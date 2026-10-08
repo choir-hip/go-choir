@@ -18,6 +18,53 @@ import (
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
 )
 
+// Guest planner refusal kinds. The host maps these onto its durable recovery
+// condition without parsing guest logs; tail_excess and base_missing are
+// deterministic for an unchanged store and (W, H), the others are transient
+// or operator-repair states.
+const (
+	BootRefusalKindTailExcess          = "tail_excess"
+	BootRefusalKindBaseMissing         = "base_missing"
+	BootRefusalKindBaseUnavailable     = "base_unavailable"
+	BootRefusalKindRecoveryUnavailable = "recovery_unavailable"
+)
+
+// ProjectionBaseRefusal is the guest planner's typed refusal. It carries the
+// exact (empty, local, W, H) inputs PlanRecovery decided on so the host can
+// persist a durable recovery condition and serve a structured 503 instead of
+// boot-looping. Error wraps ErrBaseRefused so errors.Is keeps working.
+type ProjectionBaseRefusal struct {
+	ComputerID        string
+	Kind              string
+	Reason            string
+	LocalSequence     uint64
+	WatermarkSequence uint64
+	TargetSequence    uint64
+	EmptyStore        bool
+	ChainExists       bool
+}
+
+func (e *ProjectionBaseRefusal) Error() string {
+	if e == nil {
+		return "required projection base refused"
+	}
+	return fmt.Sprintf("required projection base refused (%s) for %s: %s (local=%d W=%d H=%d)",
+		e.Kind, e.ComputerID, e.Reason, e.LocalSequence, e.WatermarkSequence, e.TargetSequence)
+}
+
+// Unwrap reports ErrBaseRefused so existing refusal checks stay valid.
+func (e *ProjectionBaseRefusal) Unwrap() error { return projectionbase.ErrBaseRefused }
+
+// projectionBaseRefusalKind classifies a PlanRecovery refusal for the host.
+// A missing or ahead-of-target advertised watermark is a base dependency
+// problem; anything else with a live chain is the tail bound.
+func projectionBaseRefusalKind(watermarkSeq, targetSeq uint64) string {
+	if watermarkSeq == 0 || watermarkSeq > targetSeq {
+		return BootRefusalKindBaseMissing
+	}
+	return BootRefusalKindTailExcess
+}
+
 // materializeProjectionBaseIfNeeded installs or rebases onto a verified
 // ProjectionBase before reconstruct. The contract:
 //
@@ -87,7 +134,16 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 
 	plan, err := projectionbase.PlanRecovery(empty, localSeq, chainExists, watermarkSeq, targetSeq)
 	if err != nil {
-		return projectionbase.RecoveryPlan{}, false, fmt.Errorf("projection recovery plan refused for %s (empty=%t local=%d W=%d H=%d): %w", computerID, empty, localSeq, watermarkSeq, targetSeq, err)
+		return projectionbase.RecoveryPlan{}, false, &ProjectionBaseRefusal{
+			ComputerID:        computerID,
+			Kind:              projectionBaseRefusalKind(watermarkSeq, targetSeq),
+			Reason:            plan.Reason,
+			LocalSequence:     localSeq,
+			WatermarkSequence: watermarkSeq,
+			TargetSequence:    targetSeq,
+			EmptyStore:        empty,
+			ChainExists:       chainExists,
+		}
 	}
 	switch plan.Action {
 	case projectionbase.RecoveryGenesis, projectionbase.RecoveryResume:
@@ -96,7 +152,16 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 	case projectionbase.RecoveryInstall:
 		descriptor, err := projectionbase.InstallVerifiedBase(ctx, source, storeDir, markerName, computerID, targetHead, targetSeq)
 		if err != nil {
-			return projectionbase.RecoveryPlan{}, false, fmt.Errorf("autoputer: required projection base refused: %w", err)
+			return projectionbase.RecoveryPlan{}, false, &ProjectionBaseRefusal{
+				ComputerID:        computerID,
+				Kind:              BootRefusalKindBaseUnavailable,
+				Reason:            err.Error(),
+				LocalSequence:     localSeq,
+				WatermarkSequence: watermarkSeq,
+				TargetSequence:    targetSeq,
+				EmptyStore:        empty,
+				ChainExists:       chainExists,
+			}
 		}
 		log.Printf("autoputer: ProjectionBase installed at sequence %d (base %s) for target %d", descriptor.Sequence, descriptor.BlobSHA256, targetSeq)
 		return plan, true, nil
@@ -111,7 +176,16 @@ func materializeProjectionBaseIfNeeded(ctx context.Context, storePath, computerI
 			if live != nil {
 				_ = live.Reopen(storePath)
 			}
-			return projectionbase.RecoveryPlan{}, false, fmt.Errorf("autoputer: required projection rebase refused: %w", err)
+			return projectionbase.RecoveryPlan{}, false, &ProjectionBaseRefusal{
+				ComputerID:        computerID,
+				Kind:              BootRefusalKindBaseUnavailable,
+				Reason:            err.Error(),
+				LocalSequence:     localSeq,
+				WatermarkSequence: watermarkSeq,
+				TargetSequence:    targetSeq,
+				EmptyStore:        empty,
+				ChainExists:       chainExists,
+			}
 		}
 		if live != nil {
 			if err := live.Reopen(storePath); err != nil {

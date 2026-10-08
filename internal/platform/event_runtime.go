@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"time"
 )
 
@@ -47,6 +48,14 @@ func (s *Service) ComputerEventRuntime() (*ComputerEventCAS, *EventArtifactServi
 	}
 	auth := SignedCapabilityVerifier{Store: s.store, PublicKey: s.signingKey.Public}
 	return cas, artifacts, auth, nil
+}
+
+// ControlKeyResolver returns the platform control key resolver bound to this service.
+func (s *Service) ControlKeyResolver() computerevent.KeyResolver {
+	if s == nil || s.store == nil || s.signingKey == nil {
+		return nil
+	}
+	return bootstrapControlKeyResolver{store: s.store, domain: "platform-control", keyID: s.signingKey.KeyID, publicKey: s.signingKey.Public}
 }
 
 func (s *Service) SelfDevelopmentModeRuntime() (*SelfDevelopmentModeCAS, error) {

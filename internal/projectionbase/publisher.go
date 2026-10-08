@@ -217,7 +217,6 @@ func ParseDescriptor(raw []byte) (Descriptor, error) {
 // Unpack extracts a ProjectionBase tar blob into the destination directory.
 func Unpack(blobPath, dstDir string) error {
 	blobPath = filepath.Clean(blobPath)
-	dstDir = filepath.Clean(dstDir)
 
 	file, err := os.Open(blobPath)
 	if err != nil {
@@ -225,43 +224,54 @@ func Unpack(blobPath, dstDir string) error {
 	}
 	defer file.Close()
 
+	if err := unpackReader(file, dstDir); err != nil {
+		return fmt.Errorf("unpack: %w", err)
+	}
+	return nil
+}
+
+// unpackReader extracts a tar stream into dstDir with the same zip-slip and
+// entry-type guards Unpack applies.
+func unpackReader(reader io.Reader, dstDir string) error {
+	dstDir = filepath.Clean(dstDir)
+
 	if err := os.MkdirAll(dstDir, 0o755); err != nil {
-		return fmt.Errorf("unpack: create destination directory: %w", err)
+		return fmt.Errorf("create destination directory: %w", err)
 	}
 
-	tarReader := tar.NewReader(file)
+	tarReader := tar.NewReader(reader)
 	for {
 		header, err := tarReader.Next()
 		if errorsIsEOF(err) {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("unpack: read tar header: %w", err)
+			return fmt.Errorf("read tar header: %w", err)
 		}
 
 		// Security: prevent zip-slip attacks by cleaning and checking prefix.
 		cleanName := filepath.Clean(header.Name)
 		if strings.HasPrefix(cleanName, "..") || strings.HasPrefix(cleanName, "/") {
-			return fmt.Errorf("unpack: invalid path in tar: %q", header.Name)
+			return fmt.Errorf("invalid path in tar: %q", header.Name)
 		}
 
 		target := filepath.Join(dstDir, cleanName)
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0o755); err != nil {
-				return fmt.Errorf("unpack: mkdir %q: %w", target, err)
+				return fmt.Errorf("mkdir %q: %w", target, err)
 			}
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return fmt.Errorf("unpack: mkdir parent %q: %w", target, err)
+				return fmt.Errorf("mkdir parent %q: %w", target, err)
 			}
 			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, header.FileInfo().Mode())
 			if err != nil {
-				return fmt.Errorf("unpack: create file %q: %w", target, err)
+				return fmt.Errorf("create file %q: %w", target, err)
 			}
 			if _, err := io.Copy(outFile, tarReader); err != nil {
 				_ = outFile.Close()
-				return fmt.Errorf("unpack: write file %q: %w", target, err)
+				return fmt.Errorf("write file %q: %w", target, err)
 			}
 			_ = outFile.Sync()
 			_ = outFile.Close()

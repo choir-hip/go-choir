@@ -547,6 +547,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, fileCASSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap file CAS schema: %w", err)
 	}
+	if _, err := s.db.ExecContext(ctx, projectionJobSchemaDDL); err != nil {
+		return fmt.Errorf("platform store: bootstrap projection jobs: %w", err)
+	}
 	if _, err := s.corpus().ExecContext(ctx, corpusSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap corpus schema: %w", err)
 	}

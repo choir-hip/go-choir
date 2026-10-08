@@ -219,10 +219,11 @@ func (s *DiskEventSource) PinEventPayload(ctx context.Context, computerID, event
 	return computerevent.PinResult{ArtifactDigest: computerevent.DigestBytes(payload)}, nil
 }
 
-// VerifyEventHeadReceipt verifies receipt for offline replay.
+// VerifyEventHeadReceipt fails closed: the artifact store carries event bytes
+// and fabricated envelopes but no signed event head receipts, so offline replay
+// through this source cannot verify the original receipts. Publication requires
+// a source that verifies real receipts (an HTTP replay source with a pinned
+// verifier, or a platform-composed CASReplaySource).
 func (s *DiskEventSource) VerifyEventHeadReceipt(ctx context.Context, receipt computerevent.Receipt, request computerevent.CASRequest) error {
-	if receipt.ReceiptKind != "EventHeadReceipt" {
-		return fmt.Errorf("disk event source: receipt kind mismatch: %s", receipt.ReceiptKind)
-	}
-	return nil
+	return fmt.Errorf("%w: disk artifact store carries no signed event head receipts", ErrReceiptUnverifiable)
 }

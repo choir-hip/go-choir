@@ -74,8 +74,35 @@ func (s *Store) RecordReplayWatermark(ctx context.Context, computerID string, se
 	if s == nil || s.db == nil || !safeFileCASComponent(computerID) || seq < 0 || strings.TrimSpace(baseRef) == "" {
 		return fmt.Errorf("file cas: invalid replay watermark")
 	}
-	if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE base_ref=IF(VALUES(watermark_sequence)>watermark_sequence,VALUES(base_ref),base_ref), updated_at=IF(VALUES(watermark_sequence)>watermark_sequence,VALUES(updated_at),updated_at), watermark_sequence=IF(VALUES(watermark_sequence)>watermark_sequence,VALUES(watermark_sequence),watermark_sequence)`, computerID, seq, baseRef, time.Now().UTC()); err != nil {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var priorSeq int64
+	var priorRef string
+	err = tx.QueryRowContext(ctx, `SELECT watermark_sequence,base_ref FROM computer_replay_watermarks WHERE computer_id=? FOR UPDATE`, computerID).Scan(&priorSeq, &priorRef)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && seq <= priorSeq {
+		return tx.Commit()
+	}
+	now := time.Now().UTC()
+	// Protect the predecessor in the same transaction that advances W.
+	if priorRef != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, computerID, priorRef, priorSeq, now.Add(-time.Microsecond)); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO computer_projection_bases (computer_id,base_ref,sequence,created_at) VALUES (?,?,?,?)`, computerID, baseRef, seq, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO computer_replay_watermarks (computer_id,watermark_sequence,base_ref,updated_at) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE watermark_sequence=VALUES(watermark_sequence),base_ref=VALUES(base_ref),updated_at=VALUES(updated_at)`, computerID, seq, baseRef, now); err != nil {
 		return fmt.Errorf("file cas: record replay watermark: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return err
 	}
 	return s.commitBoundary(ctx, "record replay watermark "+computerID)
 }

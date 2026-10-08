@@ -24,6 +24,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -418,6 +419,11 @@ type OwnershipRegistry struct {
 	// Firecracker data disks live under the VM manager state dir; this file is
 	// the durable routing index that lets vmctl reattach to those disks.
 	persistencePath string
+
+	// recoveryAdmission is the durable typed recovery breaker. It is separate
+	// from lifecycle state: conditions survive restarts and gate every
+	// realization start before resource allocation. Nil disables the gate.
+	recoveryAdmission *RecoveryAdmission
 }
 
 // NewOwnershipRegistry creates a new ownership registry.
@@ -664,6 +670,107 @@ func (r *OwnershipRegistry) SetCorpusdURL(url string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.corpusdURL = strings.TrimSpace(url)
+}
+
+// ConfigureRecoveryAdmission attaches the durable typed recovery breaker. It
+// loads existing conditions immediately so a vmctl restart keeps refusing
+// deterministically blocked starts without a guest boot.
+func (r *OwnershipRegistry) ConfigureRecoveryAdmission(cfg RecoveryAdmissionConfig) error {
+	admission, err := NewRecoveryAdmission(cfg)
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.recoveryAdmission = admission
+	r.mu.Unlock()
+	return nil
+}
+
+// RecoveryConditionFor returns the durable recovery condition for a computer,
+// if one is recorded.
+func (r *OwnershipRegistry) RecoveryConditionFor(computerID string) (*RecoveryCondition, bool) {
+	admission := r.recoveryAdmissionHandle()
+	if admission == nil {
+		return nil, false
+	}
+	return admission.Condition(computerID)
+}
+
+func (r *OwnershipRegistry) recoveryAdmissionHandle() *RecoveryAdmission {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.recoveryAdmission
+}
+
+// admitRecoveryStart is the retained-aware fail-fast gate consulted before any
+// realization start. It returns a typed *RecoveryRefusal when the computer is
+// durably blocked; a nil admission (feature off), an unknown local state, or
+// unverifiable metadata leave the decision to the guest planner.
+func (r *OwnershipRegistry) admitRecoveryStart(own *VMOwnership, emptyStore bool) error {
+	if own == nil {
+		return nil
+	}
+	admission := r.recoveryAdmissionHandle()
+	if admission == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), recoveryAdmissionTimeout)
+	defer cancel()
+	if refusal := admission.Admit(ctx, stableComputerID(own.UserID, own.DesktopID, own.ComputerID), own.UserID, emptyStore); refusal != nil {
+		return refusal
+	}
+	return nil
+}
+
+// noteRecoveryStartFailure converts a VM-manager boot failure carrying the
+// guest planner's typed refusal into a durable recovery condition and returns
+// a typed refusal for prompt propagation. Other failures pass through.
+func (r *OwnershipRegistry) noteRecoveryStartFailure(own *VMOwnership, err error) error {
+	if err == nil || own == nil {
+		return err
+	}
+	admission := r.recoveryAdmissionHandle()
+	if admission == nil {
+		return err
+	}
+	var guest guestBootRefusal
+	if !errors.As(err, &guest) {
+		return err
+	}
+	kind, reason, local, watermark, target, empty, chain := guest.GuestBootRefusal()
+	computerID := stableComputerID(own.UserID, own.DesktopID, own.ComputerID)
+	refusal := admission.RecordGuestRefusal(GuestBootRefusalInput{
+		ComputerID:        computerID,
+		OwnerID:           own.UserID,
+		Kind:              kind,
+		Reason:            reason,
+		LocalSequence:     local,
+		WatermarkSequence: watermark,
+		TargetSequence:    target,
+		EmptyStore:        empty,
+		ChainExists:       chain,
+	})
+	if refusal == nil {
+		return err
+	}
+	log.Printf("vmctl: computer %s recovery refusal recorded (kind=%s kind_guest=%s): %s", computerID, refusal.Kind, kind, refusal.Reason)
+	return refusal
+}
+
+// clearRecoveryCondition drops a stale durable condition after a realization
+// started successfully: a healthy retained store is the authority again.
+func (r *OwnershipRegistry) clearRecoveryCondition(own *VMOwnership) {
+	if own == nil {
+		return
+	}
+	admission := r.recoveryAdmissionHandle()
+	if admission == nil {
+		return
+	}
+	admission.Clear(stableComputerID(own.UserID, own.DesktopID, own.ComputerID))
 }
 
 // SetIdleTimeout configures the idle timeout for automatic VM lifecycle
@@ -1019,6 +1126,9 @@ func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMMan
 	if mgr.GetVM(own.VMID) == nil {
 		return r.startExistingVM(own, mgr)
 	}
+	if err := r.admitRecoveryStart(own, false); err != nil {
+		return nil, err
+	}
 	cfg, err := r.reserveFreshVMConfig(own, "", mgr)
 	if err != nil {
 		return nil, err
@@ -1028,8 +1138,9 @@ func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMMan
 		if mgr.GetVM(own.VMID) == nil {
 			return r.startExistingVM(own, mgr)
 		}
-		return nil, err
+		return nil, r.noteRecoveryStartFailure(own, err)
 	}
+	r.clearRecoveryCondition(own)
 	return recovered, nil
 }
 
@@ -1037,18 +1148,31 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 	if own == nil || mgr == nil {
 		return nil, nil
 	}
+	if err := r.admitRecoveryStart(own, false); err != nil {
+		return nil, err
+	}
 	if mgr.GetVM(own.VMID) != nil {
 		cfg, err := r.reserveFreshVMConfig(own, "", mgr)
 		if err != nil {
 			return nil, err
 		}
-		return mgr.RecoverVM(own.VMID, cfg)
+		info, err := mgr.RecoverVM(own.VMID, cfg)
+		if err != nil {
+			return nil, r.noteRecoveryStartFailure(own, err)
+		}
+		r.clearRecoveryCondition(own)
+		return info, nil
 	}
 	cfg, err := r.reserveFreshVMConfig(own, r.issueGatewayToken(own.VMID), mgr)
 	if err != nil {
 		return nil, err
 	}
-	return mgr.BootVM(cfg)
+	info, err := mgr.BootVM(cfg)
+	if err != nil {
+		return nil, r.noteRecoveryStartFailure(own, err)
+	}
+	r.clearRecoveryCondition(own)
+	return info, nil
 }
 
 func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManagerConfig {
@@ -1553,20 +1677,12 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 	}
 
 	// We are the first caller for this user/desktop pair. Create a new VM.
+	// The boot-epoch reservation is deliberately deferred past the recovery
+	// admission gate below: a deterministically refused start must not allocate
+	// any realization resource, epoch included.
 	vmID := generateVMID()
 	mgr := r.vmManager
 	epoch := r.nextEpoch()
-	if mgr != nil {
-		reservedEpoch, err := mgr.ReserveBootEpoch(vmID, epoch)
-		if err != nil {
-			r.mu.Unlock()
-			return nil, fmt.Errorf("reserve initial realization for VM %s: %w", vmID, err)
-		}
-		epoch = reservedEpoch
-		if r.epochCounter < epoch {
-			r.epochCounter = epoch
-		}
-	}
 
 	own := &VMOwnership{
 		VMID:       vmID,
@@ -1603,8 +1719,49 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 	corpusdConfigured := strings.TrimSpace(r.corpusdURL) != ""
 	r.mu.Unlock()
 
+	// Retained-aware fail-fast before any gateway/credential/boot resource:
+	// a fresh realization has a provably empty store, so the shared planner can
+	// refuse deterministically when the existing chain demands a base whose
+	// remaining tail exceeds the recovery bound.
+	if mgr != nil {
+		if refusal := r.admitRecoveryStart(own, true); refusal != nil {
+			r.mu.Lock()
+			own.State = VMStateFailed
+			r.saveLocked()
+			waiters := r.pendingWaiters[key]
+			delete(r.pendingWaiters, key)
+			r.mu.Unlock()
+			for _, ch := range waiters {
+				ch <- nil
+			}
+			return nil, refusal
+		}
+	}
+
 	// Boot the real Firecracker VM if a manager is configured.
 	if mgr != nil {
+		reservedEpoch, reserveErr := mgr.ReserveBootEpoch(vmID, epoch)
+		if reserveErr != nil {
+			r.mu.Lock()
+			own.State = VMStateFailed
+			r.saveLocked()
+			waiters := r.pendingWaiters[key]
+			delete(r.pendingWaiters, key)
+			r.mu.Unlock()
+			for _, ch := range waiters {
+				ch <- nil
+			}
+			return nil, fmt.Errorf("reserve initial realization for VM %s: %w", vmID, reserveErr)
+		}
+		epoch = reservedEpoch
+		r.mu.Lock()
+		if r.epochCounter < epoch {
+			r.epochCounter = epoch
+		}
+		own.Epoch = epoch
+		r.saveLocked()
+		r.mu.Unlock()
+
 		// Issue a gateway token for the VM autoputer before booting.
 		// The token is written to the persistent directory by the vmmanager
 		// and read by the guest init script to authenticate to the gateway.
@@ -1644,12 +1801,13 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 			for _, ch := range waiters {
 				ch <- nil
 			}
-			return nil, fmt.Errorf("failed to boot VM %s: %w", vmID, err)
+			return nil, fmt.Errorf("failed to boot VM %s: %w", vmID, r.noteRecoveryStartFailure(own, err))
 		}
 		r.mu.Lock()
 		own.ComputerURL = info.HostURL
 		own.Epoch = info.Epoch
 		r.mu.Unlock()
+		r.clearRecoveryCondition(own)
 		log.Printf("vmctl: booted Firecracker VM %s for user %s at %s (epoch=%d)", vmID, userID, info.HostURL, info.Epoch)
 	}
 
@@ -2309,6 +2467,14 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 
 	var info *VMInstanceInfo
 	if mgr != nil {
+		// Authorized maintenance recovery (the B14 replay-only drive) is an
+		// explicit operator path and stays exempt: refusing it would remove the
+		// evidence-gathering repair boot. Automatic recovery is gated.
+		if !maintenance {
+			if refusal := r.admitRecoveryStart(&snapshot, false); refusal != nil {
+				return nil, refusal
+			}
+		}
 		cfg, err := r.reserveFreshVMConfig(&snapshot, "", mgr)
 		if err != nil {
 			return nil, fmt.Errorf("reserve recovery realization for VM %s: %w", vmid, err)
@@ -2318,14 +2484,15 @@ func (r *OwnershipRegistry) recoverVMForDesktop(userID, desktopID string, mainte
 		if wasStopped {
 			info, err = mgr.BootVM(cfg)
 			if err != nil {
-				return nil, fmt.Errorf("failed to boot recovered VM %s: %w", vmid, err)
+				return nil, fmt.Errorf("failed to boot recovered VM %s: %w", vmid, r.noteRecoveryStartFailure(&snapshot, err))
 			}
 		} else {
 			info, err = mgr.RecoverVM(vmid, cfg)
 			if err != nil {
-				return nil, fmt.Errorf("failed to recover VM %s: %w", vmid, err)
+				return nil, fmt.Errorf("failed to recover VM %s: %w", vmid, r.noteRecoveryStartFailure(&snapshot, err))
 			}
 		}
+		r.clearRecoveryCondition(&snapshot)
 	}
 
 	r.mu.Lock()
@@ -2400,6 +2567,14 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 
 	var info *VMInstanceInfo
 	if mgr != nil {
+		// A durable refusal gates refresh only when the computer is not
+		// currently serving: a healthy running realization is never stopped by
+		// stale recovery evidence.
+		if snapshot.State != VMStateActive {
+			if refusal := r.admitRecoveryStart(&snapshot, false); refusal != nil {
+				return nil, refusal
+			}
+		}
 		cfg, err := r.reserveFreshVMConfig(&snapshot, "", mgr)
 		if err != nil {
 			return nil, fmt.Errorf("reserve refresh realization for VM %s: %w", snapshot.VMID, err)
@@ -2418,8 +2593,9 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 				r.saveLocked()
 			}
 			r.mu.Unlock()
-			return nil, fmt.Errorf("failed to refresh VM %s: %w", snapshot.VMID, err)
+			return nil, fmt.Errorf("failed to refresh VM %s: %w", snapshot.VMID, r.noteRecoveryStartFailure(&snapshot, err))
 		}
+		r.clearRecoveryCondition(&snapshot)
 	}
 
 	r.mu.Lock()

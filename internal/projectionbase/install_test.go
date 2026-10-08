@@ -144,6 +144,7 @@ func TestInstallVerifiedBaseThenTailReplaysToHead(t *testing.T) {
 	}
 	digests := buildInstallChain(t, artifactsRoot, computerID)
 	disk := NewDiskEventSource(artifactsRoot, computerID)
+	replaySource := fixtureReplay(NewDiskEventSource(artifactsRoot, computerID, digests[0]))
 
 	// Publish a base at W=1 through the real offline rebuilder.
 	rebuilder, err := NewRebuilder(Config{
@@ -153,7 +154,7 @@ func TestInstallVerifiedBaseThenTailReplaysToHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := rebuilder.Run(ctx, disk)
+	result, err := rebuilder.Run(ctx, replaySource)
 	if err != nil {
 		t.Fatalf("rebuild base at W=1: %v", err)
 	}
@@ -193,7 +194,7 @@ func TestInstallVerifiedBaseThenTailReplaysToHead(t *testing.T) {
 	}
 
 	// Tail-only replay from the installed head reaches H through the real loop.
-	appender, err := computerevent.NewComputerEventAppender(computerID, disk, installed, disk, disk)
+	appender, err := computerevent.NewComputerEventAppender(computerID, disk, installed, disk, fixtureReplay(disk))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +237,7 @@ func TestInstallRefusesFailureClasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := rebuilder.Run(ctx, disk)
+	result, err := rebuilder.Run(ctx, fixtureReplay(NewDiskEventSource(artifactsRoot, computerID, digests[0])))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +282,7 @@ func TestInstallRefusesFailureClasses(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result2, err := rebuilder2.Run(ctx, disk)
+		result2, err := rebuilder2.Run(ctx, fixtureReplay(NewDiskEventSource(artifactsRoot, computerID, digests[1])))
 		if err != nil {
 			t.Fatal(err)
 		}

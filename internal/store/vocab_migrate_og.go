@@ -688,6 +688,12 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 // rep.OGSuperseded. A migrating row strictly newer than the live row is a
 // V1 write after the cutover, which no replay should produce: refuse.
 //
+// Versioned projection-deposit upcasting removes this artifact for fresh
+// reconstructions and cut-over stores (the V1 row is upcast at deposit time,
+// so no stale sibling forms). This resolution remains the retained-store
+// path: a store whose V1 rows were never replayed under the new deposit
+// contract still has to cut over in place.
+//
 // Planning has not mutated any row, so o still sits at o.canonicalID with
 // its original content, and the timestamp comparison runs on the DATETIME
 // columns themselves.
@@ -733,10 +739,12 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 	if err != nil {
 		return fmt.Errorf("og migrate tx: %w", err)
 	}
+	changed := false
 	for _, o := range objs {
 		if !o.dirty && !o.dropped {
 			continue
 		}
+		changed = true
 		if o.dropped {
 			// Convergence duplicate: the survivor holds the target canonical
 			// ID. Delete this row rather than updating it into a PK conflict.
@@ -758,6 +766,7 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 		if !e.dirty {
 			continue
 		}
+		changed = true
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE og_edges SET edge_id = ?, from_id = ?, to_id = ? WHERE edge_id = ?`,
 			e.newEdgeID, e.newFrom, e.newTo, e.edgeID); err != nil {
@@ -767,6 +776,12 @@ func (s *Store) applyOGMigration(ctx context.Context, objs []*ogObjectRow, edges
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("og migrate commit: %w", err)
+	}
+	if changed {
+		// The working set changed outside the event paths, so the next
+		// checkpoint must commit it (a migration-only store otherwise leaves
+		// its cutover in the uncommitted working set of a published base).
+		s.markDoltHistoryDirty()
 	}
 	return nil
 }
@@ -997,6 +1012,9 @@ func (s *Store) revertOGMigration(ctx context.Context, rep *MigrationReport) err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("og revert commit: %w", err)
+	}
+	if len(rep.OGObjects) > 0 || len(rep.OGEdges) > 0 {
+		s.markDoltHistoryDirty()
 	}
 	return nil
 }

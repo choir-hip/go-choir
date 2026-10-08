@@ -224,4 +224,12 @@ assert_contains "$guest_signer_output" "deploy_vmctl_restart=true"
 assert_contains "$guest_signer_output" "deploy_active_vm_refresh=true"
 assert_contains "$guest_signer_output" "scripts/guest-signer-state-migrate -> canonical guest image (builtins.readFile input of nix/autoputer-vm.nix)"
 
+checkpoint_worker_output="$(run_classifier "cmd/checkpointd/main.go")"
+assert_contains "$checkpoint_worker_output" "deploy_needed=true"
+assert_contains "$checkpoint_worker_output" "host_services=checkpointd"
+
+checkpoint_dependency_output="$(run_classifier "internal/projectionbase/rebuilder.go")"
+assert_contains "$checkpoint_dependency_output" "deploy_needed=true"
+assert_contains "$checkpoint_dependency_output" "host_services=checkpointd"
+
 printf 'deploy-impact-classify-test: ok\n'

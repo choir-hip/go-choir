@@ -846,13 +846,25 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	// needs serialization.
 	m.mu.Unlock()
 	locked = false
-	if err := m.waitForGuestReady(hostURL, tl); err != nil {
+	// A Firecracker child that exits before readiness (crash or typed boot
+	// refusal followed by exit) must fail the boot promptly.
+	alive := func() bool {
+		m.mu.Lock()
+		pid := inst.PID
+		m.mu.Unlock()
+		if pid <= 0 {
+			return true
+		}
+		return processExists(pid)
+	}
+	if err := m.waitForGuestReady(hostURL, tl, alive); err != nil {
 		m.mu.Lock()
 		locked = true
 		inst.State = StateFailed
 		inst.Healthy = false
 		m.killFirecrackerProcess(inst)
 		waitErr := fmt.Errorf("wait for guest ready for VM %s: %w", cfg.VMID, err)
+		recordGuestRefusalOnTimeline(tl, err)
 		tl.finish("failed", waitErr)
 		if perr := tl.persist(m.cfg.StateDir); perr != nil {
 			log.Printf("vmmanager: warning: could not persist boot timeline for VM %s: %v", cfg.VMID, perr)
@@ -1019,13 +1031,23 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 
 	m.mu.Unlock()
 	locked = false
-	if err := m.waitForGuestReady(hostURL, tl); err != nil {
+	alive := func() bool {
+		m.mu.Lock()
+		pid := inst.PID
+		m.mu.Unlock()
+		if pid <= 0 {
+			return true
+		}
+		return processExists(pid)
+	}
+	if err := m.waitForGuestReady(hostURL, tl, alive); err != nil {
 		m.mu.Lock()
 		locked = true
 		inst.State = StateFailed
 		inst.Healthy = false
 		m.killFirecrackerProcess(inst)
 		waitErr := fmt.Errorf("wait for resumed guest ready for VM %s: %w", vmID, err)
+		recordGuestRefusalOnTimeline(tl, err)
 		tl.finish("failed", waitErr)
 		if perr := tl.persist(m.cfg.StateDir); perr != nil {
 			log.Printf("vmmanager: warning: could not persist boot timeline for VM %s: %v", vmID, perr)
@@ -2165,6 +2187,70 @@ type guestHealthProbeResult struct {
 	// ReplayProgress ticks during post-replay work (vocabulary migration,
 	// fence verification) while the applied sequence is stationary.
 	ReplayProgress uint64
+	// BootRefusal is the guest planner's typed refusal parsed from a 503
+	// "refused" /health body. It carries the recovery witness the host persists
+	// without reading guest logs.
+	BootRefusal *GuestBootRefusal
+}
+
+// GuestBootRefusal is the guest planner refusal body served by a refused
+// guest's /health listener (autoputer boot refusal surface).
+type GuestBootRefusal struct {
+	Kind              string `json:"kind"`
+	Reason            string `json:"reason"`
+	ComputerID        string `json:"computer_id"`
+	LocalSequence     uint64 `json:"local_sequence"`
+	WatermarkSequence uint64 `json:"watermark_sequence"`
+	TargetSequence    uint64 `json:"target_sequence"`
+	EmptyStore        bool   `json:"empty_store"`
+	ChainExists       bool   `json:"chain_exists"`
+}
+
+// GuestBootRefusedError is the typed boot failure raised when the guest
+// planner refused to materialize. vmctl reads it structurally (via the
+// GuestBootRefusal method) to persist a durable recovery condition; the
+// structural coupling keeps vmctl free of a vmmanager import.
+type GuestBootRefusedError struct {
+	VMID              string
+	Kind              string
+	Reason            string
+	ComputerID        string
+	LocalSequence     uint64
+	WatermarkSequence uint64
+	TargetSequence    uint64
+	EmptyStore        bool
+	ChainExists       bool
+}
+
+func (e *GuestBootRefusedError) Error() string {
+	if e == nil {
+		return "guest boot refused"
+	}
+	return fmt.Sprintf("guest boot refused (%s): %s (local=%d W=%d H=%d empty=%t chain=%t)",
+		e.Kind, e.Reason, e.LocalSequence, e.WatermarkSequence, e.TargetSequence, e.EmptyStore, e.ChainExists)
+}
+
+// GuestBootRefusal mirrors vmctl's structural guestBootRefusal interface: the
+// method set must match exactly so errors.As on the vmctl side finds it
+// without importing this package.
+func (e *GuestBootRefusedError) GuestBootRefusal() (kind, reason string, localSequence, watermarkSequence, targetSequence uint64, emptyStore, chainExists bool) {
+	return e.Kind, e.Reason, e.LocalSequence, e.WatermarkSequence, e.TargetSequence, e.EmptyStore, e.ChainExists
+}
+
+// GuestProcessExitedError is the typed boot failure raised when the
+// Firecracker child exited before the guest became ready. It bounds a dead
+// boot promptly instead of waiting out the full readiness deadline.
+type GuestProcessExitedError struct {
+	VMID      string
+	HostURL   string
+	LastProbe string
+}
+
+func (e *GuestProcessExitedError) Error() string {
+	if e == nil {
+		return "guest process exited before readiness"
+	}
+	return fmt.Sprintf("guest process exited before readiness at %s (vm=%s, last probe: %s)", e.HostURL, e.VMID, e.LastProbe)
 }
 
 func (r guestHealthProbeResult) String() string {
@@ -2204,14 +2290,24 @@ func (m *Manager) probeGuestHealthDetailed(hostURL string) guestHealthProbeResul
 	// A 503 ReplayInProgress body signals a live guest mid-replay: liveness, not
 	// readiness. Parse the applied and durably committed sequence so the wait
 	// loop can gate the kill on replay progress instead of wall clock (B5/B6).
+	// A 503 "refused" body is the guest planner's typed refusal: the boot is
+	// deterministically dead for these inputs, and the witness must reach vmctl.
 	if resp.StatusCode == http.StatusServiceUnavailable {
+		var refusalBody struct {
+			Status string `json:"status"`
+			GuestBootRefusal
+		}
+		if json.Unmarshal(body, &refusalBody) == nil && refusalBody.Status == "refused" && strings.TrimSpace(refusalBody.Kind) != "" {
+			refusal := refusalBody.GuestBootRefusal
+			result.BootRefusal = &refusal
+		}
 		var replayBody struct {
 			Status            string `json:"status"`
 			Sequence          uint64 `json:"sequence"`
 			CommittedSequence uint64 `json:"committed_sequence"`
 			Progress          uint64 `json:"progress"`
 		}
-		if json.Unmarshal(body, &replayBody) == nil && replayBody.Status == "replaying" {
+		if result.BootRefusal == nil && json.Unmarshal(body, &replayBody) == nil && replayBody.Status == "replaying" {
 			result.ReplayInProgress = true
 			result.ReplaySequence = replayBody.Sequence
 			result.ReplayCommittedSequence = replayBody.CommittedSequence
@@ -2229,7 +2325,11 @@ func (m *Manager) probeGuestHealth(hostURL string) bool {
 	return m.probeGuestHealthDetailed(hostURL).Healthy
 }
 
-func (m *Manager) waitForGuestReady(hostURL string, tl *BootTimeline) error {
+// waitForGuestReady polls the guest /health until ready. A typed guest boot
+// refusal and an exited Firecracker child both fail the boot immediately: a
+// deterministic refusal must reach vmctl promptly instead of waiting out the
+// readiness deadline. alive may be nil (callers without a process handle).
+func (m *Manager) waitForGuestReady(hostURL string, tl *BootTimeline, alive func() bool) error {
 	deadline := time.Now().Add(m.cfg.BootReadyTimeout)
 	stall := m.cfg.ReplayStallTimeout
 	if stall <= 0 {
@@ -2243,6 +2343,10 @@ func (m *Manager) waitForGuestReady(hostURL string, tl *BootTimeline) error {
 	sawHTTP := false
 	sawHealthy := false
 	for {
+		if alive != nil && !alive() {
+			tl.markDetail("guest_process_exited", fmt.Sprintf("last probe: %s", lastProbe.String()))
+			return &GuestProcessExitedError{VMID: bootTimelineVMID(tl), HostURL: hostURL, LastProbe: lastProbe.String()}
+		}
 		lastProbe = m.probeGuestHealthDetailed(hostURL)
 		if !sawHTTP && lastProbe.Err == nil {
 			// First HTTP-level response (any status): the guest's listener is
@@ -2250,6 +2354,21 @@ func (m *Manager) waitForGuestReady(hostURL string, tl *BootTimeline) error {
 			// still be 503.
 			sawHTTP = true
 			tl.markDetail("first_http_response", fmt.Sprintf("status=%d", lastProbe.Status))
+		}
+		if lastProbe.BootRefusal != nil {
+			refusal := lastProbe.BootRefusal
+			tl.markDetail("boot_refused", fmt.Sprintf("kind=%s local=%d W=%d H=%d", refusal.Kind, refusal.LocalSequence, refusal.WatermarkSequence, refusal.TargetSequence))
+			return &GuestBootRefusedError{
+				VMID:              bootTimelineVMID(tl),
+				Kind:              refusal.Kind,
+				Reason:            refusal.Reason,
+				ComputerID:        refusal.ComputerID,
+				LocalSequence:     refusal.LocalSequence,
+				WatermarkSequence: refusal.WatermarkSequence,
+				TargetSequence:    refusal.TargetSequence,
+				EmptyStore:        refusal.EmptyStore,
+				ChainExists:       refusal.ChainExists,
+			}
 		}
 		if lastProbe.Healthy {
 			if !sawHealthy {
@@ -2284,6 +2403,40 @@ func (m *Manager) waitForGuestReady(hostURL string, tl *BootTimeline) error {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+}
+
+// bootTimelineVMID returns the receipt's VMID, tolerating a nil receipt (the
+// readiness wait is exercised without one in focused tests).
+func bootTimelineVMID(tl *BootTimeline) string {
+	if tl == nil {
+		return ""
+	}
+	return tl.VMID
+}
+
+// recordGuestRefusalOnTimeline copies a typed guest refusal into the persisted
+// boot receipt so the witness survives independently of the error string.
+func recordGuestRefusalOnTimeline(tl *BootTimeline, err error) {
+	if tl == nil || err == nil {
+		return
+	}
+	var refused *GuestBootRefusedError
+	if !errors.As(err, &refused) {
+		return
+	}
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+	refusal := GuestBootRefusal{
+		Kind:              refused.Kind,
+		Reason:            refused.Reason,
+		ComputerID:        refused.ComputerID,
+		LocalSequence:     refused.LocalSequence,
+		WatermarkSequence: refused.WatermarkSequence,
+		TargetSequence:    refused.TargetSequence,
+		EmptyStore:        refused.EmptyStore,
+		ChainExists:       refused.ChainExists,
+	}
+	tl.Refusal = &refusal
 }
 
 // loadEpoch loads the epoch counter for a VM from persistent storage.

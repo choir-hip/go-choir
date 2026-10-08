@@ -14,6 +14,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -64,6 +65,11 @@ type errorResponse struct {
 	Error          string `json:"error"`
 	Reason         string `json:"reason,omitempty"`
 	UpstreamStatus int    `json:"upstream_status,omitempty"`
+	// Recovery refusal fields: durable condition kind, retry hint and repair
+	// job status. Omitted for ordinary errors.
+	Kind              string                     `json:"kind,omitempty"`
+	RetryAfterSeconds int                        `json:"retry_after_seconds,omitempty"`
+	Repair            *vmctl.CheckpointJobStatus `json:"repair,omitempty"`
 }
 
 // proxyHealthResponse is the JSON structure returned by the proxy /health
@@ -798,6 +804,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isComputerBootstrapChainPath(path):
 		h.HandleComputerBootstrapChain(w, r)
 		return
+	case isComputerRecoveryJobPath(path):
+		h.HandleComputerRecoveryJob(w, r)
+		return
 	case isSelfDevelopmentModePath(path):
 		h.HandleSelfDevelopmentMode(w, r)
 		return
@@ -1347,6 +1356,12 @@ func isTransientVMCTLResolveError(err error) bool {
 	if err == nil {
 		return false
 	}
+	// A durable recovery refusal is deterministic for its inputs: retrying it
+	// inside the transient window is a request storm against blocked state.
+	var refusal *vmctl.RecoveryRefusalError
+	if errors.As(err, &refusal) {
+		return false
+	}
 	text := strings.ToLower(err.Error())
 	for _, marker := range []string{
 		"resolve call failed",
@@ -1364,6 +1379,39 @@ func isTransientVMCTLResolveError(err error) bool {
 		}
 	}
 	return false
+}
+
+// recoveryRefusalFromError extracts a typed vmctl recovery refusal.
+func recoveryRefusalFromError(err error) *vmctl.RecoveryRefusalError {
+	if err == nil {
+		return nil
+	}
+	var refusal *vmctl.RecoveryRefusalError
+	if errors.As(err, &refusal) {
+		return refusal
+	}
+	return nil
+}
+
+// writeRecoveryRefusalResponse renders the durable recovery condition as the
+// product-visible structured 503: reason, kind, repair job status, and
+// Retry-After. It is deterministic; callers must not retry it as transient.
+func writeRecoveryRefusalResponse(w http.ResponseWriter, refusal *vmctl.RecoveryRefusalError) {
+	if refusal == nil {
+		return
+	}
+	retryAfter := refusal.RetryAfterSeconds
+	if retryAfter <= 0 {
+		retryAfter = 60
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	writeJSON(w, http.StatusServiceUnavailable, errorResponse{
+		Error:             "computer recovery blocked",
+		Reason:            refusal.Reason,
+		Kind:              refusal.Kind,
+		RetryAfterSeconds: retryAfter,
+		Repair:            refusal.Repair,
+	})
 }
 
 // isResolveTimeoutError reports whether an error from resolveComputerURL is a
@@ -1385,14 +1433,29 @@ func isResolveTimeoutError(err error) bool {
 }
 
 // writeResolveError writes the appropriate JSON error response for a autoputer
-// resolve failure. Timeouts surface as 504 Gateway Timeout; other failures are
-// 502 Bad Gateway.
+// resolve failure. A durable recovery refusal is a structured 503 with
+// Retry-After; timeouts are 504 Gateway Timeout; other failures are 502.
 func writeResolveError(w http.ResponseWriter, err error) {
+	if refusal := recoveryRefusalFromError(err); refusal != nil {
+		writeRecoveryRefusalResponse(w, refusal)
+		return
+	}
 	status := http.StatusBadGateway
 	if isResolveTimeoutError(err) {
 		status = http.StatusGatewayTimeout
 	}
 	writeJSON(w, status, errorResponse{Error: "failed to resolve user autoputer"})
+}
+
+// writeAutoputerResolveFailure renders a resolve failure for callers with
+// their own message: a durable recovery refusal still becomes the structured
+// 503 with Retry-After; everything else keeps the caller's status and text.
+func writeAutoputerResolveFailure(w http.ResponseWriter, status int, message string, err error) {
+	if refusal := recoveryRefusalFromError(err); refusal != nil {
+		writeRecoveryRefusalResponse(w, refusal)
+		return
+	}
+	writeJSON(w, status, errorResponse{Error: message})
 }
 
 // setResolvedRouteContext stashes the resolved upstream URL and the route

@@ -52,6 +52,35 @@ func main() {
 	if corpusdURL := os.Getenv("VMCTL_CORPUSD_URL"); corpusdURL != "" {
 		registry.SetCorpusdURL(corpusdURL)
 		log.Printf("vmctl: corpusd URL configured for guest event credentials")
+
+		// Retained-aware recovery admission: durable typed conditions gate
+		// every realization start before resource allocation, and blocked
+		// computers enqueue the deduplicated checkpoint/repair job.
+		jobsURL := strings.TrimSpace(os.Getenv("VMCTL_RECOVERY_JOBS_URL"))
+		if jobsURL == "" {
+			jobsURL = strings.TrimSpace(corpusdURL)
+		}
+		conditionsPath := strings.TrimSpace(os.Getenv("VMCTL_RECOVERY_CONDITIONS_PATH"))
+		if conditionsPath == "" {
+			stateDir := strings.TrimSpace(os.Getenv("VM_STATE_DIR"))
+			if ownershipPath := strings.TrimSpace(os.Getenv("VMCTL_OWNERSHIP_PATH")); ownershipPath != "" {
+				stateDir = filepath.Dir(ownershipPath)
+			}
+			if stateDir != "" {
+				conditionsPath = filepath.Join(stateDir, "recovery-conditions.json")
+			}
+		}
+		if conditionsPath == "" {
+			log.Printf("vmctl: recovery admission disabled (no VM_STATE_DIR/VMCTL_RECOVERY_CONDITIONS_PATH)")
+		} else if err := registry.ConfigureRecoveryAdmission(vmctl.RecoveryAdmissionConfig{
+			StatePath:  conditionsPath,
+			CorpusdURL: strings.TrimSpace(corpusdURL),
+			JobsURL:    jobsURL,
+		}); err != nil {
+			log.Fatalf("vmctl: configure recovery admission: %v", err)
+		} else {
+			log.Printf("vmctl: recovery admission configured (conditions=%s jobs=%s)", conditionsPath, jobsURL)
+		}
 	}
 
 	// Configure idle timeout for automatic VM lifecycle management.

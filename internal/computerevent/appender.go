@@ -51,7 +51,12 @@ type BatchProjectionStore interface {
 
 // ReplayBatchProjectionStore is the explicit dry-run seam for projection
 // compatibility that is safe only while reconstructing a canonical tape.
-// Live finalization must continue through BatchProjectionStore.
+// Live finalization must continue through BatchProjectionStore. Because this
+// path re-derives a projection from the immutable tape, the store may apply
+// the versioned projection-deposit upcast here: the event, receipt, payload
+// digest and reducer commitment are verified upstream and never rewritten —
+// only the resolved deposit view is transformed, deterministically, in
+// canonical event order (internal/store vocab_upcast_deposit.go).
 type ReplayBatchProjectionStore interface {
 	FinalizeReplayBatch(ctx context.Context, computerID, eventDigest string, receipt Receipt, batch *ProjectionBatch) error
 }

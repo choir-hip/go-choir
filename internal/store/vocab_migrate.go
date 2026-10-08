@@ -88,6 +88,17 @@ type MigrationReport struct {
 	OGSuperseded []OGSupersededEntry `json:"og_superseded,omitempty"`
 	// OGEdges records every rewritten og_edges row.
 	OGEdges []OGEdgeProvEntry `json:"og_edges,omitempty"`
+	// DepositUpcastVersion records the projection-deposit upcast version
+	// (vocabmigrate.DepositUpcastVersion) that already transformed this
+	// store's replayed deposits to the active V2 vocabulary before this
+	// report was planned. It is 0 when the end-of-replay migration itself
+	// performed the vocabulary transformation (a retained V1 store), so a
+	// consumer of a published base can see which compatibility path produced
+	// the projection.
+	DepositUpcastVersion int `json:"deposit_upcast_version,omitempty"`
+	// DepositUpcastAliases counts the old→new identity aliases the deposit
+	// upcaster recorded in the workspace ledger.
+	DepositUpcastAliases int `json:"deposit_upcast_aliases,omitempty"`
 }
 
 // OGSupersededEntry retains one superseded og_objects row's pre-migration
@@ -387,6 +398,12 @@ func (s *Store) applyVocabularyMigration(ctx context.Context, writes []vocabWrit
 			return fmt.Errorf("vocab migrate %s.%s write: %w", w.table, w.col, err)
 		}
 	}
+	if len(writes) > 0 {
+		// The working set changed outside the event paths, so the next
+		// checkpoint must commit it (a migration-only store otherwise leaves
+		// its cutover in the uncommitted working set of a published base).
+		s.markDoltHistoryDirty()
+	}
 	return nil
 }
 
@@ -409,7 +426,14 @@ func (s *Store) MigrateVocabularyToV2(ctx context.Context) (*MigrationReport, er
 	if err != nil {
 		return nil, err
 	}
-	objs, edges, err := s.planOGMigration(ctx, rep, nil, nil)
+	// Replayed deposits may already have been upcast; their recorded aliases
+	// resolve references still written against legacy IDs.
+	seed := map[string]string{}
+	depositLedger, err := s.depositUpcastSeed(seed)
+	if err != nil {
+		return nil, err
+	}
+	objs, edges, err := s.planOGMigration(ctx, rep, seed, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -418,6 +442,10 @@ func (s *Store) MigrateVocabularyToV2(ctx context.Context) (*MigrationReport, er
 	}
 	if err := s.applyOGMigration(ctx, objs, edges); err != nil {
 		return nil, err
+	}
+	if depositLedger != nil {
+		rep.DepositUpcastVersion = depositLedger.Version
+		rep.DepositUpcastAliases = len(depositLedger.Objects) + len(depositLedger.Edges)
 	}
 	s.vocabCutover.Store(true)
 	return rep, nil
@@ -671,6 +699,9 @@ func (s *Store) RevertVocabularyToV1(ctx context.Context, rep *MigrationReport) 
 	if err := s.revertOGMigration(ctx, rep); err != nil {
 		return err
 	}
+	// Revert writes run outside the event paths; the next checkpoint must be
+	// able to commit them (a no-op commit is tolerated by commitDoltCheckpoint).
+	s.markDoltHistoryDirty()
 	s.vocabCutover.Store(false)
 	return nil
 }
@@ -793,14 +824,27 @@ func (s *Store) MigrateAndFenceServingVocabulary(ctx context.Context, replayed b
 	}
 	// OG planning seeds its reference map from the persisted report so a
 	// re-run after a mid-apply crash still resolves references to objects
-	// already migrated under their new IDs.
-	objs, edges, err := s.planOGMigration(ctx, rep, ogSeedFromReport(prior), progress)
+	// already migrated under their new IDs. The deposit upcast ledger adds
+	// every identity replayed deposits already renamed, so references
+	// recorded against those legacy IDs still resolve. On a store whose
+	// deposits were upcast this pass is verify-only (plus that straggler
+	// rewrite); on a retained V1 store it remains the one-time migration.
+	seed := ogSeedFromReport(prior)
+	depositLedger, err := s.depositUpcastSeed(seed)
+	if err != nil {
+		return nil, err
+	}
+	objs, edges, err := s.planOGMigration(ctx, rep, seed, progress)
 	if err != nil {
 		return nil, err
 	}
 	if prior != nil {
 		mergeVocabReports(prior, rep)
 		rep = prior
+	}
+	if depositLedger != nil {
+		rep.DepositUpcastVersion = depositLedger.Version
+		rep.DepositUpcastAliases = len(depositLedger.Objects) + len(depositLedger.Edges)
 	}
 	// Provenance is durable before the first mutation: a crash after this
 	// point can never lose or counterfeit the inverse record. A crash before

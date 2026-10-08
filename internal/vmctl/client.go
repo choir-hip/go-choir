@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,6 +27,68 @@ const DefaultClientTimeout = 60 * time.Second
 // other than the exact identity requested. Callers must classify it as denied
 // authority, not as a retryable control-plane outage.
 var ErrComputerLookupIdentityMismatch = errors.New("vmctl computer lookup identity mismatch")
+
+// RecoveryRefusalError is the typed view of a structured 503 recovery refusal
+// (durable recovery condition). It is deterministic for its inputs: callers
+// must not retry it inside a transient retry window. It clears only when the
+// recovery inputs change or the repair job advances the advertised base.
+type RecoveryRefusalError struct {
+	Reason            string
+	Kind              string
+	RetryAfterSeconds int
+	Witness           *RecoveryInputWitness
+	Repair            *CheckpointJobStatus
+}
+
+func (e *RecoveryRefusalError) Error() string {
+	if e == nil {
+		return "vmctl client: resolve blocked"
+	}
+	reason := strings.TrimSpace(e.Reason)
+	if reason == "" {
+		reason = "computer recovery is blocked"
+	}
+	return fmt.Sprintf("vmctl client: resolve blocked (%s): %s", e.Kind, reason)
+}
+
+// decodeRecoveryRefusal parses the structured 503 envelope. A non-503 or a
+// body without a refusal kind returns nil so ordinary errors keep their path.
+func decodeRecoveryRefusal(status int, body []byte, retryAfterHeader string) *RecoveryRefusalError {
+	if status != http.StatusServiceUnavailable {
+		return nil
+	}
+	var envelope struct {
+		Error             string                `json:"error"`
+		Reason            string                `json:"reason"`
+		Kind              string                `json:"kind"`
+		RetryAfterSeconds int                   `json:"retry_after_seconds"`
+		Witness           *RecoveryInputWitness `json:"witness"`
+		Repair            *CheckpointJobStatus  `json:"repair"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return nil
+	}
+	kind := strings.TrimSpace(envelope.Kind)
+	if kind == "" {
+		return nil
+	}
+	retryAfter := envelope.RetryAfterSeconds
+	if retryAfter <= 0 {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(retryAfterHeader)); err == nil {
+			retryAfter = parsed
+		}
+	}
+	if retryAfter <= 0 {
+		retryAfter = recoveryRetryAfterSeconds
+	}
+	return &RecoveryRefusalError{
+		Reason:            envelope.Reason,
+		Kind:              kind,
+		RetryAfterSeconds: retryAfter,
+		Witness:           envelope.Witness,
+		Repair:            envelope.Repair,
+	}
+}
 
 // NewClient creates a vmctl client pointing at the given base URL.
 func NewClient(baseURL string) *Client {
@@ -89,6 +152,9 @@ func (c *Client) ResolveDesktopContext(ctx context.Context, userID, desktopID st
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		if refusal := decodeRecoveryRefusal(resp.StatusCode, body, resp.Header.Get("Retry-After")); refusal != nil {
+			return nil, refusal
+		}
 		var errResp vmctlErrorResponse
 		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
 			return nil, fmt.Errorf("vmctl client: resolve failed: %s", errResp.Error)
@@ -181,6 +247,9 @@ func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID st
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		if refusal := decodeRecoveryRefusal(resp.StatusCode, body, resp.Header.Get("Retry-After")); refusal != nil {
+			return nil, refusal
+		}
 		var errResp vmctlErrorResponse
 		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
 			return nil, fmt.Errorf("vmctl client: refresh failed: %s", errResp.Error)

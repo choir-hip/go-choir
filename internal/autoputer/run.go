@@ -282,7 +282,12 @@ func Run() {
 		recoveryPlan, materialized, baseErr := materializeProjectionBaseIfNeeded(bootstrapCtx, rtCfg.StorePath, computerID, platformURL, credentials.Capability, db)
 		if baseErr != nil {
 			cancel()
-			log.Fatalf("autoputer: required projection base refused; refusing genesis fallback: %v", baseErr)
+			// Typed refusal surface: the planner refused to proceed. The host
+			// probes /health, records the witness, and kills this VM; the
+			// runtime and appender never start on an unrecovered store.
+			refusal := bootRefusalForError(computerID, baseErr)
+			log.Printf("autoputer: required projection base refused; serving typed refusal on /health for %s: %v", bootRefusalObservationWindow, baseErr)
+			serveBootRefusalAndExit(s, refusal)
 		} else if materialized {
 			log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
 		}
@@ -624,8 +629,9 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 	err := appender.Reconstruct(bootstrapCtx, client)
 	appender.SetReplayMode(false)
 	if err == nil {
-		// Vocabulary cutover: replay deposits V1 rows byte-identically, so
-		// forward-migrate and fence BEFORE the health gate opens or the
+		// Replay deposits are upcast to V2 at deposit time (versioned
+		// projection-deposit upcast); MigrateAndFence verifies/fences (and
+		// migrates retained V1 rows) before the health gate opens or the
 		// runtime serves. Runs on the replay-only host drive too so the
 		// materialized store is V2 before the guest takes over. A boot that
 		// replayed zero events over a previously fenced store skips the

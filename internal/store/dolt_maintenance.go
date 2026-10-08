@@ -177,6 +177,14 @@ func planDoltGC(usage doltGCDiskUsage, previousMilestoneGiB, milestoneGiB uint64
 	return plan
 }
 
+// RunDoltGCWorkspace runs embedded Dolt garbage collection (CALL DOLT_GC)
+// on the given texture workspace path. It opens no Store handle; callers must
+// have closed every handle on the workspace first. Unconditional: it does not
+// consult milestone markers, journal size, or RUNTIME_DOLT_GC_DISABLED.
+func RunDoltGCWorkspace(workspacePath string) error {
+	return runDoltGCWorkspace(workspacePath)
+}
+
 func runDoltGCWorkspace(workspacePath string) error {
 	rootDB, rootConnector, err := openDoltRootDB(workspacePath)
 	if err != nil {

@@ -78,7 +78,11 @@ func (s *Store) FinalizeBatch(ctx context.Context, computerID, eventDigest strin
 
 // FinalizeReplayBatch applies a resolved projection while reconstructing a
 // canonical tape into a disposable store. It is the only path allowed to use
-// legacy-row compatibility; live finalization remains strict.
+// legacy-row compatibility; live finalization remains strict. The resolved
+// deposit view is upcast to the active serving vocabulary in canonical event
+// order (vocab_upcast_deposit.go) when this store's deposits are upcast:
+// fresh reconstructions and cut-over stores, never a retained V1 store whose
+// one-time cutover is MigrateAndFenceServingVocabulary's job.
 func (s *Store) FinalizeReplayBatch(ctx context.Context, computerID, eventDigest string, receipt computerevent.Receipt, batch *computerevent.ProjectionBatch) error {
 	return s.finalizeBatch(ctx, computerID, eventDigest, receipt, batch, true)
 }
@@ -95,6 +99,11 @@ func (s *Store) DryRunProjectionBatch(ctx context.Context, computerID string, ba
 	}
 	if batch == nil {
 		return fmt.Errorf("computer event projection: dry-run batch is required")
+	}
+	// Validation must see the same deposit view finalize will apply. The
+	// dry-run is side-effect free: it never registers aliases.
+	if err := s.upcastProjectionDeposit(batch, false, false, false); err != nil {
+		return err
 	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -158,8 +167,13 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	}
 	var currentSequence uint64
 	var currentHead string
-	err = tx.QueryRowContext(ctx, `SELECT sequence, canonical_event_head FROM computer_event_projection_heads WHERE computer_id=? FOR UPDATE`, computerID).Scan(&currentSequence, &currentHead)
-	if errors.Is(err, sql.ErrNoRows) {
+	headErr := tx.QueryRowContext(ctx, `SELECT sequence, canonical_event_head FROM computer_event_projection_heads WHERE computer_id=? FOR UPDATE`, computerID).Scan(&currentSequence, &currentHead)
+	// A missing projection head means this computer has never been projected
+	// in this store: a from-scratch reconstruction, which is when the
+	// versioned replayed-deposit upcast activates (vocab_upcast_deposit.go).
+	storeWasEmpty := errors.Is(headErr, sql.ErrNoRows)
+	err = headErr
+	if storeWasEmpty {
 		if sequence != 1 || previousHead != computerevent.ZeroHead {
 			return computerevent.ErrProjectionMismatch
 		}
@@ -179,6 +193,15 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 	}
 	if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
 		return fmt.Errorf("computer event projection: finalize CAS lost")
+	}
+	// Versioned projection-deposit upcast: the event, receipt, payload digest
+	// and reducer commitment were verified upstream; only the resolved deposit
+	// view is transformed, in canonical event order. The decision is resolved
+	// on every finalize (including the batchless genesis) so a from-scratch
+	// reconstruction is detected while its missing head row is still
+	// observable (vocab_upcast_deposit.go).
+	if err := s.upcastProjectionDeposit(batch, allowLegacyTextureBootstrap, storeWasEmpty, true); err != nil {
+		return err
 	}
 	if batch != nil {
 		var projectErr error
@@ -211,8 +234,15 @@ func (s *Store) finalizeBatch(ctx context.Context, computerID, eventDigest strin
 }
 
 // CommitReplay makes the complete replay working set addressable by Dolt
-// history once, instead of committing once per replayed event.
+// history once, instead of committing once per replayed event. The deposit
+// upcast alias ledger is synced first, on the same boundary, so a
+// crash-resumed replay can still resolve references recorded against legacy
+// IDs: an alias is written before the deposit it renames commits, and it is
+// flushed no later than the checkpoint that makes that deposit durable.
 func (s *Store) CommitReplay(ctx context.Context) error {
+	if err := s.syncDepositUpcastLedger(); err != nil {
+		return err
+	}
 	return s.commitDoltCheckpoint(ctx, "finalize computer event replay")
 }
 

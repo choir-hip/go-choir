@@ -70,11 +70,15 @@ type BootTimeline struct {
 	GuestFetchError string          `json:"guest_fetch_error,omitempty"`
 
 	// Terminal state.
-	Outcome   string `json:"outcome"` // healthy | failed
-	Error     string `json:"error,omitempty"`
-	StartedAt string `json:"started_at"`
-	EndedAt   string `json:"ended_at,omitempty"`
-	TotalMS   int64  `json:"total_ms,omitempty"`
+	Outcome string `json:"outcome"` // healthy | failed
+	Error   string `json:"error,omitempty"`
+	// Refusal carries the guest planner's typed refusal witness when the boot
+	// failed because materialization was refused. It is the structured copy of
+	// the failure; Error remains the human string.
+	Refusal   *GuestBootRefusal `json:"refusal,omitempty"`
+	StartedAt string            `json:"started_at"`
+	EndedAt   string            `json:"ended_at,omitempty"`
+	TotalMS   int64             `json:"total_ms,omitempty"`
 
 	// Caller-set summary the receipts key off.
 	FirstHealthyOffsetMS int64 `json:"first_healthy_offset_ms,omitempty"`

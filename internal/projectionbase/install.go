@@ -238,3 +238,59 @@ func verifyInstalledHead(storeDir, markerName string, descriptor Descriptor) err
 	}
 	return nil
 }
+
+// unpackVerified streams a published base blob through tar extraction while
+// hashing the whole blob, so a corrupt blob is refused at the byte where it
+// diverges from its content address.
+func unpackVerified(blobPath, dstDir, expectedDigest string) error {
+	blobPath = filepath.Clean(blobPath)
+	expectedDigest = strings.ToLower(strings.TrimSpace(expectedDigest))
+	if !computerevent.IsSHA256(expectedDigest) {
+		return fmt.Errorf("%w: base blob digest is required", ErrBaseRefused)
+	}
+	file, err := os.Open(blobPath)
+	if err != nil {
+		return fmt.Errorf("%w: open base blob: %v", ErrBaseRefused, err)
+	}
+	defer file.Close()
+	hasher := sha256.New()
+	if err := unpackReader(io.TeeReader(file, hasher), dstDir); err != nil {
+		return fmt.Errorf("%w: unpack base blob: %v", ErrBaseRefused, err)
+	}
+	if _, err := io.Copy(hasher, file); err != nil {
+		return fmt.Errorf("%w: read base blob: %v", ErrBaseRefused, err)
+	}
+	if digest := hex.EncodeToString(hasher.Sum(nil)); digest != expectedDigest {
+		return fmt.Errorf("%w: base blob digest mismatch", ErrBaseRefused)
+	}
+	return nil
+}
+
+// resetScratchContent clears the scratch store entries this tool owns: the
+// marker, its derived Dolt workspace, and the seed metadata. Unknown files are
+// never touched.
+func resetScratchContent(scratchDir string) error {
+	markerPath := filepath.Join(scratchDir, "runtime.db")
+	for _, path := range []string{
+		markerPath,
+		choirstore.TextureWorkspacePath(markerPath),
+		filepath.Join(scratchDir, seedMetaFileName),
+		filepath.Join(scratchDir, seedMetaFileName+".tmp"),
+	} {
+		if err := os.RemoveAll(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// cleanScratchBookkeeping removes scratch-only bookkeeping entries before
+// packing so they never travel inside a published base blob.
+func cleanScratchBookkeeping(scratchDir string) error {
+	for _, name := range []string{seedMetaFileName, seedMetaFileName + ".tmp", seedStagingDirName} {
+		if err := os.RemoveAll(filepath.Join(scratchDir, name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}

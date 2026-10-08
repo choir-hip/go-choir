@@ -431,6 +431,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/files/chunks/", h.HandleFileCASChunk)
 	s.HandleFunc("/internal/computers/files/root", h.HandleFileCASRoot)
 	s.HandleFunc("/internal/computers/files/watermark", h.HandleFileCASWatermark)
+	s.HandleFunc("/internal/computers/projection-base/jobs", h.HandleProjectionJobs)
+	s.HandleFunc("/internal/computers/projection-base/pins", h.HandleProjectionBasePins)
 	s.HandleFunc("/internal/computers/files/projection-base/descriptor", h.HandleProjectionBaseDescriptor)
 	s.HandleFunc("/internal/computers/files/projection-base/blob", h.HandleProjectionBaseBlob)
 	s.HandleFunc("/internal/computers/files/roots", h.HandleFileCASRoots)

@@ -1270,6 +1270,12 @@ jobs:
                   echo "    Skipped autoputer restart (VM runtime package, not a host service)"
                   continue
                 fi
+                if [ "$service" = "checkpointd" ]; then
+                  # A running frozen-target job finishes with its current
+                  # binary. The next timer activation uses the new pointer.
+                  echo "    Checkpoint worker pointer installed; timer remains authoritative"
+                  continue
+                fi
                 systemctl restart "go-choir-${service}.service"
                 systemctl is-active --quiet "go-choir-${service}.service"
                 echo "    Restarted go-choir-${service}.service"
@@ -1278,7 +1284,7 @@ jobs:
               echo "==> Synchronizing host service pointers from activated NixOS closure"
               # sourcecycled intentionally absent: durable default-off (fetch-debt
               # against corpus-dolt; unit stays defined but deploy does not manage it).
-              scripts/node-b-sync-service-pointers auth gateway maild corpusd proxy vmctl
+              scripts/node-b-sync-service-pointers auth gateway maild corpusd proxy vmctl checkpointd
             else
               echo "    Skipping host service pointer install"
             fi
@@ -1788,7 +1794,7 @@ jobs:
             # evidence unless it exactly matches the active copied tree.
             source scripts/node-b-sync-service-pointers
             host_services='{}'
-            for service in auth proxy vmctl gateway corpusd maild; do
+            for service in auth proxy vmctl gateway corpusd maild checkpointd; do
               active_path="/var/lib/go-choir/services/${service}"
               active_commit=$(artifact_manifest_commit "$active_path/share/go-choir/build.json" "$service")
               active_digest=$(nix hash path --type sha256 "$active_path")

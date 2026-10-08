@@ -30,7 +30,7 @@ func TestRebaseRetainedStoreReplacesPrefixWithoutInPlaceOverwrite(t *testing.T) 
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := rebuilder.Run(ctx, disk)
+		result, err := rebuilder.Run(ctx, fixtureReplay(NewDiskEventSource(artifactsRoot, computerID, target)))
 		if err != nil {
 			t.Fatal(err)
 		}

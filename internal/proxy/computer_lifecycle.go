@@ -167,6 +167,10 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		}
 	}
 	if err != nil {
+		if refusal := recoveryRefusalFromError(err); refusal != nil {
+			writeRecoveryRefusalResponse(w, refusal)
+			return
+		}
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "lifecycle actuation failed"})
 		return
 	}
@@ -363,7 +367,7 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 			h.handleComputerColdRecover(w, r, authResult, target, fmt.Sprintf("owner-cold-recover:%s:%d", target.ComputerID, target.Epoch))
 			return
 		}
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "computer authority unavailable"})
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "computer authority unavailable", err)
 		return
 	}
 
@@ -583,7 +587,7 @@ func (h *Handler) HandleComputerBootstrapChain(w http.ResponseWriter, r *http.Re
 		err = fmt.Errorf("computer realization is not active")
 	}
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "computer authority unavailable"})
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "computer authority unavailable", err)
 		return
 	}
 

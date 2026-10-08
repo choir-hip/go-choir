@@ -177,11 +177,33 @@ func (h *Handler) HandleFileCASWatermark(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusForbidden, apiError{Error: "computer capability required"})
 			return
 		}
-		if err := h.service.store.RecordReplayWatermark(r.Context(), input.ComputerID, input.WatermarkSequence, input.BaseRef); err != nil {
-			writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		if input.WatermarkSequence <= 0 || !validFileCASDigest(input.BaseRef) {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "positive sequence and base digest required"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"watermark_sequence": input.WatermarkSequence, "base_ref": input.BaseRef})
+		h.service.writeMu.Lock()
+		defer h.service.writeMu.Unlock()
+		current, _, readErr := h.service.store.ReplayWatermark(r.Context(), input.ComputerID)
+		if readErr != nil && !errors.Is(readErr, ErrNoWatermark) {
+			writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "watermark unavailable"})
+			return
+		}
+		if errors.Is(readErr, ErrNoWatermark) || input.WatermarkSequence > current {
+			if err := h.validateProjectionAdvertisement(r.Context(), input); err != nil {
+				writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+				return
+			}
+			if err := h.service.store.RecordReplayWatermark(r.Context(), input.ComputerID, input.WatermarkSequence, input.BaseRef); err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "watermark publication failed"})
+				return
+			}
+		}
+		sequence, baseRef, err := h.service.store.ReplayWatermark(r.Context(), input.ComputerID)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "watermark readback failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"watermark_sequence": sequence, "base_ref": baseRef})
 		return
 	}
 	if r.Method != http.MethodGet {

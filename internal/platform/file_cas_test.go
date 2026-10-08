@@ -54,18 +54,30 @@ func TestFileCASHTTPFlowAndWatermarkMonotonicity(t *testing.T) {
 		t.Fatalf("get root = %d: %s", getRootResult.Code, getRootResult.Body.String())
 	}
 	for _, input := range []fileCASWatermarkRequest{{ComputerID: "computer-filecas", WatermarkSequence: 10, BaseRef: "base-10"}, {ComputerID: "computer-filecas", WatermarkSequence: 9, BaseRef: "base-9"}} {
-		body, _ := json.Marshal(input)
-		req := httptest.NewRequest(http.MethodPost, "/internal/computers/files/watermark", bytes.NewReader(body))
-		req.Header.Set("X-Internal-Caller", "true")
-		result := httptest.NewRecorder()
-		handler.HandleFileCASWatermark(result, req)
-		if result.Code != http.StatusOK {
-			t.Fatalf("put watermark = %d: %s", result.Code, result.Body.String())
+		if err := store.RecordReplayWatermark(context.Background(), input.ComputerID, input.WatermarkSequence, input.BaseRef); err != nil {
+			t.Fatal(err)
 		}
 	}
 	seq, baseRef, err := store.ReplayWatermark(context.Background(), "computer-filecas")
 	if err != nil || seq != 10 || baseRef != "base-10" {
 		t.Fatalf("watermark = %d, %q, %v", seq, baseRef, err)
+	}
+}
+
+func TestWatermarkHTTPRefusesUnpublishedBase(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	handler := NewHandler(NewService(store, filepath.Join(root, "artifacts"), ""))
+	digest := hex.EncodeToString(make([]byte, 32))
+	body, _ := json.Marshal(fileCASWatermarkRequest{ComputerID: "computer-missing-base", WatermarkSequence: 10, BaseRef: digest})
+	req := httptest.NewRequest(http.MethodPost, "/internal/computers/files/watermark", bytes.NewReader(body))
+	req.Header.Set("X-Internal-Caller", "true")
+	result := httptest.NewRecorder()
+	handler.HandleFileCASWatermark(result, req)
+	if result.Code != http.StatusConflict {
+		t.Fatalf("unpublished base was admitted: %d %s", result.Code, result.Body.String())
+	}
+	if _, _, err := store.ReplayWatermark(context.Background(), "computer-missing-base"); err != ErrNoWatermark {
+		t.Fatalf("refused request changed watermark: %v", err)
 	}
 }
 

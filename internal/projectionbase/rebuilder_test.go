@@ -128,7 +128,7 @@ func TestRebuilderReplaysAndPublishesBase(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(eventsDir, digest1), event1JSON, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	diskSource := NewDiskEventSource(artifactsRoot, computerID)
+	diskSource := fixtureReplay(NewDiskEventSource(artifactsRoot, computerID))
 
 	scratchDir := t.TempDir()
 	cfg := Config{
@@ -225,7 +225,7 @@ func TestRebuilderRejectsMismatchedHeadOrInvalidConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	diskSource := NewDiskEventSource(artifactsRoot, computerID)
+	diskSource := fixtureReplay(NewDiskEventSource(artifactsRoot, computerID))
 	if _, err := rebuilder.Run(ctx, diskSource); err == nil {
 		t.Fatal("expected error when target head is not reached on disk")
 	}

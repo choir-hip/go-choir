@@ -46,6 +46,9 @@ type computeComputer struct {
 	RecoveryEligible  bool                      `json:"recovery_eligible"`
 	LookupStatus      string                    `json:"lookup_status"`
 	ImmutableIdentity *computeImmutableIdentity `json:"immutable_identity,omitempty"`
+	// Recovery is the real checkpoint/repair job JSON for this computer, when
+	// one exists. It is read from the platform job authority, never invented.
+	Recovery *recoveryJobStatus `json:"recovery,omitempty"`
 }
 
 type computeImmutableIdentity struct {
@@ -234,6 +237,9 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		resp.Warnings = append(resp.Warnings, "immutable identity evidence unavailable")
 	} else {
 		resp.CurrentComputer.ImmutableIdentity = identity
+	}
+	if job := h.recoveryJobForComputer(r, authResult.UserID, own.ComputerID); job != nil {
+		resp.CurrentComputer.Recovery = job
 	}
 	if own.ComputerURL != "" && strings.EqualFold(own.State, string(vmctl.VMStateActive)) {
 		resp.Runtime = h.probeRuntimeHealthForTarget(own.ComputerURL)

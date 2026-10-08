@@ -700,6 +700,19 @@ func (s *Service) artifactPath(storageRef string) (string, error) {
 	return path, nil
 }
 
+// ArtifactPath returns the absolute filesystem path for storageRef within the artifacts root.
+func (s *Service) ArtifactPath(storageRef string) (string, error) {
+	return s.artifactPath(storageRef)
+}
+
+// ArtifactsRoot returns the configured artifacts root directory.
+func (s *Service) ArtifactsRoot() string {
+	if s == nil {
+		return ""
+	}
+	return s.artifactsRoot
+}
+
 type statement struct {
 	query string
 	args  []any

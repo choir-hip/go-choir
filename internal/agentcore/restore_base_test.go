@@ -167,8 +167,9 @@ func seedRestoreBase(t *testing.T, ctx context.Context, rt *Runtime, cas *replay
 		keyMaterial[i] = byte(i + 11)
 	}
 	rebuilder, err := projectionbase.NewRebuilder(projectionbase.Config{
-		ComputerID: computerID, TargetHead: target, ArtifactsRoot: artifactsRoot,
-		ScratchDir: t.TempDir(), KeyMaterial: keyMaterial, BatchSize: 100,
+		ComputerID: computerID, TargetHead: target, TargetSequence: uint64(baseSeq),
+		ArtifactsRoot: artifactsRoot,
+		ScratchDir:    t.TempDir(), KeyMaterial: keyMaterial, BatchSize: 100,
 		MemoryLimitRSS: 512 * 1024 * 1024,
 	})
 	if err != nil {

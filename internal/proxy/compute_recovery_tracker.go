@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 const (
@@ -167,6 +169,14 @@ func snapshotComputeRecoveryOperation(op *computeRecoveryOperation) (*computeRec
 func computeRecoveryFailure(err error) (string, string) {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "recovery_timeout", "Current computer recovery timed out."
+	}
+	var refusal *vmctl.RecoveryRefusalError
+	if errors.As(err, &refusal) {
+		reason := strings.TrimSpace(refusal.Reason)
+		if reason == "" {
+			reason = "computer recovery is blocked until repair publishes a fresher projection base"
+		}
+		return "recovery_blocked", "Computer recovery is blocked: " + reason
 	}
 	text := strings.ToLower(err.Error())
 	switch {

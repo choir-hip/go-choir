@@ -132,7 +132,7 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: platform publish failed to resolve autoputer for user %s desktop %s: %v", authResult.UserID, desktopID, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user autoputer"})
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "failed to resolve user autoputer", err)
 		h.lifecycle.record("platform_publish.resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record("platform_publish.total", "resolve_error", time.Since(started))
 		return

@@ -140,6 +140,11 @@ type Store struct {
 	// declared role fields outside the V2 vocabulary. Set when the migration
 	// report exists (open) or when the fenced cutover persists it.
 	vocabCutover atomic.Bool
+	// depositUpcastMu guards the lazy, once-per-process resolution of
+	// depositUpcast: the versioned replayed-deposit upcaster and its alias
+	// ledger (see vocab_upcast_deposit.go).
+	depositUpcastMu sync.Mutex
+	depositUpcast   *depositUpcaster
 	// kernelMode marks the store post-ontology-kernel: bare OG state
 	// transitions that bypass the canonical reducer path fail closed instead
 	// of silently writing a non-event-backed mutation. Set by
@@ -1166,6 +1171,17 @@ func (s *Store) Reopen(path string) error {
 	if err != nil {
 		return err
 	}
+	// The adopted workspace may carry a different deposit-upcast ledger (a
+	// rematerialize flip or base install replaces the files wholesale), so
+	// the cached decision, its alias map and its appended file handle must
+	// not survive the reopen: the handle points at the quarantined
+	// realization once the flip renames the workspace.
+	if err := s.closeDepositUpcastLedger(); err != nil {
+		return fmt.Errorf("runtime store: reopen deposit upcast ledger: %w", err)
+	}
+	s.depositUpcastMu.Lock()
+	s.depositUpcast = nil
+	s.depositUpcastMu.Unlock()
 	s.db = live.db
 	s.readDB = live.readDB
 	s.path = live.path
@@ -1183,6 +1199,9 @@ func (s *Store) Reopen(path string) error {
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
 	var err error
+	if closeErr := s.closeDepositUpcastLedger(); closeErr != nil {
+		err = closeErr
+	}
 	if db := s.textureDB; db != nil {
 		func() {
 			defer func() {

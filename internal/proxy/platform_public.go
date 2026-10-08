@@ -209,7 +209,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: platform proposal resolve autoputer: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user autoputer"})
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "failed to resolve user autoputer", err)
 		return
 	}
 	var doc autoputerTextureDocument

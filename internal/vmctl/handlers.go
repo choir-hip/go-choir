@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -24,6 +25,35 @@ import (
 // errorResponse is a JSON error envelope.
 type vmctlErrorResponse struct {
 	Error string `json:"error"`
+	// Recovery refusal fields: reason, condition kind, retry hint, the frozen
+	// input witness and the repair job status. They are omitted for ordinary
+	// errors so existing clients decode `error` unchanged.
+	Reason            string                `json:"reason,omitempty"`
+	Kind              string                `json:"kind,omitempty"`
+	RetryAfterSeconds int                   `json:"retry_after_seconds,omitempty"`
+	Witness           *RecoveryInputWitness `json:"witness,omitempty"`
+	Repair            *CheckpointJobStatus  `json:"repair,omitempty"`
+}
+
+// writeVMCTLRecoveryRefusal renders a durable recovery refusal as a structured
+// 503 with Retry-After. Known blocked state must fail promptly and durably.
+func writeVMCTLRecoveryRefusal(w http.ResponseWriter, refusal *RecoveryRefusal) {
+	if refusal == nil {
+		return
+	}
+	retryAfter := refusal.RetryAfterSeconds
+	if retryAfter <= 0 {
+		retryAfter = recoveryRetryAfterSeconds
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{
+		Error:             "computer recovery blocked",
+		Reason:            refusal.Reason,
+		Kind:              string(refusal.Kind),
+		RetryAfterSeconds: retryAfter,
+		Witness:           &refusal.Witness,
+		Repair:            refusal.Job,
+	})
 }
 
 // vmctlHealthResponse is the JSON structure for GET /health.
@@ -284,6 +314,11 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if own == nil {
+			if refusal := RecoveryRefusalFrom(err); refusal != nil {
+				log.Printf("vmctl: platform computer recovery blocked: %s", refusal.Reason)
+				writeVMCTLRecoveryRefusal(w, refusal)
+				return
+			}
 			log.Printf("vmctl: resolve platform computer lookup failed after ensure")
 			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "failed to resolve platform computer"})
 			return
@@ -314,6 +349,18 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		own, err = h.registry.ResolveOrAssignDesktopContext(r.Context(), req.UserID, req.DesktopID)
 	}
 	if err != nil {
+		if refusal := RecoveryRefusalFrom(err); refusal != nil {
+			log.Printf("vmctl: resolve blocked for user %s desktop %s: %s", req.UserID, req.DesktopID, refusal.Reason)
+			writeVMCTLRecoveryRefusal(w, refusal)
+			return
+		}
+		// A coalesced waiter released by a sibling refusal carries no typed
+		// error; the durable condition is still the truthful reason.
+		if refusal := h.recordedRecoveryRefusal(req.UserID, req.DesktopID); refusal != nil {
+			log.Printf("vmctl: resolve blocked (recorded condition) for user %s desktop %s: %s", req.UserID, req.DesktopID, refusal.Reason)
+			writeVMCTLRecoveryRefusal(w, refusal)
+			return
+		}
 		log.Printf("vmctl: resolve failed for user %s desktop %s: %v", req.UserID, req.DesktopID, err)
 		status := http.StatusInternalServerError
 		if routeKnown && !route.RouteAbsent {
@@ -333,6 +380,31 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		ComputerURL:   own.ComputerURL,
 		State:         string(own.State),
 	})
+}
+
+// recordedRecoveryRefusal renders the durable condition for a user/desktop
+// whose resolve failed for another reason (for example a coalesced waiter
+// released by a sibling refusal): the durable reason is still the truth.
+func (h *Handler) recordedRecoveryRefusal(userID, desktopID string) *RecoveryRefusal {
+	if h == nil || h.registry == nil {
+		return nil
+	}
+	own := h.registry.GetOwnershipForDesktop(userID, desktopID)
+	if own == nil {
+		return nil
+	}
+	condition, ok := h.registry.RecoveryConditionFor(stableComputerID(own.UserID, own.DesktopID, own.ComputerID))
+	if !ok {
+		return nil
+	}
+	return &RecoveryRefusal{
+		ComputerID:        condition.ComputerID,
+		Kind:              condition.Kind,
+		Reason:            condition.Reason,
+		Witness:           condition.Witness,
+		Job:               condition.Job,
+		RetryAfterSeconds: recoveryRetryAfterSeconds,
+	}
 }
 
 // HandleLookup handles GET /internal/vmctl/lookup?user_id=...
@@ -704,6 +776,10 @@ func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
 
 	own, err := h.registry.ResumeVMForDesktop(req.UserID, req.DesktopID)
 	if err != nil {
+		if refusal := RecoveryRefusalFrom(err); refusal != nil {
+			writeVMCTLRecoveryRefusal(w, refusal)
+			return
+		}
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
@@ -753,6 +829,10 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 
 	own, err := h.registry.RecoverVMForDesktop(req.UserID, req.DesktopID)
 	if err != nil {
+		if refusal := RecoveryRefusalFrom(err); refusal != nil {
+			writeVMCTLRecoveryRefusal(w, refusal)
+			return
+		}
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
@@ -812,6 +892,10 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 
 	own, err := h.registry.RefreshVMForDesktop(req.UserID, req.DesktopID)
 	if err != nil {
+		if refusal := RecoveryRefusalFrom(err); refusal != nil {
+			writeVMCTLRecoveryRefusal(w, refusal)
+			return
+		}
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
 		return
 	}

@@ -254,6 +254,10 @@
           pname = "corpusd";
           subPackage = "cmd/corpusd";
         };
+        checkpointd = mkGoService {
+          pname = "checkpointd";
+          subPackage = "cmd/checkpointd";
+        };
         updater = mkGoService {
           pname = "choir-updater";
           subPackage = "cmd/choir-updater";

@@ -345,13 +345,24 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 	r.pendingWaiters[key] = nil
 	r.mu.Unlock()
 
-	info, err := mgr.BootVM(vmManagerConfigForOwnership(&VMOwnership{
+	platformOwn := &VMOwnership{
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		VMID:          vmID,
 		Kind:          VMKindInteractive,
 		WarmnessClass: WarmnessClassPublicPlatform,
-	}, issueGatewayTokenAt(r.gatewayURL, vmID)))
+	}
+	if refusal := r.admitRecoveryStart(platformOwn, false); refusal != nil {
+		r.mu.Lock()
+		waiters := r.pendingWaiters[key]
+		delete(r.pendingWaiters, key)
+		r.mu.Unlock()
+		for _, ch := range waiters {
+			ch <- nil
+		}
+		return nil, refusal
+	}
+	info, err := mgr.BootVM(vmManagerConfigForOwnership(platformOwn, issueGatewayTokenAt(r.gatewayURL, vmID)))
 	if err != nil {
 		r.mu.Lock()
 		waiters := r.pendingWaiters[key]
@@ -361,8 +372,9 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		for _, ch := range waiters {
 			ch <- nil
 		}
-		return nil, fmt.Errorf("boot platform computer %s: %w", vmID, err)
+		return nil, fmt.Errorf("boot platform computer %s: %w", vmID, r.noteRecoveryStartFailure(platformOwn, err))
 	}
+	r.clearRecoveryCondition(platformOwn)
 	r.mu.Lock()
 	own := &VMOwnership{
 		UserID:        UniversalWirePlatformOwnerID,

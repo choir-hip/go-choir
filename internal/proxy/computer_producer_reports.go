@@ -89,7 +89,7 @@ func (h *Handler) HandleComputerProducerReports(w http.ResponseWriter, r *http.R
 		autoputerURL = target.ComputerURL
 	}
 	if err != nil || strings.TrimSpace(autoputerURL) == "" {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "computer authority unavailable"})
+		writeAutoputerResolveFailure(w, http.StatusBadGateway, "computer authority unavailable", err)
 		return
 	}
 	targetURL, err := joinBasePath(autoputerURL, r.URL.Path)

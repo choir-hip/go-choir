@@ -551,6 +551,40 @@ in
     };
   };
 
+  # Owner-authorized maintenance key use is isolated from corpusd requests.
+  # One oneshot process per host; the timer does not overlap an active replay.
+  systemd.services.go-choir-checkpointd = {
+    description = "Choir verified projection checkpoint maintenance";
+    after = [ "go-choir-corpusd.service" "go-choir-platform-dolt.service" ];
+    requires = [ "go-choir-platform-dolt.service" ];
+    path = [ pkgs.dolt ];
+    serviceConfig = commonServiceHardening // {
+      Type = "oneshot";
+      ExecStart = "${serviceExec "checkpointd" goChoirPackages.checkpointd}";
+      TimeoutStartSec = "8h";
+      MemoryMax = "16G";
+      CPUQuota = "100%";
+      Nice = 10;
+      UMask = "0077";
+      ReadWritePaths = [ platformArtifactsDir ];
+      EnvironmentFile = [ "-/var/lib/go-choir/corpus-dsn.env" ];
+      Environment = [
+        "CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED=true"
+        "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
+        "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
+      ];
+    };
+  };
+  systemd.timers.go-choir-checkpointd = {
+    description = "Reconcile verified projection checkpoints every minute";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "1min";
+      OnUnitInactiveSec = "1min";
+      Unit = "go-choir-checkpointd.service";
+    };
+  };
+
   # go-choir-sourcecycled.service is deliberately NOT in the boot set: it was
   # pure fetch-debt burning corpus-dolt (WW corpus burn, docs(s0)
   # ee013c9a, 2026-10-05). Interim-stopped ~01:15Z; a switch restarted it via

@@ -92,6 +92,10 @@ func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 	if s == nil || s.store == nil || s.artifactsRoot == "" {
 		return report, fmt.Errorf("artifact gc: service/store/artifacts root unavailable")
 	}
+	// Serialize explicit pins with live-set capture and deletion. A pin of an
+	// old blob must not commit after the sweep has classified it unreachable.
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	cfg = normalizeArtifactGCConfig(cfg)
 	if cfg.Mode == ArtifactGCModeOff {
 		report.Mode = ArtifactGCModeOff
@@ -189,6 +193,15 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 			}
 		}
 		wm.Close()
+	}
+	pins, err := s.store.projectionBasePins(ctx)
+	if err != nil {
+		return nil, append(warnings, "projection-base pins: "+err.Error())
+	}
+	for ref := range pins {
+		digest := filepath.Base(ref)
+		live["projection-base"][digest] = struct{}{}
+		live["projection-base"][digest+".descriptor.json"] = struct{}{}
 	}
 
 	// platform-update: every route-table-referenced payload digest. Union of
