@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "kind": "recovery_policy_design_consensus",
+  "source_ref": "33f55961fa3b00c3f790a0fb071f09c3a9d5853b",
+  "prompt_sha256": "9a8126068e409e48035c67dbae4574ab6e61009b5749803be1d96aacdd47223d",
+  "prompt": "MODE: CONVERGENT \u2014 decide.\n\nYou are one member of an independent agentic consensus panel in convergent mode.\nReturn a clear verdict or recommendation, the strongest supporting findings,\nthe dissent you are aware of, risks/edge cases, your evidence or assumptions,\nand a confidence level. Prioritize decision-useful output over breadth.\n\n# Policy & Design Decision: Event Sourcing Checkpoint Cadence, vmctl Fail-Fast, and Replay Schema Evolution\n\nYou are one member of an independent agentic consensus panel.\nDo not assume other agents agree with you.\nReturn concise, decision-useful output.\n\n## Context & Incident Background\n\nChoir is an automatic persistent computer operating on an event-sourced architecture.\nEach computer's source of truth is an immutable append-only event tape in Dolt (`computer_event_index`, head sequence $H$).\nState projections (Dolt workspaces, object graph `og_objects`, SQLite runtime) are materialized from this event tape.\n\nTo avoid replaying the entire lifetime of events on every VM boot (cold boot / resume), Choir uses **ProjectionBase snapshots** (tar blobs of the materialized store) with an advertised watermark sequence $W$.\nOn boot, `PlanRecovery` computes the recovery tail:\n$$\\text{tail} = H - W$$\nThe hard platform invariant is `MaxRecoveryTailEvents = 10,000`. If $\\text{tail} > 10,000$, recovery **refuses** to boot the VM rather than replaying an unbounded lifetime of events.\n\n### The Incident (2026-10-07)\nOn 2026-09-09, a snapshot was manually published at $W = 148,431$.\nOver the next month, no automated system ever republished $W$.\nBy 2026-10-07, the event tape reached $H = 572,151$.\nWhen the owner's VM (`yusefnathanson@me.com`, `computer-03335285...`) was restarted:\n1. Recovery tail was $572,151 - 148,431 = 423,720 > 10,000$.\n2. The guest refused to boot, exiting immediately.\n3. `vmctl`'s warmness policy retried booting the failed VM every 30 minutes in an infinite loop.\n4. Proxy `api.resolve` requests hung for 1,800 seconds (30 minutes) before returning an error to the user.\n5. Rebuilding the base offline required replaying all 572k events from genesis (4.5 hours), producing a 93GB uncompressed Dolt chunk journal (`vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv`).\n6. At the end of replay, a batch vocabulary migration (V1 `super`/`co-super` -> V2 `management`/`engineering`) crashed because replayed pre-cutover V1 rows renamed onto their own post-cutover V2 successors with divergent content.\n7. Dolt GC was required to compact the 93GB journal into an 8.1GB `.darc` chunk archive before the 8.69GB tar blob could be published.\n\nWe recovered the computer by fixing the convergence logic (newer live V2 row wins), running Dolt GC, publishing $W = 572,151$, and resuming the VM (recovery tail = 0).\n\nNow we need to decide permanent policies and designs for the three residuals exposed by this incident.\n\n---\n\n## The Three Policy Questions to Decide\n\n### Question 1: Checkpoint Cadence & Base Publication Policy\n- **Trigger Strategy:** What policy governs when a new ProjectionBase snapshot is built and advertised?\n  - Event count threshold (e.g. every $N = 2,500$ or $5,000$ events)?\n  - Time-based window (e.g. daily if tail $> 1,000$ events)?\n  - Hybrid?\n- **Execution Substrate:** Where and how should snapshotting execute?\n  - Host-side systemd timer / cron job running `choir-rebuild-base`?\n  - Background worker consuming an event-bus queue from corpusd?\n  - In-guest incremental checkpointing vs host-side isolated scratch replay?\n- **Compaction & Retention:**\n  - When should Dolt GC (`CALL DOLT_GC()`) run to prevent journal explosion?\n  - How many historical base blobs to retain per computer in the artifact store?\n- **Monitoring & Alerting:**\n  - What metric thresholds should alert operators before the 10,000-event hard cap is breached?\n\n### Question 2: vmctl Admission Control & Fail-Fast Policy\n- **Admission Check:** How should vmctl inspect `H - W` *before* allocating Firecracker tap devices and booting?\n- **Status Representation:** What state should vmctl assign to a computer whose recovery tail exceeds the limit (`rebuild_required`, `tail_exceeded`)?\n- **Circuit Breaker:** How should vmctl stop warmness/auto-resume loops when a VM cannot boot due to tail excess?\n- **Proxy Behavior:** How should the proxy respond to user requests when a computer is in `rebuild_required`? (e.g., immediate HTTP 503 with structured JSON and `Retry-After`, vs timing out).\n- **Automated Self-Healing:** Should vmctl automatically enqueue an asynchronous rebuild job when tail excess is detected?\n\n### Question 3: Event Replay & Schema/Vocabulary Evolution Strategy\n- **Root Cause:** Replay deposited V1 events, then V2 events, and ran batch migration at the end, causing intra-stream identity collisions.\n- **Design Alternatives:**\n  - **Option A (Stream-level Upcasting):** Upcast events on the fly during replay/read so the reducer only ever consumes the active vocabulary/schema (Greg Young / Event Sourcing standard).\n  - **Option B (Cutover Marker Events):** Append explicit migration marker events to the event tape, so replay triggers the vocabulary migration at the exact stream sequence where it occurred historically.\n  - **Option C (Monotonic LWW / Idempotent Projections):** Treat all replayed projections as last-write-wins by update timestamp so stale pre-cutover copies are naturally replaced by post-cutover updates without batch migrations.\n- Which approach is most robust and maintainable for long-term evolution?\n\n---\n\n## Output Format\n1. **Verdict & Executive Summary** (concise recommended policy for each of the 3 questions)\n2. **Detailed Policy & Architecture Design**:\n   - 1. Checkpoint Cadence & Publication\n   - 2. vmctl Fail-Fast & Admission Control\n   - 3. Replay & Schema Evolution\n3. **Risks, Edge Cases & Failure Modes**\n4. **Implementation Priority & Sequencing**\n5. **Confidence Level** (High / Medium / Low) with rationale\n",
+  "panel": [
+    {
+      "agent": "claude",
+      "status": "failed",
+      "exit_code": "1",
+      "duration_seconds": "7"
+    },
+    {
+      "agent": "opencode",
+      "status": "failed",
+      "exit_code": "1",
+      "duration_seconds": "11"
+    },
+    {
+      "agent": "omp-muse-spark",
+      "status": "ok",
+      "exit_code": "0",
+      "duration_seconds": "80"
+    },
+    {
+      "agent": "codex",
+      "status": "ok",
+      "exit_code": "0",
+      "duration_seconds": "80"
+    },
+    {
+      "agent": "omp-glm53-flash",
+      "status": "ok",
+      "exit_code": "0",
+      "duration_seconds": "95"
+    },
+    {
+      "agent": "omp-gemini38",
+      "status": "ok",
+      "exit_code": "0",
+      "duration_seconds": "243"
+    },
+    {
+      "agent": "omp-gpt61-sol",
+      "status": "ok",
+      "exit_code": "0",
+      "duration_seconds": "262"
+    },
+    {
+      "agent": "omp-gpt6-luna",
+      "status": "ok",
+      "exit_code": "0",
+      "duration_seconds": "267"
+    },
+    {
+      "agent": "devin",
+      "status": "ok",
+      "exit_code": "0",
+      "duration_seconds": "287"
+    },
+    {
+      "agent": "omp-deepseek-v41-flash",
+      "status": "ok",
+      "exit_code": "0",
+      "duration_seconds": "434"
+    }
+  ],
+  "failures": {
+    "claude": "OAuth session expired and could not be refreshed",
+    "opencode": "API key is invalid (served CLI banner claude-haiku-5-5)"
+  },
+  "adjudication": {
+    "checkpoint": "2500 events or age24h/tail1000; offguest seeded verified incremental; scratch GC; two bases plus pins; exact thresholds provisional",
+    "admission": "PlanRecovery retained-aware, durable recovery condition separate lifecycle; typed 503 and async jobs; guest remains authoritative for unknown retained state",
+    "replay": "Original verification inputs immutable; versioned projection-deposit view only; ordered bound forward events for semantic transitions; no invented historical cutover or general wall-clock LWW",
+    "key_custody": "Owner subsequently authorized isolated maintenance worker unwrap with durable audit; human reveal remains two-approval"
+  },
+  "rejected_claims": [
+    "Unconditional H-W boot refusal even with verified retained L",
+    "Unanimous upcasting agreement",
+    "Measured 1-2 minute incremental rebuild",
+    "Sub-50ms response guarantee",
+    "Retroactively synthesized canonical cutover marker"
+  ],
+  "primary_sources": [
+    "https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing",
+    "https://docs.axoniq.io/axon-framework-reference/4.12/events/event-versioning/"
+  ]
+}

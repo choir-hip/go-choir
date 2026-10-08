@@ -223,7 +223,11 @@ finding and historical verification boundary take precedence over votes.
   at least 24h with tail at least 1000. Freeze the target head for each job.
 - Host-side isolated, durable, coalesced work; one active job per computer,
   initially one worker per host. Seed from the latest compatible verified
-  base and replay only its tail. Genesis replay is exceptional repair.
+  base and replay only its tail. The first base may bootstrap from genesis
+  only while its entire chain fits the 10,000-event bound. Unbounded genesis
+  reconstruction requires explicit operator repair; missing seed is never an
+  automatic lifetime-replay fallback. Isolated incremental repair may exceed
+  the serving boot cap without raising that cap.
 - Compact the closed scratch Dolt workspace before packaging. Verify blob,
   descriptor, head, and installed content witness before advertising; read
   back the watermark. Publication is complete only when advertisement advances.
@@ -234,6 +238,14 @@ finding and historical verification boundary take precedence over votes.
   thresholds; observed queue/build/GC/upload time and bursts determine margin.
 - Do not put rebuild execution in the request/append path or invent a third
   semantic store. Operational jobs belong to existing platform control state.
+
+Source-inspection finding before implementation landing: the existing watermark
+POST (`internal/platform/file_cas_http.go:180-184` at `fa251322`) accepted a
+sequence/base string without checking a published descriptor or canonical
+sequence binding, then echoed the request even when the monotonic store refused
+to advance. This is not a staging failure claim. The permanent publication
+boundary must reject missing/foreign/unbound bases and return the stored
+watermark, not fabricate advertisement success from an echoed request.
 
 ### Admission and repair policy
 
