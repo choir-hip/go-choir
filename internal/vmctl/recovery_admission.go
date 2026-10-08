@@ -48,7 +48,18 @@ const (
 	RecoveryRefusalBaseMissing         RecoveryRefusalKind = "projection_base_missing"
 	RecoveryRefusalGuestRefused        RecoveryRefusalKind = "guest_recovery_refused"
 	RecoveryRefusalMetadataUnavailable RecoveryRefusalKind = "recovery_metadata_unavailable"
+	// RecoveryRefusalPrivacyKeyUnavailable: the realization cannot obtain the
+	// computer's privacy key. A fresh realization of an existing chain has no
+	// key source until escrow delivery lands (station SH, O21).
+	RecoveryRefusalPrivacyKeyUnavailable RecoveryRefusalKind = "privacy_key_unavailable"
+	// RecoveryRefusalGuestStartupFailed: the guest hit a fatal startup error
+	// outside the recovery planner and reported it before readiness.
+	RecoveryRefusalGuestStartupFailed RecoveryRefusalKind = "guest_startup_failed"
 )
+
+// privacyKeyRetryAfterSeconds: waiting does not supply a key; the hint only
+// paces clients while an operator acts.
+const privacyKeyRetryAfterSeconds = 300
 
 // RecoveryInputWitness freezes the recovery inputs an admission decision was
 // made on: the guest-measured local sequence (when known), the advertised
@@ -61,6 +72,10 @@ type RecoveryInputWitness struct {
 	EmptyStore        bool   `json:"empty_store,omitempty"`
 	ChainExists       bool   `json:"chain_exists"`
 	HasLocalWitness   bool   `json:"has_local_witness"`
+	// FreshRealization marks a refusal vmctl made before any boot of a new
+	// realization. The refused ownership is retained, so a later start of it
+	// is still a fresh realization even though it takes the retained path.
+	FreshRealization bool `json:"fresh_realization,omitempty"`
 }
 
 // CheckpointJobStatus mirrors the platform checkpoint job document at
@@ -387,6 +402,7 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 			return refusalFromCondition(updated)
 		}
 		a.Clear(computerID)
+		emptyStore = emptyStore || condition.Witness.FreshRealization
 		if !emptyStore {
 			return nil
 		}
@@ -402,6 +418,14 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 		return nil
 	}
 	refusal := deterministicEmptyStoreRefusal(computerID, ownerID, observed)
+	if refusal == nil {
+		// Recovery inputs admit the install, but a provably empty store over
+		// an existing chain is a fresh realization of an existing computer:
+		// its privacy key lived on a previous realization's data image, so
+		// the start cannot succeed. Refuse durably before boot rather than
+		// crash-loop to the readiness deadline.
+		refusal = privacyKeyUnavailableRefusal(computerID, observed)
+	}
 	if refusal == nil {
 		return nil
 	}
@@ -420,7 +444,8 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 }
 
 // RecordGuestRefusal persists a typed guest planner refusal as a durable
-// condition when it is deterministic (tail excess / missing base) and returns
+// condition when it is deterministic (tail excess / missing base / missing
+// privacy key) and returns
 // the refusal for prompt propagation. Other guest failures stay prompt but not
 // durable: they may clear on the next start attempt.
 func (a *RecoveryAdmission) RecordGuestRefusal(input GuestBootRefusalInput) *RecoveryRefusal {
@@ -434,6 +459,10 @@ func (a *RecoveryAdmission) RecordGuestRefusal(input GuestBootRefusalInput) *Rec
 		kind = RecoveryRefusalTailExcess
 	case "base_missing":
 		kind = RecoveryRefusalBaseMissing
+	case "privacy_key_unavailable":
+		kind = RecoveryRefusalPrivacyKeyUnavailable
+	case "startup_failed":
+		kind = RecoveryRefusalGuestStartupFailed
 	}
 	refusal := &RecoveryRefusal{
 		ComputerID: computerID,
@@ -449,7 +478,10 @@ func (a *RecoveryAdmission) RecordGuestRefusal(input GuestBootRefusalInput) *Rec
 		},
 		RetryAfterSeconds: recoveryRetryAfterSeconds,
 	}
-	if kind != RecoveryRefusalTailExcess && kind != RecoveryRefusalBaseMissing {
+	if kind == RecoveryRefusalPrivacyKeyUnavailable {
+		refusal.RetryAfterSeconds = privacyKeyRetryAfterSeconds
+	}
+	if kind != RecoveryRefusalTailExcess && kind != RecoveryRefusalBaseMissing && kind != RecoveryRefusalPrivacyKeyUnavailable {
 		return refusal
 	}
 	condition := &RecoveryCondition{
@@ -484,6 +516,12 @@ func reevaluateRecoveryCondition(now time.Time, condition *RecoveryCondition, ob
 		// nothing to recover and genesis is explicit, not a refusal.
 		return true, updated
 	}
+	if condition.Kind == RecoveryRefusalPrivacyKeyUnavailable {
+		// Only a key source reopens this; recovery inputs (watermark, base,
+		// head) cannot supply a key. Operator cold-recover uses the
+		// maintenance path, which bypasses admission.
+		return false, updated
+	}
 	if condition.Witness.HasLocalWitness {
 		plan, err := recoveryplan.PlanRecovery(condition.Witness.EmptyStore, condition.Witness.LocalSequence, true, observed.WatermarkSequence, observed.TargetSequence)
 		if err == nil {
@@ -501,6 +539,29 @@ func reevaluateRecoveryCondition(now time.Time, condition *RecoveryCondition, ob
 		return true, updated
 	}
 	return false, updated
+}
+
+// privacyKeyUnavailableRefusal refuses a fresh realization of an existing
+// chain. With no chain the guest creates the key before minting genesis.
+func privacyKeyUnavailableRefusal(computerID string, observed recoveryEvidence) *RecoveryRefusal {
+	if !observed.ChainExists {
+		return nil
+	}
+	return &RecoveryRefusal{
+		ComputerID: computerID,
+		Kind:       RecoveryRefusalPrivacyKeyUnavailable,
+		Reason: fmt.Sprintf("fresh realization of existing computer (canonical head %d) has no privacy key source: "+
+			"the key lives only on a previous realization's data image and escrow delivery is not available", observed.TargetSequence),
+		Witness: RecoveryInputWitness{
+			WatermarkSequence: observed.WatermarkSequence,
+			TargetSequence:    observed.TargetSequence,
+			BaseRef:           observed.BaseRef,
+			EmptyStore:        true,
+			ChainExists:       true,
+			FreshRealization:  true,
+		},
+		RetryAfterSeconds: privacyKeyRetryAfterSeconds,
+	}
 }
 
 // deterministicEmptyStoreRefusal applies the shared planner to a provably
@@ -526,6 +587,7 @@ func deterministicEmptyStoreRefusal(computerID, ownerID string, observed recover
 			EmptyStore:        true,
 			ChainExists:       true,
 			HasLocalWitness:   true,
+			FreshRealization:  true,
 		},
 		RetryAfterSeconds: recoveryRetryAfterSeconds,
 	}
@@ -568,7 +630,8 @@ func (a *RecoveryAdmission) considerJob(condition *RecoveryCondition) {
 	if a == nil || condition == nil {
 		return
 	}
-	if a.jobs == nil {
+	if a.jobs == nil || condition.Kind == RecoveryRefusalPrivacyKeyUnavailable {
+		// A checkpoint job cannot supply a key.
 		return
 	}
 	if condition.Job != nil && !checkpointJobTerminal(condition.Job.Status) {

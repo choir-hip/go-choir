@@ -3,9 +3,12 @@ package autoputer
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -69,4 +72,90 @@ func serveBootRefusalAndExit(s *server.Server, refusal *ProjectionBaseRefusal) {
 	time.Sleep(bootRefusalObservationWindow)
 	log.Printf("autoputer: boot refusal observation window elapsed; exiting refused guest")
 	os.Exit(1)
+}
+
+// startupFailer ends a boot that can no longer reach readiness. Every fatal
+// startup error takes this path instead of log.Fatalf, so the host records a
+// typed reason within one health probe rather than waiting out its readiness
+// deadline while systemd crash-loops the runtime (O9/O20;
+// docs/problems/fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md).
+type startupFailer struct {
+	server     *server.Server
+	computerID string
+	window     time.Duration
+	exit       func(int)
+
+	mu   sync.Mutex
+	gate *replayHealthGate
+}
+
+func newStartupFailer(s *server.Server, computerID string) *startupFailer {
+	window := bootRefusalObservationWindow
+	if strings.TrimSpace(os.Getenv("RUNTIME_RECOVERY_REPLAY_ONLY")) == "1" {
+		// The B14 host drive waits on process exit, not /health: fail fast.
+		window = 0
+	}
+	return &startupFailer{server: s, computerID: computerID, window: window, exit: os.Exit}
+}
+
+// setGate records that the server is running with the replay gate as its
+// /health handler; later refusals are published through the gate.
+func (f *startupFailer) setGate(gate *replayHealthGate) {
+	f.mu.Lock()
+	f.gate = gate
+	f.mu.Unlock()
+}
+
+// fatalf is the log.Fatalf replacement for startup: it logs, then refuses
+// with kind startup_failed and the formatted message as the reason.
+func (f *startupFailer) fatalf(format string, args ...any) {
+	reason := fmt.Sprintf(format, args...)
+	log.Print(reason)
+	f.refuse(&ProjectionBaseRefusal{ComputerID: f.computerID, Kind: BootRefusalKindStartupFailed, Reason: reason})
+}
+
+// refuse publishes the typed refusal on /health for the observation window,
+// then exits. Before the server runs it starts a refusal-only server.
+func (f *startupFailer) refuse(refusal *ProjectionBaseRefusal) {
+	f.mu.Lock()
+	gate := f.gate
+	f.mu.Unlock()
+	if gate == nil {
+		if f.window == 0 {
+			f.exit(1)
+			return
+		}
+		serveBootRefusalAndExit(f.server, refusal)
+		return
+	}
+	readinessServed := !gate.isPending()
+	gate.refuse(refusal)
+	if readinessServed {
+		// The host stopped its boot wait once readiness was served; nobody
+		// reads the refusal, so restart now as before.
+		log.Printf("autoputer: startup refused (%s) after readiness; exiting", refusal.Kind)
+		f.exit(1)
+		return
+	}
+	log.Printf("autoputer: startup refused (%s); serving typed refusal on /health for %s", refusal.Kind, f.window)
+	time.Sleep(f.window)
+	f.exit(1)
+}
+
+// privacyKeyBootRefusal classifies a privacy key load failure. A missing key
+// over an existing chain is the typed privacy_key_unavailable refusal: the
+// key may be created only before genesis, so this realization can never
+// succeed without a key source.
+func privacyKeyBootRefusal(computerID string, headSequence uint64, err error) *ProjectionBaseRefusal {
+	reason := fmt.Sprintf("autoputer: configure guest-owned private artifact cipher: %v", err)
+	if headSequence > 0 && errors.Is(err, os.ErrNotExist) {
+		return &ProjectionBaseRefusal{
+			ComputerID:     computerID,
+			Kind:           BootRefusalKindPrivacyKeyUnavailable,
+			Reason:         reason,
+			TargetSequence: headSequence,
+			ChainExists:    true,
+		}
+	}
+	return &ProjectionBaseRefusal{ComputerID: computerID, Kind: BootRefusalKindStartupFailed, Reason: reason}
 }

@@ -442,15 +442,140 @@ func TestRecoveryAdmissionFreshInstallRefusesOvercapBeforeBoot(t *testing.T) {
 		t.Fatalf("head growth alone must not requeue the repair job, posts=%d", jobs.postCount())
 	}
 
-	// A published fresher base changes the seed dependency: admission clears
-	// and the guest boots against the repaired watermark.
+	// A published fresher base clears the recovery refusal, but a fresh
+	// realization of an existing chain still has no privacy key source: the
+	// start is refused before boot instead of crash-looping on the missing key
+	// (docs/problems/fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md).
 	corpusd.setWatermark(571000, "base-fresh")
-	own, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-fresh", PrimaryDesktopID)
-	if err != nil {
-		t.Fatalf("repair must restore admission: %v", err)
+	_, err = reg.ResolveOrAssignDesktopContext(context.Background(), "user-fresh", PrimaryDesktopID)
+	refusal = requireRecoveryRefusal(t, err)
+	if refusal.Kind != RecoveryRefusalPrivacyKeyUnavailable {
+		t.Fatalf("repaired fresh realization refusal kind = %s, want %s", refusal.Kind, RecoveryRefusalPrivacyKeyUnavailable)
 	}
-	if own == nil || len(mgr.boots) != 1 {
-		t.Fatalf("restored admission must boot exactly once, boots=%d own=%+v", len(mgr.boots), own)
+	if len(mgr.boots) != 0 {
+		t.Fatalf("key-unsatisfiable fresh realization must not boot, boots=%d", len(mgr.boots))
+	}
+}
+
+func TestRecoveryAdmissionFreshRealizationOfExistingChainRefusesMissingPrivacyKey(t *testing.T) {
+	corpusd := &recoveryEvidenceFake{headSequence: 2, watermarkSequence: 2, baseRef: "base-current"}
+	corpusdServer := httptest.NewServer(corpusd)
+	t.Cleanup(corpusdServer.Close)
+	jobs := &recoveryJobsFake{status: "succeeded"}
+	jobsServer := httptest.NewServer(jobs)
+	t.Cleanup(jobsServer.Close)
+	statePath := filepath.Join(t.TempDir(), "recovery-conditions.json")
+
+	reg := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	mgr := &mockVMManager{}
+	reg.SetVMManager(mgr)
+
+	for attempt := 0; attempt < 2; attempt++ {
+		_, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-keyless", PrimaryDesktopID)
+		refusal := requireRecoveryRefusal(t, err)
+		if refusal.Kind != RecoveryRefusalPrivacyKeyUnavailable {
+			t.Fatalf("attempt %d: kind = %s, want %s", attempt, refusal.Kind, RecoveryRefusalPrivacyKeyUnavailable)
+		}
+		if refusal.Witness.TargetSequence != 2 || !refusal.Witness.ChainExists || !refusal.Witness.EmptyStore {
+			t.Fatalf("attempt %d: witness = %+v, want empty store over existing chain at 2", attempt, refusal.Witness)
+		}
+		if !strings.Contains(refusal.Reason, "privacy key") {
+			t.Fatalf("attempt %d: reason must name the missing key: %q", attempt, refusal.Reason)
+		}
+	}
+	if len(mgr.boots) != 0 || len(mgr.reservedEpochs) != 0 {
+		t.Fatalf("refused start must not boot or reserve an epoch, boots=%d reserved=%v", len(mgr.boots), mgr.reservedEpochs)
+	}
+	// A checkpoint job cannot supply a key, and recovery-input changes must
+	// not reopen the refusal.
+	time.Sleep(50 * time.Millisecond)
+	if jobs.postCount() != 0 {
+		t.Fatalf("key refusal must not enqueue a checkpoint job, posts=%d", jobs.postCount())
+	}
+	computerID := stableComputerID("user-keyless", PrimaryDesktopID, "")
+	if condition, ok := reg.RecoveryConditionFor(computerID); !ok || condition.Kind != RecoveryRefusalPrivacyKeyUnavailable {
+		t.Fatalf("key refusal must persist a durable condition: %+v (%t)", condition, ok)
+	}
+	corpusd.setHead(3)
+	corpusd.setWatermark(3, "base-newer")
+	_, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-keyless", PrimaryDesktopID)
+	if refusal := requireRecoveryRefusal(t, err); refusal.Kind != RecoveryRefusalPrivacyKeyUnavailable {
+		t.Fatalf("watermark change reopened a key refusal: kind=%s", refusal.Kind)
+	}
+
+	// Durable across a vmctl restart.
+	restarted := newRecoveryAdmissionRegistry(t, statePath, corpusdServer.URL, jobsServer.URL)
+	if condition, ok := restarted.RecoveryConditionFor(computerID); !ok || condition.Kind != RecoveryRefusalPrivacyKeyUnavailable {
+		t.Fatalf("key refusal must survive a vmctl restart: %+v (%t)", condition, ok)
+	}
+	if len(mgr.boots) != 0 {
+		t.Fatalf("key-refused computer booted, boots=%d", len(mgr.boots))
+	}
+}
+
+func TestRecoveryAdmissionGenesisStartIsNotRefusedForMissingKey(t *testing.T) {
+	// No canonical chain: the guest creates the key before minting genesis.
+	corpusd := &recoveryEvidenceFake{}
+	corpusdServer := httptest.NewServer(corpusd)
+	t.Cleanup(corpusdServer.Close)
+	jobsServer := httptest.NewServer(&recoveryJobsFake{status: "running"})
+	t.Cleanup(jobsServer.Close)
+
+	for _, head := range []int{http.StatusNotFound, 0} {
+		corpusd.mu.Lock()
+		corpusd.headStatus = head
+		corpusd.mu.Unlock()
+		reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+		mgr := &mockVMManager{}
+		reg.SetVMManager(mgr)
+		if _, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-genesis", PrimaryDesktopID); err != nil {
+			t.Fatalf("head status %d: genesis start must not be refused: %v", head, err)
+		}
+		if len(mgr.boots) != 1 {
+			t.Fatalf("head status %d: genesis start must boot once, boots=%d", head, len(mgr.boots))
+		}
+	}
+}
+
+func TestRecoveryAdmissionGuestStartupFailuresArePrompt(t *testing.T) {
+	corpusdServer := httptest.NewServer(&recoveryEvidenceFake{headSequence: 9, watermarkSequence: 9, baseRef: "base"})
+	t.Cleanup(corpusdServer.Close)
+	jobs := &recoveryJobsFake{status: "running"}
+	jobsServer := httptest.NewServer(jobs)
+	t.Cleanup(jobsServer.Close)
+	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	own := seedRecoveryOwnership(reg, "user-startup", "computer-startup", VMStateStopped)
+
+	for kind, want := range map[string]RecoveryRefusalKind{
+		"startup_failed":   RecoveryRefusalGuestStartupFailed,
+		"some_future_kind": RecoveryRefusalGuestRefused,
+	} {
+		guestErr := &testGuestBootRefusalError{kind: kind, reason: "autoputer: open runtime store: disk full", target: 9, chain: true}
+		refusal := requireRecoveryRefusal(t, reg.noteRecoveryStartFailure(own, guestErr))
+		if refusal.Kind != want {
+			t.Fatalf("guest kind %q mapped to %s, want %s", kind, refusal.Kind, want)
+		}
+		if !strings.Contains(refusal.Reason, "disk full") {
+			t.Fatalf("guest kind %q lost its reason: %q", kind, refusal.Reason)
+		}
+		if condition, ok := reg.RecoveryConditionFor("computer-startup"); ok {
+			t.Fatalf("guest kind %q must not persist a durable condition: %+v", kind, condition)
+		}
+	}
+
+	// A guest-measured missing key is deterministic: durable, but no
+	// checkpoint job can repair it.
+	guestErr := &testGuestBootRefusalError{kind: "privacy_key_unavailable", reason: "privacy keyring: load guest key: no such file", target: 9, chain: true}
+	refusal := requireRecoveryRefusal(t, reg.noteRecoveryStartFailure(own, guestErr))
+	if refusal.Kind != RecoveryRefusalPrivacyKeyUnavailable {
+		t.Fatalf("guest key refusal kind = %s", refusal.Kind)
+	}
+	if condition, ok := reg.RecoveryConditionFor("computer-startup"); !ok || condition.Kind != RecoveryRefusalPrivacyKeyUnavailable {
+		t.Fatalf("guest key refusal must be durable: %+v (%t)", condition, ok)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if jobs.postCount() != 0 {
+		t.Fatalf("startup and key failures must not enqueue checkpoint jobs, posts=%d", jobs.postCount())
 	}
 }
 

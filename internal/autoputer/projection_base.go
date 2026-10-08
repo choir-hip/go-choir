@@ -27,6 +27,11 @@ const (
 	BootRefusalKindBaseMissing         = "base_missing"
 	BootRefusalKindBaseUnavailable     = "base_unavailable"
 	BootRefusalKindRecoveryUnavailable = "recovery_unavailable"
+	// BootRefusalKindPrivacyKeyUnavailable: the computer has a chain but this
+	// realization has no privacy key (the key may be created only pre-genesis).
+	BootRefusalKindPrivacyKeyUnavailable = "privacy_key_unavailable"
+	// BootRefusalKindStartupFailed: any other fatal startup error.
+	BootRefusalKindStartupFailed = "startup_failed"
 )
 
 // ProjectionBaseRefusal is the guest planner's typed refusal. It carries the

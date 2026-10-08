@@ -59,6 +59,9 @@ type replayHealthGate struct {
 	// verification) so the host stall detector sees liveness while the
 	// applied sequence is stationary.
 	progress uint64
+	// refused, once set, is the only /health answer: a fatal startup error
+	// after the server started.
+	refused *ProjectionBaseRefusal
 }
 
 func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +74,12 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	app := g.appender
 	base := g.base
 	progress := g.progress
+	refused := g.refused
 	g.mu.Unlock()
+	if refused != nil {
+		writeBootRefusalHealth(w, refused)
+		return
+	}
 	if pending {
 		var snap computerevent.ReplaySnapshot
 		if app != nil {
@@ -92,6 +100,18 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	base(w, r)
+}
+
+func (g *replayHealthGate) refuse(refusal *ProjectionBaseRefusal) {
+	g.mu.Lock()
+	g.refused = refusal
+	g.mu.Unlock()
+}
+
+func (g *replayHealthGate) isPending() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.pending
 }
 
 func (g *replayHealthGate) setPending(pending bool) {
@@ -124,6 +144,7 @@ func Run() {
 	cfg := LoadConfig()
 
 	s := server.NewServer("autoputer", cfg.Port)
+	boot := newStartupFailer(s, cfg.ComputerID)
 
 	// Initialize the placeholder shell handlers.
 	h := NewHandler(cfg.ComputerID)
@@ -143,7 +164,7 @@ func Run() {
 
 	// Ensure the store directory exists.
 	if err := os.MkdirAll(storeDir(rtCfg.StorePath), 0o755); err != nil {
-		log.Fatalf("autoputer: create store directory: %v", err)
+		boot.fatalf("autoputer: create store directory: %v", err)
 	}
 
 	log.Printf("autoputer: startup phase=dolt-maintenance status=starting")
@@ -155,7 +176,7 @@ func Run() {
 	log.Printf("autoputer: startup phase=runtime-store-open status=starting")
 	db, err := store.Open(rtCfg.StorePath)
 	if err != nil {
-		log.Fatalf("autoputer: open runtime store: %v", err)
+		boot.fatalf("autoputer: open runtime store: %v", err)
 	}
 	log.Printf("autoputer: startup phase=runtime-store-open status=complete")
 	bootMark("runtime_store_open")
@@ -204,7 +225,7 @@ func Run() {
 	}
 	capsuleExecutor, capsuleConfigured, err := configuredCapsuleExecutor()
 	if err != nil {
-		log.Fatalf("autoputer: configure production capsule executor: %v", err)
+		boot.fatalf("autoputer: configure production capsule executor: %v", err)
 	}
 	if capsuleConfigured {
 		coreOpts = append(coreOpts, agentcore.WithCapsuleExecutor(capsuleExecutor))
@@ -267,17 +288,17 @@ func Run() {
 		}
 		if err != nil {
 			cancel()
-			log.Fatalf("autoputer: acquire or recover computer event credential: %v", err)
+			boot.fatalf("autoputer: acquire or recover computer event credential: %v", err)
 		}
 		eventClient, err := computerevent.NewGuestHTTPClient(platformURL, credentials.Capability)
 		if err != nil {
 			cancel()
-			log.Fatalf("autoputer: configure computer event client: %v", err)
+			boot.fatalf("autoputer: configure computer event client: %v", err)
 		}
 		canonicalHead, err := eventClient.Head(bootstrapCtx, computerID)
 		if err != nil {
 			cancel()
-			log.Fatalf("autoputer: resolve canonical event head before keyring: %v", err)
+			boot.fatalf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
 		recoveryPlan, materialized, baseErr := materializeProjectionBaseIfNeeded(bootstrapCtx, rtCfg.StorePath, computerID, platformURL, credentials.Capability, db)
 		if baseErr != nil {
@@ -296,7 +317,13 @@ func Run() {
 		privateCipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, canonicalHead == nil)
 		if err != nil {
 			cancel()
-			log.Fatalf("autoputer: configure guest-owned private artifact cipher: %v", err)
+			var headSequence uint64
+			if canonicalHead != nil {
+				headSequence = canonicalHead.Sequence
+			}
+			refusal := privacyKeyBootRefusal(computerID, headSequence, err)
+			log.Print(refusal.Reason)
+			boot.refuse(refusal)
 		}
 		// Track K lazy per-boot custodian escrow: best-effort, never blocks
 		// boot; retried on the next boot when the platform is unreachable.
@@ -351,7 +378,7 @@ func Run() {
 			replayBootstrapCancel = cancel
 		} else {
 			cancel()
-			log.Fatalf("autoputer: acquire computer event authority: %v", err)
+			boot.fatalf("autoputer: acquire computer event authority: %v", err)
 		}
 		if platformURL != "" {
 			fileSyncService = newFileSync(filesRoot, platformURL, credentials.Capability, computerID, privateCipher, func(ctx context.Context) (uint64, error) {
@@ -375,19 +402,19 @@ func Run() {
 		bootMark("credential_exchange_done")
 	}
 	if opt, ok, err := selfDevelopmentUpdaterOption(); err != nil {
-		log.Fatalf("autoputer: configure self-development updater: %v", err)
+		boot.fatalf("autoputer: configure self-development updater: %v", err)
 	} else if ok {
 		coreOpts = append(coreOpts, opt)
 		log.Printf("autoputer: self-development updater root wired")
 	}
 	if opt, ok, err := selfDevelopmentRouteOption(); err != nil {
-		log.Fatalf("autoputer: configure self-development route: %v", err)
+		boot.fatalf("autoputer: configure self-development route: %v", err)
 	} else if ok {
 		coreOpts = append(coreOpts, opt)
 		log.Printf("autoputer: self-development computer-version route wired")
 	}
 	if opt, ok, err := selfDevelopmentVerifierOption(); err != nil {
-		log.Fatalf("autoputer: configure self-development verifier: %v", err)
+		boot.fatalf("autoputer: configure self-development verifier: %v", err)
 	} else if ok {
 		coreOpts = append(coreOpts, opt)
 		log.Printf("autoputer: self-development verifier authority wired; mode remains off")
@@ -460,7 +487,7 @@ func Run() {
 			toolCWD = filesRoot
 		}
 		if err := rt.Runtime.InstallDefaultAgentTools(toolCWD); err != nil {
-			log.Fatalf("autoputer: install default agent tools: %v", err)
+			boot.fatalf("autoputer: install default agent tools: %v", err)
 		}
 	} else {
 		log.Printf("autoputer: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
@@ -468,7 +495,7 @@ func Run() {
 
 	textureHandler := textureowner.NewHandler(rt.Runtime)
 	if err := rt.BindTextureOwner(textureHandler); err != nil {
-		log.Fatalf("autoputer: bind Texture lifecycle owner: %v", err)
+		boot.fatalf("autoputer: bind Texture lifecycle owner: %v", err)
 	}
 	if toolsEnabled {
 		// R3d: texture is a full-RLM desk — its registry is desk_go_eval only;
@@ -491,10 +518,10 @@ func Run() {
 			}
 			spawnPolicy, policyErr := agentprofile.PolicyFor(profile)
 			if policyErr != nil {
-				log.Fatalf("autoputer: spawn policy for %s: %v", profile, policyErr)
+				boot.fatalf("autoputer: spawn policy for %s: %v", profile, policyErr)
 			}
 			if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, spawnPolicy); err != nil {
-				log.Fatalf("autoputer: register coagent spawn tool for %s: %v", profile, err)
+				boot.fatalf("autoputer: register coagent spawn tool for %s: %v", profile, err)
 			}
 		}
 	}
@@ -556,8 +583,9 @@ func Run() {
 		gate.appender = replayAppender
 		gate.mu.Unlock()
 		s.SetHealthHandler(gate.ServeHTTP)
+		boot.setGate(gate)
 		bootMark("replay_begin")
-		go runReplayPhase(gate, replayAppender, replayClient, replayCredentials, replayComputerID, rtCfg.StorePath, db, replayBootstrapCtx, replayBootstrapCancel, func() error {
+		go runReplayPhase(boot, gate, replayAppender, replayClient, replayCredentials, replayComputerID, rtCfg.StorePath, db, replayBootstrapCtx, replayBootstrapCancel, func() error {
 			if fileSyncService != nil {
 				restored, err := fileSyncService.HydrateIfNeeded(ctx)
 				if err != nil {
@@ -585,11 +613,11 @@ func Run() {
 		// Vocabulary cutover: migrate any retained V1 rows and hold the
 		// serving fence closed before the runtime starts serving authority.
 		if _, err := db.MigrateAndFenceServingVocabulary(ctx, false, nil); err != nil {
-			log.Fatalf("autoputer: vocabulary migration refused: %v", err)
+			boot.fatalf("autoputer: vocabulary migration refused: %v", err)
 		}
 		startPeriodicDoltGC(rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
-			log.Fatalf("autoputer: runtime startup refused: %v", err)
+			boot.fatalf("autoputer: runtime startup refused: %v", err)
 		}
 		StartPeriodicFileSync(ctx, fileSyncService, fileSyncIntervalFromEnv())
 	}
@@ -615,7 +643,7 @@ func startPeriodicDoltGC(storePath string) {
 // (Restart=on-failure) restart the guest and the next boot resumes from the
 // committed head. Never CAS during replay (B8); the appender is read-only over
 // the canonical tape.
-func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID, storePath string, db *store.Store, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
+func runReplayPhase(boot *startupFailer, gate *replayHealthGate, appender *computerevent.ComputerEventAppender, client *computerevent.HTTPClient, credentials *selfdev.GuestCredentials, computerID, storePath string, db *store.Store, bootstrapCtx context.Context, cancel context.CancelFunc, afterReplay func() error) {
 	defer cancel()
 	// B14 host-drive boundary: when RUNTIME_RECOVERY_REPLAY_ONLY is set the
 	// reconstruct is a one-shot, deterministic projection materialization on
@@ -645,7 +673,7 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 		replayed := appender.ReplaySnapshot().AppliedRows > 0
 		bootMark("reconstruct_done") // raw tape apply complete
 		if _, migErr := db.MigrateAndFenceServingVocabulary(bootstrapCtx, replayed, gate.tick); migErr != nil {
-			log.Fatalf("autoputer: vocabulary migration refused: %v", migErr)
+			boot.fatalf("autoputer: vocabulary migration refused: %v", migErr)
 		}
 		bootMark("vocab_fenced") // forward-migrate + serving fence complete
 	}
@@ -656,7 +684,7 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 			log.Printf("autoputer: replay quantum complete; resuming on next boot (progress seq=%d)", appender.ReplaySnapshot().Sequence)
 			os.Exit(1)
 		}
-		log.Fatalf("autoputer: reconstruct computer event authority: %v", err)
+		boot.fatalf("autoputer: reconstruct computer event authority: %v", err)
 	}
 	if replayOnly {
 		snap := appender.ReplaySnapshot()
@@ -669,13 +697,13 @@ func runReplayPhase(gate *replayHealthGate, appender *computerevent.ComputerEven
 	gate.tick()
 	gate.setPending(false)
 	if err := reconcilePendingLifecycleReceipts(appender, credentials, computerID, bootstrapCtx); err != nil {
-		log.Fatalf("autoputer: reconcile pending lifecycle receipts: %v", err)
+		boot.fatalf("autoputer: reconcile pending lifecycle receipts: %v", err)
 	}
 	bootMark("lifecycle_reconciled")
 	gate.tick()
 	if afterReplay != nil {
 		if err := afterReplay(); err != nil {
-			log.Fatalf("autoputer: runtime startup refused: %v", err)
+			boot.fatalf("autoputer: runtime startup refused: %v", err)
 		}
 	}
 	bootMark("runtime_started")
