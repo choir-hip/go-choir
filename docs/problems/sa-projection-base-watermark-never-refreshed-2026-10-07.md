@@ -335,6 +335,33 @@ Named residuals from the pre-landing audit:
 - Failed-job scratch directories are retained for diagnostics and are not
   yet swept.
 
+### Staging finding — scheduler reconcile scan error (2026-10-08, `0f7c58ba`)
+
+Evidence: deployed `0f7c58ba` (corpusd/vmctl/proxy/checkpointd build.json
+all report it; CI run 37831357213 green). Every timer activation of
+`go-choir-checkpointd.service` exits status 1 before claiming a job:
+
+```
+checkpoint worker: sql: Scan error on column index 3, name
+"COALESCE(w.updated_at,h.created_at)": unsupported Scan, storing
+driver.Value type []uint8 into type *time.Time
+```
+
+Cause: `ReconcileProjectionJobs` scans `COALESCE(w.updated_at,h.created_at)`
+into `time.Time`. Dolt returns the COALESCE expression as bytes, which
+`parseTime=true` does not convert (it converts only typed DATETIME columns).
+No unit test exercised reconcile against a Dolt server.
+
+Impact: fail-closed. No job is queued, claimed, unwrapped or published; no
+watermark moves. But the checkpoint cadence — the core of this policy — is
+dead on staging until fixed. Pre-deploy staging state for the acceptance
+record: 110 computers with event heads, 1 with a watermark (the repaired
+owner VM, tail 534), 11 due by tail ≥ 2500, 1 of those over the 10k
+bootstrap bound without a base (`computer-ccb04d4a…`, 15,998 events).
+
+Fix shape: scan the two typed columns separately and coalesce in Go; add a
+reconcile regression against the platform test store.
+
 ## Rollback
 
 None — record only. The deployed repair path (manual `bootstrap-chain`
