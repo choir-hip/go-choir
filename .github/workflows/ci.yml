@@ -1675,6 +1675,20 @@ jobs:
               # autoputer is a VM runtime package. Active VM refresh verifies its
               # compiled identity through the guest /health body above.
               [ "$service" = "autoputer" ] && continue
+              # checkpointd is a timer-driven oneshot with no health port: its
+              # identity is the installed pointer's build manifest, fail-closed.
+              if [ "$service" = "checkpointd" ]; then
+                manifest="/var/lib/go-choir/services/checkpointd/share/go-choir/build.json"
+                observed_commit=$(jq -r '.commit // empty' "$manifest" 2>/dev/null || true)
+                if [ "$observed_commit" != "$DEPLOY_COMMIT" ]; then
+                  echo "Selected service checkpointd manifest commit=${observed_commit:-missing}, expected ${DEPLOY_COMMIT}" >&2
+                  dump_deploy_service_diagnostics "selected service build identity mismatch"
+                  exit 1
+                fi
+                echo "    Activation receipt: service=checkpointd commit=${observed_commit} (manifest)"
+                record_receipt_artifact checkpointd "$observed_commit" active
+                continue
+              fi
               port=$(service_health_port "$service") || {
                 echo "No health identity probe is defined for selected host service ${service}" >&2
                 exit 1
