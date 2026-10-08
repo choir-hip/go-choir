@@ -187,6 +187,98 @@ replay.
   (from `7cf0a438`); in-guest reruns lose the dedup audit trail. Fixed
   together with the fourth defect.
 
+## Owner-authorized permanent policy — implementation boundary
+
+Owner: “document and implement”, following the recovery policy panel.
+Baseline: main `33f55961`; unrelated dirty `skills/agentic-consensus/*`
+is preserved untouched. Mutation class **red**: replay/projection, watermark,
+privacy custody, vmctl admission, proxy availability. Conjecture delta:
+periodic verified incremental publication plus typed recovery admission can
+bound recovery without changing event authority or historical verification.
+Heresy delta: discovered missing cadence, blind boot retries, and mixed-version
+projection deposits; no claim of repair until deployed acceptance.
+Rollback: revert implementation commits, disable the checkpoint scheduler,
+retain readable prior bases and the immutable tape; never rewind event heads.
+
+### Research and panel adjudication
+
+Primary sources actually read for this implementation:
+[Microsoft event sourcing](https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing)
+recommends snapshots plus subsequent events, immutable history, versioned
+upcasters and idempotent consumers;
+[Axon event versioning](https://docs.axoniq.io/axon-framework-reference/4.12/events/event-versioning/)
+describes explicit revision transformations and snapshot compatibility.
+Neither supplies Choir's numerical cadence or proves publication throughput.
+The previous chat overstated external research and unanimity: the panel
+disagreed on 2,500 versus 5,000 events, two versus three bases, and upcasting
+versus ordered migration for identity-changing cutovers. Its claimed
+one-to-two-minute rebuild and 50ms responses are unmeasured, not acceptance.
+Raw panel: `.agentic-consensus/agentic-consensus-20261007-200921/`;
+eight successful outputs, two failures. The verified retained-store minority
+finding and historical verification boundary take precedence over votes.
+
+### Checkpoint policy
+
+- Reconcile every minute. Queue at cold tail `H-W >= 2500`, or base age
+  at least 24h with tail at least 1000. Freeze the target head for each job.
+- Host-side isolated, durable, coalesced work; one active job per computer,
+  initially one worker per host. Seed from the latest compatible verified
+  base and replay only its tail. Genesis replay is exceptional repair.
+- Compact the closed scratch Dolt workspace before packaging. Verify blob,
+  descriptor, head, and installed content witness before advertising; read
+  back the watermark. Publication is complete only when advertisement advances.
+- Retain current and previous verified bases plus explicitly referenced
+  restore, reader and repair bases. Never delete the tape or a live pin.
+- Warn at 5000, urgent at 7500, and on two failed jobs. Expose scheduler
+  heartbeat, tail, job status, errors and publication age. These are starting
+  thresholds; observed queue/build/GC/upload time and bursts determine margin.
+- Do not put rebuild execution in the request/append path or invent a third
+  semantic store. Operational jobs belong to existing platform control state.
+
+### Admission and repair policy
+
+- Reuse `PlanRecovery`, distinguishing cold `H-W` from verified retained
+  `H-L`. Stale W alone must not strand a valid retained store or stop a healthy
+  running computer. An unverified heartbeat is not a retained-state witness.
+- Before resource allocation where inputs are verifiable, refuse deterministic
+  over-cap plans. Preserve guest validation for races and unknown local state.
+- Persist a typed recovery condition separately from process state. Blind
+  warmness retries stop on deterministic refusal and survive vmctl restart.
+  Reevaluate on changed recovery inputs, not a cooldown expiring.
+- Resolve returns structured 503 with reason, repair status and Retry-After,
+  promptly for known blocked state. Metadata unavailability is distinct from
+  tail excess. Release waiters on typed guest refusal.
+- Enqueue the same deduplicated asynchronous checkpoint/repair job; vmctl
+  does not perform replay or clear another authority's state directly.
+- Preserve existing key escrow two-approval policy. Event capabilities are
+  not decryption keys. No silent corpusd key export or debugfs scrape of a
+  running guest. Authorized key acquisition/export is an explicit prerequisite;
+  missing approval is a visible blocked job, not fake repair success.
+
+### Replay evolution policy
+
+- Verify original immutable events, receipts, payload digests and reducer
+  commitments first. Upcast only the verified projection-deposit view.
+- Version vocabulary transformations, cover object IDs/references, SQL rows,
+  deletes and partial updates in canonical event order; no wall-clock LWW.
+- Identity/authority-changing semantic migrations require ordered, bound
+  forward events, not retroactively fabricated cutover markers.
+- Remove obsolete end-of-replay mutation for newly reconstructed stores only
+  after genesis replay and base-plus-tail replay agree, including cross-version
+  delete/recreate and unchanged raw-event verification. Existing retained V1
+  stores still need an explicit one-time migration into the new projection.
+
+### Required acceptance
+
+Focused regressions precede code. Run a real replay/publish/install scenario;
+prove no prefix reads for incremental work, compact scratch output, matching
+head/content and monotonic advertisement. Exercise concurrent refused requests,
+restart durability and restored admission after repair on a disposable staging
+computer, plus valid retained resume with stale W. Push, monitor CI/deploy,
+verify staging identity and archive API evidence. Run frozen-candidate consensus
+before declaring the residuals repaired.
+
+
 ## Rollback
 
 None — record only. The deployed repair path (manual `bootstrap-chain`
