@@ -100,6 +100,13 @@ divergent; all required revisions applied in v3). Thirteen stations;
   [operational invariants register](operational-invariants-register-2026-10-08.md)
   (draft, owner-approved set). Absorbs SA slice 1 (Management storm
   convergence). First slice: read-only obligation inventory.
+- **SH** state homes **working** (opened 2026-10-08, owner direction
+  "good policy and good ideas. Let's do it"):
+  [`definitions/choir-appdev-sh-state-homes-2026-10-08.md`](definitions/choir-appdev-sh-state-homes-2026-10-08.md)
+  — enforce O21, a realization holds no unique state
+  ([inventory](state-homes-inventory-2026-10-08.md)). Escrowed privacy key
+  delivered to a computer's new realization (owner-ratified). Slice 1: typed
+  `privacy_key_unavailable` refusal and prompt guest fatal-startup reporting.
 Ordered ahead of the World Wire metamission per owner direction
 2026-10-01 ("a good prerequisite to it").
 

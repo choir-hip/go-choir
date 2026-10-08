@@ -1308,6 +1308,22 @@ nodes:
       - choir-appdev-sa-agent-density-2026-10-05
     note: >-
       v5 2026-10-05. Absorbs Jev M0a (choir-signal-research-rlm-cutover-2026-09-29).
+  - id: choir-appdev-sh-state-homes-2026-10-08
+    title: SH State Homes — a realization holds no unique state (O21)
+    path: docs/definitions/choir-appdev-sh-state-homes-2026-10-08.md
+    ledger: ''
+    status: working
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables:
+      - choir-appdev-sa-agent-density-2026-10-05
+    note: >-
+      2026-10-08 owner direction. Operational invariant O21 from
+      docs/operational-invariants-register-2026-10-08.md; inventory in
+      docs/state-homes-inventory-2026-10-08.md. Escrow key delivery to a new
+      realization owner-ratified. Prerequisite for desktop hosted<->local.
   - id: choir-appdev-sl-obligation-terminality-2026-10-08
     title: SL Obligation Terminality — every durable obligation has one driver and a recorded terminal fate (O1)
     path: docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md

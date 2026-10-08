@@ -38,7 +38,7 @@ Disposable `computer-f177676f…` (user `6c13cf31…`), driver log
    full 30-minute health timeout — the blind wait the recovery policy
    removed for over-cap tails.
 
-## Open decision (owner authority)
+## Decision (owner, 2026-10-08) — formerly open
 
 Whether a fresh realization of an existing computer may receive its privacy
 key from custodian escrow automatically (and under what audit), or whether
@@ -46,3 +46,18 @@ this state is intentionally operator-only (cold-recover / two-approval
 reveal). Until decided, items 2 and 3 are the safe fix: refuse the start
 with a typed `privacy_key_unavailable` condition before boot, and report any
 fatal guest startup error as a typed refusal promptly.
+
+**Decided.** Owner ratified operational invariant O21 ("a realization holds
+no unique state", [register](../operational-invariants-register-2026-10-08.md),
+[inventory](../state-homes-inventory-2026-10-08.md)) and its consequence for
+this key: the escrowed key is delivered to the same computer's new
+realization automatically — bound to ComputerID and realization epoch,
+consume-once, recorded in key-escrow transparency before unwrap, delivered
+on the root-only credential disk like the credential envelope. No new party
+gains access (the custodian already holds and may unwrap this key for
+replay). Human reveal keeps two-approval. The debugfs copier is deleted
+once delivery is proven. Escrow upload must become guaranteed (not lazy,
+best-effort) before a computer's key is its only copy.
+
+Sequencing: items 2 and 3 land first as safe fixes; escrow delivery lands
+as its own red slice proved on a lose-the-disk disposable.

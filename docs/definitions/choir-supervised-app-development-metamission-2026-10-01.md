@@ -139,6 +139,15 @@ metamission:
       readiness: drafted
       status: working
       depends_on: [SMG-management-rlm-cutover]
+    - id: SH-state-homes
+      # 2026-10-08 owner direction ("good policy and good ideas. Let's do it"):
+      # enforce operational invariant O21 (a realization holds no unique
+      # state). Escrow-to-realization privacy key delivery owner-ratified.
+      # Prerequisite for the desktop app's hosted<->local move.
+      path: docs/definitions/choir-appdev-sh-state-homes-2026-10-08.md
+      readiness: drafted
+      status: working
+      depends_on: []
     - id: SM-model-policy-and-evals
       # v5. Absorbs Jev M2 (choir-signal-model-policy-rlm-module-2026-09-29.md).
       # Jev M3 (research hill-climb) is its first consumer.

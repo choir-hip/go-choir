@@ -129,6 +129,26 @@ Evidence: `retained-computer-lifecycle-start-timeout`,
 `s2-stranded-retired-realization-permanent-wedge`. Enforcer: partial (S2,
 typed admission). Alarm: none. Goal: 1.
 
+## Placement — a realization is a disposable cache
+
+**O21 A realization holds no unique state.** Every piece of a computer's
+persistent state has exactly one durable home outside any realization — tape
+(what happened), content-addressed store (bytes), escrow (keys), projections
+(derived) — and a realization is a cache built from them. Recovery, resume,
+host move, hosted↔desktop placement and forks are one operation. Owner
+ratified the principle 2026-10-08; it restates the
+[computer ontology](computer-ontology.md) ("a realization may be replaced
+without changing ComputerID") as an enforceable property.
+Evidence: `fresh-realization-missing-privacy-key-blind-boot` (privacy key
+only on the realization disk), `sa-projection-base-watermark-never-refreshed`
+(local store was the only fast restore path). Inventory and findings:
+[state-homes-inventory-2026-10-08.md](state-homes-inventory-2026-10-08.md)
+(privacy key, capsule artifacts, 15-minute file window; updater `current` and
+signer trust unverified). Enforcer: unowned. Alarm: none. Proof: lose-the-disk
+disposable — destroy the data disk, realize again, identical effective head,
+witness, files, artifacts and release with no operator step. Goal: 1 (and the
+desktop app's hosted↔local move).
+
 ## Resources — everything that grows is bounded and owned
 
 **O10 Declared bound per growth surface.** Every store, journal, image,
