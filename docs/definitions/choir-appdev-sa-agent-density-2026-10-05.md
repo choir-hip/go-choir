@@ -182,6 +182,19 @@ now:
     - checkpoint cadence / watermark auto-refresh before tail hits cap;
     - vmctl fail-fast with "rebuild required" instead of 30-min retry loop;
     - cutover-aware replay (migrate at cutover point in event chain).
+    PERMANENT RECOVERY POLICY LANDED 2026-10-08 (0f7c58ba, e7b51524,
+    11ee8b50, 67729e07; deployed 67729e07): cmd/checkpointd verified
+    incremental checkpoints on a 1-minute timer, typed vmctl admission +
+    structured 503, versioned deposit upcast. Staging: 26/27 cadence
+    bootstraps published + read back, over-cap orphan refused blocked,
+    disposable seeded incremental 0->2->2,318, retained stale-W resume
+    tail=0. Frozen-candidate consensus (8/10): cadence and replay
+    REPAIRED-WITH-RESIDUAL, OGDropped REPAIRED, admission NOT-REPAIRED
+    until the staging refusal demo runs (driver ready; owner-approved;
+    blocked on a tool permission rule). Four panel defects fixed in
+    67729e07. Named residuals (GC publish race — fix before active GC;
+    platform warm-path admission bypass; lease duplicate work; scratch
+    sweep; large-base memory) in the problem doc.
     (a) sa-delegated-report-poisons-management-listing-2026-10-06.md
     (red, protected surface): a delegated-cast producer report fails the
     ListLifecycleControlsDeliveredToRunPage ProducerReport validation arm

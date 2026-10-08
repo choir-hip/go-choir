@@ -87,6 +87,12 @@ divergent; all required revisions applied in v3). Thirteen stations;
   deployed-verified 2026-10-07 on fresh disposable `computer-e472d237`
   (legs 1-3 + bound report green, evidence
   `smg-rlm-acceptance-fix-verify-2026-10-07.json`).
+  Owner-VM boot-loop incident (2026-10-07) → permanent recovery policy
+  landed and deployed 2026-10-08 (`67729e07`): verified incremental
+  checkpoints (`checkpointd`), typed vmctl admission, deposit upcast.
+  Cadence/replay repaired-with-residual; admission awaits its staging
+  refusal demo. Record:
+  [`problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md`](problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md).
 Ordered ahead of the World Wire metamission per owner direction
 2026-10-01 ("a good prerequisite to it").
 
