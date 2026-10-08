@@ -184,11 +184,14 @@ func (u *depositUpcaster) resolve(replay bool, fresh bool, cutover bool) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if !u.loaded {
-		u.loaded = true
+		// Mark loaded only after validation succeeds: an invalid ledger must
+		// refuse every call, not just the first (frozen-candidate panel
+		// 2026-10-08).
 		ledger, err := loadDepositUpcastLedger(u.path)
 		if err != nil {
 			return err
 		}
+		u.loaded = true
 		if ledger != nil {
 			u.present = true
 			if ledger.Objects != nil {

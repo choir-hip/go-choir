@@ -944,3 +944,26 @@ func TestVocabDepositUpcastConvergentSpellingsFollowEventOrder(t *testing.T) {
 		t.Fatalf("serving fence: %v", err)
 	}
 }
+
+// TestVocabDepositUpcastRefusesInvalidLedgerOnEveryCall pins the frozen-candidate
+// panel finding (2026-10-08): a ledger that fails validation must refuse every
+// replay attempt in the process, not only the first; a cached "loaded" flag
+// let a same-process retry skip validation and append to the bad ledger.
+func TestVocabDepositUpcastRefusesInvalidLedgerOnEveryCall(t *testing.T) {
+	s, _ := vocabUpcastOpenStore(t, "badledger")
+	path := s.depositUpcastLedgerPath()
+	if path == "" {
+		t.Fatal("store has no deposit upcast ledger path")
+	}
+	if err := os.WriteFile(path, []byte(`{"version":999,"active":"v2"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 1; attempt <= 2; attempt++ {
+		if err := s.upcastProjectionDeposit(nil, true, true, true); err == nil || !strings.Contains(err.Error(), "unsupported version") {
+			t.Fatalf("replay attempt %d: err=%v, want unsupported-version refusal", attempt, err)
+		}
+		if err := s.upcastProjectionDeposit(nil, false, false, false); err == nil {
+			t.Fatalf("dry-run attempt %d accepted an invalid ledger", attempt)
+		}
+	}
+}

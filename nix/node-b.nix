@@ -563,6 +563,10 @@ in
       ExecStart = "${serviceExec "checkpointd" goChoirPackages.checkpointd}";
       TimeoutStartSec = "8h";
       MemoryMax = "16G";
+      # Under host memory pressure the kernel must kill the checkpoint worker
+      # (a retryable job) before any guest VM. Large seeded bases are still
+      # unmeasured; MemoryMax is a ceiling, not reserved headroom.
+      OOMScoreAdjust = 1000;
       CPUQuota = "100%";
       Nice = 10;
       UMask = "0077";

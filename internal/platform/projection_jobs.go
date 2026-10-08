@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,6 +76,7 @@ type ProjectionJob struct {
 	UpdatedAt         time.Time  `json:"updated_at"`
 	WorkerHeartbeat   *time.Time `json:"worker_heartbeat,omitempty"`
 	WorkerBuildCommit string     `json:"worker_build_commit,omitempty"`
+	WorkerError       string     `json:"worker_error,omitempty"`
 	ColdTail          uint64     `json:"cold_tail"`
 	Alert             string     `json:"alert,omitempty"`
 }
@@ -99,7 +101,7 @@ func (s *Store) ProjectionJob(ctx context.Context, computerID string) (Projectio
 		return j, err
 	}
 	var heartbeat time.Time
-	if err := s.db.QueryRowContext(ctx, `SELECT heartbeat,build_commit FROM projection_worker_status WHERE worker_id='checkpoint'`).Scan(&heartbeat, &j.WorkerBuildCommit); err == nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT heartbeat,build_commit,error_text FROM projection_worker_status WHERE worker_id='checkpoint'`).Scan(&heartbeat, &j.WorkerBuildCommit, &j.WorkerError); err == nil {
 		j.WorkerHeartbeat = &heartbeat
 	}
 	var head, wm uint64
@@ -110,15 +112,35 @@ func (s *Store) ProjectionJob(ctx context.Context, computerID string) (Projectio
 	if head > wm {
 		j.ColdTail = head - wm
 	}
+	// Tail and failure alerts are reported together: a tail alert must never
+	// mask the repeated-failure signal that explains why the tail grows.
+	var alerts []string
 	switch {
 	case j.ColdTail >= 7500:
-		j.Alert = "urgent_tail"
+		alerts = append(alerts, "urgent_tail")
 	case j.ColdTail >= 5000:
-		j.Alert = "warning_tail"
-	case j.Failures >= 2:
-		j.Alert = "repeated_failure"
+		alerts = append(alerts, "warning_tail")
 	}
+	if j.Failures >= 2 {
+		alerts = append(alerts, "repeated_failure")
+	}
+	j.Alert = strings.Join(alerts, ",")
 	return j, nil
+}
+
+// failedJobRetryBackoff is how long a twice-failed (non-deterministic) job
+// waits before cadence or repair may re-admit it: 15m doubling per further
+// failure, capped at 16h. Blocked jobs are deterministic refusals and still
+// wait for changed inputs.
+func failedJobRetryBackoff(failures int) time.Duration {
+	shift := failures - 2
+	if shift < 0 {
+		shift = 0
+	}
+	if shift > 6 {
+		shift = 6
+	}
+	return 15 * time.Minute << shift
 }
 
 func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason string, genesisRepair bool) (ProjectionJob, error) {
@@ -154,7 +176,12 @@ func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason str
 	if err == nil {
 		// Request traffic cannot reset a lease or deterministic refusal. Dependency
 		// changes (seed/key) admit a new attempt; head growth alone does not.
-		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (old.Status == "succeeded" && head <= old.TargetSequence) || ((old.Status == "blocked" || old.Status == "failed") && old.SeedBaseRef == seed && old.KeyDigest == keyDigest && old.GenesisRepair == genesisRepair) {
+		sameInputs := old.SeedBaseRef == seed && old.KeyDigest == keyDigest && old.GenesisRepair == genesisRepair
+		// A failed job is transient trouble (lease loss, store error), not a
+		// deterministic refusal: it is re-admitted after a growing backoff so
+		// two failures cannot silently end cadence for this computer.
+		failedBackingOff := old.Status == "failed" && sameInputs && now.Sub(old.UpdatedAt) < failedJobRetryBackoff(old.Failures)
+		if old.Status == "queued" || old.Status == "running" || old.Status == "retry" || (old.Status == "succeeded" && head <= old.TargetSequence) || (old.Status == "blocked" && sameInputs) || failedBackingOff {
 			return old, tx.Commit()
 		}
 		if old.SeedBaseRef != seed || old.KeyDigest != keyDigest {
@@ -203,12 +230,15 @@ func (s *Store) ReconcileProjectionJobs(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// One computer that cannot be enqueued must not stop cadence for the rest
+	// of the fleet; every failure is returned for the worker's heartbeat.
+	var failures []error
 	for _, id := range due {
 		if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", false); err != nil {
-			return err
+			failures = append(failures, fmt.Errorf("enqueue %s: %w", id, err))
 		}
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 func (s *Store) ClaimProjectionJob(ctx context.Context) (*ProjectionJob, error) {

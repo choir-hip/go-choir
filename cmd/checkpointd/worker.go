@@ -62,10 +62,14 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 	if svc == nil || store == nil {
 		return nil, fmt.Errorf("checkpoint worker requires control store and service")
 	}
-	if err := store.CheckpointHeartbeat(ctx, ""); err != nil {
-		return nil, err
-	}
+	// A reconcile error (one computer that cannot be enqueued) is recorded on
+	// the worker heartbeat and does not stop already-queued work.
+	reconcileProblem := ""
 	if err := store.ReconcileProjectionJobs(ctx); err != nil {
+		reconcileProblem = "reconcile: " + err.Error()
+		log.Printf("checkpoint %s", reconcileProblem)
+	}
+	if err := store.CheckpointHeartbeat(ctx, reconcileProblem); err != nil {
 		return nil, err
 	}
 	j, err := store.ClaimProjectionJob(ctx)
@@ -91,12 +95,14 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 					cancel()
 					return
 				}
-				if err := store.CheckpointHeartbeat(ctx, ""); err != nil {
+				problem := ""
+				if err := store.ReconcileProjectionJobs(ctx); err != nil {
+					problem = "reconcile: " + err.Error()
+					log.Printf("checkpoint %s", problem)
+				}
+				if err := store.CheckpointHeartbeat(ctx, problem); err != nil {
 					cancel()
 					return
-				}
-				if err := store.ReconcileProjectionJobs(ctx); err != nil {
-					log.Printf("checkpoint reconcile: %v", err)
 				}
 			}
 		}

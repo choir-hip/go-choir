@@ -129,3 +129,71 @@ func TestReconcileProjectionJobsEnqueuesDueChains(t *testing.T) {
 		t.Fatal("chain below cadence threshold was queued")
 	}
 }
+
+func insertProjectionTestHead(t *testing.T, s *Store, id string, seq uint64) {
+	t.Helper()
+	if _, err := s.db.ExecContext(context.Background(), `INSERT INTO computer_event_heads (computer_id,sequence,canonical_event_head,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,reducer_version,credential_revocation_epoch,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,1,0,?,?)`, id, seq, strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("b", 64), time.Now(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Frozen-candidate panel (2026-10-08): two transient failures must not end
+// cadence forever. A failed job becomes eligible again after backoff; a
+// blocked (deterministic) refusal still waits for changed inputs; the failure
+// alert is never masked by a tail alert.
+func TestProjectionJobFailedRetriesAfterBackoffBlockedDoesNot(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	insertProjectionTestHead(t, s, "computer-failed", 9000)
+	insertProjectionTestHead(t, s, "computer-blocked", 9000)
+	for _, id := range []string{"computer-failed", "computer-blocked"} {
+		if _, err := s.EnqueueProjectionJob(ctx, id, "cadence", false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setJob := func(id, status string, failures int, age time.Duration) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx, `UPDATE computer_projection_jobs SET status=?,failures=?,updated_at=? WHERE computer_id=?`, status, failures, time.Now().UTC().Add(-age), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setJob("computer-failed", "failed", 2, time.Minute)
+	setJob("computer-blocked", "blocked", 2, 48*time.Hour)
+
+	j, err := s.ProjectionJob(ctx, "computer-failed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(j.Alert, "urgent_tail") || !strings.Contains(j.Alert, "repeated_failure") {
+		t.Fatalf("alert = %q, want urgent_tail and repeated_failure together", j.Alert)
+	}
+	again, err := s.EnqueueProjectionJob(ctx, "computer-failed", "repair", false)
+	if err != nil || again.Status != "failed" || again.Generation != 1 {
+		t.Fatalf("failed job re-admitted inside backoff: %+v %v", again, err)
+	}
+	setJob("computer-failed", "failed", 2, time.Hour)
+	again, err = s.EnqueueProjectionJob(ctx, "computer-failed", "repair", false)
+	if err != nil || again.Status != "queued" || again.Generation != 2 || again.Failures != 2 {
+		t.Fatalf("failed job not re-admitted after backoff (failures must carry for growing backoff): %+v %v", again, err)
+	}
+	blocked, err := s.EnqueueProjectionJob(ctx, "computer-blocked", "repair", false)
+	if err != nil || blocked.Status != "blocked" || blocked.Generation != 1 {
+		t.Fatalf("deterministic refusal re-admitted without changed inputs: %+v %v", blocked, err)
+	}
+}
+
+// One computer that cannot be enqueued must not stop cadence for the fleet.
+func TestReconcileProjectionJobsContinuesPastPerComputerError(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	insertProjectionTestHead(t, s, "computer-bad/../x", 9000)
+	insertProjectionTestHead(t, s, "computer-good", 9000)
+	err := s.ReconcileProjectionJobs(ctx)
+	if err == nil || !strings.Contains(err.Error(), "computer-bad") {
+		t.Fatalf("reconcile error = %v, want the failing computer named", err)
+	}
+	j, jerr := s.ProjectionJob(ctx, "computer-good")
+	if jerr != nil || j.Status != "queued" {
+		t.Fatalf("healthy computer not queued after a sibling error: %+v %v", j, jerr)
+	}
+}
