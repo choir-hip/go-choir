@@ -96,3 +96,36 @@ func TestProjectionJobCoalescingAndRetention(t *testing.T) {
 		t.Fatalf("durable refusal lost %+v %v", got, err)
 	}
 }
+
+// Staging 0f7c58ba: reconcile scanned COALESCE(datetime,datetime) into
+// time.Time and Dolt returned bytes, so every scheduler pass exited before
+// enqueueing. Reconcile must run against the real store and queue a due chain
+// whether or not it has a watermark row.
+func TestReconcileProjectionJobsEnqueuesDueChains(t *testing.T) {
+	s, _ := openTestPlatformStore(t)
+	ctx := context.Background()
+	insertHead := func(id string, seq uint64) {
+		t.Helper()
+		if _, err := s.db.ExecContext(ctx, `INSERT INTO computer_event_heads (computer_id,sequence,canonical_event_head,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,reducer_version,credential_revocation_epoch,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,1,0,?,?)`, id, seq, strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("b", 64), time.Now(), time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insertHead("computer-due-nowm", 3000)
+	insertHead("computer-due-wm", 9000)
+	insertHead("computer-fresh", 100)
+	if err := s.RecordReplayWatermark(ctx, "computer-due-wm", 6000, strings.Repeat("c", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReconcileProjectionJobs(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	for _, id := range []string{"computer-due-nowm", "computer-due-wm"} {
+		j, err := s.ProjectionJob(ctx, id)
+		if err != nil || j.Status != "queued" || j.Reason != "cadence" {
+			t.Fatalf("%s not queued by cadence: %+v %v", id, j, err)
+		}
+	}
+	if _, err := s.ProjectionJob(ctx, "computer-fresh"); err == nil {
+		t.Fatal("chain below cadence threshold was queued")
+	}
+}

@@ -173,7 +173,9 @@ func (s *Store) EnqueueProjectionJob(ctx context.Context, computerID, reason str
 }
 
 func (s *Store) ReconcileProjectionJobs(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT h.computer_id,h.sequence,COALESCE(w.watermark_sequence,0),COALESCE(w.updated_at,h.created_at) FROM computer_event_heads h LEFT JOIN computer_replay_watermarks w ON w.computer_id=h.computer_id`)
+	// Typed columns only: Dolt returns COALESCE over DATETIME as untyped bytes,
+	// which parseTime does not convert (staging 0f7c58ba).
+	rows, err := s.db.QueryContext(ctx, `SELECT h.computer_id,h.sequence,COALESCE(w.watermark_sequence,0),w.updated_at,h.created_at FROM computer_event_heads h LEFT JOIN computer_replay_watermarks w ON w.computer_id=h.computer_id`)
 	if err != nil {
 		return err
 	}
@@ -182,10 +184,15 @@ func (s *Store) ReconcileProjectionJobs(ctx context.Context) error {
 	for rows.Next() {
 		var id string
 		var h, w uint64
-		var published time.Time
-		if err := rows.Scan(&id, &h, &w, &published); err != nil {
+		var advertised sql.NullTime
+		var created time.Time
+		if err := rows.Scan(&id, &h, &w, &advertised, &created); err != nil {
 			rows.Close()
 			return err
+		}
+		published := created
+		if advertised.Valid {
+			published = advertised.Time
 		}
 		if checkpointDue(h, w, published, now) {
 			due = append(due, id)
