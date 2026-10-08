@@ -250,10 +250,12 @@ finding and historical verification boundary take precedence over votes.
   tail excess. Release waiters on typed guest refusal.
 - Enqueue the same deduplicated asynchronous checkpoint/repair job; vmctl
   does not perform replay or clear another authority's state directly.
-- Preserve existing key escrow two-approval policy. Event capabilities are
-  not decryption keys. No silent corpusd key export or debugfs scrape of a
-  running guest. Authorized key acquisition/export is an explicit prerequisite;
-  missing approval is a visible blocked job, not fake repair success.
+- **Owner authority update, this implementation:** owner selected “Authorize
+  isolated maintenance worker”: the dedicated worker may unwrap existing
+  custodian escrow solely for verified replay/checkpoint jobs, with durable
+  key-use transparency and no plaintext key in job APIs. Human key reveal
+  still requires two independent approvals. Event capabilities are not keys.
+  No debugfs scrape of running guests. Missing escrow is a visible blocked job.
 
 ### Replay evolution policy
 
