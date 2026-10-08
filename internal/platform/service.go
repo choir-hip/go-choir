@@ -33,7 +33,11 @@ type Service struct {
 	artifactsRoot string
 	signingKey    *SigningKey
 	writeMu       sync.Mutex
-	graphStore    *PublicationGraphStore // graph-native dual-write target
+	// artifactGCMu serializes artifact GC live-set capture and deletion with
+	// explicit projection-base pins only. It must never be writeMu: a sweep
+	// lasts minutes and would block credential issuance and VM boots.
+	artifactGCMu sync.Mutex
+	graphStore   *PublicationGraphStore // graph-native dual-write target
 }
 
 type citationInput struct {

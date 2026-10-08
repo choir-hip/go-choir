@@ -94,8 +94,10 @@ func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 	}
 	// Serialize explicit pins with live-set capture and deletion. A pin of an
 	// old blob must not commit after the sweep has classified it unreachable.
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
+	// This is a dedicated lock, never writeMu (staging 2026-10-08: a sweep
+	// holding writeMu timed out credential issuance and failed VM boots).
+	s.artifactGCMu.Lock()
+	defer s.artifactGCMu.Unlock()
 	cfg = normalizeArtifactGCConfig(cfg)
 	if cfg.Mode == ArtifactGCModeOff {
 		report.Mode = ArtifactGCModeOff

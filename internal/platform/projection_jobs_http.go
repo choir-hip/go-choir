@@ -89,8 +89,8 @@ func (h *Handler) HandleProjectionBasePins(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, 403, apiError{Error: "computer lifecycle capability required"})
 		return
 	}
-	h.service.writeMu.Lock()
-	defer h.service.writeMu.Unlock()
+	h.service.artifactGCMu.Lock()
+	defer h.service.artifactGCMu.Unlock()
 	raw, err := h.projectionBaseSidecar(input.BaseRef)
 	if err != nil {
 		http.NotFound(w, r)
