@@ -60,6 +60,11 @@ the row's claim needs a disposable lose-the-disk test.
    Prerequisite: escrow upload must be **guaranteed before the key becomes
    the computer's only copy**, not lazy — a computer whose escrow never
    succeeded is one disk away from permanent loss.
+1a. **Escrow is overwritable** — `UpsertKeyEscrow` replaces the key digest;
+   any realization of the computer can replace the only off-realization copy
+   ([problem doc](problems/key-escrow-overwritable-by-guest-2026-10-08.md)).
+   Staging: all 113 chained computers are escrowed, so the backfill is done;
+   the guarantee left is write-once escrow plus escrow-before-genesis.
 2. **Capsule artifacts** — committed refs, realization-only bytes.
    Problem doc owed.
 3. **Files** — 15-minute loss window. Any planned realization change
