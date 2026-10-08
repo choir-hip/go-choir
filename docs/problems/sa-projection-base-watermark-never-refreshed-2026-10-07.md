@@ -292,6 +292,48 @@ computer, plus valid retained resume with stale W. Push, monitor CI/deploy,
 verify staging identity and archive API evidence. Run frozen-candidate consensus
 before declaring the residuals repaired.
 
+### Implementation status (2026-10-08, pre-landing)
+
+Candidate implementation of all three policy sections; residuals are **not**
+claimed repaired until deployed acceptance and frozen-candidate consensus.
+
+- Checkpoint: `cmd/checkpointd` (oneshot, 1-minute systemd timer, one job per
+  activation, one host worker) claims leased, frozen-target jobs from Store A
+  `computer_projection_jobs`; `ReconcileProjectionJobs` applies the
+  2500 / (24h ∧ 1000) cadence; seeded tail replay; mandatory scratch
+  `DOLT_GC`; blob/head/witness readback before descriptor; advertisement
+  readback before `succeeded`; retention = current + previous + explicit pins
+  + active-job seeds; alerts at 5000/7500/two failures. Key use is audited in
+  escrow transparency before unwrap.
+- Advertisement: watermark POST validates published descriptor, blob size and
+  canonical event binding (`projection_advertisement.go`).
+- Admission: `vmctl/recovery_admission.go` persists typed conditions
+  (tail excess / base missing / guest refused / metadata unavailable),
+  re-evaluates only on changed inputs, enqueues the deduplicated job; proxy
+  renders a structured 503 with `Retry-After` and repair status and never
+  retries a typed refusal as transient.
+- Replay evolution: `internal/store/vocab_upcast_deposit.go` upcasts the
+  verified deposit view in event order with an alias-ledger sidecar.
+
+Finding (test harness, not product): the four red
+`TestVocabDepositUpcast*` regressions failed because the test helper
+finalized the batchless genesis through live `Finalize`, while the product
+replay path (`ComputerEventAppender.finalizeProjection`, `replayProjection`)
+finalizes every event — including batchless genesis — through
+`FinalizeReplayBatch`. The fresh-reconstruction signal therefore never reached
+the upcaster in tests. Fixing the helper to mirror the product path turned all
+five green with no assertion changes.
+
+Named residuals from the pre-landing audit:
+
+- Artifact GC grace (30 min mtime) is the only protection for a freshly
+  written blob between `PublishDir` and the advertisement row; a
+  verify step longer than grace could race GC. Expected minutes; measure.
+- A job that fails twice is terminal (`failed`, `repeated_failure` alert)
+  until its seed or escrow key changes or an operator re-enqueues; head growth
+  alone does not retry it, by design.
+- Failed-job scratch directories are retained for diagnostics and are not
+  yet swept.
 
 ## Rollback
 
