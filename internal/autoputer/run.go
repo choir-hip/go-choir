@@ -325,22 +325,37 @@ func Run() {
 			log.Print(refusal.Reason)
 			boot.refuse(refusal)
 		}
-		// Track K lazy per-boot custodian escrow: best-effort, never blocks
-		// boot; retried on the next boot when the platform is unreachable.
+		// Custodian escrow (Track K). Before genesis it is required: the escrow
+		// wrap must exist before any history is encrypted under a key whose
+		// only other copy is this realization's disk (O21). After genesis it
+		// stays a best-effort per-boot check.
 		if platformURL != "" {
-			escrowCtx, escrowCancel := context.WithTimeout(context.Background(), 45*time.Second)
-			go func(computerID string) {
-				defer escrowCancel()
-				rawDEK, err := privateCipher.ExportKeyForEscrow(escrowCtx, computerID)
+			escrowKey := func(ctx context.Context) error {
+				rawDEK, err := privateCipher.ExportKeyForEscrow(ctx, computerID)
 				if err != nil {
-					log.Printf("autoputer: key escrow export unavailable (will retry next boot): %v", err)
-					return
+					return err
 				}
-				if _, err := newKeyEscrowClient(platformURL, credentials.Capability).EnsureCustodianEscrow(escrowCtx, computerID, rawDEK); err != nil {
-					log.Printf("autoputer: custodian key escrow deferred (will retry next boot): %v", err)
-					return
+				defer clear(rawDEK)
+				_, err = newKeyEscrowClient(platformURL, credentials.Capability).EnsureCustodianEscrow(ctx, computerID, rawDEK)
+				return err
+			}
+			if canonicalHead == nil {
+				escrowCtx, escrowCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				err := escrowKey(escrowCtx)
+				escrowCancel()
+				if err != nil {
+					cancel()
+					boot.fatalf("autoputer: custodian key escrow before genesis: %v", err)
 				}
-			}(computerID)
+			} else {
+				go func() {
+					escrowCtx, escrowCancel := context.WithTimeout(context.Background(), 45*time.Second)
+					defer escrowCancel()
+					if err := escrowKey(escrowCtx); err != nil {
+						log.Printf("autoputer: custodian key escrow deferred (will retry next boot): %v", err)
+					}
+				}()
+			}
 		}
 		appender, err := computerevent.NewComputerEventAppender(
 			computerID, eventClient, db, eventClient,

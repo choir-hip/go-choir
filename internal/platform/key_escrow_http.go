@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -108,7 +109,11 @@ func (h *Handler) HandleKeyEscrow(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid escrow record"})
 		return
 	}
-	if err := h.service.store.UpsertKeyEscrow(r.Context(), input.ComputerID, input.Protector, []byte(input.WrappedKey), input.KeyDigest); err != nil {
+	if err := h.service.store.UpsertKeyEscrow(r.Context(), input.ComputerID, input.Protector, []byte(input.WrappedKey), input.KeyDigest); errors.Is(err, ErrKeyEscrowDigestConflict) {
+		log.Printf("key escrow: refused replacing escrowed key for %s with digest %s", input.ComputerID, input.KeyDigest)
+		writeJSON(w, http.StatusConflict, apiError{Error: "escrow holds a different key"})
+		return
+	} else if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to store escrow record"})
 		return
 	}

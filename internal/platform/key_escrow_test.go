@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 )
@@ -247,4 +249,73 @@ func callKeyEscrowHandler(t *testing.T, handler http.HandlerFunc, method, target
 	response := httptest.NewRecorder()
 	handler(response, request)
 	return response
+}
+
+// TestKeyEscrowIsWriteOncePerKeyDigest: the custodian wrap is the durable
+// home of a computer's key (O21). Once the computer has a chain, re-uploading
+// the same key is idempotent and keeps the original wrap; a different key is
+// refused and never replaces it
+// (docs/problems/key-escrow-overwritable-by-guest-2026-10-08.md).
+func TestKeyEscrowIsWriteOncePerKeyDigest(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	ctx := context.Background()
+	_, publicKey, err := keyescrow.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seal := func(dek []byte) (*keyescrow.WrappedKey, []byte) {
+		t.Helper()
+		wrapped, err := keyescrow.SealDEK(publicKey, "computer-write-once", dek)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wrappedJSON, _ := json.Marshal(wrapped)
+		return wrapped, wrappedJSON
+	}
+	// Before genesis nothing is encrypted under the key yet: a realization
+	// that died pre-genesis is replaced by one with a new key, which may
+	// replace the escrow.
+	abandoned, abandonedJSON := seal(bytes.Repeat([]byte{0x09}, 32))
+	if err := store.UpsertKeyEscrow(ctx, abandoned.ComputerID, abandoned.Protector, abandonedJSON, abandoned.KeyDigest); err != nil {
+		t.Fatal(err)
+	}
+	original, originalJSON := seal(bytes.Repeat([]byte{0x01}, 32))
+	if err := store.UpsertKeyEscrow(ctx, original.ComputerID, original.Protector, originalJSON, original.KeyDigest); err != nil {
+		t.Fatalf("pre-genesis escrow replacement must be allowed: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO computer_event_heads (computer_id,sequence,canonical_event_head,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,reducer_version,credential_revocation_epoch,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,1,0,?,?)`,
+		original.ComputerID, 1, strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("b", 64), time.Now(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	resealed, resealedJSON := seal(bytes.Repeat([]byte{0x01}, 32))
+	if err := store.UpsertKeyEscrow(ctx, resealed.ComputerID, resealed.Protector, resealedJSON, resealed.KeyDigest); err != nil {
+		t.Fatalf("same key re-upload must be idempotent: %v", err)
+	}
+	other, otherJSON := seal(bytes.Repeat([]byte{0x02}, 32))
+	if err := store.UpsertKeyEscrow(ctx, other.ComputerID, other.Protector, otherJSON, other.KeyDigest); !errors.Is(err, ErrKeyEscrowDigestConflict) {
+		t.Fatalf("different key must be refused with ErrKeyEscrowDigestConflict, got %v", err)
+	}
+	gotWrapped, digest, err := store.GetKeyEscrow(ctx, original.ComputerID, original.Protector)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest != original.KeyDigest || !bytes.Equal(gotWrapped, originalJSON) {
+		t.Fatal("escrow record changed after a re-upload or a conflicting upload")
+	}
+
+	// HTTP surface: a conflicting PUT is 409.
+	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "signing-key"))
+	handler := NewHandler(service)
+	escrowPrivate, _, err := keyescrow.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := handler.ConfigureKeyEscrow(escrowPrivate, ""); err != nil {
+		t.Fatal(err)
+	}
+	putBody, _ := json.Marshal(keyEscrowPutRequest{ComputerID: other.ComputerID, Protector: other.Protector, WrappedKey: string(otherJSON), KeyDigest: other.KeyDigest})
+	response := callKeyEscrowHandler(t, handler.HandleKeyEscrow, http.MethodPut, "/internal/computers/keys/escrow", putBody, map[string]string{"X-Internal-Caller": "true"})
+	if response.Code != http.StatusConflict {
+		t.Fatalf("conflicting escrow PUT status = %d body=%s, want 409", response.Code, response.Body.String())
+	}
 }

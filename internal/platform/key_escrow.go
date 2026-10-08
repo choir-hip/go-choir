@@ -20,6 +20,9 @@ var (
 	ErrDuplicateApproval    = errors.New("key unwrap request already approved by operator")
 	ErrKeyUnwrapNotPending  = errors.New("key unwrap request is not pending")
 	ErrKeyUnwrapNotApproved = errors.New("key unwrap request is not approved")
+	// ErrKeyEscrowDigestConflict: an escrow record for this computer and
+	// protector already holds a different key. Escrow is write-once.
+	ErrKeyEscrowDigestConflict = errors.New("key escrow holds a different key")
 )
 
 type KeyEscrowStatus struct {
@@ -45,13 +48,40 @@ func (s *Store) UpsertKeyEscrow(ctx context.Context, computerID, protector strin
 	if strings.TrimSpace(computerID) == "" || strings.TrimSpace(protector) == "" || len(wrappedJSON) == 0 || strings.TrimSpace(keyDigest) == "" {
 		return fmt.Errorf("key escrow: complete escrow record is required")
 	}
+	// Write-once once history exists: the escrow wrap is the durable home of
+	// the computer's key (O21). Re-uploading the same key keeps the original
+	// wrap; a different key replaces it only before genesis, when nothing is
+	// encrypted under the escrowed key yet (a realization that died
+	// pre-genesis was replaced by one with a new key).
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	if _, err := s.db.ExecContext(ctx, `
+	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO computer_key_escrows (computer_id, protector, wrap_version, wrapped_key_json, key_digest, escrowed_at, updated_at)
-		VALUES (?, ?, 1, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE wrapped_key_json=VALUES(wrapped_key_json), key_digest=VALUES(key_digest), updated_at=VALUES(updated_at)`,
-		computerID, protector, string(wrappedJSON), keyDigest, now, now); err != nil {
-		return fmt.Errorf("key escrow: upsert: %w", err)
+		VALUES (?, ?, 1, ?, ?, ?, ?)`,
+		computerID, protector, string(wrappedJSON), keyDigest, now, now)
+	if isDuplicateKeyError(err) {
+		_, existing, getErr := s.GetKeyEscrow(ctx, computerID, protector)
+		if getErr != nil {
+			return fmt.Errorf("key escrow: read existing record: %w", getErr)
+		}
+		if existing == keyDigest {
+			return nil
+		}
+		head, headErr := readComputerEventHead(ctx, s.db, computerID, false)
+		if headErr != nil {
+			return fmt.Errorf("key escrow: read canonical head: %w", headErr)
+		}
+		if head != nil {
+			return ErrKeyEscrowDigestConflict
+		}
+		if _, err := s.db.ExecContext(ctx, `UPDATE computer_key_escrows SET wrapped_key_json=?, key_digest=?, updated_at=? WHERE computer_id=? AND protector=? AND key_digest=?`,
+			string(wrappedJSON), keyDigest, now, computerID, protector, existing); err != nil {
+			return fmt.Errorf("key escrow: replace pre-genesis record: %w", err)
+		}
+		s.markDirty("replace pre-genesis key escrow " + computerID + "/" + protector)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("key escrow: insert: %w", err)
 	}
 	s.markDirty("upsert key escrow " + computerID + "/" + protector)
 	return nil
