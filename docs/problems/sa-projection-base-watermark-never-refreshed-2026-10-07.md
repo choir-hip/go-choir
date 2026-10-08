@@ -411,10 +411,61 @@ since). CI runs 37831357213, 37836514564 green.
   W=2318 H=2397 tail=0)` then `replay complete`. The planner used H−L, not
   the stale H−W; post-resume API request 200.
 
-Not yet exercised on staging (named residual): the vmctl over-cap admission
-refusal path (structured 503, concurrent refused requests, restart
-durability, restored admission after repair). No startable computer exceeds
-the 10k bound, and manufacturing one requires >10k events on a disposable.
+Not yet exercised on staging: the vmctl admission refusal path (structured
+503, concurrent refused requests, restart durability, restored admission
+after repair). Correction (panel, verified in `recoveryplan.PlanRecovery`):
+this does **not** require >10k events — an existing chain with no watermark
+and an empty store is refused `base_missing`, so a fresh realization of a
+disposable whose chain has no base yet is a legitimate refusal target.
+
+### Frozen-candidate consensus (2026-10-08, candidate `11ee8b50`)
+
+Raw output: `.agentic-consensus/recovery-frozen-candidate-11ee8b50/`
+(convergent mode; 8 substantive of 10 — opencode failed `invalid x-api-key`,
+devin's tool calls were refused non-interactively).
+
+| Residual | Verdicts |
+|---|---|
+| (a) checkpoint cadence | REPAIRED-WITH-RESIDUAL ×6, REPAIRED ×2 |
+| (b) vmctl fail-fast/admission | NOT-REPAIRED ×5, REPAIRED-WITH-RESIDUAL ×3 — all 8 require the staging refusal demonstration before "repaired" |
+| (c) cutover-aware replay | REPAIRED-WITH-RESIDUAL ×6, REPAIRED ×2 |
+| (d) `mergeVocabReports` OGDropped | REPAIRED ×7, REPAIRED-WITH-RESIDUAL ×1 |
+
+Confirmed defects adopted for repair (follow-up commits):
+
+1. Upcaster ledger initialization caches a failed load as loaded
+   (`vocab_upcast_deposit.go` `resolve`: `loaded=true` before
+   `loadDepositUpcastLedger` succeeds); reproduced by gpt-6.1-sol: replay
+   attempt 1 errors `unsupported version`, attempt 2 returns nil. The
+   end-of-replay fence still rejected it — contained, but the boundary must
+   refuse on every call.
+2. Twice-failed checkpoint jobs are terminal even against vmctl's repair
+   enqueue, and `urgent_tail`/`warning_tail` mask `repeated_failure`
+   (claude): two transient failures silently end cadence for that computer.
+3. `ReconcileProjectionJobs` aborts the whole pass on the first per-computer
+   enqueue error and the worker records no reconcile error in its heartbeat
+   (claude, gpt-6-luna).
+4. `go-choir-checkpointd` has no `OOMScoreAdjust`; under host pressure the
+   kernel may kill a VM before the worker (claude, gemini, muse).
+
+Named residuals (not repaired in this slice):
+
+- GC grace vs publish→advertise window: the separate checkpointd process is
+  not coordinated with corpusd's GC mutex; mtime grace is the only guard.
+  Dormant while artifact GC is dry-run on Node B; **must be fixed before
+  enabling active GC** (codex, sol, luna, glm, deepseek).
+- `WarmUniversalWirePlatformComputer` resumes via `mgr.ResumeVM` without
+  recovery admission (muse, glm, deepseek) — platform computer only.
+- Lease expiry re-claims a `running` job without fencing on `lease_until`;
+  duplicate work, publication is still lease-token fenced (deepseek, muse).
+- Failed-job scratch unswept; checkpoint memory unmeasured for large seeded
+  bases (owner-scale 8.7 GB base).
+- Upcaster ledger sidecar vs projection transaction crash consistency
+  (codex); SQL-row ops pass through the upcaster untransformed on the claim
+  they are live-only (muse) — needs proof, not assertion.
+- Retained-V1 collision repair in `vocab_migrate_og.go` keeps the incident's
+  `updated_at` comparison (pre-existing `ca41be90` interim; applies only to
+  retained V1 stores' one-time migration), contrary to "no wall-clock LWW".
 
 ## Rollback
 
