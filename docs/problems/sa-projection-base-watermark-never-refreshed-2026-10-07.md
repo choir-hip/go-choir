@@ -362,6 +362,60 @@ bootstrap bound without a base (`computer-ccb04d4a…`, 15,998 events).
 Fix shape: scan the two typed columns separately and coalesce in Go; add a
 reconcile regression against the platform test store.
 
+Repaired in `e7b51524` (regression reproduced the scan error first).
+
+### Staging finding — oneshot service had no deploy identity probe (2026-10-08)
+
+Evidence: CI run 37834433720 (deploy of `e7b51524`). Attempt 1 failed on a
+`nix build` segfault (status 139) during concurrent Nix auto-GC — infra
+flake, the same package built in the prior deploy. Attempt 2 installed and
+restarted the selected services, then exited 1 at the activation-receipt step:
+`No health identity probe is defined for selected host service checkpointd`.
+The identity loop assumes every host service has a health port; checkpointd is
+a timer-driven oneshot. Fixed in `11ee8b50` (verify the installed pointer
+manifest commit, fail-closed, record the receipt). Documented after the fix:
+the deploy-script defect blocked the landing loop, the fix was one
+fail-closed branch, and the evidence is preserved in the CI run and
+`/var/lib/go-choir/deploy-failures/37834433720-{1,2}.json` on Node B.
+
+### Staging acceptance evidence (2026-10-08, `e7b51524` worker, `11ee8b50` deployed)
+
+Deployed identity: choir.news `/health` `deployed_commit=11ee8b50`; Node B
+pointers corpusd/proxy/checkpointd `11ee8b50`, vmctl `0f7c58ba` (unchanged
+since). CI runs 37831357213, 37836514564 green.
+
+- First scheduler pass queued 27 jobs (tail ≥ 2500, or no watermark +
+  tail ≥ 1000 + chain age ≥ 24h). 26 succeeded (bootstrap from genesis,
+  targets 1,023–6,198 events, ~20–30s each); watermark advanced to each
+  target and read back.
+- The orphaned over-cap chain `computer-ccb04d4a…` (15,998 events, no base,
+  no vmctl ownership) was refused `blocked`: "projection base missing beyond
+  bootstrap bound; explicit genesis repair required" — before escrow unwrap,
+  no lifetime replay.
+- Verified first base `computer-0396f4f2…`: blob sha256 equals name, size
+  8,638,976 = descriptor, descriptor `canonical_head` equals
+  `computer_event_append_receipts` digest at sequence 1,691; key-use
+  transparency entry (seq 3) precedes publication.
+- Disposable `computer-7e6a9afd…` (fresh passkey account via
+  `scripts/s0m_disposable_keydriver.mjs`): gen-1 bootstrap at target 2
+  (base `d435410e…`, 81 KB, 1.3s); after real prompt-bar work, gen-2 seeded
+  from that base to target 2,318 (`SeedPinned`, `SeedRequired`; replay floor
+  = 2 enforced by `boundedReplaySource`, so success proves no prefix reads):
+  11.4 MB, 27s, 1.1 GB peak RSS. Watermark 0 → 2 → 2,318, monotonic.
+- Node B during jobs: ~15 GiB RAM available.
+- Retained resume with stale W: disposable hibernated at head 2,375 with
+  W=2,318, then woken through vmctl `resolve` (the cookie-session wake path;
+  API-key bearer requests intentionally never wake a computer —
+  `internal/proxy/api_key_computer_authority.go`). 200 in 9.25s, boot kind
+  `recover`; guest console: `projection recovery resume … (local=2397
+  W=2318 H=2397 tail=0)` then `replay complete`. The planner used H−L, not
+  the stale H−W; post-resume API request 200.
+
+Not yet exercised on staging (named residual): the vmctl over-cap admission
+refusal path (structured 503, concurrent refused requests, restart
+durability, restored admission after repair). No startable computer exceeds
+the 10k bound, and manufacturing one requires >10k events on a disposable.
+
 ## Rollback
 
 None — record only. The deployed repair path (manual `bootstrap-chain`
