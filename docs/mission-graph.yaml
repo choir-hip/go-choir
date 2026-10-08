@@ -1308,6 +1308,23 @@ nodes:
       - choir-appdev-sa-agent-density-2026-10-05
     note: >-
       v5 2026-10-05. Absorbs Jev M0a (choir-signal-research-rlm-cutover-2026-09-29).
+  - id: choir-appdev-sl-obligation-terminality-2026-10-08
+    title: SL Obligation Terminality — every durable obligation has one driver and a recorded terminal fate (O1)
+    path: docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
+    ledger: ''
+    status: working
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-appdev-smg-management-rlm-cutover-2026-10-06
+    enables:
+      - choir-appdev-sa-agent-density-2026-10-05
+    note: >-
+      2026-10-08 owner direction. Operational invariant O1 from
+      docs/operational-invariants-register-2026-10-08.md. Absorbs SA slice 1
+      (Management storm convergence). First slice: read-only obligation
+      inventory.
   - id: choir-appdev-sa-agent-density-2026-10-05
     title: SA Agent Density — many concurrent desk activations in a 2-4 GiB guest
     path: docs/definitions/choir-appdev-sa-agent-density-2026-10-05.md

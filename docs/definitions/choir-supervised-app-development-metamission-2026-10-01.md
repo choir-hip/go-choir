@@ -131,6 +131,14 @@ metamission:
       readiness: drafted
       status: pending
       depends_on: [SR-desk-surface-cleanup, SO-ops-substrate]
+    - id: SL-obligation-terminality
+      # 2026-10-08 owner direction ("proceed with mission next"): enforce
+      # operational invariant O1 (docs/operational-invariants-register-2026-10-08.md).
+      # Absorbs SA slice 1 (Management storm convergence is an O1 instance).
+      path: docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
+      readiness: drafted
+      status: working
+      depends_on: [SMG-management-rlm-cutover]
     - id: SM-model-policy-and-evals
       # v5. Absorbs Jev M2 (choir-signal-model-policy-rlm-module-2026-09-29.md).
       # Jev M3 (research hill-climb) is its first consumer.

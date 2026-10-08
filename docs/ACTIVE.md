@@ -93,6 +93,13 @@ divergent; all required revisions applied in v3). Thirteen stations;
   Cadence/replay repaired-with-residual; admission awaits its staging
   refusal demo. Record:
   [`problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md`](problems/sa-projection-base-watermark-never-refreshed-2026-10-07.md).
+- **SL** obligation terminality **working** (opened 2026-10-08, owner
+  direction "proceed with mission next"):
+  [`definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md`](definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md)
+  — enforce operational invariant O1 from the
+  [operational invariants register](operational-invariants-register-2026-10-08.md)
+  (draft, owner-approved set). Absorbs SA slice 1 (Management storm
+  convergence). First slice: read-only obligation inventory.
 Ordered ahead of the World Wire metamission per owner direction
 2026-10-01 ("a good prerequisite to it").
 

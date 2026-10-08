@@ -426,6 +426,21 @@ documents:
     depends_on: [docs/archive/choir-texture-owner-input-cutover-2026-09-22.md]
     witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/archive/choir-rlm-engineering-carrier-2026-09-11.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
+  - path: docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/operational-invariants-register-2026-10-08.md]
+    witnesses: [docs/operational-invariants-register-2026-10-08.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/operational-invariants-register-2026-10-08.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: register, authority: support, lifecycle: living}
+    witnesses: [docs/operational-invariants-register-2026-10-08.md, docs/evidence/problem-doc-triage-2026-10-08.jsonl, docs/choir-doctrine.md]
+    refresh_triggers: [doctrine_change, owner_ratification_change]
   - path: docs/definitions/choir-strand2-freeze-order-patch-2026-09-23.md
     claim_scope: current
     is_root: []

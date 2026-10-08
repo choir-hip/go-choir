@@ -182,6 +182,10 @@ now:
     - checkpoint cadence / watermark auto-refresh before tail hits cap;
     - vmctl fail-fast with "rebuild required" instead of 30-min retry loop;
     - cutover-aware replay (migrate at cutover point in event chain).
+    SLICE 1 MOVED 2026-10-08: Management storm convergence is an O1
+    instance and is absorbed by station SL
+    (choir-appdev-sl-obligation-terminality-2026-10-08.md); its deployed
+    acceptance (owner restart, migration minted ~=0, storm absent) is SL's.
     PERMANENT RECOVERY POLICY LANDED 2026-10-08 (0f7c58ba, e7b51524,
     11ee8b50, 67729e07; deployed 67729e07): cmd/checkpointd verified
     incremental checkpoints on a 1-minute timer, typed vmctl admission +
