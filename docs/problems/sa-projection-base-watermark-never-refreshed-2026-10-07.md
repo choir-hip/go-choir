@@ -418,6 +418,31 @@ this does **not** require >10k events — an existing chain with no watermark
 and an empty store is refused `base_missing`, so a fresh realization of a
 disposable whose chain has no base yet is a legitimate refusal target.
 
+### Admission staging acceptance (2026-10-08, deployed `85befb1c`/`67729e07`)
+
+Driver: scratchpad admission-refusal demo; log
+[`evidence/recovery-admission-staging-demo-2026-10-08.log`](../evidence/recovery-admission-staging-demo-2026-10-08.log).
+Fresh disposable `computer-f177676f…`, scheduler paused, vmctl ownership
+removed (chain retained, W=0, empty store on next realization):
+
+- Concurrent refused requests: 6 concurrent product requests → structured
+  `503`, `kind=projection_base_missing`, `Retry-After: 60`, 34–61 ms, one
+  deduplicated repair job (`repair_status=queued`, generation 1). PASS.
+- Restart durability: vmctl restarted; 4 further requests refused
+  identically (33 ms); no boot attempted while blocked. PASS.
+- Restored admission after repair: scheduler resumed; admission-enqueued
+  genesis bootstrap `succeeded` (W=2); admission reopened on the changed
+  watermark and started the realization. PASS for admission.
+- End-to-end restore: FAIL on an independent gap — the fresh realization has
+  no guest privacy key, the runtime crash-loops, and vmctl waits 30 min.
+  Recorded in
+  [`fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md`](fresh-realization-missing-privacy-key-blind-boot-2026-10-08.md).
+
+Also found during this run and fixed before the rerun: the artifact GC sweep
+held the service write lock and failed fresh boots
+([`gc-sweep-holds-service-write-lock-2026-10-08.md`](gc-sweep-holds-service-write-lock-2026-10-08.md),
+fixed `85befb1c`).
+
 ### Frozen-candidate consensus (2026-10-08, candidate `11ee8b50`)
 
 Raw output: `.agentic-consensus/recovery-frozen-candidate-11ee8b50/`
