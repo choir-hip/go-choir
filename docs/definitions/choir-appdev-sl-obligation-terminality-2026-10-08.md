@@ -158,12 +158,18 @@ boundaries:
 now:
   status: working
   slice: >-
-    define — obligation inventory: enumerate every durable obligation kind
-    (store, creators, drivers, terminal states, attempt accounting, expiry,
-    restart behavior); map each O1-cluster problem doc to its kind and
-    mechanism; reconcile those docs' real status against commits.
-  source_ref: 3d2247da
-  deploy_identity: a72e2d32
+    fault matrix — slices 1-3 deployed on staging (e3f2d560: crash vs
+    planned restart for all desks; event-driven wake outbox with a 5-attempt
+    budget and visible dispatch_exhausted fate; GET /api/runtime/obligations).
+    Leg c (poison wake isolation) pinned in Go; leg d (nothing owed after a
+    crash) is Texture suite T8 on staging. First staging read of the surface
+    (18:34Z) found the gap that the Texture create occurrence was invisible
+    to it; 690ef1ee adds the actor tape (due/deferred updates, in-flight
+    activations). Open: legs a (dropped dispatch) and b (killed bound run)
+    on a disposable; the silent nil,nil consumption paths in the Texture
+    occurrence handler (texture-create-occurrence-deferred-never-refires).
+  source_ref: 7bc8f374
+  deploy_identity: e3f2d560 (d4488c0c and 7bc8f374 deploying)
   candidate:
     id: none
     state: none
@@ -212,14 +218,11 @@ now:
     Red surface; regressions here strand real work. Mitigated by
     disposable-first fault matrix and additive registry.
   next_action: >-
-    Owner decisions 2026-10-09: no panel; the outbox is the single driver,
-    event-driven (signal on write, timer only for the earliest due retry,
-    no fixed poll); crash restart closes open work, planned update restart
-    (durable marker consumed once at boot) resumes it, so the boot-time
-    resumers are gated on the marker rather than deleted. Deploys restart
-    only idle computers (separate CI change, problem doc
-    deploy-restarts-busy-computers-2026-10-09). Next: SL problem doc, then
-    marker, boot close-out, retry counts and the "what is owed" surface.
+    After 7bc8f374 deploys: rerun the Texture suite (T2a captures the
+    obligations surface if the first draft is missing, deciding H2 vs H5);
+    then legs a and b on a disposable via the obligations surface. Owner
+    decisions 2026-10-09 stand: no panel; outbox is the single driver,
+    event-driven; crash closes work, planned update restart resumes it.
 receipts: []
 ---
 
