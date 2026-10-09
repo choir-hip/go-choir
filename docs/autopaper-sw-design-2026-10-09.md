@@ -1,4 +1,4 @@
-# AutoPaper redesign (station SW) — draft for owner review
+# Autopaper redesign (station SW) — draft for owner review
 
 Date: 2026-10-09. Status: **draft; decisions marked OPEN are the owner's.**
 Station: `SW-world-wire-interface` in the
@@ -19,7 +19,7 @@ plan" (the plan for the old Store B data), then "review these docs first"
 
 ## 1. What we are building
 
-**AutoPaper** is a maintained, research-intensive automatic newspaper with a
+**Autopaper** is a maintained, research-intensive automatic newspaper with a
 customized article interface (canonical context §5.2):
 
 - It ingests sources continuously and keeps a knowledge graph of
@@ -45,10 +45,12 @@ evidence they need; it does not claim them.
 
 ## 2. Names
 
-- **AutoPaper** is the product (settled in the canonical vocabulary).
-  "Universal Wire" is retired from the UI. The desktop app becomes AutoPaper.
+- **Autopaper** is the product (settled in the canonical vocabulary). The
+  owner's spelling is "Autopaper", not "AutoPaper" as in the canonical
+  context (owner, 2026-10-09).
+  "Universal Wire" is retired from the UI. The desktop app becomes Autopaper.
 - "World Wire", "Universal Wire" and "sourcecycled" are retired (owner,
-  2026-10-09). Everything is AutoPaper or a derivation. The shared-claims
+  2026-10-09). Everything is Autopaper or a derivation. The shared-claims
   layer needs no product name.
 - Code: per canonical context §12.4, existing identifiers are not renamed
   for their own sake. New code is named `autopaper`. The
@@ -72,7 +74,7 @@ Receipts are in the 10-05 doc and the June attempt report:
 ## 4. Architecture
 
 ```text
-Primary AutoPaper computer (ordinary persistent computer, platform-owned)
+Primary Autopaper computer (ordinary persistent computer, platform-owned)
   tape + object graph + artifacts        <- the only state; no Store B
   management desk   attention, cadence, budget per item (the spend dial)
   research desk     observe sources (deterministic tool modules: fetch,
@@ -190,20 +192,20 @@ need to rebuild one. Per class:
 |---|---|
 | Whole store (current state) | keep the history-free dump, compressed, as a cold archive on Node B and node-a. Delete the 104 G repo. |
 | The 148 user publications (38 the owner's, ~110 from 12 accounts) | restore as frozen public pages (static snapshots) so their URLs work. These are the prosumer writers the product is for; their authors can republish from their computers later. |
-| The paper's own 485 publications and 185 articles (June attempt) | archive only; the primary AutoPaper starts fresh |
-| 211 sources | import as the primary AutoPaper's initial source list |
+| The paper's own 485 publications and 185 articles (June attempt) | archive only; the primary Autopaper starts fresh |
+| 211 sources | import as the primary Autopaper's initial source list |
 | 2.4M items, 8.8M objects | archive only; old news is not seed material. Use them as an offline evaluation set for claim extraction (the 10-05 director note). They are not prospective evidence: any claim scored against them is retrospective (canonical context §12.9). |
 | ~12M log rows | archive only (inside the dump) |
 
 ## 10. Build order (sketch)
 
-- **W1:** the primary AutoPaper computer: source adapters (RSS/Telegram),
+- **W1:** the primary Autopaper computer: source adapters (RSS/Telegram),
   observation with retention, the timer obligation, and the rename.
 - **W2:** claims, entities and threads by the research desk, with
   precommitment records around investigations and reads.
 - **W3:** articles as Texture documents, revision on new evidence, and
   publish (precommit, authorize, project).
-- **W4:** free reading surfaces (the AutoPaper app and public pages) plus
+- **W4:** free reading surfaces (the Autopaper app and public pages) plus
   restored user publications.
 - **W5:** the governed read interface and adopt-on-cite for paid
   personalized investigations.
@@ -213,11 +215,11 @@ need to rebuild one. Per class:
 ## 11. Open decisions for the owner
 
 1. ~~Sequencing.~~ **Decided (owner, 2026-10-09):** Gate 1 today, Gate 2
-   tomorrow, Gate 3 (AutoPaper) in October. The v6 order holds and the
+   tomorrow, Gate 3 (Autopaper) in October. The v6 order holds and the
    October launch target holds.
 2. ~~"World Wire" as an internal name.~~ **Decided (owner, 2026-10-09):**
    retire "World Wire", "Universal Wire" and "sourcecycled"; everything is
-   AutoPaper or a derivation. The rename is a TODO, not done now (§12).
+   Autopaper or a derivation. The rename is a TODO, not done now (§12).
 3. The primary paper's public name and URL shape on choir.news.
 4. User publications from June: restore as frozen pages, or retire?
 5. Observation retention default (proposal: 30 days, cited bodies pinned).
@@ -255,14 +257,14 @@ Notes for whoever does it:
   (`internal/proxy/guest_authority.go`, `handlers.go`). Renaming the
   constants without a migration would orphan the existing platform
   computer and could start a new one. Prefer retiring it in W1, when the
-  primary AutoPaper computer replaces it, over an in-place rename.
+  primary Autopaper computer replaces it, over an in-place rename.
 - **sourcecycled** is slated for deletion (§4 rule 2). Delete rather than
   rename, after W1 moves any reusable source adapters into desk tool
   modules. The host env file `/var/lib/go-choir/corpus-dsn.env` also
   carries `SOURCECYCLED_DOLT_DSN`.
 - **Routes:** `/api/universal-wire/stories` and the corpusd
   `/internal/platform/universal-wire/*` endpoints go away with Store B
-  (§9); the AutoPaper app gets new routes in W4.
+  (§9); the Autopaper app gets new routes in W4.
 - **Docs:** rename current documents and roadmap gate names. Dated
   receipts and `docs/archive/` keep their text, with a glossary line in the
-  doctrine mapping the former names to AutoPaper.
+  doctrine mapping the former names to Autopaper.

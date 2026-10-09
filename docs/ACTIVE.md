@@ -16,7 +16,7 @@ Three gates, in order, each with an exit test — see "v6 plan" in the
 2. **Self-development with live Texture supervision** — S1 → S4 → S5 → S6.
    Exit: owner-requested change, capsule build, live preview, approval,
    release, rollback.
-3. **AutoPaper** (formerly World Wire; owner 2026-10-09: Gate 1 today,
+3. **Autopaper** (formerly World Wire; owner 2026-10-09: Gate 1 today,
    Gate 2 tomorrow, Gate 3 in October; design draft
    [`autopaper-sw-design-2026-10-09`](autopaper-sw-design-2026-10-09.md);
    name retirement is a TODO there, §12) — on SW's interface constraints; four core desks; shared
