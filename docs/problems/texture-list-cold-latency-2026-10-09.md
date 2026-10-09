@@ -57,3 +57,43 @@ So every read queues behind any background write on the computer
 2. Make the list one metadata pass:
    - one document scan;
    - revision stats and head author from revision metadata (no bodies).
+
+## Profile (owner computer on f8a968dd, 2026-10-09 08:51Z, 25 s CPU + mutex + block)
+
+Taken through `/internal/debug/pprof/` (f8a968dd) while timing cold list
+calls (5.6 s during the profile). **This record is late:** the fixes below
+were committed before this section, against the problem-documentation-
+first rule; the profile was reported in the session but not written here
+first.
+
+- **The list is not the cost; boot replay is.** 89% of CPU was under
+  `textureowner.(*Handler).Start` (boot reconcile), which was still running
+  minutes after boot. The list handler itself was 1.5%.
+- `GetLifecycleSnapshot` was 68% of CPU, called **twice per Texture
+  document** at boot: once by `textureLifecycleActivationEligible`, once
+  for `PendingTextureOwnerRevision`.
+- Inside it, `ReadObjectSnapshotFiltered`:
+  - phase 1 scans the metadata of 9 kinds across the whole computer;
+  - the keep filter kept **every** Texture document and revision;
+  - phase 2 fetched all survivors in one `IN (...)` list.
+  go-mysql-server's range overlap check on that list is quadratic:
+  `StringType.Compare` alone was 38% of CPU.
+- **Mutex profile:** 91% of `engineMutex` hold time was this snapshot read.
+  Hypothesis 1 holds: list reads queue behind boot's per-document snapshots
+  on the shared engine mutex. "Cold after idle" was really "behind boot
+  reconcile or background sweeps".
+- Other boot costs: `ListActionablePendingLifecycleUpdates` (12%, JSON
+  extraction over update bodies per document);
+  `sweepActorWakeOutbox` → `LatestActorRunMemoryEntries` (5%).
+
+## Fixes (pushed in c01bc2f9; not yet measured on staging)
+
+| Commit | Change |
+|---|---|
+| e228711f | phase 2 fetches survivors in batches of 256 in one read transaction |
+| 02807c7d | the snapshot keeps only the trajectory's own document and revisions; `GetLifecycleHeadView` (point reads) replaces the snapshot in the activation classifier |
+| c01bc2f9 | boot reads the full snapshot for the owner-revision check only when the head view shows an owner-input head |
+
+Still open: the phase-1 metadata scan is still computer-wide per snapshot
+(the wake path and the API still use it), the list's own ~100 reads
+(Next item 2), and `ListActionablePendingLifecycleUpdates` per document.
