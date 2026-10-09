@@ -722,14 +722,15 @@ in
         "VM_HOST_BASE_PORT=9000"
         "VM_CPU_COUNT=2"
         "VM_MEM_MIB=4096"
-        # Interactive guest shape: 4 CPU / 4 GiB (owner direction 2026-10-09).
-        # The 8 and 16 GiB shapes were sized for an 8.9 GiB projection store
-        # whose live state is 1.7 GiB; compaction removes the history that
-        # drove them (docs/problems/guest-store-history-bloat-and-memory-
-        # shape-2026-10-09.md). This is the only memory setting: do not
-        # override it in /var/lib/go-choir/vmctl-priority.env.
+        # Interactive guest shape: 4 CPU / 8 GiB. A 4 GiB trial on the
+        # compacted owner store thrashed (3.67 GB RSS at the cap, 78 ms guest
+        # RTT, health unreachable) and was rolled back per the owner-approved
+        # plan (docs/problems/guest-store-history-bloat-and-memory-shape-
+        # 2026-10-09.md). Host swap is bounded by the memory budget, not by
+        # guest size. This is the only memory setting: do not override it in
+        # /var/lib/go-choir/vmctl-priority.env.
         "VM_INTERACTIVE_CPU_COUNT=4"
-        "VM_INTERACTIVE_MEM_MIB=4096"
+        "VM_INTERACTIVE_MEM_MIB=8192"
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=10s"
         "VM_BOOT_READY_TIMEOUT=30m"
