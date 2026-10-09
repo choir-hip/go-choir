@@ -96,3 +96,24 @@ seen for fe5bbcbf). The deploy job already has its own concurrency group
 and a stale-target guard, so main runs could run checks in parallel.
 This changes the deploy pipeline (red), so it is a proposal, not a
 change.
+
+## Hole: a docs push after a cancelled code run deploys nothing (2026-10-09 12:15Z)
+
+Sequence:
+1. Code commit 9c0eac3b was pushed while 964a68ea's run was in progress,
+   so its run queued.
+2. Docs commit 3b860cd7 was pushed next. GitHub replaced the queued
+   9c0eac3b run (cancelled); a group keeps one running and one pending.
+3. The 3b860cd7 run's "Plan CI Lanes" classified the push as docs-only
+   from the push's own before/after. It skipped tests, "Detect Staging
+   Deploy Impact" and the deploy. Staging stayed on 3ef77efb, without
+   c0903096, 3ef77efb's successors 4b9bf31d, 964a68ea or 9c0eac3b.
+
+Deploy-impact does diff against the live staging commit, but it never ran
+because the planner gated it on push-local paths. Workaround used:
+`gh workflow run ci.yml -f force_staging_deploy=true` (run 37928689108).
+
+Fix direction: on main, the planner's docs-only shortcut must use the
+same base as deploy-impact (the live staging commit), not the push's
+`before`. Or make item 2 moot: stop serializing whole main runs, so a
+queued code run is never replaced by a docs run.
