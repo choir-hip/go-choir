@@ -80,3 +80,54 @@ realization/head binding
 ([`s2-app-layer-offer-bind-gaps`](s2-app-layer-offer-bind-gaps-2026-10-05.md)).
 A refused push leaves the computer on the old layer, but the deploy is
 not failed for it (`skipped` is counted, not gated).
+
+## Corrected cause and fix direction (2026-10-09 ~07:55)
+
+Second push run (16806d8e, deploy run 37895020834): both targets refused
+with `updater: layering entrypoint … not materialized`, then
+`base event head is stale`.
+
+**The push direction above was wrong:**
+- the new base image's runtime is `/nix/store/h3zhi6pz…-autoputer-0.1.0`
+  (`guest-image-manifest`, build_commit 16806d8e);
+- the same-commit app layer's `runtime_path` is the **same store path**
+  (builder receipt).
+
+On a reboot-path deploy the base already carries the deploy's runtime.
+The layer's entrypoint is a base path, absent from the private store, so
+it can never materialize. Pushing a layer after a refresh cannot work.
+
+**The defect is in the boot wrapper.** `nix/autoputer-vm.nix` execs
+`current/layering-entrypoint` without checking the release's
+`base_image_manifest_digest` against the booted base. Apply enforces that
+binding (`internal/updater/updater.go:276`); boot does not. So a
+platform base-image deploy leaves the previous layer (39c0d991, built for
+an older base) exec'ing on a base it was never built against. That works
+only while the old closure's base-present paths happen to still exist in
+the new base.
+
+**Fix:**
+1. The boot wrapper skips a layered release whose recorded base digest
+   differs from the booted base's manifest digest. It logs a diag line and
+   serves the base runtime, which on a reboot-path deploy is the deploy's
+   own commit.
+2. Revert the classifier change (4e82febe). Reboot-path deploys deliver
+   through the base; the post-refresh push only wasted ~465 s per deploy
+   on refusals.
+
+**Open (S6):** a divergent self-developed computer refreshed onto a new
+base loses its layer under the same rule. Its layer was built for the old
+base, so running it there was never safe. The divergence guard must keep
+such computers off reboot-path refreshes, or rebase them.
+
+**Clustering note (CLAUDE.md rule).** Tonight's S2 delivery symptoms:
+1. layered SPA underivable;
+2. offer binds a different realization;
+3. `base event head is stale`;
+4. entrypoint not materialized;
+5. stale layer exec'd on a new base.
+
+Items 4 and 5 share this root (layer–base binding is checked at apply but
+not at boot). Items 2 and 3 are offer binding against a moving
+realization/head, documented in
+[`s2-app-layer-offer-bind-gaps`](s2-app-layer-offer-bind-gaps-2026-10-05.md).
