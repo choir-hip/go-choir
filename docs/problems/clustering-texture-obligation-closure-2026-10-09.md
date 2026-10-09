@@ -111,3 +111,18 @@ not research closure: Texture's turn reasons cite the search outage. The
 research-work-left-open state is real (O24) but did not make Texture wait.
 That lowers the urgency of option A; B (turn-level cancel) and the
 search-plane fix are what the suite needs next.
+
+## Item 5 and a first substrate rule (20:43Z)
+
+5. `texture-research-loop-never-idles` (suite run 6, after the research
+   packet fix): each research report wakes Texture, the turn opens more
+   research, and the document never idles. Same common cause: nothing
+   but a model choice ends the loop.
+
+The first runtime-derived rule landed for it (dc3e86b6): **two research
+openers per owner request**; further openers are dropped and the
+committed turn says so. It bounds the loop without asking either model to
+learn a field. Still open in this cluster: research work never settles
+(A, decision `texture-research-assignment-finish`, A2 recommended), cancel
+ends the document (B/B2, `texture-terminal-trajectory-revise`, B2
+leaning), and evidence turns are not bound to the owner's last directive.
