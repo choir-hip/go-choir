@@ -612,8 +612,10 @@ func TestFileSyncFreshVolumeHydratesOverSeedAndBlocksSyncUntilDone(t *testing.T)
 	if err := os.WriteFile(filepath.Join(fresh, "seed.txt"), []byte("image seed"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := MarkFreshVolume(fresh); err != nil {
+		t.Fatal(err)
+	}
 	service := newFileSync(fresh, server.URL, capability, "computer-test", cipher, head, nil)
-	service.markFreshVolume()
 	if _, err := service.SyncOnce(context.Background()); !errors.Is(err, errFileSyncHydrationPending) {
 		t.Fatalf("sync before fresh-volume hydration must refuse, got %v", err)
 	}
@@ -652,5 +654,102 @@ func TestFileSyncFreshVolumeHydratesOverSeedAndBlocksSyncUntilDone(t *testing.T)
 	}
 	if !paths["owner.txt"] || !paths["seed.txt"] || len(paths) != 2 {
 		t.Fatalf("post-hydration published root must keep the owner's files, got %v", paths)
+	}
+}
+
+// A fresh volume's protection must survive a restart before hydration: the
+// app-layer push that restarts the guest after key delivery must not turn the
+// image seed into the owner's latest root
+// (docs/problems/fresh-realization-skips-file-hydration-2026-10-09.md, cause 2).
+func TestFileSyncFreshVolumeMarkerSurvivesRestartUntilHydrated(t *testing.T) {
+	server := newFileCASFake(t)
+	defer server.Close()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 7)
+	}
+	cipher, err := computerevent.NewPrivateArtifactCipher("computer-test", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := func(context.Context) (string, error) { return "file-sync-token", nil }
+	head := func(context.Context) (uint64, error) { return 9, nil }
+
+	owner := t.TempDir()
+	if err := os.WriteFile(filepath.Join(owner, "owner.txt"), []byte("owner data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newFileSync(owner, server.URL, capability, "computer-test", cipher, head, nil).SyncOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := filepath.Join(t.TempDir(), "files")
+	if err := os.MkdirAll(fresh, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fresh, "seed.txt"), []byte("image seed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Boot that delivers the key: the marker is durable before delivery.
+	if err := MarkFreshVolume(fresh); err != nil {
+		t.Fatal(err)
+	}
+	// The restart: a new service instance, no in-memory state carried over.
+	restarted := newFileSync(fresh, server.URL, capability, "computer-test", cipher, head, nil)
+	if _, err := restarted.SyncOnce(context.Background()); !errors.Is(err, errFileSyncHydrationPending) {
+		t.Fatalf("sync after restart on an unhydrated fresh volume must refuse, got %v", err)
+	}
+	if _, err := restarted.HydrateIfNeeded(context.Background()); err != nil {
+		t.Fatalf("hydrate: %v", err)
+	}
+	if _, err := os.Stat(freshVolumeMarkerPath(fresh)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("marker must be removed after hydration, stat err = %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(fresh, "owner.txt"))
+	if err != nil || string(got) != "owner data" {
+		t.Fatalf("owner.txt after hydration = %q, %v", got, err)
+	}
+	// A later restart is an ordinary boot: no marker, local tree wins, sync works.
+	again := newFileSync(fresh, server.URL, capability, "computer-test", cipher, head, nil)
+	if _, err := again.SyncOnce(context.Background()); err != nil {
+		t.Fatalf("sync after hydration and restart: %v", err)
+	}
+}
+
+// The marker lives beside the files root, never inside it, and a computer
+// with no recorded root clears it so sync can publish the first root.
+func TestFileSyncFreshVolumeMarkerOutsideTreeAndClearedWithoutRoot(t *testing.T) {
+	server := newFileCASFake(t)
+	defer server.Close()
+	key := make([]byte, 32)
+	cipher, err := computerevent.NewPrivateArtifactCipher("computer-new", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := func(context.Context) (string, error) { return "file-sync-token", nil }
+	head := func(context.Context) (uint64, error) { return 1, nil }
+
+	fresh := filepath.Join(t.TempDir(), "files")
+	if err := os.MkdirAll(fresh, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fresh, "seed.txt"), []byte("image seed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkFreshVolume(fresh); err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasPrefix(freshVolumeMarkerPath(fresh), filepath.Clean(fresh)+string(filepath.Separator)) {
+		t.Fatalf("marker %s must not be inside the files root", freshVolumeMarkerPath(fresh))
+	}
+	service := newFileSync(fresh, server.URL, capability, "computer-new", cipher, head, nil)
+	if restored, err := service.HydrateIfNeeded(context.Background()); err != nil || restored != 0 {
+		t.Fatalf("hydrate with no recorded root = %d, %v; want 0, nil", restored, err)
+	}
+	if _, err := os.Stat(freshVolumeMarkerPath(fresh)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("marker must be cleared when the computer has no root, stat err = %v", err)
+	}
+	if _, err := service.SyncOnce(context.Background()); err != nil {
+		t.Fatalf("first sync of a computer with no root: %v", err)
 	}
 }

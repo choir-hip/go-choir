@@ -330,12 +330,19 @@ func Run() {
 			boot.retryf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
 		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
-		keyDelivered := false
 		// O21: a realization of an existing computer whose key file is missing
 		// receives the key from custodian escrow, while this realization's
 		// issuance capability is still valid (before base materialization).
 		if canonicalHead != nil && platformURL != "" && privacyKeyPath != "" {
 			if _, statErr := os.Stat(privacyKeyPath); errors.Is(statErr, os.ErrNotExist) {
+				// The key and the files share this volume: a missing key over an
+				// existing chain means the files root is the image seed. Mark that
+				// durably before delivery, so no crash or restart can leave a
+				// delivered key on an unmarked seed tree.
+				if markErr := MarkFreshVolume(filesRoot); markErr != nil {
+					cancel()
+					boot.retryf("autoputer: privacy key delivery: %v", markErr)
+				}
 				commitment, issuanceToken, ok := credentials.IssuanceProof()
 				if !ok {
 					cancel()
@@ -346,7 +353,6 @@ func Run() {
 				deliverCancel()
 				switch {
 				case err == nil:
-					keyDelivered = true
 					log.Printf("autoputer: privacy key delivered from custodian escrow for %s (head %d)", computerID, canonicalHead.Sequence)
 				case errors.Is(err, errPrivacyKeyNotEscrowed):
 					cancel()
@@ -467,11 +473,6 @@ func Run() {
 				}
 				return head.Sequence, nil
 			}, appender)
-			if keyDelivered {
-				// The key lives on the same volume as the files: a delivered
-				// key means the image-seeded files root is not the owner's.
-				fileSyncService.markFreshVolume()
-			}
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher), agentcore.WithEventPayloadReader(eventClient))
 		if credentials != nil {

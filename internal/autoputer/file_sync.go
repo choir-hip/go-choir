@@ -70,18 +70,76 @@ type fileSync struct {
 	// files root is then not the owner's tree: hydration must restore the
 	// latest durable root over it, and sync must refuse until it has (O21;
 	// docs/problems/fresh-realization-skips-file-hydration-2026-10-09.md).
+	// It mirrors the durable marker beside the files root, so a restart
+	// before hydration keeps the protection.
 	freshVolume bool
+}
+
+// freshVolumeMarkerPath is beside the files root, never inside it, so sync
+// never publishes it and hydration never replaces it.
+func freshVolumeMarkerPath(filesRoot string) string {
+	return filepath.Clean(filesRoot) + ".fresh-volume"
+}
+
+// MarkFreshVolume durably records that this volume's files root is the image
+// seed, not the owner's tree. Boot writes it before the privacy key is
+// delivered: a crash between the two must leave the volume marked, never a
+// key without the mark. Only a completed hydration (or a computer with no
+// recorded root) removes it.
+func MarkFreshVolume(filesRoot string) error {
+	path := freshVolumeMarkerPath(filesRoot)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("file sync: fresh-volume marker directory: %w", err)
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("file sync: write fresh-volume marker: %w", err)
+	}
+	_, err = file.WriteString("fresh volume: hydrate the latest root before publishing\n")
+	if err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("file sync: write fresh-volume marker: %w", err)
+	}
+	return syncDir(filepath.Dir(path))
+}
+
+func freshVolumeMarked(filesRoot string) bool {
+	_, err := os.Stat(freshVolumeMarkerPath(filesRoot))
+	return err == nil
+}
+
+// clearFreshVolumeMarker runs only after the hydrated tree is installed.
+func clearFreshVolumeMarker(filesRoot string) error {
+	path := freshVolumeMarkerPath(filesRoot)
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("file sync: clear fresh-volume marker: %w", err)
+	}
+	return syncDir(filepath.Dir(path))
+}
+
+func syncDir(dir string) error {
+	handle, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("file sync: open %s for sync: %w", dir, err)
+	}
+	err = handle.Sync()
+	if closeErr := handle.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("file sync: sync %s: %w", dir, err)
+	}
+	return nil
 }
 
 // errFileSyncHydrationPending: a fresh volume has not restored the owner's
 // latest root yet; publishing now would replace it with the image seed.
 var errFileSyncHydrationPending = errors.New("file sync: fresh volume not yet hydrated from the latest root")
-
-func (s *fileSync) markFreshVolume() {
-	s.mu.Lock()
-	s.freshVolume = true
-	s.mu.Unlock()
-}
 
 func newFileSync(filesRoot, platformURL string, capability func(context.Context) (string, error), computerID string, cipher *computerevent.PrivateArtifactCipher, head func(context.Context) (uint64, error), appender *computerevent.ComputerEventAppender) *fileSync {
 	return &fileSync{
@@ -96,6 +154,7 @@ func newFileSync(filesRoot, platformURL string, capability func(context.Context)
 		httpClient:  &http.Client{Timeout: 30 * time.Second},
 		fileCache:   make(map[string]cachedSyncedFile),
 		chunkCache:  make(map[string]map[string]bool),
+		freshVolume: strings.TrimSpace(filesRoot) != "" && freshVolumeMarked(filesRoot),
 	}
 }
 
@@ -129,6 +188,11 @@ func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	if root == "" {
+		if s.freshVolume {
+			if err := clearFreshVolumeMarker(s.filesRoot); err != nil {
+				return 0, err
+			}
+		}
 		s.freshVolume = false
 		return 0, nil
 	}
@@ -195,6 +259,11 @@ func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
 		}
 	}
 
+	if s.freshVolume {
+		if err := clearFreshVolumeMarker(s.filesRoot); err != nil {
+			return restored, err
+		}
+	}
 	s.lastHydratedRoot = root
 	s.freshVolume = false
 	return restored, nil
