@@ -71,3 +71,35 @@ The gateway confirms a plane-wide cooldown from 19:24:26
 (§2 state) are still an O24 gap, but they did not cause T6; the earlier
 reading in §2 ("a Texture that waits while research work is open waits
 forever") was an inference the trace did not support.
+
+## T5b: what a fix touches (19:41Z, code reading; no decision yet)
+
+`CancelLifecycleTrajectory` (`store/lifecycle.go`) is one transaction:
+trajectory to `cancelled` (terminal), every open work item to `cancelled`,
+every pending worker update to `cancelled`. The owner revise
+(`textureowner/texture_agent_revision.go`) refuses any trajectory that is
+not live, and its reopen (4f9331cf) only reopens Texture work the desk
+**completed**; cancelled work still refuses, by the August rule.
+
+Two shapes, both red (Texture canonical lifecycle):
+
+- **B, turn-level cancel.** A new store command cancels open work and
+  pending updates and fences runs, but leaves the trajectory live; the
+  revise reopen accepts cancelled Texture work. Risk: whether settlement
+  reconciliation then settles a live trajectory whose work is all
+  terminal (the residual named in
+  `texture-settled-work-refuses-owner-revise-2026-10-09`).
+- **B2, a new episode per terminal trajectory.** Cancel keeps its present
+  meaning. An owner revise on a document whose trajectory is terminal
+  (cancelled **or** settled) starts a new trajectory bound to the same
+  document. This also closes the settled-trajectory residual. Cost:
+  `StartLifecycle` requires the document not to exist and the desk agent
+  id is `texture:<doc>`, so it needs a new store transaction that rebinds
+  an existing document and its agent to a new trajectory.
+
+B2 removes two failure classes with one rule (a live document is always
+revisable, O23) and leaves the cancel transaction alone; B changes a
+transaction with pinned semantics. Leaning B2. Named residual
+`texture-terminal-trajectory-revise`; T5b stays a soft check until it
+lands. Not started tonight in favour of the search-plane fix, the suite
+rerun, and the Gate 2 reality probe.
