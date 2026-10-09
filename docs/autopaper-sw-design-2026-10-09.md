@@ -52,6 +52,68 @@ that as too much structure.
 > call a researcher, management, and/or engineering for help before
 > revising and yielding
 
+> on transclusion, we should transclude specific versions, but have a
+> subtle indicator that new revisions is available for the transcluded
+> texture. that way, the system is stable and intelligible. [...] i think
+> we should start from zero content actually. easier to say no backwards
+> compatibility. [...] budget, we shouldnt worry about that until we are
+> operating live. we can put that in after we track our resource usage.
+
+## 0. Why the Universal Wire app failed, and what not to repeat
+
+Owner: "do we know why world wire app couldnt connect to corpus store? if
+we dont know we might replicate that rotten bug we couldnt squash in june
+and july."
+
+**What we know (June–July).** The
+July attempt report (deleted from the tree; read it with
+`git show d10ec47b:docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`) found no single bug. It found six wrong cornerstones that
+made the paper "0% retentive": stories did appear several times, but only
+in windows that the next deploy closed. Their status today:
+
+| July cause | What it was | Status 2026-10-09 |
+|---|---|---|
+| C1 | The guest's embedded Dolt runs on **one connection**; health, Texture, graph reads and background work all queue on it | **Still open**: `configureEmbeddedDoltDB` sets one connection (`internal/store/texture.go:399`) |
+| C2 | Legacy migration ran on every boot, under a readiness deadline | Fixed: the boot backfill is gone |
+| C3 | Slow treated as dead; reads could boot or recover a VM | Partly addressed (recovery admission, faster boot); not re-verified for this workload |
+| C4 | Processor lifecycle split across five authorities; "at most once ever" dedup | Moot: the processor and reconciler are deleted |
+| C5 | Agent completion was narrative, not artifact-verified | Partly addressed (run acceptance work); must hold for Texture revisions |
+| C6 | Every read of the app went proxy → vmctl → live guest → that one connection | Fixed: reads go proxy → corpusd → the host store, never the guest |
+
+**What we do not know (September–October).** After the store split, the
+app read from corpusd and the corpus store. There is no trace evidence of
+a connection failure in that period: the proxy journal on Node B starts on
+October 4 and logs no stories errors after that. What the evidence does
+show:
+- The processing pipeline was dead (127 of about 211,000 processor
+  requests completed, per the October 5 problem doc). No new stories were
+  published after June 30, so at best the app showed stale June stories.
+- The store was under constant ingest load: more than one core, 10 GB of
+  memory, and the October 1 out-of-memory cluster on the same host.
+- The final data was internally consistent for the stories endpoint: all
+  209 active routes resolve to a version (offline check on the old repo,
+  2026-10-09).
+- There were **two route authorities**: 209 route objects in the object
+  graph against 926 rows in the `public_routes` table.
+- The endpoint fails as a whole if any single route is broken, and it
+  makes several store queries per route.
+
+The exact September–October failure is therefore **unknown**. The old
+store is offline (reset at 12:33Z), so it cannot be reproduced live.
+
+**Constraints this design takes on, so the known causes cannot recur:**
+1. **High-volume ingest never shares the guest's single embedded
+   connection with Texture and health (C1).** How (real concurrency in the
+   store, or a separate handle and store for captures) is W1's first
+   engineering decision, made in Gate 1 terms, not worked around.
+2. One authority per fact: one route record, one revision chain, one
+   publication state.
+3. Reads of published Textures never touch the paper's computer (C6 stays
+   fixed).
+4. A list read degrades per item (one bad entry is skipped and logged), and
+   costs a bounded number of queries.
+5. A Texture revision counts only when the revision exists (C5).
+
 ## 1. Principles
 
 1. **Show what the world indicates; do not adjudicate.** Textures present
@@ -87,38 +149,58 @@ that as too much structure.
 
 ### Content lands in the object graph
 
-- Source adapters write each item as a `report` object in the paper's
-  object graph: source, time, URL, language and a content-addressed body.
-  The adapters are deterministic tool modules, and the existing adapters
-  (RSS, Telegram web preview, GDELT, Polymarket in `internal/sources`) are
-  enough for the MVP.
+- Research polls sources through its in-cell module. The polling code
+  already exists in `internal/sources` (RSS, Telegram web preview, GDELT,
+  Polymarket), and it is enough for the MVP.
+- Each fetched item becomes a `choir.web_capture` object in the paper's
+  object graph. That kind already exists: URL, canonical URL, title, fetch
+  time, and the content and extracted text as content blobs. The fields
+  the feeds add (published time, language, source) extend its metadata
+  schema rather than creating a new kind.
 - Agents may write any further objects they find useful (stories, claims,
-  entities, discrepancies, translations) through the open kind registry.
-  The design does not require them.
+  entities, discrepancies, translations). New kinds are added only when
+  an existing one does not fit.
+
+### Ontology: existing types only (owner: "so we dont create new types... unless we need to")
+
+| Thing | Existing type | Where |
+|---|---|---|
+| A feed or outlet to poll | `sources.Source` (configuration read by research's polling code) | `internal/sources/types.go` |
+| A fetched item | `choir.web_capture`, with bodies as content blobs | `internal/objectgraph/web_capture.go` |
+| A cited source inside a Texture | `choir.source_entity` and `choir.source_ref` | `internal/store/texture_source_graph.go` |
+| An article | a Texture document and its revisions | the Texture store |
+| A commitment, report or resolution between desks | `choir.commitment_record` (precommitment records) | `internal/types/commitment.go` |
+| Polling, fetching, parsing | functions in research's in-cell module, not a type | — |
+
+"Adapter" and "report" in earlier drafts of this design were informal
+words, not types. They are dropped.
 
 ### Storage that cannot repeat the 104 G problem
 
 - **The paper's computer** (embedded Dolt plus content storage) holds
-  working state. Report bodies live in content storage, not Dolt rows.
+  working state. Capture bodies live in content storage, not Dolt rows.
   High-volume tables stay out of Dolt history or are committed on a
   bounded cadence (to be settled in SH; Dolt's ignored-table mechanism is
   the first candidate). Textures and records are versioned.
 - **The host-level store** (the corpus Dolt behind corpusd) holds published
   Textures and their revisions, and serves every logged-out read. Its
   history has a declared bound.
-- Retention: report bodies have a bounded window (OPEN: 30 days), then
+- Retention: capture bodies have a bounded window (OPEN: 30 days), then
   shrink to a stub. Bodies cited by a Texture or a record are pinned.
 
 ### Textures: one writer, woken by evidence
 
 - Only the Texture desk writes a Texture revision.
-- Evidence reaches a Texture as a delivery (a report, another Texture's
+- Evidence reaches a Texture as a delivery (a capture, another Texture's
   record, a research result). The delivery wakes the Texture desk for that
   Texture. It may call research, management or engineering, waits for
   what it needs, then revises and yields.
-- Transclusion is how Textures reference graph objects and each other. A
-  transcluded item changes what a reader sees only through a Texture
-  revision.
+- **Transclusion pins a specific revision.** A Texture transcludes a graph
+  object or another Texture at an exact version, so what a reader sees is
+  stable and intelligible. When the transcluded item has a newer revision,
+  the transclusion shows a subtle indicator ("newer revision available").
+  Moving the pin forward is itself a Texture revision, made by the Texture
+  desk.
 - A Texture's model is a property of its activation and can change from
   one revision to the next. Several Textures can cover one story.
 
@@ -156,34 +238,37 @@ that as too much structure.
   many models and how many Textures each story gets, scaling with story
   size. It also owns the source schedule and email policy, and it scores
   records (Jev by default).
-- **Research:** observes through the adapters, searches the web sparingly
+- **Research:** polls sources, searches the web sparingly
   (rate limits and cost), checks provenance, writes graph objects and
   resolves records. Its authority is read-only toward the world.
-- **Engineering:** fixes adapters and tool modules in capsules, when cast.
+- **Engineering:** fixes polling code and other module functions in
+  capsules, when cast.
 - **Texture:** the only writer of Textures. It is woken by evidence,
   revises and yields, and publishes automatically.
 
-## 4. Inference
+## 4. Inference and resources
 
-Spend scales with story size and nothing else is fixed. The levers are
+Spend scales with story size, and nothing else is fixed. The levers are
 management's: how many models, how many Textures, how much research and
 search a story gets. The cheap defaults that need no workflow:
 
-- Adapters and resolution by counting cost no model calls.
+- Polling and resolution by counting cost no model calls.
 - Texture revisions happen only when evidence arrives.
 - A small story gets one Texture and few calls. A big one gets many
   Textures, many models and more research.
 
-Cost per story and per revision is measured and shown to management. It
-is not designed in advance.
+No budget is set before the paper runs live (owner). The MVP **tracks**
+resource usage per story, Texture, revision and desk: tokens, model, time,
+storage. The budget mechanism is added once that data exists.
 
 ## 5. Constraints on Gates 1–2
 
 | Gate / station | Constraint |
 |---|---|
 | SL (Gate 1) | a delivery to a Texture durably wakes the Texture desk; durable timer obligations for the source schedule, paused after a restart (owner rule) |
-| SH (Gate 1) | report bodies in content storage; bounded history for high-volume tables; retention classes; records immutable |
-| Texture contract (Gate 1) | sole writer; woken by deliveries; may call the other desks before revising; model per activation; several Textures per story; transclusion of graph objects and Textures |
+| SH (Gate 1) | capture bodies in content storage; bounded history for high-volume tables; retention classes; records immutable |
+| Store (Gate 1) | high-volume capture writes do not share the guest's single embedded Dolt connection with Texture and health (July C1) |
+| Texture contract (Gate 1) | sole writer; woken by deliveries; may call the other desks before revising; model per activation; several Textures per story; transclusion pinned to a revision, with a newer-revision indicator |
 | S5/S6 (Gate 2) | publishing is a visibility state agents can set; published revisions reach the host store; logged-out reads never touch the paper's computer |
 | Platform | the host store holds published Textures and serves reads, with a declared history bound; email is a separate, policy-gated channel |
 
@@ -193,11 +278,14 @@ No new feeds and no beats. Each step lands through the Landing Loop with
 deployed acceptance.
 
 - **W1 Content in the graph:**
-  - the primary Autopaper computer;
-  - the existing adapters as research tool modules, writing reports with
-    bodies in content storage and bounded history;
+  - decide and build how captures avoid the single embedded connection
+    (§0 constraint 1);
+  - the primary Autopaper computer, starting from zero content;
+  - research's polling over the existing source code, writing
+    `choir.web_capture` objects with bodies in content storage and bounded
+    history;
   - the source schedule as timer obligations;
-  - the June publications restored into the host store.
+  - resource usage tracking from the first poll.
 - **W2 Living Textures:**
   - management notices stories in the incoming reports and opens or
     feeds Textures;
@@ -209,23 +297,24 @@ deployed acceptance.
   - the Autopaper app and public permalinks reading from the host store.
   Email distribution comes after the MVP.
 
-Later, not in the MVP: AT Protocol and MTProto adapters, other feeds,
+Later, not in the MVP: polling for AT Protocol and MTProto, other feeds,
 private feeds, beats (Taiwan first, then Asian-language social media).
 
-## 7. The old Store B data (proposal)
+## 7. The old Store B data: start from zero
 
-The corpus store behind corpusd stays as the host-level store. It was
-reset empty at 12:33Z. The history-free dump finished at 13:15Z (23 GB of
-SQL).
+Owner: "i think we should start from zero content actually. easier to say
+no backwards compatibility."
 
-| Data | Proposal |
-|---|---|
-| All 633 publications with their chain and the 926 routes | migrate into the host store so the URLs work again (148 are users' work, 38 the owner's) |
-| The 185 platform Texture documents (545 revisions) | migrate into the host store |
-| 211 sources | import into the primary Autopaper as its initial source list |
-| 2.4M items, 8.8M objects | keep in the dump; not part of the MVP |
-| ~12M log rows | archive only (inside the dump) |
-| The 104 G old repo | delete once the migrated tables' row counts match the dump; keep the compressed dump |
+- Nothing is migrated. The corpus store behind corpusd stays as the
+  host-level store and starts empty (reset at 12:33Z).
+- The June publications (633, of which 148 are users' work) and their
+  URLs are not restored.
+- The history-free dump (23 GB of SQL, finished 13:15Z) is the only archive
+  of the old data. Compressing it and keeping a copy on node-a is cheap.
+- The 104 G old repo can be deleted: the dump holds its current state.
+  This is irreversible and waits for the owner's go-ahead.
+- The source list for the MVP is chosen fresh. The old 211 sources remain
+  readable in the dump if useful.
 
 ## 8. Decisions
 
@@ -236,6 +325,11 @@ Decided on 2026-10-09:
   TODO (§9).
 - **Storage:** each computer embeds Dolt; the host-level Dolt behind
   corpusd is the global publish and read store. No cross-computer reading.
+- **Old data:** start from zero content; no backwards compatibility.
+- **Transclusion:** pinned to a revision, with a subtle newer-revision
+  indicator.
+- **Budget:** none until live; track resource usage first.
+- **Ontology:** existing types only (§2); no new kinds unless needed.
 - **Publishing:** automatic for Autopaper; manual for users; email
   separately gated.
 - **Structure:** minimal. Spend scales with story size; many Textures and
@@ -244,9 +338,10 @@ Decided on 2026-10-09:
 - **MVP scope:** existing feeds, no beats, no shortcuts.
 
 Open:
-1. Starting daily budget.
-2. Report body retention window (proposal: 30 days, cited bodies pinned).
-3. Email distribution policy, after the MVP.
+1. Capture body retention window (proposal: 30 days, cited bodies pinned).
+2. Email distribution policy, after the MVP.
+3. The MVP source list.
+4. Deleting the 104 G old repo (irreversible; the dump holds its state).
 
 ## 9. TODO: retire the old names (owner, 2026-10-09; not done now)
 
@@ -275,8 +370,8 @@ Notes for whoever does it:
   computer and could start a new one. Prefer retiring it in W1, when the
   primary Autopaper computer replaces it, over an in-place rename.
 - **sourcecycled** is slated for deletion. Delete rather than rename,
-  after W1 moves the adapters in `internal/sources` into research tool
-  modules. The host env file `/var/lib/go-choir/corpus-dsn.env` also
+  after W1 moves the polling code in `internal/sources` into research's
+  in-cell module. The host env file `/var/lib/go-choir/corpus-dsn.env` also
   carries `SOURCECYCLED_DOLT_DSN`.
 - **Routes:** `/api/universal-wire/stories` and the corpusd
   `/internal/platform/universal-wire/*` endpoints are renamed or replaced
