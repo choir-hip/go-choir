@@ -564,13 +564,15 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 	manifest, err := updater.VerifyCurrentRelease(rt.selfdevUpdaterRoot)
 	if err == nil {
 		if strings.TrimSpace(manifest.ComputerID) != computerID {
-			return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+			return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable (current release is bound to another computer)")
 		}
 		rt.recordStartupManifest(manifest)
 		return manifest, nil
 	}
 	if strings.TrimSpace(baselineRoot) == "" || rt.selfdevUpdater == nil || strings.TrimSpace(rt.selfdevRealizationID) == "" {
-		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable")
+		// Name why: the verify error is the only clue to which release
+		// layout refused (layered-release-spa-underivable-2026-10-09).
+		return empty, fmt.Errorf("self-development checkpoint: served SPA is underivable (current release: %v; trusted baseline root: %t)", err, strings.TrimSpace(baselineRoot) != "")
 	}
 	codeRef := "code:genesis"
 	artifactRef := "artifact-program:genesis"
