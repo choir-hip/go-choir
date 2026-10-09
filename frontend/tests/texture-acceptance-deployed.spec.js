@@ -112,7 +112,7 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
     client_request_id: `acceptance-create-${suffix}`,
   });
   expect(created.status, JSON.stringify(created.body)).toBe(201);
-  const docID = created.body?.doc_id;
+  let docID = created.body?.doc_id;
   receipt.doc_id = docID;
   // T2a — the create wake produces the first draft with no further owner
   // action (soft: a failure is recorded and the suite continues).
@@ -182,6 +182,27 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   });
   expect(cancelled.status, JSON.stringify(cancelled.body)).toBeLessThan(300);
   expect(cleared?.done, 'pending cleared within 20 s of cancel').toBeTruthy();
+
+  // T5b — the owner revises again after a cancel (soft: the editor's Cancel
+  // cancels the document trajectory; this records whether the document
+  // stays revisable).
+  const afterCancel = await api(page, 'POST', `/api/texture/documents/${docID}/revise`, {
+    prompt: 'Shorten this to one paragraph.', intent: 'revise', client_request_id: `acceptance-t5b-${suffix}`,
+  });
+  record('T5b_revise_after_cancel', { pass: afterCancel.status === 202, status: afterCancel.status, body: afterCancel.body });
+  expect.soft(afterCancel.status, `revise after cancel: ${JSON.stringify(afterCancel.body)}`).toBe(202);
+
+  // T6 and T7 run on a fresh document so a terminal trajectory from the
+  // cancel cannot mask them.
+  const created2 = await api(page, 'POST', '/api/texture/lifecycle-documents', {
+    title: `Acceptance research ${suffix}`,
+    initial_content: `Acceptance seed ${suffix}: persistent personal computers and their owners.`,
+    client_request_id: `acceptance-create2-${suffix}`,
+  });
+  expect(created2.status, JSON.stringify(created2.body)).toBe(201);
+  docID = created2.body?.doc_id;
+  receipt.doc_id_research = docID;
+  await waitForTurn(page, docID, 0, 300_000);
 
   // T6 — research.
   const beforeResearch = (await appagentRevisions(page, docID)).length;
