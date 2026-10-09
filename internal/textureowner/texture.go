@@ -162,6 +162,9 @@ type textureDocumentResponse struct {
 	LastAuthorKind       string `json:"last_author_kind,omitempty"`
 	AgentRevisionPending bool   `json:"agent_revision_pending,omitempty"`
 	AgentRevisionRunID   string `json:"agent_revision_run_id,omitempty"`
+	// AgentRevisionInterrupted: the latest Texture turn was cut off by a
+	// restart and will not resume on its own.
+	AgentRevisionInterrupted bool `json:"agent_revision_interrupted,omitempty"`
 }
 
 // textureDocumentStreamEvent is the hidden transport envelope sent over the
@@ -1049,8 +1052,38 @@ func (h *Handler) handleTextureGetDocument(w http.ResponseWriter, r *http.Reques
 	resp.AgentRevisionPending = pendingMutation != nil
 	if pendingMutation != nil {
 		resp.AgentRevisionRunID = pendingMutation.RunID
+	} else if interruptedRunID := h.textureTurnInterruptedByRestart(r.Context(), doc); interruptedRunID != "" {
+		resp.AgentRevisionInterrupted = true
+		resp.AgentRevisionRunID = interruptedRunID
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+
+// textureTurnInterruptedByRestart returns the document's latest Texture
+// revision run when a restart passivated it. Boot does not resume it (owner
+// rule, docs/problems/texture-zombie-activations-revising-forever-
+// 2026-10-09.md), so the owner is told instead.
+func (h *Handler) textureTurnInterruptedByRestart(ctx context.Context, doc types.Document) string {
+	computerID, trajectoryID := strings.TrimSpace(doc.ComputerID), strings.TrimSpace(doc.TrajectoryID)
+	if h == nil || h.Store == nil || computerID == "" || trajectoryID == "" {
+		return ""
+	}
+	runs, err := h.Store.ListLifecycleRunsByChannel(ctx, doc.OwnerID, computerID, doc.DocID, 0)
+	if err != nil {
+		log.Printf("texture api: list document runs for interruption: %v", err)
+		return ""
+	}
+	agentID := currentTextureAgentID(doc.DocID)
+	for _, run := range runs {
+		if run.AgentID != agentID || run.TrajectoryID != trajectoryID || !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+			continue
+		}
+		if run.State == types.RunPassivated && metadataStringValue(run.Metadata, "passivated_reason") == "runtime_restarted" {
+			return run.RunID
+		}
+		return ""
+	}
+	return ""
 }
 
 func (h *Handler) handleTextureUpdateDocument(w http.ResponseWriter, r *http.Request, docID string) {

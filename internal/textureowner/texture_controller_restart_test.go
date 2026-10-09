@@ -55,7 +55,7 @@ func projectTextureOwnerTestProducer(t *testing.T, s *store.Store, start types.S
 	return agentID, workID, runID
 }
 
-func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
+func TestTextureOwnerStartDoesNotWakeTextureAfterRestart(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "texture-restart.db")
 	s1, err := store.Open(dbPath)
@@ -144,21 +144,16 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list recovered runs: %v", err)
 	}
+	// Owner rule: a restart is a system failure, not a wake. The pending
+	// report waits for the owner's next action; boot mints no Texture run.
 	for _, run := range runs {
-		if run.AgentID == agentID && run.ChannelID == docID && run.State == types.RunPending {
-			for _, orphanRunID := range []string{"orphan-preprojection-run", "orphan-preprojection-run-newer"} {
-				orphan, orphanErr := s2.GetAgentMutationByRun(ctx, ownerID, "autoputer-texture-restart", orphanRunID)
-				if orphanErr != nil || orphan == nil || orphan.State != "stale_activation" {
-					t.Fatalf("orphan mutation %s was not staled before recovery: %+v, %v", orphanRunID, orphan, orphanErr)
-				}
-			}
-			return
+		if run.AgentID == agentID && run.ChannelID == docID {
+			t.Fatalf("boot started a Texture run after restart: %+v", run)
 		}
 	}
-	t.Fatalf("durable Texture wake did not create a pending owner run after restart: %+v", runs)
 }
 
-func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
+func TestTextureOwnerRestartLeavesOtherComputerMutationAlone(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "texture-mutation-scope-restart.db")
 	s1, err := store.Open(dbPath)
@@ -246,24 +241,24 @@ func TestTextureOwnerRestartDoesNotCrossComputerPendingMutation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list computer B runs: %v", err)
 	}
+	// Owner rule: computer B's boot wakes nothing, and must not touch
+	// computer A's mutation either.
 	for _, run := range runs {
-		if run.AgentID == agentID && run.State == types.RunPending {
-			pendingA, pendingErr := s2.GetPendingAgentMutationByDoc(ctx, ownerID, "computer-a", docID)
-			if pendingErr != nil || pendingA == nil || pendingA.RunID != "shared-run" {
-				t.Fatalf("computer A mutation changed during B restart: %+v, %v", pendingA, pendingErr)
-			}
-			return
+		if run.AgentID == agentID {
+			t.Fatalf("computer B boot started a Texture run: %+v", run)
 		}
 	}
-	t.Fatalf("computer A pending mutation suppressed computer B restart wake: %+v", runs)
+	pendingA, pendingErr := s2.GetPendingAgentMutationByDoc(ctx, ownerID, "computer-a", docID)
+	if pendingErr != nil || pendingA == nil || pendingA.RunID != "shared-run" {
+		t.Fatalf("computer A mutation changed during B restart: %+v, %v", pendingA, pendingErr)
+	}
 }
 
-// A texture run passivated with passivated_reason=runtime_restarted while an
-// owner revision is still pending must be reactivated by Handler.Start, not
-// left stranded. Production receipt: run 654acaec on the owner computer was
-// passivated at 03:48 and never reactivated across the 04:21 restart — the
-// owner revision stayed armed-but-undelivered.
-func TestTextureOwnerStartReactivatesRuntimeRestartedPassivatedRun(t *testing.T) {
+// A texture run passivated by a restart while an owner revision is pending
+// stays passivated at boot. Owner rule (2026-10-09, superseding the 09-30
+// receipt that asked for automatic reactivation): a restart is a system
+// failure, not a wake; the revision waits for the owner's next action.
+func TestTextureOwnerStartLeavesRuntimeRestartedPassivatedRun(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "texture-restart-rewake.db")
 	s1, err := store.Open(dbPath)
@@ -379,9 +374,8 @@ func TestTextureOwnerStartReactivatesRuntimeRestartedPassivatedRun(t *testing.T)
 	if run == nil {
 		t.Fatalf("passivated texture run not listed")
 	}
-	if run.State != types.RunPending {
-		t.Fatalf("runtime_restarted texture run was not reactivated; state=%s reason=%s",
-			run.State, metadataStringValue(run.Metadata, "passivated_reason"))
+	if run.State != types.RunPassivated {
+		t.Fatalf("boot resumed a runtime_restarted texture run with a pending owner revision; state=%s", run.State)
 	}
 }
 

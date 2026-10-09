@@ -41,12 +41,40 @@ type resumeState struct {
 type actorHandler struct {
 	rt           *agentcore.Runtime
 	textureOwner *textureowner.Handler
+	// bootAt is when this process built its handler. A Texture occurrence
+	// recorded earlier belongs to a run the restart interrupted.
+	bootAt time.Time
 }
 
 // newActorHandler creates the handler. The rt must have its store, provider,
 // and tool registry configured before runs are dispatched.
 func newActorHandler(rt *agentcore.Runtime, textureOwner *textureowner.Handler) *actorHandler {
-	return &actorHandler{rt: rt, textureOwner: textureOwner}
+	return &actorHandler{rt: rt, textureOwner: textureOwner, bootAt: time.Now().UTC()}
+}
+
+// errInterruptedByRestart is the durable fate of a Texture occurrence recorded
+// before this boot: a guest restart is a system failure, not a wake, so no
+// Texture turn starts or resumes on its own. The lifecycle keeps the pending
+// reports and owner revision for the owner's next action (owner rule,
+// docs/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
+var errInterruptedByRestart = fmt.Errorf("%w: interrupted_by_restart: Texture occurrence recorded before this boot", actor.ErrDurableInvalid)
+
+// textureWorkKinds are the update kinds that start or resume a Texture turn.
+// Cancellation and deadlines still apply across a restart.
+var textureWorkKinds = map[string]bool{
+	"initial_dispatch": true, "coagent_result": true, "channel_message": true,
+	"owner_revision": true, "lifecycle_work_assigned": true,
+}
+
+func (h *actorHandler) preBootTextureOccurrence(mailboxID string, u actor.Update) bool {
+	if h.bootAt.IsZero() || u.CreatedAt.IsZero() || !u.CreatedAt.Before(h.bootAt) || !textureWorkKinds[u.Kind] {
+		return false
+	}
+	if strings.TrimSpace(u.ToAgentID) != "" {
+		mailboxID = u.ToAgentID
+	}
+	_, _, agentID, err := parseScopedActorMailboxID(mailboxID)
+	return err == nil && strings.HasPrefix(agentID, agentprofile.Texture+":")
 }
 
 func deferTextureOccurrence(err error) error {
@@ -81,6 +109,11 @@ func textureRunRecord(rec types.RunRecord) bool {
 // A single run may span many HandleUpdate calls (initial_dispatch → park →
 // coagent_result → park → ... → completion).
 func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor.Update, memory []byte) ([]byte, error) {
+	if h.preBootTextureOccurrence(agentID, u) {
+		log.Printf("actorruntime: Texture %s %s recorded %s, before boot %s: interrupted_by_restart, not run",
+			u.Kind, u.UpdateID, u.CreatedAt.Format(time.RFC3339), h.bootAt.Format(time.RFC3339))
+		return nil, errInterruptedByRestart
+	}
 	switch u.Kind {
 	case "initial_dispatch":
 		return h.handleInitialDispatch(ctx, u, memory)

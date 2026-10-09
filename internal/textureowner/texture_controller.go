@@ -109,10 +109,6 @@ func (rt *Handler) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("reconcile lifecycle Texture subjects: %w", err)
 	}
-	textureSubjects := make([]types.AgentRecord, 0)
-	// One owner-wide report scan per owner, not one per document. A report
-	// written after the scan is driven by its own producer wake.
-	bootReportsByOwner := make(map[string]map[string][]types.CoagentSourcePacket)
 	for _, subject := range subjects {
 		subjectProfile, _ := agentprofile.Canonical(subject.Profile)
 		if subjectProfile == agentprofile.Engineering && subject.LifecycleVersion > 0 && subject.ChannelID != subject.AgentID {
@@ -129,197 +125,11 @@ func (rt *Handler) Start(ctx context.Context) error {
 			}
 			continue
 		}
-		if subjectProfile != agentprofile.Texture {
-			continue
-		}
-		docID := docIDFromTextureAgentID(subject.AgentID)
-		doc, err := rt.Store.GetLifecycleDocument(ctx, subject.OwnerID, subject.ComputerID, docID)
-		if err != nil {
-			return fmt.Errorf("load boot Texture document %s: %w", docID, err)
-		}
-		activationEligible, err := rt.textureLifecycleActivationEligible(ctx, doc)
-		if err != nil {
-			return fmt.Errorf("classify boot Texture lifecycle %s: %w", subject.AgentID, err)
-		}
-		ownerReports, cached := bootReportsByOwner[subject.OwnerID]
-		if !cached {
-			ownerReports, err = rt.Store.ListActionablePendingLifecycleUpdatesByTarget(ctx, subject.OwnerID)
-			if err != nil {
-				return fmt.Errorf("list boot Texture reports %s: %w", subject.AgentID, err)
-			}
-			bootReportsByOwner[subject.OwnerID] = ownerReports
-		}
-		updates := ownerReports[subject.AgentID]
-		ownerHead, ownerHeadSeq, ownerHeadPending, snapshotErr := rt.Store.ReadPendingTextureOwnerRevision(ctx, subject.OwnerID, subject.ComputerID, doc.TrajectoryID)
-		if snapshotErr != nil {
-			return fmt.Errorf("load boot Texture snapshot %s: %w", subject.AgentID, snapshotErr)
-		}
-
-		var runID, tailID, mutationIdentity string
-		candidateRunID := ""
-		if activationEligible {
-			rawActiveID := strings.TrimSpace(subject.ActiveRunID)
-			if rawActiveID != "" {
-				activeRun, activeErr := rt.Store.GetLifecycleRun(ctx, subject.OwnerID, subject.ComputerID, rawActiveID)
-				if activeErr == nil && activeRun.AgentID == subject.AgentID && activeRun.OwnerID == subject.OwnerID &&
-					activeRun.ComputerID == subject.ComputerID && activeRun.ChannelID == docID &&
-					activeRun.TrajectoryID == doc.TrajectoryID && !activeRun.State.Terminal() &&
-					isTextureAgentRevisionTaskType(metadataStringValue(activeRun.Metadata, "type")) {
-					candidateRunID = rawActiveID
-				} else if activeErr != nil && !errors.Is(activeErr, store.ErrNotFound) {
-					return fmt.Errorf("load boot Texture active run %s: %w", rawActiveID, activeErr)
-				}
-			}
-		}
-		if activationEligible && candidateRunID == "" {
-			memoryRunID, entries, memoryErr := rt.Store.LatestActorRunMemoryEntries(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID, "")
-			if memoryErr == nil && memoryRunID != "" {
-				memRun, memErr := rt.Store.GetLifecycleRun(ctx, subject.OwnerID, subject.ComputerID, memoryRunID)
-				if memErr == nil && memRun.AgentID == subject.AgentID && memRun.OwnerID == subject.OwnerID &&
-					memRun.ComputerID == subject.ComputerID && memRun.ChannelID == docID &&
-					memRun.TrajectoryID == doc.TrajectoryID && !memRun.State.Terminal() &&
-					isTextureAgentRevisionTaskType(metadataStringValue(memRun.Metadata, "type")) {
-					candidateRunID = memoryRunID
-					if len(entries) > 0 {
-						tailID = entries[len(entries)-1].EntryID
-					}
-				} else if memErr != nil && !errors.Is(memErr, store.ErrNotFound) {
-					return fmt.Errorf("load boot Texture memory candidate run %s: %w", memoryRunID, memErr)
-				}
-			} else if memoryErr != nil && !errors.Is(memoryErr, store.ErrNotFound) {
-				return fmt.Errorf("load boot Texture actor memory: %w", memoryErr)
-			}
-		}
-		if activationEligible && candidateRunID == "" {
-			// A pre-repair passivated run can have neither ActiveRunID nor memory.
-			// Enumerate exact document/trajectory/mutation candidates. Live
-			// (active) multiplicity fails closed; passivated residue supersession
-			// resolves by canonical order (see selectPassivatedTextureAuthority).
-			// See docs/reviews/passivated-authority-structural-assessment-2026-08-28.md.
-			runs, listErr := rt.Store.ListLifecycleRunsByChannel(ctx, subject.OwnerID, subject.ComputerID, docID, 0)
-			if listErr != nil {
-				return fmt.Errorf("list boot Texture recovery candidates: %w", listErr)
-			}
-			activeRuns := 0
-			var passivated []passivatedTextureAuthority
-			for i := range runs {
-				candidate := runs[i]
-				if candidate.AgentID != subject.AgentID || candidate.OwnerID != subject.OwnerID || candidate.ComputerID != subject.ComputerID || candidate.ChannelID != docID || candidate.TrajectoryID != doc.TrajectoryID || candidate.State.Terminal() || !isTextureAgentRevisionTaskType(metadataStringValue(candidate.Metadata, "type")) {
-					continue
-				}
-				mutation, mutationErr := rt.Store.GetAgentMutationByRun(ctx, subject.OwnerID, subject.ComputerID, candidate.RunID)
-				if mutationErr != nil {
-					return fmt.Errorf("load boot Texture candidate mutation %s: %w", candidate.RunID, mutationErr)
-				}
-				if mutation == nil || mutation.RunID != candidate.RunID || mutation.DocID != docID || mutation.OwnerID != subject.OwnerID || mutation.ComputerID != subject.ComputerID {
-					continue
-				}
-				if candidate.State.Active() {
-					activeRuns++
-					if activeRuns > 1 {
-						return fmt.Errorf("ambiguous boot Texture recovery run authority")
-					}
-					candidateRunID = candidate.RunID
-					continue
-				}
-				passivated = append(passivated, passivatedTextureAuthority{run: candidate, sequence: mutation.ScheduledMessageSeq, mutationCreatedAt: mutation.CreatedAt})
-			}
-			if activeRuns == 0 {
-				winner, selectErr := selectPassivatedTextureAuthority(passivated)
-				if selectErr != nil {
-					return fmt.Errorf("ambiguous boot Texture recovery run authority")
-				}
-				if winner != nil {
-					candidateRunID = winner.RunID
-				}
-			}
-		}
-		if activationEligible && candidateRunID != "" {
-			run, runErr := rt.Store.GetLifecycleRun(ctx, subject.OwnerID, subject.ComputerID, candidateRunID)
-			if runErr != nil {
-				return fmt.Errorf("load boot Texture run %s: %w", candidateRunID, runErr)
-			}
-			if run.AgentID != subject.AgentID || run.OwnerID != subject.OwnerID || run.ComputerID != subject.ComputerID || run.ChannelID != docID || run.TrajectoryID != doc.TrajectoryID || run.State.Terminal() || !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
-				return fmt.Errorf("boot Texture run %s is not exact canonical authority", candidateRunID)
-			}
-			runID = run.RunID
-			if tailID == "" {
-				entries, memoryErr := rt.Store.ListRunMemoryEntries(ctx, subject.OwnerID, run.RunID)
-				if memoryErr != nil {
-					return fmt.Errorf("load boot Texture run memory %s: %w", run.RunID, memoryErr)
-				}
-				if len(entries) > 0 {
-					tailID = entries[len(entries)-1].EntryID
-				}
-			}
-			mutation, mutationErr := rt.Store.GetAgentMutationByRun(ctx, subject.OwnerID, subject.ComputerID, run.RunID)
-			if mutationErr != nil {
-				return fmt.Errorf("load boot Texture mutation %s: %w", run.RunID, mutationErr)
-			}
-			if mutation == nil || mutation.RunID != run.RunID || mutation.DocID != docID || mutation.OwnerID != subject.OwnerID || mutation.ComputerID != subject.ComputerID {
-				return fmt.Errorf("boot Texture run %s lacks exact mutation join", candidateRunID)
-			}
-			mutationIdentity = fmt.Sprintf("%s:%d:%s", mutation.State, mutation.ScheduledMessageSeq, mutation.RevisionID)
-		}
-		dispatch := func(base agentcore.TextureActorOccurrence, source string) error {
-			content, err := agentcore.EncodeTextureActorOccurrence(base)
-			if err != nil {
-				return err
-			}
-			// This boot convergence only re-appends exact lifecycle-owned
-			// producer/head occurrences. Adapter dispatch derives its update_id
-			// from this deterministic content, so the durable SQLite tape
-			// deduplicates an already-recorded occurrence; no process-local wake
-			// or fresh delivery identity is synthesized by the scan.
-			if err := rt.Core.DispatchActor(ctx, base.OwnerID, base.ComputerID, base.TargetAgentID, "coagent_result", content, base.TrajectoryID, source); err != nil {
-				return err
-			}
-			// Recovery is a deterministic join over the exact trigger and current
-			// canonical run-memory/head/mutation state. It is harmless on fresh rows
-			// and essential after MarkProcessed-before-snapshot cuts.
-			if runID != "" {
-				recovery := agentcore.TextureRecoveryOccurrence(base, runID, tailID, doc.CurrentRevisionID, mutationIdentity)
-				recoveryContent, encodeErr := agentcore.EncodeTextureActorOccurrence(recovery)
-				if encodeErr != nil {
-					return encodeErr
-				}
-				if recoveryContent != content {
-					if err := rt.Core.DispatchActor(ctx, base.OwnerID, base.ComputerID, base.TargetAgentID, "coagent_result", recoveryContent, base.TrajectoryID, source); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		}
-		for _, update := range updates {
-			if update.Direction != types.LifecyclePacketDirectionProducerReport {
-				continue
-			}
-			base, err := agentcore.TextureProducerReportOccurrence(update)
-			if err != nil {
-				return fmt.Errorf("build boot Texture report occurrence: %w", err)
-			}
-			if err := dispatch(base, base.ProducerAgentID); err != nil {
-				return fmt.Errorf("dispatch boot Texture report occurrence: %w", err)
-			}
-		}
-		if ownerHeadPending {
-			base, err := agentcore.TextureDocumentRevisionOccurrence(ownerHead, "", ownerHeadSeq)
-			if err != nil {
-				return fmt.Errorf("build boot Texture revision occurrence: %w", err)
-			}
-			if err := dispatch(base, "owner:"+base.OwnerID); err != nil {
-				return fmt.Errorf("dispatch boot Texture revision occurrence: %w", err)
-			}
-		}
-		if activationEligible {
-			textureSubjects = append(textureSubjects, subject)
-		}
-	}
-	for _, subject := range textureSubjects {
-		if _, err := rt.reconcileActorWake(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID, textureWakeBootScan); err != nil {
-			return fmt.Errorf("reconcile subject %s/%s/%s: %w", subject.OwnerID, subject.ComputerID, subject.AgentID, err)
-		}
+		// Texture subjects: nothing at boot. A restart is a system failure, not
+		// a wake: interrupted runs stay passivated (runtime_restarted), pending
+		// reports and owner revisions wait for the owner's next action, and no
+		// turn starts or resumes on its own (owner rule, docs/problems/texture-
+		// zombie-activations-revising-forever-2026-10-09.md).
 	}
 	return nil
 }
@@ -328,22 +138,6 @@ func (rt *Handler) Start(ctx context.Context) error {
 // persists its durable identity when first seen, and reconciles its mailbox.
 // This path does not depend on a pre-existing generic agents row.
 func (rt *Handler) ReconcileActorWake(ctx context.Context, ownerID, computerID, agentID string) (*types.RunRecord, error) {
-	return rt.reconcileActorWake(ctx, ownerID, computerID, agentID, textureWakeOccurrence)
-}
-
-// textureWakeMode says whether the wake has an executor. An occurrence-driven
-// wake runs the run it re-arms; the boot scan dispatches occurrences only for
-// producer reports and owner-input heads, so it must not re-arm a run on open
-// work alone (docs/problems/texture-zombie-activations-revising-forever-
-// 2026-10-09.md).
-type textureWakeMode int
-
-const (
-	textureWakeOccurrence textureWakeMode = iota
-	textureWakeBootScan
-)
-
-func (rt *Handler) reconcileActorWake(ctx context.Context, ownerID, computerID, agentID string, mode textureWakeMode) (*types.RunRecord, error) {
 	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
 	if rt == nil || rt.Store == nil || rt.Core == nil || ownerID == "" || computerID == "" || agentID == "" {
 		return nil, fmt.Errorf("resolve Texture actor wake: incomplete scoped owner state")
@@ -362,7 +156,7 @@ func (rt *Handler) reconcileActorWake(ctx context.Context, ownerID, computerID, 
 	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, computerID, agentID); err != nil {
 		return nil, fmt.Errorf("resolve Texture actor wake: durable subject unavailable: %w", err)
 	}
-	return rt.reconcileAgentWake(ctx, ownerID, doc.DocID, mode)
+	return rt.ReconcileAgentWake(ctx, ownerID, doc.DocID)
 }
 
 // ReconcileActorOccurrenceWake returns the exact run that the current
@@ -654,10 +448,6 @@ func (rt *Handler) ValidateOccurrenceActivationAuthority(ctx context.Context, o 
 // same typed coagent update packets as other actors; integrate intent only
 // selects the Texture revision run shape.
 func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string) (*types.RunRecord, error) {
-	return rt.reconcileAgentWake(ctx, ownerID, docID, textureWakeOccurrence)
-}
-
-func (rt *Handler) reconcileAgentWake(ctx context.Context, ownerID, docID string, mode textureWakeMode) (*types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
 	if ownerID == "" || docID == "" {
@@ -687,7 +477,7 @@ func (rt *Handler) reconcileAgentWake(ctx context.Context, ownerID, docID string
 	if strings.TrimSpace(doc.ComputerID) != wakeComputerID || strings.TrimSpace(doc.TrajectoryID) != wakeTrajectoryID {
 		return nil, fmt.Errorf("texture wake durable lifecycle document binding changed")
 	}
-	return rt.reconcileAgentWakeLockedMode(ctx, doc, textureAgentID, mode)
+	return rt.reconcileAgentWakeLocked(ctx, doc, textureAgentID)
 }
 
 func classifyTextureLifecycleActivationSnapshot(doc types.Document, snapshot types.LifecycleSnapshot) (bool, error) {
@@ -744,10 +534,6 @@ func (rt *Handler) textureLifecycleActivationEligible(ctx context.Context, doc t
 }
 
 func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Document, textureAgentID string) (*types.RunRecord, error) {
-	return rt.reconcileAgentWakeLockedMode(ctx, doc, textureAgentID, textureWakeOccurrence)
-}
-
-func (rt *Handler) reconcileAgentWakeLockedMode(ctx context.Context, doc types.Document, textureAgentID string, mode textureWakeMode) (*types.RunRecord, error) {
 	ownerID := strings.TrimSpace(doc.OwnerID)
 	docID := strings.TrimSpace(doc.DocID)
 	activationEligible, err := rt.textureLifecycleActivationEligible(ctx, doc)
@@ -864,16 +650,6 @@ func (rt *Handler) reconcileAgentWakeLockedMode(ctx context.Context, doc types.D
 				return nil, fmt.Errorf("list initial lifecycle Texture runs: %w", runsErr)
 			}
 			for i := range runs {
-				// Boot has no executor for an open-work wake: a re-armed run
-				// would sit pending and the document would show "Revising…"
-				// forever. Only a document that never had a Texture run mints
-				// (and dispatches) its first one at boot; the next occurrence
-				// re-arms an interrupted run through the occurrence path.
-				if mode == textureWakeBootScan && strings.TrimSpace(runs[i].AgentID) == textureAgentID &&
-					isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
-					initialWorkWake = false
-					break
-				}
 				// Only a live activation suppresses the work-item wake. A
 				// passivated or terminal run is a dead authority — its stale
 				// obligation must re-arm through reactivatePassivatedTextureRun,

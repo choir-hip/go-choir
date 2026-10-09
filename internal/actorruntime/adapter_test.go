@@ -400,7 +400,7 @@ func TestAcknowledgeDurablyTerminalLifecycleControlActivation(t *testing.T) {
 		}
 	}
 }
-func TestAdapterRestartDeliversRunningLifecycleActivationFromDurableBacklog(t *testing.T) {
+func TestAdapterRestartInterruptsRunningTextureActivationFromDurableBacklog(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "restart-running.db")
@@ -495,9 +495,11 @@ func TestAdapterRestartDeliversRunningLifecycleActivationFromDurableBacklog(t *t
 	stored, err := s.GetLifecycleRun(ctx, ownerID, "autoputer-test", run.RunID)
 	mutation, mutationErr := s.GetAgentMutationByRun(ctx, ownerID, "autoputer-test", run.RunID)
 	reactivated, _ := stored.Metadata["actor_reactivated_from_passivated"].(bool)
-	if err != nil || stored.State != types.RunCompleted || reactivated || mutationErr != nil || mutation == nil ||
-		mutation.State != "completed" {
-		t.Fatalf("durable initial dispatch was not delivered: run=%+v mutation=%+v run_err=%v mutation_err=%v", stored, mutation, err, mutationErr)
+	// Owner rule: a restart interrupts the Texture turn; the pre-boot dispatch
+	// is consumed as interrupted_by_restart and nothing runs.
+	if err != nil || stored.State == types.RunCompleted || reactivated || mutationErr != nil ||
+		(mutation != nil && mutation.State == "completed") {
+		t.Fatalf("restart resumed the interrupted Texture turn: run=%+v mutation=%+v run_err=%v mutation_err=%v", stored, mutation, err, mutationErr)
 	}
 }
 
@@ -2209,7 +2211,7 @@ func TestAdapterSQLitePersistsExactTextureReportAndDocumentRevisionOccurrencesBe
 	}
 }
 
-func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatch(t *testing.T) {
+func TestAdapterSQLiteBootDispatchesNoTextureRecovery(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "texture-recovery-occurrence.db")
@@ -2258,88 +2260,28 @@ func TestAdapterSQLiteBootRecoveryUsesJoinedOccurrenceNotDuplicateInitialDispatc
 		t.Fatal(err)
 	}
 
-	if err := owner.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	backlog, err := adapter.log.Unprocessed(ctx, legacy.ToAgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var normal, recovery int
-	kinds := map[string]int{}
-	for _, update := range backlog {
-		if update.Kind == "initial_dispatch" {
-			t.Fatalf("boot recovery duplicated initial dispatch: %+v", backlog)
+	// Owner rule: boot dispatches nothing for Texture. The pending report and
+	// the owner's initial revision wait for the owner's next action; the
+	// passivated run stays passivated across boots.
+	for boot := 1; boot <= 2; boot++ {
+		if err := owner.Start(ctx); err != nil {
+			t.Fatal(err)
 		}
-		o, err := agentcore.DecodeTextureActorOccurrence(update.Content)
+		backlog, err := adapter.log.Unprocessed(ctx, legacy.ToAgentID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if o.RecoveryRunID == "" {
-			normal++
-			kinds[o.Kind]++
-		} else {
-			recovery++
-			if o.RecoveryRunID != run.RunID || o.RecoveryHeadID != "revision:"+docID || o.RecoveryTailID == "" || !strings.HasPrefix(o.RecoveryMutation, "sleeping:") {
-				t.Fatalf("recovery join=%+v", o)
-			}
+		if len(backlog) != 0 {
+			t.Fatalf("boot %d dispatched Texture occurrences: %+v", boot, backlog)
 		}
-	}
-	// The seeded document's initial AuthorUser revision is itself a pending
-	// owner input, so boot dispatches one document_revision occurrence beside
-	// the producer report.
-	if normal != 2 || recovery != 0 || kinds[agentcore.TextureActorOccurrenceProducerReport] != 1 || kinds[agentcore.TextureActorOccurrenceDocumentRevision] != 1 {
-		t.Fatalf("fresh canonical base must execute before recovery normal=%d recovery=%d kinds=%v backlog=%+v", normal, recovery, kinds, backlog)
-	}
-	projected, err := s.GetLifecycleRun(ctx, ownerID, computerID, run.RunID)
-	if err != nil || projected.State != types.RunPending {
-		t.Fatalf("recovered exact run=%+v err=%v", projected, err)
-	}
-
-	// Crash after the canonical base occurrence is processed while its Store
-	// trigger remains pending. A later boot proves that exact processed base
-	// before appending one joined recovery identity.
-	baseUpdate := backlog[0]
-	if err := adapter.log.MarkProcessed(ctx, baseUpdate.ToAgentID, baseUpdate.UpdateID); err != nil {
-		t.Fatal(err)
-	}
-	projected.State = types.RunPassivated
-	projected.UpdatedAt = time.Now().UTC()
-	if err := s.UpdateRun(ctx, projected); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SleepAgentMutation(ctx, ownerID, computerID, projected.RunID); err != nil {
-		t.Fatal(err)
-	}
-	if err := owner.Start(ctx); err != nil {
-		t.Fatal(err)
-	}
-	backlog, err = adapter.log.Unprocessed(ctx, legacy.ToAgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	normal, recovery = 0, 0
-	for _, update := range backlog {
-		o, decodeErr := agentcore.DecodeTextureActorOccurrence(update.Content)
-		if decodeErr != nil {
-			t.Fatal(decodeErr)
+		projected, err := s.GetLifecycleRun(ctx, ownerID, computerID, run.RunID)
+		if err != nil || projected.State != types.RunPassivated {
+			t.Fatalf("boot %d resumed the interrupted run=%+v err=%v", boot, projected, err)
 		}
-		if o.RecoveryRunID == "" {
-			normal++
-			if o.Kind != agentcore.TextureActorOccurrenceDocumentRevision {
-				t.Fatalf("unexpected unprocessed occurrence=%+v", o)
-			}
-		} else {
-			recovery++
-			if o.RecoveryRunID != run.RunID || o.RecoveryHeadID != "revision:"+docID || o.RecoveryTailID == "" || !strings.HasPrefix(o.RecoveryMutation, "sleeping:") {
-				t.Fatalf("recovery join=%+v", o)
-			}
+		pending, err := s.ListPendingLifecycleUpdates(ctx, ownerID, computerID, run.AgentID, 10)
+		if err != nil || len(pending) != 1 {
+			t.Fatalf("boot %d lost the pending report: %+v err=%v", boot, pending, err)
 		}
-	}
-	// The owner-revision occurrence was never processed, so it remains pending
-	// in the mailbox; the processed producer base yields exactly one recovery.
-	if normal != 1 || recovery != 1 {
-		t.Fatalf("processed canonical base recovery normal=%d recovery=%d backlog=%+v", normal, recovery, backlog)
 	}
 }
 

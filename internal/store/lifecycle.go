@@ -2197,13 +2197,6 @@ func (s *Store) ListActionablePendingLifecycleUpdates(ctx context.Context, owner
 	return updates, nil
 }
 
-// ListActionablePendingLifecycleUpdatesByTarget is ListActionablePendingLifecycleUpdates
-// for every target in one owner-wide scan, grouped by target agent id. Boot
-// uses it instead of one scan per Texture document.
-func (s *Store) ListActionablePendingLifecycleUpdatesByTarget(ctx context.Context, ownerID string) (map[string][]types.CoagentSourcePacket, error) {
-	return s.listActionablePendingLifecycleUpdates(ctx, ownerID, nil)
-}
-
 func (s *Store) listActionablePendingLifecycleUpdates(ctx context.Context, ownerID string, wantTarget func(string) bool) (map[string][]types.CoagentSourcePacket, error) {
 	graph := s.ogReadStore
 	if graph == nil {

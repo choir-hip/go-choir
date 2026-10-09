@@ -503,7 +503,7 @@ func TestResidentTextureInjectsAndConsumesCurrentOwnerRevision(t *testing.T) {
 	}
 }
 
-func TestOwnerRevisionWakeSurvivesPassivationRaceAndBootReconcile(t *testing.T) {
+func TestOwnerRevisionSurvivesPassivationRaceAndWaitsAcrossBoot(t *testing.T) {
 	core, handler := testAPISetup(t)
 	start := startObservationLifecycle(t, core.Store())
 	var dispatches []string
@@ -537,8 +537,20 @@ func TestOwnerRevisionWakeSurvivesPassivationRaceAndBootReconcile(t *testing.T) 
 		t.Fatalf("passivation-race reactivation=%+v err=%v", reactivated, err)
 	}
 	passivate("owner-revision-boot-passivation", *reactivated)
+	// Owner rule: boot resumes nothing. The owner revision waits, and the
+	// run stays passivated until the next occurrence for the document.
+	dispatchedBeforeBoot := len(dispatches)
 	if err := handler.Start(t.Context()); err != nil {
 		t.Fatalf("boot reconcile: %v", err)
+	}
+	if len(dispatches) != dispatchedBeforeBoot {
+		t.Fatalf("boot dispatched Texture work: %v", dispatches[dispatchedBeforeBoot:])
+	}
+	if afterBoot, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID); err != nil || afterBoot.State != types.RunPassivated {
+		t.Fatalf("boot resumed the interrupted run=%+v err=%v", afterBoot, err)
+	}
+	if _, err := handler.ReconcileActorWake(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID); err != nil {
+		t.Fatalf("next occurrence wake: %v", err)
 	}
 	agent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
 	if err != nil || agent.ActiveRunID != run.RunID {
@@ -553,33 +565,67 @@ func TestOwnerRevisionWakeSurvivesPassivationRaceAndBootReconcile(t *testing.T) 
 	}
 }
 
-// Boot and wake read the pending owner head through the head view and take
-// the full snapshot only when the head can be owner input. Failure modes
-// pinned: the gated read disagreeing with the snapshot answer (a missed
-// owner wake, or a desk self-wake), before and after an owner revision.
-func TestReadPendingTextureOwnerRevisionMatchesSnapshot(t *testing.T) {
+
+// A document whose latest Texture turn was cut off by a restart says so,
+// instead of showing "Revising…" or nothing (owner rule: a restart is a
+// system failure the owner must see). Failure modes pinned: the flag absent
+// for a restart-passivated run; the flag on a run passivated for another
+// reason; the flag beside agent_revision_pending.
+func TestDocumentReportsTextureTurnInterruptedByRestart(t *testing.T) {
 	core, handler := testAPISetup(t)
 	start := startObservationLifecycle(t, core.Store())
 	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
-	check := func(stage string) {
+	if response := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", start.OwnerID, "interrupted-turn", "revise", start.InitialRevision.RevisionID); response.Code != http.StatusAccepted {
+		t.Fatalf("revise status=%d body=%s", response.Code, response.Body.String())
+	}
+	run, err := handler.ReconcileAgentWake(t.Context(), start.OwnerID, start.InitialDocument.DocID)
+	if err != nil || run == nil {
+		t.Fatalf("reconcile run=%+v err=%v", run, err)
+	}
+	get := func() textureDocumentResponse {
 		t.Helper()
-		snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+		request := httptest.NewRequest(http.MethodGet, "/api/texture/documents/"+start.InitialDocument.DocID, nil)
+		request.Header.Set("X-Authenticated-User", start.OwnerID)
+		response := httptest.NewRecorder()
+		handler.HandleTextureRouter(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("get document status=%d body=%s", response.Code, response.Body.String())
+		}
+		var doc textureDocumentResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &doc); err != nil {
+			t.Fatal(err)
+		}
+		return doc
+	}
+	passivate := func(commandID, reason string) {
+		t.Helper()
+		rec, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, run.RunID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		wantHead, wantSeq, wantOK := store.PendingTextureOwnerRevision(snapshot)
-		head, seq, ok, err := core.Store().ReadPendingTextureOwnerRevision(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
-		if err != nil || ok != wantOK || seq != wantSeq || head.RevisionID != wantHead.RevisionID {
-			t.Fatalf("%s: gated=(%s,%d,%v,%v) snapshot=(%s,%d,%v)", stage, head.RevisionID, seq, ok, err, wantHead.RevisionID, wantSeq, wantOK)
+		rec.State, rec.UpdatedAt, rec.FinishedAt = types.RunPassivated, time.Now().UTC(), nil
+		rec.Metadata["passivated_reason"] = reason
+		request := types.ReplaceLifecycleActivationRequest{
+			OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: commandID,
+			TrajectoryID: start.TrajectoryID, AgentID: start.Agent.AgentID, Run: rec,
+		}
+		request.CommandDigest, _ = store.ComputeReplaceLifecycleActivationDigest(request)
+		if _, err := core.Store().ReplaceLifecycleActivation(t.Context(), request); err != nil {
+			t.Fatal(err)
+		}
+		if err := core.Store().MarkAgentMutationStale(t.Context(), start.OwnerID, start.ComputerID, run.RunID); err != nil {
+			t.Fatal(err)
 		}
 	}
-	check("initial")
-	response := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", start.OwnerID, "revise-gated", "revise privately", start.InitialRevision.RevisionID)
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("lifecycle revise status=%d body=%s", response.Code, response.Body.String())
+	if doc := get(); doc.AgentRevisionInterrupted {
+		t.Fatalf("live turn reported interrupted: %+v", doc)
 	}
-	check("after owner revision")
-	if _, _, ok, _ := core.Store().ReadPendingTextureOwnerRevision(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID); !ok {
-		t.Fatal("owner revision must be pending")
+	passivate("passivate-idle", "idle")
+	if doc := get(); doc.AgentRevisionInterrupted {
+		t.Fatalf("idle-passivated turn reported interrupted: %+v", doc)
+	}
+	passivate("passivate-restart", "runtime_restarted")
+	if doc := get(); !doc.AgentRevisionInterrupted || doc.AgentRevisionPending {
+		t.Fatalf("restart-interrupted turn: interrupted=%v pending=%v", doc.AgentRevisionInterrupted, doc.AgentRevisionPending)
 	}
 }

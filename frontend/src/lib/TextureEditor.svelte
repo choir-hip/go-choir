@@ -519,6 +519,9 @@
     agentRunId = doc?.agent_revision_run_id || '';
     if (agentPending) {
       saveStatus = synthStatusLabel();
+    } else if (doc?.agent_revision_interrupted) {
+      // A restart cut the turn off; it does not resume on its own.
+      saveStatus = 'Interrupted by a restart. Revise again to continue.';
     }
   }
 

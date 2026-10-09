@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 
@@ -64,25 +63,6 @@ func textureOwnerRevisionCandidate(view types.LifecycleSnapshot) bool {
 		strings.TrimSpace(head.RevisionID) != "" &&
 		head.RevisionID == view.Document.CurrentRevisionID &&
 		textureRevisionIsOwnerInput(head)
-}
-
-// ReadPendingTextureOwnerRevision answers PendingTextureOwnerRevision for a
-// trajectory, reading the full snapshot (for its events) only when the head
-// view shows an owner-input head. Boot asks this for every Texture document.
-func (s *Store) ReadPendingTextureOwnerRevision(ctx context.Context, ownerID, computerID, trajectoryID string) (types.Revision, int64, bool, error) {
-	view, err := s.GetLifecycleHeadView(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		return types.Revision{}, 0, false, err
-	}
-	if !textureOwnerRevisionCandidate(view) {
-		return types.Revision{}, 0, false, nil
-	}
-	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
-	if err != nil {
-		return types.Revision{}, 0, false, err
-	}
-	head, seq, ok := PendingTextureOwnerRevision(snapshot)
-	return head, seq, ok, nil
 }
 
 // textureRevisionIsOwnerInput reports whether a head revision is owner-side
