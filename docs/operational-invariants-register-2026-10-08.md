@@ -112,6 +112,12 @@ Evidence (~9): `held-computer-boot-terminal-outcome-scan-crash`,
 `sa2-appendevent-unbounded-scan`. Enforcer: fragmented (per-path fixes).
 Alarm: none. Proof: none general — a boot-cost budget test on an owner-scale
 store would make this enforceable. Goal: 1.
+*Update 2026-10-09:* first fleet measurement
+([evidence](evidence/o7-boot-cost-vs-history-2026-10-09.md)). Health is
+history-independent (7–11 s at 0.4–5.2 GB); runtime start grows ~4–5 s
+per GB (31 s at 5.2 GB). Partial violation, seconds not minutes; residual
+`o7-runtime-start-scales-with-store`. The boot timeline already carries
+the numbers for a host-side budget alarm.
 
 **O8 Readiness is earned.** A computer reports active only when genesis
 exists, credentials verify against the current signer, the guest serves, a
