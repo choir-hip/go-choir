@@ -1922,7 +1922,10 @@ its own invariants in the register).
 **Gate 2 — self-development with live Texture supervision.** Exit test: the
 owner asks Texture for a change; engineering develops it in a capsule; the
 owner watches a live preview, approves, and the release applies and can be
-rolled back. Stations: S1 remainder -> S4 -> S5 -> S6. SC/SM only as far as
+rolled back. Stations: S1 remainder -> S4 -> S5 -> S6. S6 also owns the
+divergence guard (owner 2026-10-09): a computer running an owner-approved
+release refuses platform-follow updates with a typed hold, and the owner
+rebases through the same gate; S11's fleet security push stays deferred. SC/SM only as far as
 S5 needs them (to be checked when S5 is re-read).
 
 **Gate 3 — World Wire operational.** Designed on SW's constraints after

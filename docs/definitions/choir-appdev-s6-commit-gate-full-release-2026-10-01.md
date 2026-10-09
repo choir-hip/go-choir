@@ -105,6 +105,19 @@ finish:
         Post-test mutation and stale-head promotion refuse, and every interrupted
         activation recovers derivably with no mixed-version observation.
       evidence_class: deployed proof
+    - action: >-
+        (Addendum 2026-10-09, not panel-reviewed.) With an owner-approved
+        release active, run the CI app-layer push of a newer platform
+        release; then approve the engineering desk's rebase of the owner's
+        patch onto that release; then restore the pinned pre-release head.
+      proves: >-
+        A platform update never overwrites an owner change: the push is
+        refused with a typed divergent_release hold recorded on the tape and
+        reported by CI as held (not applied, not failed) while the changed
+        backend endpoint keeps answering; the approved rebase carries both
+        the platform update and the owner change; after restore the computer
+        is tracking again and the next push applies.
+      evidence_class: deployed proof
   rollback: >-
     Refuse an unbound or stale decision before mutation; for an applied release,
     restore the pinned pre-release head through the checkpoint/tape path and
@@ -310,3 +323,59 @@ receipts: []
   same reconciler with exactly one event chain; S6 expands that proof to every
   updater boundary and the deployed lifecycle observations
   (`internal/agentcore/selfdev_derivable_materialize_test.go:1058-1096`).
+
+## Divergence and platform updates (addendum 2026-10-09, owner direction)
+
+Owner 2026-10-09: put the rebase question into S6. S11 stays deferred; S6
+takes only the part Gate 2 needs. The first owner-approved release makes
+the computer diverge from the platform, and from then on a platform update
+must not overwrite the owner's change.
+
+**Today (code reading, 2026-10-09).** Nothing protects a diverged computer:
+
+- CI builds every app-layer offer with `divergence_status:"tracking"`
+  and `platform_follow_policy:"auto"` written into the offer
+  (`.github/workflows/ci.yml`, app-layer push). The guest checks the
+  offer's own field (`internal/selfdevprotocol/platform_update.go:125`),
+  not its own state.
+- The only divergence record is `DivergenceStatus` in the vmctl ownership
+  registry (`internal/vmctl/ownership.go:139-229`). It is set only by the
+  manual `/internal/vmctl/divergence` endpoint, and CI treats a missing
+  value as tracking. That is a second state authority that defaults the
+  unsafe way (standing question: single state authority).
+
+**Design.**
+
+1. **Divergence is derived, never declared.** A computer is diverged
+   exactly when its effective release (on the tape) carries an
+   owner-approved patch. It is tracking when the effective release is a
+   platform release. The release manifest already records base commit,
+   closure and builder receipt; S6 adds the patch-stack digest. The vmctl
+   flag and the offer field become, at most, projections of this. Delete
+   them once nothing reads them.
+2. **The guest refuses, typed.** The guest updater refuses a
+   platform-follow offer when its effective release is diverged. The
+   refusal kind is `divergent_release`, recorded on the tape, and the
+   running release is untouched. CI reports it as `held (divergent)`,
+   distinct from applied, rolled back and failed.
+3. **A rebase is an ordinary S6 change.** Texture shows the owner that a
+   platform update is available and that a rebase is needed. Engineering
+   replays the owner's patch onto the new platform release in a capsule.
+   It goes through the same gate: tests, preview, owner approval. In
+   Gate 2 even a clean rebase needs approval; auto-rebase policy belongs
+   to S11.
+4. **Base image updates.** An app layer is built against one base. A
+   diverged computer must not boot its layer on an incompatible base, and
+   must not silently fall back to the platform layer (that also drops
+   the owner's change). It stays on its recorded base until rebased; this
+   is S2's per-computer image reference. Verify early in S6 whether that
+   retention is implemented or only designed.
+5. **Restore is consistent for free.** Restoring the pinned pre-release
+   head makes the effective release a platform release again, so the
+   computer is tracking again with no flag to reset.
+
+**Left to S11 (deferred).** Security fixes with deadlines, exploit-test
+witnesses, evaluation on ephemeral forks (S9), auto-rebase policy, and
+fail-closed at deadline. Until then, a diverged computer gets a platform
+fix only through the owner's rebase. That is acceptable before
+production, when only owner and test computers diverge.
