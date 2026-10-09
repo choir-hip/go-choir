@@ -72,3 +72,33 @@ Do C first (green), then A (smallest change that removes the T6 failure
 class), then B. A and B each get a problem-first commit, a test pinning
 the failure modes, and a deployed rerun of the Texture suite. The suite
 (T5b, T6) is the acceptance for both.
+
+## Refinement after reading the store (19:50Z)
+
+- No runtime code calls `SettleLifecycleWork`; research work has no
+  settlement path except Texture naming the report as `incorporated` with
+  `work_disposition: completed` and a result ref, after research itself
+  marked the report `completed`. The consume-at-commit default is
+  `delivered`, which by contract cannot settle producer work ("delivered is
+  neutral receipt, never auto-incorporated", `store/texture_turn.go`).
+- The Texture turn already tolerates producer work that settled before
+  incorporation (texture-incorporate-deadlock-settled-producer-2026-09-28),
+  so a producer-side settle is compatible with the turn path.
+- Research runs **passivate** after reporting; they do not complete. So a
+  "settle when the run completes" rule would never fire, and "settle when
+  it passivates after a report" would close work that Texture might still
+  extend with a follow-up control.
+
+Option A therefore needs one product decision: **when is a research
+assignment finished?** Candidates: (A1) when its report is incorporated by
+Texture (default-complete research reports; change the delivered default
+for research only); (A2) when research passivates after a report, with
+Texture opening new work for follow-ups (what the staging trace shows
+Texture already does); (A3) teach both desks the field (prompt/module
+text only; cheapest, but leaves closure to model cooperation, against
+O24).
+
+Open decision `texture-research-assignment-finish` (named residual; not
+blocking other work). Recommended: A2, because it matches observed desk
+behavior (one report per research assignment, follow-ups as new work)
+and keeps the Texture turn contract unchanged.
