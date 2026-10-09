@@ -3475,6 +3475,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
+	if runHasProfile(rec, agentprofile.Engineering) {
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolLoopBudget(engineeringToolLoopBudget(rec)))
+	}
 	if runHasProfile(rec, agentprofile.Texture) {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolLoopBudget(textureActorToolLoopBudget(rec)))
 		// R3d: texture's durable transition is a committed texture_apply cell
@@ -4093,12 +4096,37 @@ func textureActorToolLoopBudget(rec *types.RunRecord) toolregistry.ToolLoopBudge
 	if docID != "" {
 		label = "texture:" + docID
 	}
-	budget := toolregistry.ToolLoopBudget{
+	return actorToolLoopBudgetFromMetadata(rec, toolregistry.ToolLoopBudget{
 		Label:            label,
 		MaxProviderCalls: defaultTextureActorMaxProviderCalls,
 		MaxTotalTokens:   defaultTextureActorMaxTotalTokens,
 		MaxElapsed:       defaultTextureActorMaxElapsed,
+	})
+}
+
+const (
+	defaultEngineeringMaxProviderCalls = 200
+	defaultEngineeringMaxElapsed       = 60 * time.Minute
+)
+
+// engineeringToolLoopBudget bounds one engineering activation. Without it a
+// run whose capsule worker never starts retried ~400 times, held open by the
+// completion guard (capsule-session-worker-dies-at-start-2026-10-09).
+func engineeringToolLoopBudget(rec *types.RunRecord) toolregistry.ToolLoopBudget {
+	label := "engineering"
+	if rec != nil && strings.TrimSpace(rec.AgentID) != "" {
+		label = strings.TrimSpace(rec.AgentID)
 	}
+	return actorToolLoopBudgetFromMetadata(rec, toolregistry.ToolLoopBudget{
+		Label:            label,
+		MaxProviderCalls: defaultEngineeringMaxProviderCalls,
+		MaxElapsed:       defaultEngineeringMaxElapsed,
+	})
+}
+
+// actorToolLoopBudgetFromMetadata applies run-metadata limit overrides and
+// carried spend to a desk's default budget.
+func actorToolLoopBudgetFromMetadata(rec *types.RunRecord, budget toolregistry.ToolLoopBudget) toolregistry.ToolLoopBudget {
 	if rec == nil {
 		return budget
 	}
