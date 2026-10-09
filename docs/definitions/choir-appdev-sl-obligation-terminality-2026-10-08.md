@@ -235,3 +235,43 @@ of problem docs.
 The first slice is a read-only inventory, because the decision between
 "registry plus existing drivers" and any larger restructuring must rest on
 the real set of obligation kinds and mechanisms, not on problem-doc titles.
+
+## Slice 1 — crash vs planned restart (2026-10-09, autonomous run)
+
+Owner rule: a crash restart never resumes work; a planned update restart
+may (AGENTS.md "Restarts End Work (Crash) Or Resume It").
+
+**Today.** Boot passivates running runs (`passivateInterruptedActivations`)
+and the actor boundary consumes pre-boot work-starting occurrences as
+`interrupted_by_restart` — **for Texture only**
+(`actorruntime/handler.go:69`, 4b9bf31d). Management, engineering and
+research occurrences recorded before a crash still run after it (the wake
+outbox re-delivers them). And a planned restart (a platform update or
+self-development apply, which self-restarts the guest) interrupts
+Texture's pending work exactly like a crash, which would break Gate 2's
+"engineering reports back to Texture" step.
+
+**Change.**
+1. Planned-restart marker: `<RUNTIME_STORE_PATH>.planned-restart`
+   (`{reason, target, requested_at}`), written and fsynced by the guest
+   immediately before an intentional restart (the three
+   `selfdevUpdater.Apply` call sites), removed if the apply returns an
+   error. The runtime consumes it once at startup, before actors run; a
+   marker older than 15 minutes is treated as absent (a stale marker must
+   never turn a later crash into a "planned" boot).
+2. The actor boundary interrupts pre-boot work-starting occurrences for
+   **every desk** after a crash boot, and for none after a planned boot.
+   Work-starting kinds: initial_dispatch, coagent_result,
+   channel_message, owner_revision, lifecycle_work_assigned,
+   delegated_assignment_spawn_deadline,
+   fresh_mint_management_resume_deadline. Cancels and fail-closed
+   deadlines (activation budget, cell terminal, engineering fate and
+   progress, reactivated-management) and selfdev_materialization_retry
+   still run: they close work or finish the planned step.
+3. Boot logs the restart kind (`planned: <reason>` or `crash`).
+
+**Evidence.** Focused tests at the actor boundary (crash boot interrupts a
+pre-boot management occurrence; planned boot runs it; a stale marker is
+ignored); staging: a disposable's guest restart logs `crash` and its
+pre-boot management work is consumed as interrupted.
+**Rollback.** Revert; the Texture-only rule returns.
