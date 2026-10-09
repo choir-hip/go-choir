@@ -19,17 +19,26 @@ function record(id, data) {
   writeFileSync(receiptPath, JSON.stringify(receipt, null, 2) + '\n');
 }
 
+// Access tokens live 5 minutes. Like the editor, a 401 renews the session
+// through GET /auth/session (refresh rotation) and retries once.
 async function api(page, method, apiPath, body) {
   return page.evaluate(async ({ method, apiPath, body }) => {
-    const started = performance.now();
-    const res = await fetch(apiPath, {
+    const send = () => fetch(apiPath, {
       method,
       credentials: 'include',
       headers: body ? { 'Content-Type': 'application/json' } : undefined,
       body: body ? JSON.stringify(body) : undefined,
     });
+    const started = performance.now();
+    let res = await send();
+    let renewed = false;
+    if (res.status === 401) {
+      await fetch('/auth/session', { credentials: 'include' });
+      renewed = true;
+      res = await send();
+    }
     const json = await res.json().catch(() => null);
-    return { status: res.status, body: json, ms: Math.round(performance.now() - started) };
+    return { status: res.status, body: json, ms: Math.round(performance.now() - started), renewed };
   }, { method, apiPath, body });
 }
 
