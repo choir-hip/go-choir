@@ -97,3 +97,18 @@ gateway already has the same check for credential routes
 
 Fix direction: require `isAuthorizedCredentialCaller` on the four ops
 routes. Operators reach them from Node B over loopback.
+
+## After the fix (20:10Z)
+
+Deployed 97970cda; gateway restarted 19:44:37Z. Brave and SerpAPI health
+reset by hand on Node B (reset writes a clean record, which also removed
+the stored SerpAPI summary with its key). In Texture suite run 5 every
+search from the test computer succeeded (19:52:53–19:58:45Z). The gateway
+journal holds no line with an `api_key` parameter (14-day window).
+
+Residual `search-rate-limit-cooldown-scale`: Brave answered one 429 at
+19:55:11Z and is now cooled down for 24 hours. The policy gives every
+`rate_limited` outcome the quota base (24 h). A per-second limit (Brave's
+plan allows about one request per second; the plane fans out) should cost
+seconds, not a day. Telling the two apart needs the provider's rate-limit
+headers. Not fixed tonight; Parallel and SerpAPI carry the load.
