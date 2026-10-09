@@ -110,3 +110,23 @@ the guest):**
 
 Status: the owner-visible list latency is resolved. Boot replay is still
 4.7 min, and the open items above remain.
+
+## Boot replay profile after the fixes (owner computer on 63c3263c, 2026-10-09 10:14Z, 90 s CPU from health-ready)
+
+Boot replay still took 4.7 min (09:33 boot) and ~4 min (10:06 boot). Of the 90 s CPU
+profile, 87% is still `textureowner.(*Handler).Start`:
+
+| Cost | CPU share | Cause |
+|---|---|---|
+| `ListJSONBodyFieldsByKindOwner` | 38% | JSON extraction from every worker-update body of the owner, **once per Texture document** (`ListActionablePendingLifecycleUpdates` at boot, 21%) |
+| `ListLifecycleRunsByChannel` | 22% | lists every run of the owner and **point-fetches each body** (`GetObject`, 19%) under the engine mutex, then filters by channel in Go; called several times per document (boot, wake reconcile, stranded deliveries) |
+| `GetLifecycleSnapshot` | 15% | the wake path's full snapshot (phase-1 metadata scan still computer-wide) |
+| `LatestActorRunMemoryEntries` | 8% | per document |
+
+Fix (orange, read path):
+1. Runs by channel are read in one batched, metadata-prefiltered
+   pass. Rows whose metadata names another channel are skipped; rows
+   without `channel_id` (lifecycle writers omit it) are kept and decided
+   on the body.
+2. Boot reads actionable reports once per owner, grouped by target, not
+   once per document.
