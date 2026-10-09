@@ -58,18 +58,47 @@ Owner-approved middle way:
   is never a silent forced restart (policy deferred until needed).
 - A computer that is never idle for several days shows a notice (later).
 
+## Refinement: human focus and an update prompt (owner, 2026-10-09)
+
+Owner: "we should try to avoid rebooting if we can detect the human user's
+focus. Like, if there's been any input in the last short time interval."
+And: "we could show like a little pop up on the screen saying you know
+update now or you know wait five minutes kind of thing."
+
+- **Focus signal.** Activity means real human input: keyboard, pointer,
+  touch or scroll while the Choir tab is visible and focused. Background
+  polling and an open idle tab do not count. The frontend reports input
+  to its computer at most every 30 s while input is happening; the guest
+  exposes `last_owner_input_at` on `/health`. Today no such signal exists:
+  `last_active_at` moves only on ownership resolution, and the frontend
+  sends no presence.
+- **Who restarts silently.** Only a computer with no running runs and no
+  human input in the last 10 minutes.
+- **Everyone else gets a prompt.** A small notice in the desktop: "An
+  update is ready. Update now / In 5 minutes." "In 5 minutes" asks again
+  later. "Update now" is a planned restart. Until SL's planned-restart
+  marker lands (so work resumes), the prompt is offered only when no runs
+  are running; while work runs, the computer waits.
+- **How the frontend knows.** It needs the computer's running guest commit
+  and the guest commit the host would boot now. vmctl knows both (the
+  booted base and the current base); an owner endpoint reports them and
+  takes the "Update now" request.
+
 ## Known weak spot
 
 "Busy" means running runs. An obligation stuck in a loop can keep a
 computer busy forever and block its updates. SL's retry budgets close that.
 
-## Fix shape
+## Fix shape, in slices
 
-1. Deploy refresh loop: before refreshing, read the guest's `/health`
-   `running_runs` and the ownership's `last_active_at`; skip a computer
-   with running runs or activity in the last 10 minutes; list skipped
-   computers in the deploy log. A guest that does not answer is skipped,
-   not restarted.
-2. Forced deploys follow the same rule.
-3. The planned-restart marker is part of SL, not this change. Until it
-   lands, the idle-only rule means no work is interrupted by a deploy.
+1. **Focus signal:** frontend input reporter (visible and focused tab,
+   throttled), guest `last_owner_input_at` on `/health`.
+2. **Deploy restarts only idle computers:** read `running_runs` and
+   `last_owner_input_at`; skip busy or recently used computers and list
+   them; a guest that does not answer is skipped, not restarted. Forced
+   deploys follow the same rule.
+3. **Update prompt:** owner endpoint reporting running vs available guest
+   commit and accepting "Update now"; desktop notice with "Update now / In
+   5 minutes".
+4. **Planned-restart marker and resume:** part of SL. Until then, no
+   deploy or prompt restarts a computer with running work.
