@@ -75,34 +75,6 @@
         in
           if pkgs.lib.hasPrefix prefix full then pkgs.lib.removePrefix prefix full else full;
 
-      # Keep source selection structural. Go owns the package dependency graph;
-      # repeating it here as per-service internalDirs caused fallback builds to
-      # omit new transitive imports that normal Go builds already understood.
-      goServiceSrc = { subPackage, includeSkills ? false }:
-        pkgs.lib.cleanSourceWith {
-          src = ./.;
-          filter = path: type:
-            let
-              full = toString path;
-              rel = relPath path;
-              isProductionFile = !(pkgs.lib.hasSuffix "_test.go" path);
-              isRelevantDirectory =
-                full == rootPath ||
-                rel == "cmd" ||
-                rel == subPackage ||
-                pkgs.lib.hasPrefix (subPackage + "/") rel ||
-                rel == "internal" ||
-                pkgs.lib.hasPrefix "internal/" rel ||
-                (includeSkills && (rel == "skills" || pkgs.lib.hasPrefix "skills/" rel));
-            in
-              (type == "directory" && isRelevantDirectory) ||
-              (rel == "go.mod") ||
-              (rel == "go.sum") ||
-              (pkgs.lib.hasPrefix (subPackage + "/") rel && isProductionFile) ||
-              (pkgs.lib.hasPrefix "internal/" rel && isProductionFile) ||
-              (includeSkills && pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path);
-        };
-
       # Common buildGoModule args for all Go services
       commonGoArgs = {
         vendorHash = "sha256-Aw/1kqOBkYBLZgaVnpkQV+QKGuy1zm9xx5kuUAMHiyc=";
@@ -201,28 +173,77 @@
         doCheck = false;
       };
 
-      # Build a single Go service binary
+      # One Go compile for every service (docs/problems/ci-deploy-latency-per-
+      # service-go-builds-2026-10-09.md). Fifteen per-service buildGoModule
+      # derivations each compiled the whole dependency graph (embedded Dolt
+      # included, ~94 s each on Node B); this derivation builds every cmd with
+      # one build cache. mkGoService copies one binary out and keeps the
+      # per-service identity the deploy verifies (build.json, skills, frontend).
+      goServiceSubPackages = [
+        "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/vmctl"
+        "cmd/gateway" "cmd/corpusd" "cmd/checkpointd" "cmd/projection-compact"
+        "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
+        "cmd/sourcecycled" "cmd/autoputer" "cmd/choir-builder"
+      ];
+      # Keep source selection structural. Go owns the package dependency graph;
+      # repeating it here as per-service internalDirs caused fallback builds to
+      # omit new transitive imports that normal Go builds already understood.
+      goServicesSrc = pkgs.lib.cleanSourceWith {
+        src = ./.;
+        filter = path: type:
+          let
+            full = toString path;
+            rel = relPath path;
+            isProductionFile = !(pkgs.lib.hasSuffix "_test.go" path);
+            inSubPackage = pkgs.lib.any (sp: rel == sp || pkgs.lib.hasPrefix (sp + "/") rel) goServiceSubPackages;
+          in
+            (type == "directory" && (full == rootPath || rel == "cmd" || inSubPackage || rel == "internal" || pkgs.lib.hasPrefix "internal/" rel)) ||
+            (rel == "go.mod") ||
+            (rel == "go.sum") ||
+            (type != "directory" && inSubPackage && isProductionFile) ||
+            (pkgs.lib.hasPrefix "internal/" rel && isProductionFile);
+      };
+      goServicesAll = pkgs.buildGoModule (commonGoArgs // {
+        pname = "go-choir-services";
+        version = goModuleVersion;
+        src = goServicesSrc;
+        subPackages = goServiceSubPackages;
+      });
+      skillsSrc = pkgs.lib.cleanSourceWith {
+        src = ./.;
+        filter = path: type:
+          let
+            full = toString path;
+            rel = relPath path;
+          in
+            (type == "directory" && (full == rootPath || rel == "skills" || pkgs.lib.hasPrefix "skills/" rel)) ||
+            (pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path);
+      };
+
+      # A service package: its binary from the shared build plus identity.
       mkGoService = { pname, subPackage, includeSkills ? false, includeFrontend ? false }:
-        pkgs.buildGoModule (commonGoArgs // {
+        assert pkgs.lib.elem subPackage goServiceSubPackages;
+        pkgs.stdenvNoCC.mkDerivation {
           inherit pname;
           version = goModuleVersion;
-          src = goServiceSrc { inherit subPackage includeSkills; };
-          subPackages = [ subPackage ];
-          postInstall = ''
-            mkdir -p $out/share/go-choir
+          dontUnpack = true;
+          dontFixup = true;
+          installPhase = ''
+            mkdir -p $out/bin $out/share/go-choir
+            cp ${goServicesAll}/bin/${baseNameOf subPackage} $out/bin/
             cat > $out/share/go-choir/build.json <<'EOF'
             {"schema_version":1,"artifact":"${pname}","version":"${goModuleVersion}","commit":"${buildCommit}","built_at":"${buildDate}"}
             EOF
             ${pkgs.lib.optionalString includeSkills ''
               mkdir -p $out/share/go-choir/skills
-              cp -R skills/. $out/share/go-choir/skills/
+              cp -R ${skillsSrc}/skills/. $out/share/go-choir/skills/
             ''}
             ${pkgs.lib.optionalString includeFrontend ''
               mkdir -p $out/frontend
               cp -R ${frontendPkg}/. $out/frontend/
             ''}
           '';
-        });
+        };
 
       # All packages
       goChoirPackages = {
