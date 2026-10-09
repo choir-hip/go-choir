@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
@@ -18,18 +19,38 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 	if pageSize <= 0 || pageSize > computerevent.EventReplayMaxPageSize {
 		return nil, fmt.Errorf("event replay: page size %d exceeds maximum %d", pageSize, computerevent.EventReplayMaxPageSize)
 	}
+	// The chain is gapless (sequence = head + 1, receipt and head written in
+	// one transaction), so a page is the point lookups after+1..min(head,
+	// after+pageSize) on the (computer_id, sequence) index. A range predicate
+	// (sequence > ?) makes Dolt plan the primary key and read the computer's
+	// whole chain per page
+	// (docs/problems/replay-page-query-scans-whole-chain-2026-10-09.md).
+	head, err := readComputerEventHead(ctx, s.platform.store.db, computerID, false)
+	if err != nil {
+		return nil, fmt.Errorf("event replay: %w", err)
+	}
+	if head == nil || afterSequence >= head.Sequence {
+		return []computerevent.DurableEvent{}, nil
+	}
 	var credentialEpoch uint64
 	if afterSequence > 0 {
 		if err := s.platform.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_event_append_receipts WHERE computer_id=? AND sequence<=? AND event_kind=?`, computerID, afterSequence, computerevent.EventKeyRevoked).Scan(&credentialEpoch); err != nil {
 			return nil, fmt.Errorf("event replay: resolve credential epoch: %w", err)
 		}
 	}
-	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment FROM computer_event_append_receipts WHERE computer_id=? AND sequence>? ORDER BY sequence LIMIT ?`, computerID, afterSequence, pageSize)
+	last := min(head.Sequence, afterSequence+uint64(pageSize))
+	args := []any{computerID}
+	for sequence := afterSequence + 1; sequence <= last; sequence++ {
+		args = append(args, sequence)
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(args)-1), ",")
+	rows, err := s.platform.store.db.QueryContext(ctx, `SELECT sequence, event_digest, event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head, COALESCE(pending_transition_ref, ''), desired_state_commitment, effective_state_commitment FROM computer_event_append_receipts WHERE computer_id=? AND sequence IN (`+placeholders+`) ORDER BY sequence`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("event replay: query chain: %w", err)
 	}
 	defer rows.Close()
 	var records []computerevent.DurableEvent
+	expected := afterSequence + 1
 	for rows.Next() {
 		var record computerevent.DurableEvent
 		var sequence uint64
@@ -37,6 +58,10 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 		if err := rows.Scan(&sequence, &record.Request.EventDigest, &eventArtifactRef, &record.Request.EventPinReceiptDigest, &rawPins, &rawReceipt, &receiptDigest, &record.Request.Next.DesiredEventHead, &record.Request.Next.EffectiveEventHead, &record.Request.Next.PendingTransitionRef, &record.Request.Next.DesiredStateCommitment, &record.Request.Next.EffectiveStateCommitment); err != nil {
 			return nil, err
 		}
+		if sequence != expected {
+			return nil, fmt.Errorf("event replay: chain gap at sequence %d below head %d", expected, head.Sequence)
+		}
+		expected++
 		if eventArtifactRef != record.Request.EventDigest {
 			return nil, fmt.Errorf("event replay: artifact reference mismatch at sequence %d", sequence)
 		}
@@ -88,8 +113,8 @@ func (s *EventArtifactService) EventsPage(ctx context.Context, computerID string
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if records == nil {
-		return []computerevent.DurableEvent{}, nil
+	if expected <= last {
+		return nil, fmt.Errorf("event replay: chain gap at sequence %d below head %d", expected, head.Sequence)
 	}
 	return records, nil
 }

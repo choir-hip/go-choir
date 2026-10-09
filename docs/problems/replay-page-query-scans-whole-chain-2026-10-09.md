@@ -49,7 +49,8 @@ WHERE computer_id=? AND sequence>? ORDER BY sequence LIMIT ?
   unique index `(computer_id, sequence)` is ignored. `FORCE INDEX` and a
   bounded `BETWEEN` do not change the plan.
 - The same page as `sequence IN (a+1, …, a+128)` uses the `(computer_id,
-  sequence)` index: **0.02 s** (128 rows), so 180x faster.
+  sequence)` index: **0.02 s** for a 128-row probe (the production page size
+  is 1024).
 - The chain is gapless: `COUNT(*) = MAX(sequence) = 576855` for this
   computer, and appends are `sequence = head + 1`.
 
@@ -58,7 +59,8 @@ WHERE computer_id=? AND sequence>? ORDER BY sequence LIMIT ?
 1. **Substrate: each replay page costs O(chain length).** On this computer
    one page is at least 3.6 s of server time, and 17–28 s from the guest at
    boot, when several computers read Store A at once. A full replay of 577k
-   events would take about 4,500 pages × ≥3.6 s, which is more than 4.5 h.
+   events at the 1024-event page size takes about 564 pages × ≥3.6 s, so at
+   least 34 min of query time alone.
    This is plausibly the cost behind past "large-history replay outlasts the
    apply fence" findings. Hypothesis, not verified against old traces.
 2. **Liveness signal missing during a projection resume.** `/health` reports
@@ -90,3 +92,10 @@ Running `nix shell nixpkgs#mariadb.client` on Node B triggered Nix's
 automatic min-free GC (the root filesystem is 81% full). It deleted only
 unrooted store paths (for example, old `choir-builder` builds). Rooted
 deploy closures are unaffected.
+
+## Status
+
+Fix: replay pages are point lookups bounded by the head, and a gap below
+the head is a typed error (`internal/platform/event_replay.go`, test
+`TestEventsPageWalksGaplessChainToHead`). Staging acceptance: pending
+deploy.
