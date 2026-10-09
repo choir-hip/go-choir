@@ -69,6 +69,31 @@ exceeded` → `realization credential unavailable` → state `failed`. A
 retry 4 minutes later booted in 17 s. A brand-new user saw a failed
 computer during host load.
 
+**Analysis (2026-10-09 11:00Z): why a plain retry would not fix it.**
+- vmctl calls `/internal/computers/credentials/issue` once, with a 5 s
+  timeout, and an idempotency key `guest-credential:<realization>:<epoch>`.
+  Any failure becomes `realization credential unavailable`, and the
+  computer is marked `failed` (`internal/vmctl/ownership.go`
+  `reserveFreshVMConfig`, and the boot path near line 1770).
+- The issuer's request commitment includes `expires_at`, which the
+  handler derives from its own clock on every request (now + 10 min).
+  The receipt is keyed by (computer, idempotency key), and a different
+  commitment is refused as "idempotency conflict" (409)
+  (`internal/platform/credential_envelope.go`, `credentialLifecycleReceipt`).
+- So if the first attempt committed server-side but the client timed out,
+  a retry with the same key is refused. A retry is only safe if the
+  issuer replays by key: it must derive `expires_at` from the stored
+  receipt when one exists for the key.
+- Fix (red: credential issuance; not landed tonight):
+  1. The issuer replays the stored envelope for an existing
+     (computer, key) receipt.
+  2. vmctl retries transport errors and 5xx with backoff within the boot
+     deadline.
+  3. A credential failure leaves the computer `pending` with a retry,
+     never `failed`.
+- The trigger here was host swap at 02:42, now removed by the host memory
+  budget (16806d8e), so the urgency is lower.
+
 ## Next
 
 1. Find what returns passivated runs to `pending` (trace one run across
