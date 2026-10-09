@@ -106,3 +106,23 @@ turn that ends without applying on a create wake be retried by the desk,
 or reported to the owner as "Texture replied without revising"? And the
 silent `nil, nil` returns in the Texture occurrence handler consume
 obligations with no visible fate (O1).
+
+## Code reading for H5 (added 19:10Z)
+
+The mechanism H5 needs exists:
+
+- A Texture turn that does not apply still commits
+  `texture_turn_committed` with artifact refs `[doc, expected head]`
+  (`internal/store/texture_turn.go:395` and `:451`).
+- `TextureTurnConsumedHead` treats any such event as consuming that head
+  (`internal/store/texture_owner_revision.go:15`), and
+  `ResolveTextureActorOccurrence` then returns the document-revision
+  occurrence as terminal (`internal/textureowner/texture_controller.go`,
+  the `TextureTurnConsumedHead` check), which the actor handler consumes
+  with `return nil, nil` and no log line (`internal/actorruntime/handler.go`,
+  "explicit Store-owned disposed/cancelled/late outcome").
+
+Not yet explained: the first handler call's postcondition still saw the
+trigger pending at 18:23:28, so a consuming commit, if there was one,
+landed after that check. The actor-tape observer on the next reproduction
+decides it.
