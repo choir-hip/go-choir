@@ -99,3 +99,28 @@ Two fixes, in order:
 2. (red, named residual `texture-source-pool-refresh`) Refresh the
    listed pool from the commitment records at each apply and show entity
    ids beside packet sources, so mid-run sources are citable by id.
+
+## Suite run 8 on 5b851eed (23:31Z)
+
+Receipt `evidence/texture-acceptance-2026-10-09T23-19-02-531Z.json`
+(computer `computer-817cedef…`, research document `44f14a8b…`).
+
+- 23:21:41 owner research request. 23:22:24 and 23:22:45 research reports
+  (one with two sources).
+- 23:26:40 Texture run `546339f8…` (34 iterations) applies revision
+  `0dc62fca…`: two `web_url` source entities with runtime-minted
+  `src_` ids, each cited once in the body. **The inline citation path
+  works; the owner's request was answered with two cited sources in five
+  minutes.**
+- The same turn opened a third research question (`research:8b1b6c61…`,
+  within the two-per-request budget), so the document stayed "Revising…"
+  and the suite's T6 predicate (new revision **and** idle) failed at the
+  six-minute window. The T7 crash then interrupted that research.
+
+So T6 now fails on a different property: after answering, Texture opens
+follow-up research the owner did not ask for and the document stays busy.
+That is the cluster's open item "evidence turns are not bound to the
+owner's directive"
+(`clustering-texture-obligation-closure-2026-10-09.md`), not citation.
+The suite will record the two properties separately: T6 (a cited research
+revision landed) and T6-idle (the document idles after it).
