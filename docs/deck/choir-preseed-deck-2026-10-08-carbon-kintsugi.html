@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CHOIR — Carbon Fiber Kintsugi — Pre-Seed October 8</title>
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    /* theme: carbon-fiber-kintsugi (frontend/src/lib/theme.ts) */
+    --paper: #0B0C0D;          /* colors.bg */
+    --ink: #F2EFE7;            /* colors.fg */
+    --muted: #B2AA98;       /* colors.muted */
+    --subtle: #766F62;     /* colors.subtle */
+    --accent: #FFD86B;     /* colors.accent */
+    --accent2: #FFF1BC;   /* colors.accent2 */
+    --rule: rgba(255,216,107,0.18);       /* colors.border */
+    --rule-strong: rgba(255,241,188,0.48); /* colors.borderStrong */
+    --mark: #FFE18A;         /* colors.tetramarkColor */
+
+    --paper-font: "Iowan Old Style", "Hoefler Text", Palatino, "Times New Roman", serif;
+    --mast-font: "Didot", "Hoefler Text", "Iowan Old Style", serif;
+    --ui-font: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  body { font-family: var(--paper-font); background: var(--paper); color: var(--ink);
+         -webkit-font-smoothing: antialiased; font-feature-settings: "onum" 1, "liga" 1; }
+  .slide { width:1280px; height:720px; page-break-after:always; position:relative; overflow:hidden;
+           background-color: var(--paper);
+           padding:44px 88px 60px; display:flex; flex-direction:column; }
+  .slide:last-child { page-break-after:auto; }
+
+  .rail { display:flex; justify-content:space-between; align-items:baseline; font-family:var(--mono);
+          font-size:9.5px; letter-spacing:0.17em; text-transform:uppercase; color:var(--muted); }
+  .rail .g { color:var(--accent); }
+  .hair { height:1px; background:var(--rule); margin-top:12px; }
+  .folio { position:absolute; bottom:26px; left:88px; right:88px; display:flex; justify-content:space-between;
+           font-family:var(--mono); font-size:9.5px; letter-spacing:0.17em; text-transform:uppercase; color:var(--subtle); }
+  .body-area { flex:1; padding-top:34px; display:flex; flex-direction:column; min-height:0; }
+  .tail { margin-top:auto; }
+
+  /* tetramark */
+  .tetra { display:block; color:var(--mark); }
+  .tetra path { fill: currentColor; }
+
+  .sect { font-family:var(--mono); font-size:10px; letter-spacing:0.24em; text-transform:uppercase;
+          color:var(--accent); margin-bottom:16px; }
+  h1.head { font-family:var(--paper-font); font-weight:600; font-size:57px; line-height:1.06;
+            letter-spacing:-0.012em; margin-bottom:14px; text-wrap:balance; }
+  .dek { font-style:italic; font-size:23px; color:var(--muted); line-height:1.4; max-width:960px; text-wrap:balance; }
+  .body { font-size:16px; line-height:1.62; }
+  .body.dim { color:var(--muted); }
+  .pull { font-style:italic; font-weight:600; font-size:29px; line-height:1.25; color:var(--ink);
+          border-top:2px solid var(--ink); border-bottom:1px solid var(--rule); padding:14px 0 12px; max-width:1080px; }
+  .pull .g { color:var(--accent); }
+  .note { font-size:14px; font-style:italic; color:var(--muted); line-height:1.5; }
+
+  /* cover */
+  .flag { margin-top:54px; border-top:3px solid var(--ink); border-bottom:1px solid var(--ink); padding:20px 0 20px; text-align:center; }
+  .overline { font-family:var(--mono); font-size:11px; letter-spacing:0.34em; text-transform:uppercase;
+              color:var(--accent); margin-bottom:14px; }
+  .mast { font-family:var(--mast-font); font-weight:400; font-size:168px; line-height:0.92; letter-spacing:0.015em; }
+  .cover-dek { text-align:center; font-style:italic; font-size:30px; margin-top:24px; }
+  .cover-note { text-align:center; font-family:var(--mono); font-size:10px; letter-spacing:0.2em;
+                text-transform:uppercase; color:var(--muted); margin-top:auto; }
+  .cover-sub { text-align:center; font-family:var(--mono); font-size:11px; letter-spacing:0.3em; text-transform:uppercase;
+               color:var(--accent); margin-top:16px; }
+
+  /* structure */
+  .cols2 { column-count:2; column-gap:44px; column-rule:1px solid var(--rule); margin-top:24px; }
+  .cols3 { display:grid; grid-template-columns:1fr 1fr 1fr; margin-top:26px; }
+  .cols3 > div { padding:0 26px; }
+  .cols3 > div + div { border-left:1px solid var(--rule); }
+  .cols3 > div:first-child { padding-left:0; }
+  .cols3 > div:last-child { padding-right:0; }
+  .cols4 { display:grid; grid-template-columns:repeat(4,1fr); margin-top:26px; }
+  .cols4 > div { padding:0 22px; border-left:1px solid var(--rule); }
+  .cols4 > div:first-child { padding-left:0; border-left:none; }
+  .cols4 > div:last-child { padding-right:0; }
+  .colhead { font-family:var(--mono); font-size:10px; letter-spacing:0.2em; text-transform:uppercase;
+             color:var(--accent); margin-bottom:9px; }
+  .kicker { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+            color:var(--subtle); margin-bottom:7px; }
+  .coltitle { font-size:19px; font-weight:600; letter-spacing:-0.005em; margin-bottom:8px; }
+
+  figure { margin:0; }
+  figure img { display:block; border:1px solid var(--rule-strong); width:100%; height:auto; }
+  figcaption { font-size:13.5px; font-style:italic; color:var(--muted); line-height:1.4; margin-top:8px; max-width:520px; }
+  .lead { display:grid; grid-template-columns:500px 1fr; gap:52px; margin-top:20px; align-items:start; }
+  .lead-side { display:flex; flex-direction:column; }
+
+  .figs { display:grid; grid-template-columns:repeat(3,1fr); margin-top:40px; }
+  .figs > div { padding:0 30px; border-left:1px solid var(--rule); }
+  .figs > div:first-child { padding-left:0; border-left:none; }
+  .figs > div:last-child { padding-right:0; }
+  .fig-n { font-weight:600; font-size:52px; line-height:1.1; margin-bottom:8px; letter-spacing:-0.01em; }
+  .fig-n.g { color:var(--accent); }
+  .fig-l { font-size:14.5px; color:var(--muted); line-height:1.45; }
+
+  table.stand { width:100%; border-collapse:collapse; margin-top:24px; }
+  table.stand th { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+                   color:var(--muted); font-weight:400; text-align:left; padding:0 0 8px; }
+  table.stand td { font-size:17px; padding:9px 0; border-top:1px solid var(--rule); }
+  table.stand td.no { color:var(--muted); }
+  table.stand td.yes { color:var(--accent2); font-weight:600; }
+  table.stand td.lbl { font-family:var(--mono); font-size:10px; letter-spacing:0.16em; text-transform:uppercase;
+                       color:var(--accent); width:27%; padding-right:18px; vertical-align:top; padding-top:12px; }
+
+  .byline-wrap { display:grid; grid-template-columns:1fr 300px; gap:54px; margin-top:22px; align-items:start; }
+  .byline { font-family:var(--mono); font-size:10px; letter-spacing:0.22em; text-transform:uppercase;
+            color:var(--muted); margin-bottom:14px; }
+  .portrait img { width:100%; border:1px solid var(--rule-strong); }
+  .founder-name { font-size:44px; font-weight:600; letter-spacing:-0.012em; line-height:1.05; margin-bottom:4px; }
+  .founder-role { font-style:italic; font-size:19px; color:var(--muted); margin-bottom:22px; }
+
+  .contacts { font-family:var(--mono); font-size:11px; letter-spacing:0.14em; color:var(--muted); text-transform:uppercase; }
+  .rule-thin { height:1px; background:var(--rule); }
+  .mech { font-family:var(--mono); font-size:12.5px; letter-spacing:0.1em; color:var(--accent2); margin-top:38px; }
+  .mech-center { text-align:center; font-family:var(--mono); font-size:13px; letter-spacing:0.14em;
+                 color:var(--accent2); margin-top:34px; }
+  .mech-center .g { color:var(--accent); }
+  .psa { font-family:var(--mono); font-size:12px; letter-spacing:0.34em; text-transform:uppercase;
+         color:var(--accent2); margin-top:22px; }
+
+  .chip { display:inline-block; font-family:var(--mono); font-size:8.5px; letter-spacing:0.18em;
+          text-transform:uppercase; color:var(--accent); border:1px solid var(--rule-strong);
+          padding:3px 8px; margin-bottom:10px; }
+  .chip.mute { color:var(--muted); }
+  .pimg { display:block; width:100%; height:150px; object-fit:cover; object-position:top left;
+          border:1px solid var(--rule-strong); margin-bottom:12px; }
+  .iface-mock { width:100%; height:150px; border:1px solid var(--rule); display:flex; align-items:center;
+                justify-content:center; font-family:var(--mono); font-size:9px; letter-spacing:0.2em;
+                text-transform:uppercase; color:var(--subtle); margin-bottom:12px; text-align:center; padding:0 16px; }
+  .figsub { font-size:11.5px; font-style:italic; color:var(--subtle); margin-bottom:8px; }
+
+  .split2 { display:grid; grid-template-columns:1fr 1fr; margin-top:26px; border:1px solid var(--rule); }
+  .split2 > div { padding:16px 22px; }
+  .split2 > div + div { border-left:1px solid var(--rule); }
+  .split2 .k { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+               color:var(--accent); margin-bottom:6px; }
+  .split2 .v { font-size:16px; font-style:italic; }
+
+  .ladder { display:grid; grid-template-columns:repeat(4,1fr); margin-top:22px; }
+  .ladder > div { border:1px solid var(--rule); border-left:none; padding:15px 18px 14px; }
+  .ladder > div:first-child { border-left:1px solid var(--rule); }
+  .ladder .price { font-size:32px; font-weight:600; letter-spacing:-0.01em; }
+  .ladder .price.g { color:var(--accent); }
+  .ladder .tier { font-family:var(--mono); font-size:9.5px; letter-spacing:0.22em; text-transform:uppercase;
+                  color:var(--accent2); margin:3px 0 7px; }
+  .ladder .desc { font-size:12.5px; color:var(--muted); line-height:1.45; }
+
+  .banner { border:1px solid var(--rule-strong); border-left:3px solid var(--accent); padding:13px 20px;
+            margin-top:32px; display:flex; gap:22px; align-items:baseline; }
+  .banner .k { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+               color:var(--accent); white-space:nowrap; }
+  .banner .v { font-size:14.5px; font-style:italic; color:var(--muted); line-height:1.5; }
+
+  .bigask { font-family:var(--mast-font); font-size:120px; line-height:1; letter-spacing:0.01em; }
+  .beat .k, .loop .k { font-family:var(--mono); font-size:9.5px; letter-spacing:0.2em; text-transform:uppercase;
+                       color:var(--accent); margin-bottom:5px; }
+  .beat { margin-bottom:16px; }
+  .beat .v { font-size:14.5px; line-height:1.5; color:var(--muted); }
+  a { color:inherit; text-decoration:none; }
+</style>
+</head>
+<body>
+
+<!-- 01 — COVER -->
+<section class="slide">
+  <div class="hair" style="margin-top:26px;"></div>
+  <div class="rail"><span>choir.news</span><span class="g">Pre-seed &mdash; October 2026</span></div>
+  <div class="flag" style="margin-top:44px;">
+    <svg class="tetra" viewBox="0 0 512 512" aria-hidden="true" style="width:60px;height:60px;margin:0 auto 16px;"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z"/></svg>
+    <div class="mast">CHOIR</div>
+  </div>
+  <div class="cover-dek" style="font-size:37px; font-style:normal; font-weight:600;">Intelligence that compounds.</div>
+  <div class="cover-sub">The automatic computer &amp; reputation network for the learning economy</div>
+  <div class="cover-note">Deep research &nbsp;&middot;&nbsp; Automatic publishing &nbsp;&middot;&nbsp; Intelligence you can own, improve and sell
+    <br><br>$1M pre-seed ask &nbsp;&middot;&nbsp; Q4 2026</div>
+  <div class="folio"><span>Choir</span><span>01</span></div>
+</section>
+
+<!-- 02 — THE PROBLEM -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The problem</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The problem</div>
+    <h1 class="head" style="font-size:50px;">AI generates work.<br>The learning disappears.</h1>
+    <div class="dek">Each useful result is too often a dead end instead of a durable, improving asset.</div>
+    <div class="cols3" style="margin-top:40px;">
+      <div>
+        <div class="kicker">01 / Repeat</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Start over</div>
+        <div class="body dim">Context, investigation, and corrections are repeatedly reconstructed. The next session rebuilds what the last one already did.</div>
+      </div>
+      <div>
+        <div class="kicker">02 / Guess</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Cannot measure</div>
+        <div class="body dim">Most agent systems do not retain prospective commitments alongside later outcomes. Nothing becomes a comparable evaluation.</div>
+      </div>
+      <div>
+        <div class="kicker">03 / Strand</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Cannot earn</div>
+        <div class="body dim">An expert cannot readily sell governed access to their intelligence &mdash; or prove to a buyer when it is reliable.</div>
+      </div>
+    </div>
+    <div class="pull tail" style="font-size:22px;">The missing infrastructure retains, measures, improves, and <span class="g">exchanges</span> intelligence.</div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>02</span></div>
+</section>
+
+<!-- 03 — THE PRODUCT -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The product</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The product</div>
+    <h1 class="head" style="font-size:50px;">Give the computer agents.<br>Keep the work.</h1>
+    <div class="dek">The document is not an export &mdash; it is the shared place where humans and agents work.</div>
+    <div class="lead">
+      <figure>
+        <img src="shot-texture.png" alt="Choir desktop prototype" style="height:290px; object-fit:cover; object-position:top left;">
+        <figcaption>Actual Choir desktop &mdash; Texture maintaining a versioned research document.</figcaption>
+      </figure>
+      <div class="lead-side">
+        <div class="colhead">Durable, versioned working state</div>
+        <table class="stand" style="margin-top:8px;">
+          <tr><td class="lbl">Persistent</td><td class="no">Knowledge and revision history survive runs and model churn.</td></tr>
+          <tr><td class="lbl">Automatic</td><td class="no">Agents maintain bounded tasks and documents &mdash; increasingly without a prompt per operation.</td></tr>
+          <tr><td class="lbl">Model-neutral</td><td class="no">Different models work over the same shared state.</td></tr>
+          <tr><td class="lbl">User-controlled</td><td class="no">Knowledge and authorization remain with the operator.</td></tr>
+        </table>
+        <div class="note" style="margin-top:18px;">A personal research institution, not another blank chat box.</div>
+      </div>
+    </div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>03</span></div>
+</section>
+
+<!-- 04 — THE INTERFACES -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The interfaces</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The interfaces</div>
+    <h1 class="head" style="font-size:50px;">Research. Publish. Listen.</h1>
+    <div class="dek">Three interfaces to the same retained knowledge. No free horizontal chat race.</div>
+    <div class="cols3" style="margin-top:34px;">
+      <div>
+        <div class="colhead">Autoputer desktop</div>
+        <img class="pimg" src="shot-texture.png" alt="Autoputer desktop" style="object-position:top left;">
+        <div class="chip">Now / prototype</div>
+        <div class="body dim" style="font-size:14.5px;">A persistent research workspace with agents, evidence, and editable documents.</div>
+      </div>
+      <div>
+        <div class="colhead">Autopaper</div>
+        <img class="pimg" src="shot-worldwire.png" alt="Global Wire — publishing precedent">
+        <div class="chip">Next / live demo to build</div>
+        <div class="body dim" style="font-size:14.5px;">A maintained newspaper: published results free to read; new custom research is paid.</div>
+        <div class="figsub" style="margin-top:8px;">Shown: Global Wire, the existing maintained-coverage surface AutoPaper formalizes.</div>
+      </div>
+      <div>
+        <div class="colhead">Autoradio</div>
+        <div class="iface-mock">Interface in development &mdash;<br>no shipped UI yet</div>
+        <div class="chip mute">Development / 1&ndash;2 month target</div>
+        <div class="body dim" style="font-size:14.5px;">A personalized, interruptible mobile research station. Shared recordings persist.</div>
+      </div>
+    </div>
+    <div class="note tail">Custom research and audio generation consume inference; shared artifacts do not. Enterprise scale gates on an independent security audit; PSA value gates on held-out experiments.</div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>04</span></div>
+</section>
+
+<!-- 05 — THE INVENTION + LEARNING -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The invention / PSA</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The invention &mdash; prospective self-alignment</div>
+    <h1 class="head" style="font-size:48px;">Trust is a prediction you can check.<br>Every consequential job can teach the next.</h1>
+    <div class="cols4" style="margin-top:32px;">
+      <div>
+        <div class="kicker">01 / Before</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Commit</div>
+        <div class="body dim" style="font-size:15px;">Intended action, meaningful non-actions, and predicted consequences.</div>
+      </div>
+      <div>
+        <div class="kicker">02 / During</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Observe</div>
+        <div class="body dim" style="font-size:15px;">Authorized behavior, evidence, and eventual results.</div>
+      </div>
+      <div>
+        <div class="kicker">03 / After</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Compare</div>
+        <div class="body dim" style="font-size:15px;">Fidelity and calibration where outcomes resolve.</div>
+      </div>
+      <div>
+        <div class="kicker" style="color:var(--accent);">04 / Improve</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Teach the next job</div>
+        <div class="body dim" style="font-size:15px;">Prompts, tools, routing &mdash; eventually weights. Held-out test on fresh work.</div>
+      </div>
+    </div>
+    <div class="mech-center">commit &rarr; observe &rarr; compare &rarr; improve &rarr; <span class="g">new task, held-out</span></div>
+    <div class="note tail">Rules still decide what is allowed; PSA measures commitment against reality. Training and reputation need independently resolvable outcomes &mdash; the proof must resist easy-question selection, outcome leakage, and self-evaluation gaming.</div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>05</span></div>
+</section>
+
+<!-- 06 — THE GO-TO-MARKET -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The go-to-market</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The go-to-market</div>
+    <h1 class="head" style="font-size:50px;">Find the expertise<br>the attention economy missed.</h1>
+    <div class="dek">Start with under-monetized independent writers, researchers, and analysts &mdash; not celebrity creators.</div>
+    <div class="cols3" style="margin-top:34px;">
+      <div>
+        <div class="kicker">01 / Discover</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Find the long tail</div>
+        <div class="body dim">Serious Substack authors, bloggers, and analysts with differentiated work and limited commercial reach.</div>
+      </div>
+      <div>
+        <div class="kicker">02 / Evaluate</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Read the record</div>
+        <div class="body dim">Retrospectively assess dated, resolvable claims; select with editorial judgment, not cherry-picked hits.</div>
+      </div>
+      <div>
+        <div class="kicker">03 / Invite</div>
+        <div class="colhead" style="font-size:13px; letter-spacing:0.14em;">Make expertise earn</div>
+        <div class="body dim">Offer capped creator beta access, publishing distribution, and new prospective PSA track records.</div>
+      </div>
+    </div>
+    <div class="note tail">AutoPaper becomes a public, readable demonstration of the work they can produce. Retrospective claims are not full prospective records &mdash; no invented probabilities, no ranking on selected hits.</div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>06</span></div>
+</section>
+
+<!-- 07 — THE BUSINESS MODEL -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The business model</span></div>
+  <div class="hair"></div>
+    <div class="sect">The business model</div>
+    <h1 class="head" style="font-size:50px;">Charge for the work.<br>Share the result.</h1>
+    <div class="split2">
+      <div><div class="k">Paid inference</div><div class="v">Custom research, articles, and interactive radio</div></div>
+      <div><div class="k">Free distribution</div><div class="v">Published articles, audio, and shared artifacts</div></div>
+    </div>
+    <div class="colhead" style="margin-top:26px;">The prosumer pricing ladder</div>
+    <div class="ladder">
+      <div>
+        <div class="price">$35</div>
+        <div class="tier">Research</div>
+        <div class="desc">Bounded personalized investigation.</div>
+      </div>
+      <div>
+        <div class="price">$100</div>
+        <div class="tier">Studio</div>
+        <div class="desc">Heavier research, production, and personalized audio.</div>
+      </div>
+      <div>
+        <div class="price g">$350</div>
+        <div class="tier">Professional</div>
+        <div class="desc">High-throughput investigations, ongoing agents, sophisticated media workflows.</div>
+      </div>
+      <div>
+        <div class="price">Custom</div>
+        <div class="tier">Enterprise</div>
+        <div class="desc">Multi-user organizations, governance, deployment, contracted service.</div>
+      </div>
+    </div>
+    <div class="note tail">Metered allowances at every tier. No unlimited deep-inference subsidy.</div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>07</span></div>
+</section>
+
+<!-- 08 — THE PLATFORM FLYWHEEL -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The platform flywheel</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The platform flywheel</div>
+    <h1 class="head" style="font-size:50px;">One network.<br>Two ways in.</h1>
+    <div class="dek">The two sides reinforce each other without having to transact directly.</div>
+    <div class="cols3" style="margin-top:38px;">
+      <div>
+        <div class="colhead">Prosumers</div>
+        <div class="body dim">Expertise, audience, public track records, and demand.</div>
+      </div>
+      <div>
+        <div class="colhead" style="color:var(--accent2);">Choir network</div>
+        <div class="body">PSA-based reputation improves task-specific discovery and matching.</div>
+      </div>
+      <div>
+        <div class="colhead">Organizations</div>
+        <div class="body dim">Specialist agents, licensed capability, and depth.</div>
+      </div>
+    </div>
+    <div class="mech-center">More interactions &rarr; more evidence &rarr; <span class="g">better matching</span></div>
+    <div class="note tail">Shared reputation is the potential network moat; proprietary data stays scoped. Neither side must buy from the other.</div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>08</span></div>
+</section>
+
+<!-- 09 — AGENT COMMERCE -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">Agent commerce</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">Agent commerce</div>
+    <h1 class="head" style="font-size:48px;">Every computer can be<br>an intelligence business.</h1>
+    <div class="dek">Sell authorized answers and capabilities. Keep the underlying knowledge and models.</div>
+    <div class="cols4" style="margin-top:36px;">
+      <div><div class="colhead">Own</div><div class="body dim" style="font-size:15px;">Private documents, models, expertise</div></div>
+      <div><div class="colhead">Expose</div><div class="body dim" style="font-size:15px;">Scoped agent API endpoints</div></div>
+      <div><div class="colhead">Earn</div><div class="body dim" style="font-size:15px;">Paid specialist queries</div></div>
+      <div><div class="colhead">Learn</div><div class="body dim" style="font-size:15px;">Demand signals + resolved outcomes</div></div>
+    </div>
+    <div class="note" style="margin-top:30px;">Governed access, extraction controls, and buyer-query privacy are prerequisites. The marketplace is not yet operating.</div>
+    <div class="pull tail" style="font-size:21px;">Queries reveal demand; verifiable outcomes can <span class="g">improve capability and reputation.</span></div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>09</span></div>
+</section>
+
+<!-- 10 — THE REPUTATION MOAT -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The reputation moat</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The reputation moat</div>
+    <h1 class="head" style="font-size:50px;">Popularity is not competence.</h1>
+    <div class="dek">Can this agent make the right prediction &mdash; or perform the right task &mdash; in this domain?</div>
+    <div class="cols3" style="margin-top:36px;">
+      <div>
+        <div class="colhead">Commitments</div>
+        <div class="body dim">What was claimed before the result?</div>
+      </div>
+      <div>
+        <div class="colhead">Outcomes</div>
+        <div class="body dim">What actually happened, at what difficulty?</div>
+      </div>
+      <div>
+        <div class="colhead">Matching</div>
+        <div class="body dim">Who should a buyer trust for the next task?</div>
+      </div>
+    </div>
+    <div class="banner tail">
+      <div class="k">Moat hypothesis / not yet proven</div>
+      <div class="v">Test whether PSA forecasts unseen performance better than simple ratings or benchmarks.</div>
+    </div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>10</span></div>
+</section>
+
+<!-- 11 — WHY NOW -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">Why now</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">Why now</div>
+    <h1 class="head" style="font-size:48px;">AI&rsquo;s first paying consumers<br>are producers.</h1>
+    <div class="dek">Power users already buy tools to make things. Choir targets deeper research and media production.</div>
+    <div class="figs">
+      <div><div class="fig-n g">4.5%</div><div class="fig-l">of U.S. consumers in the sample paid for ChatGPT, Claude, or Gemini</div></div>
+      <div><div class="fig-n g">19.5%</div><div class="fig-l">of observed AI spend came from the top 1% of payers</div></div>
+      <div><div class="fig-n g">29/50</div><div class="fig-l">top vendors by AI spending were absent from top traffic charts</div></div>
+    </div>
+    <div class="note" style="margin-top:26px;">a16z, Top 100 Consumer AI Apps (7th ed., Oct 5, 2026); YipitData U.S. consumer panel, Aug 2026.</div>
+    <div class="pull tail" style="font-size:21px;">Usage is broad. Willingness to pay <span class="g">concentrates in high-value workflows.</span></div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>11</span></div>
+</section>
+
+<!-- 12 — THE MARKET -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The market</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The market</div>
+    <h1 class="head" style="font-size:46px;">The market grows when<br>intelligence becomes sellable.</h1>
+    <div class="dek">One platform expands through three revenue pools &mdash; not additive AI TAM headlines.</div>
+    <table class="stand" style="margin-top:30px;">
+      <tr><th style="width:8%;"></th><th style="width:34%;">Pool</th><th style="width:40%;">Mechanics</th><th>Role</th></tr>
+      <tr><td class="lbl">01</td><td><b>Prosumer computers</b></td><td class="no">Paid creators &times; recurring research ARPU</td><td class="yes">Initial wedge</td></tr>
+      <tr><td class="lbl">02</td><td><b>Organizational computers</b></td><td class="no">Deployed organizations &times; annual contracts</td><td class="yes">Natural expansion</td></tr>
+      <tr><td class="lbl">03</td><td><b>Intelligence economy</b></td><td class="no">Licensed data + paid calls &times; net take rate</td><td class="yes">Network scale</td></tr>
+    </table>
+    <div class="pull tail" style="font-size:21px;">The strategic upside is transactions and compounding capability &mdash; <span class="g">not advertising inventory.</span></div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>12</span></div>
+</section>
+
+<!-- 13 — SCALE TARGETS -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">Scale targets</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The opportunity</div>
+    <h1 class="head" style="font-size:50px;">A founder-scale ambition.</h1>
+    <div class="dek">Targets &mdash; not current traction or an underwritten forecast.</div>
+    <table class="stand" style="margin-top:34px;">
+      <tr><th style="width:16%;">Year</th><th style="width:30%;">Paying prosumers</th><th style="width:27%;">Prosumer exit ARR</th><th>Total exit run rate*</th></tr>
+      <tr><td style="font-size:22px;"><b>2027</b></td><td>110K</td><td class="yes">$57M</td><td class="yes">$69.8M</td></tr>
+      <tr><td style="font-size:22px;"><b>2028</b></td><td>1.1M</td><td class="yes">$570M</td><td class="yes">$822.6M</td></tr>
+      <tr><td style="font-size:22px;"><b>2029</b></td><td>11M</td><td class="yes">$5.7B</td><td class="yes">$12.63B</td></tr>
+    </table>
+    <div class="tail">
+      <div class="rule-thin"></div>
+      <div class="note" style="margin-top:12px;">2029: 100M free shared-content readers + 1M daily speakers are separate participation ambitions, not paid tiers. *Includes subscriptions, strategic licenses, and net marketplace commissions &mdash; not all contracted ARR. Mix percentages are editable assumptions, not observed adoption.</div>
+    </div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>13</span></div>
+</section>
+
+<!-- 14 — FOUNDER / TEAM -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">Founder / team</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">Founder / team</div>
+    <h1 class="head" style="font-size:50px;">Founder-built.<br>Research-led.</h1>
+    <div class="byline-wrap">
+      <div>
+        <div class="byline">Founder &amp; technical lead &mdash; one technical founder</div>
+        <div class="founder-name">Yusef Nathanson</div>
+        <div class="beat"><div class="k">Experience</div><div class="v">Professional poker; AI work since 2015; research into learning systems.</div></div>
+        <div class="beat"><div class="k">Builder</div><div class="v">Personally designed the web desktop, NixOS environment, versioned state, and the PSA research program.</div></div>
+        <div class="beat" style="margin-bottom:0;"><div class="k">Next hires</div><div class="v">Agent infrastructure, research/evaluation, product engineering, and enterprise reliability.</div></div>
+      </div>
+      <div class="portrait"><img src="Yusef_photo.jpeg" alt="Yusef Nathanson"></div>
+    </div>
+    <div class="note tail">The next round turns the prototype into a measured, deployable product.</div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>14</span></div>
+</section>
+
+<!-- 15 — THE ASK -->
+<section class="slide">
+  <div class="rail"><span>Choir &mdash; the automatic computer</span><span class="g">The ask</span></div>
+  <div class="hair"></div>
+  <div class="body-area">
+    <div class="sect">The ask &mdash; Q4 2026 / pre-seed</div>
+    <div class="bigask">$1M</div>
+    <div class="dek" style="font-size:34px; margin-top:6px;">to prove the learning loop.</div>
+    <div class="cols3" style="margin-top:38px;">
+      <div>
+        <div class="colhead">Build</div>
+        <div class="body dim">AutoPaper public demo, AutoRadio beta, bounded multi-agent reliability, deliberate paywalls and spend caps.</div>
+      </div>
+      <div>
+        <div class="colhead">Sell</div>
+        <div class="body dim">First paying high-end research producers; measured inference margins.</div>
+      </div>
+      <div>
+        <div class="colhead">Prove</div>
+        <div class="body dim">Held-out PSA improvement; security groundwork for institutional pilots.</div>
+      </div>
+    </div>
+    <div class="tail">
+      <div class="rule-thin"></div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:12px;">
+        <div class="note">Following rounds respond to traction &mdash; not the initial $1M commitment.<br>
+          <span class="contacts" style="margin-top:10px; display:inline-block;">choir.news &nbsp;&middot;&nbsp; github.com/choir-hip/go-choir</span></div>
+        <svg class="tetra" viewBox="0 0 512 512" aria-hidden="true" style="width:52px;height:52px;"><path d="M 269.72 36.86 L 258.57 63.16 L 250.28 143.79 L 251.71 206.97 L 262.58 236.99 L 275.44 235.84 L 288.88 195.25 L 291.17 109.19 L 308.03 105.48 L 376.93 226.41 L 424.39 279.87 L 449.84 324.47 L 475.85 327.05 L 437.54 244.99 L 360.35 138.07 L 328.62 77.17 L 291.17 34.86 Z"/><path d="M 174.23 148.93 L 135.07 175.52 L 79.60 281.02 L 54.73 361.07 L 35.29 396.80 L 37.29 425.97 L 53.87 437.97 L 181.38 387.94 L 218.55 355.63 L 217.98 342.20 L 206.25 339.62 L 146.50 361.07 L 92.75 395.09 L 77.60 394.80 L 79.32 373.36 L 175.66 166.09 Z"/><path d="M 476.43 455.41 L 367.21 359.64 L 324.90 339.34 L 326.33 360.21 L 389.23 420.82 L 388.66 435.69 L 199.68 442.83 L 177.38 455.98 L 175.38 466.56 L 185.10 477.14 L 304.89 473.14 L 457.56 477.14 L 473.28 469.42 Z"/></svg>
+      </div>
+    </div>
+  </div>
+  <div class="folio"><span>Intelligence that compounds</span><span>15</span></div>
+</section>
+
+
+</body>
+</html>
