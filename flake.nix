@@ -258,6 +258,10 @@
           pname = "checkpointd";
           subPackage = "cmd/checkpointd";
         };
+        projectionCompact = mkGoService {
+          pname = "projection-compact";
+          subPackage = "cmd/projection-compact";
+        };
         updater = mkGoService {
           pname = "choir-updater";
           subPackage = "cmd/choir-updater";

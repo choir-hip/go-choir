@@ -198,6 +198,10 @@ for path in "${changed[@]}"; do
       mark_host_os_only
       add_explanation "$path -> maildctl host package in Node B system environment"
       ;;
+    cmd/projection-compact/*)
+      mark_host_os_only
+      add_explanation "$path -> projection-compact host package in Node B system environment"
+      ;;
     cmd/gateway/*)
       add_host_service "gateway"
       add_explanation "$path -> gateway host service"

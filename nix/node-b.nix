@@ -1111,6 +1111,7 @@ in
     icu
     icu.dev
     goChoirPackages.maildctl
+    goChoirPackages.projectionCompact
     goChoirPackages.zot
     procps
     lsof
