@@ -121,3 +121,34 @@ So skipping it loses no executor fate.
 
 **Residue left by the failed attempts:** a durable cancellation intent
 on each trajectory. A retry with the same command identity resumes it.
+
+## Resolved on the owner computer (2026-10-09 08:10–08:15 UTC)
+
+**Fixes, deployed to staging:**
+- 3083c6dd: cancel skips never-bound terminal assignments.
+- cd7e8cfe: the Cancel UI reads `?view=summary`.
+- 8fd243ba: boot refuses a stale layer.
+
+The owner computer then ran 8fd243ba itself; before that it had stayed on
+the 39c0d991 layer. See
+[`guest-runtime-fix-never-reaches-layered-computers`](guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md).
+
+| Measure | Before | After |
+|---|---|---|
+| `GET /api/trajectories/{id}?view=summary` | full snapshot: 9–18 s | 2–360 ms |
+| Cancel `d50af120` (resumed original intent, V=1901) | 400 in 12–30 s | **200 `cancelled`**, 1 run cancelled, 32.8 s |
+| Cancel `bda20d6e` (V=1987) | 400 | **200 `cancelled`**, 2 runs cancelled, 40.8 s |
+| `3b12d89a` | "Revising…" | `cancelled` (v13) |
+| Management "reconcile lifecycle cancellation" deferrals | every 25–50 s | none since the 8fd243ba boot |
+| `GET /api/texture/documents` | timed out (>120 s) at 4 GiB | 0.14–0.36 s warm at 8 GiB; 2.7 s first call after boot |
+
+**Residuals:**
+- **Cancel latency is still 33–41 s on trajectories with ~200
+  assignments.** Prepare/finish write per assignment under the store
+  mutex. Bound or batch them.
+- **Owner-visible failure:** a failed cancel leaves a durable intent. A
+  retry from the UI mints a new command id (from version and head) and
+  conflicts with that intent. The UI should resume the stored intent.
+- **Zombie cycle:** the original 68-run re-passivation cycle has not
+  recurred since the 05:38 boot (0 candidates). Its trigger is still
+  untraced; next steps 1, 2 and 5 above remain open.
