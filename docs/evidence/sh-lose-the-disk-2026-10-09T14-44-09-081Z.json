@@ -1,0 +1,99 @@
+{
+  "started_at": "2026-10-09T14:44:09.082Z",
+  "base_url": "https://choir.news",
+  "proof_file": "sh-o21-proof.txt",
+  "steps": [
+    {
+      "name": "precondition",
+      "at": "2026-10-09T14:44:22.744Z",
+      "ownership": [
+        {
+          "state": "active",
+          "vm_id": "vm-f7386e38b6794f625cef2fdd6e6557c4",
+          "computer_id": "computer-dbc7adf030a45ad6d3dc7e72a1d7e0df",
+          "epoch": 12949,
+          "computer_url": "http://10.200.21.2:8085"
+        }
+      ],
+      "build": "799097e32440ed4955ef4d1577812eb2881f06cd"
+    },
+    {
+      "name": "private_file_written",
+      "at": "2026-10-09T14:44:30.200Z",
+      "written": {
+        "status": 200,
+        "text": "{\"message\":\"file saved\",\"status\":\"updated\"}\n"
+      },
+      "synced": {
+        "status": 200,
+        "text": "{\"root\":\"8bfd47536f4af33b2b98d0790737f534d93fa8a32791278ded7c3608d28f0779\",\"files\":2460,\"chunks_uploaded\":2471}\n"
+      }
+    },
+    {
+      "name": "ownership_removed",
+      "at": "2026-10-09T14:44:31.350Z",
+      "response": "{\"status\":\"removed\"}",
+      "after": []
+    },
+    {
+      "name": "file_read_back",
+      "at": "2026-10-09T14:45:39.320Z",
+      "pass": true,
+      "attempts": 6,
+      "last": [
+        {
+          "status": 503,
+          "at_ms": 10078,
+          "text": "{\"error\":\"computer recovery blocked\",\"reason\":\"required base is missing for an existing chain\",\"kind\":\"projection_base_m"
+        },
+        {
+          "status": 503,
+          "at_ms": 20112,
+          "text": "{\"error\":\"computer recovery blocked\",\"reason\":\"required base is missing for an existing chain\",\"kind\":\"projection_base_m"
+        },
+        {
+          "status": 503,
+          "at_ms": 30150,
+          "text": "{\"error\":\"computer recovery blocked\",\"reason\":\"required base is missing for an existing chain\",\"kind\":\"projection_base_m"
+        },
+        {
+          "status": 503,
+          "at_ms": 40360,
+          "text": "{\"error\":\"computer recovery blocked\",\"reason\":\"required base is missing for an existing chain\",\"kind\":\"projection_base_m"
+        },
+        {
+          "status": 200,
+          "at_ms": 67288,
+          "text": "lose-the-disk proof 2026-10-09T14-44-09-081Z mrrc6ylbii"
+        }
+      ],
+      "ownership": [
+        {
+          "state": "active",
+          "vm_id": "vm-afdc238bc68135c6df475c5cd874f216",
+          "computer_id": "computer-dbc7adf030a45ad6d3dc7e72a1d7e0df",
+          "epoch": 12951,
+          "computer_url": "http://10.200.22.2:8085"
+        }
+      ]
+    },
+    {
+      "name": "fresh_realization_console",
+      "at": "2026-10-09T14:45:41.351Z",
+      "vm_id": "vm-afdc238bc68135c6df475c5cd874f216",
+      "build": "799097e32440ed4955ef4d1577812eb2881f06cd",
+      "lines": [
+        "2026/10/09 14:45:32 autoputer: privacy key delivered from custodian escrow for computer-dbc7adf030a45ad6d3dc7e72a1d7e0df (head 4)\r",
+        "2026/10/09 14:45:36 autoputer: file tree hydrated 2460 files from CAS root 8bfd47536f4af33b2b98d0790737f534d93fa8a32791278ded7c3608d28f0779"
+      ]
+    }
+  ],
+  "disposable": {
+    "email": "sh-lose-disk-1791557049610-wfr3z6@example.com",
+    "user_id": "f5c92c8c-e71b-44aa-bbfb-9e7ed4a3fb3d",
+    "computer_id": "computer-dbc7adf030a45ad6d3dc7e72a1d7e0df",
+    "initial_vm_id": "vm-f7386e38b6794f625cef2fdd6e6557c4"
+  },
+  "result": "pass",
+  "finished_at": "2026-10-09T14:45:41.412Z"
+}

@@ -67,14 +67,18 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
     staging signup E2E was not run (it creates a real account and VM).
   - Store B: reset to an empty repo, dumped (23 GB), and the 104 G old repo
     deleted (owner, 14:04Z). Autopaper starts from zero content.
-- **SH lose-the-disk (Gate 1 exit), 2026-10-09 afternoon:**
-  - cause 2 (in-memory fresh-volume flag) fixed in 799097e3 with a durable
-    marker; repeatable proof `scripts/sh_lose_the_disk_proof.mjs`;
-  - forced reboot-path deploy so the base image carries the fix; proof run
-    pending;
-  - cause 1 (version skew: app-layer-only deploys leave the base image, and
-    so every new realization, on older code) needs an owner deploy-shape
-    decision.
+- **SH lose-the-disk (Gate 1 exit): PASSED on staging, 2026-10-09 14:45Z.**
+  A disposable computer lost its realization and volume; the next
+  realization got its key from escrow, hydrated 2,460 files and served the
+  private proof file 67 s later
+  ([receipt](evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json)).
+  Fixes: c72c38c4 (hydration), 799097e3 (durable fresh-volume marker),
+  a47122de (every runtime deploy takes the reboot path; no version skew).
+  Bounded residual: a disk lost before the first projection checkpoint
+  waits up to ~1 min for `checkpointd`. Remaining Gate 1 exit items: SL
+  fault matrix, Texture acceptance suite.
+- **CI item 2:** main runs stay serialized (parallel runs can invert deploy
+  order; see the CI latency problem doc).
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 

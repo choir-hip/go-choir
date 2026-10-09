@@ -132,14 +132,14 @@ boundaries:
 now:
   status: working
   slice: >-
-    lose-the-disk proof (Gate 1 exit). Slices 1-3 landed (typed key
-    refusal; write-once escrow; escrow-to-realization key delivery, proven
-    on staging 02:21Z). Files half failed twice: hydration skipped on a
-    seeded tree (fixed c72c38c4), then version skew plus an in-memory
-    fresh-volume flag (b008b8a6). The flag is now a durable marker
-    (799097e3); proof script scripts/sh_lose_the_disk_proof.mjs.
-  source_ref: 799097e3
-  deploy_identity: ae61f153 (799097e3 deploying through a forced reboot path)
+    lose-the-disk proof PASSED on staging 14:45Z (Gate 1 exit test). Slices
+    1-3 landed (typed key refusal; write-once escrow; escrow-to-realization
+    key delivery). Files half: hydration on a seeded tree (c72c38c4),
+    durable fresh-volume marker (799097e3), reboot-path-only deploys so new
+    realizations run current code (a47122de). Receipt
+    docs/evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json.
+  source_ref: 32a1c2e8
+  deploy_identity: 799097e3 (base image)
   candidate:
     id: none
     state: none
@@ -180,11 +180,12 @@ now:
     Red surface (custody, vmctl). Mitigated by disposable-first proof and
     refusing rather than guessing.
   next_action: >-
-    Run scripts/sh_lose_the_disk_proof.mjs on staging once 799097e3 is in
-    the base image; record the receipt. Owner decision pending on version
-    skew (base image vs app layer for new realizations).
-
-receipts: []
+    Close SH: conjecture C1-bridge is supported on staging computers by the
+    proof; remaining Gate 1 exit items are the SL fault matrix and the
+    Texture acceptance suite. Bounded residual: recovery waits up to ~1 min
+    for the first projection checkpoint if the disk is lost before it.
+receipts:
+  - docs/evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json
 ---
 
 # SH — State homes

@@ -155,3 +155,29 @@ refresh, not per-base layers.
 Change: `deploy-impact-classify` sends every guest-runtime change through
 the canonical guest boot path (base rebuilt, active computers refreshed),
 and the platform app-layer push block is removed from the deploy job.
+
+## Resolved: lose-the-disk passes on staging (2026-10-09 14:45Z)
+
+Run of `scripts/sh_lose_the_disk_proof.mjs` against base image 799097e3
+(receipt [`evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json`](../evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json)):
+a fresh disposable computer wrote and synced a private file (2,460 files,
+root `8bfd4753…`); its realization and volume were removed; the next
+realization (a different VM) logged `privacy key delivered from custodian
+escrow … (head 4)` and `file tree hydrated 2460 files from CAS root
+8bfd4753…`, and `GET /api/files/sh-o21-proof.txt` returned the written
+content 67 s after removal. Both causes are closed: hydration on a seeded
+tree (c72c38c4), and the fresh-volume flag now durable (799097e3) with
+every runtime deploy on the reboot path (a47122de), so no skew.
+
+An earlier attempt at 14:30Z failed in the proof harness, not the product:
+the script registered an account but never made a computer-routed request,
+so no computer was realized (fixed in 32a1c2e8).
+
+**Residual, bounded:** for the first 40 s after removal, recovery was
+refused with `projection_base_missing` (`internal/recoveryplan/recovery_plan.go:110`).
+Trace: the computer was removed ~10 s after creation, before its first
+verified projection checkpoint, so the watermark was 0. The
+`go-choir-checkpointd` timer (every 1 min) published the base (target 4) at
+14:45:20 and the next resolve succeeded. A computer that loses its disk
+before its first checkpoint is unavailable for at most about a minute; no
+state is lost, since the chain is intact. Not worth a change now.
