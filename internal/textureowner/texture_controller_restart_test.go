@@ -385,12 +385,15 @@ func TestTextureOwnerStartReactivatesRuntimeRestartedPassivatedRun(t *testing.T)
 	}
 }
 
-// The runtime_restarted restart gap, isolated: when the document head is a
-// desk-authored (non-owner-input) revision, ownerHeadPending is false and the
-// open work item is the only arm. A passivated texture run must still
-// reactivate — the pre-fix gate suppressed initialWorkWake on any texture
-// run regardless of state, stranding the interrupted activation forever.
-func TestTextureOwnerStartReactivatesPassivatedRunOnOpenWork(t *testing.T) {
+// Boot with the open work item as the only arm (desk-authored head, no
+// producer reports) must leave a passivated Texture run passivated. Boot
+// dispatches no occurrence for open work, and only an occurrence executes a
+// run, so a re-arm here produced a run that stayed pending forever and a
+// document that opened into "Revising…" on every boot (67 documents on the
+// owner computer; docs/problems/texture-zombie-activations-revising-forever-
+// 2026-10-09.md). Failure modes pinned: the run re-armed to pending; its
+// mutation re-armed (agent_revision_pending); a new run minted beside it.
+func TestTextureOwnerStartLeavesOpenWorkPassivatedRunWithoutExecutor(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "texture-restart-workrewake.db")
 	s1, err := store.Open(dbPath)
@@ -486,7 +489,11 @@ func TestTextureOwnerStartReactivatesPassivatedRunOnOpenWork(t *testing.T) {
 		PromptRoot: filepath.Join(t.TempDir(), "prompts"),
 		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
-	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	dispatches := 0
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		dispatches++
+		return nil
+	})
 	t.Cleanup(rt.Stop)
 
 	if err := NewHandler(rt).Start(ctx); err != nil {
@@ -506,9 +513,17 @@ func TestTextureOwnerStartReactivatesPassivatedRunOnOpenWork(t *testing.T) {
 	if run == nil {
 		t.Fatalf("passivated texture run not listed")
 	}
-	if run.State != types.RunPending {
-		t.Fatalf("open-work texture run was not reactivated; state=%s reason=%s",
-			run.State, metadataStringValue(run.Metadata, "passivated_reason"))
+	if run.State != types.RunPassivated {
+		t.Fatalf("boot re-armed an open-work texture run with no executor; state=%s", run.State)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("boot minted a run beside the passivated one: %d runs", len(runs))
+	}
+	if pending, err := s2.GetPendingAgentMutationByDoc(ctx, ownerID, computerID, docID); err != nil || pending != nil {
+		t.Fatalf("boot re-armed the document mutation (agent_revision_pending): %+v err=%v", pending, err)
+	}
+	if dispatches != 0 {
+		t.Fatalf("boot dispatched %d occurrences for open work alone", dispatches)
 	}
 }
 

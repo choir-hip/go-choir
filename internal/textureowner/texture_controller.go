@@ -309,7 +309,7 @@ func (rt *Handler) Start(ctx context.Context) error {
 		}
 	}
 	for _, subject := range textureSubjects {
-		if _, err := rt.ReconcileActorWake(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID); err != nil {
+		if _, err := rt.reconcileActorWake(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID, textureWakeBootScan); err != nil {
 			return fmt.Errorf("reconcile subject %s/%s/%s: %w", subject.OwnerID, subject.ComputerID, subject.AgentID, err)
 		}
 	}
@@ -320,6 +320,22 @@ func (rt *Handler) Start(ctx context.Context) error {
 // persists its durable identity when first seen, and reconciles its mailbox.
 // This path does not depend on a pre-existing generic agents row.
 func (rt *Handler) ReconcileActorWake(ctx context.Context, ownerID, computerID, agentID string) (*types.RunRecord, error) {
+	return rt.reconcileActorWake(ctx, ownerID, computerID, agentID, textureWakeOccurrence)
+}
+
+// textureWakeMode says whether the wake has an executor. An occurrence-driven
+// wake runs the run it re-arms; the boot scan dispatches occurrences only for
+// producer reports and owner-input heads, so it must not re-arm a run on open
+// work alone (docs/problems/texture-zombie-activations-revising-forever-
+// 2026-10-09.md).
+type textureWakeMode int
+
+const (
+	textureWakeOccurrence textureWakeMode = iota
+	textureWakeBootScan
+)
+
+func (rt *Handler) reconcileActorWake(ctx context.Context, ownerID, computerID, agentID string, mode textureWakeMode) (*types.RunRecord, error) {
 	ownerID, computerID, agentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agentID)
 	if rt == nil || rt.Store == nil || rt.Core == nil || ownerID == "" || computerID == "" || agentID == "" {
 		return nil, fmt.Errorf("resolve Texture actor wake: incomplete scoped owner state")
@@ -338,7 +354,7 @@ func (rt *Handler) ReconcileActorWake(ctx context.Context, ownerID, computerID, 
 	if _, err := rt.Store.GetAgentByScope(ctx, ownerID, computerID, agentID); err != nil {
 		return nil, fmt.Errorf("resolve Texture actor wake: durable subject unavailable: %w", err)
 	}
-	return rt.ReconcileAgentWake(ctx, ownerID, doc.DocID)
+	return rt.reconcileAgentWake(ctx, ownerID, doc.DocID, mode)
 }
 
 // ReconcileActorOccurrenceWake returns the exact run that the current
@@ -630,6 +646,10 @@ func (rt *Handler) ValidateOccurrenceActivationAuthority(ctx context.Context, o 
 // same typed coagent update packets as other actors; integrate intent only
 // selects the Texture revision run shape.
 func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string) (*types.RunRecord, error) {
+	return rt.reconcileAgentWake(ctx, ownerID, docID, textureWakeOccurrence)
+}
+
+func (rt *Handler) reconcileAgentWake(ctx context.Context, ownerID, docID string, mode textureWakeMode) (*types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
 	if ownerID == "" || docID == "" {
@@ -659,7 +679,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 	if strings.TrimSpace(doc.ComputerID) != wakeComputerID || strings.TrimSpace(doc.TrajectoryID) != wakeTrajectoryID {
 		return nil, fmt.Errorf("texture wake durable lifecycle document binding changed")
 	}
-	return rt.reconcileAgentWakeLocked(ctx, doc, textureAgentID)
+	return rt.reconcileAgentWakeLockedMode(ctx, doc, textureAgentID, mode)
 }
 
 func classifyTextureLifecycleActivationSnapshot(doc types.Document, snapshot types.LifecycleSnapshot) (bool, error) {
@@ -716,6 +736,10 @@ func (rt *Handler) textureLifecycleActivationEligible(ctx context.Context, doc t
 }
 
 func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Document, textureAgentID string) (*types.RunRecord, error) {
+	return rt.reconcileAgentWakeLockedMode(ctx, doc, textureAgentID, textureWakeOccurrence)
+}
+
+func (rt *Handler) reconcileAgentWakeLockedMode(ctx context.Context, doc types.Document, textureAgentID string, mode textureWakeMode) (*types.RunRecord, error) {
 	ownerID := strings.TrimSpace(doc.OwnerID)
 	docID := strings.TrimSpace(doc.DocID)
 	activationEligible, err := rt.textureLifecycleActivationEligible(ctx, doc)
@@ -832,6 +856,16 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 				return nil, fmt.Errorf("list initial lifecycle Texture runs: %w", runsErr)
 			}
 			for i := range runs {
+				// Boot has no executor for an open-work wake: a re-armed run
+				// would sit pending and the document would show "Revising…"
+				// forever. Only a document that never had a Texture run mints
+				// (and dispatches) its first one at boot; the next occurrence
+				// re-arms an interrupted run through the occurrence path.
+				if mode == textureWakeBootScan && strings.TrimSpace(runs[i].AgentID) == textureAgentID &&
+					isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
+					initialWorkWake = false
+					break
+				}
 				// Only a live activation suppresses the work-item wake. A
 				// passivated or terminal run is a dead authority — its stale
 				// obligation must re-arm through reactivatePassivatedTextureRun,
