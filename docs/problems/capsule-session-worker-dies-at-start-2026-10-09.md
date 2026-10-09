@@ -83,3 +83,25 @@ run a capsule cell since that floor landed.
 Fix direction: enable Landlock (ABI v5 needs kernel 6.10 or later) in the
 guest kernel and its LSM list. Not chosen: best-effort Landlock, which
 would silently drop the floor this design makes mandatory.
+
+## Correction (21:36Z): the kernel has Landlock; the worker inherits a filter that refuses it
+
+The guest kernel is 6.18 with `lsm=landlock,yama,bpf` in the params vmctl
+passes, and the broker applies its own Landlock successfully before it
+spawns anything (`cmd/capsule-broker/main.go`; it would `log.Fatalf`
+otherwise). It then loads `LoadBrokerFilter`, a seccomp allowlist that
+equals the workload list and has no `landlock_create_ruleset`,
+`landlock_add_rule` or `landlock_restrict_self`. Seccomp filters are
+inherited across fork and exec, so the session worker's Landlock call
+gets EPERM, which go-landlock reports as "missing kernel Landlock
+support … ABI v0". The earlier "guest kernel has no Landlock" reading was
+an inference the code does not support.
+
+The next layer is safe: the worker's capability drop skips the
+bounding-set drop when CAP_SETPCAP is not effective (moby/sys/capability
+`Apply`), and the broker's bounding set already holds only five caps.
+
+Fix: the broker's filter allows the three Landlock syscalls (Landlock
+can only remove access). The worker applies its Landlock, drops caps,
+then stacks the workload filter, which still refuses Landlock to model
+code.
