@@ -29,7 +29,8 @@ customized article interface (canonical context §5.2):
 - **Published articles are free to read** at ordinary serving cost. The
   public paper is the demo anyone can read without a computer or a model.
 - **Personalized investigations and customized articles are paid.** They
-  run on the reader's own computer, as metered inference.
+  run on the reader's own computer, as metered inference, and read
+  published material from the host-level store like everyone else.
 - **Precommitment records are the mechanism.** An investigation commits
   before it reads, a claim carries its uncertainty and a resolution spec,
   and publishing is a material action with an authorization gate (PSA paper
@@ -45,10 +46,10 @@ evidence they need; it does not claim them.
 
 ## 2. Names
 
-- **Autopaper** is the product (settled in the canonical vocabulary). The
-  owner's spelling is "Autopaper", not "AutoPaper" as in the canonical
-  context (owner, 2026-10-09).
-  "Universal Wire" is retired from the UI. The desktop app becomes Autopaper.
+- **Autopaper** is the product. Product names are never camel case:
+  Autopaper (or autopaper), Autoputer, Autoradio (owner, 2026-10-09; the
+  canonical context will be corrected). "Universal Wire" is retired from the
+  UI. The desktop app becomes Autopaper.
 - "World Wire", "Universal Wire" and "sourcecycled" are retired (owner,
   2026-10-09). Everything is Autopaper or a derivation. The shared-claims
   layer needs no product name.
@@ -73,9 +74,20 @@ Receipts are in the 10-05 doc and the June attempt report:
 
 ## 4. Architecture
 
+Two levels of Dolt, by design (owner, 2026-10-09: "the whole point of the
+architecture is to have a dolt db embedded in vm and at the host level, for
+global access for publishing and reading"):
+
+- **In each computer:** an embedded Dolt holds that computer's working state
+  (sources, observations, claims, records, Texture documents).
+- **At the host:** one Dolt (the corpus store, served by corpusd) is the
+  global publication store. Every computer publishes into it, and every
+  reader (public pages, the Autopaper app, other computers) reads from it.
+  There is no computer-to-computer path.
+
 ```text
 Primary Autopaper computer (ordinary persistent computer, platform-owned)
-  tape + object graph + artifacts        <- the only state; no Store B
+  embedded Dolt: tape + object graph + artifacts (working state)
   management desk   attention, cadence, budget per item (the spend dial)
   research desk     observe sources (deterministic tool modules: fetch,
                     parse, dedup); extract claims; corroborate/contradict;
@@ -83,29 +95,30 @@ Primary Autopaper computer (ordinary persistent computer, platform-owned)
   engineering desk  writes and fixes source adapters in capsules
   Texture desk      writes, revises and publishes articles
         |
-        | publish: precommit -> authorize -> project one exact head
+        | publish: precommit -> authorize -> publication transaction
         v
-  public projection (static snapshot served by the host; never
-  fate-shares the live computer)    -> free reading on choir.news
-        |
-        | governed query interface (read-only, metered)
-        v
-Reader's own computer (paid)
-  personalized investigation / customized article
-  reads the paper's public claims; adopts the ones it cites onto its own tape
+Host-level Dolt (corpus store, corpusd)   <- global publish + read
+  published article revisions, published claims + provenance, routes
+        |                         |
+        v                         v
+  public pages / Autopaper app    reader's own computer (paid):
+  (free; never touch the live     personalized investigation reads
+   paper computer)                published material from here
 ```
 
 Rules (settled by owner decisions unless marked):
 
 1. **Four desks only.** Deterministic steps (fetch, parse, dedup, schedule)
    are desk tool modules, never separate actors or host daemons.
-2. **One computer per paper.** No host-side ingestion service and no shared
-   corpus store. `sourcecycled`, the paper tables in corpusd and Store B are
-   deleted at the end of the migration.
+2. **One computer per paper; the host store holds only what is
+   published.** No host-side ingestion service: `sourcecycled` is deleted.
+   Raw observations, fetch logs and working claims stay in the paper's
+   embedded Dolt. The host store holds published material only.
 3. **Budget, not architecture, limits ingest.** Cost per item is a
    management dial with a declared default. Free readers never trigger
    inference; only paid work and the paper's own budget do.
-4. **Shared data is adopted objects, never Dolt sync** (§6).
+4. **Publishing is a transaction into the host store, never Dolt branch
+   sync** (§6).
 5. **Publishing is a material action.** Texture precommits (claims,
    uncertainty, expected corrections, consequences), the owner authorizes
    in the supervision surface, and the projection binds one head. Delegated
@@ -147,21 +160,24 @@ derived views over resolved records. They feed the reputation hypothesis
 That is the O10 bound the old store lacked: growth is in knowledge and
 records, not in logs or raw bodies.
 
-## 6. Reading across computers (launch needs part of it)
+## 6. Publishing and reading through the host store
 
-- **Read (launch):** a reader's computer queries the paper's public claims
-  through a governed, metered, read-only interface. This is the Agent API
-  shape (canonical context §1) pointed at Choir's own paper. Nothing private
-  crosses.
-- **Adopt on cite (launch):** when a personalized document cites a paper
-  claim, the reader's computer adopts that object. It appends an adoption
-  event carrying the origin computer, signature, privacy class and the
-  publisher's head. The citation stays stable if the paper later supersedes
-  the claim; the reader sees the supersession and can follow it.
-- **Publish and subscribe between papers (later):** tenant papers adopting
-  each other's claims, revocation through `supersedes`/retraction, and
-  privacy classes (public, tenant-internal, private) all reuse the same
-  adoption event.
+- **Publish:** a computer sends a publication transaction to corpusd: one
+  exact Texture head, the claims it cites with their provenance, the
+  precommitment, the authorization receipt, and the route. corpusd writes it
+  to the host store. A correction is a new transaction that supersedes the
+  old revision, which stays readable.
+- **Read:** public pages, the Autopaper app and any computer read published
+  material from the host store through corpusd. Reading never wakes or
+  touches the publishing computer, so a paper restart never takes the paper
+  offline.
+- **Cite:** a document on any computer cites a published object by its
+  host-store identity and revision. The citation stays valid when the
+  object is superseded, and the reader can see the newer revision.
+- **Bound:** the host store's own history needs a declared bound (O10). The
+  old store reached 104 G of history from ingestion churn; publications are
+  far smaller, but the bound is still stated (the same retention decision
+  as Store A).
 
 ## 7. Restart, schedules and the no-auto-resume rule (OPEN)
 
@@ -177,25 +193,26 @@ lost; they wake on the next observation after resume.
 | Gate / station | Constraint |
 |---|---|
 | SL (Gate 1) | a durable timer obligation kind with an explicit post-restart state (`paused`), owned by management; the impact-propagation wake (new evidence wakes open claims) uses the same obligation substrate |
-| SH (Gate 1) | retention classes per object kind; precommitment records immutable and durable; a home for adopted foreign-origin objects; observation bodies are reconstructible or explicitly lossy |
-| S1 (Gate 2) | capsule egress for source adapters (recorded network access); privacy class on objects |
-| S5/S6 (Gate 2) | publish = precommit + owner authorization + projection of one head; public projection served without the live computer |
+| SH (Gate 1) | retention classes per object kind; precommitment records immutable and durable; observation bodies are reconstructible or explicitly lossy |
+| S1 (Gate 2) | capsule egress for source adapters (recorded network access) |
+| S5/S6 (Gate 2) | publish = precommit + owner authorization + a publication transaction binding one head into the host store |
 | Texture contract | an article is an ordinary Texture document; revision on new evidence uses the same revision/commitment path as user documents |
-| Platform | static public projection outside Store B; a governed, metered read interface to a computer's public objects |
+| Platform | the host store (corpusd) accepts publication transactions and serves all reads; reads never depend on the publishing computer; the host store's history has a declared bound |
 
 ## 9. The old Store B data (proposal; OPEN)
 
-With this design there is **no Store B** in the end state, so there is no
-need to rebuild one. Per class:
+The fresh, empty corpus store (since the 12:33Z reset) **is** the host-level
+store of this design. So the plan is to migrate what is published back into
+it and keep it lean:
 
 | Data | Proposal |
 |---|---|
-| Whole store (current state) | keep the history-free dump, compressed, as a cold archive on Node B and node-a. Delete the 104 G repo. |
-| The 148 user publications (38 the owner's, ~110 from 12 accounts) | restore as frozen public pages (static snapshots) so their URLs work. These are the prosumer writers the product is for; their authors can republish from their computers later. |
-| The paper's own 485 publications and 185 articles (June attempt) | archive only; the primary Autopaper starts fresh |
-| 211 sources | import as the primary Autopaper's initial source list |
-| 2.4M items, 8.8M objects | archive only; old news is not seed material. Use them as an offline evaluation set for claim extraction (the 10-05 director note). They are not prospective evidence: any claim scored against them is retrospective (canonical context §12.9). |
+| All 633 publications with their chain (versions, reviews, provenance, retrieval manifests, citations, artifacts) and the 926 routes | migrate into the host store from the history-free dump, so every URL works again (148 are users' work, 38 the owner's) |
+| The 185 platform Texture documents (545 revisions) | migrate into the host store with the publications |
+| 211 sources | import as the primary Autopaper's initial source list (its embedded Dolt) |
+| 2.4M items, 8.8M objects | not in the host store (working data, not published). Keep in the dump; import into the paper's embedded Dolt at W1 only if useful, or use as an offline evaluation set for claim extraction. Scores against them are retrospective, not PSA evidence (canonical context §12.9). |
 | ~12M log rows | archive only (inside the dump) |
+| The 104 G old repo | delete once the migrated tables' row counts match the dump; keep the compressed dump as the archive |
 
 ## 10. Build order (sketch)
 
@@ -205,12 +222,12 @@ need to rebuild one. Per class:
   precommitment records around investigations and reads.
 - **W3:** articles as Texture documents, revision on new evidence, and
   publish (precommit, authorize, project).
-- **W4:** free reading surfaces (the Autopaper app and public pages) plus
-  restored user publications.
-- **W5:** the governed read interface and adopt-on-cite for paid
-  personalized investigations.
-- **Later:** paper-to-paper publish and subscribe, white-label templates,
-  AutoRadio on the same claims.
+- **W4:** free reading surfaces (the Autopaper app and public pages)
+  reading the host store.
+- **W5:** paid personalized investigations on readers' computers, citing
+  published material from the host store.
+- **Later:** white-label papers publishing into the same host store, and
+  Autoradio on the same published material.
 
 ## 11. Open decisions for the owner
 
@@ -221,7 +238,9 @@ need to rebuild one. Per class:
    retire "World Wire", "Universal Wire" and "sourcecycled"; everything is
    Autopaper or a derivation. The rename is a TODO, not done now (§12).
 3. The primary paper's public name and URL shape on choir.news.
-4. User publications from June: restore as frozen pages, or retire?
+4. ~~Cross-computer reading.~~ **Decided (owner, 2026-10-09):** none.
+   Publishing and reading go through the host-level Dolt; restore the old
+   publications into it (§9).
 5. Observation retention default (proposal: 30 days, cited bodies pinned).
 6. Schedules after restart: paused until resumed (proposal)?
 7. First edition scope: general news first, then verticals (AI, Taiwan and
@@ -263,8 +282,8 @@ Notes for whoever does it:
   modules. The host env file `/var/lib/go-choir/corpus-dsn.env` also
   carries `SOURCECYCLED_DOLT_DSN`.
 - **Routes:** `/api/universal-wire/stories` and the corpusd
-  `/internal/platform/universal-wire/*` endpoints go away with Store B
-  (§9); the Autopaper app gets new routes in W4.
+  `/internal/platform/universal-wire/*` endpoints are renamed or replaced
+  when the Autopaper app gets its routes in W4. The host store stays.
 - **Docs:** rename current documents and roadmap gate names. Dated
   receipts and `docs/archive/` keep their text, with a glossary line in the
   doctrine mapping the former names to Autopaper.

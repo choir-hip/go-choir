@@ -11,8 +11,9 @@ Three gates, in order, each with an exit test — see "v6 plan" in the
 [metamission](definitions/choir-supervised-app-development-metamission-2026-10-01.md):
 
 1. **Stable computer** — SH (O21) → SL (O1) → O7/O12 checks → O8/O9 →
-   Texture contract. Exit: lose-the-disk proof, SL fault matrix, owner
-   computer 72 h unattended, Texture acceptance.
+   Texture contract. Exit: lose-the-disk proof, SL fault matrix, Texture
+   acceptance, and owner confidence in the autoputer. Stable uptime is
+   counted, not waited for (owner 2026-10-09: no 72 h clock).
 2. **Self-development with live Texture supervision** — S1 → S4 → S5 → S6.
    Exit: owner-requested change, capsule build, live preview, approval,
    release, rollback.

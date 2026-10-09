@@ -1911,9 +1911,11 @@ Next station: **S3 fast resume** per the v5 ordering; S2 hands S3/S6 the
 The goal is three outcomes, in order; stations serve them, not the reverse.
 
 **Gate 1 — the computer is stable.** Exit test: lose-the-disk proof on a
-disposable (SH), SL fault matrix on a disposable, owner computer 72 h
-unattended with no new liveness problem docs, Texture acceptance suite
-green. Stations: SH (O21, in flight), SL (O1; absorbs the Management storm),
+disposable (SH), SL fault matrix on a disposable, Texture acceptance suite
+green, and owner confidence in the autoputer. Stable uptime is counted, not
+waited for: owner 2026-10-09 removed the 72 h unattended clock ("once we are
+confident in autoputer we will move to gate 2. if we have more fixes to do
+so be it"). Stations: SH (O21, in flight), SL (O1; absorbs the Management storm),
 O7/O12 as enforceable checks (boot-cost budget test, lock-scope rule),
 O8/O9 remainder, Texture contract and acceptance (Texture is input, output,
 supervision, control plane, multi-agent member and an RLM desk — it gets
