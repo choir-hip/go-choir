@@ -79,3 +79,45 @@ computer during host load.
 4. Measure Texture reads under load on a large-history computer.
 5. Credential issuance under load: a refusal or retry, never a `failed`
    computer.
+
+## Owner-approved disposal, and why Cancel cannot finish (2026-10-09 ~06:30Z)
+
+The owner approved cancelling/disposing the stuck activations. Everything
+below went through the product cancel path (`GET` document, `GET`
+trajectory snapshot, `POST /api/trajectories/{id}/cancel`). Only states,
+counts and timings were read.
+
+- **`3b12d89a` (newest, "Revising…"):** run `36f5e4e9` pending since
+  10-08 20:02. Cancel returned 200 `cancelled`; the document now reports
+  no pending revision.
+- **`d50af120` and `bda20d6e` (September documents):**
+  - These are the four Texture occurrences deferred 43–49 times
+    ("pending Texture occurrence produced no exact run").
+  - Their activations are `passivated`, with lifecycle versions ~1,900
+    and 217 work items.
+  - **Trajectory snapshot: 9–18 s each.** That is the second of the
+    three Cancel round trips.
+  - **Cancel is refused:** HTTP 400 in 12–30 s with
+    `prepare trajectory assignment fate: co-super assignment invalid transition`.
+
+**Cause (verified in source and data):**
+- Each trajectory holds about 90 co-super assignments with:
+  `disposition=cancelled`, `capsule_disposition=unbound`, and no bound
+  run. These were cancelled before ever binding a capsule.
+- `prepareEngineeringTrajectoryCancellation`
+  (`internal/agentcore/engineering_assignment_fate.go:252`) requests a
+  capsule revoke for **every** non-revoked assignment.
+- `SetEngineeringCapsuleDisposition` refuses any transition on an
+  unbound, non-open assignment (`internal/store/engineering_assignments.go:2397`).
+
+So one never-bound assignment makes owner Cancel impossible for the
+whole trajectory. The occurrences then have no terminal fate and retry
+forever (O1).
+
+**A terminal `unbound` assignment never had an executor.** Capsule
+disposition never returns to `unbound`, and `Bound` requires a
+non-`unbound` capsule (`internal/types/engineering_assignment.go:323`).
+So skipping it loses no executor fate.
+
+**Residue left by the failed attempts:** a durable cancellation intent
+on each trajectory. A retry with the same command identity resumes it.
