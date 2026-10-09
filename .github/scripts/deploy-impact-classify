@@ -397,21 +397,16 @@ if [[ "$deploy_active_vm_refresh" == "true" ]]; then
   add_explanation "canonical guest boot refresh -> autoputer runtime package at the same commit"
 fi
 
-# S2 layering: when the only runtime change is the autoputer app layer (no
-# guest boot-contract change), CI pushes a layered release to tracking
-# computers through the platform-update endpoint instead of rebuilding the
-# guest image and rebooting active VMs. The guest-boot-contract path stays
-# for base/kernel/systemd changes.
-deploy_app_layer=false
+# Every guest-runtime change takes the canonical guest boot path: the base
+# image is rebuilt at this commit and active computers are refreshed onto it.
+# There is no platform app-layer push: it left the base image (and so every
+# new realization) on older code (version skew, docs/problems/fresh-
+# realization-skips-file-hydration-2026-10-09.md, decision 2026-10-09).
+# Layering remains for self-development releases.
 for service in "${host_services[@]}"; do
   if [[ "$service" == "autoputer" ]]; then
-    if [[ "$deploy_active_vm_refresh" != "true" ]] && [[ "$deploy_host_os" != "true" ]] && [[ "$deploy_vmctl_restart" != "true" ]]; then
-      deploy_app_layer=true
-      add_explanation "autoputer runtime selected -> layered app-layer release push (no VM reboot)"
-    else
-      mark_guest_boot_contract
-      add_explanation "autoputer runtime selected -> canonical guest boot closure + active VM refresh"
-    fi
+    mark_guest_boot_contract
+    add_explanation "autoputer runtime selected -> canonical guest boot closure + active VM refresh"
     break
   fi
 done
@@ -425,7 +420,6 @@ if [[ -n "$output_file" ]]; then
     echo "deploy_host_os=${deploy_host_os}"
     echo "deploy_vmctl_restart=${deploy_vmctl_restart}"
     echo "deploy_active_vm_refresh=${deploy_active_vm_refresh}"
-    echo "deploy_app_layer=${deploy_app_layer}"
     echo "host_services=$(IFS=,; echo "${host_services[*]}")"
     echo "changed_paths<<EOF"
     printf '%s\n' "${changed[@]}"
@@ -444,7 +438,6 @@ deploy_host_service=${deploy_host_service}
 deploy_host_os=${deploy_host_os}
 deploy_vmctl_restart=${deploy_vmctl_restart}
 deploy_active_vm_refresh=${deploy_active_vm_refresh}
-deploy_app_layer=${deploy_app_layer}
 host_services=$(IFS=,; echo "${host_services[*]}")
 EOF
 
