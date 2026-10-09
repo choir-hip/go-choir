@@ -313,3 +313,22 @@ Still open:
   wholesale.
 - Every boot still spends ~15 s passivating runs that the previous boot's
   replay re-armed. With the fix, the next boot should find 0.
+
+## Disposal receipt (owner-approved, 2026-10-09 ~11:10Z)
+
+The owner re-approved the disposal command after the permission refusal.
+Product cancel path (`POST /api/trajectories/{id}/cancel`, idempotency
+key `zombie-dispose:<trajectory>:<version>:<head>`), against the 67 runs
+from the 09:33 boot:
+
+- **28 cancelled** (live, lifecycle version 2–3, no committed turn). Each
+  returned 200 `cancelled` in 1.5–6.0 s.
+- **39 skipped** (history up to version 775). They stay live with their
+  run `passivated` and do not show "Revising…".
+
+Read-back: 28 trajectories `cancelled`, each with its run `cancelled`; 39
+`live` with their run `passivated`. Only states, versions and timings
+were read. Document content is untouched.
+
+The 39 remaining are honest: not running, not pending. Whether to resume
+them is the open owner decision above.
