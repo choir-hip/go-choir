@@ -27,6 +27,10 @@ const (
 	OutcomeTimeout            OutcomeClass = "timeout"
 	OutcomeSkippedCoolingDown OutcomeClass = "skipped_cooling_down"
 	OutcomeError              OutcomeClass = "error"
+
+	// OutcomeCallerGone: the caller cancelled, or its own deadline passed,
+	// before the provider answered. Not the provider's failure; never a strike.
+	OutcomeCallerGone OutcomeClass = "caller_gone"
 )
 
 // Result is a normalized search hit from a provider adapter.

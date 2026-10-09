@@ -130,6 +130,8 @@ func AttemptStatus(class OutcomeClass) string {
 		return "timeout"
 	case OutcomeSkippedCoolingDown:
 		return "cooling_down"
+	case OutcomeCallerGone:
+		return "caller_gone"
 	default:
 		return "error"
 	}

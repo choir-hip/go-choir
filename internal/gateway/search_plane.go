@@ -121,7 +121,7 @@ func convertPlaneResult(query string, result *searchplane.SearchResult) *SearchR
 			Status:    attempt.Status,
 			LatencyMs: attempt.LatencyMs,
 			Results:   attempt.Results,
-			Error:     attempt.Error,
+			Error:     searchplane.RedactSummary(attempt.Error),
 		}
 	}
 	for name, health := range result.ProviderHealth {
@@ -129,7 +129,7 @@ func convertPlaneResult(query string, result *searchplane.SearchResult) *SearchR
 			State:            health.State,
 			StrikeCount:      health.StrikeCount,
 			LastFailureClass: health.LastFailureClass,
-			LastErrorSummary: health.LastErrorSummary,
+			LastErrorSummary: searchplane.RedactSummary(health.LastErrorSummary),
 		}
 		if health.CooldownUntil != nil {
 			summary.CooldownUntil = health.CooldownUntil.UTC().Format("2006-01-02T15:04:05Z07:00")
@@ -158,7 +158,7 @@ func searchOutageResponse(err error) (*SearchOutageResponse, bool) {
 			Status:    attempt.Status,
 			LatencyMs: attempt.LatencyMs,
 			Results:   attempt.Results,
-			Error:     attempt.Error,
+			Error:     searchplane.RedactSummary(attempt.Error),
 		}
 	}
 	for name, health := range outage.Health {
@@ -166,7 +166,7 @@ func searchOutageResponse(err error) (*SearchOutageResponse, bool) {
 			State:            health.State,
 			StrikeCount:      health.StrikeCount,
 			LastFailureClass: health.LastFailureClass,
-			LastErrorSummary: health.LastErrorSummary,
+			LastErrorSummary: searchplane.RedactSummary(health.LastErrorSummary),
 		}
 		if health.CooldownUntil != nil {
 			summary.CooldownUntil = health.CooldownUntil.UTC().Format("2006-01-02T15:04:05Z07:00")

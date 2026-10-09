@@ -102,7 +102,7 @@ func (r *Router) Search(ctx context.Context, query string, maxResults int) (*Sea
 			used[name] = struct{}{}
 		}
 		merged := mergeBatches(batches, maxResults)
-		if len(merged) >= targetMin {
+		if len(merged) >= targetMin || ctx.Err() != nil {
 			break
 		}
 		health, err = r.store.Snapshot()
@@ -230,6 +230,13 @@ func (r *Router) executeWave(ctx context.Context, query string, maxResults int, 
 			started := time.Now()
 			hits, err := provider.Search(callCtx, query, maxResults)
 			class := ClassifyCall(err, len(hits))
+			// The caller going away (cancel, or its own deadline before the
+			// request timeout) is not the provider failing: one cancelled
+			// fan-out must not cool the whole plane down.
+			callerGone := err != nil && ctx.Err() != nil
+			if callerGone {
+				class = OutcomeCallerGone
+			}
 			attempt := Attempt{
 				Provider:  name,
 				Endpoint:  r.endpoint(name),
@@ -243,13 +250,15 @@ func (r *Router) executeWave(ctx context.Context, query string, maxResults int, 
 			for j := range hits {
 				hits[j].Provider = name
 			}
-			_, _ = r.store.RecordOutcome(Outcome{
-				Provider: name,
-				Class:    class,
-				Results:  len(hits),
-				Error:    attempt.Error,
-				At:       now,
-			})
+			if !callerGone {
+				_, _ = r.store.RecordOutcome(Outcome{
+					Provider: name,
+					Class:    class,
+					Results:  len(hits),
+					Error:    attempt.Error,
+					At:       now,
+				})
+			}
 			resultsCh[i] = callResult{provider: name, attempt: attempt, results: hits, class: class}
 			return nil
 		})

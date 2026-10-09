@@ -137,7 +137,7 @@ func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, no
 }
 
 func truncateSummary(msg string) string {
-	msg = strings.TrimSpace(msg)
+	msg = strings.TrimSpace(RedactSummary(msg))
 	if len(msg) > 240 {
 		return msg[:240] + "..."
 	}

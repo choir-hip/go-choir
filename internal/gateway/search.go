@@ -222,7 +222,7 @@ func searchProviderEndpoint(provider string) string {
 }
 
 func truncateSearchAttemptError(err error) string {
-	msg := strings.TrimSpace(err.Error())
+	msg := strings.TrimSpace(searchplane.RedactSummary(err.Error()))
 	if len(msg) > 240 {
 		return msg[:240] + "..."
 	}
@@ -536,7 +536,7 @@ func (p *BraveProvider) Search(ctx context.Context, query string, maxResults int
 		return nil, fmt.Errorf("BRAVE_API_KEY not set")
 	}
 
-	u := fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d", url.QueryEscape(query), maxResults)
+	u := braveSearchURL(query, maxResults)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -562,6 +562,17 @@ func (p *BraveProvider) Search(ctx context.Context, query string, maxResults int
 	}
 
 	return parseBraveResults(bodyBytes)
+}
+
+// braveMaxCount is Brave's per-request limit; a larger count is a 422 that
+// strikes Brave for a week (search-plane-cooldown-on-caller-cancel-2026-10-09).
+const braveMaxCount = 20
+
+func braveSearchURL(query string, maxResults int) string {
+	if maxResults <= 0 || maxResults > braveMaxCount {
+		maxResults = braveMaxCount
+	}
+	return fmt.Sprintf("https://api.search.brave.com/res/v1/web/search?q=%s&count=%d", url.QueryEscape(query), maxResults)
 }
 
 func parseBraveResults(data []byte) ([]SearchResult, error) {

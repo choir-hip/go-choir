@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
 	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -958,7 +959,7 @@ func (h *Handler) HandleSearchHealth(w http.ResponseWriter, r *http.Request) {
 			State:            health.State,
 			StrikeCount:      health.StrikeCount,
 			LastFailureClass: health.LastFailureClass,
-			LastErrorSummary: health.LastErrorSummary,
+			LastErrorSummary: searchplane.RedactSummary(health.LastErrorSummary),
 		}
 		if health.CooldownUntil != nil {
 			summary.CooldownUntil = health.CooldownUntil.UTC().Format(time.RFC3339)
