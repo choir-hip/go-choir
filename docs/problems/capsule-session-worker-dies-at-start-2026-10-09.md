@@ -105,3 +105,11 @@ Fix: the broker's filter allows the three Landlock syscalls (Landlock
 can only remove access). The worker applies its Landlock, drops caps,
 then stacks the workload filter, which still refuses Landlock to model
 code.
+
+## Budget verified on staging (7922bd56)
+
+The second M11 rerun (`evidence/m11-rerun-2026-10-09T21-32-17Z.json`,
+5/16 again) carried the worker's stderr into every result (the
+diagnostic works) and its engineering run stopped at tool-loop iteration
+200 at 21:43:37Z, eleven minutes after it started, and ended
+`cancelled`; the probe then finished instead of waiting out its hour.
