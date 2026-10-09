@@ -90,11 +90,17 @@ func (e ComputerCredentialEnvelope) VerifyBootstrap(computerID, realizationID st
 	return ed25519.PublicKey(publicKey), nil
 }
 
-func (s *Service) mintComputerCredentialEnvelope(ctx context.Context, computerID, realizationID, idempotencyKey string, expiresAt time.Time) (ComputerCredentialEnvelope, computerevent.Receipt, error) {
+// mintComputerCredentialEnvelope issues (or replays) the envelope. A non-zero
+// issuedAt is the issue time to record for a fresh issuance; zero means now.
+func (s *Service) mintComputerCredentialEnvelope(ctx context.Context, computerID, realizationID, idempotencyKey string, issuedAt, expiresAt time.Time) (ComputerCredentialEnvelope, computerevent.Receipt, error) {
 	if s == nil || s.store == nil || s.signingKey == nil || computerID == "" || realizationID == "" || idempotencyKey == "" {
 		return ComputerCredentialEnvelope{}, computerevent.Receipt{}, fmt.Errorf("credential envelope: complete issuance input is required")
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
+	if issuedAt.IsZero() {
+		issuedAt = now
+	}
+	issuedAt = issuedAt.UTC().Truncate(time.Microsecond)
 	expiresAt = expiresAt.UTC().Truncate(time.Microsecond)
 	if !expiresAt.After(now) || expiresAt.Sub(now) > maximumCredentialEnvelopeTTL {
 		return ComputerCredentialEnvelope{}, computerevent.Receipt{}, fmt.Errorf("credential envelope: expiry exceeds the five-minute issuance window")
@@ -120,7 +126,6 @@ func (s *Service) mintComputerCredentialEnvelope(ctx context.Context, computerID
 
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	issuedAt := now
 	if existing, completedAt, found, err := s.credentialLifecycleReceipt(ctx, computerID, idempotencyKey, requestCommitment, "credential_envelope_issued"); err != nil {
 		return ComputerCredentialEnvelope{}, computerevent.Receipt{}, err
 	} else if found {
@@ -146,10 +151,30 @@ func (s *Service) mintComputerCredentialEnvelope(ctx context.Context, computerID
 	return envelope, receipt, nil
 }
 
+// IssueComputerCredentialEnvelope issues an envelope valid for ttl from its
+// issue time. A retry with the same idempotency key replays the stored
+// issuance: expiry derives from the recorded issue time, so the request
+// commitment matches instead of conflicting on the issuer's clock. vmctl
+// retries a timed-out issuance this way rather than failing the computer.
+func (s *Service) IssueComputerCredentialEnvelope(ctx context.Context, computerID, realizationID, idempotencyKey string, ttl time.Duration) (ComputerCredentialEnvelope, computerevent.Receipt, error) {
+	if s == nil || s.store == nil {
+		return ComputerCredentialEnvelope{}, computerevent.Receipt{}, fmt.Errorf("credential envelope: service unavailable")
+	}
+	var issuedAt time.Time
+	err := s.store.db.QueryRowContext(ctx, `SELECT completed_at FROM computer_lifecycle_receipts WHERE computer_id=? AND idempotency_key=? AND action='credential_envelope_issued'`, computerID, idempotencyKey).Scan(&issuedAt)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		issuedAt = time.Now().UTC().Truncate(time.Microsecond)
+	case err != nil:
+		return ComputerCredentialEnvelope{}, computerevent.Receipt{}, err
+	}
+	return s.mintComputerCredentialEnvelope(ctx, computerID, realizationID, idempotencyKey, issuedAt, issuedAt.UTC().Add(ttl))
+}
+
 // MintComputerCredentialEnvelope issues the short-lived signed bootstrap
 // envelope consumed once by the exact guest realization.
 func (s *Service) MintComputerCredentialEnvelope(ctx context.Context, computerID, realizationID, idempotencyKey string, expiresAt time.Time) (ComputerCredentialEnvelope, computerevent.Receipt, error) {
-	return s.mintComputerCredentialEnvelope(ctx, computerID, realizationID, idempotencyKey, expiresAt)
+	return s.mintComputerCredentialEnvelope(ctx, computerID, realizationID, idempotencyKey, time.Time{}, expiresAt)
 }
 
 func (s *Service) exchangeComputerCredentialEnvelope(ctx context.Context, encoded []byte) (CredentialExchangeResult, error) {

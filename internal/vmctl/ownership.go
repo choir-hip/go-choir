@@ -1253,10 +1253,32 @@ func (r *OwnershipRegistry) issueComputerCredentialEnvelope(computerID, realizat
 	return issueComputerCredentialEnvelope(corpusdURL, computerID, realizationID, epoch)
 }
 
+// credentialIssueAttempts bounds issuance retries inside one realization;
+// the issuer replays a same-key retry, so a timed-out first attempt that did
+// commit is safe to repeat.
+const credentialIssueAttempts = 3
+
+var credentialIssueRetryBackoff = func(attempt int) time.Duration {
+	return time.Duration(attempt) * time.Second
+}
+
 func issueComputerCredentialEnvelope(corpusdURL, computerID, realizationID string, epoch int64) string {
 	if corpusdURL == "" || computerID == "" || realizationID == "" {
 		return ""
 	}
+	for attempt := 1; ; attempt++ {
+		envelope, retryable := issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID, epoch)
+		if envelope != "" || !retryable || attempt >= credentialIssueAttempts {
+			return envelope
+		}
+		log.Printf("vmctl: retrying computer credential request for %s (attempt %d of %d)", realizationID, attempt+1, credentialIssueAttempts)
+		time.Sleep(credentialIssueRetryBackoff(attempt))
+	}
+}
+
+// issueComputerCredentialEnvelopeOnce makes one issuance request. retryable
+// is true for transport errors and 5xx; an explicit refusal is final.
+func issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID string, epoch int64) (string, bool) {
 	body, _ := json.Marshal(map[string]string{
 		"computer_id":     computerID,
 		"realization_id":  realizationID,
@@ -1266,32 +1288,36 @@ func issueComputerCredentialEnvelope(corpusdURL, computerID, realizationID strin
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(corpusdURL, "/")+"/internal/computers/credentials/issue", strings.NewReader(string(body)))
 	if err != nil {
-		return ""
+		return "", false
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Internal-Caller", "true")
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		log.Printf("vmctl: computer credential request failed for %s: %v", realizationID, err)
-		return ""
+		return "", true
 	}
 	defer response.Body.Close()
+	if response.StatusCode >= http.StatusInternalServerError {
+		log.Printf("vmctl: computer credential request unavailable for %s: status %d", realizationID, response.StatusCode)
+		return "", true
+	}
 	var result struct {
 		Envelope json.RawMessage `json:"envelope"`
 	}
 	if response.StatusCode != http.StatusCreated || json.NewDecoder(io.LimitReader(response.Body, 128<<10)).Decode(&result) != nil || len(result.Envelope) == 0 {
 		log.Printf("vmctl: computer credential request refused for %s", realizationID)
-		return ""
+		return "", false
 	}
 	var envelope any
 	if json.Unmarshal(result.Envelope, &envelope) != nil {
-		return ""
+		return "", false
 	}
 	canonical, err := computerevent.CanonicalJSON(envelope)
 	if err != nil {
-		return ""
+		return "", false
 	}
-	return base64.RawURLEncoding.EncodeToString(canonical)
+	return base64.RawURLEncoding.EncodeToString(canonical), false
 }
 
 func issueGatewayTokenAt(gwURL, computerID string) string {
