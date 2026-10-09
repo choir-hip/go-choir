@@ -304,3 +304,20 @@ persistent dispatch error loops forever (exhaustion); a transient error
 exhausts too fast (backoff); exhaustion silently drops the wake (durable
 fate and last error).
 **Rollback.** Revert; the 500 ms poll returns.
+
+## Slice 3 — the "what is owed" surface (2026-10-09)
+
+**Today.** No observer can list what a computer owes without SSH and
+store queries; strands are found only as downstream symptoms (inventory).
+
+**Change.** `GET /api/runtime/obligations` (owner-authenticated, proxied
+like every `/api/*` route) returns: how this boot began (planned with
+reason, or crash/stop); wakes pending (by kind, oldest, how many are
+backing off) and exhausted (count plus up to 20 samples with attempts and
+last error); runs pending/running/passivated with the oldest of each;
+open assigned work items with the oldest. Bounded reads only (indexed
+lists, capped at 1000), so it is safe on the one-connection guest store.
+Later slices add per-kind "no live driver" detection.
+
+**Failure modes pinned first.** An exhausted wake is invisible; a pending,
+backing-off wake is not counted; the surface answers without an owner.
