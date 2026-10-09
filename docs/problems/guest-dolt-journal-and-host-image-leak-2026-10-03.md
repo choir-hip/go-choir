@@ -116,6 +116,8 @@ Ran `docs/runbooks/offline-gc.md` break-glass on the held owner VM:
   **89% → 26%**. maintenance-serve → `ready`, `running_runs` recovered
   0→5, routing restored. Unheld; computer `active` epoch 1040.
   Backup retained at `/var/tmp/texture-backup-pre-gc-2026-10-03`.
+  Deleted 2026-10-09 (owner-approved) with the 2026-09-11 backup (45 GB
+  total) to restore Node B deploy headroom; the GC result had run 6 days.
 
 **Residual:** ~60 `desk_pending_mutations` accumulated during the wedged
 window drain slowly; submits return `failed to submit prompt` (HTTP 500)
