@@ -327,5 +327,8 @@ backing-off wake is not counted; the surface answers without an owner.
 sweeps at once on start (the old loop waited 500 ms), so it read the actor
 delivery hooks (`runtime.go:2549`) while the test was still setting them.
 The hooks had no synchronization; the 500 ms delay had hidden it. Fix: hook
-setters and the sweep's hook snapshot share a lock. Staging is not
-affected: b78a8aeb never deployed (its CI failed).
+setters and the sweep's hook snapshot share a lock. Correction (same day):
+production was never exposed. `actorruntime.New` binds all four hooks
+before `Runtime.Start` starts the projector, so only tests that set hooks
+after start could race. The race is intermittent: ee686ab5 passed CI and
+carried slice 2's code to staging.
