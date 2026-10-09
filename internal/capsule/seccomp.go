@@ -38,13 +38,17 @@ var capsuleAllowedSyscalls = []string{
 // WorkloadSeccompFilter is default-deny. It admits the file/process/memory
 // substrate needed by the broker and offline build tools plus AF_UNIX only.
 func WorkloadSeccompFilter() seccomp.Filter {
+	return seccompFilterAllowing(capsuleAllowedSyscalls)
+}
+
+func seccompFilterAllowing(allowed []string) seccomp.Filter {
 	return seccomp.Filter{
 		NoNewPrivs: true,
 		Flag:       seccomp.FilterFlagTSync,
 		Policy: seccomp.Policy{
 			DefaultAction: denyEPERM,
 			Syscalls: []seccomp.SyscallGroup{
-				{Action: seccomp.ActionAllow, Names: capsuleAllowedSyscalls},
+				{Action: seccomp.ActionAllow, Names: allowed},
 				{Action: seccomp.ActionAllow, NamesWithCondtions: []seccomp.NameWithConditions{{
 					Name: "socket", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.Equal, Value: uint64(unix.AF_UNIX)}},
 				}}},
@@ -53,7 +57,17 @@ func WorkloadSeccompFilter() seccomp.Filter {
 	}
 }
 
-func BrokerSeccompFilter() seccomp.Filter { return WorkloadSeccompFilter() }
+// brokerExtraSyscalls are allowed to the broker but not to workloads. The
+// session worker inherits the broker's filter and applies its own Landlock
+// before stacking the workload filter; refusing these made every worker die
+// before ready (capsule-session-worker-dies-at-start-2026-10-09). Landlock
+// can only remove access.
+var brokerExtraSyscalls = []string{"landlock_create_ruleset", "landlock_add_rule", "landlock_restrict_self"}
+
+func BrokerSeccompFilter() seccomp.Filter {
+	allowed := append(append([]string(nil), capsuleAllowedSyscalls...), brokerExtraSyscalls...)
+	return seccompFilterAllowing(allowed)
+}
 
 func LoadWorkloadFilter() error {
 	if err := seccomp.LoadFilter(WorkloadSeccompFilter()); err != nil {

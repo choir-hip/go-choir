@@ -59,3 +59,44 @@ func TestBrokerSeccompAllowsSetpgidChildStart(t *testing.T) {
 		t.Fatalf("seccomp helper: %v\n%s", err, output)
 	}
 }
+
+// docs/problems/capsule-session-worker-dies-at-start-2026-10-09.md: the
+// session worker inherits the broker's filter and must apply its own
+// Landlock under it. Failure mode: the broker filter refuses the Landlock
+// syscalls (EPERM, reported by go-landlock as "ABI v0"), so every worker
+// dies before ready. The workload filter still refuses them to model code.
+func landlockVersionErr() error {
+	_, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, 0, 0, unix.LANDLOCK_CREATE_RULESET_VERSION)
+	if errno != 0 {
+		return errno
+	}
+	return nil
+}
+
+func TestBrokerSeccompAllowsLandlockForSessionWorker(t *testing.T) {
+	switch os.Getenv(seccompHelperEnv) {
+	case "landlock-broker":
+		if err := LoadBrokerFilter(); err != nil {
+			t.Fatalf("load broker filter: %v", err)
+		}
+		if err := landlockVersionErr(); errors.Is(err, unix.EPERM) {
+			t.Fatalf("broker filter refuses landlock_create_ruleset: %v", err)
+		}
+		return
+	case "landlock-workload":
+		if err := LoadWorkloadFilter(); err != nil {
+			t.Fatalf("load workload filter: %v", err)
+		}
+		if err := landlockVersionErr(); !errors.Is(err, unix.EPERM) {
+			t.Fatalf("workload filter allows landlock_create_ruleset to model code: %v", err)
+		}
+		return
+	}
+	for _, mode := range []string{"landlock-broker", "landlock-workload"} {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestBrokerSeccompAllowsLandlockForSessionWorker$")
+		cmd.Env = append(os.Environ(), seccompHelperEnv+"="+mode)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("seccomp helper %s: %v\n%s", mode, err, output)
+		}
+	}
+}
