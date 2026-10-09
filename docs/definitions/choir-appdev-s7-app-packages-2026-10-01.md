@@ -318,3 +318,15 @@ what users see from the bytes, event head, and recovery record that the updater
 actually committed. The first frontend-only proof is a discriminator, not a
 demo: it must prove that the future full-stack package has no second authority
 path.
+
+## Appagent egress grants (addendum 2026-10-09, owner direction)
+
+Appagents (Texture first; email next) request durable network grants in
+their package manifest. The grant object, the effect classes and the
+data-flow rule are defined once in S4 ("Egress capability model"). S7 adds:
+
+- manifest-declared grants;
+- owner approval at install;
+- re-approval with a visible diff when an upgrade widens a grant;
+- renewal;
+- operation contracts for `visible-write` endpoints.

@@ -279,3 +279,96 @@ frozen candidate's build outputs through the existing acceptance boundary; it
 never becomes guest-global Nix state. These limits preserve the ontology that a
 capsule effect bundle is a frozen speculative candidate and an accepted event is
 the only desired-code transition (docs/computer-ontology.md:85-105).
+
+## Egress capability model (addendum 2026-10-09, owner direction; not panel-reviewed)
+
+Owner 2026-10-09: engineering needs network in some ways; calling research
+is not the whole answer. The model must also cover future appagents
+(Texture is the first; email becomes a full appagent), which will want
+durable grants, including writes to specific endpoints. And HTTP verbs are
+not a security boundary: a GET leaks through its query, headers and DNS,
+and a GET can have side effects.
+
+S4 builds the enforcement point and the ephemeral (capsule) case. The
+grant object below is designed once here so S7 (app packages, appagent
+grants) extends it instead of replacing it.
+
+### Principles
+
+1. **One egress path for every holder.** Capsules and appagents reach the
+   network only through the platform egress proxy. No direct sockets, and no
+   DNS outside the proxy. Private, loopback, link-local, host and tap ranges
+   are denied for everyone, and no grant can open them.
+2. **A grant is a capability object on the tape, never a property the
+   holder sets.** Issued, used, renewed, expired and revoked are all events.
+   Texture renders the owner's live grants, answering "what can my computer
+   do out there?". Agents cannot widen their own permissions.
+3. **Delegation only narrows.** Authority flows owner → management →
+   engineering cast → capsule, and owner → installed appagent. A delegated
+   grant is a subset of its parent and dies with it.
+4. **The boundary is data flow and effect, not the HTTP method.** Every
+   request is treated as able to carry data out. What the holder may send
+   depends on what it holds; what it may do depends on the declared effect
+   of the destination.
+5. **Credentials stay with the platform.** The proxy injects them, bound to
+   the grant; the holder never sees the secret. Revocation is therefore real.
+
+### The grant object
+
+| Field | Meaning |
+| --- | --- |
+| holder | a capsule/assignment (ephemeral) or an installed appagent (durable) |
+| granter + parent | who issued it, and the grant it was narrowed from |
+| destination | exact origin, plus path/endpoint contract where declared; no wildcards without owner approval |
+| operation contract | for writes: the declared request shape(s) the endpoint accepts (schema digest), enforced at the proxy; reads may be open-ended within the destination |
+| effect class | declared per endpoint, not inferred from the method: `read`, `idempotent-write`, `visible-write` (others see it: post, mail, publish), `money`, `irreversible` |
+| data ceiling | the highest data class the holder may send there (public, owner-private, third-party-private) |
+| credential binding | which platform-held credential the proxy injects, if any |
+| budget | requests, bytes and spend per period; counted against management's budget |
+| lifetime | the assignment's lifetime, or a renewal period for durable grants |
+| conditions | e.g. per-use owner confirmation for `money` / `irreversible` |
+
+### Who may grant what (default policy, owner-adjustable)
+
+- **Management** may grant to engineering casts: `read` grants to named
+  origins, and the curated package-registry set. Only when the holder's
+  data ceiling is public, within budget and within the cast's lifetime.
+- **Owner approval** is required for any credential binding, any effect
+  above `read`, any wildcard, and every durable grant.
+- **Per-use owner confirmation** (or a pre-set spend cap) is required for
+  `money` and `irreversible`.
+- **Appagents** request durable grants in their package manifest (S7),
+  like phone app permissions but endpoint-specific. The owner approves
+  them at install. An upgrade that widens a grant needs re-approval; the
+  diff is shown in Texture. This joins the S6 divergence guard.
+
+### Data flow (the real exfiltration rule)
+
+A holder's data ceiling is set by what it was given, not by what it says.
+For example, a capsule cast with the owner's private files is
+owner-private. It may then reach only destinations whose grant allows
+owner-private data: none for an engineering capsule by default, and an
+appagent's own declared service such as the owner's mail provider. Work
+that needs open reading and private data at once is split: a public-only
+fetcher (research, or a clean capsule) reads, and the private holder
+receives its result as content-addressed evidence.
+
+### What S4 builds now vs later
+
+- **S4:**
+  - the proxy as the single enforcement point;
+  - the grant object and its tape events;
+  - ephemeral capsule grants;
+  - the registry set with content capture;
+  - management-issued `read` grants;
+  - the data-ceiling check;
+  - credential injection for test sandboxes.
+- **S7:**
+  - durable appagent grants from manifests;
+  - install/upgrade approval with grant diffs;
+  - renewal;
+  - operation contracts for `visible-write` endpoints.
+- **Later:**
+  - `money` / `irreversible` effect classes with per-use confirmation;
+  - World Wire publication as a platform-protocol egress, using the same
+    grant object.
