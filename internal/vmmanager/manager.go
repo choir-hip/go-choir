@@ -1393,7 +1393,7 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 
 	m.killFirecrackerProcess(inst)
 	inst.State = StateFailed
-	cfg := refreshConfigForCurrentDeploy(mergeVMConfigOverrides(inst.Config, overrides), m.cfg)
+	cfg := refreshBootConfig(inst.Config, overrides, m.cfg)
 	if overrides.BootKind == "" {
 		cfg.BootKind = "refresh"
 	}
@@ -1474,6 +1474,15 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 		cfg.BootKind = overrides.BootKind
 	}
 	return cfg
+}
+
+// refreshBootConfig resets the stored config to the current deploy first, then
+// applies the caller's overrides. The order matters: resetting after the merge
+// erased the machine shape vmctl asked for, so every refresh booted an
+// interactive computer at the manager default (docs/problems/vm-refresh-drops-
+// interactive-machine-shape-2026-10-09.md).
+func refreshBootConfig(stored, overrides VMConfig, defaults ManagerConfig) VMConfig {
+	return mergeVMConfigOverrides(refreshConfigForCurrentDeploy(stored, defaults), overrides)
 }
 
 func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfig {

@@ -1958,3 +1958,43 @@ func TestMergeVMConfigOverridesTakesBootModeFromOverrides(t *testing.T) {
 		t.Fatalf("merge dropped explicit replay-only: %+v", got)
 	}
 }
+
+// Failure modes pinned (docs/problems/vm-refresh-drops-interactive-machine-
+// shape-2026-10-09.md): the caller's machine shape erased by the deploy
+// refresh reset (interactive computers booting at the 2 vCPU / 4 GiB
+// default); a stale stored shape surviving when the caller names none; stale
+// boot artifacts surviving; fresh realization authority dropped.
+func TestRefreshBootConfigKeepsCallerShapeDropsStoredShape(t *testing.T) {
+	stored := VMConfig{
+		VMID:              "vm-owner",
+		KernelImagePath:   "/old/kernel",
+		StoreDiskPath:     "/old/store",
+		PersistentDir:     "/state/vm-owner/persist",
+		GuestPort:         8085,
+		MachineCPUCount:   4,
+		MachineMemSizeMib: 16384,
+	}
+	defaults := DefaultManagerConfig()
+	defaults.StoreDiskPath = "/current/store"
+
+	got := refreshBootConfig(stored, VMConfig{
+		RealizationID:     "vm-owner-epoch-9",
+		Epoch:             9,
+		MachineCPUCount:   4,
+		MachineMemSizeMib: 4096,
+	}, defaults)
+	if got.MachineCPUCount != 4 || got.MachineMemSizeMib != 4096 {
+		t.Fatalf("refresh dropped the caller's machine shape: cpu=%d mem=%d", got.MachineCPUCount, got.MachineMemSizeMib)
+	}
+	if got.KernelImagePath != "" || got.StoreDiskPath != "" {
+		t.Fatalf("refresh kept stale boot artifacts: %+v", got)
+	}
+	if got.RealizationID != "vm-owner-epoch-9" || got.Epoch != 9 || got.PersistentDir != stored.PersistentDir {
+		t.Fatalf("refresh dropped identity or realization authority: %+v", got)
+	}
+
+	got = refreshBootConfig(stored, VMConfig{}, defaults)
+	if got.MachineCPUCount != 0 || got.MachineMemSizeMib != 0 {
+		t.Fatalf("refresh with no caller shape kept the stale stored shape: cpu=%d mem=%d", got.MachineCPUCount, got.MachineMemSizeMib)
+	}
+}
