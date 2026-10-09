@@ -1112,7 +1112,39 @@ in
     # a time, six cores each, inside the bounded nix-daemon slice below.
     max-jobs = 2;
     cores = 6;
+    # Remote builders fetch their inputs from cache.nixos.org themselves
+    # instead of receiving them over SSH from this host.
+    builders-use-substitutes = true;
   };
+
+  # Builds go to node-a (12 cores, 31 GiB, no guests; 0.5 ms away) so CI
+  # compiles stop competing with guests for this host's memory and CPU
+  # (docs/problems/ci-deploy-latency-per-service-go-builds-2026-10-09.md,
+  # proposal item 3). The key is node-b-local (/root/.ssh, not in the repo);
+  # node-a restricts it to `nix-daemon --stdio`. If node-a is unreachable,
+  # Nix builds locally under the budget above.
+  nix.distributedBuilds = true;
+  nix.buildMachines = [{
+    hostName = "node-a-builder";
+    protocol = "ssh-ng";
+    sshUser = "root";
+    sshKey = "/root/.ssh/nix-builder-node-a";
+    system = "x86_64-linux";
+    maxJobs = 8;
+    speedFactor = 10;
+    supportedFeatures = [ "benchmark" "big-parallel" "kvm" "nixos-test" ];
+  }];
+  programs.ssh.knownHosts."node-a-builder" = {
+    hostNames = [ "node-a-builder" "51.81.93.94" ];
+    publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKYpptwKiBVbvuEzT2fE/NfaGDO5CfDBOveEy6UlC/XJ";
+  };
+  programs.ssh.extraConfig = ''
+    Host node-a-builder
+      HostName 51.81.93.94
+      ConnectTimeout 5
+      ServerAliveInterval 15
+      ServerAliveCountMax 4
+  '';
 
   # Host memory budget (docs/problems/node-b-memory-overcommitted-swap-
   # 2026-10-09.md, owner direction: swapping is service degradation). Builds
