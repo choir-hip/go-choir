@@ -26,8 +26,9 @@ realization's files root is pre-seeded by the image (the platform source
 tree under `files/Source/platform`), so hydration is always skipped on a
 fresh realization of an existing computer.
 
-Worse: the periodic file sync (15 min) then uploads the seed-only tree as
-the computer's latest file root and cites it on the tape. The owner's files
+Worse (code-derived; not yet observed — by ~01:30Z the disposable had
+published no new root): the periodic file sync (15 min) would upload the
+seed-only tree as the computer's latest file root and cite it on the tape. The owner's files
 are still in older roots in the content store, but the computer's current
 state no longer contains them — silent data loss on every lost or moved
 realization. This is the files row of the
@@ -41,3 +42,7 @@ existing chain) has a fresh persistent volume — the key and the files live
 on the same volume. Such a realization must hydrate the latest durable root
 over the seeded tree, and file sync must refuse to publish until that
 hydration succeeds, so a seed-only tree can never become the latest root.
+
+Custody path verified in the same run: key-escrow transparency seq 36
+`realization_delivery` for this computer, key digest `69437ebc…` equal to
+the checkpoint job's audited key use (seq 35).

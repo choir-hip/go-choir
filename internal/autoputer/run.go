@@ -330,6 +330,7 @@ func Run() {
 			boot.retryf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
 		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
+		keyDelivered := false
 		// O21: a realization of an existing computer whose key file is missing
 		// receives the key from custodian escrow, while this realization's
 		// issuance capability is still valid (before base materialization).
@@ -345,6 +346,7 @@ func Run() {
 				deliverCancel()
 				switch {
 				case err == nil:
+					keyDelivered = true
 					log.Printf("autoputer: privacy key delivered from custodian escrow for %s (head %d)", computerID, canonicalHead.Sequence)
 				case errors.Is(err, errPrivacyKeyNotEscrowed):
 					cancel()
@@ -465,6 +467,11 @@ func Run() {
 				}
 				return head.Sequence, nil
 			}, appender)
+			if keyDelivered {
+				// The key lives on the same volume as the files: a delivered
+				// key means the image-seeded files root is not the owner's.
+				fileSyncService.markFreshVolume()
+			}
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher), agentcore.WithEventPayloadReader(eventClient))
 		if credentials != nil {

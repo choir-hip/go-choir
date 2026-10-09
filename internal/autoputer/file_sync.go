@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -64,6 +65,22 @@ type fileSync struct {
 	pendingCitation *pendingFileRootCitation
 
 	lastHydratedRoot string
+	// freshVolume: this realization's persistent volume is new (its privacy
+	// key had to be delivered over an existing chain). The image-seeded
+	// files root is then not the owner's tree: hydration must restore the
+	// latest durable root over it, and sync must refuse until it has (O21;
+	// docs/problems/fresh-realization-skips-file-hydration-2026-10-09.md).
+	freshVolume bool
+}
+
+// errFileSyncHydrationPending: a fresh volume has not restored the owner's
+// latest root yet; publishing now would replace it with the image seed.
+var errFileSyncHydrationPending = errors.New("file sync: fresh volume not yet hydrated from the latest root")
+
+func (s *fileSync) markFreshVolume() {
+	s.mu.Lock()
+	s.freshVolume = true
+	s.mu.Unlock()
 }
 
 func newFileSync(filesRoot, platformURL string, capability func(context.Context) (string, error), computerID string, cipher *computerevent.PrivateArtifactCipher, head func(context.Context) (uint64, error), appender *computerevent.ComputerEventAppender) *fileSync {
@@ -88,8 +105,9 @@ func (s *fileSync) SyncOnce(ctx context.Context) (string, error) {
 	return result.root, err
 }
 
-// HydrateIfNeeded restores the latest CAS root only when the local Files tree
-// has no regular files. A local file always wins over a remote snapshot.
+// HydrateIfNeeded restores the latest CAS root when the local Files tree has
+// no regular files, or when the volume is fresh (the image seed is not the
+// owner's tree). Otherwise a local file always wins over a remote snapshot.
 func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
 	if s == nil || s.cipher == nil || strings.TrimSpace(s.filesRoot) == "" || strings.TrimSpace(s.platformURL) == "" || strings.TrimSpace(s.computerID) == "" {
 		return 0, fmt.Errorf("file sync: incomplete configuration")
@@ -102,7 +120,7 @@ func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("file sync: inspect files root: %w", err)
 	}
-	if hasFiles {
+	if hasFiles && !s.freshVolume {
 		return 0, nil
 	}
 
@@ -111,6 +129,7 @@ func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	if root == "" {
+		s.freshVolume = false
 		return 0, nil
 	}
 	manifestJSON, err := s.get(ctx, "/internal/computers/files/root?computer_id="+url.QueryEscape(s.computerID)+"&root="+url.QueryEscape(root))
@@ -177,6 +196,7 @@ func (s *fileSync) HydrateIfNeeded(ctx context.Context) (int, error) {
 	}
 
 	s.lastHydratedRoot = root
+	s.freshVolume = false
 	return restored, nil
 }
 
@@ -401,6 +421,9 @@ func (s *fileSync) syncOnce(ctx context.Context) (fileSyncResult, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.freshVolume {
+		return fileSyncResult{}, errFileSyncHydrationPending
+	}
 
 	// ExportKeyForEscrow is the sole guest accessor for the DEK. File CAS uses
 	// it only transiently to seal chunks; it is never logged or persisted.
@@ -635,7 +658,15 @@ func StartPeriodicFileSync(ctx context.Context, service *fileSync, interval time
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if _, err := service.SyncOnce(ctx); err != nil {
+				if _, err := service.SyncOnce(ctx); errors.Is(err, errFileSyncHydrationPending) {
+					// Boot hydration of a fresh volume failed: retry it
+					// instead of publishing the image seed.
+					if restored, hydrateErr := service.HydrateIfNeeded(ctx); hydrateErr != nil {
+						log.Printf("autoputer: fresh-volume file hydration still pending: %v", hydrateErr)
+					} else {
+						log.Printf("autoputer: fresh-volume file tree hydrated %d files", restored)
+					}
+				} else if err != nil {
 					log.Printf("autoputer: periodic file sync failed: %v", err)
 				}
 			}

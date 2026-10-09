@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -183,26 +184,15 @@ func TestFileSyncHandlerRequiresAuthAndReturnsBarrierResult(t *testing.T) {
 	}
 }
 
-func TestFileSyncHydrateIfNeededRestoresLatestRoot(t *testing.T) {
-	source := t.TempDir()
-	if err := os.Mkdir(filepath.Join(source, "nested"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(source, "nested", "note.txt"), []byte("sealed file contents"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(filepath.Join(source, "nested", "note.txt"), 0o640); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(source, "empty.txt"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
+// newFileCASFake serves the platform file-CAS endpoints (chunks, roots) in
+// memory for sync/hydration tests.
+func newFileCASFake(t *testing.T) *httptest.Server {
+	t.Helper()
 	var mu sync.Mutex
 	chunks := make(map[string][]byte)
 	manifests := make(map[string][]byte)
 	var roots []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer file-sync-token" {
 			t.Errorf("authorization = %q", r.Header.Get("Authorization"))
 			w.WriteHeader(http.StatusForbidden)
@@ -277,6 +267,24 @@ func TestFileSyncHydrateIfNeededRestoresLatestRoot(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
+}
+
+func TestFileSyncHydrateIfNeededRestoresLatestRoot(t *testing.T) {
+	source := t.TempDir()
+	if err := os.Mkdir(filepath.Join(source, "nested"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "nested", "note.txt"), []byte("sealed file contents"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(source, "nested", "note.txt"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "empty.txt"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	server := newFileCASFake(t)
 	defer server.Close()
 
 	key := make([]byte, 32)
@@ -566,5 +574,83 @@ func TestFileSyncIncrementalAndRestoreCycle(t *testing.T) {
 	mu.Unlock()
 	if uploadedAfter != uploadedBefore {
 		t.Fatalf("expected 0 new chunk uploads from restored tree, got %d", uploadedAfter-uploadedBefore)
+	}
+}
+
+// TestFileSyncFreshVolumeHydratesOverSeedAndBlocksSyncUntilDone: a fresh
+// realization's files root is pre-seeded by the image, so a fresh volume
+// must hydrate the latest durable root over the seed, and sync must refuse to
+// publish until that hydration succeeds — a seed-only tree must never become
+// the latest root (docs/problems/fresh-realization-skips-file-hydration-2026-10-09.md).
+func TestFileSyncFreshVolumeHydratesOverSeedAndBlocksSyncUntilDone(t *testing.T) {
+	server := newFileCASFake(t)
+	defer server.Close()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 1)
+	}
+	cipher, err := computerevent.NewPrivateArtifactCipher("computer-test", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := func(context.Context) (string, error) { return "file-sync-token", nil }
+	head := func(context.Context) (uint64, error) { return 7, nil }
+
+	owner := t.TempDir()
+	if err := os.WriteFile(filepath.Join(owner, "owner.txt"), []byte("owner data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(owner, "seed.txt"), []byte("seed v1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ownerRoot, err := newFileSync(owner, server.URL, capability, "computer-test", cipher, head, nil).SyncOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fresh, "seed.txt"), []byte("image seed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := newFileSync(fresh, server.URL, capability, "computer-test", cipher, head, nil)
+	service.markFreshVolume()
+	if _, err := service.SyncOnce(context.Background()); !errors.Is(err, errFileSyncHydrationPending) {
+		t.Fatalf("sync before fresh-volume hydration must refuse, got %v", err)
+	}
+	restored, err := service.HydrateIfNeeded(context.Background())
+	if err != nil || restored != 2 {
+		t.Fatalf("fresh volume hydration = %d, %v; want 2 files", restored, err)
+	}
+	for name, want := range map[string]string{"owner.txt": "owner data", "seed.txt": "seed v1"} {
+		got, err := os.ReadFile(filepath.Join(fresh, name))
+		if err != nil || string(got) != want {
+			t.Fatalf("%s = %q, %v; want %q", name, got, err, want)
+		}
+	}
+	root, err := service.SyncOnce(context.Background())
+	if err != nil {
+		t.Fatalf("sync after hydration: %v", err)
+	}
+	if root == "" || ownerRoot == "" {
+		t.Fatal("empty root")
+	}
+	request, _ := http.NewRequest(http.MethodGet, server.URL+"/internal/computers/files/root?root="+root, nil)
+	request.Header.Set("Authorization", "Bearer file-sync-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, _ := io.ReadAll(response.Body)
+	manifest, err := filecas.ParseManifest(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := map[string]bool{}
+	for _, entry := range manifest.Files {
+		paths[entry.Path] = true
+	}
+	if !paths["owner.txt"] || !paths["seed.txt"] || len(paths) != 2 {
+		t.Fatalf("post-hydration published root must keep the owner's files, got %v", paths)
 	}
 }
