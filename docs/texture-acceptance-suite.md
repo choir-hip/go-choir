@@ -38,3 +38,14 @@ an absent field means false.
 
 Thresholds are the owner's experience bar, not the current measurement;
 tighten them as the product improves.
+
+## Runs on staging
+
+| Run | Build | Result | Receipt |
+|---|---|---|---|
+| 1–3 | up to 7bc8f374 | found the raw-JSON recovering page, the occurrence consumption path, and the settled-work revise refusal | earlier receipts in `docs/evidence/` |
+| 4 | 4f9331cf | T1–T5 pass; T5b fails (cancel ends the document); T6 fails (search plane cooled down by a caller cancel) | `texture-acceptance-2026-10-09T19-19-29-623Z.json` |
+| 5 | 97970cda (search fix) | T1–T5 pass (first draft and revise 26 s); T5b fails (unchanged); T6 fails: search works, every research packet rejected by the packet schema | `texture-acceptance-2026-10-09T19-50-30-737Z.json` |
+
+T7 and T8 have not been reached since T6 started failing: the suite stops
+at the first hard failure.
