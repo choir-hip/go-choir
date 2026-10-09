@@ -142,11 +142,10 @@ func (rt *Handler) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("list boot Texture reports %s: %w", subject.AgentID, err)
 		}
-		snapshot, snapshotErr := rt.Store.GetLifecycleSnapshot(ctx, subject.OwnerID, subject.ComputerID, doc.TrajectoryID)
+		ownerHead, ownerHeadSeq, ownerHeadPending, snapshotErr := rt.Store.ReadPendingTextureOwnerRevision(ctx, subject.OwnerID, subject.ComputerID, doc.TrajectoryID)
 		if snapshotErr != nil {
 			return fmt.Errorf("load boot Texture snapshot %s: %w", subject.AgentID, snapshotErr)
 		}
-		ownerHead, ownerHeadSeq, ownerHeadPending := store.PendingTextureOwnerRevision(snapshot)
 
 		var runID, tailID, mutationIdentity string
 		candidateRunID := ""

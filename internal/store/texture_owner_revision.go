@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -38,10 +39,7 @@ func TextureTurnConsumedHead(events []types.LifecycleEvent, revisionID string) b
 // event history, e.g. the initial revision).
 func PendingTextureOwnerRevision(snapshot types.LifecycleSnapshot) (types.Revision, int64, bool) {
 	head := snapshot.HeadRevision
-	if snapshot.Trajectory.Status != types.TrajectoryLive ||
-		strings.TrimSpace(head.RevisionID) == "" ||
-		head.RevisionID != snapshot.Document.CurrentRevisionID ||
-		!textureRevisionIsOwnerInput(head) {
+	if !textureOwnerRevisionCandidate(snapshot) {
 		return types.Revision{}, 0, false
 	}
 	if TextureTurnConsumedHead(snapshot.Events, head.RevisionID) {
@@ -55,6 +53,36 @@ func PendingTextureOwnerRevision(snapshot types.LifecycleSnapshot) (types.Revisi
 		}
 	}
 	return head, seq, true
+}
+
+// textureOwnerRevisionCandidate is the part of PendingTextureOwnerRevision
+// that needs only the binding (a head view): a live trajectory whose current
+// head is owner input.
+func textureOwnerRevisionCandidate(view types.LifecycleSnapshot) bool {
+	head := view.HeadRevision
+	return view.Trajectory.Status == types.TrajectoryLive &&
+		strings.TrimSpace(head.RevisionID) != "" &&
+		head.RevisionID == view.Document.CurrentRevisionID &&
+		textureRevisionIsOwnerInput(head)
+}
+
+// ReadPendingTextureOwnerRevision answers PendingTextureOwnerRevision for a
+// trajectory, reading the full snapshot (for its events) only when the head
+// view shows an owner-input head. Boot asks this for every Texture document.
+func (s *Store) ReadPendingTextureOwnerRevision(ctx context.Context, ownerID, computerID, trajectoryID string) (types.Revision, int64, bool, error) {
+	view, err := s.GetLifecycleHeadView(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return types.Revision{}, 0, false, err
+	}
+	if !textureOwnerRevisionCandidate(view) {
+		return types.Revision{}, 0, false, nil
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return types.Revision{}, 0, false, err
+	}
+	head, seq, ok := PendingTextureOwnerRevision(snapshot)
+	return head, seq, ok, nil
 }
 
 // textureRevisionIsOwnerInput reports whether a head revision is owner-side

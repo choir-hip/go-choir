@@ -552,3 +552,34 @@ func TestOwnerRevisionWakeSurvivesPassivationRaceAndBootReconcile(t *testing.T) 
 		t.Fatalf("boot owner revision injection=%s err=%v", messages, err)
 	}
 }
+
+// Boot and wake read the pending owner head through the head view and take
+// the full snapshot only when the head can be owner input. Failure modes
+// pinned: the gated read disagreeing with the snapshot answer (a missed
+// owner wake, or a desk self-wake), before and after an owner revision.
+func TestReadPendingTextureOwnerRevisionMatchesSnapshot(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+	check := func(stage string) {
+		t.Helper()
+		snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantHead, wantSeq, wantOK := store.PendingTextureOwnerRevision(snapshot)
+		head, seq, ok, err := core.Store().ReadPendingTextureOwnerRevision(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+		if err != nil || ok != wantOK || seq != wantSeq || head.RevisionID != wantHead.RevisionID {
+			t.Fatalf("%s: gated=(%s,%d,%v,%v) snapshot=(%s,%d,%v)", stage, head.RevisionID, seq, ok, err, wantHead.RevisionID, wantSeq, wantOK)
+		}
+	}
+	check("initial")
+	response := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", start.OwnerID, "revise-gated", "revise privately", start.InitialRevision.RevisionID)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("lifecycle revise status=%d body=%s", response.Code, response.Body.String())
+	}
+	check("after owner revision")
+	if _, _, ok, _ := core.Store().ReadPendingTextureOwnerRevision(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID); !ok {
+		t.Fatal("owner revision must be pending")
+	}
+}
