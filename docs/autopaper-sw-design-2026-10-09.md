@@ -1,260 +1,376 @@
-# Autopaper redesign (station SW) — draft for owner review
+# Autopaper design (station SW) — draft v2 for owner review
 
-Date: 2026-10-09. Status: **draft; decisions marked OPEN are the owner's.**
-Station: `SW-world-wire-interface` in the
-[app-dev metamission](definitions/choir-supervised-app-development-metamission-2026-10-01.md)
-(design only; its output is constraints on Gates 1–2). Inputs:
+Date: 2026-10-09. Status: **rough draft, co-designed with the owner;
+decisions marked OPEN are the owner's.** Station: `SW-world-wire-interface`
+in the [app-dev metamission](definitions/choir-supervised-app-development-metamission-2026-10-01.md).
+Gate 3 (Autopaper) ships in October, after Gate 1 (today) and Gate 2
+(tomorrow).
 
-- *Choir — Canonical Project Context* (2026-10-08, owner-supplied);
-- *Prospective Self-Alignment* working paper (2026-10-08, owner-supplied);
+Inputs:
+- *Choir — Canonical Project Context* (2026-10-08);
+- [Prospective Self-Alignment](prospective-self-alignment-2026-10-09.md)
+  (2026-10-09 revision);
 - [10-05 re-architecture](world-wire-rearchitecture-2026-10-05.md);
-- [mission stack Phase 5](world-wire-mission-stack-2026-09-22.md);
-- the v6 owner decisions (2026-10-09);
 - [Store B inventory](evidence/world-wire-store-b-inventory-2026-10-09.md);
-- [precommitment records memo](<Precommitment Records — Engineering Memo.md>).
+- [precommitment records memo](<Precommitment Records — Engineering Memo.md>);
+- the [Jev supervision orientation](orientation-jev-supervision-metamission-2026-09-29.md).
 
-Owner, 2026-10-09: "lets do our world wire redesign before we commit to the
-plan" (the plan for the old Store B data), then "review these docs first"
-(the canonical context and the PSA paper).
+v1 of this draft (git history) is superseded. Owner brief for v2,
+2026-10-09:
 
-## 1. What we are building
+> pull content (rss, telegram/mtproto, atproto, gdelt, other osint,
+> eventually private data feeds) as much and as fast as we can process it
+> [...] stick to our four core desks, think about how we incorporate
+> precommitment records, and how we use inference efficiently since we are
+> budget limited and want to cover key stories globally on ai & tech,
+> geopolitics, supply chains, science, health and wellness, business and
+> finance. once we get a general system going, then i want to drill in. for
+> example, taiwan [...] then broader asian languages social media. big
+> value in multilingual and global coverage.
+>
+> we ingest and store the content in the OG, then we transclude it into
+> textures.. and transclude textures into textures. [...] researcher plays
+> a role in doing web search (not too much, rate limits and cost).
+> basically, we need to categorize and verify everything. and the more data
+> we collect and classify and organize, the more we precommit and learn
+> from what happens, the more accurately we can cover multiplicity of
+> perspectives and discrepancies of reports. thats the real alpha. we dont
+> adjudicate just show what the world indicates
 
-**Autopaper** is a maintained, research-intensive automatic newspaper with a
-customized article interface (canonical context §5.2):
+## 1. Principles
 
-- It ingests sources continuously and keeps a knowledge graph of
-  source-linked claims.
-- Its articles are **living documents**. Texture revises them as evidence
-  arrives, and corrections are ordinary forward revisions.
-- **Published articles are free to read** at ordinary serving cost. The
-  public paper is the demo anyone can read without a computer or a model.
-- **Personalized investigations and customized articles are paid.** They
-  run on the reader's own computer, as metered inference, and read
-  published material from the host-level store like everyone else.
-- **Precommitment records are the mechanism.** An investigation commits
-  before it reads, a claim carries its uncertainty and a resolution spec,
-  and publishing is a material action with an authorization gate (PSA paper
-  §2, §6). Media is the proving ground because claims resolve and stay
-  inspectable (PSA §7.1).
-- The first customers are prosumer writers and researchers who publish and
-  build a track record. The platform side comes later: white-label papers
-  for organizations on private plus public data.
+1. **Show what the world indicates; do not adjudicate.** The unit of
+   record is the *report*: who said what, when, where and in which
+   language. Articles present agreement, divergence and open questions
+   with attribution. "Verify" means verifying provenance and attribution
+   (did this source say this, where did it first appear), not issuing truth
+   verdicts.
+2. **Four desks only.** Deterministic work (fetch, parse, dedup, embed,
+   cluster) runs as desk tool modules. There are no separate actors and no
+   host daemons.
+3. **Ingest everything cheaply; spend inference on stories, not items.**
+   Model cost must scale with the number of developing stories, not the
+   number of reports (§6).
+4. **Everything lands in the object graph, classified.** Texture
+   transcludes graph objects into articles, and articles into articles.
+5. **Precommit wherever an outcome will arrive anyway.** Most forecasts
+   resolve from data the paper is already collecting, so learning costs
+   almost no extra inference (§5).
+6. **Budget is the only ceiling.** Management sets the spend. Ingest rate
+   follows processing capacity, and unprocessed reports are kept as data,
+   never silently dropped.
 
-Status discipline (canonical context §4.5, §12): PSA learning, oversight
-and reputation effects are research hypotheses. This design records the
-evidence they need; it does not claim them.
+## 2. Two levels of storage
 
-## 2. Names
+- **The paper's computer** (embedded Dolt plus content storage) holds
+  working state: reports, classifications, stories, claims, records and
+  Texture documents.
+- **The host-level store** (the corpus Dolt behind corpusd) holds only what
+  is published. Every computer publishes into it, and every reader reads
+  from it.
 
-- **Autopaper** is the product. Product names are never camel case:
-  Autopaper (or autopaper), Autoputer, Autoradio (owner, 2026-10-09; the
-  canonical context will be corrected). "Universal Wire" is retired from the
-  UI. The desktop app becomes Autopaper.
-- "World Wire", "Universal Wire" and "sourcecycled" are retired (owner,
-  2026-10-09). Everything is Autopaper or a derivation. The shared-claims
-  layer needs no product name.
-- Code: per canonical context §12.4, existing identifiers are not renamed
-  for their own sake. New code is named `autopaper`. The
-  `universal-wire-platform` identifiers go away with the code they belong to
-  (the corpusd endpoints, `sourcecycled`), which is an engineering reason.
-- Code keeps the term `precommitment records`; PSA is the theory.
+The old store grew to 104 G because high-volume ingest was committed into
+Dolt history (inventory doc). So in the paper's computer:
 
-## 3. Why the first attempt failed (short)
+- report bodies live in content-addressed storage, not Dolt rows;
+- high-volume tables are either kept out of version history (to be
+  verified: Dolt's ignored-table mechanism) or committed on a slow, bounded
+  cadence;
+- claims, stories, records and articles are versioned.
 
-Receipts are in the 10-05 doc and the June attempt report:
+## 3. The pipeline
 
-- **Wrong plane:** ingestion and processing ran as host daemons beside the
-  control plane. They had no computer, no tape and no capsule.
-- **Shared store:** one Dolt store held 8.8M objects, 2.4M items and ~12M
-  log rows. Its history alone grew to 104 G, with no declared retention.
-- **Opaque queues:** processor/reconciler requests failed as 502s in a
-  journal, which nothing could supervise.
-- **Read path through the store:** the app read stories from corpusd and
-  Store B. When that connection broke, the articles didn't load.
+Each stage names its desk, its cost tier and what it writes to the graph.
 
-## 4. Architecture
+### S0 Observe (research tool modules; deterministic; no model)
 
-Two levels of Dolt, by design (owner, 2026-10-09: "the whole point of the
-architecture is to have a dolt db embedded in vm and at the host level, for
-global access for publishing and reading"):
+- **Adapters:**
+  - existing in `internal/sources`: RSS, Telegram (web preview), GDELT,
+    Polymarket;
+  - new: AT Protocol (a filtered firehose from curated lists and
+    keywords), Telegram over MTProto (more channels, history and media),
+    other open-source intelligence feeds, and private feeds later.
+  - Engineering writes and repairs adapters in capsules.
+- **Per report:**
+  - normalize into a `report` object, with the body in content storage;
+  - detect the language;
+  - drop exact duplicates by hash and mark near-duplicates
+    (simhash/minhash: wire rewrites and reposts are data about spread, not
+    noise);
+  - compute a multilingual embedding;
+  - extract entities with cheap deterministic methods (gazetteers, links,
+    handles).
+- **Adaptive polling:** sources that report early or uniquely are polled
+  more often, and dead or redundant sources less. The cadence is a
+  management setting, held as durable timer obligations (paused after a
+  restart, per the no-auto-resume rule).
 
-- **In each computer:** an embedded Dolt holds that computer's working state
-  (sources, observations, claims, records, Texture documents).
-- **At the host:** one Dolt (the corpus store, served by corpusd) is the
-  global publication store. Every computer publishes into it, and every
-  reader (public pages, the Autopaper app, other computers) reads from it.
-  There is no computer-to-computer path.
+### S1 Classify (decision model, batched; Jev by default)
 
-```text
-Primary Autopaper computer (ordinary persistent computer, platform-owned)
-  embedded Dolt: tape + object graph + artifacts (working state)
-  management desk   attention, cadence, budget per item (the spend dial)
-  research desk     observe sources (deterministic tool modules: fetch,
-                    parse, dedup); extract claims; corroborate/contradict;
-                    precommit before investigations and reads, resolve after
-  engineering desk  writes and fixes source adapters in capsules
-  Texture desk      writes, revises and publishes articles
-        |
-        | publish: precommit -> authorize -> publication transaction
-        v
-Host-level Dolt (corpus store, corpusd)   <- global publish + read
-  published article revisions, published claims + provenance, routes
-        |                         |
-        v                         v
-  public pages / Autopaper app    reader's own computer (paid):
-  (free; never touch the live     personalized investigation reads
-   paper computer)                published material from here
-```
+For each batch of new reports, Jev answers typed questions, each with
+probabilities:
 
-Rules (settled by owner decisions unless marked):
+- vertical(s): AI and tech, geopolitics, supply chains, science, health
+  and wellness, business and finance, other;
+- region(s) concerned;
+- report type: first-hand, official statement, wire rewrite, analysis,
+  opinion, rumor or unverified, market signal;
+- salience and novelty against the story it would join.
 
-1. **Four desks only.** Deterministic steps (fetch, parse, dedup, schedule)
-   are desk tool modules, never separate actors or host daemons.
-2. **One computer per paper; the host store holds only what is
-   published.** No host-side ingestion service: `sourcecycled` is deleted.
-   Raw observations, fetch logs and working claims stay in the paper's
-   embedded Dolt. The host store holds published material only.
-3. **Budget, not architecture, limits ingest.** Cost per item is a
-   management dial with a declared default. Free readers never trigger
-   inference; only paid work and the paper's own budget do.
-4. **Publishing is a transaction into the host store, never Dolt branch
-   sync** (§6).
-5. **Publishing is a material action.** Texture precommits (claims,
-   uncertainty, expected corrections, consequences), the owner authorizes
-   in the supervision surface, and the projection binds one head. Delegated
-   autopublish comes later, per paper, under a policy.
+Escalation and audits:
+- Low confidence escalates to a small LLM.
+- A random sample is audited by a larger model, and the audit resolves
+  the decision model's answers (§5).
+- Escalation thresholds move with measured calibration.
 
-## 5. Data model, records and retention
+### S2 Stories (deterministic first, model on the edges)
 
-Object kinds (W0 set plus records):
+- Reports join **stories** by embedding similarity across languages plus
+  entity and time overlap. A model is asked only for ambiguous merges and
+  splits.
+- A story moves through states: emerging, developing, stable, dormant.
+- A story's version history is its timeline.
 
-- `source`: an adapter config (RSS, Telegram, API, private feed);
-- `source_version`: one immutable observation, with its body in content
-  storage;
-- `claim`: carries uncertainty and a resolution spec (what evidence would
-  settle it, and by when);
-- `entity`, `thread`;
-- `article`: the Texture document; publication is a projection of one head;
-- `precommitment` (existing records work): commitments around
-  investigations, reads and publishes, resolved later; nested.
+### S3 Claims and discrepancies (research; mid-size model; per story window)
 
-Edges: `cites`, `asserts`, `about`, `corroborates`, `contradicts`,
-`supersedes`, `transcludes`, `resolves`.
+- Research reads a **representative set** per story window, never every
+  report: the earliest report, each new language, each new region, each
+  new source type, and anything flagged as novel.
+- It extracts normalized `claim` objects, capped per story window to
+  prevent graph explosion. Each report links to claims with a **stance**:
+  affirms, denies, attributes ("X says"), hedges or questions.
+- Where stances conflict, research writes a `discrepancy` object: who
+  says what, split by source type, region and language.
+- Translation is late and partial. Only claim-bearing spans are
+  translated, and translations are cached as derived objects. Clustering
+  and classification work in the original language through multilingual
+  embeddings.
 
-**Resolution and track records.** A new `source_version` that bears on an
-open claim wakes it: the mission stack's impact propagation, the same
-minted-continuation primitive as the wake obligations. The resolution is
-recorded, and the article revises. Per-source and per-desk track records are
-derived views over resolved records. They feed the reputation hypothesis
-(PSA §7, H4) and are never edited by hand.
+### S4 Verify provenance (research; rationed web search)
 
-| Class | Kinds | Retention (proposal; OPEN on numbers) |
-|---|---|---|
-| Observation | `source_version` bodies | bounded window, default 30 days, then body dropped and the object kept as a stub (hash, URL, time). Bodies cited by a claim or a record are pinned. |
-| Knowledge | `claim`, `entity`, `thread`, edges | durable; superseded, never deleted for correctness |
-| Records | `precommitment` and resolutions | durable and immutable (the evidence PSA depends on) |
-| Article | Texture documents and revisions | durable (canonical) |
-| Publication | public projections | durable per published revision |
-| Operations | fetch attempts, cycle logs | not stored as rows: tape events and counters only |
+- Web search is rationed by a daily quota per vertical. It fires only
+  when salience is high, independent corroboration is low, or a
+  discrepancy is sharp.
+- Questions it answers:
+  - Did the attributed party actually say this?
+  - Where and when did the claim first appear?
+  - Is this media recycled?
+  - Is the official primary document available?
+- The results are attribution and provenance objects, not verdicts.
 
-That is the O10 bound the old store lacked: growth is in knowledge and
-records, not in logs or raw bodies.
+### S5 Write (Texture)
 
-## 6. Publishing and reading through the host store
+- **A story article** transcludes live graph objects: the claims with
+  their stance maps, discrepancy objects, a timeline, key reports in the
+  original language with translation, and the open questions together
+  with what would resolve them.
+- **Beat and vertical pages** transclude story articles, and the front
+  page transcludes beats. A Taiwan semiconductor story can appear inside
+  the supply-chains page and the Taiwan beat at once.
+- **Revision on new evidence:** when a transcluded object changes past a
+  materiality threshold (a new stance, a new region, a resolution),
+  Texture revises the article. Below the threshold, transclusion shows the
+  new state without a rewrite, so most updates cost no inference.
+- Every article follows the same structure:
+  - what is widely reported;
+  - where reports differ, with attribution;
+  - what is unclear;
+  - what would settle it;
+  - a source map by country, language and source type.
 
-- **Publish:** a computer sends a publication transaction to corpusd: one
-  exact Texture head, the claims it cites with their provenance, the
-  precommitment, the authorization receipt, and the route. corpusd writes it
-  to the host store. A correction is a new transaction that supersedes the
-  old revision, which stays readable.
-- **Read:** public pages, the Autopaper app and any computer read published
-  material from the host store through corpusd. Reading never wakes or
-  touches the publishing computer, so a paper restart never takes the paper
-  offline.
-- **Cite:** a document on any computer cites a published object by its
-  host-store identity and revision. The citation stays valid when the
-  object is superseded, and the reader can see the newer revision.
-- **Bound:** the host store's own history needs a declared bound (O10). The
-  old store reached 104 G of history from ingestion churn; publications are
-  far smaller, but the bound is still stated (the same retention decision
-  as Store A).
+### S6 Publish (Texture into the host store)
 
-## 7. Restart, schedules and the no-auto-resume rule (OPEN)
+- At first a publish is owner-supervised: precommit, authorize, then a
+  publication transaction binding one head.
+- Later, management can delegate publishing per beat under a policy, for
+  example "stories with N or more independent sources in two or more
+  regions publish without review; corrections always publish".
+- A correction is a forward revision, and earlier revisions stay readable.
 
-The paper polls on a schedule, so it needs **durable timer obligations**
-("observe source S at T"). The owner rule says a restart never resumes
-interrupted work on its own. Proposal: after a restart the schedule stays
-**paused** until management (later) or the owner (now) resumes it. A missed
-poll is recorded, not replayed. Open claims waiting for resolution are not
-lost; they wake on the next observation after resume.
+## 4. The four desks
 
-## 8. Constraints SW places on Gates 1–2
+| Desk | Owns |
+|---|---|
+| **Management** | Attention and spend: budget per vertical, region and day; polling cadence; which stories get research (S3) and which get articles (S5); escalation thresholds; publish policy. It scores records, with Jev as its default scorer. |
+| **Research** | Observation (S0 tool modules), classification (S1), stories (S2), claims and discrepancies (S3), provenance checks (S4), and resolving records. Its authority is read-only toward the world; it writes the paper's own graph. |
+| **Engineering** | Source adapters and parsers, new platforms (AT Protocol, MTProto), and fixes when an adapter breaks (management casts the fix). It also maintains the deterministic modules: dedup, clustering and entity gazetteers. |
+| **Texture** | Story, beat and front-page articles; transclusion; revision on material change; publishing. It is the sole writer of canonical article revisions. |
+
+## 5. Precommitment records: where they come from and how they resolve
+
+The rule: **precommit where the world will answer anyway**. Most of these
+resolve automatically from counts and stance edges the paper already
+collects, so the learning loop costs little inference.
+
+| Record | Who commits | Example | Resolves from |
+|---|---|---|---|
+| Salience forecast | management at triage | "this story reaches 10 or more independent sources in 3 or more regions within 48 hours: 0.35" | report counts (automatic) |
+| Story trajectory | research | "this becomes an official statement or denial within 72 hours: 0.6" | report types on the story (automatic) |
+| Claim corroboration | research at extraction | "an independent primary source will affirm this claim within a week: 0.5" | stance edges (automatic) |
+| Source behavior | research | "this outlet's report will later be contradicted by two or more independent sources: 0.2" | stance edges (automatic) |
+| Classification | Jev in S1 | vertical, report type and salience, with probabilities | sampled audits by a larger model |
+| Article stability | Texture at publish | "this section needs a material revision within 72 hours: 0.3" | revision history (automatic) |
+| Spend value | management at allocation | "the AI and tech budget today covers 8 of the 10 stories that end up biggest" | later salience (automatic) |
+
+What the loop buys:
+- **Cheaper coverage.** Calibrated triage and classification set the
+  cascade thresholds. Better salience forecasts put mid-model and search
+  spend on stories that matter, so cost per well-covered story falls.
+- **Track records as data, not verdicts.** Per source and per topic: how
+  early it reported, how often its reports were later affirmed or
+  contradicted by independent sources, and its correction rate. These are
+  shown to readers as evidence ("this outlet's reports on this topic were
+  later contradicted 3 of 40 times"). They are never used to declare what
+  is true.
+- **Perspective coverage gets measurable.** Records show which regions and
+  languages tend to report first or differently. That is where the
+  multilingual advantage becomes visible.
+- **PSA research evidence.** Every record is the kind of evidence the
+  paper's hypotheses need, especially H1 (information quality) and H4
+  (reputation). The pre-outcome ordering caveat in the PSA paper's
+  Section 10 applies.
+
+## 6. Inference economics (illustrative; prices to be measured)
+
+Shape, at an assumed 100,000 reports a day:
+
+| Tier | Runs on | Volume | Tokens per day (rough) |
+|---|---|---|---|
+| S0 deterministic and embeddings | every report | 100,000 | embeddings only |
+| S1 decision model (batched) | every report | 100,000 | ~30M small or decision-model tokens |
+| S2 ambiguous merges | ~5% of reports | ~5,000 | ~5M small-model tokens |
+| S3 claims and discrepancies | story windows, not reports | ~3,000 story updates | ~25M mid-model tokens |
+| S4 web search | rationed | tens to low hundreds of queries | quota-bound |
+| S5 articles | material revisions only | ~100–300 | ~5–10M large-model tokens |
+
+The point is the ratios. The large-model tier is a small slice, and it
+scales with stories that change materially. Levers, in order of effect:
+1. translate late and partially;
+2. extract claims per story window, not per report;
+3. let transclusion carry small updates without a rewrite;
+4. batch and cache;
+5. resolve deterministically wherever possible;
+6. move escalation thresholds with measured calibration.
+
+Management sees cost per covered story by vertical and region, and the
+budget dial changes how deep each tier goes.
+
+## 7. Object graph
+
+Kinds:
+- `source`: outlet, account or feed, with country, language, platform
+  and source type (and declared affiliation where public);
+- `report`: immutable; body in content storage;
+- `translation`: derived and cached;
+- `story`: versioned;
+- `claim`, `discrepancy`;
+- `entity`, `place`;
+- `attribution`: the result of a provenance check;
+- `article`: a Texture document;
+- `precommitment`: the existing commitment records.
+
+Edges: `in_story`, `asserts` (with stance), `about`, `translates`,
+`corroborates`, `contradicts`, `attributed_to`, `first_seen_in`,
+`transcludes`, `cites`, `supersedes`, `resolves`.
+
+Retention:
+- Report bodies are kept for a bounded window (OPEN: 30 days), then
+  reduced to a stub (hash, URL, time, language, source).
+- Bodies that a claim, record or article cites are pinned.
+- Metadata, claims, stories, records and articles are durable.
+
+## 8. Drilling in: beats
+
+A **beat** is a region or topic with its own budget (management), sources
+(engineering), language capacity (research) and a beat page (Texture).
+Global coverage comes first. Then:
+
+1. **Taiwan.** Open internet, a free press, active forums, and official
+   open data. It is strategically central to geopolitics and supply chains.
+   Candidate sources: national and local news outlets, government and
+   legislative releases, forums and social platforms, and Taiwan-focused
+   Telegram and AT Protocol accounts. Engineering confirms each platform's
+   terms and access.
+2. **Broader Asian-language social media:** Japanese, Korean, Chinese,
+   Vietnamese, Thai, Indonesian and others, in order of value and access.
+   Multilingual clustering is what makes this cheap. Reports in a new
+   language join existing stories without translation, and translation
+   happens only at the claim level.
+
+## 9. Constraints this places on Gates 1–2
 
 | Gate / station | Constraint |
 |---|---|
-| SL (Gate 1) | a durable timer obligation kind with an explicit post-restart state (`paused`), owned by management; the impact-propagation wake (new evidence wakes open claims) uses the same obligation substrate |
-| SH (Gate 1) | retention classes per object kind; precommitment records immutable and durable; observation bodies are reconstructible or explicitly lossy |
-| S1 (Gate 2) | capsule egress for source adapters (recorded network access) |
-| S5/S6 (Gate 2) | publish = precommit + owner authorization + a publication transaction binding one head into the host store |
-| Texture contract | an article is an ordinary Texture document; revision on new evidence uses the same revision/commitment path as user documents |
-| Platform | the host store (corpusd) accepts publication transactions and serves all reads; reads never depend on the publishing computer; the host store's history has a declared bound |
+| SL (Gate 1) | durable timer obligations with a post-restart `paused` state; impact-propagation wake (a changed transcluded object wakes the article; new stance edges wake open records) |
+| SH (Gate 1) | retention classes per object kind; content storage for report bodies outside Dolt rows; a bounded commit cadence for high-volume tables; records immutable |
+| S1 (Gate 2) | capsule egress for adapters, with recorded network access |
+| S5/S6 (Gate 2) | publish = precommit + authorization + a publication transaction into the host store; live transclusion of graph objects in Texture |
+| Texture contract | articles are ordinary Texture documents; transclusion of graph objects and of other Textures; revision on material change |
+| Platform | the host store accepts publication transactions and serves all reads; its history has a declared bound |
 
-## 9. The old Store B data (proposal; OPEN)
+## 10. Build order for October (sketch)
 
-The fresh, empty corpus store (since the 12:33Z reset) **is** the host-level
-store of this design. So the plan is to migrate what is published back into
-it and keep it lean:
+- **W1 Observe and classify:**
+  - the primary Autopaper computer;
+  - the existing adapters moved into research tool modules;
+  - reports in the graph with bodies in content storage;
+  - Jev classification with sampled audits;
+  - the timer obligation;
+  - restoring the June publications into the host store.
+- **W2 Stories, claims, discrepancies:** multilingual clustering, the
+  stance graph, late translation, and the automatically resolved records
+  (salience, corroboration).
+- **W3 Articles:** story articles transcluding graph objects, vertical
+  pages transcluding stories, revision on material change, supervised
+  publish.
+- **W4 Reading and learning:** the Autopaper app and public pages from the
+  host store; source track records as data; cost per covered story on the
+  management dashboard.
+- **W5 Reach:** AT Protocol and MTProto adapters, then the Taiwan beat,
+  then the Asian-language beats.
+
+## 11. The old Store B data (proposal)
+
+The corpus store behind corpusd stays as the host-level store. It was
+reset empty at 12:33Z. The history-free dump finished at 13:15Z (23 GB of
+SQL).
 
 | Data | Proposal |
 |---|---|
-| All 633 publications with their chain (versions, reviews, provenance, retrieval manifests, citations, artifacts) and the 926 routes | migrate into the host store from the history-free dump, so every URL works again (148 are users' work, 38 the owner's) |
-| The 185 platform Texture documents (545 revisions) | migrate into the host store with the publications |
-| 211 sources | import as the primary Autopaper's initial source list (its embedded Dolt) |
-| 2.4M items, 8.8M objects | not in the host store (working data, not published). Keep in the dump; import into the paper's embedded Dolt at W1 only if useful, or use as an offline evaluation set for claim extraction. Scores against them are retrospective, not PSA evidence (canonical context §12.9). |
+| All 633 publications with their chain and the 926 routes | migrate into the host store so the URLs work again (148 are users' work, 38 the owner's) |
+| The 185 platform Texture documents (545 revisions) | migrate into the host store |
+| 211 sources | import into the primary Autopaper as its initial source list |
+| 2.4M items, 8.8M objects | keep in the dump. Candidate seed for W1: import recent items into the paper's graph to warm up clustering and source track records, or use as an offline evaluation set. Retrospective, not PSA evidence. |
 | ~12M log rows | archive only (inside the dump) |
-| The 104 G old repo | delete once the migrated tables' row counts match the dump; keep the compressed dump as the archive |
+| The 104 G old repo | delete once the migrated tables' row counts match the dump; keep the compressed dump |
 
-## 10. Build order (sketch)
+## 12. Open decisions for the owner
 
-- **W1:** the primary Autopaper computer: source adapters (RSS/Telegram),
-  observation with retention, the timer obligation, and the rename.
-- **W2:** claims, entities and threads by the research desk, with
-  precommitment records around investigations and reads.
-- **W3:** articles as Texture documents, revision on new evidence, and
-  publish (precommit, authorize, project).
-- **W4:** free reading surfaces (the Autopaper app and public pages)
-  reading the host store.
-- **W5:** paid personalized investigations on readers' computers, citing
-  published material from the host store.
-- **Later:** white-label papers publishing into the same host store, and
-  Autoradio on the same published material.
+Decided on 2026-10-09:
+- **Sequencing:** Gate 1 today, Gate 2 tomorrow, Gate 3 (Autopaper) in
+  October.
+- **Names:** Autopaper, Autoputer and Autoradio, never camel case. "World
+  Wire", "Universal Wire" and "sourcecycled" are retired; the code rename
+  is a TODO (§13).
+- **Storage:** no cross-computer reading. Publishing and reading go
+  through the host-level Dolt, and the June publications are restored into
+  it.
 
-## 11. Open decisions for the owner
+Open:
+1. Daily budget to start with, and its split across the six verticals.
+2. Who decides publish for the first weeks: you per story, or a delegated
+   policy per beat from day one?
+3. Report body retention window (proposal: 30 days, cited bodies pinned).
+4. Source affiliation labels (for example, state-affiliated media): which
+   public taxonomy to use, or record only what sources declare?
+5. Whether the 2.4M June items seed W1 or stay archive-only.
+6. Order of new platforms: AT Protocol or MTProto first?
+7. Taiwan sources: any you already rely on and want first.
 
-1. ~~Sequencing.~~ **Decided (owner, 2026-10-09):** Gate 1 today, Gate 2
-   tomorrow, Gate 3 (Autopaper) in October. The v6 order holds and the
-   October launch target holds.
-2. ~~"World Wire" as an internal name.~~ **Decided (owner, 2026-10-09):**
-   retire "World Wire", "Universal Wire" and "sourcecycled"; everything is
-   Autopaper or a derivation. The rename is a TODO, not done now (§12).
-3. The primary paper's public name and URL shape on choir.news.
-4. ~~Cross-computer reading.~~ **Decided (owner, 2026-10-09):** none.
-   Publishing and reading go through the host-level Dolt; restore the old
-   publications into it (§9).
-5. Observation retention default (proposal: 30 days, cited bodies pinned).
-6. Schedules after restart: paused until resumed (proposal)?
-7. First edition scope: general news first, then verticals (AI, Taiwan and
-   geopolitics, semiconductors, internal democracy) per the 10-01 decision.
-   Still right?
-8. Who resolves claims: the research desk against later sources only, or
-   also an independent scorer (canonical context §13, "who provides the
-   independent resolution")? Proposal: research resolves, a second model
-   scores, and disagreements are flagged, per the memo's scorer interface.
-
-## 12. TODO: retire the old names (owner, 2026-10-09; not done now)
+## 13. TODO: retire the old names (owner, 2026-10-09; not done now)
 
 "lets get rid of world wire, universal wire, and sourcecycled name.
-everything can be autopaper or some derivation" — then "dont rename it now,
+everything can be autopaper or some derivation", then "dont rename it now,
 just mark that as a todo."
 
 Footprint measured 2026-10-09:
@@ -277,10 +393,10 @@ Notes for whoever does it:
   constants without a migration would orphan the existing platform
   computer and could start a new one. Prefer retiring it in W1, when the
   primary Autopaper computer replaces it, over an in-place rename.
-- **sourcecycled** is slated for deletion (§4 rule 2). Delete rather than
-  rename, after W1 moves any reusable source adapters into desk tool
-  modules. The host env file `/var/lib/go-choir/corpus-dsn.env` also
-  carries `SOURCECYCLED_DOLT_DSN`.
+- **sourcecycled** is slated for deletion (§1 principle 2). Delete rather
+  than rename, after W1 moves the adapters in `internal/sources` into
+  research tool modules. The host env file
+  `/var/lib/go-choir/corpus-dsn.env` also carries `SOURCECYCLED_DOLT_DSN`.
 - **Routes:** `/api/universal-wire/stories` and the corpusd
   `/internal/platform/universal-wire/*` endpoints are renamed or replaced
   when the Autopaper app gets its routes in W4. The host store stays.
