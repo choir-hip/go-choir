@@ -133,3 +133,25 @@ The other options, for comparison:
   each runtime deploy reboots active computers. No per-base builds.
 - **Layer new realizations.** vmctl installs the latest layer before a new
   realization boots, so bases change only on reboot-path deploys.
+
+### Decision (2026-10-09 ~14:40Z): always reboot path
+
+Owner, on seeing those implications: "i want things to be updated, and also
+fast and use minimal resources and the code to be secure and maintainable."
+Against those criteria the agent chose **always reboot path**:
+- *Updated:* every computer and every new realization runs the deploy's
+  commit; skew cannot occur.
+- *Fast:* a VM refresh is about 30 s of replay plus boot. At today's handful
+  of active computers this is no slower than the app-layer push (up to
+  465 s when its offers were refused).
+- *Minimal resources:* no per-base layer builds and no retained old bases.
+- *Secure, maintainable:* it deletes a deploy path instead of adding a base
+  registry, a cutover script and retirement.
+
+Layering stays for Gate 2 self-development releases. Revisit when many
+active computers make serial refresh slow; the next step then is parallel
+refresh, not per-base layers.
+
+Change: `deploy-impact-classify` sends every guest-runtime change through
+the canonical guest boot path (base rebuilt, active computers refreshed),
+and the platform app-layer push block is removed from the deploy job.
