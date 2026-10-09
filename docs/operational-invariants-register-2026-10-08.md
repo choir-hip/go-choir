@@ -157,7 +157,8 @@ of them live on Node B's single disk. Evidence:
 `store-a-dead-wire-data-and-unbounded-history` (owner decision 2026-10-09:
 "once self dev and world wire are operational our audit log is gold").
 Enforcer: unowned. Alarm: none. Proof: restore a platform from off-host
-copies. Goal: 1 before production; 3.
+copies. Goal: pre-production — deferred with SP (owner 2026-10-09: prove the
+system with human QA before adding infrastructure); not a Gate 1 item.
 
 ## Resources — everything that grows is bounded and owned
 

@@ -1926,7 +1926,12 @@ architectural ceiling on ingest — budget is the constraint.
 
 **Deferred (after the goals):** S3 fast resume, SA density beyond the storm
 fix, S7 app packages, S8 source publication, S9 forks and fleets, S10 org
-templates, S11 mainline push.
+templates, S11 mainline push, and SP production infrastructure (second host
+as off-host durable homes, self-hosted remote logs/metrics/alerting over a
+WireGuard mesh, zero-downtime deploys, multi-host placement, O22). Owner
+2026-10-09: "prove the system for human QA before I invest more money into
+it, and before we make the infrastructure more complex." Gate 1 runs on the
+single host with local logs.
 
 **In flight now:** SH (slice 3 deployed; file-hydration fix landing),
 SW design, corpus teardown, then SL.
