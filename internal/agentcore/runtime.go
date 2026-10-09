@@ -192,6 +192,9 @@ type Runtime struct {
 	// marker, or a crash (bootRestartPlanned false).
 	bootRestart        PlannedRestart
 	bootRestartPlanned bool
+	// deliveryHooksMu guards the actor delivery hooks against the projector
+	// goroutine reading them while they are set.
+	deliveryHooksMu sync.RWMutex
 	// wakeRetries bounds failed actor wake dispatches (SL slice 2).
 	wakeRetries                 wakeRetryTracker
 	selfdevStartupReleaseDigest string
@@ -253,6 +256,8 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 // activate() sends actor messages through this function. If not set,
 // activate() panics — there is no fallback path.
 func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
+	rt.deliveryHooksMu.Lock()
+	defer rt.deliveryHooksMu.Unlock()
 	rt.dispatchActor = fn
 }
 
@@ -281,18 +286,24 @@ func (rt *Runtime) SetTextureCellAuthorizer(a TextureCellAuthorizer) {
 // SetScheduleActor sets the kernel-only hook for durable not-before events.
 // The adapter owns the actor tape and binds this alongside dispatchActor.
 func (rt *Runtime) SetScheduleActor(fn func(context.Context, string, string, string, string, string, string, string, time.Time) error) {
+	rt.deliveryHooksMu.Lock()
+	defer rt.deliveryHooksMu.Unlock()
 	rt.scheduleActor = fn
 }
 
 // SetDispatchActorRedrive binds the re-drive delivery hook used only by the
 // actor-wake outbox sweep. When unset the sweep falls back to dispatchActor.
 func (rt *Runtime) SetDispatchActorRedrive(fn func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error) {
+	rt.deliveryHooksMu.Lock()
+	defer rt.deliveryHooksMu.Unlock()
 	rt.dispatchActorRedrive = fn
 }
 
 // SetScheduleActorRedrive binds the deferred re-drive hook used only by the
 // actor-wake outbox sweep. When unset the sweep falls back to scheduleActor.
 func (rt *Runtime) SetScheduleActorRedrive(fn func(context.Context, string, string, string, string, string, string, string, time.Time) error) {
+	rt.deliveryHooksMu.Lock()
+	defer rt.deliveryHooksMu.Unlock()
 	rt.scheduleActorRedrive = fn
 }
 
@@ -2546,7 +2557,13 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) actorWakeSweep {
 		log.Printf("runtime: actor wake outbox sweep: %v", err)
 		return out
 	}
-	if rt.dispatchActor == nil && rt.scheduleActor == nil {
+	// The projector goroutine runs beside hook setters, so read the hooks as
+	// one locked snapshot.
+	rt.deliveryHooksMu.RLock()
+	dispatchActor, scheduleActor := rt.dispatchActor, rt.scheduleActor
+	dispatch, schedule := rt.dispatchActorRedrive, rt.scheduleActorRedrive
+	rt.deliveryHooksMu.RUnlock()
+	if dispatchActor == nil && scheduleActor == nil {
 		log.Printf("runtime: actor wake outbox sweep: actor delivery unavailable")
 		return out
 	}
@@ -2555,13 +2572,11 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) actorWakeSweep {
 	// (delivered-bound run died before consuming its control) mints a salted
 	// generation instead of deduping into nothing. First-time wakes are
 	// unaffected — an empty family keeps the base update_id.
-	dispatch := rt.dispatchActorRedrive
 	if dispatch == nil {
-		dispatch = rt.dispatchActor
+		dispatch = dispatchActor
 	}
-	schedule := rt.scheduleActorRedrive
 	if schedule == nil {
-		schedule = rt.scheduleActor
+		schedule = scheduleActor
 	}
 	// Paced drain: one target desk gets at most a handful of dispatches per
 	// sweep. A boot storm that mints thousands of wakes for the same desk
