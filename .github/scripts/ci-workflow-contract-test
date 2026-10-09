@@ -28,6 +28,10 @@ require "$ci" 'HIGH_RISK_RACE: ${{ steps.classify.outputs.high_risk_race }}'
 require "$ci" 'SAMPLED_RACE: ${{ steps.classify.outputs.sampled_race }}'
 require "$ci" 'RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}'
 require "$ci" 'scripts/go-test-non-runtime-shards -race'
+# Main pushes plan against the live staging commit, so a docs push that
+# superseded a queued code run cannot skip testing and deploying that code.
+require "$ci" 'Plan base: live staging commit'
+require "$ci" 'before="$deployed"'
 require "$ci" 'scripts/go-test-runtime-shards -race'
 require "$ci" 'scripts/go-test-integration -race'
 require "$ci" 'go-test-scale:'

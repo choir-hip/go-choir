@@ -68,6 +68,20 @@ jobs:
               ;;
             push)
               before="$PUSH_BEFORE"
+              # On main, plan against the live staging commit (deploy-impact's
+              # base), not the push's own before: a docs push that superseded a
+              # queued code run must still test and deploy that code
+              # (docs/problems/ci-deploy-latency-per-service-go-builds-2026-10-09.md).
+              if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+                deployed="$(curl -fsSI --max-time 10 https://choir.news 2>/dev/null | tr -d '\r' | awk 'tolower($1)=="x-choir-build-commit:"{print $2; exit}' || true)"
+                if [[ "$deployed" =~ ^[0-9a-f]{40}$ ]]; then
+                  git cat-file -e "${deployed}^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$deployed" || true
+                  if git cat-file -e "${deployed}^{commit}" 2>/dev/null; then
+                    before="$deployed"
+                    echo "Plan base: live staging commit $deployed"
+                  fi
+                fi
+              fi
               ;;
             *)
               force_all=true
