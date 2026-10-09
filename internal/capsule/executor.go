@@ -1590,7 +1590,9 @@ func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporar
 		if !strings.HasPrefix(p, "/") {
 			p = "/" + p
 		}
-		if strings.HasPrefix(p, "/workspace/platform/") {
+		// A unified diff cannot express a directory; the files inside it
+		// carry it.
+		if strings.HasPrefix(p, "/workspace/platform/") && !change.Mode.IsDir() {
 			sourceChanges = append(sourceChanges, change)
 		}
 	}
@@ -1616,7 +1618,11 @@ func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporar
 		fromFile, toFile := "a/"+rel, "b/"+rel
 		oldPath := filepath.Join(lowerBase, filepath.FromSlash(rel))
 		var oldErr error
-		oldBytes, oldErr = os.ReadFile(oldPath)
+		if info, statErr := os.Lstat(oldPath); statErr == nil && info.IsDir() {
+			oldErr = os.ErrNotExist // a directory replaced by a file
+		} else {
+			oldBytes, oldErr = os.ReadFile(oldPath)
+		}
 		if oldErr != nil && !errors.Is(oldErr, os.ErrNotExist) {
 			return "", "", "", fmt.Errorf("capsule source patch reads base %q: %w", change.Path, oldErr)
 		}
