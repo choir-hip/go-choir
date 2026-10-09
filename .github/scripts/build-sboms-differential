@@ -141,9 +141,10 @@ assert_semantic_go_toolchain() {
   local nix_go_version setup_go_version
   nix_go_version="${SBOM_NIX_GO_VERSION:-}"
   if [[ -z "$nix_go_version" ]]; then
-    nix_go_version="$(nix derivation show .#packages.x86_64-linux.auth \
+    nix_go_version="$(nix derivation show -r .#packages.x86_64-linux.auth \
       | jq -r '
           .derivations[]
+          | select(.name | startswith("go-choir-services-"))
           | .inputs.drvs
           | keys[]
           | select(test("-go-[0-9]+(\\.[0-9]+)*\\.drv$"))
