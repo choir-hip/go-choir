@@ -933,10 +933,16 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	writeGatewayJSON(w, http.StatusOK, resp)
 }
 
-// HandleSearchHealth handles GET /provider/v1/search/health.
+// HandleSearchHealth handles GET /provider/v1/search/health. Like the
+// breaker routes below it is operator-only: computers reach this port for
+// inference, so authority is the loopback transport, not a header.
 func (h *Handler) HandleSearchHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isAuthorizedCredentialCaller(r) {
+		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "operator route"})
 		return
 	}
 	if h.searchClient == nil {
@@ -979,6 +985,10 @@ func (h *Handler) HandleSearchHealthReset(w http.ResponseWriter, r *http.Request
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
 		return
 	}
+	if !isAuthorizedCredentialCaller(r) {
+		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "operator route"})
+		return
+	}
 	if h.searchClient == nil {
 		writeGatewayJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "search not configured"})
 		return
@@ -1017,6 +1027,10 @@ func (h *Handler) HandleProviderBreakers(w http.ResponseWriter, r *http.Request)
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
 		return
 	}
+	if !isAuthorizedCredentialCaller(r) {
+		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "operator route"})
+		return
+	}
 	if h.breakers == nil {
 		writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_breakers": map[string]any{}})
 		return
@@ -1030,6 +1044,10 @@ func (h *Handler) HandleProviderBreakers(w http.ResponseWriter, r *http.Request)
 func (h *Handler) HandleProviderBreakerReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isAuthorizedCredentialCaller(r) {
+		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "operator route"})
 		return
 	}
 	if h.breakers == nil {
