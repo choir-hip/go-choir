@@ -84,3 +84,17 @@ settle the whole trajectory (`ReconcileLifecycleSettlementForTerminalRun`);
 its revise then fails earlier ("durable lifecycle state is unavailable or
 terminal"). Whether a document trajectory should ever settle while its
 owner keeps it is a Texture contract question (living documents, Gate 3).
+
+## Second effect observed (19:12Z, obligations surface on the same computer)
+
+Research's report (`update_queued`, 19:01:26) left no trace in the
+outbox or the actor tape: no unprojected wake, no due or deferred actor
+event except the one-hour fail-closed deadlines (3 activation budget, 10
+cell terminal). The research work item is still **open** (since
+19:00:43) with both runs passivated. That is an obligation with no live
+driver (O1): research is waiting on a report incorporation that the
+settled Texture will not perform. This guest runs 7bc8f374, before the
+consumption log lines (8a3d31c8), so how Texture disposed of the report
+is not visible here; the next reproduction on 8a3d31c8 or later names it.
+The SL surface should flag "open work, no active run, nothing owed" as
+undriven; that is the per-kind "no live driver" detection slice 3 deferred.
