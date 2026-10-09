@@ -180,16 +180,19 @@ now:
     Red surface (custody, vmctl). Mitigated by disposable-first proof and
     refusing rather than guessing.
   next_action: >-
-    SH is not closed: the proof covered key and files only. Remaining, in
-    order: (1) delete the debugfs copier and cold-recover's key-copy phase
-    (slice 3 deletion; safe because all 113 staging chains are escrowed and
-    escrow precedes genesis), and prove cold-recover on a disposable through
-    the owner API; (2) extend the proof to compare effective head before and
-    after and read the transparency entry; (3) slice 4 capsule artifacts and
-    slice 5 sync barrier, which the self-development acceptance needs
-    (candidates to move into Gate 2's S stations if they do not block Gate
-    1). Bounded residual: recovery waits up to ~1 min for the first
-    projection checkpoint if the disk is lost before it.
+    Copier deleted (a72e2d32, deployed 15:22Z). Cold-recover proof on a
+    disposable is not possible yet: the owner cold-recover API requires an
+    immutable ComputerVersion route slot, which only a first
+    self-development route transition creates (162 staging slots; a new
+    account has none; 503 "immutable ComputerVersion route unavailable" at
+    15:28Z). So cold recovery of a routed computer taking its key from
+    escrow is unproven until Gate 2's self-development acceptance, which
+    already includes lose-the-disk after a self-development apply; rollback
+    is git revert a72e2d32. Residual: an unrouted computer has no
+    owner-facing recovery for a broken disk (remove-and-resolve is
+    internal). Remaining SH items (effective-head and transparency checks,
+    slices 4-5) move to Gate 2's S stations, where capsules and releases
+    first exist; Gate 1's SH exit (lose-the-disk) is met.
 receipts:
   - docs/evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json
 ---
