@@ -332,3 +332,42 @@ were read. Document content is untouched.
 
 The 39 remaining are honest: not running, not pending. Whether to resume
 them is the open owner decision above.
+
+## Owner decision: Texture never resumes automatically after a restart (2026-10-09)
+
+Owner: "texture should not restart automatically! rather than trying to
+silently recover from reboot, we should treat reboot as a system failure
+that requires careful handling. in future we can build a subsystem that
+can decide what to do, but for now we shouldnt restart on texture
+opening."
+
+**Ratified rule (supersedes d1d875a0's boot re-arm and the boot
+re-dispatch):** after a guest restart, no Texture turn starts or resumes
+without a fresh owner action or a producer event recorded after the
+restart.
+
+**Paths that violated it (found 2026-10-09):**
+1. **Boot reconcile** (`textureowner.Handler.Start`):
+   - re-dispatched pre-restart producer reports and owner-input heads as
+     actor occurrences, which then executed;
+   - re-armed passivated runs on open work (fixed in 1b6c1b73);
+   - minted a first run for a document that never had one.
+2. **Actor kernel replay** (`StartKernel`): every unprocessed occurrence
+   recorded before the restart is replayed and executes the Texture turn.
+3. **Opening a document:** no code path wakes Texture on open. What the
+   owner saw on open was path 1's re-arm: "Revising…" on 67 documents.
+
+**Handling (this change):**
+- Boot does no Texture dispatch, re-arm or mint. Interrupted runs stay
+  `passivated` (`passivated_reason = runtime_restarted`).
+- A Texture occurrence whose `created_at` precedes this process's boot
+  is consumed as durable-invalid with cause `interrupted_by_restart`.
+  The dispatcher records a `delivery_invalid` fate; nothing executes.
+- Producer reports and owner revisions are untouched in the lifecycle
+  store. They are delivered on the owner's next action on that document.
+- The document reports `agent_revision_interrupted` when its latest
+  Texture run was passivated by a restart, so the editor can say so
+  instead of "Revising…".
+
+**Future:** a recovery subsystem that decides per case (owner decision
+deferred).
