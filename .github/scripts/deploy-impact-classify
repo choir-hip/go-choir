@@ -400,22 +400,17 @@ fi
 # S2 layering: when the only runtime change is the autoputer app layer (no
 # guest boot-contract change), CI pushes a layered release to tracking
 # computers through the platform-update endpoint instead of rebuilding the
-# guest image and rebooting active VMs. Base/kernel/systemd changes take the
-# guest-boot-contract path, and still push the same-commit app layer after the
-# refresh: the guest boot wrapper keeps exec'ing a computer's persisted layered
-# release (so self-developed computers keep theirs), which means a reboot alone
-# leaves layered tracking computers on stale runtime (docs/problems/
-# guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md).
+# guest image and rebooting active VMs. The guest-boot-contract path stays
+# for base/kernel/systemd changes.
 deploy_app_layer=false
 for service in "${host_services[@]}"; do
   if [[ "$service" == "autoputer" ]]; then
-    deploy_app_layer=true
     if [[ "$deploy_active_vm_refresh" != "true" ]] && [[ "$deploy_host_os" != "true" ]] && [[ "$deploy_vmctl_restart" != "true" ]]; then
+      deploy_app_layer=true
       add_explanation "autoputer runtime selected -> layered app-layer release push (no VM reboot)"
     else
       mark_guest_boot_contract
       add_explanation "autoputer runtime selected -> canonical guest boot closure + active VM refresh"
-      add_explanation "autoputer runtime selected on reboot path -> layered app-layer release push after refresh"
     fi
     break
   fi
