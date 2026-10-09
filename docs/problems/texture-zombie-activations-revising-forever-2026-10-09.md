@@ -199,3 +199,67 @@ records them, so the cycle was visible only by comparing boots.
 Next: find why a run reactivated by boot replay never produces the
 "exact run" the deferred occurrence waits for, and give each of these
 runs a terminal fate (O1) instead of re-arming it every boot.
+
+## Root cause: boot re-arms open-work runs with no executor (d1d875a0) (2026-10-09 10:05Z)
+
+**Trace (code plus owner computer states):**
+- `textureowner.Handler.Start` ends by calling `ReconcileActorWake` for
+  every activation-eligible Texture subject, and discards the result.
+- `reconcileAgentWakeLocked` arms `initialWorkWake` whenever the
+  trajectory has an open Texture work item and no **active** run.
+  d1d875a0 (2026-09-30, "runtime_restarted texture run suppressed its own
+  re-wake") narrowed the suppression from "any run" to "an active run".
+- With only that arm, `reactivatePassivatedTextureRun` sets the passivated
+  run to `pending` and its mutation back to pending, then returns. Its own
+  comment: "the current coagent_result occurrence is the execution
+  authority". At boot there is no occurrence: boot dispatches occurrences
+  only for producer reports and owner-input heads. **Nothing executes the
+  re-armed run.**
+- The next boot passivates it (`runtime_restarted`), and the cycle repeats.
+
+**Owner-visible effect:** the re-armed mutation makes
+`agent_revision_pending: true` (`internal/textureowner/texture.go:1049`).
+So **every** affected document opens into "Revising…" and stays there.
+This is the owner's 2026-10-08 report "a document can load into
+Revising…". Two sampled zombie documents (last edited 09-30 and 10-02)
+return `agent_revision_pending: true` now.
+
+**Scale on the owner computer (read-only dry run, 09:58Z):**
+- 67 runs, on 67 distinct live trajectories, all `pending`;
+- 28 at lifecycle version 2–3 (initial work, no committed turn);
+- 39 with history, up to version 775;
+- runs created 2026-08-20 … 10-08; **66 of 67 on or after 09-30**, the
+  day d1d875a0 landed.
+
+**Why tests did not catch it:** both regression tests from d1d875a0
+(`TestTextureOwnerStartReactivates{RuntimeRestartedPassivatedRun,PassivatedRunOnOpenWork}`)
+assert only `state == pending` after `Start`. Neither checks that the run
+ever executes. That violates the artifact-verified-success standing
+question: "re-armed" was taken as "recovered".
+
+**Clustering note (3+ Texture activation bugs this week):** never-bound
+assignments blocking cancel; the cancellation-intent retry loop; this.
+All three are obligations with no driver or no terminal fate (O1). This
+one is substrate-level: a wake that changes state without an executor.
+
+**Fix direction (decision recorded; No Blocking Asks):**
+- **Chosen (conservative):** boot does not re-arm a run on the open-work
+  arm alone. A re-arm requires an occurrence that will execute it:
+  - a producer report;
+  - an owner-input head;
+  - an occurrence-driven wake.
+  The run stays `passivated` (honest: not running, not "Revising…"). The
+  next real occurrence re-arms it through the occurrence path, which does
+  execute.
+- **Not chosen:** dispatch a recovery occurrence at boot so the run
+  executes. On the owner computer that would start 67 LLM turns at the
+  next boot, many on weeks-old obligations, and write agent revisions
+  into owner documents without a fresh owner request.
+- **Residual (owner decision):** should an interrupted Texture turn
+  resume automatically after a restart, and within what age? Until
+  decided, it resumes on the next occurrence for that document.
+- **Disposal of the 67:** the owner approved disposing stuck activations.
+  Cancelling the 28 initial-only trajectories was attempted and blocked
+  by the session permission classifier. With the fix, the next boot
+  leaves all 67 passivated and the "Revising…" state clears, so no
+  cancel is needed for the owner-visible symptom.
