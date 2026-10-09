@@ -123,3 +123,14 @@ allowlist has no `seccomp` syscall, so the worker cannot stack its own
 filter. (Adding a seccomp filter can only restrict.) The e3225820 test
 checked the Landlock syscalls alone; the floor should be tested as a
 sequence, the worker's layers applied under the broker filter.
+
+## Repaired on staging (22:04Z, 733bec77)
+
+Fourth M11 rerun, `computer-beb952a2…`: the first `capsule_go_eval`
+returned the cell's stdout (slot, activation, capsule computer id) with
+exit 0; later cells show the floor working as designed (`import "os"
+refused: direct OS manipulation must route through capsule broker`) and
+ordinary compile errors, then directory listings. The session worker
+starts hardened (Landlock, capability drop, workload seccomp) under the
+broker's filter. Whether the episode reaches approval, apply and restore
+is the rest of this rerun.
