@@ -629,3 +629,63 @@ func TestDocumentReportsTextureTurnInterruptedByRestart(t *testing.T) {
 		t.Fatalf("restart-interrupted turn: interrupted=%v pending=%v", doc.AgentRevisionInterrupted, doc.AgentRevisionPending)
 	}
 }
+
+// texture-settled-work-refuses-owner-revise-2026-10-09: after the Texture
+// desk settles (completes) its work on a live document, the owner's next
+// revise opens new Texture work instead of a 409. Failure modes: the revise
+// is refused; a retry opens a second work item; the completed item is
+// rewritten; a refused item is reopened (that stays 409, see
+// TestTextureOwnerRevisionRejectsMissingOpenWorkWithoutDispatch).
+func TestOwnerReviseAfterTextureSettledReopensTextureWork(t *testing.T) {
+	core, handler := testAPISetup(t)
+	start := startObservationLifecycle(t, core.Store())
+	dispatches := 0
+	core.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {
+		dispatches++
+		return nil
+	})
+	settle := types.SettleLifecycleWorkRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "settle-texture-work",
+		TrajectoryID: start.TrajectoryID, WorkItemID: start.InitialWork.WorkItemID, ActingAgentID: start.Agent.AgentID,
+		ResultRef: start.InitialRevision.RevisionID,
+	}
+	settle.CommandDigest, _ = store.ComputeSettleLifecycleWorkDigest(settle)
+	if _, err := core.Store().SettleLifecycleWork(t.Context(), settle); err != nil {
+		t.Fatalf("settle Texture work: %v", err)
+	}
+
+	path := "/api/texture/documents/" + start.InitialDocument.DocID + "/revise"
+	first := postOwnerInstruction(t, handler, path, start.OwnerID, "after-settle", "tighten the intro", start.InitialRevision.RevisionID)
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("revise after settle status=%d body=%s", first.Code, first.Body.String())
+	}
+	// A retry must not open a second work item (its status is the existing
+	// owner-revise retry behavior, not this change).
+	_ = postOwnerInstruction(t, handler, path, start.OwnerID, "after-settle", "tighten the intro", start.InitialRevision.RevisionID)
+
+	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	open, completed := 0, 0
+	for _, work := range snapshot.WorkItems {
+		if work.AssignedAgentID != start.Agent.AgentID {
+			continue
+		}
+		switch work.Status {
+		case types.WorkItemOpen:
+			open++
+		case types.WorkItemCompleted:
+			completed++
+			if work.WorkItemID != start.InitialWork.WorkItemID {
+				t.Fatalf("unexpected completed Texture work %s", work.WorkItemID)
+			}
+		}
+	}
+	if open != 1 || completed != 1 {
+		t.Fatalf("Texture work open=%d completed=%d, want 1 and 1: %+v", open, completed, snapshot.WorkItems)
+	}
+	if dispatches < 1 {
+		t.Fatalf("revise after settle dispatched no wake")
+	}
+}

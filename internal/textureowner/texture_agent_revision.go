@@ -131,34 +131,34 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head changed; reload the latest version before revising"})
 		return
 	}
-	targetProfile := ""
-	targetWorkItemID := ""
-	for _, work := range snapshot.WorkItems {
-		if work.Status != types.WorkItemOpen {
-			continue
+	targetProfile, targetWorkItemID, multiple := ownerRevisionTarget(snapshot, doc.DocID)
+	if multiple {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open desk target work items"})
+		return
+	}
+	if targetWorkItemID == "" && textureWorkSettledByDesk(snapshot, doc.DocID) {
+		// The desk completed its work on a live document; owner input is new
+		// work (texture-settled-work-refuses-owner-revise-2026-10-09).
+		// A lost race to another reopen is fine: the re-read below joins
+		// whichever single open item won.
+		if _, reopenErr := h.reopenTextureWorkForOwner(r.Context(), ownerID, doc, clientRequestID); reopenErr != nil {
+			log.Printf("texture api: reopen Texture work for owner revise: %v", reopenErr)
 		}
-		// The durable supervision surface minted beside a document cast
-		// (store.TextureSupervisionWorkItemPrefix) is a report target, never a
-		// revision consumer — an engineering-bound document legitimately shows
-		// it alongside the engineering cast item, so it must not count.
-		if store.IsTextureSupervisionWorkItem(work.WorkItemID) {
-			continue
+		if reloaded, reloadErr := h.Store.GetLifecycleSnapshot(r.Context(), ownerID, doc.ComputerID, doc.TrajectoryID); reloadErr == nil && reloaded.Trajectory.Status == types.TrajectoryLive {
+			snapshot = reloaded
+			targetProfile, targetWorkItemID, multiple = ownerRevisionTarget(snapshot, doc.DocID)
+			if multiple {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open desk target work items"})
+				return
+			}
 		}
-		profile := strings.TrimSpace(work.AuthorityProfile)
-		if profile != agentprofile.Texture && profile != agentprofile.Engineering {
-			continue
-		}
-		if work.AssignedAgentID != profile+":"+doc.DocID {
-			continue
-		}
-		if targetWorkItemID != "" {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has multiple open desk target work items"})
-			return
-		}
-		targetProfile, targetWorkItemID = profile, work.WorkItemID
 	}
 	if targetWorkItemID == "" {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle has no open desk target work item"})
+		return
+	}
+	if head = snapshot.HeadRevision; head.RevisionID != expectedHead {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "document head changed; reload the latest version before revising"})
 		return
 	}
 	metadata := mergeTextureRevisionMetadata(nil, map[string]any{
@@ -225,6 +225,91 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 		RequestID:  requestID,
 		Replay:     result.Replay,
 	})
+}
+
+// ownerRevisionTarget finds the one open desk work item an owner revise
+// feeds: Texture or Engineering, assigned to this document's desk agent.
+func ownerRevisionTarget(snapshot types.LifecycleSnapshot, docID string) (profile, workItemID string, multiple bool) {
+	for _, work := range snapshot.WorkItems {
+		if work.Status != types.WorkItemOpen {
+			continue
+		}
+		// The durable supervision surface minted beside a document cast
+		// (store.TextureSupervisionWorkItemPrefix) is a report target, never a
+		// revision consumer — an engineering-bound document legitimately shows
+		// it alongside the engineering cast item, so it must not count.
+		if store.IsTextureSupervisionWorkItem(work.WorkItemID) {
+			continue
+		}
+		p := strings.TrimSpace(work.AuthorityProfile)
+		if p != agentprofile.Texture && p != agentprofile.Engineering {
+			continue
+		}
+		if work.AssignedAgentID != p+":"+docID {
+			continue
+		}
+		if workItemID != "" {
+			return "", "", true
+		}
+		profile, workItemID = p, work.WorkItemID
+	}
+	return profile, workItemID, false
+}
+
+// textureWorkSettledByDesk reports a live document whose Texture desk
+// completed its latest work item (not refused or cancelled) and which is not
+// engineering-bound. Only this state reopens work on owner input; a refused
+// item still refuses the revise.
+func textureWorkSettledByDesk(snapshot types.LifecycleSnapshot, docID string) bool {
+	if snapshot.Trajectory.Status != types.TrajectoryLive {
+		return false
+	}
+	textureAgentID := agentprofile.Texture + ":" + docID
+	agentLive := false
+	for _, agent := range snapshot.Agents {
+		if agent.AgentID == agentprofile.Engineering+":"+docID && agent.LifecycleVersion > 0 {
+			return false
+		}
+		if agent.AgentID == textureAgentID && agent.LifecycleVersion > 0 {
+			agentLive = true
+		}
+	}
+	if !agentLive {
+		return false
+	}
+	var latest *types.WorkItemRecord
+	for i := range snapshot.WorkItems {
+		work := &snapshot.WorkItems[i]
+		if work.AssignedAgentID != textureAgentID || strings.TrimSpace(work.AuthorityProfile) != agentprofile.Texture || store.IsTextureSupervisionWorkItem(work.WorkItemID) {
+			continue
+		}
+		if latest == nil || work.UpdatedAt.After(latest.UpdatedAt) {
+			latest = work
+		}
+	}
+	return latest != nil && latest.Status == types.WorkItemCompleted
+}
+
+// textureOwnerReopenObjective is constant so the open-work fingerprint lets
+// only one concurrent reopen win; the loser re-reads and joins it.
+const textureOwnerReopenObjective = "Revise the document for the owner's new request."
+
+func (h *Handler) reopenTextureWorkForOwner(ctx context.Context, ownerID string, doc types.Document, clientRequestID string) (types.LifecycleResult, error) {
+	workID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{"texture-owner-reopen", ownerID, doc.ComputerID, doc.TrajectoryID, clientRequestID}, "\x00"))).String()
+	req := types.OpenLifecycleWorkRequest{
+		OwnerID: ownerID, ComputerID: doc.ComputerID, CommandID: "owner-reopen-texture:" + workID,
+		TrajectoryID: doc.TrajectoryID,
+		WorkItem: types.WorkItemRecord{
+			WorkItemID: workID, Objective: textureOwnerReopenObjective,
+			AssignedAgentID: agentprofile.Texture + ":" + doc.DocID, AuthorityProfile: agentprofile.Texture,
+		},
+	}
+	digest, err := store.ComputeOpenLifecycleWorkDigest(req)
+	if err != nil {
+		return types.LifecycleResult{}, err
+	}
+	req.CommandDigest = digest
+	return h.Store.OpenLifecycleWork(ctx, req)
 }
 
 const textureOwnerRevisionSchemaV1 = "choir.texture_owner_revision.v1"
