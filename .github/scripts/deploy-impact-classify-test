@@ -129,9 +129,9 @@ node_a_tooling_output="$(
     "nix/node-a-disks.nix"
 )"
 assert_contains "$node_a_tooling_output" "deploy_needed=false"
-assert_contains "$node_a_tooling_output" "nix/node-a.nix -> ignored (Node A mirror config; not deployed to Node B host or guest closures)"
-assert_contains "$node_a_tooling_output" "nix/node-a-hardware.nix -> ignored (Node A mirror config; not deployed to Node B host or guest closures)"
-assert_contains "$node_a_tooling_output" "nix/node-a-disks.nix -> ignored (Node A mirror config; not deployed to Node B host or guest closures)"
+assert_contains "$node_a_tooling_output" "nix/node-a.nix -> ignored (Node A shared-host config; not deployed to Node B host or guest closures)"
+assert_contains "$node_a_tooling_output" "nix/node-a-hardware.nix -> ignored (Node A shared-host config; not deployed to Node B host or guest closures)"
+assert_contains "$node_a_tooling_output" "nix/node-a-disks.nix -> ignored (Node A shared-host config; not deployed to Node B host or guest closures)"
 assert_not_contains "$node_a_tooling_output" "unknown deployed path"
 
 pointer_sync_output="$(run_classifier "scripts/node-b-sync-service-pointers")"

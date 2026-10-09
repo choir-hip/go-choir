@@ -464,15 +464,10 @@ EOF
       };
 
       # ── Node A host configuration ─────────────────────────────────────
-      # Full Choir mirror serving choir-ip.com. Imports node-b.nix for the
-      # complete service stack, overrides hostname and Caddy virtualHosts.
+      # Shared host: Node B's Nix remote builder only; the rest is free for
+      # another project (docs/node-a-shared-host.md).
       nixosConfigurations.go-choir-a = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
-        specialArgs = {
-          goChoirPackages = goChoirPackages;
-          inherit buildCommit sourceRepoRemote;
-          guestImage = guest-image;
-        };
         modules = [
           ./nix/node-a-hardware.nix
           ./nix/node-a-disks.nix

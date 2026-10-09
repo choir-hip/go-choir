@@ -128,8 +128,8 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
       continue
       ;;
-    scripts/node-a-*|nix/node-a.nix|nix/node-a-hardware.nix|nix/node-a-disks.nix)
-      add_explanation "$path -> ignored (Node A mirror config; not deployed to Node B host or guest closures)"
+    scripts/node-a-*|nix/node-a.nix|nix/node-a-hardware.nix|nix/node-a-disks.nix|nix/modules/choir-nix-builder-host.nix)
+      add_explanation "$path -> ignored (Node A shared-host config; not deployed to Node B host or guest closures)"
       continue
       ;;
     start-services.sh)

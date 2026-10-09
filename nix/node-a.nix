@@ -1,67 +1,50 @@
-# Disposable go-choir Node A design lab for https://choir-ip.com.
-{ lib, ... }:
+# Node A: a shared NixOS host (owner 2026-10-09). Choir uses it only as Node
+# B's Nix remote builder (./modules/choir-nix-builder-host.nix). The rest of
+# the machine is free for another project. The old Choir mirror that served
+# choir-ip.com was removed the same day. Handoff notes:
+# docs/node-a-shared-host.md.
+{ pkgs, ... }:
 {
-  imports = [ ./node-b.nix ];
+  imports = [ ./modules/choir-nix-builder-host.nix ];
 
-  networking.hostName = lib.mkForce "go-choir-a";
+  boot.loader.efi.canTouchEfiVariables = true;
+  boot.loader.efi.efiSysMountPoint = "/boot/efi";
+  boot.loader.grub = {
+    enable = true;
+    efiSupport = true;
+    devices = [ "nodev" ];
+  };
 
-  services.caddy.virtualHosts = lib.mkForce {
-    "choir-ip.com" = {
-      extraConfig = ''
-        handle /auth/* {
-          reverse_proxy 127.0.0.1:8081
-        }
-        handle /health {
-          reverse_proxy 127.0.0.1:8082
-        }
-        handle /health/* {
-          reverse_proxy 127.0.0.1:8084
-        }
-        handle /api/email/resend/webhook {
-          reverse_proxy 127.0.0.1:8087
-        }
-        handle /api/* {
-          reverse_proxy 127.0.0.1:8082 {
-            transport http {
-              response_header_timeout 15m
-              read_timeout 15m
-              write_timeout 15m
-            }
-          }
-        }
-        handle /provider/* {
-          respond "provider routes are not available from the public edge" 403
-        }
-        handle /internal/* {
-          respond "internal routes are not available from the public edge" 403
-        }
-        handle /assets/* {
-          reverse_proxy 127.0.0.1:8082
-        }
-        handle {
-          reverse_proxy 127.0.0.1:8082
-        }
-      '';
+  networking.hostName = "node-a";
+  networking.useDHCP = true;
+  networking.firewall = {
+    enable = true;
+    allowedTCPPorts = [ 22 ];
+  };
+
+  services.openssh = {
+    enable = true;
+    openFirewall = true;
+    settings = {
+      PermitRootLogin = "prohibit-password";
+      PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
     };
   };
 
-  systemd.services.go-choir-auth.serviceConfig.Environment = lib.mkForce [
-    "AUTH_PORT=8081"
-    "AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
-    "AUTH_RP_ID=choir-ip.com"
-    "AUTH_RP_ORIGINS=https://choir-ip.com"
-    "AUTH_JWT_PRIVATE_KEY_PATH=/var/lib/go-choir/auth-signing/ed25519-key"
-    "AUTH_ACCESS_TOKEN_TTL=5m"
-    "AUTH_REFRESH_TOKEN_TTL=720h"
-    "AUTH_COOKIE_SECURE=true"
+  users.users.root.openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILN3IIn6TzBBExWiJTJ7aDlA/LlEMXvjFlSfkKkV02TZ wiz@choiros-ovh"
   ];
 
-  systemd.services.go-choir-maild.serviceConfig.Environment = lib.mkForce [
-    "SERVER_HOST=0.0.0.0"
-    "MAILD_PORT=8087"
-    "MAILD_DB_PATH=/var/lib/go-choir/mail/mail.db"
-    "MAILD_STORAGE_ROOT=/var/lib/go-choir/mail"
-    "MAILD_PRIMARY_DOMAIN=choir-ip.com"
-    "MAILD_VMCTL_URL=http://127.0.0.1:8083"
-  ];
+  nix.settings.auto-optimise-store = true;
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 14d";
+  };
+
+  environment.systemPackages = with pkgs; [ git vim curl htop ];
+
+  time.timeZone = "UTC";
+  system.stateVersion = "25.11";
 }
