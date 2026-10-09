@@ -162,7 +162,15 @@ func TestMaybeRunDoltGCSkipWritesDisposition(t *testing.T) {
 	defer stubDiskUsage(big)()
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "ws.db")
-	if err := os.MkdirAll(resolveTextureWorkspacePath(storePath), 0o755); err != nil {
+	nomsDir := filepath.Join(resolveTextureWorkspacePath(storePath), "texture", ".dolt", "noms")
+	if err := os.MkdirAll(nomsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	table := filepath.Join(nomsDir, "tablefile-live")
+	if err := os.WriteFile(table, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(table, 11*gibBytes); err != nil {
 		t.Fatal(err)
 	}
 	if err := MaybeRunDoltGC(dir, storePath); err != nil {
@@ -179,4 +187,61 @@ func TestMaybeRunDoltGCSkipWritesDisposition(t *testing.T) {
 	if got.Outcome != "skipped_size" || got.UsedGiB != 11 || got.ThresholdGiB != 5 {
 		t.Fatalf("disposition = %+v, want skipped_size/11/5", got)
 	}
+}
+
+// The size guard measures the Dolt store, not the disk. Failure modes pinned
+// (docs/problems/guest-store-history-bloat-and-memory-shape-2026-10-09.md):
+// updater releases and app files on the same disk counted as "live store"
+// and suppressed GC on a compacted 1.7 GiB store; the journal counted as live;
+// a large non-journal store not tripping the guard; a missing noms dir
+// erroring instead of measuring zero.
+func TestMaybeRunDoltGCGuardMeasuresStoreNotDisk(t *testing.T) {
+	disk := doltGCDiskUsage{TotalBytes: 32 * gibBytes, UsedBytes: 12 * gibBytes, AvailBytes: 20 * gibBytes}
+	defer stubDiskUsage(disk)()
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "ws.db")
+	nomsDir := filepath.Join(resolveTextureWorkspacePath(storePath), "texture", ".dolt", "noms")
+	if err := os.MkdirAll(nomsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sparse := func(name string, size int64) {
+		t.Helper()
+		path := filepath.Join(nomsDir, name)
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Truncate(path, size); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sparse("tablefile-live", 1*gibBytes)
+
+	if err := MaybeRunDoltGC(dir, storePath); err != nil {
+		t.Fatalf("gc: %v", err)
+	}
+	got := readDisposition(t, dir)
+	if got.Outcome == "skipped_size" || got.LiveGiB != 1 || got.UsedGiB != 12 {
+		t.Fatalf("disposition = %+v, want not skipped, live 1 GiB, disk used 12 GiB", got)
+	}
+
+	sparse("tablefile-big", 6*gibBytes)
+	if err := MaybeRunDoltGC(dir, storePath); err != nil {
+		t.Fatalf("gc: %v", err)
+	}
+	if got := readDisposition(t, dir); got.Outcome != "skipped_size" || got.LiveGiB != 7 {
+		t.Fatalf("disposition = %+v, want skipped_size at 7 GiB live", got)
+	}
+}
+
+func readDisposition(t *testing.T, dir string) doltGCDisposition {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(dir, doltGCDispositionFileName))
+	if err != nil {
+		t.Fatalf("disposition missing: %v", err)
+	}
+	var got doltGCDisposition
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("decode disposition: %v", err)
+	}
+	return got
 }
