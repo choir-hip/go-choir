@@ -51,3 +51,17 @@ Problem first; no fix in this commit. Written 20:55Z.
 2. Fix the cause the stderr names.
 3. Bound identical failing tool calls in the engineering loop (a dead
    worker is a terminal blocker, not something to retry 400 times).
+
+## Why the retries never end (20:57Z, code reading)
+
+Only Texture runs get a tool-loop budget (`textureActorToolLoopBudget`,
+`agentcore/runtime.go`); engineering runs have none. And the engineering
+completion guard refuses to let a turn end without a committed terminal
+fate ("Finish the assignment inside a capsule_go_eval cell … Narrative
+text alone does not end the run."). Fates are committed from inside a
+capsule cell. With the worker dead, the run can neither do the work nor
+record that it cannot: a deadlock, held open by the guard.
+
+Fix direction 3, sharpened: give engineering a tool-loop budget, and let
+a run whose capsule worker is unavailable end with a runtime-recorded
+blocker fate instead of a model-committed one.
