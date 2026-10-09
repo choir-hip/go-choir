@@ -605,18 +605,8 @@ func (a *Adapter) Start(ctx context.Context) error {
 	// Refresh-runtime may intentionally remove the persistent updater current
 	// pointer. Rejoin the immutable baseline before the service is considered
 	// started; failures remain observable as a fail-closed 503 at the surface.
-	for attempt := range 10 {
-		if err := a.Runtime.EnsureComputerSurface(ctx); err == nil {
-			break
-		} else if attempt == 9 {
-			log.Printf("actorruntime: computer surface baseline bootstrap deferred: %v", err)
-		} else {
-			select {
-			case <-ctx.Done():
-				break
-			case <-time.After(250 * time.Millisecond):
-			}
-		}
+	if err := ensureSurfaceWithRetry(ctx, 10, 250*time.Millisecond, a.Runtime.EnsureComputerSurface); err != nil {
+		log.Printf("actorruntime: computer surface baseline bootstrap deferred: %v", err)
 	}
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {
@@ -679,4 +669,31 @@ func (a *Adapter) cleanupLog() {
 		_ = os.Remove(a.logPath + "-wal")
 		_ = os.Remove(a.logPath + "-shm")
 	}
+}
+
+// ensureSurfaceWithRetry retries the boot-time computer surface bootstrap
+// while its error changes (the updater may still be settling). The same
+// error twice in a row is a verdict about disk state, not a race, so it
+// stops there instead of spending the whole budget on every boot.
+func ensureSurfaceWithRetry(ctx context.Context, attempts int, delay time.Duration, ensure func(context.Context) error) error {
+	var last error
+	for attempt := range attempts {
+		err := ensure(ctx)
+		if err == nil {
+			return nil
+		}
+		if last != nil && err.Error() == last.Error() {
+			return err
+		}
+		last = err
+		if attempt == attempts-1 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+	return last
 }
