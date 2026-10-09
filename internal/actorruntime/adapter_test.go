@@ -1191,9 +1191,11 @@ func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "Texture owner is not bound") {
 		t.Fatalf("parked Texture wake error = %v, want explicit unbound-owner failure", err)
 	}
+	// The handler (this process's boot) precedes the update, as in production.
+	unbound := newActorHandler(env.adapter.Runtime, nil)
 	invalid := createLifecycleActorRun(t, env, "unbound-dispatch", types.RunPending)
 	initial := actorUpdate(invalid.OwnerID, "initial_dispatch", invalid.AgentID, invalid.RunID)
-	if _, err = newActorHandler(env.adapter.Runtime, nil).HandleUpdate(env.ctx, initial.ToAgentID, initial, nil); err == nil ||
+	if _, err = unbound.HandleUpdate(env.ctx, initial.ToAgentID, initial, nil); err == nil ||
 		!strings.Contains(err.Error(), "Texture owner is not bound") {
 		t.Fatalf("unbound Texture initial dispatch error = %v, want fail-closed owner requirement", err)
 	}
