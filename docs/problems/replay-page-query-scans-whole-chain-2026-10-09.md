@@ -97,5 +97,12 @@ deploy closures are unaffected.
 
 Fix: replay pages are point lookups bounded by the head, and a gap below
 the head is a typed error (`internal/platform/event_replay.go`, test
-`TestEventsPageWalksGaplessChainToHead`). Staging acceptance: pending
-deploy.
+`TestEventsPageWalksGaplessChainToHead`), commit `16adefa1`.
+
+Staging acceptance (CI run 37872311101, attempt 2, after the disk
+preflight was unblocked): `app-layer push: 2/2 applied 16adefa1,
+time-to-healthy=80s` (previous: 2/3, 507 s, owner rolled back). Owner
+console: release layered 02:17:56, projection resume `local=576859
+tail=0`, update re-drive with no rollback, and no replay page fetch over
+2 s (17–28 s on every earlier boot). Status: **fixed-verified** for
+problem 1. Problems 2–5 stay open (2 and 3 move to SL/O7).
