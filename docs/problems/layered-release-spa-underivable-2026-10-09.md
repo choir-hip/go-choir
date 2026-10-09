@@ -68,3 +68,12 @@ its layering entrypoint through. Residuals:
 2. **No SPA check in the app-layer deploy gate.** The gate checks
    `/health` and `build.commit` only, so this outage passed a green
    deploy. Add an SPA fetch.
+
+## Status (2026-10-09 02:35Z)
+
+Deployed `39c0d991` (CI run 37874573568): `app-layer push: 3/3 applied,
+time-to-healthy=106s`. The owner computer layered the release at 02:33:38.
+A direct fetch from Node B to the owner guest (`10.200.13.2:8085`) returns:
+`/` 200 (Choir SPA), `/desktop/texture` 200, `/assets/index-DWfAnd8o.js`
+200 (270,756 B), `/health` `ready`. **Fixed-verified** for the served SPA.
+Owner browser confirmation pending. Residuals 1–2 open.
