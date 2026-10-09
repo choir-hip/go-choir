@@ -463,17 +463,5 @@ EOF
         ];
       };
 
-      # ── Node A host configuration ─────────────────────────────────────
-      # Shared host: Node B's Nix remote builder only; the rest is free for
-      # another project (docs/node-a-shared-host.md).
-      nixosConfigurations.go-choir-a = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        modules = [
-          ./nix/node-a-hardware.nix
-          ./nix/node-a-disks.nix
-          ./nix/node-a.nix
-        ];
-      };
-
     };
 }

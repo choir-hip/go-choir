@@ -11,14 +11,16 @@ project, which will also run NixOS.
   Choir mirror and was taken down on 2026-10-09 (owner-approved).
 - 12 cores, 31 GiB RAM, ~950 GB btrfs on software RAID (`/` and `/data`
   subvolumes; `nix/node-a-disks.nix`, `nix/node-a-hardware.nix`).
-- NixOS config in this repo: `nixosConfigurations.go-choir-a`
-  (`nix/node-a.nix`). Firewall: port 22 only.
+- NixOS config: managed by the other project from 2026-10-09 (owner).
+  This repo no longer deploys node-a; `go-choir-a` and `nix/node-a*.nix`
+  were removed (last version at e68c8c36). Firewall at handover: port 22.
 
 ## What Choir needs from it
 
 Only the builder. Node B connects as root over `ssh-ng` with a key that
 can run nothing but `nix-daemon --stdio`
-(`nix/modules/choir-nix-builder-host.nix`), and sends builds while a deploy
+(the builder module in `/root/HANDOFF.md` on node-a, last in this repo at
+e68c8c36), and sends builds while a deploy
 runs: a few minutes per deploy, idle otherwise. If node-a is unreachable,
 Node B builds locally, so deploys keep working, just with more load on the
 production host.
@@ -40,13 +42,14 @@ production host.
 5. **Ports.** Choir needs only 22. Ports 80/443 and everything else are
    yours.
 
-## Changing who manages the config
+## Who manages the config
 
-Today this repo deploys node-a. To hand management to another project:
-move `nix/node-a-hardware.nix`, `nix/node-a-disks.nix` and the builder
-module into that project's flake, keep the root SSH key for the owner, and
-delete `go-choir-a` from this flake in the same week so two repos never
-fight over the host.
+The other project, from 2026-10-09. Its agent received `/root/HANDOFF.md`
+(machine facts, the builder module, the hardware/disk/boot config and the
+rules above). Choir's only coupling is Node B's side: `nix.buildMachines`
+in `nix/node-b.nix` (host `node-a-builder`, key
+`/root/.ssh/nix-builder-node-a`). If node-a stops accepting the key, Node B
+builds locally; remove the builder from `node-b.nix` if node-a is retired.
 
 ## Handover state (2026-10-09 16:45Z)
 
@@ -66,16 +69,3 @@ fight over the host.
   Choir), and small `/var/lib/{qdrant,searx,marco}` directories.
 - Verified: Node B built an uncached derivation on node-a over the builder
   key and copied the result back.
-
-## Deploying from this repo
-
-```sh
-nix run nixpkgs#nixos-rebuild -- test   --flake .#go-choir-a \
-  --target-host root@node-a --build-host root@node-a
-# check `ssh node-a true` from a new connection, then:
-nix run nixpkgs#nixos-rebuild -- switch --flake .#go-choir-a \
-  --target-host root@node-a --build-host root@node-a
-```
-
-`test` activates without changing the boot entry, so a bad config is gone
-after a reboot.
