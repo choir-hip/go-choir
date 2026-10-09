@@ -900,3 +900,99 @@ func TestTrajectorySummaryViewSuppliesCancelPreconditions(t *testing.T) {
 		t.Fatalf("cancel from summary preconditions status=%d body=%s", cancelResponse.Code, cancelResponse.Body.String())
 	}
 }
+
+// A failed owner Cancel leaves a durable intent; a retry that derives a new
+// idempotency key from the advanced version conflicts with it. The summary
+// view exposes a public intent so the UI resumes it exactly
+// (docs/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
+// Failure modes pinned: no intent in the summary; a non-public intent
+// offered for resume; the offered values not resuming (409 instead of
+// cancelled).
+func TestTrajectorySummaryViewOffersPendingCancellationForResume(t *testing.T) {
+	rt, s := testRuntime(t)
+	h := NewAPIHandler(rt)
+	const ownerID = "user-summary-resume"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, "doc-summary-resume")
+	summarize := func() trajectorySummaryResponse {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "/api/trajectories/"+url.PathEscape(trajectoryID)+"?view=summary", nil)
+		request.Header.Set("X-Authenticated-User", ownerID)
+		response := httptest.NewRecorder()
+		h.HandleTrajectoryDetail(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("summary status=%d body=%s", response.Code, response.Body.String())
+		}
+		var summary trajectorySummaryResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &summary); err != nil {
+			t.Fatal(err)
+		}
+		return summary
+	}
+	before := summarize()
+	if before.PendingCancellation != nil {
+		t.Fatalf("summary offered a cancellation before any intent: %+v", before.PendingCancellation)
+	}
+	intent := types.CancelLifecycleRequest{
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(), CommandID: "public-cancel:stuck-cancel-1",
+		TrajectoryID: trajectoryID, Reason: "owner cancellation", ExpectedLifecycleVersion: before.Trajectory.LifecycleVersion,
+		RequestedLifecycleVersion: before.Trajectory.LifecycleVersion, ExpectedHeadRevisionID: before.HeadRevisionID,
+	}
+	intent.CommandDigest, _ = store.ComputeCancelLifecycleDigest(intent)
+	if _, err := s.PrepareLifecycleCancellation(context.Background(), intent); err != nil {
+		t.Fatalf("prepare cancellation: %v", err)
+	}
+	pending := summarize().PendingCancellation
+	if pending == nil || pending.IdempotencyKey != "stuck-cancel-1" || pending.ExpectedLifecycleVersion != intent.RequestedLifecycleVersion ||
+		pending.ExpectedHeadRevisionID != intent.ExpectedHeadRevisionID || pending.Reason != intent.Reason {
+		t.Fatalf("pending cancellation = %+v, want the stored public intent", pending)
+	}
+	body, _ := json.Marshal(trajectoryCancelRequest{
+		IdempotencyKey: pending.IdempotencyKey, ExpectedLifecycleVersion: pending.ExpectedLifecycleVersion,
+		ExpectedHeadRevisionID: pending.ExpectedHeadRevisionID, Reason: pending.Reason,
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/trajectories/"+url.PathEscape(trajectoryID)+"/cancel", bytes.NewBuffer(body))
+	request.Header.Set("X-Authenticated-User", ownerID)
+	response := httptest.NewRecorder()
+	h.HandleTrajectoryDetail(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("resume cancel status=%d body=%s", response.Code, response.Body.String())
+	}
+	var cancelled trajectoryCancelResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &cancelled); err != nil || cancelled.Status != types.TrajectoryCancelled {
+		t.Fatalf("resume cancel = %+v err=%v", cancelled.Status, err)
+	}
+}
+
+// Only the public cancel path's intent can be resumed through the public
+// API; a runtime-internal intent is not offered.
+func TestTrajectorySummaryViewHidesNonPublicCancellation(t *testing.T) {
+	rt, s := testRuntime(t)
+	h := NewAPIHandler(rt)
+	const ownerID = "user-summary-internal"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, "doc-summary-internal")
+	trajectory, err := s.GetLifecycleTrajectory(context.Background(), ownerID, rt.TextureComputerID(), trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureComputerID(), trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intent := types.CancelLifecycleRequest{
+		OwnerID: ownerID, ComputerID: rt.TextureComputerID(), CommandID: "lifecycle-cancel:" + trajectoryID,
+		TrajectoryID: trajectoryID, Reason: "owner cancellation", ExpectedLifecycleVersion: trajectory.LifecycleVersion,
+		RequestedLifecycleVersion: trajectory.LifecycleVersion, ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID,
+	}
+	intent.CommandDigest, _ = store.ComputeCancelLifecycleDigest(intent)
+	if _, err := s.PrepareLifecycleCancellation(context.Background(), intent); err != nil {
+		t.Fatalf("prepare cancellation: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/trajectories/"+url.PathEscape(trajectoryID)+"?view=summary", nil)
+	request.Header.Set("X-Authenticated-User", ownerID)
+	response := httptest.NewRecorder()
+	h.HandleTrajectoryDetail(response, request)
+	var summary trajectorySummaryResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &summary); err != nil || summary.PendingCancellation != nil {
+		t.Fatalf("summary offered a non-public intent: %+v err=%v", summary.PendingCancellation, err)
+	}
+}

@@ -34,7 +34,21 @@ type trajectorySummaryResponse struct {
 	Schema         string                 `json:"schema"`
 	Trajectory     types.TrajectoryRecord `json:"trajectory"`
 	HeadRevisionID string                 `json:"head_revision_id"`
+	// PendingCancellation is an unfinished owner Cancel. A retry must resend
+	// exactly these values; a key derived from the advanced version conflicts.
+	PendingCancellation *pendingCancellationView `json:"pending_cancellation,omitempty"`
 }
+
+// pendingCancellationView is a durable public-cancel intent in the shape of
+// the cancel request that resumes it.
+type pendingCancellationView struct {
+	IdempotencyKey           string `json:"idempotency_key"`
+	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
+	ExpectedHeadRevisionID   string `json:"expected_head_revision_id"`
+	Reason                   string `json:"reason"`
+}
+
+const publicCancelCommandPrefix = "public-cancel:"
 
 type trajectoryCancelResponse struct {
 	types.LifecycleSnapshot
@@ -264,7 +278,7 @@ func (h *APIHandler) HandleTrajectoryCancel(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	result, cancelledRunIDs, err := h.rt.CancelTrajectoryCommand(
-		r.Context(), trajectoryID, ownerID, "public-cancel:"+request.IdempotencyKey, strings.TrimSpace(request.Reason),
+		r.Context(), trajectoryID, ownerID, publicCancelCommandPrefix+request.IdempotencyKey, strings.TrimSpace(request.Reason),
 		request.ExpectedLifecycleVersion, request.ExpectedHeadRevisionID,
 	)
 	if err != nil {
@@ -415,5 +429,19 @@ func (h *APIHandler) writeTrajectorySummary(w http.ResponseWriter, r *http.Reque
 		}
 		headRevisionID = document.CurrentRevisionID
 	}
-	writeAPIJSON(w, http.StatusOK, trajectorySummaryResponse{Schema: types.DurableWorkSchemaV1, Trajectory: trajectory, HeadRevisionID: headRevisionID})
+	summary := trajectorySummaryResponse{Schema: types.DurableWorkSchemaV1, Trajectory: trajectory, HeadRevisionID: headRevisionID}
+	intent, intentErr := h.rt.Store().GetLifecycleCancellationIntent(r.Context(), ownerID, h.rt.TextureComputerID(), trajectoryID)
+	switch {
+	case intentErr == nil && trajectory.Status == types.TrajectoryLive && strings.HasPrefix(intent.CommandID, publicCancelCommandPrefix):
+		summary.PendingCancellation = &pendingCancellationView{
+			IdempotencyKey:           strings.TrimPrefix(intent.CommandID, publicCancelCommandPrefix),
+			ExpectedLifecycleVersion: intent.RequestedLifecycleVersion,
+			ExpectedHeadRevisionID:   intent.ExpectedHeadRevisionID,
+			Reason:                   intent.Reason,
+		}
+	case intentErr != nil && !errors.Is(intentErr, store.ErrNotFound):
+		writeLifecycleAPIError(w, intentErr)
+		return
+	}
+	writeAPIJSON(w, http.StatusOK, summary)
 }

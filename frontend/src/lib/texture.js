@@ -439,12 +439,15 @@ export async function cancelAgentRevision(docId, options = {}) {
     await decodeError(summaryResponse, `Lifecycle summary failed (${summaryResponse.status})`);
   }
   const summary = await summaryResponse.json();
-  const expectedVersion = summary?.trajectory?.lifecycle_version;
-  const expectedHead = summary?.head_revision_id;
+  // An unfinished earlier Cancel is durable; retrying it with a key derived
+  // from the now-advanced version would conflict, so resend it exactly.
+  const pending = summary?.pending_cancellation;
+  const expectedVersion = pending ? pending.expected_lifecycle_version : summary?.trajectory?.lifecycle_version;
+  const expectedHead = pending ? pending.expected_head_revision_id : summary?.head_revision_id;
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion <= 0 || !expectedHead) {
     throw new Error('Lifecycle snapshot lacks cancellation preconditions');
   }
-  const commandId = options.commandId || `desktop-cancel:${trajectoryId}:${expectedVersion}:${expectedHead}`;
+  const commandId = pending?.idempotency_key || options.commandId || `desktop-cancel:${trajectoryId}:${expectedVersion}:${expectedHead}`;
   const res = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -452,7 +455,7 @@ export async function cancelAgentRevision(docId, options = {}) {
       idempotency_key: commandId,
       expected_lifecycle_version: expectedVersion,
       expected_head_revision_id: expectedHead,
-      reason: options.reason || 'owner cancellation',
+      reason: pending ? pending.reason : (options.reason || 'owner cancellation'),
     }),
   });
   if (!res.ok) {
