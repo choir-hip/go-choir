@@ -88,6 +88,25 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   it built. Next: panel review, then registry plus fate surface.
 - **CI item 2:** main runs stay serialized (parallel runs can invert deploy
   order; see the CI latency problem doc).
+- **SL slices 1–3 deployed (afternoon, e3f2d560):** crash vs planned
+  restart marker (all desks), event-driven wake outbox with a 5-attempt
+  budget and a visible `dispatch_exhausted` fate, and
+  `GET /api/runtime/obligations` (what a computer owes, no SSH). Fault
+  matrix legs pinned: poison-wake isolation (unit) and "nothing owed after
+  a crash" (Texture suite T8, staging).
+- **O12:** CI lock-scope ratchet (`cmd/lockscope`): no new lock held across
+  network, exec, sleep or channel waits; 5 known holds baselined.
+- **O7:** fleet boot measurement
+  ([evidence](evidence/o7-boot-cost-vs-history-2026-10-09.md)): health is
+  flat (7–11 s). The ~17 s that looked like history cost is a surface
+  bootstrap retrying a deterministic refusal on layered computers; fixed
+  in b2a76845 (two attempts), deploy pending.
+- **Texture acceptance suite:** first run failed at T2 on a harness bug
+  (5-minute access token, no renewal); fixed, rerun in progress.
+- **Gate 2 opened (drafted):**
+  [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
+  First slice: re-run the M11 self-development episode (last green
+  2026-09-29) on the current build.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
