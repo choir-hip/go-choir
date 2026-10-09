@@ -105,3 +105,22 @@ Known consequences:
 - Artifact GC's og live set becomes empty. If GC is ever set to active
   before the og blob namespace is reviewed, it will collect the og bodies.
   That is the intended teardown, but only behind an explicit mode change.
+
+## Done 2026-10-09 (owner-approved)
+
+- 12:33Z: Store B swapped for an empty repo (runbook above). corpusd is
+  healthy on the empty schema.
+- 12:57Z–13:15Z: history-free dump of the old repo's current state,
+  `/var/lib/go-choir/corpus-dolt/rebuild-20261009/corpus.sql` (23 GB).
+- ~12:35Z: deleted the pre-compact backup (17 G) and the August console
+  log. Both quarantine images kept.
+- ~12:40Z: `nix-store --gc` freed 16.7 GiB (287 paths).
+- 14:04Z: owner decided to start Autopaper from zero content ("yes, delete
+  it"). Stopped corpus-dolt (its server had the old repo open as a second
+  database), deleted `corpus.reset-20261009` (104 G), started corpus-dolt
+  and restarted corpusd. Health ok.
+
+Free space on `/`: 89 G this morning, **226 G** now. Remaining:
+- the 23 GB dump (compress and copy to node-a, or delete, owner's call);
+- the two quarantine images (32 G each), pending the 484-path check;
+- the bounds that are still missing (O10, above).
