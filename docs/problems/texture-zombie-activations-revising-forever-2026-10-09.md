@@ -371,3 +371,14 @@ restart.
 
 **Future:** a recovery subsystem that decides per case (owner decision
 deferred).
+
+**Owner follow-up (same day):** "i think we should be fine with stalled
+work after a reboot. later on, post gates 1, 2, 3, we can have management
+take on the responsibility of resuming or cancelling stalled work when
+resources avail."
+
+So, for O1: work stalled by a reboot is an **accepted, visible
+non-terminal state** until gates 1–3 land. It is not an O1 violation to
+repair by automatic resume. The future driver is management, which will
+resume or cancel stalled work when resources allow. Named residual:
+`management-owns-stalled-work` (post gates 1–3).
