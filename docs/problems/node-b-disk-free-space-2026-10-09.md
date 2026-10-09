@@ -67,3 +67,41 @@ hour. Its live set includes `SELECT body_ref FROM og_objects` against Store B
 down. That is one more reason to finish the corpus teardown before turning
 artifact GC on. The 12:24Z platform deploy restarts the service and ends the
 request. Hypothesis, not yet measured: the og live-set query dominates.
+
+## Store B reset runbook (owner-approved teardown; executing 2026-10-09)
+
+Store B holds only World Wire data: `og_objects`/`og_edges` (object graph),
+`platform_texture_revisions`, publication routes and ingestion tables. Code
+reaches it only via `Store.corpus()`, which **falls back to Store A when the
+DSN is unset**. So unwiring `CORPUSD_CORPUS_DOLT_DSN` would not tear Store B
+down. It would send World Wire reads and writes to Store A's stale
+pre-split tables (the 2026-10-05 og wrong-store class). The reset keeps the
+wiring and swaps the repo:
+
+1. Survey: the only connection to :13307 is corpusd; sourcecycled is
+   inactive and out of the boot set.
+2. `systemctl stop go-choir-corpus-dolt`. corpusd stays up: credential
+   issuance and the event tape are Store A.
+3. `mv corpus-dolt/corpus corpus-dolt/corpus.reset-20261009` (same
+   filesystem, instant, reversible by moving it back).
+4. `systemctl start go-choir-corpus-dolt`. `corpus-dolt-init` creates an
+   empty `corpus` repo.
+5. `systemctl restart go-choir-corpusd`. Bootstrap applies
+   `corpusSchemaDDL` to the empty Store B.
+6. Verify: corpusd health, the owner computer stays ready, a credential
+   envelope issues (signup path), and World Wire reads return empty rather
+   than errors.
+7. Archive `corpus.reset-20261009` to node-a (584 G free) with rsync and a
+   size and file-count check. Delete the Node B copy only after that check:
+   ~104 G.
+
+Rollback: stop corpus-dolt, move the empty repo aside, move
+`corpus.reset-20261009` back, start corpus-dolt, restart corpusd.
+
+Known consequences:
+- Old source citations in owner documents that point at og objects will
+  not resolve until World Wire is rebuilt (gate 3). The data stays in the
+  archive.
+- Artifact GC's og live set becomes empty. If GC is ever set to active
+  before the og blob namespace is reviewed, it will collect the og bodies.
+  That is the intended teardown, but only behind an explicit mode change.
