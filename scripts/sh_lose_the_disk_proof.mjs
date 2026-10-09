@@ -72,21 +72,27 @@ try {
   const userId = reg.user?.id || '';
   receipt.disposable = { email, user_id: userId };
 
+  const apiFetch = (path, init = {}) => page.evaluate(async ({ path, init }) => {
+    const res = await fetch(path, { credentials: 'include', ...init });
+    return { status: res.status, text: (await res.text()).slice(0, 2000) };
+  }, { path, init });
+
+  // Registration alone does not realize a computer; the first computer-routed
+  // request does. Load the desktop and keep asking through the files API.
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   let own = null;
   for (let i = 0; i < 200 && !(own && own.state === 'active'); i++) {
     own = ownershipsFor(userId)[0] || null;
-    if (!(own && own.state === 'active')) await sleep(3000);
+    if (!(own && own.state === 'active')) {
+      await apiFetch(`/api/files/${PROOF_FILE}`).catch(() => null);
+      await sleep(3000);
+    }
   }
   if (!own || own.state !== 'active') throw new Error(`computer did not reach active: ${JSON.stringify(own)}`);
   receipt.disposable.computer_id = own.computer_id;
   receipt.disposable.initial_vm_id = own.vm_id;
   const health = JSON.parse(nodeB(`curl -fsS --max-time 10 ${own.computer_url}/health`));
   step('precondition', { ownership: [own], build: health?.build?.commit });
-
-  const apiFetch = (path, init = {}) => page.evaluate(async ({ path, init }) => {
-    const res = await fetch(path, { credentials: 'include', ...init });
-    return { status: res.status, text: (await res.text()).slice(0, 2000) };
-  }, { path, init });
 
   const written = await apiFetch(`/api/files/${PROOF_FILE}`, { method: 'PUT', body: PROOF_TEXT });
   const synced = await apiFetch('/api/files/sync', { method: 'POST' });

@@ -124,3 +124,28 @@ push `before` if the header is missing or unfetchable. First run 37929273657
 logged `Plan base: live staging commit ae61f153…` and planned go=true.
 Item 2 (whole-run serialization) stays open, but it can no longer hide
 undeployed code.
+
+## Item 2 decision: keep whole-run serialization on main (2026-10-09 14:50Z)
+
+The proposal was to give each main commit its own workflow-level group and
+rely on the job-level deploy group plus the stale-target guard. Rejected
+before landing, for two reasons:
+
+1. **Deploy ordering can invert.** GitHub concurrency keeps one running and
+   one pending job per group, and a newly queued job cancels the pending one
+   whatever its commit. With parallel main runs: deploy A is running, run C
+   finishes checks first and its deploy goes pending, then older run B
+   finishes and its deploy replaces C's. B deploys, the guard passes (live
+   A is behind B), and C's deploy no longer exists. Staging silently stays
+   on B without C, which is the hole class fixed in 6d6db691.
+2. **Duplicate builds come back.** Parallel runs let run N+1's prebuild
+   build beside run N's deploy on Node B (separate groups), which is the
+   "two concurrent toplevel builds" this item was opened to remove.
+
+Serialized main runs, with one pending run that coalesces any number of
+later pushes, plus the live-staging plan base, give the right result with
+the fewest builds. The cost is latency: a push waits for the run ahead of
+it. If that becomes the bottleneck, the fix is a catch-up step at the end
+of the deploy job (if `origin/main` moved past the deployed commit with
+deploy impact and no run is queued for it, dispatch a deploy for the head),
+not parallel runs. Item 2 is closed; serialization is intended.
