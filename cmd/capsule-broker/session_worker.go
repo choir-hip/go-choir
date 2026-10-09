@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -104,7 +104,8 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	cmd.Env = []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
 	cmd.ExtraFiles = []*os.File{childFile}
-	cmd.Stderr = &bytes.Buffer{}
+	stderr := &lockedTail{limit: 2048}
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		_ = childFile.Close()
 		_ = parentConn.Close()
@@ -119,9 +120,40 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 	}
 	if err := w.awaitReady(sessionReadyTimeout); err != nil {
 		w.killLocked()
+		// The worker's stderr names why it died (a hardening-floor fatal,
+		// a bad flag); without it the broker only sees EOF
+		// (capsule-session-worker-dies-at-start-2026-10-09).
+		if tail := strings.TrimSpace(stderr.String()); tail != "" {
+			log.Printf("capsule-broker: session worker exited before ready: %s", tail)
+			return nil, fmt.Errorf("%w; worker stderr: %s", err, tail)
+		}
 		return nil, err
 	}
 	return w, nil
+}
+
+// lockedTail keeps the last limit bytes a child writes to stderr; the exec
+// copy goroutine writes while the broker may read after a timed-out reap.
+type lockedTail struct {
+	mu    sync.Mutex
+	limit int
+	buf   []byte
+}
+
+func (t *lockedTail) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if over := len(t.buf) - t.limit; over > 0 {
+		t.buf = append([]byte(nil), t.buf[over:]...)
+	}
+	return len(p), nil
+}
+
+func (t *lockedTail) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.buf)
 }
 
 // awaitReady consumes the worker's post-prebind ready result frame from the
