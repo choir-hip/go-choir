@@ -503,7 +503,9 @@ func TestAdapterRestartInterruptsRunningTextureActivationFromDurableBacklog(t *t
 	}
 }
 
-func TestAdapterStartDeliversDurableLifecycleOccurrenceAfterRestart(t *testing.T) {
+// Owner rule: only a planned restart resumes pre-boot work; a crash
+// interrupts it (TestPreBootWorkOccurrenceIsInterruptedAfterCrashForEveryDesk).
+func TestAdapterStartDeliversDurableLifecycleOccurrenceAfterPlannedRestart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	dir := t.TempDir()
@@ -570,7 +572,7 @@ func TestAdapterStartDeliversDurableLifecycleOccurrenceAfterRestart(t *testing.T
 	seed.Stop()
 
 	blocking := &targetStartupBlockingProvider{targetAgentID: fixture.agentID, started: make(chan struct{}, 1), release: make(chan struct{})}
-	restarted := New(cfg, s, events.NewEventBus(), blocking, nil)
+	restarted := New(cfg, s, events.NewEventBus(), blocking, []agentcore.RuntimeOption{agentcore.WithBootRestart(agentcore.PlannedRestart{Reason: "test_apply"}, true)})
 	if err := restarted.BindTextureOwner(textureowner.NewHandler(restarted.Runtime)); err != nil {
 		t.Fatalf("bind restart Texture owner: %v", err)
 	}
@@ -780,7 +782,7 @@ func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
 	}
 }
 
-func TestInitialDispatchReactivatesRestartPassivatedRun(t *testing.T) {
+func TestInitialDispatchReactivatesRestartPassivatedRunAfterPlannedRestart(t *testing.T) {
 	env := newAdapterTestEnv(t)
 	now := time.Now().UTC()
 	rec := types.RunRecord{
@@ -803,7 +805,9 @@ func TestInitialDispatchReactivatesRestartPassivatedRun(t *testing.T) {
 		t.Fatalf("create restart-passivated initial run: %v", err)
 	}
 	update := actorUpdate(rec.OwnerID, "initial_dispatch", rec.AgentID, rec.RunID)
-	if _, err := newActorHandler(env.adapter.Runtime, nil).HandleUpdate(env.ctx, update.ToAgentID, update, nil); err != nil {
+	handler := newActorHandler(env.adapter.Runtime, nil)
+	handler.plannedBoot = true
+	if _, err := handler.HandleUpdate(env.ctx, update.ToAgentID, update, nil); err != nil {
 		t.Fatalf("deliver committed initial dispatch after restart passivation: %v", err)
 	}
 	stored, err := env.store.GetRun(env.ctx, rec.RunID)

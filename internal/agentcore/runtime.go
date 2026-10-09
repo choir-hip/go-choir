@@ -177,17 +177,21 @@ type Runtime struct {
 	// eventPayloadReader fetches event payloads by digest (corpusd CAS). The
 	// platform-update boot sweep needs it: an accepted event pins its offer,
 	// and resuming that update after the self-restart reads it back.
-	eventPayloadReader          computerevent.ArtifactReader
-	selfdevVerifier             *receiptsigner.Client
-	selfdevControl              *selfdev.GuestCredentials
-	ownerRecoveryControl        *selfdev.GuestCredentials
-	selfdevRoute                *vmctl.Client
-	selfdevRouteOwnerID         string
-	selfdevRouteDesktopID       string
-	selfdevUpdaterRoot          string
-	selfdevComputerID           string
-	selfdevRealizationID        string
-	selfdevStartupMarker        string
+	eventPayloadReader    computerevent.ArtifactReader
+	selfdevVerifier       *receiptsigner.Client
+	selfdevControl        *selfdev.GuestCredentials
+	ownerRecoveryControl  *selfdev.GuestCredentials
+	selfdevRoute          *vmctl.Client
+	selfdevRouteOwnerID   string
+	selfdevRouteDesktopID string
+	selfdevUpdaterRoot    string
+	selfdevComputerID     string
+	selfdevRealizationID  string
+	selfdevStartupMarker  string
+	// bootRestart is how this boot began: a consumed planned-restart
+	// marker, or a crash (bootRestartPlanned false).
+	bootRestart                 PlannedRestart
+	bootRestartPlanned          bool
 	selfdevStartupReleaseDigest string
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64

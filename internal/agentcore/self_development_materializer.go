@@ -255,7 +255,9 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	if err != nil {
 		return err
 	}
+	restartPlanned := rt.markPlannedRestart("self_development_apply", operation.OperationID)
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
+	restartPlanned(applyErr)
 	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
 		// The journal is the durable authority: a terminal outcome supersedes
 		// whatever the live Apply returned (including a transport error that
@@ -328,7 +330,9 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 	if err != nil {
 		return err
 	}
+	restartPlanned := rt.markPlannedRestart("self_development_rollback", operation.OperationID)
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
+	restartPlanned(applyErr)
 	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
 		result, applyErr = journaled.Result, nil
 		if journaled.Result.Outcome != "applied" {

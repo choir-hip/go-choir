@@ -41,40 +41,53 @@ type resumeState struct {
 type actorHandler struct {
 	rt           *agentcore.Runtime
 	textureOwner *textureowner.Handler
-	// bootAt is when this process built its handler. A Texture occurrence
-	// recorded earlier belongs to a run the restart interrupted.
+	// bootAt is when this process built its handler. A work occurrence
+	// recorded earlier belongs to work the restart interrupted.
 	bootAt time.Time
+	// plannedBoot is true when this boot consumed a planned-restart marker
+	// (an update apply restarted the guest on purpose): pre-boot work resumes.
+	plannedBoot bool
 }
 
 // newActorHandler creates the handler. The rt must have its store, provider,
 // and tool registry configured before runs are dispatched.
 func newActorHandler(rt *agentcore.Runtime, textureOwner *textureowner.Handler) *actorHandler {
-	return &actorHandler{rt: rt, textureOwner: textureOwner, bootAt: time.Now().UTC()}
+	h := &actorHandler{rt: rt, textureOwner: textureOwner, bootAt: time.Now().UTC()}
+	if marker, planned := rt.BootWasPlannedRestart(); planned {
+		h.plannedBoot = true
+		log.Printf("actorruntime: boot follows a planned restart (%s %s); pre-boot work resumes", marker.Reason, marker.Target)
+	} else {
+		log.Printf("actorruntime: boot follows a crash or stop; pre-boot work is interrupted_by_restart")
+	}
+	return h
 }
 
-// errInterruptedByRestart is the durable fate of a Texture occurrence recorded
-// before this boot: a guest restart is a system failure, not a wake, so no
-// Texture turn starts or resumes on its own. The lifecycle keeps the pending
-// reports and owner revision for the owner's next action (owner rule,
-// docs/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
-var errInterruptedByRestart = fmt.Errorf("%w: interrupted_by_restart: Texture occurrence recorded before this boot", actor.ErrDurableInvalid)
+// errInterruptedByRestart is the durable fate of a work occurrence recorded
+// before a crash boot: a crash restart never resumes work, for any desk
+// (owner rule, AGENTS.md "Restarts End Work (Crash) Or Resume It"). The
+// lifecycle keeps pending reports and owner revisions for the owner's next
+// action.
+var errInterruptedByRestart = fmt.Errorf("%w: interrupted_by_restart: work occurrence recorded before this boot", actor.ErrDurableInvalid)
 
-// textureWorkKinds are the update kinds that start or resume a Texture turn.
-// Cancellation and deadlines still apply across a restart.
-var textureWorkKinds = map[string]bool{
+// restartWorkKinds start or resume work. Cancels and fail-closed deadlines
+// are absent: they close work and still apply across a restart, as does
+// selfdev_materialization_retry, which finishes a planned apply.
+var restartWorkKinds = map[string]bool{
 	"initial_dispatch": true, "coagent_result": true, "channel_message": true,
 	"owner_revision": true, "lifecycle_work_assigned": true,
+	"delegated_assignment_spawn_deadline":   true,
+	"fresh_mint_management_resume_deadline": true,
 }
 
-func (h *actorHandler) preBootTextureOccurrence(mailboxID string, u actor.Update) bool {
-	if h.bootAt.IsZero() || u.CreatedAt.IsZero() || !u.CreatedAt.Before(h.bootAt) || !textureWorkKinds[u.Kind] {
+func (h *actorHandler) preBootWorkOccurrence(mailboxID string, u actor.Update) bool {
+	if h.plannedBoot || h.bootAt.IsZero() || u.CreatedAt.IsZero() || !u.CreatedAt.Before(h.bootAt) || !restartWorkKinds[u.Kind] {
 		return false
 	}
 	if strings.TrimSpace(u.ToAgentID) != "" {
 		mailboxID = u.ToAgentID
 	}
-	_, _, agentID, err := parseScopedActorMailboxID(mailboxID)
-	return err == nil && strings.HasPrefix(agentID, agentprofile.Texture+":")
+	_, _, _, err := parseScopedActorMailboxID(mailboxID)
+	return err == nil
 }
 
 func deferTextureOccurrence(err error) error {
@@ -109,9 +122,9 @@ func textureRunRecord(rec types.RunRecord) bool {
 // A single run may span many HandleUpdate calls (initial_dispatch → park →
 // coagent_result → park → ... → completion).
 func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor.Update, memory []byte) ([]byte, error) {
-	if h.preBootTextureOccurrence(agentID, u) {
-		log.Printf("actorruntime: Texture %s %s recorded %s, before boot %s: interrupted_by_restart, not run",
-			u.Kind, u.UpdateID, u.CreatedAt.Format(time.RFC3339), h.bootAt.Format(time.RFC3339))
+	if h.preBootWorkOccurrence(agentID, u) {
+		log.Printf("actorruntime: %s %s for %s recorded %s, before crash boot %s: interrupted_by_restart, not run",
+			u.Kind, u.UpdateID, agentID, u.CreatedAt.Format(time.RFC3339), h.bootAt.Format(time.RFC3339))
 		return nil, errInterruptedByRestart
 	}
 	switch u.Kind {
@@ -245,7 +258,6 @@ func (h *actorHandler) handleReactivatedManagementResumeDeadline(ctx context.Con
 	}
 	return memory, nil
 }
-
 
 func (h *actorHandler) handleLifecycleWorkAssigned(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
 	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)

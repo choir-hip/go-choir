@@ -523,6 +523,19 @@ func Run() {
 		}
 	}
 
+	// Crash or planned restart (AGENTS.md "Restarts End Work (Crash) Or
+	// Resume It"): consume the planned-restart marker once, before any actor
+	// runs. A replay-only recovery drive exits before the runtime starts, so
+	// it leaves the marker for the boot that does.
+	if strings.TrimSpace(os.Getenv("RUNTIME_RECOVERY_REPLAY_ONLY")) != "1" {
+		bootMarker, plannedBoot := agentcore.ConsumePlannedRestartMarker(rtCfg.StorePath, time.Now().UTC())
+		if plannedBoot {
+			log.Printf("autoputer: restart kind=planned reason=%s target=%s", bootMarker.Reason, bootMarker.Target)
+		} else {
+			log.Printf("autoputer: restart kind=crash_or_stop")
+		}
+		coreOpts = append(coreOpts, agentcore.WithBootRestart(bootMarker, plannedBoot))
+	}
 	rt := actorruntime.New(rtCfg, db, bus, rtProvider, coreOpts, rtOpts...)
 
 	// Initialize the file browser handler with autoputer files root. File
