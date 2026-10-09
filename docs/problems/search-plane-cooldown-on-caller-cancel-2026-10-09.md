@@ -80,3 +80,20 @@ Further fix directions:
 - Redact URLs' query strings in every error summary the search plane
   stores or returns, at write (summary truncation) and at read (gateway
   response mapping), so stored legacy summaries are also clean.
+
+## Amendment (19:58Z): the ops routes have no caller check
+
+`/provider/v1/search/health`, `/provider/v1/search/health/reset`,
+`/provider/v1/breakers` and `/provider/v1/breakers/reset`
+(`internal/gateway/handlers.go`) check no caller. The gateway listens on
+all interfaces and every computer's tap may reach port 8084 (iptables
+`go-choir-vm-*` ACCEPT rules; inference needs it). The public address
+times out from outside. So any computer could read every provider's
+health, including the stored SerpAPI summary with the key, and reset or
+read any search or inference breaker. vmctl and the platform bind
+internal authority to the transport (loopback or unix socket); the
+gateway already has the same check for credential routes
+(`isAuthorizedCredentialCaller`), not applied to these four.
+
+Fix direction: require `isAuthorizedCredentialCaller` on the four ops
+routes. Operators reach them from Node B over loopback.
