@@ -101,12 +101,30 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   flat (7–11 s). The ~17 s that looked like history cost is a surface
   bootstrap retrying a deterministic refusal on layered computers; fixed
   in b2a76845 (two attempts), deploy pending.
-- **Texture acceptance suite:** first run failed at T2 on a harness bug
-  (5-minute access token, no renewal); fixed, rerun in progress.
+- **Texture acceptance suite (evening, six runs;
+  [suite](texture-acceptance-suite.md) has the run table):** T1–T5 pass
+  (list ~30 ms, first draft 26–46 s, revise 16–26 s, cancel clears in
+  1 s). Each later failure was a different layer, documented first and
+  fixed in order: settled work refused the owner's revise (4f9331cf); a
+  caller cancel cooled down the whole search plane, a provider key rode
+  error summaries to computers, and the gateway ops routes checked no
+  caller (97970cda, b445fd21; key rotation is the owner's call); research
+  packets were rejected by an unseen schema (19b7ef48); then the
+  Texture/research loop had no stopping rule (dc3e86b6, two research
+  openers per owner request). Open: T5b (Cancel ends the document;
+  B2 leaning, `texture-terminal-trajectory-revise`), research work never
+  settles (`texture-research-assignment-finish`), T7/T8 not yet reached
+  on a green T6. Cluster record:
+  [`clustering-texture-obligation-closure`](problems/clustering-texture-obligation-closure-2026-10-09.md).
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
-  First slice: re-run the M11 self-development episode (last green
-  2026-09-29) on the current build.
+  Reality slice ran (M11 on 19b7ef48): 5 of 16 legs; the capsule's Go
+  session worker exits before its ready handshake on every call, so
+  engineering cannot work, and it retried ~400 times with no budget
+  ([problem](problems/capsule-session-worker-dies-at-start-2026-10-09.md)).
+  Landed: the worker's stderr now reaches the error (cb138a59) and
+  engineering activations are budgeted (7591ca02). Next: rerun M11 to
+  read the stderr, fix the start failure, rerun to the restore leg.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
