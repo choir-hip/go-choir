@@ -207,17 +207,25 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   // T6 — research.
   const beforeResearch = (await appagentRevisions(page, docID)).length;
   await revise(page, docID, 'Research current reporting on persistent personal computers and add two cited web sources.', `t6-${suffix}`);
-  const researched = await waitForTurn(page, docID, beforeResearch, 360_000);
-  let sourceCount = 0;
-  const head = researched?.doc?.current_revision_id;
-  if (head) {
-    const rev = await api(page, 'GET', `/api/texture/revisions/${head}`);
-    sourceCount = Array.isArray(rev.body?.source_entities) ? rev.body.source_entities.length : 0;
-  }
-  record('T6_research', { landed: !!researched?.done, head, source_entities: sourceCount });
+  // Two properties, recorded apart (problems/texture-research-sources-never-
+  // reach-the-citing-turn-2026-10-09.md, run 8): a cited research revision
+  // lands (T6), and the document idles after it (T6_idle).
+  const cited = await waitFor(async () => {
+    const agent = await appagentRevisions(page, docID);
+    for (const r of agent.slice(beforeResearch)) {
+      const rev = await api(page, 'GET', `/api/texture/revisions/${r.revision_id}`);
+      const sources = Array.isArray(rev.body?.source_entities) ? rev.body.source_entities.length : 0;
+      const refs = Array.isArray(rev.body?.source_refs) ? rev.body.source_refs.length : 0;
+      if (sources > 0 && refs > 0) return { done: true, revision: r.revision_id, sources, refs };
+    }
+    return { done: false };
+  }, 360_000);
+  record('T6_research', { landed: !!cited?.done, revision: cited?.revision, source_entities: cited?.sources ?? 0, source_refs: cited?.refs ?? 0 });
   // Soft: a research failure must not hide the crash legs (T7, T8).
-  expect.soft(researched?.done, 'research revision landed').toBeTruthy();
-  expect.soft(sourceCount, 'source entities on the research revision').toBeGreaterThan(0);
+  expect.soft(cited?.done, 'cited research revision landed').toBeTruthy();
+  const researched = await waitForTurn(page, docID, beforeResearch, cited?.done ? 180_000 : 1_000);
+  record('T6_idle', { idle: !!researched?.done, pending: researched?.doc?.agent_revision_pending === true });
+  expect.soft(researched?.done, 'document idles after the research revision').toBeTruthy();
 
   // T7 — crash mid-turn: interrupted, never resumed.
   const session = await page.evaluate(async () => (await fetch('/auth/session', { credentials: 'include' })).json());
