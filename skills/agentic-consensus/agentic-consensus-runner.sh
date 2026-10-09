@@ -7,7 +7,7 @@ agentic-consensus-runner.sh --prompt TEXT | --prompt-file FILE [options]
 
 Runs one prompt across an agentic consensus panel and writes one output file per agent.
 Default panel: codex, devin, claude, opencode, omp-gpt61-sol, omp-gpt6-luna, omp-gemini38,
-omp-space-bunny, omp-muse-spark, omp-qwen38max, omp-glm53-flash.
+omp-muse-spark, omp-deepseek-v41-flash, omp-glm53-flash.
 External CLIs use their configured default model unless a --*-model override is passed.
 
 Every pinned OMP model was identity-verified with agentic-consensus-model-probe.sh.
@@ -35,7 +35,7 @@ Panel selection:
                                 not supported is a hard error, not a silent drop:
                                 a panel that quietly runs fewer panelists than
                                 asked for reports success it did not deliver.
-                                Default: codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-space-bunny,omp-muse-spark,omp-qwen38max,omp-glm53-flash
+                                Default: codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-muse-spark,omp-deepseek-v41-flash,omp-glm53-flash
   --exclude LIST                Comma-separated agent ids to skip.
   --list-agents                 Print supported agent ids and exit.
 
@@ -59,9 +59,8 @@ Model overrides, optional:
   --omp-gpt6-luna-model MODEL   Default: openai-codex/gpt-6-luna.
   --omp-gemini38-model MODEL    Default: google-antigravity/gemini-3.8-flash.
   --omp-claude-opus46-model MODEL Default: google-antigravity/claude-opus-4-6.
-  --omp-space-bunny-model MODEL Default: opencode-go/space-bunny-free.
   --omp-muse-spark-model MODEL  Default: opencode-go/muse-spark-1.3-contributor.
-  --omp-qwen38max-model MODEL   Default: opencode-go/qwen3.8-max.
+  --omp-deepseek-v41-flash-model MODEL Default: opencode-go/deepseek-v4.1-flash.
   --omp-glm53-flash-model MODEL Default: opencode-go/glm-5.3-flash.
   --omp-deepseek-v4-pro-model MODEL Default: opencode-go/deepseek-v4-pro.
   --omp-kimi-k3-model MODEL     Default: opencode-go/kimi-k3.
@@ -72,9 +71,8 @@ Model overrides, optional:
   --omp-gpt6-luna-thinking LEVEL      max
   --omp-gemini38-thinking LEVEL       high
   --omp-claude-opus46-thinking LEVEL  high
-  --omp-space-bunny-thinking LEVEL    high
-  --omp-muse-spark-thinking LEVEL     high
-  --omp-qwen38max-thinking LEVEL      high
+  --omp-muse-spark-thinking LEVEL     max
+  --omp-deepseek-v41-flash-thinking LEVEL max
   --omp-glm53-flash-thinking LEVEL    high
   --omp-deepseek-v4-pro-thinking LEVEL high
   --omp-kimi-k3-thinking LEVEL        high
@@ -98,8 +96,8 @@ Output:
 USAGE
 }
 
-DEFAULT_INCLUDE="codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-space-bunny,omp-muse-spark,omp-qwen38max,omp-glm53-flash"
-SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-luna omp-gemini38 omp-claude-opus46 omp-space-bunny omp-muse-spark omp-qwen38max omp-glm53-flash omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3)
+DEFAULT_INCLUDE="codex,devin,claude,opencode,omp-gpt61-sol,omp-gpt6-luna,omp-gemini38,omp-muse-spark,omp-deepseek-v41-flash,omp-glm53-flash"
+SUPPORTED_AGENTS=(codex devin claude cursor opencode omp-gpt61-sol omp-gpt6-luna omp-gemini38 omp-claude-opus46 omp-muse-spark omp-deepseek-v41-flash omp-glm53-flash omp-deepseek-v4-pro omp-kimi-k3 omp-minimax-m3)
 
 PROMPT=""
 PROMPT_FILE=""
@@ -126,9 +124,8 @@ OMP_GPT61_SOL_MODEL="openai-codex/gpt-6.1-sol"
 OMP_GPT6_LUNA_MODEL="openai-codex/gpt-6-luna"
 OMP_GEMINI38_MODEL="google-antigravity/gemini-3.8-flash"
 OMP_CLAUDE_OPUS46_MODEL="google-antigravity/claude-opus-4-6"
-OMP_SPACE_BUNNY_MODEL="opencode-go/space-bunny-free"
 OMP_MUSE_SPARK_MODEL="opencode-go/muse-spark-1.3-contributor"
-OMP_QWEN38MAX_MODEL="opencode-go/qwen3.8-max"
+OMP_DEEPSEEK_V41_FLASH_MODEL="opencode-go/deepseek-v4.1-flash"
 OMP_GLM53_FLASH_MODEL="opencode-go/glm-5.3-flash"
 OMP_DEEPSEEK_V4_PRO_MODEL="opencode-go/deepseek-v4-pro"
 OMP_KIMI_K3_MODEL="opencode-go/kimi-k3"
@@ -137,9 +134,8 @@ OMP_GPT61_SOL_THINKING="xhigh"
 OMP_GPT6_LUNA_THINKING="max"
 OMP_GEMINI38_THINKING="high"
 OMP_CLAUDE_OPUS46_THINKING="high"
-OMP_SPACE_BUNNY_THINKING="high"
-OMP_MUSE_SPARK_THINKING="high"
-OMP_QWEN38MAX_THINKING="high"
+OMP_MUSE_SPARK_THINKING="max"
+OMP_DEEPSEEK_V41_FLASH_THINKING="max"
 OMP_GLM53_FLASH_THINKING="high"
 OMP_DEEPSEEK_V4_PRO_THINKING="high"
 OMP_KIMI_K3_THINKING="high"
@@ -181,12 +177,10 @@ OMP_FLAG_VARS=(
   "omp-gemini38-thinking:OMP_GEMINI38_THINKING"
   "omp-claude-opus46-model:OMP_CLAUDE_OPUS46_MODEL"
   "omp-claude-opus46-thinking:OMP_CLAUDE_OPUS46_THINKING"
-  "omp-space-bunny-model:OMP_SPACE_BUNNY_MODEL"
-  "omp-space-bunny-thinking:OMP_SPACE_BUNNY_THINKING"
   "omp-muse-spark-model:OMP_MUSE_SPARK_MODEL"
   "omp-muse-spark-thinking:OMP_MUSE_SPARK_THINKING"
-  "omp-qwen38max-model:OMP_QWEN38MAX_MODEL"
-  "omp-qwen38max-thinking:OMP_QWEN38MAX_THINKING"
+  "omp-deepseek-v41-flash-model:OMP_DEEPSEEK_V41_FLASH_MODEL"
+  "omp-deepseek-v41-flash-thinking:OMP_DEEPSEEK_V41_FLASH_THINKING"
   "omp-glm53-flash-model:OMP_GLM53_FLASH_MODEL"
   "omp-glm53-flash-thinking:OMP_GLM53_FLASH_THINKING"
   "omp-deepseek-v4-pro-model:OMP_DEEPSEEK_V4_PRO_MODEL"

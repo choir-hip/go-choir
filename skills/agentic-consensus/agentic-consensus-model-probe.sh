@@ -48,9 +48,8 @@ DEFAULT_SPECS=(
   "openai-codex/gpt-6.1-sol:xhigh"
   "openai-codex/gpt-6-luna:max"
   "google-antigravity/gemini-3.8-flash:high"
-  "opencode-go/space-bunny-free:high"
-  "opencode-go/muse-spark-1.3-contributor:high"
-  "opencode-go/qwen3.8-max:high"
+  "opencode-go/muse-spark-1.3-contributor:max"
+  "opencode-go/deepseek-v4.1-flash:max"
   "opencode-go/glm-5.3-flash:high"
 )
 ALL_SPECS=(

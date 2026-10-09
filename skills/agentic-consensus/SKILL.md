@@ -25,7 +25,7 @@ skill://agentic-consensus/agentic-consensus-model-probe.sh --all      # every an
 
 ## Default Panel
 
-The default panel is 11 members, all verified live with exact served-model
+The default panel is 10 members, all verified live with exact served-model
 identity:
 
 1. `codex` CLI with its configured default model.
@@ -35,10 +35,9 @@ identity:
 5. OMP `openai-codex/gpt-6.1-sol` with `--thinking xhigh` — the flagship.
 6. OMP `openai-codex/gpt-6-luna` with `--thinking max` — the cost champion; fastest/cheapest GPT-6 tier (weak long-context recall).
 7. OMP `google-antigravity/gemini-3.8-flash` with `--thinking high`.
-8. OMP `opencode-go/space-bunny-free` with `--thinking high` — 1M context, 524K output.
-9. OMP `opencode-go/muse-spark-1.3-contributor` with `--thinking high`.
-10. OMP `opencode-go/qwen3.8-max` with `--thinking high`.
-11. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
+8. OMP `opencode-go/muse-spark-1.3-contributor` with `--thinking max`.
+9. OMP `opencode-go/deepseek-v4.1-flash` with `--thinking max`.
+10. OMP `opencode-go/glm-5.3-flash` with `--thinking high`.
 
 `claude` is in the default panel, pinned to `opus`. `fable` is request-only: pass `--claude-model fable` when the user explicitly asks for it — never in the default panel.
 
@@ -81,9 +80,8 @@ omp-gpt61-sol   (default)
 omp-gpt6-luna   (default)
 omp-gemini38    (default)
 omp-claude-opus46
-omp-space-bunny (default)
 omp-muse-spark  (default)
-omp-qwen38max   (default)
+omp-deepseek-v41-flash (default)
 omp-glm53-flash (default)
 omp-deepseek-v4-pro
 omp-kimi-k3
@@ -116,6 +114,8 @@ the panel was simply trimmed):
 | `omp-gpt6-sol` | `openai-codex/gpt-6-sol` |
 | `omp-gpt6-astra` | `openai-codex/gpt-6-astra` |
 | `omp-grok47` | `opencode-go/grok-4.7` |
+| `omp-space-bunny` | `opencode-go/space-bunny-free` (removed 2026-10-07) |
+| `omp-qwen38max` | `opencode-go/qwen3.8-max` (removed 2026-10-07) |
 
 The whole `opencode-zen/*-free` tier is unusable from OMP with that 403. The
 `opencode-go/*` equivalents serve the same model families and are verified, so
@@ -314,9 +314,8 @@ Runner contracts:
 omp -p --mode text --model openai-codex/gpt-6.1-sol --thinking xhigh --no-session "$PROMPT"
 omp -p --mode text --model openai-codex/gpt-6-luna --thinking max --no-session "$PROMPT"
 omp -p --mode text --model google-antigravity/gemini-3.8-flash --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-go/space-bunny-free --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-go/muse-spark-1.3-contributor --thinking high --no-session "$PROMPT"
-omp -p --mode text --model opencode-go/qwen3.8-max --thinking high --no-session "$PROMPT"
+omp -p --mode text --model opencode-go/muse-spark-1.3-contributor --thinking max --no-session "$PROMPT"
+omp -p --mode text --model opencode-go/deepseek-v4.1-flash --thinking max --no-session "$PROMPT"
 omp -p --mode text --model opencode-go/glm-5.3-flash --thinking high --no-session "$PROMPT"
 ```
 
@@ -331,9 +330,8 @@ Optional overrides — one `--<id-without-omp->-model` and
 --omp-gpt6-luna-model MODEL       --omp-gpt6-luna-thinking LEVEL
 --omp-gemini38-model MODEL        --omp-gemini38-thinking LEVEL
 --omp-claude-opus46-model MODEL   --omp-claude-opus46-thinking LEVEL
---omp-space-bunny-model MODEL     --omp-space-bunny-thinking LEVEL
 --omp-muse-spark-model MODEL      --omp-muse-spark-thinking LEVEL
---omp-qwen38max-model MODEL       --omp-qwen38max-thinking LEVEL
+--omp-deepseek-v41-flash-model MODEL --omp-deepseek-v41-flash-thinking LEVEL
 --omp-glm53-flash-model MODEL     --omp-glm53-flash-thinking LEVEL
 --omp-deepseek-v4-pro-model MODEL --omp-deepseek-v4-pro-thinking LEVEL
 --omp-kimi-k3-model MODEL         --omp-kimi-k3-thinking LEVEL
