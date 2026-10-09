@@ -73,3 +73,29 @@ contract, an error that does not show the shape, and a desk that spends
 its budget probing. Fix direction: return the minimal
 `insert_source_ref` shape in those errors and in the revision guidance
 for packet sources.
+
+## Why the citing run had nothing listed (22:41Z, code reading)
+
+The listed pool (`texture_available_source_entities` in run metadata) is
+built once, when the owner revision starts the run
+(`texture_agent_revision.go`, from the commitment records at that
+moment), and ApplyTexture resolves `source_entity_id` only against it
+(`tools_texture.go`). The per-cell view (`choir.Updates()`) carries each
+packet's sources with their URIs but no entity id. In T6 the owner's
+request started the run at 22:06:12 and the research reports arrived at
+22:06:25 and later, so the pool was empty for the whole run. Research is
+by design the thing that arrives during a run, so any research turn that
+starts before its report lands can cite only inline.
+
+The inline path already works: `insert_source_ref` with
+`source_entity: {target: {kind: "web_url", uri}}` and no id; the runtime
+mints the id and fills display, evidence and provenance defaults. The
+desk was never shown that shape.
+
+Two fixes, in order:
+
+1. (yellow, now) The citation guidance and both citation errors show the
+   inline shape for a source from a research update.
+2. (red, named residual `texture-source-pool-refresh`) Refresh the
+   listed pool from the commitment records at each apply and show entity
+   ids beside packet sources, so mid-run sources are citable by id.
