@@ -1227,6 +1227,11 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 
 	pending := false
 	producerBindingID := ""
+	// An Engineering report's binding is proven by its stored assignment
+	// (ValidateLifecycleProducerReportAuthority pins ParentControlID); a
+	// delegated cast binds a commitment record, not a lifecycle control
+	// update, so the update scan below may find none for it.
+	producerAssignmentBound := false
 	switch o.Kind {
 	case agentcore.TextureActorOccurrenceProducerReport:
 		canonical, getErr := rt.Store.GetLifecycleUpdate(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID, o.TargetAgentID, o.ProducerAgentID, o.ProducerUpdateID)
@@ -1298,6 +1303,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 			return zero, "", fmt.Errorf("validate Texture producer control/run authority: %w", authorityErr)
 		}
 		producerBindingID = strings.TrimSpace(canonical.ControlBindingID)
+		producerAssignmentBound = producerProfile == agentprofile.Engineering
 		pending = canonical.Disposition == types.UpdatePending
 	case agentcore.TextureActorOccurrenceDocumentRevision:
 		canonical, getErr := rt.Store.GetLifecycleRevision(ctx, o.OwnerID, o.ComputerID, o.HeadRevisionID)
@@ -1347,7 +1353,7 @@ func (rt *Handler) ResolveTextureActorOccurrence(ctx context.Context, ownerID, c
 				bindingMatches++
 			}
 		}
-		if bindingMatches != 1 {
+		if bindingMatches > 1 || (bindingMatches == 0 && !producerAssignmentBound) {
 			return zero, "", invalidTextureOccurrence("Texture producer control binding authority mismatch")
 		}
 	}
