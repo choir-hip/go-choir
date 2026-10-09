@@ -160,8 +160,8 @@ now:
     (store, creators, drivers, terminal states, attempt accounting, expiry,
     restart behavior); map each O1-cluster problem doc to its kind and
     mechanism; reconcile those docs' real status against commits.
-  source_ref: da28c9f0
-  deploy_identity: 85befb1c
+  source_ref: 3d2247da
+  deploy_identity: a72e2d32
   candidate:
     id: none
     state: none
@@ -210,10 +210,12 @@ now:
     Red surface; regressions here strand real work. Mitigated by
     disposable-first fault matrix and additive registry.
   next_action: >-
-    Produce the obligation inventory table (read-only, green) and the
-    reconciled O1 problem-doc status; then run agentic-consensus review of
-    this file plus the inventory to move readiness to reviewed/executable.
-
+    Inventory drafted (docs/evidence/sl-obligation-inventory-2026-10-09.md):
+    one periodic driver (actor wake sweep) and ~30 boot/event reconcilers;
+    attempt budgets on four paths only; actor wakes retry forever without
+    a count; 34 of 41 liveness docs map onto five kinds. Next: measure
+    non-terminal counts per kind on a disposable, reconcile the 34 docs'
+    status against commits, then panel review and registry decision.
 receipts: []
 ---
 
