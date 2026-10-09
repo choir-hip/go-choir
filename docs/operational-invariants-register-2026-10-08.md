@@ -277,6 +277,42 @@ Evidence: `guest-stderr-unreachable-after-cold-boot`, `s0-guest-serial-not-captu
 `s2-updater-refusal-reason-observability`, `texture-audit-post-commit-boundary`.
 Enforcer: partial. Goal: 1.
 
+## Texture — the owner's document is always the owner's
+
+Added 2026-10-09 from the Gate 1 Texture acceptance suite
+(`docs/texture-acceptance-suite.md`) and the clustering assessment
+`problems/clustering-texture-obligation-closure-2026-10-09.md`. Gate 1 calls
+for Texture's own invariants; these are the first four, each with the
+suite check that measures it.
+
+**O23 A live document is always revisable by its owner.** No desk choice
+(settling work), owner control (cancelling a turn) or delegated work state
+makes an owner revise fail on a document the owner keeps.
+Evidence: `texture-settled-work-refuses-owner-revise` (repaired 4f9331cf),
+`texture-cancel-and-research-convergence` §1 (open). Enforcer: partial.
+Proof: suite T2b, T5, T5b. Goal: 1.
+
+**O24 Delegated work reaches a fate without model cooperation.** Research
+or engineering work opened by Texture completes, fails or is cancelled by
+a runtime rule when its report is incorporated or its run ends; neither
+model has to remember a disposition field.
+Evidence: `texture-cancel-and-research-convergence` §2 (four research work
+items left open; Texture waits forever). Enforcer: none. Proof: suite T6.
+Goal: 1 (O1 at the Texture layer).
+
+**O25 No occurrence is consumed without a recorded reason.** Every Texture
+occurrence ends in a turn, a deferral with a budget, or a logged
+consumption reason.
+Evidence: `texture-create-occurrence-deferred-never-refires`. Enforcer:
+partial (8a3d31c8 logs every consumption path). Proof: suite T2a plus the
+obligations surface actor section. Goal: 1.
+
+**O26 Cancel stops a turn, not a document.** The editor's Cancel stops the
+current Texture turn and its delegated work within seconds and leaves the
+document revisable; deleting a document is a separate act.
+Evidence: suite T5 (pending clears in 1 s) and T5b (document becomes
+terminal). Enforcer: none. Goal: 1.
+
 ## Process invariants (SDLC)
 
 **P1 Problem docs carry a lifecycle.** A fix commit updates its problem doc's
