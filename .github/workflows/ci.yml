@@ -1351,14 +1351,20 @@ jobs:
             if [ "${DEPLOY_VMCTL_RESTART}" = "true" ]; then
               echo "==> Restarting vmctl when selected classes require it"
               systemctl restart go-choir-vmctl
+              # vmctl answers health only after its reattach pass, which
+              # health-checks every running VM (a dead guest costs a
+              # timeout); 30 tries was shorter than that with several VMs up
+              # (deploy-switch-dbus-reload-and-vmctl-health-window-2026-10-09).
               vmctl_ready=false
-              for attempt in $(seq 1 30); do
+              vmctl_deadline=$((SECONDS + 180))
+              while [ "$SECONDS" -lt "$vmctl_deadline" ]; do
                 if curl -fsS --max-time 2 http://127.0.0.1:8083/health >/dev/null 2>&1; then
                   vmctl_ready=true
                   break
                 fi
                 sleep 1
               done
+              echo "    vmctl health after $((SECONDS - vmctl_deadline + 180)) s (ready=${vmctl_ready})"
               if [ "$vmctl_ready" != "true" ]; then
                 dump_deploy_service_diagnostics "vmctl did not become healthy after restart"
                 exit 1
