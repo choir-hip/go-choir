@@ -90,6 +90,14 @@ func (h *actorHandler) preBootWorkOccurrence(mailboxID string, u actor.Update) b
 	return err == nil
 }
 
+// logTextureOccurrenceConsumed records why a Texture occurrence was consumed
+// without executing a turn. These paths incorporate the occurrence, so
+// without this line its fate is invisible
+// (texture-create-occurrence-deferred-never-refires-2026-10-09, O1).
+func logTextureOccurrenceConsumed(agentID string, u actor.Update, reason string) {
+	log.Printf("actorruntime: Texture occurrence %s/%s (%s) consumed without a turn: %s", agentID, u.UpdateID, u.Kind, reason)
+}
+
 func deferTextureOccurrence(err error) error {
 	if err == nil {
 		return actor.ErrDeferUnprocessed
@@ -574,11 +582,13 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		occurrence, fate, occurrenceErr := h.textureOwner.ResolveTextureActorOccurrence(ctx, ownerID, computerID, agentID, u.Content)
 		if occurrenceErr != nil {
 			if errors.Is(occurrenceErr, textureowner.ErrInvalidTextureActorOccurrence) {
+				logTextureOccurrenceConsumed(agentID, u, "invalid: "+occurrenceErr.Error())
 				return nil, nil
 			}
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: validate exact Texture occurrence: %w", occurrenceErr))
 		}
 		if strings.TrimSpace(u.TrajectoryID) != "" && strings.TrimSpace(u.TrajectoryID) != occurrence.TrajectoryID {
+			logTextureOccurrenceConsumed(agentID, u, "foreign trajectory envelope")
 			return nil, nil // durable foreign trajectory envelope
 		}
 		if strings.TrimSpace(u.FromAgentID) != "" {
@@ -587,10 +597,12 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 				expectedSource = "owner:" + occurrence.OwnerID
 			}
 			if strings.TrimSpace(u.FromAgentID) != expectedSource {
+				logTextureOccurrenceConsumed(agentID, u, "foreign source envelope")
 				return nil, nil // durable foreign source envelope
 			}
 		}
 		if fate == textureowner.TextureActorOccurrenceTerminal {
+			logTextureOccurrenceConsumed(agentID, u, "terminal (disposed, cancelled, late, or head already consumed by a Texture turn)")
 			return nil, nil // explicit Store-owned disposed/cancelled/late outcome
 		}
 
@@ -600,6 +612,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		rec, reconcileErr := h.textureOwner.ReconcileActorOccurrenceWake(ctx, ownerID, computerID, agentID, occurrence.ResolvedTargetWorkItemID, occurrence)
 		if reconcileErr != nil {
 			if errors.Is(reconcileErr, textureowner.ErrInvalidTextureActorOccurrence) {
+				logTextureOccurrenceConsumed(agentID, u, "reconcile refused: "+reconcileErr.Error())
 				return nil, nil
 			}
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: reconcile Texture coagent wake: %w", reconcileErr))
