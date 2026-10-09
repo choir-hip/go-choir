@@ -78,7 +78,7 @@ A direct fetch from Node B to the owner guest (`10.200.13.2:8085`) returns:
 200 (270,756 B), `/health` `ready`. **Fixed-verified** for the served SPA.
 Owner browser confirmation pending. Residuals 1–2 open.
 
-## Residual 1 measured: every boot of a layered computer spends ~17 s retrying (2026-10-09 18:20Z)
+## Residual 1 measured: every boot of a layered computer spends ~17 s retrying (2026-10-09 18:19Z)
 
 Found while checking O7 (boot cost against history,
 `docs/evidence/o7-boot-cost-vs-history-2026-10-09.md`). Owner computer

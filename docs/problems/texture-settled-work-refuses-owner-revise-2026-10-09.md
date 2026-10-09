@@ -62,7 +62,7 @@ Direction 1 is the conservative product choice: it changes nothing for
 documents with open work and repairs every already-settled document on
 its next revise.
 
-## Decision (2026-10-09 19:20Z, autonomous run; stated, not asked)
+## Decision (2026-10-09 19:09Z, autonomous run; stated, not asked)
 
 Direction 1, narrowed. Decision provenance: the "an owner revise must not
 invent live work" rule (`TestTextureOwnerRevisionRejectsMissingOpenWorkWithoutDispatch`,
@@ -85,7 +85,7 @@ its revise then fails earlier ("durable lifecycle state is unavailable or
 terminal"). Whether a document trajectory should ever settle while its
 owner keeps it is a Texture contract question (living documents, Gate 3).
 
-## Second effect observed (19:12Z, obligations surface on the same computer)
+## Second effect observed (19:10Z, obligations surface on the same computer)
 
 Research's report (`update_queued`, 19:01:26) left no trace in the
 outbox or the actor tape: no unprojected wake, no due or deferred actor

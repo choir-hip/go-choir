@@ -14,7 +14,7 @@ Gateway journal on Node B, research computer `vm-6071b4cd…`:
 - 19:24:26 – 19:25:25: 12 consecutive `search outage` responses.
 
 Search-plane health (`/var/lib/go-choir/gateway/search-health.db`,
-`provider_health`, read-only at 19:55Z):
+`provider_health`, read-only at about 19:30Z):
 
 | Provider | State | Cooldown until | Last failure |
 |---|---|---|---|
@@ -56,7 +56,7 @@ Search-plane health (`/var/lib/go-choir/gateway/search-health.db`,
   provider error summaries and logs.
 - Serper credits: owner decision.
 
-## Amendment (20:10Z): the key reaches user computers and model context
+## Amendment (19:36Z): the key reaches user computers and model context
 
 Reading the response path: the gateway returns `provider_health` (with
 `last_error_summary`) and per-attempt `error` strings to the calling

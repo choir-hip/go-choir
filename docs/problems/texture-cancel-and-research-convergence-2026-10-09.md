@@ -60,7 +60,7 @@ finds the head consumed by the activation's own `decide` turn and
 consumes the occurrence as terminal without a turn. That is visible now;
 whether it is wrong depends on the turn contract (below).
 
-## Correction (19:58Z): T6's cause is the search plane, not Texture
+## Correction (19:33Z): T6's cause is the search plane, not Texture
 
 The committed turn reasons (trajectory events) say why Texture waited:
 every research desk returned a blocker with no claims and no sources

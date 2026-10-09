@@ -73,7 +73,7 @@ class), then B. A and B each get a problem-first commit, a test pinning
 the failure modes, and a deployed rerun of the Texture suite. The suite
 (T5b, T6) is the acceptance for both.
 
-## Refinement after reading the store (19:50Z)
+## Refinement after reading the store (19:32Z)
 
 - No runtime code calls `SettleLifecycleWork`; research work has no
   settlement path except Texture naming the report as `incorporated` with
@@ -103,7 +103,7 @@ blocking other work). Recommended: A2, because it matches observed desk
 behavior (one report per research assignment, follow-ups as new work)
 and keeps the Texture turn contract unchanged.
 
-## Correction (19:58Z)
+## Correction (19:33Z)
 
 Item 4's T6 failure is the search plane (all providers in cooldown after
 one caller cancel; `search-plane-cooldown-on-caller-cancel-2026-10-09.md`),

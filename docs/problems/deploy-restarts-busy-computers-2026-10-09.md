@@ -103,7 +103,7 @@ computer busy forever and block its updates. SL's retry budgets close that.
 4. **Planned-restart marker and resume:** part of SL. Until then, no
    deploy or prompt restarts a computer with running work.
 
-## Interim slice verified (2026-10-09 ~17:15Z)
+## Interim slice verified (2026-10-09 ~17:00Z)
 
 f6001aea (deploys never restart running computers) was first exercised by
 run 37961856452 (e68c8c36, a flake change classified as host OS plus guest

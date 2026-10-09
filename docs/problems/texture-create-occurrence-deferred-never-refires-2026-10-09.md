@@ -70,7 +70,7 @@ field and the check never passes. The first run failed on 5-minute access
 tokens with no renewal. Both are fixed in the spec; neither changes the
 product finding above.
 
-## Gateway trace (added 18:55Z)
+## Gateway trace (added 18:43Z)
 
 Gateway journal on Node B for this VM, 18:23–18:29:
 
@@ -107,7 +107,7 @@ or reported to the owner as "Texture replied without revising"? And the
 silent `nil, nil` returns in the Texture occurrence handler consume
 obligations with no visible fate (O1).
 
-## Code reading for H5 (added 19:10Z)
+## Code reading for H5 (added 18:48Z)
 
 The mechanism H5 needs exists:
 
@@ -127,7 +127,7 @@ trigger pending at 18:23:28, so a consuming commit, if there was one,
 landed after that check. The actor-tape observer on the next reproduction
 decides it.
 
-## H2 refuted at the kernel; H5 remains (added 19:00Z)
+## H2 refuted at the kernel; H5 remains (added 18:59Z)
 
 - `TestDeferredEventRefiresWithoutNewEvent` (internal/actor): with the
   dispatcher poll disabled, a handler deferral re-fires on its own after
