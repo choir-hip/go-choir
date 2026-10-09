@@ -155,6 +155,22 @@ let
     if [ -f "$CHOIR_UPDATER_ROOT/current/layering-entrypoint" ]; then
       release_bin="$(head -1 "$CHOIR_UPDATER_ROOT/current/layering-entrypoint" 2>/dev/null)"
     fi
+    # Base binding: a layered release runs only on the base image it was
+    # built against. Apply enforces this (updater base join); boot must too,
+    # or a platform base-image deploy leaves the previous layer exec'ing on a
+    # base it never resolved against, and the deploy's own runtime (in the
+    # new base) never runs (docs/problems/guest-runtime-fix-never-reaches-
+    # layered-computers-2026-10-09.md). A release without a recorded base
+    # digest, or an unreadable manifest, keeps the prior behavior.
+    if [ -n "$release_bin" ]; then
+      release_base="$(${pkgs.jq}/bin/jq -r '.base_image_manifest_digest // empty' "$CHOIR_UPDATER_ROOT/current/release-manifest.json" 2>/dev/null || true)"
+      booted_base="$(${pkgs.coreutils}/bin/sha256sum ${guestImageManifest} 2>/dev/null | ${pkgs.coreutils}/bin/cut -d' ' -f1)"
+      if [ -n "$release_base" ] && [ -n "$booted_base" ] && [ "$release_base" != "$booted_base" ]; then
+        echo "go-choir-autoputer: layered release built for base $release_base, booted base $booted_base; serving base runtime" >&2
+        printf '%s base_mismatch release_base=%s booted_base=%s entrypoint=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" "$release_base" "$booted_base" "$release_bin" >> "$CHOIR_UPDATER_ROOT/layering-diag.log" 2>/dev/null || true
+        release_bin=""
+      fi
+    fi
     # Boot-loop guard: a layered release that fails to stay started 3 times
     # inside 60s is refused further exec attempts; the base runtime serves
     # instead with CHOIR_LAYERING_BOOTGUARD set so /health reports
