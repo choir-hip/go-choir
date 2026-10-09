@@ -587,8 +587,9 @@ jobs:
               echo "deploy_host_os=true"
               echo "deploy_vmctl_restart=true"
               echo "deploy_active_vm_refresh=true"
+              echo "deploy_app_layer=true"
               echo "host_services=autoputer"
-              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy with same-commit autoputer package and active VM refresh"
+              echo "class_explanation=manual workflow_dispatch forced host/frontend staging deploy with same-commit autoputer package, active VM refresh, and app-layer push"
             } >> "$GITHUB_OUTPUT"
             echo "Staging deploy forced by manual workflow_dispatch."
             exit 0

@@ -184,6 +184,13 @@ assert_contains "$autoputer_runtime_output" "deploy_active_vm_refresh=true"
 assert_contains "$autoputer_runtime_output" "host_services=gateway,autoputer"
 assert_contains "$autoputer_runtime_output" "internal/agentcore/run_acceptance.go -> gateway/autoputer service pointers + vmctl runtime-package endpoint restart"
 assert_contains "$autoputer_runtime_output" "autoputer runtime selected -> canonical guest boot closure + active VM refresh"
+# A reboot-path deploy must still push the same-commit app layer: the guest
+# boot wrapper keeps exec'ing a computer's persisted layered release, so a
+# reboot alone leaves layered computers on stale runtime (docs/problems/
+# guest-runtime-fix-never-reaches-layered-computers-2026-10-09.md).
+assert_contains "$autoputer_runtime_output" "deploy_app_layer=true"
+assert_contains "$autoputer_runtime_output" "autoputer runtime selected on reboot path -> layered app-layer release push after refresh"
+assert_contains "$vmmanager_boot_output" "deploy_app_layer=true"
 
 skill_runtime_output="$(run_classifier "skills/definition/SKILL.md")"
 assert_contains "$skill_runtime_output" "deploy_needed=true"
