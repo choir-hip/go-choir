@@ -117,3 +117,10 @@ Fix direction: on main, the planner's docs-only shortcut must use the
 same base as deploy-impact (the live staging commit), not the push's
 `before`. Or make item 2 moot: stop serializing whole main runs, so a
 queued code run is never replaced by a docs run.
+
+**Fixed (6d6db691, 12:24Z):** on main, the planner now uses the commit
+staging reports in `x-choir-build-commit` as its base, falling back to the
+push `before` if the header is missing or unfetchable. First run 37929273657
+logged `Plan base: live staging commit ae61f153…` and planned go=true.
+Item 2 (whole-run serialization) stays open, but it can no longer hide
+undeployed code.

@@ -46,9 +46,14 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
     [`node-b-disk-free-space-2026-10-09`](problems/node-b-disk-free-space-2026-10-09.md).
 - **Signup:** credential issuance replays by key, and vmctl retries
   transient failures (964a68ea).
+- **Deployed and verified 12:25Z on ae61f153:** boot replay 31 s (was
+  4.7 min), no Texture work at boot, 22 documents show "Interrupted by a
+  restart", list 0.13 s.
+- **CI:** main pushes plan against the live staging commit (6d6db691), so
+  a docs push can no longer skip deploying queued code.
 - **Open:**
   - owner deletions (pre-compact 17 G, quarantine 32 G, corpus 104 G);
-  - CI item 2 (main runs serialize whole runs);
+  - CI item 2 (main runs serialize whole runs; no longer hides code);
   - a credential failure that outlasts the retries still marks a computer
     `failed`.
 

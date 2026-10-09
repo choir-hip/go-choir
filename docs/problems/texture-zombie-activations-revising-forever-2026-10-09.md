@@ -382,3 +382,21 @@ non-terminal state** until gates 1–3 land. It is not an O1 violation to
 repair by automatic resume. The future driver is management, which will
 resume or cancel stalled work when resources allow. Named residual:
 `management-owns-stalled-work` (post gates 1–3).
+
+## Staging receipt for the no-restart rule (2026-10-09 12:25Z)
+
+Build ae61f153 (includes 4b9bf31d) was deployed by forced run 37928689108,
+then the owner computer was refreshed. Boot log for that start:
+
+- `passivate_interrupted_activations`: candidates=0, 193 ms.
+- `reconcile_terminal_run_outcomes`: 21 candidates, 4.0 s.
+- No Texture dispatch, no `passivated run` lines, no
+  `interrupted_by_restart` lines (no pre-boot Texture occurrences were
+  pending).
+- `computer event authority reconstructed (replay complete)` 31 s after
+  the first boot phase (was 4.7 min on c01bc2f9, 9–11 min before).
+
+Document surface: 22 of 50 documents report `agent_revision_interrupted`
+and render "Interrupted by a restart. Revise again to continue." instead
+of "Revising…". List: 0.13 s warm after replay (1.29 s while replay was
+still running).

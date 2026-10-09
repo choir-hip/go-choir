@@ -58,3 +58,12 @@ GC that deletes cached build inputs (97 deletions in run 37918703736).
   loops.
 - Nix `min-free` of 80 G against ~90 G free means routine GC churn.
   Freeing the items above takes free space to ~140–250 G.
+
+## Artifact GC dry-run does not finish (2026-10-09 12:30Z)
+
+The dry-run started at ~11:15Z and had written nothing after more than an
+hour. Its live set includes `SELECT body_ref FROM og_objects` against Store B
+(the 104 G corpus Dolt), so the sweep's cost is bound to the store being torn
+down. That is one more reason to finish the corpus teardown before turning
+artifact GC on. The 12:24Z platform deploy restarts the service and ends the
+request. Hypothesis, not yet measured: the og live-set query dominates.
