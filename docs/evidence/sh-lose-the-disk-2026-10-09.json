@@ -1,0 +1,101 @@
+{
+  "started_at": "2026-10-09T02:20:54.983Z",
+  "base_url": "https://choir.news",
+  "steps": [
+    {
+      "name": "precondition",
+      "at": "2026-10-09T02:21:10.135Z",
+      "head": {
+        "head": "2",
+        "wm": "0"
+      },
+      "ownership": [
+        {
+          "state": "active",
+          "vm_id": "vm-d073effdfc89a3903caca36d353e4600",
+          "computer_id": "computer-bb7eee8369cdcca9b25dabc8bb388964",
+          "epoch": 12944
+        }
+      ]
+    },
+    {
+      "name": "private_file_written",
+      "at": "2026-10-09T02:21:18.271Z",
+      "written": {
+        "status": 200,
+        "text": "{\"message\":\"file saved\",\"status\":\"updated\"}\n"
+      },
+      "synced": {
+        "status": 200,
+        "text": "{\"root\":\"d280d6ec0ab63d11b8d051656f4d78577cab68a9d5556c982b266f3f5713a94e\",\"files\":2431,\"chunks_uploaded\":2441}\n"
+      }
+    },
+    {
+      "name": "ownership_removed",
+      "at": "2026-10-09T02:21:19.491Z",
+      "before": [
+        {
+          "state": "active",
+          "vm_id": "vm-d073effdfc89a3903caca36d353e4600",
+          "computer_id": "computer-bb7eee8369cdcca9b25dabc8bb388964",
+          "epoch": 12944
+        }
+      ],
+      "response": "{\"status\":\"removed\"}"
+    },
+    {
+      "name": "file_read_back",
+      "at": "2026-10-09T02:36:41.599Z",
+      "readBack": null,
+      "attempts": 90,
+      "last": [
+        {
+          "status": 404,
+          "at_ms": 881342,
+          "text": "{\"error\":\"not found\"}\n"
+        },
+        {
+          "status": 404,
+          "at_ms": 891426,
+          "text": "{\"error\":\"not found\"}\n"
+        },
+        {
+          "status": 404,
+          "at_ms": 901505,
+          "text": "{\"error\":\"not found\"}\n"
+        },
+        {
+          "status": 404,
+          "at_ms": 911590,
+          "text": "{\"error\":\"not found\"}\n"
+        }
+      ],
+      "ownership": [
+        {
+          "state": "active",
+          "vm_id": "vm-4db30e982bf31817b163cd06f14e90a2",
+          "computer_id": "computer-bb7eee8369cdcca9b25dabc8bb388964",
+          "epoch": 12946
+        }
+      ]
+    },
+    {
+      "name": "transparency",
+      "at": "2026-10-09T02:36:42.076Z",
+      "deliveries": [
+        {
+          "payload_json": "{\"computer_id\":\"computer-bb7eee8369cdcca9b25dabc8bb388964\",\"delivered_at\":\"2026-10-09T02:21:49.536235284Z\",\"head_sequence\":4,\"key_digest\":\"067a8ff51a4a8ed53890a9c221b004919e594eac94bc3502396858d5491041e1\",\"recipient_key_digest\":\"593f39aeaf31e0b5ed651126a3ced784aeb3a1d89ab80d9a5212791bf88dc4b0\",\"request_commitment\":\"6f37fe02c8c69cc927046c157a005f4296ee71c258d8016e09164026e8b13f6b\",\"type\":\"realization_delivery\"}",
+          "seq": "38"
+        }
+      ]
+    }
+  ],
+  "disposable": {
+    "email": "recovery-admission-1791512455518-exi1ur@example.com",
+    "user_id": "0a240c0d-8cb7-4dc5-a434-d7e3549fa373",
+    "computer_id": "computer-bb7eee8369cdcca9b25dabc8bb388964",
+    "initial_vm_id": "vm-d073effdfc89a3903caca36d353e4600"
+  },
+  "result": "fail",
+  "finished_at": "2026-10-09T02:36:42.212Z"
+}

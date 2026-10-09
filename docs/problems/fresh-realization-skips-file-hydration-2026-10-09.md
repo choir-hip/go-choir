@@ -46,3 +46,32 @@ hydration succeeds, so a seed-only tree can never become the latest root.
 Custody path verified in the same run: key-escrow transparency seq 36
 `realization_delivery` for this computer, key digest `69437ebc…` equal to
 the checkpoint job's audited key use (seq 35).
+
+## Re-run after the fix (2026-10-09 02:21–02:36Z): still fails, two new causes
+
+Lose-the-disk proof on disposable `computer-bb7eee83…`
+(receipt [`evidence/sh-lose-the-disk-2026-10-09.json`](../evidence/sh-lose-the-disk-2026-10-09.json)):
+
+- **Key: pass.** Fresh realization `vm-4db30e98…` booted 02:21:42 and logged
+  `privacy key delivered from custodian escrow … (head 4)`. Transparency
+  recorded `realization_delivery`, digest `067a8ff5…`.
+- **Files: fail.** `GET /api/files/sh-o21-proof.txt` returned 404 on all
+  90 tries (15 min). There was no `file tree hydrated` line.
+
+Causes (console of `vm-4db30e98…`):
+
+1. **Version skew.** The fresh realization boots the **base image**
+   (`rbaf63…`, built at `eedd7b22`), which predates the hydration fix
+   `c72c38c4`. App-layer pushes reach only computers that are active at
+   deploy time. A new or newly realized computer runs the last image-build
+   code until the next push.
+2. **The fresh-volume signal lives only in memory.** At 02:33:49 the
+   `39c0d991` app-layer push restarted the guest onto code that has the
+   fix. That boot found the key already on disk, so it never marked the
+   volume fresh. The lost flag was the only guard keeping file sync from
+   publishing the seed-only tree as the latest root. Freshness must be
+   durable on the volume and must not depend on which boot delivered the
+   key.
+
+The owner's files are still in older roots in the content store; the gap
+is in which root the realization serves and publishes.
