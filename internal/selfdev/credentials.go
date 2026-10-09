@@ -36,6 +36,26 @@ type GuestCredentials struct {
 	pendingLifecycle    []computerevent.Receipt
 	recoveryHandoffPath string
 	pendingConsumption  *platform.CredentialConsumptionRequest
+	// issuanceToken/issuanceCommitment are the capability minted by this
+	// realization's own envelope exchange and that envelope's request
+	// commitment: the proof realization key delivery requires. Renewed
+	// capabilities carry random nonces and cannot serve as this proof.
+	issuanceToken      string
+	issuanceCommitment string
+	issuanceExpiresAt  time.Time
+}
+
+// IssuanceProof returns the capability minted by this realization's own
+// credential exchange and its envelope request commitment, while that
+// capability is still valid. ok is false for restored credentials or after
+// expiry.
+func (g *GuestCredentials) IssuanceProof() (commitment, token string, ok bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.issuanceToken == "" || g.issuanceCommitment == "" || time.Until(g.issuanceExpiresAt) < 10*time.Second {
+		return "", "", false
+	}
+	return g.issuanceCommitment, g.issuanceToken, true
 }
 
 func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, computerID, realizationID string) (*GuestCredentials, error) {
@@ -89,6 +109,7 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 		return nil, fmt.Errorf("guest credential: invalid revocation handoff capability")
 	}
 	manager.token, manager.postRevocationToken, manager.expiresAt = result.Capability, result.PostRevocationCapability, expiresAt
+	manager.issuanceToken, manager.issuanceCommitment, manager.issuanceExpiresAt = result.Capability, envelope.RequestCommitment, expiresAt
 	manager.pendingConsumption = &platform.CredentialConsumptionRequest{
 		ComputerID: envelope.ComputerID, Nonce: envelope.Nonce, RequestCommitment: envelope.RequestCommitment,
 	}

@@ -329,6 +329,37 @@ func Run() {
 			cancel()
 			boot.retryf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
+		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
+		// O21: a realization of an existing computer whose key file is missing
+		// receives the key from custodian escrow, while this realization's
+		// issuance capability is still valid (before base materialization).
+		if canonicalHead != nil && platformURL != "" && privacyKeyPath != "" {
+			if _, statErr := os.Stat(privacyKeyPath); errors.Is(statErr, os.ErrNotExist) {
+				commitment, issuanceToken, ok := credentials.IssuanceProof()
+				if !ok {
+					cancel()
+					boot.fatalf("autoputer: privacy key delivery: issuance proof unavailable (restored or expired credentials); a new realization boot is required")
+				}
+				deliverCtx, deliverCancel := context.WithTimeout(bootstrapCtx, time.Minute)
+				err := deliverPrivacyKey(deliverCtx, platformURL, computerID, commitment, issuanceToken, privacyKeyPath)
+				deliverCancel()
+				switch {
+				case err == nil:
+					log.Printf("autoputer: privacy key delivered from custodian escrow for %s (head %d)", computerID, canonicalHead.Sequence)
+				case errors.Is(err, errPrivacyKeyNotEscrowed):
+					cancel()
+					refusal := privacyKeyBootRefusal(computerID, canonicalHead.Sequence, fmt.Errorf("%w: %v", os.ErrNotExist, err))
+					log.Print(refusal.Reason)
+					boot.refuse(refusal)
+				case errors.Is(err, errPrivacyKeyUndeliverable):
+					cancel()
+					boot.fatalf("autoputer: privacy key delivery refused: %v", err)
+				default:
+					cancel()
+					boot.retryf("autoputer: privacy key delivery: %v", err)
+				}
+			}
+		}
 		recoveryPlan, materialized, baseErr := materializeProjectionBaseIfNeeded(bootstrapCtx, rtCfg.StorePath, computerID, platformURL, credentials.Capability, db)
 		if baseErr != nil {
 			cancel()
@@ -342,7 +373,6 @@ func Run() {
 			log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
 		}
 		provisionedGenesis := recoveryPlan.Action == projectionbase.RecoveryGenesis
-		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
 		privateCipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, canonicalHead == nil)
 		if err != nil {
 			cancel()

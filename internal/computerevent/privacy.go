@@ -131,6 +131,64 @@ func LoadGuestPrivateArtifactCipher(path, computerID string, allowCreate bool) (
 	return newPrivateArtifactCipher(computerID, keyFile.Key)
 }
 
+// InstallGuestPrivacyKey writes a key delivered from custodian escrow as the
+// canonical guest key file (temp file, fsync, rename, fsync dir). It never
+// replaces an existing key file (os.ErrExist).
+func InstallGuestPrivacyKey(path, computerID string, raw []byte) error {
+	path = filepath.Clean(path)
+	computerID = strings.TrimSpace(computerID)
+	if !filepath.IsAbs(path) || computerID == "" || len(raw) != chacha20poly1305.KeySize {
+		return fmt.Errorf("privacy keyring: invalid key installation")
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(path); err == nil {
+		return os.ErrExist
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	canonical, err := CanonicalJSON(guestPrivacyKeyFile{
+		Version: 1, ComputerID: computerID, Key: base64.RawStdEncoding.EncodeToString(raw),
+	})
+	if err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(dir, ".privacy-key-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := temporary.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	err = temporary.Chmod(0o400)
+	if err == nil {
+		_, err = temporary.Write(canonical)
+	}
+	if err == nil {
+		err = temporary.Sync()
+	}
+	if closeErr := temporary.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err := os.Link(tmpPath, path); err != nil {
+		// Link (not rename) so an existing key file is never replaced.
+		return err
+	}
+	directory, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
+}
+
 func createGuestPrivacyKey(path, computerID string) ([]byte, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err

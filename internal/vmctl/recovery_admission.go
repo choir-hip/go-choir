@@ -183,6 +183,9 @@ type recoveryEvidence struct {
 	WatermarkSequence uint64
 	BaseRef           string
 	HasWatermark      bool
+	// EscrowPresent: the platform holds a custodian escrow of the computer's
+	// privacy key, so a fresh realization can receive it (SH slice 3, O21).
+	EscrowPresent bool
 }
 
 // recoveryEvidenceReader reads canonical recovery inputs. It never writes.
@@ -527,10 +530,11 @@ func reevaluateRecoveryCondition(now time.Time, condition *RecoveryCondition, ob
 		return true, updated
 	}
 	if condition.Kind == RecoveryRefusalPrivacyKeyUnavailable {
-		// Only a key source reopens this; recovery inputs (watermark, base,
+		// Only a key source reopens this — custodian escrow, from which the
+		// realization receives the key. Recovery inputs (watermark, base,
 		// head) cannot supply a key. Operator cold-recover uses the
 		// maintenance path, which bypasses admission.
-		return false, updated
+		return observed.EscrowPresent, updated
 	}
 	if condition.Witness.HasLocalWitness {
 		plan, err := recoveryplan.PlanRecovery(condition.Witness.EmptyStore, condition.Witness.LocalSequence, true, observed.WatermarkSequence, observed.TargetSequence)
@@ -554,14 +558,15 @@ func reevaluateRecoveryCondition(now time.Time, condition *RecoveryCondition, ob
 // privacyKeyUnavailableRefusal refuses a fresh realization of an existing
 // chain. With no chain the guest creates the key before minting genesis.
 func privacyKeyUnavailableRefusal(computerID string, observed recoveryEvidence) *RecoveryRefusal {
-	if !observed.ChainExists {
+	if !observed.ChainExists || observed.EscrowPresent {
+		// No chain: the guest creates the key. Escrow: the guest receives it.
 		return nil
 	}
 	return &RecoveryRefusal{
 		ComputerID: computerID,
 		Kind:       RecoveryRefusalPrivacyKeyUnavailable,
 		Reason: fmt.Sprintf("fresh realization of existing computer (canonical head %d) has no privacy key source: "+
-			"the key lives only on a previous realization's data image and escrow delivery is not available", observed.TargetSequence),
+			"the platform holds no custodian escrow of its key", observed.TargetSequence),
 		Witness: RecoveryInputWitness{
 			WatermarkSequence: observed.WatermarkSequence,
 			TargetSequence:    observed.TargetSequence,
@@ -823,6 +828,7 @@ func (h httpRecoveryEvidence) Evidence(ctx context.Context, computerID, ownerID 
 		}
 		observed.ChainExists = true
 		observed.TargetSequence = head.Sequence
+		observed.EscrowPresent = h.custodianEscrowPresent(ctx, client, base, computerID, ownerID)
 	default:
 		return observed, fmt.Errorf("recovery evidence: canonical head status %d", headStatus)
 	}
@@ -852,6 +858,31 @@ func (h httpRecoveryEvidence) Evidence(ctx context.Context, computerID, ownerID 
 	default:
 		return observed, fmt.Errorf("recovery evidence: watermark status %d", watermarkStatus)
 	}
+}
+
+// custodianEscrowPresent reads the platform's escrow status. Any failure
+// reads as absent: the start is then refused as before, never admitted on a
+// guess.
+func (h httpRecoveryEvidence) custodianEscrowPresent(ctx context.Context, client *http.Client, base, computerID, ownerID string) bool {
+	body, status, err := h.get(ctx, client, base+"/internal/computers/keys/escrow/status?"+url.Values{"computer_id": {computerID}}.Encode(), ownerID)
+	if err != nil || status != http.StatusOK {
+		return false
+	}
+	var parsed struct {
+		Escrows []struct {
+			Protector string `json:"protector"`
+			KeyDigest string `json:"key_digest"`
+		} `json:"escrows"`
+	}
+	if json.Unmarshal(body, &parsed) != nil {
+		return false
+	}
+	for _, escrow := range parsed.Escrows {
+		if escrow.Protector == "custodian" && strings.TrimSpace(escrow.KeyDigest) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (h httpRecoveryEvidence) get(ctx context.Context, client *http.Client, endpoint, ownerID string) ([]byte, int, error) {

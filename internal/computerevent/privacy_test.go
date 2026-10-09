@@ -106,3 +106,41 @@ func TestGuestPrivacyKeyringRefusesMissingKeyAfterGenesis(t *testing.T) {
 		t.Fatal("missing post-genesis guest privacy key was recreated")
 	}
 }
+
+// TestInstallGuestPrivacyKeyRestoresDecryption: a key delivered from escrow
+// installs as the same canonical key file the guest would have created, so
+// history encrypted by an earlier realization decrypts (SH slice 3, O21).
+// An existing key file is never replaced.
+func TestInstallGuestPrivacyKeyRestoresDecryption(t *testing.T) {
+	original, err := LoadGuestPrivateArtifactCipher(filepath.Join(t.TempDir(), "old", "privacy-key"), "computer-test", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envelope, _, err := original.Encrypt(context.Background(), "computer-test", "event-old", "text/plain", "private", []byte("before the disk was lost"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := original.ExportKeyForEscrow(context.Background(), "computer-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "new", "privacy-key")
+	if err := InstallGuestPrivacyKey(path, "computer-test", raw); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := LoadGuestPrivateArtifactCipher(path, "computer-test", false)
+	if err != nil {
+		t.Fatalf("installed key does not load: %v", err)
+	}
+	plaintext, _, err := restored.Decrypt(context.Background(), envelope, "computer-test", "event-old")
+	if err != nil || string(plaintext) != "before the disk was lost" {
+		t.Fatalf("installed key cannot decrypt earlier history: %q %v", plaintext, err)
+	}
+	if err := InstallGuestPrivacyKey(path, "computer-test", bytes.Repeat([]byte{9}, 32)); !os.IsExist(err) {
+		t.Fatalf("existing key file must not be replaced, got %v", err)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(path))
+	if len(entries) != 1 {
+		t.Fatalf("install left temporary files: %v", entries)
+	}
+}

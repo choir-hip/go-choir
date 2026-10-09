@@ -26,6 +26,13 @@ type recoveryEvidenceFake struct {
 	watermarkStatus   int
 	headCalls         int
 	watermarkCalls    int
+	escrowed          bool
+}
+
+func (f *recoveryEvidenceFake) setEscrowed(escrowed bool) {
+	f.mu.Lock()
+	f.escrowed = escrowed
+	f.mu.Unlock()
 }
 
 func (f *recoveryEvidenceFake) setHead(sequence uint64) {
@@ -75,6 +82,15 @@ func (f *recoveryEvidenceFake) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			"watermark_sequence": sequence,
 			"base_ref":           baseRef,
 		})
+	case "/internal/computers/keys/escrow/status":
+		f.mu.Lock()
+		escrowed := f.escrowed
+		f.mu.Unlock()
+		escrows := []any{}
+		if escrowed {
+			escrows = append(escrows, map[string]any{"protector": "custodian", "key_digest": strings.Repeat("c", 64)})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"escrows": escrows})
 	default:
 		http.NotFound(w, r)
 	}
@@ -682,5 +698,44 @@ func TestRecoveryAdmissionMaintenanceRecoveryBypassesBreaker(t *testing.T) {
 	}
 	if _, ok := reg.RecoveryConditionFor("computer-held01"); ok {
 		t.Fatal("a successful boot clears the stale durable condition")
+	}
+}
+
+// TestRecoveryAdmissionEscrowIsAKeySource: with a custodian escrow the fresh
+// realization receives its key (SH slice 3), so it is admitted; a durable
+// privacy_key_unavailable condition reopens once escrow exists.
+func TestRecoveryAdmissionEscrowIsAKeySource(t *testing.T) {
+	corpusd := &recoveryEvidenceFake{headSequence: 2, watermarkSequence: 2, baseRef: "base-current"}
+	corpusdServer := httptest.NewServer(corpusd)
+	t.Cleanup(corpusdServer.Close)
+	jobsServer := httptest.NewServer(&recoveryJobsFake{status: "succeeded"})
+	t.Cleanup(jobsServer.Close)
+	reg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	mgr := &mockVMManager{}
+	reg.SetVMManager(mgr)
+
+	_, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-escrow", PrimaryDesktopID)
+	if refusal := requireRecoveryRefusal(t, err); refusal.Kind != RecoveryRefusalPrivacyKeyUnavailable {
+		t.Fatalf("unescrowed fresh realization kind = %s", refusal.Kind)
+	}
+	corpusd.setEscrowed(true)
+	if _, err := reg.ResolveOrAssignDesktopContext(context.Background(), "user-escrow", PrimaryDesktopID); err != nil {
+		t.Fatalf("escrow must reopen the key condition: %v", err)
+	}
+	if len(mgr.boots) != 1 {
+		t.Fatalf("reopened realization must boot once, boots=%d", len(mgr.boots))
+	}
+	if condition, ok := reg.RecoveryConditionFor(stableComputerID("user-escrow", PrimaryDesktopID, "")); ok {
+		t.Fatalf("admitted start must clear the condition: %+v", condition)
+	}
+
+	escrowedReg := newRecoveryAdmissionRegistry(t, filepath.Join(t.TempDir(), "recovery-conditions.json"), corpusdServer.URL, jobsServer.URL)
+	escrowedMgr := &mockVMManager{}
+	escrowedReg.SetVMManager(escrowedMgr)
+	if _, err := escrowedReg.ResolveOrAssignDesktopContext(context.Background(), "user-escrowed-fresh", PrimaryDesktopID); err != nil {
+		t.Fatalf("escrowed fresh realization must be admitted: %v", err)
+	}
+	if len(escrowedMgr.boots) != 1 {
+		t.Fatalf("escrowed fresh realization must boot once, boots=%d", len(escrowedMgr.boots))
 	}
 }

@@ -425,6 +425,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)
 	s.HandleFunc("/internal/computers/keys/escrow", h.HandleKeyEscrow)
 	s.HandleFunc("/internal/computers/keys/escrow/status", h.HandleKeyEscrowStatus)
+	s.HandleFunc("/internal/computers/keys/realization-delivery", h.HandleRealizationKeyDelivery)
 	s.HandleFunc("/internal/computers/keys/unwrap-requests", h.HandleKeyUnwrapRequests)
 	s.HandleFunc("/internal/computers/keys/unwrap-requests/", h.HandleKeyUnwrapRequestAction)
 	s.HandleFunc("/internal/computers/keys/transparency-head", h.HandleKeyEscrowTransparencyHead)
