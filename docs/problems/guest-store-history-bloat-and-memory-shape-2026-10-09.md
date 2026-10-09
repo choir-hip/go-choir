@@ -117,3 +117,47 @@ Checkpoints copy the bloated store, so the host pays for it again.
 5. **Owner relief first, once the compaction tool exists:** one owner-
    approved maintenance window. Hold, stop, reflink backup, compact, verify
    heads and witness, boot, then switch to 4 GiB and measure.
+
+## Owner maintenance window receipt (2026-10-09 05:31–05:38 UTC)
+
+Owner approved ("Yes, do it. Downtime is fine"). Tool:
+`projection-compact` (`internal/projectionbase/compact.go`, d339311e),
+deployed to Node B in forced staging deploy run 37885830317 (50d5707a).
+
+Sequence (as applied):
+1. Hold the computer.
+2. Stop it; firecracker gone.
+3. Reflink backup `data.img.pre-compact-20261009T053125Z`. **Rollback:** stop, then swap this file back in.
+4. Offline mount, then compact.
+5. Verify the tape projection.
+6. `fstrim`, then unmount.
+7. `maintenance-serve` (health `ready`).
+8. Unhold, then a normal refresh.
+
+| Measure | Before | After |
+|---|---|---|
+| `state.texture/texture/.dolt/noms` | 9,566,672,041 B | **1,744,115,732 B** |
+| Guest fs used | 12.0 GB | 4.2 GB (5.9 GB after boot) |
+| Host `data.img` allocated | 17.7 GB | **4.5 GB** |
+| `computer_event_projection_heads` (row digest) | `657160502cdadfb1` | `657160502cdadfb1` |
+| `computer_event_index` count / max sequence | 577,757 / 577,757 | 577,757 / 577,757 |
+
+- The tool exits non-zero unless `WitnessContentMatches(after, before)`, so the content witness held.
+- After the normal boot: health `ready`, computer-surface SPA 200, `running_runs` 0.
+- Owner VM RSS: 2.7 GB (was 14.7 GB at 02:46, before compaction).
+
+**New finding, confirmed by this boot:** guest GC is still skipped. The boot log reads
+`dolt gc skipped: live=5 GiB exceeds safe bounded-guest GC size (5 GiB)`,
+but the store is 1.7 GiB. As noted above, the guard counts whole-disk used minus the journal. The other ~4 GiB is mostly:
+- `choir-updater`: releases, store, and `incoming` (754 MB, still present);
+- `files`.
+
+Fix: the guard measures the Dolt store's non-journal noms bytes only.
+
+**Host leaks, partly open:**
+- One loop on a deleted image was detached.
+- Ten more are **mounted**:
+  - nine stacked on `/mnt/ed554data` (2026-10-04);
+  - one on `/mnt/m11-probe` (2026-09-28).
+  They are agent probe mounts over deleted guest images. They need an operator unmount; this session was not permitted to.
+- The quarantine images `data.img.quarantine-1-*` (2026-10-07) are kept pending an owner decision. They may hold pre-restore state.
