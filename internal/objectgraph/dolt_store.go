@@ -356,6 +356,9 @@ func (s *DoltStore) ReadObjectSnapshot(ctx context.Context, ownerID, computerID 
 // for the requested kinds, applies keep(kind, metadata) to decide membership,
 // and phase two fetches full rows by primary key for survivors only.
 // Returned objects are sorted by canonical_id, matching ReadObjectSnapshot.
+// snapshotFetchBatch bounds each phase-2 IN list in ReadObjectSnapshotFiltered.
+const snapshotFetchBatch = 256
+
 func (s *DoltStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, computerID string, kinds []ObjectKind, keep func(kind ObjectKind, metadata json.RawMessage) bool) ([]Object, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("objectgraph dolt: nil store")
@@ -415,36 +418,38 @@ func (s *DoltStore) ReadObjectSnapshotFiltered(ctx context.Context, ownerID, com
 	}
 
 	// Phase 2: PK-fetch bodies for survivors, preserving canonical_id order.
-	// IDs arrive sorted from phase 1; batch them with an IN clause.
-	objectsQuery := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-		FROM og_objects WHERE canonical_id IN (`
-	objArgs := make([]any, 0, len(ids))
-	for i, id := range ids {
-		if i > 0 {
-			objectsQuery += `,`
+	// IDs arrive sorted from phase 1. Fetch them in fixed-size IN batches
+	// inside the same read-only transaction: go-mysql-server's range-overlap
+	// check is quadratic in the IN list, and one list of every survivor cost
+	// 42% of guest CPU on a long-lived computer (docs/problems/
+	// texture-list-cold-latency-2026-10-09.md).
+	objects := make([]Object, 0, len(ids))
+	for start := 0; start < len(ids); start += snapshotFetchBatch {
+		batch := ids[start:min(start+snapshotFetchBatch, len(ids))]
+		objectsQuery := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		FROM og_objects WHERE canonical_id IN (` + strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",") + `) ORDER BY canonical_id`
+		objArgs := make([]any, len(batch))
+		for i, id := range batch {
+			objArgs[i] = id
 		}
-		objectsQuery += `?`
-		objArgs = append(objArgs, id)
-	}
-	objectsQuery += `) ORDER BY canonical_id`
-	objRows, err := tx.QueryContext(ctx, objectsQuery, objArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("objectgraph dolt: snapshot bodies: %w", err)
-	}
-	var objects []Object
-	for objRows.Next() {
-		obj, scanErr := scanDoltObject(objRows)
-		if scanErr != nil {
+		objRows, err := tx.QueryContext(ctx, objectsQuery, objArgs...)
+		if err != nil {
+			return nil, fmt.Errorf("objectgraph dolt: snapshot bodies: %w", err)
+		}
+		for objRows.Next() {
+			obj, scanErr := scanDoltObject(objRows)
+			if scanErr != nil {
+				objRows.Close()
+				return nil, scanErr
+			}
+			objects = append(objects, obj)
+		}
+		if err := objRows.Err(); err != nil {
 			objRows.Close()
-			return nil, scanErr
+			return nil, fmt.Errorf("objectgraph dolt: iterate snapshot bodies: %w", err)
 		}
-		objects = append(objects, obj)
-	}
-	if err := objRows.Err(); err != nil {
 		objRows.Close()
-		return nil, fmt.Errorf("objectgraph dolt: iterate snapshot bodies: %w", err)
 	}
-	objRows.Close()
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("objectgraph dolt: snapshot commit: %w", err)
 	}

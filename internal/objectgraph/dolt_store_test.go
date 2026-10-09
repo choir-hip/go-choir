@@ -696,3 +696,62 @@ func TestDoltStoreListJSONBodyFieldsByKindOwner(t *testing.T) {
 		t.Fatalf("missing pending-b in %+v", got)
 	}
 }
+
+// Failure modes pinned (docs/problems/texture-list-cold-latency-2026-10-09.md):
+// phase 2 fetched every survivor in one IN list, and go-mysql-server's range
+// overlap check is quadratic in that list (42% of guest CPU on the owner
+// computer); batching must not drop, duplicate or reorder objects across a
+// batch boundary, and the keep filter must still apply.
+func TestReadObjectSnapshotFilteredBatchesAcrossBoundaries(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	const total = snapshotFetchBatch*2 + 37
+	now := time.Now().UTC()
+	for i := 0; i < total; i++ {
+		obj := Object{
+			CanonicalID: fmt.Sprintf("obj:choir.batch:owner-b:%05d", i),
+			ObjectKind:  "choir.batch",
+			OwnerID:     "owner-b",
+			ComputerID:  "computer-b",
+			ContentHash: fmt.Sprintf("sha256:%05d", i),
+			Body:        []byte(fmt.Sprintf(`{"i":%d}`, i)),
+			Metadata:    json.RawMessage(fmt.Sprintf(`{"keep":%t}`, i%7 != 0)),
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := store.PutObject(ctx, obj); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := store.ReadObjectSnapshotFiltered(ctx, "owner-b", "computer-b", []ObjectKind{"choir.batch"}, func(_ ObjectKind, metadata json.RawMessage) bool {
+		var m struct{ Keep bool }
+		_ = json.Unmarshal(metadata, &m)
+		return m.Keep
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 0
+	for i := 0; i < total; i++ {
+		if i%7 != 0 {
+			want++
+		}
+	}
+	if len(got) != want {
+		t.Fatalf("snapshot returned %d objects, want %d", len(got), want)
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i-1].CanonicalID >= got[i].CanonicalID {
+			t.Fatalf("snapshot out of canonical order at %d: %s then %s", i, got[i-1].CanonicalID, got[i].CanonicalID)
+		}
+	}
+	for _, obj := range got {
+		if len(obj.Body) == 0 {
+			t.Fatalf("object %s returned without body", obj.CanonicalID)
+		}
+	}
+}
