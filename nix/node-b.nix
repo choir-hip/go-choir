@@ -471,6 +471,12 @@ in
       ExecStartPre = platformDoltInit;
       ExecStart = "${pkgs.dolt}/bin/dolt sql-server --host 127.0.0.1 --port 13306";
       WorkingDirectory = platformDoltDBDir;
+      # Host memory budget (docs/problems/node-b-memory-overcommitted-swap-
+      # 2026-10-09.md): the canonical log is throttled, never swapped and
+      # never hard-killed. ~1.1 GB RSS measured 2026-10-09.
+      MemoryHigh = "3G";
+      MemorySwapMax = "0";
+      OOMScoreAdjust = -500;
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/platform-dolt";
@@ -494,6 +500,13 @@ in
     serviceConfig = commonServiceHardening // {
       ExecStartPre = corpusDoltInit;
       ExecStart = "${pkgs.dolt}/bin/dolt sql-server --host 127.0.0.1 --port 13307";
+      # Host memory budget: replaces the untracked 18G/20G set-property
+      # drop-ins in /etc/systemd/system.control. ~4.0 GB RSS measured
+      # 2026-10-09. Store B is the blast-radius-isolated store: it is the one
+      # that may be killed and restarted, never the guests.
+      MemoryHigh = "5G";
+      MemoryMax = "7G";
+      MemorySwapMax = "0";
       # WorkingDirectory is the parent dir (StateDirectory-created): systemd
       # chdirs before ExecStartPre runs, so pointing at corpusDoltDBDir would
       # fail on first boot before the init script creates it. dolt sql-server
@@ -562,10 +575,13 @@ in
       Type = "oneshot";
       ExecStart = "${serviceExec "checkpointd" goChoirPackages.checkpointd}";
       TimeoutStartSec = "8h";
-      MemoryMax = "16G";
+      MemoryHigh = "4G";
+      MemoryMax = "6G";
+      MemorySwapMax = "0";
       # Under host memory pressure the kernel must kill the checkpoint worker
-      # (a retryable job) before any guest VM. Large seeded bases are still
-      # unmeasured; MemoryMax is a ceiling, not reserved headroom.
+      # (a retryable job) before any guest VM. The 16G ceiling exceeded the
+      # host budget (docs/problems/node-b-memory-overcommitted-swap-
+      # 2026-10-09.md); compact projection bases are ~1.7 GB.
       OOMScoreAdjust = 1000;
       CPUQuota = "100%";
       Nice = 10;
@@ -644,6 +660,13 @@ in
       # CAP_NET_ADMIN is required for: ip tuntap, ip addr, ip link,
       # iptables (DNAT, MASQUERADE, FORWARD rules), and ip route.
       CapabilityBoundingSet = [ "CAP_NET_ADMIN" "CAP_SYS_PTRACE" ];
+      # Host memory budget: Firecracker guests live in this cgroup. Reserve
+      # 14G for them against reclaim by everything else (3 always-on 4 GiB
+      # guests plus slack), never swap them, and keep them last in OOM order.
+      # Guest count admission against this reservation is vmctl's job.
+      MemoryLow = "14G";
+      MemorySwapMax = "0";
+      OOMScoreAdjust = -500;
       # Let Firecracker child processes survive vmctl process replacement.
       # The new vmctl process reattaches using durable ownership + pid files
       # after proving the guest health endpoint still responds.
@@ -1080,9 +1103,26 @@ in
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ];
     auto-optimise-store = false;
-    min-free = 128849018880;
-    max-free = 193273528320;
+    # min-free sat above the disk's actual free space (120 GB vs 107 GB), so
+    # every build started a store GC. GC when below 80 GB, up to 100 GB.
+    min-free = 85899345920;
+    max-free = 107374182400;
+    # CI builds run on the production host beside guests: two derivations at
+    # a time, six cores each, inside the bounded nix-daemon slice below.
+    max-jobs = 2;
+    cores = 6;
   };
+
+  # Host memory budget (docs/problems/node-b-memory-overcommitted-swap-
+  # 2026-10-09.md, owner direction: swapping is service degradation). Builds
+  # are throttled at 6G, killed at 7G, never swap, and die first under OOM.
+  systemd.services.nix-daemon.serviceConfig = {
+    MemoryHigh = "6G";
+    MemoryMax = "7G";
+    MemorySwapMax = "0";
+    OOMScoreAdjust = lib.mkForce 1000;
+  };
+  boot.kernel.sysctl."vm.swappiness" = 1;
 
   nix.optimise = {
     automatic = true;
