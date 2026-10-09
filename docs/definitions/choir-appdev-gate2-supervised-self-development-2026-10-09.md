@@ -185,33 +185,38 @@ now:
     owner_ratification_ref: pending (stated per AGENTS.md No Blocking Asks)
   belief:
     believed_state: >-
-      M11 rerun on 19b7ef48 (2026-10-09 20:31Z,
-      evidence/m11-rerun-2026-10-09T20-30-55Z.json): 5 of 16 legs pass
-      (fresh owner, bootstrap chain, pre-episode checkpoint, propose_only,
-      operation started). The episode stops before awaiting_approval: the
-      capsule's Go session worker exits before its ready handshake on
-      every call (problems/capsule-session-worker-dies-at-start-2026-10-09.md),
-      so engineering can do nothing, and with no tool-loop budget and a
-      guard that demands a capsule-committed fate it retried ~400 times.
-      Approval, apply, reject and restore were not reached, so they are
-      unobserved on this build, not known broken.
+      Four M11 reruns on 2026-10-09, each 5 of 16 legs (fresh owner,
+      bootstrap chain, pre-episode checkpoint, propose_only, operation
+      started), each stopped at a deeper layer. Reruns 1-3: the capsule's
+      session worker could not start (inherited broker seccomp refused
+      Landlock, then seccomp; repaired 733bec77). Rerun 4 (733bec77): the
+      capsule ran cells for 116 iterations, staged and verified a
+      release, then the freeze failed: emitSourcePatch read the new
+      docs/evidence directory as a file
+      (problems/capsule-freeze-fails-on-new-source-directory-2026-10-09.md;
+      fixed 2c68cc18). The blocker report never reached Texture: the
+      binding scan wanted a lifecycle control update a delegated cast
+      never has (fixed 028446a5, red). Approval, apply, reject and restore
+      remain unobserved on this build, not known broken.
     main_uncertainty: >-
-      Why the worker dies (H1: the S1 hardening floor, landed 2026-10-04,
-      after M11's last green run); the stderr diagnostic (cb138a59) names
-      it on the next run.
-    next_observation: the M11 rerun on cb138a59 or later, with the worker's stderr.
+      Whether the freeze, verification and approval chain behind the
+      capsule still works after S2 layering; nothing past the freeze has
+      run since September 29.
+    next_observation: M11 rerun 5 on 5b851eed or later.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
   next_action: >-
-    Rerun M11 on the build with the stderr diagnostic; fix the worker's
-    start failure it names; then give engineering a tool-loop budget and a
-    runtime-recorded blocker fate for an unavailable worker; rerun M11 to
-    the restore leg.
+    Deploy 5b851eed; rerun M11; on a frozen candidate, follow it through
+    verification, approval, apply, reject and restore, documenting each
+    failed leg before fixing it.
 receipts:
   - id: m11-rerun-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
     result: partial (5/16; blocked at awaiting_approval)
+  - id: m11-rerun-4-2026-10-09
+    ref: docs/evidence/m11-rerun-2026-10-09T22-01-41Z.json
+    result: partial (5/16; capsule worked; freeze failed on a new source directory)
 ---
 
 # Gate 2 — self-development with live Texture supervision

@@ -118,13 +118,14 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   [`clustering-texture-obligation-closure`](problems/clustering-texture-obligation-closure-2026-10-09.md).
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
-  Reality slice ran (M11 on 19b7ef48): 5 of 16 legs; the capsule's Go
-  session worker exits before its ready handshake on every call, so
-  engineering cannot work, and it retried ~400 times with no budget
-  ([problem](problems/capsule-session-worker-dies-at-start-2026-10-09.md)).
-  Landed: the worker's stderr now reaches the error (cb138a59) and
-  engineering activations are budgeted (7591ca02). Next: rerun M11 to
-  read the stderr, fix the start failure, rerun to the restore leg.
+  Reality slice: four M11 reruns, 5 of 16 legs each, each stopped one
+  layer deeper. The capsule session worker is repaired (733bec77);
+  rerun 4 ran engineering for 116 iterations and failed at the freeze on
+  a new source directory
+  ([problem](problems/capsule-freeze-fails-on-new-source-directory-2026-10-09.md),
+  fixed 2c68cc18); its blocker report was rejected by Texture's binding
+  scan (fixed 028446a5). Next: M11 rerun 5 on 5b851eed toward approval
+  and restore.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
