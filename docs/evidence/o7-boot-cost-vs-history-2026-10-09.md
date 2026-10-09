@@ -51,9 +51,15 @@ budget: runtime start under 60 s for any computer up to 10 GB, and health
 under 15 s regardless of size. At 4–5 s/GB the 60 s budget is crossed near
 12 GB, so this is a residual, not an emergency.
 
-Residual `o7-runtime-start-scales-with-store`: find which boot phase reads
-in proportion to history (the guest's own boot-phase timings for
-03335285 and 7cc96dc6) and make it pending-indexed. The enforcer still
+Residual `o7-runtime-start-scales-with-store`. Located from the guest's
+own marks for 7cc96dc6 (3.1 GB, 10:58Z boot): store open 0.25 s, runtime
+built 1.02 s, replay 0 rows (done at 1.03 s), lifecycle reconciled
+1.06 s, then **runtime started at 16.96 s**. The whole linear term is the
+~16 s inside `Runtime.Start` after lifecycle reconcile (the boot phases:
+passivation, terminal-outcome reconcile, wake-outbox migration and the
+other boot reconcilers). Next: per-phase timings for that span (the boot
+log already prints phase durations) on the largest computer, then make
+the slow phase pending-indexed. The enforcer still
 missing is an alarm: the boot timeline already carries the numbers, so a
 host-side check that flags a runtime start over budget would make O7
 enforceable without a synthetic owner-scale store.
