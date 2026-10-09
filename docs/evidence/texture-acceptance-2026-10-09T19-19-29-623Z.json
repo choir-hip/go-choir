@@ -1,0 +1,87 @@
+{
+  "started_at": "2026-10-09T19:19:29.625Z",
+  "checks": {
+    "T1_list": {
+      "at": "2026-10-09T19:19:46.169Z",
+      "status": [
+        200,
+        200
+      ],
+      "ms": [
+        30,
+        27
+      ],
+      "count": 0
+    },
+    "T2a_first_draft": {
+      "at": "2026-10-09T19:20:22.224Z",
+      "pass": true,
+      "seconds": 36,
+      "appagent_revisions": 1
+    },
+    "T2b_revise": {
+      "at": "2026-10-09T19:20:37.949Z",
+      "pass": true,
+      "seconds": 16,
+      "appagent_revisions": 2
+    },
+    "T3_chevrons": {
+      "at": "2026-10-09T19:20:38.191Z",
+      "reads": [
+        {
+          "id": "0dbfb04c-f84f-5c16-a7dd-ed01d2f80c8b",
+          "status": 200,
+          "ms": 28
+        },
+        {
+          "id": "abb17bbc-75a7-5d23-8b75-c95f8af626ee",
+          "status": 200,
+          "ms": 39
+        },
+        {
+          "id": "5febdaf5-87b9-5684-be9d-97e6c2ce27df",
+          "status": 200,
+          "ms": 34
+        },
+        {
+          "id": "16c5ed16-5baa-5a46-a66b-f6e532361810",
+          "status": 200,
+          "ms": 30
+        }
+      ]
+    },
+    "T4_reload_idle": {
+      "at": "2026-10-09T19:20:53.441Z",
+      "pending_reads": [
+        false,
+        false,
+        false
+      ]
+    },
+    "T5_cancel": {
+      "at": "2026-10-09T19:20:54.517Z",
+      "pending_seen": true,
+      "cancel_status": 200,
+      "cleared": true,
+      "seconds_to_clear": 1,
+      "appagent_before": 2
+    },
+    "T5b_revise_after_cancel": {
+      "at": "2026-10-09T19:20:54.551Z",
+      "pass": false,
+      "status": 409,
+      "body": {
+        "error": "durable lifecycle state is unavailable or terminal"
+      }
+    },
+    "T6_research": {
+      "at": "2026-10-09T19:27:52.749Z",
+      "landed": false,
+      "head": "ee496288-3757-5c15-9ea0-3e6ec030c32d",
+      "source_entities": 0
+    }
+  },
+  "base_url": "https://choir.news",
+  "doc_id": "cd3459e0-af6c-5843-9682-4cad158ce994",
+  "doc_id_research": "804457d4-22a3-5e71-9b2e-56ef8a94f77e"
+}
