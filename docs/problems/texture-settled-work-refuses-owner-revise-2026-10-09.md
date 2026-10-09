@@ -98,3 +98,14 @@ consumption log lines (8a3d31c8), so how Texture disposed of the report
 is not visible here; the next reproduction on 8a3d31c8 or later names it.
 The SL surface should flag "open work, no active run, nothing owed" as
 undriven; that is the per-kind "no live driver" detection slice 3 deferred.
+
+## After the deadlines (20:03Z, same computer, obligations surface)
+
+The thirteen deferred actor events (three activation-budget and ten
+cell-terminal deadlines, due 20:00Z) all fired and were processed: the
+actor tape now has nothing due or deferred and nothing in flight. The
+research work item opened at 19:00:43Z is **still open**. The fail-closed
+deadlines end activations and cells; they do not settle lifecycle work.
+So this item now has no driver at all (O1), and only an owner action on
+the document or the closure rule of
+`clustering-texture-obligation-closure-2026-10-09` option A can close it.
