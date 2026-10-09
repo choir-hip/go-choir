@@ -99,8 +99,8 @@ From the 41 `liveness` docs in
 - The outbox is already the one periodic driver and already the re-drive
   authority for wakes. Routing every kind's re-drive through an outbox
   wake, with an attempt count and an exhausted fate on the wake itself,
-  gives one driver and one budget without a new poller. It also covers
-  the gap between boots, since boot-only reconcilers become wake sources.
+  gives one driver and one budget without a new poller. (Owner direction
+  below replaces any boot re-drive: boot closes work instead.)
 - The registry is then a table of kinds, each declaring its terminal
   fates and its wake source. The fate surface reads unprojected wakes and
   non-terminal objects per kind.
@@ -112,6 +112,23 @@ From the 41 `liveness` docs in
   transition lives and what its fates are; whether actor wakes and
   lifecycle packets need different fate semantics (the definition's
   stated uncertainty).
+
+## Owner direction (2026-10-09, after this inventory)
+
+- No panel. Build the conservative design.
+- **Event-driven, not polling.** The outbox driver is signalled when an
+  obligation is written, keeps one timer for the earliest due retry, and
+  does no fixed-interval scan. Today it queries the store every 500 ms
+  even when idle, on a guest store with one connection.
+- **A restart never resumes work** (AGENTS.md "Restarts End Work"). Boot
+  does one pass that closes every open obligation with the visible fate
+  "interrupted by a restart". It re-dispatches nothing. The boot-time
+  resumers in Finding 1 are deletion candidates, not wake sources. The
+  "Restart" column above is therefore the list of behavior to remove.
+- Open, for the owner: a transition whose completion *is* a restart
+  (a self-development release apply, a platform update reboot) must still
+  record its own outcome after the boot. That is confirming a finished
+  step, not resuming work, but it needs a precise boundary.
 
 ## Next
 

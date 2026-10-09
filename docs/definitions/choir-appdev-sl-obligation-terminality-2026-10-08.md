@@ -62,8 +62,9 @@ finish:
   deliver: >-
     No durable obligation on a Choir computer can loop, strand or vanish.
     Every obligation kind has exactly one driver, an attempt budget, and a
-    terminal fate that is recorded and visible; a restart re-derives open
-    obligations from durable state without re-arming dead ones. An owner or
+    terminal fate that is recorded and visible; a restart never resumes
+    work: boot closes every open obligation with the visible fate
+    "interrupted by a restart" (owner rule 2026-10-09). An owner or
     agent can ask the product API "what is owed and why is it not moving"
     and get an exact answer without SSH.
   artifact: >-
@@ -210,12 +211,12 @@ now:
     Red surface; regressions here strand real work. Mitigated by
     disposable-first fault matrix and additive registry.
   next_action: >-
-    Inventory drafted (docs/evidence/sl-obligation-inventory-2026-10-09.md):
-    one periodic driver (actor wake sweep) and ~30 boot/event reconcilers;
-    attempt budgets on four paths only; actor wakes retry forever without
-    a count; 34 of 41 liveness docs map onto five kinds. Next: measure
-    non-terminal counts per kind on a disposable, reconcile the 34 docs'
-    status against commits, then panel review and registry decision.
+    Owner decisions 2026-10-09: no panel; build the outbox as the single
+    driver, event-driven (signal on write, timer only for the earliest due
+    retry, no fixed poll); a restart never resumes work, so boot closes
+    open obligations as "interrupted by a restart" and the boot-time
+    resumers are deletion candidates. Next: problem doc, then the boot
+    close-out plus retry counts plus the "what is owed" surface.
 receipts: []
 ---
 

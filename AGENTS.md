@@ -69,6 +69,19 @@ ask for a genuinely irreversible or destructive step with no safe default —
 a deploy-shape tradeoff or a credential/authority question, not a design
 branch. This rule is standing: it survives session compaction.
 
+## Restarts End Work
+
+Owner rule (2026-10-09, repeated several times; generalizes the earlier
+Texture-only rule): **a restart never resumes work.** A computer stays on
+while it is working; if it goes off, the work it was doing is done. At
+boot, every open obligation (run, wake, control, directive, assignment,
+work item) is closed with the visible fate "interrupted by a restart",
+never re-dispatched. Auto-resume after restart is how crash-restart loops
+happen. The persistent computer tier exists so computers stay on. Later:
+hibernate and wake instead of boot; later still, a deliberate resume
+subsystem (management-owned), not automatic restart. Do not add boot-time
+reconcilers, re-drives or resumers.
+
 ## Default Environment
 
 Staging is the acceptance environment: `https://choir.news`. Use local
