@@ -401,9 +401,9 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 			a.considerJob(updated)
 			return refusalFromCondition(updated)
 		}
-		a.Clear(computerID)
 		emptyStore = emptyStore || condition.Witness.FreshRealization
 		if !emptyStore {
+			a.Clear(computerID)
 			return nil
 		}
 	}
@@ -411,10 +411,17 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 		return nil
 	}
 
+	// For a fresh realization the old condition is replaced, never cleared
+	// first: a crash between a clear and the next store would lose the
+	// fresh-realization witness and let the retry boot as retained.
+	priorCondition := condition != nil
 	observed, err := readEvidence()
 	if err != nil {
 		// No verifiable inputs: preserve the guest planner for races and
 		// unknown local state.
+		if priorCondition {
+			a.Clear(computerID)
+		}
 		return nil
 	}
 	refusal := deterministicEmptyStoreRefusal(computerID, ownerID, observed)
@@ -427,6 +434,9 @@ func (a *RecoveryAdmission) Admit(ctx context.Context, computerID, ownerID strin
 		refusal = privacyKeyUnavailableRefusal(computerID, observed)
 	}
 	if refusal == nil {
+		if priorCondition {
+			a.Clear(computerID)
+		}
 		return nil
 	}
 	condition = &RecoveryCondition{
@@ -600,6 +610,13 @@ func recoveryRefusalKindForPlan(observed recoveryEvidence, plan recoveryplan.Rec
 	return RecoveryRefusalTailExcess
 }
 
+func retryAfterForKind(kind RecoveryRefusalKind) int {
+	if kind == RecoveryRefusalPrivacyKeyUnavailable {
+		return privacyKeyRetryAfterSeconds
+	}
+	return recoveryRetryAfterSeconds
+}
+
 func refusalFromCondition(condition *RecoveryCondition) *RecoveryRefusal {
 	if condition == nil {
 		return nil
@@ -610,7 +627,7 @@ func refusalFromCondition(condition *RecoveryCondition) *RecoveryRefusal {
 		Reason:            condition.Reason,
 		Witness:           condition.Witness,
 		Job:               condition.Job,
-		RetryAfterSeconds: recoveryRetryAfterSeconds,
+		RetryAfterSeconds: retryAfterForKind(condition.Kind),
 	}
 }
 

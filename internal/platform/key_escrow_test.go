@@ -280,8 +280,15 @@ func TestKeyEscrowIsWriteOncePerKeyDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	original, originalJSON := seal(bytes.Repeat([]byte{0x01}, 32))
+	seqBefore, _, err := store.KeyEscrowTransparencyHead(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := store.UpsertKeyEscrow(ctx, original.ComputerID, original.Protector, originalJSON, original.KeyDigest); err != nil {
 		t.Fatalf("pre-genesis escrow replacement must be allowed: %v", err)
+	}
+	if seqAfter, _, err := store.KeyEscrowTransparencyHead(ctx); err != nil || seqAfter != seqBefore+1 {
+		t.Fatalf("pre-genesis replacement must append one transparency entry: before=%d after=%d err=%v", seqBefore, seqAfter, err)
 	}
 	if _, err := store.db.ExecContext(ctx, `INSERT INTO computer_event_heads (computer_id,sequence,canonical_event_head,desired_event_head,effective_event_head,desired_state_commitment,effective_state_commitment,pending_transition_ref,reducer_version,credential_revocation_epoch,created_at,updated_at) VALUES (?,?,?,?,?,?,?,NULL,1,0,?,?)`,
 		original.ComputerID, 1, strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("b", 64), time.Now(), time.Now()); err != nil {

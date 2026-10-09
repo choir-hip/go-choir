@@ -3,8 +3,10 @@ package autoputer
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -52,11 +54,18 @@ type keyEscrowPutRequest struct {
 	KeyDigest  string `json:"key_digest"`
 }
 
+// ErrEscrowHoldsDifferentKey: the platform's custodian escrow for this
+// computer holds a different key and refused replacement (a chain exists).
+var ErrEscrowHoldsDifferentKey = errors.New("key escrow: platform escrow holds a different key")
+
 // EnsureCustodianEscrow seals rawDEK under the host escrow public key and
-// uploads the wrap when the platform lacks a custodian record. Returns true
-// when the wrap is present after the call (pre-existing or newly uploaded).
+// uploads the wrap unless the platform's custodian record already holds this
+// exact key (by digest). A record for a different key is not escrow of this
+// key: the upload lets the platform replace it before genesis or refuse it
+// (ErrEscrowHoldsDifferentKey) once a chain exists. Returns true when this
+// key's wrap is present after the call.
 func (c *keyEscrowClient) EnsureCustodianEscrow(ctx context.Context, computerID string, rawDEK []byte) (bool, error) {
-	escrowed, err := c.custodianEscrowed(ctx, computerID)
+	escrowed, err := c.custodianEscrowed(ctx, computerID, fmt.Sprintf("%x", sha256.Sum256(rawDEK)))
 	if err != nil {
 		return false, err
 	}
@@ -91,13 +100,16 @@ func (c *keyEscrowClient) EnsureCustodianEscrow(ctx context.Context, computerID 
 		return false, fmt.Errorf("key escrow: encode request: %w", err)
 	}
 	if err := c.do(ctx, http.MethodPut, "/internal/computers/keys/escrow", body); err != nil {
+		if strings.Contains(err.Error(), fmt.Sprintf("status %d", http.StatusConflict)) {
+			return false, fmt.Errorf("%w (%s): %v", ErrEscrowHoldsDifferentKey, computerID, err)
+		}
 		return false, err
 	}
 	log.Printf("autoputer: custodian key escrow uploaded for %s", computerID)
 	return true, nil
 }
 
-func (c *keyEscrowClient) custodianEscrowed(ctx context.Context, computerID string) (bool, error) {
+func (c *keyEscrowClient) custodianEscrowed(ctx context.Context, computerID, keyDigest string) (bool, error) {
 	body, err := c.get(ctx, "/internal/computers/keys/escrow/status?computer_id="+computerID)
 	if err != nil {
 		return false, err
@@ -107,7 +119,7 @@ func (c *keyEscrowClient) custodianEscrowed(ctx context.Context, computerID stri
 		return false, fmt.Errorf("key escrow: decode status: %w", err)
 	}
 	for _, escrow := range status.Escrows {
-		if escrow.Protector == keyescrow.ProtectorCustodian {
+		if escrow.Protector == keyescrow.ProtectorCustodian && escrow.KeyDigest == keyDigest {
 			return true, nil
 		}
 	}

@@ -62,6 +62,29 @@ type replayHealthGate struct {
 	// refused, once set, is the only /health answer: a fatal startup error
 	// after the server started.
 	refused *ProjectionBaseRefusal
+	// readyServed records that /health actually answered 200; only then has
+	// the host ended its boot wait (pending=false alone does not prove it).
+	readyServed bool
+}
+
+// statusRecorder captures the status code a delegated handler writes.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	if r.status == 0 {
+		r.status = status
+	}
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Write(body []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	return r.ResponseWriter.Write(body)
 }
 
 func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +122,13 @@ func (g *replayHealthGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
 		return
 	}
-	base(w, r)
+	recorder := &statusRecorder{ResponseWriter: w}
+	base(recorder, r)
+	if recorder.status == http.StatusOK {
+		g.mu.Lock()
+		g.readyServed = true
+		g.mu.Unlock()
+	}
 }
 
 func (g *replayHealthGate) refuse(refusal *ProjectionBaseRefusal) {
@@ -108,10 +137,10 @@ func (g *replayHealthGate) refuse(refusal *ProjectionBaseRefusal) {
 	g.mu.Unlock()
 }
 
-func (g *replayHealthGate) isPending() bool {
+func (g *replayHealthGate) servedReady() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.pending
+	return g.readyServed
 }
 
 func (g *replayHealthGate) setPending(pending bool) {
@@ -288,7 +317,7 @@ func Run() {
 		}
 		if err != nil {
 			cancel()
-			boot.fatalf("autoputer: acquire or recover computer event credential: %v", err)
+			boot.retryf("autoputer: acquire or recover computer event credential: %v", err)
 		}
 		eventClient, err := computerevent.NewGuestHTTPClient(platformURL, credentials.Capability)
 		if err != nil {
@@ -298,7 +327,7 @@ func Run() {
 		canonicalHead, err := eventClient.Head(bootstrapCtx, computerID)
 		if err != nil {
 			cancel()
-			boot.fatalf("autoputer: resolve canonical event head before keyring: %v", err)
+			boot.retryf("autoputer: resolve canonical event head before keyring: %v", err)
 		}
 		recoveryPlan, materialized, baseErr := materializeProjectionBaseIfNeeded(bootstrapCtx, rtCfg.StorePath, computerID, platformURL, credentials.Capability, db)
 		if baseErr != nil {
@@ -308,7 +337,7 @@ func Run() {
 			// runtime and appender never start on an unrecovered store.
 			refusal := bootRefusalForError(computerID, baseErr)
 			log.Printf("autoputer: required projection base refused; serving typed refusal on /health for %s: %v", bootRefusalObservationWindow, baseErr)
-			serveBootRefusalAndExit(s, refusal)
+			boot.refuse(refusal)
 		} else if materialized {
 			log.Printf("autoputer: ProjectionBase materialized before reconstruct for %s", computerID)
 		}
@@ -345,7 +374,7 @@ func Run() {
 				escrowCancel()
 				if err != nil {
 					cancel()
-					boot.fatalf("autoputer: custodian key escrow before genesis: %v", err)
+					boot.retryf("autoputer: custodian key escrow before genesis: %v", err)
 				}
 			} else {
 				go func() {

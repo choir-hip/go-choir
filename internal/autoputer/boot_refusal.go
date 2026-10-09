@@ -114,6 +114,15 @@ func (f *startupFailer) fatalf(format string, args ...any) {
 	f.refuse(&ProjectionBaseRefusal{ComputerID: f.computerID, Kind: BootRefusalKindStartupFailed, Reason: reason})
 }
 
+// retryf ends a boot on a transient platform error (network, platform 5xx):
+// it exits at once without a refusal, so systemd restarts the runtime inside
+// the host's readiness wait and a platform blip heals silently, as before.
+// Typed refusals are for deterministic failures only (panel F3).
+func (f *startupFailer) retryf(format string, args ...any) {
+	log.Printf(format+" (transient; restarting)", args...)
+	f.exit(1)
+}
+
 // refuse publishes the typed refusal on /health for the observation window,
 // then exits. Before the server runs it starts a refusal-only server.
 func (f *startupFailer) refuse(refusal *ProjectionBaseRefusal) {
@@ -128,7 +137,7 @@ func (f *startupFailer) refuse(refusal *ProjectionBaseRefusal) {
 		serveBootRefusalAndExit(f.server, refusal)
 		return
 	}
-	readinessServed := !gate.isPending()
+	readinessServed := gate.servedReady()
 	gate.refuse(refusal)
 	if readinessServed {
 		// The host stopped its boot wait once readiness was served; nobody

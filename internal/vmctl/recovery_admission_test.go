@@ -455,6 +455,12 @@ func TestRecoveryAdmissionFreshInstallRefusesOvercapBeforeBoot(t *testing.T) {
 	if len(mgr.boots) != 0 {
 		t.Fatalf("key-unsatisfiable fresh realization must not boot, boots=%d", len(mgr.boots))
 	}
+	// The base condition was replaced in place by the key condition, keeping
+	// the fresh-realization witness (no clear-then-store window).
+	condition, ok := reg.RecoveryConditionFor(stableComputerID("user-fresh", PrimaryDesktopID, ""))
+	if !ok || condition.Kind != RecoveryRefusalPrivacyKeyUnavailable || !condition.Witness.FreshRealization {
+		t.Fatalf("replaced condition = %+v (%t), want fresh privacy_key_unavailable", condition, ok)
+	}
 }
 
 func TestRecoveryAdmissionFreshRealizationOfExistingChainRefusesMissingPrivacyKey(t *testing.T) {
@@ -478,6 +484,9 @@ func TestRecoveryAdmissionFreshRealizationOfExistingChainRefusesMissingPrivacyKe
 		}
 		if refusal.Witness.TargetSequence != 2 || !refusal.Witness.ChainExists || !refusal.Witness.EmptyStore {
 			t.Fatalf("attempt %d: witness = %+v, want empty store over existing chain at 2", attempt, refusal.Witness)
+		}
+		if refusal.RetryAfterSeconds != privacyKeyRetryAfterSeconds {
+			t.Fatalf("attempt %d: retry after = %d, want %d", attempt, refusal.RetryAfterSeconds, privacyKeyRetryAfterSeconds)
 		}
 		if !strings.Contains(refusal.Reason, "privacy key") {
 			t.Fatalf("attempt %d: reason must name the missing key: %q", attempt, refusal.Reason)

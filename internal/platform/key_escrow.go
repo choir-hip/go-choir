@@ -66,18 +66,17 @@ func (s *Store) UpsertKeyEscrow(ctx context.Context, computerID, protector strin
 		if existing == keyDigest {
 			return nil
 		}
-		head, headErr := readComputerEventHead(ctx, s.db, computerID, false)
-		if headErr != nil {
-			return fmt.Errorf("key escrow: read canonical head: %w", headErr)
+		replaced, err := s.replacePreGenesisKeyEscrow(ctx, computerID, protector, wrappedJSON, keyDigest, now)
+		if err != nil || replaced == "" {
+			return err
 		}
-		if head != nil {
-			return ErrKeyEscrowDigestConflict
+		payload, _ := json.Marshal(map[string]any{
+			"type": "pre_genesis_escrow_replaced", "computer_id": computerID, "protector": protector,
+			"previous_key_digest": replaced, "key_digest": keyDigest, "replaced_at": now.Format(time.RFC3339Nano),
+		})
+		if _, _, err := s.AppendKeyEscrowTransparency(ctx, payload); err != nil {
+			return fmt.Errorf("key escrow: record pre-genesis replacement: %w", err)
 		}
-		if _, err := s.db.ExecContext(ctx, `UPDATE computer_key_escrows SET wrapped_key_json=?, key_digest=?, updated_at=? WHERE computer_id=? AND protector=? AND key_digest=?`,
-			string(wrappedJSON), keyDigest, now, computerID, protector, existing); err != nil {
-			return fmt.Errorf("key escrow: replace pre-genesis record: %w", err)
-		}
-		s.markDirty("replace pre-genesis key escrow " + computerID + "/" + protector)
 		return nil
 	}
 	if err != nil {
@@ -85,6 +84,49 @@ func (s *Store) UpsertKeyEscrow(ctx context.Context, computerID, protector strin
 	}
 	s.markDirty("upsert key escrow " + computerID + "/" + protector)
 	return nil
+}
+
+// replacePreGenesisKeyEscrow replaces a custodian wrap for a different key
+// only while the computer has no canonical chain. The escrow row lock, the
+// head read and the conditional update share one transaction, and exactly
+// one row must change; otherwise the caller gets ErrKeyEscrowDigestConflict
+// (or nil when a concurrent writer already stored this same key). Returns
+// the replaced digest. Residual: genesis does not take the escrow row lock,
+// so a second live pre-genesis realization racing genesis is fenced by
+// vmctl's single-realization epochs, not here.
+func (s *Store) replacePreGenesisKeyEscrow(ctx context.Context, computerID, protector string, wrappedJSON []byte, keyDigest string, now time.Time) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("key escrow: begin replacement: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var existing string
+	if err := tx.QueryRowContext(ctx, `SELECT key_digest FROM computer_key_escrows WHERE computer_id=? AND protector=? FOR UPDATE`, computerID, protector).Scan(&existing); err != nil {
+		return "", fmt.Errorf("key escrow: lock existing record: %w", err)
+	}
+	if existing == keyDigest {
+		return "", tx.Commit()
+	}
+	head, err := readComputerEventHead(ctx, tx, computerID, false)
+	if err != nil {
+		return "", fmt.Errorf("key escrow: read canonical head: %w", err)
+	}
+	if head != nil {
+		return "", ErrKeyEscrowDigestConflict
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE computer_key_escrows SET wrapped_key_json=?, key_digest=?, updated_at=? WHERE computer_id=? AND protector=? AND key_digest=?`,
+		string(wrappedJSON), keyDigest, now, computerID, protector, existing)
+	if err != nil {
+		return "", fmt.Errorf("key escrow: replace pre-genesis record: %w", err)
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows != 1 {
+		return "", ErrKeyEscrowDigestConflict
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("key escrow: commit replacement: %w", err)
+	}
+	s.markDirty("replace pre-genesis key escrow " + computerID + "/" + protector)
+	return existing, nil
 }
 
 func (s *Store) GetKeyEscrow(ctx context.Context, computerID, protector string) (wrappedJSON []byte, keyDigest string, err error) {

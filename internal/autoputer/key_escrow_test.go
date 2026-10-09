@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -20,6 +21,7 @@ func TestEnsureCustodianEscrowUploadsWrapOnce(t *testing.T) {
 	pubB64 := mustEncodePub(t, pub)
 	var mu sync.Mutex
 	uploaded := ""
+	puts := 0
 	dek := make([]byte, 32)
 	for i := range dek {
 		dek[i] = byte(7 * i)
@@ -32,7 +34,9 @@ func TestEnsureCustodianEscrowUploadsWrapOnce(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/internal/computers/keys/escrow/status":
 			status := map[string]any{"escrows": []any{}}
 			if uploaded != "" {
-				status["escrows"] = []any{map[string]string{"protector": "custodian", "key_digest": "x"}}
+				var record keyescrow.WrappedKey
+				_ = json.Unmarshal([]byte(uploaded), &record)
+				status["escrows"] = []any{map[string]string{"protector": "custodian", "key_digest": record.KeyDigest}}
 			}
 			writeJSON(t, w, status)
 		case r.Method == http.MethodGet && r.URL.Path == "/internal/computers/keys/escrow-public-key":
@@ -45,6 +49,7 @@ func TestEnsureCustodianEscrowUploadsWrapOnce(t *testing.T) {
 				return
 			}
 			uploaded = req.WrappedKey
+			puts++
 			writeJSON(t, w, map[string]string{"status": "escrowed"})
 		default:
 			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -68,6 +73,9 @@ func TestEnsureCustodianEscrowUploadsWrapOnce(t *testing.T) {
 	}
 	if !present {
 		t.Fatal("expected escrow present on second call")
+	}
+	if puts != 1 {
+		t.Fatalf("same key must upload exactly once, puts=%d", puts)
 	}
 	// The uploaded wrap must open to the same DEK under the host private key.
 	var record keyescrow.WrappedKey
@@ -111,5 +119,44 @@ func writeJSON(t *testing.T, w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		t.Errorf("encode response: %v", err)
+	}
+}
+
+// TestEnsureCustodianEscrowComparesDigest: an escrow record for a different
+// key is not "escrowed" for this key (panel F1). The guest uploads its own
+// wrap; the platform decides (pre-genesis replacement, or 409 once a chain
+// exists, surfaced as ErrEscrowHoldsDifferentKey).
+func TestEnsureCustodianEscrowComparesDigest(t *testing.T) {
+	_, pub, err := keyescrow.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubB64 := mustEncodePub(t, pub)
+	dek := make([]byte, 32)
+	for _, putStatus := range []int{http.StatusOK, http.StatusConflict} {
+		puts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Path == "/internal/computers/keys/escrow/status":
+				writeJSON(t, w, map[string]any{"escrows": []any{map[string]string{"protector": "custodian", "key_digest": "digest-of-another-key"}}})
+			case r.URL.Path == "/internal/computers/keys/escrow-public-key":
+				writeJSON(t, w, map[string]string{"public_key": pubB64})
+			case r.Method == http.MethodPut:
+				puts++
+				w.WriteHeader(putStatus)
+				_, _ = w.Write([]byte(`{}`))
+			}
+		}))
+		_, err := newKeyEscrowClient(server.URL, nil).EnsureCustodianEscrow(context.Background(), "computer-mismatch", dek)
+		server.Close()
+		if puts != 1 {
+			t.Fatalf("put status %d: a mismatched escrow must trigger an upload, puts=%d", putStatus, puts)
+		}
+		if putStatus == http.StatusOK && err != nil {
+			t.Fatalf("accepted replacement must succeed: %v", err)
+		}
+		if putStatus == http.StatusConflict && !errors.Is(err, ErrEscrowHoldsDifferentKey) {
+			t.Fatalf("409 must be ErrEscrowHoldsDifferentKey, got %v", err)
+		}
 	}
 }

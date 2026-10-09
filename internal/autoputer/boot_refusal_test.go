@@ -158,7 +158,9 @@ func TestPrivacyKeyBootRefusalClassifiesMissingKeyOverExistingChain(t *testing.T
 func TestStartupFailerExitsPromptlyAfterReadiness(t *testing.T) {
 	exits := make(chan int, 1)
 	failer := &startupFailer{computerID: "computer-x", window: time.Hour, exit: func(code int) { exits <- code }}
-	failer.setGate(&replayHealthGate{pending: false})
+	gate := &replayHealthGate{pending: false, base: func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }}
+	gate.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil))
+	failer.setGate(gate)
 	done := make(chan struct{})
 	go func() {
 		failer.fatalf("autoputer: runtime startup refused: %v", errors.New("boom"))
@@ -173,4 +175,41 @@ func TestStartupFailerExitsPromptlyAfterReadiness(t *testing.T) {
 		t.Fatal("post-readiness failure held the observation window")
 	}
 	<-done
+}
+
+// TestStartupFailerRetryExitsWithoutRefusal: transient platform errors exit
+// for a systemd restart and never publish a typed refusal (panel F3).
+func TestStartupFailerRetryExitsWithoutRefusal(t *testing.T) {
+	exits := make(chan int, 1)
+	gate := &replayHealthGate{pending: true}
+	failer := &startupFailer{computerID: "computer-x", window: time.Hour, exit: func(code int) { exits <- code }}
+	failer.setGate(gate)
+	failer.retryf("autoputer: resolve canonical event head before keyring: %v", errors.New("connection refused"))
+	if code := <-exits; code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if gate.refused != nil {
+		t.Fatalf("transient failure must not publish a refusal: %+v", gate.refused)
+	}
+}
+
+// TestStartupFailerHoldsWindowWhenReadinessNotServed: replay clears pending
+// before runtime start; until /health has actually answered 200 the host is
+// still waiting, so a failure must publish the refusal (panel F4).
+func TestStartupFailerHoldsWindowWhenReadinessNotServed(t *testing.T) {
+	exits := make(chan int, 1)
+	gate := &replayHealthGate{pending: false, base: func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }}
+	failer := &startupFailer{computerID: "computer-x", window: 50 * time.Millisecond, exit: func(code int) { exits <- code }}
+	failer.setGate(gate)
+	started := time.Now()
+	failer.fatalf("autoputer: reconcile pending lifecycle receipts: %v", errors.New("boom"))
+	<-exits
+	if time.Since(started) < 50*time.Millisecond {
+		t.Fatal("refusal window was skipped although readiness was never served")
+	}
+	recorder := httptest.NewRecorder()
+	gate.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if recorder.Code != http.StatusServiceUnavailable || !strings.Contains(recorder.Body.String(), "refused") {
+		t.Fatalf("gate must serve the refusal, got %d %s", recorder.Code, recorder.Body.String())
+	}
 }
