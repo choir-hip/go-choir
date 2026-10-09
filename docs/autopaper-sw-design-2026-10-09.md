@@ -37,6 +37,27 @@ v1 of this draft (git history) is superseded. Owner brief for v2,
 > perspectives and discrepancies of reports. thats the real alpha. we dont
 > adjudicate just show what the world indicates
 
+Owner follow-up, same day:
+
+> publication will be fully autonomous. what is publication really? it just
+> means the article is accessible via permalink, a texture in the autoputer
+> that appears to logged out users. we will have more policy over email
+> distribution. and manual publication is still manual [...] but the whole
+> point of autopaper is to automate publishing.
+>
+> i dont think about cost centrally in terms of large or small models.
+> deepseek v4.1 flash is a better writer imo than larger openai models. and
+> claude and gpt isnt good at writing stories that cover stuff outside the
+> american overton window, just like chinese models arent for writing about
+> stuff outside chinese overton window. taiwan is a great test case for
+> this reason.
+>
+> we will often be updating existing textures, not just writing new ones.
+> this is a fundamental difference between an autopaper and trad
+> publishing. we are happy when the facts change. for them a correction is
+> embarrassing. [...] every news story is a narrow slice, missing crucial
+> context, not compounding knowledge
+
 ## 1. Principles
 
 1. **Show what the world indicates; do not adjudicate.** The unit of
@@ -59,6 +80,23 @@ v1 of this draft (git history) is superseded. Owner brief for v2,
 6. **Budget is the only ceiling.** Management sets the spend. Ingest rate
    follows processing capacity, and unprocessed reports are kept as data,
    never silently dropped.
+7. **Living Textures, compounding knowledge.** The paper mostly updates
+   existing Textures rather than writing new ones. A story Texture lives as
+   long as the story does, possibly years, and accumulates background,
+   timeline and every shift in what is reported. New facts are welcome: a
+   revision is the paper working, not a correction to apologize for. That
+   is the difference from traditional news, where each article is a narrow
+   slice that loses context.
+8. **Models are chosen for fit, not size.** Each model family writes from
+   inside an Overton window: American models are weak outside the American
+   one, Chinese models outside the Chinese one. Model choice is per task
+   and per beat, judged by measured quality and price, and several families
+   work on the same story where perspective matters. Taiwan is the test
+   case.
+9. **Publishing is automatic.** Publishing means a Texture has a permalink
+   and logged-out readers can see it. Autopaper publishes on its own. Any
+   user can still publish any Texture they own by hand. Email distribution
+   is a separate channel with its own policy.
 
 ## 2. Two levels of storage
 
@@ -118,9 +156,9 @@ probabilities:
 - salience and novelty against the story it would join.
 
 Escalation and audits:
-- Low confidence escalates to a small LLM.
-- A random sample is audited by a larger model, and the audit resolves
-  the decision model's answers (§5).
+- Low confidence escalates to an LLM chosen for the beat (§6).
+- A random sample is audited by a different model family, and the audit
+  resolves the decision model's answers (§5).
 - Escalation thresholds move with measured calibration.
 
 ### S2 Stories (deterministic first, model on the edges)
@@ -131,7 +169,7 @@ Escalation and audits:
 - A story moves through states: emerging, developing, stable, dormant.
 - A story's version history is its timeline.
 
-### S3 Claims and discrepancies (research; mid-size model; per story window)
+### S3 Claims and discrepancies (research; model chosen per beat; per story window)
 
 - Research reads a **representative set** per story window, never every
   report: the earliest report, each new language, each new region, each
@@ -145,6 +183,10 @@ Escalation and audits:
   translated, and translations are cached as derived objects. Clustering
   and classification work in the original language through multilingual
   embeddings.
+- On beats where perspective matters (Taiwan first), stance labeling and
+  discrepancy detection run with at least two model families from
+  different Overton windows. Where the families disagree on how a report
+  should be read, that disagreement is itself recorded and shown.
 
 ### S4 Verify provenance (research; rationed web search)
 
@@ -158,19 +200,27 @@ Escalation and audits:
   - Is the official primary document available?
 - The results are attribution and provenance objects, not verdicts.
 
-### S5 Write (Texture)
+### S5 Write and update (Texture)
 
-- **A story article** transcludes live graph objects: the claims with
+- **Update first.** When a story develops, Texture revises the story's
+  existing Texture: it adds the new reports, moves what is widely reported
+  and what is disputed, extends the timeline, and keeps the earlier context.
+  A new Texture is written only for a genuinely new story, and even then it
+  transcludes the existing Textures that give it context.
+- **A story Texture** transcludes live graph objects: the claims with
   their stance maps, discrepancy objects, a timeline, key reports in the
   original language with translation, and the open questions together
   with what would resolve them.
 - **Beat and vertical pages** transclude story articles, and the front
   page transcludes beats. A Taiwan semiconductor story can appear inside
   the supply-chains page and the Taiwan beat at once.
-- **Revision on new evidence:** when a transcluded object changes past a
-  materiality threshold (a new stance, a new region, a resolution),
-  Texture revises the article. Below the threshold, transclusion shows the
-  new state without a rewrite, so most updates cost no inference.
+- **Two speeds of update.** Below a materiality threshold, transclusion
+  shows the new state of the graph objects with no rewrite and no
+  inference. Past the threshold (a new stance, a new region, a resolution,
+  a shift in what is widely reported), Texture revises the prose.
+- **The writer model is chosen per beat** (§6). For example, DeepSeek v4.1
+  Flash where it writes better, and a different family wherever one window
+  would distort the story.
 - Every article follows the same structure:
   - what is widely reported;
   - where reports differ, with attribution;
@@ -178,23 +228,30 @@ Escalation and audits:
   - what would settle it;
   - a source map by country, language and source type.
 
-### S6 Publish (Texture into the host store)
+### S6 Publish (automatic)
 
-- At first a publish is owner-supervised: precommit, authorize, then a
-  publication transaction binding one head.
-- Later, management can delegate publishing per beat under a policy, for
-  example "stories with N or more independent sources in two or more
-  regions publish without review; corrections always publish".
-- A correction is a forward revision, and earlier revisions stay readable.
+- **What publishing is:** a Texture gets a permalink, and logged-out
+  readers can see it. It is a visibility state, not an event per revision.
+  Every later revision of a published Texture appears at the same
+  permalink, and the revision history stays readable.
+- **Autopaper publishes on its own.** Texture publishes a story Texture
+  when it is first written. No human step is needed, and none is waited
+  for.
+- **Manual publishing is unchanged:** any user can publish any Texture
+  they own.
+- **Serving:** published Textures and their revisions reach the host store,
+  so logged-out reads never touch the paper's computer.
+- **Email distribution** (digests, alerts) is a separate channel with its
+  own policy. Management owns it, and it is where sending is gated.
 
 ## 4. The four desks
 
 | Desk | Owns |
 |---|---|
-| **Management** | Attention and spend: budget per vertical, region and day; polling cadence; which stories get research (S3) and which get articles (S5); escalation thresholds; publish policy. It scores records, with Jev as its default scorer. |
+| **Management** | Attention and spend: budget per vertical, region and day; polling cadence; which stories get research (S3) and which Texture updates; model routing per task and beat; escalation thresholds; email distribution policy. It scores records, with Jev as its default scorer. |
 | **Research** | Observation (S0 tool modules), classification (S1), stories (S2), claims and discrepancies (S3), provenance checks (S4), and resolving records. Its authority is read-only toward the world; it writes the paper's own graph. |
 | **Engineering** | Source adapters and parsers, new platforms (AT Protocol, MTProto), and fixes when an adapter breaks (management casts the fix). It also maintains the deterministic modules: dedup, clustering and entity gazetteers. |
-| **Texture** | Story, beat and front-page articles; transclusion; revision on material change; publishing. It is the sole writer of canonical article revisions. |
+| **Texture** | Story, beat and front-page Textures, mostly by updating existing ones; transclusion; revision on material change; automatic publishing. It is the sole writer of canonical Texture revisions. |
 
 ## 5. Precommitment records: where they come from and how they resolve
 
@@ -209,16 +266,21 @@ collects, so the learning loop costs little inference.
 | Claim corroboration | research at extraction | "an independent primary source will affirm this claim within a week: 0.5" | stance edges (automatic) |
 | Source behavior | research | "this outlet's report will later be contradicted by two or more independent sources: 0.2" | stance edges (automatic) |
 | Classification | Jev in S1 | vertical, report type and salience, with probabilities | sampled audits by a larger model |
-| Article stability | Texture at publish | "this section needs a material revision within 72 hours: 0.3" | revision history (automatic) |
+| Story movement | Texture at each revision | "this section will need a material update within 72 hours: 0.3". This forecasts change; it is not a quality score, since change is welcome. It schedules attention. | revision history (automatic) |
+| Model fit | management when routing | "on the Taiwan beat, model family A's stance labels will match the cross-family consensus more often than family B's" | cross-family audits (automatic once audited) |
 | Spend value | management at allocation | "the AI and tech budget today covers 8 of the 10 stories that end up biggest" | later salience (automatic) |
 
 What the loop buys:
 - **Cheaper coverage.** Calibrated triage and classification set the
-  cascade thresholds. Better salience forecasts put mid-model and search
+  escalation thresholds. Better salience forecasts put research and search
   spend on stories that matter, so cost per well-covered story falls.
+- **Learned model routing.** Records per model, task and beat show which
+  model families label, extract and write well where. Routing follows the
+  evidence rather than model size or brand (PSA §3.1, harness-level
+  optimization).
 - **Track records as data, not verdicts.** Per source and per topic: how
   early it reported, how often its reports were later affirmed or
-  contradicted by independent sources, and its correction rate. These are
+  contradicted by independent sources, and how often it retracted or revised its own reports. These are
   shown to readers as evidence ("this outlet's reports on this topic were
   later contradicted 3 of 40 times"). They are never used to declare what
   is true.
@@ -232,25 +294,31 @@ What the loop buys:
 
 ## 6. Inference economics (illustrative; prices to be measured)
 
-Shape, at an assumed 100,000 reports a day:
+Cost is not organized by model size. Every task (classify, merge, extract,
+label stance, translate, write, audit) has a model chosen per beat by
+measured quality and price. A small, cheap model can be the best writer for
+a beat. What the design controls is **how many calls each stage makes**,
+at an assumed 100,000 reports a day:
 
-| Tier | Runs on | Volume | Tokens per day (rough) |
+| Stage | Runs on | Calls scale with | Rough volume per day |
 |---|---|---|---|
-| S0 deterministic and embeddings | every report | 100,000 | embeddings only |
-| S1 decision model (batched) | every report | 100,000 | ~30M small or decision-model tokens |
-| S2 ambiguous merges | ~5% of reports | ~5,000 | ~5M small-model tokens |
-| S3 claims and discrepancies | story windows, not reports | ~3,000 story updates | ~25M mid-model tokens |
-| S4 web search | rationed | tens to low hundreds of queries | quota-bound |
-| S5 articles | material revisions only | ~100–300 | ~5–10M large-model tokens |
+| S0 observe | every report | reports (no model; embeddings only) | 100,000 reports |
+| S1 classify | every report, batched | reports ÷ batch size | ~30M decision-model tokens |
+| S2 stories | ambiguous merges only | ~5% of reports | ~5,000 decisions |
+| S3 claims and discrepancies | story windows | developing stories (×2 families on perspective beats) | ~3,000 story windows |
+| S4 search | rationed | quota | tens to low hundreds of queries |
+| S5 updates | material changes only | stories that move | ~100–300 Texture revisions |
 
-The point is the ratios. The large-model tier is a small slice, and it
-scales with stories that change materially. Levers, in order of effect:
+The point is the ratios. Model calls scale with stories that move, not with
+reports. Levers, in order of effect:
 1. translate late and partially;
-2. extract claims per story window, not per report;
-3. let transclusion carry small updates without a rewrite;
-4. batch and cache;
-5. resolve deterministically wherever possible;
-6. move escalation thresholds with measured calibration.
+2. route each task to the model that measures best per unit price on that
+   beat;
+3. extract claims per story window, not per report;
+4. let transclusion carry small updates without a rewrite;
+5. batch and cache;
+6. resolve deterministically wherever possible;
+7. move escalation thresholds with measured calibration.
 
 Management sees cost per covered story by vertical and region, and the
 budget dial changes how deep each tier goes.
@@ -304,9 +372,9 @@ Global coverage comes first. Then:
 | SL (Gate 1) | durable timer obligations with a post-restart `paused` state; impact-propagation wake (a changed transcluded object wakes the article; new stance edges wake open records) |
 | SH (Gate 1) | retention classes per object kind; content storage for report bodies outside Dolt rows; a bounded commit cadence for high-volume tables; records immutable |
 | S1 (Gate 2) | capsule egress for adapters, with recorded network access |
-| S5/S6 (Gate 2) | publish = precommit + authorization + a publication transaction into the host store; live transclusion of graph objects in Texture |
+| S5/S6 (Gate 2) | publishing is a visibility state (permalink, readable logged out) that agents can set without a human step; every revision of a published Texture reaches the host store; live transclusion of graph objects and Textures |
 | Texture contract | articles are ordinary Texture documents; transclusion of graph objects and of other Textures; revision on material change |
-| Platform | the host store accepts publication transactions and serves all reads; its history has a declared bound |
+| Platform | the host store holds published Textures and their revisions and serves every logged-out read; its history has a declared bound; email distribution is a separate, policy-gated channel |
 
 ## 10. Build order for October (sketch)
 
@@ -320,14 +388,14 @@ Global coverage comes first. Then:
 - **W2 Stories, claims, discrepancies:** multilingual clustering, the
   stance graph, late translation, and the automatically resolved records
   (salience, corroboration).
-- **W3 Articles:** story articles transcluding graph objects, vertical
-  pages transcluding stories, revision on material change, supervised
-  publish.
+- **W3 Living Textures:** story Textures transcluding graph objects,
+  vertical pages transcluding stories, update on material change, and
+  automatic publishing.
 - **W4 Reading and learning:** the Autopaper app and public pages from the
   host store; source track records as data; cost per covered story on the
   management dashboard.
-- **W5 Reach:** AT Protocol and MTProto adapters, then the Taiwan beat,
-  then the Asian-language beats.
+- **W5 Reach:** AT Protocol and MTProto adapters, then the Taiwan beat
+  (also the first cross-family model test), then the Asian-language beats.
 
 ## 11. The old Store B data (proposal)
 
@@ -355,11 +423,17 @@ Decided on 2026-10-09:
 - **Storage:** no cross-computer reading. Publishing and reading go
   through the host-level Dolt, and the June publications are restored into
   it.
+- **Publishing:** fully automatic for Autopaper. Publishing means a
+  permalink plus visibility to logged-out readers. Manual publishing stays
+  manual for users. Email distribution gets its own policy.
+- **Models:** chosen per task and beat for fit (including Overton window),
+  not by size.
+- **Updates over new articles:** living Textures that compound knowledge.
 
 Open:
 1. Daily budget to start with, and its split across the six verticals.
-2. Who decides publish for the first weeks: you per story, or a delegated
-   policy per beat from day one?
+2. Email distribution: what goes out (daily digest per vertical, alerts
+   on big moves), and to whom, at launch?
 3. Report body retention window (proposal: 30 days, cited bodies pinned).
 4. Source affiliation labels (for example, state-affiliated media): which
    public taxonomy to use, or record only what sources declare?
