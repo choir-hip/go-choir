@@ -1,4 +1,4 @@
-# Texture research turn cannot cite: research sources never reach it (2026-10-09)
+# Texture research turn cannot cite the research it received (2026-10-09)
 
 Found by Texture acceptance suite run 7 on staging (build 733bec77;
 receipt `evidence/texture-acceptance-2026-10-09T22-03-56-155Z.json`), fresh
@@ -53,3 +53,23 @@ revision in 6 minutes.
 The update records for this trajectory (which turn each research packet
 was delivered or consumed to) and whether one document can hold two
 active Texture runs. Read from the guest before any fix.
+
+## Update records read (22:30Z)
+
+The trajectory's update records: the three research reports to Texture
+(22:06:25, 22:07:05 ×2) are all still `pending`; nothing consumed them.
+**H1 refuted.** The citing run's later cells printed update ids from the
+research runs, so it saw the reports. **H2 refuted.** Two of the three
+reports carried no sources; one carried one source.
+
+H3 (current): the citing turn had one packet source and no listed source
+entity, and could not find how to turn a packet source into a citation.
+The edit contract allows it (`insert_source_ref` with an inline
+`source_entity` whose `target` holds `kind` and `uri`; the runtime mints
+the id), but the desk put `uri`, `title` and `kind` at the top level and
+the errors (`source_entity_id or source_entity is required`) never showed
+the nesting. Same class as the research packet problem: a strict
+contract, an error that does not show the shape, and a desk that spends
+its budget probing. Fix direction: return the minimal
+`insert_source_ref` shape in those errors and in the revision guidance
+for packet sources.
