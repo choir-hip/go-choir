@@ -103,13 +103,6 @@ type ColdRecoveryHeadReader interface {
 	CanonicalHead(context.Context, string, RecoveryFencingToken) (string, error)
 }
 
-// TrustedGuestKeyCopier is the sole path by which recovery reads guest data.
-// Its implementation attaches quarantine read-only to a trusted guest unit and
-// copies only the privacy key into staging; vmctl never mounts or parses ext4.
-type TrustedGuestKeyCopier interface {
-	CopyPrivacyKey(context.Context, RecoveryFencingToken, string, string) error
-}
-
 // ColdRecoveryVerifier confirms replay equivalence, effective ComputerVersion,
 // and frontend serving_join before route publication.
 type ColdRecoveryVerifier interface {
@@ -168,7 +161,6 @@ type coldRecoveryState struct {
 	locks       map[string]*sync.Mutex
 	leases      map[string]*RecoveryLease
 	headReader  ColdRecoveryHeadReader
-	keyCopier   TrustedGuestKeyCopier
 	verifier    ColdRecoveryVerifier
 	storage     coldRecoveryStorage
 	stateRoot   string
@@ -210,13 +202,6 @@ func (h *Handler) SetColdRecoveryHeadReader(reader ColdRecoveryHeadReader) {
 	state := h.coldRecovery()
 	state.mu.Lock()
 	state.headReader = reader
-	state.mu.Unlock()
-}
-
-func (h *Handler) SetTrustedGuestKeyCopier(copier TrustedGuestKeyCopier) {
-	state := h.coldRecovery()
-	state.mu.Lock()
-	state.keyCopier = copier
 	state.mu.Unlock()
 }
 
@@ -479,8 +464,8 @@ func (h *Handler) HandleColdRecover(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusAccepted, existing.response)
 		return
 	}
-	reader, copier, verifier, storage, root := state.headReader, state.keyCopier, state.verifier, state.storage, state.stateRoot
-	if reader == nil || copier == nil || verifier == nil || storage == nil {
+	reader, verifier, storage, root := state.headReader, state.verifier, state.storage, state.stateRoot
+	if reader == nil || verifier == nil || storage == nil {
 		state.mu.Unlock()
 		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "cold recovery dependencies are unavailable"})
 		return
@@ -577,14 +562,9 @@ func (h *Handler) HandleColdRecover(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "staging image is invalid"})
 		return
 	}
-	if err := copier.CopyPrivacyKey(r.Context(), token, quarantine, staging); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "trusted guest key copy failed"})
-		return
-	}
-	if err := h.writeColdRecoveryPhase(vmDir, &journal, "key_copied"); err != nil {
-		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "could not persist recovery journal"})
-		return
-	}
+	// The staged image carries no privacy key. The recovered realization
+	// receives it from custodian escrow at boot (O21); recovery never reads
+	// the quarantined image.
 	if err := h.writeColdRecoveryPhase(vmDir, &journal, "staging"); err != nil {
 		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "could not persist recovery journal"})
 		return

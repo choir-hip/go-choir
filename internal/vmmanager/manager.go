@@ -2978,8 +2978,8 @@ func (m *Manager) PruneRecoveryQuarantines(stateRoot string, maxRetained int) (i
 // recoveryJournalPrunable reports whether a quarantined image may be deleted.
 // Only post-swap phases qualify: once the journal records "swapped" (or any
 // later phase) the VM runs the staged image and the quarantine is a rollback
-// copy, not the live store. Pre-swap phases (fenced, stopped, key_copied,
-// staging) mean the quarantine may hold the only copy of the original image.
+// copy, not the live store. Pre-swap phases (fenced, stopped, staging, and
+// key_copied in journals written before key delivery moved to escrow) mean the quarantine may hold the only copy of the original image.
 func recoveryJournalPrunable(vmDir string, generation uint64, operation string) bool {
 	journal, err := os.ReadFile(filepath.Join(vmDir, fmt.Sprintf("rec-%d-%s.journal", generation, operation)))
 	if err != nil {

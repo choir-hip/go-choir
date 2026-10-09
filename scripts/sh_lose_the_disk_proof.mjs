@@ -11,7 +11,10 @@
 //   1. register a disposable account (Playwright passkey, product path) and
 //      wait for its computer to be active;
 //   2. PUT /api/files/<proof file>, then POST /api/files/sync;
-//   3. vmctl remove (the realization and its volume are discarded);
+//   3. lose the disk: `--mode remove` (default) discards the realization and
+//      its volume with vmctl remove; `--mode cold-recover` asks the owner API
+//      to quarantine the data image and boot the same VM on an empty one,
+//      which also verifies replay of the canonical head;
 //   4. poll GET /api/files/<proof file> until it returns the written content
 //      (each request resolves the computer, which boots a fresh realization);
 //   5. collect the new realization's console lines for key delivery and file
@@ -19,7 +22,7 @@
 //
 // Writes a JSON receipt (default docs/evidence/sh-lose-the-disk-<stamp>.json)
 // and exits 0 only on pass.
-// Usage: node scripts/sh_lose_the_disk_proof.mjs [--out path] [--timeout-min 20]
+// Usage: node scripts/sh_lose_the_disk_proof.mjs [--mode remove|cold-recover] [--out path] [--timeout-min 20]
 // Requires: ssh node-b (BatchMode), frontend playwright deps.
 
 import { createRequire } from 'node:module';
@@ -37,10 +40,12 @@ const arg = (name, dflt) => { const i = args.indexOf(`--${name}`); return i >= 0
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const OUT = arg('out', `docs/evidence/sh-lose-the-disk-${stamp}.json`);
 const TIMEOUT_MS = Number(arg('timeout-min', '20')) * 60_000;
+const MODE = arg('mode', 'remove');
+if (!['remove', 'cold-recover'].includes(MODE)) throw new Error(`unknown --mode ${MODE}`);
 const PROOF_FILE = 'sh-o21-proof.txt';
 const PROOF_TEXT = `lose-the-disk proof ${stamp} ${Math.random().toString(36).slice(2)}`;
 
-const receipt = { started_at: new Date().toISOString(), base_url: BASE_URL, proof_file: PROOF_FILE, steps: [] };
+const receipt = { started_at: new Date().toISOString(), base_url: BASE_URL, mode: MODE, proof_file: PROOF_FILE, steps: [] };
 const step = (name, data) => {
   const entry = { name, at: new Date().toISOString(), ...data };
   receipt.steps.push(entry);
@@ -99,8 +104,20 @@ try {
   step('private_file_written', { written, synced });
   if (written.status !== 200 || synced.status !== 200) throw new Error('file write or sync failed');
 
-  const removed = nodeB(`curl -sS -X POST -H "X-Internal-Caller: true" -H "Content-Type: application/json" -d '{"user_id":"${userId}","desktop_id":"primary"}' http://127.0.0.1:8083/internal/vmctl/remove`);
-  step('ownership_removed', { response: removed, after: ownershipsFor(userId) });
+  if (MODE === 'remove') {
+    const removed = nodeB(`curl -sS -X POST -H "X-Internal-Caller: true" -H "Content-Type: application/json" -d '{"user_id":"${userId}","desktop_id":"primary"}' http://127.0.0.1:8083/internal/vmctl/remove`);
+    step('ownership_removed', { response: removed, after: ownershipsFor(userId) });
+  } else {
+    // Recovery replays onto a projection base; a computer this young has none
+    // until checkpointd's first pass (1 min timer), so wait one cycle.
+    await sleep(75_000);
+    const recovered = await apiFetch(`/api/computers/${own.computer_id}/lifecycle/cold-recover`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idempotency_key: `sh-lose-disk-${stamp}` }),
+    });
+    step('cold_recover_requested', { response: recovered, after: ownershipsFor(userId) });
+    if (recovered.status !== 202 || !recovered.text.includes('"active"')) throw new Error(`cold recover did not reach active: ${recovered.status} ${recovered.text.slice(0, 300)}`);
+  }
 
   const deadline = Date.now() + TIMEOUT_MS;
   const last = [];
@@ -129,7 +146,8 @@ try {
     try { build = JSON.parse(nodeB(`curl -fsS --max-time 10 ${after[0].computer_url}/health`))?.build?.commit; } catch {}
     step('fresh_realization_console', { vm_id: vm, build, lines: lines.split('\n') });
   }
-  pass = Boolean(readBack) && vm && vm !== own.vm_id;
+  const fresh = MODE === 'remove' ? vm !== own.vm_id : (after[0]?.epoch ?? 0) > own.epoch;
+  pass = Boolean(readBack) && Boolean(vm) && fresh;
 } catch (err) {
   step('error', { message: String(err?.message || err) });
 } finally {
