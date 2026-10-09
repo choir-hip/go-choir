@@ -70,7 +70,7 @@ func (h *Handler) HandleComputerSurface(w http.ResponseWriter, r *http.Request) 
 	autoputerURL, err := h.resolveComputerURLForComputerTarget(r.Context(), authResult, computerTarget, desktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve computer surface for owner %s desktop %s: %v", authResult.UserID, desktopID, err)
-		writeResolveError(w, err)
+		writeComputerSurfaceResolveError(w, r, err)
 		h.lifecycle.record("surface.resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record("surface.total", "resolve_error", time.Since(started))
 		return
@@ -78,8 +78,8 @@ func (h *Handler) HandleComputerSurface(w http.ResponseWriter, r *http.Request) 
 	h.lifecycle.record("surface.resolve", "ok", time.Since(resolveStarted))
 	h.setTrustedAuthHeaders(r, authResult)
 	if autoputerURL != h.cfg.ComputerURL {
-	h.setResolvedRouteContext(r, autoputerURL)
-	r.Header.Set("X-Resolved-Autoputer-URL", autoputerURL)
+		h.setResolvedRouteContext(r, autoputerURL)
+		r.Header.Set("X-Resolved-Autoputer-URL", autoputerURL)
 	}
 
 	upstreamStarted := time.Now()
