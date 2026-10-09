@@ -173,6 +173,15 @@ metamission:
       readiness: intent
       status: pending
       depends_on: []
+    - id: SP-production-infrastructure
+      # v6 2026-10-09: DEFERRED until Gates 1-2 pass human QA (owner). Second
+      # host as off-host durable homes, self-hosted logs/metrics/alerts over a
+      # WireGuard mesh, zero-downtime deploys, failover, cold audit archive
+      # (O22). Documented so the design is not lost; not executable.
+      path: docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
+      readiness: intent
+      status: deferred
+      depends_on: [SH-state-homes]
     - id: SM-model-policy-and-evals
       # v5. Absorbs Jev M2 (choir-signal-model-policy-rlm-module-2026-09-29.md).
       # Jev M3 (research hill-climb) is its first consumer.
@@ -1928,7 +1937,9 @@ architectural ceiling on ingest — budget is the constraint.
 fix, S7 app packages, S8 source publication, S9 forks and fleets, S10 org
 templates, S11 mainline push, and SP production infrastructure (second host
 as off-host durable homes, self-hosted remote logs/metrics/alerting over a
-WireGuard mesh, zero-downtime deploys, multi-host placement, O22). Owner
+WireGuard mesh, zero-downtime deploys, multi-host placement, O22;
+design recorded in
+[SP](choir-appdev-sp-production-infrastructure-2026-10-09.md)). Owner
 2026-10-09: "prove the system for human QA before I invest more money into
 it, and before we make the infrastructure more complex." Gate 1 runs on the
 single host with local logs.

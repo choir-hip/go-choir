@@ -20,7 +20,9 @@ Three gates, in order, each with an exit test — see "v6 plan" in the
    data as adopted objects on the object graph; budget, not architecture,
    limits ingest.
 
-Deferred: S3, SA density, S7–S11. Corpus (Store B) teardown owner-approved
+Deferred: S3, SA density, S7–S11, and
+[SP production infrastructure](definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md)
+(O22; until Gates 1–2 pass human QA). Corpus (Store B) teardown owner-approved
 2026-10-09; processor/reconciler deletion committed.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)

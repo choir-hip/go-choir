@@ -1324,6 +1324,20 @@ nodes:
       docs/operational-invariants-register-2026-10-08.md; inventory in
       docs/state-homes-inventory-2026-10-08.md. Escrow key delivery to a new
       realization owner-ratified. Prerequisite for desktop hosted<->local.
+  - id: choir-appdev-sp-production-infrastructure-2026-10-09
+    title: SP Production Infrastructure — the platform's durable homes survive its host (O22)
+    path: docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
+    ledger: ''
+    status: planned
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-appdev-sh-state-homes-2026-10-08
+    enables: []
+    note: >-
+      DEFERRED. 2026-10-09 owner: deferred until Gates 1-2 pass human QA; design
+      documented on request ("But do document sp"). Not executable.
   - id: choir-appdev-sl-obligation-terminality-2026-10-08
     title: SL Obligation Terminality — every durable obligation has one driver and a recorded terminal fate (O1)
     path: docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
