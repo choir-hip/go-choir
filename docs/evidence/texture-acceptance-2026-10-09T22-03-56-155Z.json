@@ -1,0 +1,125 @@
+{
+  "started_at": "2026-10-09T22:03:56.156Z",
+  "checks": {
+    "T1_list": {
+      "at": "2026-10-09T22:04:15.904Z",
+      "status": [
+        200,
+        200
+      ],
+      "ms": [
+        28,
+        25
+      ],
+      "count": 0
+    },
+    "T2a_first_draft": {
+      "at": "2026-10-09T22:05:02.248Z",
+      "pass": true,
+      "seconds": 46,
+      "appagent_revisions": 1
+    },
+    "T2b_revise": {
+      "at": "2026-10-09T22:05:23.116Z",
+      "pass": true,
+      "seconds": 21,
+      "appagent_revisions": 2
+    },
+    "T3_chevrons": {
+      "at": "2026-10-09T22:05:23.324Z",
+      "reads": [
+        {
+          "id": "18d8d8ae-1732-5e88-8820-31ad17f1bd17",
+          "status": 200,
+          "ms": 36
+        },
+        {
+          "id": "53ccb99f-96b2-5b00-944e-fb16c545e4a5",
+          "status": 200,
+          "ms": 36
+        },
+        {
+          "id": "1b4060d8-de55-5718-a20c-28f90cc5024e",
+          "status": 200,
+          "ms": 40
+        },
+        {
+          "id": "300bfd8e-4928-5840-950c-df2600988391",
+          "status": 200,
+          "ms": 36
+        }
+      ]
+    },
+    "T4_reload_idle": {
+      "at": "2026-10-09T22:05:38.498Z",
+      "pending_reads": [
+        false,
+        false,
+        false
+      ]
+    },
+    "T5_cancel": {
+      "at": "2026-10-09T22:05:41.211Z",
+      "pending_seen": true,
+      "cancel_status": 200,
+      "cleared": true,
+      "seconds_to_clear": 1,
+      "appagent_before": 2
+    },
+    "T5b_revise_after_cancel": {
+      "at": "2026-10-09T22:05:41.254Z",
+      "pass": false,
+      "status": 409,
+      "body": {
+        "error": "durable lifecycle state is unavailable or terminal"
+      }
+    },
+    "T6_research": {
+      "at": "2026-10-09T22:12:15.845Z",
+      "landed": false,
+      "head": "b3560853-945d-580b-b3ed-0fde83305151",
+      "source_entities": 0
+    },
+    "T7_crash_interrupts": {
+      "at": "2026-10-09T22:14:27.113Z",
+      "refresh": "{\"vm_id\":\"vm-e2504f4ac63575b66d00fdee4f9530b7\",\"computer_id\":\"computer-1df030fcebac6500a365447855e8c08e\",\"user_id\":\"fb47d4f2-73f6-4fb9-bc35-97cef9495d59\",\"desktop_id\":\"primary\",\"kind\":\"interactive\",\"computer_url\":\"http://10.200.35.2:8085\",\"state\":\"active\"}",
+      "back": true,
+      "interrupted": true,
+      "pending": false,
+      "appagent_before": 1,
+      "appagent_after": 1
+    },
+    "T8_obligations_after_crash": {
+      "at": "2026-10-09T22:14:27.163Z",
+      "status": 200,
+      "ms": 44,
+      "restart": {
+        "kind": "crash_or_stop"
+      },
+      "wakes": {
+        "unprojected": 0,
+        "retrying": 0,
+        "exhausted": 0
+      },
+      "runs": {
+        "passivated": 4
+      },
+      "open_work_items": {
+        "count": 3,
+        "oldest_at": "2026-10-09T22:05:41Z"
+      }
+    },
+    "summary": {
+      "at": "2026-10-09T22:14:27.166Z",
+      "result": "fail",
+      "failed": [
+        "T5b_revise_after_cancel"
+      ]
+    }
+  },
+  "base_url": "https://choir.news",
+  "doc_id": "ef588d74-d5f8-5b4d-8ff8-ac326bfd9883",
+  "doc_id_research": "38779851-3a98-5b2a-93a2-d7df2ffef88d",
+  "result": "fail",
+  "finished_at": "2026-10-09T22:14:27.166Z"
+}
