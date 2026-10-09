@@ -553,3 +553,84 @@ func (l *SQLiteLog) PruneMailboxes(ctx context.Context, mailboxIDs []string) (bo
 	}
 	return changed, nil
 }
+
+// UnprocessedSample is one unprocessed actor update, for the "what is owed"
+// surface.
+type UnprocessedSample struct {
+	UpdateID   string
+	ToAgentID  string
+	Kind       string
+	CreatedAt  time.Time
+	NotBefore  time.Time
+	DeferCount int
+	Attempts   int
+}
+
+// UnprocessedSummary is the actor tape's share of what a computer owes:
+// unprocessed updates that are due now and those deferred to a future
+// not_before.
+type UnprocessedSummary struct {
+	Due           int
+	Deferred      int
+	MaxDeferCount int
+	OldestCreated time.Time
+	NextNotBefore time.Time
+	ByKind        map[string]int
+	Samples       []UnprocessedSample // oldest first, at most 20
+	Truncated     bool                // more than limit rows exist
+}
+
+// UnprocessedSummary reads at most limit unprocessed updates (oldest first,
+// on the backlog partial index) and summarizes them.
+func (l *SQLiteLog) UnprocessedSummary(ctx context.Context, now time.Time, limit int) (UnprocessedSummary, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	rows, err := l.db.QueryContext(ctx, `
+SELECT update_id, to_agent_id, kind, created_at, not_before, defer_count, attempts
+FROM actor_updates
+WHERE processed_at IS NULL
+ORDER BY created_at, update_id
+LIMIT ?`, limit+1)
+	if err != nil {
+		return UnprocessedSummary{}, err
+	}
+	defer rows.Close()
+	out := UnprocessedSummary{ByKind: map[string]int{}}
+	now = now.UTC()
+	n := 0
+	for rows.Next() {
+		var s UnprocessedSample
+		var nb sql.NullTime
+		if err := rows.Scan(&s.UpdateID, &s.ToAgentID, &s.Kind, &s.CreatedAt, &nb, &s.DeferCount, &s.Attempts); err != nil {
+			return UnprocessedSummary{}, err
+		}
+		n++
+		if n > limit {
+			out.Truncated = true
+			break
+		}
+		if nb.Valid {
+			s.NotBefore = nb.Time
+		}
+		if !s.NotBefore.IsZero() && s.NotBefore.After(now) {
+			out.Deferred++
+			if out.NextNotBefore.IsZero() || s.NotBefore.Before(out.NextNotBefore) {
+				out.NextNotBefore = s.NotBefore
+			}
+		} else {
+			out.Due++
+		}
+		if s.DeferCount > out.MaxDeferCount {
+			out.MaxDeferCount = s.DeferCount
+		}
+		if out.OldestCreated.IsZero() || s.CreatedAt.Before(out.OldestCreated) {
+			out.OldestCreated = s.CreatedAt
+		}
+		out.ByKind[s.Kind]++
+		if len(out.Samples) < 20 {
+			out.Samples = append(out.Samples, s)
+		}
+	}
+	return out, rows.Err()
+}

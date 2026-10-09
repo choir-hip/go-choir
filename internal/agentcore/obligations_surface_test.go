@@ -65,3 +65,46 @@ func TestObligationsSurfaceReportsPendingAndExhaustedWakes(t *testing.T) {
 		t.Fatalf("pending, retrying wake not counted: %+v", body.Wakes)
 	}
 }
+
+// Deferred and in-flight actor work is visible
+// (texture-create-occurrence-deferred-never-refires-2026-10-09): the surface
+// answered "nothing owed" while a Texture occurrence sat deferred.
+func TestObligationsSurfaceReportsActorTape(t *testing.T) {
+	rt, _ := testRuntime(t)
+	started := time.Now().UTC().Add(-90 * time.Second)
+	rt.SetActorObligationsReader(func(context.Context) (ActorObligations, error) {
+		return ActorObligations{
+			Due: 1, Deferred: 1, MaxDeferCount: 1,
+			Samples:  []ActorObligationSample{{UpdateID: "u1", ToAgentID: "texture:d/x", Kind: "initial_dispatch", DeferCount: 1}},
+			InFlight: map[string]time.Time{"texture:d/x": started},
+		}, nil
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/runtime/obligations", nil)
+	req.RemoteAddr = ""
+	req.Header.Set("X-Authenticated-User", "owner-actor-tape")
+	rec := httptest.NewRecorder()
+	NewAPIHandler(rt).HandleObligations(rec, req)
+	var body obligationsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Actors == nil || body.Actors.Due != 1 || body.Actors.Deferred != 1 || len(body.Actors.Samples) != 1 {
+		t.Fatalf("actor tape not visible: %s", rec.Body.String())
+	}
+	if len(body.Actors.InFlight) != 1 || body.Actors.InFlight[0].AgeSeconds < 60 {
+		t.Fatalf("in-flight activation age missing: %+v", body.Actors.InFlight)
+	}
+
+	rt.SetActorObligationsReader(func(context.Context) (ActorObligations, error) {
+		return ActorObligations{}, errors.New("actor log closed")
+	})
+	rec = httptest.NewRecorder()
+	NewAPIHandler(rt).HandleObligations(rec, req)
+	body = obligationsResponse{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || len(body.Errors) == 0 {
+		t.Fatalf("actor read error hidden: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+}

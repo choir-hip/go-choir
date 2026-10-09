@@ -168,8 +168,31 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	rt.SetScheduleActor(a.schedule)
 	rt.SetDispatchActorRedrive(a.dispatchRedrive)
 	rt.SetScheduleActorRedrive(a.scheduleRedrive)
+	rt.SetActorObligationsReader(a.actorObligations)
 
 	return a
+}
+
+// actorObligations is the actor tape's share of the "what is owed" surface:
+// unprocessed updates (bounded read) and in-flight activations.
+func (a *Adapter) actorObligations(ctx context.Context) (agentcore.ActorObligations, error) {
+	summary, err := a.log.UnprocessedSummary(ctx, time.Now(), 1000)
+	if err != nil {
+		return agentcore.ActorObligations{}, err
+	}
+	out := agentcore.ActorObligations{
+		Due: summary.Due, Deferred: summary.Deferred, MaxDeferCount: summary.MaxDeferCount,
+		OldestCreated: summary.OldestCreated, NextNotBefore: summary.NextNotBefore,
+		ByKind: summary.ByKind, Truncated: summary.Truncated,
+		InFlight: a.actorRT.InFlightActivations(),
+	}
+	for _, s := range summary.Samples {
+		out.Samples = append(out.Samples, agentcore.ActorObligationSample{
+			UpdateID: s.UpdateID, ToAgentID: s.ToAgentID, Kind: s.Kind, CreatedAt: s.CreatedAt,
+			NotBefore: s.NotBefore, DeferCount: s.DeferCount, Attempts: s.Attempts,
+		})
+	}
+	return out, nil
 }
 
 func actorDispatchUpdateID(ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) string {

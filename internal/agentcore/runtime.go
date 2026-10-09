@@ -195,6 +195,9 @@ type Runtime struct {
 	// deliveryHooksMu guards the actor delivery hooks against the projector
 	// goroutine reading them while they are set.
 	deliveryHooksMu sync.RWMutex
+	// actorObligations reads the actor tape for the "what is owed" surface
+	// (bound by the actor runtime adapter; guarded by deliveryHooksMu).
+	actorObligations func(context.Context) (ActorObligations, error)
 	// wakeRetries bounds failed actor wake dispatches (SL slice 2).
 	wakeRetries                 wakeRetryTracker
 	selfdevStartupReleaseDigest string

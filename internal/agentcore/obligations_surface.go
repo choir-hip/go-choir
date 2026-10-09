@@ -1,7 +1,9 @@
 package agentcore
 
 import (
+	"context"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -21,7 +23,107 @@ type obligationsResponse struct {
 	Runs        map[string]int      `json:"runs"`
 	OldestRun   map[string]string   `json:"oldest_run_at,omitempty"`
 	WorkItems   obligationsCountAge `json:"open_work_items"`
+	Actors      *obligationsActors  `json:"actors,omitempty"`
 	Errors      []string            `json:"errors,omitempty"`
+}
+
+// ActorObligations is the actor tape's share of what is owed: unprocessed
+// actor updates (due now or deferred) and activations in flight. The actor
+// runtime adapter binds the reader; agentcore does not import the kernel.
+type ActorObligations struct {
+	Due           int
+	Deferred      int
+	MaxDeferCount int
+	OldestCreated time.Time
+	NextNotBefore time.Time
+	ByKind        map[string]int
+	Samples       []ActorObligationSample
+	Truncated     bool
+	InFlight      map[string]time.Time
+}
+
+// ActorObligationSample is one unprocessed actor update.
+type ActorObligationSample struct {
+	UpdateID   string
+	ToAgentID  string
+	Kind       string
+	CreatedAt  time.Time
+	NotBefore  time.Time
+	DeferCount int
+	Attempts   int
+}
+
+// SetActorObligationsReader binds the actor tape reader for the "what is
+// owed" surface.
+func (rt *Runtime) SetActorObligationsReader(fn func(context.Context) (ActorObligations, error)) {
+	rt.deliveryHooksMu.Lock()
+	defer rt.deliveryHooksMu.Unlock()
+	rt.actorObligations = fn
+}
+
+type obligationsActors struct {
+	Due           int                     `json:"due"`
+	Deferred      int                     `json:"deferred"`
+	MaxDeferCount int                     `json:"max_defer_count"`
+	OldestCreated string                  `json:"oldest_unprocessed_at,omitempty"`
+	NextNotBefore string                  `json:"next_not_before,omitempty"`
+	ByKind        map[string]int          `json:"by_kind,omitempty"`
+	Samples       []obligationsActorEvent `json:"samples,omitempty"`
+	Truncated     bool                    `json:"truncated,omitempty"`
+	InFlight      []obligationsInFlight   `json:"in_flight,omitempty"`
+}
+
+type obligationsActorEvent struct {
+	UpdateID   string `json:"update_id"`
+	ToAgentID  string `json:"to_agent_id"`
+	Kind       string `json:"kind"`
+	CreatedAt  string `json:"created_at,omitempty"`
+	NotBefore  string `json:"not_before,omitempty"`
+	DeferCount int    `json:"defer_count"`
+	Attempts   int    `json:"attempts"`
+}
+
+type obligationsInFlight struct {
+	AgentID    string `json:"agent_id"`
+	StartedAt  string `json:"started_at"`
+	AgeSeconds int    `json:"age_seconds"`
+}
+
+func rfc3339OrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+func (rt *Runtime) actorObligationsSection(ctx context.Context, now time.Time) (*obligationsActors, error) {
+	rt.deliveryHooksMu.RLock()
+	read := rt.actorObligations
+	rt.deliveryHooksMu.RUnlock()
+	if read == nil {
+		return nil, nil
+	}
+	got, err := read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &obligationsActors{
+		Due: got.Due, Deferred: got.Deferred, MaxDeferCount: got.MaxDeferCount,
+		OldestCreated: rfc3339OrEmpty(got.OldestCreated), NextNotBefore: rfc3339OrEmpty(got.NextNotBefore),
+		ByKind: got.ByKind, Truncated: got.Truncated,
+	}
+	for _, s := range got.Samples {
+		out.Samples = append(out.Samples, obligationsActorEvent{
+			UpdateID: s.UpdateID, ToAgentID: s.ToAgentID, Kind: s.Kind,
+			CreatedAt: rfc3339OrEmpty(s.CreatedAt), NotBefore: rfc3339OrEmpty(s.NotBefore),
+			DeferCount: s.DeferCount, Attempts: s.Attempts,
+		})
+	}
+	for id, at := range got.InFlight {
+		out.InFlight = append(out.InFlight, obligationsInFlight{AgentID: id, StartedAt: rfc3339OrEmpty(at), AgeSeconds: int(now.Sub(at).Seconds())})
+	}
+	sort.Slice(out.InFlight, func(i, j int) bool { return out.InFlight[i].AgeSeconds > out.InFlight[j].AgeSeconds })
+	return out, nil
 }
 
 type obligationsRestart struct {
@@ -138,6 +240,11 @@ func (h *APIHandler) HandleObligations(w http.ResponseWriter, r *http.Request) {
 		if !oldest.IsZero() {
 			resp.WorkItems.Oldest = oldest.UTC().Format(time.RFC3339)
 		}
+	}
+	if actors, err := rt.actorObligationsSection(ctx, resp.GeneratedAt); err != nil {
+		resp.Errors = append(resp.Errors, "actors: "+err.Error())
+	} else {
+		resp.Actors = actors
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }

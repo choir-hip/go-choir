@@ -99,9 +99,9 @@ type Dispatcher struct {
 	opts    DispatcherOptions
 
 	mu      sync.Mutex
-	running map[string]bool // agentID -> activation in flight (serial fence)
-	wg      sync.WaitGroup  // in-flight activations; Stop waits for them
-	wake    chan struct{}   // pending-projection change signal
+	running map[string]time.Time // agentID -> activation start (in flight; serial fence)
+	wg      sync.WaitGroup       // in-flight activations; Stop waits for them
+	wake    chan struct{}        // pending-projection change signal
 	stop    chan struct{}
 	done    chan struct{}
 	started bool // Run was launched; Stop waits on done only then
@@ -182,7 +182,7 @@ func NewDispatcher(log KernelLog, handler Handler, opts DispatcherOptions) *Disp
 		log:     log,
 		handler: handler,
 		opts:    opts,
-		running: make(map[string]bool),
+		running: make(map[string]time.Time),
 		wake:    make(chan struct{}, 1),
 		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
@@ -198,6 +198,18 @@ func (d *Dispatcher) Notify() {
 	case d.wake <- struct{}{}:
 	default:
 	}
+}
+
+// InFlight reports each actor with an activation in flight and when it
+// started, for the "what is owed" surface.
+func (d *Dispatcher) InFlight() map[string]time.Time {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make(map[string]time.Time, len(d.running))
+	for id, at := range d.running {
+		out[id] = at
+	}
+	return out
 }
 
 // Run is the dispatcher loop: read the pending projection, fire a serial
@@ -258,11 +270,11 @@ func (d *Dispatcher) dispatchPending(ctx context.Context) {
 	}
 	for _, agentID := range agents {
 		d.mu.Lock()
-		if d.running[agentID] || len(d.running) >= d.opts.MaxConcurrent {
+		if _, busy := d.running[agentID]; busy || len(d.running) >= d.opts.MaxConcurrent {
 			d.mu.Unlock()
 			continue
 		}
-		d.running[agentID] = true
+		d.running[agentID] = time.Now().UTC()
 		d.mu.Unlock()
 		d.wg.Add(1)
 		go func(id string) {

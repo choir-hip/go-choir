@@ -132,6 +132,15 @@ func NewKernelRuntime(log Log, klog KernelLog, handler Handler, opts Options, do
 	}
 }
 
+// InFlightActivations reports actors with an activation in flight and when
+// each started (nil before the kernel exists).
+func (rt *Runtime) InFlightActivations() map[string]time.Time {
+	if rt == nil || rt.kernel == nil {
+		return nil
+	}
+	return rt.kernel.InFlight()
+}
+
 // StartKernel launches the dispatcher loop. The pending projection is the
 // recovery rule, so no separate boot scan is needed. Call once after
 // NewKernelRuntime.
