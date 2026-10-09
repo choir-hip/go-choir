@@ -46,6 +46,20 @@ definition_version: 4
 # lifecycle_work_assigned wake fires reconcileAgentWakeLocked before
 # EnsureTextureHandoff's own submit; loser now recovers the already-committed
 # run instead of 500ing. See "v5.2 addendum" in now.slice.
+# v6 2026-10-09 (owner-ratified roadmap): three gates with exit tests replace
+# the long station chain as the spine. Gate 1 stable computer (SH O21, SL O1,
+# O7/O12 enforceable checks, O8/O9, Texture contract + acceptance); Gate 2
+# self-development with live Texture supervision (S1 remainder -> S4 -> S5 ->
+# S6; check how much of SC S5 truly needs); then World Wire design + build.
+# Optimizations deferred (S3, SA beyond the storm). Post-goal stations moved
+# out of the spine (S7-S11). World Wire interface design pulled forward as
+# station SW (design only) so it cannot force late changes on Gates 1-2.
+# Owner decisions 2026-10-09: World Wire runs on the four core desks only
+# (processor/reconciler deleted); shared data between computers uses the
+# object graph (published objects adopted onto the subscriber's tape, never
+# Dolt branch sync); no architectural ceiling on ingest — budget is the
+# constraint, cost per item is a management dial; corpus (Store B) torn down.
+# Registry drift fixed: S2 and SMG closed per their now cards. See "v6 plan".
 readiness: executable
 
 review:
@@ -86,7 +100,7 @@ metamission:
     - id: S2-layering-runtime-from-release
       path: docs/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md
       readiness: reviewed
-      status: working
+      status: complete  # closed 2026-10-05 (now card v5.1)
       depends_on: [S0-reality-and-boot-timeline]
     - id: SO-ops-substrate
       # New in v4. Five disk-headroom hits in four days (Root Cause
@@ -121,7 +135,7 @@ metamission:
       # deployed schema leg PASSED. Behavioral legs blocked by the
       # management occurrence storm on the owner guest — see station now card.
       readiness: reviewed
-      status: working
+      status: complete  # closed 2026-10-06 (now card v5.1)
       depends_on: [SR-desk-surface-cleanup]
     - id: SA-agent-density
       # v5. "Scale agents horizontally in a 2-4 GiB VM before scaling VMs."
@@ -147,6 +161,17 @@ metamission:
       path: docs/definitions/choir-appdev-sh-state-homes-2026-10-08.md
       readiness: drafted
       status: working
+      depends_on: []
+    - id: SW-world-wire-interface
+      # v6 2026-10-09: World Wire interface design, pulled forward (design
+      # only). Output: constraints on Gates 1-2 — schedule/timer obligation
+      # kinds for SL, retention class + adopted-foreign-object homes for SH,
+      # cross-computer object adoption (authority, privacy class,
+      # revocation, merge) on the object graph + tape, editorial publish as
+      # an owner-supervised Texture action for S5/S6, four-desk mapping.
+      path: unauthored
+      readiness: intent
+      status: pending
       depends_on: []
     - id: SM-model-policy-and-evals
       # v5. Absorbs Jev M2 (choir-signal-model-policy-rlm-module-2026-09-29.md).
@@ -1870,3 +1895,38 @@ platform-artifacts GC cadence (S0 — first sweep reclaimed 35.4GB).
 Next station: **S3 fast resume** per the v5 ordering; S2 hands S3/S6 the
 (B,U,R) transition tuple and the builder-produced closure contract.
 
+
+
+## v6 plan (2026-10-09, owner-ratified)
+
+The goal is three outcomes, in order; stations serve them, not the reverse.
+
+**Gate 1 — the computer is stable.** Exit test: lose-the-disk proof on a
+disposable (SH), SL fault matrix on a disposable, owner computer 72 h
+unattended with no new liveness problem docs, Texture acceptance suite
+green. Stations: SH (O21, in flight), SL (O1; absorbs the Management storm),
+O7/O12 as enforceable checks (boot-cost budget test, lock-scope rule),
+O8/O9 remainder, Texture contract and acceptance (Texture is input, output,
+supervision, control plane, multi-agent member and an RLM desk — it gets
+its own invariants in the register).
+
+**Gate 2 — self-development with live Texture supervision.** Exit test: the
+owner asks Texture for a change; engineering develops it in a capsule; the
+owner watches a live preview, approves, and the release applies and can be
+rolled back. Stations: S1 remainder -> S4 -> S5 -> S6. SC/SM only as far as
+S5 needs them (to be checked when S5 is re-read).
+
+**Gate 3 — World Wire operational.** Designed on SW's constraints after
+Gate 2; four core desks (research reads and corroborates, management sets
+attention and spend, engineering writes source adapters in capsules,
+Texture writes, revises and publishes articles); deterministic steps are
+desk tool modules, never separate actors; shared claims are published
+objects that subscriber computers adopt onto their own tape; no
+architectural ceiling on ingest — budget is the constraint.
+
+**Deferred (after the goals):** S3 fast resume, SA density beyond the storm
+fix, S7 app packages, S8 source publication, S9 forks and fleets, S10 org
+templates, S11 mainline push.
+
+**In flight now:** SH (slice 3 deployed; file-hydration fix landing),
+SW design, corpus teardown, then SL.

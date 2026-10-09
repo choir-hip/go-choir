@@ -5,7 +5,25 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization
+## Roadmap (owner-ratified 2026-10-09)
+
+Three gates, in order, each with an exit test — see "v6 plan" in the
+[metamission](definitions/choir-supervised-app-development-metamission-2026-10-01.md):
+
+1. **Stable computer** — SH (O21) → SL (O1) → O7/O12 checks → O8/O9 →
+   Texture contract. Exit: lose-the-disk proof, SL fault matrix, owner
+   computer 72 h unattended, Texture acceptance.
+2. **Self-development with live Texture supervision** — S1 → S4 → S5 → S6.
+   Exit: owner-requested change, capsule build, live preview, approval,
+   release, rollback.
+3. **World Wire** — on SW's interface constraints; four core desks; shared
+   data as adopted objects on the object graph; budget, not architecture,
+   limits ingest.
+
+Deferred: S3, SA density, S7–S11. Corpus (Store B) teardown owner-approved
+2026-10-09; processor/reconciler deletion committed.
+
+## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
 [`definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md`](definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md)
 (`readiness: drafted`, `now.status: working`) — promoted to top
