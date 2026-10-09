@@ -87,3 +87,21 @@ All 633 are `published`. Since the 12:33Z reset none of them resolve.
   value.
 - **History:** the 104 G is Dolt history, not data. A current-state dump is
   a few GB.
+
+## Dump result and where the 104 G came from (13:15Z)
+
+- The history-free dump finished at 13:14:56Z (17 minutes): **23 GB of
+  SQL text** for every table's current state. As Dolt tables that is
+  smaller still. The old repo's 104 G is all in `.dolt/noms/oldgen`, so
+  most of it is history, not data.
+- Cause: corpusd commits a Dolt snapshot after every debounced write batch
+  (`doltbatch` committer, `internal/platform/store.go:470`), and ingestion
+  wrote into this store continuously: 2.4M items, 8.8M objects and ~12M log
+  rows. Dolt keeps every chunk that any commit references, so GC cannot
+  reclaim it. This is the same mechanism as Store A's 86k-commit history.
+  It is unbounded retention rather than a leak of unreferenced space.
+- Design consequence ([Autopaper design](../autopaper-sw-design-2026-10-09.md)
+  §6): this store, behind corpusd, stays the host-level publish and read
+  store. It holds only published material (a low write rate), ingestion
+  stays in each paper's embedded Dolt, and its history gets a declared
+  bound.
