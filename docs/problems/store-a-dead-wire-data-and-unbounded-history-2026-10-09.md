@@ -47,3 +47,20 @@ fix: red (canonical event/control store).
 
 Not done here: no tables dropped, no history rewritten. Store B (corpus)
 teardown is tracked separately and was owner-approved 2026-10-09.
+
+## Decision (owner, 2026-10-09)
+
+"The dolt history currently doesn't have audit value, but it definitely will
+once the system is in production." Decided:
+
+- **Now:** rebuild Store A from current state (drops the dead wire tables and
+  the 86k-commit history), after a full copy of the current directory kept
+  for one week of clean running. History before 2026-10-09 is discarded on
+  purpose. Runbook step after the Store B reset: copy → dump live tables →
+  fresh repo → import → verify event heads and receipts → restart corpusd.
+- **For production:** the audit authority is the tape (signed event heads,
+  append receipts, content-addressed artifacts) plus the key-escrow
+  transparency log; Store A Dolt history is a derived secondary record.
+  Before production, push Store A history to a cold-storage Dolt remote on a
+  schedule (bounded hot history, full cold history), and replicate the tape,
+  content store and escrow off-host — see O22 in the register.

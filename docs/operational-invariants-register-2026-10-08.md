@@ -149,6 +149,16 @@ disposable — destroy the data disk, realize again, identical effective head,
 witness, files, artifacts and release with no operator step. Goal: 1 (and the
 desktop app's hosted↔local move).
 
+**O22 The platform's durable homes survive its host.** O21 one level up:
+the tape, content store, key escrow and control store each have a copy off
+the platform host, and the audit record (tape + escrow transparency, plus
+Store A history once in production) is retained on cold storage. Today all
+of them live on Node B's single disk. Evidence:
+`store-a-dead-wire-data-and-unbounded-history` (owner decision 2026-10-09:
+"once self dev and world wire are operational our audit log is gold").
+Enforcer: unowned. Alarm: none. Proof: restore a platform from off-host
+copies. Goal: 1 before production; 3.
+
 ## Resources — everything that grows is bounded and owned
 
 **O10 Declared bound per growth surface.** Every store, journal, image,
