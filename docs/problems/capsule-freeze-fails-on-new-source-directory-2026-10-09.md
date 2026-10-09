@@ -52,3 +52,22 @@ directory are added with `/dev/null` as their base, as they are today.
 Failure modes to pin: a new directory with a new file; an existing
 directory that gains a file; a deleted directory; a directory replaced by
 a file.
+
+## The rejected report, traced (22:42Z, code reading)
+
+The M11 engineering run is a **delegated cast**
+(`engineering_assignment_runtime.go`): its binding's `ParentControlID` is
+the cast's commitment record id (`CommitmentControlID`), a ledger record,
+not a lifecycle update. The report packet carries that id as
+`control_binding_id` (`store/engineering_assignments.go`
+`buildEngineeringReturnPacket`). The Texture validator's binding check
+(August, fd83ce64) looks for a lifecycle **control update** with that id
+on the trajectory; the trajectory has none (its only update is the
+report), so every delegated-cast report to Texture fails with "producer
+control binding authority mismatch". The September 29 pass predates the
+delegated-cast reports reaching Texture. Fix direction (red, Texture
+occurrence authority): the binding check accepts a commitment-record cast
+that names the producer agent and work item, as the lifecycle control
+check does. Residual `texture-supervision-rejects-management-bound-reports`
+stays open; it does not block approval (the operation state comes from
+the assignment, not from Texture), but the owner never sees the report.
