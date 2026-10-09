@@ -25,6 +25,33 @@ Deferred: S3, SA density, S7–S11, and
 (O22; until Gates 1–2 pass human QA). Corpus (Store B) teardown owner-approved
 2026-10-09; processor/reconciler deletion committed.
 
+## Gate 1 hardening landed 2026-10-09 (owner-supervised overnight session)
+
+Receipts are in `docs/problems/*-2026-10-09.md`:
+
+- **Texture:**
+  - Cold list down to 0.10–0.19 s (was 2.7 s first call); boot replay
+    from 9–11 min to 4.7 min, with further scan fixes in c0903096.
+  - The "Revising…" zombie cycle is fixed. 28 never-executed trajectories
+    were disposed (owner-approved).
+  - Cancel now reads a summary view and resumes a stuck intent.
+- **Owner rule:** a restart never resumes Texture work on its own
+  (4b9bf31d). Stalled work is accepted until management owns
+  resume/cancel after gates 1–3 (residual `management-owns-stalled-work`).
+- **Host:**
+  - memory budget with no swap;
+  - shared Go build, so deploy jobs take ~3 min (was ~13);
+  - node-a is Node B's remote builder.
+  - Disk survey and reclaim list:
+    [`node-b-disk-free-space-2026-10-09`](problems/node-b-disk-free-space-2026-10-09.md).
+- **Signup:** credential issuance replays by key, and vmctl retries
+  transient failures (964a68ea).
+- **Open:**
+  - owner deletions (pre-compact 17 G, quarantine 32 G, corpus 104 G);
+  - CI item 2 (main runs serialize whole runs);
+  - a credential failure that outlasts the retries still marks a computer
+    `failed`.
+
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
 [`definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md`](definitions/choir-platform-dolt-capacity-stabilization-2026-10-01.md)
