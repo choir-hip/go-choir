@@ -120,6 +120,9 @@ func NewServer(serviceName, port string) *Server {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		s.healthHandler(w, r)
 	})
+	// Every service serves runtime profiles to host-sourced callers.
+	EnableContentionProfiles()
+	mux.Handle(DebugPprofPrefix, http.HandlerFunc(serveDebugPprof))
 	s.handler = WithBuildIdentity(serviceName, mux)
 	s.httpServer = &http.Server{
 		Addr:              addr,
