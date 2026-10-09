@@ -180,10 +180,16 @@ now:
     Red surface (custody, vmctl). Mitigated by disposable-first proof and
     refusing rather than guessing.
   next_action: >-
-    Close SH: conjecture C1-bridge is supported on staging computers by the
-    proof; remaining Gate 1 exit items are the SL fault matrix and the
-    Texture acceptance suite. Bounded residual: recovery waits up to ~1 min
-    for the first projection checkpoint if the disk is lost before it.
+    SH is not closed: the proof covered key and files only. Remaining, in
+    order: (1) delete the debugfs copier and cold-recover's key-copy phase
+    (slice 3 deletion; safe because all 113 staging chains are escrowed and
+    escrow precedes genesis), and prove cold-recover on a disposable through
+    the owner API; (2) extend the proof to compare effective head before and
+    after and read the transparency entry; (3) slice 4 capsule artifacts and
+    slice 5 sync barrier, which the self-development acceptance needs
+    (candidates to move into Gate 2's S stations if they do not block Gate
+    1). Bounded residual: recovery waits up to ~1 min for the first
+    projection checkpoint if the disk is lost before it.
 receipts:
   - docs/evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json
 ---
