@@ -71,3 +71,27 @@ that names the producer agent and work item, as the lifecycle control
 check does. Residual `texture-supervision-rejects-management-bound-reports`
 stays open; it does not block approval (the operation state comes from
 the assignment, not from Texture), but the owner never sees the report.
+
+## Fix plan for the rejected report (22:43Z; red, ceremony)
+
+- Conjecture delta: an Engineering report's control binding is proven by
+  its stored assignment, not by a lifecycle control update. The newer
+  authority check (`ValidateLifecycleProducerReportAuthority`) already
+  loads the assignment and pins trajectory, agent, work item and run; it
+  does not yet pin `ParentControlID` to the report's
+  `control_binding_id`.
+- Change: that check also requires `ParentControlID ==
+  control_binding_id` for Engineering; the Texture binding scan then
+  accepts zero matching lifecycle control updates for an Engineering
+  producer (assignment-bound) and still rejects two or more. Research and
+  Management keep the update-scan rule unchanged.
+- Failure modes pinned: a delegated-cast report with its own control id
+  and no lifecycle control update must be accepted; an Engineering report
+  whose binding differs from its assignment's must be rejected; a
+  Research report without a matching control update must still be
+  rejected; two matching control updates must still be rejected.
+- Protected surface: Texture occurrence authority (red). Admissible
+  evidence: the M11 rerun on staging shows a Texture turn for the
+  engineering report instead of "consumed without a turn". Rollback: git
+  revert. Heresy delta: discovered the stale binding rule; repaired on
+  staging proof only.
