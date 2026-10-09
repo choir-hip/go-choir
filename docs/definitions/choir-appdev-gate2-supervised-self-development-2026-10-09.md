@@ -185,21 +185,33 @@ now:
     owner_ratification_ref: pending (stated per AGENTS.md No Blocking Asks)
   belief:
     believed_state: >-
-      Operations, approval, apply, reject and restore exist and passed in
-      September; Texture intake, preview and product approval do not exist;
-      layered checkpoints are underivable.
+      M11 rerun on 19b7ef48 (2026-10-09 20:31Z,
+      evidence/m11-rerun-2026-10-09T20-30-55Z.json): 5 of 16 legs pass
+      (fresh owner, bootstrap chain, pre-episode checkpoint, propose_only,
+      operation started). The episode stops before awaiting_approval: the
+      capsule's Go session worker exits before its ready handshake on
+      every call (problems/capsule-session-worker-dies-at-start-2026-10-09.md),
+      so engineering can do nothing, and with no tool-loop budget and a
+      guard that demands a capsule-committed fate it retried ~400 times.
+      Approval, apply, reject and restore were not reached, so they are
+      unobserved on this build, not known broken.
     main_uncertainty: >-
-      Whether the M11 path survived S2 layering and the SL/SH changes, and
-      whether layered checkpoint identity blocks apply or only restore.
-    next_observation: the M11 re-run receipt.
+      Why the worker dies (H1: the S1 hardening floor, landed 2026-10-04,
+      after M11's last green run); the stderr diagnostic (cb138a59) names
+      it on the next run.
+    next_observation: the M11 rerun on cb138a59 or later, with the worker's stderr.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
   next_action: >-
-    Run scripts/m11_selfdev_episode_probe.mjs against staging after the
-    Texture acceptance suite finishes; write the receipt; file a problem
-    doc for each failed leg before any fix.
-receipts: []
+    Rerun M11 on the build with the stderr diagnostic; fix the worker's
+    start failure it names; then give engineering a tool-loop budget and a
+    runtime-recorded blocker fate for an unavailable worker; rerun M11 to
+    the restore leg.
+receipts:
+  - id: m11-rerun-2026-10-09
+    ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
+    result: partial (5/16; blocked at awaiting_approval)
 ---
 
 # Gate 2 — self-development with live Texture supervision
