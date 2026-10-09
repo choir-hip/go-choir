@@ -19,7 +19,8 @@ every timing and id.
 | # | Check | Pass |
 |---|---|---|
 | T1 | Document list, first and second read | each under 1.5 s |
-| T2 | Owner asks Texture to revise | an appagent revision lands within 5 min; the document is no longer pending |
+| T2a | First draft after create (no further owner action) | an appagent revision lands within 5 min (soft: recorded, the suite continues) |
+| T2b | Owner asks Texture to revise | an appagent revision lands within 5 min; the document is no longer pending |
 | T3 | Version chevrons (read each revision) | each read under 1 s |
 | T4 | Reload after a finished turn | the document is not pending on three reads over 10 s (no "Revising…" zombie) |
 | T5 | Cancel during a turn | pending clears within 20 s of the cancel request |
@@ -30,6 +31,9 @@ every timing and id.
 T7 uses the host's internal vmctl refresh over SSH (test harness only);
 everything else goes through the owner-facing API with the session
 cookie, exactly as the editor does.
+
+`agent_revision_pending` and `agent_revision_interrupted` are `omitempty`:
+an absent field means false.
 
 Thresholds are the owner's experience bar, not the current measurement;
 tighten them as the product improves.

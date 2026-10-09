@@ -67,11 +67,12 @@ async function revise(page, docID, prompt, suffix) {
   return res.body?.revision_id;
 }
 
+// agent_revision_pending is omitempty: "not pending" is an absent field.
 async function waitForTurn(page, docID, priorAppagent, timeoutMs) {
   return waitFor(async () => {
     const doc = await api(page, 'GET', `/api/texture/documents/${docID}`);
     const agent = await appagentRevisions(page, docID);
-    return { done: agent.length > priorAppagent && doc.body?.agent_revision_pending === false, doc: doc.body, agent };
+    return { done: agent.length > priorAppagent && doc.status === 200 && doc.body?.agent_revision_pending !== true, doc: doc.body, agent };
   }, timeoutMs);
 }
 
@@ -113,13 +114,19 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const docID = created.body?.doc_id;
   receipt.doc_id = docID;
-  const startedRevise = Date.now();
+  // T2a — the create wake produces the first draft with no further owner
+  // action (soft: a failure is recorded and the suite continues).
+  const startedCreate = Date.now();
   const firstTurn = await waitForTurn(page, docID, 0, 300_000);
-  // The create wake produces the first draft; then the owner revises it.
+  record('T2a_first_draft', { pass: !!firstTurn?.done, seconds: Math.round((Date.now() - startedCreate) / 1000), appagent_revisions: firstTurn?.agent?.length || 0 });
+  expect.soft(firstTurn?.done, 'first draft landed after create without another owner action').toBeTruthy();
+
+  // T2b — the owner revises.
   const priorAgent = firstTurn?.agent?.length || 0;
+  const startedRevise = Date.now();
   await revise(page, docID, 'Rewrite this as two short paragraphs about persistent computers.', `t2-${suffix}`);
   const turn = await waitForTurn(page, docID, priorAgent, 300_000);
-  record('T2_revise', { pass: !!turn?.done, seconds: Math.round((Date.now() - startedRevise) / 1000), appagent_revisions: turn?.agent?.length });
+  record('T2b_revise', { pass: !!turn?.done, seconds: Math.round((Date.now() - startedRevise) / 1000), appagent_revisions: turn?.agent?.length });
   expect(turn?.done, 'Texture revision landed and the document is idle').toBeTruthy();
 
   // T3 — version chevrons.
@@ -159,7 +166,7 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   const cancelled = await cancelTurn(page, docID);
   const cleared = await waitFor(async () => {
     const doc = await api(page, 'GET', `/api/texture/documents/${docID}`);
-    return { done: doc.body?.agent_revision_pending === false };
+    return { done: doc.status === 200 && doc.body?.agent_revision_pending !== true };
   }, 20_000, 1000);
   record('T5_cancel', {
     pending_seen: !!pendingSeen?.done, cancel_status: cancelled.status,
@@ -233,7 +240,8 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   expect(ob.wakes?.exhausted, 'wakes that exhausted their dispatch budget').toBe(0);
   expect(ob.runs?.running || 0, 'runs still running after the crash').toBe(0);
 
-  receipt.result = 'pass';
+  const failedSoft = Object.entries(receipt.checks).filter(([, v]) => v.pass === false).map(([k]) => k);
+  receipt.result = failedSoft.length ? 'fail' : 'pass';
   receipt.finished_at = new Date().toISOString();
-  record('summary', { result: 'pass' });
+  record('summary', { result: receipt.result, failed: failedSoft });
 });
