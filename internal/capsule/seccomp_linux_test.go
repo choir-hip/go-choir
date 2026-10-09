@@ -83,6 +83,19 @@ func TestBrokerSeccompAllowsLandlockForSessionWorker(t *testing.T) {
 			t.Fatalf("broker filter refuses landlock_create_ruleset: %v", err)
 		}
 		return
+	case "worker-filter-under-broker":
+		// The worker's third layer: stack the workload filter under the
+		// inherited broker filter (seccomp() must not be refused).
+		if err := LoadBrokerFilter(); err != nil {
+			t.Fatalf("load broker filter: %v", err)
+		}
+		if err := LoadWorkloadFilter(); err != nil {
+			t.Fatalf("workload filter cannot stack under the broker filter: %v", err)
+		}
+		if err := landlockVersionErr(); !errors.Is(err, unix.EPERM) {
+			t.Fatalf("stacked workload filter allows landlock_create_ruleset: %v", err)
+		}
+		return
 	case "landlock-workload":
 		if err := LoadWorkloadFilter(); err != nil {
 			t.Fatalf("load workload filter: %v", err)
@@ -92,7 +105,7 @@ func TestBrokerSeccompAllowsLandlockForSessionWorker(t *testing.T) {
 		}
 		return
 	}
-	for _, mode := range []string{"landlock-broker", "landlock-workload"} {
+	for _, mode := range []string{"landlock-broker", "worker-filter-under-broker", "landlock-workload"} {
 		cmd := exec.Command(os.Args[0], "-test.run=^TestBrokerSeccompAllowsLandlockForSessionWorker$")
 		cmd.Env = append(os.Environ(), seccompHelperEnv+"="+mode)
 		if output, err := cmd.CombinedOutput(); err != nil {

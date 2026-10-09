@@ -58,11 +58,11 @@ func seccompFilterAllowing(allowed []string) seccomp.Filter {
 }
 
 // brokerExtraSyscalls are allowed to the broker but not to workloads. The
-// session worker inherits the broker's filter and applies its own Landlock
-// before stacking the workload filter; refusing these made every worker die
-// before ready (capsule-session-worker-dies-at-start-2026-10-09). Landlock
-// can only remove access.
-var brokerExtraSyscalls = []string{"landlock_create_ruleset", "landlock_add_rule", "landlock_restrict_self"}
+// session worker inherits the broker's filter, applies its own Landlock,
+// then stacks the workload filter with seccomp(); refusing these made every
+// worker die before ready (capsule-session-worker-dies-at-start-2026-10-09).
+// Both can only remove access.
+var brokerExtraSyscalls = []string{"landlock_create_ruleset", "landlock_add_rule", "landlock_restrict_self", "seccomp"}
 
 func BrokerSeccompFilter() seccomp.Filter {
 	allowed := append(append([]string(nil), capsuleAllowedSyscalls...), brokerExtraSyscalls...)
