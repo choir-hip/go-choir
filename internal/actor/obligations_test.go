@@ -2,6 +2,7 @@ package actor
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -70,4 +71,35 @@ func TestDispatcherReportsInFlightActivationAge(t *testing.T) {
 		t.Fatalf("in-flight activation not reported with a start time: %+v", inFlight)
 	}
 	close(release)
+}
+
+// H2 of texture-create-occurrence-deferred-never-refires: a handler deferral
+// must re-fire on its own (due-timer), without any new event for the actor.
+func TestDeferredEventRefiresWithoutNewEvent(t *testing.T) {
+	l := openKernelLog(t)
+	calls := make(chan time.Time, 8)
+	var n atomic.Int32
+	d := NewDispatcher(l, HandlerFunc(func(ctx context.Context, agentID string, u Update, memory []byte) ([]byte, error) {
+		calls <- time.Now()
+		if n.Add(1) == 1 {
+			return nil, ErrDeferUnprocessed
+		}
+		return memory, nil
+	}), DispatcherOptions{PollInterval: time.Hour})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := l.Append(ctx, mkUpdate("create", "texture:doc")); err != nil {
+		t.Fatal(err)
+	}
+	go d.Run(ctx)
+	defer d.Stop()
+	first := <-calls
+	select {
+	case second := <-calls:
+		if gap := second.Sub(first); gap > 5*time.Second {
+			t.Fatalf("re-fire after %s, want about the 500 ms backoff", gap)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("deferred event never re-fired without a new event (H2)")
+	}
 }

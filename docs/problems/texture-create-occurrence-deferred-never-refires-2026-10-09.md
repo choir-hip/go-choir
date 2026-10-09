@@ -126,3 +126,22 @@ Not yet explained: the first handler call's postcondition still saw the
 trigger pending at 18:23:28, so a consuming commit, if there was one,
 landed after that check. The actor-tape observer on the next reproduction
 decides it.
+
+## H2 refuted at the kernel; H5 remains (added 19:00Z)
+
+- `TestDeferredEventRefiresWithoutNewEvent` (internal/actor): with the
+  dispatcher poll disabled, a handler deferral re-fires on its own after
+  ~0.5 s through the due-timer. The kernel does re-arm deferrals.
+- The actor-tape observer (690ef1ee, live on the probe computer after a
+  refresh at 18:56Z) shows the create occurrence `07ebb376…` is no longer
+  unprocessed: it was incorporated. Only fail-closed deadlines remain
+  deferred (activation budget and cell terminal, due 1 h after each
+  activation).
+- With no model call between 18:23:27 and 18:28:20, the re-fire at
+  ~18:23:29 must have reached the Texture handler and been consumed by one
+  of its silent `nil, nil` paths: H5.
+
+Change (orange, next commit): every Texture occurrence the handler
+consumes without a turn now logs why. The next reproduction names the
+path. The product question stays open: a create-wake turn that ends in
+text without applying consumes the head, so the owner gets no first draft.
