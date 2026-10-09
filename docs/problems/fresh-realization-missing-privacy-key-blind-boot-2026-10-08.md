@@ -72,3 +72,17 @@ best-effort) before a computer's key is its only copy.
 
 Sequencing: items 2 and 3 land first as safe fixes; escrow delivery lands
 as its own red slice proved on a lose-the-disk disposable.
+
+## Slice 1 staging acceptance (2026-10-09, deployed `c78979b8`)
+
+Disposable `computer-13ec9b0d8c80b7a3b14ec8309495a9dc`, fresh signup then
+vmctl ownership removal (chain retained), log
+[`evidence/sh-slice1-key-refusal-staging-2026-10-09.log`](../evidence/sh-slice1-key-refusal-staging-2026-10-09.log):
+first resolves refused `projection_base_missing` (repair job ran); once
+the base was published the refusal became `privacy_key_unavailable`
+(503, 31 ms) within 30 s instead of a keyless boot; after a vmctl restart
+still refused (33-90 ms) from the durable condition; no realization booted
+(ownership `failed`). Items 2 and 4 verified on staging; item 3
+(guest-side typed refusal) is unit-tested only — no safe staging trigger.
+Result: **pass**. The 300 s retry hint was 60 s on condition-backed
+refusals (panel F6, fixed in the follow-up).
