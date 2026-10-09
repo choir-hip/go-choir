@@ -161,3 +161,28 @@ Fix: the guard measures the Dolt store's non-journal noms bytes only.
   - one on `/mnt/m11-probe` (2026-09-28).
   They are agent probe mounts over deleted guest images. They need an operator unmount; this session was not permitted to.
 - The quarantine images `data.img.quarantine-1-*` (2026-10-07) are kept pending an owner decision. They may hold pre-restore state.
+
+## 4 GiB trial failed; rolled back to 8 GiB (2026-10-09 06:55 UTC)
+
+The owner computer at 4 vCPU / 4 GiB on the compacted store:
+- **After the 06:06 refresh:** health `ready`, 3.3–3.4 GB RSS. But the
+  Texture document list took 7.1 s at about 06:20, then timed out at
+  120 s around 06:40. The live cause then was in-guest:
+  cancellation-intent retries
+  ([`texture-zombie-activations`](texture-zombie-activations-revising-forever-2026-10-09.md)).
+- **After the 06:44 forced-deploy refresh:**
+  - the runtime logged `started` at 06:50:54;
+  - 9 minutes later its health port still timed out at the TCP level;
+  - Firecracker RSS was **3.67 GB of the 4 GiB cap** at 107% CPU;
+  - ping RTT to the guest was **78 ms** (a local guest answers in under 1 ms).
+
+  This is memory thrash inside the guest (no guest swap; page-cache
+  eviction) during boot reconcile plus the cancellation retry loops.
+
+The acceptance condition (boot replay, Texture, research, a capsule build
+at 4 GiB) was not met. Per the owner-approved plan, interactive guests go
+back to 8 GiB. The swap cause is now handled by the host memory budget
+([`node-b-memory-overcommitted-swap`](node-b-memory-overcommitted-swap-2026-10-09.md)),
+not by guest size. Re-try 4 GiB only after:
+- the retry loops are fixed;
+- the guest's working set is measured from inside (not RSS from the host).
