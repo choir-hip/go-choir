@@ -102,3 +102,12 @@ Open decision `texture-research-assignment-finish` (named residual; not
 blocking other work). Recommended: A2, because it matches observed desk
 behavior (one report per research assignment, follow-ups as new work)
 and keeps the Texture turn contract unchanged.
+
+## Correction (19:58Z)
+
+Item 4's T6 failure is the search plane (all providers in cooldown after
+one caller cancel; `search-plane-cooldown-on-caller-cancel-2026-10-09.md`),
+not research closure: Texture's turn reasons cite the search outage. The
+research-work-left-open state is real (O24) but did not make Texture wait.
+That lowers the urgency of option A; B (turn-level cancel) and the
+search-plane fix are what the suite needs next.

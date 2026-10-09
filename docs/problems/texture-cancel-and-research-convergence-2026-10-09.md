@@ -59,3 +59,15 @@ an activation that ends without disposing its trigger defers; its re-fire
 finds the head consumed by the activation's own `decide` turn and
 consumes the occurrence as terminal without a turn. That is visible now;
 whether it is wrong depends on the turn contract (below).
+
+## Correction (19:58Z): T6's cause is the search plane, not Texture
+
+The committed turn reasons (trajectory events) say why Texture waited:
+every research desk returned a blocker with no claims and no sources
+because live web search was unavailable (`search_outage`, zero results).
+The gateway confirms a plane-wide cooldown from 19:24:26
+(`search-plane-cooldown-on-caller-cancel-2026-10-09.md`). Texture's
+`wait_for_evidence` was the right call. The open research work items
+(§2 state) are still an O24 gap, but they did not cause T6; the earlier
+reading in §2 ("a Texture that waits while research work is open waits
+forever") was an inference the trace did not support.
