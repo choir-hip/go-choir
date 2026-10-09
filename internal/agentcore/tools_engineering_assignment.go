@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -126,8 +127,8 @@ func (rt *Runtime) persistentManagementBoundReport(ctx context.Context, parent t
 	if err := rejectReportAuthorityInputs(packet.Actions); err != nil {
 		return types.LifecycleResult{}, err
 	}
-	packet = normalizeCoagentSourcePacketPayload(packet)
-	if err := validateCoagentSourcePacketPayload(packet); err != nil {
+	packet = coagentpacket.Normalize(packet)
+	if err := coagentpacket.Validate(packet); err != nil {
 		return types.LifecycleResult{}, err
 	}
 	if workDisposition == "" {

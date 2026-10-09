@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -66,8 +67,8 @@ func (rt *Runtime) WakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 // identities from authenticated runtime state.
 func PrepareTextureControlPacket(packet types.CoagentSourcePacketPayload) (types.CoagentSourcePacketPayload, error) {
 	packet.SchemaVersion = types.CoagentSourcePacketSchemaV1
-	packet = normalizeCoagentSourcePacketPayload(packet)
-	if err := validateCoagentSourcePacketPayload(packet); err != nil {
+	packet = coagentpacket.Normalize(packet)
+	if err := coagentpacket.Validate(packet); err != nil {
 		return types.CoagentSourcePacketPayload{}, err
 	}
 	return packet, nil

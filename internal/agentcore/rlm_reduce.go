@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -1009,7 +1010,7 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 		if err := json.Unmarshal([]byte(in.Packet), &packet); err != nil {
 			return 0, fmt.Errorf("reduce: report packet is not a valid packet body: %w", err)
 		}
-		if err := validateCoagentSourcePacketPayload(packet); err != nil {
+		if err := coagentpacket.Validate(packet); err != nil {
 			return 0, fmt.Errorf("reduce: report packet invalid: %w", err)
 		}
 	}
@@ -1424,8 +1425,8 @@ func (r *rlmCallReduction) commitAddressedPacketIntent(ctx context.Context, in y
 	if decoder.More() {
 		return 0, fmt.Errorf("reduce: %s %s body carries trailing data", label, in.LocalID)
 	}
-	packet := normalizeCoagentSourcePacketPayload(payload)
-	if err := validateCoagentSourcePacketPayload(packet); err != nil {
+	packet := coagentpacket.Normalize(payload)
+	if err := coagentpacket.Validate(packet); err != nil {
 		return 0, err
 	}
 	if wantKind != "" && wantKind != packet.Kind {
@@ -1859,7 +1860,7 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 		default:
 			packet = directivePacketForRecord(rec)
 		}
-		if err := validateCoagentSourcePacketPayload(packet); err != nil {
+		if err := coagentpacket.Validate(packet); err != nil {
 			return 0, fmt.Errorf("commit lifecycle act: directive packet invalid: %w", err)
 		}
 		content := strings.TrimSpace(packet.Summary)
@@ -2028,7 +2029,7 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 		if decoder.More() {
 			return 0, fmt.Errorf("reduce: report %s body carries trailing data", in.LocalID)
 		}
-		payload = normalizeCoagentSourcePacketPayload(payload)
+		payload = coagentpacket.Normalize(payload)
 	} else {
 		claim := strings.TrimSpace(in.Claim)
 		payload = types.CoagentSourcePacketPayload{
@@ -2038,7 +2039,7 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 			Claims:        []types.CoagentPacketClaim{{Text: claim}},
 		}
 	}
-	if err := validateCoagentSourcePacketPayload(payload); err != nil {
+	if err := coagentpacket.Validate(payload); err != nil {
 		return 0, fmt.Errorf("reduce: report packet invalid: %w", err)
 	}
 	trajectory, err := rt.store.GetLifecycleTrajectory(toolCallCtx, authority.callerRun.OwnerID, authority.callerRun.ComputerID, authority.trajectoryID)

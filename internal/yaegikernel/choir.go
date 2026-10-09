@@ -806,6 +806,9 @@ func (s *ChoirScope) ReportPacket(toDesk string, packet any, resolverID string) 
 	if err != nil {
 		return "", err
 	}
+	if packetJSON, err = checkReportPacket(packetJSON); err != nil {
+		return "", err
+	}
 	return t.ReportPacket(toDesk, packetJSON, resolverID)
 }
 

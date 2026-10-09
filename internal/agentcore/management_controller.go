@@ -15,6 +15,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -1644,10 +1645,10 @@ func persistentManagementAdmissibleReport(update types.CoagentSourcePacket) bool
 		update.Direction != types.LifecyclePacketDirectionProducerReport {
 		return false
 	}
-	packet := normalizeCoagentSourcePacketPayload(update.Packet)
+	packet := coagentpacket.Normalize(update.Packet)
 	switch packet.Kind {
 	case "evidence_update", "execution_result", "blocker", "question", "proposal", "decision_request":
-		return validateCoagentSourcePacketPayload(packet) == nil
+		return coagentpacket.Validate(packet) == nil
 	default:
 		return false
 	}
@@ -1662,19 +1663,19 @@ func persistentManagementAdmissibleDirective(update types.CoagentSourcePacket) b
 	if update.Direction != types.LifecyclePacketDirectionDirective || strings.TrimSpace(update.SourceRecordID) == "" {
 		return false
 	}
-	packet := normalizeCoagentSourcePacketPayload(update.Packet)
-	return packet.Kind == "directive" && validateCoagentSourcePacketPayload(packet) == nil
+	packet := coagentpacket.Normalize(update.Packet)
+	return packet.Kind == "directive" && coagentpacket.Validate(packet) == nil
 }
 
 func persistentManagementExecutablePacket(update types.CoagentSourcePacket) bool {
 	if !persistentManagementSenderAuthorized(update) {
 		return false
 	}
-	packet := normalizeCoagentSourcePacketPayload(update.Packet)
+	packet := coagentpacket.Normalize(update.Packet)
 	if packet.Kind != "execution_request" {
 		return false
 	}
-	return validateCoagentSourcePacketPayload(packet) == nil
+	return coagentpacket.Validate(packet) == nil
 }
 
 func persistentManagementExecutableUpdate(update types.CoagentSourcePacket) bool {

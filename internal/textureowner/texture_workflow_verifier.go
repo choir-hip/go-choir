@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -157,7 +158,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
 				return report, fmt.Errorf("research coagent update %s is not routed to Texture document %s", update.UpdateID, doc.DocID)
 			}
-			if coagentPacketPayloadEmpty(update.Packet) {
+			if coagentpacket.Empty(update.Packet) {
 				return report, fmt.Errorf("research coagent update %s has no source packet payload", update.UpdateID)
 			}
 		}
@@ -176,7 +177,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 				continue
 			}
 			workerUpdateCount++
-			if coagentPacketPayloadEmpty(update.Packet) {
+			if coagentpacket.Empty(update.Packet) {
 				return report, fmt.Errorf("worker update %s has no source packet payload", update.UpdateID)
 			}
 		}
@@ -232,7 +233,6 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 	}
 	return nil
 }
-
 
 func verifyPersistentManagementPath(ownerID string, runs []types.RunRecord) error {
 	wantAgentID := persistentManagementAgentID(ownerID)
@@ -363,12 +363,6 @@ func eventsContainSuccessfulBashVerification(events []types.EventRecord) bool {
 	return false
 }
 
-
-
-
-
-
-
 func successfulToolResultPayloads(events []types.EventRecord, tool string) []map[string]any {
 	var out []map[string]any
 	for _, ev := range events {
@@ -452,13 +446,4 @@ func verifyTextureRevisionCausality(revisions []types.Revision) error {
 		}
 	}
 	return nil
-}
-
-
-func coagentPacketPayloadEmpty(packet types.CoagentSourcePacketPayload) bool {
-	return len(packet.Claims) == 0 &&
-		len(packet.Sources) == 0 &&
-		len(packet.Actions) == 0 &&
-		len(packet.Questions) == 0 &&
-		len(packet.Notes) == 0
 }
