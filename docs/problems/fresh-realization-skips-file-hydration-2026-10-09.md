@@ -95,3 +95,41 @@ Read-only comparison: each image was mounted `ro,noload` from a loop device; onl
 Distinguish the two by checking the platform file-root chain for this computer: whether a recorded root still lists these paths, and when each was removed.
 
 Until then, both quarantine images are retained as recovery sources. The owner directed "delete images not required for recovery"; these are required.
+
+## Cause 1, version skew: owner decision and what it implies (2026-10-09 ~14:30Z)
+
+Cause 2 is fixed in 799097e3 (durable fresh-volume marker). For cause 1 the
+owner chose **"Layer + move base"** over "always reboot path" and "layer new
+realizations": keep pushing app layers to running computers, and also move
+the base image to the deploy's commit without rebooting them.
+
+What the deploy job does today, read from source:
+- The base image is a symlink, `/var/lib/go-choir/guest` → a store path.
+  Only the NixOS activation script `go-choir-guest-image`
+  (`nix/node-b.nix:920`) moves it, during a host switch.
+- With the shared Go build, any Go change alters every host service
+  package. A host switch made only to move the base would restart every
+  host service (proxy, vmctl, corpusd, auth and the rest).
+- The layer builder joins against the current pointer's manifest
+  (`ci.yml`, app-layer push). Apply refuses a layer whose base digest
+  differs from the computer's booted base (`internal/updater/updater.go:276`),
+  and boot skips one (`nix/autoputer-vm.nix:166`).
+
+So "move base" needs, in order:
+1. **A standalone cutover.** The activation logic moves into a script the
+   deploy job can run without a host switch. The new image is rooted
+   against garbage collection, because the running system closure no
+   longer references it.
+2. **Order inside an app-layer deploy:** build and push the layer against
+   the bases the targets actually booted, *then* move the pointer.
+3. **A base registry.** After a move, running computers stay on older
+   bases until they reboot. Every later layer must be built per distinct
+   booted base among its targets, so each such base stays registered and
+   rooted.
+4. **Retirement.** A base is unrooted once no ownership was booted from it.
+
+The other options, for comparison:
+- **Always reboot path.** Deletes the platform app-layer path from CI, and
+  each runtime deploy reboots active computers. No per-base builds.
+- **Layer new realizations.** vmctl installs the latest layer before a new
+  realization boots, so bases change only on reboot-path deploys.
