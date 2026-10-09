@@ -55,3 +55,28 @@ Search-plane health (`/var/lib/go-choir/gateway/search-health.db`,
 - Redact query strings (and any `api_key`/`key`/`token` parameter) from
   provider error summaries and logs.
 - Serper credits: owner decision.
+
+## Amendment (20:10Z): the key reaches user computers and model context
+
+Reading the response path: the gateway returns `provider_health` (with
+`last_error_summary`) and per-attempt `error` strings to the calling
+computer, in both the success and the `search_outage` responses
+(`internal/gateway/search_plane.go`). The guest search client keeps them
+(`internal/search/search.go`), and the research tool puts
+`provider_health` and attempt errors into the model-facing tool result on
+an outage (`internal/researchtools/researchtools.go`). So while SerpAPI's
+last failure summary held its request URL, every research search that hit
+an outage carried the SerpAPI key into the research desk's context, its
+tool results on the computer's tape, and the model provider's request.
+
+The tape is append-only and is not edited; redaction cannot reach what is
+already recorded. The remedy for past exposure is rotating the SerpAPI key
+(owner action: credential). The fix must also redact on read, because the
+stored summary in `search-health.db` keeps the key until that provider's
+next failure overwrites it.
+
+Further fix directions:
+
+- Redact URLs' query strings in every error summary the search plane
+  stores or returns, at write (summary truncation) and at read (gateway
+  response mapping), so stored legacy summaries are also clean.
