@@ -81,7 +81,7 @@ Further fix directions:
   stores or returns, at write (summary truncation) and at read (gateway
   response mapping), so stored legacy summaries are also clean.
 
-## Amendment (19:58Z): the ops routes have no caller check
+## Amendment (19:51Z): the ops routes have no caller check
 
 `/provider/v1/search/health`, `/provider/v1/search/health/reset`,
 `/provider/v1/breakers` and `/provider/v1/breakers/reset`
