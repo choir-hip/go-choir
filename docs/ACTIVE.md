@@ -77,6 +77,13 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   Bounded residual: a disk lost before the first projection checkpoint
   waits up to ~1 min for `checkpointd`. Remaining Gate 1 exit items: SL
   fault matrix, Texture acceptance suite.
+  Debugfs key copier deleted (a72e2d32, deployed); routed cold recovery
+  is proven at Gate 2 (it needs a route slot). SH remainder (slices 4-5)
+  moves to Gate 2.
+- **SL define slice (15:45Z):** [obligation inventory](evidence/sl-obligation-inventory-2026-10-09.md).
+  One periodic driver, ~30 boot/event reconcilers, budgets on four paths,
+  actor wakes retry uncounted. No fate surface exists, so measuring needs
+  it built. Next: panel review, then registry plus fate surface.
 - **CI item 2:** main runs stay serialized (parallel runs can invert deploy
   order; see the CI latency problem doc).
 
