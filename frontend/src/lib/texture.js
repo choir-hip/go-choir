@@ -432,13 +432,15 @@ export async function cancelAgentRevision(docId, options = {}) {
   if (!trajectoryId) {
     throw new Error('Document has no durable lifecycle');
   }
-  const snapshotResponse = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}`, { method: 'GET' });
-  if (!snapshotResponse.ok) {
-    await decodeError(snapshotResponse, `Lifecycle snapshot failed (${snapshotResponse.status})`);
+  // The summary view is a single-object read; the full lifecycle snapshot
+  // scans the whole computer and took 9-18 s on long-lived computers.
+  const summaryResponse = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}?view=summary`, { method: 'GET' });
+  if (!summaryResponse.ok) {
+    await decodeError(summaryResponse, `Lifecycle summary failed (${summaryResponse.status})`);
   }
-  const snapshot = await snapshotResponse.json();
-  const expectedVersion = snapshot?.trajectory?.lifecycle_version;
-  const expectedHead = snapshot?.head_revision?.revision_id;
+  const summary = await summaryResponse.json();
+  const expectedVersion = summary?.trajectory?.lifecycle_version;
+  const expectedHead = summary?.head_revision_id;
   if (!Number.isSafeInteger(expectedVersion) || expectedVersion <= 0 || !expectedHead) {
     throw new Error('Lifecycle snapshot lacks cancellation preconditions');
   }

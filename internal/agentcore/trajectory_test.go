@@ -847,3 +847,56 @@ func TestEngineeringCapsuleEvidenceHandlerAuthenticatesAndDispatchesBeforeCancel
 		t.Fatalf("bad=%d", bad.Code)
 	}
 }
+
+// Cancel's preconditions come from a summary read, not the full lifecycle
+// snapshot. Failure modes pinned (docs/problems/texture-zombie-activations-
+// revising-forever-2026-10-09.md): the snapshot scans every document,
+// revision and lifecycle object in the computer (9-18 s on the owner
+// computer), and Cancel paid it on every click; a summary that leaks across
+// owners; a summary whose version or head would not satisfy cancellation.
+func TestTrajectorySummaryViewSuppliesCancelPreconditions(t *testing.T) {
+	rt, s := testRuntime(t)
+	h := NewAPIHandler(rt)
+	const ownerID = "user-summary-cancel"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, "doc-summary-cancel")
+	get := func(requestOwner string) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "/api/trajectories/"+url.PathEscape(trajectoryID)+"?view=summary", nil)
+		request.Header.Set("X-Authenticated-User", requestOwner)
+		response := httptest.NewRecorder()
+		h.HandleTrajectoryDetail(response, request)
+		return response
+	}
+	if response := get("user-other"); response.Code != http.StatusNotFound {
+		t.Fatalf("cross-owner summary status=%d body=%s", response.Code, response.Body.String())
+	}
+	response := get(ownerID)
+	if response.Code != http.StatusOK {
+		t.Fatalf("summary status=%d body=%s", response.Code, response.Body.String())
+	}
+	var summary trajectorySummaryResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &summary); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureComputerID(), trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Schema != types.DurableWorkSchemaV1 || summary.Trajectory.TrajectoryID != trajectoryID ||
+		summary.Trajectory.LifecycleVersion != snapshot.Trajectory.LifecycleVersion ||
+		summary.HeadRevisionID != snapshot.HeadRevision.RevisionID {
+		t.Fatalf("summary = %+v, want version %d head %s", summary, snapshot.Trajectory.LifecycleVersion, snapshot.HeadRevision.RevisionID)
+	}
+
+	body, _ := json.Marshal(trajectoryCancelRequest{
+		IdempotencyKey: "summary-cancel-1", ExpectedLifecycleVersion: summary.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID: summary.HeadRevisionID, Reason: "owner cancellation",
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/trajectories/"+url.PathEscape(trajectoryID)+"/cancel", bytes.NewBuffer(body))
+	request.Header.Set("X-Authenticated-User", ownerID)
+	cancelResponse := httptest.NewRecorder()
+	h.HandleTrajectoryDetail(cancelResponse, request)
+	if cancelResponse.Code != http.StatusOK {
+		t.Fatalf("cancel from summary preconditions status=%d body=%s", cancelResponse.Code, cancelResponse.Body.String())
+	}
+}

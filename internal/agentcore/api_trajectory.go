@@ -27,6 +27,15 @@ type trajectoryCancelRequest struct {
 	Reason                   string `json:"reason,omitempty"`
 }
 
+// trajectorySummaryResponse carries exactly the cancellation preconditions:
+// the trajectory record (lifecycle version) and the head revision the cancel
+// command binds. It is a single-object read, unlike the full snapshot.
+type trajectorySummaryResponse struct {
+	Schema         string                 `json:"schema"`
+	Trajectory     types.TrajectoryRecord `json:"trajectory"`
+	HeadRevisionID string                 `json:"head_revision_id"`
+}
+
 type trajectoryCancelResponse struct {
 	types.LifecycleSnapshot
 	TrajectoryID    string                        `json:"trajectory_id"`
@@ -122,6 +131,10 @@ func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Reque
 	trajectoryID := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
 	if trajectoryID == "" {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
+		return
+	}
+	if r.URL.Query().Get("view") == "summary" {
+		h.writeTrajectorySummary(w, r, ownerID, trajectoryID)
 		return
 	}
 	if snapshot, snapshotErr := h.rt.Store().GetLifecycleSnapshot(r.Context(), ownerID, h.rt.TextureComputerID(), trajectoryID); snapshotErr == nil {
@@ -376,4 +389,31 @@ func (h *APIHandler) HandleEngineeringCapsuleEvidence(w http.ResponseWriter, r *
 	default:
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "capsule evidence unavailable"})
 	}
+}
+
+// writeTrajectorySummary answers GET /api/trajectories/{id}?view=summary. The
+// full snapshot scans every document, revision and lifecycle object in the
+// computer (9-18 s on a long-lived computer); Cancel needs only the version
+// and the head, so it reads the trajectory and its bound document directly
+// (docs/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
+// The head follows the snapshot's rule: the terminal artifact head for a
+// settled trajectory, otherwise the document's current revision.
+func (h *APIHandler) writeTrajectorySummary(w http.ResponseWriter, r *http.Request, ownerID, trajectoryID string) {
+	trajectory, err := h.rt.Store().GetLifecycleTrajectory(r.Context(), ownerID, h.rt.TextureComputerID(), trajectoryID)
+	if err != nil {
+		writeLifecycleAPIError(w, err)
+		return
+	}
+	headRevisionID := ""
+	if trajectory.Status != types.TrajectoryLive && strings.TrimSpace(trajectory.TerminalArtifactHeadRef) != "" {
+		headRevisionID = trajectory.TerminalArtifactHeadRef
+	} else if docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"]); docID != "" {
+		document, docErr := h.rt.Store().GetLifecycleDocument(r.Context(), ownerID, h.rt.TextureComputerID(), docID)
+		if docErr != nil {
+			writeLifecycleAPIError(w, docErr)
+			return
+		}
+		headRevisionID = document.CurrentRevisionID
+	}
+	writeAPIJSON(w, http.StatusOK, trajectorySummaryResponse{Schema: types.DurableWorkSchemaV1, Trajectory: trajectory, HeadRevisionID: headRevisionID})
 }
