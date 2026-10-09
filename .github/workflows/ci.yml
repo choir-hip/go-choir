@@ -8,6 +8,11 @@ on:
         type: boolean
         required: false
         default: true
+      refresh_active_computers:
+        description: Also restart running computers onto the new guest code (interrupts their work)
+        type: boolean
+        required: false
+        default: false
   push:
     branches: [main]
   pull_request:
@@ -869,6 +874,7 @@ jobs:
           DEPLOY_FRONTEND: ${{ needs.deploy-impact.outputs.deploy_frontend }}
           DEPLOY_VMCTL_RESTART: ${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}
           DEPLOY_ACTIVE_VM_REFRESH: ${{ needs.deploy-impact.outputs.deploy_active_vm_refresh }}
+          REFRESH_ACTIVE_COMPUTERS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_active_computers && 'true' || 'false' }}
           DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
           HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
         run: |
@@ -880,6 +886,7 @@ jobs:
             "DEPLOY_FRONTEND=$DEPLOY_FRONTEND"
             "DEPLOY_VMCTL_RESTART=$DEPLOY_VMCTL_RESTART"
             "DEPLOY_ACTIVE_VM_REFRESH=$DEPLOY_ACTIVE_VM_REFRESH"
+            "REFRESH_ACTIVE_COMPUTERS=$REFRESH_ACTIVE_COMPUTERS"
             "DEPLOY_HOST_OS=$DEPLOY_HOST_OS"
             "HOST_SERVICES=$HOST_SERVICES"
           )
@@ -1406,6 +1413,15 @@ jobs:
               ')
               if [ "${#active_interactive[@]}" -eq 0 ]; then
                 echo "    No mutable active interactive computers need refresh"
+              elif [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then
+                # Deploys never restart a running computer (owner 2026-10-09,
+                # docs/problems/deploy-restarts-busy-computers-2026-10-09.md).
+                # The base is rebuilt above, so a computer picks up this code
+                # at its next boot (idle stop, wake, or owner update).
+                for record in "${active_interactive[@]}"; do
+                  IFS=$'\t' read -r pending_user_id pending_desktop_id pending_vm_id pending_computer_url <<< "$record"
+                  echo "    Update pending, not restarted: ${pending_vm_id} (user ${pending_user_id} desktop ${pending_desktop_id})"
+                done
               else
                 refresh_pids=()
                 refresh_status=0
@@ -1463,7 +1479,9 @@ jobs:
                   exit "$refresh_status"
                 fi
               fi
-              if [ "${#active_interactive[@]}" -gt 0 ]; then
+              if [ "${#active_interactive[@]}" -gt 0 ] && [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then
+                record_receipt_artifact active_computers "$DEPLOY_COMMIT" pending
+              elif [ "${#active_interactive[@]}" -gt 0 ]; then
                 record_receipt_artifact autoputer "$DEPLOY_COMMIT" active
                 record_receipt_artifact active_computers "$DEPLOY_COMMIT" active
               else

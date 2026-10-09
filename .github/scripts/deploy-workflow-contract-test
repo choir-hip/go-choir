@@ -60,6 +60,12 @@ require 'select((.snapshot_kind // "") == "constructed-computer-version")'
 require 'select((.snapshot_kind // "") != "constructed-computer-version")'
 require 'Preserving immutable constructed computer ${immutable_vm_id}'
 require 'No mutable active interactive computers need refresh'
+# Deploys never restart a running computer unless explicitly opted in
+# (docs/problems/deploy-restarts-busy-computers-2026-10-09.md).
+require 'elif [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then'
+require 'Update pending, not restarted: ${pending_vm_id}'
+require 'record_receipt_artifact active_computers "$DEPLOY_COMMIT" pending'
+require "REFRESH_ACTIVE_COMPUTERS: \${{ github.event_name == 'workflow_dispatch' && inputs.refresh_active_computers && 'true' || 'false' }}"
 reject 'git reset --hard origin/main'
 reject 'fast_build_host_service'
 reject 'active computer refresh failed; continuing'
