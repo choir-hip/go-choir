@@ -256,3 +256,41 @@ sufficient against a guest replaying another realization's commitment
 (it would need that realization's capability for the same computer —
 same trust domain); whether delivery should also be recorded on the
 canonical tape; desktop (unattested local) realizations are excluded.
+
+### Slice 3 design — revision after panel (2026-10-09)
+
+Panel ([evidence](../evidence/sh-panel-review-2026-10-08.md)): approve with
+changes. Revised binding and recovery:
+
+- **Envelope-possession proof, not capability alone.** The delivery request
+  carries the envelope `nonce`. corpusd already derives it as
+  `credentialPRF(seed, "nonce", request_commitment)`, so only the holder of
+  that realization's envelope (and the issuer) knows it. The request is
+  valid only for the **current** issuance of the computer (no later
+  `credential_envelope_issued`) and with the guest capability for the same
+  computer. The nonce never enters a log; the transparency entry records
+  `request_commitment` and the recipient key digest.
+- **Crash-safe re-delivery.** Not hard consume-once: a request with a valid
+  nonce proof may be re-delivered to a new recipient key (a guest that
+  crashed after delivery), each delivery transparency-logged before
+  unwrap. Only the envelope holder can ask, so re-delivery widens nothing.
+  Delivery happens right after the credential exchange, before the
+  envelope is erased.
+- **Verify against the tape.** Before writing the key, the guest decrypts
+  one private artifact named by the tape (or the projection base) with the
+  delivered key; a mismatch is a typed `privacy_key_mismatch` refusal and
+  an alarm — escrow holds the wrong key. The file is written temp → fsync →
+  rename.
+- **Transparency in the same transaction** as the delivery record, before
+  unwrap.
+- **Tape.** Delivery is custody, not computer state: the transparency log
+  is the authority. After recovery the guest appends a non-secret
+  `privacy_key_delivered` lifecycle receipt citing the transparency entry,
+  so the owner sees it.
+- **Admission.** vmctl reopens a durable `privacy_key_unavailable`
+  condition (and admits a fresh realization) when the custodian escrow
+  exists; a delivery failure in the guest is reported with its reason.
+
+Alternative (a), delivery inside the exchange response, remains the
+stricter long-term binding; the nonce proof gives the same caller binding
+without changing the exchange protocol.
