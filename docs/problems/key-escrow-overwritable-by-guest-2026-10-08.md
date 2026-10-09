@@ -36,3 +36,15 @@ Escrow is write-once per (computer, protector, key digest): re-uploading
 the same digest is idempotent; a different digest is refused (409) and
 never replaces the record. Key rotation, when it exists, is a separate
 audited operation that keeps the old wrap.
+
+## Status (2026-10-09)
+
+Fixed in `c990bf50` + `001e73cb` (write-once escrow once a chain exists;
+transactional pre-genesis replacement with a transparency entry; guest
+compares the escrowed digest; escrow required before genesis). Deployed
+`001e73cb`. Staging: fresh signup `computer-26e96cd2…` escrowed at
+00:40:36 with genesis at 00:40:36.26; chained computers without escrow: 0.
+Evidence: [`evidence/sh-slice2-panel-fixes-staging-2026-10-09.log`](../evidence/sh-slice2-panel-fixes-staging-2026-10-09.log)
+(same run re-verifies the slice-1 refusal with Retry-After 300). Status:
+**fixed-verified** for escrow-before-genesis; write-once 409 path is
+unit-verified only.
