@@ -120,15 +120,15 @@ From the 41 `liveness` docs in
   obligation is written, keeps one timer for the earliest due retry, and
   does no fixed-interval scan. Today it queries the store every 500 ms
   even when idle, on a guest store with one connection.
-- **A restart never resumes work** (AGENTS.md "Restarts End Work"). Boot
-  does one pass that closes every open obligation with the visible fate
-  "interrupted by a restart". It re-dispatches nothing. The boot-time
-  resumers in Finding 1 are deletion candidates, not wake sources. The
-  "Restart" column above is therefore the list of behavior to remove.
-- Open, for the owner: a transition whose completion *is* a restart
-  (a self-development release apply, a platform update reboot) must still
-  record its own outcome after the boot. That is confirming a finished
-  step, not resuming work, but it needs a precise boundary.
+- **Crash restarts end work; planned update restarts resume it**
+  (AGENTS.md "Restarts End Work (Crash) Or Resume It"). The host writes a
+  durable planned-restart marker before an update restart; boot consumes
+  it once. With a marker, the boot-time resumers in Finding 1 run;
+  without one, boot closes every open obligation as "interrupted by a
+  restart". The resumers are therefore gated on the marker, not deleted.
+- A transition whose completion is a restart (a self-development release
+  apply, a platform update) is a planned restart: it writes the marker and
+  records its own outcome after the boot.
 
 ## Next
 

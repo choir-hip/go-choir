@@ -66,9 +66,10 @@ target ("one exact authority per item"). Alarm: none. Goal: 1.
 **O2 Tape-derived continuation.** Every continuation is derivable from the
 canonical tape, never from process-local timers, in-memory wakes or
 out-of-band channels; boot restores state and re-derives obligations without
-starting in-flight work. Owner rule 2026-10-09: a restart never resumes work;
-boot closes every open obligation with the visible fate "interrupted by a
-restart" (AGENTS.md "Restarts End Work").
+starting in-flight work. Owner rule 2026-10-09: a crash restart never resumes
+work (boot closes every open obligation as "interrupted by a restart"); a
+planned update restart, marked durably by the host and consumed once at
+boot, may resume it (AGENTS.md "Restarts End Work (Crash) Or Resume It").
 Evidence: `root-cause-wrong-path-cluster`, `kernel-cutover-wake-gap-analysis`,
 `s0m-desk-run-dispatch-stall`. Enforcer: unowned. Alarm: none. Goal: 1.
 

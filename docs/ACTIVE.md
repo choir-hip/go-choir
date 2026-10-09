@@ -39,11 +39,11 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   - The "Revising…" zombie cycle is fixed. 28 never-executed trajectories
     were disposed (owner-approved).
   - Cancel now reads a summary view and resumes a stuck intent.
-- **Owner rule:** a restart never resumes work, for any desk (generalized
-  2026-10-09 from the Texture-only rule of 4b9bf31d; AGENTS.md "Restarts
-  End Work"). Boot closes open work as "interrupted by a restart". Later:
-  hibernate/wake, then a deliberate resume subsystem (residual
-  `management-owns-stalled-work`).
+- **Owner rule (2026-10-09):** a crash restart never resumes work, for any
+  desk; a planned update restart (durable marker, consumed once at boot)
+  may. Deploys restart only idle computers. AGENTS.md "Restarts End Work
+  (Crash) Or Resume It"; later hibernate/wake and a management-owned
+  resume subsystem (residual `management-owns-stalled-work`).
 - **Host:**
   - memory budget with no swap;
   - shared Go build, so deploy jobs take ~3 min (was ~13);

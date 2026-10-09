@@ -62,9 +62,10 @@ finish:
   deliver: >-
     No durable obligation on a Choir computer can loop, strand or vanish.
     Every obligation kind has exactly one driver, an attempt budget, and a
-    terminal fate that is recorded and visible; a restart never resumes
-    work: boot closes every open obligation with the visible fate
-    "interrupted by a restart" (owner rule 2026-10-09). An owner or
+    terminal fate that is recorded and visible; a crash restart never
+    resumes work (boot closes every open obligation as "interrupted by a
+    restart"); a planned update restart, marked durably and consumed once
+    at boot, resumes it (owner rule 2026-10-09). An owner or
     agent can ask the product API "what is owed and why is it not moving"
     and get an exact answer without SSH.
   artifact: >-
@@ -211,12 +212,14 @@ now:
     Red surface; regressions here strand real work. Mitigated by
     disposable-first fault matrix and additive registry.
   next_action: >-
-    Owner decisions 2026-10-09: no panel; build the outbox as the single
-    driver, event-driven (signal on write, timer only for the earliest due
-    retry, no fixed poll); a restart never resumes work, so boot closes
-    open obligations as "interrupted by a restart" and the boot-time
-    resumers are deletion candidates. Next: problem doc, then the boot
-    close-out plus retry counts plus the "what is owed" surface.
+    Owner decisions 2026-10-09: no panel; the outbox is the single driver,
+    event-driven (signal on write, timer only for the earliest due retry,
+    no fixed poll); crash restart closes open work, planned update restart
+    (durable marker consumed once at boot) resumes it, so the boot-time
+    resumers are gated on the marker rather than deleted. Deploys restart
+    only idle computers (separate CI change, problem doc
+    deploy-restarts-busy-computers-2026-10-09). Next: SL problem doc, then
+    marker, boot close-out, retry counts and the "what is owed" surface.
 receipts: []
 ---
 

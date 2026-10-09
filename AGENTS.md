@@ -69,18 +69,29 @@ ask for a genuinely irreversible or destructive step with no safe default —
 a deploy-shape tradeoff or a credential/authority question, not a design
 branch. This rule is standing: it survives session compaction.
 
-## Restarts End Work
+## Restarts End Work (Crash) Or Resume It (Planned Update)
 
-Owner rule (2026-10-09, repeated several times; generalizes the earlier
-Texture-only rule): **a restart never resumes work.** A computer stays on
-while it is working; if it goes off, the work it was doing is done. At
-boot, every open obligation (run, wake, control, directive, assignment,
-work item) is closed with the visible fate "interrupted by a restart",
-never re-dispatched. Auto-resume after restart is how crash-restart loops
-happen. The persistent computer tier exists so computers stay on. Later:
-hibernate and wake instead of boot; later still, a deliberate resume
-subsystem (management-owned), not automatic restart. Do not add boot-time
-reconcilers, re-drives or resumers.
+Owner rule (2026-10-09; generalizes the earlier Texture-only rule): a
+computer stays on while it is working. **A crash restart never resumes
+work**: at boot, every open obligation (run, wake, control, directive,
+assignment, work item) is closed with the visible fate "interrupted by a
+restart", never re-dispatched. Auto-resume after a crash is how
+crash-restart loops happen.
+
+**A planned restart for an update may resume work.** The distinction is a
+durable planned-restart marker (reason, target version) written by the
+host before the restart and consumed once at the next boot. Marker
+present: resume. Marker absent: it was a crash; close the work. Because the
+marker is consumed before resuming, a resume that crashes the computer
+leads to a markerless boot that closes the work: one resume per planned
+restart, so no loop.
+
+Deploys never restart a busy computer: they update idle computers and
+leave busy ones to their next idle moment. The persistent computer tier
+exists so computers stay on. Later: real hibernate and wake (a computer
+with a pending update boots fresh instead of resuming memory), then a
+deliberate management-owned resume subsystem. Do not add boot-time
+resumers that run without a planned-restart marker.
 
 ## Default Environment
 
