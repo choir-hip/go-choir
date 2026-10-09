@@ -61,3 +61,26 @@ surface and the new consumption log lines (8a3d31c8) will show it.
 Direction 1 is the conservative product choice: it changes nothing for
 documents with open work and repairs every already-settled document on
 its next revise.
+
+## Decision (2026-10-09 19:20Z, autonomous run; stated, not asked)
+
+Direction 1, narrowed. Decision provenance: the "an owner revise must not
+invent live work" rule (`TestTextureOwnerRevisionRejectsMissingOpenWorkWithoutDispatch`,
+7ba05599, 2026-08-09) came from the boot-repair work and assumed a live
+document always has open Texture work. The desk's own settle at the end
+of a turn (`CallerWorkDisposition == completed`, `store/texture_turn.go`)
+breaks that assumption; nothing in the August record makes "the owner
+cannot revise after the desk is done" a product rule.
+
+The reopen applies only when the trajectory is live, the document is not
+engineering-bound, the Texture agent is live, and the latest Texture work
+item is **completed**. A refused or cancelled item still refuses the
+revise (the August test keeps passing). The new work item has a constant
+objective, so only one concurrent reopen can win the open-work
+fingerprint; the loser re-reads and joins it.
+
+Residual, not fixed here: a document whose last open work settles can
+settle the whole trajectory (`ReconcileLifecycleSettlementForTerminalRun`);
+its revise then fails earlier ("durable lifecycle state is unavailable or
+terminal"). Whether a document trajectory should ever settle while its
+owner keeps it is a Texture contract question (living documents, Gate 3).
