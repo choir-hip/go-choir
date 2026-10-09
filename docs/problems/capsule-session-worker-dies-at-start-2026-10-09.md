@@ -65,3 +65,21 @@ record that it cannot: a deadlock, held open by the guard.
 Fix direction 3, sharpened: give engineering a tool-loop budget, and let
 a run whose capsule worker is unavailable end with a runtime-recorded
 blocker fate instead of a model-committed one.
+
+## Cause confirmed (21:34Z, M11 rerun on 7922bd56 with the stderr diagnostic)
+
+Every `capsule_go_eval` on the fresh disposable `computer-c1f4b153…`
+returned:
+
+    session worker landlock: failed to apply Landlock restrictions:
+    missing kernel Landlock support. Got Landlock ABI v0, wanted
+    {Landlock V5; FS: all; Net: ∅; Scoped: ∅}
+
+H1 holds, in its first layer: the guest kernel has no Landlock, and the
+S1 floor (a578bbc8, 2026-10-04) fails closed by design, so the session
+worker can never start. Self-development on staging has been unable to
+run a capsule cell since that floor landed.
+
+Fix direction: enable Landlock (ABI v5 needs kernel 6.10 or later) in the
+guest kernel and its LSM list. Not chosen: best-effort Landlock, which
+would silently drop the floor this design makes mandatory.
