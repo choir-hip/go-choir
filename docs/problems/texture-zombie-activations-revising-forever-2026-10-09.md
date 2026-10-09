@@ -152,3 +152,50 @@ the 39c0d991 layer. See
 - **Zombie cycle:** the original 68-run re-passivation cycle has not
   recurred since the 05:38 boot (0 candidates). Its trigger is still
   untraced; next steps 1, 2 and 5 above remain open.
+
+## Correction: the zombie cycle never stopped; boot replay is the trigger (2026-10-09 09:45Z)
+
+The residual above ("has not recurred since the 05:38 boot") was wrong.
+The owner console shows the cycle on every boot that starts after the
+previous boot's replay finished:
+
+| Boot (server start) | Passivation candidates | Previous replay complete |
+|---|---|---|
+| 05:37:52 | 0 | 05:33:54, but that boot was the compaction window's `maintenance-serve` under hold, where Texture reconcile is deferred (likely; not traced) |
+| 06:06:49 | 68 | 05:48:18 |
+| 06:44:04 | 67 | 06:16:19 |
+| 07:15:02 | 67 | 07:09:17 |
+| 07:42:27 | 67 | 07:24:03 |
+| 08:10:07 | 67 | 07:51:23 |
+| 08:49:28 | 67 | 08:20:55 |
+| 08:56:25 | **0** | 08:49 boot's replay had not finished |
+| 09:33:33 | 67 | 09:05:19 |
+
+**Mechanism (trace, owner computer on c01bc2f9; states and metadata
+flags only):**
+1. Boot passivates the 67 Texture runs (`passivated_reason =
+   runtime_restarted`), 11.3 s.
+2. The replay phase (`runReplayPhase` → `actorruntime.Adapter.Start` →
+   `textureowner.Handler.Start`) reactivates them. Three sampled runs went
+   back to `pending` at 09:36:50, 09:37:05 and 09:38:16; "replay complete"
+   was logged at 09:38:16. Their metadata reads `request_source =
+   update_coagent`, `request_intent = integrate_execution_findings`,
+   `actor_reactivated_from_passivated = true`, and `passivated_reason`
+   still `runtime_restarted`.
+3. The reactivated runs never execute: the dispatcher logs
+   `pending Texture occurrence produced no exact run` and defers.
+4. The next boot passivates them again.
+
+A boot that starts before the previous replay finished finds the runs
+still `passivated` and reports 0, which is why 05:38 and 08:56 looked
+clean.
+
+The reactivation writes are silent: no log line or lifecycle event
+records them, so the cycle was visible only by comparing boots.
+
+**Replay duration with the snapshot fixes:** 9.0–10.8 min per boot before;
+**4.7 min** on c01bc2f9 (09:33:33 → 09:38:16).
+
+Next: find why a run reactivated by boot replay never produces the
+"exact run" the deferred occurrence waits for, and give each of these
+runs a terminal fate (O1) instead of re-arming it every boot.

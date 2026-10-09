@@ -86,7 +86,7 @@ first.
   extraction over update bodies per document);
   `sweepActorWakeOutbox` → `LatestActorRunMemoryEntries` (5%).
 
-## Fixes (pushed in c01bc2f9; not yet measured on staging)
+## Fixes (c01bc2f9, deployed to staging 09:32Z; owner computer refreshed 09:33Z)
 
 | Commit | Change |
 |---|---|
@@ -97,3 +97,16 @@ first.
 Still open: the phase-1 metadata scan is still computer-wide per snapshot
 (the wake path and the API still use it), the list's own ~100 reads
 (Next item 2), and `ListActionablePendingLifecycleUpdates` per document.
+
+**Measured on the owner computer (c01bc2f9, 8 GiB, from Node B direct to
+the guest):**
+
+| Request | Before | After |
+|---|---|---|
+| `GET /api/texture/documents`, first call after boot (boot replay still running) | 2.67 s | **0.19 s** |
+| same, repeated | 0.15–0.17 s | 0.15–0.18 s |
+| same, after 90 s idle | 0.95 s | **0.17 s** |
+| boot replay (`starting server` → `replay complete`) | 9.0–10.8 min | **4.7 min** |
+
+Status: the owner-visible list latency is resolved. Boot replay is still
+4.7 min, and the open items above remain.
