@@ -1799,12 +1799,27 @@ func (s *Store) ListLifecycleRunsByChannel(ctx context.Context, ownerID, compute
 	if channelID == "" {
 		return nil, ErrLifecycleInvalidTransition
 	}
-	return s.listLifecycleRunsByScope(ctx, ownerID, computerID, limit, func(run types.RunRecord) bool {
+	// Metadata prefilter: skip rows whose metadata names another channel.
+	// Lifecycle run writers omit channel_id, so a row without it is kept and
+	// decided on its body.
+	return s.listLifecycleRunsByScopeFiltered(ctx, ownerID, computerID, limit, func(metadata json.RawMessage) bool {
+		var meta struct {
+			ChannelID string `json:"channel_id"`
+		}
+		if json.Unmarshal(metadata, &meta) != nil {
+			return true
+		}
+		return meta.ChannelID == "" || strings.TrimSpace(meta.ChannelID) == channelID
+	}, func(run types.RunRecord) bool {
 		return strings.TrimSpace(run.ChannelID) == channelID
 	})
 }
 
 func (s *Store) listLifecycleRunsByScope(ctx context.Context, ownerID, computerID string, limit int, match func(types.RunRecord) bool) ([]types.RunRecord, error) {
+	return s.listLifecycleRunsByScopeFiltered(ctx, ownerID, computerID, limit, nil, match)
+}
+
+func (s *Store) listLifecycleRunsByScopeFiltered(ctx context.Context, ownerID, computerID string, limit int, keepMetadata func(json.RawMessage) bool, match func(types.RunRecord) bool) ([]types.RunRecord, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {
 		return nil, err
@@ -1816,30 +1831,18 @@ func (s *Store) listLifecycleRunsByScope(ctx context.Context, ownerID, computerI
 	if graph == nil {
 		return nil, fmt.Errorf("lifecycle runs: object graph not initialized")
 	}
-	// Kind-filtered headers first (idx_og_objects_kind_owner, no bodies),
-	// then point-fetch only run-kind rows. A full ReadObjectSnapshot here
-	// materialized every body in the graph (2026-09-03: 94k objects / 220 MB
-	// for a runs list); run-kind rows are a small fraction of that.
-	refs, err := graph.ListAllObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID)
+	// Run-kind rows only, scoped to the owner/computer columns, with bodies
+	// fetched in batches inside one read transaction. Point-fetching each run
+	// body under the engine mutex was the largest boot cost once per Texture
+	// document (docs/problems/texture-list-cold-latency-2026-10-09.md).
+	objects, err := graph.ReadObjectSnapshotFiltered(ctx, ownerID, computerID, []objectgraph.ObjectKind{ogKindRun}, func(_ objectgraph.ObjectKind, metadata json.RawMessage) bool {
+		return keepMetadata == nil || keepMetadata(metadata)
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list lifecycle runs by scope: %w", err)
 	}
 	runs := make([]types.RunRecord, 0)
-	for _, ref := range refs {
-		// Mirror ReadObjectSnapshot's SQL-level computer predicate: the row's
-		// computer_id column must equal the scope before the body is even
-		// fetched. Body ComputerID can differ from the column on legacy rows;
-		// the old path excluded those at SQL level.
-		if strings.TrimSpace(ref.ComputerID) != computerID {
-			continue
-		}
-		obj, err := graph.GetObject(ctx, ref.CanonicalID)
-		if err != nil {
-			if errors.Is(err, objectgraph.ErrNotFound) {
-				continue
-			}
-			return nil, fmt.Errorf("list lifecycle runs by scope: get %s: %w", ref.CanonicalID, err)
-		}
+	for _, obj := range objects {
 		run, decodeErr := decodeLifecycleObject[types.RunRecord](obj)
 		if decodeErr != nil {
 			return nil, decodeErr
@@ -2182,6 +2185,26 @@ func (s *Store) ListAllPendingLifecycleUpdates(ctx context.Context, ownerID, com
 // a bound-but-pending packet is still an exact pending trigger whose claim run
 // may have died without consuming it.
 func (s *Store) ListActionablePendingLifecycleUpdates(ctx context.Context, ownerID, computerID, targetAgentID string) ([]types.CoagentSourcePacket, error) {
+	targetAgentID = strings.TrimSpace(targetAgentID)
+	byTarget, err := s.listActionablePendingLifecycleUpdates(ctx, ownerID, func(target string) bool { return target == targetAgentID })
+	if err != nil {
+		return nil, err
+	}
+	updates := byTarget[targetAgentID]
+	if updates == nil {
+		updates = make([]types.CoagentSourcePacket, 0)
+	}
+	return updates, nil
+}
+
+// ListActionablePendingLifecycleUpdatesByTarget is ListActionablePendingLifecycleUpdates
+// for every target in one owner-wide scan, grouped by target agent id. Boot
+// uses it instead of one scan per Texture document.
+func (s *Store) ListActionablePendingLifecycleUpdatesByTarget(ctx context.Context, ownerID string) (map[string][]types.CoagentSourcePacket, error) {
+	return s.listActionablePendingLifecycleUpdates(ctx, ownerID, nil)
+}
+
+func (s *Store) listActionablePendingLifecycleUpdates(ctx context.Context, ownerID string, wantTarget func(string) bool) (map[string][]types.CoagentSourcePacket, error) {
 	graph := s.ogReadStore
 	if graph == nil {
 		graph = s.ogStore
@@ -2189,7 +2212,6 @@ func (s *Store) ListActionablePendingLifecycleUpdates(ctx context.Context, owner
 	if graph == nil {
 		return nil, fmt.Errorf("lifecycle updates: object graph not initialized")
 	}
-	targetAgentID = strings.TrimSpace(targetAgentID)
 	rows, err := graph.ListJSONBodyFieldsByKindOwner(ctx, string(ogKindWorkerUpdate), ownerID, []string{
 		"$.target_agent_id",
 		"$.disposition",
@@ -2200,11 +2222,13 @@ func (s *Store) ListActionablePendingLifecycleUpdates(ctx context.Context, owner
 	if len(rows) > lifecycleWorkerUpdateScanCap {
 		return nil, fmt.Errorf("lifecycle updates: scan cap %d exceeded for owner %s", lifecycleWorkerUpdateScanCap, ownerID)
 	}
-	updates := make([]types.CoagentSourcePacket, 0)
+	byTarget := make(map[string][]types.CoagentSourcePacket)
 	for _, row := range rows {
-		if len(row.Fields) < 2 ||
-			strings.TrimSpace(row.Fields[0]) != targetAgentID ||
-			strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) {
+		if len(row.Fields) < 2 || strings.TrimSpace(row.Fields[1]) != string(types.UpdatePending) {
+			continue
+		}
+		rowTarget := strings.TrimSpace(row.Fields[0])
+		if wantTarget != nil && !wantTarget(rowTarget) {
 			continue
 		}
 		update, getErr := s.GetCoagentSourcePacket(ctx, strings.TrimSpace(row.CanonicalID))
@@ -2214,10 +2238,18 @@ func (s *Store) ListActionablePendingLifecycleUpdates(ctx context.Context, owner
 			}
 			return nil, getErr
 		}
-		if update.Disposition == types.UpdatePending && update.TargetAgentID == targetAgentID {
-			updates = append(updates, update)
+		if update.Disposition == types.UpdatePending && update.TargetAgentID == rowTarget {
+			byTarget[rowTarget] = append(byTarget[rowTarget], update)
 		}
 	}
+	for target, updates := range byTarget {
+		sortActionablePendingLifecycleUpdates(updates)
+		byTarget[target] = updates
+	}
+	return byTarget, nil
+}
+
+func sortActionablePendingLifecycleUpdates(updates []types.CoagentSourcePacket) {
 	sort.Slice(updates, func(i, j int) bool {
 		// Scheduling contract (I26): same as ListPendingLifecycleUpdates —
 		// ArrivalOrdinal takes precedence over trajectory-local ReducerSeq.
@@ -2237,7 +2269,6 @@ func (s *Store) ListActionablePendingLifecycleUpdates(ctx context.Context, owner
 		}
 		return updates[i].UpdateID < updates[j].UpdateID
 	})
-	return updates, nil
 }
 
 func (s *Store) GetLifecycleUpdate(ctx context.Context, ownerID, computerID, trajectoryID, targetAgentID, producerAgentID, producerUpdateID string) (types.CoagentSourcePacket, error) {

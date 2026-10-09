@@ -110,6 +110,9 @@ func (rt *Handler) Start(ctx context.Context) error {
 		return fmt.Errorf("reconcile lifecycle Texture subjects: %w", err)
 	}
 	textureSubjects := make([]types.AgentRecord, 0)
+	// One owner-wide report scan per owner, not one per document. A report
+	// written after the scan is driven by its own producer wake.
+	bootReportsByOwner := make(map[string]map[string][]types.CoagentSourcePacket)
 	for _, subject := range subjects {
 		subjectProfile, _ := agentprofile.Canonical(subject.Profile)
 		if subjectProfile == agentprofile.Engineering && subject.LifecycleVersion > 0 && subject.ChannelID != subject.AgentID {
@@ -138,10 +141,15 @@ func (rt *Handler) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("classify boot Texture lifecycle %s: %w", subject.AgentID, err)
 		}
-		updates, err := rt.Store.ListActionablePendingLifecycleUpdates(ctx, subject.OwnerID, subject.ComputerID, subject.AgentID)
-		if err != nil {
-			return fmt.Errorf("list boot Texture reports %s: %w", subject.AgentID, err)
+		ownerReports, cached := bootReportsByOwner[subject.OwnerID]
+		if !cached {
+			ownerReports, err = rt.Store.ListActionablePendingLifecycleUpdatesByTarget(ctx, subject.OwnerID)
+			if err != nil {
+				return fmt.Errorf("list boot Texture reports %s: %w", subject.AgentID, err)
+			}
+			bootReportsByOwner[subject.OwnerID] = ownerReports
 		}
+		updates := ownerReports[subject.AgentID]
 		ownerHead, ownerHeadSeq, ownerHeadPending, snapshotErr := rt.Store.ReadPendingTextureOwnerRevision(ctx, subject.OwnerID, subject.ComputerID, doc.TrajectoryID)
 		if snapshotErr != nil {
 			return fmt.Errorf("load boot Texture snapshot %s: %w", subject.AgentID, snapshotErr)

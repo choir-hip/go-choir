@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -4065,5 +4066,73 @@ func TestLifecycleHeadViewMatchesSnapshotBinding(t *testing.T) {
 	}
 	if _, err := s.GetLifecycleHeadView(ctx, req.OwnerID, req.ComputerID, "trajectory-missing"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing trajectory head view err = %v, want ErrNotFound", err)
+	}
+}
+
+// Runs by channel are read in one batched pass, prefiltered on metadata.
+// Boot asked this once per Texture document, point-fetching every run body
+// in the computer each time (docs/problems/texture-list-cold-latency-
+// 2026-10-09.md). Failure modes pinned: a run whose metadata lacks
+// channel_id (lifecycle writers) is dropped; a run whose metadata names
+// another channel is returned; another computer's run leaks in; the limit
+// and created_at order change.
+func TestListLifecycleRunsByChannelPrefiltersWithoutLosingRuns(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	const ownerID, computerID, channel = "owner-runs-channel", "computer-runs-channel", "document-runs-channel"
+	base := time.Unix(1_800_000_000, 0).UTC()
+	batch := objectgraph.Batch{}
+	put := func(runID, runComputer, runChannel string, meta map[string]any, at time.Time) {
+		run := types.RunRecord{RunID: runID, OwnerID: ownerID, ComputerID: runComputer, AgentID: "texture:" + runChannel,
+			ChannelID: runChannel, State: types.RunPassivated, CreatedAt: at, UpdatedAt: at}
+		obj, err := lifecycleObject(ogKindRun, ownerID, runComputer, runID, run, meta, at, at)
+		if err != nil {
+			t.Fatalf("build run %s: %v", runID, err)
+		}
+		batch.Objects = append(batch.Objects, obj)
+	}
+	put("run-no-channel-meta", computerID, channel, lifecycleMetadata("run_id", "run-no-channel-meta", computerID, "trajectory-runs", 1), base.Add(1*time.Second))
+	withChannel := lifecycleMetadata("run_id", "run-channel-meta", computerID, "trajectory-runs", 1)
+	withChannel["channel_id"] = channel
+	put("run-channel-meta", computerID, channel, withChannel, base.Add(2*time.Second))
+	for i := 0; i < 40; i++ {
+		id := fmt.Sprintf("run-other-%02d", i)
+		meta := lifecycleMetadata("run_id", id, computerID, "trajectory-other", 1)
+		meta["channel_id"] = "document-other"
+		put(id, computerID, "document-other", meta, base.Add(time.Duration(10+i)*time.Second))
+	}
+	put("run-other-computer", "computer-elsewhere", channel, lifecycleMetadata("run_id", "run-other-computer", "computer-elsewhere", "trajectory-runs", 1), base.Add(3*time.Second))
+	if err := s.ogStore.PutBatch(ctx, batch); err != nil {
+		t.Fatalf("put runs: %v", err)
+	}
+	runs, err := s.ListLifecycleRunsByChannel(ctx, ownerID, computerID, channel, 0)
+	if err != nil {
+		t.Fatalf("list runs by channel: %v", err)
+	}
+	var got []string
+	for _, run := range runs {
+		got = append(got, run.RunID)
+	}
+	want := []string{"run-no-channel-meta", "run-channel-meta"}
+	unlimited := append([]string(nil), got...)
+	limited, err := s.ListLifecycleRunsByChannel(ctx, ownerID, computerID, channel, 1)
+	if err != nil {
+		t.Fatalf("list runs by channel limit 1: %v", err)
+	}
+	all, err := s.listLifecycleRunsByScope(ctx, ownerID, computerID, 0, nil)
+	if err != nil {
+		t.Fatalf("list runs by scope: %v", err)
+	}
+	if len(all) != 42 {
+		t.Fatalf("scope runs = %d, want 42", len(all))
+	}
+	sort.Strings(unlimited)
+	sortedWant := append([]string(nil), want...)
+	sort.Strings(sortedWant)
+	if !reflect.DeepEqual(unlimited, sortedWant) {
+		t.Fatalf("runs by channel = %v, want %v", got, want)
+	}
+	if len(limited) != 1 {
+		t.Fatalf("limit 1 returned %d runs", len(limited))
 	}
 }

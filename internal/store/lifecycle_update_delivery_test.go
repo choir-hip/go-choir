@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"reflect"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -330,5 +331,54 @@ func TestReconcileUpdateDeliveryUnbindClearsDeliveredAtForPendingRescan(t *testi
 	}
 	if !found {
 		t.Fatalf("freed control packet still invisible to pending scan: %+v", pending)
+	}
+}
+
+// Boot reads every Texture document's actionable reports from one scan
+// grouped by target instead of one owner-wide scan per document. Failure
+// modes pinned: a target's list differing from the per-target read (missing,
+// extra, or reordered packets); a non-pending packet listed.
+func TestListActionablePendingLifecycleUpdatesByTargetMatchesPerTarget(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	other := start
+	other.Agent.AgentID = "texture:document-other"
+	seedBoundProducerReport(t, s, start, "update-a-1", "producer-a-1", "", 0)
+	seedBoundProducerReport(t, s, start, "update-a-2", "producer-a-2", "run-bound", 1)
+	seedBoundProducerReport(t, s, other, "update-b-1", "producer-b-1", "", 0)
+	delivered := seedBoundProducerReport(t, s, other, "update-b-2", "producer-b-2", "", 0)
+	delivered.Disposition = types.UpdateDelivered
+	key := other.TrajectoryID + "\x00" + other.Agent.AgentID + "\x00" + delivered.AgentID + "\x00" + delivered.ProducerUpdateID
+	obj, err := lifecycleObject(ogKindWorkerUpdate, other.OwnerID, other.ComputerID, key, delivered,
+		lifecycleMetadata("update_id", delivered.UpdateID, other.ComputerID, other.TrajectoryID, 2), delivered.CreatedAt, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("build delivered update: %v", err)
+	}
+	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{obj}}); err != nil {
+		t.Fatalf("deliver update: %v", err)
+	}
+	byTarget, err := s.ListActionablePendingLifecycleUpdatesByTarget(ctx, start.OwnerID)
+	if err != nil {
+		t.Fatalf("by target: %v", err)
+	}
+	for _, target := range []string{start.Agent.AgentID, other.Agent.AgentID, "texture:absent"} {
+		want, err := s.ListActionablePendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, target)
+		if err != nil {
+			t.Fatalf("per target %s: %v", target, err)
+		}
+		var wantIDs, gotIDs []string
+		for _, u := range want {
+			wantIDs = append(wantIDs, u.UpdateID)
+		}
+		for _, u := range byTarget[target] {
+			gotIDs = append(gotIDs, u.UpdateID)
+		}
+		if !reflect.DeepEqual(gotIDs, wantIDs) {
+			t.Fatalf("target %s: grouped %v, per-target %v", target, gotIDs, wantIDs)
+		}
+	}
+	if got := len(byTarget[other.Agent.AgentID]); got != 1 {
+		t.Fatalf("delivered packet listed as actionable: %d packets for %s", got, other.Agent.AgentID)
 	}
 }
