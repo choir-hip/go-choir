@@ -1338,6 +1338,22 @@ nodes:
     note: >-
       DEFERRED. 2026-10-09 owner: deferred until Gates 1-2 pass human QA; design
       documented on request ("But do document sp"). Not executable.
+  - id: choir-appdev-gate2-supervised-self-development-2026-10-09
+    title: Gate 2 — self-development with live Texture supervision (owner asks, capsule builds, preview, approve, release, rollback)
+    path: docs/definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md
+    ledger: ''
+    status: working
+    kind: station
+    entrypoint: false
+    execution_mode: draft_non_executable
+    depends_on:
+      - choir-appdev-sl-obligation-terminality-2026-10-08
+      - choir-appdev-sh-state-homes-2026-10-08
+    enables: []
+    note: >-
+      2026-10-09 v6 roadmap Gate 2, opened in the autonomous run ("continue
+      with gate 1 and into gate 2"). Composes S1 remainder, S4, S5, S6 around
+      the exit test. First slice: re-run the M11 episode on the current build.
   - id: choir-appdev-sl-obligation-terminality-2026-10-08
     title: SL Obligation Terminality — every durable obligation has one driver and a recorded terminal fate (O1)
     path: docs/definitions/choir-appdev-sl-obligation-terminality-2026-10-08.md
