@@ -69,3 +69,40 @@ The suite's T2 failed on this run for a harness reason too: it waited for
 field and the check never passes. The first run failed on 5-minute access
 tokens with no renewal. Both are fixed in the spec; neither changes the
 product finding above.
+
+## Gateway trace (added 18:55Z)
+
+Gateway journal on Node B for this VM, 18:23–18:29:
+
+- 18:23:15, 18:23:20, 18:23:24: three model calls for the create
+  activation. The first two stop on `tool_use`; the third, at 18:23:27,
+  stops on `end_turn` with 447 characters of text and no tool call. The
+  Texture desk ended its turn by talking instead of applying, so the
+  trigger stayed undisposed and the occurrence deferred.
+- **No model call from 18:23:27 to 18:28:20.** The deferred occurrence was
+  never executed again; a re-fire that reached execution would call the
+  model.
+- 18:28:20: a fresh call (3 messages) the moment the owner's revise
+  arrives; it applies at 18:28:30.
+
+This refutes a fourth hypothesis I considered (a re-fired activation
+blocked for 5 minutes on a model call: the two 5-minute clocks, the
+suite's wait and the deferral, started 15 s apart). It adds:
+
+- **H5, silent consumption.** A re-fire around 18:23:29 found the
+  occurrence's fate terminal (or a "durable foreign" envelope) and
+  returned `nil, nil`, which incorporates it without a log line. Then the
+  create's first draft is not late but lost, and the owner's revise
+  produced the only appagent revision.
+
+H2 (not re-armed) and H5 both match the silence; H1 (re-fire deferred
+again) does not, since every deferral logs. The observer upgrade
+(690ef1ee, actor section of the obligations surface) separates them on
+the next reproduction: H2 shows the update still deferred or due; H5
+shows nothing unprocessed while the document has no first draft.
+
+Two product questions follow, whatever the mechanism: should a Texture
+turn that ends without applying on a create wake be retried by the desk,
+or reported to the owner as "Texture replied without revising"? And the
+silent `nil, nil` returns in the Texture occurrence handler consume
+obligations with no visible fate (O1).

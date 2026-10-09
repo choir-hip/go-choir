@@ -118,7 +118,14 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   // action (soft: a failure is recorded and the suite continues).
   const startedCreate = Date.now();
   const firstTurn = await waitForTurn(page, docID, 0, 300_000);
-  record('T2a_first_draft', { pass: !!firstTurn?.done, seconds: Math.round((Date.now() - startedCreate) / 1000), appagent_revisions: firstTurn?.agent?.length || 0 });
+  const t2a = { pass: !!firstTurn?.done, seconds: Math.round((Date.now() - startedCreate) / 1000), appagent_revisions: firstTurn?.agent?.length || 0 };
+  if (!t2a.pass) {
+    // Diagnosis for texture-create-occurrence-deferred-never-refires: what
+    // the computer says it owes while the first draft is missing.
+    t2a.document = firstTurn?.doc;
+    t2a.obligations = (await api(page, 'GET', '/api/runtime/obligations')).body;
+  }
+  record('T2a_first_draft', t2a);
   expect.soft(firstTurn?.done, 'first draft landed after create without another owner action').toBeTruthy();
 
   // T2b — the owner revises.
