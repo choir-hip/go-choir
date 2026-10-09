@@ -25,6 +25,7 @@ every timing and id.
 | T5 | Cancel during a turn | pending clears within 20 s of the cancel request |
 | T6 | Research | a revision asking for web sources lands with at least one source entity within 6 min |
 | T7 | Crash mid-turn (host restarts the computer with no planned marker) | the document reports `agent_revision_interrupted`, is not pending, and no new appagent revision appears in the 2 minutes after the computer is back |
+| T8 | What is owed after the crash (`GET /api/runtime/obligations`; SL fault-matrix leg d) | the boot reads as `crash_or_stop`; within 2 min no wake is still owed, none exhausted, no run is running, and the surface reports no read errors |
 
 T7 uses the host's internal vmctl refresh over SSH (test harness only);
 everything else goes through the owner-facing API with the session
