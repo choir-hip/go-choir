@@ -75,3 +75,23 @@ Causes (console of `vm-4db30e98…`):
 
 The owner's files are still in older roots in the content store; the gap
 is in which root the realization serves and publishes.
+
+## Owner computer: files present before the 2026-10-07 restore are absent now (2026-10-09)
+
+Read-only comparison: each image was mounted `ro,noload` from a loop device; only path and size were listed, no content. Compared:
+- the owner's two quarantine images in its VM directory;
+- the post-compaction reflink backup (= the current disk's `files/`).
+
+| Image | `files/` entries | Paths absent from current |
+|---|---|---|
+| current (`pre-compact-20261009T053125Z`) | 2,386 (144 MB) | — |
+| `data.img.quarantine-1-39ddc7f2…` (10-07 11:46, pre-restore) | 2,152 (93 MB) | **484**: `files/Source` 432, `files/.choir` 37, `files/System` 2, and at least 5 `*.texture` documents |
+| `data.img.quarantine-1-e3dacdac…` (10-07 22:38) | 2,382 (144 MB) | 3 (`files/Source`) |
+
+**Hypothesis, unconfirmed:** the 10-07 restore did not re-hydrate the owner's file root. That is the same gap this doc records for lose-the-disk.
+
+**Alternative:** the owner or an agent deleted these files after the restore.
+
+Distinguish the two by checking the platform file-root chain for this computer: whether a recorded root still lists these paths, and when each was removed.
+
+Until then, both quarantine images are retained as recovery sources. The owner directed "delete images not required for recovery"; these are required.
