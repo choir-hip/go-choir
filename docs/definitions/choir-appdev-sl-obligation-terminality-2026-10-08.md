@@ -321,3 +321,11 @@ Later slices add per-kind "no live driver" detection.
 
 **Failure modes pinned first.** An exhausted wake is invisible; a pending,
 backing-off wake is not counted; the surface answers without an owner.
+
+**Slice 2 CI failure (run 37967364842, b78a8aeb).** Race detector in
+`TestTextureColdWakeRejectsUnboundLegacyProducerReport`: the projector now
+sweeps at once on start (the old loop waited 500 ms), so it read the actor
+delivery hooks (`runtime.go:2549`) while the test was still setting them.
+The hooks had no synchronization; the 500 ms delay had hidden it. Fix: hook
+setters and the sweep's hook snapshot share a lock. Staging is not
+affected: b78a8aeb never deployed (its CI failed).
