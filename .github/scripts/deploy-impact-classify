@@ -116,6 +116,10 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (repo metadata or docs checker tooling)"
       continue
       ;;
+    cmd/lockscope/*)
+      add_explanation "$path -> ignored (CI lock-scope checker; not installed on Node B or guest closures)"
+      continue
+      ;;
     cmd/choir/*)
       add_explanation "$path -> ignored (undistributed Choir CLI; not installed on Node B or guest closures)"
       continue

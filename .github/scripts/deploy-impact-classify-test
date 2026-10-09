@@ -45,6 +45,10 @@ assert_contains "$sourcecontract_runtime_output" "deploy_active_vm_refresh=true"
 assert_contains "$sourcecontract_runtime_output" "host_services=gateway,corpusd,proxy,autoputer,sourcecycled"
 assert_contains "$sourcecontract_runtime_output" "internal/sourcecontract/evidence.go -> shared source contract dependency: runtime/platform service pointers + active VM refresh"
 
+lockscope_output="$(run_classifier "cmd/lockscope/main.go" "cmd/lockscope/baseline.txt")"
+assert_contains "$lockscope_output" "deploy_needed=false"
+assert_contains "$lockscope_output" "cmd/lockscope/main.go -> ignored (CI lock-scope checker; not installed on Node B or guest closures)"
+
 doccheck_tooling_output="$(
   run_classifier \
     ".gitignore" \

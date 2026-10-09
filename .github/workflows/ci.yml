@@ -164,6 +164,9 @@ jobs:
       - name: Go build
         run: go build ./cmd/...
 
+      - name: Lock scope ratchet (O12)
+        run: go run ./cmd/lockscope -check cmd/lockscope/baseline.txt
+
   tla-model-check:
     name: TLA+ Model Check (specs/)
     runs-on: ubuntu-latest

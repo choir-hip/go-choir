@@ -81,7 +81,7 @@ reject 'install_guest_image'
 reject 'ordinary_guest'
 reject '/tmp/guest-image-result'
 
-identity_line=$(grep -nF 'selected service build identity mismatch' "$workflow" | cut -d: -f1)
+identity_line=$(grep -nF 'selected service build identity mismatch' "$workflow" | tail -n 1 | cut -d: -f1)
 receipt_line=$(grep -nF 'Published activation receipt' "$workflow" | cut -d: -f1)
 if [ -z "$identity_line" ] || [ -z "$receipt_line" ] || [ "$receipt_line" -le "$identity_line" ]; then
   echo "activation receipt must be published after selected-service identity verification" >&2

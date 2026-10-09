@@ -1,0 +1,8 @@
+# lockscope baseline (O12): known locks held across blocking work.
+# Shrink it; never grow it without saying what the lock protects and what contends.
+# Regenerate: go run ./cmd/lockscope -write cmd/lockscope/baseline.txt
+cmd/capsule-broker/session_worker.go | sessionWorker.eval | w.mu | chan | select
+internal/capsule/capsule.go | Capsule.Quiesce | c.mu | chan | select
+internal/yaegikernel/desk_session_worker.go | DeskSessionWorker.Close | w.mu | exec | w.cmd.Wait
+internal/yaegikernel/desk_session_worker.go | DeskSessionWorker.EvalCell | w.mu | chan | select
+internal/yaegikernel/session.go | Session.Eval | s.mu | chan | select

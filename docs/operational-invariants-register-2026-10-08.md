@@ -190,6 +190,14 @@ regression introduced by the recovery work, failing fresh boots during
 hourly GC). Enforcer: **unowned** — no lint, test or review rule; the latest
 instance shipped through unit tests and an 8-model review. Alarm: none.
 Goal: 1.
+*Update 2026-10-09:* a ratchet now runs in CI (`cmd/lockscope`, Go Vet +
+Build job). It fails on any new direct network call, exec, sleep, channel
+wait or WaitGroup wait made while a mutex taken in the same function is
+held; 5 known holds (per-session eval workers that serialize one eval by
+design) are baselined in `cmd/lockscope/baseline.txt`. Limits: syntactic,
+so a lock held across a helper that does the I/O (the 2026-10-08 GC
+sweep shape) is not seen, and store statements under the store's own
+serializing mutexes are not reported. Enforcer: partial (direct form).
 
 ## Release — what runs is known, bound and reversible
 
