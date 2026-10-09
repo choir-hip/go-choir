@@ -123,3 +123,46 @@ func TestComputerSurfaceRefusesMissingHashedAssetWithoutHTMLFallback(t *testing.
 		t.Fatalf("spa route status=%d body=%s", spaRoute.Code, spaRoute.Body.String())
 	}
 }
+
+// A layered app-layer release lives in the updater's private store, and the
+// boot wrapper points CHOIR_BASELINE_RELEASE_ROOT at it; `current` holds no
+// frontend. The surface must serve the release's SPA from there, and must
+// still refuse a baseline root outside /nix/store and the private store
+// (docs/problems/layered-release-spa-underivable-2026-10-09.md).
+func TestComputerSurfaceServesLayeredReleaseFromUpdaterStore(t *testing.T) {
+	updaterRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(updaterRoot, "current"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	releaseRoot := filepath.Join(updaterRoot, "store", "9mjfysz4-autoputer-0.1.0")
+	if err := os.MkdirAll(filepath.Join(releaseRoot, "frontend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(releaseRoot, "frontend", "index.html"), []byte("layered-shell"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CHOIR_UPDATER_ROOT", updaterRoot)
+	t.Setenv("CHOIR_BASELINE_RELEASE_ROOT", releaseRoot)
+	surface := NewComputerSurfaceFromEnv()
+	response := httptest.NewRecorder()
+	surface.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "layered-shell") {
+		t.Fatalf("layered release SPA status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	outside := filepath.Join(t.TempDir(), "elsewhere-autoputer")
+	if err := os.MkdirAll(filepath.Join(outside, "frontend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "frontend", "index.html"), []byte("untrusted-shell"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range []string{outside, filepath.Join(updaterRoot, "store", "..", "current")} {
+		t.Setenv("CHOIR_BASELINE_RELEASE_ROOT", root)
+		refused := httptest.NewRecorder()
+		NewComputerSurfaceFromEnv().ServeHTTP(refused, httptest.NewRequest(http.MethodGet, "/", nil))
+		if refused.Code != http.StatusServiceUnavailable {
+			t.Fatalf("untrusted baseline root %s status=%d body=%s", root, refused.Code, refused.Body.String())
+		}
+	}
+}

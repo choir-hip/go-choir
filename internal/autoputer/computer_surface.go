@@ -76,8 +76,17 @@ func (h *ComputerSurface) resolvedRoot() (string, error) {
 			}
 		}
 	}
+	// The baseline root is trusted under the immutable /nix/store, or under
+	// the updater's private store, where a layered app-layer release lives
+	// (filled only by verified nar replay of a signed offer; the boot wrapper
+	// points CHOIR_BASELINE_RELEASE_ROOT at it). Read-only: nothing here
+	// imports or swaps `current`.
 	baselineRoot := filepath.Clean(strings.TrimSpace(os.Getenv("CHOIR_BASELINE_RELEASE_ROOT")))
-	if strings.HasPrefix(baselineRoot, "/nix/store/") {
+	privateStore := ""
+	if updaterRoot := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")); updaterRoot != "" {
+		privateStore = filepath.Join(filepath.Clean(updaterRoot), "store") + string(filepath.Separator)
+	}
+	if strings.HasPrefix(baselineRoot, "/nix/store/") || (privateStore != "" && strings.HasPrefix(baselineRoot, privateStore)) {
 		frontendDir := filepath.Join(baselineRoot, "frontend")
 		index := filepath.Join(frontendDir, "index.html")
 		if info, err := os.Stat(index); err == nil && !info.IsDir() {

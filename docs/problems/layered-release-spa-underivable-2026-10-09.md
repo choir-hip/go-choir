@@ -48,3 +48,23 @@ code: a root is trusted if it is under `/nix/store/`, or under the
 updater's private store (`$CHOIR_UPDATER_ROOT/store/`). The updater fills
 that store only by verified nar replay of a signed offer (S2). Add an SPA
 fetch to the app-layer deploy gate.
+
+## Fix and residuals
+
+Fix: the surface's read-only fallback trusts a baseline root under the
+updater's private store as well as `/nix/store`
+(`internal/autoputer/computer_surface.go`, test
+`TestComputerSurfaceServesLayeredReleaseFromUpdaterStore`).
+
+`trustedBaselineReleaseRoot` in agentcore was **not** widened on purpose.
+Its caller `ensureServingBaseline` imports the root as a new `current`.
+That would replace the app-layer release pointer the boot wrapper reads
+its layering entrypoint through. Residuals:
+
+1. **Checkpoints on layered computers.** Checkpoint frontend identity on a
+   layered computer probably still reports "underivable": `current` fails
+   `VerifyCurrentRelease` and the import path is refused. Not measured.
+   Belongs to S6, which owns the release record.
+2. **No SPA check in the app-layer deploy gate.** The gate checks
+   `/health` and `build.commit` only, so this outage passed a green
+   deploy. Add an SPA fetch.
