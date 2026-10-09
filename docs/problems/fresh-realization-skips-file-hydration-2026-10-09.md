@@ -26,7 +26,7 @@ realization's files root is pre-seeded by the image (the platform source
 tree under `files/Source/platform`), so hydration is always skipped on a
 fresh realization of an existing computer.
 
-Worse (code-derived; not yet observed — by ~01:30Z the disposable had
+Worse (code-derived; not yet observed — by 01:22Z the disposable had
 published no new root): the periodic file sync (15 min) would upload the
 seed-only tree as the computer's latest file root and cite it on the tape. The owner's files
 are still in older roots in the content store, but the computer's current
