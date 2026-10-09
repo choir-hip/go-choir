@@ -69,3 +69,24 @@ Owner direction: swapping is service degradation and is not tolerated.
    OOM kills.
 5. **Builds off the host (longer term).** The production host should not
    compile.
+
+## Applied (2026-10-09 ~07:20–08:00 UTC)
+
+- **Deploy 16806d8e (run 37895020834, success)** applied the budget.
+  Verified live:
+  - vmctl `MemoryLow=14G`;
+  - nix-daemon `MemoryHigh 6G / MemoryMax 7G`;
+  - checkpointd `4G / 6G`;
+  - `vm.swappiness=1`.
+- **corpus Dolt** still read 18G/20G from two `systemctl set-property`
+  drop-ins in `/etc/systemd/system.control/go-choir-corpus-dolt.service.d/`
+  (`50-MemoryHigh.conf`, `50-MemoryMax.conf`). Those outrank the Nix unit.
+  - Moved to `/var/tmp/systemd-control-backup-20261009/`, then `daemon-reload`.
+  - Now `MemoryHigh 5G / MemoryMax 7G / MemorySwapMax 0`, at 4.2 GB in use.
+  - **Rollback:** move the files back and `daemon-reload`.
+- **Swap use** fell from 15 GiB to 5 GiB as the 16 GiB guests went away.
+  The swap file itself is still present; removing it is the next step,
+  once usage drains.
+- **Admission:** vmctl pressure reclaim is already `mode=active`
+  (hibernates idle, unprotected guests under memory pressure). No new
+  admission code was needed.
