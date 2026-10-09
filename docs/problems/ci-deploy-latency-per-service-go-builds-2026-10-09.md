@@ -75,3 +75,24 @@ Go-built input is `go-choir-services`, so the probe finds nothing. Fix:
 read the recursive derivation graph and take Go from the
 `go-choir-services` derivation. The deploy is not gated on this job, so
 staging was not affected; the SBOM acceptance was skipped for this SHA.
+
+## Items 3 and SBOM fix landed (2026-10-09 ~10:15Z)
+
+- 275b02f7: the SBOM Go-version probe reads `go-choir-services`. The
+  c01bc2f9 run passed "Build Differential SBOM Candidate" and "Accept
+  Differential SBOMs".
+- **Deploy to Staging (Node B)** with the shared Go build: 2.7 min on
+  c01bc2f9, 1b6c1b73 and 63c3263c (was 12.6–13.0 min).
+- 63c3263c: Node B builds on node-a over ssh-ng
+  (`nix.distributedBuilds`, key restricted to `nix-daemon --stdio` on
+  node-a), with local fallback. Verified: a forced remote build
+  (`--max-jobs 0`) from Node B was built on node-a and copied back. The
+  first deploy built with the old configuration; the next deploy is the
+  first to use node-a.
+
+Open: item 2. Workflow-level `concurrency: ci-refs/heads/main` serializes
+whole main runs, so a push waits for the previous run to finish (~10 min
+seen for fe5bbcbf). The deploy job already has its own concurrency group
+and a stale-target guard, so main runs could run checks in parallel.
+This changes the deploy pipeline (red), so it is a proposal, not a
+change.

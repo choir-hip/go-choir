@@ -263,3 +263,28 @@ one is substrate-level: a wake that changes state without an executor.
   by the session permission classifier. With the fix, the next boot
   leaves all 67 passivated and the "Revising…" state clears, so no
   cancel is needed for the owner-visible symptom.
+
+## Fix verified on the owner computer (1b6c1b73, 2026-10-09 10:10Z)
+
+- 10:00 boot (1b6c1b73): passivated the 67 runs left pending by the
+  previous re-arm (15.2 s).
+- 10:06 boot (63c3263c, which includes the fix): 0 candidates; its replay
+  completed at 10:10:40.
+- **After the full replay, all 67 runs are `passivated`** (the read-only
+  dry run selection from 09:58). Before the fix, all 67 were back to
+  `pending` within ~4 minutes of every boot.
+- Two sampled documents (`f9e81413`, `8330d256`) no longer report
+  `agent_revision_pending`, so they open without "Revising…".
+- `GET /api/texture/documents`: 0.10–0.14 s.
+
+Still open:
+- **Owner decision:** whether interrupted Texture turns resume
+  automatically after restart, and within what age. Today they resume on
+  the document's next occurrence.
+- The 67 obligations still have no terminal fate (O1). They are honest
+  now (passivated, not "Revising…"), but disposal is pending. Owner
+  approval exists for stuck activations. The 28 initial-only trajectories
+  can be cancelled; the 39 with history should not be cancelled
+  wholesale.
+- Every boot still spends ~15 s passivating runs that the previous boot's
+  replay re-armed. With the fix, the next boot should find 0.
