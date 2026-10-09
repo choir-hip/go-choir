@@ -704,9 +704,9 @@ func (rt *Handler) textureLifecycleActivationEligible(ctx context.Context, doc t
 	ownerID := strings.TrimSpace(doc.OwnerID)
 	computerID := strings.TrimSpace(doc.ComputerID)
 	trajectoryID := strings.TrimSpace(doc.TrajectoryID)
-	snapshot, err := rt.Store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+	snapshot, err := rt.Store.GetLifecycleHeadView(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
-		return false, fmt.Errorf("load Texture lifecycle activation snapshot: %w", err)
+		return false, fmt.Errorf("load Texture lifecycle activation head: %w", err)
 	}
 	eligible, err := classifyTextureLifecycleActivationSnapshot(doc, snapshot)
 	if err != nil || !eligible {

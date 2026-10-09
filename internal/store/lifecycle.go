@@ -2249,6 +2249,51 @@ func (s *Store) GetLifecycleUpdate(ctx context.Context, ownerID, computerID, tra
 	return decodeLifecycleObject[types.CoagentSourcePacket](obj)
 }
 
+// GetLifecycleHeadView returns the trajectory, its bound document, and the
+// head the snapshot would bind (Trajectory, Document, HeadRevision,
+// CurrentDocumentHead), by point reads. It omits the trajectory's work items,
+// runs, agents, updates, assignments, and events, so it is the read for
+// classifying a document's activation at boot and wake.
+func (s *Store) GetLifecycleHeadView(ctx context.Context, ownerID, computerID, trajectoryID string) (types.LifecycleSnapshot, error) {
+	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
+	if err != nil {
+		return types.LifecycleSnapshot{}, err
+	}
+	trajectoryID = strings.TrimSpace(trajectoryID)
+	if trajectoryID == "" {
+		return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle head view: trajectory_id is required")
+	}
+	trajectory, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return types.LifecycleSnapshot{}, err
+	}
+	if trajectory.TrajectoryID != trajectoryID || trajectory.LifecycleVersion <= 0 {
+		return types.LifecycleSnapshot{}, ErrNotFound
+	}
+	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
+	document, err := s.GetLifecycleDocument(ctx, ownerID, computerID, docID)
+	if err != nil {
+		return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle head view: bound document %q: %w", docID, err)
+	}
+	headRevisionID := document.CurrentRevisionID
+	if trajectory.Status != types.TrajectoryLive && strings.TrimSpace(trajectory.TerminalArtifactHeadRef) != "" {
+		headRevisionID = trajectory.TerminalArtifactHeadRef
+	}
+	head, err := s.GetLifecycleRevision(ctx, ownerID, computerID, headRevisionID)
+	if err != nil {
+		return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle head view: bound head revision %q: %w", headRevisionID, err)
+	}
+	view := types.LifecycleSnapshot{Schema: types.DurableWorkSchemaV1, Trajectory: trajectory, Document: document, HeadRevision: head}
+	if document.CurrentRevisionID != headRevisionID {
+		current, err := s.GetLifecycleRevision(ctx, ownerID, computerID, document.CurrentRevisionID)
+		if err != nil {
+			return types.LifecycleSnapshot{}, fmt.Errorf("lifecycle head view: current document head revision %q: %w", document.CurrentRevisionID, err)
+		}
+		view.CurrentDocumentHead = &current
+	}
+	return view, nil
+}
+
 func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, trajectoryID string) (types.LifecycleSnapshot, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(ownerID, computerID)
 	if err != nil {
@@ -2270,19 +2315,33 @@ func (s *Store) GetLifecycleSnapshot(ctx context.Context, ownerID, computerID, t
 	// bodies for this trajectory's lifecycle objects (plus the doc/revision
 	// chain, which is addressed by canonical id and may predate trajectory
 	// metadata) instead of every object in the computer.
+	//
+	// The document binding (subject_refs.doc_id) is fixed when the trajectory
+	// starts, so it is read first and documents and revisions are narrowed to
+	// that one document. Without it every Texture document and revision in the
+	// computer was fetched, once per document at boot
+	// (docs/problems/texture-list-cold-latency-2026-10-09.md).
+	bound, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		return types.LifecycleSnapshot{}, err
+	}
+	boundDocID := strings.TrimSpace(bound.SubjectRefs["doc_id"])
 	snapshotKinds := []objectgraph.ObjectKind{
 		ogKindTrajectory, ogKindTexDoc, ogKindTexRev, ogKindWorkItem,
 		ogKindRun, ogKindAgent, ogKindWorkerUpdate, ogKindEngineeringAssignment,
 		ogKindLifecycleEvent,
 	}
 	objects, err := graph.ReadObjectSnapshotFiltered(ctx, ownerID, computerID, snapshotKinds, func(kind objectgraph.ObjectKind, metadata json.RawMessage) bool {
-		if kind == ogKindTexDoc || kind == ogKindTexRev {
-			return true
-		}
 		var meta struct {
 			TrajectoryID string `json:"trajectory_id"`
+			DocID        string `json:"doc_id"`
 		}
-		if json.Unmarshal(metadata, &meta) != nil {
+		decodeErr := json.Unmarshal(metadata, &meta)
+		if kind == ogKindTexDoc || kind == ogKindTexRev {
+			// Keep anything that cannot be attributed to another document.
+			return boundDocID == "" || decodeErr != nil || meta.DocID == "" || meta.DocID == boundDocID
+		}
+		if decodeErr != nil {
 			return false
 		}
 		return meta.TrajectoryID == trajectoryID

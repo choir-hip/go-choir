@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -3992,5 +3993,77 @@ func TestDecodeLifecycleObjectFrozenKindBoundary(t *testing.T) {
 	badEvt, _ := json.Marshal(types.LifecycleEvent{Kind: types.LifecycleEventKind("co_super_assignment_forged")})
 	if _, err := decodeLifecycleObject[types.LifecycleEvent](objectgraph.Object{Body: badEvt}); err == nil {
 		t.Fatal("non-frozen event kind decoded")
+	}
+}
+
+// The snapshot reads only its own document's objects. Failure modes pinned
+// (docs/problems/texture-list-cold-latency-2026-10-09.md): the snapshot read
+// every Texture document and revision in the computer (boot ran it once per
+// document); narrowing must not drop the bound document, its head, or bind a
+// sibling trajectory's document.
+func TestLifecycleSnapshotIgnoresOtherDocuments(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := func(n int) types.StartLifecycleRequest {
+		req := lifecycleStartFixture()
+		suffix := fmt.Sprintf("-%d", n)
+		docID := "document-lifecycle" + suffix
+		req.CommandID, req.TrajectoryID = "command-start"+suffix, "trajectory-lifecycle"+suffix
+		req.InitialWork.WorkItemID = "work-lifecycle" + suffix
+		req.SubjectRefs = map[string]string{"artifact": "texture://artifact" + suffix, "doc_id": docID}
+		req.InitialDocument.DocID = docID
+		req.InitialRevision.RevisionID = "revision-lifecycle" + suffix
+		req.InitialRevision.BodyDoc = lifecycleStructuredBodyDoc(docID, req.InitialRevision.RevisionID, "Initial artifact")
+		req.Agent.AgentID, req.Agent.ChannelID = "texture:"+docID, docID
+		req.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(req)
+		if _, err := s.StartLifecycle(ctx, req); err != nil {
+			t.Fatalf("start lifecycle %d: %v", n, err)
+		}
+		return req
+	}
+	var reqs []types.StartLifecycleRequest
+	for n := 0; n < 4; n++ {
+		reqs = append(reqs, start(n))
+	}
+	for _, req := range reqs {
+		snapshot, err := s.GetLifecycleSnapshot(ctx, req.OwnerID, req.ComputerID, req.TrajectoryID)
+		if err != nil {
+			t.Fatalf("snapshot %s: %v", req.TrajectoryID, err)
+		}
+		if snapshot.Document.DocID != req.InitialDocument.DocID || snapshot.HeadRevision.RevisionID != req.InitialRevision.RevisionID {
+			t.Fatalf("snapshot %s bound doc=%s head=%s, want %s/%s", req.TrajectoryID,
+				snapshot.Document.DocID, snapshot.HeadRevision.RevisionID, req.InitialDocument.DocID, req.InitialRevision.RevisionID)
+		}
+	}
+	if _, err := s.GetLifecycleSnapshot(ctx, reqs[0].OwnerID, reqs[0].ComputerID, "trajectory-missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing trajectory snapshot err = %v, want ErrNotFound", err)
+	}
+}
+
+// The head view is the snapshot's binding without the trajectory's work:
+// boot and wake classify every Texture document with it. Failure modes
+// pinned: a head view that disagrees with the snapshot on trajectory,
+// document or head; one that answers for a missing trajectory.
+func TestLifecycleHeadViewMatchesSnapshotBinding(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	req := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, req); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, req.OwnerID, req.ComputerID, req.TrajectoryID)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	view, err := s.GetLifecycleHeadView(ctx, req.OwnerID, req.ComputerID, req.TrajectoryID)
+	if err != nil {
+		t.Fatalf("head view: %v", err)
+	}
+	if !reflect.DeepEqual(view.Trajectory, snapshot.Trajectory) || !reflect.DeepEqual(view.Document, snapshot.Document) ||
+		!reflect.DeepEqual(view.HeadRevision, snapshot.HeadRevision) || !reflect.DeepEqual(view.CurrentDocumentHead, snapshot.CurrentDocumentHead) {
+		t.Fatalf("head view binding differs from snapshot:\nview=%+v\nsnapshot=%+v", view, snapshot)
+	}
+	if _, err := s.GetLifecycleHeadView(ctx, req.OwnerID, req.ComputerID, "trajectory-missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing trajectory head view err = %v, want ErrNotFound", err)
 	}
 }
