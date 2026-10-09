@@ -9,6 +9,10 @@ Product direction: the vision is the automatic computer — a persistent compute
 for supervised self-development first, the World Wire downstream
 ([docs/choir-vision.md](docs/choir-vision.md), argued in
 [docs/signal-is-sparse-not-the-learner-2026-08-01.md](docs/signal-is-sparse-not-the-learner-2026-08-01.md)).
+Product names are never camel case: Autopaper (or autopaper),
+Autoputer, Autoradio (owner, 2026-10-09). "World Wire", "Universal Wire"
+and "sourcecycled" are retired names for Autopaper; the code rename is a
+TODO in [docs/autopaper-sw-design-2026-10-09.md](docs/autopaper-sw-design-2026-10-09.md) §9.
 The README is the open-source front door; this file is the operating contract,
 and [docs/choir-doctrine.md](docs/choir-doctrine.md) is the normative
 architecture. Do not let this file drift into doctrine.
