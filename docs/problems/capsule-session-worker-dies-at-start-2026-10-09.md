@@ -113,3 +113,13 @@ The second M11 rerun (`evidence/m11-rerun-2026-10-09T21-32-17Z.json`,
 diagnostic works) and its engineering run stopped at tool-loop iteration
 200 at 21:43:37Z, eleven minutes after it started, and ended
 `cancelled`; the probe then finished instead of waiting out its hour.
+
+## Third rerun (21:50Z, e3225820): Landlock passes; the worker's own seccomp load is refused
+
+`computer-b9722092…`: every result now reads `session worker seccomp: failed
+to load workload seccomp filter: failed loading seccomp filter: operation
+not permitted`. Same mechanism one layer later: the inherited broker
+allowlist has no `seccomp` syscall, so the worker cannot stack its own
+filter. (Adding a seccomp filter can only restrict.) The e3225820 test
+checked the Landlock syscalls alone; the floor should be tested as a
+sequence, the worker's layers applied under the broker filter.
