@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -124,20 +126,68 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunR
 	return inbound, nil
 }
 
-func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord, doc types.Document, snapshot types.LifecycleSnapshot, in editTextureArgs) ([]types.TextureTurnControl, error) {
+// textureResearchBudgetPerOwnerRequest bounds the research assignments
+// Texture opens per owner request (or per document creation). Without it a
+// research report wakes Texture, that turn opens more research, and the
+// document never idles (texture-research-loop-never-idles-2026-10-09).
+const textureResearchBudgetPerOwnerRequest = 2
+
+// researchOpenedSinceOwnerInput counts research work opened since the latest
+// owner input on the trajectory (creation or an owner revise), excluding
+// own: the deterministic work ids of the turn being built, so replaying a
+// committed turn computes the same controls.
+func researchOpenedSinceOwnerInput(snapshot types.LifecycleSnapshot, own map[string]bool) int {
+	var since time.Time
+	for _, ev := range snapshot.Events {
+		ownerInput := ev.Kind == types.LifecycleTrajectoryStarted ||
+			(ev.Kind == types.LifecycleArtifactHeadAdvanced && strings.HasPrefix(ev.CommandID, "owner-revise:"))
+		if ownerInput && ev.CreatedAt.After(since) {
+			since = ev.CreatedAt
+		}
+	}
+	n := 0
+	for _, work := range snapshot.WorkItems {
+		if work.AuthorityProfile == agentprofile.Research && !own[strings.TrimSpace(work.WorkItemID)] && !work.CreatedAt.Before(since) {
+			n++
+		}
+	}
+	return n
+}
+
+// textureTurnControls builds the turn's controls. A research opener past the
+// per-request budget is dropped, not failed: the turn still commits, and the
+// returned note goes into the committed reason.
+func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord, doc types.Document, snapshot types.LifecycleSnapshot, in editTextureArgs) ([]types.TextureTurnControl, string, error) {
 	workByID := make(map[string]types.WorkItemRecord, len(snapshot.WorkItems))
 	for _, work := range snapshot.WorkItems {
 		workByID[strings.TrimSpace(work.WorkItemID)] = work
 	}
+	own := map[string]bool{}
+	for i, raw := range in.Controls {
+		if raw.OpenResearch {
+			if id, err := textureTurnRuntimeID(rec, in.ToolCallID, "researcher-work", i); err == nil {
+				own[id] = true
+			}
+		}
+	}
+	researchOpened := researchOpenedSinceOwnerInput(snapshot, own)
+	dropped := 0
 	controls := make([]types.TextureTurnControl, 0, len(in.Controls))
 	for i, raw := range in.Controls {
+		if raw.OpenResearch {
+			if researchOpened >= textureResearchBudgetPerOwnerRequest {
+				dropped++
+				continue
+			}
+			researchOpened++
+		}
 		packet, err := agentcore.PrepareTextureControlPacket(raw.Packet)
 		if err != nil {
-			return nil, fmt.Errorf("Texture controls[%d] packet: %w", i, err)
+			return nil, "", fmt.Errorf("Texture controls[%d] packet: %w", i, err)
 		}
 		controlID, err := textureTurnRuntimeID(rec, in.ToolCallID, "control", i)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		targetAgentID, targetWorkItemID := "", strings.TrimSpace(raw.TargetWorkItemID)
 		var openAgent *types.AgentRecord
@@ -146,10 +196,10 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 			targetAgentID = agentprofile.Management + ":" + strings.TrimSpace(rec.OwnerID)
 			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "persistent-super-work", i)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			if packet.Kind != "execution_request" || len(packet.Actions) == 0 {
-				return nil, fmt.Errorf("Texture controls[%d] persistent-Management opener requires execution_request actions", i)
+				return nil, "", fmt.Errorf("Texture controls[%d] persistent-Management opener requires execution_request actions", i)
 			}
 			work := types.WorkItemRecord{
 				WorkItemID: targetWorkItemID, Objective: strings.TrimSpace(raw.Objective),
@@ -160,12 +210,12 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 		} else if raw.OpenResearch {
 			agentIdentity, identityErr := textureTurnRuntimeID(rec, in.ToolCallID, "researcher-agent", i)
 			if identityErr != nil {
-				return nil, identityErr
+				return nil, "", identityErr
 			}
 			targetAgentID = agentprofile.Research + ":" + agentIdentity
 			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "researcher-work", i)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			agent := types.AgentRecord{AgentID: targetAgentID, Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: doc.DocID}
 			work := types.WorkItemRecord{
@@ -183,11 +233,11 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 		} else {
 			work, ok := workByID[targetWorkItemID]
 			if !ok || work.Status != types.WorkItemOpen || strings.TrimSpace(work.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) {
-				return nil, fmt.Errorf("Texture controls[%d] target work is not an open current-trajectory obligation", i)
+				return nil, "", fmt.Errorf("Texture controls[%d] target work is not an open current-trajectory obligation", i)
 			}
 			targetAgentID = strings.TrimSpace(work.AssignedAgentID)
 			if targetAgentID == "" {
-				return nil, fmt.Errorf("Texture controls[%d] target work is unassigned", i)
+				return nil, "", fmt.Errorf("Texture controls[%d] target work is unassigned", i)
 			}
 		}
 		// Runtime lookup is an early fail-closed refusal for existing targets; a
@@ -195,20 +245,25 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 		// the same ApplyTextureTurn CAS as work and first control.
 		if openAgent == nil {
 			if _, err := h.Store.GetAgentByScope(ctx, rec.OwnerID, doc.ComputerID, targetAgentID); err != nil {
-				return nil, fmt.Errorf("Texture controls[%d] load exact target: %w", i, err)
+				return nil, "", fmt.Errorf("Texture controls[%d] load exact target: %w", i, err)
 			}
 		}
 		content := agentcore.BuildTextureLifecycleControlContent(packet, targetAgentID, targetWorkItemID)
 		payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 		if err != nil {
-			return nil, fmt.Errorf("Texture controls[%d] payload digest: %w", i, err)
+			return nil, "", fmt.Errorf("Texture controls[%d] payload digest: %w", i, err)
 		}
 		controls = append(controls, types.TextureTurnControl{
 			ControlID: controlID, TargetAgentID: targetAgentID, TargetWorkItemID: targetWorkItemID,
 			OpenAgent: openAgent, OpenWork: openWork, Packet: packet, Content: content, PayloadDigest: payloadDigest,
 		})
 	}
-	return controls, nil
+	note := ""
+	if dropped > 0 {
+		note = fmt.Sprintf("[runtime: research budget for this owner request is spent (%d of %d); %d research opener(s) not opened]", textureResearchBudgetPerOwnerRequest, textureResearchBudgetPerOwnerRequest, dropped)
+		log.Printf("textureowner: Texture %s run %s: %s", rec.AgentID, rec.RunID, note)
+	}
+	return controls, note, nil
 }
 
 func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunRecord, doc types.Document, in editTextureArgs, outcome types.TextureTurnOutcome, revision types.Revision, graph store.TextureSourceGraphWriteSet, reason string) (types.LifecycleResult, error) {
@@ -228,9 +283,12 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
-	controls, err := h.textureTurnControls(ctx, rec, doc, snapshot, in)
+	controls, budgetNote, err := h.textureTurnControls(ctx, rec, doc, snapshot, in)
 	if err != nil {
 		return types.LifecycleResult{}, err
+	}
+	if budgetNote != "" {
+		reason = strings.TrimSpace(reason + " " + budgetNote)
 	}
 	commandUUID, err := textureTurnRuntimeID(rec, in.ToolCallID, "command", 0)
 	if err != nil {

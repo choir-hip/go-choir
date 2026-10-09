@@ -184,7 +184,7 @@ func TestLifecycleTextureResearchOpenerDerivesIdentitiesAndCommitsBeforeWake(t *
 		Packet: types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}},
 	}}}
 	snapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
-	controls, err := handler.textureTurnControls(t.Context(), &run, doc, snapshot, args)
+	controls, _, err := handler.textureTurnControls(t.Context(), &run, doc, snapshot, args)
 	if err != nil || len(controls) != 1 || controls[0].OpenAgent == nil || controls[0].OpenWork == nil || !strings.HasPrefix(controls[0].TargetAgentID, "research:") || controls[0].OpenAgent.AgentID != controls[0].TargetAgentID || controls[0].OpenWork.WorkItemID != controls[0].TargetWorkItemID {
 		t.Fatalf("runtime-derived Research opener=%+v err=%v", controls, err)
 	}
