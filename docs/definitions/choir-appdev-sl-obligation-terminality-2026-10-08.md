@@ -275,3 +275,32 @@ pre-boot management occurrence; planned boot runs it; a stale marker is
 ignored); staging: a disposable's guest restart logs `crash` and its
 pre-boot management work is consumed as interrupted.
 **Rollback.** Revert; the Texture-only rule returns.
+
+## Slice 2 — event-driven outbox with a retry budget (2026-10-09)
+
+**Today.** The projector sweeps the wake outbox every 500 ms whether or
+not anything changed (`agentcore/runtime.go` startProjector): two store
+queries a second while idle, on a guest store with one connection. A
+dispatch that keeps failing is logged and retried every tick forever,
+with no count and no visible fate (inventory Finding 2).
+
+**Change.**
+1. The store signals after a committed batch that wrote outbox rows (the
+   two lifecycle commit points and the boot migration), never before
+   commit, so a sweep cannot run ahead of the write it was told about.
+2. The projector sweeps once at start, then waits for a signal, the
+   earliest retry due, or a 60 s audit timer. A sweep that hit its
+   per-pass budget runs again at once. The audit sweep logs "missed
+   signal" if it finds a ready wake no signal announced, so a missed
+   signal is a visible bug, not a silent strand.
+3. A failing dispatch retries with backoff (1, 2, 4, 8, 16 s). After 5
+   failures the wake is marked projected with fate `dispatch_exhausted`
+   and its last error, durably, so the "what is owed" surface can list it.
+
+**Failure modes to pin first.** Signal before commit (sweep misses the
+row); a missed signal leaves a wake stranded (audit catches and logs);
+budget overflow waits for the next signal (immediate re-sweep); a
+persistent dispatch error loops forever (exhaustion); a transient error
+exhausts too fast (backoff); exhaustion silently drops the wake (durable
+fate and last error).
+**Rollback.** Revert; the 500 ms poll returns.
