@@ -1135,3 +1135,61 @@ func TestProgressOverdueDeadlineEmitsObservation(t *testing.T) {
 		t.Fatalf("replay handler: %v", err)
 	}
 }
+
+// Owner cancellation must reach trajectory fate past a never-bound cancelled
+// assignment. Failure modes pinned (docs/problems/texture-zombie-activations-
+// revising-forever-2026-10-09.md): prepare requested a capsule revoke on a
+// terminal unbound assignment, the store refused it, and the whole trajectory
+// cancel failed forever; the skip widening to an assignment that did hold a
+// capsule; finish demanding a revoke acknowledgement it can never get.
+func TestTrajectoryCancellationSkipsTerminalUnboundAssignment(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	rt.assignmentRuntime = absentAssignmentCapsule{}
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-assignment", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := types.OpenEngineeringAssignmentRequest{
+		CommandID: "command-open-never-bound-1", AssignmentID: "assignment-never-bound",
+		Binding: types.EngineeringAssignmentBinding{
+			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
+			ScopeDigest: objectgraph.SHA256([]byte("scope:never-bound")), RequestDigest: objectgraph.SHA256([]byte("request:never-bound")),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-never-bound"), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-never-bound")),
+			SubjectDigest:     objectgraph.SHA256([]byte("subject:never-bound")),
+			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:never-bound")),
+			Writable:          true, CapsuleID: "capsule-never-bound",
+			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+		},
+		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
+	}
+	open.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(open)
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	cancel := types.CancelEngineeringAssignmentRequest{
+		CommandID: "command-cancel-never-bound-1", OwnerID: seed.OwnerID, ComputerID: seed.ComputerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1, Reason: "cancelled before bind",
+	}
+	cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
+	if _, err := s.CancelEngineeringAssignment(ctx, cancel); err != nil {
+		t.Fatal(err)
+	}
+
+	prepared, err := rt.prepareEngineeringTrajectoryCancellation(ctx, seed.OwnerID, seed.ComputerID, seed.TrajectoryID, "owner cancellation")
+	if err != nil {
+		t.Fatalf("prepare trajectory cancellation refused on a never-bound assignment: %v", err)
+	}
+	if len(prepared) != 1 || prepared[0].CapsuleDisposition != types.EngineeringCapsuleUnbound {
+		t.Fatalf("prepared = %+v, want the never-bound assignment unchanged", prepared)
+	}
+	if err := rt.finishEngineeringTrajectoryCancellation(ctx, seed.OwnerID, seed.ComputerID, seed.TrajectoryID, "owner cancellation"); err != nil {
+		t.Fatalf("finish trajectory cancellation: %v", err)
+	}
+}

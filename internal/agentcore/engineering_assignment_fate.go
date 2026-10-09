@@ -261,6 +261,15 @@ func (rt *Runtime) prepareEngineeringTrajectoryCancellation(ctx context.Context,
 	for _, assignment := range assignments {
 		// Terminal assignment outcome does not by itself prove executor fate;
 		// cancellation closes every non-revoked capsule before trajectory fate.
+		// A terminal assignment still at capsule `unbound` never held one (a
+		// capsule never returns to unbound, and Bound requires a capsule), so
+		// there is nothing to revoke; requesting it refused the whole
+		// trajectory cancel forever (docs/problems/texture-zombie-activations-
+		// revising-forever-2026-10-09.md).
+		if assignment.Disposition.Terminal() && assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound {
+			prepared = append(prepared, assignment)
+			continue
+		}
 		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			assignment, err = rt.revokeAssignedCapsule(ctx, assignment, reason)
 			if err != nil {
