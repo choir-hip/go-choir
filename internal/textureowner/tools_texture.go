@@ -1200,14 +1200,20 @@ func resolveStructuredEditSourceEntity(entities *[]texturedoc.SourceEntity, edit
 		return entity.SourceEntityID, nil
 	}
 	if sourceEntityID == "" {
-		return "", fmt.Errorf("source_entity_id or source_entity is required")
+		return "", fmt.Errorf("%s", textureSourceRefShapeHint("source_entity_id or source_entity is required"))
 	}
 	for _, entity := range *entities {
 		if strings.TrimSpace(entity.SourceEntityID) == sourceEntityID {
 			return sourceEntityID, nil
 		}
 	}
-	return "", fmt.Errorf("source_entity_id %q is not present in the current structured source_entities", sourceEntityID)
+	return "", fmt.Errorf("%s", textureSourceRefShapeHint(fmt.Sprintf("source_entity_id %q is not present in the current structured source_entities", sourceEntityID)))
+}
+
+// textureSourceRefShapeHint shows the inline citation shape: sources that
+// arrive in research updates during a run are not in the listed pool.
+func textureSourceRefShapeHint(problem string) string {
+	return problem + `; to cite a source that is not listed (for example a research update's packet source), pass it inline and omit source_entity_id: {"op":"insert_source_ref","block_id":"<block id>","source_entity":{"target":{"kind":"web_url","uri":"<url>"}}}`
 }
 
 func mergeStructuredSourceEntityPool(current, incoming []texturedoc.SourceEntity) []texturedoc.SourceEntity {
