@@ -63,3 +63,13 @@ the slow phase pending-indexed. The enforcer still
 missing is an alarm: the boot timeline already carries the numbers, so a
 host-side check that flags a runtime start over budget would make O7
 enforceable without a synthetic owner-scale store.
+
+## Correction (18:20Z): the term is a retry loop, not history
+
+The ~16–17 s inside the boot of the two larger computers is the computer
+surface baseline bootstrap retrying a deterministic refusal 10 times on
+layered computers (`problems/layered-release-spa-underivable-2026-10-09.md`,
+"Residual 1 measured"). The two large computers are also the two that
+run layered releases, so data size and the retry loop were confounded.
+With the loop removed, O7 for runtime start is expected to hold; re-measure
+after the fix lands.

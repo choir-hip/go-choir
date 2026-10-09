@@ -77,3 +77,39 @@ A direct fetch from Node B to the owner guest (`10.200.13.2:8085`) returns:
 `/` 200 (Choir SPA), `/desktop/texture` 200, `/assets/index-DWfAnd8o.js`
 200 (270,756 B), `/health` `ready`. **Fixed-verified** for the served SPA.
 Owner browser confirmation pending. Residuals 1–2 open.
+
+## Residual 1 measured: every boot of a layered computer spends ~17 s retrying (2026-10-09 18:20Z)
+
+Found while checking O7 (boot cost against history,
+`docs/evidence/o7-boot-cost-vs-history-2026-10-09.md`). Owner computer
+`candidate-fleet-e15cb89f…`, boot at 17:52:22, console log (timings only):
+
+- `starting server on 0.0.0.0:8085` at 17:52:22;
+- `computer surface baseline bootstrap deferred: self-development
+  checkpoint: served SPA is underivable` at 17:52:39;
+- the first runtime boot phase begins right after, at 17:52:39.
+
+The 17 s is the boot loop in `internal/actorruntime/adapter.go`
+(`EnsureComputerSurface`, 10 attempts, 250 ms apart). Each attempt runs
+`updater.VerifyCurrentRelease` on the layered release (about 1.5 s) and
+then fails the same way: `current` is not a full release, and
+`trustedBaselineReleaseRoot` refuses the updater-store baseline (kept
+narrow on purpose, see above). The verdict depends only on disk state, so
+attempts 2 to 10 cannot succeed. The other computer measured (3.1 GB,
+10:58Z boot) shows the same ~16 s gap between lifecycle reconcile and
+runtime start.
+
+Console logs on Node B show the deferred line on 5 computers (owner
+computer 18 times). The served SPA is unaffected (the read-only fallback
+fix above); the cost is boot time (runtime start, and so Texture and the
+desks, ~17 s later on every boot) and residual 1 itself: checkpoint
+frontend identity on a layered computer is underivable, which Gate 2's
+self-development checkpoints depend on.
+
+Correction to the O7 reading: the boot term that looked proportional to
+stored data is this retry loop on layered computers, not a history scan.
+
+Fix direction (this doc first, fix second): retry only while the verdict
+changes. The same error twice in a row is a state verdict; stop and log
+it once. Residual 1 proper (a trusted checkpoint identity for layered
+releases) stays with S6 / Gate 2.
