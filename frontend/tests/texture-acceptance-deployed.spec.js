@@ -215,8 +215,9 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
     sourceCount = Array.isArray(rev.body?.source_entities) ? rev.body.source_entities.length : 0;
   }
   record('T6_research', { landed: !!researched?.done, head, source_entities: sourceCount });
-  expect(researched?.done, 'research revision landed').toBeTruthy();
-  expect(sourceCount, 'source entities on the research revision').toBeGreaterThan(0);
+  // Soft: a research failure must not hide the crash legs (T7, T8).
+  expect.soft(researched?.done, 'research revision landed').toBeTruthy();
+  expect.soft(sourceCount, 'source entities on the research revision').toBeGreaterThan(0);
 
   // T7 — crash mid-turn: interrupted, never resumed.
   const session = await page.evaluate(async () => (await fetch('/auth/session', { credentials: 'include' })).json());
