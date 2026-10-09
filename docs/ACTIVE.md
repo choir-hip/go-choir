@@ -55,7 +55,15 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   - owner deletions (pre-compact 17 G, quarantine 32 G, corpus 104 G);
   - CI item 2 (main runs serialize whole runs; no longer hides code);
   - a credential failure that outlasts the retries still marks a computer
-    `failed`.
+    `failed`. Low: the next resolve starts it again with a fresh epoch on
+    the same VMID and data root (`internal/vmctl/ownership.go:1611`). The
+    only failures today were at 02:42Z, before 964a68ea; the 12:25Z
+    refresh on ae61f153 issued a credential and booted normally. A
+    staging signup E2E was not run (it creates a real account and VM).
+  - Store B reset: runbook committed (3b6d95c8). The swap (stop
+    corpus-dolt, move the repo aside, start empty, restart corpusd) was
+    refused by the session classifier as a mass delete and is waiting for
+    the owner.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
