@@ -198,6 +198,8 @@ type Runtime struct {
 	// actorObligations reads the actor tape for the "what is owed" surface
 	// (bound by the actor runtime adapter; guarded by deliveryHooksMu).
 	actorObligations func(context.Context) (ActorObligations, error)
+	// wakeAuditInterval overrides actorWakeAuditInterval (tests only).
+	wakeAuditInterval time.Duration
 	// wakeRetries bounds failed actor wake dispatches (SL slice 2).
 	wakeRetries                 wakeRetryTracker
 	selfdevStartupReleaseDigest string

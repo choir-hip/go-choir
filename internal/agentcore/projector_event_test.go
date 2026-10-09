@@ -187,3 +187,42 @@ func TestPoisonWakeDoesNotStallHealthyWake(t *testing.T) {
 		t.Fatalf("exhausted fates: poison=%v healthy=%v, want poison only", poisonFate, healthyFate)
 	}
 }
+
+// SL fault-matrix leg a: a committed wake whose signal is lost (the dispatch
+// "dropped") is still delivered by the audit sweep within one audit interval.
+func TestMissedSignalWakeIsDeliveredByAudit(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	rt.wakeAuditInterval = 50 * time.Millisecond
+	delivered := make(chan string, 64)
+	rt.SetDispatchActor(func(_ context.Context, _, _, to, _, _, _, _ string) error {
+		select {
+		case delivered <- to:
+		default:
+		}
+		return nil
+	})
+	stop := make(chan struct{})
+	defer close(stop)
+	// Start the projector, let its start sweep pass, then commit a wake and
+	// swallow its signal before the projector can see it.
+	go rt.runActorWakeProjector(ctx, stop)
+	time.Sleep(20 * time.Millisecond)
+	target := queueOneActorWake(t, s, "missed-signal")
+	select {
+	case <-s.ActorWakeSignal():
+	default:
+	}
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case got := <-delivered:
+			if got == target {
+				return
+			}
+		case <-deadline:
+			t.Fatal("wake with a lost signal was never delivered by the audit sweep")
+		}
+	}
+}

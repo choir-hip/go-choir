@@ -94,6 +94,9 @@ func (rt *Runtime) runActorWakeProjector(ctx context.Context, stop <-chan struct
 			log.Printf("runtime: actor wake outbox audit found %d ready wake(s) no signal announced (missed signal)", out.dispatched)
 		}
 		wait := actorWakeAuditInterval
+		if rt.wakeAuditInterval > 0 {
+			wait = rt.wakeAuditInterval
+		}
 		next := "audit"
 		if out.more {
 			wait, next = actorWakeResweepDelay, "more"
