@@ -56,3 +56,27 @@ refresh. The push step already:
 - records an applied count.
 
 The reboot path still delivers the new base.
+
+## First run with the fix (forced deploy 37892708774, 4e82febe): push ran, both targets refused
+
+The classifier change worked: the reboot-path deploy built and staged the
+app layer after the refresh (`app-layer-closure.nar` sha256 `11b40c0c…`,
+10 closure paths). Both targets refused it; result `0/0 applied, 2 skipped`
+after 465 s.
+
+- **`vm-48bc0981…`:**
+  - attempt 1: `updater refused apply: … layering entrypoint
+    /mnt/persistent/choir-updater/store/cr0zi1f5…` (truncated);
+  - attempt 2: `base event head is stale`.
+- **Owner `candidate-fleet-e15cb89f…`:** `offer binds a different
+  realization` on both attempts. The guest had been rebooted at 06:44:49
+  by the same deploy and was thrashing at 4 GiB.
+
+The run also failed its smoke test (proxy `degraded`, vmctl `unavailable`
+during restart). Five ownerships are in `failed`.
+
+Residual: delivery to layered computers now depends on the S2 push path's
+realization/head binding
+([`s2-app-layer-offer-bind-gaps`](s2-app-layer-offer-bind-gaps-2026-10-05.md)).
+A refused push leaves the computer on the old layer, but the deploy is
+not failed for it (`skipped` is counted, not gated).
