@@ -20,9 +20,9 @@ Three gates, in order, each with an exit test — see "v6 plan" in the
 3. **Autopaper** (formerly World Wire; owner 2026-10-09: Gate 1 today,
    Gate 2 tomorrow, Gate 3 in October; design draft
    [`autopaper-sw-design-2026-10-09`](autopaper-sw-design-2026-10-09.md);
-   name retirement is a TODO there, §12) — on SW's interface constraints; four core desks; shared
-   data as adopted objects on the object graph; budget, not architecture,
-   limits ingest.
+   name retirement is a TODO there, §9) — four core desks, minimal
+   structure, living Textures woken by evidence, automatic publishing into
+   the host-level store, starting from zero content.
 
 Deferred: S3, SA density, S7–S11, and
 [SP production infrastructure](definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md)
@@ -56,7 +56,8 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
 - **CI:** main pushes plan against the live staging commit (6d6db691), so
   a docs push can no longer skip deploying queued code.
 - **Open:**
-  - owner deletions (pre-compact 17 G, quarantine 32 G, corpus 104 G);
+  - quarantine images (2 × 32 G) kept pending the 484-path check; the
+    pre-compact backup and the old corpus repo are deleted (226 G free);
   - CI item 2 (main runs serialize whole runs; no longer hides code);
   - a credential failure that outlasts the retries still marks a computer
     `failed`. Low: the next resolve starts it again with a fresh epoch on
@@ -64,10 +65,16 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
     only failures today were at 02:42Z, before 964a68ea; the 12:25Z
     refresh on ae61f153 issued a credential and booted normally. A
     staging signup E2E was not run (it creates a real account and VM).
-  - Store B reset: runbook committed (3b6d95c8). The swap (stop
-    corpus-dolt, move the repo aside, start empty, restart corpusd) was
-    refused by the session classifier as a mass delete and is waiting for
-    the owner.
+  - Store B: reset to an empty repo, dumped (23 GB), and the 104 G old repo
+    deleted (owner, 14:04Z). Autopaper starts from zero content.
+- **SH lose-the-disk (Gate 1 exit), 2026-10-09 afternoon:**
+  - cause 2 (in-memory fresh-volume flag) fixed in 799097e3 with a durable
+    marker; repeatable proof `scripts/sh_lose_the_disk_proof.mjs`;
+  - forced reboot-path deploy so the base image carries the fix; proof run
+    pending;
+  - cause 1 (version skew: app-layer-only deploys leave the base image, and
+    so every new realization, on older code) needs an owner deploy-shape
+    decision.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 

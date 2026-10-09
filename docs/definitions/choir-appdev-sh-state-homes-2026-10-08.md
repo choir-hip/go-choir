@@ -132,10 +132,14 @@ boundaries:
 now:
   status: working
   slice: >-
-    1 — typed pre-boot refusal `privacy_key_unavailable` and prompt guest
-    fatal-startup reporting (O8/O9/O20 safe fixes).
-  source_ref: 2a5d6166
-  deploy_identity: 85befb1c
+    lose-the-disk proof (Gate 1 exit). Slices 1-3 landed (typed key
+    refusal; write-once escrow; escrow-to-realization key delivery, proven
+    on staging 02:21Z). Files half failed twice: hydration skipped on a
+    seeded tree (fixed c72c38c4), then version skew plus an in-memory
+    fresh-volume flag (b008b8a6). The flag is now a durable marker
+    (799097e3); proof script scripts/sh_lose_the_disk_proof.mjs.
+  source_ref: 799097e3
+  deploy_identity: ae61f153 (799097e3 deploying through a forced reboot path)
   candidate:
     id: none
     state: none
@@ -176,7 +180,9 @@ now:
     Red surface (custody, vmctl). Mitigated by disposable-first proof and
     refusing rather than guessing.
   next_action: >-
-    Design and land slice 1; then panel review of this file before slice 3.
+    Run scripts/sh_lose_the_disk_proof.mjs on staging once 799097e3 is in
+    the base image; record the receipt. Owner decision pending on version
+    skew (base image vs app layer for new realizations).
 
 receipts: []
 ---
