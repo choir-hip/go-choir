@@ -47,8 +47,9 @@ evidence they need; it does not claim them.
 
 - **AutoPaper** is the product (settled in the canonical vocabulary).
   "Universal Wire" is retired from the UI. The desktop app becomes AutoPaper.
-- "World Wire" stays only as the internal name of roadmap Gate 3, or is
-  retired (**OPEN**). The shared-claims layer needs no product name.
+- "World Wire", "Universal Wire" and "sourcecycled" are retired (owner,
+  2026-10-09). Everything is AutoPaper or a derivation. The shared-claims
+  layer needs no product name.
 - Code: per canonical context §12.4, existing identifiers are not renamed
   for their own sake. New code is named `autopaper`. The
   `universal-wire-platform` identifiers go away with the code they belong to
@@ -211,11 +212,12 @@ need to rebuild one. Per class:
 
 ## 11. Open decisions for the owner
 
-1. **Sequencing.** The canonical context targets an AutoPaper launch in
-   October 2026. The v6 roadmap (10-09) puts it at Gate 3, after Gate 2
-   (self-development). Which holds? If the launch comes first, W1–W4 need a
-   stable computer (Gate 1) but not self-development.
-2. "World Wire" as an internal roadmap name: keep or retire?
+1. ~~Sequencing.~~ **Decided (owner, 2026-10-09):** Gate 1 today, Gate 2
+   tomorrow, Gate 3 (AutoPaper) in October. The v6 order holds and the
+   October launch target holds.
+2. ~~"World Wire" as an internal name.~~ **Decided (owner, 2026-10-09):**
+   retire "World Wire", "Universal Wire" and "sourcecycled"; everything is
+   AutoPaper or a derivation. The rename is a TODO, not done now (§12).
 3. The primary paper's public name and URL shape on choir.news.
 4. User publications from June: restore as frozen pages, or retire?
 5. Observation retention default (proposal: 30 days, cited bodies pinned).
@@ -227,3 +229,40 @@ need to rebuild one. Per class:
    also an independent scorer (canonical context §13, "who provides the
    independent resolution")? Proposal: research resolves, a second model
    scores, and disagreements are flagged, per the memo's scorer interface.
+
+## 12. TODO: retire the old names (owner, 2026-10-09; not done now)
+
+"lets get rid of world wire, universal wire, and sourcecycled name.
+everything can be autopaper or some derivation" — then "dont rename it now,
+just mark that as a todo."
+
+Footprint measured 2026-10-09:
+
+| Name | Code (non-Markdown) | Markdown files |
+|---|---|---|
+| Universal Wire | 65 files, 558 occurrences | 86 |
+| sourcecycled | 33 files, 115 occurrences | 92 |
+| World Wire | 6 files, 13 occurrences | 115 |
+
+Notes for whoever does it:
+
+- **Persisted identity, not just symbols.** `universal-wire-platform`
+  (owner), `vm-universal-wire-platform` and
+  `computer-universal-wire-platform` are stored in vmctl ownership on Node
+  B. vmctl ensures that platform computer by these constants
+  (`internal/vmctl/platform_computer.go`, `cmd/vmctl/main.go`,
+  `internal/vmctl/handlers.go`), and the proxy authorizes by them
+  (`internal/proxy/guest_authority.go`, `handlers.go`). Renaming the
+  constants without a migration would orphan the existing platform
+  computer and could start a new one. Prefer retiring it in W1, when the
+  primary AutoPaper computer replaces it, over an in-place rename.
+- **sourcecycled** is slated for deletion (§4 rule 2). Delete rather than
+  rename, after W1 moves any reusable source adapters into desk tool
+  modules. The host env file `/var/lib/go-choir/corpus-dsn.env` also
+  carries `SOURCECYCLED_DOLT_DSN`.
+- **Routes:** `/api/universal-wire/stories` and the corpusd
+  `/internal/platform/universal-wire/*` endpoints go away with Store B
+  (§9); the AutoPaper app gets new routes in W4.
+- **Docs:** rename current documents and roadmap gate names. Dated
+  receipts and `docs/archive/` keep their text, with a glossary line in the
+  doctrine mapping the former names to AutoPaper.
