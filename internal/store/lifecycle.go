@@ -1216,6 +1216,9 @@ func (s *Store) MigrateActorWakeOutbox(ctx context.Context) (int, error) {
 	if expired > 0 {
 		log.Printf("migrate actor wake outbox: expired %d stale pending packets", expired)
 	}
+	if minted > 0 {
+		s.signalActorWakes()
+	}
 	return minted, nil
 }
 
@@ -2615,6 +2618,7 @@ func (s *Store) commitLifecycleTransition(ctx context.Context, ownerID, computer
 		}
 		return types.LifecycleResult{}, err
 	}
+	s.signalActorWakesIfAny(objects)
 	return result, nil
 }
 
@@ -3282,6 +3286,7 @@ func (s *Store) projectLifecycleRun(ctx context.Context, req types.ReplaceLifecy
 		}
 		return types.LifecycleResult{}, err
 	}
+	s.signalActorWakesIfAny(objects)
 	return types.LifecycleResult{Trajectory: trajectory}, nil
 }
 

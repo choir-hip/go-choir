@@ -190,8 +190,10 @@ type Runtime struct {
 	selfdevStartupMarker  string
 	// bootRestart is how this boot began: a consumed planned-restart
 	// marker, or a crash (bootRestartPlanned false).
-	bootRestart                 PlannedRestart
-	bootRestartPlanned          bool
+	bootRestart        PlannedRestart
+	bootRestartPlanned bool
+	// wakeRetries bounds failed actor wake dispatches (SL slice 2).
+	wakeRetries                 wakeRetryTracker
 	selfdevStartupReleaseDigest string
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
@@ -2526,18 +2528,27 @@ func (rt *Runtime) reconcilePersistedTerminalRunOutcome(ctx context.Context, rec
 	}
 }
 
-func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
+// actorWakeSweep reports what one outbox pass did, so the projector can
+// decide when to look again.
+type actorWakeSweep struct {
+	dispatched int
+	// more: wakes were left for pacing or budget; sweep again at once.
+	more bool
+}
+
+func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) actorWakeSweep {
+	var out actorWakeSweep
 	if rt == nil || rt.store == nil {
-		return
+		return out
 	}
 	wakes, err := rt.store.ListUnprojectedActorWakes(ctx)
 	if err != nil {
 		log.Printf("runtime: actor wake outbox sweep: %v", err)
-		return
+		return out
 	}
 	if rt.dispatchActor == nil && rt.scheduleActor == nil {
 		log.Printf("runtime: actor wake outbox sweep: actor delivery unavailable")
-		return
+		return out
 	}
 	// The sweep is the obligation re-drive authority: dispatch through the
 	// redrive hooks so a wake whose deterministic tape row was already consumed
@@ -2554,14 +2565,16 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 	}
 	// Paced drain: one target desk gets at most a handful of dispatches per
 	// sweep. A boot storm that mints thousands of wakes for the same desk
-	// collapses to a bounded burst per tick — resolve folds the desk's whole
+	// collapses to a bounded burst per pass — resolve folds the desk's whole
 	// pending set anyway, so extra dispatches to a hot desk carry no
 	// additional obligation (sa1 rearm storm).
 	perTarget := map[string]int{}
 	const sweepPerTargetLimit = 4
-	dispatched := 0
 	const sweepDispatchBudget = 64
 	for _, wake := range wakes {
+		if !rt.wakeRetries.due(wake.CanonicalID) {
+			continue // backing off after a failed dispatch
+		}
 		var dispatchErr error
 		if !wake.NotBefore.IsZero() {
 			if schedule == nil {
@@ -2570,10 +2583,12 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 			}
 			dispatchErr = schedule(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID, wake.NotBefore.UTC())
 		} else {
-			if wake.NotBefore.IsZero() && dispatched >= sweepDispatchBudget {
-				break // leave the rest unprojected for the next tick
+			if out.dispatched >= sweepDispatchBudget {
+				out.more = true
+				break // leave the rest unprojected for the next pass
 			}
 			if perTarget[wake.TargetAgentID] >= sweepPerTargetLimit {
+				out.more = true
 				continue
 			}
 			dispatchErr = dispatch(ctx, wake.OwnerID, wake.ComputerID, wake.TargetAgentID, wake.Kind, wake.Content, wake.TrajectoryID, wake.AgentID)
@@ -2583,6 +2598,7 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 				// The backing occurrence is gone (consumed, disposed, or
 				// delivery-exhausted before this wake projected). Retrying can
 				// never succeed — mark projected so the wake leaves the drain.
+				rt.wakeRetries.clear(wake.CanonicalID)
 				if markErr := rt.store.MarkActorWakeProjected(ctx, wake.CanonicalID); markErr != nil {
 					log.Printf("runtime: actor wake outbox dispose dead wake %s: %v", wake.SourceUpdateID, markErr)
 				} else {
@@ -2590,15 +2606,28 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) {
 				}
 				continue
 			}
-			log.Printf("runtime: actor wake outbox dispatch %s: %v", wake.SourceUpdateID, dispatchErr)
+			attempts, exhausted := rt.wakeRetries.failed(wake.CanonicalID, dispatchErr)
+			if !exhausted {
+				log.Printf("runtime: actor wake outbox dispatch %s failed (attempt %d/%d, backing off): %v", wake.SourceUpdateID, attempts, wakeDispatchMaxAttempts, dispatchErr)
+				continue
+			}
+			// O1: a bounded number of attempts, then a recorded, visible fate.
+			if markErr := rt.store.MarkActorWakeExhausted(ctx, wake.CanonicalID, attempts, dispatchErr.Error()); markErr != nil {
+				log.Printf("runtime: actor wake outbox mark %s exhausted: %v", wake.SourceUpdateID, markErr)
+				continue
+			}
+			rt.wakeRetries.clear(wake.CanonicalID)
+			log.Printf("runtime: actor wake outbox dispatch %s exhausted after %d attempts: %v", wake.SourceUpdateID, attempts, dispatchErr)
 			continue
 		}
+		rt.wakeRetries.clear(wake.CanonicalID)
 		perTarget[wake.TargetAgentID]++
-		dispatched++
+		out.dispatched++
 		if err := rt.store.MarkActorWakeProjected(ctx, wake.CanonicalID); err != nil && !errors.Is(err, store.ErrConcurrentStateChange) {
 			log.Printf("runtime: actor wake outbox mark projected %s: %v", wake.SourceUpdateID, err)
 		}
 	}
+	return out
 }
 
 // SetKernelMode enables the derivable-continuation projector. Called by the
@@ -2636,9 +2665,9 @@ func (rt *Runtime) migrateActorWakeOutboxAsync(ctx context.Context) {
 	}()
 }
 
-// startProjector launches the continuous store→actor projection. It drains the
-// durable metadata-indexed actor-wake outbox, so the 500 ms poll never scans
-// the canonical worker-update backlog. The fold only appends idempotent actor
+// startProjector launches the store→actor projection. It drains the durable
+// metadata-indexed actor-wake outbox when the store signals a committed wake
+// write, never scanning the canonical worker-update backlog. The fold only appends idempotent actor
 // occurrences and marks successful outbox entries projected; activation owns
 // all resident-run binding.
 func (rt *Runtime) startProjector(ctx context.Context) {
@@ -2652,18 +2681,7 @@ func (rt *Runtime) startProjector(ctx context.Context) {
 	rt.wg.Add(1)
 	go func() {
 		defer rt.wg.Done()
-		ticker := time.NewTicker(500 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-stop:
-				return
-			case <-ticker.C:
-				rt.sweepActorWakeOutbox(ctx)
-			}
-		}
+		rt.runActorWakeProjector(ctx, stop)
 	}()
 }
 

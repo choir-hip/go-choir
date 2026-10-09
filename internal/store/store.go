@@ -115,6 +115,10 @@ type Store struct {
 	textureRevMu     sync.Mutex
 	doltCommitMu     sync.Mutex
 	doltHistoryDirty bool
+	// actorWakeSignal wakes the outbox projector after committed wake
+	// writes (SL slice 2, actor_wake_signal.go).
+	actorWakeSignal     chan struct{}
+	actorWakeSignalOnce sync.Once
 	// finalizeSinceCheckpoint counts finalized events since the last Dolt
 	// checkpoint. finalizeBatch commits at most every doltCheckpointEvery
 	// events (0 = defaultFinalizeCheckpointEvery) instead of once per event:
