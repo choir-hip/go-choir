@@ -54,3 +54,24 @@ prebuild of run N+1 overlapping the deploy of run N) at load 61.
 
 Item 1 is self-contained and verifiable: compare toplevel build time and
 per-service `build.json` identity before and after on one deploy.
+
+## Item 1 landed: fe5bbcbf (run 37906238438, 2026-10-09)
+
+| Job | Before (f8a968dd, 8fd243ba) | After (fe5bbcbf) |
+|---|---|---|
+| Prebuild Deploy Artifacts (Node B) | 15.0–16.2 min | **5.8 min** |
+| Deploy to Staging (Node B) | 12.6–13.0 min | **7.5 min** |
+| First job start → deploy done | 17–19 min | **8.1 min** |
+
+The run itself still took 18 min wall-clock: it queued ~10 min behind the
+previous run's Node B concurrency group (item 2 is still open).
+
+**Regression introduced by fe5bbcbf:** "Build Differential SBOM
+Candidate" failed with `semantic fingerprint Go toolchain mismatch:
+Nix=unknown setup-go=1.26.4`. Both `build-sboms-differential` and
+`verify-sbom-candidate` find the Nix Go version among the **direct**
+input derivations of `packages.auth`. `auth` is now a copier whose only
+Go-built input is `go-choir-services`, so the probe finds nothing. Fix:
+read the recursive derivation graph and take Go from the
+`go-choir-services` derivation. The deploy is not gated on this job, so
+staging was not affected; the SBOM acceptance was skipped for this SHA.
