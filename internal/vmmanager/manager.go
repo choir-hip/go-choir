@@ -1186,6 +1186,7 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 
 	m.ensureTapHostServiceInputRules(tapNameForVMID(vmID))
 	m.reconcileTapIsolation(vmID, hostURL)
+	m.adoptConsole(vmID, pid)
 	log.Printf("vmmanager: reattached VM %s (host=%s pid=%d epoch=%d)", vmID, hostURL, pid, epoch)
 	return inst, nil
 }
@@ -1879,11 +1880,10 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 	// --no-api config file. The kernel's ttyS0 output is instead written to
 	// Firecracker stdout, which we retain per VM rather than mixing it into
 	// vmctl's shared journal.
-	console, err := newRotatingConsoleWriter(
-		consoleLogPath(m.cfg.StateDir, vmID),
-		consoleLogMaxBytes,
-		consoleLogGenerations,
-	)
+	// The console is a file firecracker writes directly, never a pipe that
+	// needs this process to read it (console_file.go).
+	consolePath := consoleLogPath(m.cfg.StateDir, vmID)
+	console, err := openConsoleSink(consolePath, consoleLogMaxBytes, consoleLogGenerations)
 	if err != nil {
 		return fmt.Errorf("open console sink for VM %s: %w", vmID, err)
 	}
@@ -1907,7 +1907,11 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 		_ = console.Close()
 		return fmt.Errorf("start firecracker: %w", err)
 	}
+	// The child holds its own descriptor for the console file.
+	_ = console.Close()
 	applyLaunchOOMScoreAdj(vmID, cmd.Process.Pid)
+	exited := make(chan struct{})
+	go watchConsoleLog(vmID, cmd.Process.Pid, consolePath, exited)
 
 	// Store the process info.
 	var expected *VMInstance
@@ -1925,7 +1929,7 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 	// os/exec has stopped forwarding its stdout.
 	go func() {
 		err := cmd.Wait()
-		_ = console.Close()
+		close(exited)
 		if expected != nil {
 			close(expected.done)
 		}
