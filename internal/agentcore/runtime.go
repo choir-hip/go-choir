@@ -4078,9 +4078,12 @@ func engineeringOverlayTerminalFateCommitted(messages []json.RawMessage) bool {
 	return false
 }
 
+// Desk budgets are 100x their first values by owner direction
+// (2026-10-10): make the system work before constraining it. Loops are
+// watched in the traces instead; the elapsed bounds stay.
 const (
-	defaultTextureActorMaxProviderCalls = 80
-	defaultTextureActorMaxTotalTokens   = 1200000
+	defaultTextureActorMaxProviderCalls = 8000
+	defaultTextureActorMaxTotalTokens   = 120000000
 	defaultTextureActorMaxElapsed       = 45 * time.Minute
 )
 
@@ -4105,7 +4108,7 @@ func textureActorToolLoopBudget(rec *types.RunRecord) toolregistry.ToolLoopBudge
 }
 
 const (
-	defaultEngineeringMaxProviderCalls = 200
+	defaultEngineeringMaxProviderCalls = 20000
 	defaultEngineeringMaxElapsed       = 60 * time.Minute
 )
 

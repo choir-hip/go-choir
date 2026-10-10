@@ -80,8 +80,20 @@ total tokens ~1.24M exceeded max 1200000` at 01:19:40, 03:00:27 and
 04:30:22. The budget (`textureowner/tool_loop_policy.go`: 80 calls,
 1.2M total tokens) counts the input tokens resent on every call. A
 Texture run that keeps taking supervision turns while apply stalls
-reaches it in about 60 to 80 calls. The fix is passivation while waiting
-on evidence, not a larger budget. A protocol change, pending design.
+reaches it in about 60 to 80 calls. Spend also carries across resumes
+(`actor_budget_spent_*`).
+
+**Owner decision (2026-10-10): make the system work before constraining
+it.** The caps were inherited defaults the owner never set. Desk token
+and call budgets are raised 100x:
+
+- Texture: 8000 calls and 120M tokens;
+- engineering: 20000 calls.
+
+The elapsed bounds stay (Texture 45m, engineering 60m) as the backstop
+for a dead-worker loop. Uncontrolled loops are watched in the traces by
+recurring haiku trace reviews instead. Passivating while waiting on
+evidence remains the right protocol fix.
 
 ### F6. The apply checkpoint chases a moving head (reported; matches the open apply-starvation doc)
 

@@ -16,7 +16,9 @@ func TestEngineeringRunsHaveAToolLoopBudget(t *testing.T) {
 	if budget.MaxProviderCalls != defaultEngineeringMaxProviderCalls || budget.MaxElapsed != defaultEngineeringMaxElapsed {
 		t.Fatalf("engineering budget = %+v", budget)
 	}
-	if budget.MaxProviderCalls <= 0 || budget.MaxProviderCalls > 400 || budget.MaxElapsed <= 0 || budget.MaxElapsed > 2*time.Hour {
+	// Owner direction (2026-10-10): call and token caps are effectively
+	// off; the elapsed bound is what still ends a dead-worker retry loop.
+	if budget.MaxProviderCalls <= 0 || budget.MaxElapsed <= 0 || budget.MaxElapsed > 2*time.Hour {
 		t.Fatalf("engineering budget is unbounded or absurd: %+v", budget)
 	}
 	rec.Metadata["actor_budget_max_provider_calls"] = 500

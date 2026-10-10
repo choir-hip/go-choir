@@ -26,9 +26,11 @@ func initialTextureToolChoice(rec *types.RunRecord) string {
 	return ""
 }
 
+// 100x the first values by owner direction (2026-10-10); see
+// agentcore/runtime.go.
 const (
-	defaultTextureActorMaxProviderCalls = 80
-	defaultTextureActorMaxTotalTokens   = 1200000
+	defaultTextureActorMaxProviderCalls = 8000
+	defaultTextureActorMaxTotalTokens   = 120000000
 	defaultTextureActorMaxElapsed       = 45 * time.Minute
 )
 
