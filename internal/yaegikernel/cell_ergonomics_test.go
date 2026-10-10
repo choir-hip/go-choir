@@ -120,3 +120,48 @@ func TestTopLevelCompoundStatementsCompileAndKeepBindings(t *testing.T) {
 		t.Fatalf("self-referencing rebind = %q, want 20", out.Stdout)
 	}
 }
+
+// K9-K11 (docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md),
+// from the first bound engineering run. Failure modes pinned: a one-line
+// parenthesized import list followed by statements fails to compile; a
+// bound helper cannot be redefined with a new func type; a compile error
+// does not show the line it points at.
+func TestOneLineImportListsTypedRedefinitionAndCompileErrorLines(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	cell := func(source string) SessionResult {
+		t.Helper()
+		out, err := serveCell(sess, SessionFrame{ID: "cell", Source: source}, nil, &hooks)
+		if err != nil || out.Error != "" || out.Reuse == ReuseUnsafeToReuse {
+			t.Fatalf("cell failed: %v %q reuse=%q\n%s", err, out.Error, out.Reuse, source)
+		}
+		return out
+	}
+	got := cell("import (\"encoding/json\"; \"fmt\"; \"strconv\")\ndump := func(label string, v any) {\n\tb, _ := json.Marshal(v)\n\tfmt.Println(label, string(b), strconv.Itoa(1))\n}\ndump(\"x\", 2)")
+	if got.Stdout != "x 2 1\n" {
+		t.Fatalf("one-line import list cell stdout = %q", got.Stdout)
+	}
+	cell("sh := func(cmd string, args ...string) string { return cmd }\nfmt.Println(sh(\"a\"))")
+	got = cell("sh := func(cmd string, args []string, env []string) string { return cmd + env[0] }\nfmt.Println(sh(\"a\", nil, []string{\"b\"}))")
+	if got.Stdout != "ab\n" {
+		t.Fatalf("redefined helper stdout = %q", got.Stdout)
+	}
+	cell("y := 3")
+	if out := cell("y := y * 2\nfmt.Println(y)"); out.Stdout != "6\n" {
+		t.Fatalf("K8 still holds: stdout = %q", out.Stdout)
+	}
+
+	bad := "r := []string{\"a\", \"b\"]\nfmt.Println(r)"
+	out, err := serveCell(sess, SessionFrame{ID: "cell", Source: bad}, nil, &hooks)
+	if err != nil || out.Error == "" {
+		t.Fatalf("typo cell: err=%v out=%+v", err, out)
+	}
+	if !strings.Contains(out.Error, `r := []string{"a", "b"]`) {
+		t.Fatalf("compile error does not show the offending line:\n%s", out.Error)
+	}
+}

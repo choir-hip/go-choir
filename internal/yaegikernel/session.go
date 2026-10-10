@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -159,6 +162,28 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 		res.Duration = time.Since(start)
 		return res, &EvalError{err: err, Reuse: ReusePreserve, Kind: DiagImportPreflight}
 	}
+	if head, rest, split := s.splitNewLeadingImports(src); split {
+		// Install the cell's new imports on their own, then run the
+		// statements as a plain fragment (K9). An import decl executes
+		// nothing, so a failure here leaves the session as it was.
+		prog, err, compilePanic := s.compileCell(s.normalizeCellSource(head))
+		if compilePanic != nil {
+			res.Duration = time.Since(start)
+			s.poisoned = compilePanic
+			return res, &EvalError{err: compilePanic, Reuse: ReuseUnsafeToReuse, Kind: DiagPanic}
+		}
+		if err != nil {
+			res.Duration = time.Since(start)
+			return res, &EvalError{err: withCompileErrorLine(err, head), Reuse: ReusePreserve, Kind: DiagCompile}
+		}
+		if _, err := s.interp.Execute(prog); err != nil {
+			res.Duration = time.Since(start)
+			s.poisoned = err
+			return res, &EvalError{err: err, Reuse: ReuseUnsafeToReuse, Kind: DiagRuntime}
+		}
+		s.markCellImports(head)
+		src = rest
+	}
 	// Normalize the program-shaped sources models actually emit into the
 	// fragment shape this persistent session accepts: drop the package
 	// clause, drop import decls for paths already loaded, and rename
@@ -180,7 +205,7 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 	}
 	if err != nil {
 		res.Duration = time.Since(start)
-		return res, &EvalError{err: err, Reuse: ReusePreserve, Kind: DiagCompile}
+		return res, &EvalError{err: withCompileErrorLine(err, src), Reuse: ReusePreserve, Kind: DiagCompile}
 	}
 	stdoutCap := &cappedBuffer{max: maxEvalOutputBytes}
 	stderrCap := &cappedBuffer{max: maxEvalOutputBytes}
@@ -305,4 +330,40 @@ func (s *Session) ErrorHint(src, msg string) string {
 		return ""
 	}
 	return cellErrorHint(s.choirSurface, src, msg)
+}
+
+var compileErrorPosition = regexp.MustCompile(`^(?:[^:\s]*\.go:)?(\d+):(\d+):`)
+
+// withCompileErrorLine appends the source line a compile error points at.
+// A bare "_.go:4:176: missing ','" left the model guessing; it blamed
+// transport truncation for its own `"]` typo across three cells (K11,
+// docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md). The
+// line is the one the kernel compiled, which can differ from the cell text
+// when imports or a statement mix were normalized.
+func withCompileErrorLine(err error, src string) error {
+	m := compileErrorPosition.FindStringSubmatch(err.Error())
+	if m == nil {
+		return err
+	}
+	lineNo, _ := strconv.Atoi(m[1])
+	col, _ := strconv.Atoi(m[2])
+	lines := strings.Split(src, "\n")
+	if lineNo < 1 || lineNo > len(lines) {
+		return err
+	}
+	line := strings.TrimRight(lines[lineNo-1], " \t\r")
+	const window = 160
+	prefix := ""
+	if col > window {
+		cut := col - window/2
+		line, col, prefix = line[cut:], col-cut, "…"
+	}
+	if len(line) > window {
+		line = line[:window] + "…"
+	}
+	caret := ""
+	if col >= 1 && col <= len(line)+1 {
+		caret = "\n  | " + strings.Repeat(" ", len(prefix)+col-1) + "^"
+	}
+	return fmt.Errorf("%w\n  | %s%s%s", err, prefix, line, caret)
 }

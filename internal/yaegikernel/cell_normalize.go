@@ -52,6 +52,7 @@ import (
 
 func (s *Session) normalizeCellSource(src string) string {
 	s.cellDeclares = nil
+	src = expandOneLineImportLists(src)
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "cell.go", src, parser.ParseComments)
 	if err != nil {
@@ -165,6 +166,49 @@ func guardLeadingFuncStatement(src string) string {
 	return ";\n" + src
 }
 
+var (
+	oneLineImportList = regexp.MustCompile(`^(\s*)import\s*\((.*)\)\s*;?\s*$`)
+	importListSpec    = regexp.MustCompile(`(?:([\w\.]+)\s+)?"([^"]+)"`)
+)
+
+// expandOneLineImportLists rewrites `import ("a"; "b")` lines into the
+// multi-line block the import handling below recognizes (K9,
+// docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md). A line
+// whose parentheses hold anything but import specs is left alone.
+func expandOneLineImportLists(src string) string {
+	if !strings.Contains(src, "import") {
+		return src
+	}
+	lines := strings.Split(src, "\n")
+	changed := false
+	for i, line := range lines {
+		m := oneLineImportList.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		specs := importListSpec.FindAllStringSubmatch(m[2], -1)
+		if len(specs) == 0 || strings.TrimSpace(importListSpec.ReplaceAllString(strings.ReplaceAll(m[2], ";", " "), "")) != "" {
+			continue
+		}
+		var b strings.Builder
+		b.WriteString(m[1] + "import (\n")
+		for _, spec := range specs {
+			b.WriteString(m[1] + "\t")
+			if spec[1] != "" {
+				b.WriteString(spec[1] + " ")
+			}
+			b.WriteString(strconv.Quote(spec[2]) + "\n")
+		}
+		b.WriteString(m[1] + ")")
+		lines[i] = b.String()
+		changed = true
+	}
+	if !changed {
+		return src
+	}
+	return strings.Join(lines, "\n")
+}
+
 // degradeBoundDefines handles the statement-fragment cell. Top-level
 // compound statements run inside func() { ... }() (see below). A top-level
 // `x := e` whose names are all already bound becomes `x = e`: yaegi's
@@ -221,6 +265,15 @@ func (s *Session) degradeBoundDefines(src string) string {
 			}
 		}
 		s.cellDeclares = append(s.cellDeclares, names...)
+		// A bound helper redefined with a func literal is a new definition,
+		// usually with a new signature: assigning it fails "cannot use type"
+		// (K10). Self-reference, the case the rewrite exists for, cannot
+		// occur in a func literal's own definition.
+		if len(as.Rhs) == 1 {
+			if _, isFunc := as.Rhs[0].(*ast.FuncLit); isFunc {
+				allBound = false
+			}
+		}
 		if allBound && len(names) > 0 {
 			as.Tok = token.ASSIGN
 			rewrote = true
@@ -252,6 +305,47 @@ func (s *Session) degradeBoundDefines(src string) string {
 // session and something follows them. Any new path, an aliased or
 // unparseable spec, or an import block that does not close returns ok=false.
 func (s *Session) dropInstalledLeadingImports(src string) (string, bool) {
+	_, rest, paths, ok := leadingImportLines(src)
+	if !ok {
+		return "", false
+	}
+	for _, path := range paths {
+		if !s.importedPaths[path] {
+			return "", false
+		}
+	}
+	return rest, true
+}
+
+// splitNewLeadingImports separates an import+statement cell whose imports
+// are not all installed: head is the import lines alone, rest the statements.
+// The session installs head first, then runs rest as an ordinary statement
+// fragment. Wrapping the statements in a synthetic main and hoisting their
+// definitions to package vars instead reorders them: yaegi ran the body
+// before `var dump = func…` was set ("call of nil function", K9,
+// docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md). A cell
+// that parses as a Go file (imports plus declarations) is not split.
+func (s *Session) splitNewLeadingImports(src string) (head, rest string, ok bool) {
+	head, rest, paths, ok := leadingImportLines(expandOneLineImportLists(src))
+	if !ok {
+		return "", "", false
+	}
+	if _, err := parser.ParseFile(token.NewFileSet(), "cell.go", "package p\n"+src, 0); err == nil {
+		return "", "", false
+	}
+	for _, path := range paths {
+		if !s.importedPaths[path] {
+			return head, rest, true
+		}
+	}
+	return "", "", false
+}
+
+// leadingImportLines splits src into its contiguous leading import lines
+// (single `import "x"` lines and multi-line `import ( … )` blocks) and the
+// non-empty rest. ok=false when there are no leading imports, nothing
+// follows them, or a spec is aliased or unparseable.
+func leadingImportLines(src string) (head, rest string, paths []string, ok bool) {
 	lines := strings.Split(src, "\n")
 	inBlock, sawImport := false, false
 	for i, line := range lines {
@@ -277,18 +371,19 @@ func (s *Session) dropInstalledLeadingImports(src string) (string, bool) {
 		default:
 			rest := strings.Join(lines[i:], "\n")
 			if !sawImport || strings.TrimSpace(rest) == "" {
-				return "", false
+				return "", "", nil, false
 			}
-			return rest, true
+			return strings.Join(lines[:i], "\n"), rest, paths, true
 		}
 		for _, spec := range specs {
 			path, err := strconv.Unquote(spec)
-			if err != nil || !s.importedPaths[path] {
-				return "", false
+			if err != nil {
+				return "", "", nil, false
 			}
+			paths = append(paths, path)
 		}
 	}
-	return "", false
+	return "", "", nil, false
 }
 
 // parseWrappedStatementMix rescues the import+statement shape models emit:
