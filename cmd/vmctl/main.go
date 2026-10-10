@@ -103,7 +103,12 @@ func main() {
 	if cfg, ok := pressureReclaimConfigFromEnv(); ok {
 		registry.SetPressureReclaimConfig(cfg)
 		idleSweeperEnabled = true
-		log.Printf("vmctl: pressure reclaim mode=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.MinIdle, cfg.MaxCandidates)
+		log.Printf("vmctl: pressure reclaim mode=%s min_idle=%s max_candidates=%d max_busy_protect=%s", cfg.Mode, cfg.MinIdle, cfg.MaxCandidates, cfg.MaxBusyProtect)
+	}
+	if v := os.Getenv("VMCTL_UNMANAGED_REAP_GRACE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			registry.SetUnmanagedReapGrace(d)
+		}
 	}
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
@@ -346,6 +351,16 @@ func (a *vmManagerAdapter) GetVM(vmID string) *vmctl.VMInstanceInfo {
 	return toVMInstanceInfo(inst)
 }
 
+// LiveFirecrackerVMs, ReapUnmanagedVM and SetVMOOMScoreAdj implement the
+// vmctl host-capacity process controller.
+func (a *vmManagerAdapter) LiveFirecrackerVMs() map[string][]int { return a.mgr.LiveFirecrackerVMs() }
+
+func (a *vmManagerAdapter) ReapUnmanagedVM(vmID string) error { return a.mgr.ReapUnmanagedVM(vmID) }
+
+func (a *vmManagerAdapter) SetVMOOMScoreAdj(vmID string, adj int) error {
+	return a.mgr.SetVMOOMScoreAdj(vmID, adj)
+}
+
 func (a *vmManagerAdapter) CheckHealth(vmID string) (bool, error) {
 	return a.mgr.CheckHealth(vmID)
 }
@@ -382,6 +397,11 @@ func pressureReclaimConfigFromEnv() (vmctl.PressureReclaimConfig, bool) {
 	if v := os.Getenv("VMCTL_PRESSURE_RECLAIM_MIN_IDLE"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			cfg.MinIdle = d
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_MAX_BUSY_PROTECT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.MaxBusyProtect = d
 		}
 	}
 	if v := os.Getenv("VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB"); v != "" {

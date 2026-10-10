@@ -666,7 +666,11 @@ in
       # Guest count admission against this reservation is vmctl's job.
       MemoryLow = "14G";
       MemorySwapMax = "0";
-      OOMScoreAdjust = -500;
+      # vmctl must outlive every VM under global OOM. Firecracker children
+      # set their own priority at launch (+500, lowered to -400 for
+      # protected computers by vmctl's process reconcile) instead of
+      # inheriting this (docs/problems/node-b-oom-from-retained-qa-computers-2026-10-10.md).
+      OOMScoreAdjust = -900;
       # Let Firecracker child processes survive vmctl process replacement.
       # The new vmctl process reattaches using durable ownership + pid files
       # after proving the guest health endpoint still responds.
@@ -758,6 +762,9 @@ in
         "VMCTL_PRESSURE_MAX_CPU_SOME_AVG10=90.0"
         "VMCTL_PRESSURE_MAX_IO_SOME_AVG10=5.0"
         "VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5"
+        # A proof-account computer busy longer than this (e.g. stuck
+        # mid-apply) loses busy protection under host pressure.
+        "VMCTL_PRESSURE_MAX_BUSY_PROTECT=2h"
         "VMCTL_STALE_STATE_MIN_AGE=6h"
         "VMCTL_STALE_STATE_MAX_DELETES=25"
         # Codex-created staging/product-proof accounts use the example.com and

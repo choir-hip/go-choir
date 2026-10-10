@@ -96,3 +96,59 @@ it started.**
   running for six days.
 - `vmctl-sigbus-under-oom`: vmctl crashed with SIGBUS under global OOM
   instead of shedding load.
+
+## Fix: vmctl host-capacity guards (owner-approved 2026-10-10)
+
+Red ceremony (vmctl VM lifecycle on staging).
+
+- Conjecture delta: host capacity is safe only if vmctl's registry
+  accounts for every Firecracker process it started, refuses new computers
+  below the memory floor, and ranks VMs for the kernel OOM killer. The
+  existing reclaim was correct, but it was blind.
+- Changes (`internal/vmctl/host_capacity.go`,
+  `internal/vmmanager/process_control.go`):
+  1. `ReconcileVMProcesses` runs first in every sweep (every 2 minutes).
+     - It scans every Firecracker process on the host and gives each
+       tracked VM its OOM priority: -400 for protected computers, +500
+       for ordinary ones.
+     - It retries reattach for processes behind a stopped ownership.
+       After 10 minutes (`VMCTL_UNMANAGED_REAP_GRACE`) it powers them off,
+       keeping their disk state, unless the computer is premium,
+       critical, platform or held. Those are never reaped.
+     - A process with no ownership at all is powered off on its second
+       sighting.
+  2. Memory admission. A new computer, or a start that adds a VM, is
+     refused with 503 / Retry-After (`host_memory_pressure`) when
+     available memory minus the VM size would fall below the reclaim
+     floor. Protected computers, and recovery of a tracked VM, are always
+     admitted.
+  3. Stop and logout power off an unmanaged process, and stop fails if
+     the process survives. No more false "stopped".
+  4. OOM order. vmctl goes from -500 to -900. Every VM launches at +500
+     instead of inheriting vmctl's protection, and reconcile lowers
+     protected computers to -400.
+  5. Busy cap. `VMCTL_PRESSURE_MAX_BUSY_PROTECT=2h` applies to proof
+     accounts only (retention's `example.com` / `example.test` and the
+     proof user prefixes). Real users' computers keep busy protection
+     however long their work runs.
+- Tests first (`host_capacity_test.go`, `process_control_test.go`): the
+  failure modes are listed at the top of the test file. They cover reap
+  only after grace, never reap protected, reattach on recovery, orphan
+  reaped on second sight, managed VM untouched, a truthful stop,
+  admission refusing below the floor but admitting premium, OOM priority
+  by class, and the busy cap for proof computers only.
+- Protected surfaces: vmctl VM lifecycle (reattach, stop, admission),
+  host OOM policy.
+- Admissible evidence: after deploy, the vmctl log shows
+  `process reconcile`, live VMs have the expected `oom_score_adj`, and
+  `free` stays above the floor through an M11 rerun.
+- Rollback: git revert, plus restoring the nix OOMScoreAdjust.
+  Powered-off VMs keep their state and resume on the next request.
+- Heresy delta:
+  - Discovered "registry blind to unmanaged VM processes" and "stop
+    reports success for a running VM".
+  - Repaired both on staging proof only.
+  - Introduced none.
+- Residual `probe-self-stop`: auth logout does not stop the computer, so
+  probes cannot stop their own. Reconcile, idle hibernation and the busy
+  cap now bound them instead.

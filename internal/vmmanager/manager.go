@@ -1913,6 +1913,7 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 		_ = console.Close()
 		return fmt.Errorf("start firecracker: %w", err)
 	}
+	applyLaunchOOMScoreAdj(vmID, cmd.Process.Pid)
 
 	// Store the process info.
 	var expected *VMInstance

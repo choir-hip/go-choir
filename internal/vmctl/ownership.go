@@ -347,6 +347,15 @@ type VMInstanceInfo struct {
 type OwnershipRegistry struct {
 	mu sync.RWMutex
 
+	// clock overrides time.Now for host-capacity tests.
+	clock func() time.Time
+	// unmanagedSince records when reconcile first saw a live VM process the
+	// manager does not track; busySince when a guest first reported busy
+	// (host_capacity.go). unmanagedGrace overrides the reap grace.
+	unmanagedSince map[string]time.Time
+	busySince      map[string]time.Time
+	unmanagedGrace time.Duration
+
 	// ownerships maps user/desktop composite keys to their active VM ownership.
 	ownerships map[string]*VMOwnership
 
@@ -435,6 +444,8 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 	}
 	return &OwnershipRegistry{
 		ownerships:                 make(map[string]*VMOwnership),
+		unmanagedSince:             make(map[string]time.Time),
+		busySince:                  make(map[string]time.Time),
 		vmByID:                     make(map[string]*VMOwnership),
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
 		gatewayCredentialNextCheck: make(map[string]time.Time),
@@ -626,29 +637,41 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 			log.Printf("vmctl: reattach refused for VM %s: %v", own.VMID, err)
 			continue
 		}
-		info, err := mgr.ReattachVM(own.VMID, own.ComputerURL, own.Epoch)
-		if err != nil {
-			log.Printf("vmctl: reattach skipped for VM %s: %v", own.VMID, err)
-			continue
-		}
-		r.mu.Lock()
-		if cur, ok := r.vmByID[own.VMID]; ok {
-			cur.State = VMStateActive
-			cur.ComputerURL = info.HostURL
-			cur.Epoch = info.Epoch
-			if cur.LastActiveAt.IsZero() {
-				cur.LastActiveAt = time.Now()
-			}
-			cur.StoppedBy = ""
-			r.saveLocked()
+		if r.reattachOwnership(own, mgr) {
 			reattached++
 		}
-		r.mu.Unlock()
 	}
 	if reattached > 0 {
 		go r.ReconcileReadyGatewayCredentials()
 	}
 	return reattached
+}
+
+// reattachOwnership adopts one surviving VM process. A failed reattach
+// leaves the process running outside the manager; ReconcileVMProcesses
+// retries it and powers it off after a grace period (host_capacity.go).
+func (r *OwnershipRegistry) reattachOwnership(own VMOwnership, mgr VMManager) bool {
+	info, err := mgr.ReattachVM(own.VMID, own.ComputerURL, own.Epoch)
+	if err != nil {
+		log.Printf("vmctl: reattach skipped for VM %s: %v", own.VMID, err)
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cur, ok := r.vmByID[own.VMID]
+	if !ok {
+		return false
+	}
+	cur.State = VMStateActive
+	cur.ComputerURL = info.HostURL
+	cur.Epoch = info.Epoch
+	if cur.LastActiveAt.IsZero() {
+		cur.LastActiveAt = time.Now()
+	}
+	cur.StoppedBy = ""
+	delete(r.unmanagedSince, own.VMID)
+	r.saveLocked()
+	return true
 }
 
 // SetGatewayURL configures the gateway URL for issuing autoputer tokens.
@@ -863,6 +886,7 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 	sweep := func() {
 		sweepMu.Lock()
 		defer sweepMu.Unlock()
+		r.ReconcileVMProcesses(ctx, guard)
 		if warmed := r.WarmAlwaysOnDesktops(ctx, guard); warmed > 0 {
 			log.Printf("vmctl: warmness policy resumed %d always-on desktop VM(s)", warmed)
 		}
@@ -1147,6 +1171,15 @@ func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMMan
 func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if own == nil || mgr == nil {
 		return nil, nil
+	}
+	if mgr.GetVM(own.VMID) == nil {
+		// Booting adds a VM; recovering a tracked one replaces it in place.
+		r.mu.RLock()
+		class := warmnessClassForOwnership(own, r.warmnessPolicy)
+		r.mu.RUnlock()
+		if err := r.admitHostMemory(class); err != nil {
+			return nil, err
+		}
 	}
 	if err := r.admitRecoveryStart(own, false); err != nil {
 		return nil, err
@@ -1702,6 +1735,16 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
 	}
 
+	// A new computer adds a VM: refuse it before minting anything when the
+	// host is below its memory floor (host_capacity.go).
+	if r.vmManager != nil {
+		class := warmnessClassForOwnership(&VMOwnership{UserID: userID, DesktopID: desktopID, Kind: VMKindInteractive}, r.warmnessPolicy)
+		if err := r.admitHostMemoryLocked(class); err != nil {
+			r.mu.Unlock()
+			return nil, err
+		}
+	}
+
 	// We are the first caller for this user/desktop pair. Create a new VM.
 	// The boot-epoch reservation is deliberately deferred past the recovery
 	// admission gate below: a deterministically refused start must not allocate
@@ -2196,6 +2239,11 @@ func (r *OwnershipRegistry) StopVMForDesktop(userID, desktopID string) error {
 			return fmt.Errorf("stop VM %s: %w", own.VMID, err)
 		}
 	}
+	// A process the manager no longer tracks (a failed reattach) is still a
+	// running VM: stop is only true once it is gone.
+	if err := r.reapUnmanagedLocked(own); err != nil {
+		return err
+	}
 
 	own.State = VMStateStopped
 	own.LastActiveAt = time.Now()
@@ -2678,6 +2726,9 @@ func (r *OwnershipRegistry) LogoutVMForDesktop(userID, desktopID string) error {
 	// Delegate to the real VM manager if available.
 	if r.vmManager != nil && (own.State == VMStateActive || own.State == VMStateDegraded) {
 		_ = r.vmManager.StopVM(own.VMID)
+	}
+	if err := r.reapUnmanagedLocked(own); err != nil {
+		log.Printf("vmctl: logout for user %s: %v", userID, err)
 	}
 
 	own.State = VMStateStopped

@@ -36,6 +36,9 @@ type PressureReclaimConfig struct {
 	MaxCandidates               int
 	StaleStateMinAge            time.Duration
 	MaxStateDeletes             int
+	// MaxBusyProtect caps how long a busy ordinary computer stays protected
+	// from pressure reclaim (0: forever). Protected classes are never capped.
+	MaxBusyProtect time.Duration
 }
 
 // HostPressureSample is a single host resource-pressure observation.
@@ -452,8 +455,8 @@ func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
 	annotatePressure(&sample, cfg)
 	plan.Pressure = sample
 
-	now := time.Now()
-	candidates := rankPressureCandidates(ownerships, cfg, warmnessPolicy, now, r.guestBusy())
+	now := r.now()
+	candidates := rankPressureCandidates(ownerships, cfg, warmnessPolicy, now, r.cappedGuestBusy(cfg, warmnessPolicy))
 	plan.Inventory = pressureInventory(ownerships, candidates)
 	limit := cfg.MaxCandidates
 	if limit > len(candidates) {
@@ -514,7 +517,7 @@ func (r *OwnershipRegistry) pressureReclaimActionCandidates() []pressureCandidat
 		return nil
 	}
 
-	ranked := rankPressureCandidates(ownerships, cfg, warmnessPolicy, time.Now(), r.guestBusy())
+	ranked := rankPressureCandidates(ownerships, cfg, warmnessPolicy, r.now(), r.cappedGuestBusy(cfg, warmnessPolicy))
 	limit := cfg.MaxCandidates
 	if limit > len(ranked) {
 		limit = len(ranked)
