@@ -1,0 +1,57 @@
+{
+  "probe": "vmctl_receipt_probe",
+  "base_url": "https://choir.news",
+  "started_at": "2026-10-10T11:24:15.490Z",
+  "predicate": "A refresh and a stop of a disposable computer each leave a destruction receipt naming the VM, its cause, and a call chain through the vmctl lifecycle method, and vmctl logs each request with its named caller.",
+  "legs": {
+    "fresh_owner": true,
+    "computer_booted": true,
+    "refresh_receipt": true,
+    "refresh_caller_logged": true,
+    "stop_receipt": true,
+    "stop_caller_logged": true
+  },
+  "email": "vmctl-receipt-1791631456453-edopxg@example.com",
+  "vm_id": "vm-ce56e9965a563cf488a9511ff6ebdfb2",
+  "computer_id": "computer-f3907c03d1eb46a9fad321a3da629ead",
+  "refresh_http_status": "200",
+  "refresh_receipt": {
+    "at": "2026-10-10T11:24:28.976145202Z",
+    "vm_id": "vm-ce56e9965a563cf488a9511ff6ebdfb2",
+    "pid": 3995091,
+    "cause": "refresh",
+    "epoch": 12987,
+    "host_url": "http://10.200.36.2:8085",
+    "caller": "vmctl.(*OwnershipRegistry).RefreshVMForDesktop",
+    "stack": [
+      "vmmanager.(*Manager).killFirecrackerProcess",
+      "vmmanager.(*Manager).RefreshVMWithConfig",
+      "vmctl.(*OwnershipRegistry).RefreshVMForDesktop",
+      "vmctl.(*Handler).HandleRefresh",
+      "vmctl.RegisterRoutes.attributedLifecycle.func8",
+      "server.NewServer.WithBuildIdentity.func2"
+    ]
+  },
+  "refresh_caller_log": "Oct 10 11:24:28 choiros-b lchxqvxda41hg2zkrinq61jn49k2f1xr-go-choir-vmctl-exec[3994216]: 2026/10/10 11:24:28 vmctl: lifecycle request POST /internal/vmctl/refresh caller=\"operator.vmctl-receipt-probe\" remote=127.0.0.1:43846",
+  "stop_http_status": "200",
+  "stop_receipt": {
+    "at": "2026-10-10T11:24:38.864280031Z",
+    "vm_id": "vm-ce56e9965a563cf488a9511ff6ebdfb2",
+    "pid": 3995223,
+    "cause": "stop",
+    "epoch": 12988,
+    "host_url": "http://10.200.37.2:8085",
+    "caller": "vmctl.(*OwnershipRegistry).StopVMForDesktop",
+    "stack": [
+      "vmmanager.(*Manager).killFirecrackerProcess",
+      "vmmanager.(*Manager).StopVM",
+      "vmctl.(*OwnershipRegistry).StopVMForDesktop",
+      "vmctl.(*Handler).HandleStop",
+      "vmctl.RegisterRoutes.attributedLifecycle.func2",
+      "server.NewServer.WithBuildIdentity.func2"
+    ]
+  },
+  "stop_caller_log": "Oct 10 11:24:38 choiros-b lchxqvxda41hg2zkrinq61jn49k2f1xr-go-choir-vmctl-exec[3994216]: 2026/10/10 11:24:38 vmctl: lifecycle request POST /internal/vmctl/stop caller=\"operator.vmctl-receipt-probe\" remote=127.0.0.1:39082",
+  "finished_at": "2026-10-10T11:24:39.926Z",
+  "predicate_result": "satisfied"
+}
