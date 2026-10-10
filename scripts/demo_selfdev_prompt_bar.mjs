@@ -21,7 +21,7 @@
 //   node scripts/demo_selfdev_prompt_bar.mjs --label demo-computer-2026-10-10 \
 //     --name minesweeper --prompt "Make a Minesweeper game" [--approve] [--hours 3]
 import { createRequire } from 'node:module';
-import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -124,6 +124,14 @@ async function api(method, path, body) {
 const getJSON = (path) => api('GET', path);
 const postJSON = (path, body) => api('POST', path, body);
 
+// The session's refresh token rotates on renewal; writing the rotated cookies
+// back keeps the next run signed in (replaying a rotated token ends the
+// session). The file stays 0600.
+async function persistSession() {
+  await context.storageState({ path: storagePath }).catch((error) => log('session_save_failed', { error: String(error) }));
+  try { chmodSync(storagePath, 0o600); } catch {}
+}
+
 async function screenshot(step, extra) {
   shot += 1;
   const file = `screens/${String(shot).padStart(3, '0')}-${step}.png`;
@@ -185,6 +193,8 @@ async function approveOnce(operation) {
 try {
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.waitForSelector('[data-prompt-input]', { timeout: 300_000 });
+  await persistSession();
+  if (await page.locator('text=Sign in with your passkey').count()) throw new Error('browser session expired: sign-in shown before the prompt');
   await screenshot('desktop-before');
   const knownDocs = new Set(((await getJSON('/api/texture/documents')).json?.documents || []).map((doc) => doc.doc_id));
 
@@ -260,6 +270,7 @@ try {
     }
     const open = Object.values(operationStates).some((state) => !['applied', 'failed', 'rejected', 'rolled_back'].includes(state));
     if (!finished && !open && Date.now() - lastChange > idleMs) finished = { state: 'idle', idle_minutes: idleMs / 60_000 };
+    await persistSession();
     if (!finished) await page.waitForTimeout(pollMs);
   }
   manifest.finished = finished || { state: 'timeout' };
