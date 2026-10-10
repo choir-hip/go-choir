@@ -68,6 +68,22 @@ func (rt *Runtime) TriggerSelfDevelopmentReconcile() {
 	rt.triggerSelfDevelopmentReconcile()
 }
 
+// PlannedRestartSelfDevelopmentApply is the planned-restart reason an apply
+// writes before it restarts the guest.
+const PlannedRestartSelfDevelopmentApply = "self_development_apply"
+
+// SelfDevelopmentApplyMaterializing reports whether a self-development
+// operation on this computer is still materializing. The actor handler holds
+// work while it is, so the apply checkpoint reads a quiet chain. A read error
+// reports false: work is never held on an unknown state.
+func (rt *Runtime) SelfDevelopmentApplyMaterializing(ctx context.Context) bool {
+	if rt == nil || rt.selfdevOperations == nil || rt.selfdevComputerID == "" {
+		return false
+	}
+	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.StateMaterializing)
+	return err == nil && len(operations) > 0
+}
+
 func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) {
 	if rt == nil || rt.maintenanceHeld() || rt.selfdevUpdater == nil || rt.selfdevVerifier == nil || rt.selfdevControl == nil || rt.selfdevRoute == nil || rt.selfdevRouteOwnerID == "" || rt.selfdevRouteDesktopID == "" || rt.selfdevComputerID == "" || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.selfdevRealizationID) == "" {
 		return
@@ -255,7 +271,7 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	if err != nil {
 		return err
 	}
-	restartPlanned := rt.markPlannedRestart("self_development_apply", operation.OperationID)
+	restartPlanned := rt.markPlannedRestart(PlannedRestartSelfDevelopmentApply, operation.OperationID)
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
 	restartPlanned(applyErr)
 	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {

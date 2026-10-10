@@ -47,6 +47,34 @@ type actorHandler struct {
 	// plannedBoot is true when this boot consumed a planned-restart marker
 	// (an update apply restarted the guest on purpose): pre-boot work resumes.
 	plannedBoot bool
+	// applyHoldUntil bounds the apply hold: after a self-development apply
+	// restart, work waits while the operation is still materializing (its
+	// checkpoint needs a quiet chain), never past this instant.
+	applyHoldUntil     time.Time
+	applyMaterializing func(context.Context) bool
+	now                func() time.Time
+}
+
+// applyHoldWindow bounds how long work waits for an apply's checkpoint. It
+// keeps deferrals far below the dispatcher's poison limit, so a stalled apply
+// delays work and never destroys it.
+const applyHoldWindow = 10 * time.Minute
+
+// applyHoldsWork reports whether a work occurrence must wait for the
+// self-development apply this boot is finishing
+// (problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md).
+func (h *actorHandler) applyHoldsWork(ctx context.Context, u actor.Update) bool {
+	if h.applyHoldUntil.IsZero() || h.applyMaterializing == nil || !restartWorkKinds[u.Kind] {
+		return false
+	}
+	now := time.Now
+	if h.now != nil {
+		now = h.now
+	}
+	if !now().Before(h.applyHoldUntil) {
+		return false
+	}
+	return h.applyMaterializing(ctx)
 }
 
 // newActorHandler creates the handler. The rt must have its store, provider,
@@ -56,6 +84,11 @@ func newActorHandler(rt *agentcore.Runtime, textureOwner *textureowner.Handler) 
 	if marker, planned := rt.BootWasPlannedRestart(); planned {
 		h.plannedBoot = true
 		log.Printf("actorruntime: boot follows a planned restart (%s %s); pre-boot work resumes", marker.Reason, marker.Target)
+		if marker.Reason == agentcore.PlannedRestartSelfDevelopmentApply {
+			h.applyHoldUntil = h.bootAt.Add(applyHoldWindow)
+			h.applyMaterializing = rt.SelfDevelopmentApplyMaterializing
+			log.Printf("actorruntime: work waits while %s is materializing (at most %s)", marker.Target, applyHoldWindow)
+		}
 	} else {
 		log.Printf("actorruntime: boot follows a crash or stop; pre-boot work is interrupted_by_restart")
 	}
@@ -134,6 +167,10 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		log.Printf("actorruntime: %s %s for %s recorded %s, before crash boot %s: interrupted_by_restart, not run",
 			u.Kind, u.UpdateID, agentID, u.CreatedAt.Format(time.RFC3339), h.bootAt.Format(time.RFC3339))
 		return nil, errInterruptedByRestart
+	}
+	if h.applyHoldsWork(ctx, u) {
+		log.Printf("actorruntime: %s %s for %s waits for the self-development apply checkpoint", u.Kind, u.UpdateID, agentID)
+		return nil, actor.ErrDeferUnprocessed
 	}
 	switch u.Kind {
 	case "initial_dispatch":
