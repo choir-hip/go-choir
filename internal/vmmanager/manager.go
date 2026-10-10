@@ -1127,8 +1127,17 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	if !processExists(pid) {
 		return nil, fmt.Errorf("firecracker pid %d for VM %s is not running", pid, vmID)
 	}
-	if !m.probeGuestHealth(hostURL) {
-		return nil, fmt.Errorf("guest health check failed for reattach VM %s at %s", vmID, hostURL)
+	// Adopt by identity (vmctl 360 review Phase 0 step 5): a live process
+	// whose cmdline names this VM is this computer, answering or not. A busy
+	// guest that misses the health probe is adopted unready, never left
+	// outside the registry; routing waits for its health, and the wedge
+	// watchdog ends it only on evidence.
+	if !firecrackerCmdlineMatchesVM(pid, vmID) {
+		return nil, fmt.Errorf("pid %d does not identify VM %s; refusing to adopt", pid, vmID)
+	}
+	healthy := m.probeGuestHealth(hostURL)
+	if !healthy {
+		log.Printf("vmmanager: adopting VM %s (pid=%d) unready: alive, health probe unanswered", vmID, pid)
 	}
 
 	m.mu.Lock()
@@ -1158,15 +1167,18 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	cfg.VMID = vmID
 	cfg.Epoch = epoch
 	cfg.GatewayToken = m.resolveGatewayToken(cfg)
+	now := time.Now()
 	inst := &VMInstance{
 		Config:          cfg,
 		State:           StateRunning,
 		HostURL:         hostURL,
 		PID:             pid,
-		StartedAt:       time.Now(),
-		LastHealthCheck: time.Now(),
-		LastHealthyAt:   time.Now(),
-		Healthy:         true,
+		StartedAt:       now,
+		LastHealthCheck: now,
+		Healthy:         healthy,
+	}
+	if healthy {
+		inst.LastHealthyAt = now
 	}
 	m.vms[vmID] = inst
 	m.reserveHostURLLocked(hostURL)

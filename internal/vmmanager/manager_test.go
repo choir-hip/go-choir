@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -837,42 +838,61 @@ func TestBootVMExpandsExistingSmallDataImageBeforeLaunch(t *testing.T) {
 	}
 }
 
-func TestReattachVMRequiresPIDAndHealthyGuest(t *testing.T) {
+// Phase 0 step 5 (adopt by identity): reattach needs a live PID whose
+// cmdline names the VM, not a healthy answer. Failure modes pinned: a busy
+// guest that misses the probe is left outside the registry; an unanswering
+// guest is adopted as healthy (and routed); a PID that is not this VM's
+// Firecracker is adopted. Linux only: identity reads /proc.
+func TestReattachVMAdoptsByIdentity(t *testing.T) {
+	if _, err := os.Stat("/proc/self/cmdline"); err != nil {
+		t.Skip("needs /proc")
+	}
 	tmpDir := t.TempDir()
-	mgr := NewManager(ManagerConfig{
-		StateDir:           tmpDir,
-		GuestPort:          8085,
-		HealthCheckTimeout: time.Second,
-	})
+	mgr := NewManager(ManagerConfig{StateDir: tmpDir, GuestPort: 8085, HealthCheckTimeout: time.Second})
 
 	if _, err := mgr.ReattachVM("vm-missing-pid", "http://127.0.0.1:1", 4); err == nil {
 		t.Fatal("expected missing pid reattach to fail")
 	}
+	if err := mgr.savePID("vm-not-firecracker", os.Getpid()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mgr.ReattachVM("vm-not-firecracker", "http://127.0.0.1:1", 4); err == nil {
+		t.Fatal("adopted a pid that is not this VM's Firecracker")
+	}
+
+	fake := func(vmID string) int {
+		script := filepath.Join(t.TempDir(), "firecracker")
+		if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 60\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command("/bin/sh", script, "--id", vmID)
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+		if err := mgr.savePID(vmID, cmd.Process.Pid); err != nil {
+			t.Fatal(err)
+		}
+		return cmd.Process.Pid
+	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/health" {
-			http.NotFound(w, r)
-			return
-		}
 		_, _ = w.Write([]byte("ok"))
 	}))
 	t.Cleanup(srv.Close)
-
-	if err := mgr.savePID("vm-reattach", os.Getpid()); err != nil {
-		t.Fatalf("savePID: %v", err)
-	}
+	pid := fake("vm-reattach")
 	inst, err := mgr.ReattachVM("vm-reattach", srv.URL, 9)
+	if err != nil || inst.State != StateRunning || !inst.Healthy || inst.PID != pid || inst.Config.Epoch != 9 || inst.LastHealthyAt.IsZero() {
+		t.Fatalf("healthy adopt = %+v, %v", inst, err)
+	}
+
+	fake("vm-busy")
+	inst, err = mgr.ReattachVM("vm-busy", "http://127.0.0.1:1", 3)
 	if err != nil {
-		t.Fatalf("ReattachVM: %v", err)
+		t.Fatalf("a live, identified guest that missed the probe was not adopted: %v", err)
 	}
-	if inst.State != StateRunning || !inst.Healthy {
-		t.Fatalf("reattached state=%s healthy=%v, want running healthy", inst.State, inst.Healthy)
-	}
-	if inst.PID != os.Getpid() {
-		t.Fatalf("reattached pid=%d, want %d", inst.PID, os.Getpid())
-	}
-	if inst.Config.Epoch != 9 {
-		t.Fatalf("reattached epoch=%d, want 9", inst.Config.Epoch)
+	if inst.State != StateRunning || inst.Healthy || !inst.LastHealthyAt.IsZero() {
+		t.Fatalf("unanswering guest adopted as %+v, want running, unhealthy, never healthy", inst)
 	}
 }
 
