@@ -256,6 +256,32 @@ func (b *CircuitBreaker) Execute(fn func() error) error {
 	return err
 }
 
+// ExecuteClassified is Execute for callers whose errors are not all evidence
+// about the upstream: an error for which counts returns false (a request the
+// upstream rejected, a caller that went away) is returned to the caller but
+// recorded as neither a failure nor a success.
+func (b *CircuitBreaker) ExecuteClassified(fn func() error, counts func(error) bool) error {
+	allowed, done := b.Allow()
+	if !allowed {
+		return ErrCircuitOpen
+	}
+	err := fn()
+	if err != nil && counts != nil && !counts(err) {
+		b.releaseProbe()
+		return err
+	}
+	done(err)
+	return err
+}
+
+func (b *CircuitBreaker) releaseProbe() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.state == StateHalfOpen && b.probesInflight > 0 {
+		b.probesInflight--
+	}
+}
+
 // Snapshot is an immutable view of the breaker state for observability.
 type Snapshot struct {
 	State            State      `json:"state"`

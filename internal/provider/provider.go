@@ -1106,7 +1106,7 @@ func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk fun
 	case openCodeChatCompletions:
 		if req.Stream {
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				_, _ = io.ReadAll(resp.Body)
+				logRejectedRequest(p.providerName, resp)
 				return nil, fmt.Errorf("%s: status %s (sanitized)", p.providerName, resp.Status)
 			}
 			return parseOpenAIChatCompletionsStream(resp.Body, modelID, p.providerName, onChunk)
@@ -1114,14 +1114,14 @@ func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk fun
 		return parseOpenAIChatCompletionsResponse(resp, modelID, p.providerName)
 	case openCodeResponses:
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			_, _ = io.ReadAll(resp.Body)
+			logRejectedRequest(p.providerName, resp)
 			return nil, fmt.Errorf("%s: status %s (sanitized)", p.providerName, resp.Status)
 		}
 		return parseOpenAIStream(resp.Body, modelID, p.providerName, onChunk)
 	case openCodeMessages:
 		if req.Stream {
 			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				_, _ = io.ReadAll(resp.Body)
+				logRejectedRequest(p.providerName, resp)
 				return nil, fmt.Errorf("%s: status %s (sanitized)", p.providerName, resp.Status)
 			}
 			return parseSSEStream(resp.Body, modelID, p.providerName, onChunk)
@@ -1966,7 +1966,7 @@ func parseAnthropicResponse(resp *http.Response, modelID string, providerName st
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Drain and discard the body to allow connection reuse, but do not
 		// include it in the error (may contain provider details or credentials).
-		_, _ = io.ReadAll(resp.Body)
+		logRejectedRequest(providerName, resp)
 		return nil, fmt.Errorf("%s: status %s (sanitized)", providerName, resp.Status)
 	}
 
@@ -2012,7 +2012,7 @@ func parseAnthropicResponse(resp *http.Response, modelID string, providerName st
 
 func parseOpenAIResponse(resp *http.Response, modelID string, providerName string) (*LLMResponse, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.ReadAll(resp.Body)
+		logRejectedRequest(providerName, resp)
 		return nil, fmt.Errorf("%s: status %s (sanitized)", providerName, resp.Status)
 	}
 
@@ -2058,7 +2058,7 @@ func parseOpenAIResponse(resp *http.Response, modelID string, providerName strin
 
 func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, providerName string) (*LLMResponse, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		_, _ = io.ReadAll(resp.Body)
+		logRejectedRequest(providerName, resp)
 		return nil, fmt.Errorf("%s: status %s (sanitized)", providerName, resp.Status)
 	}
 

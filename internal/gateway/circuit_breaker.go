@@ -2,7 +2,10 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/health"
@@ -45,11 +48,11 @@ func (c *CircuitBreakingProvider) IsReal() bool { return c.inner.IsReal() }
 // Call executes the LLM request through the circuit breaker.
 func (c *CircuitBreakingProvider) Call(ctx context.Context, req provider.LLMRequest) (*provider.LLMResponse, error) {
 	var resp *provider.LLMResponse
-	err := c.breaker.Execute(func() error {
+	err := c.breaker.ExecuteClassified(func() error {
 		var callErr error
 		resp, callErr = c.inner.Call(ctx, req)
 		return callErr
-	})
+	}, func(err error) bool { return providerFailureCounts(ctx, err) })
 	if err == health.ErrCircuitOpen {
 		return nil, fmt.Errorf("provider %s: circuit open (upstream unhealthy)", c.inner.Name())
 	}
@@ -62,15 +65,39 @@ func (c *CircuitBreakingProvider) Call(ctx context.Context, req provider.LLMRequ
 // only transitions on the terminal Stream result.
 func (c *CircuitBreakingProvider) Stream(ctx context.Context, req provider.LLMRequest, onChunk func(provider.StreamChunk)) (*provider.LLMResponse, error) {
 	var resp *provider.LLMResponse
-	err := c.breaker.Execute(func() error {
+	err := c.breaker.ExecuteClassified(func() error {
 		var streamErr error
 		resp, streamErr = c.inner.Stream(ctx, req, onChunk)
 		return streamErr
-	})
+	}, func(err error) bool { return providerFailureCounts(ctx, err) })
 	if err == health.ErrCircuitOpen {
 		return nil, fmt.Errorf("provider %s: circuit open (upstream unhealthy)", c.inner.Name())
 	}
 	return resp, err
+}
+
+var providerStatusPattern = regexp.MustCompile(`: status (\d{3})\b`)
+
+// providerFailureCounts reports whether err is evidence that the upstream is
+// unhealthy. A caller that went away and a request the upstream rejected
+// (4xx other than 408 and 429) say nothing about the provider; counting them
+// let one computer's bad requests open the provider for every computer
+// (problems/inference-breaker-trips-on-client-errors-2026-10-10.md).
+func providerFailureCounts(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	// A deadline overrun still counts: the provider was slow.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return false
+	}
+	if m := providerStatusPattern.FindStringSubmatch(err.Error()); m != nil {
+		code, _ := strconv.Atoi(m[1])
+		if code >= 400 && code < 500 && code != 408 && code != 429 {
+			return false
+		}
+	}
+	return true
 }
 
 // WrapMultiProvider returns a new MultiProvider where every registered provider
