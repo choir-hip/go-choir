@@ -180,7 +180,9 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		byState[string(own.State)]++
 		byKind[string(own.Kind)]++
 	}
-	idleEligible := h.registry.CheckIdleOwnerships()
+	// Health never probes a guest: one that does not answer would make
+	// vmctl itself look down (docs/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md).
+	idleEligible := h.registry.IdleOwnershipsSeen()
 	writeVMCTLJSON(w, http.StatusOK, vmctlHealthResponse{
 		Status:          "ok",
 		Service:         "vmctl",
@@ -189,7 +191,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		IdleEligible:    len(idleEligible),
 		ByState:         byState,
 		ByKind:          byKind,
-		Reclaim:         h.registry.PressureReclaimPlan(),
+		Reclaim:         h.registry.PressureReclaimPlanSeen(),
 		Warmness:        h.registry.WarmnessSummary(idleEligible),
 		Processes:       h.registry.LastProcessReconcile(),
 	})

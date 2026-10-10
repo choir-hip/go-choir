@@ -389,6 +389,11 @@ type OwnershipRegistry struct {
 	// work (autoputer /health reports running_runs>0). Nil falls back to the
 	// HTTP probe; tests inject a deterministic stub.
 	guestBusyProbe func(own *VMOwnership) bool
+	// guestBusySeen is each guest's last busy answer from a live probe.
+	// vmctl health reads it instead of probing, so a guest that never
+	// answers cannot make vmctl itself look down
+	// (docs/problems/vmctl-health-fate-shares-a-hung-guest-2026-10-10.md).
+	guestBusySeen map[string]bool
 
 	// pressureReclaim controls pressure-aware dry-run lifecycle observation.
 	// It ranks reclaim candidates from measured host pressure without changing
@@ -450,6 +455,7 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 		ownerships:                 make(map[string]*VMOwnership),
 		unmanagedSince:             make(map[string]time.Time),
 		networkDeadSince:           make(map[string]time.Time),
+		guestBusySeen:              make(map[string]bool),
 		vmByID:                     make(map[string]*VMOwnership),
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
 		gatewayCredentialNextCheck: make(map[string]time.Time),
@@ -2800,6 +2806,16 @@ func (r *OwnershipRegistry) CheckIdleVMs() []string {
 // CheckIdleOwnerships returns idle ownership records whose VMs have exceeded
 // the idle timeout and should be stopped or hibernated.
 func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
+	return r.checkIdleOwnerships(r.guestBusy())
+}
+
+// IdleOwnershipsSeen is CheckIdleOwnerships from the guests' last recorded
+// busy answers, without probing any guest. For health only.
+func (r *OwnershipRegistry) IdleOwnershipsSeen() []*VMOwnership {
+	return r.checkIdleOwnerships(r.guestBusySeenAnswer())
+}
+
+func (r *OwnershipRegistry) checkIdleOwnerships(busy func(*VMOwnership) bool) []*VMOwnership {
 	r.mu.RLock()
 	if r.idleTimeout <= 0 {
 		r.mu.RUnlock()
@@ -2828,7 +2844,7 @@ func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
 	}
 
 	now := time.Now()
-	candidates := idleOwnershipCandidates(ownerships, warmnessPolicy, pressure, idleTimeout, now, r.guestBusy())
+	candidates := idleOwnershipCandidates(ownerships, warmnessPolicy, pressure, idleTimeout, now, busy)
 	idle := make([]*VMOwnership, 0, len(candidates))
 	for _, candidate := range candidates {
 		idle = append(idle, candidate.own)
@@ -2843,9 +2859,38 @@ func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
 // whatever it was doing, and a truly dead guest is the wedge watchdog's.
 func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
 	probe := r.guestBusyProbe
-	if probe != nil {
-		return probe
+	if probe == nil {
+		probe = httpGuestBusy()
 	}
+	return func(own *VMOwnership) bool {
+		busy := probe(own)
+		if own != nil {
+			r.mu.Lock()
+			if r.guestBusySeen == nil {
+				r.guestBusySeen = make(map[string]bool)
+			}
+			r.guestBusySeen[own.VMID] = busy
+			r.mu.Unlock()
+		}
+		return busy
+	}
+}
+
+// guestBusySeenAnswer answers from the last recorded probe. A guest never
+// probed counts as busy, as an unanswered probe does.
+func (r *OwnershipRegistry) guestBusySeenAnswer() func(*VMOwnership) bool {
+	return func(own *VMOwnership) bool {
+		if own == nil {
+			return true
+		}
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		busy, seen := r.guestBusySeen[own.VMID]
+		return !seen || busy
+	}
+}
+
+func httpGuestBusy() func(*VMOwnership) bool {
 	client := &http.Client{Timeout: 4 * time.Second}
 	return func(own *VMOwnership) bool {
 		base := strings.TrimRight(strings.TrimSpace(own.ComputerURL), "/")

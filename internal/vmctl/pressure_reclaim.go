@@ -423,6 +423,16 @@ type pressureCandidateInternal struct {
 }
 
 func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
+	return r.pressureReclaimPlan(r.guestBusy())
+}
+
+// PressureReclaimPlanSeen is the reclaim plan from the guests' last recorded
+// busy answers, without probing any guest. For health only.
+func (r *OwnershipRegistry) PressureReclaimPlanSeen() PressureReclaimPlan {
+	return r.pressureReclaimPlan(r.guestBusySeenAnswer())
+}
+
+func (r *OwnershipRegistry) pressureReclaimPlan(busy func(*VMOwnership) bool) PressureReclaimPlan {
 	r.mu.RLock()
 	cfg := r.pressureReclaim
 	warmnessPolicy := r.warmnessPolicy
@@ -453,7 +463,7 @@ func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
 	plan.Pressure = sample
 
 	now := r.now()
-	candidates := rankPressureCandidates(ownerships, cfg, warmnessPolicy, now, r.guestBusy())
+	candidates := rankPressureCandidates(ownerships, cfg, warmnessPolicy, now, busy)
 	plan.Inventory = pressureInventory(ownerships, candidates)
 	limit := cfg.MaxCandidates
 	if limit > len(candidates) {
