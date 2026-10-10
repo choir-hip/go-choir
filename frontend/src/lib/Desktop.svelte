@@ -126,13 +126,18 @@
   const BOOTSTRAP_STABILITY_DEADLINE_MS = 300_000;
   const BOOTSTRAP_STABILITY_DELAY_MS = 1_000;
   const BOOTSTRAP_PROBE_TIMEOUT_MS = 15_000;
-  const BOOTSTRAP_RECOVERY_AFTER_ATTEMPT = 3;
+  // After this many failed probes the boot console offers the owner a
+  // restart. It never restarts on its own: an unanswered probe is not a reason
+  // to destroy a computer that may be busy (docs/vmctl-360-review-2026-10-10.md,
+  // Phase 0 step 2).
+  const BOOTSTRAP_RESTART_OFFER_AFTER_ATTEMPT = 3;
   const MAX_BOOT_LINES = 9;
   let bootPromptPlaceholder = 'Booting user computer...';
   let bootLines = [];
   let bootLineCounter = 0;
   let bootStartedAt = 0;
   let bootstrapRecoveryInFlight = false;
+  let bootstrapRestartOffered = false;
   let restoreRecovery = null;
   let restoreRecoveryWindows = [];
   let restoreRecoveryActiveId = '';
@@ -904,7 +909,7 @@
     bootstrapError = '';
     let previousAutoputerId = '';
     let attempt = 0;
-    let recoveryRequested = false;
+    bootstrapRestartOffered = false;
     const deadline = Date.now() + BOOTSTRAP_STABILITY_DEADLINE_MS;
     appendBootLine('Resolving active computer');
 
@@ -924,20 +929,14 @@
             : `Bootstrap probe ${attempt} lost contact; retrying`,
           'warn'
         );
-        if (!recoveryRequested && attempt >= BOOTSTRAP_RECOVERY_AFTER_ATTEMPT) {
-          recoveryRequested = true;
-          requestBootstrapRecovery('bootstrap pending');
-        }
+        offerBootstrapRestart(attempt);
         await delay(BOOTSTRAP_STABILITY_DELAY_MS);
         continue;
       }
       if (!res.ok) {
         bootstrapError = `Bootstrap failed (${res.status})`;
         appendBootLine(`VM route returned ${res.status}; retrying`, 'warn');
-        if (!recoveryRequested && attempt >= BOOTSTRAP_RECOVERY_AFTER_ATTEMPT) {
-          recoveryRequested = true;
-          requestBootstrapRecovery(`bootstrap returned ${res.status}`);
-        }
+        offerBootstrapRestart(attempt);
         await delay(BOOTSTRAP_STABILITY_DELAY_MS);
         continue;
       }
@@ -945,6 +944,7 @@
       const autoputerId = (bootstrapData?.computer_id || '').trim();
       if (autoputerId !== '' && autoputerId === previousAutoputerId) {
         bootstrapStable = true;
+        bootstrapRestartOffered = false;
         appendBootLine('Stable computer route confirmed');
         return true;
       }
@@ -960,7 +960,15 @@
     return false;
   }
 
-  async function requestBootstrapRecovery(reason) {
+  function offerBootstrapRestart(attempt) {
+    if (bootstrapRestartOffered || attempt < BOOTSTRAP_RESTART_OFFER_AFTER_ATTEMPT) return;
+    bootstrapRestartOffered = true;
+    appendBootLine('Computer is not answering; restart is available below', 'warn');
+  }
+
+  // restartFromBootConsole runs only on the owner's click.
+  async function restartFromBootConsole() {
+    const reason = 'owner restart from boot console';
     if (bootstrapRecoveryInFlight) return;
     bootstrapRecoveryInFlight = true;
     try {
@@ -1796,6 +1804,12 @@
         <span>CHOIR BIOS</span>
         <span>{bootstrapError || 'VM bootstrap'}</span>
       </div>
+      {#if bootstrapRestartOffered}
+        <div class="boot-restart" data-boot-restart>
+          <span>Your computer is not answering. Restarting it ends any work in progress.</span>
+          <button type="button" on:click={restartFromBootConsole} disabled={bootstrapRecoveryInFlight}>Restart computer</button>
+        </div>
+      {/if}
       <div class="boot-lines" data-boot-lines>
         {#each bootLines as line (line.id)}
           <div class="boot-line" class:warn={line.kind === 'warn'} class:error={line.kind === 'error'} data-boot-line>
@@ -1907,6 +1921,34 @@
     font-size: 0.72rem;
     font-weight: 800;
     text-transform: uppercase;
+  }
+
+  .boot-restart {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.65rem 0.8rem 0;
+    color: var(--choir-status-warning);
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .boot-restart button {
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    padding: 0.3rem 0.8rem;
+    cursor: pointer;
+  }
+
+  .boot-restart button:disabled {
+    opacity: 0.6;
+    cursor: progress;
   }
 
   .boot-lines {

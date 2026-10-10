@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -536,6 +537,10 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// errWakeDoesNotRestart marks a wake that found the current computer
+// unhealthy and left it running.
+var errWakeDoesNotRestart = errors.New("wake does not restart a running computer")
+
 func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, expectedComputerID string) (computeComputer, *computeRuntimeStatus, error) {
 	ctx = vmctl.WithLifecycleCaller(ctx, "proxy.compute-recovery")
 	own, err := h.vmctlClient.LookupDesktopContext(ctx, userID, desktopID)
@@ -572,49 +577,34 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 			runtimeStatus = h.probeRuntimeHealthForTarget(resolved.ComputerURL)
 		}
 	} else if own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated) {
+		// Wake is resolve only. A failed wake reports the failure; it never
+		// escalates to a refresh, which kills whatever the resolve left
+		// running (docs/vmctl-360-review-2026-10-10.md, Phase 0 step 2).
 		resolved, resolveErr := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
-		if resolveErr == nil {
-			if expectedComputerID != "" && (resolved.UserID != userID || resolved.ComputerID != expectedComputerID || resolved.DesktopID != desktopID) {
-				return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
-			}
-			current = computeComputerFromFields(
-				resolved.ComputerID,
-				resolved.DesktopID,
-				string(resolved.Kind),
-				resolved.State,
-				resolved.WarmnessClass,
-				0,
-				"",
-				"",
-			)
-			if resolved.ComputerURL != "" {
-				runtimeStatus = h.probeRuntimeHealthForTarget(resolved.ComputerURL)
-			}
-		} else {
-			log.Printf("proxy compute recovery: wake current computer failed; refreshing stopped desktop=%s: %v", desktopID, resolveErr)
-			refreshed, refreshErr := h.vmctlClient.RefreshDesktopContext(ctx, userID, desktopID)
-			if refreshErr != nil {
-				log.Printf("proxy compute recovery: refresh stopped current computer desktop=%s: %v", desktopID, refreshErr)
-				return computeComputer{}, nil, refreshErr
-			}
-			if expectedComputerID != "" && (refreshed.UserID != userID || refreshed.ComputerID != expectedComputerID || refreshed.DesktopID != desktopID) {
-				return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
-			}
-			current = computeComputerFromFields(
-				refreshed.ComputerID,
-				refreshed.DesktopID,
-				string(refreshed.Kind),
-				refreshed.State,
-				refreshed.WarmnessClass,
-				0,
-				"",
-				"",
-			)
-			if refreshed.ComputerURL != "" {
-				runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.ComputerURL)
-			}
+		if resolveErr != nil {
+			log.Printf("proxy compute recovery: wake current computer desktop=%s: %v", desktopID, resolveErr)
+			return computeComputer{}, nil, resolveErr
+		}
+		if expectedComputerID != "" && (resolved.UserID != userID || resolved.ComputerID != expectedComputerID || resolved.DesktopID != desktopID) {
+			return computeComputer{}, nil, fmt.Errorf("computer ownership authority changed during recovery")
+		}
+		current = computeComputerFromFields(
+			resolved.ComputerID,
+			resolved.DesktopID,
+			string(resolved.Kind),
+			resolved.State,
+			resolved.WarmnessClass,
+			0,
+			"",
+			"",
+		)
+		if resolved.ComputerURL != "" {
+			runtimeStatus = h.probeRuntimeHealthForTarget(resolved.ComputerURL)
 		}
 	} else {
+		// A running computer that is booting, degraded, failed or not
+		// answering is reported, not restarted: uncertainty never supplies a
+		// reason to destroy. Restart stays an explicit owner lifecycle action.
 		current = computeComputerFromFields(
 			own.ComputerID,
 			own.DesktopID,
@@ -625,46 +615,15 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, exp
 			own.StoppedBy,
 			own.LastActiveAt,
 		)
-	}
-
-	ownWasStopped := own != nil && (own.State == string(vmctl.VMStateStopped) || own.State == string(vmctl.VMStateHibernated))
-	if own != nil && !ownWasStopped && own.ComputerURL != "" {
-		runtimeStatus = h.probeRuntimeHealthForTarget(own.ComputerURL)
-	}
-	shouldRefresh := own != nil && !ownWasStopped && (own.ComputerURL == "" ||
-		own.State == string(vmctl.VMStateBooting) ||
-		own.State == string(vmctl.VMStateDegraded) ||
-		own.State == string(vmctl.VMStateFailed) ||
-		(runtimeStatus != nil && !runtimeStatus.Reachable))
-	if shouldRefresh {
-		runtimeStatus = nil
-		refreshed, refreshErr := h.vmctlClient.RefreshDesktopContext(ctx, userID, desktopID)
-		if refreshErr != nil {
-			log.Printf("proxy compute recovery: refresh unreachable current computer desktop=%s: %v", desktopID, refreshErr)
-			return current, runtimeStatus, fmt.Errorf("refresh current computer: %w", refreshErr)
-		}
-		if expectedComputerID != "" && (refreshed.UserID != userID || refreshed.ComputerID != expectedComputerID || refreshed.DesktopID != desktopID) {
-			return current, runtimeStatus, fmt.Errorf("computer ownership authority changed during recovery")
-		}
-		current = computeComputerFromFields(
-			refreshed.ComputerID,
-			refreshed.DesktopID,
-			string(refreshed.Kind),
-			refreshed.State,
-			refreshed.WarmnessClass,
-			0,
-			"",
-			"",
-		)
-		if refreshed.ComputerURL != "" {
-			runtimeStatus = h.probeRuntimeHealthForTarget(refreshed.ComputerURL)
+		if own.ComputerURL != "" {
+			runtimeStatus = h.probeRuntimeHealthForTarget(own.ComputerURL)
 		}
 	}
 	if current.State != string(vmctl.VMStateActive) {
-		return current, runtimeStatus, fmt.Errorf("refreshed computer state is %s", current.State)
+		return current, runtimeStatus, fmt.Errorf("current computer state is %s: %w", current.State, errWakeDoesNotRestart)
 	}
 	if runtimeStatus == nil || !runtimeStatus.Reachable {
-		return current, runtimeStatus, fmt.Errorf("guest health unavailable after refresh")
+		return current, runtimeStatus, fmt.Errorf("guest health unavailable: %w", errWakeDoesNotRestart)
 	}
 	return current, runtimeStatus, nil
 }

@@ -170,6 +170,9 @@ func computeRecoveryFailure(err error) (string, string) {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "recovery_timeout", "Current computer recovery timed out."
 	}
+	if errors.Is(err, errWakeDoesNotRestart) {
+		return "not_restarted", "The current computer is not healthy. Wake leaves it running; reload to restart it from the boot screen."
+	}
 	var refusal *vmctl.RecoveryRefusalError
 	if errors.As(err, &refusal) {
 		reason := strings.TrimSpace(refusal.Reason)

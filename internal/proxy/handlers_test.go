@@ -2186,7 +2186,9 @@ func TestComputeRecoveryStopUsesOwnerScopedVMCTL(t *testing.T) {
 	}
 }
 
-func TestComputeRecoveryWakeRefreshesUnreachableCurrentComputer(t *testing.T) {
+// Phase 0 step 2 (docs/vmctl-360-review-2026-10-10.md): wake is resolve only.
+// A running computer that does not answer is reported, never refreshed.
+func TestComputeRecoveryWakeLeavesUnreachableCurrentComputerRunning(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate ed25519 key: %v", err)
@@ -2239,26 +2241,15 @@ func TestComputeRecoveryWakeRefreshesUnreachableCurrentComputer(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
 	w := httptest.NewRecorder()
 	handler.HandleAPI(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("compute recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("compute recovery = %d, want 502 body=%s", w.Code, w.Body.String())
 	}
-	if !refreshed.Load() {
-		t.Fatal("wake recovery did not refresh unreachable current computer")
-	}
-
-	var result computeRecoveryResponse
-	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-		t.Fatalf("decode recovery response: %v", err)
-	}
-	if result.Runtime == nil || !result.Runtime.Reachable {
-		t.Fatalf("runtime after recovery = %+v, want reachable", result.Runtime)
-	}
-	if result.CurrentComputer.LookupStatus != "ok" || result.CurrentComputer.State != string(vmctl.VMStateActive) {
-		t.Fatalf("current computer after recovery = %+v", result.CurrentComputer)
+	if refreshed.Load() {
+		t.Fatal("wake refreshed an unreachable running computer")
 	}
 }
 
-func TestComputeRecoveryWakeReportsUnreachableRefreshFailure(t *testing.T) {
+func TestComputeRecoveryWakeReportsUnhealthyComputerWithoutRefresh(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate ed25519 key: %v", err)
@@ -2322,8 +2313,8 @@ func TestComputeRecoveryWakeReportsUnreachableRefreshFailure(t *testing.T) {
 	if w.Code != http.StatusBadGateway {
 		t.Fatalf("compute recovery = %d, want 502 body=%s", w.Code, w.Body.String())
 	}
-	if !refreshCalled.Load() {
-		t.Fatal("expected recovery to attempt refresh")
+	if refreshCalled.Load() {
+		t.Fatal("wake refreshed a boot-pending running computer")
 	}
 	statusReq := httptest.NewRequest(http.MethodGet, "/api/compute/status", nil)
 	statusReq.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
@@ -2337,21 +2328,21 @@ func TestComputeRecoveryWakeReportsUnreachableRefreshFailure(t *testing.T) {
 		t.Fatalf("decode compute status: %v", err)
 	}
 	if status.Recovery == nil || status.Recovery.Active || status.Recovery.Status != "failed" ||
-		status.Recovery.Code != "refresh_failed" || status.Recovery.Message != "The retained computer could not be refreshed." {
-		t.Fatalf("recovery status = %+v, want bounded failed refresh diagnostic", status.Recovery)
+		status.Recovery.Code != "not_restarted" {
+		t.Fatalf("recovery status = %+v, want not_restarted diagnostic", status.Recovery)
 	}
 	if strings.Contains(strings.ToLower(status.Recovery.Message), "vmctl") {
 		t.Fatalf("recovery status leaked raw vmctl error: %+v", status.Recovery)
 	}
 	if status.Runtime == nil || status.Runtime.Reachable {
-		t.Fatalf("runtime after failed refresh = %+v, want unreachable observation", status.Runtime)
+		t.Fatalf("runtime after wake = %+v, want unreachable observation", status.Runtime)
 	}
 	if status.CurrentComputer.State != string(vmctl.VMStateActive) {
 		t.Fatalf("current computer state = %s, want retained active observation", status.CurrentComputer.State)
 	}
 }
 
-func TestRunComputeRecoveryRejectsStalePreRefreshHealth(t *testing.T) {
+func TestRunComputeRecoveryLeavesFailedComputerRunning(t *testing.T) {
 	oldAutoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}))
@@ -2365,12 +2356,10 @@ func TestRunComputeRecoveryRejectsStalePreRefreshHealth(t *testing.T) {
 			"computer_url": oldAutoputer.URL, "state": string(vmctl.VMStateFailed), "epoch": 8,
 		})
 	})
+	var refreshCalled atomic.Bool
 	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"vm_id": "vm-unready", "user_id": "owner-unready", "desktop_id": vmctl.PrimaryDesktopID,
-			"kind": string(vmctl.VMKindInteractive), "warmness_class": "primary",
-			"state": string(vmctl.VMStateActive), "epoch": 9,
-		})
+		refreshCalled.Store(true)
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "refresh must not be called"})
 	})
 	vmctlServer := httptest.NewServer(vmctlMux)
 	t.Cleanup(vmctlServer.Close)
@@ -2383,11 +2372,14 @@ func TestRunComputeRecoveryRejectsStalePreRefreshHealth(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 	current, runtimeStatus, recoveryErr := handler.runComputeRecovery(context.Background(), "owner-unready", vmctl.PrimaryDesktopID, "")
-	if recoveryErr == nil || !strings.Contains(recoveryErr.Error(), "guest health unavailable") {
-		t.Fatalf("recovery error = %v, want guest health refusal", recoveryErr)
+	if !errors.Is(recoveryErr, errWakeDoesNotRestart) {
+		t.Fatalf("recovery error = %v, want errWakeDoesNotRestart", recoveryErr)
 	}
-	if current.State != string(vmctl.VMStateActive) || runtimeStatus != nil {
-		t.Fatalf("recovery observation = current=%+v runtime=%+v, want active with no new-realization health", current, runtimeStatus)
+	if refreshCalled.Load() {
+		t.Fatal("wake refreshed a failed running computer")
+	}
+	if current.State != string(vmctl.VMStateFailed) || current.Epoch != 8 {
+		t.Fatalf("recovery observation = current=%+v runtime=%+v, want the failed computer as observed", current, runtimeStatus)
 	}
 }
 
@@ -2452,7 +2444,7 @@ func TestComputeRecoveryWaiterSnapshotsOriginalOperation(t *testing.T) {
 	}
 }
 
-func TestComputeRecoveryWakeRefreshesCurrentComputerWithoutBlockingResolve(t *testing.T) {
+func TestComputeRecoveryWakeDoesNotRefreshBootPendingComputer(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate ed25519 key: %v", err)
@@ -2514,29 +2506,18 @@ func TestComputeRecoveryWakeRefreshesCurrentComputerWithoutBlockingResolve(t *te
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
 	w := httptest.NewRecorder()
 	handler.HandleAPI(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("compute recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("compute recovery = %d, want 502 body=%s", w.Code, w.Body.String())
 	}
 	if resolveCalled.Load() {
-		t.Fatal("recovery called resolve before refreshing an existing current computer")
+		t.Fatal("wake resolved an existing running computer")
 	}
-	if !refreshed.Load() {
-		t.Fatal("wake recovery did not refresh from lookup-only current computer")
-	}
-
-	var result computeRecoveryResponse
-	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-		t.Fatalf("decode recovery response: %v", err)
-	}
-	if result.Runtime == nil || !result.Runtime.Reachable {
-		t.Fatalf("runtime after lookup-first recovery = %+v, want reachable", result.Runtime)
-	}
-	if result.CurrentComputer.State != string(vmctl.VMStateActive) {
-		t.Fatalf("current computer state = %s, want active", result.CurrentComputer.State)
+	if refreshed.Load() {
+		t.Fatal("wake refreshed a boot-pending running computer")
 	}
 }
 
-func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *testing.T) {
+func TestComputeRecoveryWakeReportsFailedResolveWithoutRefresh(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatalf("generate ed25519 key: %v", err)
@@ -2607,25 +2588,14 @@ func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *t
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
 	w := httptest.NewRecorder()
 	handler.HandleAPI(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("compute recovery = %d, want 200 body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("compute recovery = %d, want 502 body=%s", w.Code, w.Body.String())
 	}
 	if !resolveCalled.Load() {
-		t.Fatal("expected recovery to try normal wake before refresh fallback")
+		t.Fatal("wake did not try to resolve the stopped computer")
 	}
-	if !refreshCalled.Load() {
-		t.Fatal("expected recovery to refresh stopped current computer after wake failed")
-	}
-
-	var result computeRecoveryResponse
-	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
-		t.Fatalf("decode recovery response: %v", err)
-	}
-	if result.CurrentComputer.State != string(vmctl.VMStateActive) {
-		t.Fatalf("current computer state = %s, want active", result.CurrentComputer.State)
-	}
-	if result.Runtime == nil || !result.Runtime.Reachable {
-		t.Fatalf("runtime after stopped fallback refresh = %+v, want reachable", result.Runtime)
+	if refreshCalled.Load() {
+		t.Fatal("a failed wake escalated to a refresh")
 	}
 }
 
@@ -2681,13 +2651,23 @@ func TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady
 	}
 
 	vmctlMux := http.NewServeMux()
+	// The computer is stopped; the wake's resolve is the slow step.
 	vmctlMux.HandleFunc("/internal/vmctl/lookup", func(w http.ResponseWriter, r *http.Request) {
-		writeOwnership(w, string(vmctl.VMStateActive))
-	})
-	vmctlMux.HandleFunc("/internal/vmctl/resolve", func(w http.ResponseWriter, r *http.Request) {
-		writeOwnership(w, string(vmctl.VMStateActive))
+		if refreshed.Load() {
+			writeOwnership(w, string(vmctl.VMStateActive))
+			return
+		}
+		writeOwnership(w, string(vmctl.VMStateStopped))
 	})
 	vmctlMux.HandleFunc("/internal/vmctl/refresh", func(w http.ResponseWriter, r *http.Request) {
+		t.Error("wake refreshed the computer")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "refresh must not be called"})
+	})
+	vmctlMux.HandleFunc("/internal/vmctl/resolve", func(w http.ResponseWriter, r *http.Request) {
+		if refreshed.Load() {
+			writeOwnership(w, string(vmctl.VMStateActive))
+			return
+		}
 		if refreshStartedClosed.CompareAndSwap(false, true) {
 			close(refreshStarted)
 		}
@@ -2734,7 +2714,7 @@ func TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady
 	select {
 	case <-refreshStarted:
 	case <-time.After(2 * time.Second):
-		t.Fatal("recovery did not reach vmctl refresh")
+		t.Fatal("recovery did not reach vmctl resolve")
 	}
 	cancel()
 	select {

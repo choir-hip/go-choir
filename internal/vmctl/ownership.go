@@ -1054,6 +1054,13 @@ func activeVMCanRouteDuringHealthGrace(info *VMInstanceInfo, now time.Time) bool
 	}
 }
 
+// unreadyActiveVM is the answer for a live guest that has not answered.
+func unreadyActiveVM(info *VMInstanceInfo) *VMInstanceInfo {
+	unready := *info
+	unready.Healthy = false
+	return &unready
+}
+
 func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if own == nil {
 		return nil, fmt.Errorf("ownership is required")
@@ -1095,13 +1102,16 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 			log.Printf("vmctl: active ownership for VM %s found manager state=pending; preserving in-flight boot", own.VMID)
 			return info, nil
 		}
-		log.Printf("vmctl: active ownership for VM %s found stale manager state=pending; recovering before routing", own.VMID)
-		return r.recoverOrRestartActiveVM(own, mgr)
+		// A live process that has not answered is pending, not broken: a
+		// resolve never destroys it (docs/vmctl-360-review-2026-10-10.md,
+		// Phase 0 step 2). The owner restarts it explicitly.
+		log.Printf("vmctl: active ownership for VM %s is still pending past its grace; routing as unready, not recovering", own.VMID)
+		return unreadyActiveVM(info), nil
 	case "", "running":
 		healthy, err := mgr.CheckHealth(own.VMID)
 		if err != nil {
-			log.Printf("vmctl: active VM %s health probe errored; recovering before routing: %v", own.VMID, err)
-			return r.recoverOrRestartActiveVM(own, mgr)
+			log.Printf("vmctl: active VM %s health probe errored; routing as unready, not recovering: %v", own.VMID, err)
+			return unreadyActiveVM(info), nil
 		}
 		if healthy {
 			if refreshed := mgr.GetVM(own.VMID); refreshed != nil {
@@ -1114,9 +1124,11 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 			log.Printf("vmctl: active VM %s health check failed; preserving route within transient health grace", own.VMID)
 			return refreshed, nil
 		}
-		log.Printf("vmctl: active VM %s is unhealthy on resolve; recovering before routing", own.VMID)
-		return r.recoverOrRestartActiveVM(own, mgr)
+		log.Printf("vmctl: active VM %s is unhealthy on resolve; routing as unready, not recovering", own.VMID)
+		return unreadyActiveVM(info), nil
 	default:
+		// failed: the process crashed or boot's readiness timeout already
+		// killed it, so starting it again destroys nothing alive.
 		log.Printf("vmctl: active ownership for VM %s found manager state=%s; recovering before routing", own.VMID, state)
 		return r.recoverOrRestartActiveVM(own, mgr)
 	}

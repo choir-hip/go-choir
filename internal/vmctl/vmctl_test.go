@@ -2407,67 +2407,62 @@ func TestOwnershipRegistry_ResolveReconcilesExistingGatewayCredential(t *testing
 	}
 }
 
-func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *testing.T) {
-	healthy := false
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+// Phase 0 step 2 (docs/vmctl-360-review-2026-10-10.md): a resolve never
+// destroys a live guest that has not answered. Unhealthy past grace, a health
+// probe error, and a stale pending boot all route the guest as unready.
+func TestOwnershipRegistry_ResolveNeverRecoversALiveUnreadyVM(t *testing.T) {
+	stale := time.Now().Add(-time.Hour)
+	unhealthy := false
+	for _, tc := range []struct {
+		name        string
+		state       string
+		healthOK    *bool
+		healthErr   error
+		wantHealthy int
+	}{
+		{name: "unhealthy past grace", state: "running", healthOK: &unhealthy, wantHealthy: 1},
+		{name: "health probe error", state: "running", healthErr: errors.New("probe timed out"), wantHealthy: 1},
+		{name: "stale pending boot", state: "pending", wantHealthy: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+			own := &VMOwnership{VMID: "vm-unready",
+				UserID:       "user-unready",
+				DesktopID:    PrimaryDesktopID,
+				Kind:         VMKindInteractive,
+				ComputerURL:  "http://127.0.0.1:9001",
+				State:        VMStateActive,
+				CreatedAt:    stale,
+				LastActiveAt: stale,
+				Epoch:        3}
+			reg.mu.Lock()
+			reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+			reg.vmByID[own.VMID] = own
+			reg.mu.Unlock()
+			mock := &mockVMManager{
+				getVMs: map[string]*VMInstanceInfo{
+					own.VMID: {HostURL: own.ComputerURL, Epoch: own.Epoch, State: tc.state, StartedAt: stale, LastHealthyAt: stale},
+				},
+				checkHealthOK:    tc.healthOK,
+				checkHealthError: tc.healthErr,
+				recoverResponse:  &VMInstanceInfo{HostURL: "http://127.0.0.1:9044", Epoch: 4, Healthy: true, State: "running"},
+			}
+			reg.SetVMManager(mock)
 
-	now := time.Now().Add(-time.Hour)
-	own := &VMOwnership{VMID: "vm-stale-active",
-		UserID:       "user-old-account",
-		DesktopID:    PrimaryDesktopID,
-		Kind:         VMKindInteractive,
-		ComputerURL:  "http://127.0.0.1:9001",
-		State:        VMStateActive,
-		CreatedAt:    now,
-		LastActiveAt: now,
-		Epoch:        3}
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
-	reg.vmByID[own.VMID] = own
-	reg.mu.Unlock()
-
-	mock := &mockVMManager{
-		getVMs: map[string]*VMInstanceInfo{
-			own.VMID: {
-				HostURL:       own.ComputerURL,
-				Epoch:         own.Epoch,
-				Healthy:       false,
-				State:         "running",
-				StartedAt:     now,
-				LastHealthyAt: now,
-			},
-		},
-		checkHealthOK: &healthy,
-		recoverResponse: &VMInstanceInfo{
-			HostURL: "http://127.0.0.1:9044",
-			Epoch:   4,
-			Healthy: true,
-			State:   "running",
-		},
-	}
-	reg.SetVMManager(mock)
-
-	resolved, err := reg.ResolveOrAssignDesktop("user-old-account", PrimaryDesktopID)
-	if err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-	if resolved.VMID != own.VMID {
-		t.Fatalf("resolved VMID = %q, want %q", resolved.VMID, own.VMID)
-	}
-	if len(mock.checkHealthCalls) != 1 || mock.checkHealthCalls[0] != own.VMID {
-		t.Fatalf("health checks = %+v, want [%s]", mock.checkHealthCalls, own.VMID)
-	}
-	if len(mock.recovers) != 1 || mock.recovers[0] != own.VMID {
-		t.Fatalf("recovers = %+v, want [%s]", mock.recovers, own.VMID)
-	}
-	if resolved.ComputerURL != "http://127.0.0.1:9044" {
-		t.Fatalf("ComputerURL = %q, want recovered host URL", resolved.ComputerURL)
-	}
-	if resolved.Epoch != 4 {
-		t.Fatalf("Epoch = %d, want 4", resolved.Epoch)
-	}
-	if resolved.State != VMStateActive {
-		t.Fatalf("State = %s, want %s", resolved.State, VMStateActive)
+			resolved, err := reg.ResolveOrAssignDesktop(own.UserID, PrimaryDesktopID)
+			if err != nil {
+				t.Fatalf("ResolveOrAssignDesktop: %v", err)
+			}
+			if len(mock.recovers) != 0 {
+				t.Fatalf("resolve recovered a live guest: %+v", mock.recovers)
+			}
+			if len(mock.checkHealthCalls) != tc.wantHealthy {
+				t.Fatalf("health checks = %+v, want %d", mock.checkHealthCalls, tc.wantHealthy)
+			}
+			if resolved.ComputerURL != own.ComputerURL || resolved.Epoch != 3 || resolved.State != VMStateActive {
+				t.Fatalf("resolved = %+v, want the same realization routed as unready", resolved)
+			}
+		})
 	}
 }
 

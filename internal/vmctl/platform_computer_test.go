@@ -142,7 +142,9 @@ func TestEnsureUniversalWirePlatformComputerRecoversPersistedBootingWithoutWaite
 				HostURL: "http://10.200.17.2:8085",
 				Epoch:   58,
 				Healthy: false,
-				State:   "pending",
+				// failed: the process is gone, so recovery destroys nothing
+				// alive. A live pending boot is never recovered.
+				State: "failed",
 			},
 		},
 		recoverResponse: &VMInstanceInfo{
@@ -194,7 +196,7 @@ func TestEnsureUniversalWirePlatformComputerCoalescesPersistedBootingRecovery(t 
 			HostURL: "http://10.200.17.2:8085",
 			Epoch:   58,
 			Healthy: false,
-			State:   "pending",
+			State:   "failed",
 		},
 		recovered: &VMInstanceInfo{
 			HostURL: "http://10.200.99.2:8085",
