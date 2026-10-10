@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -75,11 +76,18 @@ type candidateJudgment struct {
 	Answers  map[string]candidateAnswer `json:"answers"`
 }
 
+// candidateAnswer is one recorded answer. Probabilities and confidence are
+// integer basis points (0–10000): the verdict lands in an event payload, and
+// canonical JSON refuses floats (rerun 14).
 type candidateAnswer struct {
-	Choice     string             `json:"choice"`
-	Yes        float64            `json:"p_yes"`
-	Confidence float64            `json:"confidence"`
-	Raw        map[string]float64 `json:"probabilities,omitempty"`
+	Choice                string           `json:"choice"`
+	YesBasisPoints        int64            `json:"p_yes_bp"`
+	ConfidenceBasisPoints int64            `json:"confidence_bp"`
+	BasisPoints           map[string]int64 `json:"probabilities_bp,omitempty"`
+}
+
+func basisPoints(p float64) int64 {
+	return int64(math.Round(p * 10000))
 }
 
 // parseCandidateJudgment reads the decision model's distribution. It passes
@@ -107,7 +115,11 @@ func parseCandidateJudgment(raw json.RawMessage) (candidateJudgment, error) {
 			continue
 		}
 		yes := answer.Probabilities["yes"]
-		judgment.Answers[name] = candidateAnswer{Choice: answer.Choice, Yes: yes, Confidence: answer.Confidence, Raw: answer.Probabilities}
+		points := make(map[string]int64, len(answer.Probabilities))
+		for choice, p := range answer.Probabilities {
+			points[choice] = basisPoints(p)
+		}
+		judgment.Answers[name] = candidateAnswer{Choice: answer.Choice, YesBasisPoints: basisPoints(yes), ConfidenceBasisPoints: basisPoints(answer.Confidence), BasisPoints: points}
 		if answer.Choice != "yes" || yes < 0.5 {
 			judgment.Decision = "fail"
 		}
