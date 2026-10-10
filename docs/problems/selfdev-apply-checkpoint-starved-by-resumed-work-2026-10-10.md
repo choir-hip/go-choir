@@ -321,3 +321,30 @@ Red ceremony (checkpoint replay, restore/rematerialize).
   - `live-rescan-mixed-spelling`: a boot that replays rows rescans and
     migrates live rows in place, so a retained replay of such a store
     would differ.
+
+## Rerun 9 event payload read: the hypothesis holds, and the rule rewrites prose (04:56Z)
+
+Read-only internal run-events read on the disposable computer. The
+03:56:19 pair is `seq 40 tool.result` (`capsule_go_eval`) and
+`seq 41 loop.progress` of the implementation run. `payload.output`
+is a 19,739-character directory listing that contains file names like
+`effects-red-cosuper-activation-budget-…`.
+
+`ogLeafMigrate` documents that "whitespace-bearing leaves are prose,
+never IDs or tokens". The guard is `trimmed != v`, though, so it skips
+only **leading or trailing** whitespace. A multi-line output with no edge
+whitespace reaches `migrateIDForward`, whose infix branch runs
+`strings.ReplaceAll(id, "-cosuper-", "-engineering-")` over the whole
+text. The upcast rewrites recorded tool output, the content hash
+changes, and so does the event's key.
+
+**Heresy (discovered):** a deposit upcast rewrites recorded model and
+tool content, which is history, inside prose leaves. Fix (b) stops it
+for the probe and restore of stores that never upcast. It still happens
+on every upcasting replay: platform base rebuilds, and fresh
+reconstructions without a live counterpart. Named residual
+`upcast-rewrites-prose`. The repair is a guarded change to the frozen
+rule: skip any leaf containing whitespace, under a new
+`DepositUpcastVersion`. Existing ledgers stay on the old version.
+That is red, and it touches every upcast store, so it needs its own
+ceremony and owner visibility. It is not part of this slice.
