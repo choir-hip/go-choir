@@ -1,0 +1,35 @@
+{
+  "probe": "vmctl_no_escalation_probe",
+  "base_url": "https://choir.news",
+  "started_at": "2026-10-10T12:07:07.359Z",
+  "predicate": "A disposable computer whose guest is frozen past the unhealthy grace is not destroyed by a vmctl resolve or the owner's wake (no destruction receipt), and after thawing it answers at the same epoch. The owner's explicit restart then ends it with an attributed stop receipt and boots a new epoch.",
+  "legs": {
+    "fresh_owner": true,
+    "computer_booted": true,
+    "guest_frozen": true,
+    "resolve_left_it_running": true,
+    "wake_reported_not_restarted": true,
+    "no_destruction_receipt": true,
+    "thawed_same_epoch": true,
+    "owner_restart_new_epoch": true,
+    "owner_restart_receipted": true
+  },
+  "email": "vmctl-no-escalation-1791634028276-f5rf2n@example.com",
+  "vm_id": "vm-6f724cf8f7f4b83928ca106168328790",
+  "epoch_before": 12991,
+  "frozen_at": "2026-10-10T12:07:21.535Z",
+  "resolve_http_status": "200",
+  "wake": {
+    "http": 202,
+    "code": "not_restarted",
+    "status": "failed"
+  },
+  "receipts_before": 0,
+  "receipts_while_frozen": 0,
+  "epoch_after": 12991,
+  "restart_http": 201,
+  "epoch_after_restart": 12992,
+  "restart_caller_log": "Oct 10 12:08:44 choiros-b r1f98c5fgs9j3vsrd51klfwkxfpamkks-go-choir-vmctl-exec[4014516]: 2026/10/10 12:08:44 vmctl: lifecycle request POST /internal/vmctl/stop caller=\"proxy.lifecycle.restart\" remote=127.0.0.1:35386",
+  "finished_at": "2026-10-10T12:08:54.568Z",
+  "predicate_result": "satisfied"
+}

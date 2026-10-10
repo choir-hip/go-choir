@@ -129,11 +129,18 @@ try {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'wake_current_computer' }),
     });
-    const status = await (await fetch('/api/compute/status', { credentials: 'same-origin' })).json().catch(() => null);
+    // Wake answers 202 while it is still probing; wait for its outcome.
+    let status = null;
+    for (let i = 0; i < 60; i++) {
+      status = await (await fetch('/api/compute/status', { credentials: 'same-origin' })).json().catch(() => null);
+      if (status?.recovery && !status.recovery.active) break;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
     return { http: res.status, recovery: status?.recovery || null };
   });
   result.wake = { http: wake.http, code: wake.recovery?.code || '', status: wake.recovery?.status || '' };
-  result.legs.wake_reported_not_restarted = wake.http === 502 && wake.recovery?.code === 'not_restarted';
+  result.legs.wake_reported_not_restarted = (wake.http === 502 || wake.http === 202) &&
+    wake.recovery?.status === 'failed' && wake.recovery?.code === 'not_restarted';
 
   result.receipts_before = receiptsBefore;
   result.receipts_while_frozen = receiptCount(booted.vm_id);
