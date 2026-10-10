@@ -241,3 +241,15 @@ Red ceremony (Texture canonical writes, actor occurrence disposal).
 - Rollback: git revert.
 - Heresy delta: discovered "a read-only cell consumes the activation's
   inputs"; repaired on staging proof only; introduced none.
+
+## Failure 1 disposition: measured with retries; product fix is a named residual
+
+The owner's own apply checkpoint is taken inside the apply hold and
+passed in rerun 12. Only the probe's extra post-apply checkpoint, taken
+while the desks resume, replays a moving chain. The probe now retries it
+once a minute for up to ten minutes and records every attempt.
+Residual `checkpoint-at-captured-head`: a checkpoint should replay to a
+head captured at its start and compare live state at that head, so a busy
+computer can mint one. That needs a live-state snapshot at the head, a
+red change to the replay-completeness verifier, and it is scheduled after
+rerun 13.

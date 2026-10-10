@@ -495,9 +495,21 @@ try {
       // Gate 2 track B: the apply made this computer layered. Can it still
       // mint a checkpoint? Every second change depends on it
       // (docs/problems/layered-checkpoint-identity-gate2-2026-10-10.md).
-      const postApplyCheckpoint = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/checkpoint`, {});
+      // After apply the desks resume, and a replay over a chain that is still
+      // growing ends in "projection repair required" (rerun 12). Retry while
+      // the computer settles; the attempts are recorded, never hidden.
+      let postApplyCheckpoint;
+      let checkpointMinted = false;
+      result.post_apply_checkpoint_attempts = [];
+      for (let attempt = 0; attempt < 10 && !checkpointMinted; attempt++) {
+        if (attempt > 0) await page.waitForTimeout(60_000);
+        postApplyCheckpoint = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/checkpoint`, {});
+        checkpointMinted = Boolean(postApplyCheckpoint.json?.published_checkpoint?.checkpoint ?? postApplyCheckpoint.json?.checkpoint);
+        const errorText = String(postApplyCheckpoint.json?.error ?? postApplyCheckpoint.text ?? '');
+        result.post_apply_checkpoint_attempts.push({at: new Date().toISOString(), status: postApplyCheckpoint.status, error: errorText.slice(0, 200)});
+        if (!checkpointMinted && !/projection repair required|head moved|not exactly-once/.test(errorText)) break;
+      }
       result.post_apply_checkpoint = {status: postApplyCheckpoint.status, body: postApplyCheckpoint.json ?? postApplyCheckpoint.text};
-      const checkpointMinted = Boolean(postApplyCheckpoint.json?.published_checkpoint?.checkpoint ?? postApplyCheckpoint.json?.checkpoint);
       // mark() flips the leg it names, so a failed check marks a log-only name.
       if (checkpointMinted) mark('post_apply_checkpoint', {status: postApplyCheckpoint.status});
       else mark('post_apply_checkpoint_failed', {status: postApplyCheckpoint.status});
