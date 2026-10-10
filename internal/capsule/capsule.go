@@ -41,6 +41,7 @@ type Capsule struct {
 	Cgroup               capsuleCgroup
 	wait                 func() error
 	listener             net.Listener
+	egress               *EgressProxy // ecosystem_proxy (L2) capsules only
 	processDone          chan struct{}
 	processErr           error
 	Pinned               bool

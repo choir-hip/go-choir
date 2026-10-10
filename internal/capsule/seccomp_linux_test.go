@@ -113,3 +113,38 @@ func TestBrokerSeccompAllowsLandlockForSessionWorker(t *testing.T) {
 		}
 	}
 }
+
+// docs/design/engineering-network-grants-2026-10-10.md §4.0b: the L2 filter
+// admits AF_INET/AF_INET6 so native tools reach the loopback egress
+// forwarder. Failure modes: the variant still refuses inet (L2 is dead on
+// arrival), or it also admits netlink or packet sockets (interface and route
+// manipulation, raw frames).
+func TestWorkloadInetSeccompFilterAdmitsOnlyInetAndUnix(t *testing.T) {
+	if os.Getenv(seccompHelperEnv) == "inet" {
+		if err := LoadWorkloadInetFilter(); err != nil {
+			t.Fatalf("load L2 workload filter: %v", err)
+		}
+		for _, family := range []int{unix.AF_UNIX, unix.AF_INET, unix.AF_INET6} {
+			fd, err := unix.Socket(family, unix.SOCK_STREAM, 0)
+			if err != nil {
+				t.Fatalf("family %d refused under the L2 filter: %v", family, err)
+			}
+			_ = unix.Close(fd)
+		}
+		for _, family := range []int{unix.AF_NETLINK, unix.AF_PACKET} {
+			fd, err := unix.Socket(family, unix.SOCK_RAW, 0)
+			if fd >= 0 {
+				_ = unix.Close(fd)
+			}
+			if !errors.Is(err, unix.EPERM) {
+				t.Fatalf("family %d error = %v, want EPERM", family, err)
+			}
+		}
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWorkloadInetSeccompFilterAdmitsOnlyInetAndUnix$")
+	cmd.Env = append(os.Environ(), seccompHelperEnv+"=inet")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("seccomp helper: %v\n%s", err, output)
+	}
+}

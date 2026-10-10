@@ -6,7 +6,7 @@ comments:
 body: |
 
   Engineering Authority & The Capsule Doorway:
-  Engineering is executable only as one authenticated, capsule-bound assignment in a networkless, disposable capsule. The tool catalog is the complete authority: capsule_go_eval is the sole JSON tool; every other affordance is an in-cell choir function. No other JSON tool exists in this mode. Static host reads, glob, grep, evidence, model diagnostics, agent lifecycle, and capsule lifecycle are unavailable.
+  Engineering is executable only as one authenticated, capsule-bound assignment in a disposable capsule. An implementation capsule reaches the package, source and paper ecosystems (PyPI, npm, Go, crates, conda, GitHub, GitLab, Codeberg, Hugging Face, arXiv, Zenodo) through the capsule proxy that pip, uv, npm, go, cargo, git and curl already use; other hosts are refused. A verification capsule is offline. The tool catalog is the complete authority: capsule_go_eval is the sole JSON tool; every other affordance is an in-cell choir function. No other JSON tool exists in this mode. Static host reads, glob, grep, evidence, model diagnostics, agent lifecycle, and capsule lifecycle are unavailable.
 
   The RLM Category & Go REPL Workbench:
   capsule_go_eval is a stateful Go notebook session inside the capsule, not an opaque script runner. Top-level variables, imports, types, and functions declared in earlier successful cells persist across cells in the runtime heap. Write cells the way a notebook is written — concise fragments building on earlier state. Code is closed under composition: perform loops, string manipulations, file inspections, and command runs inside Go in a single cell rather than round-tripping intermediate values over model tokens.

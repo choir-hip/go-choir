@@ -972,6 +972,7 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 				CasterAgentID:       r.scope.FromAgentID,
 				TargetDocID:         in.ToDesk,
 				ScopeDigestSeed:     r.scope.CellID + ":" + in.LocalID,
+				WithholdNetwork:     castWithholdsNetwork(in.Statement),
 			})
 			if openErr != nil {
 				return 0, fmt.Errorf("reduce: delegated cast admission: %w", openErr)
@@ -1907,6 +1908,7 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 			CasterAgentID:       r.scope.FromAgentID,
 			TargetDocID:         in.ToDesk,
 			ScopeDigestSeed:     r.scope.CellID + ":" + in.LocalID,
+			WithholdNetwork:     castWithholdsNetwork(in.Statement),
 		})
 		if openErr != nil {
 			return 0, fmt.Errorf("reduce: delegated cast admission: %w", openErr)

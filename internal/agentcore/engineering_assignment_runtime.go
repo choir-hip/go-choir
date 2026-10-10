@@ -150,6 +150,9 @@ type OpenDocumentAssignmentRequest struct {
 	// report (store-side validateEngineeringSupersedeTuple enforces it).
 	Attempt    uint64
 	Supersedes *types.EngineeringSupersedeTuple
+	// WithholdNetwork keeps an implementation capsule networkless instead of
+	// the L2 ecosystem default.
+	WithholdNetwork bool
 }
 
 // DelegatedCastRequest is a desk-staged choir.Cast: one desk cell admits one
@@ -164,6 +167,39 @@ type DelegatedCastRequest struct {
 	CasterAgentID       string
 	TargetDocID         string // engineering-bound document the cast targets
 	ScopeDigestSeed     string // deterministic seed so a replayed cell re-derives the same scope digest
+	WithholdNetwork     bool   // the caster's spec said {"network":"forbidden"}
+}
+
+// engineeringCapsuleNetwork picks a new assignment's network mode. Owner
+// direction (2026-10-10, "don't hinder agency"): implementation capsules get
+// L2 ecosystem egress through the executor's proxy unless the caster
+// withheld it; verification stays offline because the verifier rebuilds from
+// the frozen bundle (engineering-network-grants-2026-10-10.md §4.0b).
+func engineeringCapsuleNetwork(kind types.EngineeringAssignmentKind, withheld bool) string {
+	if kind == types.EngineeringAssignmentImplementation && !withheld {
+		return types.EngineeringCapsuleNetworkEcosystemProxy
+	}
+	return types.EngineeringCapsuleNetworkForbidden
+}
+
+// castWithholdsNetwork reads a Cast spec's "network" field. Only an explicit
+// "forbidden", "none" or "off" (or false) withholds; anything else keeps the
+// default, and a spec can never widen past L2.
+func castWithholdsNetwork(spec string) bool {
+	var fields map[string]any
+	if json.Unmarshal([]byte(spec), &fields) != nil {
+		return false
+	}
+	switch value := fields["network"].(type) {
+	case bool:
+		return !value
+	case string:
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case types.EngineeringCapsuleNetworkForbidden, types.EngineeringCapsuleNetworkNone, "off":
+			return true
+		}
+	}
+	return false
 }
 
 // startAssignedEngineeringForDocument opens one assignment whose parent authority is
@@ -320,7 +356,7 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
 		SourceArtifactRef: preflight.ArtifactRef, SourceCandidateID: req.CandidateID,
 		Writable: true, CapsuleID: "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-"),
-		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+		NetworkMode:    engineeringCapsuleNetwork(req.Kind, req.WithholdNetwork),
 		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 	}
 	open := types.OpenEngineeringAssignmentRequest{
@@ -462,7 +498,7 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req Delegate
 		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
 		SourceArtifactRef: preflight.ArtifactRef, SourceCandidateID: req.CandidateID,
 		Writable: true, CapsuleID: "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-"),
-		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
+		NetworkMode:    engineeringCapsuleNetwork(req.Kind, req.WithholdNetwork),
 		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 		CastAuthority:  types.EngineeringCastAuthorityDelegated,
 	}
@@ -564,7 +600,8 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	spec := capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
 		MemoryMax: engineeringAssignmentMemoryMax, CpuQuota: engineeringAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: engineeringAssignmentPidsMax,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
-		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest}
+		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest,
+		Egress: binding.NetworkMode == types.EngineeringCapsuleNetworkEcosystemProxy}
 	if req.Kind == types.EngineeringAssignmentVerification {
 		// The verifier's exact-binding mount is mandatory: the host installs
 		// the operation's frozen bundle read-only at /selfdev/bundle with a

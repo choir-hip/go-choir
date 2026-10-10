@@ -47,6 +47,7 @@ type Broker struct {
 	listener           net.Listener
 	brokerBin          string // path to this broker binary (for go_eval worker spawn)
 	sessionWorkerReady bool
+	egress             bool // ecosystem_proxy (L2): workloads get the proxy env and the inet filter
 }
 
 // Session represents a long-lived shell session.
@@ -91,6 +92,8 @@ func main() {
 		sessionSlot        string
 		sessionSockFD      int
 		sessionHarden      bool
+		sessionInet        bool
+		egress             bool
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
@@ -108,6 +111,8 @@ func main() {
 	flag.StringVar(&sessionSlot, "session-slot", "", "Session worker co-super slot bound into the choir scope (trusted, from verified capability)")
 	flag.IntVar(&sessionSockFD, "session-sock-fd", -1, "inherited multiplexed session socket fd (Step 2 transport); -1 selects legacy stdio")
 	flag.BoolVar(&sessionHarden, "session-harden", false, "apply the S1 kernel floor (Landlock, capability drop, seccomp) to the session worker; set only by a privileged in-namespace broker spawn")
+	flag.BoolVar(&sessionInet, "session-inet", false, "load the L2 workload filter that admits inet sockets (ecosystem_proxy capsules only)")
+	flag.BoolVar(&egress, "egress", false, "this capsule is ecosystem_proxy (L2): bring up lo and forward 127.0.0.1:3128 to the executor's egress socket")
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
@@ -134,7 +139,11 @@ func main() {
 			if err := capsule.DropWorkloadCapabilities(); err != nil {
 				log.Fatalf("session worker capability drop: %v", err)
 			}
-			if err := capsule.LoadWorkloadFilter(); err != nil {
+			loadFilter := capsule.LoadWorkloadFilter
+			if sessionInet {
+				loadFilter = capsule.LoadWorkloadInetFilter
+			}
+			if err := loadFilter(); err != nil {
 				log.Fatalf("session worker seccomp: %v", err)
 			}
 		}
@@ -159,7 +168,7 @@ func main() {
 		if listenerFD != 3 {
 			log.Fatal("capsule broker launcher requires listener fd 3")
 		}
-		if err := runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir, authorizedPeerUID, listenerFD); err != nil {
+		if err := runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir, authorizedPeerUID, listenerFD, egress); err != nil {
 			log.Fatalf("capsule broker launcher: %v", err)
 		}
 		return
@@ -209,6 +218,14 @@ func main() {
 		log.Fatalf("failed to mask guest kernel command line: %v", err)
 	}
 
+	// L2: the forwarder needs CAP_NET_ADMIN for lo and an inet socket, so it
+	// starts before the capability drop and the syscall filter.
+	if egress {
+		if _, err := startEgressForwarder(capsule.EgressLoopbackAddr, capsule.EgressSocketPath); err != nil {
+			log.Fatalf("failed to start egress forwarder: %v", err)
+		}
+	}
+
 	// Apply the filesystem boundary before the syscall filter, then make every
 	// hardening failure fatal. The broker is guest TCB and must fail closed.
 	landlock := capsule.NewBrokerLandlock(mergedDir, "/run/capsule/broker")
@@ -218,7 +235,11 @@ func main() {
 	if err := capsule.DropBrokerCapabilities(); err != nil {
 		log.Fatalf("failed to drop capabilities: %v", err)
 	}
-	if err := capsule.LoadBrokerFilter(); err != nil {
+	loadBrokerFilter := capsule.LoadBrokerFilter
+	if egress {
+		loadBrokerFilter = capsule.LoadBrokerInetFilter
+	}
+	if err := loadBrokerFilter(); err != nil {
 		log.Fatalf("failed to load seccomp filter: %v", err)
 	}
 
@@ -234,6 +255,7 @@ func main() {
 		revokedCaps:        make(map[string]bool),
 		brokerBin:          "/run/capsule/broker",
 		sessionWorkerReady: true,
+		egress:             egress,
 	}
 	log.Printf("capsule-broker: session worker ready=%v", broker.sessionWorkerReady)
 
@@ -260,7 +282,7 @@ func main() {
 	}
 }
 
-func runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir string, authorizedPeerUID uint, listenerFD int) error {
+func runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir string, authorizedPeerUID uint, listenerFD int, egress bool) error {
 	listenerFile := os.NewFile(uintptr(listenerFD), "capsule-broker-listener")
 	if listenerFile == nil {
 		return fmt.Errorf("inherited listener is unavailable")
@@ -269,6 +291,7 @@ func runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir string, au
 		"--socket", socketPath, "--listener-fd", "3", "--isolation-stage", "broker",
 		"--capsule-id", capsuleID, "--pubkey", pubKeyHex, "--merged", mergedDir,
 		"--authorized-peer-uid", fmt.Sprint(authorizedPeerUID),
+		fmt.Sprintf("--egress=%t", egress),
 	}
 	command := exec.Command("/run/capsule/broker", args...)
 	command.ExtraFiles = []*os.File{listenerFile}
@@ -489,6 +512,9 @@ func (b *Broker) handleExecDirect(ctx context.Context, cwdPath string, p capsule
 	cmd.Dir = cwdPath
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	cmd.Env = directExecEnv(p.Env)
+	if b.egress {
+		cmd.Env = append(cmd.Env, capsule.EgressProxyEnv()...)
+	}
 
 	var stdout, stderr cappedBuffer
 	stdout.max = goEvalMaxOutputBytes

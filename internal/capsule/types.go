@@ -32,6 +32,13 @@ type SpawnSpec struct {
 	// the durable operation identity written to binding.json beside it.
 	VerifierBundleDir string
 	VerifierBinding   string
+
+	// Egress makes this an ecosystem_proxy (L2) capsule: the executor serves
+	// an egress proxy on EgressSocketPath and the broker forwards loopback
+	// TCP to it. It is a trusted-runtime input read from the durable
+	// assignment binding, never from the capsule
+	// (docs/design/engineering-network-grants-2026-10-10.md §4.0b).
+	Egress bool
 }
 
 type SourcePreflight struct {

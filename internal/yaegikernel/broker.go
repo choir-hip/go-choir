@@ -210,6 +210,7 @@ func (b *Broker) handleExec(ctx context.Context, req *BrokerRequest, receiptID s
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 		}
 	}
+	cmd.Env = append(cmd.Env, egressProxyEnvFromWorker()...)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -476,4 +477,23 @@ func newReceiptID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return "rcpt_" + hex.EncodeToString(b)
+}
+
+// EgressProxyKeys are the proxy settings an ecosystem_proxy (L2) capsule's
+// broker gives its session worker (capsule.EgressProxyEnv). Commands a cell
+// runs inherit exactly these, so native tools reach the in-capsule proxy;
+// in a networkless capsule the worker has none and nothing is added.
+var EgressProxyKeys = []string{
+	"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy",
+	"npm_config_proxy", "npm_config_https_proxy", "SSL_CERT_FILE", "NIX_SSL_CERT_FILE",
+}
+
+func egressProxyEnvFromWorker() []string {
+	var env []string
+	for _, key := range EgressProxyKeys {
+		if value, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env
 }

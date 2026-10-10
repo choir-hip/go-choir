@@ -94,7 +94,7 @@ func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentManagementCapsules(
 			"open_persistent_super=true",
 			"valid execution_request",
 			"never directly opens, requests, or spawns Engineering",
-			"networkless disposable capsule",
+			"disposable capsule",
 			"durable execution or capsule evidence",
 		} {
 			if !strings.Contains(prompt, want) {

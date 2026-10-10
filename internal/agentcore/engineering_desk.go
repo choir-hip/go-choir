@@ -252,6 +252,9 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 		started, openErr := rt.startAssignedEngineeringForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
 			Objective: objective, Kind: types.EngineeringAssignmentImplementation, RevisionID: revision.RevisionID,
 			Attempt: nextAttempt,
+			// A recast keeps the prior attempt's network: a withheld cast
+			// stays networkless.
+			WithholdNetwork: latest.Binding.NetworkMode != types.EngineeringCapsuleNetworkEcosystemProxy,
 			Supersedes: &types.EngineeringSupersedeTuple{
 				SupersedesAssignmentID: assignmentID, SupersedesAttempt: latest.Binding.Attempt,
 				PriorReceiptRef: reportRef, SupersedeKind: types.EngineeringSupersedeRetryAfterBlock,

@@ -38,10 +38,29 @@ var capsuleAllowedSyscalls = []string{
 // WorkloadSeccompFilter is default-deny. It admits the file/process/memory
 // substrate needed by the broker and offline build tools plus AF_UNIX only.
 func WorkloadSeccompFilter() seccomp.Filter {
-	return seccompFilterAllowing(capsuleAllowedSyscalls)
+	return seccompFilterAllowing(capsuleAllowedSyscalls, false)
 }
 
-func seccompFilterAllowing(allowed []string) seccomp.Filter {
+// WorkloadInetSeccompFilter also admits AF_INET and AF_INET6 sockets. It is
+// loaded only in an ecosystem_proxy (L2) capsule, whose network namespace
+// has loopback as its one reachable address, so TCP reaches nothing but the
+// broker's egress forwarder (engineering-network-grants-2026-10-10.md
+// §4.0b). Netlink, packet and every other family stay refused.
+func WorkloadInetSeccompFilter() seccomp.Filter {
+	return seccompFilterAllowing(capsuleAllowedSyscalls, true)
+}
+
+func seccompFilterAllowing(allowed []string, inet bool) seccomp.Filter {
+	families := []uint64{unix.AF_UNIX}
+	if inet {
+		families = append(families, unix.AF_INET, unix.AF_INET6)
+	}
+	socketRules := make([]seccomp.NameWithConditions, 0, len(families))
+	for _, family := range families {
+		socketRules = append(socketRules, seccomp.NameWithConditions{
+			Name: "socket", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.Equal, Value: family}},
+		})
+	}
 	return seccomp.Filter{
 		NoNewPrivs: true,
 		Flag:       seccomp.FilterFlagTSync,
@@ -49,9 +68,7 @@ func seccompFilterAllowing(allowed []string) seccomp.Filter {
 			DefaultAction: denyEPERM,
 			Syscalls: []seccomp.SyscallGroup{
 				{Action: seccomp.ActionAllow, Names: allowed},
-				{Action: seccomp.ActionAllow, NamesWithCondtions: []seccomp.NameWithConditions{{
-					Name: "socket", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.Equal, Value: uint64(unix.AF_UNIX)}},
-				}}},
+				{Action: seccomp.ActionAllow, NamesWithCondtions: socketRules},
 			},
 		},
 	}
@@ -66,12 +83,34 @@ var brokerExtraSyscalls = []string{"landlock_create_ruleset", "landlock_add_rule
 
 func BrokerSeccompFilter() seccomp.Filter {
 	allowed := append(append([]string(nil), capsuleAllowedSyscalls...), brokerExtraSyscalls...)
-	return seccompFilterAllowing(allowed)
+	return seccompFilterAllowing(allowed, false)
+}
+
+// BrokerInetSeccompFilter is the L2 broker filter: the broker's loopback
+// forwarder and its children (direct exec, session workers) need inet
+// sockets, and a child cannot gain what its parent's filter refuses.
+func BrokerInetSeccompFilter() seccomp.Filter {
+	allowed := append(append([]string(nil), capsuleAllowedSyscalls...), brokerExtraSyscalls...)
+	return seccompFilterAllowing(allowed, true)
 }
 
 func LoadWorkloadFilter() error {
 	if err := seccomp.LoadFilter(WorkloadSeccompFilter()); err != nil {
 		return fmt.Errorf("failed to load workload seccomp filter: %w", err)
+	}
+	return nil
+}
+
+func LoadWorkloadInetFilter() error {
+	if err := seccomp.LoadFilter(WorkloadInetSeccompFilter()); err != nil {
+		return fmt.Errorf("failed to load L2 workload seccomp filter: %w", err)
+	}
+	return nil
+}
+
+func LoadBrokerInetFilter() error {
+	if err := seccomp.LoadFilter(BrokerInetSeccompFilter()); err != nil {
+		return fmt.Errorf("failed to load L2 broker seccomp filter: %w", err)
 	}
 	return nil
 }

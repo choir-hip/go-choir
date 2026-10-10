@@ -82,6 +82,18 @@ func TestEngineeringAssignmentBindingValidationExhaustive(t *testing.T) {
 	if err := noneNetwork.Validate(); err != nil {
 		t.Fatalf("network_mode=none should remain machine-verifiable networkless policy: %v", err)
 	}
+	// L2 (engineering-network-grants-2026-10-10.md §4.0b): implementation
+	// may take ecosystem_proxy; the verifier stays offline.
+	ecosystemVerification := verification
+	ecosystemVerification.Binding.NetworkMode = EngineeringCapsuleNetworkEcosystemProxy
+	if err := ecosystemVerification.Validate(); err == nil {
+		t.Fatal("verification with ecosystem_proxy network accepted")
+	}
+	ecosystemImplementation := base
+	ecosystemImplementation.Binding.NetworkMode = EngineeringCapsuleNetworkEcosystemProxy
+	if err := ecosystemImplementation.Validate(); err != nil {
+		t.Fatalf("implementation with ecosystem_proxy network refused: %v", err)
+	}
 	verification.Binding.Writable, verification.Binding.CapsuleID = false, ""
 	if err := verification.Validate(); err == nil {
 		t.Fatal("read-only verification accepted")

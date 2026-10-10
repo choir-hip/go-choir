@@ -104,6 +104,19 @@ func ValidateHost(ctx context.Context, resolver *net.Resolver, host string) erro
 	return nil
 }
 
+// AddressBlocked reports whether ip is loopback, private, link-local
+// (including cloud metadata), CGNAT, multicast, unspecified or otherwise not
+// a public unicast address. It ignores the test override: callers that dial
+// a checked address (the capsule egress proxy) inject their own dialer in
+// tests instead.
+func AddressBlocked(ip net.IP) bool {
+	if v6 := ip.To16(); v6 != nil && ip.To4() == nil && v6[0] == 0x00 && v6[1] == 0x64 && v6[2] == 0xff && v6[3] == 0x9b {
+		// NAT64 well-known prefix 64:ff9b::/96 embeds an IPv4 address.
+		return ipBlocked(net.IP(v6[12:16]))
+	}
+	return ipBlocked(ip)
+}
+
 func ipBlocked(ip net.IP) bool {
 	if ip == nil {
 		return true

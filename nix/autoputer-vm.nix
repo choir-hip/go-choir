@@ -33,6 +33,7 @@ let
     ebooklib
     lxml
     pdfplumber
+    pip
     pypdf
     python-docx
   ]);
@@ -923,6 +924,9 @@ EOF
     pandoc
     poppler-utils
     bash
+    # L2 ecosystem egress (engineering-network-grants-2026-10-10.md §4.0b):
+    # implementation capsules install Python packages with pip or uv.
+    uv
   ];
 
   system.stateVersion = "25.11";

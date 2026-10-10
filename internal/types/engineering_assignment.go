@@ -19,6 +19,12 @@ const (
 	EngineeringCapsuleFateStepSchemaV1                         = "choir.co_super_capsule_fate_step/v1"
 )
 
+// EngineeringCapsuleNetworkEcosystemProxy (L2) gives an implementation
+// capsule live egress to package, source and paper ecosystems through the
+// executor's allowlisting proxy
+// (docs/design/engineering-network-grants-2026-10-10.md §4.0b).
+const EngineeringCapsuleNetworkEcosystemProxy = "ecosystem_proxy"
+
 type EngineeringAssignmentKind string
 
 // EngineeringCastAuthority names which admission authority admitted the
@@ -160,8 +166,16 @@ func (b EngineeringAssignmentBinding) Validate() error {
 	if b.CapsuleID != strings.TrimSpace(b.CapsuleID) || b.CapsuleID == "." || b.CapsuleID == ".." || strings.ContainsAny(b.CapsuleID, `/\`) {
 		return fmt.Errorf("co-super assignment: capsule_id must be a canonical single path component")
 	}
-	if b.NetworkMode != EngineeringCapsuleNetworkForbidden && b.NetworkMode != EngineeringCapsuleNetworkNone {
-		return fmt.Errorf("co-super assignment: capsule network_mode must be forbidden or none")
+	switch b.NetworkMode {
+	case EngineeringCapsuleNetworkForbidden, EngineeringCapsuleNetworkNone:
+	case EngineeringCapsuleNetworkEcosystemProxy:
+		// The verifier rebuilds offline from the frozen bundle; only
+		// implementation work reaches the ecosystems.
+		if b.Kind != EngineeringAssignmentImplementation {
+			return fmt.Errorf("co-super assignment: ecosystem_proxy network is for implementation assignments only")
+		}
+	default:
+		return fmt.Errorf("co-super assignment: capsule network_mode must be forbidden, none or ecosystem_proxy")
 	}
 	if b.FilesystemMode != EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay {
 		return fmt.Errorf("co-super assignment: capsule filesystem_mode must be assignment-local writable overlay")

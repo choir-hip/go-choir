@@ -38,7 +38,10 @@ type workerSessionConfig struct {
 	// capsule user namespace. Unprivileged test spawns leave it false;
 	// an unprivileged process cannot drop caps, so hardening would fail
 	// closed and the worker would never become ready.
-	hardened    bool
+	hardened bool
+	// inet loads the L2 workload filter and the proxy environment; set only
+	// for an ecosystem_proxy capsule's broker.
+	inet bool
 }
 
 // sessionWorker owns one persistent worker process serving framed eval cells
@@ -98,11 +101,15 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 		"--session-slot", cfg.slot,
 		"--session-sock-fd", "3",
 		fmt.Sprintf("--session-harden=%t", cfg.hardened),
+		fmt.Sprintf("--session-inet=%t", cfg.inet),
 	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = cfg.allowedRoot
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	cmd.Env = []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
+	if cfg.inet {
+		cmd.Env = append(cmd.Env, capsule.EgressProxyEnv()...)
+	}
 	cmd.ExtraFiles = []*os.File{childFile}
 	stderr := &lockedTail{limit: 2048}
 	cmd.Stderr = stderr
@@ -329,6 +336,7 @@ func (b *Broker) sessionConfigFor(activationID, role, slot string) workerSession
 		role:        role,
 		slot:        slot,
 		hardened:    true,
+		inet:        b.egress,
 	}
 }
 

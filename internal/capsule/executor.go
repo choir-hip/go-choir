@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -260,6 +261,10 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			cleanupErr = errors.Join(cleanupErr, caps.listener.Close())
 			caps.listener = nil
 		}
+		if caps.egress != nil {
+			caps.egress.Close()
+			caps.egress = nil
+		}
 		if caps.Cgroup != nil {
 			cleanupErr = errors.Join(cleanupErr, caps.Cgroup.Delete())
 		}
@@ -367,6 +372,11 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, err
 	}
 	caps.Cgroup = cgroup
+	if spec.Egress {
+		if err := e.startEgressLocked(caps); err != nil {
+			return nil, err
+		}
+	}
 	if err := e.startBrokerLocked(ctx, caps); err != nil {
 		return nil, err
 	}
@@ -376,6 +386,44 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	e.controlHandles[capKey{AgentRunID: spec.OwnerRunID, Handle: controlHandle}] = caps.ID
 	e.vmMemoryUsed += caps.MemoryMax
 	return caps, nil
+}
+
+// startEgressLocked serves an L2 capsule's egress socket from outside the
+// capsule. The socket is owned by the capsule's mapped host uid so the
+// broker can connect; every connection is logged to the guest journal and
+// to the capsule's egress ledger under the persistent artifact root.
+func (e *Executor) startEgressLocked(caps *Capsule) error {
+	socketPath := filepath.Join(caps.MergedDir, strings.TrimPrefix(EgressSocketPath, "/"))
+	_ = os.Remove(socketPath)
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
+	if err != nil {
+		return fmt.Errorf("capsule egress listener: %w", err)
+	}
+	if err := os.Chown(socketPath, capsuleNamespaceHostID, capsuleNamespaceHostID); err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("capsule egress socket owner: %w", err)
+	}
+	if err := os.Chmod(socketPath, 0o600); err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("capsule egress socket mode: %w", err)
+	}
+	ledgerDir := filepath.Join(e.artifactRoot(), "egress")
+	_ = os.MkdirAll(ledgerDir, 0o700)
+	ledgerPath := filepath.Join(ledgerDir, caps.ID+".jsonl")
+	var ledgerMu sync.Mutex
+	proxy := NewEgressProxy(caps.ID, EcosystemEgressPolicy(), func(record EgressRecord) {
+		line, _ := json.Marshal(record)
+		log.Printf("capsule-egress: %s", line)
+		ledgerMu.Lock()
+		defer ledgerMu.Unlock()
+		if f, err := os.OpenFile(ledgerPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+			_, _ = f.Write(append(line, '\n'))
+			_ = f.Close()
+		}
+	})
+	caps.egress = proxy
+	go func() { _ = proxy.Serve(listener) }()
+	return nil
 }
 
 func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
@@ -398,7 +446,7 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 		_ = inheritedListener.Close()
 		return err
 	}
-	args := []string{"--socket", "/run/capsule/broker.sock", "--listener-fd", "3", "--isolation-stage", "launcher", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/", "--authorized-peer-uid", fmt.Sprint(capsuleNamespaceHostID)}
+	args := []string{"--socket", "/run/capsule/broker.sock", "--listener-fd", "3", "--isolation-stage", "launcher", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/", "--authorized-peer-uid", fmt.Sprint(capsuleNamespaceHostID), fmt.Sprintf("--egress=%t", caps.egress != nil)}
 	cmd := exec.Command("/run/capsule/broker", args...)
 	cmd.ExtraFiles = []*os.File{inheritedListener}
 	brokerPath := os.Getenv("PATH")
@@ -505,6 +553,10 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 	if caps.listener != nil {
 		_ = caps.listener.Close()
 		caps.listener = nil
+	}
+	if caps.egress != nil {
+		caps.egress.Close()
+		caps.egress = nil
 	}
 	var cleanupErr error
 	if caps.Process != nil {
