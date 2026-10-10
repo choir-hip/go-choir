@@ -140,3 +140,40 @@ artifact-verified success).
    new directory, an empty added file, an edit at end of file, a file
    without a final newline (both directions), a deletion, and a
    multi-hunk modify.
+
+### Fix: a faithful source patch, proven at freeze (red ceremony)
+
+- Conjecture delta: a frozen bundle is reconstructable only if its
+  source patch has been applied by the builder's own applier and
+  reproduces the candidate bytes. Until now the freeze emitted a diff
+  and trusted it. The verifier was the first, and an inconsistent, line
+  of defense.
+- Changes:
+  - `internal/capsule/source_patch.go` (portable, so it is testable off
+    linux). `patchLines` has no phantom line and handles an
+    unterminated last line with git's marker. `renderSourcePatch` emits
+    `diff --git` headers with new/deleted file modes, so empty files
+    survive. `verifySourcePatch` runs `git apply` on a scratch tree of
+    the base files and compares bytes.
+  - `emitSourcePatch` (`executor.go`) builds the file set, renders the
+    patch and verifies it before writing `source.patch`. A patch that
+    cannot reproduce the candidate fails the freeze with an error that
+    names the file.
+- Tests first (`source_patch_test.go`): the six failure modes are listed
+  at the top, and 11 shapes are proven through real `git apply`. It also
+  checks that the round-trip refuses the rerun 10 phantom hunk and a
+  byte mismatch.
+- Protected surfaces: the self-development freeze and bundle
+  (run-acceptance input). The verifier's decision authority is
+  unchanged.
+- Admissible evidence: an M11 rerun whose bundle reaches
+  `awaiting_approval`, and whose apply builds through `patchedFlakeRef`.
+- Rollback: git revert. A bundle frozen under the old emitter remains
+  unappliable either way.
+- Heresy delta:
+  - Discovered: "freeze claims reconstructability without applying the
+    patch", and "verifier passes an unappliable patch" (reruns 8 and 9).
+  - Repaired: the first, on a local proof only, until staging.
+  - Introduced: none.
+  - The verifier-contract variance stays open, as residual
+    `verifier-apply-check`.

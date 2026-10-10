@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/pmezard/go-difflib/difflib"
 	"io"
 	"net"
 	"os"
@@ -1606,60 +1605,53 @@ func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporar
 			baseCommit = raw[:idx]
 		}
 	}
-	var buf bytes.Buffer
 	lowerBase := filepath.Join(caps.MergedDir, "..", "source-lower", "workspace", "platform")
+	var files []sourcePatchFile
 	for _, change := range sourceChanges {
 		rel := strings.TrimPrefix(change.Path, "/")
 		rel = strings.TrimPrefix(rel, "workspace/platform/")
 		if rel == "" || strings.HasPrefix(rel, "..") || strings.Contains(rel, "/../") {
 			continue
 		}
-		var oldBytes, newBytes []byte
-		fromFile, toFile := "a/"+rel, "b/"+rel
+		file := sourcePatchFile{Rel: rel}
 		oldPath := filepath.Join(lowerBase, filepath.FromSlash(rel))
 		var oldErr error
 		if info, statErr := os.Lstat(oldPath); statErr == nil && info.IsDir() {
 			oldErr = os.ErrNotExist // a directory replaced by a file
 		} else {
-			oldBytes, oldErr = os.ReadFile(oldPath)
+			file.Old, oldErr = os.ReadFile(oldPath)
 		}
 		if oldErr != nil && !errors.Is(oldErr, os.ErrNotExist) {
 			return "", "", "", fmt.Errorf("capsule source patch reads base %q: %w", change.Path, oldErr)
 		}
-		if errors.Is(oldErr, os.ErrNotExist) {
-			fromFile = "/dev/null" // added file
-		}
-		switch change.Kind {
-		case ChangeDeleted:
-			newBytes = nil
-			toFile = "/dev/null"
-		default:
+		file.OldExists = oldErr == nil
+		if change.Kind != ChangeDeleted {
 			newPath := filepath.Join(caps.MergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
-			newBytes, err = os.ReadFile(newPath)
+			file.New, err = os.ReadFile(newPath)
 			if err != nil {
 				return "", "", "", fmt.Errorf("capsule source patch reads %q: %w", change.Path, err)
 			}
+			file.NewExists = true
 		}
-		ud, udErr := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
-			A:        difflib.SplitLines(string(oldBytes)),
-			B:        difflib.SplitLines(string(newBytes)),
-			FromFile: fromFile,
-			ToFile:   toFile,
-			Context:  3,
-		})
-		if udErr != nil {
-			return "", "", "", fmt.Errorf("capsule source patch %q: %w", change.Path, udErr)
-		}
-		buf.WriteString(ud)
+		files = append(files, file)
 	}
-	if buf.Len() == 0 {
-		return "", "", "", nil
-	}
-	patchPath = filepath.Join(temporary, "source.patch")
-	if err := os.WriteFile(patchPath, buf.Bytes(), 0o444); err != nil {
+	patch, err := renderSourcePatch(files)
+	if err != nil {
 		return "", "", "", err
 	}
-	sum := sha256.Sum256(buf.Bytes())
+	if len(patch) == 0 {
+		return "", "", "", nil
+	}
+	// The freeze claims the patch reconstructs the candidate; prove it
+	// with the builder's applier before any verifier sees the bundle.
+	if err := verifySourcePatch(context.Background(), patch, files); err != nil {
+		return "", "", "", err
+	}
+	patchPath = filepath.Join(temporary, "source.patch")
+	if err := os.WriteFile(patchPath, patch, 0o444); err != nil {
+		return "", "", "", err
+	}
+	sum := sha256.Sum256(patch)
 	return patchPath, hex.EncodeToString(sum[:]), baseCommit, nil
 }
 
