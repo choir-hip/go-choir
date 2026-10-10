@@ -233,7 +233,7 @@ now:
       guest_reattach_pending (cfc17e05). But the kill at 09:25:48 came
       through a boot path the resolve guard does not cover: the frontend's
       own cold-recover or compute recovery. The chokepoint is
-      vmmanager.StartVM's orphan kill
+      vmmanager.bootVM's orphan kill (one of at least five kill sites; docs/vmctl-360-review-2026-10-10.md)
       (problems/vmctl-restart-reboots-busy-computer-2026-10-10.md,
       correction and clustering assessment). Track D landed in 19834f68:
       an ordinary engineering freeze opens its own promotion candidate
@@ -244,7 +244,7 @@ now:
     main_uncertainty: >-
       Whether apply completes now that the bundle is faithful and the
       deposit mode is retained. Then reject and restore.
-    next_observation: M11 rerun 12 after the StartVM chokepoint fix, with no push during the run, reading Texture's turn count to first useful act (F13), the verifier verdict, then replay-completeness at apply.
+    next_observation: M11 rerun 12 after vmctl Phase 0 (docs/vmctl-360-review-2026-10-10.md), with no push during the run, reading Texture's turn count to first useful act (F13), the verifier verdict, then replay-completeness at apply.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
@@ -255,9 +255,11 @@ now:
     probe-self-stop, one-candidate-per-document-trajectory,
     owner-recovery-reboot, guest-degraded-after-forced-reboot.
   next_action: >-
-    Deploy 79edc337; run M11 rerun 12 with the haiku loop-watch; if the
-    replay is eligible, continue to applied, reject and restore;
-    otherwise read the named rows.
+    vmctl Phase 0 (docs/vmctl-360-review-2026-10-10.md, converged 8/8):
+    step 1 kill receipts alone, then disarm browser/proxy escalation,
+    close automatic destructive paths with bounded admission, adopt by
+    identity. Each step problem-doc first, red ceremony, Landing Loop. Then
+    M11 rerun 12 with no push during the run.
 receipts:
   - id: m11-rerun-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json

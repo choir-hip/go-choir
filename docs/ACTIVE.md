@@ -139,14 +139,17 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   Rerun 11 reached the first completed apply of Gate 2 (09:21), then a
   mid-run deploy I pushed killed the working guest through a boot path
   the new resolve guard (cfc17e05) does not cover. The chokepoint is
-  vmmanager.StartVM's orphan kill
+  vmmanager.bootVM's orphan kill (one of at least five kill sites; docs/vmctl-360-review-2026-10-10.md)
   ([problem](problems/vmctl-restart-reboots-busy-computer-2026-10-10.md),
   correction and clustering assessment). Probe scripts are now tooling
   (a820beea). Track D landed: an ordinary
   engineering freeze opens its own promotion candidate when the mode is
   armed (19834f68). Every desk now knows its REPL surface: a generated
   prompt block, choir.Help(), and compile errors that name what exists
-  (79edc337). Rerun 12 next. Fixed tonight on
+  (79edc337). Owner-requested vmctl 360 review converged 8/8 on a
+  redesign ([review](vmctl-360-review-2026-10-10.md)); its Phase 0
+  (receipts, disarm escalation, close destructive paths, bounded
+  admission) precedes rerun 12. Fixed tonight on
   the way: capsule worker, freeze on new directories, delegated-cast
   reports to Texture, verifier bundle mirror, inference breaker, apply
   hold, engineering id spelling.

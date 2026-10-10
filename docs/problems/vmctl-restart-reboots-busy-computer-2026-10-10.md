@@ -126,7 +126,7 @@ The frontend calls the first and third by itself:
 The probe drives a real desktop page, so the browser itself asks for
 recovery while vmctl is down.
 
-**Every boot path ends at `vmmanager.StartVM`.** For an untracked VM it
+**Every boot path ends at `vmmanager.bootVM`** (there is no `StartVM`; corrected by the 360 panel). For an untracked VM it
 calls `cleanupOrphanedFirecrackerLocked`, which **kills any live
 Firecracker process for that VM id** before launching. That kill is the
 chokepoint.
@@ -143,7 +143,7 @@ guest exists for this VM. Each caller decides for itself, and the
 manager's boot silently resolves a disagreement by killing the guest.
 
 The substrate fix:
-- `StartVM` never kills a live Firecracker process it does not track. It
+- `bootVM` never kills a live Firecracker process it does not track. It
   returns a typed error, which vmctl maps to `guest_reattach_pending` for
   every caller.
 - Only two paths may stop such a process: reconcile's grace
