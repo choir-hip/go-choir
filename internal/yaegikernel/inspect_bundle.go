@@ -58,6 +58,8 @@ type bundleDraftMirror struct {
 	Rejected                bool                       `json:"rejected"`
 	RejectReason            string                     `json:"reject_reason,omitempty"`
 	RuntimeFiles            []mountedRuntimeFile       `json:"runtime_files"`
+	SourcePatchSHA256       string                     `json:"source_patch_sha256,omitempty"`
+	SourcePatchBaseCommit   string                     `json:"source_patch_base_commit,omitempty"`
 }
 
 type mountedRuntimeFile struct {
@@ -75,6 +77,13 @@ type mountedRuntimeFile struct {
 // the receipt REFS only (bodies embed occurred_at and are never compared).
 func inspectMountedBundle() (map[string]any, error) {
 	return inspectMountedBundleAt(selfDevBundleMountPoint)
+}
+
+// InspectMountedBundleAt inspects a frozen bundle laid out under root. It
+// lets the producer's package pin that this mirror reads every field it
+// writes.
+func InspectMountedBundleAt(root string) (map[string]any, error) {
+	return inspectMountedBundleAt(root)
 }
 
 func inspectMountedBundleAt(root string) (map[string]any, error) {
