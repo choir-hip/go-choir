@@ -113,3 +113,34 @@ object kind and key), then name the writer. The operation stays in
   Admissible evidence: the next M11 rerun shows no desk turn between the
   apply restart and the checkpoint. Rollback: git revert. Heresy delta:
   discovered "resume during apply"; repaired only on staging proof.
+
+## Rerun 8 on 5704ace6: the hold works; the diagnostic names the rows (02:45Z)
+
+Disposable `computer-14bec738…` (VM `vm-419eeec3…`), operation
+`selfdev-87882911…`. Implementation and verification took 16 minutes;
+the apply restart came at 02:43:13Z. From then the engineering and
+Texture desks logged "waits for the self-development apply checkpoint"
+(fix A, 7ea0f66d). The first checkpoint (02:44:02Z) read a quiet chain:
+no head-moving or tail errors, straight to the equivalence test.
+
+The equivalence test still fails, and now says why:
+
+`og_objects live_only=26 replay_only=26 changed=3`, by kind:
+`choir.lifecycle_command` 24, `choir.lifecycle_event` 24, `choir.event` 4,
+`choir.co_super_assignment` 2 (content and body differ),
+`choir.co_super_assignment_report` 1 (content and body differ).
+
+The live-only rows were written at 02:27:58, 02:28:12, 02:40:18–24 and
+02:43:15: the engineering assignment's open, its report and freeze, and
+its cancel at the apply restart. The matching 26/26 counts mean replay
+builds the same number of lifecycle commands and events under different
+keys. **Finding:** the engineering assignment lifecycle (open, report,
+cancel) is not replay-deterministic. Either the keys include a value the
+replay does not see the same way (a sequence, a time, a run id), or the
+live write and the reducer build different objects. H1–H3 above are
+refuted as stated: the divergence is the assignment lifecycle, not run
+passivation or the budget path.
+
+Next: read how `store/engineering_assignments.go` mints lifecycle
+command and event keys and bodies, and how the reducer replays the same
+event, before any fix.
