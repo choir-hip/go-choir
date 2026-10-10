@@ -90,10 +90,23 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
   deliberately default-off on Node B since 2026-10-05, but research is
   still offered the verb. Research run 64f09172 spent a cell on it, and
   its report blamed "the source service was unavailable".
-- R2. (open) Two `choir.WebSearch` calls in one cell exceeded the cell
-  deadline (`context deadline exceeded`, 64f09172 at 21:17:09). Exa was
-  cooling down until the next day. Brave answered in 505 ms in an earlier
-  run, so the time went to other providers in the chain.
+- R2. (traced; cause revised) Two `choir.WebSearch` calls in one cell
+  failed with `context deadline exceeded` (research run 64f09172 at
+  21:17:09). The deadline was the cell's own: research set
+  `timeout_ms: 2000` on a cell making two searches. The providers were not
+  at fault. Across the saved demo traces (arxiv5-7, ms5), research ran 11
+  cells calling WebSearch or FetchURL. Six died on a `timeout_ms` it chose
+  itself (2000, 3000, 4000 or 5000 ms). The five that completed took 0.2,
+  3.3, 4.8, 4.8 and 10.5 s; one finished 0.2 s inside a 5 s limit. Every
+  timed-out result read `{"error":"context deadline exceeded","duration":0}`.
+  It did not name the cell's limit, how long the cell ran, or that
+  `DeskSessionWorker.EvalCell` kills the session worker on that deadline,
+  so every value defined in earlier cells is gone. The tool schema
+  describes `timeout_ms` only as "Evaluation timeout in milliseconds".
+  Fix direction: the timed-out result names the limit, the elapsed time,
+  the lost session, and the observed cost of host calls; the schema says
+  host calls take seconds and that leaving `timeout_ms` unset is
+  normal.
 - R3. (observed, desk behavior) Research reported two candidate papers.
   Both need a GPU or a 7B model, which does not fit "very little compute".
   The cast reached engineering before research reported, so engineering
