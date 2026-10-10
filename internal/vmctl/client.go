@@ -575,6 +575,12 @@ func (c *Client) StopDesktop(userID, desktopID string) error {
 	return c.postAction(StopEndpoint(c.baseURL), userID, desktopID)
 }
 
+// StopDesktopContext is StopDesktop carrying ctx, so the stop names its
+// lifecycle caller.
+func (c *Client) StopDesktopContext(ctx context.Context, userID, desktopID string) error {
+	return c.postActionContext(ctx, StopEndpoint(c.baseURL), userID, desktopID)
+}
+
 // RemoveDesktop requests vmctl to remove the ownership for the given
 // user/desktop pair.
 func (c *Client) RemoveDesktop(userID, desktopID string) error {
@@ -584,13 +590,17 @@ func (c *Client) RemoveDesktop(userID, desktopID string) error {
 // postAction sends a POST request with a user_id/desktop_id body to the given
 // endpoint.
 func (c *Client) postAction(endpoint, userID, desktopID string) error {
+	return c.postActionContext(context.Background(), endpoint, userID, desktopID)
+}
+
+func (c *Client) postActionContext(ctx context.Context, endpoint, userID, desktopID string) error {
 	reqBody := resolveRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID)}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return fmt.Errorf("vmctl client: marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("vmctl client: create request: %w", err)
 	}

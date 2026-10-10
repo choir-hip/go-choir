@@ -138,19 +138,23 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 	switch action {
 	case "stop":
 		if ownership.State != "stopped" {
-			err = h.vmctlClient.StopDesktop(ownership.UserID, ownership.DesktopID)
+			err = h.vmctlClient.StopDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 		}
 	case "start":
 		if ownership.State != "active" {
 			_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 		}
 	case "restart":
-		if ownership.State == "stopped" {
-			_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
-		} else if ownership.Epoch <= control.PriorEpoch {
-			if err = h.vmctlClient.StopDesktop(ownership.UserID, ownership.DesktopID); err == nil {
+		// The owner's restart is an authorized reason to end the running
+		// guest, so it always stops first, even when the ownership already
+		// reads stopped: a guest vmctl lost track of after its own restart is
+		// still running, and only stop ends it (with a destruction receipt).
+		if ownership.Epoch <= control.PriorEpoch {
+			if err = h.vmctlClient.StopDesktopContext(opCtx, ownership.UserID, ownership.DesktopID); err == nil {
 				_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 			}
+		} else if ownership.State == "stopped" {
+			_, err = h.vmctlClient.ResolveDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)
 		}
 	case "refresh":
 		_, err = h.vmctlClient.RefreshDesktopContext(opCtx, ownership.UserID, ownership.DesktopID)

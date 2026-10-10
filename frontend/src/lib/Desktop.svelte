@@ -984,25 +984,28 @@
         appendBootLine(`Computer identity is unavailable; continuing (${reason})`, 'warn');
         return;
       }
-      appendBootLine('Requesting cold computer recovery', 'warn');
-      const res = await fetchWithRenewal(`/api/computers/${encodeURIComponent(computerId)}/lifecycle/cold-recover`, {
+      // A plain restart: stop (which ends a guest vmctl lost track of) then
+      // start. Cold recovery rebuilds the computer from its tape and is not
+      // offered here.
+      appendBootLine('Restarting computer', 'warn');
+      const res = await fetchWithRenewal(`/api/computers/${encodeURIComponent(computerId)}/lifecycle/restart`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idempotency_key: `bios-cold-recover-${computerId}-${Date.now()}` }),
+        body: JSON.stringify({ idempotency_key: `bios-restart-${computerId}-${Date.now()}` }),
       });
-      const recovery = await res.json().catch(() => null);
-      const recoveryStatus = String(recovery?.recovery?.status || '').trim();
       if (res.ok) {
-        appendBootLine(recoveryStatus ? `Computer recovery: ${recoveryStatus}` : 'Computer recovery requested');
+        appendBootLine('Computer restarted');
+        bootstrapRestartOffered = false;
+        if (!authenticatedStartupRunning) startAuthenticatedDesktop();
       } else {
-        appendBootLine(`Recovery request returned ${res.status}; continuing`, 'warn');
+        appendBootLine(`Restart returned ${res.status}`, 'warn');
       }
     } catch (err) {
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
       }
-      appendBootLine(`Recovery request failed; continuing (${reason})`, 'warn');
+      appendBootLine(`Restart request failed (${reason})`, 'warn');
     } finally {
       bootstrapRecoveryInFlight = false;
     }
