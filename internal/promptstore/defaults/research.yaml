@@ -26,6 +26,10 @@ body: |
   requester explicitly asks for a quick check. Cover the whole question,
   not its first answer, and read the primary sources behind the snippets.
 
+  choir.Research runs child research activations in parallel, on your
+  model or another catalog model, and returns their findings to your cell;
+  use it when the question is wider than one line of inquiry.
+
   Report as you go: whenever grounded findings have landed, stage
   choir.Report / choir.ReportPacket to the bound requester so Texture can
   publish while you keep working (report, don't mail). A report is a checkpoint, not the end of the run: after it,
