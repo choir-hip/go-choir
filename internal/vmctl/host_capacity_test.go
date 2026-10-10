@@ -86,7 +86,12 @@ func addOwnership(reg *OwnershipRegistry, own *VMOwnership) {
 	reg.vmByID[own.VMID] = own
 }
 
-func TestReconcileReapsUnmanagedProcessOnlyAfterGrace(t *testing.T) {
+// Phase 0 step 3: a live guest behind an ownership is a running computer.
+// Reconcile keeps retrying its reattach and never powers it off on a timer;
+// only wedge evidence (wedge_test.go) or an explicit stop ends it. Failure
+// mode pinned: a busy proof-account computer (an M11 run) is killed ten
+// minutes after a vmctl restart because its reattach health check was slow.
+func TestReconcileNeverReapsALiveGuestWithAnOwnership(t *testing.T) {
 	mgr := newProcessControlVMManager()
 	mgr.reattachError = errors.New("guest health check failed")
 	reg, now := hostCapacityRegistry(t, mgr)
@@ -94,28 +99,15 @@ func TestReconcileReapsUnmanagedProcessOnlyAfterGrace(t *testing.T) {
 		State: VMStateStopped, StoppedBy: "vmctl-restart", ComputerURL: "http://10.0.0.2:8085"})
 	mgr.live["vm-qa"] = []int{4242}
 
-	res := reg.ReconcileVMProcesses(context.Background(), allowAllRoutes)
-	if len(mgr.reaped) != 0 || res.Reaped != 0 {
-		t.Fatalf("reaped on first sight: %v", mgr.reaped)
+	for i := 0; i < 24; i++ {
+		res := reg.ReconcileVMProcesses(context.Background(), allowAllRoutes)
+		if res.Reaped != 0 || res.Wedged != 0 {
+			t.Fatalf("pass %d reaped a live, connectable guest: %+v %v", i, res, mgr.reaped)
+		}
+		*now = now.Add(time.Hour)
 	}
-	if len(mgr.reattaches) != 1 {
-		t.Fatalf("reattach retries = %d, want 1 before any reap", len(mgr.reattaches))
-	}
-
-	*now = now.Add(unmanagedReapGraceDefault - time.Second)
-	reg.ReconcileVMProcesses(context.Background(), allowAllRoutes)
-	if len(mgr.reaped) != 0 {
-		t.Fatalf("reaped inside the grace period: %v", mgr.reaped)
-	}
-
-	*now = now.Add(2 * time.Second)
-	res = reg.ReconcileVMProcesses(context.Background(), allowAllRoutes)
-	if res.Reaped != 1 || len(mgr.reaped) != 1 || mgr.reaped[0] != "vm-qa" {
-		t.Fatalf("not reaped after grace: result=%+v reaped=%v", res, mgr.reaped)
-	}
-	own := reg.GetOwnershipByVMID("vm-qa")
-	if own == nil || own.State != VMStateStopped || own.StoppedBy != stoppedByUnmanagedReap {
-		t.Fatalf("ownership after reap = %+v", own)
+	if len(mgr.reaped) != 0 || len(mgr.reattaches) != 24 {
+		t.Fatalf("reaped=%v reattach retries=%d, want none reaped and a retry every pass", mgr.reaped, len(mgr.reattaches))
 	}
 }
 
@@ -251,34 +243,32 @@ func TestReconcileAppliesOOMPriorityByClass(t *testing.T) {
 	}
 }
 
-func TestPressureReclaimBusyProtectionExpiresForProofComputers(t *testing.T) {
+// Phase 0 step 3: busy protection never expires, for proof accounts too —
+// a Gate 2 run on an example.com account can be busy for hours. Admission's
+// memory floor, not reclaim of busy guests, keeps the host from OOM.
+func TestPressureReclaimNeverTakesABusyComputer(t *testing.T) {
 	reg, now := hostCapacityRegistry(t, newProcessControlVMManager())
-	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{AlwaysOnUserIDs: map[string]bool{"owner": true}})
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{
 		Mode:                    PressureReclaimModeActive,
 		MinIdle:                 time.Minute,
 		MinMemoryAvailableBytes: 4 << 30,
-		MaxBusyProtect:          2 * time.Hour,
 		MaxCandidates:           5,
 	})
 	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
 		return HostPressureSample{MemoryTotalBytes: 32 << 30, MemoryAvailableBytes: 1 << 30, MemoryAvailablePercent: 3}
 	})
-	reg.setGuestBusyProbeForTest(func(*VMOwnership) bool { return true })
+	busy := map[string]bool{"vm-qa": true}
+	reg.setGuestBusyProbeForTest(func(own *VMOwnership) bool { return busy[own.VMID] })
 	reg.SetRetentionPruneConfig(RetentionPruneConfig{EphemeralEmailDomains: []string{"example.com"}})
-	reg.setRetentionUserEmailsForTest(map[string]string{"qa": "m11-selfdev@example.com", "real": "someone@realmail.org"})
+	reg.setRetentionUserEmailsForTest(map[string]string{"qa": "m11-selfdev@example.com", "idle": "idle@example.com"})
 	idle := now.Add(-time.Hour)
 	addOwnership(reg, &VMOwnership{VMID: "vm-qa", UserID: "qa", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, LastActiveAt: idle})
-	addOwnership(reg, &VMOwnership{VMID: "vm-owner", UserID: "owner", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, LastActiveAt: idle})
-	addOwnership(reg, &VMOwnership{VMID: "vm-real", UserID: "real", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, LastActiveAt: idle})
+	addOwnership(reg, &VMOwnership{VMID: "vm-idle", UserID: "idle", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, LastActiveAt: idle})
 
-	if got := reg.pressureReclaimActionCandidates(); len(got) != 0 {
-		t.Fatalf("busy computers eligible before the cap: %d", len(got))
-	}
-	*now = now.Add(2*time.Hour + time.Minute)
+	*now = now.Add(24 * time.Hour)
 	got := reg.pressureReclaimActionCandidates()
-	if len(got) != 1 || got[0].own.VMID != "vm-qa" {
-		t.Fatalf("after the cap, want only the proof-account computer eligible (premium and real users keep busy protection); got %d", len(got))
+	if len(got) != 1 || got[0].own.VMID != "vm-idle" {
+		t.Fatalf("after a day busy, want only the idle computer eligible; got %d", len(got))
 	}
 }
 
@@ -288,7 +278,7 @@ var allowAllRoutes ComputerVersionRouteGuard = func(context.Context, string, str
 // vmctl restart, a guest too busy to answer the reattach health check was
 // killed as an "orphan" and rebooted by the next resolve (rerun 11, 08:57Z).
 // Resolve must retry reattach and refuse with Retry-After, never boot over
-// a live process; only reconcile's grace may power it off.
+// a live process; only an explicit stop or the wedge watchdog ends it.
 func TestResolveNeverBootsOverLiveUnmanagedGuest(t *testing.T) {
 	mgr := newProcessControlVMManager()
 	reg, _ := hostCapacityRegistry(t, mgr)

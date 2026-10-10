@@ -26,13 +26,6 @@ const (
 	RecoveryRefusalGuestReattachPending RecoveryRefusalKind = "guest_reattach_pending"
 	hostMemoryRetryAfterSeconds                             = 60
 
-	stoppedByUnmanagedReap = "unmanaged-reaped"
-	// unmanagedReapGraceDefault is how long a live process behind a
-	// non-active ownership may keep failing reattach before it is powered
-	// off. A transient health failure at vmctl restart must not kill a
-	// working computer.
-	unmanagedReapGraceDefault = 10 * time.Minute
-
 	// The kernel kills the highest oom_score first. vmctl runs at -900
 	// (nix/node-b.nix); protected computers rank below ordinary ones, so a
 	// QA computer is the first VM to go and the owner computer the last.
@@ -79,21 +72,6 @@ func protectedWarmnessClass(class WarmnessClass) bool {
 	return false
 }
 
-func (r *OwnershipRegistry) unmanagedReapGrace() time.Duration {
-	if r.unmanagedGrace > 0 {
-		return r.unmanagedGrace
-	}
-	return unmanagedReapGraceDefault
-}
-
-// SetUnmanagedReapGrace overrides how long an unmanaged VM process may keep
-// failing reattach before reconcile powers it off.
-func (r *OwnershipRegistry) SetUnmanagedReapGrace(d time.Duration) {
-	r.mu.Lock()
-	r.unmanagedGrace = d
-	r.mu.Unlock()
-}
-
 // ReconcileVMProcesses makes the registry account for every Firecracker
 // process on the host. A process the manager tracks gets its class's OOM
 // priority. A process behind a stopped ownership is reattached when its
@@ -116,7 +94,6 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 	}
 	sort.Strings(vmIDs)
 	now := r.now()
-	grace := r.unmanagedReapGrace()
 	seen := make(map[string]bool, len(vmIDs))
 
 	for _, vmID := range vmIDs {
@@ -169,7 +146,7 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 				res.Pending++
 				continue
 			}
-			r.reapUnmanaged(pc, vmID, nil, &res)
+			r.reapOrphan(pc, vmID, &res)
 			continue
 		}
 		if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.ComputerURL) != "" &&
@@ -184,16 +161,18 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 			r.stopWedgedUnmanaged(pc, own, &res)
 			continue
 		}
+		// A live guest behind an ownership is a running computer, not a leak:
+		// it stays until it reattaches, its owner stops it, or it is wedged
+		// (docs/vmctl-360-review-2026-10-10.md, Phase 0 step 3). A grace
+		// period is not evidence; admission's memory floor keeps the host
+		// from booting past what these hold.
 		if own.IsHeld() || protectedWarmnessClass(class) {
 			res.ProtectedUnmanaged++
-			log.Printf("vmctl: protected VM %s (%s) runs outside the registry; reattach pending, never reaped", vmID, class)
+			log.Printf("vmctl: protected VM %s (%s) runs outside the registry; reattach pending", vmID, class)
 			continue
 		}
-		if now.Sub(first) < grace {
-			res.Pending++
-			continue
-		}
-		r.reapUnmanaged(pc, vmID, own, &res)
+		res.Pending++
+		log.Printf("vmctl: VM %s (user %s) runs outside the registry for %s; reattach pending", vmID, own.UserID, now.Sub(first).Round(time.Second))
 	}
 
 	r.forgetWedgeProbes(live)
@@ -214,27 +193,18 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 	return res
 }
 
-func (r *OwnershipRegistry) reapUnmanaged(pc vmProcessController, vmID string, own *VMOwnership, res *VMProcessReconcileResult) {
+// reapOrphan powers off a Firecracker process with no ownership at all, on
+// its second sighting: no computer claims it, so nothing running is lost.
+func (r *OwnershipRegistry) reapOrphan(pc vmProcessController, vmID string, res *VMProcessReconcileResult) {
 	if err := pc.ReapUnmanagedVM(vmID); err != nil {
-		log.Printf("vmctl: reap unmanaged VM %s failed: %v", vmID, err)
+		log.Printf("vmctl: reap orphaned VM %s failed: %v", vmID, err)
 		return
 	}
 	res.Reaped++
 	r.mu.Lock()
 	delete(r.unmanagedSince, vmID)
-	if own != nil {
-		if cur, ok := r.vmByID[vmID]; ok && cur.State != VMStateActive && cur.State != VMStateDegraded && cur.State != VMStateBooting {
-			cur.State = VMStateStopped
-			cur.StoppedBy = stoppedByUnmanagedReap
-			r.saveLocked()
-		}
-	}
 	r.mu.Unlock()
-	if own != nil {
-		log.Printf("vmctl: powered off unmanaged VM %s (user %s); state kept", vmID, own.UserID)
-	} else {
-		log.Printf("vmctl: powered off orphaned VM process %s with no ownership; state kept", vmID)
-	}
+	log.Printf("vmctl: powered off orphaned VM process %s with no ownership; state kept", vmID)
 }
 
 // reapUnmanagedLocked powers off a live process behind an ownership the
@@ -301,57 +271,6 @@ func (r *OwnershipRegistry) admitHostMemoryLocked(class WarmnessClass) error {
 		Reason: fmt.Sprintf("host memory available %d MiB; a new computer needs %d MiB above the %d MiB floor",
 			sample.MemoryAvailableBytes>>20, need>>20, floor>>20),
 		RetryAfterSeconds: hostMemoryRetryAfterSeconds,
-	}
-}
-
-// cappedGuestBusy limits busy protection under host pressure: an ephemeral
-// proof computer (retention's example.com / example.test accounts) that has
-// reported busy for longer than MaxBusyProtect, for example one stuck
-// mid-apply, stops being protected. Real users' computers keep busy
-// protection however long their work runs.
-func (r *OwnershipRegistry) cappedGuestBusy(cfg PressureReclaimConfig, policy WarmnessPolicyConfig) func(*VMOwnership) bool {
-	probe := r.guestBusy()
-	if cfg.MaxBusyProtect <= 0 {
-		return probe
-	}
-	ephemeral := r.ephemeralOwnership()
-	now := r.now()
-	return func(own *VMOwnership) bool {
-		busy := probe(own)
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if !busy {
-			delete(r.busySince, own.VMID)
-			return false
-		}
-		since, ok := r.busySince[own.VMID]
-		if !ok {
-			r.busySince[own.VMID] = now
-			return true
-		}
-		if protectedWarmnessClass(warmnessClassForOwnership(own, policy)) || !ephemeral(own) {
-			return true
-		}
-		return now.Sub(since) < cfg.MaxBusyProtect
-	}
-}
-
-// ephemeralOwnership reports whether an ownership belongs to a proof
-// account, using the retention prune's account classification.
-func (r *OwnershipRegistry) ephemeralOwnership() func(*VMOwnership) bool {
-	cfg, _, emails, _ := r.retentionSnapshot()
-	if loaded, warnings := loadRetentionEmailsFromAuthDB(cfg.AuthDBPath); len(warnings) == 0 {
-		for userID, email := range loaded {
-			if _, ok := emails[userID]; !ok {
-				emails[userID] = email
-			}
-		}
-	}
-	return func(own *VMOwnership) bool {
-		if own == nil {
-			return false
-		}
-		return retentionOwnershipEphemeral(own, emails[own.UserID], cfg)
 	}
 }
 

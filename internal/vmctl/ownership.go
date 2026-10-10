@@ -350,11 +350,9 @@ type OwnershipRegistry struct {
 	// clock overrides time.Now for host-capacity tests.
 	clock func() time.Time
 	// unmanagedSince records when reconcile first saw a live VM process the
-	// manager does not track; busySince when a guest first reported busy
-	// (host_capacity.go). unmanagedGrace overrides the reap grace.
+	// manager does not track
+	// (host_capacity.go).
 	unmanagedSince map[string]time.Time
-	busySince      map[string]time.Time
-	unmanagedGrace time.Duration
 	// networkDeadSince records when a live guest first refused a connection
 	// to its service port (wedge.go); guestNetworkProbe overrides the probe.
 	networkDeadSince  map[string]time.Time
@@ -450,7 +448,6 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 		ownerships:                 make(map[string]*VMOwnership),
 		unmanagedSince:             make(map[string]time.Time),
 		networkDeadSince:           make(map[string]time.Time),
-		busySince:                  make(map[string]time.Time),
 		vmByID:                     make(map[string]*VMOwnership),
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
 		gatewayCredentialNextCheck: make(map[string]time.Time),
@@ -764,6 +761,15 @@ func (r *OwnershipRegistry) admitRecoveryStart(own *VMOwnership, emptyStore bool
 func (r *OwnershipRegistry) noteRecoveryStartFailure(own *VMOwnership, err error) error {
 	if err == nil || own == nil {
 		return err
+	}
+	if liveUnmanagedBootRefusal(err) {
+		// vmmanager refused to boot over a live process it does not track
+		// (ErrLiveUnmanaged): the computer is running, so callers wait.
+		return &RecoveryRefusal{
+			Kind:              RecoveryRefusalGuestReattachPending,
+			Reason:            "computer is still running but did not answer reattach; retry shortly",
+			RetryAfterSeconds: guestReattachRetryAfterSeconds,
+		}
 	}
 	admission := r.recoveryAdmissionHandle()
 	if admission == nil {
@@ -1198,7 +1204,7 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 		// The guest is still running but vmctl lost track of it (a reattach
 		// after vmctl's restart found it too busy to answer). Booting would
 		// kill it mid-work: retry the reattach, else refuse with Retry-After.
-		// Only reconcile's grace may power an unmanaged process off
+		// Only an explicit stop or the wedge watchdog (wedge.go) may end it
 		// (vmctl-restart-reboots-busy-computer-2026-10-10).
 		if info, ok := r.reattachOwnershipInfo(*own, mgr); ok {
 			return info, nil
@@ -2828,11 +2834,11 @@ func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
 	return idle
 }
 
-// guestBusy returns the busy-check closure used by the idle sweep. The
-// default probes the guest's own /health for running_runs; a nil/ unreachable
-// answer keeps the pre-existing idle decision — a silent guest is already a
-// hibernation candidate for other reasons, and a claimed-busy guest is the
-// only case where the sweep is wrong without this check.
+// guestBusy returns the busy-check closure used by the idle sweep and
+// pressure reclaim. It fails closed (Phase 0 step 3): only an explicit 200
+// /health reporting no work is idle. An unreachable, non-200 (a replaying
+// guest answers 503) or unreadable answer is busy — a stopped computer loses
+// whatever it was doing, and a truly dead guest is the wedge watchdog's.
 func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
 	probe := r.guestBusyProbe
 	if probe != nil {
@@ -2846,21 +2852,24 @@ func (r *OwnershipRegistry) guestBusy() func(*VMOwnership) bool {
 		}
 		req, err := http.NewRequest(http.MethodGet, base+"/health", nil)
 		if err != nil {
-			return false
+			return true
 		}
 		req.Header.Set("X-Internal-Caller", "true")
 		resp, err := client.Do(req)
 		if err != nil {
-			return false
+			return true
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return true
+		}
 		var health struct {
 			RunningRuns          int `json:"running_runs"`
 			DeskPendingMutations int `json:"desk_pending_mutations"`
 			SelfdevActiveOps     int `json:"selfdev_active_operations"`
 		}
 		if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&health); err != nil {
-			return false
+			return true
 		}
 		// running_runs covers in-flight activations; desk_pending_mutations
 		// covers the gap between them — a controller that owes the document

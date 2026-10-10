@@ -566,6 +566,8 @@ func TestHandler_ReserveFreshVMConfigDoesNotDeadlockDuringSlowBoot(t *testing.T)
 
 func TestOwnershipRegistry_StateDirPressureTriggersReclaimPlan(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	// The guests answer idle: guestBusy fails closed on an unreachable one.
+	reg.setGuestBusyProbeForTest(func(*VMOwnership) bool { return false })
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{
 		Mode:                      PressureReclaimModeDryRun,
 		MinIdle:                   10 * time.Minute,
@@ -921,6 +923,8 @@ func retentionPlanHasVM(plan RetentionPrunePlan, vmID string) bool {
 
 func TestOwnershipRegistry_PressureReclaimNoPressureObservesOnly(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	// The guests answer idle: guestBusy fails closed on an unreachable one.
+	reg.setGuestBusyProbeForTest(func(*VMOwnership) bool { return false })
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{
 		Mode:                      PressureReclaimModeDryRun,
 		MinIdle:                   10 * time.Minute,
@@ -1079,12 +1083,13 @@ func TestOwnershipRegistry_IdleSweepSkipsGuestWithRunningRuns(t *testing.T) {
 		t.Fatalf("idle = %+v, want only quiet-user", idle)
 	}
 
-	// With the busy signal absent (guest unreachable), the same ownership
-	// hibernates — fail-open on the sweep is preserved.
+	// With the busy signal absent (guest unreachable), neither ownership is
+	// idle: guestBusy fails closed (Phase 0 step 3), and a guest that never
+	// answers is the wedge watchdog's, not the sweep's.
 	reg.setGuestBusyProbeForTest(nil)
 	idle = reg.CheckIdleOwnerships()
-	if len(idle) != 2 {
-		t.Fatalf("idle without busy signal = %d, want 2", len(idle))
+	if len(idle) != 0 {
+		t.Fatalf("idle without busy signal = %d, want 0 (fail closed)", len(idle))
 	}
 }
 
@@ -1764,6 +1769,8 @@ func TestOwnershipRegistry_LogoutStopsOnlyCurrentUser(t *testing.T) {
 func TestOwnershipRegistry_IdleTimeoutChecks(t *testing.T) {
 	// VAL-VM-008: Idle timeout transitions inactive VMs.
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	// The guests answer idle: guestBusy fails closed on an unreachable one.
+	reg.setGuestBusyProbeForTest(func(*VMOwnership) bool { return false })
 	reg.SetIdleTimeout(50 * time.Millisecond)
 
 	if _, err := reg.ResolveOrAssign("user-active"); err != nil {
@@ -1809,6 +1816,8 @@ func TestOwnershipRegistry_IdleTimeoutChecks(t *testing.T) {
 
 func TestOwnershipRegistry_IdleSweeperHibernatesIdleVM(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	// The guests answer idle: guestBusy fails closed on an unreachable one.
+	reg.setGuestBusyProbeForTest(func(*VMOwnership) bool { return false })
 	reg.SetIdleTimeout(10 * time.Millisecond)
 
 	if _, err := reg.ResolveOrAssign("user-idle-sweeper"); err != nil {

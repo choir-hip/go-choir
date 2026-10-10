@@ -103,12 +103,7 @@ func main() {
 	if cfg, ok := pressureReclaimConfigFromEnv(); ok {
 		registry.SetPressureReclaimConfig(cfg)
 		idleSweeperEnabled = true
-		log.Printf("vmctl: pressure reclaim mode=%s min_idle=%s max_candidates=%d max_busy_protect=%s", cfg.Mode, cfg.MinIdle, cfg.MaxCandidates, cfg.MaxBusyProtect)
-	}
-	if v := os.Getenv("VMCTL_UNMANAGED_REAP_GRACE"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			registry.SetUnmanagedReapGrace(d)
-		}
+		log.Printf("vmctl: pressure reclaim mode=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.MinIdle, cfg.MaxCandidates)
 	}
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
@@ -397,11 +392,6 @@ func pressureReclaimConfigFromEnv() (vmctl.PressureReclaimConfig, bool) {
 	if v := os.Getenv("VMCTL_PRESSURE_RECLAIM_MIN_IDLE"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			cfg.MinIdle = d
-		}
-	}
-	if v := os.Getenv("VMCTL_PRESSURE_MAX_BUSY_PROTECT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d > 0 {
-			cfg.MaxBusyProtect = d
 		}
 	}
 	if v := os.Getenv("VMCTL_PRESSURE_MIN_MEMORY_AVAILABLE_MIB"); v != "" {

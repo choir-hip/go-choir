@@ -113,3 +113,9 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
+
+// liveUnmanagedBootRefusal recognizes vmmanager.ErrLiveUnmanaged across the
+// manager adapter, which vmctl does not import.
+func liveUnmanagedBootRefusal(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "live untracked Firecracker process")
+}

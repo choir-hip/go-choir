@@ -3,8 +3,13 @@ package vmctl
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/vmmanager"
 )
 
 // Owner ruling 2026-10-10: a stranded computer recovers by itself
@@ -127,5 +132,54 @@ func TestReconcileNeverStopsHeldGuest(t *testing.T) {
 	reg.ReconcileVMProcesses(context.Background(), allowAllRoutes)
 	if len(mgr.reaped) != 0 {
 		t.Fatalf("held guest stopped: %v", mgr.reaped)
+	}
+}
+
+// The manager's refusal to boot over a live untracked process crosses the
+// adapter as an error; vmctl must still read it as "running, wait", or the
+// refusal turns into a generic boot failure.
+func TestLiveUnmanagedBootRefusalIsRecognized(t *testing.T) {
+	if !liveUnmanagedBootRefusal(fmt.Errorf("boot VM: %w: vm vm-x", vmmanager.ErrLiveUnmanaged)) {
+		t.Fatalf("vmmanager.ErrLiveUnmanaged not recognized: %v", vmmanager.ErrLiveUnmanaged)
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	err := reg.noteRecoveryStartFailure(&VMOwnership{VMID: "vm-x"}, fmt.Errorf("%w: vm vm-x", vmmanager.ErrLiveUnmanaged))
+	var refusal *RecoveryRefusal
+	if !errors.As(err, &refusal) || refusal.Kind != RecoveryRefusalGuestReattachPending {
+		t.Fatalf("boot refusal mapped to %v, want guest_reattach_pending", err)
+	}
+}
+
+// Phase 0 step 3: guestBusy fails closed. Failure modes pinned: an
+// unreachable guest, a replaying guest's 503, or an unreadable answer reads
+// idle, so the idle sweep or pressure reclaim stops a computer that is working.
+func TestGuestBusyFailsClosed(t *testing.T) {
+	serve := func(status int, body string) string {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(body))
+		}))
+		t.Cleanup(srv.Close)
+		return srv.URL
+	}
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closedURL := closed.URL
+	closed.Close()
+
+	busy := NewOwnershipRegistry("http://127.0.0.1:8085").guestBusy()
+	for name, tc := range map[string]struct {
+		url  string
+		want bool
+	}{
+		"idle 200":        {serve(http.StatusOK, `{"running_runs":0}`), false},
+		"working 200":     {serve(http.StatusOK, `{"running_runs":2}`), true},
+		"replaying 503":   {serve(http.StatusServiceUnavailable, `{"running_runs":0}`), true},
+		"unreadable 200":  {serve(http.StatusOK, `not json`), true},
+		"unreachable":     {closedURL, true},
+		"no computer url": {"", false},
+	} {
+		if got := busy(&VMOwnership{VMID: "vm", ComputerURL: tc.url}); got != tc.want {
+			t.Errorf("%s: busy = %v, want %v", name, got, tc.want)
+		}
 	}
 }

@@ -670,10 +670,15 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		// VM exists but is not running; clean up before relaunching.
 		m.forceCleanup(cfg.VMID, "boot-replace-tracked")
 	} else {
-		// A previous vmctl process may have failed to reattach a Firecracker
-		// child whose PID file survived. Reclaim only processes whose cmdline
-		// still proves they are this VM's Firecracker instance; never kill an
-		// arbitrary reused PID from stale metadata.
+		// A live Firecracker process for this VM that the manager does not
+		// track is a running computer (a reattach that failed after vmctl's
+		// restart), not debris. Booting never kills it: explicit stop or the
+		// wedge watchdog are the only paths that end one
+		// (docs/vmctl-360-review-2026-10-10.md, Phase 0 step 3).
+		if m.liveFirecrackerForVMLocked(cfg.VMID) {
+			return nil, fmt.Errorf("%w: vm %s", ErrLiveUnmanaged, cfg.VMID)
+		}
+		// Only stale metadata remains: a dead PID file or a leftover tap.
 		m.cleanupOrphanedFirecrackerLocked(cfg.VMID, "boot")
 	}
 
@@ -1254,6 +1259,9 @@ func (m *Manager) DestroyVMState(vmID string) error {
 		}
 		delete(m.vms, vmID)
 	} else {
+		if m.liveFirecrackerForVMLocked(vmID) {
+			return fmt.Errorf("%w: refuse to destroy state of vm %s", ErrLiveUnmanaged, vmID)
+		}
 		m.cleanupOrphanedFirecrackerLocked(vmID, "destroy-state")
 	}
 	if pids := firecrackerPIDsForVM(vmID); len(pids) > 0 {
@@ -2004,6 +2012,20 @@ func (m *Manager) forceCleanup(vmID, cause string) {
 	if inst, ok := m.vms[vmID]; ok {
 		m.killFirecrackerProcess(inst, cause)
 	}
+}
+
+// ErrLiveUnmanaged refuses a boot over a live Firecracker process for the same
+// VM that the manager does not track.
+var ErrLiveUnmanaged = errors.New("vm has a live untracked Firecracker process; refusing to boot over it")
+
+// liveFirecrackerForVMLocked reports a live Firecracker process proven to be
+// this VM's, by cmdline scan or by a PID file whose process still matches.
+func (m *Manager) liveFirecrackerForVMLocked(vmID string) bool {
+	if len(firecrackerPIDsForVM(vmID)) > 0 {
+		return true
+	}
+	pid, err := m.loadPID(vmID)
+	return err == nil && processExists(pid) && firecrackerCmdlineMatchesVM(pid, vmID)
 }
 
 // cause names the path that asked for the cleanup, for its destruction receipt.

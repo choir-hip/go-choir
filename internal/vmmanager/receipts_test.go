@@ -3,6 +3,7 @@ package vmmanager
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -174,5 +175,43 @@ func waitExit(cmd *exec.Cmd, timeout time.Duration) error {
 		return nil
 	case <-time.After(timeout):
 		return os.ErrDeadlineExceeded
+	}
+}
+
+// Phase 0 step 3: a boot or a state destroy never kills a live Firecracker
+// process the manager does not track. Failure modes pinned: the boot reclaims
+// it as an "orphan" (the 09:25:48 kill path); destroy-state reclaims it; the
+// refusal leaves a receipt as if it killed. Linux only: the scan reads /proc.
+func TestBootAndDestroyRefuseOverLiveUntrackedFirecracker(t *testing.T) {
+	if _, err := os.Stat("/proc/self/cmdline"); err != nil {
+		t.Skip("needs /proc")
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "firecracker")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nsleep 60\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", script, "--id", "vm-live-untracked")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	deadline := time.Now().Add(5 * time.Second)
+	for len(firecrackerPIDsForVM("vm-live-untracked")) == 0 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	m := NewManager(ManagerConfig{StateDir: t.TempDir()})
+	if _, err := m.bootVM(VMConfig{VMID: "vm-live-untracked"}); !errors.Is(err, ErrLiveUnmanaged) {
+		t.Fatalf("boot over a live untracked process: err = %v, want ErrLiveUnmanaged", err)
+	}
+	if err := m.DestroyVMState("vm-live-untracked"); !errors.Is(err, ErrLiveUnmanaged) {
+		t.Fatalf("destroy-state over a live untracked process: err = %v, want ErrLiveUnmanaged", err)
+	}
+	if !processExists(cmd.Process.Pid) {
+		t.Fatal("a refused boot or destroy killed the live process")
+	}
+	if _, err := os.Stat(m.destructionReceiptPath()); err == nil {
+		t.Fatal("a refusal wrote a destruction receipt")
 	}
 }
