@@ -255,23 +255,26 @@ now:
     probe-self-stop, one-candidate-per-document-trajectory,
     owner-recovery-reboot, guest-degraded-after-forced-reboot.
   next_action: >-
-    vmctl Phase 0 (docs/vmctl-360-review-2026-10-10.md, converged 8/8):
-    step 1 kill receipts accepted on staging (d41c2caf, a5c85838); step 2
-    no automatic restart from browser, wake or resolve accepted (4eb1ec55,
-    8a32484c); protection is bounded by evidence: a guest that refuses
-    connections for five minutes is stopped as wedged and boots again
-    (537735c1, 0eee1843; owner ruling "it should all be automated"). Next
-    step 3, close the remaining automatic destructive paths; then adopt by
-    identity and restart hygiene (the deploy's double vmctl restart
-    orphans guest console pipes). Residual: one pending desk mutation keeps
-    the owner's computer busy (hypothesis). Each step
-    problem-doc first, red ceremony, Landing Loop. Self-development now
-    admits one open operation per computer and a crash boot closes
-    pre-decision operations (9399f3ed); the owner's computer needs one boot
-    to shed five August zombies
-    (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
-    Then M11 rerun 12 with no push during the run.
+    M11 rerun 12 (19ba3034, first run on the new desk prompts): 14/17,
+    second completed apply, candidate B rejected, no vmctl kill. Three
+    failures, documented first in
+    docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md:
+    (1) restore cannot reach a head older than the newest replay base
+    (rollback impossible by construction); (2) Texture's document says no
+    change was made after it applied, and Texture turns' emitted updates
+    are discarded on deferral and never re-emitted; (3) the post-apply
+    checkpoint replays a moving chain. Order: restore fix (a), read the
+    Texture trace then fix the emission loss, checkpoint at a captured
+    head, then rerun 13 and the trace-review/prompt-tuning loop. vmctl
+    Phase 0 steps 4-7 are committed (2f755bb3, 3823e25e, dfa4cb51,
+    e55d0f0b) and land before rerun 13; no push during a run. Residual:
+    one pending desk mutation keeps the owner's computer busy
+    (hypothesis); application-level wedge (TCP accepted, health never
+    answers) is unbounded; console pipe fate-sharing is Phase 1.
 receipts:
+  - id: m11-rerun-12-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T13-21-08Z.json
+    result: partial (14/17; applied; restore refused below the newest base; Texture document false after apply; post-apply checkpoint on a moving chain)
   - id: vmctl-wedge-recovery-probe-2026-10-10
     ref: docs/evidence/vmctl-wedge-recovery-probe-2026-10-10T12-47Z.json
     result: satisfied (7/7; frozen guest untouched 3 min, stopped as wedged at ~7 min, reload booted a new epoch)

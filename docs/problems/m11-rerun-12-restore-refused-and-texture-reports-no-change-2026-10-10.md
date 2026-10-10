@@ -1,0 +1,133 @@
+# Rerun 12: the change applied, but restore is refused and Texture tells the owner nothing changed (2026-10-10)
+
+Status: open. Gate 2. Problem first; no fix in this commit.
+Mutation class of the fixes: red (restore/rematerialize, checkpoint
+replay, actor delivery of Texture emissions).
+Evidence class: staging, disposable QA computer
+`computer-75c31e98bdbcd8d23116922467d2329a` (VM
+`vm-ce25f113b83df722248562a46b12c504`), build 19ba3034, probe receipt
+`docs/evidence/m11-rerun-2026-10-10T13-21-08Z.json`. Host-side console
+of a disposable computer only.
+
+## How far it got: 14 of 17 checks
+
+First run on the new desk prompts (79edc337) and the Phase 0 vmctl.
+Primary operation `selfdev-b3c271e2…` started 13:21, reached
+`awaiting_approval` 13:44, applied 13:45 (one materializer retry at
+13:44:47: `route ledger: authorization evidence creation time is
+required`, then it passed). Candidate B (`selfdev-68559150…`) was
+rejected at 14:09. No vmctl kill touched the computer. Three checks
+failed.
+
+## Failure 1: the post-apply checkpoint replays a moving chain
+
+`POST …/self-development/checkpoint` after apply returned 409:
+`replay completeness: reconstruct event chain: computer event projection
+repair required: local=seq=1860 … platform=seq=1897`.
+
+Cause (code reading, `computerevent/appender.go` `ReconstructInto`):
+replay pages to the end of the tape and then requires the platform head
+to equal the replayed head. Thirty-seven events landed during the
+replay. The apply hold (7ea0f66d) releases desk work when the operation
+leaves `materializing`, so this checkpoint runs on a busy computer. This
+is the same class as
+[selfdev-apply-checkpoint-starved-by-resumed-work](selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md),
+fix direction B: replay to a head captured at the start and compare
+there. Fix A (hold work) cannot cover a checkpoint taken at an arbitrary
+later moment, and every second change on a layered computer needs one.
+
+## Failure 2: restore cannot reach a head older than the newest replay base
+
+Restore to the pre-episode checkpoint was refused: `projection base
+refused: target is not a descendant of watermark 2542`.
+
+Cause (code reading):
+
+- checkpointd builds replay bases for a computer as it runs and advances
+  its one advertised watermark (`cmd/checkpointd/worker.go`,
+  `PublishCheckpointResult`). Here it reached 2542, after the pinned
+  head.
+- Restore resolves its target only against that newest watermark
+  (`agentcore/restore_base.go` `resolveRecoveryTarget` →
+  `projectionbase.ResolveTargetSequence`), which pages forward from W. A
+  target older than W never appears, so it is refused. The genesis
+  fallback in `rematerialize.go` runs only when no base was ever
+  advertised.
+- So a rollback to any checkpoint older than the newest base is
+  impossible by construction. That is every rollback after the computer
+  has run a while: exactly Gate 2's rollback.
+- Older bases are recorded (`computer_projection_bases`), but base GC
+  keeps only the newest two plus pinned ones (`projectionBasePins`).
+  A pin route exists (`/internal/computers/projection-base/pins`) and
+  nothing in the tree calls it. A checkpoint does not record which base
+  it rests on.
+
+Fix shape (to decide; red):
+
+- (a) restore picks the newest retained base at or before its target,
+  and falls back to bounded genesis replay (≤ `MaxRecoveryTailEvents`,
+  10000) when the target precedes every retained base. Enough for
+  disposable QA computers.
+- (b) a checkpoint mint pins the base under its head (reference = the
+  checkpoint digest), so a long-lived computer such as the owner's can
+  always restore to it. Needed before restore is routine there.
+
+## Failure 3: Texture's document says no change was made, after it was applied
+
+The owner-facing document's last revision (13:46:42, a minute after
+apply) says: "No self-development change has been applied, frozen, or
+verified … the execution assignment … ended in cancellation: a restart
+revoked the assignment's capsule before it returned a result", and that
+"the owner's persistent Management execution path … is not currently
+available here". The operation was frozen, verified, approved and
+applied. This is the Gate 2 exit's central claim (live Texture
+supervision) failing: the supervision surface is false.
+
+Trace (guest console of the disposable computer):
+
+- 13:44:22 the engineering run that froze the candidate
+  (`run:assignment-e37fe78f…`) was still running at the apply restart:
+  `could not join assignment fate … connector is closed`. Boot
+  passivated it and cancelled its assignment (the rerun 7 pattern: the
+  producing run keeps iterating after its result).
+- The cancel report woke Texture. Its turn waited for the apply
+  checkpoint (fix A working), then at 13:46:42 wrote the revision from
+  that cancel report.
+- Both Texture turns in the episode (13:41:47 and 13:46:42) logged
+  `deferred … discards 15 (13) emitted update(s)` and `Texture
+  activation returned without disposing exact trigger`, then on retry
+  `consumed without a turn: terminal (… head already consumed by a
+  Texture turn)`.
+
+Findings and hypotheses:
+
+- **Finding (code, `actor/dispatcher.go`):** a deferred event's
+  emissions are dropped on the promise that "the event re-fires and the
+  handler re-emits them". For Texture the re-fire is consumed without a
+  turn, because the turn already consumed the document head. So
+  whatever Texture emitted in those turns is lost for good. Which
+  updates those were (dispatches, controls, wakes) is not yet read.
+- **Hypothesis H1:** Texture renders from desk reports and never sees
+  the operation's own state (`frozen`, `verified`, `applied`), so a
+  cancel report of the producing run reads to it as "nothing happened".
+- **Hypothesis H2:** "Management path not available" is Texture's
+  reading of a dispatch whose effect it never saw, because the emission
+  was discarded.
+
+Next probe: read the two turns' run events and the discarded update ids
+on this disposable computer (internal run-events read) before any fix.
+
+## Probe bug (fixed with this record)
+
+The M11 probe's `mark()` sets any leg it is named after. Its progress
+mark `post_apply_checkpoint` set that leg true on a 409. The receipt is
+corrected (false, with a note) and the probe now marks
+`post_apply_checkpoint_failed` unless a checkpoint was minted.
+
+## Order of work
+
+1. Restore (failure 2, fix a): smallest, and it blocks the rollback leg.
+2. Texture emissions (failure 3 finding): a substrate loss, not prompt
+   tuning. Read the trace first.
+3. Post-apply checkpoint (failure 1, direction B).
+4. Rerun 13, then the trace-review and prompt-tuning loop.

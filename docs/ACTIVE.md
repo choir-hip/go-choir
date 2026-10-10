@@ -156,7 +156,13 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   ([problem](problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md)). Fixed tonight on
   the way: capsule worker, freeze on new directories, delegated-cast
   reports to Texture, verifier bundle mirror, inference breaker, apply
-  hold, engineering id spelling.
+  hold, engineering id spelling. Phase 0 is landed through step 7 and the
+  owner's stranded computer recovered; recovery is now automatic (wedge
+  watchdog). Rerun 12 reached 14/17 with a second completed apply; restore
+  cannot reach a head older than the newest replay base, Texture's
+  document said nothing changed after the change applied, and the
+  post-apply checkpoint replays a moving chain
+  ([problem](problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md)).
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 

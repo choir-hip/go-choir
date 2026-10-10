@@ -497,8 +497,10 @@ try {
       // (docs/problems/layered-checkpoint-identity-gate2-2026-10-10.md).
       const postApplyCheckpoint = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/checkpoint`, {});
       result.post_apply_checkpoint = {status: postApplyCheckpoint.status, body: postApplyCheckpoint.json ?? postApplyCheckpoint.text};
-      result.legs.post_apply_checkpoint = Boolean(postApplyCheckpoint.json?.published_checkpoint?.checkpoint ?? postApplyCheckpoint.json?.checkpoint);
-      mark('post_apply_checkpoint', {ok: result.legs.post_apply_checkpoint, status: postApplyCheckpoint.status});
+      const checkpointMinted = Boolean(postApplyCheckpoint.json?.published_checkpoint?.checkpoint ?? postApplyCheckpoint.json?.checkpoint);
+      // mark() flips the leg it names, so a failed check marks a log-only name.
+      if (checkpointMinted) mark('post_apply_checkpoint', {status: postApplyCheckpoint.status});
+      else mark('post_apply_checkpoint_failed', {status: postApplyCheckpoint.status});
     } else {
       result.apply_blocker = `operation terminal state was ${primary?.state ?? 'unavailable'}`;
     }
