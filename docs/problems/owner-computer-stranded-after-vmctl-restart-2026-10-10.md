@@ -81,5 +81,15 @@ own stdout sink.
    wedged guest and boots epoch 1188. The crash-boot closer (9399f3ed)
    then closes the August self-development zombies.
 
+**Correction, 12:10Z (owner report).** The owner opened choir.news and saw
+"Your computer cannot start right now. This page will keep checking." The
+page load resolves the computer, gets the same `guest_reattach_pending`
+refusal, and the proxy serves its small self-reloading page
+(`computer_surface_page.go`). The desktop never loads, so its boot console
+and its Restart button never appear. Step 2 of this fix shape could not
+reach the owner. That page must offer the restart itself. An operator
+restart from this session was refused by the session's permission policy
+(remote state change), so the restart stays with the owner.
+
 Bounded protection, step 4 of Phase 0, remains open. Until it lands, the
 owner's restart is the only bound on a stranded computer.
