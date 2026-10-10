@@ -423,3 +423,15 @@ idempotent on (operation, state), authorized by the operation store's own
 transition rather than a run. It wakes Texture as a producer report does,
 and Texture's turn disposes it. Red (Texture ledger); it gets its own
 ceremony and tests before code.
+
+## Rerun 14 finding: the Jev verdict cannot be recorded (16:41Z)
+
+Rerun 14 (computer-f531498648564ac235bbca1b8c982892) froze its candidate and
+the engineering reconcile asked Jev. Recording the verdict then failed, and
+the reconcile retries forever:
+`engineering desk reconcile: judge frozen candidate: canonical json:
+non-integral number "0.82" is forbidden`. The verdict payload carries Jev's
+probabilities and confidence as floats; event payloads are canonical JSON,
+which admits integers only. 32febcf6's tests parsed the answer but never
+encoded the recorded payload. Fix: record probabilities and confidence as
+integer basis points (0–10000).
