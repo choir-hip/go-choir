@@ -405,3 +405,21 @@ corrupt). Not observed yet: rerun 13's restore target was a quiet
 checkpoint. Evidence needed: a restore to a post-apply checkpoint taken
 while desks were busy. Candidate fix: publish the checkpoint at the
 witness's captured head (it descends from the checkpointed event).
+
+## H3 confirmed by rerun 13, and its shape
+
+Rerun 13's document had two revisions, the last at 15:04:09, before the
+15:07:54 apply. Approval, apply, candidate B's rejection and the restore
+never reached Texture, so the owner's document stopped at "awaiting your
+approval". With Jev replacing the verification run, the verifier's report
+to Texture is gone too, so Texture would not even hear the verdict.
+
+Every producer path into Texture (`QueueLifecycleUpdate`) is bound to a
+desk run: a source run, a control binding or a worker work item. An
+operation transition has no run. Shape chosen (live supervision, not a
+read): a new store command that queues an operation-transition report to
+the trajectory's Texture agent, with producer `selfdev:<operation id>`,
+idempotent on (operation, state), authorized by the operation store's own
+transition rather than a run. It wakes Texture as a producer report does,
+and Texture's turn disposes it. Red (Texture ledger); it gets its own
+ceremony and tests before code.
