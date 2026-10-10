@@ -6,18 +6,24 @@
 //   - a screenshot of the live desktop at each step and every new revision;
 //   - every Texture revision as markdown plus a rendered screenshot, so the
 //     versions before the final one are kept;
-//   - every self-development candidate state, found from the document's
-//     engineering assignments (a freeze opens the candidate keyed by them);
-//   - with --approve, the owner approval, the applied state, and the desktop
-//     after the computer serves the change.
+//   - every self-development operation the request opens, found through the
+//     operations list route, with each state change;
+//   - timings: V0 is the prompt, V1 the first Texture revision, and every
+//     later revision and operation transition as seconds after V0;
+//   - with --approve, the owner's single approval (accept_once bound to the
+//     frozen candidate, through the public routes — no host access), the
+//     applied state, and the desktop after the computer serves the change.
+//
+// Evidence goes to --out (default: a fresh directory under the OS temp dir,
+// never the repo). With no open operation, it stops after --idle-minutes
+// (default 30) without a new revision.
 //
 //   node scripts/demo_selfdev_prompt_bar.mjs --label demo-computer-2026-10-10 \
 //     --name minesweeper --prompt "Make a Minesweeper game" [--approve] [--hours 3]
 import { createRequire } from 'node:module';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { approveOperation, requireKnownPolicyDigest, sha256hex } from './lib/selfdev_approval.mjs';
 
 const requireFrontend = createRequire(new URL('../frontend/package.json', import.meta.url));
 const { chromium } = requireFrontend('@playwright/test');
@@ -35,20 +41,25 @@ const prompt = arg('prompt');
 const approve = arg('approve', false) === true;
 const hours = Number(arg('hours', 3));
 const pollMs = Number(arg('poll-seconds', 20)) * 1000;
+const idleMs = Number(arg('idle-minutes', 30)) * 60_000;
 if (!label || !prompt) throw new Error('--label and --prompt are required');
 
 const credential = JSON.parse(readFileSync(join(homedir(), '.config', 'choir-qa', 'test-computers', `${label}.json`), 'utf8'));
 const storagePath = join(homedir(), '.config', 'choir-qa', 'test-computers', `${label}.storage.json`);
 const BASE_URL = credential.base_url;
 const computerID = credential.computer_id;
-const ownerID = credential.user_id;
 const started = new Date();
-const marker = `DEMO_${name.toUpperCase()}_${started.getTime()}`;
-const outDir = arg('out', join(process.cwd(), 'demo-output', `${name}-${started.toISOString().replace(/[:.]/g, '-')}`));
+const outDir = arg('out', join(tmpdir(), 'choir-demo', `${name}-${started.toISOString().replace(/[:.]/g, '-')}`));
 mkdirSync(join(outDir, 'revisions'), { recursive: true });
 mkdirSync(join(outDir, 'screens'), { recursive: true });
 
-const manifest = { name, prompt, label, computer_id: computerID, started_at: started.toISOString(), base_url: BASE_URL, approve, steps: [], revisions: [], operations: {} };
+const manifest = { name, prompt, label, computer_id: computerID, started_at: started.toISOString(), base_url: BASE_URL, approve, steps: [], revisions: [], operations: {}, timings: [] };
+let v0 = null;
+function mark(event, at = new Date(), extra) {
+  if (!v0) return;
+  const seconds = Math.round((new Date(at).getTime() - v0.getTime()) / 100) / 10;
+  manifest.timings.push({ event, seconds_after_v0: seconds, at: new Date(at).toISOString(), ...(extra || {}) });
+}
 let shot = 0;
 function log(step, extra) {
   const line = `${new Date().toISOString()} ${step}${extra ? ' ' + JSON.stringify(extra).slice(0, 400) : ''}`;
@@ -140,12 +151,38 @@ async function saveRevision(docID, title, revision, index) {
   save();
 }
 
-function candidateOperationID(assignmentID) {
-  return 'selfdev-' + sha256hex(`${computerID}\u0000${assignmentID}`).slice(0, 32);
+const selfDev = (rest) => `/api/computers/${encodeURIComponent(computerID)}/self-development/${rest}`;
+
+// approveOnce is the owner's single approval: arm accept_once bound to exactly
+// the frozen candidate, the event heads and the state commitments, then post
+// the approve decision that consumes it (the same steps as choir self-dev
+// approve).
+async function approveOnce(operation) {
+  const head = (await getJSON(selfDev('head'))).json;
+  const mode = (await getJSON(selfDev('mode'))).json;
+  const binding = {
+    bundle_digest: operation.bundle_digest,
+    expected_desired_event_head: head.desired_event_head,
+    expected_effective_event_head: head.effective_event_head,
+    expected_pending_transition_ref: head.pending_transition_ref ?? '',
+    expected_desired_state_commitment: head.desired_state_commitment,
+    expected_effective_state_commitment: head.effective_state_commitment,
+  };
+  const expires = new Date(Date.now() + 15 * 60_000);
+  expires.setUTCMilliseconds(0);
+  const arm = await api('PUT', selfDev('mode'), {
+    mode: 'accept_once', expected_generation: mode.generation, idempotency_key: `demo-accept-once:${operation.operation_id}`,
+    operation_id: operation.operation_id, expires_at: expires.toISOString().replace('.000Z', 'Z'), ...binding,
+  });
+  if (arm.status !== 200) throw new Error(`arm accept_once: ${arm.status} ${JSON.stringify(arm.json ?? arm.text).slice(0, 300)}`);
+  const decision = await postJSON(selfDev(`operations/${encodeURIComponent(operation.operation_id)}/decision`), {
+    decision: 'approve', idempotency_key: `demo-approve:${operation.operation_id}`, verifier_ref: operation.verifier_refs[0], ...binding,
+  });
+  if (decision.status !== 200) throw new Error(`approve: ${decision.status} ${JSON.stringify(decision.json ?? decision.text).slice(0, 300)}`);
+  return decision;
 }
 
 try {
-  requireKnownPolicyDigest();
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.waitForSelector('[data-prompt-input]', { timeout: 300_000 });
   await screenshot('desktop-before');
@@ -155,6 +192,9 @@ try {
   await page.fill('[data-prompt-input]', prompt);
   await screenshot('prompt-typed');
   await page.keyboard.press('Enter');
+  v0 = new Date();
+  manifest.v0 = v0.toISOString();
+  mark('V0 prompt submitted');
   log('prompt_submitted', { prompt });
   await page.waitForTimeout(8_000);
   await screenshot('prompt-submitted');
@@ -164,6 +204,7 @@ try {
   const deadline = Date.now() + hours * 3600_000;
   let approved = false;
   let finished = null;
+  let lastChange = Date.now();
   while (Date.now() < deadline && !finished) {
     const docs = ((await getJSON('/api/texture/documents')).json?.documents || []).filter((doc) => !knownDocs.has(doc.doc_id));
     for (const doc of docs) {
@@ -175,44 +216,47 @@ try {
         if (seen.has(revision.revision_id)) continue;
         seen.add(revision.revision_id);
         fresh = true;
+        lastChange = Date.now();
         await saveRevision(doc.doc_id, doc.title, revision, seen.size);
+        const texture = manifest.timings.filter((t) => t.event.startsWith('V') && t.event !== 'V0 prompt submitted').length;
+        mark(revision.author_kind === 'user' ? `seed revision` : `V${texture + 1} revision`, revision.created_at, { doc_id: doc.doc_id, revision_id: revision.revision_id, author_kind: revision.author_kind });
         log('revision', { doc: doc.doc_id, index: seen.size, author: revision.author_kind });
       }
       seenRevisions.set(doc.doc_id, seen);
       if (fresh) await screenshot(`desktop-after-revision-${doc.doc_id.slice(0, 8)}-${seen.size}`);
-
-      const diagnosis = await getJSON(`/api/texture/documents/${encodeURIComponent(doc.doc_id)}/diagnosis?include_content=false`);
-      const assignments = [...new Set((JSON.stringify(diagnosis.json || {}).match(/assignment-[0-9a-f-]{36}/g) || []))];
-      for (const assignmentID of assignments) {
-        const operationID = candidateOperationID(assignmentID);
-        const operation = await getJSON(`/api/computers/${encodeURIComponent(computerID)}/self-development/operations/${encodeURIComponent(operationID)}`);
-        if (operation.status !== 200 || !operation.json?.state) continue;
-        const state = operation.json.state;
-        if (operationStates[operationID] !== state) {
-          operationStates[operationID] = state;
-          manifest.operations[operationID] = { assignment_id: assignmentID, doc_id: doc.doc_id, state, history: [...(manifest.operations[operationID]?.history || []), { at: new Date().toISOString(), state }] };
-          writeFileSync(join(outDir, `operation-${operationID}.json`), JSON.stringify(operation.json, null, 2));
-          log('operation', { operationID, state });
-          await screenshot(`operation-${state}`);
-        }
-        if (state === 'awaiting_approval' && approve && !approved) {
-          approved = true;
-          const decision = await approveOperation({ marker, computerID, ownerID, operation: operation.json, postJSON, getJSON });
-          manifest.approval = { at: new Date().toISOString(), status: decision.status };
-          log('approved', { operationID });
-          await screenshot('approved');
-        }
-        if (state === 'applied') {
-          await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
-          await page.waitForSelector('[data-prompt-input]', { timeout: 300_000 }).catch(() => {});
-          await page.waitForTimeout(5_000);
-          await screenshot('desktop-after-apply');
-          finished = { state, operationID };
-        }
-        if (['failed', 'rejected', 'cancelled', 'rolled_back'].includes(state)) finished = { state, operationID };
-        if (state === 'awaiting_approval' && !approve) finished = { state, operationID };
-      }
     }
+    const listed = (await getJSON(selfDev('operations'))).json?.operations || [];
+    for (const operation of listed.filter((op) => new Date(op.created_at) >= started)) {
+      const operationID = operation.operation_id;
+      const state = operation.state;
+      if (operationStates[operationID] !== state) {
+        operationStates[operationID] = state;
+        lastChange = Date.now();
+        manifest.operations[operationID] = { state, history: [...(manifest.operations[operationID]?.history || []), { at: new Date().toISOString(), state }] };
+        writeFileSync(join(outDir, `operation-${operationID}.json`), JSON.stringify(operation, null, 2));
+        mark(`operation ${state}`, new Date(), { operation_id: operationID });
+        log('operation', { operationID, state });
+        await screenshot(`operation-${state}`);
+      }
+      if (state === 'awaiting_approval' && approve && !approved) {
+        approved = true;
+        const decision = await approveOnce(operation);
+        manifest.approval = { at: new Date().toISOString(), status: decision.status };
+        log('approved', { operationID });
+        await screenshot('approved');
+      }
+      if (state === 'applied') {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+        await page.waitForSelector('[data-prompt-input]', { timeout: 300_000 }).catch(() => {});
+        await page.waitForTimeout(5_000);
+        await screenshot('desktop-after-apply');
+        finished = { state, operationID };
+      }
+      if (['failed', 'rejected', 'cancelled', 'rolled_back'].includes(state)) finished = { state, operationID };
+      if (state === 'awaiting_approval' && !approve) finished = { state, operationID };
+    }
+    const open = Object.values(operationStates).some((state) => !['applied', 'failed', 'rejected', 'rolled_back'].includes(state));
+    if (!finished && !open && Date.now() - lastChange > idleMs) finished = { state: 'idle', idle_minutes: idleMs / 60_000 };
     if (!finished) await page.waitForTimeout(pollMs);
   }
   manifest.finished = finished || { state: 'timeout' };
