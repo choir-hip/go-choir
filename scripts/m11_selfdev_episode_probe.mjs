@@ -35,6 +35,7 @@ const result = {
     approved: false,
     applied: false,
     apply_events: false,
+    post_apply_checkpoint: false,
     candidate_b_started: false,
     candidate_b_rejected: false,
     document_rendered: false,
@@ -491,6 +492,13 @@ try {
       result.applied_event_kinds = appliedKinds;
       mark('apply_events_check', {kinds: appliedKinds});
       result.legs.apply_events = ['materialization_applied', 'checkpoint_published', 'route_projection_updated'].every((kind) => appliedKinds.includes(kind));
+      // Gate 2 track B: the apply made this computer layered. Can it still
+      // mint a checkpoint? Every second change depends on it
+      // (docs/problems/layered-checkpoint-identity-gate2-2026-10-10.md).
+      const postApplyCheckpoint = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/lifecycle/checkpoint`, {});
+      result.post_apply_checkpoint = {status: postApplyCheckpoint.status, body: postApplyCheckpoint.json ?? postApplyCheckpoint.text};
+      result.legs.post_apply_checkpoint = Boolean(postApplyCheckpoint.json?.published_checkpoint?.checkpoint ?? postApplyCheckpoint.json?.checkpoint);
+      mark('post_apply_checkpoint', {ok: result.legs.post_apply_checkpoint, status: postApplyCheckpoint.status});
     } else {
       result.apply_blocker = `operation terminal state was ${primary?.state ?? 'unavailable'}`;
     }
