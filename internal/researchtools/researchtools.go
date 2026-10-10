@@ -3,12 +3,14 @@ package researchtools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -100,7 +102,7 @@ func (c *HTTPSourceClient) SearchSources(ctx context.Context, query string, maxR
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call source service search: %w", err)
+		return nil, sourceServiceCallError("search", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -143,7 +145,7 @@ func (c *HTTPSourceClient) IngestionHandoffLatest(ctx context.Context) (*sourcea
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call source service ingestion handoff: %w", err)
+		return nil, sourceServiceCallError("ingestion handoff", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -176,7 +178,7 @@ func (c *HTTPSourceClient) ResolveSourceItem(ctx context.Context, itemID string)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call source service item: %w", err)
+		return nil, sourceServiceCallError("item", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -1141,4 +1143,16 @@ func universalWirePlatformOwnerID() string {
 		ownerID = "universal-wire-platform"
 	}
 	return ownerID
+}
+
+// sourceServiceCallError names a refused connection for what it is. The
+// source service is off by default on the host (go-choir-sourcecycled is not
+// in the boot set), so a refusal means "not running here", not an outage,
+// and research should use the verbs that do work (R1,
+// docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md).
+func sourceServiceCallError(op string, err error) error {
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return fmt.Errorf("source service %s: the source service is not running on this host; use choir.WebSearch to find sources and choir.FetchURL to read them: %w", op, err)
+	}
+	return fmt.Errorf("call source service %s: %w", op, err)
 }
