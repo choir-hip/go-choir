@@ -99,23 +99,29 @@ On 2026-10-09, two Texture runs looped on `binding authority mismatch`:
 the same for 115 iterations. Nothing short-circuits an identical
 reducer rejection.
 
-### F8. Deploy refresh closed open work on busy QA computers (reported, 2026-10-09 only)
+### F8. Recovery reboots are logged as deploy refreshes (verified; not a rule violation)
 
-Three of four deploy refreshes logged `restart kind=crash_or_stop` and
-closed open work. To be checked against when the idle-only deploy rule
-landed before this is treated as current.
+After the opt-in rule (f6001aea, 2026-10-09 16:09Z), CI refreshed no
+computer: `REFRESH_ACTIVE_COMPUTERS` is false outside a manual
+dispatch, and the last one was at 14:12Z. Seven QA computers were still
+"refreshed" between 14:57Z on the 9th and 00:56Z on the 10th. Every
+one went through the proxy's compute recovery
+(`proxy/compute_status.go`), which force-reboots a computer that is
+unreachable, booting, degraded or failed.
 
-### F9. Gateway 400s may trip the circuit breaker (reported)
+vmctl logs every refresh as `deploy-image-refresh`
+(`vmctl/ownership.go`), which mislabels these. To the guest, a
+recovery reboot is a crash restart, so closing its open work follows
+the owner rule. Residual `refresh-log-reason`: log the caller's reason.
 
-The gateway journal logged:
+### F9. Gateway 400s tripped the circuit breaker (verified; already fixed)
 
-- 24 `opencode-go` 400s (sanitized), with 15 on rerun 5's VM at
-  23:41–23:44 and 9 on rerun 6's at 00:23–00:25;
-- 13 circuit-open refusals, one of which spread at 00:24:55 to a VM
-  with no 400s;
-- no 429s or 5xx.
-
-To verify in the breaker code.
+The gateway journal logged 24 `opencode-go` 400s (15 on rerun 5's VM at
+23:41–23:44Z, 9 on rerun 6's at 00:23–00:25Z) and 13 circuit-open
+refusals, one of which spread to a VM with no 400s. 589a68bc
+(2026-10-10 00:39Z) already made the breaker ignore client 4xx except
+408 and 429 (`gateway/circuit_breaker.go`). Both windows predate it.
+Repaired; it needs no new work.
 
 ### F10. Receipts lack identity and reasons (reported)
 
@@ -124,6 +130,32 @@ failure reason beyond the operation's error field. Probe blocker text is
 generic in 7 of 12 M11 receipts. There are 9 distinct blockers in about
 10.5 hours, but clustering assessments exist only for Texture. The
 capsule, bundle and replay clusters each have 3 or more fixes.
+
+### F11. A dead report wake makes Texture's disposition fail (reported)
+
+The console logs `actor wake outbox disposed dead wake
+assignment-report:…` at 07:20:38 and 07:36:01. Those are the moments
+each Texture run was created. In both runs Texture's
+`update_dispositions` naming that report were refused, as "does not
+name a pending target-bound producer report eligible to this
+activation". Code check (`agentcore/runtime.go` sweep): "disposed dead wake" means
+the sweep's re-drive found the backing occurrence already gone. The
+direct delivery that created the Texture run had consumed it, so the
+disposal itself is benign. That leaves the refusal unexplained.
+Texture tried two id forms, `assignment-report:report:sha256:…` and
+`work:assignment…`, and both were refused. Next hypothesis: the
+activation binds the report under an id the desk never sees. Open,
+with the trace refs above.
+
+### F12. Message validation fails a whole cell (reported)
+
+The verifier's `choir.Message` failed twice: an unknown field
+`artifact_refs`, then the engineering-to-engineering refusal. The
+reducer rejects the whole tray, so the cell's other intents are lost
+with it. The implementation desk froze with no patch preview and no
+apply check, though git was available in its capsule. The repl
+friction it hit: `choir.Exec` takes a slice, not variadic arguments,
+and inner exit codes are not surfaced.
 
 ## Proposed changes, by layer
 
