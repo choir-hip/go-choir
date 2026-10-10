@@ -115,3 +115,12 @@ Substrate options:
 
 The guest-side transport is the next commit. Lost occurrences ("consumed
 without a turn") and zombie terminal writes remain residuals after it.
+
+Where the gap comes from (from `.github/workflows/ci.yml`, Deploy to
+Staging): when the host closure changes, `switch-to-configuration switch`
+stops the changed `go-choir-*` units, runs activation, and starts them;
+on 02e19146 that took 23:32:47 to 23:34:35. The script then restarts auth,
+maild, corpusd, gateway and proxy again (23:34:40). Owner decision, not
+changed here: whether host services should restart in place (no
+stop-then-start across activation) and whether the second restart is
+needed.
