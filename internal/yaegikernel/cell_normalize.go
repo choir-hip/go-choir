@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/format"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"regexp"
 	"strings"
@@ -67,7 +68,7 @@ func (s *Session) normalizeCellSource(src string) string {
 		// decl path, which renames and invokes main exactly once.
 		var ok bool
 		if file, fset, ok = s.parseWrappedStatementMix(src); !ok {
-			return s.dedupeFragmentImports(src)
+			return guardLeadingFuncStatement(s.dedupeFragmentImports(src))
 		}
 	}
 
@@ -130,6 +131,27 @@ func (s *Session) normalizeCellSource(src string) string {
 		return "1"
 	}
 	return buf.String()
+}
+
+// guardLeadingFuncStatement keeps a statement fragment that begins with the
+// func keyword — `func() { ... }()`, the immediately invoked closure models
+// write to scope a cell — from becoming a package-level main. Yaegi's
+// incremental parser sees a leading FUNC token, fails to parse the fragment
+// as a declaration, and retries it as `package main; func main() { ... }`
+// in file mode: an installed main that re-runs on every later cell, so the
+// closure's staged intents replay into cells that staged nothing (F2,
+// docs/problems/prompt-bar-minesweeper-demo-2026-10-10.md). A leading empty
+// statement makes the first token a semicolon, so yaegi takes its ordinary
+// statement path and evaluates the fragment exactly once.
+func guardLeadingFuncStatement(src string) string {
+	fset := token.NewFileSet()
+	file := fset.AddFile("cell.go", fset.Base(), len(src))
+	var scan scanner.Scanner
+	scan.Init(file, []byte(src), nil, 0)
+	if _, tok, _ := scan.Scan(); tok != token.FUNC {
+		return src
+	}
+	return ";\n" + src
 }
 
 // parseWrappedStatementMix rescues the import+statement shape models emit:
