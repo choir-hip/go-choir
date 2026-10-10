@@ -144,3 +144,63 @@ passivation or the budget path.
 Next: read how `store/engineering_assignments.go` mints lifecycle
 command and event keys and bodies, and how the reducer replays the same
 event, before any fix.
+
+## Rerun 8: the different keys are vocabulary spellings (02:55Z)
+
+The 26/26 key difference is not nondeterminism. It is the vocabulary
+upcast, and the trace and code agree on how.
+
+- Every live store is cut over at boot
+  (`autoputer/run.go` calls `MigrateAndFenceServingVocabulary`). After
+  that the write guard (`vocabWriteGuard`) checks **role fields only**.
+- Live writers still mint IDs that the frozen migration rule
+  (`ogLeafMigrate` → `migrateIDForward`) treats as V1. The engineering
+  assignment path mints lifecycle command IDs `co-super-open:`,
+  `co-super-open-failed:`, `co-super-bind:`, `co-super-capsule:`,
+  `co-super-cancel:`, `co-super-system-cancel:`,
+  `co-super-restart-open-cancel:`, `co-super-restart-cancel:`,
+  `co-super-report:` and `co-super-orphan:`, plus the digest refs
+  `co-super-grant:sha256:`, `co-super-execution:sha256:` and
+  `co-super-fate:sha256:`. Each contains the infix `-super-`.
+- The live store writes those bytes. The probe's from-genesis replay
+  opens a fresh store. A fresh store activates the deposit upcaster
+  (`vocab_upcast_deposit.go`, `fresh`), which rewrites
+  `co-super-open:…` to `co-management-open:…` and re-derives the
+  canonical id from `command_id`. That gives the same number of
+  lifecycle commands and events under different keys, and assignment
+  bodies that differ only in the digest-ref leaves. That matches the
+  diagnostic exactly.
+- The boot fast path (`!replayed && FencedAt != ""`) skips the rescan on
+  the claim that "a fenced store … cannot contain non-V2 rows". That claim
+  is false for IDs, because the guard never checks them.
+
+**Heresy (discovered):** the serving fence and the migration disagree
+about what V2 means. The guard accepts any ID spelling. The migration and
+upcast rewrite every leaf. So a live store is not a fixed point of its own
+migration, and any replay that upcasts diverges from it.
+
+The same flaw would break restore. `rematerialize.go` says the staged
+store "was reconstructed from the V1 tape byte-identically" and compares
+its witness with the checkpoint's. With no advertised base it replays
+from genesis in a fresh store, which upcasts, so the witness would not
+match.
+
+Fix options:
+
+- (a) Writers mint IDs that are fixed points of the frozen rule. This is
+  correct by construction for new events and needs an inventory of
+  writers. Digest refs that are recomputed and compared must accept the
+  legacy spelling.
+- (b) Probe and restore replay in the live store's deposit mode. A
+  live store without an upcast ledger keeps its own bytes, so the staged
+  replay must keep them too. That matches rematerialize's stated design.
+  Its weak spot: a store with mixed spellings after a boot rescan.
+- (c) Extend the write guard to refuse leaves that are not fixed points.
+  This enforces (a) but would fail live writes for any writer left out of
+  the inventory, so it can only come after (a).
+
+Decision (conservative, per no-blocking-asks): (a) for the engineering
+assignment path, with a test guard that every deposit the path writes is
+an upcast fixed point. Then (b) only if the rerun still shows spelling
+divergence from other writers. (c) is a named residual,
+`vocab-guard-ids`.
