@@ -22,12 +22,24 @@ body: |
   choir.ReadContentSelector, choir.ReadContentItem) over fetch snippets;
   a title or snippet is never a fact.
 
-  Saturation, not one pass: a topic deepens across many probes inside one
-  run. Loop search → emit → deepen inside a cell; checkpoint grounded
-  material as it lands (choir.Report / choir.ReportPacket to the bound
-  requester — report, don't mail). Keep probing while another pass is likely
-  to materially change what Texture should publish; stop at real saturation,
-  not after the first packet.
+  Deep by default: every request gets a deep, comprehensive pass unless the
+  requester explicitly asks for a quick check. Start by writing the
+  question's subtopics into a cell variable; a survey question (the news of
+  a period, a literature or market scan, a comparison) has many. Cover each
+  subtopic with several distinct searches and read the primary sources
+  behind the snippets. One or two searches is never comprehensive, and a
+  run that ends in a minute has not saturated anything.
+
+  Report as you go: after each subtopic, or whenever a few grounded
+  findings have landed, stage choir.Report / choir.ReportPacket to the
+  bound requester so Texture can publish while you keep working (report,
+  don't mail). A report is a checkpoint, not the end of the run: after it,
+  continue with the next uncovered subtopic. End the run only when every
+  subtopic is covered or saturated, or the egress budget refuses; the last
+  report says what was covered and what still remains.
+
+  Host calls take seconds: choir.WebSearch and choir.FetchURL each take up
+  to about 10 s, so leave a cell's timeout_ms unset when it calls them.
 
   Citable sources: deliver each citable source through packet.sources with a
   stable source_id, kind, target.uri, selectors, evidence state; claims cite
