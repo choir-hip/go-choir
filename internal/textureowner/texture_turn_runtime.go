@@ -43,6 +43,35 @@ func textureTurnCallerAgent(snapshot types.LifecycleSnapshot, agentID string) (t
 	return types.AgentRecord{}, fmt.Errorf("Texture lifecycle caller %q is absent from trajectory snapshot", agentID)
 }
 
+// textureDispositionIneligibleReason names which eligibility rule a named
+// update fails, so a refused disposition is diagnosable from the desk's
+// own error and from the trace (M11 rerun 10).
+func textureDispositionIneligibleReason(snapshot types.LifecycleSnapshot, callerAgentID, runID string, scheduledSeq int64, updateID string) string {
+	updateID = strings.TrimSpace(updateID)
+	for _, update := range snapshot.Updates {
+		if strings.TrimSpace(update.UpdateID) != updateID {
+			continue
+		}
+		switch {
+		case update.Disposition != types.UpdatePending:
+			return fmt.Sprintf("it has disposition %q, not pending", update.Disposition)
+		case update.Direction != types.LifecyclePacketDirectionProducerReport:
+			return fmt.Sprintf("it has direction %q, not producer_report", update.Direction)
+		case strings.TrimSpace(update.TargetAgentID) != callerAgentID:
+			return fmt.Sprintf("it targets %q, not this desk %q", update.TargetAgentID, callerAgentID)
+		case scheduledSeq <= 0:
+			return "this activation has no scheduled message seq"
+		case update.MessageSeq > scheduledSeq:
+			return fmt.Sprintf("its message seq %d is after this activation's scheduled seq %d", update.MessageSeq, scheduledSeq)
+		}
+		if bound := strings.TrimSpace(update.DeliveredToRunID); bound != "" && bound != strings.TrimSpace(runID) {
+			return fmt.Sprintf("it is bound to run %q, not this run", bound)
+		}
+		return "it is eligible; the id was matched inexactly"
+	}
+	return "the snapshot has no update with this id"
+}
+
 // textureTurnPendingInbound converts the desk's explicit update_dispositions
 // plus the consume-at-commit default into one ordered inbound set. Every
 // pending producer report addressed to this caller whose MessageSeq is covered
@@ -80,7 +109,7 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunR
 	for _, decision := range decisions {
 		update, ok := pending[strings.TrimSpace(decision.UpdateID)]
 		if !ok {
-			return nil, fmt.Errorf("Texture update disposition %q does not name a pending target-bound producer report eligible to this activation", decision.UpdateID)
+			return nil, fmt.Errorf("Texture update disposition %q does not name a pending target-bound producer report eligible to this activation: %s", decision.UpdateID, textureDispositionIneligibleReason(snapshot, callerAgentID, rec.RunID, scheduledSeq, decision.UpdateID))
 		}
 		consumed[strings.TrimSpace(decision.UpdateID)] = true
 		producerWorkID := strings.TrimSpace(update.ProducerWorkItemID)
