@@ -168,41 +168,44 @@ boundaries:
     - no bare models.Call (dataflow recursion) in this mission; separate if needed
 
 now:
-  status: drafted
+  status: working
   slice: >-
-    S0: measure the prompt and display fixes alone on staging before
-    building fan-out.
-  candidate: none
+    S1: measure the research-only prompt on the build with choir.Research,
+    the display fix and the hostlink transport, against the baseline.
+  candidate: >-
+    470a734c (choir.Research) + a7320499 (prompt sentence) + 02e19146
+    (prompt trim) + b055ff58 (hostlink), pushed 2026-10-10 ~23:55.
   conjecture: >-
     If research can fan its work out to parallel child activations and
-    reports as findings land, then the week-of-AI-news
-    document reaches the Haiku baseline's in-window item count, with correct
-    dates and working links, within 15 minutes, with a revision every few
-    minutes. EDGE missing_oracle: item correctness needs a checker
-    (ΔO: scripted item extraction plus link spot checks on both reports).
-    Status: proposed.
+    reports as findings land, then the week-of-AI-news document reaches the
+    Haiku baseline's in-window item count, with correct dates and working
+    links, within 15 minutes, with a revision every few minutes. EDGE
+    missing_oracle: item correctness needs a checker (ΔO: scripted item
+    extraction plus link spot checks on both reports). Status: proposed.
   decision: >-
     Actor recursion as a synchronous host verb (choir.Research) over the
     existing model loop, not new runs: it matches M6.5 (nested activation,
     subset manifest, budget carve-out) and the 2026-09-15 return-value rule
     without new lifecycle objects. M6.5's depth cap 2-3 is dropped by the
     owner's 2026-10-10 direction; the shared budget and deadline bound the
-    tree.
+    tree. S0 (prompt-only) was skipped as a separate measurement: its run
+    on a114b46e was broken by a deploy, and the owner measures the result,
+    not attribution.
   belief:
     believed_state: >-
-      Depth is limited first by kernel ergonomics (display, timeouts) and
-      the prompt's missing "continue after a report", then by one
-      low-effort model doing all the searching serially, then possibly by
-      the 64-call activation egress budget.
+      S0 on a114b46e (document 04a60c53): Texture opened two research desks;
+      they ran 67 s and 142 s (longer than any earlier run), then a deploy's
+      1 min 48 s host gap stranded Texture and its three result wakes.
     main_uncertainty: >-
-      Whether the prompt fix alone produces sustained depth from a
-      low-effort model, which decides how much fan-out must carry.
+      Whether a low-effort desk model uses choir.Research unprompted, and
+      whether the 64-call egress budget caps coverage once it does.
     next_observation: >-
-      The S0 rerun's research runs: duration, searches, reports per run.
+      S1 traces: choir.Research calls, child durations and findings, egress
+      refusals, revisions over time; then the item comparison.
   blocker: none
   next_action: >-
-    After a114b46e deploys, restart demo-arxiv-2026-10-10c and rerun the
-    research-only prompt on a fresh document; pull traces and compare.
+    After the push deploys, restart demo-arxiv-2026-10-10c and run the
+    research-only prompt on a fresh document with no pushes during the run.
 
 receipts: []
 ---
