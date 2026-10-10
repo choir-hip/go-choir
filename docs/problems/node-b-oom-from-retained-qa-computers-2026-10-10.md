@@ -152,3 +152,19 @@ Red ceremony (vmctl VM lifecycle on staging).
 - Residual `probe-self-stop`: auth logout does not stop the computer, so
   probes cannot stop their own. Reconcile, idle hibernation and the busy
   cap now bound them instead.
+
+## Staging proof (cf0969cf, deployed 06:58Z)
+
+- `go-choir-vmctl` OOMScoreAdjust=-900 (MainPID `oom_score_adj` -900).
+- 06:58:33: the owner computer was reattached. Reconcile set its VM to
+  `oom_score_adj` -400. The six untracked VMs failed reattach again and
+  entered the 10-minute grace.
+- 07:10:28: `process reconcile live=8 managed=2 reattached=0 reaped=6
+  pending=0 protected_unmanaged=0`. Each VM was logged as "powered off
+  unmanaged VM … state kept". Two Firecracker processes remain: the owner
+  computer and M11 rerun 10. Available memory went from 0.25 GiB (06:23Z)
+  to 23.9 GiB.
+- Heresy "registry blind to unmanaged VM processes": **repaired**
+  (staging proof above). The truthful stop, memory admission and the
+  proof-account busy cap are deployed but have not yet been exercised on
+  staging.
