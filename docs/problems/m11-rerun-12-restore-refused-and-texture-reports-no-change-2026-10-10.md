@@ -213,3 +213,31 @@ Fix shape (red; Texture canonical writes):
 Prompt-side residuals from the same trace, for the tuning loop:
 `texture-control-schema-friction` (four refused control attempts) and
 `texture-truncated-update-id`.
+
+## Fix for failure 3: the activation, not the cell, answers an idle trigger
+
+Red ceremony (Texture canonical writes, actor occurrence disposal).
+
+- Conjecture delta: a pending report belongs to the whole activation. Only
+  the model's own turn, or the activation's end, may consume it.
+- Change: `noteTextureCell` records each completed Texture cell's staged
+  intents. `answerIdleTextureTrigger` runs once at the end of
+  `ExecuteActivationSyncChecked`. It commits the decide turn
+  (`no_worker_needed`, or `delegation_skipped` after a staged act) only
+  when the activation completed at least one cell, applied nothing, and
+  did not fail or cancel. An activation retried as unprocessed drops its
+  record.
+- Tests first (`texture_idle_trigger_test.go`): a read-only cell commits
+  nothing; the end answers once and states what happened; an applied
+  activation, a cell-less one, a failed one, and a non-Texture one are not
+  answered. The existing desk, textureowner, actorruntime and actor suites
+  pass.
+- Protected surfaces: when a Texture decide turn is committed. The turn
+  itself, its consume-at-commit default, and the postcondition are
+  unchanged.
+- Admissible evidence: rerun 13's Texture document names the frozen,
+  verified candidate, and the console shows no "discards … emitted
+  update(s)" for Texture.
+- Rollback: git revert.
+- Heresy delta: discovered "a read-only cell consumes the activation's
+  inputs"; repaired on staging proof only; introduced none.

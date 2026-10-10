@@ -92,13 +92,18 @@ func (rt *Runtime) ExecuteActivationSyncChecked(ctx context.Context, rec *types.
 		return fmt.Errorf("runtime: activation returned no run")
 	}
 	if message := metadataStringValue(rec.Metadata, activationRetryableErrorMetadata); message != "" {
+		rt.takeTextureActivationCells(rec.RunID) // the retry starts a fresh record
 		return errors.New(message)
 	}
 	if rec.State == types.RunPassivated {
 		reason := metadataStringValue(rec.Metadata, "passivated_reason")
 		if reason == runtimeInjectionAppendFailurePassivationReason || reason == lifecycleResearchAdmissionRetryReason {
+			rt.takeTextureActivationCells(rec.RunID)
 			return fmt.Errorf("%w: %s", ErrActivationOccurrenceMustRemainUnprocessed, reason)
 		}
+	}
+	if err := rt.answerIdleTextureTrigger(ctx, rec); err != nil {
+		return fmt.Errorf("runtime: answer idle Texture trigger: %w", err)
 	}
 	return nil
 }

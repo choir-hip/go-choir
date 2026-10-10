@@ -218,15 +218,12 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				for _, in := range reduction.receipt.Intents {
 					result.Receipts = append(result.Receipts, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
 				}
-				// A texture desk cell that staged no texture_apply intent did not
-				// commit a turn, so the owner-revision trigger would stay pending
-				// forever (defect #5: "activation returned without disposing exact
-				// trigger"). Consume it with a no_semantic_change turn — the desk
-				// authored nothing, which is still a disposition of the wake.
+				// A Texture cell records what it staged. The activation's end,
+				// not the cell, answers a trigger no cell authored a turn for
+				// (answerIdleTextureTrigger): a read-only cell that committed a
+				// turn consumed reports the model had not read yet (rerun 12).
 				if deskRole == agentprofile.Texture {
-					if cerr := rt.consumeIdleTextureTrigger(ctx, result.Intents); cerr != nil {
-						return "", fmt.Errorf("desk_go_eval: consume texture trigger: %w", cerr)
-					}
+					rt.noteTextureCell(execCtx.RunID, result.Intents)
 				}
 			}
 			out, _ := json.Marshal(map[string]any{
@@ -559,44 +556,73 @@ func (rt *Runtime) newestEmissionSeqTo(ctx context.Context, execCtx toolregistry
 	return max
 }
 
-// consumeIdleTextureTrigger disposes the owner-revision wake when a texture
-// desk cell completed without staging a texture_apply intent. Without this the
-// trigger never consumes: texture_turn_committed needs an artifactRefs[1] ==
-// the trigger head, which only a turn commit writes. A cell that authored no
-// revision/decision still must answer the wake — the desk observed the owner
-// revision and chose to change nothing, which is the no_semantic_change turn.
-//
-// The decision_kind must describe what the cell actually did, because the
-// desk's authored acts (Ask/Resolve/Note/Report) are real work — the cell only
-// declined a *doc* write. Recording "no_worker_needed" for a cell that staged
-// an Ask launders a real act into "no act" (the s0m idle-mask defect): the
-// audit row then claims the desk did nothing and the run reads as a completed
-// no-op, destroying the retry signal. A cell that staged a semantic act but no
-// apply disposes the wake as delegation_skipped — the work went elsewhere, the
-// doc needed no edit. Only a cell that staged nothing at all is a true
-// no_semantic_change.
-func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaegikernel.StagedIntent) error {
-	stagedAct := false
+// textureActivationCells is what one Texture activation's completed cells
+// staged: a texture_apply (the activation authored a turn) or any other act.
+type textureActivationCells struct {
+	applied bool
+	staged  bool
+}
+
+// noteTextureCell records one completed Texture cell's staged intents.
+func (rt *Runtime) noteTextureCell(runID string, intents []yaegikernel.StagedIntent) {
+	runID = strings.TrimSpace(runID)
+	if rt == nil || runID == "" {
+		return
+	}
+	rt.textureCellsMu.Lock()
+	defer rt.textureCellsMu.Unlock()
+	if rt.textureCells == nil {
+		rt.textureCells = map[string]textureActivationCells{}
+	}
+	cells := rt.textureCells[runID]
 	for _, in := range intents {
 		if in.Kind == yaegikernel.IntentTextureApply {
-			return nil // the cell committed a real turn; the trigger consumed
-		}
-		// Any semantic act (ask/resolve/note/report/reply/message/…) counts as
-		// an act — the cell was not idle even though it authored no revision.
-		if strings.TrimSpace(in.Kind) != "" {
-			stagedAct = true
+			cells.applied = true
+		} else if strings.TrimSpace(in.Kind) != "" {
+			cells.staged = true
 		}
 	}
-	execCtx := toolregistry.ExecutionContextFrom(ctx)
-	rec := execCtx.RunRecord
-	if rt == nil || rt.textureCellAuthorizer == nil || rec == nil {
-		return nil // not a texture run or no authorizer bound — nothing to do
+	rt.textureCells[runID] = cells
+}
+
+// takeTextureActivationCells returns and forgets the activation's cell record;
+// ok is false when no cell completed.
+func (rt *Runtime) takeTextureActivationCells(runID string) (textureActivationCells, bool) {
+	rt.textureCellsMu.Lock()
+	defer rt.textureCellsMu.Unlock()
+	cells, ok := rt.textureCells[strings.TrimSpace(runID)]
+	delete(rt.textureCells, strings.TrimSpace(runID))
+	return cells, ok
+}
+
+// answerIdleTextureTrigger disposes the activation's trigger when its cells
+// completed but none authored a Texture turn. Without it the owner-revision
+// trigger never consumes: texture_turn_committed needs an artifactRefs[1] ==
+// the trigger head, which only a turn commit writes (defect #5, a08defc0).
+// The desk observed its inputs and chose to change nothing, which is the
+// no_semantic_change turn.
+//
+// It runs once, at the end of the activation. Run per cell (a08defc0 until
+// rerun 12) it committed after the model's first read-only cell, and the
+// commit's consume-at-commit default delivered every pending producer report
+// before the model had read or acted on it.
+//
+// The decision_kind says what the activation actually did. A staged act
+// (Ask/Resolve/Note/Report) is real work routed off the doc, so the wake is
+// disposed as delegation_skipped; recording no_worker_needed for it would
+// launder a real act into "no act" (the s0m idle-mask defect). Only an
+// activation that staged nothing is a true no_worker_needed.
+func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rec == nil {
+		return nil
 	}
-	// Only texture desk cells owe the owner-revision trigger a turn. Every
-	// other desk (engineering, management, research) reduces intents against
-	// the channel ledger and never touches the texture head — consuming here
-	// would be a non-texture cell reaching into the doc it does not own.
-	if !runHasProfile(rec, agentprofile.Texture) {
+	cells, ran := rt.takeTextureActivationCells(rec.RunID)
+	if !ran || cells.applied || rt.textureCellAuthorizer == nil {
+		return nil
+	}
+	// Only Texture activations owe the trigger a turn; a failed or cancelled
+	// one is settled by the occurrence's own failure path.
+	if !runHasProfile(rec, agentprofile.Texture) || rec.State == types.RunFailed || rec.State == types.RunCancelled {
 		return nil
 	}
 	docID := strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
@@ -604,15 +630,12 @@ func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaeg
 		docID = strings.TrimSpace(rec.ChannelID)
 	}
 	if docID == "" {
-		docID = strings.TrimSpace(execCtx.ChannelID)
-	}
-	if docID == "" {
 		return nil
 	}
 	doc, err := rt.store.GetLifecycleDocument(ctx, rec.OwnerID, rec.ComputerID, docID)
 	if err != nil {
-		// A missing doc is not a cell failure — the desk ran but its doc moved
-		// out from under it; the trigger either consumed or the head is gone.
+		// The doc moved out from under the desk: the trigger either consumed
+		// or the head is gone.
 		if errors.Is(err, store.ErrNotFound) {
 			return nil
 		}
@@ -621,14 +644,11 @@ func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaeg
 	if doc.CurrentRevisionID == "" {
 		return nil
 	}
-	// decision_kind names what the cell actually did so the audit row is honest:
-	// a staged act means the desk routed work off the doc (delegation_skipped);
-	// no staged act means it genuinely did nothing (no_worker_needed).
 	decisionKind := "no_worker_needed"
-	reason := "desk cell completed with no authoring act; consuming the owner revision"
-	if stagedAct {
+	reason := "desk activation completed with no authoring act; consuming the owner revision"
+	if cells.staged {
 		decisionKind = "delegation_skipped"
-		reason = "desk cell committed an act off the texture doc (no revision needed); consuming the owner revision"
+		reason = "desk activation committed an act off the texture doc (no revision needed); consuming the owner revision"
 	}
 	body, err := json.Marshal(map[string]any{
 		"op":               "decide",
@@ -644,9 +664,7 @@ func (rt *Runtime) consumeIdleTextureTrigger(ctx context.Context, intents []yaeg
 	_, err = rt.textureCellAuthorizer.CommitCellTextureAuthor(ctx, rec, string(body), "rlm-texture-idle:"+hex.EncodeToString(sum[:8]))
 	if err != nil {
 		// A non-pending mutation or mismatched doc means the trigger was already
-		// consumed (the cell committed a turn through another path, or the run
-		// settled). That is success for our purpose — never fail a healthy cell
-		// over an already-disposed wake.
+		// consumed through another path. That is success for our purpose.
 		if strings.Contains(err.Error(), "not pending") || strings.Contains(err.Error(), "does not match authenticated") {
 			return nil
 		}

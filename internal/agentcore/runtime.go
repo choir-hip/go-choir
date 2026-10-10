@@ -157,7 +157,12 @@ type Runtime struct {
 	// transaction. Bound by autoputer to the texture lifecycle owner —
 	// the desk-cell carrier cannot import the owner, so this is an
 	// interface seam (same shape as the actor-dispatch hooks).
-	textureCellAuthorizer    TextureCellAuthorizer
+	textureCellAuthorizer TextureCellAuthorizer
+	// textureCells records what each running Texture activation's cells
+	// staged; the activation's end answers an unanswered trigger from it
+	// (answerIdleTextureTrigger).
+	textureCellsMu           sync.Mutex
+	textureCells             map[string]textureActivationCells
 	assignmentHandleResolver interface {
 		AssignmentHandle(string, string) (string, error)
 	}
