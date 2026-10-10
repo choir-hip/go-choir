@@ -243,7 +243,7 @@ test('real texture workflow demo uses live LLM, search, generated artifact, and 
   expect(finalState.head.metadata.source).toBe('patch_texture');
   expect(finalState.head.metadata.texture_edit_kind).toBe('texture_edit');
 
-  await page.locator('[data-desktop-icon-id="files"]').dblclick();
+  await page.locator('[data-desktop-icon-id="files"]').click();
   const filesApp = page.locator('[data-files-app]').last();
   await expect(filesApp).toBeVisible({ timeout: 10000 });
   await filesApp.locator('[data-file-item]').filter({ hasText: 'artifacts' }).first().click();

@@ -1,7 +1,7 @@
 import { test, expect } from './helpers/fixtures.js';
 
 async function openTexture(page) {
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   await page.locator('[data-texture-editor]').waitFor({ state: 'visible', timeout: 10000 });
   const recent = page.locator('[data-texture-recent]');
   if (await recent.isVisible().catch(() => false)) {

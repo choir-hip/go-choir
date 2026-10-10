@@ -790,7 +790,7 @@ test('Texture renders source entities as expandable sources and opens owning med
     return doc;
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -914,7 +914,7 @@ test('Texture opens content-item text sources as reader-mode markdown', async ({
     return { title, contentID: item.content_id };
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -1060,7 +1060,7 @@ test('Texture source URL opens Source Viewer unless browser is explicitly reques
     return { title };
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -1268,7 +1268,7 @@ test('Texture renders and opens graph-wrapper sources when legacy revision sourc
     });
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -1501,7 +1501,7 @@ test('Texture source panel omits retired artifact attachment UI while structured
     return doc;
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -1635,7 +1635,7 @@ test('Texture lays out expanded text sources as noncanonical journal flow', asyn
     return doc;
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -1798,7 +1798,7 @@ test('Texture uses stacked journal flow instead of old source card when side rou
     return doc;
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -1922,7 +1922,7 @@ test('Texture mobile source journal flow stays within the reader width', async (
     return doc;
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -2007,7 +2007,7 @@ test('legacy content-only markdown tables render as plain structured paragraph t
     return { ...doc, revision };
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -2060,7 +2060,7 @@ test('legacy content-only markdown tables do not expose bounded cell edit contro
     return { ...doc, revision };
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();

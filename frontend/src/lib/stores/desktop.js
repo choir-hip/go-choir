@@ -8,7 +8,7 @@
  *   - liveStatus: WebSocket connection status
  *   - iconPositions: positions of floating desktop icons
  *   - showDesktopMode: whether all windows are minimized (show desktop)
- *   - selectedIconId: currently selected desktop icon (single-click)
+ *   - selectedIconId: currently selected desktop icon (set on icon press)
  *
  * Each window object has:
  *   { windowId, appId, title, icon, x, y, width, height, mode, zIndex, restoredGeometry, appContext }

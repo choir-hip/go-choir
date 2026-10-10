@@ -95,7 +95,7 @@ test('podcast app opens a durable feed artifact as a full player app', async ({ 
 
   const podcastIcon = page.locator('[data-desktop-icon-id="podcast"]');
   await expect(podcastIcon).toBeVisible();
-  await podcastIcon.dblclick();
+  await podcastIcon.click();
 
   const podcastWindow = page.locator('[data-podcast-app]').last();
   await expect(podcastWindow.locator('[data-podcast-library]')).toBeVisible({ timeout: 10_000 });
@@ -144,7 +144,7 @@ test('podcast mobile detail keeps a long episode list scrollable with player con
   );
   const contentItem = await seedPodcastFeed(page, { rss, title });
 
-  await page.locator('[data-desktop-icon-id="podcast"]').dblclick();
+  await page.locator('[data-desktop-icon-id="podcast"]').click();
   const podcastWindow = page.locator('[data-window]').filter({ has: page.locator('[data-podcast-app]') }).last();
   const podcastApp = podcastWindow.locator('[data-podcast-app]');
   await expect(podcastApp.locator('[data-podcast-library]')).toBeVisible({ timeout: 10_000 });

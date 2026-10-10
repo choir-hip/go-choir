@@ -28,7 +28,7 @@ test('Browser app renders a backend Obscura text snapshot when configured', asyn
   expect(authenticator.authenticatorId).toBeTruthy();
   await registerAndLoadDesktop(page, uniqueEmail());
 
-  await page.locator('[data-desktop-icon-id="browser"]').dblclick();
+  await page.locator('[data-desktop-icon-id="browser"]').click();
   const browserApp = page.locator('[data-browser-app]').last();
   await expect(browserApp).toBeVisible({ timeout: 10_000 });
 

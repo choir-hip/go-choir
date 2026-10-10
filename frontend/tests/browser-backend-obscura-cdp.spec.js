@@ -28,7 +28,7 @@ test('Browser app persists a backend Obscura CDP screenshot when enabled', async
   expect(authenticator.authenticatorId).toBeTruthy();
   await registerAndLoadDesktop(page, uniqueEmail());
 
-  await page.locator('[data-desktop-icon-id="browser"]').dblclick();
+  await page.locator('[data-desktop-icon-id="browser"]').click();
   const browserApp = page.locator('[data-browser-app]').last();
   await expect(browserApp).toBeVisible({ timeout: 10_000 });
 
@@ -79,7 +79,7 @@ test('Browser app applies bounded backend control through the persistent CDP ses
   expect(authenticator.authenticatorId).toBeTruthy();
   await registerAndLoadDesktop(page, uniqueEmail());
 
-  await page.locator('[data-desktop-icon-id="browser"]').dblclick();
+  await page.locator('[data-desktop-icon-id="browser"]').click();
   const browserApp = page.locator('[data-browser-app]').last();
   await expect(browserApp).toBeVisible({ timeout: 10_000 });
 

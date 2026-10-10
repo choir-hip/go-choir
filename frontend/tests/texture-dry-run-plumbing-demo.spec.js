@@ -323,14 +323,14 @@ User edit: keep the model deterministic, cite the research assumptions, and requ
   expect(finalText).not.toMatch(/Task completed successfully|stub provider|Worker update ready\.|Research findings ready\./i);
   await expect(textureWindow.locator('[data-texture-version]')).toContainText(/^v[4-9]/, { timeout: 10000 });
 
-  await page.locator('[data-desktop-icon-id="files"]').dblclick();
+  await page.locator('[data-desktop-icon-id="files"]').click();
   const filesApp = page.locator('[data-files-app]').last();
   await expect(filesApp).toBeVisible({ timeout: 10000 });
   await filesApp.locator('[data-file-item]').filter({ hasText: 'artifacts' }).first().click();
   await expect(filesApp.locator('[data-file-item]').filter({ hasText: 'evolution-ca.html' })).toBeVisible({ timeout: 10000 });
   await expect(filesApp.locator('[data-file-item]').filter({ hasText: 'evolution-ca.verify.js' })).toBeVisible();
 
-  await page.locator('[data-desktop-icon-id="browser"]').dblclick();
+  await page.locator('[data-desktop-icon-id="browser"]').click();
   const browserApp = page.locator('[data-browser-app]').last();
   await expect(browserApp).toBeVisible({ timeout: 10000 });
   await browserApp.locator('[data-browser-url-input]').fill(`data:text/html;charset=utf-8,${encodeURIComponent(artifactHTML)}`);

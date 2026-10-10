@@ -28,10 +28,10 @@ async function registerAndLoadDesktop(page, authenticator, email) {
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
-// Helper: open Engineering Console via double-click on floating desktop icon
+// Helper: open Engineering Console via single click on floating desktop icon
 async function openTerminal(page) {
   const icon = page.locator('[data-desktop-icon-id="super-console"]');
-  await icon.dblclick();
+  await icon.click();
   await page.locator('[data-super-console-app]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
@@ -47,7 +47,7 @@ test('Engineering Console launches from floating desktop icon', async ({ page, a
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  // Double-click the terminal icon
+  // Click the terminal icon
   await openTerminal(page);
 
   // Terminal window must be visible

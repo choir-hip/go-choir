@@ -101,7 +101,7 @@ test('deployed Mail app sends attachments through approval to inbound', async ({
   expect([200, 201]).toContain(put.status);
   // Open the Mail app from the desktop icon (id `email` after the cutover).
   await page.goto(BASE_URL);
-  await page.locator('[data-desktop-icon-id="email"]').dblclick();
+  await page.locator('[data-desktop-icon-id="email"]').click();
   const mailApp = page.locator('[data-mail-app]').last();
   await expect(mailApp).toBeVisible({ timeout: 60_000 });
 

@@ -6,9 +6,9 @@
   Icon positions persist via the desktop state API.
 
   Interactions:
-    - Single-click: selects the icon (visual highlight)
-    - Double-click: opens/focuses the app window (single-instance)
-    - Drag: moves the icon freely on the desktop surface
+    - Click: opens/focuses the app window (single-instance)
+    - Press and hold: enters drag mode, then move to reposition the icon
+    - Drag: moves the icon freely on the desktop surface (does not open the app)
 
   Icons sit at z-index below windows so windows cover them.
 
@@ -41,11 +41,24 @@
   const ICON_GRID_COL_WIDTH = 96;
   const ICON_GRID_ROW_HEIGHT = 86;
 
-  // ---- Drag state ----
+  // ---- Press/drag state ----
+  // A press selects the icon and arms a long-press timer. Releasing before the
+  // hold time elapses produces a normal click that opens the app. Once the hold
+  // elapses the icon is in drag mode: pointer movement repositions it and the
+  // trailing click on release is suppressed so the app does not open.
+  const LONG_PRESS_MS = 450;
+  const DRAG_SLOP_PX = 12; // moving this far before the hold elapses cancels the drag arm
+  let pressActive = false;
+  let pressAppId = null;
+  let pressTimer = 0;
+  let pressStartX = 0;
+  let pressStartY = 0;
+  let lastPointerX = 0;
+  let lastPointerY = 0;
   let dragging = false;
-  let dragAppId = null;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
+  let suppressClick = false;
   let surfaceEl;
   let resizeObserver;
   let normalizeFrame = 0;
@@ -146,13 +159,13 @@
     return activeWin && activeWin.appId === appId;
   }
 
-  /** Handle single click — select icon */
+  /** Handle click — open/focus the app window unless it trails a drag. */
   function handleClick(app) {
+    if (suppressClick) {
+      suppressClick = false;
+      return;
+    }
     selectedIconId.set(app.id);
-  }
-
-  /** Handle double click — open/focus app window */
-  function handleDblClick(app) {
     dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon });
   }
 
@@ -162,95 +175,100 @@
     dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon });
   }
 
-  /** Handle drag start on icon */
-  function handleDragStart(event, app) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    dragging = true;
-    dragAppId = app.id;
-
-    const surfaceRect = surfaceEl?.getBoundingClientRect();
-    const pos = $iconPositions[app.id] || { x: 0, y: 0 };
-    dragOffsetX = event.clientX - (surfaceRect?.left || 0) - pos.x;
-    dragOffsetY = event.clientY - (surfaceRect?.top || 0) - pos.y;
-
+  /** Handle press start on an icon (mouse or touch). */
+  function beginPress(app, x, y) {
+    if (pressActive) endPress();
+    pressActive = true;
+    pressAppId = app.id;
+    pressStartX = x;
+    pressStartY = y;
+    lastPointerX = x;
+    lastPointerY = y;
+    dragging = false;
+    suppressClick = false;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => armDragMode(), LONG_PRESS_MS);
     selectedIconId.set(app.id);
   }
 
-  /** Handle mouse move during drag */
-  function handleMouseMove(event) {
-    if (!dragging || !dragAppId) return;
-
-    if (!surfaceEl) return;
-
-    const rect = surfaceEl.getBoundingClientRect();
-    const bounds = safeBounds();
-    const newX = Math.max(0, Math.min(event.clientX - rect.left - dragOffsetX, bounds.maxX));
-    const newY = Math.max(0, Math.min(event.clientY - rect.top - dragOffsetY, bounds.maxY));
-
-    moveIcon(dragAppId, newX, newY);
+  /** Hold time elapsed — enter drag mode. */
+  function armDragMode() {
+    if (!pressActive) return;
+    pressTimer = 0;
+    dragging = true;
+    suppressClick = true;
+    const surfaceRect = surfaceEl?.getBoundingClientRect();
+    const pos = $iconPositions[pressAppId] || { x: 0, y: 0 };
+    dragOffsetX = lastPointerX - (surfaceRect?.left || 0) - pos.x;
+    dragOffsetY = lastPointerY - (surfaceRect?.top || 0) - pos.y;
   }
 
-  /** Handle mouse up — end drag */
-  function handleMouseUp() {
+  /** Handle pointer movement during a press. */
+  function updatePointer(x, y, preventDefault) {
+    if (!pressActive) return;
+    lastPointerX = x;
+    lastPointerY = y;
+    if (!dragging) {
+      // Moved too far before the hold elapsed: not a drag, release opens the app.
+      if (Math.abs(x - pressStartX) > DRAG_SLOP_PX || Math.abs(y - pressStartY) > DRAG_SLOP_PX) {
+        clearTimeout(pressTimer);
+        pressTimer = 0;
+      }
+      return;
+    }
+    preventDefault?.();
+    if (!surfaceEl || !pressAppId) return;
+    const rect = surfaceEl.getBoundingClientRect();
+    const bounds = safeBounds();
+    const newX = Math.max(0, Math.min(x - rect.left - dragOffsetX, bounds.maxX));
+    const newY = Math.max(0, Math.min(y - rect.top - dragOffsetY, bounds.maxY));
+    moveIcon(pressAppId, newX, newY);
+  }
+
+  /** Handle pointer release — end the press (and any drag). */
+  function endPress() {
+    if (!pressActive) return;
+    pressActive = false;
+    pressAppId = null;
+    clearTimeout(pressTimer);
+    pressTimer = 0;
     if (dragging) {
       dragging = false;
-      dragAppId = null;
       dispatch('iconpositionschanged');
     }
   }
 
-  // Touch support for mobile drag
-  let touchDragging = false;
-  let touchAppId = null;
-  let touchOffsetX = 0;
-  let touchOffsetY = 0;
+  function handleMouseDown(event, app) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    beginPress(app, event.clientX, event.clientY);
+  }
+
+  function handleMouseMove(event) {
+    if (!pressActive) return;
+    updatePointer(event.clientX, event.clientY, null);
+  }
 
   function handleTouchStart(event, app) {
     if (event.touches.length !== 1) return;
     const touch = event.touches[0];
-
-    touchDragging = true;
-    touchAppId = app.id;
-
-    const surfaceRect = surfaceEl?.getBoundingClientRect();
-    const pos = $iconPositions[app.id] || { x: 0, y: 0 };
-    touchOffsetX = touch.clientX - (surfaceRect?.left || 0) - pos.x;
-    touchOffsetY = touch.clientY - (surfaceRect?.top || 0) - pos.y;
-
-    selectedIconId.set(app.id);
+    beginPress(app, touch.clientX, touch.clientY);
   }
 
   function handleTouchMove(event) {
-    if (!touchDragging || !touchAppId) return;
-    event.preventDefault();
-
+    if (!pressActive) return;
     const touch = event.touches[0];
-    if (!surfaceEl) return;
-
-    const rect = surfaceEl.getBoundingClientRect();
-    const bounds = safeBounds();
-    const newX = Math.max(0, Math.min(touch.clientX - rect.left - touchOffsetX, bounds.maxX));
-    const newY = Math.max(0, Math.min(touch.clientY - rect.top - touchOffsetY, bounds.maxY));
-
-    moveIcon(touchAppId, newX, newY);
-  }
-
-  function handleTouchEnd() {
-    if (touchDragging) {
-      touchDragging = false;
-      touchAppId = null;
-      dispatch('iconpositionschanged');
-    }
+    if (!touch) return;
+    updatePointer(touch.clientX, touch.clientY, () => event.preventDefault());
   }
 
   onMount(() => {
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mouseup', endPress);
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchend', endPress);
+    window.addEventListener('touchcancel', endPress);
     window.addEventListener('resize', scheduleNormalizeIconPositions);
     window.visualViewport?.addEventListener('resize', scheduleNormalizeIconPositions);
     resizeObserver = new ResizeObserver(scheduleNormalizeIconPositions);
@@ -261,9 +279,10 @@
   onDestroy(() => {
     if (normalizeFrame) cancelAnimationFrame(normalizeFrame);
     window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
+    window.removeEventListener('mouseup', endPress);
     window.removeEventListener('touchmove', handleTouchMove);
-    window.removeEventListener('touchend', handleTouchEnd);
+    window.removeEventListener('touchend', endPress);
+    window.removeEventListener('touchcancel', endPress);
     window.removeEventListener('resize', scheduleNormalizeIconPositions);
     window.visualViewport?.removeEventListener('resize', scheduleNormalizeIconPositions);
     resizeObserver?.disconnect();
@@ -284,15 +303,15 @@
     {@const isActive = isAppActive($windows, $activeWindowId, app.id)}
     {@const isSelected = $selectedIconId === app.id}
     <div
-      class="desktop-icon {isActive ? 'icon-active' : ''} {isSelected ? 'icon-selected' : ''} {isOpen ? 'icon-open' : ''}"
+      class="desktop-icon {isActive ? 'icon-active' : ''} {isSelected ? 'icon-selected' : ''} {isOpen ? 'icon-open' : ''} {dragging && pressAppId === app.id ? 'icon-dragging' : ''}"
       style="left: {pos.x}px; top: {pos.y}px;"
       data-desktop-icon
       data-desktop-icon-id={app.id}
       on:click|stopPropagation={() => handleClick(app)}
-      on:dblclick|stopPropagation={() => handleDblClick(app)}
       on:keydown|stopPropagation={(event) => handleKeydown(event, app)}
-      on:mousedown|stopPropagation={(e) => handleDragStart(e, app)}
+      on:mousedown|stopPropagation={(e) => handleMouseDown(e, app)}
       on:touchstart|stopPropagation={(e) => handleTouchStart(e, app)}
+      on:contextmenu|preventDefault|stopPropagation
       role="button"
       tabindex="0"
       aria-label={app.name}
@@ -370,6 +389,12 @@
   .desktop-icon.icon-selected {
     background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
     border-color: color-mix(in srgb, var(--choir-border-strong) 40%, transparent);
+  }
+
+  .desktop-icon.icon-dragging {
+    cursor: grabbing;
+    opacity: 0.85;
+    z-index: 1;
   }
 
   .desktop-icon.icon-active {
