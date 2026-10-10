@@ -136,13 +136,13 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   (1ae758ef). A trace review of every log found desks guessing enums
   against the reducer, and rejections now name the accepted values
   ([problem](problems/trace-review-desk-protocol-friction-2026-10-10.md)).
-  Rerun 11 was lost to my own mid-run probe-script push. The classifier
-  ran a full deploy, the vmctl restart rebooted the busy guest, and the
-  guest never recovered
-  ([problem](problems/vmctl-restart-reboots-busy-computer-2026-10-10.md)).
-  Probe scripts are now tooling (a820beea). Resolve refuses
-  guest_reattach_pending instead of booting over a live guest
-  (cfc17e05, seen working on staging). Track D landed: an ordinary
+  Rerun 11 reached the first completed apply of Gate 2 (09:21), then a
+  mid-run deploy I pushed killed the working guest through a boot path
+  the new resolve guard (cfc17e05) does not cover. The chokepoint is
+  vmmanager.StartVM's orphan kill
+  ([problem](problems/vmctl-restart-reboots-busy-computer-2026-10-10.md),
+  correction and clustering assessment). Probe scripts are now tooling
+  (a820beea). Track D landed: an ordinary
   engineering freeze opens its own promotion candidate when the mode is
   armed (19834f68). Every desk now knows its REPL surface: a generated
   prompt block, choir.Help(), and compile errors that name what exists

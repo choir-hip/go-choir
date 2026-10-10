@@ -223,14 +223,19 @@ now:
       (refused dispositions name their reason). Owner 2026-10-10 raised
       the tool-loop budgets 100x (dbed74e5) and set no call limit before
       the system works. A haiku loop-watch reviews traces each run. Rerun
-      11 (dbed74e5) never reached freeze. I pushed a probe-script change
-      mid-run (cc72a94c). The classifier treated the unknown path as a
-      full deploy, so vmctl restarted, and resolve rebooted the busy QA
-      guest, which never recovered
-      (problems/vmctl-restart-reboots-busy-computer-2026-10-10.md). Two
-      fixes followed: probe scripts are tooling (a820beea), and resolve
-      refuses guest_reattach_pending instead of booting over a live guest
-      (cfc17e05, seen working on staging). Track D landed in 19834f68:
+      11 (dbed74e5) reached the first completed apply of Gate 2. It froze,
+      the independent verifier passed, and it reached awaiting_approval at
+      09:20, was approved, and was applied at 09:21. Candidate B started.
+      That happened despite two mid-run deploys I pushed (cc72a94c,
+      19834f68), each of which restarted vmctl twice and rebooted the busy
+      guest. The second deploy killed the working guest after apply. Probe
+      scripts are tooling now (a820beea). Resolve refuses
+      guest_reattach_pending (cfc17e05). But the kill at 09:25:48 came
+      through a boot path the resolve guard does not cover: the frontend's
+      own cold-recover or compute recovery. The chokepoint is
+      vmmanager.StartVM's orphan kill
+      (problems/vmctl-restart-reboots-busy-computer-2026-10-10.md,
+      correction and clustering assessment). Track D landed in 19834f68:
       an ordinary engineering freeze opens its own promotion candidate
       when the signed mode is armed, so no special start API is needed
       on that path. F13 (79edc337): every desk prompt carries its
@@ -239,7 +244,7 @@ now:
     main_uncertainty: >-
       Whether apply completes now that the bundle is faithful and the
       deposit mode is retained. Then reject and restore.
-    next_observation: M11 rerun 12 on 79edc337, reading Texture's turn count to first useful act (F13), the verifier verdict, then replay-completeness at apply.
+    next_observation: M11 rerun 12 after the StartVM chokepoint fix, with no push during the run, reading Texture's turn count to first useful act (F13), the verifier verdict, then replay-completeness at apply.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
@@ -284,6 +289,9 @@ receipts:
   - id: m11-rerun-10-2026-10-10
     ref: docs/evidence/m11-rerun-2026-10-10T07-00-32Z.json
     result: partial (5/16; verifier correctly rejected an unappliable source.patch)
+  - id: m11-rerun-11-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T08-36-30Z.json (pending probe exit); progress log in problems/vmctl-restart-reboots-busy-computer-2026-10-10.md
+    result: partial (first completed apply, 09:21; guest killed after candidate B started, by a mid-run deploy)
 ---
 
 # Gate 2 — self-development with live Texture supervision
