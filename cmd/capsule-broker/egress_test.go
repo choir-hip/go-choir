@@ -8,9 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"golang.org/x/sys/unix"
 )
 
 const egressForwarderHelperEnv = "CHOIR_EGRESS_FORWARDER_HELPER"
@@ -75,5 +80,57 @@ func TestEgressForwarderSplicesLoopbackToTheEgressSocket(t *testing.T) {
 	reply, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil || reply != "proxy saw CONNECT pypi.org:443\n" {
 		t.Fatalf("reply = %q, %v", reply, err)
+	}
+}
+
+const brokerCapsHelperEnv = "CHOIR_BROKER_CAPS_HELPER"
+
+// docs/problems/l2-broker-cannot-bring-up-loopback-2026-10-10.md: a process
+// launched into the capsule user namespace holds only its ambient
+// capabilities. Failure modes pinned: the L2 ambient set cannot bring up lo
+// (every L2 capsule dies at start); CAP_NET_ADMIN survives the broker's
+// capability drop, into its serving phase and every workload it spawns.
+// Needs root (privileged container); skips otherwise.
+func TestL2BrokerBringsUpLoopbackThenDropsNetAdmin(t *testing.T) {
+	if os.Getenv(brokerCapsHelperEnv) == "" {
+		if os.Geteuid() != 0 {
+			t.Skip("needs root to create a user namespace with mapped ids")
+		}
+		cmd := exec.Command(os.Args[0], "-test.run=^TestL2BrokerBringsUpLoopbackThenDropsNetAdmin$", "-test.v")
+		cmd.Env = append(os.Environ(), brokerCapsHelperEnv+"=1")
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Cloneflags:   syscall.CLONE_NEWUSER,
+			Unshareflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
+			UidMappings:  []syscall.SysProcIDMap{{ContainerID: 0, HostID: 65534, Size: 1}},
+			GidMappings:  []syscall.SysProcIDMap{{ContainerID: 0, HostID: 65534, Size: 1}},
+			AmbientCaps:  capsule.BrokerAmbientCaps(true),
+		}
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("broker caps helper: %v\n%s", err, output)
+		}
+		return
+	}
+	if err := bringLoopbackUp(); err != nil {
+		t.Fatalf("L2 ambient set cannot bring up lo: %v", err)
+	}
+	if err := capsule.DropBrokerCapabilities(); err != nil {
+		t.Fatalf("drop broker capabilities: %v", err)
+	}
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(status), "\n") {
+		field, value, ok := strings.Cut(line, ":")
+		if !ok || (field != "CapEff" && field != "CapAmb" && field != "CapPrm" && field != "CapBnd") {
+			continue
+		}
+		bits, err := strconv.ParseUint(strings.TrimSpace(value), 16, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bits&(1<<unix.CAP_NET_ADMIN) != 0 {
+			t.Fatalf("%s still holds CAP_NET_ADMIN after the broker drop: %s", field, strings.TrimSpace(value))
+		}
 	}
 }

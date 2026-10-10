@@ -426,6 +426,21 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 	return nil
 }
 
+// BrokerAmbientCaps is the capability set the broker launcher starts with.
+// A process launched into the capsule's user namespace this way holds only
+// its ambient set, not the full root set, so an ecosystem_proxy (L2) broker
+// also needs CAP_NET_ADMIN to bring up lo. The broker's
+// DropBrokerCapabilities clears it from the permitted and bounding sets once
+// the forwarder is listening, which clears it from the ambient set as well
+// (docs/problems/l2-broker-cannot-bring-up-loopback-2026-10-10.md).
+func BrokerAmbientCaps(egress bool) []uintptr {
+	ambient := []uintptr{unix.CAP_SYS_ADMIN, unix.CAP_SETPCAP, unix.CAP_DAC_OVERRIDE, unix.CAP_FOWNER, unix.CAP_CHOWN, unix.CAP_SETUID, unix.CAP_SETGID}
+	if egress {
+		ambient = append(ambient, unix.CAP_NET_ADMIN)
+	}
+	return ambient
+}
+
 func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	hostSocket := filepath.Join(caps.MergedDir, "run", "capsule", "broker.sock")
 	_ = os.Remove(hostSocket)
@@ -464,7 +479,7 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 		Unshareflags:               unix.CLONE_NEWNS | unix.CLONE_NEWNET | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP,
 		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: capsuleNamespaceHostID, Size: 1}},
 		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: capsuleNamespaceHostID, Size: 1}},
-		AmbientCaps:                []uintptr{unix.CAP_SYS_ADMIN, unix.CAP_SETPCAP, unix.CAP_DAC_OVERRIDE, unix.CAP_FOWNER, unix.CAP_CHOWN, unix.CAP_SETUID, unix.CAP_SETGID},
+		AmbientCaps:                BrokerAmbientCaps(caps.egress != nil),
 		GidMappingsEnableSetgroups: false,
 		UseCgroupFD:                true,
 		CgroupFD:                   int(cgroupFile.Fd()),
