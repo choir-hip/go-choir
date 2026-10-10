@@ -64,3 +64,14 @@ At 16:2xZ a second live guest, `vm-48bc09812f3fce06d715f6c7f8e2db9a`
 
 Detection residual: the wedge watchdog misses a guest that accepts TCP but
 whose vCPU is deadlocked. Mutation class red (vmctl); rollback is git revert.
+
+## Landed (16:25Z)
+
+86770ae7 deployed (CI 38067001852). On reattach vmctl logged "console pipe
+has a reader again" for the owner's computer and for vm-48bc; each
+firecracker stdout pipe now has one reader. choir.news health `ok`, vmctl
+health 1 ms, owner computer epoch 1188, no destruction. New launches write
+their console to a file. The owner's computer stays frozen until the owner
+decides to stop and boot it (vCPU 0 is deadlocked on itself). Legacy pipe
+guests still have a seconds-long readerless gap during each vmctl restart
+until they next boot.
