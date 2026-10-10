@@ -169,6 +169,34 @@ apply check, though git was available in its capsule. The repl
 friction it hit: `choir.Exec` takes a slice, not variadic arguments,
 and inner exit codes are not surfaced.
 
+### F13. A desk does not know its own interaction surface (verified, rerun 11)
+
+From 08:52 to 08:54Z in rerun 11, Texture run `4bc98ed4` made about 35
+turns. None reached `choir.ApplyTexture`:
+
+- bare `ReadDoc()` failed 5 times ("constant definition loop") until
+  `choir.ReadDoc()`;
+- then about 19 of 20 turns guessed API names: `PendingUpdates`,
+  `Ledger`, `Messages`, `ReadUpdate`, `Poll`, and `Report` with six
+  argument shapes.
+
+Cause (code reading):
+
+- Texture's surface is described only in prose fragments across
+  `textureprompts/overlays/*.yaml`. There is no complete function list,
+  no signatures, and no return-type fields (`DocSnapshot`,
+  `PendingUpdate`, …).
+- The prompt itself says `ReadDoc()` and `Inbox()` without the `choir.`
+  prefix (`run_system.yaml:14`).
+- There is no in-REPL help.
+- An undefined `choir.X` or a wrong argument count never names what
+  exists.
+
+The exact per-desk surface already exists at runtime
+(`yaegikernel.ChoirExports` over `deskModuleSets`) but is never shown.
+This is F1's disease one layer down: the surface says "wrong" and never
+"what is right".
+
 ## Proposed changes, by layer
 
 - **reducer/protocol**
