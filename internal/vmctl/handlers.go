@@ -67,6 +67,9 @@ type vmctlHealthResponse struct {
 	ByKind          map[string]int        `json:"by_kind,omitempty"`
 	Reclaim         PressureReclaimPlan   `json:"reclaim"`
 	Warmness        WarmnessHealthSummary `json:"warmness"`
+	// Processes is the latest reconcile pass: live guests outside the
+	// registry (waiting to reattach), wedged stops, orphan reaps.
+	Processes VMProcessReconcileResult `json:"processes"`
 }
 
 // resolveRequest is the JSON payload for POST /internal/vmctl/resolve.
@@ -188,6 +191,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		ByKind:          byKind,
 		Reclaim:         h.registry.PressureReclaimPlan(),
 		Warmness:        h.registry.WarmnessSummary(idleEligible),
+		Processes:       h.registry.LastProcessReconcile(),
 	})
 }
 

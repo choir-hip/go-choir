@@ -48,13 +48,17 @@ type vmProcessController interface {
 
 // VMProcessReconcileResult summarizes one reconcile pass.
 type VMProcessReconcileResult struct {
-	Live               int
-	Managed            int
-	Reattached         int
-	Reaped             int
-	Pending            int
-	ProtectedUnmanaged int
-	Wedged             int
+	At                 string `json:"at,omitempty"`
+	Live               int    `json:"live"`
+	Managed            int    `json:"managed"`
+	Reattached         int    `json:"reattached"`
+	Reaped             int    `json:"reaped"`
+	Pending            int    `json:"pending"`
+	ProtectedUnmanaged int    `json:"protected_unmanaged"`
+	Wedged             int    `json:"wedged"`
+	// Unmanaged names each live guest waiting to reattach, with how long it
+	// has waited: a strand is visible from health, not only from SSH.
+	Unmanaged map[string]string `json:"unmanaged,omitempty"`
 }
 
 func (r *OwnershipRegistry) now() time.Time {
@@ -183,6 +187,16 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 		}
 	}
 	r.mu.Unlock()
+	res.At = now.UTC().Format(time.RFC3339)
+	r.mu.Lock()
+	for vmID, since := range r.unmanagedSince {
+		if res.Unmanaged == nil {
+			res.Unmanaged = map[string]string{}
+		}
+		res.Unmanaged[vmID] = now.Sub(since).Round(time.Second).String()
+	}
+	r.lastProcessReconcile = res
+	r.mu.Unlock()
 	if res.Reattached > 0 {
 		go r.ReconcileReadyGatewayCredentials()
 	}
@@ -285,4 +299,19 @@ func (r *OwnershipRegistry) liveUnmanagedProcess(vmID string, mgr VMManager) boo
 	}
 	_, live := pc.LiveFirecrackerVMs()[vmID]
 	return live
+}
+
+// LastProcessReconcile reports the most recent reconcile pass for health.
+func (r *OwnershipRegistry) LastProcessReconcile() VMProcessReconcileResult {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := r.lastProcessReconcile
+	if out.Unmanaged != nil {
+		copied := make(map[string]string, len(out.Unmanaged))
+		for k, v := range out.Unmanaged {
+			copied[k] = v
+		}
+		out.Unmanaged = copied
+	}
+	return out
 }

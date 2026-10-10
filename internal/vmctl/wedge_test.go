@@ -183,3 +183,19 @@ func TestGuestBusyFailsClosed(t *testing.T) {
 		}
 	}
 }
+
+// Phase 0 step 4 (strand visibility): a live guest waiting to reattach is
+// named in vmctl health with how long it has waited, not found only by SSH.
+func TestReconcileReportsGuestsWaitingToReattach(t *testing.T) {
+	reg, mgr, now, _ := wedgeRegistry(t)
+	addOwnership(reg, &VMOwnership{VMID: "vm-wait", UserID: "someone", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive,
+		State: VMStateStopped, StoppedBy: "vmctl-restart", ComputerURL: "http://10.0.0.8:8085"})
+	mgr.live["vm-wait"] = []int{3}
+	reg.ReconcileVMProcesses(context.Background(), allowAllRoutes)
+	*now = now.Add(7 * time.Minute)
+	reg.ReconcileVMProcesses(context.Background(), allowAllRoutes)
+	last := reg.LastProcessReconcile()
+	if last.Unmanaged["vm-wait"] != "7m0s" || last.Pending != 1 || last.At == "" {
+		t.Fatalf("health reconcile = %+v, want vm-wait waiting 7m0s", last)
+	}
+}

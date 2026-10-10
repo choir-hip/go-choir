@@ -353,6 +353,8 @@ type OwnershipRegistry struct {
 	// manager does not track
 	// (host_capacity.go).
 	unmanagedSince map[string]time.Time
+	// lastProcessReconcile is the latest reconcile pass, for health.
+	lastProcessReconcile VMProcessReconcileResult
 	// networkDeadSince records when a live guest first refused a connection
 	// to its service port (wedge.go); guestNetworkProbe overrides the probe.
 	networkDeadSince  map[string]time.Time
