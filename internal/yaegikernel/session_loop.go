@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -165,6 +166,7 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 		return out, evalErr
 	}
 	out.Intents = staged
+	out.Stdout += sess.showListedNames(frame.Source)
 	if shown := describeCellValue(frame.Source, res.Value); shown != "" {
 		out.Stdout += shown
 	}
@@ -187,21 +189,65 @@ func describeCellValue(source string, value reflect.Value) (shown string) {
 			shown = ""
 		}
 	}()
-	if value.Kind() == reflect.Func {
+	text, ok := cellValueText(value, maxShownCellValue)
+	if !ok {
 		return ""
-	}
-	var text string
-	if value.Kind() == reflect.String {
-		text = value.String()
-	} else if value.CanInterface() {
-		text = fmt.Sprintf("%+v", value.Interface())
-	} else {
-		return ""
-	}
-	if len(text) > maxShownCellValue {
-		text = text[:maxShownCellValue] + fmt.Sprintf("… [%d bytes truncated]", len(text)-maxShownCellValue)
 	}
 	return "=> " + text + "\n"
+}
+
+// cellValueText renders one value for a cell result. Bytes that are valid
+// UTF-8 (a json.RawMessage from choir.WebSearch) render as text, not as a
+// list of byte values.
+func cellValueText(value reflect.Value, max int) (string, bool) {
+	if !value.IsValid() || value.Kind() == reflect.Func {
+		return "", false
+	}
+	var text string
+	switch {
+	case value.Kind() == reflect.String:
+		text = value.String()
+	case value.Kind() == reflect.Slice && value.Type().Elem().Kind() == reflect.Uint8 && utf8.Valid(value.Bytes()):
+		text = string(value.Bytes())
+	case value.CanInterface():
+		text = fmt.Sprintf("%+v", value.Interface())
+	default:
+		return "", false
+	}
+	if len(text) > max {
+		text = text[:max] + fmt.Sprintf("… [%d bytes truncated]", len(text)-max)
+	}
+	return text, true
+}
+
+// listedNames returns the bare identifiers a cell lists as statements before
+// its last statement (`r; err` lists r). The REPL shows only the final
+// value, so research read `r; err` as a nil result (problem doc
+// cell-shows-only-last-value-research-reads-results-as-nil-2026-10-10.md).
+func listedNames(source string) []string {
+	file, err := parser.ParseFile(token.NewFileSet(), "cell.go", "package p\nfunc _() {\n"+source+"\n}", 0)
+	if err != nil || len(file.Decls) == 0 {
+		return nil
+	}
+	fn, ok := file.Decls[0].(*ast.FuncDecl)
+	if !ok || fn.Body == nil || len(fn.Body.List) < 2 {
+		return nil
+	}
+	seen := map[string]bool{}
+	var names []string
+	for _, stmt := range fn.Body.List[:len(fn.Body.List)-1] {
+		expr, ok := stmt.(*ast.ExprStmt)
+		if !ok {
+			continue
+		}
+		ident, ok := expr.X.(*ast.Ident)
+		if !ok || ident.Name == "_" || seen[ident.Name] {
+			continue
+		}
+		seen[ident.Name] = true
+		names = append(names, ident.Name)
+	}
+	return names
 }
 
 // endsInBareExpression reports whether the cell's last statement is an

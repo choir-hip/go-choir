@@ -165,3 +165,32 @@ func TestOneLineImportListsTypedRedefinitionAndCompileErrorLines(t *testing.T) {
 		t.Fatalf("compile error does not show the offending line:\n%s", out.Error)
 	}
 }
+
+// Research-only demo 2026-10-10 (cell-shows-only-last-value-research-reads-
+// results-as-nil-2026-10-10.md): research wrote `r, err := choir.WebSearch(...);
+// r; err`, saw only `=> <nil>` (err), and reported every source dead.
+// Failure modes pinned: a listed name before the last statement is not
+// shown; JSON bytes show as a list of numbers; a name listed twice shows
+// twice; a listed func value prints an address; the final value stops
+// showing.
+func TestCellShowsEveryListedNameAndJSONBytesAsText(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	out, err := serveCell(sess, SessionFrame{ID: "cell", Source: "r := json.RawMessage(`{\"results\":[{\"title\":\"x\"}]}`); var e error; f := strings.ToUpper; r; f; r; e"}, nil, &hooks)
+	if err != nil || out.Error != "" {
+		t.Fatalf("cell failed: %v %s", err, out.Error)
+	}
+	want := "=> r: {\"results\":[{\"title\":\"x\"}]}\n=> <nil>\n"
+	if out.Stdout != want {
+		t.Fatalf("stdout = %q, want %q", out.Stdout, want)
+	}
+	out, err = serveCell(sess, SessionFrame{ID: "cell2", Source: "r"}, nil, &hooks)
+	if err != nil || !strings.Contains(out.Stdout, "=> {\"results\"") {
+		t.Fatalf("final JSON bytes not shown as text: %v %q", err, out.Stdout)
+	}
+}

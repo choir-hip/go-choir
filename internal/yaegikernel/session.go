@@ -308,6 +308,39 @@ func classifyExecuteError(evalErr error, panicked bool) DiagnosticKind {
 
 // Close retires the session. In-flight Eval calls are unaffected beyond their
 // own contexts; the broker SIGKILLs the worker process for hard termination.
+// maxShownListedValue bounds each listed name's line in a cell result.
+const maxShownListedValue = 4000
+
+// showListedNames shows, after a successful cell, each bare name the cell
+// listed before its last statement, as "=> name: value". Reading a variable
+// has no side effects, so evaluating the name again is safe; a name that
+// does not resolve at session scope, a package, or a func is skipped.
+func (s *Session) showListedNames(source string) (out string) {
+	names := listedNames(source)
+	if len(names) == 0 || s == nil {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.interp == nil || s.closed || s.poisoned != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, name := range names {
+		func() {
+			defer func() { _ = recover() }()
+			value, err := s.interp.Eval(name)
+			if err != nil {
+				return
+			}
+			if text, ok := cellValueText(value, maxShownListedValue); ok {
+				b.WriteString("=> " + name + ": " + text + "\n")
+			}
+		}()
+	}
+	return b.String()
+}
+
 func (s *Session) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
