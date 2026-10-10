@@ -56,3 +56,36 @@ wakes a Texture supervision turn.
   apply restart does not cut a live verifier.
 
 Leaning A (smallest, keeps the checkpoint's quiet-computer contract).
+
+## After the computer went quiet (01:25Z)
+
+The Texture supervision run hit its tool-loop budget at 01:19:40Z. The
+next retries show the checkpoint stepping through three failures:
+
+1. 01:20:29 `projection base refused: tail application is not
+   exactly-once (1680 events, [1,1680], want (0,1673])`: the budget
+   failure's own events landed during that replay.
+2. 01:21:24 onward, with the head now stable: `replay is ineligible:
+   reconstructed projection is not equivalent to live state`.
+
+The replay-completeness report (read-only, owner-bound guest route,
+01:24Z) names two differing keys: `dolt:texture:table:og_objects` and
+the content root that hashes it. No missing tables, no schema drift, run
+memory equal. So some object-graph rows on this computer were written
+outside the event chain, and replay cannot reproduce them.
+
+What is new on this computer compared with the September 29 pass: boot
+passivated a run that was still working at the apply restart (the
+verifier), its assignment was cancelled, and a Texture run failed on its
+tool-loop budget. Hypotheses, not findings:
+
+- H1: boot passivation's `store.UpdateRun` (`agentcore/runtime.go`)
+  writes the run object without a reducer event.
+- H2: the tool-loop budget failure path writes the run's terminal state
+  directly.
+- H3: the assignment cancel at restart writes outside the chain.
+
+The report hashes whole tables, so it cannot say which rows differ.
+Next: a row-level og_objects diff in the replay-completeness report (by
+object kind and key), then name the writer. The operation stays in
+`materializing`, retrying.
