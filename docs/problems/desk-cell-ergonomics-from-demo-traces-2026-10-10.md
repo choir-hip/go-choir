@@ -44,6 +44,23 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
 - K8. (open) a top-level `y := y * 2` on a bound name in statement mode
   declares a fresh, zero y.
 
+- K9. (open) A one-line parenthesized import followed by statements,
+  `import ("encoding/json"; "fmt")` then `dump := func(…) {…}`, fails
+  `expected declaration, found dump`. The normalizer recognizes only
+  `import "x"` lines and a multi-line `import (` block. Engineering run
+  `run:delegated-sha256:b66e551d…` (arXiv demo, 21:14:39 and 21:14:43) paid
+  two failed cells, then sent the import block alone.
+- K10. (open, introduced by the K8 fix) Redefining a bound helper with a new
+  type, `sh := func(cmd string, args []string, env []string) {…}` after `sh`
+  held a `func(string, ...string)`, fails `cannot use type … in
+  assignment`. The K8 rewrite turns every fully bound top-level `:=` into
+  `=`. Same run, 21:18:08.
+- K11. (open) Compile errors give only `_.go:4:176: missing ','` without the
+  offending line. In the same run the model misread its own `"]` typo (for
+  `"}`) as "long lines seem to be getting truncated by the transport"
+  (21:19:52), and the same typo failed three cells (21:18:59, 21:19:47,
+  21:27:14).
+
 ## Prompt gaps (management)
 
 - M1. The management prompt was two paragraphs. It never said how to open
