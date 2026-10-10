@@ -1455,6 +1455,7 @@ jobs:
                     refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
                     refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
                       -H "X-Internal-Caller: true" \
+                      -H "X-Choir-Lifecycle-Caller: ci.deploy-refresh" \
                       -H "Content-Type: application/json" \
                       -d "$payload" \
                       http://127.0.0.1:8083/internal/vmctl/refresh || printf 'curl_error_%s' "$?")

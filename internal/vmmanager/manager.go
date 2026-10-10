@@ -322,6 +322,11 @@ type Manager struct {
 
 	healthCancel chan struct{}
 	healthDone   chan struct{}
+
+	// receiptMu serializes destruction receipt appends (receipts.go);
+	// receiptMaxBytes bounds the receipt file (0 = default).
+	receiptMu       sync.Mutex
+	receiptMaxBytes int64
 }
 
 func (m *Manager) StateDir() string {
@@ -663,13 +668,13 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			return inst, nil
 		}
 		// VM exists but is not running; clean up before relaunching.
-		m.forceCleanup(cfg.VMID)
+		m.forceCleanup(cfg.VMID, "boot-replace-tracked")
 	} else {
 		// A previous vmctl process may have failed to reattach a Firecracker
 		// child whose PID file survived. Reclaim only processes whose cmdline
 		// still proves they are this VM's Firecracker instance; never kill an
 		// arbitrary reused PID from stale metadata.
-		m.cleanupOrphanedFirecrackerLocked(cfg.VMID)
+		m.cleanupOrphanedFirecrackerLocked(cfg.VMID, "boot")
 	}
 
 	// Assign a host port/subnet for this VM. A vmctl restart can leave stale
@@ -862,7 +867,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		locked = true
 		inst.State = StateFailed
 		inst.Healthy = false
-		m.killFirecrackerProcess(inst)
+		m.killFirecrackerProcess(inst, "boot-readiness-failed")
 		waitErr := fmt.Errorf("wait for guest ready for VM %s: %w", cfg.VMID, err)
 		recordGuestRefusalOnTimeline(tl, err)
 		tl.finish("failed", waitErr)
@@ -912,7 +917,7 @@ func (m *Manager) StopVM(vmID string) error {
 		return nil // already stopped or hibernated
 	}
 
-	m.killFirecrackerProcess(inst)
+	m.killFirecrackerProcess(inst, "stop")
 	inst.State = StateStopped
 	inst.Healthy = false
 
@@ -941,7 +946,7 @@ func (m *Manager) HibernateVM(vmID string) error {
 		return fmt.Errorf("vm %s is not running (state=%s)", vmID, inst.State)
 	}
 
-	m.killFirecrackerProcess(inst)
+	m.killFirecrackerProcess(inst, "hibernate")
 	inst.State = StateHibernated
 	inst.Healthy = false
 
@@ -975,7 +980,7 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 	}
 
 	// Clean up the old process.
-	m.forceCleanup(vmID)
+	m.forceCleanup(vmID, "resume")
 
 	// Assign a new host port/subnet (old one may be reused if it is actually
 	// free, but stale linkdown taps from failed boots must not capture routing).
@@ -1045,7 +1050,7 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 		locked = true
 		inst.State = StateFailed
 		inst.Healthy = false
-		m.killFirecrackerProcess(inst)
+		m.killFirecrackerProcess(inst, "resume-readiness-failed")
 		waitErr := fmt.Errorf("wait for resumed guest ready for VM %s: %w", vmID, err)
 		recordGuestRefusalOnTimeline(tl, err)
 		tl.finish("failed", waitErr)
@@ -1179,7 +1184,7 @@ func (m *Manager) ForceKillVM(vmID string) error {
 		return fmt.Errorf("vm %s not found", vmID)
 	}
 
-	m.killFirecrackerProcess(inst)
+	m.killFirecrackerProcess(inst, "force-kill")
 	inst.State = StateFailed
 	inst.Healthy = false
 
@@ -1249,7 +1254,7 @@ func (m *Manager) DestroyVMState(vmID string) error {
 		}
 		delete(m.vms, vmID)
 	} else {
-		m.cleanupOrphanedFirecrackerLocked(vmID)
+		m.cleanupOrphanedFirecrackerLocked(vmID, "destroy-state")
 	}
 	if pids := firecrackerPIDsForVM(vmID); len(pids) > 0 {
 		return fmt.Errorf("vm %s still has Firecracker process(es); refuse to destroy state", vmID)
@@ -1355,7 +1360,7 @@ func (m *Manager) RecoverVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	}
 
 	// Force kill the old process.
-	m.killFirecrackerProcess(inst)
+	m.killFirecrackerProcess(inst, "recover")
 	inst.State = StateFailed
 	m.mu.Unlock()
 
@@ -1391,7 +1396,7 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 		return nil, fmt.Errorf("vm %s not found", vmID)
 	}
 
-	m.killFirecrackerProcess(inst)
+	m.killFirecrackerProcess(inst, "refresh")
 	inst.State = StateFailed
 	cfg := refreshBootConfig(inst.Config, overrides, m.cfg)
 	if overrides.BootKind == "" {
@@ -1948,12 +1953,15 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 
 // killFirecrackerProcess forcefully terminates a Firecracker process
 // and cleans up the associated tap device.
-func (m *Manager) killFirecrackerProcess(inst *VMInstance) {
+//
+// cause names the kill path for its destruction receipt (receipts.go).
+func (m *Manager) killFirecrackerProcess(inst *VMInstance, cause string) {
 	vmID := strings.TrimSpace(inst.Config.VMID)
+	receipt := DestructionReceipt{VMID: vmID, Cause: cause, Epoch: inst.Config.Epoch, HostURL: inst.HostURL}
 	killedPrimaryPID := 0
 	if inst.cmd != nil && inst.cmd.Process != nil {
 		killedPrimaryPID = inst.cmd.Process.Pid
-		_ = inst.cmd.Process.Kill()
+		m.killProcessWithReceipt(inst.cmd.Process, receipt)
 		// Wait for the process to exit.
 		if inst.done != nil {
 			select {
@@ -1965,7 +1973,7 @@ func (m *Manager) killFirecrackerProcess(inst *VMInstance) {
 	} else if inst.PID > 0 {
 		killedPrimaryPID = inst.PID
 		if proc, err := os.FindProcess(inst.PID); err == nil {
-			_ = proc.Kill()
+			m.killProcessWithReceipt(proc, receipt)
 		}
 	}
 	inst.PID = 0
@@ -1977,7 +1985,9 @@ func (m *Manager) killFirecrackerProcess(inst *VMInstance) {
 			}
 			if proc, err := os.FindProcess(pid); err == nil {
 				log.Printf("vmmanager: killing duplicate Firecracker process for VM %s (pid=%d)", vmID, pid)
-				_ = proc.Kill()
+				duplicate := receipt
+				duplicate.Cause = cause + ":duplicate"
+				m.killProcessWithReceipt(proc, duplicate)
 			}
 		}
 		_ = os.Remove(m.pidPath(vmID))
@@ -1990,20 +2000,21 @@ func (m *Manager) killFirecrackerProcess(inst *VMInstance) {
 }
 
 // forceCleanup removes any leftover state for a VM before relaunching.
-func (m *Manager) forceCleanup(vmID string) {
+func (m *Manager) forceCleanup(vmID, cause string) {
 	if inst, ok := m.vms[vmID]; ok {
-		m.killFirecrackerProcess(inst)
+		m.killFirecrackerProcess(inst, cause)
 	}
 }
 
-func (m *Manager) cleanupOrphanedFirecrackerLocked(vmID string) {
+// cause names the path that asked for the cleanup, for its destruction receipt.
+func (m *Manager) cleanupOrphanedFirecrackerLocked(vmID, cause string) {
 	pids := firecrackerPIDsForVM(vmID)
 	tapName := tapNameForVMID(vmID)
 	if len(pids) > 0 {
 		for _, pid := range pids {
 			log.Printf("vmmanager: killing orphaned Firecracker process for VM %s (pid=%d) before restart", vmID, pid)
 			if proc, err := os.FindProcess(pid); err == nil {
-				_ = proc.Kill()
+				m.killProcessWithReceipt(proc, DestructionReceipt{VMID: vmID, Cause: cause + ":orphan"})
 			}
 		}
 		_ = os.Remove(m.pidPath(vmID))
@@ -2036,7 +2047,7 @@ func (m *Manager) cleanupOrphanedFirecrackerLocked(vmID string) {
 		Config: VMConfig{VMID: vmID},
 		PID:    pid,
 	}
-	m.killFirecrackerProcess(inst)
+	m.killFirecrackerProcess(inst, cause+":orphan-pidfile")
 }
 
 func (m *Manager) pidPath(vmID string) string {

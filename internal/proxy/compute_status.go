@@ -537,6 +537,7 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID, expectedComputerID string) (computeComputer, *computeRuntimeStatus, error) {
+	ctx = vmctl.WithLifecycleCaller(ctx, "proxy.compute-recovery")
 	own, err := h.vmctlClient.LookupDesktopContext(ctx, userID, desktopID)
 	if err != nil {
 		log.Printf("proxy compute recovery: lookup current computer desktop=%s: %v", desktopID, err)

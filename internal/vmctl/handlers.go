@@ -1689,34 +1689,50 @@ func isInternalCaller(r *http.Request) bool {
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/vmctl/resolve", h.HandleResolve)
-	s.HandleFunc("/internal/vmctl/computers/{computerID}/cold-recover", h.HandleColdRecover)
+	s.HandleFunc("/internal/vmctl/computers/{computerID}/cold-recover", attributedLifecycle(h.HandleColdRecover))
 	s.HandleFunc("/internal/vmctl/computer-version-inputs/resolve", h.HandleResolveComputerVersionInputs)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/resolve", h.HandleResolveComputerVersionRoute)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-self-development", h.HandleApplySelfDevelopmentRouteProjection)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-platform-follow", h.HandleApplyPlatformFollowRouteProjection)
 	s.HandleFunc("/internal/vmctl/lookup", h.HandleLookup)
 	s.HandleFunc("/internal/vmctl/lookup-guest", h.HandleLookupGuestOwnership)
-	s.HandleFunc("/internal/vmctl/stop", h.HandleStop)
-	s.HandleFunc("/internal/vmctl/remove", h.HandleRemove)
+	s.HandleFunc("/internal/vmctl/stop", attributedLifecycle(h.HandleStop))
+	s.HandleFunc("/internal/vmctl/remove", attributedLifecycle(h.HandleRemove))
 	s.HandleFunc("/internal/vmctl/list", h.HandleList)
-	s.HandleFunc("/internal/vmctl/hibernate", h.HandleHibernate)
-	s.HandleFunc("/internal/vmctl/maintenance-serve", h.HandleMaintenanceServe)
-	s.HandleFunc("/internal/vmctl/resume", h.HandleResume)
-	s.HandleFunc("/internal/vmctl/recover", h.HandleRecover)
-	s.HandleFunc("/internal/vmctl/refresh", h.HandleRefresh)
-	s.HandleFunc("/internal/vmctl/logout", h.HandleLogout)
+	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
+	s.HandleFunc("/internal/vmctl/maintenance-serve", attributedLifecycle(h.HandleMaintenanceServe))
+	s.HandleFunc("/internal/vmctl/resume", attributedLifecycle(h.HandleResume))
+	s.HandleFunc("/internal/vmctl/recover", attributedLifecycle(h.HandleRecover))
+	s.HandleFunc("/internal/vmctl/refresh", attributedLifecycle(h.HandleRefresh))
+	s.HandleFunc("/internal/vmctl/logout", attributedLifecycle(h.HandleLogout))
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
-	s.HandleFunc("/internal/vmctl/reclaim", h.HandleReclaim)
+	s.HandleFunc("/internal/vmctl/reclaim", attributedLifecycle(h.HandleReclaim))
 	s.HandleFunc("/internal/vmctl/hold", h.HandleHold)
 	s.HandleFunc("/internal/vmctl/unhold", h.HandleUnhold)
 	s.HandleFunc("/internal/vmctl/divergence", h.HandleSetDivergence)
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
-	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
+	s.HandleFunc("/internal/vmctl/prune", attributedLifecycle(h.HandlePrune))
 	s.HandleFunc("/internal/vmctl/runtime-package/autoputer", h.HandleRuntimePackage)
 	s.HandleFunc("/internal/vmctl/autoputer-proxy/", h.HandleAutoputerProxy)
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
+}
+
+// attributedLifecycle logs who asked for a lifecycle call that can stop,
+// replace or delete a computer, so a destroyed computer's destruction receipt
+// (vmmanager/receipts.go) joins to its caller (docs/vmctl-360-review-2026-10-10.md,
+// Phase 0 step 1). Resolve is not wrapped: it is too frequent to log, and a
+// resolve-driven kill already names resolveDesktopContext in its receipt stack.
+func attributedLifecycle(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		caller := strings.TrimSpace(r.Header.Get(LifecycleCallerHeader))
+		if caller == "" {
+			caller = "unattributed"
+		}
+		log.Printf("vmctl: lifecycle request %s %s caller=%q remote=%s", r.Method, r.URL.Path, caller, r.RemoteAddr)
+		next(w, r)
+	}
 }
 
 // ResolveEndpoint returns the full resolve endpoint URL for the vmctl

@@ -111,6 +111,23 @@ func NewClientWithTimeout(baseURL string, timeout time.Duration) *Client {
 // Resolve resolves or assigns a VM for the given user ID. Returns the
 // ownership information including the autoputer URL where the user's VM
 // is reachable (VAL-VM-001).
+// LifecycleCallerHeader names the code that asked vmctl for a lifecycle call.
+// vmctl logs it on every call that can stop, replace or delete a computer.
+const LifecycleCallerHeader = "X-Choir-Lifecycle-Caller"
+
+type lifecycleCallerKey struct{}
+
+// WithLifecycleCaller tags ctx so the vmctl client names its caller.
+func WithLifecycleCaller(ctx context.Context, caller string) context.Context {
+	return context.WithValue(ctx, lifecycleCallerKey{}, caller)
+}
+
+func setLifecycleCaller(req *http.Request) {
+	if caller, ok := req.Context().Value(lifecycleCallerKey{}).(string); ok && strings.TrimSpace(caller) != "" {
+		req.Header.Set(LifecycleCallerHeader, caller)
+	}
+}
+
 func (c *Client) Resolve(userID string) (*resolveResponse, error) {
 	return c.ResolveDesktop(userID, PrimaryDesktopID)
 }
@@ -139,6 +156,7 @@ func (c *Client) ResolveDesktopContext(ctx context.Context, userID, desktopID st
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -193,6 +211,7 @@ func (c *Client) ColdRecover(ctx context.Context, computerID, expectedCanonicalH
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(request)
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: cold recovery call failed: %w", err)
@@ -234,6 +253,7 @@ func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID st
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -284,6 +304,7 @@ func (c *Client) Unhold(ctx context.Context, computerID string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -329,6 +350,7 @@ func (c *Client) LookupDesktopContext(ctx context.Context, userID, desktopID str
 		return nil, fmt.Errorf("vmctl client: create lookup request: %w", err)
 	}
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -387,6 +409,7 @@ func (c *Client) lookupComputerContext(ctx context.Context, userID, computerID s
 		return nil, fmt.Errorf("vmctl client: create computer lookup request: %w", err)
 	}
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: computer lookup call failed: %w", err)
@@ -439,6 +462,7 @@ func (c *Client) LookupGuestContext(ctx context.Context, remoteAddr string) (*Gu
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: guest lookup call failed: %w", err)
@@ -468,6 +492,7 @@ func (c *Client) ListOwnershipsContext(ctx context.Context) ([]ownershipResponse
 		return nil, fmt.Errorf("vmctl client: create list request: %w", err)
 	}
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -508,6 +533,7 @@ func (c *Client) PulseSummaryContext(ctx context.Context) (*PulseSummary, error)
 		return nil, fmt.Errorf("vmctl client: create pulse request: %w", err)
 	}
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -570,6 +596,7 @@ func (c *Client) postAction(endpoint, userID, desktopID string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
+	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

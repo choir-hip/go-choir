@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 func parseComputerLifecyclePath(path string) (computerID, action string, ok bool) {
@@ -132,7 +133,7 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		return
 	}
 	control.PriorState, control.PriorEpoch = prepared.PriorState, prepared.PriorEpoch
-	opCtx, cancelOp := h.vmctlOpContext(r.Context())
+	opCtx, cancelOp := h.vmctlOpContext(vmctl.WithLifecycleCaller(r.Context(), "proxy.lifecycle."+action))
 	defer cancelOp()
 	switch action {
 	case "stop":
@@ -479,7 +480,7 @@ func (h *Handler) handleComputerColdRecover(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "canonical event head unavailable"})
 		return
 	}
-	recovery, err := h.vmctlClient.ColdRecover(r.Context(), target.ComputerID, canonicalHead, route.Slot.Generation, idempotencyKey)
+	recovery, err := h.vmctlClient.ColdRecover(vmctl.WithLifecycleCaller(r.Context(), "proxy.cold-recover"), target.ComputerID, canonicalHead, route.Slot.Generation, idempotencyKey)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "cold recovery authority unavailable"})
 		return

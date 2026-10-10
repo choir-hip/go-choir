@@ -49,7 +49,7 @@ function vmctlOwnership(userID) {
 
 function vmctlRefresh(userID) {
   return nodeBJSON(
-    'curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" --data-binary @- http://127.0.0.1:8083/internal/vmctl/refresh',
+    'curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" -H "X-Choir-Lifecycle-Caller: operator.m3-refresh-probe" --data-binary @- http://127.0.0.1:8083/internal/vmctl/refresh',
     JSON.stringify({ user_id: userID, desktop_id: 'primary' }),
   );
 }

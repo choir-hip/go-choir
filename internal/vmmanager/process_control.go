@@ -91,7 +91,7 @@ func (m *Manager) ReapUnmanagedVM(vmID string) error {
 		m.mu.Unlock()
 		return fmt.Errorf("vm %s is managed and running", vmID)
 	}
-	m.cleanupOrphanedFirecrackerLocked(vmID)
+	m.cleanupOrphanedFirecrackerLocked(vmID, "reap-unmanaged")
 	m.mu.Unlock()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
