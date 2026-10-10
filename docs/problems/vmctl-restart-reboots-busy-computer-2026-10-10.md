@@ -76,3 +76,28 @@ repaired there.
   own hold rule, because I judged a scripts-only change harmless.
   Classifying `scripts/*_probe.mjs` as tooling makes that judgment
   true.
+
+## Staging evidence (19834f68, deployed 09:26:17Z)
+
+- **Resolve refused instead of booting.** Between 09:26:22 and 09:27:05,
+  four resolves for the rerun 11 QA user hit vm-795dcd90. That guest was
+  still live, but it had not answered a health check since its forced
+  reboot at 08:57. Each resolve logged `computer recovery blocked
+  (guest_reattach_pending)` and did not boot a second copy.
+- **Reconcile was the only power-off.** At 09:36:32, reconcile's grace
+  powered off the unanswering guest ("powered off unmanaged VM … state
+  kept"; `reaped=1`). This is the one path the conjecture allows.
+- **Repaired** on staging: "resolve kills a live guest after vmctl
+  restart". The classifier half takes effect at the next probe-script
+  push.
+
+## Residual: guest-degraded-after-forced-reboot
+
+After the 08:57 forced reboot, rerun 11's guest never became healthy.
+It ran at about 193% CPU with a silent console, and health checks timed
+out for 39 minutes until reconcile reaped it. Its state was kept, so the
+next resolve boots it fresh. The cause is not measured: the console was
+silent, and the guest was a QA computer. This is a hypothesis only: the
+crash-restart boot path closes open work and does recovery that can
+spin on a large tape. Measure it on the next forced reboot of a QA
+computer before acting.

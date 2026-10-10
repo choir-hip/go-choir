@@ -149,8 +149,8 @@ now:
   slice: >-
     reality — re-run the M11 episode probe on a fresh disposable on the
     current staging build and record which legs still pass.
-  source_ref: b2a76845
-  deploy_identity: e3f2d560
+  source_ref: 79edc337
+  deploy_identity: 19834f68
   candidate:
     id: none
     state: none
@@ -220,11 +220,26 @@ now:
       (problems/trace-review-desk-protocol-friction-2026-10-10.md)
       found desks guessing enum values against the reducer. Fixed in
       26c288c4 (enum rejections name the accepted values) and 81104b9c
-      (refused dispositions name their reason).
+      (refused dispositions name their reason). Owner 2026-10-10 raised
+      the tool-loop budgets 100x (dbed74e5) and set no call limit before
+      the system works. A haiku loop-watch reviews traces each run. Rerun
+      11 (dbed74e5) never reached freeze. I pushed a probe-script change
+      mid-run (cc72a94c). The classifier treated the unknown path as a
+      full deploy, so vmctl restarted, and resolve rebooted the busy QA
+      guest, which never recovered
+      (problems/vmctl-restart-reboots-busy-computer-2026-10-10.md). Two
+      fixes followed: probe scripts are tooling (a820beea), and resolve
+      refuses guest_reattach_pending instead of booting over a live guest
+      (cfc17e05, seen working on staging). Track D landed in 19834f68:
+      an ordinary engineering freeze opens its own promotion candidate
+      when the signed mode is armed, so no special start API is needed
+      on that path. F13 (79edc337): every desk prompt carries its
+      generated REPL surface. choir.Help() is in the cell, and compile
+      errors name what exists.
     main_uncertainty: >-
       Whether apply completes now that the bundle is faithful and the
       deposit mode is retained. Then reject and restore.
-    next_observation: M11 rerun 11 on 81104b9c or later, reading the verifier verdict, then replay-completeness at apply.
+    next_observation: M11 rerun 12 on 79edc337, reading Texture's turn count to first useful act (F13), the verifier verdict, then replay-completeness at apply.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
@@ -232,10 +247,12 @@ now:
     upcast-rewrites-prose, base-upcast-vs-live, live-rescan-mixed-spelling,
     verifier-apply-check, verifier-implementer-channel, refresh-log-reason,
     texture-budget-burn-while-waiting, identical-rejection-loop,
-    probe-self-stop.
+    probe-self-stop, one-candidate-per-document-trajectory,
+    owner-recovery-reboot, guest-degraded-after-forced-reboot.
   next_action: >-
-    Deploy 81104b9c; rerun M11 to apply; if replay is eligible, continue
-    to applied, reject and restore; otherwise read the named rows.
+    Deploy 79edc337; run M11 rerun 12 with the haiku loop-watch; if the
+    replay is eligible, continue to applied, reject and restore;
+    otherwise read the named rows.
 receipts:
   - id: m11-rerun-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
