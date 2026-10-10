@@ -7,6 +7,7 @@ package coagentpacket
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
@@ -119,7 +120,7 @@ func Validate(packet types.CoagentSourcePacketPayload) error {
 		return fmt.Errorf("update_coagent schema_version must be %q", types.CoagentSourcePacketSchemaV1)
 	}
 	if !validCoagentPacketKind(packet.Kind) {
-		return fmt.Errorf("update_coagent kind %q is not supported", packet.Kind)
+		return notSupported("update_coagent kind", packet.Kind, coagentPacketKinds)
 	}
 	if packet.Summary == "" {
 		return fmt.Errorf("update_coagent summary is required")
@@ -160,13 +161,26 @@ func Validate(packet types.CoagentSourcePacketPayload) error {
 	return nil
 }
 
+// Accepted enum values. A rejection names them, so a desk corrects a
+// value in one turn instead of guessing (M11 rerun 10).
+var (
+	coagentPacketKinds               = []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request", "directive"}
+	coagentClaimStances              = []string{"supports", "qualifies", "contradicts", "background"}
+	coagentClaimRecommendedSurfaces  = []string{"inline_ref", "block_embed", "source_panel", "decision_log"}
+	coagentSourceEvidenceStates      = []string{"available", "pending", "blocked", "unavailable"}
+	coagentSourceEvidenceConfidences = []string{"low", "medium", "high"}
+	coagentActionTypes               = []string{"run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "import_source", "revise_texture"}
+	mutationClasses                  = []string{"green", "yellow", "orange", "red", "black"}
+	coagentActionSafetyModes         = []string{"forbidden", "allowed", "required"}
+)
+
+// notSupported rejects value for field and names the accepted values.
+func notSupported(field, value string, allowed []string) error {
+	return fmt.Errorf("%s %q is not supported; use one of: %s", field, value, strings.Join(allowed, ", "))
+}
+
 func validCoagentPacketKind(kind string) bool {
-	switch strings.TrimSpace(kind) {
-	case "evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request", "directive":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(coagentPacketKinds, strings.TrimSpace(kind))
 }
 
 func validateCoagentPacketClaim(claim types.CoagentPacketClaim, sourceIDs map[string]bool) error {
@@ -174,10 +188,10 @@ func validateCoagentPacketClaim(claim types.CoagentPacketClaim, sourceIDs map[st
 		return fmt.Errorf("text is required")
 	}
 	if stance := strings.TrimSpace(claim.Stance); stance != "" && !validCoagentClaimStance(stance) {
-		return fmt.Errorf("stance %q is not supported", stance)
+		return notSupported("stance", stance, coagentClaimStances)
 	}
 	if surface := strings.TrimSpace(claim.RecommendedSurface); surface != "" && !validCoagentClaimRecommendedSurface(surface) {
-		return fmt.Errorf("recommended_surface %q is not supported", surface)
+		return notSupported("recommended_surface", surface, coagentClaimRecommendedSurfaces)
 	}
 	seen := map[string]bool{}
 	for _, sourceID := range claim.SourceIDs {
@@ -201,7 +215,7 @@ func validateCoagentPacketSource(source types.CoagentPacketSource) error {
 		return fmt.Errorf("kind is required")
 	}
 	if !sourcecontract.IsSourceKind(source.Kind) {
-		return fmt.Errorf("kind %q is not supported", source.Kind)
+		return notSupported("kind", source.Kind, sourcecontract.SourceKindValues())
 	}
 	if strings.TrimSpace(source.Target.URI) == "" {
 		return fmt.Errorf("target.uri is required")
@@ -217,24 +231,24 @@ func validateCoagentPacketSource(source types.CoagentPacketSource) error {
 			return fmt.Errorf("selectors[%d].kind is required", i)
 		}
 		if !sourcecontract.IsSelectorKind(selector.Kind) {
-			return fmt.Errorf("selectors[%d].kind %q is not supported", i, selector.Kind)
+			return notSupported(fmt.Sprintf("selectors[%d].kind", i), selector.Kind, sourcecontract.SelectorKindValues())
 		}
 	}
 	if state := strings.TrimSpace(source.Evidence.State); state != "" && !validCoagentSourceEvidenceState(state) {
-		return fmt.Errorf("evidence.state %q is not supported", state)
+		return notSupported("evidence.state", state, coagentSourceEvidenceStates)
 	}
 	if confidence := strings.TrimSpace(source.Evidence.Confidence); confidence != "" && !validCoagentSourceEvidenceConfidence(confidence) {
-		return fmt.Errorf("evidence.confidence %q is not supported", confidence)
+		return notSupported("evidence.confidence", confidence, coagentSourceEvidenceConfidences)
 	}
 	return nil
 }
 
 func validateCoagentPacketAction(action types.CoagentPacketAction, requireSafety bool) error {
 	if strings.TrimSpace(action.Type) == "" {
-		return fmt.Errorf("type is required")
+		return fmt.Errorf("type is required (one of: %s)", strings.Join(coagentActionTypes, ", "))
 	}
 	if !validCoagentActionType(action.Type) {
-		return fmt.Errorf("type %q is not supported", action.Type)
+		return notSupported("type", action.Type, coagentActionTypes)
 	}
 	if strings.TrimSpace(action.Objective) == "" {
 		return fmt.Errorf("objective is required")
@@ -244,88 +258,53 @@ func validateCoagentPacketAction(action types.CoagentPacketAction, requireSafety
 			return fmt.Errorf("expected_sources[%d].kind is required", i)
 		}
 		if !sourcecontract.IsSourceKind(expected.Kind) {
-			return fmt.Errorf("expected_sources[%d].kind %q is not supported", i, expected.Kind)
+			return notSupported(fmt.Sprintf("expected_sources[%d].kind", i), expected.Kind, sourcecontract.SourceKindValues())
 		}
 	}
 	safety := action.Safety
 	if requireSafety {
 		if strings.TrimSpace(safety.MutationClass) == "" || strings.TrimSpace(safety.Network) == "" || strings.TrimSpace(safety.FileMutation) == "" {
-			return fmt.Errorf("safety.mutation_class, safety.network, and safety.file_mutation are required for execution_request actions")
+			return fmt.Errorf("safety.mutation_class (one of: %s), safety.network, and safety.file_mutation (each one of: %s) are required for execution_request actions", strings.Join(mutationClasses, ", "), strings.Join(coagentActionSafetyModes, ", "))
 		}
 	}
 	if mutationClass := strings.TrimSpace(safety.MutationClass); mutationClass != "" && !validMutationClass(mutationClass) {
-		return fmt.Errorf("safety.mutation_class %q is not supported", mutationClass)
+		return notSupported("safety.mutation_class", mutationClass, mutationClasses)
 	}
 	if network := strings.TrimSpace(safety.Network); network != "" && !validCoagentActionSafetyMode(network) {
-		return fmt.Errorf("safety.network %q is not supported", network)
+		return notSupported("safety.network", network, coagentActionSafetyModes)
 	}
 	if fileMutation := strings.TrimSpace(safety.FileMutation); fileMutation != "" && !validCoagentActionSafetyMode(fileMutation) {
-		return fmt.Errorf("safety.file_mutation %q is not supported", fileMutation)
+		return notSupported("safety.file_mutation", fileMutation, coagentActionSafetyModes)
 	}
 	return nil
 }
 
 func validCoagentClaimStance(stance string) bool {
-	switch strings.TrimSpace(stance) {
-	case "supports", "qualifies", "contradicts", "background":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(coagentClaimStances, strings.TrimSpace(stance))
 }
 
 func validCoagentClaimRecommendedSurface(surface string) bool {
-	switch strings.TrimSpace(surface) {
-	case "inline_ref", "block_embed", "source_panel", "decision_log":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(coagentClaimRecommendedSurfaces, strings.TrimSpace(surface))
 }
 
 func validCoagentSourceEvidenceState(state string) bool {
-	switch strings.TrimSpace(state) {
-	case "available", "pending", "blocked", "unavailable":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(coagentSourceEvidenceStates, strings.TrimSpace(state))
 }
 
 func validCoagentSourceEvidenceConfidence(confidence string) bool {
-	switch strings.TrimSpace(confidence) {
-	case "low", "medium", "high":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(coagentSourceEvidenceConfidences, strings.TrimSpace(confidence))
 }
 
 func validCoagentActionType(actionType string) bool {
-	switch strings.TrimSpace(actionType) {
-	case "run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "import_source", "revise_texture":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(coagentActionTypes, strings.TrimSpace(actionType))
 }
 
 func validMutationClass(mutationClass string) bool {
-	switch strings.TrimSpace(mutationClass) {
-	case "green", "yellow", "orange", "red", "black":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(mutationClasses, strings.TrimSpace(mutationClass))
 }
 
 func validCoagentActionSafetyMode(mode string) bool {
-	switch strings.TrimSpace(mode) {
-	case "forbidden", "allowed", "required":
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(coagentActionSafetyModes, strings.TrimSpace(mode))
 }
 
 func Empty(packet types.CoagentSourcePacketPayload) bool {
