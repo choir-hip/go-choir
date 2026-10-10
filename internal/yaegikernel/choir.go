@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/traefik/yaegi/interp"
@@ -63,6 +64,12 @@ type ChoirScope struct {
 // never from model input. Any other role string means full engineering scope.
 const SessionRoleResearch = "research"
 
+// SessionRoleResearchChild is a child research activation run for a
+// research cell's choir.Research: read-only world verbs and further
+// choir.Research, no messaging or reporting. Its result returns to the
+// parent cell as a value.
+const SessionRoleResearchChild = "research_child"
+
 // NewChoirScope mints a session-scoped handle for exactly the file, assign,
 // and message actions and returns the scope the choir symbols close over.
 // The caller (worker session setup) owns the broker lifetime.
@@ -73,9 +80,15 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	if issuer == nil {
 		return nil, fmt.Errorf("choir: handle issuer is required")
 	}
-	readOnly := role == SessionRoleResearch
+	readOnly := role == SessionRoleResearch || role == SessionRoleResearchChild
 	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit}
-	if readOnly {
+	if role == SessionRoleResearchChild {
+		actions = []BrokerAction{ActionReadFile, ActionListDir,
+			ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
+			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
+			ActionReadContentSelector, ActionSearchWireCorpus,
+			ActionReadEvidence, ActionListEvidence, ActionResearch}
+	} else if readOnly {
 		// Research is read-only on the filesystem but owns the host-mediated
 		// egress verbs (web_search/fetch_url/source_search/import_*/read_*/
 		// list_*/search_wire_corpus + evidence/run-memory) — the handle must
@@ -84,7 +97,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 			ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
 			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
 			ActionReadContentSelector, ActionSearchWireCorpus,
-			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry}
+			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch}
 	}
 	// SMG: the management desk's product API call rides the broker like the
 	// research egress verbs — the typed product_api_request tool is deleted.
@@ -107,7 +120,7 @@ func (s *ChoirScope) HandleRef() string { return s.handleRef }
 // generalized carrier never under-provisions a working desk.
 func normalizeDeskRole(role string) string {
 	switch role {
-	case "management", "engineering", "research", "texture":
+	case "management", "engineering", "research", "texture", SessionRoleResearchChild:
 		return role
 	}
 	return "engineering"
@@ -192,7 +205,13 @@ var deskModuleSets = map[string][]string{
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
 		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
-		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry"},
+		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research"},
+	// A child research activation (choir.Research) reads the world and may
+	// fan out further; it cannot message, report or write. Its findings
+	// return to the parent cell as a value.
+	SessionRoleResearchChild: {"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
+		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
+		"ReadEvidence", "ListEvidence", "Research"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
 	// not capsule file ops. Children (research probes, persistent management)
@@ -254,6 +273,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ReadDoc":              func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
 		"ApplyTexture":         func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
 		"WebSearch":            func() reflect.Value { return reflect.ValueOf(s.WebSearch) },
+		"Research":             func() reflect.Value { return reflect.ValueOf(s.Research) },
 		"FetchURL":             func() reflect.Value { return reflect.ValueOf(s.FetchURL) },
 		"SourceSearch":         func() reflect.Value { return reflect.ValueOf(s.SourceSearch) },
 		"ImportDocument":       func() reflect.Value { return reflect.ValueOf(s.ImportDocument) },
@@ -405,6 +425,62 @@ func (s *ChoirScope) WebSearch(query string, maxResults int) (json.RawMessage, e
 	var out json.RawMessage
 	err := s.call(ActionWebSearch, WebSearchPayload{Query: query, MaxResults: maxResults}, &out)
 	return out, err
+}
+
+// Research runs child research activations on the host, in parallel, and
+// returns each child's findings to this cell. children is one objective (a
+// string), a list of objectives, or a list of {"objective", "model"} maps;
+// an empty model means this desk's own. The children share this
+// activation's egress budget and this cell's deadline.
+func (s *ChoirScope) Research(children any) ([]ResearchChildResult, error) {
+	specs, err := researchChildSpecs(children)
+	if err != nil {
+		return nil, err
+	}
+	var out []ResearchChildResult
+	err = s.call(ActionResearch, ResearchPayload{Children: specs}, &out)
+	return out, err
+}
+
+func researchChildSpecs(children any) ([]ResearchChild, error) {
+	raw, err := jsonCellArg(children)
+	if err != nil {
+		return nil, err
+	}
+	raw = strings.TrimSpace(raw)
+	var specs []ResearchChild
+	switch {
+	case raw == "":
+	case strings.HasPrefix(raw, "["):
+		var objectives []string
+		if json.Unmarshal([]byte(raw), &objectives) == nil {
+			for _, o := range objectives {
+				specs = append(specs, ResearchChild{Objective: o})
+			}
+		} else if err := json.Unmarshal([]byte(raw), &specs); err != nil {
+			return nil, fmt.Errorf("choir: Research takes an objective, a list of objectives, or a list of {objective, model} maps: %w", err)
+		}
+	case strings.HasPrefix(raw, "{"):
+		var one ResearchChild
+		if err := json.Unmarshal([]byte(raw), &one); err != nil {
+			return nil, fmt.Errorf("choir: Research takes an objective, a list of objectives, or a list of {objective, model} maps: %w", err)
+		}
+		specs = append(specs, one)
+	default:
+		specs = append(specs, ResearchChild{Objective: raw})
+	}
+	kept := specs[:0]
+	for _, spec := range specs {
+		spec.Objective = strings.TrimSpace(spec.Objective)
+		spec.Model = strings.TrimSpace(spec.Model)
+		if spec.Objective != "" {
+			kept = append(kept, spec)
+		}
+	}
+	if len(kept) == 0 {
+		return nil, fmt.Errorf("choir: Research needs at least one objective")
+	}
+	return kept, nil
 }
 
 // FetchURL resolves a URL fetch through the host's HTTP client under the

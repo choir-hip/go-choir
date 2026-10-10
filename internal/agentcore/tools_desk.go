@@ -151,6 +151,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					if action == yaegikernel.ActionProductAPI {
 						return rt.productAPIEgress(egrCtx, execCtx.OwnerID, execCtx.OwnerEmail, payload)
 					}
+					if action == yaegikernel.ActionResearch {
+						return rt.runResearchChildren(egrCtx, execCtx, payload)
+					}
 					if fn, ok := rt.egressEvidenceTool()[string(action)]; ok {
 						out, err := fn(egrCtx, payload)
 						return json.RawMessage(out), err

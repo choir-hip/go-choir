@@ -172,7 +172,7 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 	case ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
 		ActionReadContentItem, ActionListContentSelectors, ActionReadContentSelector, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI:
+		ActionProductAPI, ActionResearch:
 		return b.handleEgress(ctx, req, receiptID, start)
 	default:
 		return NewErrorResponse(req.RequestID, fmt.Sprintf("unsupported action %q", req.Action), time.Since(start))

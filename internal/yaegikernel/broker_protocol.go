@@ -28,11 +28,14 @@ const (
 	ActionListContentSelectors BrokerAction = "list_content_item_selectors"
 	ActionReadContentSelector  BrokerAction = "read_content_item_selector"
 	ActionSearchWireCorpus     BrokerAction = "search_wire_corpus"
-	ActionSaveEvidence         BrokerAction = "save_evidence"
-	ActionReadEvidence         BrokerAction = "read_evidence"
-	ActionListEvidence         BrokerAction = "list_evidence"
-	ActionGetRunMemoryEntry    BrokerAction = "get_run_memory_entry"
-	ActionProductAPI           BrokerAction = "product_api"
+	// ActionResearch runs child research activations on the host and
+	// returns their findings to the calling cell (RLM actor recursion).
+	ActionResearch          BrokerAction = "research"
+	ActionSaveEvidence      BrokerAction = "save_evidence"
+	ActionReadEvidence      BrokerAction = "read_evidence"
+	ActionListEvidence      BrokerAction = "list_evidence"
+	ActionGetRunMemoryEntry BrokerAction = "get_run_memory_entry"
+	ActionProductAPI        BrokerAction = "product_api"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -160,6 +163,28 @@ type WebSearchPayload struct {
 	MaxResults int    `json:"max_results,omitempty"`
 }
 
+// ResearchPayload defines the parameters for ActionResearch: the child
+// research activations to run, each with its objective and an optional
+// model from the catalog (empty means the caller's own model).
+type ResearchPayload struct {
+	Children []ResearchChild `json:"children"`
+}
+
+// ResearchChild is one child research activation's spec.
+type ResearchChild struct {
+	Objective string `json:"objective"`
+	Model     string `json:"model,omitempty"`
+}
+
+// ResearchChildResult is what one child returns to the calling cell.
+type ResearchChildResult struct {
+	Objective  string `json:"objective"`
+	Model      string `json:"model"`
+	Findings   string `json:"findings,omitempty"`
+	Error      string `json:"error,omitempty"`
+	DurationMs int64  `json:"duration_ms"`
+}
+
 // ProductAPIPayload defines the parameters for ActionProductAPI — the
 // management desk's host-resolved product API call (former
 // product_api_request typed tool). The host validates method/route against
@@ -255,7 +280,7 @@ func (r *BrokerRequest) Validate() error {
 		ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
 		ActionReadContentItem, ActionListContentSelectors, ActionReadContentSelector, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI:
+		ActionProductAPI, ActionResearch:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)
