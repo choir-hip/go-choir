@@ -157,6 +157,18 @@ type ReplayObserver interface {
 	CheckpointCommitted(sequence uint64)
 }
 
+// HoldAppends runs fn while no event can be appended. Every append and its
+// live projection run under the same lock, so fn sees a head and a projection
+// that belong together. Keep fn short: every writer waits for it.
+func (a *ComputerEventAppender) HoldAppends(fn func() error) error {
+	if a == nil {
+		return fn()
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return fn()
+}
+
 // SetReplayObserver installs the recovery telemetry observer. Nil disables.
 func (a *ComputerEventAppender) SetReplayObserver(observer ReplayObserver) {
 	if a == nil {

@@ -190,7 +190,12 @@ func TestReplayCompletenessUsesDisposableProjectionWithoutMutatingLiveStore(t *t
 	}
 }
 
-func TestReplayCompletenessRejectsLiveObservationDriftDuringReplay(t *testing.T) {
+// The probe compares the live state captured with its head. A write after the
+// capture (here, during replay) belongs to a later head and cannot change this
+// report; a write outside the event chain is caught as live-only drift by the
+// next probe (TestReplayCompletenessUsesDisposableProjectionWithoutMutatingLiveStore). Until rerun 12
+// this test pinned a refusal, which made a busy computer unable to checkpoint.
+func TestReplayCompletenessReportsStateCapturedWithItsHead(t *testing.T) {
 	computerID := "computer-replay-live-drift"
 	storePath := filepath.Join(t.TempDir(), "runtime.db")
 	liveStore, err := choirstore.Open(storePath)
@@ -217,9 +222,14 @@ func TestReplayCompletenessRejectsLiveObservationDriftDuringReplay(t *testing.T)
 		store:         liveStore,
 		eventAppender: appender,
 	}
-	_, err = rt.ReplayCompleteness(context.Background(), computerID)
-	if err == nil || !strings.Contains(err.Error(), "live Dolt state changed during probe") {
-		t.Fatalf("live midflight mutation error=%v, want stable-observation refusal", err)
+	report, err := rt.ReplayCompleteness(context.Background(), computerID)
+	if err != nil {
+		t.Fatalf("write after capture refused the probe: %v", err)
+	}
+	for _, difference := range report.Result.Differences {
+		if strings.Contains(difference.Key, "replay_probe_midflight") {
+			t.Fatalf("a write after the capture leaked into the report: %#v", difference)
+		}
 	}
 }
 

@@ -226,15 +226,35 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		return ReplayCompletenessReport{}, err
 	}
 
-	liveHead, err := rt.store.Head(ctx, computerID)
-	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: read live event head: %w", err)
-	}
-	version := replayCompletenessVersion(rt, liveHead)
+	// Capture the head and the live state together: appends wait while the
+	// live store is read, so the state belongs to exactly this head. The
+	// replay below stops at it, and desks keep working meanwhile
+	// (docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md).
+	var (
+		liveHead      *computerevent.Head
+		live          computerversion.ObservationSet
+		liveRunMemory []choirstore.RunMemoryEntryFingerprint
+		version       computerversion.ComputerVersion
+	)
 	extractor := replayDoltStateExtractor(rt.store.TexturePath())
-	live, err := extractor.Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt", Version: version})
-	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: extract live Dolt state: %w", err)
+	if err := rt.eventAppender.HoldAppends(func() error {
+		var err error
+		if liveHead, err = rt.store.Head(ctx, computerID); err != nil {
+			return fmt.Errorf("replay completeness: read live event head: %w", err)
+		}
+		version = replayCompletenessVersion(rt, liveHead)
+		if live, err = extractor.Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt", Version: version}); err != nil {
+			return fmt.Errorf("replay completeness: extract live Dolt state: %w", err)
+		}
+		if liveRunMemory, err = rt.store.ListRunMemoryEntryFingerprints(ctx); err != nil {
+			return fmt.Errorf("replay completeness: fingerprint live run memory: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return ReplayCompletenessReport{}, err
+	}
+	if rt.replayProbeAfterCapture != nil {
+		rt.replayProbeAfterCapture()
 	}
 
 	tempRoot, err := os.MkdirTemp("", "choir-replay-completeness-")
@@ -252,7 +272,12 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: %w", err)
 	}
 	rt.eventAppender.SetReplayObserver(observer)
-	reconstructErr := rt.eventAppender.ReconstructInto(ctx, replayStore)
+	var reconstructErr error
+	if liveHead != nil && liveHead.Sequence > 0 {
+		reconstructErr = rt.eventAppender.ReconstructThroughTarget(ctx, replayStore, liveHead.CanonicalEventHead)
+	} else {
+		reconstructErr = rt.eventAppender.ReconstructInto(ctx, replayStore)
+	}
 	rt.eventAppender.SetReplayObserver(nil)
 	if reconstructErr != nil {
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: reconstruct event chain: %w", reconstructErr)
@@ -274,28 +299,6 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: extract replay Dolt state: %w", err)
 	}
 
-	liveAfter, err := extractor.Extract(ctx, computerversion.ExtractRequest{Name: "live-dolt-after", Version: version})
-	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: re-extract live Dolt state: %w", err)
-	}
-	liveHeadAfter, err := rt.store.Head(ctx, computerID)
-	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: re-read live event head: %w", err)
-	}
-	if !sameReplayHead(liveHead, liveHeadAfter) {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: live event head changed during probe")
-	}
-	stable := (computerversion.EquivalenceChecker{}).CheckObservationSets(
-		filterReplayHeadObservation(live), filterReplayHeadObservation(liveAfter),
-	)
-	if !stable.Equivalent() {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: live Dolt state changed during probe: %v", stable.Differences)
-	}
-
-	liveRunMemory, err := rt.store.ListRunMemoryEntryFingerprints(ctx)
-	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: fingerprint live run memory: %w", err)
-	}
 	replayRunMemory, err := replayStore.ListRunMemoryEntryFingerprints(ctx)
 	if err != nil {
 		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: fingerprint replay run memory: %w", err)

@@ -265,3 +265,31 @@ applied or taken back. Rerun 13's trace decides the shape. Either each
 transition becomes a ledger report that wakes Texture, or Texture's cell
 can read the operation's state. The first is live supervision; the second
 is only a read.
+
+## Fix for failure 1: the checkpoint compares state captured with its head (owner: "do the checkpoint fix")
+
+Red ceremony (replay-completeness verifier, checkpoint mint).
+
+- Conjecture delta: a checkpoint needs one head and the live state at that
+  head, not a quiet computer. Every append and its live projection run under
+  the appender's lock, so holding that lock while reading the head, the live
+  Dolt state and run memory gives an exact pair. The replay then stops at
+  that head (`ReconstructThroughTarget`), and desks keep working.
+- Change: `ComputerEventAppender.HoldAppends`; `ReplayCompleteness`
+  captures head, state and run memory under it and replays to the captured
+  head. The before/after "live state changed during probe" guard is
+  removed: later writes belong to a later head. A write outside the event
+  chain is still caught, as live-only drift, by the equivalence test.
+- Tests first: `TestReplayCompletenessCapturesHeadAndStateTogether` (an
+  event appended mid-probe; report and replay both name the captured head;
+  equivalent). `TestReplayCompletenessRejectsLiveObservationDriftDuringReplay`
+  pinned the old refusal and becomes
+  `TestReplayCompletenessReportsStateCapturedWithItsHead`.
+- Cost: appends wait while the live store is extracted (seconds on a large
+  computer).
+- Protected surfaces: replay-completeness verifier, checkpoint mint.
+- Admissible evidence: a post-apply checkpoint on the first attempt, while
+  desks are active. Rerun 13 minted one only after retries (15:12:29Z).
+- Rollback: git revert.
+- Heresy delta: discovered "checkpoint requires a quiet computer";
+  repaired on staging proof only.

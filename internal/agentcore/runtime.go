@@ -161,8 +161,11 @@ type Runtime struct {
 	// textureCells records what each running Texture activation's cells
 	// staged; the activation's end answers an unanswered trigger from it
 	// (answerIdleTextureTrigger).
-	textureCellsMu           sync.Mutex
-	textureCells             map[string]textureActivationCells
+	textureCellsMu sync.Mutex
+	textureCells   map[string]textureActivationCells
+	// replayProbeAfterCapture is a test seam: it runs after the
+	// replay-completeness probe captures its head and live state.
+	replayProbeAfterCapture  func()
 	assignmentHandleResolver interface {
 		AssignmentHandle(string, string) (string, error)
 	}

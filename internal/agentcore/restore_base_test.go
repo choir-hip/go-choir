@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
@@ -444,4 +445,57 @@ func TestPlanRestoreTargetBeforeNewestBase(t *testing.T) {
 			t.Fatalf("outage: %v, want a non-refusal error", err)
 		}
 	})
+}
+
+// Rerun 12: the post-apply checkpoint failed "projection repair required"
+// because 37 events landed while the probe replayed to the end of the tape and
+// compared with a live head it had read earlier. Failure modes pinned:
+//   - an event appended during the probe fails it (a busy computer can never
+//     checkpoint);
+//   - the replay runs past the captured head, so it compares different heads;
+//   - the report names a head other than the one its live state was read at.
+func TestReplayCompletenessCapturesHeadAndStateTogether(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-replay-busy"
+	storePath := filepath.Join(t.TempDir(), "runtime.db")
+	live, err := choirstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = live.Close() }()
+	rt, cas, capturedHead := rematerializeTapeRuntime(t, computerID, storePath, live)
+	rt.restoreBaseSource = restoreBaseFakeFor(projectionbase.Descriptor{}, nil, cas.events)
+	rt.restoreBaseSource.(*restoreBaseFake).emptyWatermark = true
+	appended := false
+	rt.replayProbeAfterCapture = func() {
+		eventID, _ := computerevent.NewEventID()
+		update := computerevent.Event{SchemaVersion: 1, EventID: eventID, ComputerID: computerID, EventKind: computerevent.EventResearchUpdate,
+			OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "during-probe", ActorProfile: "research", AuthorityRef: "typed-update",
+			PayloadCommitment: strings.Repeat("0", 64), PrivacyClass: "owner", ResultingEffectiveCommitment: strings.Repeat("f", 64), ReducerVersion: 1}
+		if _, err := rt.eventAppender.AppendNew(ctx, update, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("f", 64)}, nil); err != nil {
+			t.Errorf("append during probe: %v", err)
+			return
+		}
+		appended = true
+	}
+
+	report, err := rt.ReplayCompleteness(ctx, computerID)
+	if err != nil {
+		t.Fatalf("probe on a busy computer refused: %v", err)
+	}
+	if !appended {
+		t.Fatal("no event was appended during the probe")
+	}
+	if report.LiveHead == nil || report.LiveHead.CanonicalEventHead != capturedHead {
+		t.Fatalf("report live head = %+v, want the captured head %s", report.LiveHead, capturedHead)
+	}
+	if report.ReplayHead == nil || report.ReplayHead.CanonicalEventHead != capturedHead {
+		t.Fatalf("replay ran to %+v, want the captured head %s", report.ReplayHead, capturedHead)
+	}
+	if !report.Result.Equivalent() {
+		t.Fatalf("state captured with its head is not equivalent: %#v", report.Result)
+	}
+	if now, _ := live.Head(ctx, computerID); now == nil || now.CanonicalEventHead == capturedHead {
+		t.Fatalf("live head did not advance past the capture: %+v", now)
+	}
 }
