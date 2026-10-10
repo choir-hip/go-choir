@@ -124,9 +124,12 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   replay-completeness checkpoint sees resumed desk work and then an
   og_objects difference
   ([problem](problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md)).
-  The diagnostic e9805de5 names the differing rows. Fixed tonight on
+  Rerun 8 (5704ace6): the bounded apply hold worked; the replay diff
+  showed the engineering path minting co-super-* ids that from-genesis
+  replay upcasts. Fixed in f9531177; rerun 9 next. Fixed tonight on
   the way: capsule worker, freeze on new directories, delegated-cast
-  reports to Texture, verifier bundle mirror, inference breaker.
+  reports to Texture, verifier bundle mirror, inference breaker, apply
+  hold, engineering id spelling.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 

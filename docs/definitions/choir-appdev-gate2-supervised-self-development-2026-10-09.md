@@ -196,23 +196,26 @@ now:
       apply began with a planned restart. Apply then stalls in
       materializing: first resumed desk work keeps the replay-completeness
       checkpoint from seeing a quiet chain, and once quiet the replay is
-      not equivalent to live state (og_objects rows written outside the
-      event chain)
+      not equivalent to live state
       (problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md).
+      Rerun 8 (5704ace6): the bounded apply hold (7ea0f66d) worked: no desk
+      turn between the apply restart and the checkpoint. The replay diff
+      named the cause: the engineering path minted co-super-* ids that the
+      from-genesis replay upcasts, so 24 lifecycle commands and 24 events
+      were re-keyed. Fixed in f9531177 (engineering-* ids, legacy refs
+      still accepted).
     main_uncertainty: >-
-      Which writer puts og_objects rows outside the chain (boot
-      passivation, the budget failure path, or the cancel at restart);
-      the e9805de5 diagnostic names the rows on the next rerun.
-    next_observation: M11 rerun 8 on e9805de5 or later, reading the object_graph diff at apply.
+      Whether any other writer on the M11 path still mints V1-spelled
+      leaves (the replay diagnostic names them), and whether apply then
+      completes, followed by reject and restore.
+    next_observation: M11 rerun 9 on f9531177 or later, reading replay-completeness at apply.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
-    Open decision (fix A leaning): hold desk activations from the apply
-    restart until the checkpoint finishes.
+    Residuals: vocab-guard-ids, vocab-recovery-prefix, upcast-legacy-refs.
   next_action: >-
-    Deploy e9805de5; rerun M11 to apply; read the named og_objects rows;
-    fix that writer; decide the activation hold; rerun to applied,
-    reject and restore.
+    Deploy f9531177; rerun M11 to apply; if replay is equivalent, continue
+    to applied, reject and restore; otherwise fix the named writer.
 receipts:
   - id: m11-rerun-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
@@ -226,6 +229,12 @@ receipts:
   - id: m11-rerun-6-2026-10-10
     ref: docs/evidence/m11-rerun-2026-10-10T00-19-25Z.json
     result: partial (5/16; failed on the shared inference breaker opened by 400s)
+  - id: m11-rerun-7-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T00-49-59Z.json
+    result: partial (10/16; approved; apply stalled in materializing)
+  - id: m11-rerun-8-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T02-27-23Z.json
+    result: partial (apply hold worked; replay diverged on V1-spelled engineering ids)
 ---
 
 # Gate 2 — self-development with live Texture supervision

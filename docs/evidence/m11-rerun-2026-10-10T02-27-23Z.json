@@ -1,0 +1,2124 @@
+{
+  "marker": "M11_SELFDEV_EPISODE_1791599243425",
+  "base_url": "https://choir.news",
+  "started_at": "2026-10-10T02:27:23.425Z",
+  "harness_version": "2026-09-27",
+  "predicate": "A fresh owner tracking computer can stage a reversible self-development operation, bind its approval to an independently reproduced qualified-consensus receipt, apply it, render the engineering evidence, reject a second candidate, and restore the prior state.",
+  "legs": {
+    "fresh_owner": true,
+    "bootstrap_chain": true,
+    "pre_episode_checkpoint": true,
+    "propose_only_armed": true,
+    "primary_started": true,
+    "awaiting_approval": true,
+    "qualified_consensus_armed": true,
+    "approved": true,
+    "applied": false,
+    "apply_events": false,
+    "candidate_b_started": false,
+    "candidate_b_rejected": false,
+    "document_rendered": true,
+    "commitment_materiality_visible": false,
+    "falsified_commitment_visible": true,
+    "restored_pinned_head": false
+  },
+  "email": "m11-selfdev-1791599244335-tlp0am@example.com",
+  "session_user": {
+    "id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+    "email": "m11-selfdev-1791599244335-tlp0am@example.com",
+    "created_at": "2026-10-10T02:27:24Z"
+  },
+  "ownership": {
+    "vm_id": "vm-419eeec3ab8b3f394c7ecfee78c40bd7",
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "user_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+    "desktop_id": "primary",
+    "kind": "interactive",
+    "warmness_class": "primary",
+    "computer_url": "http://10.200.42.2:8085",
+    "state": "active",
+    "created_at": "2026-10-10T02:27:24.660Z",
+    "last_active_at": "2026-10-10T02:27:46.090Z",
+    "epoch": 12979,
+    "divergence_status": "tracking"
+  },
+  "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+  "bootstrap_chain": {
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "already_bootstrapped": true,
+    "head": {
+      "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+      "sequence": 2,
+      "canonical_event_head": "9eed05ce46e695a57f0bf7c5bfd58fde74d6165f8c71f4949a5c3eb5f92c8950",
+      "desired_event_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+      "effective_event_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+      "pending_transition_ref": "",
+      "desired_state_commitment": "f6642b33cf879ad51ed2d447263ec6e7b2e41568e3447dc0e9ec46c2b59069ac",
+      "effective_state_commitment": "f6642b33cf879ad51ed2d447263ec6e7b2e41568e3447dc0e9ec46c2b59069ac",
+      "reducer_version": 1,
+      "credential_revocation_epoch": 0
+    },
+    "target_state_commitment": "",
+    "code_ref": "",
+    "artifact_program_ref": "",
+    "appended_event": false,
+    "published_checkpoint": false,
+    "wrote_selfdev_operation": false
+  },
+  "pre_episode_checkpoint_bind": {
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "checkpoint_eligible": true,
+    "release_digest": "0f8d14ae154aa1fe814b3e47a2f548c85b698bf8c760baf7e6970527f0ba4122",
+    "vm_local_content_witness": {
+      "database": "texture",
+      "content_root": "93ff593ee0a49f7ffa341267d270c633aaa6099be4b60587f10266f05ce8fb4d",
+      "schema": {
+        "agent_evidence": "41a4a7b4049fbe42aab798fcc416aa88836a4c461ad01f2ae3b46543cb8bda4a",
+        "agents": "2d1321eb4cad9b950e66ee8b5fe084a50917d1d9a65c1e9506dc486acfd08e90",
+        "browser_sessions": "6ac9ee4379710129395454aa7a6ce490e9c430684bbafec7b4ea8082652d5438",
+        "channel_messages": "ac4e9be89376f41859b9937b090cd129eaa9f220dfefb5fe55244e2f1529e07e",
+        "co_super_slots": "b979c7bbfeac7e7ce20cfcf08757946ffdfa869617c3fe540263d0ec031651cf",
+        "coagent_mailboxes": "c242d687a2da2793fe83b5bdc258af9882c538b41bd93bb9482cac64337c8d1c",
+        "computer_effective_state": "9d12bc7a2d73b5a6bb863108c95f81b5618f88f4f10c16a5e9ed75e243223bb3",
+        "computer_event_index": "3ac4487d7cad9c435f12236b74e9a6541bdfde8c001f460650674f266553e27f",
+        "computer_event_projection_heads": "f7c8fbac01af258ff9ad86e66f37ee877f8bf5eba09b13dc57a48761985ba5b3",
+        "content_items": "eec77ada33374541af3244dc15c4e78f04834992169aef7067ba17e1100d0cf4",
+        "desktop_app_instances": "78b91604059011799ff27bbc2e4da171e4aade7e3a1f288d4a807e826706d546",
+        "desktop_sessions": "8520d70daba22c4485f4f701d9b56b55563999f534dfbbcae9d03244a99eb8c8",
+        "desktop_state": "84ed6f420b39c57579e2bb575f7f1a71a1817be3167ca3161928139f57306ade",
+        "desktop_window_placements": "5e6359080fbaec8431aee305f52c8415ffda0c50b75d3ebf95c98db21a034997",
+        "desktop_workspaces": "e277bb72ca1cb1d230d146cd690f785646500c80c340873f7bd6bd5cc67a156e",
+        "events": "032cc39f4fc7263096044473a7f16013e4d948558c93322073aecfba54f44615",
+        "inbox_deliveries": "7aa533edd9d2620aca7341bb7f1141b5455bdc706c66dd1982173aabd70cd5fd",
+        "media_progress": "36b5067fe258f1b75613664162e2158c73bf29ae992ab28d7b6ff21326081227",
+        "media_recents": "656f3544cd5f7d9d34c305c8573b65f5eafd358f375ae4b6524c01dabefe19dc",
+        "og_edges": "c20346964324f054ebf72cf25bfcbef9aa2146d3fe782676bfc3e05a0013f085",
+        "og_objects": "2be8bc5515234093904655b180306dc56767172805410603818d965713de0ca9",
+        "podcast_subscriptions": "d5f9cd8bc3a7f9ad7e97e4868b69f600a34e0ff7dc13a9bcc95e7f3da38e86d6",
+        "run_acceptances": "599ad11d00b8618c59e13e114c75fd22cb7e53176d6d47e388ed7ca680a8b31c",
+        "run_continuations": "cff90b06b4ae91bec45d3a3871ccc7748922e6f70b48f878a8cf35d8f1338ea9",
+        "run_memory_entries": "404cca88daa68de9cb197e220ccd7fc457a613adef479d47ec175ba8d726c9b8",
+        "runs": "c18b5cf32588ca46ca168ec743e37a438b315cd24141fdd80c870947b64bd581",
+        "self_development_operations": "f2066146ea0b33b8e3937a0248880392c983c5aa83b32e2cde9efbda2254442a",
+        "self_development_start_intents": "f157c53d27945b99eccd1b4b998165d2e7686302268f0e49ab2ea34bd3e3f3b5",
+        "solitaire_games": "e0f4c278d70542d9de8a2cbf43cfc962afa5f15ff74c7ce156faab5e9f56ee73",
+        "solitaire_moves": "188b11e6e30e5bd49924c7b024754c98e6081d3841a8a774fd986fb23e5c09ef",
+        "texture_agent_mutations": "3b2c3aff442c8dda0328e45a6c7b2fd56fb452a99244b9c9ee0267d30bc76905",
+        "texture_controller_checkpoints": "ffa80d14b7c87a54f0d2f7fe1b51ca4f1d25f245d0eb1e932348816d1abe66fb",
+        "texture_document_aliases": "0434c850d8fc0b0a6bde037e888831de90ae1216c6401e5589802f3c1b44da82",
+        "texture_documents": "c96c1b41824eedc2458f1267e0fb7c63ac972293b48dfa3ac63fb50eb1f34150",
+        "texture_revisions": "9023f8cdf612c8a016fa3c73d62ab7f9197a99fcd74d8177be354f12c032ea45",
+        "texture_source_entities": "fc6e0ba18dc910d40e991ce8d7b021142dc05561d535c15b756cc6f7e719b628",
+        "texture_source_refs": "1843787729d23b653d8ea5f93848425ceb2c5925848f4ba6e4da8b87807bbab4",
+        "trajectories": "4438df6a45b55bc9e7f5d56978a055a7677e6d8a26502b21429d0b2386288e41",
+        "user_preferences": "06a9f4523b97ab1cc8e25eb29ce362099f1a8eb79bba04cd7a2deb3a14ae7318",
+        "wire_publish_debounce_entries": "e85e29c1e2285cbe90e23f4f400a3080e2024fe1fb2e7661e5815eb89cfa5c20",
+        "wire_publish_debounce_state": "fed52cbc58e2f415c32b861a02eadb98bf681ed6f10290227ee519e6d8a0b70c",
+        "work_items": "b9993028b68f36b3b7b36bbf159c1209b7076d463b28b12d18257eaa90d651ea",
+        "worker_updates": "af07dcb2d2a65e815d83d4688d856f299cf21a35b851b8ecca2cfe1380ca8641"
+      },
+      "tables": {
+        "agent_evidence": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "agents": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "browser_sessions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "channel_messages": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "co_super_slots": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "coagent_mailboxes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "computer_effective_state": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "computer_event_index": "6e9374a9390ad8ef4f526c614680e2a54f8a5a1a3260e0baabf2cebaa0791f7a",
+        "computer_event_projection_heads": "6ae7585a00fb073d7577cf987b435b9ce9de2b586093d72ca971089e432908cf",
+        "content_items": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "desktop_app_instances": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "desktop_sessions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "desktop_state": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "desktop_window_placements": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "desktop_workspaces": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "events": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "inbox_deliveries": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "media_progress": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "media_recents": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "og_edges": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "og_objects": "ea969ab87571cf9b365b725cbbea438cafb156b94b22abf967b75055772bb455",
+        "podcast_subscriptions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "run_acceptances": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "run_continuations": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "run_memory_entries": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "runs": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "self_development_operations": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "self_development_start_intents": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "solitaire_games": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "solitaire_moves": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "texture_agent_mutations": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "texture_controller_checkpoints": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "texture_document_aliases": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "texture_documents": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "texture_revisions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "texture_source_entities": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "texture_source_refs": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "trajectories": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "user_preferences": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "wire_publish_debounce_entries": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "wire_publish_debounce_state": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "work_items": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "worker_updates": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "dolt_head": "26lu6i8js9ubjrvhisffr8fsnuqpauur",
+      "derivability_digest": "4449f8c3e186ddb2b1d2302d5830d8d4573a1d1fcb5138e98ffbe20dad6eb2bb"
+    },
+    "frontend_identity": {
+      "digest": "330d279a51bef74366cfb7905323dfe402e7891729bd175cc1b31c76dc728730",
+      "derivation": "release",
+      "release_digest": "0f8d14ae154aa1fe814b3e47a2f548c85b698bf8c760baf7e6970527f0ba4122"
+    },
+    "published_checkpoint": {
+      "checkpoint": {
+        "request": {
+          "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+          "idempotency_key": "owner-recovery-9eed05ce46e695a57f0bf7c5bfd58fde74d6165f8c71f4949a5c3eb5f92c8950",
+          "computer_version": {
+            "code_ref": "code:genesis",
+            "artifact_program_ref": "artifact-program:genesis"
+          },
+          "accepted_event_head": "9eed05ce46e695a57f0bf7c5bfd58fde74d6165f8c71f4949a5c3eb5f92c8950",
+          "effective_event_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+          "effective_state_commitment": "f6642b33cf879ad51ed2d447263ec6e7b2e41568e3447dc0e9ec46c2b59069ac",
+          "event_head_receipt_id": "01a123a3-452c-753a-a9ca-19e2ffa52b6d",
+          "release_digest": "0f8d14ae154aa1fe814b3e47a2f548c85b698bf8c760baf7e6970527f0ba4122",
+          "reconstruction_digest": "7a43e96394fc83aa8879cce2e88186d99f81e5c8b39a961d0eaca7b3a76fa192",
+          "materialization_receipt_digest": "",
+          "verifier_certificate_digest": "",
+          "verifier_certificate": {
+            "request": {
+              "version": 0,
+              "computer_id": "",
+              "operation_id": "",
+              "bundle_digest": "",
+              "verification_event_digest": "",
+              "verifier_evidence_refs": null,
+              "decision_event_head": "",
+              "code_ref": "",
+              "artifact_program_ref": "",
+              "release_digest": "",
+              "decision": ""
+            },
+            "certificate": {
+              "canonical_payload_sha256": "",
+              "issued_at": "",
+              "issuer": "",
+              "receipt_id": "",
+              "receipt_kind": "",
+              "receipt_version": 0,
+              "required_signers": [],
+              "signature_set": []
+            },
+            "public_key": ""
+          },
+          "verifier_trust_bootstrap": false,
+          "owner_recovery": true,
+          "reducer_version": 1,
+          "vm_local_content_witness": {
+            "database": "texture",
+            "content_root": "93ff593ee0a49f7ffa341267d270c633aaa6099be4b60587f10266f05ce8fb4d",
+            "schema": {
+              "agent_evidence": "41a4a7b4049fbe42aab798fcc416aa88836a4c461ad01f2ae3b46543cb8bda4a",
+              "agents": "2d1321eb4cad9b950e66ee8b5fe084a50917d1d9a65c1e9506dc486acfd08e90",
+              "browser_sessions": "6ac9ee4379710129395454aa7a6ce490e9c430684bbafec7b4ea8082652d5438",
+              "channel_messages": "ac4e9be89376f41859b9937b090cd129eaa9f220dfefb5fe55244e2f1529e07e",
+              "co_super_slots": "b979c7bbfeac7e7ce20cfcf08757946ffdfa869617c3fe540263d0ec031651cf",
+              "coagent_mailboxes": "c242d687a2da2793fe83b5bdc258af9882c538b41bd93bb9482cac64337c8d1c",
+              "computer_effective_state": "9d12bc7a2d73b5a6bb863108c95f81b5618f88f4f10c16a5e9ed75e243223bb3",
+              "computer_event_index": "3ac4487d7cad9c435f12236b74e9a6541bdfde8c001f460650674f266553e27f",
+              "computer_event_projection_heads": "f7c8fbac01af258ff9ad86e66f37ee877f8bf5eba09b13dc57a48761985ba5b3",
+              "content_items": "eec77ada33374541af3244dc15c4e78f04834992169aef7067ba17e1100d0cf4",
+              "desktop_app_instances": "78b91604059011799ff27bbc2e4da171e4aade7e3a1f288d4a807e826706d546",
+              "desktop_sessions": "8520d70daba22c4485f4f701d9b56b55563999f534dfbbcae9d03244a99eb8c8",
+              "desktop_state": "84ed6f420b39c57579e2bb575f7f1a71a1817be3167ca3161928139f57306ade",
+              "desktop_window_placements": "5e6359080fbaec8431aee305f52c8415ffda0c50b75d3ebf95c98db21a034997",
+              "desktop_workspaces": "e277bb72ca1cb1d230d146cd690f785646500c80c340873f7bd6bd5cc67a156e",
+              "events": "032cc39f4fc7263096044473a7f16013e4d948558c93322073aecfba54f44615",
+              "inbox_deliveries": "7aa533edd9d2620aca7341bb7f1141b5455bdc706c66dd1982173aabd70cd5fd",
+              "media_progress": "36b5067fe258f1b75613664162e2158c73bf29ae992ab28d7b6ff21326081227",
+              "media_recents": "656f3544cd5f7d9d34c305c8573b65f5eafd358f375ae4b6524c01dabefe19dc",
+              "og_edges": "c20346964324f054ebf72cf25bfcbef9aa2146d3fe782676bfc3e05a0013f085",
+              "og_objects": "2be8bc5515234093904655b180306dc56767172805410603818d965713de0ca9",
+              "podcast_subscriptions": "d5f9cd8bc3a7f9ad7e97e4868b69f600a34e0ff7dc13a9bcc95e7f3da38e86d6",
+              "run_acceptances": "599ad11d00b8618c59e13e114c75fd22cb7e53176d6d47e388ed7ca680a8b31c",
+              "run_continuations": "cff90b06b4ae91bec45d3a3871ccc7748922e6f70b48f878a8cf35d8f1338ea9",
+              "run_memory_entries": "404cca88daa68de9cb197e220ccd7fc457a613adef479d47ec175ba8d726c9b8",
+              "runs": "c18b5cf32588ca46ca168ec743e37a438b315cd24141fdd80c870947b64bd581",
+              "self_development_operations": "f2066146ea0b33b8e3937a0248880392c983c5aa83b32e2cde9efbda2254442a",
+              "self_development_start_intents": "f157c53d27945b99eccd1b4b998165d2e7686302268f0e49ab2ea34bd3e3f3b5",
+              "solitaire_games": "e0f4c278d70542d9de8a2cbf43cfc962afa5f15ff74c7ce156faab5e9f56ee73",
+              "solitaire_moves": "188b11e6e30e5bd49924c7b024754c98e6081d3841a8a774fd986fb23e5c09ef",
+              "texture_agent_mutations": "3b2c3aff442c8dda0328e45a6c7b2fd56fb452a99244b9c9ee0267d30bc76905",
+              "texture_controller_checkpoints": "ffa80d14b7c87a54f0d2f7fe1b51ca4f1d25f245d0eb1e932348816d1abe66fb",
+              "texture_document_aliases": "0434c850d8fc0b0a6bde037e888831de90ae1216c6401e5589802f3c1b44da82",
+              "texture_documents": "c96c1b41824eedc2458f1267e0fb7c63ac972293b48dfa3ac63fb50eb1f34150",
+              "texture_revisions": "9023f8cdf612c8a016fa3c73d62ab7f9197a99fcd74d8177be354f12c032ea45",
+              "texture_source_entities": "fc6e0ba18dc910d40e991ce8d7b021142dc05561d535c15b756cc6f7e719b628",
+              "texture_source_refs": "1843787729d23b653d8ea5f93848425ceb2c5925848f4ba6e4da8b87807bbab4",
+              "trajectories": "4438df6a45b55bc9e7f5d56978a055a7677e6d8a26502b21429d0b2386288e41",
+              "user_preferences": "06a9f4523b97ab1cc8e25eb29ce362099f1a8eb79bba04cd7a2deb3a14ae7318",
+              "wire_publish_debounce_entries": "e85e29c1e2285cbe90e23f4f400a3080e2024fe1fb2e7661e5815eb89cfa5c20",
+              "wire_publish_debounce_state": "fed52cbc58e2f415c32b861a02eadb98bf681ed6f10290227ee519e6d8a0b70c",
+              "work_items": "b9993028b68f36b3b7b36bbf159c1209b7076d463b28b12d18257eaa90d651ea",
+              "worker_updates": "af07dcb2d2a65e815d83d4688d856f299cf21a35b851b8ecca2cfe1380ca8641"
+            },
+            "tables": {
+              "agent_evidence": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "agents": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "browser_sessions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "channel_messages": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "co_super_slots": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "coagent_mailboxes": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "computer_effective_state": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "computer_event_index": "6e9374a9390ad8ef4f526c614680e2a54f8a5a1a3260e0baabf2cebaa0791f7a",
+              "computer_event_projection_heads": "6ae7585a00fb073d7577cf987b435b9ce9de2b586093d72ca971089e432908cf",
+              "content_items": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "desktop_app_instances": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "desktop_sessions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "desktop_state": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "desktop_window_placements": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "desktop_workspaces": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "events": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "inbox_deliveries": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "media_progress": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "media_recents": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "og_edges": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "og_objects": "ea969ab87571cf9b365b725cbbea438cafb156b94b22abf967b75055772bb455",
+              "podcast_subscriptions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "run_acceptances": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "run_continuations": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "run_memory_entries": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "runs": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "self_development_operations": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "self_development_start_intents": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "solitaire_games": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "solitaire_moves": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "texture_agent_mutations": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "texture_controller_checkpoints": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "texture_document_aliases": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "texture_documents": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "texture_revisions": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "texture_source_entities": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "texture_source_refs": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "trajectories": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "user_preferences": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "wire_publish_debounce_entries": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "wire_publish_debounce_state": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "work_items": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "worker_updates": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "dolt_head": "26lu6i8js9ubjrvhisffr8fsnuqpauur",
+            "derivability_digest": "4449f8c3e186ddb2b1d2302d5830d8d4573a1d1fcb5138e98ffbe20dad6eb2bb"
+          },
+          "frontend_identity": {
+            "digest": "330d279a51bef74366cfb7905323dfe402e7891729bd175cc1b31c76dc728730",
+            "derivation": "release",
+            "release_digest": "0f8d14ae154aa1fe814b3e47a2f548c85b698bf8c760baf7e6970527f0ba4122"
+          }
+        },
+        "checkpoint_digest": "a4080125cfc16fa8dda8bcadd1596f98d5e98bdd1f2d48520493c474ff24c4a8"
+      },
+      "receipt": {
+        "kind": "checkpoint",
+        "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+        "request_commitment": "a4080125cfc16fa8dda8bcadd1596f98d5e98bdd1f2d48520493c474ff24c4a8",
+        "artifact_digest": "a4080125cfc16fa8dda8bcadd1596f98d5e98bdd1f2d48520493c474ff24c4a8",
+        "issuer": "corpusd",
+        "signer": {
+          "signer_domain": "platform-control",
+          "key_id": "868f96cca8726f99"
+        },
+        "issued_at": "2026-10-10T02:27:48.724515626Z",
+        "signature": "5SCy/Id5Qntg3Rp8+5mWfww1x82le0LrQA4Xn1zhzH9RCP7oxa4ZyoZD/eT5p1Wb/QFnZT1tqOJghBZO30DsDA=="
+      }
+    }
+  },
+  "mode_before": {
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "mode": "off",
+    "generation": 0
+  },
+  "propose_only_arm": {
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "mode": "propose_only",
+    "generation": 1,
+    "receipt": {
+      "base_event_head": "",
+      "bundle_digest": "",
+      "canonical_payload_sha256": "d76017f8f6a001f8b3eb7ae07f77d731a83001fff49632de2d0325a01fa870a1",
+      "committed_generation": 1,
+      "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+      "consensus_receipt_digest": "",
+      "consumed_bundle_digest": "",
+      "consumed_consensus_receipt_digest": "",
+      "consumed_desired_event_head": "",
+      "consumed_desired_state_commitment": "",
+      "consumed_effective_event_head": "",
+      "consumed_effective_state_commitment": "",
+      "consumed_expires_at": "",
+      "consumed_operation_id": "",
+      "consumed_pending_transition_ref": "",
+      "consumed_policy_digest": "",
+      "expected_desired_event_head": "",
+      "expected_desired_state_commitment": "",
+      "expected_effective_event_head": "",
+      "expected_effective_state_commitment": "",
+      "expected_pending_transition_ref": "",
+      "expires_at": "",
+      "idempotency_key": "M11_SELFDEV_EPISODE_1791599243425:arm-propose-only",
+      "issued_at": "2026-10-10T02:27:49.531682Z",
+      "issuer": "corpusd",
+      "new_mode": "propose_only",
+      "old_generation": 0,
+      "old_mode": "off",
+      "operation_id": "",
+      "policy_digest": "",
+      "receipt_id": "01a123a3-569b-7a85-94f6-ac7d4b85d36c",
+      "receipt_kind": "ModeReceipt",
+      "receipt_version": 1,
+      "request_commitment": "a5f1b8913ae45132e3e6bc96dc2471184702fffdbbdc6c60235fab351dec1769",
+      "required_signers": [
+        {
+          "key_id": "868f96cca8726f99",
+          "signer_domain": "platform-control"
+        }
+      ],
+      "signature_set": [
+        {
+          "key_id": "868f96cca8726f99",
+          "signature": "xNACINEHHGNuVZZ8xrh7NOTrOnULJ5KJwxyN2LwcPsXL3hdVKcuDDNYPNeQFcBD0J2o9yvVPmw7bOLIJs0bHBg",
+          "signer_domain": "platform-control"
+        }
+      ]
+    }
+  },
+  "primary_start": {
+    "operation_id": "selfdev-878829114301292b69b8423a1ef6971c",
+    "request_commitment": "fd0a88882fb8326c37fbcdaaa04452e271d4a1a7fe108a88d861bdff35da8bd3",
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+    "base_head": "05f9707d0c95a5de4acbc9809274888343d4e6d9225e12bd8074cf6103ecdf5a",
+    "prompt_artifact_ref": "artifact:sha256:e1524b866cf8d632d6b281bbabf842caa8a81c39cdd0aeb2ce09698cecd36aad",
+    "verifier_refs": [],
+    "desired_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+    "effective_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+    "state": "executing",
+    "created_at": "2026-10-10T02:27:49.640168Z",
+    "updated_at": "2026-10-10T02:27:49.85325Z"
+  },
+  "primary_operation_id": "selfdev-878829114301292b69b8423a1ef6971c",
+  "primary_awaiting_approval": {
+    "operation_id": "selfdev-878829114301292b69b8423a1ef6971c",
+    "request_commitment": "fd0a88882fb8326c37fbcdaaa04452e271d4a1a7fe108a88d861bdff35da8bd3",
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+    "capsule_id": "capsule-40b08155-80e0-5dcc-8fe5-03e42cf91ff4",
+    "base_head": "05f9707d0c95a5de4acbc9809274888343d4e6d9225e12bd8074cf6103ecdf5a",
+    "prompt_artifact_ref": "artifact:sha256:e1524b866cf8d632d6b281bbabf842caa8a81c39cdd0aeb2ce09698cecd36aad",
+    "bundle_digest": "f45427efd38a11050b35e5d399058266ab13ea0ce160ff317b5da71e514d8a17",
+    "verifier_refs": [
+      "c46b39ad1733b9511cc7b9e0d7500a413b19baf42be5c4d7627b3a074193b969"
+    ],
+    "desired_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+    "effective_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+    "state": "awaiting_approval",
+    "created_at": "2026-10-10T02:27:49.640168Z",
+    "updated_at": "2026-10-10T02:43:03.981271Z"
+  },
+  "primary_receipts": {
+    "status": 200,
+    "json": {
+      "base_head": "05f9707d0c95a5de4acbc9809274888343d4e6d9225e12bd8074cf6103ecdf5a",
+      "bundle_digest": "f45427efd38a11050b35e5d399058266ab13ea0ce160ff317b5da71e514d8a17",
+      "capsule_id": "capsule-40b08155-80e0-5dcc-8fe5-03e42cf91ff4",
+      "checkpoint_ref": "",
+      "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+      "decision_actor": "",
+      "decision_event": "",
+      "decision_receipt": "",
+      "desired_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+      "effective_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+      "error": "",
+      "lifecycle_receipt": "",
+      "materialization_receipt": "",
+      "mode_receipt": "",
+      "operation_id": "selfdev-878829114301292b69b8423a1ef6971c",
+      "request_commitment": "fd0a88882fb8326c37fbcdaaa04452e271d4a1a7fe108a88d861bdff35da8bd3",
+      "route_certificate": "",
+      "route_generation": null,
+      "terminal_state": "awaiting_approval",
+      "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+      "verifier_refs": [
+        "c46b39ad1733b9511cc7b9e0d7500a413b19baf42be5c4d7627b3a074193b969"
+      ]
+    }
+  },
+  "qualified_consensus_arm": {
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "mode": "qualified_consensus",
+    "generation": 2,
+    "operation_id": "selfdev-878829114301292b69b8423a1ef6971c",
+    "bundle_digest": "f45427efd38a11050b35e5d399058266ab13ea0ce160ff317b5da71e514d8a17",
+    "expected_desired_event_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+    "expected_effective_event_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+    "expected_desired_state_commitment": "f6642b33cf879ad51ed2d447263ec6e7b2e41568e3447dc0e9ec46c2b59069ac",
+    "expected_effective_state_commitment": "f6642b33cf879ad51ed2d447263ec6e7b2e41568e3447dc0e9ec46c2b59069ac",
+    "expires_at": "2026-10-10T03:03:09.974Z",
+    "policy_digest": "c34ddf073aecaacc307f375d6f2e398798350d7a48c8d3c2e7c6d10248b394d7",
+    "consensus_receipt_digest": "befad82b2b9b5a786b8e6bdedb8841795c28587e19d2ba4e6b911fa25a2f0d9e",
+    "receipt": {
+      "base_event_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+      "bundle_digest": "f45427efd38a11050b35e5d399058266ab13ea0ce160ff317b5da71e514d8a17",
+      "canonical_payload_sha256": "893a5bb91ef6b30a63be9bf1be4c675a51677c236b98987ad9c857c0dc80dd64",
+      "committed_generation": 2,
+      "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+      "consensus_receipt_digest": "befad82b2b9b5a786b8e6bdedb8841795c28587e19d2ba4e6b911fa25a2f0d9e",
+      "consumed_bundle_digest": "",
+      "consumed_consensus_receipt_digest": "",
+      "consumed_desired_event_head": "",
+      "consumed_desired_state_commitment": "",
+      "consumed_effective_event_head": "",
+      "consumed_effective_state_commitment": "",
+      "consumed_expires_at": "",
+      "consumed_operation_id": "",
+      "consumed_pending_transition_ref": "",
+      "consumed_policy_digest": "",
+      "expected_desired_event_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+      "expected_desired_state_commitment": "f6642b33cf879ad51ed2d447263ec6e7b2e41568e3447dc0e9ec46c2b59069ac",
+      "expected_effective_event_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+      "expected_effective_state_commitment": "f6642b33cf879ad51ed2d447263ec6e7b2e41568e3447dc0e9ec46c2b59069ac",
+      "expected_pending_transition_ref": "",
+      "expires_at": "2026-10-10T03:03:09.974Z",
+      "idempotency_key": "M11_SELFDEV_EPISODE_1791599243425:arm-qualified-consensus",
+      "issued_at": "2026-10-10T02:43:10.355929Z",
+      "issuer": "corpusd",
+      "new_mode": "qualified_consensus",
+      "old_generation": 1,
+      "old_mode": "propose_only",
+      "operation_id": "selfdev-878829114301292b69b8423a1ef6971c",
+      "policy_digest": "c34ddf073aecaacc307f375d6f2e398798350d7a48c8d3c2e7c6d10248b394d7",
+      "receipt_id": "01a123b1-6393-7e45-aa6a-c0b32e2b6ef5",
+      "receipt_kind": "ModeReceipt",
+      "receipt_version": 1,
+      "request_commitment": "c85eaf319d44555e5ccabf2166c4bf09215197b17e91aaf2b1d0101e1f67be63",
+      "required_signers": [
+        {
+          "key_id": "868f96cca8726f99",
+          "signer_domain": "platform-control"
+        }
+      ],
+      "signature_set": [
+        {
+          "key_id": "868f96cca8726f99",
+          "signature": "DCsHGSkZnTmOS/6VChg/QTyLS15F5Jdye2U5lIG6RwG5hvugh5Z9gU9mHtJWyjGduzKQNkMHgoTq8q5b/COYCg",
+          "signer_domain": "platform-control"
+        }
+      ]
+    }
+  },
+  "primary_decision": {
+    "error": "self-development operation conflict: state is accepted, expected awaiting_approval"
+  },
+  "primary_decision_recovery": {
+    "status": 409,
+    "body": {
+      "error": "self-development operation conflict: state is accepted, expected awaiting_approval"
+    },
+    "observed": "accepted"
+  },
+  "primary_applied": {
+    "operation_id": "selfdev-878829114301292b69b8423a1ef6971c",
+    "request_commitment": "fd0a88882fb8326c37fbcdaaa04452e271d4a1a7fe108a88d861bdff35da8bd3",
+    "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+    "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+    "capsule_id": "capsule-40b08155-80e0-5dcc-8fe5-03e42cf91ff4",
+    "base_head": "05f9707d0c95a5de4acbc9809274888343d4e6d9225e12bd8074cf6103ecdf5a",
+    "prompt_artifact_ref": "artifact:sha256:e1524b866cf8d632d6b281bbabf842caa8a81c39cdd0aeb2ce09698cecd36aad",
+    "bundle_digest": "f45427efd38a11050b35e5d399058266ab13ea0ce160ff317b5da71e514d8a17",
+    "verifier_refs": [
+      "c46b39ad1733b9511cc7b9e0d7500a413b19baf42be5c4d7627b3a074193b969"
+    ],
+    "decision_actor": "befad82b2b9b5a786b8e6bdedb8841795c28587e19d2ba4e6b911fa25a2f0d9e",
+    "decision_event": "6826b07333abbee7b8460189e25201ba31829867db01e07cb8e6907e8592b96c",
+    "decision_receipt": "01a123b1-6404-7a6a-931e-c7365de661ff",
+    "desired_head": "6826b07333abbee7b8460189e25201ba31829867db01e07cb8e6907e8592b96c",
+    "effective_head": "3549d0df14104243c7c90f5b5b552654e7ce68abaf4012780748126516b70952",
+    "mode_receipt": "cdd21841f47b5246e812c7d1374fa2fec42749810e9313381c78737a5610b0ab",
+    "state": "materializing",
+    "created_at": "2026-10-10T02:27:49.640168Z",
+    "updated_at": "2026-10-10T02:43:10.647825Z"
+  },
+  "apply_blocker": "operation terminal state was materializing",
+  "document_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+  "document_render": {
+    "document": {
+      "status": 200,
+      "json": {
+        "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+        "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+        "title": "Self-development operation selfdev-878829114301292b69b8423a1ef6971c",
+        "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+        "current_revision_id": "d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd",
+        "current_version_number": 0,
+        "created_at": "2026-10-10T02:27:49.703Z",
+        "updated_at": "2026-10-10T02:27:49.703Z",
+        "revision_count": 1,
+        "last_editor": "8951d9c0-3c17-4445-873b-0ced991183b8",
+        "last_author_kind": "user"
+      }
+    },
+    "revisions": {
+      "status": 200,
+      "json": {
+        "revisions": [
+          {
+            "revision_id": "d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd",
+            "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "author_kind": "user",
+            "author_label": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "version_number": 0,
+            "content": "Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval.",
+            "body_doc": {
+              "schema": "choir.texture_doc.v1",
+              "doc": {
+                "type": "doc",
+                "attrs": {
+                  "id": "doc-c462c578-e44e-5e27-903d-dd741ae539a3-d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd-root"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "id": "p-c462c578-e44e-5e27-903d-dd741ae539a3-d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd-0"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval."
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "metadata": {
+              "input_origin": "user_prompt",
+              "owner_prompt": "Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval.",
+              "self_development_operation_id": "selfdev-878829114301292b69b8423a1ef6971c"
+            },
+            "revision_hash": "rev2:686149d73f3c0088621be3b8f98b72433f9530165eb5e0ffec1468a020b9155c",
+            "created_at": "2026-10-10T02:27:49.703Z"
+          }
+        ]
+      }
+    },
+    "diagnosis": {
+      "status": 200,
+      "json": {
+        "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+        "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+        "store_path": "/mnt/persistent/state",
+        "texture_path": "/mnt/persistent/state.texture",
+        "document": {
+          "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+          "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+          "title": "Self-development operation selfdev-878829114301292b69b8423a1ef6971c",
+          "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+          "current_revision_id": "d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd",
+          "current_version_number": 0,
+          "created_at": "2026-10-10T02:27:49.703Z",
+          "updated_at": "2026-10-10T02:27:49.703Z",
+          "revision_count": 1,
+          "last_editor": "8951d9c0-3c17-4445-873b-0ced991183b8",
+          "last_author_kind": "user"
+        },
+        "revisions": [
+          {
+            "revision_id": "d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd",
+            "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "author_kind": "user",
+            "author_label": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "version_number": 0,
+            "content": "Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval.",
+            "body_doc": {
+              "schema": "choir.texture_doc.v1",
+              "doc": {
+                "type": "doc",
+                "attrs": {
+                  "id": "doc-c462c578-e44e-5e27-903d-dd741ae539a3-d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd-root"
+                },
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "id": "p-c462c578-e44e-5e27-903d-dd741ae539a3-d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd-0"
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval."
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "metadata": {
+              "input_origin": "user_prompt",
+              "owner_prompt": "Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval.",
+              "self_development_operation_id": "selfdev-878829114301292b69b8423a1ef6971c"
+            },
+            "revision_hash": "rev2:686149d73f3c0088621be3b8f98b72433f9530165eb5e0ffec1468a020b9155c",
+            "created_at": "2026-10-10T02:27:49.703Z"
+          }
+        ],
+        "revision_structures": [
+          {
+            "revision_id": "d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd",
+            "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "version_number": 0,
+            "author_kind": "user",
+            "author_label": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "created_at": "2026-10-10T02:27:49.703Z",
+            "content_hash": "sha256:3e0c3d18878be815d0fbeba679cb92619a0f4d2970844595408e5f05b4749f49",
+            "line_count": 1,
+            "non_empty_line_count": 1,
+            "heading_count": 0,
+            "source_marker_count": 0,
+            "table_count": 0,
+            "table_row_count": 0
+          }
+        ],
+        "runs": [
+          {
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "agent_profile": "texture",
+            "agent_role": "texture",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+            "state": "failed",
+            "prompt": "A revise event was triggered for the current Texture document.\nIntent: integrate_execution_findings.\n\nOwner directive for this revision:\nCreate a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval.\n\nCurrent head revision: d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd (user by 8951d9c0-3c17-4445-873b-0ced991183b8).\n\nCurrent canonical document content:\n---\nCreate a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval.\n---\n\n\nStructured document outline for choir.ApplyTexture block/node ids:\n- paragraph id=p-c462c578-e44e-5e27-903d-dd741ae539a3-d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd-0 text=\"Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and...\"\n    - text text=\"Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and...\"\nThis canonical V0 content is the owner's original prompt/request for this Texture document.\nTreat the owner prompt as the request to fulfill: author the first useful reader-facing revision that addresses it. The prompt may itself read like an instruction; produce the document the owner asked for rather than restating the prompt verbatim or preserving it as final prose.\nKeep private coordination rationale, explicit off-document decision reasons, and cell-verb instructions out of the canonical document body unless the owner explicitly asked for that rationale to be part of the reader-facing artifact.\n\nInvariant: canonical meaning is Texture-owned; model priors are not evidence. Objective: metabolize grounded packets into versioned belief state the owner can supervise.\nProbe morphisms (research opened atomically in an ApplyTexture controls entry) gather world knowledge. Incorporate morphisms (choir.ApplyTexture apply turns) publish R -> R'. Effects-OFF is a precise authority boundary, not a blanket ban on assignment capsules. Protected host, self-development, event, checkpoint, materialization, acceptance, route, VM, and SSH effects are unavailable, as are generic agent and execution spawning.\nTexture may request execution only by atomically opening its owner's exact persistent Management: include one controls entry with open_persistent_super=true, an objective, and a valid execution_request packet (coagent_source_packet.v1, kind=execution_request, with at least one action) in the same choir.ApplyTexture body. Texture never directly opens, requests, or spawns Engineering and never uses generic execution tools. The authenticated persistent Management alone may assign exact work through the assignment runtime; that runtime owns each exact networkless disposable capsule and its lifecycle.\nTexture has no authoring tools besides desk_go_eval. Reason in Go cells and stage choir.* verbs. ReadDoc() returns the bound document head (revision_id and content); Inbox() returns delivered acts and ledger traffic.\nDo not claim command, code, artifact, browser, verification, or other execution results before durable execution or capsule evidence packets contain those results.\nModel priors may shape structure, tone, formatting, greetings, or work the owner already supplied; they are not authoritative for reader-facing substance.\nFor greetings or simple non-factual prompts with no world-knowledge objective, answer directly and do not open workers.\n\nFor factual/current/search requests, do not answer substantive world facts from model recall. On activation, an immediate model-prior/interim V1 is allowed before retrieval only as an explicitly uncertain scaffold: name the question, known uncertainty, evidence plan, and unresolved branches without asserting current facts as grounded. Substantive world knowledge requires Probe (research) evidence before the document states facts as grounded.\nFor coding or execution requests, use only the atomic persistent-Management control path above. If Texture cannot form or commit that valid execution_request, record the unmet execution requirement as an ApplyTexture decide body; do not claim command, artifact, or verification evidence.\nDo not include a [CMD] evidence label unless a durable source packet already contains actual command evidence.\nFor owner requests to send, draft, or prepare an email whose content is already supplied, store the exact email artifact and stage choir.ApplyTexture with {\"op\":\"email\",\"email\":{...handoff fields...}} in the same run. Do not attempt effectful execution for a simple email draft handoff, and do not send mail directly.\n\nThis document does not yet have grounded workflow history.\n\nYou may edit user-provided text for structure, clarity, or formatting.\n\nThe canonical content is the owner's original prompt; write the first useful document that fulfills it while excluding control-only rationale from the body.\n\nDo not add factual claims, citations, or coding results from model priors as grounded. An immediate model-prior/interim V1 may structure the question and uncertainty before retrieval, but it must not present world claims as evidence-backed.\nIf the request needs facts, current events, or citations, Probe evidence is required. If it needs generated artifacts, execution, or verification, use only the atomic persistent-Management control path above; preserve the unmet requirement as an explicit blocker until durable execution or capsule evidence arrives. A short uncertain checkpoint may name what evidence is still missing, but ending with only model-shaped substance and no worker path violates invariant 3 unless Texture records an audit-worthy reason in an ApplyTexture decide body.\n\n\nTreat this run as one step in an ongoing document loop.\nWorker messages can wake later texture runs and trigger the next revision.\nSubstantive topics deepen across many canonical versions; depth scales with subject matter, not a fixed research round count.\nPrefer evidence-backed revisions over placeholder status documents. Incorporate each useful source packet when it materially improves the document.\nWhen worker source packets arrive, stage an ApplyTexture apply turn as soon as a packet can improve the document; do not wait for every research thread to finish.\nMulti-revision work stalls when research agents stop early, not when Texture incorporates. If depth still remains after incorporating a packet, address active research desks through ApplyTexture continuation controls (target_work_item_id + packet) or open the next research branch atomically in a controls entry rather than treating one round as fulfillment. Direct choir.Message/choir.Note to a research desk is rejected by the lifecycle queue. Stop when marginal returns diminish.\nIf the original request also asked for command output, code execution, generated artifacts, browser proof, or verification and no durable execution or capsule evidence packet contains that evidence, preserve the unmet requirement as an explicit blocker. Texture may open execution only through the atomic persistent-Management control path above. Never make a source-grounded edit look final for `[CMD]`, command output, artifacts, or verification.\nNever use `[CMD]` as a pending/requested/target-only label, including in the initial v1 scaffold, source ledger, status table, or placeholder. If command evidence is still pending, write \"command evidence pending\" without the `[CMD]` marker. Use `[CMD]` only when a durable evidence packet reports the actual command result or precise execution blocker.\nNever describe coordination as already done unless the corresponding cell verb committed or recent worker messages prove that worker is active. If you only stage an ApplyTexture apply turn, phrase remaining work as \"next needed\" or \"still unresolved\" instead of implying dispatch.\nFor email: Texture may write the canonical email artifact, but Email appagent owns drafts, approval, and send decisions. After writing a supplied-content email artifact, stage choir.ApplyTexture with {\"op\":\"email\",\"email\":{...handoff fields...}}. Its result creates a reviewable draft only; it never authorizes outbound send.\nBuild from the current canonical document, recent worker messages, recent change context, and user-authored diffs.\nDefault context is intentionally small: current head plus the exact user edit diff. Prior versions, source entities, import manifests, publication records, and worker evidence should be retrieved only when needed rather than assumed to be preloaded.\nIntermediate appagent revisions are compactable context, not the source of truth.\nPreserve explicit hard requirements from the original user request and current document across every revision. These include exact marker strings, required headings or section counts, required labels or sentence prefixes, requested source labels, command strings, target hashes, and text the user said to preserve.\nBefore a full-replace ApplyTexture apply body, audit the complete replacement against those hard requirements. Do not replace a requested numbered/sectioned document with a different report outline unless the user explicitly changed the structure.\nDo not answer knowledge or coding requests from model weights. Research messages ground knowledge; coding, execution, and verification claims require durable evidence packets that actually contain those results.\nDo not claim to be researching unless worker runs are open and their messages are being incorporated.\nTo create the next canonical document version, stage choir.ApplyTexture with {\"op\":\"apply\",\"base_revision_id\":\"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\",\"edits\":[<structured edits>],\"controls\":[...],\"rationale\":\"...\",\"work_disposition\":\"open|completed\"}; use \"content\":\"<full replace>\" instead of edits only for a full replacement. A successful turn commits through ApplyTextureTurn. Provider final text is not a document write path.\nEvery ApplyTexture apply body must propose work_disposition. Use \"open\" whenever evidence, a worker update, an owner requirement, or another material dependency remains; artifact revision and activation completion do not settle work. Use \"completed\" only when the new revision fully satisfies the currently assigned material work. The reducer, not prose or run completion, applies that explicit consequence.\nFor every addressed update packet that this revision evaluates, pass update_dispositions with its exact update_id and an explicit incorporated or rejected decision. Incorporated means the packet materially affected the revision. Rejected requires a concise reason. Delivery consumes at turn commit — the packets this run covered terminate with its ApplyTexture turn, so omit nothing the run already covered.\nThe ApplyTexture apply body's edits array accepts structured document operations: update_block_text, insert_block, append_block, delete_node, insert_source_ref, and the structured operation for marking an unused source. Use block_id / after_block_id / node_id values from the structured document outline when they are available. update_block_text is for one block, not a whole markdown document; if a full rewrite is needed, use a full-replace apply body so the runtime can parse headings/lists into structured blocks.\nFor a precise block edit against the current head, stage choir.ApplyTexture with:\n{\"op\":\"apply\",\"base_revision_id\":\"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\",\"work_disposition\":\"open or completed\",\"edits\":[{\"op\":\"update_block_text\",\"block_id\":\"block id from the structured outline\",\"text\":\"replacement text for that block\"}],\"controls\":[],\"rationale\":\"why this block changes\"}\nTo add new prose without a known target block, use append_block inside the same apply body:\n{\"op\":\"apply\",\"base_revision_id\":\"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\",\"work_disposition\":\"open or completed\",\"edits\":[{\"op\":\"append_block\",\"block_type\":\"paragraph\",\"text\":\"new section text\"}],\"controls\":[],\"rationale\":\"why this material belongs at the end\"}\nEach append_block edit adds one paragraph or heading block. For multi-paragraph content, include one append_block edit per paragraph — do not put an entire long document into a single block with blank-line separators. If the full document draft is easier to express as prose (especially for v0→v1 or v1→v2 from worker evidence), use a full-replace apply body instead of many append_block edits.\nTo attach evidence from a listed source entity, include insert_source_ref with the exact source_entity_id value and place it after the text it supports. Do not insert source refs at offset 0 or stack multiple refs at the same offset. Use display_mode numbered_ref for inline citations; use display_mode expanded_ref only when a block excerpt is editorially required. If a source is immaterial, mark it unused within the apply turn's structured edits with the source_entity_id and a short rationale so it stays in the toolbar without a body source_ref. Do not write markdown links, source inventories, or Source: lines as substitutes. A source that arrived in a research update (a source in choir.Updates() packet sources) is not listed and has no source_entity_id; cite it inline and the runtime mints the id: {\"op\":\"insert_source_ref\",\"block_id\":\"<block id>\",\"display_mode\":\"numbered_ref\",\"source_entity\":{\"target\":{\"kind\":\"web_url\",\"uri\":\"<the packet source target.uri>\"}}}.\nUse a full-replace ApplyTexture apply body for explicit whole-document transformations such as full style rewrite, summary, expansion from outline, full reorganization, or when a necessary precise edit cannot be expressed with available block/node ids. Also use it when incorporating a batch of worker evidence into a fresh or early-stage document (v0→v1, v1→v2) where the full document draft is easier to express as prose than as individual block edits. Include a rationale that explains why structured edits are insufficient and audit source/ref preservation first.\nIf a full replacement is truly required, stage choir.ApplyTexture with {\"op\":\"apply\",\"base_revision_id\":\"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\",\"work_disposition\":\"open or completed\",\"content\":\"complete current-state document\",\"controls\":[],\"rationale\":\"why a full rewrite is required\"}.\nIf you end the run without a committed ApplyTexture apply turn, no canonical document revision will be created.",
+            "error": "tool loop budget \"texture:c462c578-e44e-5e27-903d-dd741ae539a3\" exhausted: total tokens 1250786 exceeded max 1200000",
+            "created_at": "2026-10-10T02:40:21.63266948Z",
+            "updated_at": "2026-10-10T03:00:26.814882896Z",
+            "finished_at": "2026-10-10T03:00:26.814882896Z",
+            "metadata": {
+              "actor_budget_spent_input_tokens": 0,
+              "actor_budget_spent_output_tokens": 0,
+              "actor_budget_spent_provider_calls": 0,
+              "actor_park_idle_seconds": 120,
+              "actor_park_on_idle": true,
+              "actor_reactivate_existing_memory": true,
+              "actor_reactivated_from_passivated": true,
+              "actor_resume_source_loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "actor_sleep_at": "2026-10-10T02:43:09.870210731Z",
+              "actor_sleep_state": "idle",
+              "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+              "agent_profile": "texture",
+              "agent_role": "texture",
+              "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "current_author_kind": "user",
+              "current_revision_id": "d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd",
+              "desktop_id": "primary",
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "input_origin": "user_prompt",
+              "input_tokens": 497530,
+              "lifecycle_terminal_settlement_requested": true,
+              "lifecycle_trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+              "lifecycle_work_item_id": "work:texture-supervision:c462c578-e44e-5e27-903d-dd741ae539a3",
+              "llm_model": "deepseek-v4.1-flash",
+              "llm_policy_source": "/mnt/persistent/files/System/model-policy.toml",
+              "llm_provider": "opencode-go",
+              "llm_reasoning_effort": "high",
+              "model": "deepseek-v4.1-flash",
+              "original_prompt": "",
+              "output_tokens": 17743,
+              "passivated_reason": "durable_transition_success",
+              "request_intent": "integrate_execution_findings",
+              "request_source": "update_coagent",
+              "scheduled_message_seq": 17,
+              "self_development_operation_id": "selfdev-878829114301292b69b8423a1ef6971c",
+              "texture_context_mode": "current_head_plus_user_edit_diff",
+              "texture_prompt_chars": 14337,
+              "texture_trigger_occurrence": "texture-occurrence:IWNob2lyOnRleHR1cmUtYWN0b3Itb2NjdXJyZW5jZTp2MQ9wcm9kdWNlcl9yZXBvcnQkODk1MWQ5YzAtM2MxNy00NDQ1LTg3M2ItMGNlZDk5MTE4M2I4KWNvbXB1dGVyLTE0YmVjNzM4NTk3ZDk1OWJhMGM5NDViMjQzZTIwMmFlK3RyYWplY3RvcnktYjVhZTU3MmE0YzAwM2YzMGIwZWI1YzVmOTk5ZWY2YWMkYzQ2MmM1NzgtZTQ0ZS01ZTI3LTkwM2QtZGQ3NDFhZTUzOWEzLHRleHR1cmU6YzQ2MmM1NzgtZTQ0ZS01ZTI3LTkwM2QtZGQ3NDFhZTUzOWEzPXdvcms6dGV4dHVyZS1zdXBlcnZpc2lvbjpjNDYyYzU3OC1lNDRlLTVlMjctOTAzZC1kZDc0MWFlNTM5YTM7ZW5naW5lZXJpbmc6YXNzaWdubWVudC0xNTk2ZGZiYS1hYjI4LTVmZmQtYWFhNC1mMDY3MDQzNDgyNTFnYXNzaWdubWVudC1yZXBvcnQ6Y2FuY2VsLXJlcG9ydDpzaGEyNTY6YWZjNTZlNDI4OWU0MWExMmQyOTUyMjc4NWJhZTI3Zjk5MjkyMDQyMWQ1NDU1YTZjNWFiODY5OGJjYTRhZDQ5OFVjYW5jZWwtcmVwb3J0OnNoYTI1NjphZmM1NmU0Mjg5ZTQxYTEyZDI5NTIyNzg1YmFlMjdmOTkyOTIwNDIxZDU0NTVhNmM1YWI4Njk4YmNhNGFkNDk4NHdvcms6YXNzaWdubWVudC0xNTk2ZGZiYS1hYjI4LTVmZmQtYWFhNC1mMDY3MDQzNDgyNTEAAAAAATABMAIxNwAAAAA",
+              "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+              "type": "texture_agent_revision",
+              "worker_update_ids": [
+                "assignment-report:report:sha256:39d6cf7b9443f42492e02067bb5d03bacdefe795bb5aed4c38d00bf20859b51b",
+                "assignment-report:cancel-report:sha256:afc56e4289e41a12d29522785bae27f992920421d5455a6c5ab8698bca4ad498"
+              ],
+              "worker_updates_injected": true
+            }
+          },
+          {
+            "loop_id": "run:assignment-1596dfba-ab28-5ffd-aaa4-f06704348251",
+            "agent_id": "engineering:assignment-1596dfba-ab28-5ffd-aaa4-f06704348251",
+            "channel_id": "engineering:assignment-1596dfba-ab28-5ffd-aaa4-f06704348251",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "agent_profile": "engineering",
+            "agent_role": "engineering",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+            "state": "cancelled",
+            "prompt": "Verify the frozen self-development bundle for operation selfdev-878829114301292b69b8423a1ef6971c against the implementation assignment's candidate artifact.",
+            "error": "restart revoked absent assignment capsule",
+            "created_at": "2026-10-10T02:40:23.528013454Z",
+            "updated_at": "2026-10-10T02:43:14.899692816Z",
+            "finished_at": "2026-10-10T02:43:14.899692816Z",
+            "metadata": {
+              "agent_id": "engineering:assignment-1596dfba-ab28-5ffd-aaa4-f06704348251",
+              "agent_profile": "engineering",
+              "agent_role": "engineering",
+              "assigned_work_item_id": "work:assignment-1596dfba-ab28-5ffd-aaa4-f06704348251",
+              "assignment_attempt": 1,
+              "assignment_id": "assignment-1596dfba-ab28-5ffd-aaa4-f06704348251",
+              "assignment_kind": "verification",
+              "capability_digest": "sha256:1ae3c671d2d28ee75265699c180287e14f3a722c49518dfeb54ef5be7fea4717",
+              "capsule_id": "capsule-fb459178-0cdc-5db9-ac98-6b0e05397955",
+              "co_super_slot": "verifier",
+              "execution_handle_digest": "sha256:972e1efc44ebb5a25afe5ad0f40bdcb8599e00daba4cfe8eae46cf602fc880ee",
+              "lifecycle_work_item_id": "work:assignment-1596dfba-ab28-5ffd-aaa4-f06704348251",
+              "llm_model": "deepseek-v4.1-flash",
+              "llm_policy_source": "/mnt/persistent/files/System/model-policy.toml",
+              "llm_provider": "opencode-go",
+              "llm_reasoning_effort": "low",
+              "model": "deepseek-v4.1-flash",
+              "parent_control_id": "obj:choir.co_super_subject_candidate:ODk1MWQ5YzAtM2MxNy00NDQ1LTg3M2ItMGNlZDk5MTE4M2I4:key-471a6b88e80242f32661bf9c6d2f0e8a0914a64aca638ae24541d7980809c56e",
+              "parent_decision_id": "decision:sha256:c54a5c825362bc5a5172b314aa3efb0fc6d3e017f416ee56bbc2ad3a99a01b73",
+              "parent_work_item_id": "d691d6a6-1557-56e9-ab72-faa6a2594419",
+              "passivated_reason": "runtime_restarted",
+              "request_digest": "sha256:2b2a9f6ec062bfb4f058924da9099dc94ca74388e39f698b5f49accb8fb82c94",
+              "requested_by_agent_id": "engineering:c462c578-e44e-5e27-903d-dd741ae539a3",
+              "requested_by_profile": "engineering",
+              "scope_digest": "sha256:a6922a1eea09101fba1f001576de1ae34baa778bd48074828df1f667275ed38d",
+              "source_artifact_ref": "capsule-subject:sha256:1178fbd90016107b3a51019594c287d6248980e089058f1ddee3dff33a1f266f",
+              "source_candidate_id": "obj:choir.co_super_subject_candidate:ODk1MWQ5YzAtM2MxNy00NDQ1LTg3M2ItMGNlZDk5MTE4M2I4:key-471a6b88e80242f32661bf9c6d2f0e8a0914a64aca638ae24541d7980809c56e",
+              "subject_digest": "sha256:1178fbd90016107b3a51019594c287d6248980e089058f1ddee3dff33a1f266f",
+              "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+              "work_item_ids": [
+                "work:assignment-1596dfba-ab28-5ffd-aaa4-f06704348251"
+              ]
+            }
+          },
+          {
+            "loop_id": "run:assignment-8ed0dbf0-e879-5d41-a53f-57f01b9c8bdf",
+            "agent_id": "engineering:assignment-8ed0dbf0-e879-5d41-a53f-57f01b9c8bdf",
+            "channel_id": "engineering:assignment-8ed0dbf0-e879-5d41-a53f-57f01b9c8bdf",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "agent_profile": "engineering",
+            "agent_role": "engineering",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "computer_id": "computer-14bec738597d959ba0c945b243e202ae",
+            "state": "completed",
+            "prompt": "Create a minimal reversible self-development evidence change for M11_SELFDEV_EPISODE_1791599243425; freeze, verify, and await approval.",
+            "result": "report:sha256:39d6cf7b9443f42492e02067bb5d03bacdefe795bb5aed4c38d00bf20859b51b",
+            "created_at": "2026-10-10T02:28:11.91319974Z",
+            "updated_at": "2026-10-10T02:40:21.167690493Z",
+            "finished_at": "2026-10-10T02:40:21.167690493Z",
+            "metadata": {
+              "agent_id": "engineering:assignment-8ed0dbf0-e879-5d41-a53f-57f01b9c8bdf",
+              "agent_profile": "engineering",
+              "agent_role": "engineering",
+              "assigned_work_item_id": "work:assignment-8ed0dbf0-e879-5d41-a53f-57f01b9c8bdf",
+              "assignment_attempt": 1,
+              "assignment_id": "assignment-8ed0dbf0-e879-5d41-a53f-57f01b9c8bdf",
+              "assignment_kind": "implementation",
+              "capability_digest": "sha256:34cc70a44ec971cfc7d28117d1734ed6f79b418351237445c5214a41a9fbacb2",
+              "capsule_id": "capsule-40b08155-80e0-5dcc-8fe5-03e42cf91ff4",
+              "co_super_slot": "implementation",
+              "execution_handle_digest": "sha256:16e94c0a975c751c75c3cf5c277e2c88ba2fd67c9dac76f08da103cc344aef3f",
+              "lifecycle_work_item_id": "work:assignment-8ed0dbf0-e879-5d41-a53f-57f01b9c8bdf",
+              "llm_model": "deepseek-v4.1-flash",
+              "llm_policy_source": "/mnt/persistent/files/System/model-policy.toml",
+              "llm_provider": "opencode-go",
+              "llm_reasoning_effort": "low",
+              "model": "deepseek-v4.1-flash",
+              "parent_control_id": "d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd",
+              "parent_decision_id": "decision:sha256:1464398ad908b43a08ee2f2d8e45ef7fb3d2445f4f1fc19a7c2ba968e2c4503a",
+              "parent_work_item_id": "d691d6a6-1557-56e9-ab72-faa6a2594419",
+              "request_digest": "sha256:3e51eb96f71ef2798d40fdf74a2caee8d7c058f8752b7f58a2fb1d2aa7142517",
+              "requested_by_agent_id": "engineering:c462c578-e44e-5e27-903d-dd741ae539a3",
+              "requested_by_profile": "engineering",
+              "scope_digest": "sha256:a6922a1eea09101fba1f001576de1ae34baa778bd48074828df1f667275ed38d",
+              "source_artifact_ref": "capsule-source-git:5704ace631ae02419358b1f553a87708d8a0d2cd:sha256:7d48fb8468dae231b03f79a4fecfaff693834d51eb19788c0217f60f99b56a00",
+              "source_candidate_id": "",
+              "subject_digest": "sha256:7d48fb8468dae231b03f79a4fecfaff693834d51eb19788c0217f60f99b56a00",
+              "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+              "work_item_ids": [
+                "work:assignment-8ed0dbf0-e879-5d41-a53f-57f01b9c8bdf"
+              ]
+            }
+          }
+        ],
+        "events": [
+          {
+            "event_id": "6741f23c-99fb-4a71-b4ac-d810adb46d6b",
+            "seq": 697,
+            "stream_seq": 1202,
+            "ts": "2026-10-10T03:00:27.004891554Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.failed",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "error": "tool loop budget \"texture:c462c578-e44e-5e27-903d-dd741ae539a3\" exhausted: total tokens 1250786 exceeded max 1200000",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd"
+            }
+          },
+          {
+            "event_id": "5e9f40d3-b853-4ef1-8998-c688afe378c4",
+            "seq": 0,
+            "ts": "2026-10-10T03:00:26.814892961Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.failed",
+            "payload": {
+              "error": "tool loop budget \"texture:c462c578-e44e-5e27-903d-dd741ae539a3\" exhausted: total tokens 1250786 exceeded max 1200000"
+            }
+          },
+          {
+            "event_id": "33b0c37e-fdaf-4890-b90b-ba419679f98f",
+            "seq": 696,
+            "stream_seq": 1201,
+            "ts": "2026-10-10T03:00:26.705171001Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.progress",
+            "payload": {
+              "budget": {
+                "active": true,
+                "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+                "max_elapsed_ms": 2700000,
+                "max_provider_calls": 80,
+                "max_total_tokens": 1200000
+              },
+              "error": "tool loop budget \"texture:c462c578-e44e-5e27-903d-dd741ae539a3\" exhausted: total tokens 1250786 exceeded max 1200000",
+              "input_tokens": 1199213,
+              "output_tokens": 51573,
+              "provider_calls": 20,
+              "reason": "tool_loop_budget_exhausted",
+              "total_tokens": 1250786
+            }
+          },
+          {
+            "event_id": "c650aac7-2af4-4b7e-a94a-f07cf1849f83",
+            "seq": 695,
+            "stream_seq": 1200,
+            "ts": "2026-10-10T03:00:26.586821404Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.progress",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "phase": "tool_loop_budget"
+            }
+          },
+          {
+            "event_id": "04271a79-2be2-4f99-94c9-323730b3d1b2",
+            "seq": 694,
+            "stream_seq": 1199,
+            "ts": "2026-10-10T03:00:26.47453411Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.progress",
+            "payload": {
+              "activation_input_tokens": 1199213,
+              "activation_output_tokens": 51573,
+              "activation_provider_calls": 20,
+              "budget": {
+                "active": true,
+                "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+                "max_elapsed_ms": 2700000,
+                "max_provider_calls": 80,
+                "max_total_tokens": 1200000
+              },
+              "input_tokens": 1199213,
+              "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+              "output_tokens": 51573,
+              "provider_calls": 20,
+              "reason": "tool_loop_budget_usage",
+              "total_tokens": 1250786
+            }
+          },
+          {
+            "event_id": "77155307-f158-464f-88cb-a6e878b1d6aa",
+            "seq": 693,
+            "stream_seq": 1198,
+            "ts": "2026-10-10T03:00:26.364037979Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.progress",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "phase": "tool_loop_budget_usage"
+            }
+          },
+          {
+            "event_id": "4bea566e-959a-45be-992a-d03833ab0b24",
+            "seq": 692,
+            "stream_seq": 1197,
+            "ts": "2026-10-10T03:00:10.902085317Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.progress",
+            "payload": {
+              "iteration": 20,
+              "last_user_chars": 0,
+              "last_user_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "last_user_text": "",
+              "llm_model": "deepseek-v4.1-flash",
+              "llm_provider": "opencode-go",
+              "llm_reasoning_effort": "high",
+              "max_tokens": 0,
+              "max_tokens_requested": false,
+              "message_roles": [
+                "user",
+                "user",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user"
+              ],
+              "messages": 104,
+              "model_policy": "run_metadata",
+              "phase": "provider_call_started",
+              "system_chars": 20718,
+              "system_preview": "Choir is a multiagent writing, research, and execution system with one user-facing product, one runtime, and one standard of truth. Agents participate in an ongoing workflow with durable documents, durable agents, explicit coordination edges, event history, and revision history—not as isolated chatbots.\n\nThe user cares about useful progress, not performative agent chatter. Prefer calibrated claims, preserved provenance, and the next useful step in the shared workflow. Do not bluff about research, evidence, or execution. When outside facts, validation, or real system work are needed, use the right tools or delegate to the right functional role.\n\nThe runtime owns delivery. When another agent sends addressed work, the runtime may thread that delivery into the loop as a normal next user turn. Do not poll for inbox state manually.\n\nConductor routes top-level intent. Texture owns canonical document versions. Research gathers evidence and grounded findings. Management orchestrates audited work. Engineering performs bounded implementation or verification only through guest-local capsules.\n\n\n\nCurrent UTC date/time: 2026-10-10T02:53:17Z. Treat relative-date requests such as today, tonight, yesterday, last night, latest, current, or now as time-sensitive. Anchor searches, evidence, and claims to this date/time, and state timezone uncertainty when the user's locale is not known.\n\nRole-specific instructions:\nThis is the system prompt for the texture agent in Choir.\n\nConversation surfaces organize around the thread. Texture organizes around the\nwork and what the work teaches. The prompt surface is where someone asks. Texture\nis where the work lives, versions, and learns.\n\nTurn-thread interfaces make every model utterance feel like the product. That\nfails quickly. A short answer may need one paragraph. A hard question may need\nresearch, critique, execution, and revision. Printing the whole cognitive supply\nchain into the thread overloads the owner. Hiding it creates invisible st...",
+              "system_sha256": "95ce20a0d579854581a58aca1dd48821f2c32cacb363c9d696bec776b3f9cb3c",
+              "tool_choice": "",
+              "tool_loop_budget": {
+                "active": true,
+                "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+                "max_elapsed_ms": 2700000,
+                "max_provider_calls": 80,
+                "max_total_tokens": 1200000
+              },
+              "tool_names": [
+                "desk_go_eval"
+              ],
+              "tools": 1
+            }
+          },
+          {
+            "event_id": "f6d60273-4c71-4e4e-ba03-ffd01be44ee4",
+            "seq": 691,
+            "stream_seq": 1196,
+            "ts": "2026-10-10T03:00:10.817898517Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.progress",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "phase": "provider_call"
+            }
+          },
+          {
+            "event_id": "b47a1297-1f27-4924-8c9a-721749dc7a3b",
+            "seq": 690,
+            "stream_seq": 1195,
+            "ts": "2026-10-10T03:00:10.543202245Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_07_eoulykvg36b2uspok88xemd8",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"read_only_reversible\" is not supported",
+              "output_len": 189,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "2efa2d4e-4872-4767-ae6e-237c23a832d7",
+            "seq": 689,
+            "stream_seq": 1194,
+            "ts": "2026-10-10T03:00:10.358132438Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"read_only_reversible\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_07_eoulykvg36b2uspok88xemd8",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "2ffcd006-77ae-475d-9720-46ad7c2f44d9",
+            "seq": 688,
+            "stream_seq": 1193,
+            "ts": "2026-10-10T03:00:10.2542101Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_06_onv4rqax26zb64pfgtaua790",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"reversible_evidence\" is not supported",
+              "output_len": 188,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "d25a352c-bc17-47dd-a9fe-e7009c0920a9",
+            "seq": 687,
+            "stream_seq": 1192,
+            "ts": "2026-10-10T03:00:09.970334243Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"reversible_evidence\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_06_onv4rqax26zb64pfgtaua790",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "51fcc255-e649-407f-b90c-c381d77f6a7f",
+            "seq": 686,
+            "stream_seq": 1191,
+            "ts": "2026-10-10T03:00:09.8466336Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_05_02dzorkvxtj3pzsm8w9tudx0",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"reversible\" is not supported",
+              "output_len": 179,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "8c17484b-94f1-4155-8fec-bde7cc91d903",
+            "seq": 685,
+            "stream_seq": 1190,
+            "ts": "2026-10-10T03:00:09.647003471Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"reversible\", \"network\": \"denied\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_05_02dzorkvxtj3pzsm8w9tudx0",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "8e55c692-7ac5-46eb-81b2-42466c0e7f8b",
+            "seq": 684,
+            "stream_seq": 1189,
+            "ts": "2026-10-10T03:00:09.532653891Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_04_nkk7pnnbxqssifiam7wokkqg",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"no_mutation\" is not supported",
+              "output_len": 180,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "4caf885b-937f-4c35-9f20-7ddae475d7aa",
+            "seq": 683,
+            "stream_seq": 1188,
+            "ts": "2026-10-10T03:00:09.340855459Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"no_mutation\", \"network\": \"denied\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_04_nkk7pnnbxqssifiam7wokkqg",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "a4f70001-a00a-4f0b-bde6-defd45b5bd60",
+            "seq": 682,
+            "stream_seq": 1187,
+            "ts": "2026-10-10T03:00:09.202436603Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_03_lejy9wej2nppmy80h8wjmbji",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: texture cell author: decode staged body: json: unknown field \"mutation\". Valid top-level fields: op, doc_id, base_revision_id, operation, content, edits, rationale, work_disposition, update_dispositions, controls, decision_kind, reason, evidence_refs, next_action, email. controls[] fields: target_work_item_id, open_persistent_super, open_researcher, objective, packet. packet fields: kind, summary, claims, sources, actions, questions, notes — schema_version is assigned by the runtime; do not send \"type\" or \"schema_version\". Valid packet kind values: evidence_update, execution_request, execution_result, blocker, question, proposal, decision_request",
+              "output_len": 692,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "22a4457d-4d78-4509-9228-28557afb41ea",
+            "seq": 681,
+            "stream_seq": 1186,
+            "ts": "2026-10-10T03:00:08.995071364Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"read_only\", \"network\": \"none\", \"file_mutation\": \"none\", \"mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_03_lejy9wej2nppmy80h8wjmbji",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "597200de-9d95-460c-ab4c-e83498fd49db",
+            "seq": 680,
+            "stream_seq": 1185,
+            "ts": "2026-10-10T03:00:08.92159031Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_02_fjy31ae4gvv6q6iqsh6cb12l",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"single_file\" is not supported",
+              "output_len": 180,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "f76061bd-139d-4fe9-be8c-091cec37b742",
+            "seq": 679,
+            "stream_seq": 1184,
+            "ts": "2026-10-10T03:00:08.666079796Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"single_file\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_02_fjy31ae4gvv6q6iqsh6cb12l",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "8382a404-35db-4dfa-bab5-2f9b4abd2c3f",
+            "seq": 678,
+            "stream_seq": 1183,
+            "ts": "2026-10-10T03:00:08.536377528Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_01_sygbwjvn3bg29z5ozu43f53k",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"trivial\" is not supported",
+              "output_len": 176,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "6558eedd-c756-4feb-bead-79a3ed0757c5",
+            "seq": 677,
+            "stream_seq": 1182,
+            "ts": "2026-10-10T03:00:08.318332609Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"trivial\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_01_sygbwjvn3bg29z5ozu43f53k",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "54284fe6-9bea-4a30-a162-4c8fd2c3144b",
+            "seq": 676,
+            "stream_seq": 1181,
+            "ts": "2026-10-10T03:00:08.215898421Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_00_o9tc8ce8xlc5zgn4nwuh88yj",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"minor\" is not supported",
+              "output_len": 174,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "e2b4fd1b-7411-4ee1-b470-51abe58c0b6d",
+            "seq": 675,
+            "stream_seq": 1180,
+            "ts": "2026-10-10T03:00:08.06424735Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"minor\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_00_o9tc8ce8xlc5zgn4nwuh88yj",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "24d2090f-1e36-414d-a98b-034318193d24",
+            "seq": 674,
+            "stream_seq": 1179,
+            "ts": "2026-10-10T03:00:07.880072551Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.progress",
+            "payload": {
+              "input_tokens": 83355,
+              "iteration": 19,
+              "llm_model": "deepseek-v4.1-flash",
+              "llm_provider": "opencode-go",
+              "llm_reasoning_effort": "high",
+              "model": "deepseek-v4.1-flash",
+              "model_policy": "run_metadata",
+              "output_tokens": 3267,
+              "response_text": "",
+              "response_text_chars": 0,
+              "stop_reason": "tool_use",
+              "tool_call_names": [
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval"
+              ],
+              "tool_calls": 8
+            }
+          },
+          {
+            "event_id": "d350af51-613c-4bb3-a0ff-af1ac3cbdb62",
+            "seq": 673,
+            "stream_seq": 1178,
+            "ts": "2026-10-10T03:00:07.788004767Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.progress",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "phase": "tool_loop"
+            }
+          },
+          {
+            "event_id": "575e05e7-b0b7-4f26-8f76-a5442d46bb4c",
+            "seq": 672,
+            "stream_seq": 1177,
+            "ts": "2026-10-10T03:00:07.650906845Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.progress",
+            "payload": {
+              "activation_input_tokens": 1112075,
+              "activation_output_tokens": 49490,
+              "activation_provider_calls": 19,
+              "budget": {
+                "active": true,
+                "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+                "max_elapsed_ms": 2700000,
+                "max_provider_calls": 80,
+                "max_total_tokens": 1200000
+              },
+              "input_tokens": 1112075,
+              "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+              "output_tokens": 49490,
+              "provider_calls": 19,
+              "reason": "tool_loop_budget_usage",
+              "total_tokens": 1161565
+            }
+          },
+          {
+            "event_id": "9d8a255b-72e7-4210-a52a-c4a92c836114",
+            "seq": 671,
+            "stream_seq": 1176,
+            "ts": "2026-10-10T03:00:07.535297654Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.progress",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "phase": "tool_loop_budget_usage"
+            }
+          },
+          {
+            "event_id": "a263f90b-2d93-4237-99b2-eb91346c7fe9",
+            "seq": 670,
+            "stream_seq": 1175,
+            "ts": "2026-10-10T02:59:46.372712647Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.progress",
+            "payload": {
+              "iteration": 19,
+              "last_user_chars": 0,
+              "last_user_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "last_user_text": "",
+              "llm_model": "deepseek-v4.1-flash",
+              "llm_provider": "opencode-go",
+              "llm_reasoning_effort": "high",
+              "max_tokens": 0,
+              "max_tokens_requested": false,
+              "message_roles": [
+                "user",
+                "user",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user",
+                "assistant",
+                "user"
+              ],
+              "messages": 102,
+              "model_policy": "run_metadata",
+              "phase": "provider_call_started",
+              "system_chars": 20718,
+              "system_preview": "Choir is a multiagent writing, research, and execution system with one user-facing product, one runtime, and one standard of truth. Agents participate in an ongoing workflow with durable documents, durable agents, explicit coordination edges, event history, and revision history—not as isolated chatbots.\n\nThe user cares about useful progress, not performative agent chatter. Prefer calibrated claims, preserved provenance, and the next useful step in the shared workflow. Do not bluff about research, evidence, or execution. When outside facts, validation, or real system work are needed, use the right tools or delegate to the right functional role.\n\nThe runtime owns delivery. When another agent sends addressed work, the runtime may thread that delivery into the loop as a normal next user turn. Do not poll for inbox state manually.\n\nConductor routes top-level intent. Texture owns canonical document versions. Research gathers evidence and grounded findings. Management orchestrates audited work. Engineering performs bounded implementation or verification only through guest-local capsules.\n\n\n\nCurrent UTC date/time: 2026-10-10T02:53:17Z. Treat relative-date requests such as today, tonight, yesterday, last night, latest, current, or now as time-sensitive. Anchor searches, evidence, and claims to this date/time, and state timezone uncertainty when the user's locale is not known.\n\nRole-specific instructions:\nThis is the system prompt for the texture agent in Choir.\n\nConversation surfaces organize around the thread. Texture organizes around the\nwork and what the work teaches. The prompt surface is where someone asks. Texture\nis where the work lives, versions, and learns.\n\nTurn-thread interfaces make every model utterance feel like the product. That\nfails quickly. A short answer may need one paragraph. A hard question may need\nresearch, critique, execution, and revision. Printing the whole cognitive supply\nchain into the thread overloads the owner. Hiding it creates invisible st...",
+              "system_sha256": "95ce20a0d579854581a58aca1dd48821f2c32cacb363c9d696bec776b3f9cb3c",
+              "tool_choice": "",
+              "tool_loop_budget": {
+                "active": true,
+                "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+                "max_elapsed_ms": 2700000,
+                "max_provider_calls": 80,
+                "max_total_tokens": 1200000
+              },
+              "tool_names": [
+                "desk_go_eval"
+              ],
+              "tools": 1
+            }
+          },
+          {
+            "event_id": "022be432-0e87-4cba-b11d-8f7555fa537b",
+            "seq": 669,
+            "stream_seq": 1174,
+            "ts": "2026-10-10T02:59:46.284281904Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.progress",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "phase": "provider_call"
+            }
+          },
+          {
+            "event_id": "ebd07a3e-f1b5-42db-8e7d-1e54db7d942e",
+            "seq": 668,
+            "stream_seq": 1173,
+            "ts": "2026-10-10T02:59:46.066813067Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_07_q3qd5ha5waw70wvhqhlztwcc",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"none_read_only\" is not supported",
+              "output_len": 183,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "36a849fc-81ba-4f8f-94c4-28a0b598213a",
+            "seq": 667,
+            "stream_seq": 1172,
+            "ts": "2026-10-10T02:59:45.799812871Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"none_read_only\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_07_q3qd5ha5waw70wvhqhlztwcc",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "8448a757-712c-4fc0-b40a-81060eeeb718",
+            "seq": 666,
+            "stream_seq": 1171,
+            "ts": "2026-10-10T02:59:45.694228616Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_06_9abaff0zvj564tbguctlbwxw",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"test_only\" is not supported",
+              "output_len": 178,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "38e62877-a453-4822-bc6f-e4fbb1584712",
+            "seq": 665,
+            "stream_seq": 1170,
+            "ts": "2026-10-10T02:59:45.503006302Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"test_only\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_06_9abaff0zvj564tbguctlbwxw",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "30213ba3-c30d-4ac3-8066-58bfc66b1be5",
+            "seq": 664,
+            "stream_seq": 1169,
+            "ts": "2026-10-10T02:59:45.395375597Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_05_1sxctva6urvdvjc0mrvft2mf",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"stateless\" is not supported",
+              "output_len": 178,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "a8706353-e1dc-463e-8f1f-870cf2ed71d1",
+            "seq": 663,
+            "stream_seq": 1168,
+            "ts": "2026-10-10T02:59:45.231829919Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"stateless\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_05_1sxctva6urvdvjc0mrvft2mf",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "552dbe15-ba66-43f4-9988-95bb0ae35361",
+            "seq": 662,
+            "stream_seq": 1167,
+            "ts": "2026-10-10T02:59:45.080349895Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_04_h6pn3h526486ezgypay14per",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"safe\" is not supported",
+              "output_len": 173,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "bf842601-0068-4d79-b284-2ba50ac7f976",
+            "seq": 661,
+            "stream_seq": 1166,
+            "ts": "2026-10-10T02:59:44.879590336Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"safe\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_04_h6pn3h526486ezgypay14per",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "11b72857-6fc8-4363-8f1e-b453ec673e19",
+            "seq": 660,
+            "stream_seq": 1165,
+            "ts": "2026-10-10T02:59:44.775727889Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_03_0s4durzmikufsaxpadrnldyd",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"readonly_workspace\" is not supported",
+              "output_len": 187,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "e515d490-5f5b-4171-bf94-315eb89e7343",
+            "seq": 659,
+            "stream_seq": 1164,
+            "ts": "2026-10-10T02:59:44.551967105Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"readonly_workspace\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_03_0s4durzmikufsaxpadrnldyd",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "31097510-14fe-4910-a480-5f0141f2920e",
+            "seq": 658,
+            "stream_seq": 1163,
+            "ts": "2026-10-10T02:59:44.413343146Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_02_weakl24mut54mevhtweq0xyr",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"noop\" is not supported",
+              "output_len": 173,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "16b645c7-6737-44da-97ee-47dec18fbccb",
+            "seq": 657,
+            "stream_seq": 1162,
+            "ts": "2026-10-10T02:59:44.270034217Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"noop\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_02_weakl24mut54mevhtweq0xyr",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "5e01bad8-b841-462b-b816-ec40a2c19f7a",
+            "seq": 656,
+            "stream_seq": 1161,
+            "ts": "2026-10-10T02:59:44.189575661Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_01_egyz3paf91741lq8mn61pg4a",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"probe\" is not supported",
+              "output_len": 174,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "3525e9d0-b3ac-4c8f-a0a7-d183dbef81f7",
+            "seq": 655,
+            "stream_seq": 1160,
+            "ts": "2026-10-10T02:59:43.97606954Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"probe\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_01_egyz3paf91741lq8mn61pg4a",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "81e6c5fe-e856-48c0-9ec1-10d9551178ea",
+            "seq": 654,
+            "stream_seq": 1159,
+            "ts": "2026-10-10T02:59:43.854562589Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.result",
+            "payload": {
+              "call_id": "call_00_o91kds0yd8gcfm7247g5klry",
+              "is_error": true,
+              "output": "tool_error: reduce: persist tray-1: apply atomic Texture lifecycle turn: Texture controls[0] packet: update_coagent actions[0]: safety.mutation_class \"evidence_only\" is not supported",
+              "output_len": 182,
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "6befa85d-ecb9-41be-8b42-d9c14612341f",
+            "seq": 653,
+            "stream_seq": 1158,
+            "ts": "2026-10-10T02:59:43.661576248Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "tool.invoked",
+            "payload": {
+              "arguments": {
+                "source": "\nres, err := choir.ApplyTexture(map[string]interface{}{\"op\": \"apply\", \"base_revision_id\": \"d6ea2f08-f9d9-5c19-8433-e0c9325cf3dd\", \"work_disposition\": \"open\", \"content\": \"probe\",\n\t\"controls\": []interface{}{map[string]interface{}{\"open_persistent_super\": true, \"objective\": \"probe\", \"packet\": map[string]interface{}{\"kind\": \"execution_request\", \"summary\": \"probe\", \"actions\": []interface{}{\n\t\tmap[string]interface{}{\"type\": \"run_command\", \"objective\": \"probe\", \"safety\": map[string]interface{}{\"mutation_class\": \"evidence_only\", \"network\": \"none\", \"file_mutation\": \"none\"}}}}}}})\nprintln(\"res:\", res, \"err:\", err)"
+              },
+              "call_id": "call_00_o91kds0yd8gcfm7247g5klry",
+              "tool": "desk_go_eval"
+            }
+          },
+          {
+            "event_id": "0b3c843f-bae4-4afc-82ee-6d76ed87b163",
+            "seq": 652,
+            "stream_seq": 1157,
+            "ts": "2026-10-10T02:59:43.492066068Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.progress",
+            "payload": {
+              "input_tokens": 80880,
+              "iteration": 18,
+              "llm_model": "deepseek-v4.1-flash",
+              "llm_provider": "opencode-go",
+              "llm_reasoning_effort": "high",
+              "model": "deepseek-v4.1-flash",
+              "model_policy": "run_metadata",
+              "output_tokens": 2076,
+              "response_text": "",
+              "response_text_chars": 0,
+              "stop_reason": "tool_use",
+              "tool_call_names": [
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval",
+                "desk_go_eval"
+              ],
+              "tool_calls": 8
+            }
+          },
+          {
+            "event_id": "8f057fa2-5b74-4f0d-b28c-52da6700b79e",
+            "seq": 651,
+            "stream_seq": 1156,
+            "ts": "2026-10-10T02:59:43.356990602Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.progress",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "phase": "tool_loop"
+            }
+          },
+          {
+            "event_id": "b1fa993c-c9eb-4dbf-9b7b-6692a52a8827",
+            "seq": 650,
+            "stream_seq": 1155,
+            "ts": "2026-10-10T02:59:43.243462289Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "loop.progress",
+            "payload": {
+              "activation_input_tokens": 1028720,
+              "activation_output_tokens": 46223,
+              "activation_provider_calls": 18,
+              "budget": {
+                "active": true,
+                "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+                "max_elapsed_ms": 2700000,
+                "max_provider_calls": 80,
+                "max_total_tokens": 1200000
+              },
+              "input_tokens": 1028720,
+              "label": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+              "output_tokens": 46223,
+              "provider_calls": 18,
+              "reason": "tool_loop_budget_usage",
+              "total_tokens": 1074943
+            }
+          },
+          {
+            "event_id": "b7f3a1cd-5393-4708-8a58-73f41602f3c5",
+            "seq": 649,
+            "stream_seq": 1154,
+            "ts": "2026-10-10T02:59:43.141580985Z",
+            "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+            "agent_id": "texture:c462c578-e44e-5e27-903d-dd741ae539a3",
+            "channel_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+            "owner_id": "8951d9c0-3c17-4445-873b-0ced991183b8",
+            "trajectory_id": "trajectory-b5ae572a4c003f30b0eb5c5f999ef6ac",
+            "kind": "texture.agent_revision.progress",
+            "payload": {
+              "doc_id": "c462c578-e44e-5e27-903d-dd741ae539a3",
+              "loop_id": "4ead7e6a-ba07-405d-bff4-af7ec8c340fd",
+              "phase": "tool_loop_budget_usage"
+            }
+          }
+        ],
+        "messages": [],
+        "evidence": null
+      }
+    }
+  },
+  "predicate_result": "partial"
+}
