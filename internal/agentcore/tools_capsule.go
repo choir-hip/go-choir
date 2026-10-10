@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -37,7 +39,10 @@ type CapsuleToolCtx struct {
 	EventAppender      *computerevent.ComputerEventAppender
 	TransactionBuilder *transaction.TransactionBuilder
 	OperationStore     *selfdev.Store
-	EventProjection    interface {
+	// OpenFreezeCandidate opens the promotion candidate when an assignment
+	// freezes with none (Gate 2 track D); nil keeps the pre-created-only rule.
+	OpenFreezeCandidate func(ctx context.Context, trajectoryID string) (selfdev.Operation, error)
+	EventProjection     interface {
 		Head(context.Context, string) (*computerevent.Head, error)
 		EventByIdempotency(context.Context, string, string) (computerevent.Event, bool, error)
 	}
@@ -247,6 +252,11 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		return nil, fmt.Errorf("self-development freeze authority unavailable")
 	}
 	operation, err := toolCtx.OperationStore.GetByTrajectory(ctx, toolCtx.ComputerID, trajectoryID)
+	if errors.Is(err, sql.ErrNoRows) && toolCtx.OpenFreezeCandidate != nil {
+		// Self-development is not a special operation: an ordinary assignment
+		// whose change would land on this computer opens its own candidate.
+		operation, err = toolCtx.OpenFreezeCandidate(ctx, trajectoryID)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("resolve self-development operation: %w", err)
 	}

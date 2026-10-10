@@ -56,6 +56,9 @@ func RLMManagementOverlay() string {
 // JSON file and exec operations so the model sees one authority.
 type RLMEngineeringOverlayOptions struct {
 	HasSelfDevelopmentOperation bool
+	// CanProposeChange: no operation is bound yet, but the computer's signed
+	// mode authorizes proposals, so a freeze opens the candidate (Gate 2 D).
+	CanProposeChange bool
 }
 
 func RLMEngineeringOverlay(opts RLMEngineeringOverlayOptions) string {

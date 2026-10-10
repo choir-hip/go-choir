@@ -258,8 +258,12 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 				hasSelfDevelopmentOperation = err == nil
 			}
 		}
+		canProposeChange := !hasSelfDevelopmentOperation && rt != nil && rt.selfdevOperations != nil &&
+			metadataStringValue(rec.Metadata, "assignment_kind") != string(types.EngineeringAssignmentVerification) &&
+			rt.selfDevelopmentProposalAuthorized(context.Background()) == nil
 		b.WriteString(runtimeprompts.RLMEngineeringOverlay(runtimeprompts.RLMEngineeringOverlayOptions{
 			HasSelfDevelopmentOperation: hasSelfDevelopmentOperation,
+			CanProposeChange:            canProposeChange,
 		}))
 		kind := metadataStringValue(rec.Metadata, "assignment_kind")
 		if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {

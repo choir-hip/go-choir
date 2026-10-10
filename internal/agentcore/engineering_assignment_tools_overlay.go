@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -84,6 +85,13 @@ func (rt *Runtime) assignedEngineeringCapsuleToolCtx(rec *types.RunRecord, handl
 	if rt != nil && rt.store != nil {
 		toolCtx.EventProjection = rt.store
 		toolCtx.Ledger = rt.store // R4 learning-claims gate lookups
+	}
+	if rt != nil && rt.selfdevOperations != nil && metadataStringValue(rec.Metadata, "assignment_kind") != string(types.EngineeringAssignmentVerification) {
+		assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+		objective := rec.Prompt
+		toolCtx.OpenFreezeCandidate = func(callCtx context.Context, trajectoryID string) (selfdev.Operation, error) {
+			return openFreezeCandidate(callCtx, rt.selfdevOperations, rt.selfDevelopmentProposalAuthorized, rec.ComputerID, trajectoryID, assignmentID, objective)
+		}
 	}
 
 	return toolCtx
