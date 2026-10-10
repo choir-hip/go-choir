@@ -851,7 +851,9 @@ EOF
       # credential disk, never inherited via env by children.
       RUNTIME_GATEWAY_TOKEN_FILE = "/run/choir-bootstrap/gateway-token";
       CHOIR_CAPSULE_BROKER_PATH = "${goChoirPackages.capsuleBroker}/bin/capsule-broker";
-      CHOIR_CAPSULE_STATE_DIR = "/run/choir/capsules";
+      # Capsule overlay uppers and /tmp live on the data volume: package
+      # installs do not fit in guest RAM. The executor scopes it per boot.
+      CHOIR_CAPSULE_STATE_DIR = "/mnt/persistent/capsule-state";
       CHOIR_CAPSULE_ARTIFACT_DIR = "/mnt/persistent/capsule-artifacts";
       CHOIR_CAPSULE_SOURCE_ROOT = "/mnt/persistent/files/Source/platform";
       CHOIR_CAPSULE_LOWER_ROOT = "/";

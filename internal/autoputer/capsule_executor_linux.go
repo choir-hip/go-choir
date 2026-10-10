@@ -30,6 +30,10 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	if err := os.Chmod(state, 0o700); err != nil {
 		return nil, false, fmt.Errorf("secure capsule state directory: %w", err)
 	}
+	state, err := capsule.BootScopedStateDir(state)
+	if err != nil {
+		return nil, false, err
+	}
 	if err := os.MkdirAll(artifact, 0o700); err != nil {
 		return nil, false, fmt.Errorf("create capsule artifact directory: %w", err)
 	}

@@ -219,6 +219,10 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		return nil, fmt.Errorf("capsule source root is unavailable: %s", e.sourceDir)
 	}
 
+	if free, err := stateFreeBytes(e.stateDir); err == nil && free < StateFloorBytes {
+		return nil, fmt.Errorf("capsule state volume has %d MiB free, below the %d MiB floor", free>>20, StateFloorBytes>>20)
+	}
+
 	controlHandle, err := randomOpaque("c-")
 	if err != nil {
 		return nil, err
@@ -1983,18 +1987,38 @@ func prepareCapsuleRoot(root, upperDir string) error {
 			return fmt.Errorf("capsule prepare root: %w", err)
 		}
 	}
-	for _, path := range []string{"run", "tmp", "mnt", "proc", "sys"} {
+	for _, path := range []string{"run", "mnt", "proc", "sys"} {
 		target := filepath.Join(root, path)
 		mode := "mode=0755,size=64m"
-		if path == "tmp" || path == "mnt" || path == "run" {
+		if path == "mnt" || path == "run" {
 			mode = "mode=1777,size=256m"
 		}
 		if err := unix.Mount("tmpfs", target, "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, mode); err != nil {
 			return fmt.Errorf("capsule mask %s: %w", path, err)
 		}
-		if path == "tmp" || path == "mnt" || path == "run" {
+		if path == "mnt" || path == "run" {
 			_ = os.Chmod(target, 0o1777)
 		}
+	}
+	// /tmp is where builds and package managers put venvs, caches and
+	// unpacked wheels, so it lives next to the overlay upper on the state
+	// volume rather than in a RAM tmpfs that counts against the capsule's
+	// memory limit. It is still a fresh per-capsule directory that masks the
+	// guest's own /tmp, and it is removed with the capsule's state tree
+	// (capsule-workload-cannot-run-a-shell-or-install-packages-2026-10-10).
+	scratch := filepath.Join(filepath.Dir(upperDir), "tmp")
+	if err := os.MkdirAll(scratch, 0o700); err != nil {
+		return fmt.Errorf("capsule scratch tmp: %w", err)
+	}
+	if err := os.Chmod(scratch, 0o1777); err != nil {
+		return fmt.Errorf("capsule scratch tmp mode: %w", err)
+	}
+	tmpTarget := filepath.Join(root, "tmp")
+	if err := unix.Mount(scratch, tmpTarget, "", unix.MS_BIND, ""); err != nil {
+		return fmt.Errorf("capsule mask tmp: %w", err)
+	}
+	if err := unix.Mount("", tmpTarget, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_NOSUID|unix.MS_NODEV, ""); err != nil {
+		return fmt.Errorf("capsule harden tmp: %w", err)
 	}
 	currentSystem := "/run/current-system"
 	if _, err := os.Stat(currentSystem); err == nil {
