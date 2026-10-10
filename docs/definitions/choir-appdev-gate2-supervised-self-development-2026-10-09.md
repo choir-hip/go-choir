@@ -208,17 +208,33 @@ now:
       because the upcast rewrites prose leaves (edge-only whitespace
       guard). Fixed for probe and restore in 6e7e3c5e: the staged replay
       keeps the live store's deposit mode (deposit_mode in the report).
+      Rerun 10 (cf0969cf): Node B ran out of memory at 06:05Z, from QA
+      computers that vmctl was not tracking. The vmctl host-capacity
+      guards fixed that (cf0969cf). The rerun then froze, and the
+      independent verifier rejected the bundle correctly: source.patch
+      creation hunks were diffed against a phantom empty line, so the
+      builder's git apply refuses them. Reruns 8 and 9 shipped the same
+      defect and their verifiers passed it. Fixed in 1ae758ef: the freeze
+      now proves the patch with git apply and a byte compare. A trace
+      review of every log
+      (problems/trace-review-desk-protocol-friction-2026-10-10.md)
+      found desks guessing enum values against the reducer. Fixed in
+      26c288c4 (enum rejections name the accepted values) and 81104b9c
+      (refused dispositions name their reason).
     main_uncertainty: >-
-      Whether the checkpoint is now eligible (deposit_mode retained) and
-      apply completes, followed by reject and restore.
-    next_observation: M11 rerun 10 on 6e7e3c5e or later, reading replay-completeness at apply.
+      Whether apply completes now that the bundle is faithful and the
+      deposit mode is retained. Then reject and restore.
+    next_observation: M11 rerun 11 on 81104b9c or later, reading the verifier verdict, then replay-completeness at apply.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
     Residuals: vocab-guard-ids, vocab-recovery-prefix, upcast-legacy-refs,
-    upcast-rewrites-prose, base-upcast-vs-live, live-rescan-mixed-spelling.
+    upcast-rewrites-prose, base-upcast-vs-live, live-rescan-mixed-spelling,
+    verifier-apply-check, verifier-implementer-channel, refresh-log-reason,
+    texture-budget-burn-while-waiting, identical-rejection-loop,
+    probe-self-stop.
   next_action: >-
-    Deploy 6e7e3c5e; rerun M11 to apply; if replay is eligible, continue
+    Deploy 81104b9c; rerun M11 to apply; if replay is eligible, continue
     to applied, reject and restore; otherwise read the named rows.
 receipts:
   - id: m11-rerun-2026-10-09
@@ -242,6 +258,15 @@ receipts:
   - id: m11-rerun-9-2026-10-10
     ref: docs/evidence/m11-rerun-2026-10-10T03-54-51Z.json
     result: partial (10/16; engineering replays exactly; 2 recorded events upcast)
+  - id: m11-rerun-2026-10-09-2132-2148
+    ref: docs/evidence/m11-rerun-2026-10-09T21-32-17Z.json, docs/evidence/m11-rerun-2026-10-09T21-48-21Z.json
+    result: partial (5/16; capsule worker floor — engineering exhausted its 200-call budget, then a completion guard; Landlock/seccomp fixed in e3225820, 733bec77)
+  - id: m11-rerun-10-attempts-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T05-54-57Z.json, docs/evidence/m11-rerun-2026-10-10T06-00-20Z.json
+    result: blocked (0/16; first page load timed out during the Node B OOM)
+  - id: m11-rerun-10-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T07-00-32Z.json
+    result: partial (5/16; verifier correctly rejected an unappliable source.patch)
 ---
 
 # Gate 2 — self-development with live Texture supervision

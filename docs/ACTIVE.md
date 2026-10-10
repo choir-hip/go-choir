@@ -129,7 +129,14 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   replay upcasts. Fixed in f9531177. Rerun 9 (77406673): engineering
   replays exactly; the upcast still rewrote recorded tool output, so
   the probe and restore now replay in the live store's deposit mode
-  (6e7e3c5e); rerun 10 next. Fixed tonight on
+  (6e7e3c5e). Rerun 10 (cf0969cf), after the Node B OOM and the
+  vmctl host-capacity guards: the verifier correctly rejected an
+  unappliable source.patch (phantom-line creation hunks, which reruns 8
+  and 9 also shipped). The freeze now proves the patch with git apply
+  (1ae758ef). A trace review of every log found desks guessing enums
+  against the reducer, and rejections now name the accepted values
+  ([problem](problems/trace-review-desk-protocol-friction-2026-10-10.md)).
+  Rerun 11 next. Fixed tonight on
   the way: capsule worker, freeze on new directories, delegated-cast
   reports to Texture, verifier bundle mirror, inference breaker, apply
   hold, engineering id spelling.
