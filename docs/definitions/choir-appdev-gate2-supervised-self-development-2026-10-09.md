@@ -256,11 +256,19 @@ now:
     owner-recovery-reboot, guest-degraded-after-forced-reboot.
   next_action: >-
     vmctl Phase 0 (docs/vmctl-360-review-2026-10-10.md, converged 8/8):
-    step 1 kill receipts alone, then disarm browser/proxy escalation,
-    close automatic destructive paths with bounded admission, adopt by
-    identity. Each step problem-doc first, red ceremony, Landing Loop. Then
-    M11 rerun 12 with no push during the run.
+    step 1 kill receipts accepted on staging (d41c2caf, a5c85838). Next
+    step 2, disarm browser/proxy escalation; then close automatic
+    destructive paths with bounded admission, adopt by identity. Each step
+    problem-doc first, red ceremony, Landing Loop. Self-development now
+    admits one open operation per computer and a crash boot closes
+    pre-decision operations (9399f3ed); the owner's computer needs one boot
+    to shed five August zombies
+    (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
+    Then M11 rerun 12 with no push during the run.
 receipts:
+  - id: vmctl-receipt-probe-2026-10-10
+    ref: docs/evidence/vmctl-receipt-probe-2026-10-10T11-24Z.json
+    result: satisfied (6/6; refresh and stop each leave an attributable destruction receipt)
   - id: m11-rerun-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
     result: partial (5/16; blocked at awaiting_approval)

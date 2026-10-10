@@ -149,7 +149,11 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   (79edc337). Owner-requested vmctl 360 review converged 8/8 on a
   redesign ([review](vmctl-360-review-2026-10-10.md)); its Phase 0
   (receipts, disarm escalation, close destructive paths, bounded
-  admission) precedes rerun 12. Fixed tonight on
+  admission) precedes rerun 12; step 1, kill receipts, is accepted on
+  staging. The owner's computer carried five self-development operations
+  stuck in executing since August, which kept it busy forever; a crash
+  boot now closes them and a computer admits one open operation
+  ([problem](problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md)). Fixed tonight on
   the way: capsule worker, freeze on new directories, delegated-cast
   reports to Texture, verifier bundle mirror, inference breaker, apply
   hold, engineering id spelling.
