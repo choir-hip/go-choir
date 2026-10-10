@@ -92,6 +92,19 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 			s.choirSurface[name] = true
 		}
 	}
+	// Predeclare the packages desks reach for in nearly every cell. Without
+	// them the demo traces of 2026-10-10 lost cells on "undefined: fmt",
+	// "undefined: json" and grouped-import redeclarations; a model-authored
+	// import of them is dropped by normalization like any repeated import.
+	for _, path := range predeclaredCellPackages {
+		if s.allowlist.IsAllowed(path) != nil {
+			continue
+		}
+		if _, err := s.Eval(context.Background(), "import \""+path+"\""); err != nil {
+			s.Close()
+			return nil, fmt.Errorf("yaegi: predeclare %s: %w", path, err)
+		}
+	}
 	// Predeclare the choir binding when the symbol surface provides it: the
 	// desk's entire write path goes through choir.* verbs, and requiring the
 	// model to `import "choir"` in its first cell burns one compile-rejected
@@ -106,6 +119,21 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 		}
 	}
 	return s, nil
+}
+
+// predeclaredCellPackages are imported into every session at start.
+var predeclaredCellPackages = []string{"fmt", "strings", "encoding/json"}
+
+// compileCell compiles one normalized cell, converting a compiler panic into
+// a value so the session can poison itself instead of crashing the worker.
+func (s *Session) compileCell(src string) (prog *interp.Program, err error, panicErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			panicErr = fmt.Errorf("yaegi compile panic: %v", r)
+		}
+	}()
+	prog, err = s.interp.Compile(src)
+	return prog, err, nil
 }
 
 // Eval runs one cell on the persistent interpreter. Cells share variables,
@@ -141,7 +169,15 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 	// session is preserved. A successful Compile may install symbols, so every
 	// Execute-phase failure below poisons. Compile mirrors Eval's parse path
 	// (compileSrc with inc=true), so accepted programs are identical.
-	prog, err := s.interp.Compile(src)
+	prog, err, compilePanic := s.compileCell(src)
+	if compilePanic != nil {
+		// yaegi's compiler can panic (e.g. compDefineX on `b, _ := pkg.F()`
+		// with pkg undefined). A panic mid-compile may have installed partial
+		// symbols, so it poisons instead of crashing the worker process.
+		res.Duration = time.Since(start)
+		s.poisoned = compilePanic
+		return res, &EvalError{err: compilePanic, Reuse: ReuseUnsafeToReuse, Kind: DiagPanic}
+	}
 	if err != nil {
 		res.Duration = time.Since(start)
 		return res, &EvalError{err: err, Reuse: ReusePreserve, Kind: DiagCompile}

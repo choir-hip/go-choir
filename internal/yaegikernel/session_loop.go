@@ -6,7 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -160,7 +165,70 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 		return out, evalErr
 	}
 	out.Intents = staged
+	if shown := describeCellValue(frame.Source, res.Value); shown != "" {
+		out.Stdout += shown
+	}
 	return out, nil
+}
+
+// maxShownCellValue bounds the final-value line a cell result carries.
+const maxShownCellValue = 8000
+
+// describeCellValue renders a cell's final value, REPL style, when the cell
+// ends in a bare expression that is not itself a print call. Models probe
+// state with `updates` or `choir.Help("X")`; without this the result was
+// empty and they spent cells on panic(string(b)) to see it.
+func describeCellValue(source string, value reflect.Value) (shown string) {
+	if !value.IsValid() || !endsInBareExpression(source) {
+		return ""
+	}
+	defer func() {
+		if recover() != nil {
+			shown = ""
+		}
+	}()
+	var text string
+	if value.Kind() == reflect.String {
+		text = value.String()
+	} else if value.CanInterface() {
+		text = fmt.Sprintf("%+v", value.Interface())
+	} else {
+		return ""
+	}
+	if len(text) > maxShownCellValue {
+		text = text[:maxShownCellValue] + fmt.Sprintf("… [%d bytes truncated]", len(text)-maxShownCellValue)
+	}
+	return "=> " + text + "\n"
+}
+
+// endsInBareExpression reports whether the cell's last statement is an
+// expression statement other than a print call.
+func endsInBareExpression(source string) bool {
+	file, err := parser.ParseFile(token.NewFileSet(), "cell.go", "package p\nfunc _() {\n"+source+"\n}", 0)
+	if err != nil || len(file.Decls) == 0 {
+		return false
+	}
+	fn, ok := file.Decls[0].(*ast.FuncDecl)
+	if !ok || fn.Body == nil || len(fn.Body.List) == 0 {
+		return false
+	}
+	stmt, ok := fn.Body.List[len(fn.Body.List)-1].(*ast.ExprStmt)
+	if !ok {
+		return false
+	}
+	if call, ok := stmt.X.(*ast.CallExpr); ok {
+		switch callee := call.Fun.(type) {
+		case *ast.Ident:
+			if callee.Name == "println" || callee.Name == "print" || callee.Name == "panic" {
+				return false
+			}
+		case *ast.SelectorExpr:
+			if pkg, ok := callee.X.(*ast.Ident); ok && pkg.Name == "fmt" && strings.HasPrefix(callee.Sel.Name, "Print") {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // RunSessionLoopFramed serves eval cells over the multiplexed session socket
