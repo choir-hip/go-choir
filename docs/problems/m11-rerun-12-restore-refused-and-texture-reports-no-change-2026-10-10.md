@@ -356,3 +356,52 @@ Change (red; self-development verification, approval gating):
 - Residuals (deletions after staging proof): the verification assignment
   kind and its opener and recast code, `record_self_development_verification`
   for the verifier slot, and the dead `verifier` model-policy rows.
+
+## Rerun 13: all 17 legs satisfied (15:40Z)
+
+Rerun 13 on 9d703e2c reached every leg: approve, apply (15:07:54),
+post-apply checkpoint on its fourth attempt (the first three hit
+"projection repair required" while the chain moved), candidate B rejected
+by the owner, and restore to the pinned pre-episode head with the witness
+matched. Texture's document was accurate after engineering reported.
+Receipt: `docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json`. The restore
+target was the quiet pre-episode checkpoint (sequence 2, genesis replay of
+2 events), so it did not exercise a base.
+
+## Restore from pinned snapshots (owner: "that's their purpose")
+
+checkpointd advances the advertised base while a computer runs, and base
+GC keeps only the newest two plus pinned bases. A pin route existed
+(`/internal/computers/projection-base/pins`), but nothing called it, and
+it required `computer:lifecycle`, which a guest's capability does not
+carry. So a checkpoint older than the newest two bases could restore only
+by replaying from genesis, inside the 10000-event bound.
+
+Change (red; checkpoint and restore):
+
+- A checkpoint pins the base its replay started from, under the reference
+  `checkpoint:<captured head>`. A pin failure fails the checkpoint; a
+  replay from genesis has no base to pin.
+- The pin route accepts the computer's own `event:pin` scope for POST
+  (pinning only keeps bytes); DELETE still needs `computer:lifecycle`. GET
+  lists a computer's pinned bases with `event:read`.
+- Restore, when its target is older than the advertised base, installs the
+  newest pinned base at or below the target whose tail fits the bound
+  (`projectionbase.InstallPinnedBase`, same verification as the advertised
+  base), and falls back to the genesis replay. A pin never bypasses a
+  refused advertised base that should cover the target.
+- Rollback: git revert; pins left behind only retain bytes.
+
+## Open (hypothesis): a checkpoint's witness head can postdate its accepted head
+
+`checkpointRestoreBindings` captures the witness at the live head when the
+check runs. The genesis checkpoint publishes `AcceptedEventHead` as the
+event it appended before the check, and the post-apply checkpoint re-reads
+the head when it publishes. On a busy computer the witness head and the
+accepted head can differ. Restore replays to the accepted head and compares
+with the witness, so a table that changed between the two heads would show
+as a witness mismatch and the restore would refuse (fail closed, not
+corrupt). Not observed yet: rerun 13's restore target was a quiet
+checkpoint. Evidence needed: a restore to a post-apply checkpoint taken
+while desks were busy. Candidate fix: publish the checkpoint at the
+witness's captured head (it descends from the checkpointed event).
