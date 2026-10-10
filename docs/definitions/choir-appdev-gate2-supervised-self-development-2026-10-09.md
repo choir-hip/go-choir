@@ -185,30 +185,34 @@ now:
     owner_ratification_ref: pending (stated per AGENTS.md No Blocking Asks)
   belief:
     believed_state: >-
-      Five M11 reruns on 2026-10-09/10, each 5 of 16 legs, each stopped
-      one layer deeper. Reruns 1-3: the capsule session worker could not
-      start (repaired 733bec77). Rerun 4: the freeze failed on a new source
-      directory (fixed 2c68cc18) and Texture rejected the delegated-cast
-      report (fixed 028446a5). Rerun 5 (5b851eed): implementation
-      completed, **freeze succeeded**, Texture took a supervision turn on
-      the report, the host opened verification, and the independent
-      verifier failed closed because the in-cell bundle inspection
-      predates the S2-f source patch fields
-      (problems/selfdev-verifier-rejects-frozen-bundle-2026-10-10.md;
-      fixed 3e69567b). The verifier diagnosed the cause itself and every
-      payload check it could run passed. Approval, apply, reject and
-      restore remain unobserved on this build.
+      Seven M11 reruns on 2026-10-09/10, each stopping one layer deeper.
+      Fixed on the way: capsule session worker (733bec77), freeze on a new
+      source directory (2c68cc18), Texture rejecting delegated-cast
+      reports (028446a5), the verifier's in-cell bundle mirror (3e69567b),
+      and the inference breaker counting one computer's 400s against
+      everyone (589a68bc; rerun 6 failed on that outage). Rerun 7
+      (2a16a6db): implementation froze, the independent verifier passed,
+      the operation reached awaiting_approval, the probe approved it, and
+      apply began with a planned restart. Apply then stalls in
+      materializing: first resumed desk work keeps the replay-completeness
+      checkpoint from seeing a quiet chain, and once quiet the replay is
+      not equivalent to live state (og_objects rows written outside the
+      event chain)
+      (problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md).
     main_uncertainty: >-
-      Whether approval, apply and restore work after S2 layering; nothing
-      past verification has run since September 29.
-    next_observation: M11 rerun 6 on 3e69567b or later.
+      Which writer puts og_objects rows outside the chain (boot
+      passivation, the budget failure path, or the cancel at restart);
+      the e9805de5 diagnostic names the rows on the next rerun.
+    next_observation: M11 rerun 8 on e9805de5 or later, reading the object_graph diff at apply.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
+    Open decision (fix A leaning): hold desk activations from the apply
+    restart until the checkpoint finishes.
   next_action: >-
-    Deploy 3e69567b; rerun M11; follow the verified candidate through
-    approval, apply, reject and restore, documenting each failed leg
-    before fixing it.
+    Deploy e9805de5; rerun M11 to apply; read the named og_objects rows;
+    fix that writer; decide the activation hold; rerun to applied,
+    reject and restore.
 receipts:
   - id: m11-rerun-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
@@ -219,6 +223,9 @@ receipts:
   - id: m11-rerun-5-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T23-15-26Z.json
     result: partial (5/16; frozen; verifier failed closed on the in-cell draft mirror)
+  - id: m11-rerun-6-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T00-19-25Z.json
+    result: partial (5/16; failed on the shared inference breaker opened by 400s)
 ---
 
 # Gate 2 — self-development with live Texture supervision

@@ -118,14 +118,15 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   [`clustering-texture-obligation-closure`](problems/clustering-texture-obligation-closure-2026-10-09.md).
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
-  Reality slice: five M11 reruns, 5 of 16 legs each, each stopped one
-  layer deeper: capsule worker (733bec77), freeze on a new source
-  directory (2c68cc18), Texture rejecting delegated-cast reports
-  (028446a5), and in rerun 5 the verifier's in-cell bundle inspection
-  predating the S2-f fields
-  ([problem](problems/selfdev-verifier-rejects-frozen-bundle-2026-10-10.md),
-  fixed 3e69567b). Rerun 5 froze a candidate for the first time since
-  S2. Next: M11 rerun 6 toward approval and restore.
+  Reality slice: seven M11 reruns, each one layer deeper. Rerun 7
+  (2a16a6db) froze, verified, reached approval and began apply for the
+  first time since S2; apply stalls in materializing because the
+  replay-completeness checkpoint sees resumed desk work and then an
+  og_objects difference
+  ([problem](problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md)).
+  The diagnostic e9805de5 names the differing rows. Fixed tonight on
+  the way: capsule worker, freeze on new directories, delegated-cast
+  reports to Texture, verifier bundle mirror, inference breaker.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
