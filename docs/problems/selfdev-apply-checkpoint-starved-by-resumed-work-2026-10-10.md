@@ -248,3 +248,35 @@ Red ceremony (checkpoint/route projection replay; engineering lifecycle).
     recovery occurrence identity, which is a separate red change.
   - `upcast-legacy-refs`: on a store that was already upcast, legacy refs
     were hashed over V1 payloads, so their digests no longer validate.
+
+## Rerun 9 on 77406673: engineering replays exactly; recorded content still diverges (04:36Z)
+
+Disposable `computer-3af55828…` (VM `vm-fc88c237…`), operation
+`selfdev-6a5317f4…`. Implementation reported at 04:17Z, after a longer
+build than rerun 8. Verification and approval followed, and the apply
+restart came at 04:32:14Z. The hold logged "waits for the
+self-development apply checkpoint" again.
+
+Replay-completeness at 04:34Z is still ineligible, but the diff shrank
+from `live_only=26 replay_only=26 changed=3` to
+`live_only=2 replay_only=2 changed=0`, all `choir.event`. The
+engineering lifecycle now replays exactly (f9531177 confirmed on
+staging).
+
+The two live-only events were written at 03:56:19 and 04:06:49, each an
+ordinary tool-loop iteration (8 and 70). `choir.event` uses
+content-hash identity, and its body is the recorded tool call or result.
+**Finding (hypothesis until the payload is read):** a whitespace-free
+string the model sent or received, such as a search pattern or path
+containing `-super-`, is upcast on replay. That changes the event's
+content hash and so its key. Rerun 8 had the same 2/2 pair.
+
+This is model-authored content. No writer can make it a fixed point,
+so fix (a) cannot close it. The frozen leaf rule rewrites history the
+model actually produced. **Decision:** add fix (b). Probe and restore
+replay in the live store's deposit mode: a live store without an upcast
+ledger never upcast its deposits, so the staged replay keeps their bytes.
+That is what `rematerialize.go` already assumes ("reconstructed from
+the V1 tape byte-identically", then `MigrateAndFenceServingVocabulary`).
+Fix (a) stays: after that migration, ids the runtime recomputes must
+already be fixed points, or lookups miss.
