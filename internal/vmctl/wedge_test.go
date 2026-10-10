@@ -88,10 +88,17 @@ func TestReconcileKeepsBusyGuestAndResetsWindowOnAnyConnection(t *testing.T) {
 }
 
 func TestReconcileStopsTrackedRunningGuestRefusingConnections(t *testing.T) {
+	for _, state := range []VMState{VMStateActive, VMStateDegraded} {
+		t.Run(string(state), func(t *testing.T) { testReconcileStopsTrackedWedgedGuest(t, state) })
+	}
+}
+
+// A degraded latch must not exempt a wedged guest from the watchdog.
+func testReconcileStopsTrackedWedgedGuest(t *testing.T, state VMState) {
 	reg, mgr, now, refusing := wedgeRegistry(t)
 	const url = "http://10.0.0.6:8085"
 	addOwnership(reg, &VMOwnership{VMID: "vm-tracked", UserID: "someone", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive,
-		State: VMStateActive, ComputerURL: url})
+		State: state, ComputerURL: url})
 	mgr.live["vm-tracked"] = []int{5}
 	mgr.getVMs["vm-tracked"] = &VMInstanceInfo{HostURL: url, State: "running"}
 	refusing[url] = true

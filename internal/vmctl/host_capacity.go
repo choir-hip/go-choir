@@ -133,7 +133,7 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 			res.Managed++
 			// A tracked running guest that refuses connections for the
 			// wedge window is stopped; a booting one is never probed.
-			if own != nil && own.State == VMStateActive && !own.IsHeld() &&
+			if own != nil && (own.State == VMStateActive || own.State == VMStateDegraded) && !own.IsHeld() &&
 				strings.EqualFold(strings.TrimSpace(info.State), "running") &&
 				r.guestWedged(vmID, firstNonEmpty(info.HostURL, own.ComputerURL), now) {
 				r.stopWedgedManaged(own, &res)
