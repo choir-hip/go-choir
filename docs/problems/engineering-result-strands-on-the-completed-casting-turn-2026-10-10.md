@@ -81,3 +81,31 @@ management turn, so the owner never hears of it. Remaining error field:
 whether the report's DeliveredToRunID was set when it was produced (the
 parent run binding) or by a later delivery attempt. A ledger read of the
 report packet settles this before the fix.
+
+## Fix chosen (settled-decision conformance)
+
+The owner ruling of 2026-09-03
+(docs/archive/choir-substrate-and-scheduling-readiness-2026-09-02.md) says:
+"terminal events wake Texture, never select backlog". Its not-done
+conditions forbid minting a management run from producer reports "through
+any reconcile entry". So the obvious patch, minting a management turn from
+the stranded report, is ruled out.
+
+The handler already names the intended path: "A producer report: never
+mint execution. Fall through to the generic park-resume path — it
+reactivates the parked run". The casting turn was never parked.
+
+The fix:
+
+1. A persistent management control turn that authored a delegated cast
+   parks (`passivated_reason=awaiting_delegated_cast`) while that cast is
+   open. If the result has already arrived, it takes it in the same turn.
+   Once the cast is terminal, it completes. A turn that cast nothing
+   behaves as before.
+2. When the result resumes the parked turn, the turn keeps its
+   `lifecycle_texture_control` source. Lifecycle reports are listed only
+   for that source, and the handler used to rewrite it to
+   `update_coagent`.
+
+The store already delivers a report to a parent run that is not terminal,
+so the result binds to the parked turn and resumes that exact run.

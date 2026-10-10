@@ -1,0 +1,130 @@
+package agentcore
+
+import (
+	"context"
+	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
+)
+
+// docs/problems/engineering-result-strands-on-the-completed-casting-turn-2026-10-10.md:
+// management completed its turn seconds after casting, so the engineering
+// result was delivered to a dead run and nothing woke management. The fix
+// parks the casting turn while its own cast is open, so the result resumes
+// it through the park-resume path (a producer report never mints a
+// management run; terminal events never select backlog).
+//
+// Failure modes pinned:
+//   - a turn with an open cast it authored completes instead of parking;
+//   - a turn parks on a cast another run authored, or on a terminal cast
+//     (a leaked passivated run per finished assignment);
+//   - a turn that cast nothing changes behavior;
+//   - a result that already arrived is not taken in the same turn;
+//   - a turn with nothing outstanding stops completing normally.
+func TestManagementParksOnlyWhileItsOwnCastIsOpen(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-awaits", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caster := &types.RunRecord{
+		RunID: seed.ParentRunID, OwnerID: seed.OwnerID, ComputerID: seed.ComputerID,
+		AgentID: persistentManagementAgentID(seed.OwnerID), AgentProfile: "management", AgentRole: "management",
+		Metadata: map[string]any{"request_source": "lifecycle_texture_control", "assignment_trajectory_id": seed.TrajectoryID},
+	}
+	other := *caster
+	other.RunID = "run-management-other-turn"
+
+	if authored, open, err := rt.managementRunCasts(ctx, caster); err != nil || authored || open {
+		t.Fatalf("before any cast: authored=%v open=%v err=%v", authored, open, err)
+	}
+
+	assignmentID, capability := "assignment-awaits", "opaque-awaits"
+	open := types.OpenEngineeringAssignmentRequest{
+		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
+		Binding: types.EngineeringAssignmentBinding{
+			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
+			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
+			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+			Writable:          true, CapsuleID: "capsule-awaits",
+			NetworkMode:    types.EngineeringCapsuleNetworkEcosystemProxy,
+			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+		},
+		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
+		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "replicate"},
+	}
+	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("open assignment: %v", err)
+	}
+
+	if authored, open, err := rt.managementRunCasts(ctx, caster); err != nil || !authored || !open {
+		t.Fatalf("casting turn with an open cast: authored=%v open=%v err=%v", authored, open, err)
+	}
+	if authored, open, err := rt.managementRunCasts(ctx, &other); err != nil || authored || open {
+		t.Fatalf("a turn that did not cast: authored=%v open=%v err=%v", authored, open, err)
+	}
+	texture := *caster
+	texture.AgentID, texture.AgentProfile, texture.AgentRole = "texture:doc", "texture", "texture"
+	if authored, open, err := rt.managementRunCasts(ctx, &texture); err != nil || authored || open {
+		t.Fatalf("a non-management run: authored=%v open=%v err=%v", authored, open, err)
+	}
+
+	current, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel := types.CancelEngineeringAssignmentRequest{
+		CommandID: "command-cancel-" + assignmentID, OwnerID: seed.OwnerID, ComputerID: seed.ComputerID,
+		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: "test terminal",
+	}
+	if cancel.CommandDigest, err = store.ComputeCancelEngineeringAssignmentDigest(cancel); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CancelEngineeringAssignment(ctx, cancel); err != nil {
+		t.Fatalf("cancel assignment: %v", err)
+	}
+	if authored, open, err := rt.managementRunCasts(ctx, caster); err != nil || !authored || open {
+		t.Fatalf("after the cast is terminal: authored=%v open=%v err=%v", authored, open, err)
+	}
+}
+
+func TestManagementParkDecision(t *testing.T) {
+	cont := toolregistry.ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}
+	park := toolregistry.ToolLoopParkResult{Passivate: true, Reason: managementAwaitingCastPassivation}
+	done := toolregistry.ToolLoopParkResult{}
+	cases := []struct {
+		ready, authored, open bool
+		want                  toolregistry.ToolLoopParkResult
+	}{
+		// The turn cast and the result already arrived: take it now, or it
+		// is delivered to a run that is about to complete.
+		{ready: true, authored: true, open: true, want: cont},
+		{ready: true, authored: true, open: false, want: cont},
+		// The cast is still open: park until its result resumes the turn.
+		{ready: false, authored: true, open: true, want: park},
+		// The cast finished and its result was taken: complete.
+		{ready: false, authored: true, open: false, want: done},
+		// A turn that cast nothing keeps today's behavior.
+		{ready: true, authored: false, open: false, want: done},
+		{ready: false, authored: false, open: false, want: done},
+	}
+	for _, c := range cases {
+		if got := managementParkDecision(c.ready, c.authored, c.open); got != c.want {
+			t.Errorf("ready=%v authored=%v open=%v: got %+v, want %+v", c.ready, c.authored, c.open, got, c.want)
+		}
+	}
+}

@@ -750,6 +750,15 @@ resumeGeneric:
 			(wakeProfile == agentprofile.Research ||
 				wakeRole == agentprofile.Research) &&
 				strings.TrimSpace(metadataString(rec.Metadata, "request_source")) == "lifecycle_texture_control"
+		// A persistent Management control turn parked on its own delegated
+		// cast resumes as the same control turn: its lifecycle reports are
+		// listed only for lifecycle_texture_control runs, so rewriting the
+		// source to update_coagent would hide the very result that woke it
+		// (engineering-result-strands-on-the-completed-casting-turn-2026-10-10).
+		keepControlSource := lifecycleControlResearch ||
+			(wakeProfile == agentprofile.Management && wakeRole == agentprofile.Management &&
+				rec.AgentID == agentprofile.Management+":"+rec.OwnerID &&
+				strings.TrimSpace(metadataString(rec.Metadata, "request_source")) == "lifecycle_texture_control")
 		if lifecycleControlResearch {
 			if strings.TrimSpace(u.TrajectoryID) == "" || strings.TrimSpace(u.TrajectoryID) != strings.TrimSpace(rec.TrajectoryID) {
 				return nil, fmt.Errorf("actorruntime: parked lifecycle coagent wake trajectory mismatch")
@@ -778,7 +787,7 @@ resumeGeneric:
 		}
 		rec.Metadata["actor_reactivate_existing_memory"] = true
 		rec.Metadata["actor_reactivated_from_passivated"] = true
-		if !lifecycleControlResearch {
+		if !keepControlSource {
 			rec.Metadata["request_source"] = "update_coagent"
 		}
 		rec.State = types.RunPending
@@ -790,7 +799,7 @@ resumeGeneric:
 			"actor_reactivate_existing_memory":  true,
 			"actor_reactivated_from_passivated": true,
 		}
-		if !lifecycleControlResearch {
+		if !keepControlSource {
 			patch["request_source"] = "update_coagent"
 		}
 		// Lifecycle-bound runs reactivate through the canonical reducer

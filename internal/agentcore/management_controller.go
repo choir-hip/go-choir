@@ -2654,11 +2654,70 @@ func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
 	return len(coagentUpdateIDsForRun(rec)) > 0
 }
 
+// managementAwaitingCastPassivation is the passivated_reason of a persistent
+// Management turn parked on the engineering cast it authored.
+const managementAwaitingCastPassivation = "awaiting_delegated_cast"
+
+// managementRunCasts reports whether a persistent Management control turn
+// authored a delegated engineering cast (an assignment whose parent run is
+// this turn), and whether one of them is still open.
+//
+// Management turns end seconds after they cast, while the cast's result
+// arrives minutes later and is delivered to the parent run. A completed
+// parent stranded every result
+// (engineering-result-strands-on-the-completed-casting-turn-2026-10-10):
+// a producer report never mints a Management run, and a terminal event never
+// selects backlog (owner ruling 2026-09-03). The casting turn therefore
+// parks while its own cast is open, and the result resumes that exact run.
+func (rt *Runtime) managementRunCasts(ctx context.Context, rec *types.RunRecord) (authored, open bool, err error) {
+	if rt == nil || rt.store == nil || rec == nil || !isPersistentManagementAgentRun(rec) ||
+		metadataStringValue(rec.Metadata, "request_source") != "lifecycle_texture_control" {
+		return false, false, nil
+	}
+	trajectoryID := lifecycleControlTrajectoryForRun(rec)
+	runID := strings.TrimSpace(rec.RunID)
+	if trajectoryID == "" || runID == "" {
+		return false, false, nil
+	}
+	assignments, err := rt.store.ListEngineeringAssignments(ctx, rec.OwnerID, rec.ComputerID, trajectoryID)
+	if err != nil {
+		return false, false, err
+	}
+	for _, assignment := range assignments {
+		if strings.TrimSpace(assignment.Binding.ParentRunID) != runID {
+			continue
+		}
+		authored = true
+		if !assignment.Disposition.Terminal() {
+			open = true
+		}
+	}
+	return authored, open, nil
+}
+
+// managementParkDecision ends a persistent Management turn. A turn that cast
+// nothing completes as before. A turn that cast takes a result that already
+// arrived, parks while its cast is open, and completes once it is not.
+func managementParkDecision(ready, authored, open bool) toolregistry.ToolLoopParkResult {
+	switch {
+	case !authored:
+		return toolregistry.ToolLoopParkResult{}
+	case ready:
+		return toolregistry.ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}
+	case open:
+		return toolregistry.ToolLoopParkResult{Passivate: true, Reason: managementAwaitingCastPassivation}
+	default:
+		return toolregistry.ToolLoopParkResult{}
+	}
+}
+
 func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) toolregistry.ToolLoopParkWaiterFunc {
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
 	}
-	if !metadataBoolValue(rec.Metadata, "actor_park_on_idle") {
+	parkOnIdle := metadataBoolValue(rec.Metadata, "actor_park_on_idle")
+	managementControl := isPersistentManagementAgentRun(rec) && metadataStringValue(rec.Metadata, "request_source") == "lifecycle_texture_control"
+	if !parkOnIdle && !managementControl {
 		return nil
 	}
 	ownerID := strings.TrimSpace(rec.OwnerID)
@@ -2687,6 +2746,20 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) toolregistry.ToolLoop
 				}
 			}
 			return false, nil
+		}
+		if !parkOnIdle {
+			authored, open, err := rt.managementRunCasts(ctx, rec)
+			if err != nil {
+				return toolregistry.ToolLoopParkResult{}, fmt.Errorf("list the turn's delegated casts for park wait: %w", err)
+			}
+			if !authored {
+				return toolregistry.ToolLoopParkResult{}, nil
+			}
+			ok, err := ready()
+			if err != nil {
+				return toolregistry.ToolLoopParkResult{}, err
+			}
+			return managementParkDecision(ok, authored, open), nil
 		}
 		// Actor mode: do not block on a channel. If there are no
 		// pending updates, passivate immediately. The actor will
