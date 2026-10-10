@@ -301,7 +301,7 @@ Critical path. Tracks B to E run in parallel with A.
   is not a special operation. Any prompt, from Texture or the prompt bar
   (which already enters through Texture), can end in a promotable
   change. Examples: "make an app that does x", "change the desktop
-  background", "email me a daily digest", "change the slides app to …".
+  background", "email me a daily digest", "change an app to …".
 
   The route is the ordinary one: Texture, then management, then
   engineering in a capsule. Whenever a capsule result would change the
@@ -333,11 +333,22 @@ Critical path. Tracks B to E run in parallel with A.
   automation, and an app is a release, but all three are typed
   candidates on one promotion path. Texture's "effects-OFF" framing
   follows the computer's armed mode.
-- **E. Approve, reject and roll back in the product.** Today they exist
-  only as API calls and key scopes. Minimal: one decision card in the
-  Texture document, bound to the frozen candidate, for every kind of
-  change. Add a rollback that works when the desktop itself is broken.
-  The updater's health rollback is the backstop.
+- **E. A changes app (owner, 2026-10-10).** A desktop app for
+  managing changes, not a one-off card. It lists every candidate
+  (requested or speculative) with its request, diff, verifier verdict
+  and state. It is where the owner approves, rejects and rolls back, and
+  where release history and restore points live. The Texture document
+  links to the candidate in this app. The app also needs a rollback
+  that works when the desktop itself is broken; the updater's health
+  rollback is the backstop.
+
+  Its second job is publishing: share an approved change as source
+  that another owner can inspect, customize, rebuild and adopt. That is
+  S8's deliverable, which arrives through this app, after F.
+
+  Today approve, reject and roll back exist only as API calls and key
+  scopes. The slides app was one example of an app change, not a
+  target.
 - **F. Owner computer.** Arm the mode with the owner, who then asks
   in their own words, through D and E.
 - **G. Speculative development (owner, 2026-10-10), right after F.**
