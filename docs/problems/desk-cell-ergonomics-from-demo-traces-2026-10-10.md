@@ -107,6 +107,15 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
   open owner question: the persistent-management findings of this day point
   the same way.
 
+- T4. (open, low) `choir.Updates()` lists every pending report, but a
+  Texture turn may dispose only those at or before its
+  `scheduled_message_seq`. Research-only demo, Texture run 1d9c40b0 at
+  22:48:50: a disposition naming a report that arrived mid-turn was
+  refused ("its message seq 15 is after this activation's scheduled seq
+  13"); the next cell dropped it and committed. Cost: one cell. Fix
+  direction: mark such updates in the cell view as arriving for the next
+  turn.
+
 ## Research (tools)
 
 - R1. (open) `choir.SourceSearch` fails `dial tcp 10.200.57.1:8787:
