@@ -8,7 +8,10 @@ definition_version: 4
 # and it can recursively call itself (rlm pattern) to fan out to multiple
 # models"; "we probably need a research-only task ... we can pause working
 # on arxiv task until our research only task is good ... compare the results
-# to a multi-haiku deep research on the same topic".
+# to a multi-haiku deep research on the same topic"; "we dont really care
+# about the recursion depth or number of rlm agents used. just the result.
+# bitter lesson, remember. and different models in the desk will probably
+# have different behavior so we dont want to overfit a prompt or model".
 readiness: drafted
 
 review:
@@ -77,11 +80,12 @@ finish:
   artifact: >-
     A deployed research desk on staging that (1) is deep by default and
     reports per subtopic (prompt); (2) can call choir.Research with a list
-    of child specs (objective, model from an allowlisted catalog, budget
-    share) and receive each child's findings and sources as return values
-    in the same cell; children run in parallel, read-only, with no
-    messaging verbs and a depth cap, inside the parent's egress budget and
-    deadline, each receipted under the parent.
+    of child specs (objective, optional model from the catalog) and
+    receive each child's findings and sources as return values in the same
+    cell; children run in parallel, read-only, with no messaging verbs, and
+    may themselves call choir.Research; the whole tree runs inside the
+    parent's egress budget and deadline. How deep or wide the model goes is
+    its own choice.
   acceptance:
     - action: >-
         Rerun the research-only demo ("Research the news on and around AI
@@ -103,11 +107,11 @@ finish:
         the product path.
       evidence_class: deployed proof (test computer)
     - action: >-
-        A run whose children exceed their budget or deadline, and a child
-        that tries a messaging verb or a further nested call past the cap.
+        A run whose children exhaust the shared budget or the deadline, and
+        a child that tries a messaging verb.
       proves: >-
-        Budget, deadline, depth and authority bounds hold; a refused child
-        returns an error value, never a hang.
+        Budget, deadline and authority bounds hold; a refused child returns
+        an error value, never a hang.
       evidence_class: deployed proof plus focused tests
   rollback: >-
     Revert the fan-out commits; the research prompt change is independent
@@ -127,16 +131,17 @@ value:
     activation deadline.
   goodharting_would_be: >-
     Counting items without checking dates or links; padding the week with
-    out-of-window or unconfirmed items; children that are the same model
-    repeating the same searches; revisions that churn wording without new
-    evidence; reports split into fragments to raise a report count.
+    out-of-window or unconfirmed items; revisions that churn wording without
+    new evidence; scoring the mechanism (children, depth, models, report
+    count) instead of the document; a prompt tuned to one model or to this
+    one prompt.
 
 homotopy:
   realism_axis: >-
     prompt-only depth in one activation -> choir.Research with parallel
-    children on the desk's own model -> children on several models from the
-    catalog -> depth-2 recursion (a child plans grandchildren) -> an owner
-    research request on a real computer.
+    children (any depth, the model's choice) -> the same on other desk
+    models and other research prompts -> an owner research request on a
+    real computer.
 
 boundaries:
   authority: >-
@@ -153,8 +158,11 @@ boundaries:
   invariants:
     - a child never holds Report, Message, Cast, Escalate or any write verb
     - a child's results return as values in the parent's cell, never by mailbox
-    - children share the parent's egress budget and deadline; depth cap 2
-    - every child call is receipted with a link to the parent activation
+    - the whole tree shares the parent's egress budget and deadline; no
+      structural cap on depth or width (owner 2026-10-10: the result is the
+      measure)
+    - prompts state the desk's job in general terms, not tuned to one model
+      or one task
   exclusions:
     - no change to Texture's control path or management
     - no bare models.Call (dataflow recursion) in this mission; separate if needed
@@ -166,8 +174,8 @@ now:
     building fan-out.
   candidate: none
   conjecture: >-
-    If research fans its subtopics out to parallel child activations on
-    several models and reports after each subtopic, then the week-of-AI-news
+    If research can fan its work out to parallel child activations and
+    reports as findings land, then the week-of-AI-news
     document reaches the Haiku baseline's in-window item count, with correct
     dates and working links, within 15 minutes, with a revision every few
     minutes. EDGE missing_oracle: item correctness needs a checker
@@ -177,12 +185,15 @@ now:
     Actor recursion as a synchronous host verb (choir.Research) over the
     existing model loop, not new runs: it matches M6.5 (nested activation,
     subset manifest, budget carve-out) and the 2026-09-15 return-value rule
-    without new lifecycle objects.
+    without new lifecycle objects. M6.5's depth cap 2-3 is dropped by the
+    owner's 2026-10-10 direction; the shared budget and deadline bound the
+    tree.
   belief:
     believed_state: >-
       Depth is limited first by kernel ergonomics (display, timeouts) and
       the prompt's missing "continue after a report", then by one
-      low-effort model doing all the searching serially.
+      low-effort model doing all the searching serially, then possibly by
+      the 64-call activation egress budget.
     main_uncertainty: >-
       Whether the prompt fix alone produces sustained depth from a
       low-effort model, which decides how much fan-out must carry.
