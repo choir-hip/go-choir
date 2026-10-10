@@ -105,7 +105,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 		Description: "Evaluate model-authored Go source for this desk in a killable host subprocess (restricted stdlib, per-role choir verbs).",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"source":     map[string]any{"type": "string", "description": "Raw Go source for one REPL cell; stage desk acts with choir.* verbs."},
-			"timeout_ms": map[string]any{"type": "integer", "description": "Evaluation timeout in milliseconds."},
+			"timeout_ms": map[string]any{"type": "integer", "description": "Optional evaluation timeout in milliseconds; leaving it unset is normal. A cell that reaches it is killed with its session, so values from earlier cells are lost. Host calls such as choir.WebSearch and choir.FetchURL take several seconds each (up to about 10 s)."},
 		}, []string{"source"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			execCtx := toolregistry.ExecutionContextFrom(ctx)
@@ -191,6 +191,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			if reduction.active {
 				rt.armCellTerminalDeadline(ctx, reduction)
 			}
+			evalStart := time.Now()
 			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits)
 
 			result := yaegikernel.SessionResult{}
@@ -199,6 +200,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					workers.release(activationID)
 				}
 				result.Error = evalErr.Error()
+				if input.TimeoutMS > 0 && ctx.Err() == nil && evalCtx.Err() == context.DeadlineExceeded {
+					result.Error = cellTimeoutError(input.TimeoutMS, time.Since(evalStart))
+					result.DurationMs = time.Since(evalStart).Milliseconds()
+				}
 			} else {
 				result = res
 			}
@@ -674,4 +679,13 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 		return err
 	}
 	return nil
+}
+
+// cellTimeoutError explains a cell stopped by the timeout_ms its desk chose.
+// A bare "context deadline exceeded" left research shortening the limit or
+// retrying the same cell, while its web searches needed 3-10 s each.
+func cellTimeoutError(timeoutMS int, elapsed time.Duration) string {
+	return fmt.Sprintf("cell stopped by its own timeout_ms=%d after %d ms; the session was killed, so values defined in earlier cells are gone. "+
+		"Host calls such as choir.WebSearch and choir.FetchURL take several seconds each (up to about 10 s): leave timeout_ms unset or allow for them",
+		timeoutMS, elapsed.Milliseconds())
 }
