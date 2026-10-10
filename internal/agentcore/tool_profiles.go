@@ -244,6 +244,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	if profile == agentprofile.Texture {
 		b.WriteString(textureprompts.RunOverlay())
+		if operationID := textureRunSelfDevelopmentOperation(rt, rec); operationID != "" {
+			b.WriteString("\n\nSelf-development supervision:\nThis document supervises self-development operation " + operationID + ". The runtime runs the operation: engineering builds and freezes the change, an independent judgment checks it, the owner approves or rejects it, and the update applies. Do not send controls to verify, approve, apply or re-run it. Keep the document a true account of where the operation stands, from the reports in choir.Updates(): what was built, what the evidence shows, and what is still pending. When a report adds nothing the document needs, record a decision (op \"decide\", decision_kind \"wait_for_evidence\") instead of a revision.")
+		}
 		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
 			b.WriteString("\n\nLifecycle Texture control authority:\nTexture is a full-RLM desk: you author the document and open children inside one staged choir.ApplyTexture turn. Open each new Research atomically in that turn's controls array — one controls entry with open_researcher=true, an objective, and the first typed downward packet. Open the persistent Management similarly with open_persistent_super=true and a valid execution_request packet. Continue an existing bound child only by target_work_item_id. Each owner request (and the document's creation) allows two new Research openers; the runtime drops further openers and notes it in the turn, so finish with the evidence in hand. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
 		}
@@ -571,4 +574,21 @@ func deskSurfacePrompt(profile string, rec *types.RunRecord) string {
 	default:
 		return ""
 	}
+}
+
+// textureRunSelfDevelopmentOperation names the self-development operation a
+// Texture run's trajectory supervises, or "" when there is none.
+func textureRunSelfDevelopmentOperation(rt *Runtime, rec *types.RunRecord) string {
+	if rt == nil || rt.selfdevOperations == nil || rec == nil || strings.TrimSpace(rec.ComputerID) == "" {
+		return ""
+	}
+	trajectoryID := strings.TrimSpace(firstNonEmpty(rec.TrajectoryID, metadataStringValue(rec.Metadata, runMetadataTrajectoryID)))
+	if trajectoryID == "" {
+		return ""
+	}
+	operation, err := rt.selfdevOperations.GetByTrajectory(context.Background(), rec.ComputerID, trajectoryID)
+	if err != nil {
+		return ""
+	}
+	return operation.OperationID
 }

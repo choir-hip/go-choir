@@ -302,6 +302,9 @@ func pendingCellUpdates(ctx context.Context, rt *Runtime, execCtx toolregistry.E
 	}
 	updates, err := rt.pendingCoagentUpdatesForRun(ctx, rec, ownerID, agentID, 100)
 	if err != nil {
+		// The cell still runs, but an empty choir.Updates() must not be
+		// indistinguishable from "no reports" (rerun 12).
+		log.Printf("desk cell: pending updates for %s run %s unavailable: %v", agentID, rec.RunID, err)
 		return nil
 	}
 	if len(updates) == 0 {
