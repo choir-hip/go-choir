@@ -66,6 +66,54 @@ func resolveRecoveryTarget(ctx context.Context, src projectionbase.BaseSource, c
 	return projectionbase.ResolveTargetSequence(ctx, src, computerID, targetHead, sequence, descriptor.CanonicalHead)
 }
 
+// restoreTarget is how a restore reaches its target head: install the
+// advertised base and replay the tail after it, or replay from genesis.
+type restoreTarget struct {
+	sequence uint64
+	fromBase bool
+}
+
+// planRestoreTarget resolves the restore target against the advertised base,
+// and falls back to a bounded genesis replay when no base applies: none was
+// ever advertised, or the target is older than the newest one. checkpointd
+// keeps advancing the base while a computer runs, so a rollback target is
+// routinely older than it
+// (docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md).
+// The tape decides: a target that is not on the chain refuses, and a target
+// at or past the base's sequence keeps the base's refusal, so a stale or
+// corrupt base is never bypassed.
+func planRestoreTarget(ctx context.Context, src projectionbase.BaseSource, computerID, targetHead string) (restoreTarget, error) {
+	sequence, err := resolveRecoveryTarget(ctx, src, computerID, targetHead)
+	if err == nil {
+		return restoreTarget{sequence: sequence, fromBase: true}, nil
+	}
+	if !errors.Is(err, projectionbase.ErrBaseRefused) {
+		return restoreTarget{}, err
+	}
+	baseRefusal := err
+	absent := advertisedBaseAbsent(ctx, src, computerID)
+	var watermark uint64
+	if !absent {
+		if watermark, _, err = src.Watermark(ctx, computerID); err != nil {
+			return restoreTarget{}, baseRefusal
+		}
+	}
+	sequence, err = projectionbase.ResolveTargetSequence(ctx, src, computerID, targetHead, 0, "")
+	if err != nil {
+		return restoreTarget{}, fmt.Errorf("rematerialize: recovery target is not on the canonical chain: %w", err)
+	}
+	if !absent && sequence >= watermark {
+		return restoreTarget{}, baseRefusal
+	}
+	if sequence > projectionbase.MaxRecoveryTailEvents {
+		if absent {
+			return restoreTarget{}, fmt.Errorf("%w: no advertised base and recovery target %d exceeds the %d-event replay bound", projectionbase.ErrBaseRefused, sequence, projectionbase.MaxRecoveryTailEvents)
+		}
+		return restoreTarget{}, fmt.Errorf("%w: recovery target %d precedes base %d and exceeds the %d-event replay bound", projectionbase.ErrBaseRefused, sequence, watermark, projectionbase.MaxRecoveryTailEvents)
+	}
+	return restoreTarget{sequence: sequence}, nil
+}
+
 // installStagedBase installs the verified base for targetHead into stagingRoot
 // and opens it. The returned store head is the watermark W; replay resumes
 // after W through the existing reconstruct loop. Any failure refuses before

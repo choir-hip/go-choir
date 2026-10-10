@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -359,4 +360,88 @@ func TestRestoreTailReceiptBounds(t *testing.T) {
 	if _, err := gap.tailReceipt(1, 4); !errors.Is(err, projectionbase.ErrBaseRefused) {
 		t.Fatalf("gapped tail admitted: %v", err)
 	}
+}
+
+// Rerun 12 (docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md):
+// checkpointd advanced the advertised base past the pinned head, and restore
+// refused "target is not a descendant of watermark". Failure modes pinned:
+//   - a target older than the newest base is refused although the tape
+//     proves it is on the chain (rollback impossible by construction);
+//   - a target that is not on the chain falls back to genesis instead of
+//     refusing;
+//   - an old target beyond the replay bound is replayed anyway;
+//   - a target the base should cover (at or past its sequence) skips a base
+//     that refused, so a stale or corrupt base no longer refuses;
+//   - a target past the base stops using the base.
+func TestPlanRestoreTargetBeforeNewestBase(t *testing.T) {
+	ctx := context.Background()
+	const computerID = "computer-restore-plan"
+	head := func(seq uint64) string { return fmt.Sprintf("%064x", seq) }
+	chain := func(n uint64) []computerevent.DurableEvent {
+		events := make([]computerevent.DurableEvent, 0, n)
+		for seq := uint64(1); seq <= n; seq++ {
+			var record computerevent.DurableEvent
+			record.Request.Event.Sequence = seq
+			record.Request.Next.CanonicalEventHead = head(seq)
+			events = append(events, record)
+		}
+		return events
+	}
+	source := func(watermark uint64, baseHead string, events []computerevent.DurableEvent) *restoreBaseFake {
+		return &restoreBaseFake{
+			descriptor: projectionbase.Descriptor{ComputerID: computerID, Sequence: watermark, CanonicalHead: baseHead, BlobSHA256: strings.Repeat("e", 64)},
+			events:     events,
+		}
+	}
+
+	t.Run("older than the newest base replays from genesis", func(t *testing.T) {
+		plan, err := planRestoreTarget(ctx, source(40, head(40), chain(60)), computerID, head(12))
+		if err != nil || plan.fromBase || plan.sequence != 12 {
+			t.Fatalf("plan = %+v, %v; want genesis replay to 12", plan, err)
+		}
+	})
+	t.Run("past the base uses the base", func(t *testing.T) {
+		plan, err := planRestoreTarget(ctx, source(40, head(40), chain(60)), computerID, head(55))
+		if err != nil || !plan.fromBase || plan.sequence != 55 {
+			t.Fatalf("plan = %+v, %v; want base then tail to 55", plan, err)
+		}
+	})
+	t.Run("not on the chain refuses", func(t *testing.T) {
+		_, err := planRestoreTarget(ctx, source(40, head(40), chain(60)), computerID, strings.Repeat("9", 64))
+		if !errors.Is(err, projectionbase.ErrBaseRefused) {
+			t.Fatalf("foreign target: %v, want refusal", err)
+		}
+	})
+	t.Run("a base that should cover the target still refuses", func(t *testing.T) {
+		// The tail after the base is missing the target's event, so the
+		// base path refuses; a genesis read past the base must not bypass it.
+		src := source(40, head(40), chain(60))
+		src.dropTailEvent = true
+		_, err := planRestoreTarget(ctx, src, computerID, head(41))
+		if !errors.Is(err, projectionbase.ErrBaseRefused) {
+			t.Fatalf("corrupt base covering the target: %v, want refusal", err)
+		}
+	})
+	t.Run("old target beyond the replay bound refuses", func(t *testing.T) {
+		bound := projectionbase.MaxRecoveryTailEvents
+		_, err := planRestoreTarget(ctx, source(bound+20, head(bound+20), chain(bound+30)), computerID, head(bound+5))
+		if !errors.Is(err, projectionbase.ErrBaseRefused) || !strings.Contains(err.Error(), "replay bound") {
+			t.Fatalf("old target past the bound: %v, want bound refusal", err)
+		}
+	})
+	t.Run("absent base replays from genesis", func(t *testing.T) {
+		src := source(0, "", chain(30))
+		src.emptyWatermark = true
+		plan, err := planRestoreTarget(ctx, src, computerID, head(30))
+		if err != nil || plan.fromBase || plan.sequence != 30 {
+			t.Fatalf("plan = %+v, %v; want genesis replay to 30", plan, err)
+		}
+	})
+	t.Run("watermark outage is not a refusal", func(t *testing.T) {
+		src := source(40, head(40), chain(60))
+		src.watermarkErr = errors.New("platform outage")
+		if _, err := planRestoreTarget(ctx, src, computerID, head(12)); err == nil || errors.Is(err, projectionbase.ErrBaseRefused) {
+			t.Fatalf("outage: %v, want a non-refusal error", err)
+		}
+	})
 }

@@ -105,36 +105,21 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	}
 	var staged *choirstore.Store
 	var descriptor projectionbase.Descriptor
-	targetSequence, err := resolveRecoveryTarget(ctx, src, computerID, targetHead)
-	if errors.Is(err, projectionbase.ErrBaseRefused) {
-		// The refusal could name a stale or corrupt base, which must stay
-		// refused. Only an absent advertised base permits the bounded genesis
-		// replay below.
-		if !advertisedBaseAbsent(ctx, src, computerID) {
-			return report, err
-		}
-		// No advertised base: no ops base exists for this computer, so there is
-		// nothing to install — replay the full tape into the staged store.
-		// ResolveTargetSequence from zero proves the target is on the canonical
-		// chain (immutable tape) where a base descriptor would have; the tail
-		// bound keeps the refusal posture the base exists to protect.
-		targetSequence, err = projectionbase.ResolveTargetSequence(ctx, src, computerID, targetHead, 0, "")
-		if err != nil {
-			_ = os.RemoveAll(stagingRoot)
-			return report, fmt.Errorf("rematerialize: recovery target is not on the canonical chain: %w", err)
-		}
-		if targetSequence > projectionbase.MaxRecoveryTailEvents {
-			_ = os.RemoveAll(stagingRoot)
-			return report, fmt.Errorf("%w: no advertised base and recovery target %d exceeds the %d-event replay bound", projectionbase.ErrBaseRefused, targetSequence, projectionbase.MaxRecoveryTailEvents)
-		}
+	plan, err := planRestoreTarget(ctx, src, computerID, targetHead)
+	if err != nil {
+		_ = os.RemoveAll(stagingRoot)
+		return report, err
+	}
+	targetSequence := plan.sequence
+	if !plan.fromBase {
+		// No base applies: replay the tape from genesis into the staged store.
+		// planRestoreTarget proved the target is on the canonical chain and
+		// inside the replay bound.
 		staged, err = choirstore.OpenFresh(filepath.Join(stagingRoot, filepath.Base(stagedMarker)))
 		if err != nil {
 			_ = os.RemoveAll(stagingRoot)
 			return report, fmt.Errorf("rematerialize: open staged workspace: %w", err)
 		}
-	} else if err != nil {
-		_ = os.RemoveAll(stagingRoot)
-		return report, err
 	} else {
 		staged, descriptor, err = installStagedBase(ctx, src, stagingRoot, filepath.Base(stagedMarker), computerID, targetHead, targetSequence)
 		if err != nil {

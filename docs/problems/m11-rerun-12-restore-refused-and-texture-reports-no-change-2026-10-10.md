@@ -131,3 +131,32 @@ corrected (false, with a note) and the probe now marks
    tuning. Read the trace first.
 3. Post-apply checkpoint (failure 1, direction B).
 4. Rerun 13, then the trace-review and prompt-tuning loop.
+
+## Fix (a) for failure 2: restore replays from genesis below the newest base
+
+Red ceremony (restore/rematerialize).
+
+- Conjecture delta: the tape, not the newest base, decides whether a
+  restore target is reachable. A target older than the base is replayed
+  from genesis, within the same 10000-event bound the fresh-computer path
+  already uses.
+- Change: `planRestoreTarget` (`agentcore/restore_base.go`) replaces the
+  branch in `RematerializeFromTape`. If the base path refuses, it resolves
+  the target from genesis. It replays from genesis only when no base was
+  advertised, or when the target's sequence is below the base's. A
+  target at or past the base keeps the base's refusal, so a stale or
+  corrupt base is never bypassed. A target off the chain, or past the
+  bound, refuses.
+- Tests first: `TestPlanRestoreTargetBeforeNewestBase` (older than the
+  base, past it, off the chain, a base that refused a target it covers,
+  past the bound, absent base, watermark outage). The genesis replay
+  itself is the path the existing "absent watermark" test exercises.
+- Protected surfaces: restore target resolution. The base install path,
+  the tail receipt and the witness check are unchanged.
+- Admissible evidence: rerun 13's restore leg returns 200 with the
+  witness matched, on a computer whose watermark passed the pinned head.
+- Rollback: git revert; no persistent state changes.
+- Heresy delta: discovered "rollback impossible below the newest base";
+  repaired for computers under 10000 events, on staging proof only.
+  Residual `restore-long-lived`: the owner's computer is past the bound,
+  so it needs fix (b), a checkpoint that pins its base.
