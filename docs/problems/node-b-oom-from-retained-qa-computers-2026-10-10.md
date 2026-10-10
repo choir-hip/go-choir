@@ -168,3 +168,22 @@ Red ceremony (vmctl VM lifecycle on staging).
   (staging proof above). The truthful stop, memory admission and the
   proof-account busy cap are deployed but have not yet been exercised on
   staging.
+
+## Second owner-computer reboot (07:06Z)
+
+After the cf0969cf deploy, vmctl reattached the owner computer at
+06:58:33 with health OK. From 06:59:43 its health checks failed. At
+07:05:37 vmctl marked it "unhealthy on resolve; recovering before
+routing", and at 07:06:17 rebooted it (epoch 1187, new address). That is
+a crash restart under the owner rule: open work was closed, the second
+time this morning (after 06:26:50).
+
+- Hypothesis: host memory pressure. Six unmanaged QA VMs were still
+  running until reconcile reaped them at 07:10:28, and rerun 10's
+  computer booted at 07:00:57.
+- Not established: whether the guest itself was busy, for example in
+  boot replay.
+- It has been healthy since, on cf0969cf.
+
+Residual `owner-recovery-reboot`: recovery of a protected computer
+reboots it without trying anything gentler.
