@@ -263,8 +263,41 @@ func TestValidateLifecycleTextureControlTargetRejectsScopeRoleAndWorkMismatches(
 	if _, err := s.SettleLifecycleWork(ctx, settle); err != nil {
 		t.Fatalf("settle target work: %v", err)
 	}
-	if _, err := s.ValidateLifecycleTextureControlTarget(ctx, base); err == nil {
-		t.Fatal("closed target work validation unexpectedly succeeded")
+	if _, err := s.ValidateLifecycleTextureControlTarget(ctx, base); err == nil || !strings.Contains(err.Error(), "not open") || !strings.Contains(err.Error(), "open_researcher") {
+		t.Fatalf("closed target work error = %v, want it to say the work is not open and name open_researcher", err)
+	}
+}
+
+// TestLifecycleTargetWorkMismatchNamesTheEarlierRun covers T3
+// (desk-cell-ergonomics 2026-10-10): Texture followed up on research work an
+// earlier Texture run of the same document had opened, and the refusal did
+// not say so. Run-level provenance stays; the refusal names both runs and
+// the way forward.
+func TestLifecycleTargetWorkMismatchNamesTheEarlierRun(t *testing.T) {
+	req := LifecycleTextureControlTargetRequest{
+		OwnerID: "owner", ComputerID: "computer", TrajectoryID: "traj", DocumentID: "doc",
+		CallerAgentID: "texture:doc", CallerRunID: "run-texture-now",
+		TargetAgentID: "research:r1", TargetWorkItemID: "work-1",
+	}
+	work := types.WorkItemRecord{
+		WorkItemID: "work-1", OwnerID: "owner", ComputerID: "computer", TrajectoryID: "traj",
+		Status: types.WorkItemOpen, AssignedAgentID: "research:r1", AuthorityProfile: "research",
+		CreatedByRunID: "run-texture-earlier",
+		Details: map[string]any{
+			"requested_by_profile": "texture", "requested_by_agent_id": "texture:doc",
+			"requested_by_run_id": "run-texture-earlier",
+		},
+	}
+	got := lifecycleTargetWorkMismatch(work, req, "research")
+	for _, want := range []string{"run-texture-earlier", "run-texture-now", "open_researcher"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("mismatch %q does not name %q", got, want)
+		}
+	}
+	work.CreatedByRunID = "run-texture-now"
+	work.Details["requested_by_run_id"] = "run-texture-now"
+	if got := lifecycleTargetWorkMismatch(work, req, "research"); got != "" {
+		t.Fatalf("work this run opened was refused: %s", got)
 	}
 }
 

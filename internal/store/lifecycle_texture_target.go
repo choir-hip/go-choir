@@ -144,11 +144,8 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		if err != nil {
 			return LifecycleTextureControlTargetBinding{}, fmt.Errorf("validate lifecycle Texture control target: lookup target work: %w", err)
 		}
-		if work.WorkItemID != req.TargetWorkItemID || work.OwnerID != ownerID || work.ComputerID != computerID ||
-			work.TrajectoryID != req.TrajectoryID || work.Status != types.WorkItemOpen ||
-			strings.TrimSpace(work.AssignedAgentID) != req.TargetAgentID || strings.TrimSpace(work.AuthorityProfile) != binding.TargetProfile ||
-			!lifecycleTargetWorkRequestedByTexture(work, req.CallerRunID, req.CallerAgentID) {
-			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("target work does not bind the open target obligation and caller provenance")
+		if reason := lifecycleTargetWorkMismatch(work, req, binding.TargetProfile); reason != "" {
+			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget(reason)
 		}
 		binding.TargetWorkItem = &work
 	}
@@ -180,6 +177,26 @@ func containsLifecycleIdentity(values []string, wanted string) bool {
 		}
 	}
 	return false
+}
+
+// lifecycleTargetWorkMismatch names the first reason target work cannot carry
+// a Texture control, in words the Texture desk can act on. One combined
+// message for all of them left Texture retrying the same control (T3 in
+// docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md).
+func lifecycleTargetWorkMismatch(work types.WorkItemRecord, req LifecycleTextureControlTargetRequest, targetProfile string) string {
+	id := req.TargetWorkItemID
+	switch {
+	case work.WorkItemID != id || work.OwnerID != req.OwnerID || work.ComputerID != req.ComputerID || work.TrajectoryID != req.TrajectoryID:
+		return fmt.Sprintf("target work %s is not work of this document's trajectory", id)
+	case work.Status != types.WorkItemOpen:
+		return fmt.Sprintf("target work %s is %s, not open; open a new research entry (open_researcher) instead of following up on it", id, work.Status)
+	case strings.TrimSpace(work.AssignedAgentID) != req.TargetAgentID || strings.TrimSpace(work.AuthorityProfile) != targetProfile:
+		return fmt.Sprintf("target work %s is assigned to %s, not to the target %s", id, strings.TrimSpace(work.AssignedAgentID), req.TargetAgentID)
+	case !lifecycleTargetWorkRequestedByTexture(work, req.CallerRunID, req.CallerAgentID):
+		return fmt.Sprintf("target work %s was requested by run %s, not by this Texture run %s; a Texture run follows up only on work it opened itself, so open a new research entry (open_researcher) for the follow-up",
+			id, strings.TrimSpace(work.CreatedByRunID), req.CallerRunID)
+	}
+	return ""
 }
 
 func lifecycleTargetWorkRequestedByTexture(work types.WorkItemRecord, callerRunID, callerAgentID string) bool {
