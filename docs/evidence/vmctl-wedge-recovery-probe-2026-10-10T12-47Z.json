@@ -1,0 +1,24 @@
+{
+  "probe": "vmctl_wedge_recovery_probe",
+  "base_url": "https://choir.news",
+  "started_at": "2026-10-10T12:47:11.151Z",
+  "predicate": "A disposable computer frozen so it refuses connections is left alone for the wedge window, then stopped by vmctl itself as wedged with a destruction receipt, and a plain page reload boots it at a new epoch.",
+  "legs": {
+    "fresh_owner": true,
+    "computer_booted": true,
+    "guest_frozen": true,
+    "untouched_inside_window": true,
+    "stopped_as_wedged": true,
+    "wedge_receipted": true,
+    "reload_boots_new_epoch": true
+  },
+  "email": "vmctl-wedge-1791636432218-m75tzk@example.com",
+  "vm_id": "vm-1da1ac2a10d0cffde628853599fbd412",
+  "epoch_before": 12993,
+  "frozen_at": "2026-10-10T12:47:25.674Z",
+  "stopped_at": "2026-10-10T12:54:27.843Z",
+  "receipts_after": 1,
+  "epoch_after": 12994,
+  "finished_at": "2026-10-10T12:54:41.704Z",
+  "predicate_result": "satisfied"
+}

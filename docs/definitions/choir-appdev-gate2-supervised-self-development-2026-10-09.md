@@ -256,9 +256,15 @@ now:
     owner-recovery-reboot, guest-degraded-after-forced-reboot.
   next_action: >-
     vmctl Phase 0 (docs/vmctl-360-review-2026-10-10.md, converged 8/8):
-    step 1 kill receipts accepted on staging (d41c2caf, a5c85838). Next
-    step 2, disarm browser/proxy escalation; then close automatic
-    destructive paths with bounded admission, adopt by identity. Each step
+    step 1 kill receipts accepted on staging (d41c2caf, a5c85838); step 2
+    no automatic restart from browser, wake or resolve accepted (4eb1ec55,
+    8a32484c); protection is bounded by evidence: a guest that refuses
+    connections for five minutes is stopped as wedged and boots again
+    (537735c1, 0eee1843; owner ruling "it should all be automated"). Next
+    step 3, close the remaining automatic destructive paths; then adopt by
+    identity and restart hygiene (the deploy's double vmctl restart
+    orphans guest console pipes). Residual: one pending desk mutation keeps
+    the owner's computer busy (hypothesis). Each step
     problem-doc first, red ceremony, Landing Loop. Self-development now
     admits one open operation per computer and a crash boot closes
     pre-decision operations (9399f3ed); the owner's computer needs one boot
@@ -266,6 +272,12 @@ now:
     (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
     Then M11 rerun 12 with no push during the run.
 receipts:
+  - id: vmctl-wedge-recovery-probe-2026-10-10
+    ref: docs/evidence/vmctl-wedge-recovery-probe-2026-10-10T12-47Z.json
+    result: satisfied (7/7; frozen guest untouched 3 min, stopped as wedged at ~7 min, reload booted a new epoch)
+  - id: vmctl-no-escalation-probe-2026-10-10
+    ref: docs/evidence/vmctl-no-escalation-probe-2026-10-10T12-1xZ.json
+    result: satisfied (9/9; resolve and wake left a frozen guest running; owner restart attributed)
   - id: vmctl-receipt-probe-2026-10-10
     ref: docs/evidence/vmctl-receipt-probe-2026-10-10T11-24Z.json
     result: satisfied (6/6; refresh and stop each leave an attributable destruction receipt)
