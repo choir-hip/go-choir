@@ -79,3 +79,39 @@ effect on other guest clients") is answered for the gateway: yes. The
 guest gateway client sends once. Fix direction: the same bounded resend
 on ECONNREFUSED as the event-chain client (a refused connection never
 reached the server, so the resend cannot duplicate a model call).
+
+## Third instance and clustering assessment (2026-10-10 23:33)
+
+Research-only demo on a114b46e (demo-arxiv-2026-10-10c). The same
+02e19146 deploy stopped the proxy, auth, platform, mail and gateway
+services at 23:32:47 and started them at 23:34:35, a gap of 1 min 48 s,
+then restarted them again at 23:34:40 (host journal). The guest could not
+reach corpusd from at least 23:33:34. Event writes outlasted the 30 s
+resend window, and guest credential renewal (`internal/selfdev/credentials.go`,
+sends once) failed. Texture run 16e6bdbf could not record its own failure
+and is a zombie `running` run. Three research results that arrived during
+the gap were "consumed without a turn" (reconcile refused): research work
+lost.
+
+Clustering: four defects in one week share one cause. A deploy restarts
+host services under busy guests (corpusd, gateway, auth/credential
+renewal), and every guest-to-host client sent once or retried briefly.
+The defects are the zombie run, the failed management turn, the cancelled
+engineering run and the lost research results. The per-client resend
+loops added in 880d3ffb (event chain) and 4fcf00ae (gateway) treat one
+client each, and 30 s is shorter than the observed gap.
+
+Substrate options:
+
+1. Guest side: one shared transport for every guest-to-host HTTP client
+   that resends when the dial was refused and the body can be replayed,
+   for a window longer than a deploy gap (3 minutes), bounded by each
+   call's context. It replaces the two per-client loops. Reversible; no
+   deploy-shape change.
+2. Host side: a deploy should not leave gateway, auth and platform stopped
+   for nearly two minutes. That gap is the deploy's shape (what runs
+   between stop and start). It is a deploy-shape decision for the owner,
+   recorded here with the evidence. Not changed by this record.
+
+The guest-side transport is the next commit. Lost occurrences ("consumed
+without a turn") and zombie terminal writes remain residuals after it.
