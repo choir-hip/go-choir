@@ -185,31 +185,30 @@ now:
     owner_ratification_ref: pending (stated per AGENTS.md No Blocking Asks)
   belief:
     believed_state: >-
-      Four M11 reruns on 2026-10-09, each 5 of 16 legs (fresh owner,
-      bootstrap chain, pre-episode checkpoint, propose_only, operation
-      started), each stopped at a deeper layer. Reruns 1-3: the capsule's
-      session worker could not start (inherited broker seccomp refused
-      Landlock, then seccomp; repaired 733bec77). Rerun 4 (733bec77): the
-      capsule ran cells for 116 iterations, staged and verified a
-      release, then the freeze failed: emitSourcePatch read the new
-      docs/evidence directory as a file
-      (problems/capsule-freeze-fails-on-new-source-directory-2026-10-09.md;
-      fixed 2c68cc18). The blocker report never reached Texture: the
-      binding scan wanted a lifecycle control update a delegated cast
-      never has (fixed 028446a5, red). Approval, apply, reject and restore
-      remain unobserved on this build, not known broken.
+      Five M11 reruns on 2026-10-09/10, each 5 of 16 legs, each stopped
+      one layer deeper. Reruns 1-3: the capsule session worker could not
+      start (repaired 733bec77). Rerun 4: the freeze failed on a new source
+      directory (fixed 2c68cc18) and Texture rejected the delegated-cast
+      report (fixed 028446a5). Rerun 5 (5b851eed): implementation
+      completed, **freeze succeeded**, Texture took a supervision turn on
+      the report, the host opened verification, and the independent
+      verifier failed closed because the in-cell bundle inspection
+      predates the S2-f source patch fields
+      (problems/selfdev-verifier-rejects-frozen-bundle-2026-10-10.md;
+      fixed 3e69567b). The verifier diagnosed the cause itself and every
+      payload check it could run passed. Approval, apply, reject and
+      restore remain unobserved on this build.
     main_uncertainty: >-
-      Whether the freeze, verification and approval chain behind the
-      capsule still works after S2 layering; nothing past the freeze has
-      run since September 29.
-    next_observation: M11 rerun 5 on 5b851eed or later.
+      Whether approval, apply and restore work after S2 layering; nothing
+      past verification has run since September 29.
+    next_observation: M11 rerun 6 on 3e69567b or later.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
   next_action: >-
-    Deploy 5b851eed; rerun M11; on a frozen candidate, follow it through
-    verification, approval, apply, reject and restore, documenting each
-    failed leg before fixing it.
+    Deploy 3e69567b; rerun M11; follow the verified candidate through
+    approval, apply, reject and restore, documenting each failed leg
+    before fixing it.
 receipts:
   - id: m11-rerun-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
@@ -217,6 +216,9 @@ receipts:
   - id: m11-rerun-4-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T22-01-41Z.json
     result: partial (5/16; capsule worked; freeze failed on a new source directory)
+  - id: m11-rerun-5-2026-10-09
+    ref: docs/evidence/m11-rerun-2026-10-09T23-15-26Z.json
+    result: partial (5/16; frozen; verifier failed closed on the in-cell draft mirror)
 ---
 
 # Gate 2 — self-development with live Texture supervision

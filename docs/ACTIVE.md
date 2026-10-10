@@ -118,14 +118,14 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   [`clustering-texture-obligation-closure`](problems/clustering-texture-obligation-closure-2026-10-09.md).
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
-  Reality slice: four M11 reruns, 5 of 16 legs each, each stopped one
-  layer deeper. The capsule session worker is repaired (733bec77);
-  rerun 4 ran engineering for 116 iterations and failed at the freeze on
-  a new source directory
-  ([problem](problems/capsule-freeze-fails-on-new-source-directory-2026-10-09.md),
-  fixed 2c68cc18); its blocker report was rejected by Texture's binding
-  scan (fixed 028446a5). Next: M11 rerun 5 on 5b851eed toward approval
-  and restore.
+  Reality slice: five M11 reruns, 5 of 16 legs each, each stopped one
+  layer deeper: capsule worker (733bec77), freeze on a new source
+  directory (2c68cc18), Texture rejecting delegated-cast reports
+  (028446a5), and in rerun 5 the verifier's in-cell bundle inspection
+  predating the S2-f fields
+  ([problem](problems/selfdev-verifier-rejects-frozen-bundle-2026-10-10.md),
+  fixed 3e69567b). Rerun 5 froze a candidate for the first time since
+  S2. Next: M11 rerun 6 toward approval and restore.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
