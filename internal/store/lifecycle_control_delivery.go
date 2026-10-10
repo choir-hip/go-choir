@@ -781,18 +781,33 @@ func (s *Store) ListLifecycleControlsDeliveredToRunPage(ctx context.Context, own
 				!lifecycleRunBindsWork(run, targetWorkID) {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
 			}
-			producerRun, runErr := s.GetLifecycleRun(ctx, ownerID, computerID, update.SourceRunID)
-			if runErr != nil {
-				return LifecycleDeliveredPacketPage{}, runErr
-			}
 			producerWork, workErr := s.GetLifecycleWorkItem(ctx, ownerID, computerID, producerWorkID)
 			if workErr != nil {
 				return LifecycleDeliveredPacketPage{}, workErr
 			}
-			if producerRun.RunID != update.SourceRunID || producerRun.AgentID != update.AgentID || producerRun.TrajectoryID != trajectoryID ||
-				producerRun.AgentProfile != agentprofile.Engineering || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) ||
-				producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.Engineering {
+			if producerWork.TrajectoryID != trajectoryID || producerWork.AssignedAgentID != update.AgentID || producerWork.AuthorityProfile != agentprofile.Engineering {
 				return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
+			}
+			// A report with no source run is one the runtime wrote for an
+			// assignment that ended before any engineering run bound (a cast
+			// cancelled at spawn). Requiring its run threw not-found and hid
+			// every packet delivered to the consuming turn
+			// (capsule-socket-path-too-long-on-data-disk-2026-10-10.md); it
+			// authenticates through its terminal producer work and the
+			// parent join below instead.
+			if sourceRunID := strings.TrimSpace(update.SourceRunID); sourceRunID == "" {
+				if !workItemTerminal(producerWork.Status) {
+					return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
+				}
+			} else {
+				producerRun, runErr := s.GetLifecycleRun(ctx, ownerID, computerID, sourceRunID)
+				if runErr != nil {
+					return LifecycleDeliveredPacketPage{}, runErr
+				}
+				if producerRun.RunID != sourceRunID || producerRun.AgentID != update.AgentID || producerRun.TrajectoryID != trajectoryID ||
+					producerRun.AgentProfile != agentprofile.Engineering || !producerRun.State.Valid() || !lifecycleRunBindsWork(producerRun, producerWorkID) {
+					return LifecycleDeliveredPacketPage{}, ErrLifecycleInvalidTransition
+				}
 			}
 			// The control binding authenticates two different ID spaces: owner casts
 			// bind the report to the consuming run's lifecycle control update id,

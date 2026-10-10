@@ -235,3 +235,49 @@ func TestDelegatedCastAuthorityOutlivesTheCastingTurn(t *testing.T) {
 		t.Fatalf("historical authority lost after the parent work closed: %v", err)
 	}
 }
+
+// docs/problems/capsule-socket-path-too-long-on-data-disk-2026-10-10.md
+// (second defect): a delegated cast cancelled at spawn, before any
+// engineering run bound, left a runtime-written cancel report with no source
+// run on the parked management turn. The delivered listing threw on it, so
+// the resumed turn saw nothing. Failure modes pinned: the listing errors on a
+// runless report; the report is missing from the listing.
+func TestRunlessCancelReportDoesNotPoisonConsumerDeliveredListing(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installEngineeringAssignmentAuthority(t, s, 1)
+	controlID, err := s.AppendCommitmentRecord(ctx, f.ownerID, f.computerID, types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cast-cell:cast:runless-cancel",
+		Provenance: types.CommitmentProvenance{AgentID: f.parentAgentID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := delegatedCastOpenRequest(f, 0, "delegated-assignment-runless", controlID)
+	opened, err := s.OpenEngineeringAssignment(ctx, open)
+	if err != nil {
+		t.Fatalf("delegated open: %v", err)
+	}
+	cancel := types.CancelEngineeringAssignmentRequest{
+		CommandID: "command-cancel-runless", OwnerID: f.ownerID, ComputerID: f.computerID,
+		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: opened.Assignment.LifecycleVersion,
+		Reason: "spawn assigned capsule after durable open: bind: invalid argument",
+	}
+	cancel.CommandDigest, _ = ComputeCancelEngineeringAssignmentDigest(cancel)
+	if _, err := s.CancelEngineeringAssignment(ctx, cancel); err != nil {
+		t.Fatalf("cancel before bind: %v", err)
+	}
+	packets, err := s.ListLifecycleControlsDeliveredToRun(ctx, f.ownerID, f.computerID, f.trajectoryID, f.parentAgentID, f.parentRunID, 10)
+	if err != nil {
+		t.Fatalf("delivered listing threw on a runless cancel report: %v", err)
+	}
+	found := false
+	for _, p := range packets {
+		if p.Direction == types.LifecyclePacketDirectionProducerReport && p.Packet.Kind == "blocker" && strings.TrimSpace(p.SourceRunID) == "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("runless cancel report missing from delivered listing: %+v", packets)
+	}
+}
