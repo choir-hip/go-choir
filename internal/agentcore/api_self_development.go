@@ -312,6 +312,15 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current signed mode does not authorize proposal"})
 		return
 	}
+	// Refuse before the trajectory event lands, so a refused start leaves
+	// nothing on the tape. Store.Start enforces the same limit.
+	if open, found, openErr := h.rt.selfdevOperations.OpenOperation(r.Context(), computerID); openErr != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "self-development operations unavailable"})
+		return
+	} else if found {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: fmt.Sprintf("%v: %s is %s", selfdev.ErrOperationOpen, open.OperationID, open.State)})
+		return
+	}
 	if err := h.rt.selfdevOperations.BindStartIntent(r.Context(), computerID, request.IdempotencyKey, requestCommitment); err != nil {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return

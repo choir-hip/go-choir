@@ -72,6 +72,47 @@ func (rt *Runtime) TriggerSelfDevelopmentReconcile() {
 // writes before it restarts the guest.
 const PlannedRestartSelfDevelopmentApply = "self_development_apply"
 
+// selfdevInterruptedByRestart is the visible fate of an operation whose desk
+// run a crash boot closed.
+const selfdevInterruptedByRestart = "interrupted by a restart"
+
+// closeSelfDevelopmentOperationsAfterCrash fails every pre-decision operation
+// at a crash boot (owner rule, AGENTS.md "Restarts End Work (Crash) Or Resume
+// It"). Desk tools drive requested through verified; the crash boot closes
+// that desk run, so nothing would advance the operation again, and the busy
+// probe would count it forever
+// (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
+// awaiting_approval waits on the owner and stays. The post-decision states
+// stay with the materializer, which recovers them from the updater journal.
+// A planned boot closes nothing.
+func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context) {
+	if rt == nil || rt.selfdevOperations == nil {
+		return
+	}
+	if _, planned := rt.BootWasPlannedRestart(); planned {
+		return
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if computerID == "" {
+		return
+	}
+	operations, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.PreDecisionStates...)
+	if err != nil {
+		log.Printf("selfdev: crash boot: list pre-decision operations: %v", err)
+		return
+	}
+	for _, operation := range operations {
+		if _, err := rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, operation.State, selfdev.StateFailed, func(next *selfdev.Operation) error {
+			next.TerminalError = selfdevInterruptedByRestart
+			return nil
+		}); err != nil {
+			log.Printf("selfdev: crash boot: close %s from %s: %v", operation.OperationID, operation.State, err)
+			continue
+		}
+		log.Printf("selfdev: crash boot: %s closed from %s: %s", operation.OperationID, operation.State, selfdevInterruptedByRestart)
+	}
+}
+
 // SelfDevelopmentApplyMaterializing reports whether a self-development
 // operation on this computer is still materializing. The actor handler holds
 // work while it is, so the apply checkpoint reads a quiet chain. A read error

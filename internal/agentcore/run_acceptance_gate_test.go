@@ -46,7 +46,6 @@ func TestFailedCapsuleCheckpointBlocksAcceptance(t *testing.T) {
 // transition chain and reads the checkpoint the builder emits.
 func TestFreezeCheckpointSurvivesPostFrozenStates(t *testing.T) {
 	ctx := context.Background()
-	computerID := "computer-acceptance"
 	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -57,15 +56,6 @@ func TestFreezeCheckpointSurvivesPostFrozenStates(t *testing.T) {
 		t.Fatal(err)
 	}
 	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "test"}, PrivateKey: privateKey}
-	appender, err := computerevent.NewComputerEventAppender(computerID, rollbackTestPinner{signingKey}, productStore, rollbackTestCAS{key: signingKey, projection: productStore}, rollbackTestReceiptVerifier{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	genesisID, _ := computerevent.NewEventID()
-	genesis := computerevent.Event{SchemaVersion: 1, EventID: genesisID, ComputerID: computerID, EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64), ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: 1}
-	if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
-		t.Fatal(err)
-	}
 	operations, err := selfdev.NewStore(productStore, productStore)
 	if err != nil {
 		t.Fatal(err)
@@ -82,6 +72,17 @@ func TestFreezeCheckpointSurvivesPostFrozenStates(t *testing.T) {
 		{selfdev.StateFailed, []string{selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateFailed}},
 		{selfdev.StateApplied, []string{selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateApplied}},
 	} {
+		// A computer admits one open operation, so each case gets its own.
+		computerID := "computer-acceptance-" + target.state
+		appender, err := computerevent.NewComputerEventAppender(computerID, rollbackTestPinner{signingKey}, productStore, rollbackTestCAS{key: signingKey, projection: productStore}, rollbackTestReceiptVerifier{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		genesisID, _ := computerevent.NewEventID()
+		genesis := computerevent.Event{SchemaVersion: 1, EventID: genesisID, ComputerID: computerID, EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "genesis", ActorProfile: "management", AuthorityRef: "owner", PrivacyClass: "owner", PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64), ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: 1}
+		if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
+			t.Fatal(err)
+		}
 		trajectoryID := "trajectory-" + target.state
 		operation, err := operations.Start(ctx, selfdev.StartRequest{
 			ComputerID: computerID, IdempotencyKey: "op-" + target.state,

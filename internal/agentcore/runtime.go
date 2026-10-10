@@ -736,6 +736,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	})
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
 	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
+	bootPhase("selfdev_close_after_crash", func() { rt.closeSelfDevelopmentOperationsAfterCrash(ctx) })
 	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })
 	// M7 derivable continuations: every committed canonical event may carry
 	// a self-development settlement boundary (verification -> approval,
@@ -2312,7 +2313,9 @@ func (rt *Runtime) pendingDeskMutations(ctx context.Context) int {
 // materializing, and rollback_pending. Parked states — frozen, verified,
 // awaiting_approval — are deliberately excluded: with artifacts on durable
 // storage the boot reconcile can resume them after a restart, and a wedged
-// parked op must not pin the guest busy forever.
+// parked op must not pin the guest busy forever. An executing op orphaned by
+// a crash did pin it until closeSelfDevelopmentOperationsAfterCrash
+// (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
 func (rt *Runtime) activeSelfdevOperations(ctx context.Context) int {
 	if rt == nil || rt.selfdevOperations == nil {
 		return 0

@@ -34,7 +34,20 @@ var (
 	ErrConflict          = errors.New("self-development operation conflict")
 	ErrInvalidTransition = errors.New("invalid self-development operation transition")
 	ErrOperationNotFound = errors.New("self-development operation not found")
+	// ErrOperationOpen refuses a new operation while another on the same
+	// computer is unsettled: one open operation per computer until one has
+	// been shown to work end to end
+	// (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
+	ErrOperationOpen = errors.New("another self-development operation is open on this computer")
 )
+
+// OpenStates are the unsettled states. Applied is settled: its rollback opens
+// a new rollback_pending operation.
+var OpenStates = []string{StateRequested, StateExecuting, StateFrozen, StateVerified, StateAwaitingApproval, StateAccepted, StateMaterializing, StateRollbackPending, StateDegraded}
+
+// PreDecisionStates are the states a desk run drives forward with its tools.
+// When that run is gone, nothing else advances them.
+var PreDecisionStates = []string{StateRequested, StateExecuting, StateFrozen, StateVerified}
 
 type DBProvider interface {
 	DB() *sql.DB
@@ -206,6 +219,11 @@ func (s *Store) Start(ctx context.Context, request StartRequest) (Operation, err
 		}
 		return existing, err
 	}
+	if open, found, err := s.OpenOperation(ctx, request.ComputerID); err != nil {
+		return Operation{}, err
+	} else if found {
+		return Operation{}, fmt.Errorf("%w: %s is %s", ErrOperationOpen, open.OperationID, open.State)
+	}
 	head, err := s.heads.Head(ctx, request.ComputerID)
 	if err != nil {
 		return Operation{}, err
@@ -293,6 +311,15 @@ func (s *Store) ListByStates(ctx context.Context, computerID string, states ...s
 		operations = append(operations, operation)
 	}
 	return operations, rows.Err()
+}
+
+// OpenOperation returns the computer's oldest unsettled operation, if any.
+func (s *Store) OpenOperation(ctx context.Context, computerID string) (Operation, bool, error) {
+	open, err := s.ListByStates(ctx, computerID, OpenStates...)
+	if err != nil || len(open) == 0 {
+		return Operation{}, false, err
+	}
+	return open[0], true, nil
 }
 
 func (s *Store) RecordAppliedBaseline(ctx context.Context, request BaselineRequest) (Operation, error) {

@@ -55,6 +55,57 @@ func TestOperationStartIsDurableIdempotentAndHeadBound(t *testing.T) {
 	}
 }
 
+// One open operation per computer
+// (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
+// Ways the limit can fail:
+//  1. A second start is admitted while one is open.
+//  2. The open operation's own idempotent retry is refused.
+//  3. A settled operation blocks new starts forever.
+//  4. An open operation on another computer blocks this one.
+func TestOperationStartAdmitsOneOpenOperationPerComputer(t *testing.T) {
+	ctx := context.Background()
+	store, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	digest := strings.Repeat("a", 64)
+	for _, computerID := range []string{"computer-one", "computer-two"} {
+		if _, err := store.DB().Exec(`INSERT INTO computer_event_projection_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch, updated_at) VALUES (?, 1, ?, ?, ?, ?, ?, 1, 0, ?)`, computerID, digest, digest, digest, strings.Repeat("b", 64), strings.Repeat("b", 64), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	operations, err := NewStore(store, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations.now = func() time.Time { return now }
+	request := func(computerID, key string) StartRequest {
+		return StartRequest{ComputerID: computerID, IdempotencyKey: key, PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64)}
+	}
+
+	first, err := operations.Start(ctx, request("computer-one", "first"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := operations.Start(ctx, request("computer-one", "second")); !errors.Is(err, ErrOperationOpen) || !strings.Contains(err.Error(), first.OperationID) {
+		t.Fatalf("second start while %s is open: err = %v, want ErrOperationOpen naming it", first.OperationID, err)
+	}
+	if retry, err := operations.Start(ctx, request("computer-one", "first")); err != nil || retry.OperationID != first.OperationID {
+		t.Fatalf("idempotent retry of the open operation = %+v err=%v", retry, err)
+	}
+	if _, err := operations.Start(ctx, request("computer-two", "elsewhere")); err != nil {
+		t.Fatalf("an open operation on another computer blocked this one: %v", err)
+	}
+	if _, err := operations.Transition(ctx, "computer-one", first.OperationID, StateRequested, StateFailed, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := operations.Start(ctx, request("computer-one", "after-settled")); err != nil {
+		t.Fatalf("a settled operation blocked the next start: %v", err)
+	}
+}
+
 func TestOperationTransitionsRefuseSkippedAndStaleStates(t *testing.T) {
 	if allowedTransition(StateRequested, StateApplied) {
 		t.Fatal("requested operation skipped directly to applied")
