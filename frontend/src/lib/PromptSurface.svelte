@@ -18,6 +18,7 @@
   export let promptDisabled = false;
   export let promptPlaceholder = '';
   export let promptStatus = '';
+  export let promptRouting = false;
   export let placement: 'top' | 'bottom' = 'bottom';
 
   const dispatch = createEventDispatcher();
@@ -227,6 +228,7 @@
   class:mobile-switcher-open={mobileSwitcherOpen}
   data-prompt-surface
   data-placement={normalizedPlacement}
+  data-routing={promptRouting ? 'true' : 'false'}
   data-desk-sheet-open={sheetOpen ? 'true' : 'false'}
   data-mobile-switcher-open={mobileSwitcherOpen ? 'true' : 'false'}
   bind:this={surfaceEl}

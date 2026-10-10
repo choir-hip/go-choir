@@ -100,6 +100,9 @@
   let desktopReady = false;
   let promptPlaceholder = '';
   let promptStatus = '';
+  // True from prompt submit until the conductor's decision arrives; the
+  // prompt surface sweeps an accent across that gap (about 0.6 s).
+  let promptRouting = false;
   let mounted = false;
   let authenticatedStartupRunning = false;
   let lastAuthenticated = null;
@@ -1236,10 +1239,13 @@
 
     try {
       promptStatus = 'Routing through conductor...';
+      promptRouting = true;
       const submission = await submitConductorPrompt(text);
       const conductorSubmissionId = submission.submission_id || '';
       promptStatus = 'Waiting for conductor decision...';
-      const decision = await waitForConductorDecision(conductorSubmissionId);
+      const decision = await waitForConductorDecision(conductorSubmissionId).finally(() => {
+        promptRouting = false;
+      });
 
       if (decision.action === 'toast') {
         promptStatus = '';
@@ -1283,6 +1289,7 @@
         if (promptStatus.startsWith('Opening ')) promptStatus = '';
       }, 1800);
     } catch (err) {
+      promptRouting = false;
       if (err instanceof AuthRequiredError) {
         dispatch('authexpired');
         return;
@@ -1795,6 +1802,7 @@
     promptDisabled={!desktopReady}
     {promptPlaceholder}
     {promptStatus}
+    {promptRouting}
     on:logout={handleLogout}
     on:authrequest={() => requestAuth({ kind: 'sign_in' })}
     on:promptsubmit={handlePromptSubmit}

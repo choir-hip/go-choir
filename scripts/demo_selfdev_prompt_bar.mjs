@@ -196,6 +196,9 @@ try {
   manifest.v0 = v0.toISOString();
   mark('V0 prompt submitted');
   log('prompt_submitted', { prompt });
+  await page.waitForTimeout(250);
+  manifest.routing_visible = await page.getAttribute('[data-prompt-surface]', 'data-routing').catch(() => null);
+  await screenshot('conductor-routing');
   await page.waitForTimeout(8_000);
   await screenshot('prompt-submitted');
 

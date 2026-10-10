@@ -165,6 +165,36 @@
     0 0 0 1px var(--choir-border-strong);
 }
 
+/* While the conductor routes a submitted prompt (about 0.6 s) an accent
+   sweeps along the bar's inner edge, so the gap before the app opens reads
+   as work in progress rather than a stall. */
+[data-prompt-surface][data-routing='true']::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, var(--choir-accent, currentColor) 50%, transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: choir-prompt-routing 0.9s var(--choir-ease) infinite;
+}
+
+[data-placement='top'][data-prompt-surface][data-routing='true']::after {
+  top: auto;
+  bottom: 0;
+}
+
+@keyframes choir-prompt-routing {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
+}
+
 /* ── toasts ────────────────────────────────────────────────────────────
    Enter from the edge they belong to, leave quietly. */
 .toast {
@@ -242,6 +272,11 @@
    Collapse every duration rather than deleting the rules, so nothing is
    left frozen in a `from` keyframe. */
 @media (prefers-reduced-motion: reduce) {
+  [data-prompt-surface][data-routing='true']::after {
+    animation: none;
+    background-position: 50% 0;
+  }
+
   [data-desktop][data-desktop-ready='true'] .desktop-area,
   [data-floating-window],
   [data-window],
