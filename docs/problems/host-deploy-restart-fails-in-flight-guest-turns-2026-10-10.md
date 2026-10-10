@@ -1,6 +1,6 @@
 # A host deploy's corpusd restart fails a guest's in-flight turn, and the run is left "running" (2026-10-10)
 
-Status: documented, not fixed. Mutation class of the fix: `red` (computer
+Status: fixed in 880d3ffb (retry); the zombie-run residual below stays open. Mutation class of the fix: `red` (computer
 event chain client).
 
 ## Evidence
@@ -50,3 +50,14 @@ leave a zombie `running` run. Remaining error field: whether proxy or
 vmctl restarts have the same effect on other guest clients. Those clients
 are out of scope here; the event chain is the substrate every turn writes
 through.
+
+## Fix and residual
+
+880d3ffb makes `doWithResponseLimit` resend a request refused with
+ECONNREFUSED, with backoff from 250 ms to 2 s, for up to 30 seconds and
+within the request's context. A refused connection never reached corpusd,
+so the resend cannot duplicate a write.
+
+Residual, open: an outage longer than 30 seconds still fails the write
+that records a run's own failure. That run stays `running` until the next
+boot closes it as interrupted. Nothing retries a terminal run write later.
