@@ -63,3 +63,80 @@ Fix: add the two fields to the mirror with the same tags
 a draft carrying both fields. Mutation class orange (verifier input
 parsing; the verification decision stays with the verifier).
 Rollback: git revert.
+
+## Rerun 10 (07:35Z): second cause, the source patch cannot be applied
+
+Found by M11 rerun 10 on cf0969cf: disposable `computer-90138c40…`
+(VM `vm-a507c0fa…`), operation `selfdev-14851a1c…`, bundle `e164a288…`.
+5 of 16 legs. The mirror fix held: the verifier inspected the bundle
+in-cell.
+
+- 07:01:19 the implementation assignment (`assignment-03a092ff…`)
+  started. 07:20:37 it completed. Its change adds three new files: an
+  evidence JSON under `docs/evidence/`, plus `episode.go` and
+  `episode_test.go` in `internal/selfdevevidence`.
+- 07:20:38 the verifier assignment (`assignment-3ffa5762…`) started.
+  It took 86 turns.
+- 07:35:59 the verifier called `choir.Verify("fail", …)` with this
+  summary (finding, quoted from its final cell):
+  - source.patch is not applicable: `git apply` (the builder's
+    `patchedFlakeRef`) rejects it with "docs/evidence/…json depends on
+    old contents".
+  - All three `/dev/null` creation hunks read `@@ -1 +1,N @@` (old count
+    1, where it must be `-0,0`), and each carries a stray context line.
+  - Repairing the headers by hand gives files one byte longer, so the
+    hashes differ from the declared candidate hashes.
+  - Everything else checked out: candidate bytes, the content digest,
+    and `go test` for the new package passed.
+- Side friction (finding): the verifier's `choir.Message` to the
+  implementation desk was refused by the reducer with
+  `update_coagent engineering cannot message engineering`, so its report
+  travelled only in its completion.
+
+### Cause (confirmed in code)
+
+`emitSourcePatch` (`internal/capsule/executor.go`) splits lines with
+`difflib.SplitLines`, which always appends `"\n"` to the last element
+of `strings.SplitAfter`:
+
+- An empty base becomes one phantom empty line, so every added file is
+  diffed against `["\n"]`. The result is `@@ -1 +1,N @@` plus a stray
+  context line.
+- Every non-empty file gains a phantom trailing empty line too, so a
+  hunk that touches the end of a file carries a context line that is
+  not in the file.
+- A file without a final newline is silently given one, with no
+  `\ No newline at end of file` marker.
+- An empty added file produces no hunk, so it vanishes from the patch.
+
+The only test (`TestEmitSourcePatchSkipsDirectoryChanges`) checks
+substrings. Nothing on the freeze path ever applies the patch, so the
+freeze claims reconstructability it never checks (standing question:
+artifact-verified success).
+
+### Reruns 8 and 9 carried the same defect (finding plus hypothesis)
+
+- Finding: the emitter is unchanged since 2c68cc18 (2026-10-09 22:38Z).
+  Reruns 8 and 9 each added a new evidence file, and both reached
+  `awaiting_approval`, so their verifiers passed bundles whose patch had
+  the same malformed creation hunks.
+- Hypothesis: had their apply not stalled on checkpoint starvation, the
+  builder's `git apply` would have failed next.
+- Verifier variance: rerun 10's verifier ran `git apply`, and the
+  earlier verifiers did not. The verifier contract does not require the
+  check the builder relies on.
+
+### Proposed fix (red: self-development bundle and release path)
+
+1. Correct the line splitter: no phantom line, and an unterminated last
+   line carries git's `\ No newline at end of file` marker. Emit
+   `diff --git` headers with `new file mode` / `deleted file mode`, so
+   empty files survive.
+2. Round-trip check at freeze: apply the emitted patch with `git apply`
+   to a scratch copy of the base files, and require the result to match
+   the candidate bytes exactly (deleted files absent). A mismatch fails
+   the freeze with a named error, before any verifier runs.
+3. Tests first, through `git apply`: an added file, an added file in a
+   new directory, an empty added file, an edit at end of file, a file
+   without a final newline (both directions), a deletion, and a
+   multi-hunk modify.
