@@ -253,3 +253,15 @@ head captured at its start and compare live state at that head, so a busy
 computer can mint one. That needs a live-state snapshot at the head, a
 red change to the replay-completeness verifier, and it is scheduled after
 rerun 13.
+
+## Open (H3): operation outcomes never reach Texture
+
+Code reading: no path delivers a self-development operation's transitions
+(verified, awaiting approval, approved, applied, rejected, rolled back) to
+the trajectory's Texture agent. Texture hears only desk reports. With the
+idle fix it should see engineering's freeze result and the verifier's
+report, but it still cannot tell the owner that the change was approved,
+applied or taken back. Rerun 13's trace decides the shape. Either each
+transition becomes a ledger report that wakes Texture, or Texture's cell
+can read the operation's state. The first is live supervision; the second
+is only a read.
