@@ -2533,6 +2533,17 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 		args   string
 	}
 	tools := map[string]*toolBuffer{}
+	// The Responses stream reports each function call twice (arguments.done
+	// and output_item.done); record each call id once.
+	recorded := map[string]bool{}
+	appendToolCall := func(call ContentToolCall) {
+		if call.ID != "" && recorded[call.ID] {
+			return
+		}
+		recorded[call.ID] = true
+		result.ToolCalls = append(result.ToolCalls, call)
+		result.StopReason = "tool_use"
+	}
 
 	if err := readOpenAISSE(body, func(data []byte) error {
 		if len(data) == 0 || strings.TrimSpace(string(data)) == "[DONE]" {
@@ -2596,24 +2607,22 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 			if tools[key].name == "" {
 				tools[key].name = stringValue(payload["name"])
 			}
-			result.ToolCalls = append(result.ToolCalls, ContentToolCall{
+			appendToolCall(ContentToolCall{
 				ID:        tools[key].callID,
 				Name:      tools[key].name,
 				Arguments: canonicalJSON(json.RawMessage(tools[key].args)),
 			})
-			result.StopReason = "tool_use"
 			onChunk(StreamChunk{Type: "content_block_stop", ToolCallID: tools[key].callID, ToolCallName: tools[key].name})
 			delete(tools, key)
 		case "response.output_item.done":
 			item, _ := payload["item"].(map[string]any)
 			if stringValue(item["type"]) == "function_call" {
 				args := stringValue(item["arguments"])
-				result.ToolCalls = append(result.ToolCalls, ContentToolCall{
+				appendToolCall(ContentToolCall{
 					ID:        stringValue(item["call_id"]),
 					Name:      stringValue(item["name"]),
 					Arguments: canonicalJSON(json.RawMessage(args)),
 				})
-				result.StopReason = "tool_use"
 			}
 		case "response.completed", "response.incomplete":
 			response, _ := payload["response"].(map[string]any)
