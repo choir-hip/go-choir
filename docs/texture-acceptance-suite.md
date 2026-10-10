@@ -50,7 +50,9 @@ tighten them as the product improves.
 | 6 | 19b7ef48 (packet contract) | T2b fails: research reports and Texture loop, the document never idles (fixed dc3e86b6, two research openers per owner request) | `texture-acceptance-2026-10-09T20-23-25-707Z.json` |
 | 7 | 733bec77 | T1–T5, T7, T8 pass (T7 and T8 for the first time; T6 made soft); T5b fails; T6 fails: the citing turn had no listed sources and never found the inline shape | `texture-acceptance-2026-10-09T22-03-56-155Z.json` |
 | 8 | 5b851eed (inline citation hint) | T1–T5, T7, T8 pass; T5b fails; T6 substance passes (cited revision with two sources in 5 min) but the same turn opened follow-up research and the document stayed pending, so T6 was split into T6 and T6_idle | `texture-acceptance-2026-10-09T23-19-02-531Z.json` |
+| 9 | 3e69567b | T1–T5 pass (T2b 266 s: the inference breaker opened at 00:24:55, see `inference-breaker-trips-on-client-errors-2026-10-10`); T5b fails; T6 recorded as failed but a cited research revision (one source, cited in the body) landed in 3.7 min: the new T6 check skipped the newest revisions (the list is newest first), fixed; T6_idle passes; T7 and T8 not reached: the 15-minute test limit ran out, raised to 25 | `texture-acceptance-2026-10-10T00-22-37-787Z.json` |
 
-The first attempt of run 8 never signed in (the page stayed on the local
-preview) while a second new computer booted beside it; the retry passed
-sign-in.
+The first attempts of runs 8 and 9 never signed in (the page stayed on
+the local preview although the account's computer booted); both retries
+passed sign-in. Named residual `suite-first-sign-in-after-deploy`: no
+trace was kept, so the cause is not known.

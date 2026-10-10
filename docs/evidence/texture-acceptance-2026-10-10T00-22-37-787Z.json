@@ -1,0 +1,92 @@
+{
+  "started_at": "2026-10-10T00:22:37.788Z",
+  "checks": {
+    "T1_list": {
+      "at": "2026-10-10T00:23:00.829Z",
+      "status": [
+        200,
+        200
+      ],
+      "ms": [
+        36,
+        34
+      ],
+      "count": 0
+    },
+    "T2a_first_draft": {
+      "at": "2026-10-10T00:23:37.334Z",
+      "pass": true,
+      "seconds": 36,
+      "appagent_revisions": 1
+    },
+    "T2b_revise": {
+      "at": "2026-10-10T00:28:03.581Z",
+      "pass": true,
+      "seconds": 266,
+      "appagent_revisions": 3
+    },
+    "T3_chevrons": {
+      "at": "2026-10-10T00:28:03.817Z",
+      "reads": [
+        {
+          "id": "88ef7fd3-5bf9-5b16-9bb5-e0f7cf2a7d97",
+          "status": 200,
+          "ms": 39
+        },
+        {
+          "id": "83dbaa6a-8b00-57b8-8bdc-34c4b03bc39a",
+          "status": 200,
+          "ms": 47
+        },
+        {
+          "id": "50a0cfc8-139d-523a-9e05-6ce4e9069f14",
+          "status": 200,
+          "ms": 46
+        },
+        {
+          "id": "77618a3b-ffb9-5d00-a9b9-550d809b1f91",
+          "status": 200,
+          "ms": 37
+        }
+      ]
+    },
+    "T4_reload_idle": {
+      "at": "2026-10-10T00:28:19.045Z",
+      "pending_reads": [
+        false,
+        false,
+        false
+      ]
+    },
+    "T5_cancel": {
+      "at": "2026-10-10T00:28:22.132Z",
+      "pending_seen": true,
+      "cancel_status": 200,
+      "cleared": true,
+      "seconds_to_clear": 2,
+      "appagent_before": 3
+    },
+    "T5b_revise_after_cancel": {
+      "at": "2026-10-10T00:28:22.186Z",
+      "pass": false,
+      "status": 409,
+      "body": {
+        "error": "durable lifecycle state is unavailable or terminal"
+      }
+    },
+    "T6_research": {
+      "at": "2026-10-10T00:35:51.108Z",
+      "landed": false,
+      "source_entities": 0,
+      "source_refs": 0
+    },
+    "T6_idle": {
+      "at": "2026-10-10T00:35:51.263Z",
+      "idle": true,
+      "pending": false
+    }
+  },
+  "base_url": "https://choir.news",
+  "doc_id": "1c439afb-e693-5f06-b19d-7f0041077499",
+  "doc_id_research": "94e00ab2-226c-5d76-8466-800b1c4202a0"
+}
