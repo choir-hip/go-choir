@@ -204,3 +204,47 @@ assignment path, with a test guard that every deposit the path writes is
 an upcast fixed point. Then (b) only if the rerun still shows spelling
 divergence from other writers. (c) is a named residual,
 `vocab-guard-ids`.
+
+## Fix (a): engineering writers mint serving-vocabulary ids
+
+Red ceremony (checkpoint/route projection replay; engineering lifecycle).
+
+- Conjecture delta: a live store is replayable only if every leaf its
+  writers mint is a fixed point of the frozen vocabulary rule. The engineering
+  path broke that with thirteen `co-super-*` spellings. With them minted
+  as `engineering-*`, the from-genesis upcast is a no-op for new deposits.
+  Probe and restore then match live byte for byte.
+- Change: lifecycle command ids `engineering-{open,open-failed,bind,capsule,
+  cancel,system-cancel,restart-open-cancel,restart-cancel,report,orphan}:`.
+  Digest refs are `engineering-{grant,execution,fate}:sha256:`.
+  Compatibility:
+  - Validation accepts the same digest under the legacy `co-super-` spelling.
+  - Report replay uses the report's recorded command id.
+  - The legacy report fallback keeps `co-super-report:`.
+  - The `choir:co-super-report:v1` hash domain is unchanged, so report ids
+    stay stable.
+- Tests first:
+  - `requireServingVocabularyDeposits` scans every object-graph leaf after
+    five real minting flows (boot sweep, deadline cancel, restart recast,
+    stranded proposal resume, revoked resume). It failed on exactly the
+    production spellings before the change.
+  - Store tests pin legacy digest refs and legacy report replay.
+  - The assignment seed fixture now uses `engineering-` ids so it cannot
+    mask a writer.
+- Protected surfaces: engineering assignment lifecycle commands, attestation
+  and fate validation, and replay equivalence.
+- Admissible evidence: an M11 rerun whose apply checkpoint reports
+  replay-equivalent, and no `co-super-*` leaf in the replay diagnostic.
+- Rollback: git revert. Records minted as `engineering-*` stay valid only
+  under this code, so a revert after new assignments would refuse their
+  refs. Revert only on a fresh QA computer.
+- Heresy delta: discovered "serving fence accepts V1-spelled ids";
+  repaired for the engineering path only on staging proof; introduced none.
+- Named residuals:
+  - `vocab-guard-ids`: the write guard still checks role fields only.
+  - `vocab-recovery-prefix`: `persistent-super-recovery:v2:` is still
+    minted. It is stored as update content and parsed by prefix, so a
+    replayed store would not recognize it. Renaming it changes the
+    recovery occurrence identity, which is a separate red change.
+  - `upcast-legacy-refs`: on a store that was already upcast, legacy refs
+    were hashed over V1 payloads, so their digests no longer validate.

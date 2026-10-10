@@ -384,7 +384,7 @@ func grantAttestationRef(att types.EngineeringGrantPolicyAttestation) (string, e
 	if err != nil {
 		return "", err
 	}
-	return "co-super-grant:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
+	return "engineering-grant:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
 }
 
 func executionAttestationRef(att types.EngineeringExecutionAttestation) (string, error) {
@@ -393,7 +393,7 @@ func executionAttestationRef(att types.EngineeringExecutionAttestation) (string,
 	if err != nil {
 		return "", err
 	}
-	return "co-super-execution:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
+	return "engineering-execution:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
 }
 
 func fateStepRef(step types.EngineeringCapsuleFateStep) (string, error) {
@@ -402,7 +402,19 @@ func fateStepRef(step types.EngineeringCapsuleFateStep) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "co-super-fate:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
+	return "engineering-fate:sha256:" + strings.TrimPrefix(objectgraph.SHA256(payload), "sha256:"), nil
+}
+
+// engineeringDigestRefMatches accepts a stored digest ref equal to want, or
+// the same digest under the legacy co-super- spelling minted before refs
+// became fixed points of the vocabulary rule
+// (problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md).
+func engineeringDigestRefMatches(got, want string) bool {
+	if got == want {
+		return true
+	}
+	rest, ok := strings.CutPrefix(want, "engineering-")
+	return ok && got == "co-super-"+rest
 }
 
 func validCanonicalTime(value time.Time) bool { return !value.IsZero() && value.Location() == time.UTC }
@@ -421,7 +433,7 @@ func validateGrantPolicyAttestation(att types.EngineeringGrantPolicyAttestation,
 		return fmt.Errorf("co-super assignment: invalid runtime grant policy attestation: %w", ErrEngineeringAssignmentInvalid)
 	}
 	want, err := grantAttestationRef(att)
-	if err != nil || att.AttestationRef != want {
+	if err != nil || !engineeringDigestRefMatches(att.AttestationRef, want) {
 		return fmt.Errorf("co-super assignment: grant attestation digest mismatch: %w", ErrEngineeringAssignmentInvalid)
 	}
 	return nil
@@ -481,7 +493,7 @@ func validateExecutionAttestations(atts []types.EngineeringExecutionAttestation,
 			return nameErr("duplicate attestation ref")
 		}
 		want, err := executionAttestationRef(att)
-		if err != nil || att.AttestationRef != want {
+		if err != nil || !engineeringDigestRefMatches(att.AttestationRef, want) {
 			return fmt.Errorf("co-super assignment: execution attestation digest mismatch (command %d): %w", i, ErrEngineeringAssignmentInvalid)
 		}
 		seen[att.AttestationRef] = true
@@ -538,7 +550,7 @@ func validateFateHistory(history []types.EngineeringCapsuleFateStep, assignment 
 			}
 		}
 		want, err := fateStepRef(step)
-		if err != nil || step.StepRef != want {
+		if err != nil || !engineeringDigestRefMatches(step.StepRef, want) {
 			return fmt.Errorf("co-super assignment: fate step digest mismatch: %w", ErrEngineeringAssignmentInvalid)
 		}
 		seen[step.StepRef], lastSeq, lastDisposition = true, step.ReducerSeq, step.Disposition
@@ -1077,6 +1089,11 @@ func (s *Store) ReplayRecordedEngineeringAssignmentReport(ctx context.Context, o
 	}
 	if report.AssignmentID != assignmentID || report.Attempt != attempt {
 		return types.EngineeringAssignmentCommandResult{}, ErrEngineeringAssignmentInvalid
+	}
+	// The command that recorded the report is authoritative; the caller's id
+	// is a derivation whose spelling changed (co-super- to engineering-).
+	if recorded := strings.TrimSpace(report.RecordCommandID); recorded != "" {
+		commandID = recorded
 	}
 	commandCanonicalID, err := lifecycleCanonicalID(ogKindLifecycleCmd, ownerID, computerID, commandID)
 	if err != nil {
@@ -1960,6 +1977,7 @@ func (s *Store) SlotTerminalReport(ctx context.Context, assignment types.Enginee
 		if digest == propositionDigest {
 			replayCommandID := strings.TrimSpace(stored.RecordCommandID)
 			if replayCommandID == "" {
+				// Legacy reports predate RecordCommandID and the engineering- spelling.
 				replayCommandID = "co-super-report:" + assignment.AssignmentID + ":" + stored.ReportID
 			}
 			return stored.ReportID, replayCommandID, "", nil
@@ -2550,7 +2568,7 @@ func (s *Store) RecordEngineeringOrphanObservation(ctx context.Context, obs type
 	// is derived identically to the close path below, so a retry replays instead of
 	// conflicting with itself.
 	if assignment.Disposition.Terminal() {
-		commandID := fmt.Sprintf("co-super-orphan:%s:%d:%s", obs.AssignmentID, obs.Attempt, obs.RunID)
+		commandID := fmt.Sprintf("engineering-orphan:%s:%d:%s", obs.AssignmentID, obs.Attempt, obs.RunID)
 		replayVerdict := types.EngineeringVerdictNone
 		if assignment.Binding.Kind == types.EngineeringAssignmentVerification {
 			replayVerdict = types.EngineeringVerdictAbstain
@@ -2579,7 +2597,7 @@ func (s *Store) RecordEngineeringOrphanObservation(ctx context.Context, obs type
 		CreatedAt:             obs.ObservedAt,
 	}
 	req := types.RecordEngineeringAssignmentReportRequest{
-		CommandID:                fmt.Sprintf("co-super-orphan:%s:%d:%s", obs.AssignmentID, obs.Attempt, obs.RunID),
+		CommandID:                fmt.Sprintf("engineering-orphan:%s:%d:%s", obs.AssignmentID, obs.Attempt, obs.RunID),
 		OwnerID:                  obs.OwnerID,
 		ComputerID:               obs.ComputerID,
 		AssignmentID:             obs.AssignmentID,

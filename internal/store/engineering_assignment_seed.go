@@ -84,8 +84,8 @@ func SeedEngineeringAssignmentAuthority(s *Store, ownerID, computerID string, co
 	objects := []objectgraph.Object{trajObj, agentObj, workObj, docObj, revObj}
 	for i := 0; i < count; i++ {
 		f.AssignedAgentIDs = append(f.AssignedAgentIDs, fmt.Sprintf("engineering:assignment-%02d", i))
-		f.AssignedWorkIDs = append(f.AssignedWorkIDs, fmt.Sprintf("work-cosuper-assignment-%02d", i))
-		f.AssignedRunIDs = append(f.AssignedRunIDs, fmt.Sprintf("run-cosuper-assignment-%02d", i))
+		f.AssignedWorkIDs = append(f.AssignedWorkIDs, fmt.Sprintf("work-engineering-assignment-%02d", i))
+		f.AssignedRunIDs = append(f.AssignedRunIDs, fmt.Sprintf("run-engineering-assignment-%02d", i))
 	}
 	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: objects}); err != nil {
 		return EngineeringAssignmentSeed{}, err

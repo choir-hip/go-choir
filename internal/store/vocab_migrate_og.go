@@ -141,6 +141,15 @@ var ogIdentityFormulas = []ogIdentityFormula{
 	{kind: "choir.source_ref", fields: []string{"canonical_id", "version_id"}},
 }
 
+// IsServingVocabularyLeaf reports whether v is a fixed point of the frozen
+// vocabulary rule. A live writer that mints anything else diverges from a
+// from-genesis replay, which upcasts the leaf the live store kept
+// (problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md).
+func IsServingVocabularyLeaf(v string) bool {
+	_, changed := ogLeafMigrate(v)
+	return !changed
+}
+
 // ogLeafMigrate applies the frozen vocabulary rules to one string leaf.
 // Returns the migrated value and whether it changed. Frozen protocol values
 // and unknown tokens pass through unchanged (the fence owns refusal).

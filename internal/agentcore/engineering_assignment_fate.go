@@ -18,7 +18,7 @@ import (
 
 func engineeringFateRequest(assignment types.EngineeringAssignment, disposition types.EngineeringCapsuleDisposition, intentRef, ackRef string) types.SetEngineeringCapsuleDispositionRequest {
 	req := types.SetEngineeringCapsuleDispositionRequest{
-		CommandID: fmt.Sprintf("co-super-capsule:%s:%d:%s", assignment.AssignmentID, assignment.Binding.Attempt, disposition),
+		CommandID: fmt.Sprintf("engineering-capsule:%s:%d:%s", assignment.AssignmentID, assignment.Binding.Attempt, disposition),
 		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Disposition: disposition,
@@ -175,7 +175,7 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires exact persistent Management parent")
 	}
 	cancel := types.CancelEngineeringAssignmentRequest{
-		CommandID: fmt.Sprintf("co-super-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
+		CommandID: fmt.Sprintf("engineering-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
 		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: strings.TrimSpace(reason),
@@ -220,7 +220,7 @@ func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, ass
 		if current.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("system assignment cancellation requires durable revoke acknowledgement")
 		}
-		cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("co-super-system-cancel:%s:%d", current.AssignmentID, current.Binding.Attempt),
+		cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("engineering-system-cancel:%s:%d", current.AssignmentID, current.Binding.Attempt),
 			OwnerID: current.Binding.OwnerID, ComputerID: current.Binding.ComputerID, AssignmentID: current.AssignmentID, Attempt: current.Binding.Attempt,
 			ExpectedLifecycleVersion: current.LifecycleVersion, Reason: strings.TrimSpace(reason)}
 		if cancel.Reason == "" {
@@ -486,7 +486,7 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 				return fmt.Errorf("restart open assignment has ambiguous capsule fate %s", assignment.CapsuleDisposition)
 			}
 			cancel := types.CancelEngineeringAssignmentRequest{
-				CommandID: fmt.Sprintf("co-super-restart-open-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
+				CommandID: fmt.Sprintf("engineering-restart-open-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
 				OwnerID:   ownerID, ComputerID: computerID, AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 				ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart acknowledged absent pre-bind assignment capsule",
 			}
@@ -530,7 +530,7 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			return err
 		}
 		cancel := types.CancelEngineeringAssignmentRequest{
-			CommandID: fmt.Sprintf("co-super-restart-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
+			CommandID: fmt.Sprintf("engineering-restart-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
 			OwnerID:   ownerID, ComputerID: computerID, AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 			ExpectedLifecycleVersion: assignment.LifecycleVersion, Reason: "restart revoked absent assignment capsule",
 		}
@@ -725,7 +725,7 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 	}
 	if !terminal && reportExists {
 		return rt.store.ReplayRecordedEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
-			assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "co-super-report:"+assignment.AssignmentID+":"+report.ReportID)
+			assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "engineering-report:"+assignment.AssignmentID+":"+report.ReportID)
 	}
 
 	// Cancellation/revocation wins the lifecycle race. A provider tool call
@@ -741,7 +741,7 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 				}
 			}
 			return rt.store.ReplayRecordedEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
-				assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "co-super-report:"+assignment.AssignmentID+":"+report.ReportID)
+				assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, "engineering-report:"+assignment.AssignmentID+":"+report.ReportID)
 		}
 		report, err = rt.bindLateAssignmentExecutionReceipts(assignment, report)
 		if err != nil {
@@ -914,7 +914,7 @@ func (rt *Runtime) recordAssignedEngineeringReportOnce(ctx context.Context, rec 
 				return types.EngineeringAssignmentCommandResult{}, err
 			}
 		}
-		commandID := "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID
+		commandID := "engineering-report:" + assignment.AssignmentID + ":" + report.ReportID
 		result, err = rt.store.ReplayRecordedEngineeringAssignmentReport(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt, report.ReportID, commandID)
 	} else {
 		// Revocation must precede terminal commitment! No terminal state is visible until revoke ack.
@@ -1162,7 +1162,7 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("terminal assignment requires one durable granted executor receipt per command")
 	}
 	req := types.RecordEngineeringAssignmentReportRequest{
-		CommandID: "co-super-report:" + assignment.AssignmentID + ":" + report.ReportID,
+		CommandID: "engineering-report:" + assignment.AssignmentID + ":" + report.ReportID,
 		OwnerID:   assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
 		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Report: report,

@@ -136,6 +136,7 @@ func TestReconcileEngineeringAssignmentCapsulesAfterRestartTerminalizesAbsentCap
 	if err != nil || !got.State.Terminal() {
 		t.Fatalf("run projection=%+v err=%v", got, err)
 	}
+	requireServingVocabularyDeposits(t, s)
 }
 
 func TestReconcileSkipsTerminalUnboundCapsule(t *testing.T) {
@@ -479,6 +480,7 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 	if err != nil || again.Disposition != types.EngineeringAssignmentBound || again.CapsuleDisposition != types.EngineeringCapsuleFrozen {
 		t.Fatalf("second reconcile changed the strand: %+v err=%v", again, err)
 	}
+	requireServingVocabularyDeposits(t, s)
 }
 
 // TestAssignedEngineeringFatePendingSignature pins the strand predicate: a bound
@@ -656,6 +658,7 @@ func TestDeadlineWakeCancelsExpiredBoundAssignmentWithoutManagementSelection(t *
 	if done.Disposition != types.EngineeringAssignmentCancelled {
 		t.Fatalf("expired assignment not cancelled by derivable wake: %+v", done)
 	}
+	requireServingVocabularyDeposits(t, s)
 }
 
 // A guest restart terminally cancels the bound assignment (absent capsule) but
@@ -800,6 +803,7 @@ func TestRestartCancelledCastRecastsAtNextAttempt(t *testing.T) {
 	if _, ok := latestCancelledForRestartRecast([]types.EngineeringAssignment{deliberate}, assignmentID); ok {
 		t.Fatal("deliberate cancel must not be restart-recast admissible")
 	}
+	requireServingVocabularyDeposits(t, s)
 }
 
 // TestRevokedAssignmentResumeCommitsStagedProposalEvidence pins the
@@ -994,6 +998,7 @@ func TestRevokedAssignmentResumeCommitsStagedProposalEvidence(t *testing.T) {
 	if result.Assignment.Disposition != types.EngineeringAssignmentCompleted {
 		t.Fatalf("resumed assignment disposition = %s, want completed", result.Assignment.Disposition)
 	}
+	requireServingVocabularyDeposits(t, s)
 }
 
 // TestExecutionAttestationPinsFrozenFinalSubject pins the certified-subject

@@ -324,7 +324,7 @@ func (rt *Runtime) startAssignedEngineeringForDocument(ctx context.Context, doc 
 		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 	}
 	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "co-super-open:" + assignmentID + fmt.Sprintf(":%d", attempt), AssignmentID: assignmentID, Binding: binding,
+		CommandID: "engineering-open:" + assignmentID + fmt.Sprintf(":%d", attempt), AssignmentID: assignmentID, Binding: binding,
 		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
 		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: req.Objective},
 		Supersedes:    req.Supersedes,
@@ -545,7 +545,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	cancelOpen := func(cause error) error {
 		current, loadErr := rt.store.GetEngineeringAssignment(context.Background(), ownerID, computerID, assignmentID, attempt)
 		if loadErr == nil && !current.Disposition.Terminal() {
-			cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("co-super-open-failed:%s:%d", assignmentID, attempt), OwnerID: ownerID, ComputerID: computerID,
+			cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("engineering-open-failed:%s:%d", assignmentID, attempt), OwnerID: ownerID, ComputerID: computerID,
 				AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: current.LifecycleVersion, Reason: cause.Error()}
 			cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 			if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil && (errors.Is(cancelErr, store.ErrLifecycleCommandConflict) || errors.Is(cancelErr, store.ErrEngineeringAssignmentInvalid)) {
@@ -672,7 +672,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		if acked.Disposition.Terminal() {
 			return cause
 		}
-		cancel := types.CancelEngineeringAssignmentRequest{CommandID: "co-super-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
+		cancel := types.CancelEngineeringAssignmentRequest{CommandID: "engineering-open-failed:" + assignmentID, OwnerID: ownerID, ComputerID: computerID,
 			AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: acked.LifecycleVersion, Reason: cause.Error()}
 		cancel.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancel)
 		if _, cancelErr := rt.store.CancelEngineeringAssignment(context.Background(), cancel); cancelErr != nil {
@@ -760,7 +760,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		run.Metadata[runMetadataModel] = model
 	}
 	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "co-super-bind:" + assignmentID + fmt.Sprintf(":%d", attempt), OwnerID: ownerID, ComputerID: computerID,
+		CommandID: "engineering-bind:" + assignmentID + fmt.Sprintf(":%d", attempt), OwnerID: ownerID, ComputerID: computerID,
 		AssignmentID: assignmentID, Attempt: attempt, ExpectedLifecycleVersion: assignment.LifecycleVersion,
 		RunID: runID, Run: run, OpaqueCapability: opaque, CapsuleID: capsuleID, GrantPolicyAttestation: grantAttestation,
 	}
