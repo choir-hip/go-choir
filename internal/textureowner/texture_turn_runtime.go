@@ -223,6 +223,15 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 		var openWork *types.WorkItemRecord
 		if raw.OpenPersistentManagement {
 			targetAgentID = agentprofile.Management + ":" + strings.TrimSpace(rec.OwnerID)
+			// A fresh computer has never registered the persistent management
+			// agent; the HTTP opener ensures it, and so must the turn
+			// (docs/problems/prompt-bar-minesweeper-demo-2026-10-10.md F1).
+			if h.Core == nil {
+				return nil, "", fmt.Errorf("Texture controls[%d] persistent-Management opener: runtime unavailable", i)
+			}
+			if _, err := h.Core.EnsurePersistentManagementAgent(ctx, rec.OwnerID); err != nil {
+				return nil, "", fmt.Errorf("Texture controls[%d] ensure persistent Management agent: %w", i, err)
+			}
 			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "persistent-super-work", i)
 			if err != nil {
 				return nil, "", err
