@@ -24,3 +24,14 @@ it checked.
 
 Fix order: wire the sourcefetch guard into fetch_url with dial-the-checked-IP.
 That fix is red (egress) and comes before Phase 1 of the grants design.
+
+## Adjacent finding while fixing (2026-10-10, not fixed)
+
+`Dependencies.egressToolTable` (internal/researchtools/host_egress.go) caches
+the per-deps tool table under `key := &d`, but `d` is a value receiver, so
+the key is a fresh pointer on every call. The cache never hits and
+`egressTables` gains one entry of closures per research egress call for the
+life of the guest process. Effect: unbounded memory growth proportional to
+research egress calls, and every call rebuilds its tool table. Fix shape:
+key on the `*Dependencies` the runtime holds (`rt.researchDeps`), or drop
+the cache. Mutation class `orange`.
