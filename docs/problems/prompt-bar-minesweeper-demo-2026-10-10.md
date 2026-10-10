@@ -107,3 +107,33 @@ conductor experiment is separate.
 
 The rule was already present in the long overlays and was ignored, so it now
 leads the overlay.
+
+## Landed (17:00–17:45Z)
+
+- F1: b746fce2 — the Texture opener registers `management:<owner>` before
+  the lookup (`TestTextureOpensManagementOnAFreshComputer`).
+- F3: c1e73d4a — the "Revision shape" block leads the Texture run overlay.
+  Deployed 17:31Z; the rerun measures whether V1 becomes an acknowledgment.
+- F2: 5d702514 — the cell normalizer leads a `func`-first statement fragment
+  with an empty statement, so yaegi evaluates it once instead of installing
+  it as a re-running package main
+  (`TestCellAfterAStagingCellShipsOnlyItsOwnIntents`).
+- F4: 3bf96ee7 — `GET .../self-development/operations` (newest first,
+  `?state=`), `GET .../self-development/head`, and
+  `choir self-dev list|show|head|start|wait|approve|reject`. `approve` is
+  the owner's single approval (accept_once bound to exactly the frozen
+  candidate), not harness-minted consensus ballots. A GUI approval control
+  is still missing.
+- Conductor latency: 25778ee2 — an accent sweeps the prompt bar from submit
+  to the conductor's decision. Jev routing (p50 208 ms) is measured but not
+  wired: with Texture the only app agent, every prompt routes to Texture
+  anyway; wire it when mail or calendar become app agents.
+
+## Open
+
+- H3 in the Texture-opened flow: management receives a ledger observation
+  when a candidate reaches the approval boundary
+  (`notifySelfDevelopmentDecisionBoundary`), but nothing wakes it and later
+  transitions (applied, rejected, rolled back) mint nothing. The rerun's
+  trace decides whether Texture hears about the candidate at all.
+- Code-diff transclusion: no diff or capsule-change source kind exists.
