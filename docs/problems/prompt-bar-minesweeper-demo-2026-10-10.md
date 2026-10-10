@@ -34,10 +34,23 @@ HTTP opener (`issueManagementOpenControl`) calls
 Owner computers registered the agent long ago, so it never showed there.
 Every new computer is affected: Texture can never delegate.
 
-F2. (hypothesis) After a cell's reduce fails, later cells that stage nothing
-still fail with the same `tray-1` error. `Tray.Drain` says undrained trays
-die with their cell, so something re-stages or replays the failed intent
-(cell results report `"reuse":"preserve"`). Needs a kernel-level test.
+F2. (confirmed 18:20Z) After a cell's reduce fails, later cells that stage
+nothing still fail with the same `tray-1` error. Trace: the cell
+`println("ping ok")` (invoked 16:56:13.815) failed `persist tray-1` 48 ms
+later, as did two `choir.Help` cells; only the compile-rejected cell
+escaped. The tray, worker and reducer each drain once — the replay is in
+the interpreter. The failing cell was an immediately invoked closure,
+`func() { ... choir.ApplyTexture(...) }()`. Yaegi v0.16.1's incremental
+parser sees a leading `func` token, fails to parse the fragment as a
+declaration, and retries it as `package main; func main() { ... }` in file
+mode, installing a package-level `main` that re-runs on every later
+Execute. Every later cell re-staged the failed apply (kernel reproduction:
+the ping cell's stdout carries the closure's `apply: tray-1`). The cell
+normalizer already renames explicit `func main` for exactly this re-run
+class; it let this shape through its bare-statement fallback. Any desk
+that writes a closure cell is affected, not only Texture: a closure that
+casts, messages or completes replays that act until another closure
+replaces `main`.
 
 F3. V1 took 5 min 53 s because Texture's first turn wrote the whole program
 before acknowledging the request. Owner (17:05Z): V1 is Texture showing it
