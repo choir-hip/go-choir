@@ -1,0 +1,28 @@
+{
+  "marker": "M11_SELFDEV_EPISODE_1791611698740",
+  "base_url": "https://choir.news",
+  "started_at": "2026-10-10T05:54:58.740Z",
+  "harness_version": "2026-09-27",
+  "predicate": "A fresh owner tracking computer can stage a reversible self-development operation, bind its approval to an independently reproduced qualified-consensus receipt, apply it, render the engineering evidence, reject a second candidate, and restore the prior state.",
+  "legs": {
+    "fresh_owner": false,
+    "bootstrap_chain": false,
+    "pre_episode_checkpoint": false,
+    "propose_only_armed": false,
+    "primary_started": false,
+    "awaiting_approval": false,
+    "qualified_consensus_armed": false,
+    "approved": false,
+    "applied": false,
+    "apply_events": false,
+    "candidate_b_started": false,
+    "candidate_b_rejected": false,
+    "document_rendered": false,
+    "commitment_materiality_visible": false,
+    "falsified_commitment_visible": false,
+    "restored_pinned_head": false
+  },
+  "email": "m11-selfdev-1791611699935-81b4a7@example.com",
+  "error": "page.reload: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for navigation until \"domcontentloaded\"\u001b[22m\n\n    at /Users/wiz/go-choir/scripts/m11_selfdev_episode_probe.mjs:388:14",
+  "predicate_result": "blocked"
+}
