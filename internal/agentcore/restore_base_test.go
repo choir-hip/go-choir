@@ -30,6 +30,22 @@ type restoreBaseFake struct {
 	foreignBase    bool
 	corruptBlob    bool
 	dropTailEvent  bool
+	// pinned are bases a checkpoint pinned, by ref; pins records PinBase.
+	pinned map[string]projectionbase.Descriptor
+	pins   []string
+}
+
+func (f *restoreBaseFake) PinBase(ctx context.Context, computerID, baseRef, reference string) error {
+	f.pins = append(f.pins, baseRef+" "+reference)
+	return nil
+}
+
+func (f *restoreBaseFake) PinnedBases(ctx context.Context, computerID, reference string) ([]string, error) {
+	refs := make([]string, 0, len(f.pinned))
+	for ref := range f.pinned {
+		refs = append(refs, ref)
+	}
+	return refs, nil
 }
 
 func (f *restoreBaseFake) Watermark(ctx context.Context, computerID string) (uint64, string, error) {
@@ -43,6 +59,9 @@ func (f *restoreBaseFake) Watermark(ctx context.Context, computerID string) (uin
 }
 
 func (f *restoreBaseFake) Descriptor(ctx context.Context, computerID, baseRef string) (projectionbase.Descriptor, error) {
+	if d, ok := f.pinned[baseRef]; ok {
+		return d, nil
+	}
 	d := f.descriptor
 	if f.foreignBase {
 		d.ComputerID = "computer-foreign-base"
@@ -280,6 +299,21 @@ func TestRematerializeRefusesFailureClasses(t *testing.T) {
 			t.Fatalf("baseless replay reported a base: seq=%d blob=%s", result.BaseSequence, result.BaseBlobSHA256)
 		}
 	})
+	t.Run("a target older than the advertised base installs the pinned base", func(t *testing.T) {
+		// checkpointd moved the advertised base past the checkpoint; the
+		// checkpoint's own base is still pinned and restore installs it.
+		rt, fake, checkpoint, _ := rematerializeSeededWithFrontend(t, "computer-restore-pinned")
+		pinned := fake.descriptor
+		fake.pinned = map[string]projectionbase.Descriptor{pinned.BlobSHA256: pinned}
+		fake.descriptor.Sequence, fake.descriptor.BlobSHA256, fake.descriptor.CanonicalHead = 1000, strings.Repeat("e", 64), strings.Repeat("d", 64)
+		result, err := rt.RematerializeFromTape(ctx, "computer-restore-pinned", checkpoint)
+		if err != nil {
+			t.Fatalf("pinned-base rematerialize refused: %v", err)
+		}
+		if result.BaseSequence != pinned.Sequence || result.BaseBlobSHA256 != pinned.BlobSHA256 || !result.WitnessMatched {
+			t.Fatalf("restore used base seq=%d blob=%s witness=%v; want the pinned base %d", result.BaseSequence, result.BaseBlobSHA256, result.WitnessMatched, pinned.Sequence)
+		}
+	})
 	t.Run("watermark outage is not a refusal", func(t *testing.T) {
 		rt, fake, checkpoint, _ := rematerializeSeededWithFrontend(t, "computer-refuse-outage")
 		fake.watermarkErr = errors.New("platform outage")
@@ -436,6 +470,47 @@ func TestPlanRestoreTargetBeforeNewestBase(t *testing.T) {
 		plan, err := planRestoreTarget(ctx, src, computerID, head(30))
 		if err != nil || plan.fromBase || plan.sequence != 30 {
 			t.Fatalf("plan = %+v, %v; want genesis replay to 30", plan, err)
+		}
+	})
+	// Restore from pinned snapshots. Failure modes pinned: a pinned base
+	// above the target is chosen (install would refuse it after the plan
+	// skipped genesis); an older pin wins over a newer usable one; a pin
+	// whose tail exceeds the bound is chosen; a pin bypasses a refused
+	// advertised base that should cover the target.
+	t.Run("older than the newest base installs the newest pinned base below it", func(t *testing.T) {
+		src := source(40, head(40), chain(60))
+		pin := func(seq uint64, ref string) projectionbase.Descriptor {
+			return projectionbase.Descriptor{ComputerID: computerID, Sequence: seq, CanonicalHead: head(seq), BlobSHA256: ref}
+		}
+		src.pinned = map[string]projectionbase.Descriptor{
+			strings.Repeat("a", 64): pin(5, strings.Repeat("a", 64)),
+			strings.Repeat("b", 64): pin(10, strings.Repeat("b", 64)),
+			strings.Repeat("c", 64): pin(20, strings.Repeat("c", 64)),
+		}
+		plan, err := planRestoreTarget(ctx, src, computerID, head(12))
+		if err != nil || !plan.fromBase || plan.pinnedBase != strings.Repeat("b", 64) || plan.sequence != 12 {
+			t.Fatalf("plan = %+v, %v; want pinned base b (sequence 10) then tail to 12", plan, err)
+		}
+	})
+	t.Run("a pin past the replay bound is not used", func(t *testing.T) {
+		bound := projectionbase.MaxRecoveryTailEvents
+		src := source(bound+20, head(bound+20), chain(bound+30))
+		src.pinned = map[string]projectionbase.Descriptor{
+			strings.Repeat("a", 64): {ComputerID: computerID, Sequence: 1, CanonicalHead: head(1), BlobSHA256: strings.Repeat("a", 64)},
+		}
+		_, err := planRestoreTarget(ctx, src, computerID, head(bound+5))
+		if !errors.Is(err, projectionbase.ErrBaseRefused) || !strings.Contains(err.Error(), "replay bound") {
+			t.Fatalf("pin beyond the bound: %v, want bound refusal", err)
+		}
+	})
+	t.Run("a pin does not bypass a refused advertised base", func(t *testing.T) {
+		src := source(40, head(40), chain(60))
+		src.dropTailEvent = true
+		src.pinned = map[string]projectionbase.Descriptor{
+			strings.Repeat("a", 64): {ComputerID: computerID, Sequence: 30, CanonicalHead: head(30), BlobSHA256: strings.Repeat("a", 64)},
+		}
+		if _, err := planRestoreTarget(ctx, src, computerID, head(41)); !errors.Is(err, projectionbase.ErrBaseRefused) {
+			t.Fatalf("refused advertised base with a pin: %v, want refusal", err)
 		}
 	})
 	t.Run("watermark outage is not a refusal", func(t *testing.T) {

@@ -71,6 +71,10 @@ func (h *Handler) HandleProjectionBasePins(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, 503, apiError{Error: "checkpoint control unavailable"})
 		return
 	}
+	if r.Method == http.MethodGet {
+		h.listProjectionBasePins(w, r)
+		return
+	}
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		writeJSON(w, 405, apiError{Error: "method not allowed"})
 		return
@@ -85,7 +89,14 @@ func (h *Handler) HandleProjectionBasePins(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, 400, apiError{Error: "invalid pin request"})
 		return
 	}
-	if !h.authorizeFileCAS(r, input.ComputerID, "computer:lifecycle") {
+	// A computer may pin its own bases with its event:pin capability: a
+	// checkpoint retains the base its restore needs. Pinning only keeps
+	// bytes; releasing a pin stays a lifecycle act.
+	authorized := h.authorizeFileCAS(r, input.ComputerID, "computer:lifecycle")
+	if !authorized && r.Method == http.MethodPost {
+		authorized = h.authorizeFileCAS(r, input.ComputerID, "event:pin")
+	}
+	if !authorized {
 		writeJSON(w, 403, apiError{Error: "computer lifecycle capability required"})
 		return
 	}
@@ -117,4 +128,39 @@ func (h *Handler) HandleProjectionBasePins(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, 200, map[string]any{"computer_id": input.ComputerID, "base_ref": input.BaseRef, "reference": input.Reference, "pinned": r.Method == http.MethodPost})
+}
+
+// listProjectionBasePins returns the bases a computer pinned, newest first;
+// a reference narrows the listing to one pin holder.
+func (h *Handler) listProjectionBasePins(w http.ResponseWriter, r *http.Request) {
+	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
+	reference := strings.TrimSpace(r.URL.Query().Get("reference"))
+	if !safeFileCASComponent(computerID) || len(reference) > 255 {
+		writeJSON(w, 400, apiError{Error: "invalid pin listing"})
+		return
+	}
+	if !h.authorizeFileCAS(r, computerID, "event:read") {
+		writeJSON(w, 403, apiError{Error: "computer capability required"})
+		return
+	}
+	rows, err := h.service.store.db.QueryContext(r.Context(), `SELECT base_ref FROM computer_projection_base_pins WHERE computer_id=? AND (?='' OR reference_id=?) GROUP BY base_ref ORDER BY MAX(created_at) DESC`, computerID, reference, reference)
+	if err != nil {
+		writeJSON(w, 503, apiError{Error: "checkpoint pins unavailable"})
+		return
+	}
+	defer rows.Close()
+	refs := []string{}
+	for rows.Next() {
+		var ref string
+		if err := rows.Scan(&ref); err != nil {
+			writeJSON(w, 503, apiError{Error: "checkpoint pins unavailable"})
+			return
+		}
+		refs = append(refs, ref)
+	}
+	if rows.Err() != nil {
+		writeJSON(w, 503, apiError{Error: "checkpoint pins unavailable"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"computer_id": computerID, "reference": reference, "base_refs": refs})
 }

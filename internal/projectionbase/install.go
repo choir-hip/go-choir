@@ -25,6 +25,20 @@ type BaseSource interface {
 	TailPage(ctx context.Context, computerID string, afterSequence uint64, pageSize int) ([]computerevent.DurableEvent, error)
 }
 
+// PinnedBaseSource retains bases past garbage collection. A checkpoint pins
+// the base its replay started from, so a restore to that checkpoint can
+// install a base at or below its target instead of replaying from genesis.
+// PinnedBases with an empty reference lists every pin the computer holds.
+type PinnedBaseSource interface {
+	PinBase(ctx context.Context, computerID, baseRef, reference string) error
+	PinnedBases(ctx context.Context, computerID, reference string) ([]string, error)
+}
+
+// CheckpointPinReference is the pin reference for the checkpoint at head.
+func CheckpointPinReference(head string) string {
+	return "checkpoint:" + strings.TrimSpace(head)
+}
+
 // InstallVerifiedBase installs the required base for recovery into storeDir
 // and proves it before returning: descriptor bindings plus W<=H ordering plus
 // live compatibility (VerifyForRecovery), blob digest match, unpacked store
@@ -67,6 +81,33 @@ func InstallVerifiedBase(ctx context.Context, src BaseSource, storeDir, markerNa
 	if descriptor.Sequence != sequence {
 		return Descriptor{}, fmt.Errorf("%w: watermark sequence %d does not match descriptor %d", ErrBaseRefused, sequence, descriptor.Sequence)
 	}
+	return installDescriptor(ctx, src, storeDir, markerName, computerID, targetHead, targetSequence, descriptor)
+}
+
+// InstallPinnedBase installs one named base — a checkpoint's pinned base,
+// which may be older than the advertised watermark — under the same
+// verification as InstallVerifiedBase.
+func InstallPinnedBase(ctx context.Context, src BaseSource, storeDir, markerName, computerID, baseRef, targetHead string, targetSequence uint64) (Descriptor, error) {
+	storeDir = filepath.Clean(strings.TrimSpace(storeDir))
+	markerName = strings.TrimSpace(markerName)
+	computerID = strings.TrimSpace(computerID)
+	if storeDir == "" || storeDir == "." || markerName == "" || computerID == "" || strings.TrimSpace(baseRef) == "" {
+		return Descriptor{}, fmt.Errorf("%w: install paths, computer and base are required", ErrBaseRefused)
+	}
+	if !computerevent.IsSHA256(targetHead) || targetSequence == 0 {
+		return Descriptor{}, fmt.Errorf("%w: recovery target is required", ErrBaseRefused)
+	}
+	if src == nil {
+		return Descriptor{}, fmt.Errorf("%w: base source is required", ErrBaseRefused)
+	}
+	descriptor, err := src.Descriptor(ctx, computerID, strings.TrimSpace(baseRef))
+	if err != nil {
+		return Descriptor{}, err
+	}
+	return installDescriptor(ctx, src, storeDir, markerName, computerID, targetHead, targetSequence, descriptor)
+}
+
+func installDescriptor(ctx context.Context, src BaseSource, storeDir, markerName, computerID, targetHead string, targetSequence uint64, descriptor Descriptor) (Descriptor, error) {
 	if err := descriptor.VerifyForRecovery(computerID, targetHead, targetSequence); err != nil {
 		return Descriptor{}, err
 	}

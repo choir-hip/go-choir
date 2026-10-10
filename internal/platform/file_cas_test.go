@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,5 +193,36 @@ func TestProjectionBaseDescriptorAndBlobServing(t *testing.T) {
 	handler.HandleProjectionBaseBlob(postResult, post)
 	if postResult.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("post blob = %d, want 405", postResult.Code)
+	}
+
+	// A checkpoint pins its base; restore lists the computer's pins.
+	pin := func(computerID string, internal bool) *httptest.ResponseRecorder {
+		body := `{"computer_id":"` + computerID + `","base_ref":"` + digest + `","reference":"checkpoint:` + digest + `"}`
+		req := httptest.NewRequest(http.MethodPost, "/internal/computers/projection-base/pins", strings.NewReader(body))
+		if internal {
+			req.Header.Set("X-Internal-Caller", "true")
+		}
+		result := httptest.NewRecorder()
+		handler.HandleProjectionBasePins(result, req)
+		return result
+	}
+	if got := pin("computer-base", false); got.Code != http.StatusForbidden {
+		t.Fatalf("unauthenticated pin = %d, want 403", got.Code)
+	}
+	if got := pin("computer-other", true); got.Code != http.StatusConflict {
+		t.Fatalf("foreign pin = %d, want 409", got.Code)
+	}
+	if got := pin("computer-base", true); got.Code != http.StatusOK {
+		t.Fatalf("pin = %d: %s", got.Code, got.Body.String())
+	}
+	pins := handler.HandleProjectionBasePins
+	if got := get(pins, "/internal/computers/projection-base/pins?computer_id=computer-base", true); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"base_refs":["`+digest+`"]`) {
+		t.Fatalf("list pins = %d: %s", got.Code, got.Body.String())
+	}
+	if got := get(pins, "/internal/computers/projection-base/pins?computer_id=computer-base&reference=checkpoint:other", true); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"base_refs":[]`) {
+		t.Fatalf("list pins by other reference = %d: %s", got.Code, got.Body.String())
+	}
+	if got := get(pins, "/internal/computers/projection-base/pins?computer_id=computer-base", false); got.Code != http.StatusForbidden {
+		t.Fatalf("unauthenticated list = %d, want 403", got.Code)
 	}
 }

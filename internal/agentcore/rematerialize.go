@@ -121,7 +121,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 			return report, fmt.Errorf("rematerialize: open staged workspace: %w", err)
 		}
 	} else {
-		staged, descriptor, err = installStagedBase(ctx, src, stagingRoot, filepath.Base(stagedMarker), computerID, targetHead, targetSequence)
+		staged, descriptor, err = installStagedBaseRef(ctx, src, stagingRoot, filepath.Base(stagedMarker), computerID, plan.pinnedBase, targetHead, targetSequence)
 		if err != nil {
 			_ = os.RemoveAll(stagingRoot)
 			return report, err

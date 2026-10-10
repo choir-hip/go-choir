@@ -67,10 +67,12 @@ func resolveRecoveryTarget(ctx context.Context, src projectionbase.BaseSource, c
 }
 
 // restoreTarget is how a restore reaches its target head: install the
-// advertised base and replay the tail after it, or replay from genesis.
+// advertised base, or a base a checkpoint pinned (pinnedBase), and replay
+// the tail after it, or replay from genesis.
 type restoreTarget struct {
-	sequence uint64
-	fromBase bool
+	sequence   uint64
+	fromBase   bool
+	pinnedBase string
 }
 
 // planRestoreTarget resolves the restore target against the advertised base,
@@ -105,6 +107,9 @@ func planRestoreTarget(ctx context.Context, src projectionbase.BaseSource, compu
 	if !absent && sequence >= watermark {
 		return restoreTarget{}, baseRefusal
 	}
+	if ref, ok := newestPinnedBaseAtOrBelow(ctx, src, computerID, sequence); ok {
+		return restoreTarget{sequence: sequence, fromBase: true, pinnedBase: ref}, nil
+	}
 	if sequence > projectionbase.MaxRecoveryTailEvents {
 		if absent {
 			return restoreTarget{}, fmt.Errorf("%w: no advertised base and recovery target %d exceeds the %d-event replay bound", projectionbase.ErrBaseRefused, sequence, projectionbase.MaxRecoveryTailEvents)
@@ -114,12 +119,75 @@ func planRestoreTarget(ctx context.Context, src projectionbase.BaseSource, compu
 	return restoreTarget{sequence: sequence}, nil
 }
 
+// newestPinnedBaseAtOrBelow picks the newest base this computer pinned whose
+// sequence is at or below the target and whose tail to the target fits the
+// replay bound. Checkpoints pin the base they replayed from, so a restore to
+// a checkpoint older than the advertised base still starts from a snapshot
+// (owner, 2026-10-10: "restore from pinned snapshots — that's their
+// purpose"). The installer verifies the base against the tape; an unusable
+// pin is skipped here and the restore falls back to genesis.
+func newestPinnedBaseAtOrBelow(ctx context.Context, src projectionbase.BaseSource, computerID string, targetSequence uint64) (string, bool) {
+	pins, ok := src.(projectionbase.PinnedBaseSource)
+	if !ok {
+		return "", false
+	}
+	refs, err := pins.PinnedBases(ctx, computerID, "")
+	if err != nil {
+		return "", false
+	}
+	best, bestSequence := "", uint64(0)
+	for _, ref := range refs {
+		descriptor, err := src.Descriptor(ctx, computerID, ref)
+		if err != nil || descriptor.Sequence == 0 || descriptor.Sequence > targetSequence {
+			continue
+		}
+		if targetSequence-descriptor.Sequence > projectionbase.MaxRecoveryTailEvents {
+			continue
+		}
+		if descriptor.Sequence > bestSequence {
+			best, bestSequence = ref, descriptor.Sequence
+		}
+	}
+	return best, best != ""
+}
+
+// pinCheckpointBase retains the base a checkpoint's replay started from, so
+// a later restore to that checkpoint can install it. A replay from genesis
+// has no base to pin.
+func (rt *Runtime) pinCheckpointBase(ctx context.Context, computerID string, report ReplayCompletenessReport) error {
+	baseRef := strings.TrimSpace(report.BaseBlobSHA256)
+	if baseRef == "" || report.LiveHead == nil {
+		return nil
+	}
+	src, err := rt.resolveRestoreBaseSource()
+	if err != nil {
+		return err
+	}
+	pins, ok := src.(projectionbase.PinnedBaseSource)
+	if !ok {
+		return fmt.Errorf("checkpoint base pin: base source cannot pin")
+	}
+	return pins.PinBase(ctx, computerID, baseRef, projectionbase.CheckpointPinReference(report.LiveHead.CanonicalEventHead))
+}
+
 // installStagedBase installs the verified base for targetHead into stagingRoot
 // and opens it. The returned store head is the watermark W; replay resumes
 // after W through the existing reconstruct loop. Any failure refuses before
 // the caller mutates the original realization.
 func installStagedBase(ctx context.Context, src projectionbase.BaseSource, stagingRoot, markerName, computerID, targetHead string, targetSequence uint64) (*choirstore.Store, projectionbase.Descriptor, error) {
-	descriptor, err := projectionbase.InstallVerifiedBase(ctx, src, stagingRoot, markerName, computerID, targetHead, targetSequence)
+	return installStagedBaseRef(ctx, src, stagingRoot, markerName, computerID, "", targetHead, targetSequence)
+}
+
+// installStagedBaseRef installs a named pinned base, or the advertised base
+// when baseRef is empty.
+func installStagedBaseRef(ctx context.Context, src projectionbase.BaseSource, stagingRoot, markerName, computerID, baseRef, targetHead string, targetSequence uint64) (*choirstore.Store, projectionbase.Descriptor, error) {
+	var descriptor projectionbase.Descriptor
+	var err error
+	if baseRef == "" {
+		descriptor, err = projectionbase.InstallVerifiedBase(ctx, src, stagingRoot, markerName, computerID, targetHead, targetSequence)
+	} else {
+		descriptor, err = projectionbase.InstallPinnedBase(ctx, src, stagingRoot, markerName, computerID, baseRef, targetHead, targetSequence)
+	}
 	if err != nil {
 		return nil, projectionbase.Descriptor{}, err
 	}

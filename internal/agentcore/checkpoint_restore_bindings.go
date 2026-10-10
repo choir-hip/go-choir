@@ -23,6 +23,9 @@ func (rt *Runtime) checkpointRestoreBindings(ctx context.Context, computerID, re
 	if err != nil {
 		return selfdevprotocol.VMLocalContentWitness{}, selfdevprotocol.FrontendIdentity{}, err
 	}
+	if err := rt.pinCheckpointBase(ctx, computerID, report); err != nil {
+		return selfdevprotocol.VMLocalContentWitness{}, selfdevprotocol.FrontendIdentity{}, fmt.Errorf("self-development checkpoint: pin replay base: %w", err)
+	}
 	releaseFiles := make([]selfdevprotocol.ReleaseFile, 0, len(files))
 	for _, file := range files {
 		releaseFiles = append(releaseFiles, selfdevprotocol.ReleaseFile{Path: file.Path, SHA256: file.SHA256})

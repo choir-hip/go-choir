@@ -189,6 +189,12 @@ func (s *liveBaseSource) pinAtHead(ctx context.Context, targetHead string) error
 	return nil
 }
 
+func (s *liveBaseSource) PinBase(context.Context, string, string, string) error { return nil }
+
+func (s *liveBaseSource) PinnedBases(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
+
 func (s *liveBaseSource) Watermark(ctx context.Context, computerID string) (uint64, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

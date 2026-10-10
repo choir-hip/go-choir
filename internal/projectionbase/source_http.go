@@ -1,6 +1,7 @@
 package projectionbase
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -195,4 +196,50 @@ func (s *HTTPSource) TailPage(ctx context.Context, computerID string, afterSeque
 		return nil, fmt.Errorf("projection base: decode tail: %w", err)
 	}
 	return page, nil
+}
+
+// PinBase retains baseRef for this computer under reference.
+func (s *HTTPSource) PinBase(ctx context.Context, computerID, baseRef, reference string) error {
+	token, err := s.bearer(ctx)
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(map[string]string{"computer_id": strings.TrimSpace(computerID), "base_ref": strings.TrimSpace(baseRef), "reference": strings.TrimSpace(reference)})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/internal/computers/projection-base/pins", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("projection base: pin status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// PinnedBases lists the bases this computer pinned under reference.
+func (s *HTTPSource) PinnedBases(ctx context.Context, computerID, reference string) ([]string, error) {
+	resp, err := s.get(ctx, "/internal/computers/projection-base/pins", url.Values{"computer_id": {strings.TrimSpace(computerID)}, "reference": {strings.TrimSpace(reference)}})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("projection base: pins status %d", resp.StatusCode)
+	}
+	var listing struct {
+		BaseRefs []string `json:"base_refs"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&listing); err != nil {
+		return nil, fmt.Errorf("projection base: decode pins: %w", err)
+	}
+	return listing.BaseRefs, nil
 }
