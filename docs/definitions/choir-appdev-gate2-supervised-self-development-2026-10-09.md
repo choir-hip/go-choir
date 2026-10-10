@@ -276,24 +276,60 @@ build it in a capsule, see the change before it lands, approve it, and be
 able to take it back. Stations S1 remainder, S4, S5 and S6 are the parts;
 this file holds the gate together and keeps the order honest.
 
-## Order
+## Order (revised 2026-10-10, owner: "get more aggressive")
 
-1. **Reality.** Re-run M11 on the current build. It passed all six legs on
-   September 29th; S2 layering and the Gate 1 work landed since.
-2. **Layered checkpoint identity** (S6, residual 1 of the layered-release
-   problem doc). Self-development checkpoints on a layered computer need a
-   trusted frontend identity; today they report "underivable".
-3. **Texture intake.** An owner request in Texture becomes an engineering
-   self-development operation (Texture writes the request; management
-   admits engineering; engineering opens the operation).
-4. **Preview** (S5 v1). A route on the owner's desktop serves the frozen
-   candidate's built frontend before approval.
-5. **Product approval** (S6). The owner approves or rejects in the product;
-   the decision binds to the frozen candidate.
-6. **Owner computer.** The whole path on the owner's layered computer, with
-   the owner's approval.
-7. **Later on the axis:** a live dev-server preview while engineering works
-   (S5 proper), then capsule egress through the recording proxy (S4).
+The breathtaking moment is the target: the owner asks Texture, on their
+own computer, for a change they can see. It applies, they use it, and
+they can take it back. Everything is cut to that path. M11's evidence
+file change is a scaffold, not the goal: it never rebuilds the SPA or
+the binary from the patch.
+
+Critical path. Tracks B to E run in parallel with A.
+
+- **A. Apply, reject and restore on a disposable computer.** M11
+  reruns. Rerun 11 is in flight on dbed74e5.
+- **B. Layered checkpoint identity.** The owner computer runs a layered
+  release, and its self-development checkpoint reports "served SPA is
+  underivable" (residual 1 of `problems/layered-release-spa-underivable-2026-10-09.md`).
+  M11's fresh computers may not be layered, so passing A does not prove
+  the owner path. This is a hard blocker for F.
+- **C. A visible change.** An M11 variant whose request changes UI
+  text, then adds a tiny app through the existing registry. The host
+  builder rebuilds SPA and binary from the patch, and the applied
+  computer serves the new surface. It proves what the owner will see.
+- **D. Texture intake and effects on.** Today only the API starts an
+  operation. Texture needs a self-development request control, routed
+  through management to engineering, and only when the computer's mode
+  is armed. Its "effects-OFF" framing must follow the armed mode, or
+  Texture keeps telling the owner it cannot act.
+- **E. Approve, reject and roll back in the product.** Today they exist
+  only as API calls and key scopes. Minimal: a decision card in the
+  Texture document bound to the frozen candidate, plus a rollback that
+  works when the desktop itself is broken. The updater's health
+  rollback is the backstop.
+- **F. Owner computer.** Arm the mode with the owner and run C's
+  request through D and E.
+
+Cut from the path:
+
+- **Preview before approval (S5).** Restore after apply is the safety
+  net. Preview is added after F.
+- **Full recorded egress (S4).** The authoritative build is the host
+  builder, which has network and pins dependency hashes. Capsules need
+  network only to add a new dependency. Minimal S4 comes after F:
+  - an allowlist of lockfile-verified registries (Nix cache, Go proxy,
+    npm), recorded by URL and hash;
+  - no full byte capture, since the package managers already verify
+    integrity.
+- **App packages (S7).** These follow F. Until then a new app goes into
+  the monolith's registry, and its rollback is whole-release.
+- **Texture suite items not on this path** (T5b and the research
+  stopping rule). These stay residuals.
+
+Loop speed: each M11 attempt costs 30 to 90 minutes. Run variants in
+parallel now that host memory is guarded. Add a harness that replays
+apply from a known frozen bundle, so an apply fix does not wait on a
+fresh build.
 
 The S1 remainder items (non-root runtime, Yaegi floor proofs) stay on S1's
 file. They gate S4 egress, not this gate's network-closed v1.
