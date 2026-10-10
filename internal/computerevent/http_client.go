@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -286,34 +287,61 @@ func (c *HTTPClient) do(ctx context.Context, method, path string, body any, resp
 // payload envelopes to be read in full. A response that crosses that bound is
 // rejected before JSON decoding, so truncation cannot masquerade as valid data.
 func (c *HTTPClient) doWithResponseLimit(ctx context.Context, method, path string, body any, response any, maxResponseBytes int) (int, error) {
-	var reader io.Reader
+	var encoded []byte
 	if body != nil {
-		encoded, err := CanonicalJSON(body)
+		var err error
+		encoded, err = CanonicalJSON(body)
 		if err != nil {
 			return 0, err
 		}
-		reader = bytes.NewReader(encoded)
 	}
 	endpoint := *c.baseURL
 	endpoint.Path = strings.TrimRight(c.baseURL.Path, "/") + strings.SplitN(path, "?", 2)[0]
 	if queryIndex := strings.IndexByte(path, '?'); queryIndex >= 0 {
 		endpoint.RawQuery = path[queryIndex+1:]
 	}
-	request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), reader)
-	if err != nil {
-		return 0, err
-	}
-	token, err := c.capability(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("computer event client: capability: %w", err)
-	}
-	request.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	result, err := c.http.Do(request)
-	if err != nil {
-		return 0, err
+	// A refused connection never reached corpusd, so resending is safe for
+	// any method. A host deploy restarts corpusd for a few seconds; without
+	// this every guest write in flight failed, including the one recording
+	// the run's own failure, which left a zombie running run
+	// (host-deploy-restart-fails-in-flight-guest-turns-2026-10-10).
+	deadline := time.Now().Add(corpusdRestartWait)
+	backoff := 250 * time.Millisecond
+	var result *http.Response
+	for {
+		var reader io.Reader
+		if body != nil {
+			reader = bytes.NewReader(encoded)
+		}
+		request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), reader)
+		if err != nil {
+			return 0, err
+		}
+		token, err := c.capability(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("computer event client: capability: %w", err)
+		}
+		request.Header.Set("Authorization", "Bearer "+token)
+		if body != nil {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		result, err = c.http.Do(request)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.ECONNREFUSED) || time.Now().Add(backoff).After(deadline) {
+			return 0, err
+		}
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return 0, err
+		case <-timer.C:
+		}
+		if backoff < 2*time.Second {
+			backoff *= 2
+		}
 	}
 	defer result.Body.Close()
 	var responseReader io.Reader = io.LimitReader(result.Body, 1<<20)
@@ -352,6 +380,10 @@ func (c *HTTPClient) doWithResponseLimit(ctx context.Context, method, path strin
 
 // NewGuestHTTPClient permits authenticated, signed-receipt traffic over the
 // Firecracker host-only RFC1918 tap. Public/non-private HTTP remains refused.
+// corpusdRestartWait bounds how long a request keeps resending while corpusd
+// refuses connections, as it does for a few seconds during a host deploy.
+const corpusdRestartWait = 30 * time.Second
+
 func NewGuestHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClient, error) {
 	parsed, err := url.Parse(strings.TrimRight(baseURL, "/"))
 	if err != nil || parsed.Scheme != "http" {
