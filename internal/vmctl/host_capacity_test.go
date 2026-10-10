@@ -73,6 +73,8 @@ func hostCapacityRegistry(t *testing.T, mgr VMManager) (*OwnershipRegistry, *tim
 	reg.SetVMManager(mgr)
 	now := time.Date(2026, 10, 10, 7, 0, 0, 0, time.UTC)
 	reg.clock = func() time.Time { return now }
+	// Guests accept connections unless a test says otherwise (wedge.go).
+	reg.guestNetworkProbe = func(string) bool { return true }
 	return reg, &now
 }
 

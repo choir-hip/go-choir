@@ -61,6 +61,7 @@ type VMProcessReconcileResult struct {
 	Reaped             int
 	Pending            int
 	ProtectedUnmanaged int
+	Wedged             int
 }
 
 func (r *OwnershipRegistry) now() time.Time {
@@ -128,8 +129,16 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 		}
 		r.mu.RUnlock()
 
-		if mgr.GetVM(vmID) != nil {
+		if info := mgr.GetVM(vmID); info != nil {
 			res.Managed++
+			// A tracked running guest that refuses connections for the
+			// wedge window is stopped; a booting one is never probed.
+			if own != nil && own.State == VMStateActive && !own.IsHeld() &&
+				strings.EqualFold(strings.TrimSpace(info.State), "running") &&
+				r.guestWedged(vmID, firstNonEmpty(info.HostURL, own.ComputerURL), now) {
+				r.stopWedgedManaged(own, &res)
+				continue
+			}
 			adj := oomScoreAdjOrdinary
 			if protectedWarmnessClass(class) {
 				adj = oomScoreAdjProtected
@@ -169,6 +178,12 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 			delete(seen, vmID)
 			continue
 		}
+		if !own.IsHeld() && r.guestWedged(vmID, own.ComputerURL, now) {
+			// Protection covers a guest that may be working, not one that
+			// refuses every connection: the bound on protection is evidence.
+			r.stopWedgedUnmanaged(pc, own, &res)
+			continue
+		}
 		if own.IsHeld() || protectedWarmnessClass(class) {
 			res.ProtectedUnmanaged++
 			log.Printf("vmctl: protected VM %s (%s) runs outside the registry; reattach pending, never reaped", vmID, class)
@@ -181,6 +196,7 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 		r.reapUnmanaged(pc, vmID, own, &res)
 	}
 
+	r.forgetWedgeProbes(live)
 	r.mu.Lock()
 	for vmID := range r.unmanagedSince {
 		if !seen[vmID] {
@@ -191,9 +207,9 @@ func (r *OwnershipRegistry) ReconcileVMProcesses(ctx context.Context, guard Comp
 	if res.Reattached > 0 {
 		go r.ReconcileReadyGatewayCredentials()
 	}
-	if res.Reaped > 0 || res.Reattached > 0 || res.ProtectedUnmanaged > 0 {
-		log.Printf("vmctl: process reconcile live=%d managed=%d reattached=%d reaped=%d pending=%d protected_unmanaged=%d",
-			res.Live, res.Managed, res.Reattached, res.Reaped, res.Pending, res.ProtectedUnmanaged)
+	if res.Reaped > 0 || res.Reattached > 0 || res.ProtectedUnmanaged > 0 || res.Wedged > 0 {
+		log.Printf("vmctl: process reconcile live=%d managed=%d reattached=%d reaped=%d pending=%d protected_unmanaged=%d wedged=%d",
+			res.Live, res.Managed, res.Reattached, res.Reaped, res.Pending, res.ProtectedUnmanaged, res.Wedged)
 	}
 	return res
 }

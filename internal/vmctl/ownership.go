@@ -355,6 +355,10 @@ type OwnershipRegistry struct {
 	unmanagedSince map[string]time.Time
 	busySince      map[string]time.Time
 	unmanagedGrace time.Duration
+	// networkDeadSince records when a live guest first refused a connection
+	// to its service port (wedge.go); guestNetworkProbe overrides the probe.
+	networkDeadSince  map[string]time.Time
+	guestNetworkProbe func(computerURL string) bool
 
 	// ownerships maps user/desktop composite keys to their active VM ownership.
 	ownerships map[string]*VMOwnership
@@ -445,6 +449,7 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 	return &OwnershipRegistry{
 		ownerships:                 make(map[string]*VMOwnership),
 		unmanagedSince:             make(map[string]time.Time),
+		networkDeadSince:           make(map[string]time.Time),
 		busySince:                  make(map[string]time.Time),
 		vmByID:                     make(map[string]*VMOwnership),
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
