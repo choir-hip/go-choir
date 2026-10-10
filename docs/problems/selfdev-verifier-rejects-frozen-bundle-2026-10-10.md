@@ -38,3 +38,28 @@ tree (`/workspace/platform/cmd/verifydigest/main.go`) and ran it with
 
 Next observation: the verifier's report summary, then the decision
 cell's arguments.
+
+## Cause (00:02Z; the verifier's report, confirmed in code)
+
+The verifier reported a fail-closed blocker at 00:01:42Z:
+`choir.InspectBundle` refuses the mounted draft ("invalid frozen bundle
+draft"). `internal/yaegikernel/inspect_bundle.go` decodes the draft into
+`bundleDraftMirror` with `DisallowUnknownFields`; the mirror predates
+S2-f and lacks `source_patch_sha256` and `source_patch_base_commit`,
+which `transaction.CapsuleEffectBundle` (and so every draft with a source
+patch) carries. The mirror would also recompute the wrong content digest,
+since the declared digest covers those fields. Every payload check the
+verifier could run by hand passed (binding, content digest, runtime file
+hashes, source patch hash, subject tree digest).
+
+H1 confirmed in a narrower form: the in-cell inspection, not the
+verifier's own program, cannot read the draft. H2 and H3 refuted. The
+verifier's `fail` was the correct fail-closed call. Every self-development
+change that touches platform sources has been unverifiable since S2-f
+landed; the September 29 pass predates it.
+
+Fix: add the two fields to the mirror with the same tags
+(`omitempty`), so decode and digest match; pin with a test that inspects
+a draft carrying both fields. Mutation class orange (verifier input
+parsing; the verification decision stays with the verifier).
+Rollback: git revert.
