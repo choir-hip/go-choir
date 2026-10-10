@@ -196,7 +196,12 @@ try {
   await persistSession();
   if (await page.locator('text=Sign in with your passkey').count()) throw new Error('browser session expired: sign-in shown before the prompt');
   await screenshot('desktop-before');
-  const knownDocs = new Set(((await getJSON('/api/texture/documents')).json?.documents || []).map((doc) => doc.doc_id));
+  // The desktop renders its prompt bar in preview mode even with an expired
+  // session, so the DOM check above is not enough: an authenticated read
+  // must succeed before the prompt is typed.
+  const documents = await getJSON('/api/texture/documents');
+  if (documents.status !== 200) throw new Error(`browser session expired: /api/texture/documents returned ${documents.status}`);
+  const knownDocs = new Set((documents.json?.documents || []).map((doc) => doc.doc_id));
 
   await page.click('[data-prompt-input]');
   await page.fill('[data-prompt-input]', prompt);
@@ -211,6 +216,7 @@ try {
   await screenshot('conductor-routing');
   await page.waitForTimeout(8_000);
   await screenshot('prompt-submitted');
+  if (await page.locator('text=Sign in with your passkey').count()) throw new Error('browser session expired: sign-in shown after the prompt was submitted');
 
   const seenRevisions = new Map();
   const operationStates = {};
