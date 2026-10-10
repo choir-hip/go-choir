@@ -179,6 +179,57 @@ owner's compute and storage budget; and other tenants.
 
 ## 4. Proposed design
 
+### 4.0a Owner direction (2026-10-10): don't hinder agency — the capability ladder
+
+Owner: "I want to give more access than that. What's the next level of
+capability? We need to not hinder agency." Fetch-then-mount (§4.1) gates every
+fetch, so a build that resolves dependencies lazily, a `git clone` the agent
+didn't predict, or a dataset link found halfway through all need a round trip.
+This section re-ranks the design. The strictness moves from the fetch to the
+promotion boundary.
+
+| Level | Capsule network | Who grants | What it unblocks |
+| --- | --- | --- | --- |
+| L0 (today) | none | n/a | pure computation on vendored code |
+| L1 | none; trusted fetcher mounts granted bytes read-only (§4.1) | management or research per item | pinned packages known in advance |
+| **L2: live ecosystems** | a real interface whose only route is the host egress proxy; native `pip`/`uv`/`npm`/`go`/`cargo`/`git`/`hf` work unchanged against an ecosystem allowlist (PyPI, npm, crates, Go proxy, conda-forge, GitHub/GitLab/Codeberg, Hugging Face, arXiv, Zenodo, common dataset hosts) | default for every implementation assignment; management may withhold | almost all coding and replication work, including lazy fetches and install scripts |
+| **L3: open web, guarded** | any public HTTPS host through the proxy; private, loopback, link-local and metadata ranges denied; request and byte budgets; outbound body caps | management grant per assignment; research consult optional | APIs, documentation sites, arbitrary download links |
+| L4: full network | raw sockets, any protocol and port (SSH, UDP, listening servers), NAT'd, private ranges denied | owner, and only for capsules with no private data mounted | servers, P2P, network benchmarks |
+
+Why L2 by default is safe enough:
+
+1. **The capsule is already a disposable blast radius.** Malicious install
+   code runs there, holds no credentials, and is destroyed.
+2. **Promotion is the boundary, not the fetch.** Nothing reaches the owner's
+   computer unless it was frozen, verified and approved. The proxy records
+   every fetched artifact by hash, and the freeze carries that record as
+   `dep-lock:sha256:…`. At freeze, deterministic screening (OSV `MAL-`,
+   package age and cooldown, confusable names, install scripts, binaries) and
+   a research/Jev verdict run over the manifest. Flagged dependencies block
+   approval or go to the owner. Research vets what will ship, not every probe
+   the agent makes while exploring.
+3. **Every request is logged and attributable** to the assignment, so Texture
+   can show what was fetched (and transclude it).
+
+What L2/L3 accept, and how it is bounded:
+
+- **Exfiltration of the capsule's source snapshot** (T1) is the real residual,
+  because the snapshot may hold the owner's private source and documents.
+  Bounds: no credentials in capsules; L2 limits destinations to ecosystem
+  hosts. At L3, outbound bodies and request rates are capped. Upload-shaped
+  traffic (large POST/PUT bodies, git push) is refused unless granted. A
+  "public scratch" capsule with no private snapshot can take L3/L4 freely.
+- **Prompt injection through fetched content** (T4) can steer the agent inside
+  the sandbox, but it cannot cross promotion without passing screening,
+  verification and approval.
+
+Re-ranked plan: L2 becomes the first network phase. It reuses the guest's
+existing NAT and needs a veth plus nftables limited to the proxy, `AF_INET`
+in the workload seccomp filter, and the proxy as `HTTP(S)_PROXY`, with the CA
+injected or CONNECT host checks. L1's fetcher remains for the verifier's
+offline rebuild from the lock. L3 is a grant flag on the same proxy, and L4 a
+separate capsule class. The D1/D2 address-guard fixes remain prerequisites.
+
 ### 4.0 Principles
 
 1. **Fetch-and-mount, not open network.** Model-authored code and a network
@@ -659,7 +710,7 @@ build systems that fetch lazily. The work would be: a veth plus nftables
 limited to the mirror, `AF_INET` in the workload seccomp filter, and the
 mirror as `HTTP(S)_PROXY` with path policy (CA injection, or plain-HTTP
 mirror URLs only). Same grants. It would carry a stronger tier floor
-(`use: execute` context). The default recommendation is **not to build
+(`use: execute` context). Superseded by §4.0a: live proxied egress (L2) is now the first network phase, and the original recommendation was **not to build
 this**.
 
 ---
