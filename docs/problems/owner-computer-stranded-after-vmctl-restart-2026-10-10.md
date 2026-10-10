@@ -93,3 +93,34 @@ restart from this session was refused by the session's permission policy
 
 Bounded protection, step 4 of Phase 0, remains open. Until it lands, the
 owner's restart is the only bound on a stranded computer.
+
+## Outcome and owner direction (12:20Z)
+
+The owner clicked "Restart computer" on the new page at 12:19Z. The
+restart worked. At 12:19:49 stop reaped the wedged guest; its receipt
+reads `reap-unmanaged:orphan` via `reapUnmanagedLocked`, and the log shows
+the caller `proxy.lifecycle.restart`. At 12:20:20 epoch 1188 booted. The
+crash-boot closer failed the August operations ("interrupted by a
+restart", 12:20:06), and `selfdev_active_operations` is 0. The page itself
+reported "Restart did not finish (Load failed)": the browser lost its
+connection during the ~30 s boot. A reload opened the computer.
+`desk_pending_mutations` is still 1, so vmctl still reads the computer as
+busy. That is a separate stale obligation, still to trace.
+
+The owner then ruled: **"Users shouldn't ever have to do this. It should
+all be automated."** A restart button is the wrong bound. The bound becomes
+automatic, and it rests on evidence rather than on uncertainty:
+
+- **Wedged means unreachable at the network level.** A guest whose
+  process is alive but refuses a TCP connection to its service port for
+  five minutes running is wedged. The owner's guest did not even answer
+  ARP. A busy guest still accepts the connection even when `/health` is
+  slow, and it stays protected.
+- **vmctl's reconcile ends a wedged guest by itself.** This applies to
+  untracked ones (today's case, previously "protected, never reaped") and
+  to tracked running ones. Reconcile stops the guest with a receipt and
+  `stopped_by: wedged`. The always-on policy then boots an always-on
+  computer again; any other computer boots on its next page load.
+- **No owner-facing restart button.** The page and the boot console say
+  the computer is not answering and will restart by itself if it stays
+  that way. They keep checking.
