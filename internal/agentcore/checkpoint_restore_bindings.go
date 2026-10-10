@@ -14,6 +14,9 @@ func (rt *Runtime) checkpointRestoreBindings(ctx context.Context, computerID, re
 		return selfdevprotocol.VMLocalContentWitness{}, selfdevprotocol.FrontendIdentity{}, fmt.Errorf("self-development checkpoint: replay completeness: %w", err)
 	}
 	if err := report.Eligibility.Error(); err != nil {
+		if og := report.ObjectGraph; og != nil {
+			return selfdevprotocol.VMLocalContentWitness{}, selfdevprotocol.FrontendIdentity{}, fmt.Errorf("self-development checkpoint: %w (og_objects live_only=%d replay_only=%d changed=%d by_kind=%v)", err, og.LiveOnlyCount, og.ReplayOnlyCount, og.ChangedCount, og.ByObjectKind)
+		}
 		return selfdevprotocol.VMLocalContentWitness{}, selfdevprotocol.FrontendIdentity{}, fmt.Errorf("self-development checkpoint: %w", err)
 	}
 	witness, err := selfdevprotocol.WitnessFromObservationSets(report.Live, report.Replay, report.Result)

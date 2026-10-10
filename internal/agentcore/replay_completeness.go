@@ -38,6 +38,7 @@ type ReplayCompletenessReport struct {
 	Eligibility        ReplayEligibility                 `json:"eligibility"`
 	ProbeDigest        string                            `json:"probe_digest"`
 	RunMemory          ReplayRunMemoryComparison         `json:"run_memory"`
+	ObjectGraph        *ReplayObjectGraphComparison      `json:"object_graph,omitempty"`
 	BaseSequence       uint64                            `json:"base_sequence"`
 	BaseBlobSHA256     string                            `json:"base_blob_sha256"`
 	TailTargetSequence uint64                            `json:"tail_target_sequence"`
@@ -299,6 +300,16 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 	result := (computerversion.EquivalenceChecker{}).CheckObservationSets(
 		filterReplayHeadObservation(live), filterReplayHeadObservation(replay),
 	)
+	var objectGraph *ReplayObjectGraphComparison
+	if !result.Equivalent() {
+		// Diagnostic only: name the object-graph rows replay cannot
+		// reproduce. Failure to list leaves the report as it was.
+		liveObjects, liveErr := rt.store.ListObjectGraphFingerprints(ctx)
+		replayObjects, replayErr := replayStore.ListObjectGraphFingerprints(ctx)
+		if liveErr == nil && replayErr == nil {
+			objectGraph = compareReplayObjectGraph(liveObjects, replayObjects)
+		}
+	}
 	report := ReplayCompletenessReport{
 		SchemaVersion:      replayCompletenessSchemaVersion,
 		ComputerID:         computerID,
@@ -310,6 +321,7 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		Result:             result,
 		Eligibility:        replayEligibility(liveHead, replayHead, live, replay, result),
 		RunMemory:          runMemory,
+		ObjectGraph:        objectGraph,
 		BaseSequence:       baseSequence,
 		BaseBlobSHA256:     baseBlob,
 		TailTargetSequence: targetSequence,
