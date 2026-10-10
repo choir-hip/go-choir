@@ -76,3 +76,28 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
 - T1. Put `file_mutation` at the top level of ApplyTexture, and used
   "decision" for decision_kind. One retry each; the rejections already name
   the valid fields.
+- T2. (open) Strict decode errors give no location. Texture runs d878d267
+  and 1803835a (arXiv demo, 21:17-21:21) lost five cells to
+  `unknown field "decision"`, `"rationale"` and `"questions_note"`. The
+  hint lists the top-level fields, and `rationale` is valid there; it was
+  misplaced inside a nested object. So the message read as a
+  contradiction.
+
+## Research (tools)
+
+- R1. (open) `choir.SourceSearch` fails `dial tcp 10.200.57.1:8787:
+  connection refused`. The source service (go-choir-sourcecycled) is
+  deliberately default-off on Node B since 2026-10-05, but research is
+  still offered the verb. Research run 64f09172 spent a cell on it, and
+  its report blamed "the source service was unavailable".
+- R2. (open) Two `choir.WebSearch` calls in one cell exceeded the cell
+  deadline (`context deadline exceeded`, 64f09172 at 21:17:09). Exa was
+  cooling down until the next day. Brave answered in 505 ms in an earlier
+  run, so the time went to other providers in the chain.
+- R3. (observed, desk behavior) Research reported two candidate papers.
+  Both need a GPU or a 7B model, which does not fit "very little compute".
+  The cast reached engineering before research reported, so engineering
+  picked arXiv:2209.10652 on its own. It is a 2022 paper, which does not
+  fit "recent". Hypothesis, not yet traced: management cast in parallel
+  with research instead of waiting for its pick.
+
