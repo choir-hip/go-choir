@@ -329,6 +329,25 @@ Critical path. Tracks B to E run in parallel with A.
   deleted. Its only remaining caller is the M11 probe, which moves to
   prompting Texture.
 
+  D design: freeze opens the candidate. Today
+  `freezeCapsuleEffectBundle` (`agentcore/tools_capsule.go`) looks up an
+  operation pre-created for the trajectory and refuses without one. An
+  ordinary engineering assignment from Texture can therefore build a
+  change but never promote it. The change:
+
+  - when an engineering assignment freezes and no candidate exists, the
+    runtime opens one;
+  - it is keyed by the assignment, not the trajectory, so one document
+    can carry several changes;
+  - its heads are pinned at freeze;
+  - its request is the assignment's own objective;
+  - it opens only if the computer's signed mode authorizes proposals.
+
+  Verification, decision, materialization and rollback already key off
+  the operation and are unchanged. The engineering prompt says: a change
+  meant for this computer is frozen. The start API then has no caller
+  but the probe, which moves to prompting Texture.
+
   The lightest effect wins. A background is a setting, a digest is an
   automation, and an app is a release, but all three are typed
   candidates on one promotion path. Texture's "effects-OFF" framing
