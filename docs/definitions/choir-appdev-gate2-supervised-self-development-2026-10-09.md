@@ -203,19 +203,23 @@ now:
       named the cause: the engineering path minted co-super-* ids that the
       from-genesis replay upcasts, so 24 lifecycle commands and 24 events
       were re-keyed. Fixed in f9531177 (engineering-* ids, legacy refs
-      still accepted).
+      still accepted). Rerun 9 (77406673): the engineering lifecycle
+      replays exactly; two recorded tool-result events still re-keyed
+      because the upcast rewrites prose leaves (edge-only whitespace
+      guard). Fixed for probe and restore in 6e7e3c5e: the staged replay
+      keeps the live store's deposit mode (deposit_mode in the report).
     main_uncertainty: >-
-      Whether any other writer on the M11 path still mints V1-spelled
-      leaves (the replay diagnostic names them), and whether apply then
-      completes, followed by reject and restore.
-    next_observation: M11 rerun 9 on f9531177 or later, reading replay-completeness at apply.
+      Whether the checkpoint is now eligible (deposit_mode retained) and
+      apply completes, followed by reject and restore.
+    next_observation: M11 rerun 10 on 6e7e3c5e or later, reading replay-completeness at apply.
   blocker_or_risk: >-
     Red surfaces (checkpoint, route projection, apply). Every proof runs
     on a disposable first; the owner computer only with owner approval.
-    Residuals: vocab-guard-ids, vocab-recovery-prefix, upcast-legacy-refs.
+    Residuals: vocab-guard-ids, vocab-recovery-prefix, upcast-legacy-refs,
+    upcast-rewrites-prose, base-upcast-vs-live, live-rescan-mixed-spelling.
   next_action: >-
-    Deploy f9531177; rerun M11 to apply; if replay is equivalent, continue
-    to applied, reject and restore; otherwise fix the named writer.
+    Deploy 6e7e3c5e; rerun M11 to apply; if replay is eligible, continue
+    to applied, reject and restore; otherwise read the named rows.
 receipts:
   - id: m11-rerun-2026-10-09
     ref: docs/evidence/m11-rerun-2026-10-09T20-30-55Z.json
@@ -235,6 +239,9 @@ receipts:
   - id: m11-rerun-8-2026-10-10
     ref: docs/evidence/m11-rerun-2026-10-10T02-27-23Z.json
     result: partial (apply hold worked; replay diverged on V1-spelled engineering ids)
+  - id: m11-rerun-9-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T03-54-51Z.json
+    result: partial (10/16; engineering replays exactly; 2 recorded events upcast)
 ---
 
 # Gate 2 — self-development with live Texture supervision

@@ -126,7 +126,10 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   ([problem](problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md)).
   Rerun 8 (5704ace6): the bounded apply hold worked; the replay diff
   showed the engineering path minting co-super-* ids that from-genesis
-  replay upcasts. Fixed in f9531177; rerun 9 next. Fixed tonight on
+  replay upcasts. Fixed in f9531177. Rerun 9 (77406673): engineering
+  replays exactly; the upcast still rewrote recorded tool output, so
+  the probe and restore now replay in the live store's deposit mode
+  (6e7e3c5e); rerun 10 next. Fixed tonight on
   the way: capsule worker, freeze on new directories, delegated-cast
   reports to Texture, verifier bundle mirror, inference breaker, apply
   hold, engineering id spelling.
