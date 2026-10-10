@@ -285,7 +285,7 @@ async function openPromptRoutedApp(page, reference) {
 
 async function openPodcastApp(page, title) {
   const contentItem = await seedPodcastFeed(page, title);
-  await page.locator('[data-desktop-icon-id="podcast"]').dblclick();
+  await page.locator('[data-desktop-icon-id="podcast"]').click();
   const viewer = page.locator('[data-podcast-app]').last();
   await expect(viewer.locator('[data-podcast-library]')).toBeVisible({ timeout: 10_000 });
   await viewer.locator('[data-podcast-library-item]').filter({ hasText: contentItem.title }).click();

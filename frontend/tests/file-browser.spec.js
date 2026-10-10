@@ -20,7 +20,7 @@ import { buildDocxBytes, buildEpubBytes, buildPdfBytes, putBinaryFile } from './
 // Helper: open the Files app from the floating desktop icon
 async function openFilesApp(page) {
   const filesIcon = page.locator('[data-desktop-icon-id="files"]');
-  await filesIcon.dblclick();
+  await filesIcon.click();
   // Wait for file browser window to appear
   await page.locator('[data-file-list]').waitFor({ state: 'visible', timeout: 10000 });
 }
@@ -88,9 +88,9 @@ test('file browser launches from left rail', async ({ desktopSession }) => {
   const { page } = desktopSession;
 
   // Click the Files icon in the left rail
-  // Double-click the Files floating icon
+  // Click the Files floating icon
   const filesIcon = page.locator('[data-desktop-icon-id="files"]');
-  await filesIcon.dblclick();
+  await filesIcon.click();
 
   // A window should appear with title "Files"
   const window = page.locator('[data-window]');

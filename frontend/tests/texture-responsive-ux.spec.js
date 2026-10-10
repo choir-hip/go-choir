@@ -19,7 +19,7 @@ async function registerAndLoadDesktop(page, email) {
 }
 
 async function openBlankTexture(page) {
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   await page.locator('[data-texture-editor]').waitFor({ state: 'visible', timeout: 15000 });
   const recent = page.locator('[data-texture-recent]');
   await expect(recent).toBeVisible({ timeout: 15000 });

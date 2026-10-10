@@ -39,10 +39,10 @@ async function registerAndLoadDesktop(page, authenticator, email, viewportSize =
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: DESKTOP_BOOT_TIMEOUT_MS });
 }
 
-// Helper: open app via double-click on floating desktop icon
+// Helper: open app via single click on floating desktop icon
 async function openAppViaIcon(page, appId) {
   const icon = page.locator(`[data-desktop-icon-id="${appId}"]`);
-  await icon.dblclick();
+  await icon.click();
 }
 
 // ================================================================

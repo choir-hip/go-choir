@@ -29,7 +29,7 @@ async function registerAndLoadDesktop(page, authenticator, email) {
 
 // Helper: open a specific app from the floating desktop icon
 async function openApp(page, appId) {
-  await page.locator(`[data-desktop-icon-id="${appId}"]`).dblclick();
+  await page.locator(`[data-desktop-icon-id="${appId}"]`).click();
   await page.locator('[data-window]').first().waitFor({ state: 'visible', timeout: 5000 });
 }
 

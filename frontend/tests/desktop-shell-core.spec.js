@@ -5,7 +5,7 @@
  * These tests verify the desktop shell rewrite:
  * - No top bar rendered (VAL-SHELL-001)
  * - Floating desktop icons render with emoji and labels (VAL-SHELL-002)
- * - Double-click icon opens single-instance window (VAL-SHELL-003)
+ * - Click icon opens single-instance window (VAL-SHELL-003)
  * - Active window indicator on desktop icon (VAL-SHELL-004)
  * - Bottom bar always visible (VAL-SHELL-006)
  * - Bottom bar prompt input (VAL-SHELL-007)
@@ -35,10 +35,10 @@ async function registerAndLoadDesktop(page, authenticator, email) {
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
-// Helper: open app via double-click on floating desktop icon
+// Helper: open app via single click on floating desktop icon
 async function openAppViaIcon(page, appId) {
   const icon = page.locator(`[data-desktop-icon-id="${appId}"]`);
-  await icon.dblclick();
+  await icon.click();
 }
 
 async function fetchJSON(page, path) {
@@ -138,7 +138,7 @@ test('Texture appears as a first-class desktop app', async ({ page, authenticato
   await expect(textureIcon).toBeVisible();
   await expect(textureIcon).toContainText('Texture');
 
-  await textureIcon.dblclick();
+  await textureIcon.click();
 
   const textureWindow = page.locator('[data-texture-app]');
   await expect(textureWindow).toBeVisible({ timeout: 5000 });
@@ -243,7 +243,7 @@ test('Texture recent landing can open a Markdown document without control overla
     return doc;
   });
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 5000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -269,7 +269,7 @@ test('Texture opens near full mobile workspace and clears the prompt bar', async
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const windowEl = page.locator('[data-window]').filter({ has: page.locator('[data-texture-app]') }).last();
   await expect(windowEl).toBeVisible({ timeout: 5000 });
 
@@ -304,13 +304,13 @@ test('Engineering Console opens as the singleton repair app', async ({ page, aut
 });
 
 // ---------------------------------------------------------------
-// Test: double-click icon opens single-instance window (VAL-SHELL-003)
+// Test: click icon opens single-instance window (VAL-SHELL-003)
 // ---------------------------------------------------------------
-test('double-click icon opens single-instance window', async ({ page, authenticator }) => {
+test('click icon opens single-instance window', async ({ page, authenticator }) => {
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  // Double-click the Files icon
+  // Click the Files icon
   await openAppViaIcon(page, 'files');
 
   // A window should appear
@@ -318,7 +318,7 @@ test('double-click icon opens single-instance window', async ({ page, authentica
   await expect(windowEl).toHaveCount(1);
   await expect(windowEl.first()).toBeVisible({ timeout: 5000 });
 
-  // Double-click the same icon again — should NOT open a second window
+  // Click the same icon again — should NOT open a second window
   await openAppViaIcon(page, 'files');
   await expect(page.locator('[data-window]')).toHaveCount(1);
 
@@ -811,7 +811,7 @@ test('aria labels on desktop icons and window controls', async ({ page, authenti
   expect(filesAria).toBe('Files');
 
   // Open a window and check its controls have aria-labels
-  await filesIcon.dblclick();
+  await filesIcon.click();
   await page.locator('[data-window]').first().waitFor({ state: 'visible', timeout: 5000 });
 
   const closeBtn = page.locator('[data-window-close]').first();

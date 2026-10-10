@@ -38,7 +38,7 @@ async function closeDesktopWindows(page, appIds = ['content', 'texture', 'textur
 async function launchTextureApp(page) {
   const floatingIcon = page.locator('[data-desktop-icon-id="texture"], [data-desktop-icon-id="texture"]').first();
   if ((await floatingIcon.count()) > 0 && await floatingIcon.isVisible()) {
-    await floatingIcon.dblclick();
+    await floatingIcon.click();
     return;
   }
 

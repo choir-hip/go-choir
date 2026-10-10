@@ -18,7 +18,7 @@ async function registerAndLoadDesktop(page, email) {
 }
 
 async function openEmail(page) {
-  await page.locator('[data-desktop-icon-id="email"]').dblclick();
+  await page.locator('[data-desktop-icon-id="email"]').click();
   const emailApp = page.locator('[data-mail-app]').last();
   await expect(emailApp).toBeVisible({ timeout: 10000 });
   return emailApp;

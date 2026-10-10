@@ -15,7 +15,7 @@ async function registerAndLoadDesktop(page, authenticator, email) {
 }
 
 async function openFilesApp(page) {
-  await page.locator('[data-desktop-icon-id="files"]').dblclick();
+  await page.locator('[data-desktop-icon-id="files"]').click();
   const filesWindow = page.locator('[data-files-app]').last();
   await filesWindow.waitFor({ state: 'visible', timeout: 10000 });
   const rootBreadcrumb = filesWindow.locator('[data-breadcrumb-segment]').first();
@@ -25,7 +25,7 @@ async function openFilesApp(page) {
 }
 
 async function openTexture(page) {
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   await page.locator('[data-texture-editor]').last().waitFor({ state: 'visible', timeout: 10000 });
   const recent = page.locator('[data-texture-app] [data-texture-recent]').last();
   if (await recent.isVisible().catch(() => false)) {
@@ -259,7 +259,7 @@ test('texture does not restore stale local draft over a newer canonical table he
 
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 10000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -334,7 +334,7 @@ test('texture does not restore same-head local draft that lost canonical tables'
 
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 10000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();
@@ -400,7 +400,7 @@ test('texture does not auto-restore a differing local draft over a non-empty can
 
   await page.reload();
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
-  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
+  await page.locator('[data-desktop-icon-id="texture"]').click();
   const textureWindow = page.locator('[data-texture-app]').last();
   await expect(textureWindow.locator('[data-texture-recent]')).toBeVisible({ timeout: 10000 });
   await textureWindow.locator('[data-texture-recent-document]').filter({ hasText: created.title }).click();

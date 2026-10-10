@@ -30,7 +30,7 @@ async function registerAndLoadDesktop(page, authenticator, email) {
 // Helper: open the Browser app from the floating desktop icon
 async function openBrowserApp(page) {
   const browserIcon = page.locator('[data-desktop-icon-id="browser"]');
-  await browserIcon.dblclick();
+  await browserIcon.click();
   // Wait for browser app to appear
   await page.locator('[data-browser-app]').waitFor({ state: 'visible', timeout: 10000 });
 }
@@ -42,7 +42,7 @@ test('browser app launches from floating desktop icon', async ({ page, authentic
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  // Double-click the Browser floating desktop icon
+  // Click the Browser floating desktop icon
   await openBrowserApp(page);
 
   // Browser app window should appear
@@ -252,14 +252,14 @@ test('clicking browser icon again focuses existing window', async ({ page, authe
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  // Open browser app via double-click
+  // Open browser app via click
   await openBrowserApp(page);
 
   // Count windows
   const windowCount = await page.locator('[data-window][data-window-id]').count();
 
-  // Double-click browser icon again
-  await page.locator('[data-desktop-icon-id="browser"]').dblclick();
+  // Click browser icon again
+  await page.locator('[data-desktop-icon-id="browser"]').click();
   await page.waitForTimeout(500);
 
   // Should still have the same number of windows (no duplicate)
@@ -277,7 +277,7 @@ test('browser app works in mobile focus mode', async ({ page, authenticator }) =
   await page.setViewportSize({ width: 375, height: 812 });
   await registerAndLoadDesktop(page, authenticator, email);
 
-  // Double-click the Browser floating desktop icon
+  // Click the Browser floating desktop icon
   await openBrowserApp(page);
 
   // Browser app should appear in full-width focus mode

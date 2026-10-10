@@ -11,7 +11,7 @@
  *
  * These tests verify that:
  * - Authenticated users reach a real desktop shell (VAL-DESKTOP-001)
- * - Double-clicking floating icons opens apps inside the desktop (VAL-DESKTOP-002)
+ * - Clicking floating icons opens apps inside the desktop (VAL-DESKTOP-002)
  * - Window focus changes raise the active window (VAL-DESKTOP-003)
  * - Windows support drag and resize (VAL-DESKTOP-004)
  * - Windows support minimize, maximize, and restore (VAL-DESKTOP-005)
@@ -40,10 +40,10 @@ async function registerAndLoadDesktop(page, authenticator, email) {
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
 }
 
-// Helper: open app via double-click on floating desktop icon
+// Helper: open app via single click on floating desktop icon
 async function openAppViaIcon(page, appId) {
   const icon = page.locator(`[data-desktop-icon-id="${appId}"]`);
-  await icon.dblclick();
+  await icon.click();
 }
 
 async function clickDesktopLogout(page) {
@@ -97,7 +97,7 @@ test('floating icons open apps inside the desktop', async ({
   const email = uniqueEmail();
   await registerAndLoadDesktop(page, authenticator, email);
 
-  // Double-click the Files icon to open the app
+  // Click the Files icon to open the app
   await openAppViaIcon(page, 'files');
 
   // A window should appear in the desktop.
