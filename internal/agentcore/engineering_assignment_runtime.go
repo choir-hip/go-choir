@@ -170,6 +170,37 @@ type DelegatedCastRequest struct {
 	WithholdNetwork     bool   // the caster's spec said {"network":"forbidden"}
 }
 
+// buildAssignedEngineeringRun builds the engineering run an assignment binds. Its
+// parent fields come from the binding, so the same run satisfies the store's
+// exact bind check for an owner's document cast (no parent run, an
+// engineering desk parent) and for management's delegated cast (the casting
+// run, a management parent); the document-cast constants made every
+// delegated cast fail bind
+// (delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md).
+func buildAssignedEngineeringRun(assignment types.EngineeringAssignment, runID, slot, objective string, kind types.EngineeringAssignmentKind, sourceArtifactRef, candidateID string) types.RunRecord {
+	binding := assignment.Binding
+	ownerID, computerID, trajectoryID := binding.OwnerID, binding.ComputerID, binding.TrajectoryID
+	assignmentID, attempt := assignment.AssignmentID, binding.Attempt
+	agentID, workID, capsuleID := binding.AssignedAgentID, binding.AssignedWorkItemID, binding.CapsuleID
+	return types.RunRecord{
+		RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: binding.ParentRunID, TrajectoryID: trajectoryID,
+		AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, OwnerID: ownerID, ComputerID: computerID,
+		State: types.RunPending, Prompt: objective,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.Engineering, runMetadataAgentRole: agentprofile.Engineering, runMetadataAgentID: agentID,
+			runMetadataTrajectoryID: trajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID,
+			"requested_by_agent_id": binding.ParentAgentID, "requested_by_profile": store.EngineeringParentProfileForBinding(binding),
+			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(kind),
+			runMetadataEngineeringSlot: slot,
+			"assigned_work_item_id":    workID, "capsule_id": capsuleID,
+			"parent_decision_id": binding.ParentDecisionID, "parent_control_id": binding.ParentControlID,
+			"parent_work_item_id": binding.ParentWorkItemID, "scope_digest": binding.ScopeDigest, "request_digest": binding.RequestDigest,
+			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest, "subject_digest": binding.SubjectDigest,
+			"source_artifact_ref": sourceArtifactRef, "source_candidate_id": candidateID,
+		},
+	}
+}
+
 // delegatedCastParentWork picks the caster's parent work item: the open item
 // the casting turn was woken for. A persistent desk holds one open work item
 // per request it is answering, so a scan for "the" open item is ambiguous
@@ -592,7 +623,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	binding := assignment.Binding
 	ownerID, computerID, trajectoryID := binding.OwnerID, binding.ComputerID, binding.TrajectoryID
 	assignmentID, attempt := assignment.AssignmentID, binding.Attempt
-	agentID, workID, capsuleID := binding.AssignedAgentID, binding.AssignedWorkItemID, binding.CapsuleID
+	capsuleID := binding.CapsuleID
 	// The bound run's canonical ID is attempt-scoped for the same reason the
 	// work/agent mints are: a restart recast must not overwrite attempt 1's run.
 	runID := "run:" + assignmentID
@@ -788,23 +819,7 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		SignedCapabilityDigest: objectgraph.SHA256(capabilityBytes), SpawnAcknowledged: true, ActiveAcknowledged: true, GrantAcknowledged: true,
 		SpawnedAt: spawnedAt, GrantedAt: grantedAt,
 	}
-	run := types.RunRecord{
-		RunID: runID, AgentID: agentID, ChannelID: agentID, RequestedByRunID: "", TrajectoryID: trajectoryID,
-		AgentProfile: agentprofile.Engineering, AgentRole: agentprofile.Engineering, OwnerID: ownerID, ComputerID: computerID,
-		State: types.RunPending, Prompt: req.Objective,
-		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Engineering, runMetadataAgentRole: agentprofile.Engineering, runMetadataAgentID: agentID,
-			runMetadataTrajectoryID: trajectoryID, "work_item_ids": []string{workID}, "lifecycle_work_item_id": workID,
-			"requested_by_agent_id": binding.ParentAgentID, "requested_by_profile": agentprofile.Engineering,
-			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(req.Kind),
-			runMetadataEngineeringSlot: slot,
-			"assigned_work_item_id":    workID, "capsule_id": capsuleID,
-			"parent_decision_id": binding.ParentDecisionID, "parent_control_id": binding.ParentControlID,
-			"parent_work_item_id": binding.ParentWorkItemID, "scope_digest": binding.ScopeDigest, "request_digest": binding.RequestDigest,
-			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest, "subject_digest": binding.SubjectDigest,
-			"source_artifact_ref": preflight.ArtifactRef, "source_candidate_id": req.CandidateID,
-		},
-	}
+	run := buildAssignedEngineeringRun(assignment, runID, slot, req.Objective, req.Kind, preflight.ArtifactRef, req.CandidateID)
 	if overlay := strings.TrimSpace(req.ModelPolicyOverlayID); overlay != "" {
 		run.Metadata[modelpolicy.MetadataPolicyOverlayID] = overlay
 	}

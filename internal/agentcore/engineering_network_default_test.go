@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -119,5 +120,67 @@ func TestDelegatedCastParentWorkIsTheCastingTurnsOwnItem(t *testing.T) {
 	}
 	if work, err := delegatedCastParentWork(items[1:], caster, ""); err != nil || work == nil || work.WorkItemID != "second-request" {
 		t.Fatalf("unnamed run with one open item: %+v, %v", work, err)
+	}
+}
+
+// docs/problems/delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md
+// (follow-up): the bound engineering run carried a document cast's parent
+// fields (no parent run, an "engineering" requester), so the store's exact
+// bind check refused every delegated cast. Failure mode pinned: the run the
+// runtime builds for a management-parented binding (delegated, or a
+// run-parented cast) fails the store's bind check.
+func TestBuiltEngineeringRunPassesTheExactBindCheck(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-bindrun", rt.TextureComputerID(), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controlID, err := s.AppendCommitmentRecord(ctx, seed.OwnerID, seed.ComputerID, types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cast-cell:cast:bindrun",
+		Provenance: types.CommitmentProvenance{AgentID: seed.ParentAgentID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, delegated := range []bool{true, false} {
+		assignmentID, capability := fmt.Sprintf("assignment-bindrun-%d", i), fmt.Sprintf("opaque-bindrun-%d", i)
+		binding := types.EngineeringAssignmentBinding{
+			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
+			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
+			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
+			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[i], AssignedAgentID: seed.AssignedAgentIDs[i],
+			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
+			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
+			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
+			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
+			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
+			Writable:          true, CapsuleID: "capsule-bindrun-" + fmt.Sprint(i),
+			NetworkMode:    types.EngineeringCapsuleNetworkEcosystemProxy,
+			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
+		}
+		if delegated {
+			binding.ParentControlID, binding.CastAuthority = controlID, types.EngineeringCastAuthorityDelegated
+		}
+		open := types.OpenEngineeringAssignmentRequest{
+			CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID, Binding: binding,
+			AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
+			AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: "build it"},
+		}
+		if open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open); err != nil {
+			t.Fatal(err)
+		}
+		opened, err := s.OpenEngineeringAssignment(ctx, open)
+		if err != nil {
+			t.Fatalf("open (delegated=%v): %v", delegated, err)
+		}
+		agent, err := s.GetAgentByScope(ctx, seed.OwnerID, seed.ComputerID, binding.AssignedAgentID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		run := buildAssignedEngineeringRun(opened.Assignment, "run:"+assignmentID, "slot", "build it", binding.Kind, binding.SourceArtifactRef, "")
+		if err := store.ValidateEngineeringAssignmentRun(opened.Assignment, agent, run); err != nil {
+			t.Fatalf("built run fails the exact bind check (delegated=%v): %v", delegated, err)
+		}
 	}
 }

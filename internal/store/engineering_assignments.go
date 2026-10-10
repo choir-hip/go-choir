@@ -1387,6 +1387,18 @@ func (s *Store) GetEngineeringAssignment(ctx context.Context, ownerID, computerI
 	return assignment, err
 }
 
+// EngineeringParentProfileForBinding is the requested_by_profile an assigned
+// run must carry: the profile prefix of the binding's parent agent.
+func EngineeringParentProfileForBinding(binding types.EngineeringAssignmentBinding) string {
+	return engineeringParentProfileForBinding(binding)
+}
+
+// ValidateEngineeringAssignmentRun is the exact bind check a run must pass to
+// bind an assignment; the runtime's run construction is tested against it.
+func ValidateEngineeringAssignmentRun(assignment types.EngineeringAssignment, assignedAgent types.AgentRecord, run types.RunRecord) error {
+	return validateEngineeringAssignmentRun(assignment, assignedAgent, run)
+}
+
 func engineeringParentProfileForBinding(binding types.EngineeringAssignmentBinding) string {
 	if profile, _, ok := strings.Cut(binding.ParentAgentID, ":"); ok {
 		return profile
