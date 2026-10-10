@@ -255,22 +255,25 @@ now:
     probe-self-stop, one-candidate-per-document-trajectory,
     owner-recovery-reboot, guest-degraded-after-forced-reboot.
   next_action: >-
-    Rerun 13 on 9d703e2c. Since rerun 12 (14/17): restore replays from
-    genesis when its target is older than the newest replay base (1b826dca);
-    a Texture idle trigger is answered once at the end of the activation, so
-    a read-only cell no longer consumes the engineering result before the
-    model reads it (be8c0a03; trace in
-    docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md);
-    the probe retries the post-apply checkpoint while desks resume. vmctl
-    Phase 0 is landed through step 7 and verified on staging at aee2d47a: one
-    vmctl restart per deploy, all three guests reattached (the owner's
-    computer stayed at epoch 1188), zero destruction receipts. Then watch
-    rerun 13's desk traces and tune prompts (residuals
-    texture-control-schema-friction, texture-truncated-update-id). Residuals:
-    checkpoint-at-captured-head, restore-long-lived (checkpoint pins its
-    base), one pending desk mutation keeps the owner's computer busy
-    (hypothesis), application-level wedge, console pipe fate-sharing (Phase 1).
+    Rerun 13 satisfied all 17 legs on 9d703e2c: approve, apply, post-apply
+    checkpoint (fourth attempt, the chain kept moving), candidate B owner
+    rejected, restore to the pinned head with the witness matched. Texture's
+    document was accurate after engineering reported. Next, land and prove
+    on rerun 14: the checkpoint captures its head and state together under
+    the append lock (eed21ece), a Texture occurrence is handled when any turn
+    disposes its report (5cb2f32e), a frozen candidate is judged by Jev
+    instead of a second engineering run (32febcf6), and Texture is told the
+    runtime runs the operation (76e8a8bf). Then a checkpoint pins its replay
+    base and restore installs it (restore-long-lived), and operation
+    outcomes reach Texture (H3). Residuals: one pending desk mutation keeps
+    the owner's computer busy (hypothesis), application-level wedge, console
+    pipe fate-sharing (Phase 1), texture-control-schema-friction,
+    texture-truncated-update-id, legacy verification assignment code to
+    delete after Jev is proven.
 receipts:
+  - id: m11-rerun-13-2026-10-10
+    ref: docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json
+    result: satisfied (17/17; applied 15:07:54; post-apply checkpoint on attempt 4; candidate B rejected by the owner; restored the pinned head, witness matched)
   - id: m11-rerun-12-2026-10-10
     ref: docs/evidence/m11-rerun-2026-10-10T13-21-08Z.json
     result: partial (14/17; applied; restore refused below the newest base; Texture document false after apply; post-apply checkpoint on a moving chain)

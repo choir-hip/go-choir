@@ -162,7 +162,12 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   cannot reach a head older than the newest replay base, Texture's
   document said nothing changed after the change applied, and the
   post-apply checkpoint replays a moving chain
-  ([problem](problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md)).
+  ([problem](problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md)). Rerun 13 satisfied all 17 legs: the first complete Gate 2 episode on
+  staging — Texture reported the change accurately, the owner approved,
+  it applied, candidate B was rejected, and restore reached the pinned
+  head ([receipt](evidence/m11-rerun-2026-10-10T14-46-02Z.json)). Rerun 14
+  proves the captured-head checkpoint, Jev judgment and the Texture
+  occurrence fix.
 
 ## Blocking Substrate Mission — Platform-Dolt Capacity Stabilization (superseded 2026-10-09 by the corpus teardown)
 
