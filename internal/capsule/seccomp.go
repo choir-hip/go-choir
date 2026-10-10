@@ -13,7 +13,7 @@ var denyEPERM = seccomp.ActionErrno
 
 var capsuleAllowedSyscalls = []string{
 	"read", "write", "readv", "writev", "pread64", "pwrite64", "close", "close_range",
-	"open", "openat", "openat2", "creat", "stat", "fstat", "lstat", "newfstatat", "statx",
+	"open", "openat", "openat2", "creat", "stat", "fstat", "lstat", "newfstatat", "statx", "statfs", "fstatfs",
 	"access", "faccessat", "faccessat2", "lseek", "getdents", "getdents64", "getcwd", "chdir", "fchdir",
 	"mkdir", "mkdirat", "rmdir", "rename", "renameat", "renameat2", "link", "linkat", "unlink", "unlinkat",
 	"symlink", "symlinkat", "readlink", "readlinkat", "chmod", "fchmod", "fchmodat", "chown", "fchown", "lchown", "fchownat",
@@ -25,7 +25,7 @@ var capsuleAllowedSyscalls = []string{
 	"inotify_init", "inotify_init1", "inotify_add_watch", "inotify_rm_watch",
 	"socketpair", "connect", "bind", "listen", "accept", "accept4", "shutdown", "sendto", "recvfrom", "sendmsg", "recvmsg",
 	"getsockname", "getpeername", "setsockopt", "getsockopt",
-	"clone", "clone3", "fork", "vfork", "setpgid", "execve", "execveat", "exit", "exit_group", "wait4", "waitid",
+	"clone", "clone3", "fork", "vfork", "setpgid", "getpgid", "getpgrp", "setsid", "getsid", "execve", "execveat", "exit", "exit_group", "wait4", "waitid",
 	"getpid", "getppid", "gettid", "getuid", "geteuid", "getgid", "getegid", "getresuid", "getresgid", "getgroups",
 	"setuid", "setgid", "setreuid", "setregid", "setresuid", "setresgid", "setgroups", "setfsuid", "setfsgid",
 	"kill", "tkill", "tgkill", "prctl", "capget", "capset", "set_tid_address", "set_robust_list", "rseq",

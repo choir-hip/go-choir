@@ -148,3 +148,39 @@ func TestWorkloadInetSeccompFilterAdmitsOnlyInetAndUnix(t *testing.T) {
 		t.Fatalf("seccomp helper: %v\n%s", err, output)
 	}
 }
+
+// capsule-workload-cannot-run-a-shell-or-install-packages-2026-10-10: bash
+// 5.3 exits at start when getpgid is refused ("initialize_job_control:
+// getpgrp failed"), which took the shell and every wrapper script (pip3)
+// from the capsule. Go's telemetry child needs setsid; disk-usage queries
+// need statfs.
+func TestWorkloadSeccompAllowsProcessGroupSessionAndStatfs(t *testing.T) {
+	if os.Getenv(seccompHelperEnv) == "pgid-statfs" {
+		if err := LoadWorkloadFilter(); err != nil {
+			t.Fatalf("load workload filter: %v", err)
+		}
+		if _, err := unix.Getpgid(0); err != nil {
+			t.Fatalf("getpgid: %v", err)
+		}
+		if _, err := unix.Getsid(0); err != nil {
+			t.Fatalf("getsid: %v", err)
+		}
+		var st unix.Statfs_t
+		if err := unix.Statfs("/", &st); err != nil {
+			t.Fatalf("statfs: %v", err)
+		}
+		cmd := exec.Command(os.Args[0], "-test.run=^$")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		cmd.Env = []string{"HOME=/tmp", "TMPDIR=/tmp", "PATH=/bin:/usr/bin"}
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("setsid child start: %v", err)
+		}
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWorkloadSeccompAllowsProcessGroupSessionAndStatfs$")
+	cmd.Env = append(os.Environ(), seccompHelperEnv+"=pgid-statfs")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("seccomp helper: %v\n%s", err, output)
+	}
+}

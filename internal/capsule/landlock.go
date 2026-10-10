@@ -71,6 +71,12 @@ func (r *LandlockRestrictor) Apply() error {
 	// MAKE_REG is required to create new files (os.WriteFile, choir.WriteFile).
 	// WRITE_FILE only covers existing inodes; without MAKE_REG, overlay copy-up
 	// of a new /workspace/platform artifact fails closed with EACCES.
+	// REFER lets a rename or link change a file's parent directory between
+	// two allowed paths; Landlock refuses every such move with EXDEV unless
+	// both sides grant it, which broke every package manager (they rename a
+	// temp dir into place). MAKE_FIFO and MAKE_SOCK cover named pipes and
+	// Unix sockets in /tmp. None of the three reaches outside the allowed
+	// paths (capsule-workload-cannot-run-a-shell-or-install-packages-2026-10-10).
 	directoryAccess := landlock.AccessFSSet(ll.AccessFSWriteFile |
 		ll.AccessFSReadFile |
 		ll.AccessFSReadDir |
@@ -79,6 +85,9 @@ func (r *LandlockRestrictor) Apply() error {
 		ll.AccessFSRemoveFile |
 		ll.AccessFSRemoveDir |
 		ll.AccessFSMakeSym |
+		ll.AccessFSMakeFifo |
+		ll.AccessFSMakeSock |
+		ll.AccessFSRefer |
 		ll.AccessFSTruncate |
 		ll.AccessFSExecute)
 	fileAccess := landlock.AccessFSSet(ll.AccessFSWriteFile |
