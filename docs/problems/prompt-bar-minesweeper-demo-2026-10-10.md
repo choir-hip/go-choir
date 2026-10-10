@@ -55,3 +55,42 @@ be found by deriving its id from the assignment id.
 F1 now (connect the existing ensure). Then rerun the demo and read the
 trace again (F2, F3). Conductor latency is 0.6 s; the owner's Jev-classifier
 conductor experiment is separate.
+
+## Owner direction (17:05Z) and what was measured
+
+- **No hand-holding.** The system decides on its own that a request needs
+  research, engineering, or both. If it doesn't, the desk prompts are wrong.
+- **Timings.** V0 is the owner's prompt. V1 is Texture's acknowledgment that
+  it understands the request. V2 is the first substantive worker result.
+  V3 onward are work updates through to completion. Each revision revises the
+  ideas, not an appended status log. For research: what we know, what the
+  evidence says, what is still open. For engineering: the hypotheses, what is
+  built, what is planned, and what would falsify the current approach,
+  together with the alternative hypotheses.
+- **Transclusion.** Revisions transclude research sources and code diffs.
+  Measured: source transclusion exists. Numbered or expanded source refs
+  render web pages, PDFs, video, audio, images, source-service items and
+  published Texture spans. Code-diff transclusion does not exist: there is
+  no diff or capsule-change source kind.
+- **Conductor.** Today it is deterministic: Texture, unless a content
+  classifier spots a URL or media type. It took 0.6 s. Owner direction: try
+  Jev as the router, and cover any remaining latency with an animation rather
+  than opening Texture automatically. Experiment
+  (`scripts/conductor_jev_experiment.mjs`, OpenRouter Decisions,
+  typesafe/jev-1.13): 12 prompts × 2 against 7 apps, 24 of 24 routed
+  correctly, p50 208 ms, p90 269 ms, max 397 ms.
+
+## Prompt change (F3)
+
+`internal/textureprompts/overlays/run_system.yaml` now opens with a short
+"Revision shape" block:
+- V1 is a short acknowledgment. It opens the needed work in the same apply,
+  and Texture chooses research and/or execution from the request.
+- It contains no code and no answer from priors.
+- Later revisions revise ideas, with the research and engineering shapes
+  above.
+- Texture never writes programs. Code reaches the document only from worker
+  evidence.
+
+The rule was already present in the long overlays and was ignored, so it now
+leads the overlay.
