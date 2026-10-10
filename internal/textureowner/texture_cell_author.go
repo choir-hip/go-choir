@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/strictjson"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"strings"
 )
@@ -66,6 +67,13 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 	dec := json.NewDecoder(strings.NewReader(bodyJSON))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&in); err != nil {
+		// Name where an unknown field sits: the list below is the top
+		// level's, and a field valid there but misplaced in a nested object
+		// read as a contradiction (Texture lost five cells to it,
+		// desk-cell-ergonomics-from-demo-traces-2026-10-10, T2).
+		if why := strictjson.Explain([]byte(bodyJSON), &cellTextureAuthorArgs{}); why != "" {
+			err = fmt.Errorf("%s", why)
+		}
 		return "", fmt.Errorf("texture cell author: decode staged body: %w. Valid top-level fields: op, doc_id, base_revision_id, operation, content, edits, rationale, work_disposition, update_dispositions, controls, decision_kind, reason, evidence_refs, next_action, email. controls[] fields: target_work_item_id, open_persistent_super, open_researcher, objective, packet. packet fields: kind, summary, claims, sources, actions, questions, notes — schema_version is assigned by the runtime; do not send \"type\" or \"schema_version\". Valid packet kind values: evidence_update, execution_request, execution_result, blocker, question, proposal, decision_request", err)
 	}
 	var receipt string
