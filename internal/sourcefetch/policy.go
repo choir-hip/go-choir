@@ -19,19 +19,50 @@ func SetAllowPrivateNetworkForTests(allow bool) bool {
 }
 
 func Client(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	return clientWith(timeout, net.DefaultResolver.LookupIPAddr, dialer.DialContext)
+}
+
+// clientWith resolves each dial target once, refuses the dial when any
+// answer is forbidden, and dials the checked addresses — never the hostname,
+// whose second resolution could rebind to a private address
+// (research-fetch-url-has-no-address-guard-2026-10-10.md, D2). TLS still
+// verifies the URL's hostname: the transport takes SNI from the request.
+func clientWith(timeout time.Duration, lookup func(context.Context, string) ([]net.IPAddr, error), dial func(context.Context, string, string) (net.Conn, error)) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
-	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
-	resolver := net.DefaultResolver
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
 		if err != nil {
 			return nil, fmt.Errorf("source fetch address: %w", err)
 		}
-		if err := ValidateHost(ctx, resolver, host); err != nil {
-			return nil, err
+		host = strings.Trim(host, "[]")
+		if hostnameBlocked(host) && !allowPrivateNetworkForTests {
+			return nil, fmt.Errorf("source fetch host resolves to forbidden address")
 		}
-		return dialer.DialContext(ctx, network, net.JoinHostPort(host, port))
+		var addrs []net.IPAddr
+		if ip := net.ParseIP(host); ip != nil {
+			addrs = []net.IPAddr{{IP: ip}}
+		} else if addrs, err = lookup(ctx, host); err != nil {
+			return nil, fmt.Errorf("source fetch resolve host: %w", err)
+		}
+		if len(addrs) == 0 {
+			return nil, fmt.Errorf("source fetch resolve host: no addresses")
+		}
+		for _, addr := range addrs {
+			if AddressBlocked(addr.IP) && !allowPrivateNetworkForTests {
+				return nil, fmt.Errorf("source fetch host resolves to forbidden address")
+			}
+		}
+		var lastErr error
+		for _, addr := range addrs {
+			conn, err := dial(ctx, network, net.JoinHostPort(addr.IP.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		return nil, lastErr
 	}
 	return &http.Client{
 		Timeout:   timeout,

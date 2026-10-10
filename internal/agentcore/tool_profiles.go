@@ -7,6 +7,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/search"
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -455,7 +456,10 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 
 	searchClient := search.NewGatewayClientFromEnv()
 	sourceClient := researchtools.NewSourceClientFromEnv()
-	httpClient := &http.Client{Timeout: 30 * time.Second}
+	// fetch_url's client refuses loopback, private, link-local, CGNAT and
+	// metadata addresses and dials the address it checked
+	// (research-fetch-url-has-no-address-guard-2026-10-10.md, D1/D2).
+	httpClient := sourcefetch.Client(30 * time.Second)
 
 	managementPolicy, err := agentprofile.PolicyFor(agentprofile.Management)
 	if err != nil {
