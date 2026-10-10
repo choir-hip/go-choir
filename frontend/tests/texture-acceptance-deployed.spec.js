@@ -91,7 +91,8 @@ async function cancelTurn(page, docID) {
   });
 }
 
-test.describe.configure({ mode: 'serial', timeout: 900_000 });
+// Long enough that slow turns plus T6's waits never starve T7 and T8 (run 9).
+test.describe.configure({ mode: 'serial', timeout: 1_500_000 });
 
 test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   const { page, baseURL } = desktopSession;
@@ -205,14 +206,17 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   await waitForTurn(page, docID, 0, 300_000);
 
   // T6 — research.
-  const beforeResearch = (await appagentRevisions(page, docID)).length;
+  const researchPrior = await appagentRevisions(page, docID);
+  const beforeResearch = researchPrior.length;
+  // The revision list is newest first; compare by id, not by position.
+  const priorIDs = new Set(researchPrior.map((r) => r.revision_id));
   await revise(page, docID, 'Research current reporting on persistent personal computers and add two cited web sources.', `t6-${suffix}`);
   // Two properties, recorded apart (problems/texture-research-sources-never-
   // reach-the-citing-turn-2026-10-09.md, run 8): a cited research revision
   // lands (T6), and the document idles after it (T6_idle).
   const cited = await waitFor(async () => {
     const agent = await appagentRevisions(page, docID);
-    for (const r of agent.slice(beforeResearch)) {
+    for (const r of agent.filter((x) => !priorIDs.has(x.revision_id))) {
       const rev = await api(page, 'GET', `/api/texture/revisions/${r.revision_id}`);
       const sources = Array.isArray(rev.body?.source_entities) ? rev.body.source_entities.length : 0;
       const refs = Array.isArray(rev.body?.source_refs) ? rev.body.source_refs.length : 0;
