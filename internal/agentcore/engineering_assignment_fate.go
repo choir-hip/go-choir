@@ -431,6 +431,12 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			continue
 		}
 		if assignment.BoundRunID == "" {
+			if assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound && !assignment.CreatedAt.Before(rt.bootedAt) {
+				// Opened by this boot: its delegated_assignment_spawn_deadline
+				// wake, minted in the same commit, owns the pre-bind window.
+				// Only an assignment opened before this boot is a restart strand.
+				continue
+			}
 			if assignment.CapsuleDisposition == types.EngineeringCapsuleUnbound {
 				intent := "capsule-revoke-intent:" + objectgraph.SHA256([]byte(assignment.AssignmentID+"\x00restart-pre-bind"))
 				requested, fateErr := rt.store.SetEngineeringCapsuleDisposition(ctx, engineeringFateRequest(assignment, types.EngineeringCapsuleRevokeRequested, intent, ""))

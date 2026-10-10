@@ -163,6 +163,10 @@ type Runtime struct {
 	// (answerIdleTextureTrigger).
 	textureCellsMu sync.Mutex
 	textureCells   map[string]textureActivationCells
+	// bootedAt is when this runtime started. The restart reconciler treats
+	// only pre-bind assignments opened before it as restart strands; one this
+	// boot opened belongs to its pending spawn saga.
+	bootedAt time.Time
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
 	replayProbeAfterCapture func()
@@ -242,6 +246,7 @@ type Runtime struct {
 func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, opts ...RuntimeOption) *Runtime {
 	cfg = provideriface.NormalizeConfig(cfg)
 	rt := &Runtime{
+		bootedAt:    time.Now().UTC(),
 		cfg:         cfg,
 		store:       s,
 		bus:         bus,
