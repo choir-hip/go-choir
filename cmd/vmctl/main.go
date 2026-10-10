@@ -133,7 +133,9 @@ func main() {
 		}
 		mgr = vmmanager.NewManager(mgrCfg)
 		mgr.Start()
-		if envBool("VMCTL_STOP_MANAGED_ON_EXIT", true) {
+		// Guests outlive vmctl by default: a vmctl exit must not take every
+		// computer with it (vmctl 360 review Phase 0 step 7).
+		if envBool("VMCTL_STOP_MANAGED_ON_EXIT", false) {
 			defer mgr.Stop()
 		} else {
 			defer mgr.StopHealthChecks()

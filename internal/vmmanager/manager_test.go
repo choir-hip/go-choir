@@ -400,28 +400,6 @@ func TestManagerDestroyVMStateRefusesRunningVM(t *testing.T) {
 	}
 }
 
-func TestManagerMarkFailed(t *testing.T) {
-	mgr := NewManager(DefaultManagerConfig())
-
-	inst := &VMInstance{
-		Config:  VMConfig{VMID: "test-vm-1"},
-		State:   StateRunning,
-		Healthy: true,
-	}
-	mgr.mu.Lock()
-	mgr.vms["test-vm-1"] = inst
-	mgr.mu.Unlock()
-
-	mgr.MarkFailed("test-vm-1")
-
-	if inst.State != StateFailed {
-		t.Errorf("expected failed state, got %s", inst.State)
-	}
-	if inst.Healthy {
-		t.Error("expected unhealthy after MarkFailed")
-	}
-}
-
 func TestMarkInstanceFailedIgnoresSupersededGeneration(t *testing.T) {
 	mgr := NewManager(DefaultManagerConfig())
 	old := &VMInstance{Config: VMConfig{VMID: "vm-generation"}, State: StateRunning, Healthy: true}
@@ -480,28 +458,6 @@ func TestVMOperationLockSerializesSameIdentityOnly(t *testing.T) {
 	case <-sameAcquired:
 	case <-time.After(time.Second):
 		t.Fatal("same VM identity did not proceed after release")
-	}
-}
-
-func TestManagerForceKillVM(t *testing.T) {
-	mgr := NewManager(DefaultManagerConfig())
-
-	inst := &VMInstance{
-		Config:  VMConfig{VMID: "test-vm-1"},
-		State:   StateRunning,
-		Healthy: true,
-		done:    make(chan struct{}),
-	}
-	mgr.mu.Lock()
-	mgr.vms["test-vm-1"] = inst
-	mgr.mu.Unlock()
-
-	if err := mgr.ForceKillVM("test-vm-1"); err != nil {
-		t.Fatalf("ForceKillVM: %v", err)
-	}
-
-	if inst.State != StateFailed {
-		t.Errorf("expected failed state, got %s", inst.State)
 	}
 }
 

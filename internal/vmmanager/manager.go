@@ -1190,25 +1190,6 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	return inst, nil
 }
 
-// ForceKillVM forcefully terminates a VM process. Use for unhealthy
-// guests that do not respond to clean shutdown.
-func (m *Manager) ForceKillVM(vmID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	inst, ok := m.vms[vmID]
-	if !ok {
-		return fmt.Errorf("vm %s not found", vmID)
-	}
-
-	m.killFirecrackerProcess(inst, "force-kill")
-	inst.State = StateFailed
-	inst.Healthy = false
-
-	log.Printf("vmmanager: force-killed VM %s", vmID)
-	return nil
-}
-
 // GetVM returns the VM instance for the given ID, or nil if not found.
 func (m *Manager) GetVM(vmID string) *VMInstance {
 	m.mu.RLock()
@@ -1330,18 +1311,6 @@ func (m *Manager) CheckHealth(vmID string) (bool, error) {
 	m.mu.Unlock()
 
 	return healthy, nil
-}
-
-// MarkFailed marks a VM as failed (e.g., after detecting an unhealthy guest).
-func (m *Manager) MarkFailed(vmID string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if inst, ok := m.vms[vmID]; ok {
-		inst.State = StateFailed
-		inst.Healthy = false
-		log.Printf("vmmanager: marked VM %s as failed", vmID)
-	}
 }
 
 func (m *Manager) markInstanceFailed(vmID string, expected *VMInstance) {

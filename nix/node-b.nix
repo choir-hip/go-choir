@@ -797,7 +797,6 @@ in
         # vmctl calls this endpoint to get a token before booting each VM.
         "VMCTL_GATEWAY_URL=http://127.0.0.1:8084"
         "VMCTL_CORPUSD_URL=http://127.0.0.1:8086"
-        "VMCTL_ALLOW_HOST_PROCESS=false"
         "VMCTL_PLATFORM_WIRE_ENABLED=true"
         "VMCTL_AUTOPUTER_PROXY_SOCK=/run/go-choir/vmctl.sock"
         # Path to system binaries (ip, iptables, mkfs.ext4) for network/disk setup.

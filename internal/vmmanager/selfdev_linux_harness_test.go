@@ -61,7 +61,7 @@ func TestSelfDevelopmentEffectsOffGuestHarness(t *testing.T) {
 	manager := NewManager(cfg)
 	manager.Start()
 	t.Cleanup(func() {
-		_ = manager.ForceKillVM(vmID)
+		_ = manager.StopVM(vmID)
 		manager.Stop()
 		_ = manager.DestroyVMState(vmID)
 	})
