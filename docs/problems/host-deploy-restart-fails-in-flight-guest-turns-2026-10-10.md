@@ -61,3 +61,21 @@ so the resend cannot duplicate a write.
 Residual, open: an outage longer than 30 seconds still fails the write
 that records a run's own failure. That run stays `running` until the next
 boot closes it as interrupted. Nothing retries a terminal run write later.
+
+## Second instance: the gateway (model calls), 2026-10-10 23:32
+
+Minesweeper demo on a114b46e (demo-ms-2026-10-10b, guest gateway address
+10.200.62.1:8084). The 02e19146 deploy restarted `go-choir-gateway` (pid
+93227 served calls through 23:31:54; pid 102507 listens afterwards).
+Engineering's delegated run, three minutes into the first capsule spawn
+that worked since the socket fix, was cancelled at 23:32:49. The parked
+management turn woke on that report, and its first model call failed:
+`gateway call failed: gateway client: http call: Post
+"http://10.200.62.1:8084/provider/v1/inference": dial tcp
+10.200.62.1:8084: connect: connection refused`. The run failed.
+
+The residual named above ("whether proxy or vmctl restarts have the same
+effect on other guest clients") is answered for the gateway: yes. The
+guest gateway client sends once. Fix direction: the same bounded resend
+on ECONNREFUSED as the event-chain client (a refused connection never
+reached the server, so the resend cannot duplicate a model call).
