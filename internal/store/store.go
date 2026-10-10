@@ -149,6 +149,10 @@ type Store struct {
 	// ledger (see vocab_upcast_deposit.go).
 	depositUpcastMu sync.Mutex
 	depositUpcast   *depositUpcaster
+	// retainReplayDeposits keeps recorded deposit bytes on a fresh or
+	// cut-over replay: set on a staged store whose live counterpart never
+	// upcast (RetainReplayDeposits).
+	retainReplayDeposits atomic.Bool
 	// kernelMode marks the store post-ontology-kernel: bare OG state
 	// transitions that bypass the canonical reducer path fail closed instead
 	// of silently writing a non-event-backed mutation. Set by

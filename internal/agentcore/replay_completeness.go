@@ -39,6 +39,7 @@ type ReplayCompletenessReport struct {
 	ProbeDigest        string                            `json:"probe_digest"`
 	RunMemory          ReplayRunMemoryComparison         `json:"run_memory"`
 	ObjectGraph        *ReplayObjectGraphComparison      `json:"object_graph,omitempty"`
+	DepositMode        string                            `json:"deposit_mode,omitempty"`
 	BaseSequence       uint64                            `json:"base_sequence"`
 	BaseBlobSHA256     string                            `json:"base_blob_sha256"`
 	TailTargetSequence uint64                            `json:"tail_target_sequence"`
@@ -246,6 +247,10 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		return ReplayCompletenessReport{}, err
 	}
 	defer replayStore.Close()
+	depositMode, err := matchLiveDepositMode(rt.store, replayStore)
+	if err != nil {
+		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: %w", err)
+	}
 	rt.eventAppender.SetReplayObserver(observer)
 	reconstructErr := rt.eventAppender.ReconstructInto(ctx, replayStore)
 	rt.eventAppender.SetReplayObserver(nil)
@@ -322,6 +327,7 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		Eligibility:        replayEligibility(liveHead, replayHead, live, replay, result),
 		RunMemory:          runMemory,
 		ObjectGraph:        objectGraph,
+		DepositMode:        depositMode,
 		BaseSequence:       baseSequence,
 		BaseBlobSHA256:     baseBlob,
 		TailTargetSequence: targetSequence,
@@ -343,6 +349,43 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 // posture for unbounded replay is preserved by MaxRecoveryTailEvents. An
 // empty store probes the explicit bootstrap path without one. The caller
 // closes the store and removes the temp root.
+const (
+	replayDepositModeRetained = "retained"
+	replayDepositModeUpcast   = "upcast"
+	// replayDepositModeBaseUpcast: the installed base was built by an
+	// upcasting replay while the live store never upcast; recorded V1
+	// spellings may still differ (residual base-upcast-vs-live).
+	replayDepositModeBaseUpcast = "base_upcast"
+)
+
+// matchLiveDepositMode puts the staged replay store in the live store's
+// deposit mode before any event replays into it. A live store without an
+// upcast ledger kept every deposit's recorded bytes (including recorded
+// tool-call content no writer can respell), so the replay compared with it
+// and the restore that replaces it must keep them too
+// (problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md).
+// An unreadable ledger fails closed.
+func matchLiveDepositMode(live, staged *choirstore.Store) (string, error) {
+	liveUpcast, err := live.DepositsUpcast()
+	if err != nil {
+		return "", fmt.Errorf("read live deposit mode: %w", err)
+	}
+	if liveUpcast {
+		return replayDepositModeUpcast, nil
+	}
+	stagedUpcast, err := staged.DepositsUpcast()
+	if err != nil {
+		return "", fmt.Errorf("read staged deposit mode: %w", err)
+	}
+	if stagedUpcast {
+		return replayDepositModeBaseUpcast, nil
+	}
+	if err := staged.RetainReplayDeposits(); err != nil {
+		return "", err
+	}
+	return replayDepositModeRetained, nil
+}
+
 func (rt *Runtime) openProbeReplayStore(ctx context.Context, computerID, tempRoot string, liveHead *computerevent.Head) (*choirstore.Store, uint64, string, uint64, *restoreReplayObserver, error) {
 	observer := &restoreReplayObserver{}
 	if liveHead == nil || liveHead.Sequence == 0 {

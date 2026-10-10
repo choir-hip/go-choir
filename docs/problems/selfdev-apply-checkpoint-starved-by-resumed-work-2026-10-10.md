@@ -280,3 +280,44 @@ That is what `rematerialize.go` already assumes ("reconstructed from
 the V1 tape byte-identically", then `MigrateAndFenceServingVocabulary`).
 Fix (a) stays: after that migration, ids the runtime recomputes must
 already be fixed points, or lookups miss.
+
+## Fix (b): probe and restore replay in the live store's deposit mode
+
+Red ceremony (checkpoint replay, restore/rematerialize).
+
+- Conjecture delta: the checkpoint asks whether the chain reproduces the
+  live state. A live store without an upcast ledger kept every deposit's
+  recorded bytes, so the only honest comparison is a replay that keeps
+  them too. Restore installs that same staged store and then runs
+  `MigrateAndFenceServingVocabulary` itself, as its code always assumed.
+- Change:
+  - `Store.RetainReplayDeposits` lets only a ledger activate the upcast.
+    It must precede replay, and it refuses a store whose deposits are
+    already upcast. `Store.DepositsUpcast` reads the mode.
+  - `matchLiveDepositMode` runs before replay, in both
+    `ReplayCompleteness` and `Rematerialize`.
+  - The probe report gains `deposit_mode`: `retained`, `upcast`, or
+    `base_upcast`.
+- Tests first:
+  - Store: a retained fresh replay of a V1-spelled tape equals the
+    live-path projection of the same tape, and writes no ledger. A default
+    fresh replay still upcasts and differs, which keeps the original bug
+    pinned. Retention is refused on an upcast store.
+  - Agentcore: a live store without a ledger puts the staged store in
+    retained mode, and an unreadable live ledger fails closed.
+- Protected surfaces: the replay-completeness probe and the
+  rematerialize staged replay. The live store and the tape are untouched.
+- Admissible evidence: an M11 rerun whose replay-completeness reports
+  `deposit_mode: retained` and is eligible at apply, then reaches applied.
+- Rollback: git revert. Nothing persistent changes: the flag lives in
+  memory on a disposable staged store.
+- Heresy delta: discovered "fresh replay upcasts recorded model content
+  that the live store kept"; repaired for probe and restore only on
+  staging proof; introduced none.
+- New residuals:
+  - `base-upcast-vs-live`: platform bases are built by an upcasting
+    replay. For a computer with a published base, the base plus tail
+    still upcasts while live does not. The probe reports `base_upcast`.
+  - `live-rescan-mixed-spelling`: a boot that replays rows rescans and
+    migrates live rows in place, so a retained replay of such a store
+    would differ.

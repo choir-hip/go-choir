@@ -735,10 +735,67 @@ func (s *Store) depositUpcastForBatch(replay, fresh bool) (*depositUpcaster, err
 		s.depositUpcast = upcaster
 	}
 	s.depositUpcastMu.Unlock()
-	if err := upcaster.resolve(replay, fresh, s.vocabCutover.Load()); err != nil {
+	cutover := s.vocabCutover.Load()
+	if s.retainReplayDeposits.Load() {
+		// Only a ledger (deposits declared upcast) may activate the upcast.
+		fresh, cutover = false, false
+	}
+	if err := upcaster.resolve(replay, fresh, cutover); err != nil {
 		return nil, err
 	}
 	return upcaster, nil
+}
+
+// RetainReplayDeposits makes this store's replay keep the recorded deposit
+// bytes even when it starts fresh or cut over. A staged store calls it when
+// its live counterpart never upcast (DepositsUpcast false): the apply
+// checkpoint compares the two, and restore installs the staged store, so an
+// upcast here re-keys recorded content the live store kept
+// (problems/selfdev-apply-checkpoint-starved-by-resumed-work-2026-10-10.md).
+// It must precede the first replayed event, and it refuses a store whose
+// deposits are already upcast.
+func (s *Store) RetainReplayDeposits() error {
+	if s == nil {
+		return fmt.Errorf("deposit upcast: nil store")
+	}
+	upcast, err := s.DepositsUpcast()
+	if err != nil {
+		return err
+	}
+	if upcast {
+		return fmt.Errorf("deposit upcast: store deposits are already upcast; cannot retain recorded bytes")
+	}
+	s.depositUpcastMu.Lock()
+	defer s.depositUpcastMu.Unlock()
+	if s.depositUpcast.isActive() {
+		return fmt.Errorf("deposit upcast: already active; retention must precede replay")
+	}
+	s.retainReplayDeposits.Store(true)
+	return nil
+}
+
+// RetainsReplayDeposits reports whether RetainReplayDeposits was set.
+func (s *Store) RetainsReplayDeposits() bool {
+	return s != nil && s.retainReplayDeposits.Load()
+}
+
+// DepositsUpcast reports whether this store's deposits are upcast: its
+// upcast ledger exists or its upcaster is active.
+func (s *Store) DepositsUpcast() (bool, error) {
+	if s == nil {
+		return false, nil
+	}
+	s.depositUpcastMu.Lock()
+	active := s.depositUpcast.isActive()
+	s.depositUpcastMu.Unlock()
+	if active {
+		return true, nil
+	}
+	ledger, err := loadDepositUpcastLedger(s.depositUpcastLedgerPath())
+	if err != nil {
+		return false, err
+	}
+	return ledger != nil, nil
 }
 
 // upcastProjectionDeposit transforms a verified projection batch's deposit

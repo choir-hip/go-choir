@@ -149,6 +149,13 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 			return report, err
 		}
 	}
+	// The staged store replaces the live one: keep the deposit mode the live
+	// store has, so the witness below compares like with like.
+	if _, err := matchLiveDepositMode(rt.store, staged); err != nil {
+		_ = staged.Close()
+		_ = os.RemoveAll(stagingRoot)
+		return report, fmt.Errorf("rematerialize: %w", err)
+	}
 	report.BaseSequence = descriptor.Sequence
 	report.BaseBlobSHA256 = descriptor.BlobSHA256
 	report.TailTargetSequence = targetSequence
