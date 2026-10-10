@@ -89,3 +89,27 @@ The report hashes whole tables, so it cannot say which rows differ.
 Next: a row-level og_objects diff in the replay-completeness report (by
 object kind and key), then name the writer. The operation stays in
 `materializing`, retrying.
+
+## Fix plan A (01:31Z; red, ceremony)
+
+- Conjecture delta: work may resume after an update restart (owner
+  rule), but not until the apply's checkpoint has read a still chain.
+- Change: after a boot whose planned-restart marker is
+  `self_development_apply`, the actor handler defers work-kind
+  occurrences (`restartWorkKinds`: dispatches, coagent results, channel
+  messages, owner revisions, assigned work, spawn and resume deadlines)
+  with `actor.ErrDeferUnprocessed` while a self-development operation is
+  `materializing`, for at most 10 minutes after boot. Cancels, fail-closed
+  deadlines and `selfdev_materialization_retry` are never held. After
+  the operation leaves `materializing`, or the 10 minutes pass, work
+  proceeds as before. The bound keeps deferrals far below the
+  dispatcher's 64-deferral poison limit, so a stalled apply delays work
+  and never destroys it.
+- Failure modes pinned in a handler test: held while materializing; not
+  held when nothing is materializing; not held after the window; cancels
+  and the materializer's retry never held; crash boots unchanged; a
+  planned platform update boot never held.
+- Protected surfaces: run lifecycle after a planned restart (red).
+  Admissible evidence: the next M11 rerun shows no desk turn between the
+  apply restart and the checkpoint. Rollback: git revert. Heresy delta:
+  discovered "resume during apply"; repaired only on staging proof.
