@@ -297,18 +297,36 @@ Critical path. Tracks B to E run in parallel with A.
   text, then adds a tiny app through the existing registry. The host
   builder rebuilds SPA and binary from the patch, and the applied
   computer serves the new surface. It proves what the owner will see.
-- **D. Texture intake and effects on.** Today only the API starts an
-  operation. Texture needs a self-development request control, routed
-  through management to engineering, and only when the computer's mode
-  is armed. Its "effects-OFF" framing must follow the armed mode, or
-  Texture keeps telling the owner it cannot act.
+- **D. Any request is promotable (owner, 2026-10-10).** Self-development
+  is not a special operation. Any prompt, from Texture or the prompt bar
+  (which already enters through Texture), can end in a promotable
+  change. Examples: "make an app that does x", "change the desktop
+  background", "email me a daily digest", "change the slides app to …".
+
+  The route is the ordinary one: Texture, then management, then
+  engineering in a capsule. Whenever a capsule result would change the
+  computer, it becomes a frozen candidate by itself. The engineering
+  assignment opens the promotion; there is no separate entry API. This
+  is doctrine C3/C8 (effects stay inert frozen bundles until an
+  authorized acceptance event), not a new design.
+
+  The lightest effect wins. A background is a setting, a digest is an
+  automation, and an app is a release, but all three are typed
+  candidates on one promotion path. Texture's "effects-OFF" framing
+  follows the computer's armed mode.
 - **E. Approve, reject and roll back in the product.** Today they exist
-  only as API calls and key scopes. Minimal: a decision card in the
-  Texture document bound to the frozen candidate, plus a rollback that
-  works when the desktop itself is broken. The updater's health
-  rollback is the backstop.
-- **F. Owner computer.** Arm the mode with the owner and run C's
-  request through D and E.
+  only as API calls and key scopes. Minimal: one decision card in the
+  Texture document, bound to the frozen candidate, for every kind of
+  change. Add a rollback that works when the desktop itself is broken.
+  The updater's health rollback is the backstop.
+- **F. Owner computer.** Arm the mode with the owner, who then asks
+  in their own words, through D and E.
+- **G. Speculative development (owner, 2026-10-10), right after F.**
+  The system finds better approaches and builds them unasked.
+  Management (computer-wide coherence) opens speculative candidates.
+  They are built and verified in capsules and wait on the same decision
+  card. Nothing applies without the owner. A rate policy for
+  speculation is an open design question; tracks B to F come first.
 
 Cut from the path:
 
