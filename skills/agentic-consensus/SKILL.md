@@ -29,7 +29,7 @@ The default panel is 10 members, all verified live with exact served-model
 identity:
 
 1. `codex` CLI with its configured default model.
-2. Devin CLI/API with its configured default model/agent (currently free-tier `swe-1-6-slow`; lowest-capability route but free, so it still adds an independent opinion).
+2. Devin CLI/API with its configured default model/agent (currently `swe-2-max`; the runner passes no `--model` pin, so it tracks the account default).
 3. `claude` CLI pinned to `opus` (`--model opus`).
 4. `opencode` CLI with its configured default model.
 5. OMP `openai-codex/gpt-6.1-sol` with `--thinking xhigh` — the flagship.
@@ -205,7 +205,7 @@ Notes:
 
 - `--permission-mode auto` auto-approves read-only tools.
 - Help says non-interactive mode disables workspace-trust prompting by default.
-- Devin is currently on free tier `swe-1-6-slow`: the slowest, lowest-capability route in the panel. Keep it for its free independent opinion, but do not let its verdict override a demonstrated local fact.
+- Devin is unpinned and serves the account default (`swe-2-max` as of 2026-10-08). Panel behavior follows the account default if it changes; pass `--devin-model` only for a deliberate one-off override.
 
 ### Claude CLI
 
