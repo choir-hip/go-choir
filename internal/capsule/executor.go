@@ -399,7 +399,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 func (e *Executor) startEgressLocked(caps *Capsule) error {
 	socketPath := filepath.Join(caps.MergedDir, strings.TrimPrefix(EgressSocketPath, "/"))
 	_ = os.Remove(socketPath)
-	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
+	listener, err := listenUnixAt(socketPath)
 	if err != nil {
 		return fmt.Errorf("capsule egress listener: %w", err)
 	}
@@ -448,10 +448,16 @@ func BrokerAmbientCaps(egress bool) []uintptr {
 func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	hostSocket := filepath.Join(caps.MergedDir, "run", "capsule", "broker.sock")
 	_ = os.Remove(hostSocket)
-	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: hostSocket, Net: "unix"})
+	listener, err := listenUnixAt(hostSocket)
 	if err != nil {
 		return fmt.Errorf("capsule create parent broker listener: %w", err)
 	}
+	dialSocket, closeDialSocket, err := unixSocketAddress(hostSocket)
+	if err != nil {
+		_ = listener.Close()
+		return fmt.Errorf("capsule broker socket address: %w", err)
+	}
+	defer closeDialSocket()
 	caps.listener = listener
 	if err := os.Chmod(hostSocket, 0o600); err != nil {
 		return fmt.Errorf("capsule secure parent broker listener: %w", err)
@@ -518,7 +524,7 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	deadline := time.Now().Add(10 * time.Second)
 	var lastErr error
 	for {
-		client := NewBrokerClient(hostSocket, e.publicKey)
+		client := NewBrokerClient(dialSocket, e.publicKey)
 		if err := client.Connect(ctx); err != nil {
 			lastErr = err
 		} else if _, probeErr := client.Stat(ctx, readinessCapability, "."); probeErr != nil {
@@ -2109,4 +2115,48 @@ func cloneVerbSet(input VerbSet) VerbSet {
 		out[verb] = allowed
 	}
 	return out
+}
+
+// maxUnixSocketPath is the longest path bind and connect accept: sun_path
+// is 108 bytes on Linux, including the terminating NUL.
+const maxUnixSocketPath = 107
+
+// unixSocketAddress returns an address for the socket at full that fits
+// sun_path, and a func that releases it. Capsule state on the data disk puts
+// the capsule's sockets about 145 bytes deep, so bind failed with EINVAL
+// (docs/problems/capsule-socket-path-too-long-on-data-disk-2026-10-10.md).
+// A path through an open descriptor of the socket's directory names the
+// same file in a few dozen bytes.
+func unixSocketAddress(full string) (string, func(), error) {
+	if len(full) <= maxUnixSocketPath {
+		return full, func() {}, nil
+	}
+	dir, err := os.Open(filepath.Dir(full))
+	if err != nil {
+		return "", nil, fmt.Errorf("open socket directory: %w", err)
+	}
+	short := fmt.Sprintf("/proc/self/fd/%d/%s", dir.Fd(), filepath.Base(full))
+	if len(short) > maxUnixSocketPath {
+		_ = dir.Close()
+		return "", nil, fmt.Errorf("socket name %q is too long", filepath.Base(full))
+	}
+	return short, func() { _ = dir.Close() }, nil
+}
+
+// listenUnixAt listens on a Unix socket at full, however deep full is. The
+// listener does not unlink on Close: it was bound through a descriptor path
+// that may name another directory once the descriptor is reused. The socket
+// file goes with the capsule root.
+func listenUnixAt(full string) (*net.UnixListener, error) {
+	addr, release, err := unixSocketAddress(full)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: addr, Net: "unix"})
+	if err != nil {
+		return nil, err
+	}
+	listener.SetUnlinkOnClose(false)
+	return listener, nil
 }
