@@ -53,5 +53,21 @@ management run (`delivered_to_loop_id` 5c11cfbf) and is still `pending`.
 The run resumed at 22:46:04, but its first provider call carried no new
 user message (message roles end in `assistant`, last user text empty).
 The model restated its earlier summary, made no cell call, and the turn
-completed, so Texture never learned the cast failed. Which filter on the
-resume-time injection drops this report is not yet traced.
+completed, so Texture never learned the cast failed.
+
+Cause (from source): `ListLifecycleControlsDeliveredToRunPage`
+(`internal/store/lifecycle_control_delivery.go`) authenticates each
+producer report by loading `GetLifecycleRun(update.SourceRunID)`. A cast
+cancelled at spawn never had a run, so the runtime-written cancel report
+has no `source_run_id`; the lookup fails with not-found and the whole page
+errors. `pendingCoagentUpdatesForRun` maps not-found to "nothing pending",
+so the resumed turn gets no message at all, and one runless report hides
+every other packet delivered to that run. This is the shape of
+sa-delegated-report-poisons-management-listing-2026-10-06: a valid
+delegated report poisoning the listing.
+
+Fix direction: a producer report with no source run is one the runtime
+wrote for an assignment that never ran. It still authenticates through its
+producer work item (trajectory, assigned agent, engineering authority) and
+the delegated parent join back to the consuming run; only the run check is
+skipped.
