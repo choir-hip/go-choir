@@ -83,6 +83,30 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
   misplaced inside a nested object. So the message read as a
   contradiction.
 
+- T3. (open) Texture controls aimed at research work fail with `target
+  work does not bind the open target obligation and caller provenance`.
+  Six distinct work items, across Texture runs 536ee5ef, 4d7e15d3,
+  78f029d3, 93c9760d, d878d267 and 1803835a (arxiv, arxiv5-7), drew 26
+  refusals (counted across overlapping trace snapshots). The pattern
+  (hypothesis from the traces; the work rows were not read): Texture reads
+  a research report whose update carries `work_item_id`, then follows up
+  with a control on that `target_work_item_id`. The work was opened by an
+  earlier Texture run of the same document, and
+  `lifecycleTargetWorkRequestedByTexture`
+  (`internal/store/lifecycle_texture_target.go`) requires the caller run
+  to be the creating run. That run-level provenance is deliberate (the
+  August 8 test "same channel is not provenance"; kept intact in
+  docs/evidence/effects-red-texture-caller-reactivate-2026-08-17.md), so
+  this record does not change it. The defect is the message. One error
+  string covers seven conditions (wrong id, scope, trajectory, closed
+  status, assignee, authority profile, provenance) and says nothing about
+  what Texture may do instead, so Texture retried the same control up to
+  three times per run. Fix direction: name the failing condition and the
+  alternative (a new research request, which this run then owns). Whether
+  Texture provenance should be per document desk rather than per run is an
+  open owner question: the persistent-management findings of this day point
+  the same way.
+
 ## Research (tools)
 
 - R1. (open) `choir.SourceSearch` fails `dial tcp 10.200.57.1:8787:
