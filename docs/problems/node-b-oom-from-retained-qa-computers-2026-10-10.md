@@ -42,13 +42,51 @@ owner computer, with no admission bound. Tonight's probe volume was
 enough to OOM the host and crash vmctl. Only the reattach path kept the
 owner computer alive.
 
-## Response
+## Response (owner-authorized, 06:23–06:27Z)
 
-- M11 reruns are paused until memory is back above about 8 GiB available.
-- Proposed: stop the five confirmed QA computers through vmctl's internal
-  stop (`/internal/vmctl/stop`, `user_id` plus desktop `primary`, disk
-  state kept). This is an operational action on staging, so it waits for
-  the owner's go-ahead.
+- vmctl `/internal/vmctl/stop` returned `{"status":"stopped"}` for all
+  five QA users, but every Firecracker process kept running. Those VMs
+  were not in vmctl's registry, so the stop only cleared the ownership
+  record (a false "stopped").
+- Meanwhile the owner computer failed health checks from 06:24:55. At
+  06:26:50 vmctl rebooted it (`epoch=1186`, new address 10.200.28.2), and
+  its health is 200 since then. Under the restart rule that was a crash
+  restart, so its open work was closed as interrupted.
+- The five QA Firecracker processes were sent SIGTERM by exact VM id,
+  with their disks kept. Available memory went from about 0.25 GiB to
+  17.8 GiB, and was 14.5 GiB at 06:28Z.
+
+## Why pressure reclaim did not prevent it (trace)
+
+Reclaim is enabled on Node B (`VMCTL_PRESSURE_RECLAIM_MODE=active`,
+floor 4096 MiB / 15%, min idle 30m), along with the 30-minute idle
+sweeper. From 04:30Z to 06:06Z it logged
+`active=2 eligible=0 protected=2 pressure=true` 35 times. It saw the
+pressure, but its registry held only two ownerships, both protected. The
+other ten running VMs were invisible to it. They had dropped out of the
+registry when vmctl restarted on deploys and "reattach skipped … guest
+health check failed" left them running unmanaged. Reclaim, the idle
+sweeper and stop all act on the registry only, so the substrate fault is
+that **vmctl's registry does not account for every Firecracker process
+it started.**
+
+## Proposed vmctl upgrade (red; not started)
+
+1. Reconcile process and registry. A VM whose reattach fails is stopped,
+   not left running. A periodic sweep finds Firecracker processes in the
+   vmctl cgroup that are not in the registry and terminates them, keeping
+   their disk state. Unmanaged VMs then cannot accumulate.
+2. Admission control. Refuse to boot a new computer when the host is
+   under pressure (return 503, with retry after), so probes cannot push a
+   pressured host over.
+3. Stop tells the truth. It succeeds only once the process has exited.
+4. OOM priority by class. Set `oom_score_adj` per VM: owner and premium
+   negative, ephemeral QA positive. Make vmctl itself negative, so the
+   kernel kills a QA VM before the owner computer or vmctl.
+5. An ephemeral class for QA computers. Probe accounts get a TTL, and
+   their `guest_busy` protection is capped, so a QA computer stuck in
+   `materializing` cannot hold memory forever. Probes also stop their
+   computer at exit.
 
 ## Residuals
 
