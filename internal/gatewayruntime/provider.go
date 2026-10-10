@@ -8,14 +8,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostlink"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -38,7 +38,7 @@ func New(gatewayURL, token string) *Provider {
 	return &Provider{
 		gatewayURL: strings.TrimRight(strings.TrimSpace(gatewayURL), "/"),
 		token:      strings.TrimSpace(token),
-		httpClient: &http.Client{Timeout: gatewayClientTimeout},
+		httpClient: hostlink.NewClient(gatewayClientTimeout),
 	}
 }
 
@@ -234,45 +234,23 @@ func (p *Provider) do(ctx context.Context, req llmRequest, accept string) (*http
 	if err != nil {
 		return nil, fmt.Errorf("gateway client: marshal request: %w", err)
 	}
-	// A refused connection never reached the gateway, so resending cannot
-	// duplicate a model call. A host deploy restarts the gateway for a few
-	// seconds while busy computers keep running; sending once failed their
-	// in-flight turns (host-deploy-restart-fails-in-flight-guest-turns-2026-10-10).
-	deadline := time.Now().Add(gatewayRestartWait)
-	backoff := 250 * time.Millisecond
-	for {
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.gatewayURL+"/provider/v1/inference", bytes.NewReader(data))
-		if err != nil {
-			return nil, fmt.Errorf("gateway client: create request: %w", err)
-		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Authorization", "Bearer "+p.token)
-		if accept != "" {
-			httpReq.Header.Set("Accept", accept)
-		}
-		resp, err := p.httpClient.Do(httpReq)
-		if err == nil {
-			return resp, nil
-		}
-		if !errors.Is(err, syscall.ECONNREFUSED) || time.Now().Add(backoff).After(deadline) {
-			return nil, fmt.Errorf("gateway client: http call: %w", err)
-		}
-		timer := time.NewTimer(backoff)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, fmt.Errorf("gateway client: http call: %w", err)
-		case <-timer.C:
-		}
-		if backoff < 2*time.Second {
-			backoff *= 2
-		}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.gatewayURL+"/provider/v1/inference", bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("gateway client: create request: %w", err)
 	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+p.token)
+	if accept != "" {
+		httpReq.Header.Set("Accept", accept)
+	}
+	// The transport (hostlink) resends a refused dial across a gateway
+	// restart (host-deploy-restart-fails-in-flight-guest-turns-2026-10-10).
+	resp, err := p.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("gateway client: http call: %w", err)
+	}
+	return resp, nil
 }
-
-// gatewayRestartWait bounds how long a model call keeps resending while the
-// gateway refuses connections during a host restart.
-const gatewayRestartWait = 30 * time.Second
 
 // gatewayHTTPStatusError preserves the HTTP status the gateway returned so
 // callers (the tool loop) can distinguish transient 5xx/429 provider outages

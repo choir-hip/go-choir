@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostlink"
 )
 
 func TestNewGatewayClientFromEnvRequiresURLAndToken(t *testing.T) {
@@ -47,8 +49,8 @@ func TestNewGatewayClientFromEnvPreservesURLPrecedenceAndTimeout(t *testing.T) {
 	if client.token != "secret-token" {
 		t.Fatalf("token = %q, want trimmed token", client.token)
 	}
-	if client.httpClient == nil || client.httpClient.Timeout != 30*time.Second {
-		t.Fatalf("http client = %#v, want 30s timeout", client.httpClient)
+	if transport, ok := client.httpClient.Transport.(*hostlink.Transport); !ok || transport.AttemptTimeout != 30*time.Second {
+		t.Fatalf("http client = %#v, want a hostlink transport with a 30s attempt timeout", client.httpClient)
 	}
 
 	t.Setenv("RUNTIME_GATEWAY_URL", "")

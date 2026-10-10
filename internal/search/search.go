@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostlink"
+
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
@@ -80,7 +82,7 @@ func NewGatewayClientFromEnv() Client {
 	return &gatewaySearchClient{
 		baseURL:    baseURL,
 		token:      token,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: hostlink.NewClient(30 * time.Second),
 	}
 }
 

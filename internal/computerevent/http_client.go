@@ -12,8 +12,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostlink"
 )
 
 var ErrCASConflict = errors.New("computer event CAS conflict")
@@ -300,48 +301,27 @@ func (c *HTTPClient) doWithResponseLimit(ctx context.Context, method, path strin
 	if queryIndex := strings.IndexByte(path, '?'); queryIndex >= 0 {
 		endpoint.RawQuery = path[queryIndex+1:]
 	}
-	// A refused connection never reached corpusd, so resending is safe for
-	// any method. A host deploy restarts corpusd for a few seconds; without
-	// this every guest write in flight failed, including the one recording
-	// the run's own failure, which left a zombie running run
-	// (host-deploy-restart-fails-in-flight-guest-turns-2026-10-10).
-	deadline := time.Now().Add(corpusdRestartWait)
-	backoff := 250 * time.Millisecond
-	var result *http.Response
-	for {
-		var reader io.Reader
-		if body != nil {
-			reader = bytes.NewReader(encoded)
-		}
-		request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), reader)
-		if err != nil {
-			return 0, err
-		}
-		token, err := c.capability(ctx)
-		if err != nil {
-			return 0, fmt.Errorf("computer event client: capability: %w", err)
-		}
-		request.Header.Set("Authorization", "Bearer "+token)
-		if body != nil {
-			request.Header.Set("Content-Type", "application/json")
-		}
-		result, err = c.http.Do(request)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, syscall.ECONNREFUSED) || time.Now().Add(backoff).After(deadline) {
-			return 0, err
-		}
-		timer := time.NewTimer(backoff)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return 0, err
-		case <-timer.C:
-		}
-		if backoff < 2*time.Second {
-			backoff *= 2
-		}
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(encoded)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), reader)
+	if err != nil {
+		return 0, err
+	}
+	token, err := c.capability(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("computer event client: capability: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	// The guest client's transport (hostlink) resends a refused dial across
+	// a host restart (host-deploy-restart-fails-in-flight-guest-turns-2026-10-10).
+	result, err := c.http.Do(request)
+	if err != nil {
+		return 0, err
 	}
 	defer result.Body.Close()
 	var responseReader io.Reader = io.LimitReader(result.Body, 1<<20)
@@ -380,9 +360,6 @@ func (c *HTTPClient) doWithResponseLimit(ctx context.Context, method, path strin
 
 // NewGuestHTTPClient permits authenticated, signed-receipt traffic over the
 // Firecracker host-only RFC1918 tap. Public/non-private HTTP remains refused.
-// corpusdRestartWait bounds how long a request keeps resending while corpusd
-// refuses connections, as it does for a few seconds during a host deploy.
-const corpusdRestartWait = 30 * time.Second
 
 func NewGuestHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClient, error) {
 	parsed, err := url.Parse(strings.TrimRight(baseURL, "/"))
@@ -397,7 +374,8 @@ func NewGuestHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClien
 		baseURL: parsed,
 		// Host-tap traffic is fast, but a ~150MB blob fetch can exceed a tight
 		// deadline under load; the request context remains the real bound.
-		http:       &http.Client{Timeout: 10 * time.Minute},
+		// hostlink resends a refused dial across a host restart.
+		http:       hostlink.NewClient(10 * time.Minute),
 		capability: capability,
 	}, nil
 }

@@ -7,11 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostlink"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/platform"
@@ -142,7 +143,7 @@ func RestoreGuestCredentials(path, baseURL, computerID, realizationID string) (*
 	}
 	credentials := &GuestCredentials{
 		baseURL: handoff.BaseURL, computerID: handoff.ComputerID, realizationID: handoff.RealizationID,
-		http: &http.Client{Timeout: 15 * time.Second}, token: handoff.Capability, postRevocationToken: handoff.PostRevocationCapability, expiresAt: expiresAt,
+		http: hostlink.NewClient(15 * time.Second), token: handoff.Capability, postRevocationToken: handoff.PostRevocationCapability, expiresAt: expiresAt,
 		keyID: handoff.KeyID, publicKey: ed25519.PublicKey(publicKey),
 		pendingLifecycle: append([]computerevent.Receipt(nil), handoff.PendingLifecycleReceipts...),
 		pendingConsumption: func() *platform.CredentialConsumptionRequest {

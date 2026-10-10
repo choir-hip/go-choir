@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostlink"
+
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
@@ -79,7 +81,7 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 	}
 	manager := &GuestCredentials{
 		baseURL: strings.TrimRight(baseURL, "/"), computerID: computerID, realizationID: realizationID,
-		http: &http.Client{Timeout: 15 * time.Second}, publicKey: publicKey,
+		http: hostlink.NewClient(15 * time.Second), publicKey: publicKey,
 		keyID: envelope.SigningKeyID,
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, manager.baseURL+"/internal/computers/credentials/exchange", bytes.NewReader(raw))
@@ -234,7 +236,7 @@ func GuestCredentialsWithCapability(baseURL, computerID, token string, expiresAt
 	credentials := &GuestCredentials{
 		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		computerID: strings.TrimSpace(computerID),
-		http:       &http.Client{Timeout: 15 * time.Second},
+		http:       hostlink.NewClient(15 * time.Second),
 		token:      token,
 		expiresAt:  expiresAt,
 	}
