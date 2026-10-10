@@ -310,6 +310,25 @@ Critical path. Tracks B to E run in parallel with A.
   is doctrine C3/C8 (effects stay inert frozen bundles until an
   authorized acceptance event), not a new design.
 
+  Where the special API came from: the July
+  `choir-cli-self-development-2026-07-16` mission (authorized 5483a082,
+  built 7d635330 on July 19). Its deliverable was a disposable computer
+  "develop[ing] Choir itself end to end through the supported public
+  choir CLI", an operator-driven transaction (`choir self-dev
+  approve …`) built before the desks could drive the path themselves. It
+  was forwarded to the guest in August (4543624b), and M11 inherited it.
+  Underneath, it already wakes an ordinary engineering desk
+  (`ensureSelfDevelopmentRun`). The special part is the entry and the
+  separate operation record, which the August effects mission flagged
+  as a direct-write table outside the reducer.
+
+  Deletion plan: the engineering assignment opens the candidate.
+  Freeze, verify, decision, materialization and rollback become the
+  generic promotion events behind the decision card. Then
+  `POST …/self-development/operations` and its operation store are
+  deleted. Its only remaining caller is the M11 probe, which moves to
+  prompting Texture.
+
   The lightest effect wins. A background is a setting, a digest is an
   automation, and an app is a release, but all three are typed
   candidates on one promotion path. Texture's "effects-OFF" framing
