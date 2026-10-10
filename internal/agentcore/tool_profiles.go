@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 	"net/http"
 	"os"
 	"strings"
@@ -287,6 +288,10 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		// tool-loop overlay branch is dead and removed with the typed surface.
 		b.WriteString(runtimeprompts.RLMResearchOverlay())
 	}
+	if surface := deskSurfacePrompt(profile, rec); surface != "" {
+		b.WriteString("\n\n")
+		b.WriteString(surface)
+	}
 	requesterAgentID := ""
 	textureDeliveryAgentID := ""
 	if rec != nil {
@@ -547,4 +552,23 @@ func (rt *Runtime) ToolRegistryForProfile(profile string) *toolregistry.ToolRegi
 		return nil
 	}
 	return rt.toolProfiles[strings.TrimSpace(profile)]
+}
+
+// deskSurfacePrompt is the generated block naming the desk's exact choir
+// surface (trace review F13); empty for profiles without a REPL desk.
+func deskSurfacePrompt(profile string, rec *types.RunRecord) string {
+	switch profile {
+	case agentprofile.Texture, agentprofile.Management:
+		return yaegikernel.DeskSurface(profile, "", false)
+	case agentprofile.Research:
+		return yaegikernel.DeskSurface(profile, "", true)
+	case agentprofile.Engineering:
+		slot := ""
+		if rec != nil {
+			slot = metadataStringValue(rec.Metadata, runMetadataEngineeringSlot)
+		}
+		return yaegikernel.DeskSurface(profile, slot, false)
+	default:
+		return ""
+	}
 }

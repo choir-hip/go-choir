@@ -229,6 +229,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Updates":  reflect.ValueOf(s.Updates),
 		"Emits":    reflect.ValueOf(s.Emits),
 		"Pack":     reflect.ValueOf(s.Pack),
+		"Help":     reflect.ValueOf(s.Help),
 	}
 	verbs := map[string]func() reflect.Value{
 		"WriteFile":            func() reflect.Value { return reflect.ValueOf(s.WriteFile) },

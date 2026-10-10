@@ -25,13 +25,16 @@ import (
 // equivalent of the one-shot worker's process-group SIGKILL. Callers must
 // create a new Session after any unsafe-to-reuse error.
 type Session struct {
-	mu        sync.Mutex
-	interp    *interp.Interpreter
-	allowlist *Allowlist
-	stdout    *switchWriter
-	stderr    *switchWriter
-	poisoned  error
-	closed    bool
+	mu sync.Mutex
+	// choirSurface is the desk's exported choir function set, used to name
+	// what exists when a cell fails on the surface (surface.go).
+	choirSurface map[string]bool
+	interp       *interp.Interpreter
+	allowlist    *Allowlist
+	stdout       *switchWriter
+	stderr       *switchWriter
+	poisoned     error
+	closed       bool
 	// importedPaths tracks package paths earlier successful cells installed,
 	// so normalization drops repeated import decls (yaegi compiles every
 	// cell as _.go in the same package — a re-import is a hard redeclared
@@ -83,6 +86,12 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 		return nil, fmt.Errorf("yaegi: load session symbols: %w", err)
 	}
 	s := &Session{interp: i, allowlist: allowlist, stdout: stdout, stderr: stderr, importedPaths: map[string]bool{}, declaredNames: map[string]bool{}}
+	if choirExports, ok := extraSymbols["choir/choir"]; ok {
+		s.choirSurface = make(map[string]bool, len(choirExports))
+		for name := range choirExports {
+			s.choirSurface[name] = true
+		}
+	}
 	// Predeclare the choir binding when the symbol surface provides it: the
 	// desk's entire write path goes through choir.* verbs, and requiring the
 	// model to `import "choir"` in its first cell burns one compile-rejected
@@ -251,4 +260,13 @@ func (s *Session) checkImports(src string) error {
 		return fmt.Errorf("yaegi: session allowlist unavailable")
 	}
 	return (&Evaluator{allowlist: s.allowlist}).CheckImports(src)
+}
+
+// ErrorHint names the desk's choir surface when a cell's failure is about
+// it; empty for unrelated errors.
+func (s *Session) ErrorHint(src, msg string) string {
+	if s == nil {
+		return ""
+	}
+	return cellErrorHint(s.choirSurface, src, msg)
 }

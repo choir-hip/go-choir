@@ -145,6 +145,9 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	}
 	if evalErr != nil {
 		out.Error = evalErr.Error()
+		if hint := sess.ErrorHint(frame.Source, out.Error); hint != "" {
+			out.Error += "\nhint: " + hint
+		}
 		if ee, ok := AsEvalError(evalErr); ok {
 			out.Reuse = ee.Reuse
 			out.DiagKind = ee.Kind
