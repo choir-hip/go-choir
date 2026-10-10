@@ -255,22 +255,21 @@ now:
     probe-self-stop, one-candidate-per-document-trajectory,
     owner-recovery-reboot, guest-degraded-after-forced-reboot.
   next_action: >-
-    M11 rerun 12 (19ba3034, first run on the new desk prompts): 14/17,
-    second completed apply, candidate B rejected, no vmctl kill. Three
-    failures, documented first in
-    docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md:
-    (1) restore cannot reach a head older than the newest replay base
-    (rollback impossible by construction); (2) Texture's document says no
-    change was made after it applied, and Texture turns' emitted updates
-    are discarded on deferral and never re-emitted; (3) the post-apply
-    checkpoint replays a moving chain. Order: restore fix (a), read the
-    Texture trace then fix the emission loss, checkpoint at a captured
-    head, then rerun 13 and the trace-review/prompt-tuning loop. vmctl
-    Phase 0 steps 4-7 are committed (2f755bb3, 3823e25e, dfa4cb51,
-    e55d0f0b) and land before rerun 13; no push during a run. Residual:
-    one pending desk mutation keeps the owner's computer busy
-    (hypothesis); application-level wedge (TCP accepted, health never
-    answers) is unbounded; console pipe fate-sharing is Phase 1.
+    Rerun 13 on 9d703e2c. Since rerun 12 (14/17): restore replays from
+    genesis when its target is older than the newest replay base (1b826dca);
+    a Texture idle trigger is answered once at the end of the activation, so
+    a read-only cell no longer consumes the engineering result before the
+    model reads it (be8c0a03; trace in
+    docs/problems/m11-rerun-12-restore-refused-and-texture-reports-no-change-2026-10-10.md);
+    the probe retries the post-apply checkpoint while desks resume. vmctl
+    Phase 0 is landed through step 7 and verified on staging at aee2d47a: one
+    vmctl restart per deploy, all three guests reattached (the owner's
+    computer stayed at epoch 1188), zero destruction receipts. Then watch
+    rerun 13's desk traces and tune prompts (residuals
+    texture-control-schema-friction, texture-truncated-update-id). Residuals:
+    checkpoint-at-captured-head, restore-long-lived (checkpoint pins its
+    base), one pending desk mutation keeps the owner's computer busy
+    (hypothesis), application-level wedge, console pipe fate-sharing (Phase 1).
 receipts:
   - id: m11-rerun-12-2026-10-10
     ref: docs/evidence/m11-rerun-2026-10-10T13-21-08Z.json
