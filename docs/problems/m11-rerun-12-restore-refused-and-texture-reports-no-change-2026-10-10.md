@@ -160,3 +160,56 @@ Red ceremony (restore/rematerialize).
   repaired for computers under 10000 events, on staging proof only.
   Residual `restore-long-lived`: the owner's computer is past the bound,
   so it needs fix (b), a checkpoint that pins its base.
+
+## Failure 3 trace read (15:00Z): a read-only cell consumed the engineering result
+
+Read-only reads on the disposable computer: the two Texture runs' events
+(`022cc498…`, `498dbc0e…`) and the trajectory's lifecycle log.
+
+- 13:39:14 engineering's implementation assignment (`7b33b8ab…`) froze its
+  candidate and reported `execution_result`. Delivery bound it to Texture
+  run `022cc498…`, whose wake message says the payload is "already bound
+  inside your cell as choir.Updates()".
+- 13:39:17 the model's first cell failed to compile. 13:39:20 its second
+  cell ran and printed nothing. At 13:39:20.93 the lifecycle log shows
+  `texture_turn_committed` with reason **"desk cell completed with no
+  authoring act; consuming the owner revision"**, then `update_applied`
+  for the engineering report. From 13:39:23 every `choir.Updates()`
+  returned 0. The model searched for the report (Help, Context, Pack, even
+  /tmp files), never found it, and at 13:41:47 wrote a document with no
+  result in it.
+- 13:45:26 the verifier's cancel report woke run `498dbc0e…`. Its first
+  cell printed the report at 13:45:31, and the same auto-commit consumed it
+  at 13:45:31.41. Later cells saw nothing. The model's disposition of the
+  report was refused ("the snapshot has no update with this id"). Its four
+  attempts to send an execution request were refused on schema and target
+  (`apply_change` unsupported, safety fields required, target not found).
+  It then wrote "blocked … Management path not available".
+
+**Finding:** `consumeIdleTextureTrigger` (`agentcore/tools_desk.go`,
+a08defc0, defect #5) runs after **every** Texture cell that stages no
+`texture_apply`, not once per activation. Its decide turn uses the
+consume-at-commit default (`textureTurnPendingInbound`), which marks every
+pending producer report delivered. So the model's first read-only cell
+consumes the reports the activation exists to handle. This confirms H1 as
+a substrate defect, not a prompt or model failure.
+
+It also explains the discarded emissions. A producer-report occurrence is
+handled only when the report's disposition names the run's own revision
+(`TextureActorOccurrencePostcondition`). The early decide named the base
+revision, so every such activation deferred and its emissions were
+dropped. H2 is refuted as stated: "Management path not available" was the
+model's reading of its own refused controls.
+
+Fix shape (red; Texture canonical writes):
+
+- A cell only records what it staged.
+- When a Texture activation ends with completed cells and no
+  `texture_apply`, the runtime commits the idle decide once, in
+  `ExecuteActivationSyncChecked`. That keeps the defect #5 guarantee (an
+  untouched owner revision is still answered), and reports stay visible to
+  every cell of the activation.
+
+Prompt-side residuals from the same trace, for the tuning loop:
+`texture-control-schema-friction` (four refused control attempts) and
+`texture-truncated-update-id`.
