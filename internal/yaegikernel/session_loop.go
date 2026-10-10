@@ -187,6 +187,9 @@ func describeCellValue(source string, value reflect.Value) (shown string) {
 			shown = ""
 		}
 	}()
+	if value.Kind() == reflect.Func {
+		return ""
+	}
 	var text string
 	if value.Kind() == reflect.String {
 		text = value.String()
@@ -218,6 +221,11 @@ func endsInBareExpression(source string) bool {
 	}
 	if call, ok := stmt.X.(*ast.CallExpr); ok {
 		switch callee := call.Fun.(type) {
+		case *ast.FuncLit:
+			// `func() { ... }()` returns nothing to show.
+			if callee.Type.Results == nil || len(callee.Type.Results.List) == 0 {
+				return false
+			}
 		case *ast.Ident:
 			if callee.Name == "println" || callee.Name == "print" || callee.Name == "panic" {
 				return false

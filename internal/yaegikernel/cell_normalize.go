@@ -9,6 +9,7 @@ import (
 	"go/scanner"
 	"go/token"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -50,6 +51,7 @@ import (
 // Only successful evals mark a path — a failed compile proves nothing ran.
 
 func (s *Session) normalizeCellSource(src string) string {
+	s.cellDeclares = nil
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "cell.go", src, parser.ParseComments)
 	if err != nil {
@@ -66,9 +68,18 @@ func (s *Session) normalizeCellSource(src string) string {
 		// statements aren't). Lift the contiguous leading import lines into
 		// a decl, wrap the statement tail in `func main()`, and re-enter the
 		// decl path, which renames and invokes main exactly once.
+		// When every leading import is already installed (fmt, strings and
+		// encoding/json always are), the cell is a statement fragment: drop
+		// the imports and let yaegi run the statements in order, exactly
+		// like a cell that never had them. Hoisting `x := e` into package
+		// vars reorders it before the body and loses names the body rebinds
+		// (K4, docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md).
+		if rest, ok := s.dropInstalledLeadingImports(src); ok {
+			return s.normalizeCellSource(rest)
+		}
 		var ok bool
 		if file, fset, ok = s.parseWrappedStatementMix(src); !ok {
-			return guardLeadingFuncStatement(s.dedupeFragmentImports(src))
+			return guardLeadingFuncStatement(s.degradeBoundDefines(s.dedupeFragmentImports(src)))
 		}
 	}
 
@@ -152,6 +163,132 @@ func guardLeadingFuncStatement(src string) string {
 		return src
 	}
 	return ";\n" + src
+}
+
+// degradeBoundDefines handles the statement-fragment cell. Top-level
+// compound statements run inside func() { ... }() (see below). A top-level
+// `x := e` whose names are all already bound becomes `x = e`: yaegi's
+// statement mode would otherwise declare a fresh x, so `y := y * 2` reads the
+// new, zero y. The names a fragment's top-level `:=` introduces are recorded
+// for the next cell. Source that needs no rewrite, or does not parse as
+// statements, passes through verbatim so yaegi's diagnostics and the final
+// expression's value stay authoritative.
+func (s *Session) degradeBoundDefines(src string) string {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "cell.go", "package p\nfunc f() {\n"+src+"\n}", parser.ParseComments)
+	if err != nil || len(file.Decls) == 0 {
+		return src
+	}
+	fn, ok := file.Decls[0].(*ast.FuncDecl)
+	if !ok || fn.Body == nil {
+		return src
+	}
+	rewrote := false
+	wrap := make([]bool, len(fn.Body.List))
+	for i, st := range fn.Body.List {
+		// yaegi's top-level statement mode mis-compiles definitions inside
+		// compound statements (`b, err := json.Marshal(x)` in a range body
+		// reports "undefined: b"); a function body compiles them correctly.
+		// Names declared inside a compound statement are block-scoped, so
+		// running it as func() { ... }() changes nothing else.
+		switch inner := st.(type) {
+		case *ast.LabeledStmt:
+			switch inner.Stmt.(type) {
+			case *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt:
+				wrap[i], rewrote = true, true
+			}
+		case *ast.ForStmt, *ast.RangeStmt, *ast.IfStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.SelectStmt, *ast.BlockStmt:
+			wrap[i], rewrote = true, true
+		}
+		as, ok := st.(*ast.AssignStmt)
+		if !ok || as.Tok != token.DEFINE {
+			continue
+		}
+		allBound := true
+		var names []string
+		for _, e := range as.Lhs {
+			id, isIdent := e.(*ast.Ident)
+			if !isIdent {
+				allBound = false
+				break
+			}
+			if id.Name == "_" {
+				continue
+			}
+			names = append(names, id.Name)
+			if !s.declaredNames[id.Name] {
+				allBound = false
+			}
+		}
+		s.cellDeclares = append(s.cellDeclares, names...)
+		if allBound && len(names) > 0 {
+			as.Tok = token.ASSIGN
+			rewrote = true
+		}
+	}
+	if !rewrote {
+		return src
+	}
+	var out strings.Builder
+	for i, st := range fn.Body.List {
+		if i > 0 {
+			out.WriteByte('\n')
+		}
+		if wrap[i] {
+			out.WriteString("func() {\n")
+		}
+		if err := format.Node(&out, fset, st); err != nil {
+			return src
+		}
+		if wrap[i] {
+			out.WriteString("\n}()")
+		}
+	}
+	return out.String()
+}
+
+// dropInstalledLeadingImports returns src without its contiguous leading
+// import lines when every path they name is already installed in the
+// session and something follows them. Any new path, an aliased or
+// unparseable spec, or an import block that does not close returns ok=false.
+func (s *Session) dropInstalledLeadingImports(src string) (string, bool) {
+	lines := strings.Split(src, "\n")
+	inBlock, sawImport := false, false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		var specs []string
+		switch {
+		case inBlock && trimmed == ")":
+			inBlock = false
+			continue
+		case inBlock:
+			if trimmed == "" {
+				continue
+			}
+			specs = []string{trimmed}
+		case trimmed == "":
+			continue
+		case trimmed == "import (" || trimmed == "import(":
+			inBlock, sawImport = true, true
+			continue
+		case fragImportLine.MatchString(trimmed):
+			specs = []string{strings.TrimSpace(strings.TrimPrefix(trimmed, "import"))}
+			sawImport = true
+		default:
+			rest := strings.Join(lines[i:], "\n")
+			if !sawImport || strings.TrimSpace(rest) == "" {
+				return "", false
+			}
+			return rest, true
+		}
+		for _, spec := range specs {
+			path, err := strconv.Unquote(spec)
+			if err != nil || !s.importedPaths[path] {
+				return "", false
+			}
+		}
+	}
+	return "", false
 }
 
 // parseWrappedStatementMix rescues the import+statement shape models emit:

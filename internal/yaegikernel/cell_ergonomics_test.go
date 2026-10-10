@@ -50,3 +50,73 @@ func TestCellPredeclaresCommonPackagesAndShowsTheFinalValue(t *testing.T) {
 		t.Fatalf("huge value not truncated: %d bytes", len(out.Stdout))
 	}
 }
+
+// K4 (docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md):
+// management's cells began with `import "fmt"` (already installed) and
+// re-declared objective and spec. The import+statement path hoisted each new
+// `x := e` to a package-level var, so `ref, err := choir.Cast(..., objective,
+// spec)` initialised before the body reassigned objective and spec, and
+// yaegi refused it as a "variable definition loop", poisoning the worker.
+// Failure modes pinned: the second cell errors or poisons; statements run
+// out of order (the result reflects the first cell's values).
+func TestKnownImportCellsRedeclareInOrder(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	cell := func(source string) SessionResult {
+		t.Helper()
+		out, err := serveCell(sess, SessionFrame{ID: "cell", Source: source}, nil, &hooks)
+		if err != nil || out.Error != "" || out.Reuse == ReuseUnsafeToReuse {
+			t.Fatalf("cell failed: %v %q reuse=%q\n%s", err, out.Error, out.Reuse, source)
+		}
+		return out
+	}
+	cell("import \"fmt\"\nobjective := \"first\"\nspec := map[string]interface{}{\"objective\": objective}\nout, err := json.Marshal(spec)\nfmt.Println(string(out), err)")
+	got := cell("import \"fmt\"\nobjective := \"second\"\nspec := map[string]interface{}{\"objective\": objective}\nref, err := json.Marshal(spec)\nfmt.Println(string(ref), err)")
+	if got.Stdout != "{\"objective\":\"second\"} <nil>\n" {
+		t.Fatalf("second cell stdout = %q, want the second cell's values in order", got.Stdout)
+	}
+	if out := cell("fmt.Println(objective, len(ref) > 0)"); out.Stdout != "second true\n" {
+		t.Fatalf("bindings after the cell = %q", out.Stdout)
+	}
+}
+
+// K5/K7 (docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md):
+// yaegi's top-level statement mode reported "undefined: b" for a valid
+// `b, err := json.Marshal(x)` inside a range body, and a cell ending in
+// `func() { ... }()` showed a pointer as its value. Failure modes pinned:
+// a definition inside a top-level compound statement fails to compile; a
+// top-level loop no longer sees or updates the cell's earlier bindings; a
+// void closure call gains a value line; `y := y * 2` on a bound name reads a
+// fresh zero y.
+func TestTopLevelCompoundStatementsCompileAndKeepBindings(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	cell := func(source string) SessionResult {
+		t.Helper()
+		out, err := serveCell(sess, SessionFrame{ID: "cell", Source: source}, nil, &hooks)
+		if err != nil || out.Error != "" {
+			t.Fatalf("cell failed: %v %q\n%s", err, out.Error, source)
+		}
+		return out
+	}
+	out := cell("total := 0\nfor i, x := range []int{1, 2} {\n\tb, err := json.Marshal(x)\n\ttotal += len(b)\n\tfmt.Println(i, string(b), err)\n}\nif total > 1 {\n\tfmt.Println(\"total\", total)\n}")
+	if out.Stdout != "0 1 <nil>\n1 2 <nil>\ntotal 2\n" {
+		t.Fatalf("compound statements stdout = %q", out.Stdout)
+	}
+	if out := cell("func() {\n\tfmt.Print(\"\")\n}()"); out.Stdout != "" {
+		t.Fatalf("void closure call gained output: %q", out.Stdout)
+	}
+	if out := cell("total := total * 10\ntotal"); !strings.Contains(out.Stdout, "20") {
+		t.Fatalf("self-referencing rebind = %q, want 20", out.Stdout)
+	}
+}
