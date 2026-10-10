@@ -93,6 +93,11 @@ type ActingPackItem struct {
 	// acts; empty while open.
 	ObservationExcerpt string `json:"observation_excerpt,omitempty"`
 	ResolvedAt         string `json:"resolved_at,omitempty"`
+	// CommittedAt is when the act was committed. A desk's history spans
+	// many requests on the same document; without the time, an old claim
+	// about a since-cancelled cast reads like this turn's work
+	// (management-reads-stale-pack-claims-as-done-2026-10-10).
+	CommittedAt string `json:"committed_at,omitempty"`
 }
 
 // ActingPack is the acting desk's score-free commitment context, injected
@@ -444,16 +449,29 @@ func packEligible(rec CommitmentRecord, agentID string) bool {
 }
 
 func packOrder(items []ActingPackItem) {
-	// Weight is intentionally absent from the acting item — order by
-	// discrepancy class (unresolved last? no: falsified first for honesty)
-	// then record id. Resolved-critical items lead.
+	// Weight is intentionally absent from the acting item — falsified acts
+	// lead for honesty, then the most recent first, so the pack limit keeps
+	// the desk's latest acts rather than an arbitrary slice by record id
+	// (record ids start with a random cell id). Record id breaks ties.
 	sort.SliceStable(items, func(i, j int) bool {
 		fi, fj := items[i].Discrepancy == DiscrepancyContradicted, items[j].Discrepancy == DiscrepancyContradicted
 		if fi != fj {
 			return fi
 		}
+		if items[i].CommittedAt != items[j].CommittedAt {
+			return packTime(items[i].CommittedAt).After(packTime(items[j].CommittedAt))
+		}
 		return items[i].RecordID < items[j].RecordID
 	})
+}
+
+// packTime parses a commit stamp; unstamped (pre-R4) acts sort oldest.
+func packTime(stamp string) time.Time {
+	parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(stamp))
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed
 }
 
 // BuildActingPack derives the score-free pack for one desk: own committed
@@ -473,6 +491,7 @@ func BuildActingPack(records []CommitmentRecord, agentID string, limit int) Acti
 			RecordID:    rc.Act.RecordID,
 			Claim:       commitmentClaimText(rc.Act),
 			Discrepancy: rc.Discrepancy,
+			CommittedAt: rc.Act.Provenance.CommittedAt,
 		}
 		if rc.Observation != nil {
 			item.ObservationExcerpt = rc.Observation.Excerpt

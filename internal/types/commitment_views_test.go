@@ -221,3 +221,35 @@ func TestGateLearningClaimBindsScoredEvidence(t *testing.T) {
 		t.Fatalf("canonical ref gated as %s", got)
 	}
 }
+
+// management-reads-stale-pack-claims-as-done-2026-10-10: the pack was cut to
+// its limit in record-id order (cell ids are random), so a desk saw an
+// arbitrary slice of its history with no times, and read hours-old claims
+// about a cancelled cast as this turn's work. The pack keeps the most
+// recent acts and says when each was committed.
+func TestActingPackKeepsMostRecentActsAndStampsThem(t *testing.T) {
+	act := func(id, at string) CommitmentRecord {
+		return CommitmentRecord{
+			SchemaID: CommitmentRecordSchemaV1, RecordID: id, Kind: CommitmentKindReport,
+			Discrepancy: DiscrepancyUnresolved,
+			Prediction:  CommitmentPrediction{Hypothesis: "claim " + id},
+			Provenance:  CommitmentProvenance{AgentID: "mgmt", CommittedAt: at},
+		}
+	}
+	records := []CommitmentRecord{
+		act("cell:aaa:report:1", "2026-10-10T19:07:08Z"),
+		act("cell:bbb:report:1", "2026-10-10T20:38:00Z"),
+		act("cell:zzz:report:1", "2026-10-10T21:14:18Z"),
+		act("cell:yyy:report:1", "2026-10-10T21:14:19Z"),
+	}
+	pack := BuildActingPack(records, "mgmt", 2)
+	if len(pack.Items) != 2 {
+		t.Fatalf("items = %d", len(pack.Items))
+	}
+	if pack.Items[0].RecordID != "cell:yyy:report:1" || pack.Items[1].RecordID != "cell:zzz:report:1" {
+		t.Fatalf("pack kept %s, %s; want the two most recent, newest first", pack.Items[0].RecordID, pack.Items[1].RecordID)
+	}
+	if pack.Items[0].CommittedAt != "2026-10-10T21:14:19Z" {
+		t.Fatalf("item lost its commit time: %+v", pack.Items[0])
+	}
+}
