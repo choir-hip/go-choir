@@ -25,7 +25,24 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
   json undefined) is not recovered and crashes the desk worker process.
 - K4. (open) "variable definition loop" at runtime when a later cell
   re-declares a top-level name (`objective := …`) poisoned management's
-  worker twice.
+  worker twice. Cause (reproduced by replaying the traced cells): cells that
+  begin with `import "fmt"` take the import+statement path, which hoists
+  each new `x := e` to a package-level `var x = e` and drops rebinds into a
+  synthetic main. In the second such cell, `ref, err := choir.Cast(…,
+  objective, spec)` was hoisted above the body that reassigns objective and
+  spec. That reorders the cell, and yaegi refuses it as a definition loop at
+  execution, which poisons. A rebind like `ref, err :=` with err bound also
+  stayed local to main, so ref never reached the next cell.
+- K5. (open) yaegi's top-level statement mode reports "undefined: b" for a
+  valid `b, err := json.Marshal(x)` inside a top-level range body (Texture
+  run b5506da4, 2026-10-10 rerun). The same code inside a function compiles.
+- K6. (open, upstream) `x := u[0]` at top level, where u is the
+  `choir.Updates()` slice, fails "constant definition loop" at compile
+  (session preserved). Ranging over u, or indexing inside a function, works.
+- K7. (open) a cell ending in `func() { … }()` shows `=> 0x…`, the closure
+  call's meaningless value.
+- K8. (open) a top-level `y := y * 2` on a bound name in statement mode
+  declares a fresh, zero y.
 
 ## Prompt gaps (management)
 
