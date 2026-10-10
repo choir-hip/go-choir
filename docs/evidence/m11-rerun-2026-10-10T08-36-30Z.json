@@ -1,0 +1,84 @@
+{
+  "receipt_kind": "reconstructed_from_probe_progress_log",
+  "note": "The probe prints its result only at exit. It was stopped at about 10:05Z because its computer (vm-795dcd90) was killed at 09:25:48Z by a mid-run deploy and reaped at 09:36:32Z; see docs/problems/vmctl-restart-reboots-busy-computer-2026-10-10.md (correction). apply_events_check is the probe's check mark; the apply_events leg flag is not separately recorded in the log.",
+  "marker": "M11_SELFDEV_EPISODE_1791621390754",
+  "base_url": "https://choir.news",
+  "source_ref": "dbed74e5",
+  "legs": {
+    "fresh_owner": true,
+    "bootstrap_chain": true,
+    "pre_episode_checkpoint": true,
+    "propose_only_armed": true,
+    "primary_started": true,
+    "awaiting_approval": true,
+    "qualified_consensus_armed": true,
+    "approved": true,
+    "applied": true,
+    "apply_events": false,
+    "post_apply_checkpoint": false,
+    "candidate_b_started": true,
+    "candidate_b_rejected": false,
+    "document_rendered": false,
+    "commitment_materiality_visible": false,
+    "falsified_commitment_visible": false,
+    "restored_pinned_head": false
+  },
+  "marks": [
+    {
+      "at": "2026-10-10T08:36:43.257Z",
+      "leg": "fresh_owner",
+      "detail": "{\"email\":\"m11-selfdev-1791621391734-eckgmm@example.com\"}"
+    },
+    {
+      "at": "2026-10-10T08:36:44.962Z",
+      "leg": "pre_episode_checkpoint",
+      "detail": "{}"
+    },
+    {
+      "at": "2026-10-10T08:36:44.962Z",
+      "leg": "bootstrap_chain",
+      "detail": "{\"computer\":\"computer-88ea10e204f4ff263f87833ae672c6ad\"}"
+    },
+    {
+      "at": "2026-10-10T08:36:45.824Z",
+      "leg": "propose_only_armed",
+      "detail": ""
+    },
+    {
+      "at": "2026-10-10T08:36:46.053Z",
+      "leg": "primary_started",
+      "detail": "{\"operation_id\":\"selfdev-d9aab95a3ec2bcef473f0f03b27e0970\"}"
+    },
+    {
+      "at": "2026-10-10T09:20:03.540Z",
+      "leg": "awaiting_approval",
+      "detail": "{\"bundle\":\"54d426ded15bca5f6e6f9f7cf205ca3c2afe7e17f7832829f6a4cb650ac2eef8\"}"
+    },
+    {
+      "at": "2026-10-10T09:20:04.958Z",
+      "leg": "qualified_consensus_armed",
+      "detail": "{\"receipt_digest\":\"6d819e86f1db1f0333649987a0b2b7378bd1c5176419b6947a211fbad19c2c00\"}"
+    },
+    {
+      "at": "2026-10-10T09:20:05.106Z",
+      "leg": "approved",
+      "detail": ""
+    },
+    {
+      "at": "2026-10-10T09:21:11.276Z",
+      "leg": "applied",
+      "detail": ""
+    },
+    {
+      "at": "2026-10-10T09:21:15.792Z",
+      "leg": "apply_events_check",
+      "detail": "{\"kinds\":[\"projection_batch_recorded\",\"projection_batch_recorded\",\"projection_batch_recorded\",\"projection_batch_recorded\",\"projection_batch_recorded\",\"projection_batch_recorded\",\"projection_batch_recorded\",\"projection_batch_recorded\",\"projection_batch_recorded\",\"projection_batch_recorded\",\"projectio"
+    },
+    {
+      "at": "2026-10-10T09:21:19.440Z",
+      "leg": "candidate_b_started",
+      "detail": "{\"operation_id\":\"selfdev-afb3a0c30baf58d555f9fa4a96b8e7bb\"}"
+    }
+  ],
+  "predicate_result": "not_satisfied"
+}
