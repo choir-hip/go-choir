@@ -301,6 +301,9 @@ func runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir string, au
 	// whose initialize_job_control fails inside the capsule PID namespace.
 	command.Env = append(os.Environ(), "HOME=/root", "TMPDIR=/tmp")
 	command.Stdout = os.Stdout
+	// The broker's fatal hardening errors are written to stderr; without it
+	// the guest log only says "capsule broker launcher: exit status 1".
+	command.Stderr = os.Stderr
 	command.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWPID, Pdeathsig: syscall.SIGKILL}
 	if err := command.Start(); err != nil {
 		_ = listenerFile.Close()
