@@ -140,6 +140,13 @@ Commands:
   api-key list        List your API keys
   api-key create      Create a delegated API key (requires manage:keys or admin)
   api-key revoke <id> Revoke this key, or a delegated key with manage:keys/admin
+  self-dev list        List self-development operations (--state filters)
+  self-dev show        Show one operation (--operation)
+  self-dev head        Read the computer's event head and state commitments
+  self-dev start       Propose a change (--prompt, --idempotency-key)
+  self-dev wait        Poll an operation until it reaches --state
+  self-dev approve     Owner's single approval: arm accept_once for exactly the frozen candidate, then decide
+  self-dev reject      Reject a candidate awaiting approval (--reason)
   self-dev mode get|set  Read or generation-CAS the explicit computer mode
   version             Print CLI version
   help                Print this usage
@@ -1182,8 +1189,30 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 // ---- self-development ----
 
 func runSelfDevelopment(args []string, stdout, stderr io.Writer) int {
-	if len(args) < 2 || args[0] != "mode" {
-		fmt.Fprintln(stderr, "choir self-dev: effects are disabled; only mode get|set is available")
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "choir self-dev: subcommand required: list|show|head|start|wait|approve|reject|mode get|set")
+		return 2
+	}
+	switch args[0] {
+	case "list":
+		return runSelfDevList(args[1:], stdout, stderr)
+	case "show":
+		return runSelfDevShow(args[1:], stdout, stderr)
+	case "head":
+		return runSelfDevHead(args[1:], stdout, stderr)
+	case "start":
+		return runSelfDevStart(args[1:], stdout, stderr)
+	case "wait":
+		return runSelfDevWait(args[1:], stdout, stderr)
+	case "approve", "reject":
+		return runSelfDevDecide(args[0], args[1:], stdout, stderr)
+	case "mode":
+	default:
+		fmt.Fprintf(stderr, "choir self-dev: unknown subcommand %q\n", args[0])
+		return 2
+	}
+	if len(args) < 2 {
+		fmt.Fprintln(stderr, "choir self-dev mode: get|set required")
 		return 2
 	}
 	switch args[1] {

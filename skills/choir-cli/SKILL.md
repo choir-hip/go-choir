@@ -7,23 +7,37 @@ wraps the public `/api/` and `/auth/` HTTP routes with API key (Bearer
 `choir_sk_...`) auth so agents and scripts can read Texture documents, observe
 trajectories, search, start runs, and manage API keys without a browser.
 
-**Status:** source-buildable. The self-development cutover is effects-off by
-default and has no dated deployed acceptance recorded here. `/goal` remains an
-external agent-harness invocation, not a CLI command.
+**Status:** deployed self-development commands are `list`, `show`, `head`,
+`start`, `wait`, `approve`, `reject`, and `mode get|set` (2026-10-10). Genesis,
+rollback and kernel-capability inspection are API-only (no CLI subcommand yet).
+`/goal` remains an external agent-harness invocation, not a CLI command.
 
 ## Self-Development Control
 
-Every operation targets an explicit stable `ComputerID`.
+Every command targets an explicit stable `ComputerID` (`--computer`). A key
+bound to that computer needs the matching scope:
+`computer:self_development:read` (list, show, head, mode get, wait),
+`:propose` (start), `:approve` plus `:mode` (approve), `:approve` (reject),
+`:mode` (mode set).
 
 | Step | CLI surface | Durable evidence |
 | --- | --- | --- |
-| Inspect authority | `choir self-dev status`, `inspect`, `kernel-capabilities` | event heads, operation, signed receipts |
-| Control effects | `choir self-dev mode get|set` | generation-CAS `ModeReceipt` |
-| Import baseline | `choir self-dev genesis` | G0/G1 candidate binding, deployed-release binding, genesis event/checkpoint |
-| Start proposal | `choir self-dev start` | operation id and frozen bundle |
-| Decide externally | `choir self-dev approve|reject` | exact decision event and receipt |
-| Observe completion | `choir self-dev wait` | terminal operation and joined evidence |
-| Restore | `choir self-dev rollback` | rollback event, materialization, checkpoint, route receipt |
+| Arm proposals | `choir self-dev mode set --mode=propose_only --expected-generation=N --idempotency-key=K` | generation-CAS `ModeReceipt` |
+| Start a proposal | `choir self-dev start --prompt=... --idempotency-key=K` | operation id |
+| Find candidates | `choir self-dev list [--state=awaiting_approval]` | operations, newest first |
+| Observe | `choir self-dev wait --operation=ID --state=awaiting_approval` | operation once it reaches the state; exits 1 if it settles elsewhere |
+| Read the binding | `choir self-dev head` | canonical/desired/effective heads and state commitments |
+| Approve | `choir self-dev approve --operation=ID` | consumed `accept_once` ModeReceipt + decision event |
+| Reject | `choir self-dev reject --operation=ID --reason=...` | decision event |
+
+Self-development a Texture request opens (Texture -> management -> engineering
+freeze) creates its own operation; `list` is how to find it — do not derive the
+id by hand. `approve` is the owner's single approval: it reads the frozen
+candidate and the computer's event head, arms `accept_once` bound to exactly
+that operation, bundle, heads and commitments (15-minute window, `--window`),
+and posts the approve decision, which consumes it. It refuses before any write
+unless the operation is `awaiting_approval`. Rollback of an applied operation
+is `POST /api/computers/<id>/self-development/rollbacks` (no CLI yet).
 
 Effects default to `off`. `accept_once` authorizes only its exact canonical
 approval request and returns to `propose_only` before that approval reaches the
@@ -98,6 +112,16 @@ choir api-key revoke <key_id>
 API key management routes accept both cookie auth (browser) and Bearer API key
 auth (CLI). The first key must be created via the browser UI; subsequent keys
 can be created via CLI.
+
+A computer-bound key needs `--computer <ComputerID>` on `api-key create`, and
+can only delegate scopes it already holds (an agent cannot widen its own
+authority). For a separate disposable test computer with its own owner,
+`node scripts/qa_test_computer.mjs --label <name>` registers a fresh account
+with a virtual passkey on staging, mints a 7-day key bound to that computer
+(self-development, lifecycle and texture scopes), and writes it to
+`~/.config/choir-qa/test-computers/<name>.json` (mode 0600) plus a browser
+storage state for GUI proofs. It prints only non-secret fields; load the key
+with `CHOIR_API_KEY=$(jq -r .api_key <file>)` and never echo it.
 
 ### Texture
 

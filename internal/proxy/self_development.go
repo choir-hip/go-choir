@@ -62,10 +62,24 @@ func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 	}
 }
 
-func selfDevelopmentModeComputerID(path string) (string, bool) {
+// selfDevelopmentCorpusdRoute names the corpusd-held self-development
+// resources: the signed mode, and the event head an owner's accept_once
+// approval binds.
+func selfDevelopmentCorpusdRoute(path string) (computerID, resource string, ok bool) {
+	for _, resource := range []string{"mode", "head"} {
+		if computerID, ok := selfDevelopmentCorpusdComputerID(path, "/self-development/"+resource); ok {
+			return computerID, resource, true
+		}
+	}
+	return "", "", false
+}
 
+func selfDevelopmentModeComputerID(path string) (string, bool) {
+	return selfDevelopmentCorpusdComputerID(path, "/self-development/mode")
+}
+
+func selfDevelopmentCorpusdComputerID(path, suffix string) (string, bool) {
 	const prefix = "/api/computers/"
-	const suffix = "/self-development/mode"
 	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
 		return "", false
 	}
@@ -81,7 +95,7 @@ func selfDevelopmentModeComputerID(path string) (string, bool) {
 }
 
 func isSelfDevelopmentModePath(path string) bool {
-	_, ok := selfDevelopmentModeComputerID(path)
+	_, _, ok := selfDevelopmentCorpusdRoute(path)
 	return ok
 }
 func selfDevelopmentReplayCompletenessComputerID(path string) (string, bool) {
@@ -107,12 +121,12 @@ func isSelfDevelopmentReplayCompletenessPath(path string) bool {
 }
 
 func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Request) {
-	computerID, ok := selfDevelopmentModeComputerID(r.URL.Path)
+	computerID, resource, ok := selfDevelopmentCorpusdRoute(r.URL.Path)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
-	if r.Method != http.MethodGet && r.Method != http.MethodPut {
+	if r.Method != http.MethodGet && (r.Method != http.MethodPut || resource != "mode") {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
@@ -144,7 +158,11 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/computers/self-development/mode")
+	upstreamPath := "/internal/computers/self-development/mode"
+	if resource == "head" {
+		upstreamPath = "/internal/computers/events/head"
+	}
+	target, err := joinBasePath(h.cfg.CorpusdURL, upstreamPath)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build self-development request"})
 		return
@@ -312,6 +330,10 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
+	}
+	if action == "propose" && r.Method == http.MethodGet {
+		// GET on the operations collection lists; it is a read, never a proposal.
+		action = "read"
 	}
 	if !selfDevelopmentGuestMethodAllowed(r.Method, action) {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})

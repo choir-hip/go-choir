@@ -43,6 +43,9 @@ var (
 
 // OpenStates are the unsettled states. Applied is settled: its rollback opens
 // a new rollback_pending operation.
+// AllStates lists every operation state, open and settled.
+var AllStates = []string{StateRequested, StateExecuting, StateFrozen, StateVerified, StateAwaitingApproval, StateAccepted, StateMaterializing, StateApplied, StateRejected, StateRollbackPending, StateRolledBack, StateFailed, StateDegraded}
+
 var OpenStates = []string{StateRequested, StateExecuting, StateFrozen, StateVerified, StateAwaitingApproval, StateAccepted, StateMaterializing, StateRollbackPending, StateDegraded}
 
 // PreDecisionStates are the states a desk run drives forward with its tools.

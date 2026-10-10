@@ -389,3 +389,98 @@ func TestSelfDevelopmentGuestForwardsDecisionWithApproveScope(t *testing.T) {
 		t.Fatalf("decision status=%d path=%q body=%s", response.Code, gotPath, response.Body.String())
 	}
 }
+
+// Listing the operations collection is a read: a read-scoped key lists, and a
+// propose-only key (which may start operations) may not read them back through
+// this route — GET on the collection never borrows the POST scope.
+func TestSelfDevelopmentGuestListsOperationsWithReadScope(t *testing.T) {
+	var gotPath, gotMethod, gotQuery string
+	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotMethod, gotQuery = r.URL.Path, r.Method, r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"operations":[]}`))
+	}))
+	defer autoputer.Close()
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	user, err := store.CreateUser("selfdev-list-user", "selfdev-list@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": user.ID,
+			"state": "active", "computer_url": autoputer.URL,
+		})
+	}))
+	defer ownership.Close()
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+	list := func(scope string) *httptest.ResponseRecorder {
+		_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "list-"+scope, []string{scope}, "computer-a", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodGet, "/api/computers/computer-a/self-development/operations?state=awaiting_approval", nil)
+		request.Header.Set("Authorization", "Bearer "+secret)
+		response := httptest.NewRecorder()
+		handler.HandleAPI(response, request)
+		return response
+	}
+	if response := list("computer:self_development:read"); response.Code != http.StatusOK || gotMethod != http.MethodGet ||
+		gotPath != "/api/computers/computer-a/self-development/operations" || gotQuery != "state=awaiting_approval" {
+		t.Fatalf("read list status=%d upstream=%s %s?%s body=%s", response.Code, gotMethod, gotPath, gotQuery, response.Body.String())
+	}
+	if response := list("computer:self_development:propose"); response.Code != http.StatusForbidden {
+		t.Fatalf("propose-only list status=%d body=%s, want 403", response.Code, response.Body.String())
+	}
+}
+
+// An owner's single approval (accept_once) binds the computer's event heads
+// and state commitments; without a public read of them only a host-side
+// harness could approve. Failure modes pinned: the head is read with a
+// write scope or for another computer; the route accepts writes; the read
+// reaches anything but corpusd's event head for exactly this computer.
+func TestSelfDevelopmentHeadIsAReadOfThisComputersEventHead(t *testing.T) {
+	var calls int
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Method != http.MethodGet || r.URL.Path != "/internal/computers/events/head" || r.URL.Query().Get("computer_id") != "computer-a" {
+			t.Fatalf("corpusd target = %s %s?%s", r.Method, r.URL.Path, r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"computer_id": "computer-a", "canonical_event_head": strings.Repeat("a", 64), "sequence": 7})
+	}))
+	defer corpusd.Close()
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	handler.cfg.CorpusdURL = corpusd.URL
+	user, err := store.CreateUser("selfdev-head-user", "selfdev-head@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"computer_id": "computer-a", "desktop_id": "primary", "user_id": user.ID, "state": "active"})
+	}))
+	defer ownership.Close()
+	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+	call := func(method, computerID, scope string) *httptest.ResponseRecorder {
+		_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "head-"+scope+method+computerID, []string{scope}, "computer-a", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(method, "/api/computers/"+computerID+"/self-development/head", nil)
+		request.Header.Set("Authorization", "Bearer "+secret)
+		response := httptest.NewRecorder()
+		handler.HandleAPI(response, request)
+		return response
+	}
+	if response := call(http.MethodGet, "computer-a", "computer:self_development:read"); response.Code != http.StatusOK || calls != 1 || !strings.Contains(response.Body.String(), `"sequence":7`) {
+		t.Fatalf("read head status=%d calls=%d body=%s", response.Code, calls, response.Body.String())
+	}
+	if response := call(http.MethodGet, "computer-a", "computer:self_development:propose"); response.Code != http.StatusForbidden || calls != 1 {
+		t.Fatalf("propose-scope head status=%d calls=%d", response.Code, calls)
+	}
+	if response := call(http.MethodGet, "computer-b", "computer:self_development:read"); response.Code != http.StatusForbidden || calls != 1 {
+		t.Fatalf("other-computer head status=%d calls=%d", response.Code, calls)
+	}
+	if response := call(http.MethodPut, "computer-a", "admin"); response.Code != http.StatusMethodNotAllowed || calls != 1 {
+		t.Fatalf("head write status=%d calls=%d", response.Code, calls)
+	}
+}

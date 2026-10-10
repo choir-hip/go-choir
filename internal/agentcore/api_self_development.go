@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -179,11 +180,14 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		}
 		h.readKernelCapabilityReceipt(w, r, computerID)
 	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "operations":
-		if r.Method != http.MethodPost {
+		switch r.Method {
+		case http.MethodGet:
+			h.listSelfDevelopmentOperations(w, r, computerID)
+		case http.MethodPost:
+			h.startSelfDevelopmentOperation(w, r, ownerID, computerID)
+		default:
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
 		}
-		h.startSelfDevelopmentOperation(w, r, ownerID, computerID)
 	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "genesis":
 		if r.Method != http.MethodPost {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -238,6 +242,31 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 	default:
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer route not found"})
 	}
+}
+
+// listSelfDevelopmentOperations answers the computer's operations, newest
+// first, optionally narrowed by ?state= (repeatable). It is how a caller finds
+// a candidate a freeze opened without re-deriving its id.
+func (h *APIHandler) listSelfDevelopmentOperations(w http.ResponseWriter, r *http.Request, computerID string) {
+	states := selfdev.AllStates
+	if requested := r.URL.Query()["state"]; len(requested) > 0 {
+		states = make([]string, 0, len(requested))
+		for _, state := range requested {
+			state = strings.TrimSpace(state)
+			if !slices.Contains(selfdev.AllStates, state) {
+				writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "unknown self-development operation state: " + state})
+				return
+			}
+			states = append(states, state)
+		}
+	}
+	operations, err := h.rt.selfdevOperations.ListByStates(r.Context(), computerID, states...)
+	if err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list self-development operations"})
+		return
+	}
+	slices.Reverse(operations)
+	writeAPIJSON(w, http.StatusOK, map[string]any{"operations": operations})
 }
 
 func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {
