@@ -165,7 +165,10 @@ type Runtime struct {
 	textureCells   map[string]textureActivationCells
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
-	replayProbeAfterCapture  func()
+	replayProbeAfterCapture func()
+	// candidateJudge is the decision model that judges frozen
+	// self-development candidates (selfdev_candidate_judgment.go).
+	candidateJudge           CandidateJudge
 	assignmentHandleResolver interface {
 		AssignmentHandle(string, string) (string, error)
 	}

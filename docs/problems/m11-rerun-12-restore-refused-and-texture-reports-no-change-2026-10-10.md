@@ -314,3 +314,45 @@ handled once it is not pending and its identity advanced. An owner
 revision is handled once a turn consumed its head or the head moved
 (unchanged). Test: `TestProducerReportOccurrenceSettledByAnyDisposition`.
 The textureowner and actorruntime suites pass. Rollback: git revert.
+
+## Owner direction (15:20Z): replace the verification run with Jev
+
+The owner asked what the "verifier" was, and ruled: "let's get rid of the
+verification that we have. We should use Jev." Precommitment scoring comes
+after Gate 2.
+
+What it was: after a freeze, the engineering desk's reconcile opened a
+second engineering assignment (kind `verification`, slot `verifier`). That
+is about ten minutes of a second model run. It recorded a
+`verification_recorded` event whose digest became the operation's verifier
+reference. In reruns 12 and 13 the apply restart cut it. The
+`verifier`/`verifier_multimodal` model-policy rows (July) are read by
+nothing; the run used engineering's model.
+
+Change (red; self-development verification, approval gating):
+
+- `judgeFrozenCandidate` (`agentcore/selfdev_candidate_judgment.go`) asks
+  the gateway's pinned decision model (`typesafe/jev-1.13`, the existing
+  `/provider/v1/judgments` route) three choice questions about the
+  objective, the implementation's report and the frozen file effects:
+  does it do what was asked, is it limited to that, and can it be
+  reverted. It passes only on three "yes" answers at P(yes) ≥ 0.5;
+  anything missing or malformed fails.
+- The verdict is recorded through `recordSelfDevelopmentVerdict`, the same
+  event, bundle finalization and transitions the verifier slot used. So
+  the verifier certificate, approval and checkpoint chain are unchanged.
+  The payload adds the judgment, its model, and the judged state.
+- The engineering desk reconcile calls the judgment where it used to open
+  a verification run or recast one after a restart. A legacy verification
+  run already bound is left to finish. A judgment error retries the
+  reconcile; it never fails the operation.
+- Wiring: `autoputer/run.go` binds a gateway judgment client when a
+  gateway is configured. Staging has `GATEWAY_JEV_JUDGMENTS_ENABLED=1` and
+  the OpenRouter key.
+- Tests first: `TestParseCandidateJudgmentFailsClosed`. The chain test now
+  proves the judge is asked with the objective and the report, and that no
+  verification run opens.
+- Rollback: git revert.
+- Residuals (deletions after staging proof): the verification assignment
+  kind and its opener and recast code, `record_self_development_verification`
+  for the verifier slot, and the dead `verifier` model-policy rows.

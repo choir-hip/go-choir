@@ -598,6 +598,11 @@ func Run() {
 		// ApplyTextureTurn. Do NOT register the retired typed texture tools
 		// (patch/rewrite/decision/email-draft) onto the sealed cell registry.
 		rt.Runtime.SetTextureCellAuthorizer(textureHandler)
+		// Frozen self-development candidates are judged by the gateway's
+		// pinned decision model (Jev), not by a second engineering run.
+		if gatewayURL != "" {
+			rt.Runtime.SetCandidateJudge(candidateJudge{client: gatewayruntime.NewJudgmentClient(gatewayURL, provideriface.GatewayToken())})
+		}
 		for _, profile := range []string{
 			agentprofile.Conductor,
 			agentprofile.Management,
@@ -1045,4 +1050,18 @@ func selfDevelopmentVerifierOption() (agentcore.RuntimeOption, bool, error) {
 		return nil, false, fmt.Errorf("self-development verifier: %w", err)
 	}
 	return agentcore.WithSelfDevelopmentVerifier(client), true, nil
+}
+
+// candidateJudge adapts the gateway judgment client to the runtime's
+// CandidateJudge seam.
+type candidateJudge struct {
+	client *gatewayruntime.JudgmentClient
+}
+
+func (j candidateJudge) Judge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	response, err := j.client.Decide(ctx, gatewayruntime.JudgmentRequest{State: state, Questions: questions})
+	if err != nil {
+		return nil, err
+	}
+	return response.Distribution, nil
 }

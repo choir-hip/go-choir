@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -174,14 +175,35 @@ func TestReconcileEngineeringDeskOnAgentHeadOpensVerification(t *testing.T) {
 	}
 
 	// The wedge scenario: agent head, frozen op, completed implementation.
-	// The verification opener must be reached — with no capsule executor in
-	// testRuntime it fails closed at capsule authority, which proves the
-	// reconcile passed every upstream gate. Before the repair the reconcile
-	// silently returned nil (canonical-ID suffix fed to a ReportID-keyed
-	// lookup, or the owner-head gate skipped the chain).
+	// The decision-model judgment must be reached with the objective and the
+	// implementation's report — no verification run is opened (owner
+	// direction 2026-10-10). testRuntime has no event appender, so recording
+	// the verdict fails closed after the judge answered, which proves the
+	// reconcile passed every upstream gate. Before the 09-28 repair the
+	// reconcile silently returned nil.
+	judge := &recordingCandidateJudge{reply: json.RawMessage(`{"model":"typesafe/jev-1.13-20260917","answers":{}}`)}
+	rt.SetCandidateJudge(judge)
 	if _, err := rt.ReconcileEngineeringDesk(ctx, ownerID, docID); err == nil ||
-		!strings.Contains(err.Error(), "capsule authority") {
-		t.Fatalf("verification reconcile err = %v, want capsule-authority reach", err)
+		!strings.Contains(err.Error(), "verification authority unavailable") {
+		t.Fatalf("verification reconcile err = %v, want the verdict to reach recording", err)
+	}
+	if len(judge.questions) != len(candidateJudgmentQuestions) {
+		t.Fatalf("judge asked %v, want every candidate question", judge.questions)
+	}
+	if reports, _ := judge.state["implementation_reports"].([]any); len(reports) != 1 || reports[0] != "landed" {
+		t.Fatalf("judged state = %v, want the implementation's report", judge.state)
+	}
+	if objective, _ := judge.state["objective"].(string); objective == "" {
+		t.Fatalf("judged state has no objective: %v", judge.state)
+	}
+	attempts, err := s.ListEngineeringAssignments(ctx, ownerID, computerID, trajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, attempt := range attempts {
+		if attempt.Binding.Kind == types.EngineeringAssignmentVerification {
+			t.Fatalf("a verification run was opened: %+v", attempt.Binding)
+		}
 	}
 }
 

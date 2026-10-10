@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -234,18 +233,18 @@ func (rt *Runtime) reconcileEngineeringCast(ctx context.Context, doc types.Docum
 		if objective == "" {
 			return nil, fmt.Errorf("engineering desk reconcile: admitting revision carries no objective")
 		}
-	nextAttempt := latest.Binding.Attempt + 1
-	if nextAttempt > engineeringMaxRecastAttempts {
-		// Terminal, not transient: the bound operation is durably marked
-		// failed below; returning an error would re-deliver this reconcile
-		// occurrence forever (actor retry -> re-cast attempt -> same
-		// exhausted branch), a live-lock that starves every other desk
-		// reconcile on the guest. Return clean so the occurrence is
-		// incorporated and the loop stops.
-		rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
-			fmt.Sprintf("restart recast attempts exhausted at %d", latest.Binding.Attempt))
-		return nil, nil
-	}
+		nextAttempt := latest.Binding.Attempt + 1
+		if nextAttempt > engineeringMaxRecastAttempts {
+			// Terminal, not transient: the bound operation is durably marked
+			// failed below; returning an error would re-deliver this reconcile
+			// occurrence forever (actor retry -> re-cast attempt -> same
+			// exhausted branch), a live-lock that starves every other desk
+			// reconcile on the guest. Return clean so the occurrence is
+			// incorporated and the loop stops.
+			rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
+				fmt.Sprintf("restart recast attempts exhausted at %d", latest.Binding.Attempt))
+			return nil, nil
+		}
 		deltaDigest := objectgraph.SHA256([]byte(strings.Join([]string{
 			"retry_after_block", assignmentID,
 			fmt.Sprint(latest.Binding.Attempt), fmt.Sprint(nextAttempt), restartCancelledAssignmentReason,
@@ -370,44 +369,6 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 	if revErr != nil {
 		return nil, fmt.Errorf("engineering desk reconcile: load admitting revision: %w", revErr)
 	}
-	// Restart-recast mirrors the implementation branch: a restart-cancelled
-	// verification must not strand a frozen operation. Frozen-only: an
-	// awaiting-approval operation already consumed a completed verification —
-	// a terminal newest attempt is an older row and must not reopen work.
-	if operation.State == selfdev.StateFrozen && vFound && vLatest.Disposition == types.EngineeringAssignmentCancelled &&
-		strings.TrimSpace(vLatest.DispositionReason) == restartCancelledAssignmentReason {
-		reportRef := rt.restartRecastReportRef(ctx, vLatest)
-		if reportRef == "" {
-			return nil, fmt.Errorf("engineering desk reconcile: restart-cancelled verification attempt %d has no cancel report receipt", vLatest.Binding.Attempt)
-		}
-		nextAttempt := vLatest.Binding.Attempt + 1
-		if nextAttempt > engineeringMaxRecastAttempts {
-			// Terminal (see implementation branch): the operation is durably
-			// failed; an error return re-delivers this reconcile forever.
-			rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
-				fmt.Sprintf("verification restart recast attempts exhausted at %d", vLatest.Binding.Attempt))
-			return nil, nil
-		}
-		deltaDigest := objectgraph.SHA256([]byte(strings.Join([]string{
-			"retry_after_block", verificationID,
-			fmt.Sprint(vLatest.Binding.Attempt), fmt.Sprint(nextAttempt), restartCancelledAssignmentReason,
-		}, "\x00")))
-		objective := "Verify the frozen self-development bundle for operation " + operation.OperationID +
-			" against the implementation assignment's candidate artifact."
-		started, openErr := rt.startAssignedEngineeringForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
-			Objective: objective, Kind: types.EngineeringAssignmentVerification, CandidateID: candidateID,
-			RevisionID: implementation.Binding.ParentControlID, Attempt: nextAttempt,
-			Supersedes: &types.EngineeringSupersedeTuple{
-				SupersedesAssignmentID: verificationID, SupersedesAttempt: vLatest.Binding.Attempt,
-				PriorReceiptRef: reportRef, SupersedeKind: types.EngineeringSupersedeRetryAfterBlock,
-				ReasonEnum: "restart_passivation", DeltaDigest: deltaDigest,
-			},
-		})
-		if openErr != nil {
-			return nil, fmt.Errorf("engineering desk reconcile: verification recast: %w", openErr)
-		}
-		return &started.Assignment, nil
-	}
 	if vFound && vLatest.Disposition == types.EngineeringAssignmentBound {
 		return &vLatest, nil
 	}
@@ -429,25 +390,19 @@ func (rt *Runtime) reconcileEngineeringVerification(ctx context.Context, doc typ
 		return nil, fmt.Errorf("engineering desk reconcile: %s (verification attempt %d: %s)",
 			reason, vLatest.Binding.Attempt, vLatest.Disposition)
 	}
-	// Only a frozen operation admits a fresh verification: verified already
-	// returned early, and awaiting_approval has consumed its verification.
+	// Only a frozen operation admits a verdict: verified already returned
+	// early, and awaiting_approval has consumed its verification.
 	if operation.State != selfdev.StateFrozen {
 		return nil, nil
 	}
-	objective := "Verify the frozen self-development bundle for operation " + operation.OperationID +
-		" against the implementation assignment's candidate artifact."
-	started, openErr := rt.startAssignedEngineeringForDocument(ctx, doc, revision, OpenDocumentAssignmentRequest{
-		Objective: objective, Kind: types.EngineeringAssignmentVerification, CandidateID: candidateID,
-		RevisionID: implementation.Binding.ParentControlID, Attempt: vLatest.Binding.Attempt,
-	})
-	if openErr != nil {
-		if errors.Is(openErr, capsule.ErrSubjectArtifactUnavailable) {
-			rt.failBoundSelfdevOperation(ctx, doc.ComputerID, doc.TrajectoryID,
-				"candidate artifact lost before verification opened: "+strings.TrimSpace(openErr.Error()))
-		}
-		return nil, fmt.Errorf("engineering desk reconcile: open verification: %w", openErr)
+	// The decision model judges the frozen candidate; no second engineering
+	// run is opened (owner direction 2026-10-10). A legacy verification run
+	// already bound above is left to finish. The verdict advances or fails the
+	// operation; a judgment error retries this reconcile.
+	if err := rt.judgeFrozenCandidate(ctx, doc, operation, engineeringRevisionObjective(revision), implementation); err != nil {
+		return nil, fmt.Errorf("engineering desk reconcile: judge frozen candidate: %w", err)
 	}
-	return &started.Assignment, nil
+	return nil, nil
 }
 
 // reconcileVerificationOnly is the agent-headed counterpart of the cast

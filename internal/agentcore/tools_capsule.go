@@ -404,6 +404,15 @@ func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleTool
 	if rec == nil || normalizeEngineeringSlot(metadataStringValue(rec.Metadata, runMetadataEngineeringSlot)) != "verifier" {
 		return nil, fmt.Errorf("verification recording is restricted to the co-super verifier slot")
 	}
+	return recordSelfDevelopmentVerdict(ctx, toolCtx, trajectoryIDForRun(rec), operationID, bundleDigest, decision, verifierRefs, nil)
+}
+
+// recordSelfDevelopmentVerdict records one verdict on a frozen operation: the
+// verification event, then frozen -> verified -> awaiting_approval on pass or
+// frozen -> failed on fail. The legacy verifier slot and the decision-model
+// judgment (judgeFrozenCandidate) both write through it; extra fields join
+// the event payload but not its idempotency key.
+func recordSelfDevelopmentVerdict(ctx context.Context, toolCtx *CapsuleToolCtx, trajectoryID, operationID, bundleDigest, decision string, verifierRefs []string, extra map[string]any) (map[string]any, error) {
 	if toolCtx.OperationStore == nil || toolCtx.EventAppender == nil || toolCtx.EventProjection == nil {
 		return nil, fmt.Errorf("self-development verification authority unavailable")
 	}
@@ -416,7 +425,7 @@ func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleTool
 	if err != nil {
 		return nil, err
 	}
-	if operation.TrajectoryID != trajectoryIDForRun(rec) {
+	if operation.TrajectoryID != strings.TrimSpace(trajectoryID) {
 		return nil, fmt.Errorf("verification does not bind the frozen operation")
 	}
 	if operation.State == selfdev.StateAwaitingApproval && decision == "pass" {
@@ -444,6 +453,11 @@ func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleTool
 		// distinguishable on the durable event instead of breaking
 		// verifier flows predating the ledger.
 		"claim_gate": learningClaimGate(ctx, toolCtx, verifierRefs),
+	}
+	for key, value := range extra {
+		if _, taken := record[key]; !taken {
+			record[key] = value
+		}
 	}
 	payload, err := computerevent.CanonicalJSON(record)
 	if err != nil {
@@ -492,7 +506,7 @@ func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleTool
 	if decision == "fail" {
 		operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateFailed, func(next *selfdev.Operation) error {
 			next.VerifierRefs = []string{verifierRef}
-			next.TerminalError = "independent verifier rejected frozen bundle"
+			next.TerminalError = "independent judgment rejected the frozen bundle"
 			return nil
 		})
 	} else {
