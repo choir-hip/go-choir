@@ -75,3 +75,15 @@ their console to a file. The owner's computer stays frozen until the owner
 decides to stop and boot it (vCPU 0 is deadlocked on itself). Legacy pipe
 guests still have a seconds-long readerless gap during each vmctl restart
 until they next boot.
+
+## Owner's computer recovered (16:36Z, owner-approved)
+
+Owner: "approved, boot my computer and make sure it's updated." vmctl
+`/internal/vmctl/stop` with caller
+`owner-approved-restart-after-firecracker-sigpipe-deadlock` logged a
+destructive kill (cause stop, epoch 1188) at 16:35:44; `/internal/vmctl/resume`
+booted it in 30 s at epoch 1189 on 10.200.42.2. Health `ready`, build
+86770ae7, console is now a file. The crash boot closed pre-boot work as
+"interrupted by a restart" (owner rule), and event authority replayed
+complete at 16:36:48. It reports `desk_pending_mutations: 1` (the open
+"one pending desk mutation keeps the owner's computer busy" residual).
