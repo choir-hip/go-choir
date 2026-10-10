@@ -230,6 +230,88 @@ injected or CONNECT host checks. L1's fetcher remains for the verifier's
 offline rebuild from the lock. L3 is a grant flag on the same proxy, and L4 a
 separate capsule class. The D1/D2 address-guard fixes remain prerequisites.
 
+### 4.0b L2 implementation plan (owner: "Let's do L2", 2026-10-10)
+
+Mutation class: `red` (capsule isolation, egress). Full ceremony.
+
+**Mechanism: a Unix socket instead of a veth.** The capsule keeps its own
+network namespace with no interface to the outside. For an L2 capsule the
+executor (guest core, outside the capsule) listens on a per-capsule Unix
+socket at `/run/capsule/egress.sock` inside the capsule root and serves it
+with the egress proxy. The broker, before it drops capabilities and loads its
+syscall filter, brings up `lo` in the capsule's namespace and listens on
+`127.0.0.1:3128`; each TCP connection is spliced to `egress.sock`. Workloads
+get `HTTP(S)_PROXY=http://127.0.0.1:3128`. Loopback is the only reachable
+address, so the proxy is the only way out, and every policy decision is made
+outside the capsule. No veth, no nftables, and the guest's routing is
+untouched. The broker forwarder is a byte pipe and holds no policy.
+
+**The proxy** (`internal/capsule/egress.go`):
+
+- HTTP `CONNECT` to port 443 and plain-HTTP `GET`/`HEAD` forwarding to port 80
+  only. Other methods and ports are refused.
+- The host must match the ecosystem allowlist: Python (PyPI, pythonhosted,
+  PyTorch wheels), npm and Yarn, crates, the Go module proxy and checksum
+  database, conda, GitHub/GitLab/Codeberg (including raw, codeload and
+  release assets), Hugging Face, arXiv, Zenodo and DOI. The list is code,
+  so widening it is a reviewed change.
+- The proxy resolves the name itself, refuses loopback, private, link-local
+  (including metadata), CGNAT, multicast and unspecified addresses, and dials
+  the **checked IP**. That closes the D2 resolve-then-dial gap for this path.
+- Budgets per capsule: bytes from the capsule (16 MiB, the exfiltration
+  bound), bytes to the capsule (8 GiB), and connections (4096). An exhausted
+  budget refuses new connections and cuts the over-budget one.
+- Every connection is logged: capsule, method, host, port, dialed IP, bytes
+  each way, duration and outcome. The log lives beside the capsule state as
+  `egress.jsonl` and in the guest journal. The freeze-time `dep-lock` that
+  turns this log into an evidence ref is the next slice.
+
+**Kernel floor changes.** The syscall filters gain a variant that also admits
+`socket(AF_INET|AF_INET6)`. Only L2 brokers and their workloads load it.
+Landlock is unchanged: it restricts paths only. `CAP_NET_ADMIN` is used once
+to bring up `lo` and is then dropped with the rest. `CAP_NET_RAW` is never
+kept.
+
+**Authority.** New `NetworkMode` value `ecosystem_proxy`. It is valid only for
+implementation assignments. Verification capsules stay `forbidden`, because
+the verifier must rebuild offline from the frozen bundle. Implementation
+assignments default to L2 (owner: "don't hinder agency"). Management
+withholds it with `choir.Cast("engineering", objective, {"network":
+"forbidden"})`. The mode is part of the durable binding, so it is already in
+the grant policy digest and the evidence. A capsule cannot widen its own
+mode: the executor reads it from the spawn spec, not from the capsule.
+
+**Image.** Add `pip` to the guest Python and `uv` to the system packages, so
+"native tools work unchanged" is true for Python.
+
+**Protected surfaces touched:** capsule spawn and isolation, the seccomp
+floor, the assignment binding (network mode), and guest egress. Not touched:
+Texture canonical writes, gateway and provider calls, vmctl, auth.
+
+**Admissible evidence.** Unit: the proxy refuses a non-allowlisted host, a
+private-address resolution, a non-443 `CONNECT` and an over-budget upload, and
+logs each connection. Staging: on `choir.news`, an engineering cast in a test
+computer runs `pip install` (or `uv pip install`) and `git clone` against
+public hosts and succeeds. A fetch of a non-allowlisted host from the same
+capsule fails with the proxy's refusal, and the guest journal shows both
+decisions. Local proof does not count for the capsule path.
+
+**Rollback.** Revert the commits. The default then returns to `forbidden`,
+and old bindings with `ecosystem_proxy` stay valid records. Fast mitigation
+without a revert: change the implementation default back to `forbidden` in
+one line.
+
+**Heresy delta.** Discovered: none new (D1/D2 are recorded in §2.6).
+Introduced: the capsule can reach allowlisted public hosts during
+implementation; this is the owner-directed L2 trade (§4.0a). Repaired: D2 for
+the capsule path (the proxy dials the checked IP); D1 (research
+`fetch_url`) stays open.
+
+**Conjecture.** The capsule's isolation plus promotion-time strictness is the
+right boundary for engineering agency. This fails if a staging capsule can
+reach a non-allowlisted or private address, or if L2 makes an approved
+candidate depend on bytes that the frozen bundle does not carry.
+
 ### 4.0 Principles
 
 1. **Fetch-and-mount, not open network.** Model-authored code and a network
