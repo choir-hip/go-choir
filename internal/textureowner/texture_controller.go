@@ -1173,6 +1173,22 @@ func producerOccurrenceScopeMatches(o agentcore.TextureActorOccurrence, update t
 		o.ProducerWorkID == strings.TrimSpace(firstNonEmpty(update.ProducerWorkItemID, update.WorkItemID)) && o.MessageSeq == update.MessageSeq
 }
 
+// producerReportOccurrenceState reads a producer-report occurrence from its
+// canonical report: pending until any Texture turn disposes it. A disposed
+// report must have advanced past the occurrence's identity.
+func producerReportOccurrenceState(o agentcore.TextureActorOccurrence, canonical types.CoagentSourcePacket) (TextureActorOccurrenceState, error) {
+	if !producerOccurrenceScopeMatches(o, canonical) {
+		return "", fmt.Errorf("Texture producer occurrence changed immutable identity")
+	}
+	if canonical.Disposition == types.UpdatePending {
+		return TextureActorOccurrencePending, nil
+	}
+	if canonical.LifecycleVersion <= o.LifecycleVersion || canonical.ReducerSeq <= o.ReducerSeq {
+		return "", fmt.Errorf("Texture producer occurrence was disposed without advancing atomically")
+	}
+	return TextureActorOccurrenceTerminal, nil
+}
+
 func producerOccurrenceMatches(o agentcore.TextureActorOccurrence, update types.CoagentSourcePacket) bool {
 	return producerOccurrenceScopeMatches(o, update)
 }
@@ -1485,26 +1501,17 @@ func (rt *Handler) TextureActorOccurrencePostcondition(ctx context.Context, o ag
 	} else if !errors.Is(cancelErr, store.ErrNotFound) {
 		return "", cancelErr
 	}
-	mutation, err := rt.Store.GetAgentMutationByRun(ctx, o.OwnerID, o.ComputerID, strings.TrimSpace(runID))
-	if err != nil {
-		return "", err
-	}
-	if mutation == nil || mutation.RunID != strings.TrimSpace(runID) || mutation.DocID != o.DocumentID || mutation.ComputerID != o.ComputerID || strings.TrimSpace(mutation.RevisionID) == "" || snapshot.Document.CurrentRevisionID != mutation.RevisionID {
-		return TextureActorOccurrencePending, nil
-	}
+	// The occurrence is handled when its durable input is disposed, by
+	// whatever turn did it: a revision, a decision, or the activation's idle
+	// answer. Requiring this run's own revision to be the document head
+	// deferred every decision turn and discarded its buffered wakes (rerun 13).
 	switch o.Kind {
 	case agentcore.TextureActorOccurrenceProducerReport:
 		canonical, err := rt.Store.GetLifecycleUpdate(ctx, o.OwnerID, o.ComputerID, o.TrajectoryID, o.TargetAgentID, o.ProducerAgentID, o.ProducerUpdateID)
 		if err != nil {
 			return "", err
 		}
-		if !producerOccurrenceScopeMatches(o, canonical) || canonical.LifecycleVersion <= o.LifecycleVersion || canonical.ReducerSeq <= o.ReducerSeq {
-			return "", fmt.Errorf("Texture producer occurrence changed immutable identity or did not advance atomically")
-		}
-		if canonical.Disposition == types.UpdatePending || canonical.DispositionRef != mutation.RevisionID {
-			return TextureActorOccurrencePending, nil
-		}
-		return TextureActorOccurrenceTerminal, nil
+		return producerReportOccurrenceState(o, canonical)
 	case agentcore.TextureActorOccurrenceDocumentRevision:
 		canonical, err := rt.Store.GetLifecycleRevision(ctx, o.OwnerID, o.ComputerID, o.HeadRevisionID)
 		if err != nil {

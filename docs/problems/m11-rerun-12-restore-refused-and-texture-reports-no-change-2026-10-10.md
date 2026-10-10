@@ -293,3 +293,24 @@ Red ceremony (replay-completeness verifier, checkpoint mint).
 - Rollback: git revert.
 - Heresy delta: discovered "checkpoint requires a quiet computer";
   repaired on staging proof only.
+
+## Rerun 13 finding: a Texture decision still discards its wakes; fixed
+
+Rerun 13 (15:11:03Z) showed the end-of-activation fix working: engineering's
+report stayed visible across cells, and Texture's 15:04 document is accurate.
+At 15:11 Texture chose `decide` / `wait_for_evidence` on the verifier's
+report, a correct choice. The actor then logged `discards 29 emitted
+update(s)` and, on retry, `consumed without a turn`.
+
+Cause (code): `TextureActorOccurrencePostcondition` required this run's own
+revision to be the document head (`texture_agent_mutations.revision_id`).
+A decision writes no revision, so every decision turn, and the idle answer,
+read as unhandled. The activation deferred, its buffered wakes to other
+agents were dropped, and the retry then found the report disposed.
+
+Fix (red; actor occurrence disposal): the occurrence is handled when its
+durable input is disposed, by any Texture turn. A producer report is
+handled once it is not pending and its identity advanced. An owner
+revision is handled once a turn consumed its head or the head moved
+(unchanged). Test: `TestProducerReportOccurrenceSettledByAnyDisposition`.
+The textureowner and actorruntime suites pass. Rollback: git revert.
