@@ -124,3 +124,16 @@ automatic, and it rests on evidence rather than on uncertainty:
 - **No owner-facing restart button.** The page and the boot console say
   the computer is not answering and will restart by itself if it stays
   that way. They keep checking.
+
+## Residual: one pending desk mutation keeps the owner's computer "busy" (hypothesis)
+
+After the 12:20Z boot the owner's guest reports `desk_pending_mutations: 1`,
+and vmctl's busy probe counts any pending mutation. If that mutation is
+stale, the computer never reads idle, never takes a deploy at an idle
+moment, and repeats the zombie-operation deadlock. No owner-safe route
+exposes a pending mutation's age (`texture_agent_mutations`), so this
+stays a hypothesis: it may be a legitimate Texture obligation. Next probe:
+an obligations-surface count with the oldest pending mutation's age (an
+owner-scoped count and timing, no content). Then decide whether a crash
+boot closes pending mutations whose runs it interrupted, as it now closes
+self-development operations.
