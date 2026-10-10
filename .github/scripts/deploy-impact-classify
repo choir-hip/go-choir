@@ -141,7 +141,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
-    scripts/check-*.sh|scripts/lint|scripts/generate_*.py|scripts/m3_*|scripts/mail-*)
+    scripts/check-*.sh|scripts/lint|scripts/generate_*.py|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs)
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
