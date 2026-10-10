@@ -2079,12 +2079,15 @@ func digestRegularFile(path string) ([sha256.Size]byte, error) {
 
 func removePrivateTree(root string) error {
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
+		// Walk reads a directory before calling back, so an unreadable one
+		// (overlay work/work is mode 000) arrives with err set: open it up
+		// anyway so RemoveAll can descend.
+		if info == nil {
 			return nil
 		}
 		if info.IsDir() {
 			_ = os.Chmod(path, 0o700)
-		} else if info.Mode().IsRegular() {
+		} else if err == nil && info.Mode().IsRegular() {
 			_ = os.Chmod(path, 0o600)
 		}
 		return nil
