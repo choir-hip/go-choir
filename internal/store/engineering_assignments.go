@@ -652,7 +652,7 @@ func (s *Store) requireEngineeringParentAuthority(ctx context.Context, binding t
 		return engineeringAuthorityObjects{}, fmt.Errorf("%w: %v", ErrEngineeringAssignmentInvalid, err)
 	}
 	if binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
-		return s.requireEngineeringDelegatedParentAuthority(ctx, binding, false)
+		return s.requireEngineeringDelegatedParentAuthority(ctx, binding, delegatedAuthorityLive)
 	}
 	if binding.ParentRunID == "" {
 		return s.requireEngineeringDocumentParentAuthority(ctx, binding, false)
@@ -716,7 +716,7 @@ func (s *Store) requireEngineeringHistoricalParentAuthority(ctx context.Context,
 		return engineeringAuthorityObjects{}, fmt.Errorf("%w: %v", ErrEngineeringAssignmentInvalid, err)
 	}
 	if binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
-		return s.requireEngineeringDelegatedParentAuthority(ctx, binding, true)
+		return s.requireEngineeringDelegatedParentAuthority(ctx, binding, delegatedAuthorityHistorical)
 	}
 	if binding.ParentRunID == "" {
 		return s.requireEngineeringDocumentParentAuthority(ctx, binding, true)
@@ -864,7 +864,25 @@ func (s *Store) requireEngineeringDocumentParentAuthority(ctx context.Context, b
 // ID), which self-authenticates by carrying the caster as Provenance.AgentID.
 // The caster's run is a persistent Management (or desk) run bound to the same
 // trajectory; its parent work is the caster's open work item.
-func (s *Store) requireEngineeringDelegatedParentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding, historical bool) (engineeringAuthorityObjects, error) {
+// delegatedAuthorityMode separates the one moment that needs the casting turn
+// from everything after it (delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md).
+// Admission is the cast itself: the caster's run is the live turn staging it.
+// Every later live transition (bind, activation, progress, report) rests on
+// the durable anchors that outlive a turn: the live trajectory, the persistent
+// caster agent, the commitment control it authored, and the open parent work
+// item. A management turn ending, or a newer turn starting, is not a
+// revocation; revocation is CancelAssignment, the parent work item closing,
+// or the trajectory ending.
+type delegatedAuthorityMode int
+
+const (
+	delegatedAuthorityAdmission delegatedAuthorityMode = iota
+	delegatedAuthorityLive
+	delegatedAuthorityHistorical
+)
+
+func (s *Store) requireEngineeringDelegatedParentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding, mode delegatedAuthorityMode) (engineeringAuthorityObjects, error) {
+	historical := mode == delegatedAuthorityHistorical
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
 	if err != nil {
 		return engineeringAuthorityObjects{}, err
@@ -891,7 +909,7 @@ func (s *Store) requireEngineeringDelegatedParentAuthority(ctx context.Context, 
 	}
 	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID ||
 		parentAgent.AgentID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 ||
-		(parentAgent.ActiveRunID != "" && parentAgent.ActiveRunID != binding.ParentRunID) {
+		(mode == delegatedAuthorityAdmission && parentAgent.ActiveRunID != "" && parentAgent.ActiveRunID != binding.ParentRunID) {
 		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: parent desk agent unavailable: %w", ErrEngineeringAssignmentInvalid)
 	}
 	// The caster's run is a live persistent run on the same trajectory.
@@ -908,10 +926,10 @@ func (s *Store) requireEngineeringDelegatedParentAuthority(ctx context.Context, 
 		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID {
 		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not bound to this trajectory: %w", ErrEngineeringAssignmentInvalid)
 	}
-	if !historical && !persistentManagementRunStateAllowed(parentRun.State) {
+	if mode == delegatedAuthorityAdmission && !persistentManagementRunStateAllowed(parentRun.State) {
 		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not live: %w", ErrEngineeringAssignmentInvalid)
 	}
-	if historical && !parentRun.State.Valid() {
+	if mode != delegatedAuthorityAdmission && !parentRun.State.Valid() {
 		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not valid: %w", ErrEngineeringAssignmentInvalid)
 	}
 	// Parent control = the commitment record the cast minted. It must exist
@@ -1186,7 +1204,14 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 	if err := s.validateEngineeringSupersedeTuple(ctx, req); err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	authority, err := s.requireEngineeringParentAuthority(ctx, req.Binding)
+	// Opening a delegated cast is its admission: the casting turn must be live.
+	var authority engineeringAuthorityObjects
+	var err error
+	if req.Binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
+		authority, err = s.requireEngineeringDelegatedParentAuthority(ctx, req.Binding, delegatedAuthorityAdmission)
+	} else {
+		authority, err = s.requireEngineeringParentAuthority(ctx, req.Binding)
+	}
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}

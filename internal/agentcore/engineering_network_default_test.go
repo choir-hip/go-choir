@@ -91,3 +91,33 @@ func TestStoreAcceptsAnEcosystemProxyImplementationBinding(t *testing.T) {
 		t.Fatal("grant policy digest ignores the network mode")
 	}
 }
+
+// docs/problems/delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md:
+// each Texture request opens another management work item, so the second
+// cast was refused "caster holds multiple open work items". Failure modes
+// pinned: a run that names its work item still gets the ambiguity refusal;
+// the named item is ignored for another open item; a closed or foreign item
+// is chosen.
+func TestDelegatedCastParentWorkIsTheCastingTurnsOwnItem(t *testing.T) {
+	const caster = "management:owner"
+	items := []types.WorkItemRecord{
+		{WorkItemID: "first-request", AssignedAgentID: caster, Status: types.WorkItemOpen},
+		{WorkItemID: "second-request", AssignedAgentID: caster, Status: types.WorkItemOpen},
+		{WorkItemID: "done-request", AssignedAgentID: caster, Status: types.WorkItemCompleted},
+		{WorkItemID: "texture-item", AssignedAgentID: "texture:doc", Status: types.WorkItemOpen},
+	}
+	if work, err := delegatedCastParentWork(items, caster, "second-request"); err != nil || work == nil || work.WorkItemID != "second-request" {
+		t.Fatalf("named item: %+v, %v", work, err)
+	}
+	for _, named := range []string{"done-request", "texture-item", "missing"} {
+		if work, err := delegatedCastParentWork(items, caster, named); err != nil || work != nil {
+			t.Fatalf("named %s: got %+v, %v; want no parent work", named, work, err)
+		}
+	}
+	if _, err := delegatedCastParentWork(items, caster, ""); err == nil {
+		t.Fatal("unnamed run with two open items was not refused")
+	}
+	if work, err := delegatedCastParentWork(items[1:], caster, ""); err != nil || work == nil || work.WorkItemID != "second-request" {
+		t.Fatalf("unnamed run with one open item: %+v, %v", work, err)
+	}
+}

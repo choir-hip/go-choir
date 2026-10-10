@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -146,5 +147,91 @@ func TestDelegatedCastReportDoesNotPoisonConsumerDeliveredListing(t *testing.T) 
 	}
 	if len(packets) != 1 || packets[0].UpdateID != result.Update.UpdateID || packets[0].Direction != types.LifecyclePacketDirectionProducerReport {
 		t.Fatalf("delivered packets = %+v", packets)
+	}
+}
+
+// docs/problems/delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md:
+// management casts, reports and ends its turn within seconds; the deferred
+// spawn binds after. Failure modes pinned:
+//   - live transitions after the casting turn completes are refused ("caster
+//     run is not live"), so no delegated cast ever reaches a capsule;
+//   - a newer management turn (the agent's ActiveRunID moved on) revokes the
+//     assignment;
+//   - admission stops requiring the live casting turn;
+//   - the parent work item closing no longer revokes live authority.
+func TestDelegatedCastAuthorityOutlivesTheCastingTurn(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	f := installEngineeringAssignmentAuthority(t, s, 1)
+	controlID, err := s.AppendCommitmentRecord(ctx, f.ownerID, f.computerID, types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cast-cell:cast:turn",
+		Provenance: types.CommitmentProvenance{AgentID: f.parentAgentID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := delegatedCastOpenRequest(f, 0, "delegated-assignment-turn", controlID)
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("admission during the casting turn: %v", err)
+	}
+
+	// The casting turn ends (UpdateRun releases the agent's ActiveRunID), then
+	// a newer management turn becomes the agent's active run.
+	run, err := s.GetRun(ctx, f.parentRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished := time.Now().UTC()
+	run.State, run.UpdatedAt, run.FinishedAt = types.RunCompleted, finished, &finished
+	if err := s.UpdateRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.requireEngineeringParentAuthority(ctx, open.Binding); err != nil {
+		t.Fatalf("live authority died with the casting turn: %v", err)
+	}
+	agentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, f.ownerID, f.computerID, f.parentAgentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, err := decodeLifecycleObject[types.AgentRecord](agentObj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent.ActiveRunID = "run-management-next-turn"
+	nextTurn, err := lifecycleObject(ogKindAgent, f.ownerID, f.computerID, f.parentAgentID, agent,
+		map[string]any{"agent_id": f.parentAgentID, "computer_id": f.computerID}, agent.CreatedAt, finished)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{nextTurn}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.requireEngineeringParentAuthority(ctx, open.Binding); err != nil {
+		t.Fatalf("live authority died when a newer management turn started: %v", err)
+	}
+	if _, err := s.requireEngineeringDelegatedParentAuthority(ctx, open.Binding, delegatedAuthorityAdmission); err == nil {
+		t.Fatal("admission accepted a cast whose turn has ended")
+	}
+
+	// Closing the parent work item is a revocation.
+	_, work, err := s.lifecycleWorkObject(ctx, f.ownerID, f.computerID, f.parentWorkID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	work.Status, work.LifecycleVersion = types.WorkItemCompleted, work.LifecycleVersion+1
+	closed, err := lifecycleObject(ogKindWorkItem, f.ownerID, f.computerID, f.parentWorkID, work,
+		lifecycleMetadata("work_item_id", f.parentWorkID, f.computerID, f.trajectoryID, work.LifecycleVersion), work.CreatedAt, finished)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{closed}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.requireEngineeringParentAuthority(ctx, open.Binding); err == nil {
+		t.Fatal("live authority survived the parent work item closing")
+	}
+	if _, err := s.requireEngineeringHistoricalParentAuthority(ctx, open.Binding); err != nil {
+		t.Fatalf("historical authority lost after the parent work closed: %v", err)
 	}
 }

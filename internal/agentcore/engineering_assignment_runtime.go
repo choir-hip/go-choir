@@ -170,6 +170,33 @@ type DelegatedCastRequest struct {
 	WithholdNetwork     bool   // the caster's spec said {"network":"forbidden"}
 }
 
+// delegatedCastParentWork picks the caster's parent work item: the open item
+// the casting turn was woken for. A persistent desk holds one open work item
+// per request it is answering, so a scan for "the" open item is ambiguous
+// after the second request
+// (delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md). The
+// scan remains for runs that name no item, and only while it is unambiguous.
+func delegatedCastParentWork(items []types.WorkItemRecord, casterAgentID, casterWorkID string) (*types.WorkItemRecord, error) {
+	var found *types.WorkItemRecord
+	for i := range items {
+		work := items[i]
+		if work.Status != types.WorkItemOpen || work.AssignedAgentID != casterAgentID {
+			continue
+		}
+		if casterWorkID != "" {
+			if work.WorkItemID == casterWorkID {
+				return &work, nil
+			}
+			continue
+		}
+		if found != nil {
+			return nil, fmt.Errorf("delegated cast: caster holds multiple open work items")
+		}
+		found = &work
+	}
+	return found, nil
+}
+
 // engineeringCapsuleNetwork picks a new assignment's network mode. Owner
 // direction (2026-10-10, "don't hinder agency"): implementation capsules get
 // L2 ecosystem egress through the executor's proxy unless the caster
@@ -410,23 +437,17 @@ func (rt *Runtime) openDelegatedCastAssignment(ctx context.Context, req Delegate
 	if ownerID == "" || computerID == "" || trajectoryID == "" || parentAgentID == "" {
 		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast requires a trajectory-bound caster run and agent")
 	}
-	// Parent work = the caster's open work item on this trajectory.
-	parentWorkID := ""
-	var parentWork *types.WorkItemRecord
 	snapshot, err := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
 	if err != nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast: derive scope: %w", err)
 	}
-	for i := range snapshot.WorkItems {
-		work := snapshot.WorkItems[i]
-		if work.Status == types.WorkItemOpen && work.AssignedAgentID == parentAgentID {
-			if parentWorkID != "" {
-				return AssignedEngineeringStart{}, fmt.Errorf("delegated cast: caster holds multiple open work items")
-			}
-			parentWorkID = work.WorkItemID
-			copy := work
-			parentWork = &copy
-		}
+	parentWork, err := delegatedCastParentWork(snapshot.WorkItems, parentAgentID, metadataStringValue(run.Metadata, "lifecycle_work_item_id"))
+	if err != nil {
+		return AssignedEngineeringStart{}, err
+	}
+	parentWorkID := ""
+	if parentWork != nil {
+		parentWorkID = parentWork.WorkItemID
 	}
 	if parentWork == nil {
 		return AssignedEngineeringStart{}, fmt.Errorf("delegated cast: caster has no open work item on the trajectory")
