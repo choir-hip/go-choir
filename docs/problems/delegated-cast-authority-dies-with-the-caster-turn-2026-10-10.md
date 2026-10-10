@@ -89,3 +89,26 @@ the authority anchor. Remaining error field: whether the persistent
 management run should passivate instead of completing (it would satisfy the
 current check, but it hides the turn/authority mismatch rather than
 removing it).
+
+## Follow-up after the authority fix (staging d39e05e9, 20:38Z)
+
+The authority fix held: management's cast on the minesweeper computer
+(trajectory e976454e…) admitted, spawned its capsule, and reached bind with
+the casting turn already completed. Bind then refused with `co-super
+assignment: exact run/work/parent binding mismatch`, and the capsule was
+revoked (assignment `delegated-sha256:c0df6f4d…`, read from the guest's
+trajectory route).
+
+Cause (source): `spawnBindActivateAssignment` builds the bound engineering
+run with `RequestedByRunID: ""` and `requested_by_profile: "engineering"`,
+the values for an owner's document cast. `validateEngineeringAssignmentRun`
+requires `RequestedByRunID == binding.ParentRunID` and the profile of the
+binding's parent agent. A delegated cast's parent run is the caster's run and
+its parent agent is `management:…`, so a delegated cast could never bind.
+The earlier failures (reaping, turn-scoped authority) hid this.
+
+This is the fourth delegated-cast defect today. All four sit on the one
+path that had never reached a bound engineering run on staging, so each fix
+exposes the next layer rather than a regression. The fix builds the run's
+parent fields from the binding, which is also correct for document casts
+(empty parent run, `engineering:` parent agent).
