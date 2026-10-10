@@ -651,16 +651,21 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 // leaves the process running outside the manager; ReconcileVMProcesses
 // retries it and powers it off after a grace period (host_capacity.go).
 func (r *OwnershipRegistry) reattachOwnership(own VMOwnership, mgr VMManager) bool {
+	_, ok := r.reattachOwnershipInfo(own, mgr)
+	return ok
+}
+
+func (r *OwnershipRegistry) reattachOwnershipInfo(own VMOwnership, mgr VMManager) (*VMInstanceInfo, bool) {
 	info, err := mgr.ReattachVM(own.VMID, own.ComputerURL, own.Epoch)
 	if err != nil {
 		log.Printf("vmctl: reattach skipped for VM %s: %v", own.VMID, err)
-		return false
+		return nil, false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	cur, ok := r.vmByID[own.VMID]
 	if !ok {
-		return false
+		return nil, false
 	}
 	cur.State = VMStateActive
 	cur.ComputerURL = info.HostURL
@@ -671,7 +676,7 @@ func (r *OwnershipRegistry) reattachOwnership(own VMOwnership, mgr VMManager) bo
 	cur.StoppedBy = ""
 	delete(r.unmanagedSince, own.VMID)
 	r.saveLocked()
-	return true
+	return info, true
 }
 
 // SetGatewayURL configures the gateway URL for issuing autoputer tokens.
@@ -1171,6 +1176,21 @@ func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMMan
 func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if own == nil || mgr == nil {
 		return nil, nil
+	}
+	if mgr.GetVM(own.VMID) == nil && r.liveUnmanagedProcess(own.VMID, mgr) {
+		// The guest is still running but vmctl lost track of it (a reattach
+		// after vmctl's restart found it too busy to answer). Booting would
+		// kill it mid-work: retry the reattach, else refuse with Retry-After.
+		// Only reconcile's grace may power an unmanaged process off
+		// (vmctl-restart-reboots-busy-computer-2026-10-10).
+		if info, ok := r.reattachOwnershipInfo(*own, mgr); ok {
+			return info, nil
+		}
+		return nil, &RecoveryRefusal{
+			Kind:              RecoveryRefusalGuestReattachPending,
+			Reason:            "computer is still running but did not answer reattach; retry shortly",
+			RetryAfterSeconds: guestReattachRetryAfterSeconds,
+		}
 	}
 	if mgr.GetVM(own.VMID) == nil {
 		// Booting adds a VM; recovering a tracked one replaces it in place.

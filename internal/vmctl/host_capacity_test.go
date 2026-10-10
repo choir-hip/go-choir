@@ -281,3 +281,36 @@ func TestPressureReclaimBusyProtectionExpiresForProofComputers(t *testing.T) {
 }
 
 var allowAllRoutes ComputerVersionRouteGuard = func(context.Context, string, string) error { return nil }
+
+// docs/problems/vmctl-restart-reboots-busy-computer-2026-10-10.md: after a
+// vmctl restart, a guest too busy to answer the reattach health check was
+// killed as an "orphan" and rebooted by the next resolve (rerun 11, 08:57Z).
+// Resolve must retry reattach and refuse with Retry-After, never boot over
+// a live process; only reconcile's grace may power it off.
+func TestResolveNeverBootsOverLiveUnmanagedGuest(t *testing.T) {
+	mgr := newProcessControlVMManager()
+	reg, _ := hostCapacityRegistry(t, mgr)
+	own := &VMOwnership{VMID: "vm-busy", UserID: "busy", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive,
+		State: VMStateStopped, StoppedBy: "vmctl-restart", ComputerURL: "http://10.0.0.9:8085"}
+	addOwnership(reg, own)
+	mgr.live["vm-busy"] = []int{3949451}
+	mgr.reattachError = errors.New("guest health check failed")
+
+	_, err := reg.startExistingVM(own, mgr)
+	var refusal *RecoveryRefusal
+	if !errors.As(err, &refusal) || refusal.Kind != RecoveryRefusalGuestReattachPending || refusal.RetryAfterSeconds <= 0 {
+		t.Fatalf("resolve over a live unmanaged guest = %v, want a guest_reattach_pending refusal", err)
+	}
+	if len(mgr.boots) != 0 || len(mgr.reaped) != 0 {
+		t.Fatalf("resolve booted (%d) or reaped (%v) a live guest", len(mgr.boots), mgr.reaped)
+	}
+
+	mgr.reattachError = nil
+	info, err := reg.startExistingVM(own, mgr)
+	if err != nil || info == nil || len(mgr.boots) != 0 {
+		t.Fatalf("resolve after the guest answers = %+v, %v (boots %d); want a reattach", info, err, len(mgr.boots))
+	}
+	if cur := reg.GetOwnershipByVMID("vm-busy"); cur == nil || cur.State != VMStateActive {
+		t.Fatalf("ownership after reattach = %+v", cur)
+	}
+}

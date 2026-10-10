@@ -21,7 +21,10 @@ const (
 	// to a host already below its memory floor. It is transient: never
 	// recorded as a durable recovery condition.
 	RecoveryRefusalHostMemoryPressure RecoveryRefusalKind = "host_memory_pressure"
-	hostMemoryRetryAfterSeconds                           = 60
+	// RecoveryRefusalGuestReattachPending: a live guest vmctl is not tracking
+	// did not answer reattach; resolve waits instead of rebooting it.
+	RecoveryRefusalGuestReattachPending RecoveryRefusalKind = "guest_reattach_pending"
+	hostMemoryRetryAfterSeconds                             = 60
 
 	stoppedByUnmanagedReap = "unmanaged-reaped"
 	// unmanagedReapGraceDefault is how long a live process behind a
@@ -334,4 +337,17 @@ func (r *OwnershipRegistry) ephemeralOwnership() func(*VMOwnership) bool {
 		}
 		return retentionOwnershipEphemeral(own, emails[own.UserID], cfg)
 	}
+}
+
+const guestReattachRetryAfterSeconds = 15
+
+// liveUnmanagedProcess reports whether a Firecracker process for vmID is
+// running although the VM manager does not track it.
+func (r *OwnershipRegistry) liveUnmanagedProcess(vmID string, mgr VMManager) bool {
+	pc, ok := mgr.(vmProcessController)
+	if !ok {
+		return false
+	}
+	_, live := pc.LiveFirecrackerVMs()[vmID]
+	return live
 }
