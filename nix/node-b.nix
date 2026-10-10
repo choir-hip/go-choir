@@ -645,6 +645,11 @@ in
   systemd.services.go-choir-vmctl = {
     description = "go-choir VMCtl Service (Firecracker VM lifecycle)";
     wantedBy = [ "multi-user.target" ];
+    # The deploy restarts vmctl once, after the service pointer holds the new
+    # binary. A switch-time restart ran the old pointer and doubled every
+    # deploy's restarts, each of which detaches every guest (vmctl 360 review
+    # Phase 0 step 6).
+    restartIfChanged = false;
     after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ];
     wants = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ];
     serviceConfig = commonServiceHardening // {
@@ -764,7 +769,6 @@ in
         "VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
-        "VMCTL_PRESSURE_MAX_BUSY_PROTECT=2h"
         "VMCTL_STALE_STATE_MIN_AGE=6h"
         "VMCTL_STALE_STATE_MAX_DELETES=25"
         # Codex-created staging/product-proof accounts use the example.com and

@@ -950,6 +950,13 @@ jobs:
             if [ "${DEPLOY_HOST_OS}" != "true" ] && [ -n "${HOST_SERVICES}" ]; then
               service_pointer_deploy=true
             fi
+            # vmctl's start time before this deploy touches it. A service
+            # pointer deploy restarts vmctl on its new pointer; the explicit
+            # restart below then only waits for health, so a deploy restarts
+            # vmctl at most once (vmctl 360 review Phase 0 step 6: each
+            # restart detaches every guest). Host OS deploys re-take this
+            # baseline after the pointer sync.
+            vmctl_started_at_deploy_start="$(systemctl show -p ActiveEnterTimestampMonotonic --value go-choir-vmctl 2>/dev/null || true)"
             note_phase() {
               local phase="$1"
               local now
@@ -1306,6 +1313,9 @@ jobs:
               # sourcecycled intentionally absent: durable default-off (fetch-debt
               # against corpus-dolt; unit stays defined but deploy does not manage it).
               scripts/node-b-sync-service-pointers auth gateway maild corpusd proxy vmctl checkpointd
+              # A vmctl restart before this sync ran the old pointer; only a
+              # restart from here on counts as loading the new binary.
+              vmctl_started_at_deploy_start="$(systemctl show -p ActiveEnterTimestampMonotonic --value go-choir-vmctl 2>/dev/null || true)"
             else
               echo "    Skipping host service pointer install"
             fi
@@ -1350,7 +1360,12 @@ jobs:
 
             if [ "${DEPLOY_VMCTL_RESTART}" = "true" ]; then
               echo "==> Restarting vmctl when selected classes require it"
-              systemctl restart go-choir-vmctl
+              vmctl_started_now="$(systemctl show -p ActiveEnterTimestampMonotonic --value go-choir-vmctl 2>/dev/null || true)"
+              if [ -n "$vmctl_started_at_deploy_start" ] && [ -n "$vmctl_started_now" ] && [ "$vmctl_started_now" != "$vmctl_started_at_deploy_start" ] && systemctl is-active --quiet go-choir-vmctl; then
+                echo "    vmctl already restarted by this deploy; not restarting it again"
+              else
+                systemctl restart go-choir-vmctl
+              fi
               # vmctl answers health only after its reattach pass, which
               # health-checks every running VM (a dead guest costs a
               # timeout); 30 tries was shorter than that with several VMs up
