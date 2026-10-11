@@ -1495,12 +1495,23 @@ nodes:
     title: P1 — Texture's controls mint cast records in the same commit as their packets
     path: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md
     ledger: ''
-    status: working
+    status: landed
     kind: station
     entrypoint: false
     member_of: choir-precommitment-protocol-metamission-2026-10-11
     execution_mode: subordinate_only
     depends_on: []
+    enables: [choir-protocol-p2-one-surface-2026-10-11]
+  - id: choir-protocol-p2-one-surface-2026-10-11
+    title: P2 — one surface (Texture uses Cast and Ask; Message, Emit and Texture-write ProductAPI routes deleted)
+    path: docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md
+    ledger: ''
+    status: drafted
+    kind: station
+    entrypoint: false
+    member_of: choir-precommitment-protocol-metamission-2026-10-11
+    execution_mode: subordinate_only
+    depends_on: [choir-protocol-p1-record-first-controls-2026-10-11]
     enables: []
   - id: choir-autopaper-metamission-2026-10-11
     title: Autopaper (Gate 3) — content in the graph, living Textures, automatic publishing

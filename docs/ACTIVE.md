@@ -135,7 +135,12 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   [problem](problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md)).
   Five stations; P1 (Texture's controls mint records,
   [`p1`](definitions/choir-protocol-p1-record-first-controls-2026-10-11.md))
-  is in file review. It unblocks Autopaper W2.
+  landed on staging (0f1c86c7); its audit joins every control to its cast
+  record. P2 (one surface: Texture uses Cast and Ask, Message and Emit
+  deleted, [`p2`](definitions/choir-protocol-p2-one-surface-2026-10-11.md))
+  is in file review. It unblocks Autopaper W2. Staging research is down
+  while the ChatGPT account is at its usage limit
+  ([problem](problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md)).
 - **Gate 3 opened 2026-10-11 — Autopaper (working):**
   [`definitions/choir-autopaper-metamission-2026-10-11.md`](definitions/choir-autopaper-metamission-2026-10-11.md).
   Stations: W1 content in the graph (complete,

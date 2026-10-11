@@ -20,11 +20,11 @@ metamission:
     - id: P1
       path: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md
       readiness: reviewed
-      status: working
+      status: landed (staging 0f1c86c7; completion panel pending)
       depends_on: []
     - id: P2
-      path: none (one surface — Cast and Ask replace Texture's controls; Message, Emit and Texture-write ProductAPI routes deleted)
-      readiness: intent
+      path: docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md
+      readiness: drafted
       status: pending
       depends_on: [P1]
     - id: P3
@@ -108,9 +108,9 @@ boundaries:
 
 now:
   status: working
-  slice: P1 — record-first controls
-  source_ref: f1be9e2f
-  deploy_identity: staging 25c8b5b0
+  slice: P1 landed and audited; P2 (one surface) in file review
+  source_ref: 0f1c86c7
+  deploy_identity: staging 0f1c86c7
   candidate: none
   conjecture:
     id: PR-1
@@ -130,11 +130,15 @@ now:
     status: provisional
     evidence_ref: docs/precommitment-protocol-design-2026-10-11.md §9
   belief:
-    believed_state: the ledger carries reports only; dispatch is off-ledger
-    main_uncertainty: whether the control accumulator can bind each packet to a record without a second commit
-    next_observation: P1's file review, then the code
-  blocker_or_risk: none
-  next_action: build P1 (store tests first); land it; trace audit on staging
+    believed_state: every Texture dispatch is a cast record in its own commit (P1, staging audit)
+    main_uncertainty: whether Texture's Cast can reuse the accumulator inside its turn without a second verb set
+    next_observation: P2's file review
+  blocker_or_risk: >-
+    the ChatGPT account's usage limit stops research and management on
+    staging (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md);
+    deployed demos that need research wait for it to reset or for an owner
+    routing decision
+  next_action: revise P2 after its review; P1 completion panel when OpenAI reviewers are back
 
 receipts: []
 ---

@@ -34,6 +34,8 @@ but the brief got no research.
 - The same afternoon, three review panelists that use OpenAI models failed
   locally with a usage-limit message (P1-review2, 16:36Z). Whether that is the
   same account as the gateway's ChatGPT credential is not established.
+  The local Codex CLI reports the limit resets at 18:59Z; if the accounts
+  are the same, staging research returns then.
 
 ## Why it matters
 
