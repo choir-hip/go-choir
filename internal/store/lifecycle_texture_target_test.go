@@ -273,7 +273,49 @@ func TestValidateLifecycleTextureControlTargetRejectsScopeRoleAndWorkMismatches(
 // earlier Texture run of the same document had opened, and the refusal did
 // not say so. Run-level provenance stays; the refusal names both runs and
 // the way forward.
-func TestLifecycleTargetWorkMismatchNamesTheEarlierRun(t *testing.T) {
+// Owner decision 2026-10-11 (problems/texture-research-opener-dropped-silently-2026-10-11.md):
+// one research desk per request, and every Texture turn of the document
+// follows up on it. Failure modes pinned: a later turn of the same Texture
+// is refused the desk an earlier turn opened, so it must open another; work
+// whose recorded opener is not a real run of this Texture (same channel,
+// invented run id) is accepted.
+func TestLaterTextureTurnFollowsUpOnTheDeskAnEarlierTurnOpened(t *testing.T) {
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	ended := caller
+	ended.State = types.RunPassivated
+	ended.UpdatedAt = time.Now().UTC()
+	passivate := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "project-texture-earlier-passivated", TrajectoryID: start.TrajectoryID,
+		AgentID: start.Agent.AgentID, Run: ended,
+	}
+	passivate.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(passivate)
+	if _, err := s.ReplaceLifecycleActivation(ctx, passivate); err != nil {
+		t.Fatalf("passivate earlier Texture turn: %v", err)
+	}
+	later := lifecycleRunFixture(start, "run-texture-later", types.RunRunning)
+	later.ChannelID = start.InitialDocument.DocID
+	project := types.ReplaceLifecycleActivationRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "project-texture-later", TrajectoryID: start.TrajectoryID,
+		AgentID: start.Agent.AgentID, Run: later,
+	}
+	project.CommandDigest, _ = ComputeReplaceLifecycleActivationDigest(project)
+	if _, err := s.ReplaceLifecycleActivation(ctx, project); err != nil {
+		t.Fatalf("project later Texture activation: %v", err)
+	}
+	if later.AgentID != caller.AgentID || researchWork.CreatedByRunID != caller.RunID {
+		t.Fatalf("fixture: later %s / caller %s, work opened by %s", later.AgentID, caller.AgentID, researchWork.CreatedByRunID)
+	}
+	binding, err := s.ValidateLifecycleTextureControlTarget(ctx, lifecycleTextureTargetRequest(start, later, researchWork.AssignedAgentID, researchWork.WorkItemID))
+	if err != nil {
+		t.Fatalf("a later Texture turn was refused the desk an earlier turn opened: %v", err)
+	}
+	if binding.TargetWorkItem == nil || binding.TargetWorkItem.WorkItemID != researchWork.WorkItemID {
+		t.Fatalf("binding = %+v", binding)
+	}
+
 	req := LifecycleTextureControlTargetRequest{
 		OwnerID: "owner", ComputerID: "computer", TrajectoryID: "traj", DocumentID: "doc",
 		CallerAgentID: "texture:doc", CallerRunID: "run-texture-now",
@@ -282,22 +324,15 @@ func TestLifecycleTargetWorkMismatchNamesTheEarlierRun(t *testing.T) {
 	work := types.WorkItemRecord{
 		WorkItemID: "work-1", OwnerID: "owner", ComputerID: "computer", TrajectoryID: "traj",
 		Status: types.WorkItemOpen, AssignedAgentID: "research:r1", AuthorityProfile: "research",
-		CreatedByRunID: "run-texture-earlier",
+		CreatedByRunID: "run-invented",
 		Details: map[string]any{
 			"requested_by_profile": "texture", "requested_by_agent_id": "texture:doc",
-			"requested_by_run_id": "run-texture-earlier",
+			"requested_by_run_id": "run-invented",
 		},
 	}
-	got := lifecycleTargetWorkMismatch(work, req, "research")
-	for _, want := range []string{"run-texture-earlier", "run-texture-now", "open_researcher"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("mismatch %q does not name %q", got, want)
-		}
-	}
-	work.CreatedByRunID = "run-texture-now"
-	work.Details["requested_by_run_id"] = "run-texture-now"
-	if got := lifecycleTargetWorkMismatch(work, req, "research"); got != "" {
-		t.Fatalf("work this run opened was refused: %s", got)
+	got := lifecycleTargetWorkMismatch(work, req, "research", false)
+	if !strings.Contains(got, "not opened by this document's Texture") || !strings.Contains(got, "run-invented") {
+		t.Fatalf("work with an unproven opener: %q", got)
 	}
 }
 

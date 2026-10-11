@@ -144,7 +144,8 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		if err != nil {
 			return LifecycleTextureControlTargetBinding{}, fmt.Errorf("validate lifecycle Texture control target: lookup target work: %w", err)
 		}
-		if reason := lifecycleTargetWorkMismatch(work, req, binding.TargetProfile); reason != "" {
+		openedByThisTexture := lifecycleTargetWorkOpenedByTexture(ctx, reader, work, req)
+		if reason := lifecycleTargetWorkMismatch(work, req, binding.TargetProfile, openedByThisTexture); reason != "" {
 			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget(reason)
 		}
 		binding.TargetWorkItem = &work
@@ -183,7 +184,7 @@ func containsLifecycleIdentity(values []string, wanted string) bool {
 // a Texture control, in words the Texture desk can act on. One combined
 // message for all of them left Texture retrying the same control (T3 in
 // docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md).
-func lifecycleTargetWorkMismatch(work types.WorkItemRecord, req LifecycleTextureControlTargetRequest, targetProfile string) string {
+func lifecycleTargetWorkMismatch(work types.WorkItemRecord, req LifecycleTextureControlTargetRequest, targetProfile string, openedByThisTexture bool) string {
 	id := req.TargetWorkItemID
 	switch {
 	case work.WorkItemID != id || work.OwnerID != req.OwnerID || work.ComputerID != req.ComputerID || work.TrajectoryID != req.TrajectoryID:
@@ -192,18 +193,32 @@ func lifecycleTargetWorkMismatch(work types.WorkItemRecord, req LifecycleTexture
 		return fmt.Sprintf("target work %s is %s, not open; open a new research entry (open_researcher) instead of following up on it", id, work.Status)
 	case strings.TrimSpace(work.AssignedAgentID) != req.TargetAgentID || strings.TrimSpace(work.AuthorityProfile) != targetProfile:
 		return fmt.Sprintf("target work %s is assigned to %s, not to the target %s", id, strings.TrimSpace(work.AssignedAgentID), req.TargetAgentID)
-	case !lifecycleTargetWorkRequestedByTexture(work, req.CallerRunID, req.CallerAgentID):
-		return fmt.Sprintf("target work %s was requested by run %s, not by this Texture run %s; a Texture run follows up only on work it opened itself, so open a new research entry (open_researcher) for the follow-up",
-			id, strings.TrimSpace(work.CreatedByRunID), req.CallerRunID)
+	case !openedByThisTexture:
+		return fmt.Sprintf("target work %s was not opened by this document's Texture (requested by run %s)", id, strings.TrimSpace(work.CreatedByRunID))
 	}
 	return ""
 }
 
-func lifecycleTargetWorkRequestedByTexture(work types.WorkItemRecord, callerRunID, callerAgentID string) bool {
-	return strings.TrimSpace(work.CreatedByRunID) == strings.TrimSpace(callerRunID) &&
-		workDetailString(work.Details, "requested_by_profile") == agentprofile.Texture &&
-		workDetailString(work.Details, "requested_by_agent_id") == strings.TrimSpace(callerAgentID) &&
-		workDetailString(work.Details, "requested_by_run_id") == strings.TrimSpace(callerRunID)
+// lifecycleTargetWorkOpenedByTexture reports whether a run of this
+// document's Texture agent opened the work. Any turn of that Texture may
+// follow up on it: one research desk per request, followed up by every
+// later turn (owner decision 2026-10-11,
+// docs/problems/texture-research-opener-dropped-silently-2026-10-11.md).
+// The recorded opener must be a real Texture run of the same agent and
+// trajectory, so a shared channel alone is not provenance.
+func lifecycleTargetWorkOpenedByTexture(ctx context.Context, reader lifecycleTextureControlTargetReader, work types.WorkItemRecord, req LifecycleTextureControlTargetRequest) bool {
+	openerRunID := strings.TrimSpace(work.CreatedByRunID)
+	if openerRunID == "" || workDetailString(work.Details, "requested_by_profile") != agentprofile.Texture ||
+		workDetailString(work.Details, "requested_by_agent_id") != req.CallerAgentID ||
+		workDetailString(work.Details, "requested_by_run_id") != openerRunID {
+		return false
+	}
+	if openerRunID == req.CallerRunID {
+		return true
+	}
+	opener, err := reader.GetLifecycleRun(ctx, req.OwnerID, req.ComputerID, openerRunID)
+	return err == nil && opener.RunID == openerRunID && opener.AgentID == req.CallerAgentID &&
+		opener.TrajectoryID == req.TrajectoryID && strings.TrimSpace(opener.AgentProfile) == agentprofile.Texture
 }
 
 func workDetailString(details map[string]any, key string) string {
