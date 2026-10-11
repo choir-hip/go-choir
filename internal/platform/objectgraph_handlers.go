@@ -20,12 +20,16 @@ func RegisterObjectGraphRoutes(s *server.Server, h *ObjectGraphHandler) {
 	s.HandleFunc("/internal/platform/objects", h.HandleObjects)
 	s.HandleFunc("/internal/platform/objects/", h.HandleObjectByID)
 	s.HandleFunc("/internal/platform/edges", h.HandleEdges)
+	s.HandleFunc("/internal/platform/captures", h.HandleCaptures)
+	s.HandleFunc("/internal/platform/captures/bodies/", h.HandleCaptureBody)
 }
 
 type ObjectGraphHandler struct {
 	service     *objectgraph.Service
 	store       objectgraph.Store
 	guestLookup guestOwnershipLookup
+	// captureBodies holds Autopaper capture bodies on host disk (W1b2).
+	captureBodies *CaptureBodyStore
 }
 
 // NewObjectGraphHandler builds a handler that exposes both Service-level

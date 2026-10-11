@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,16 +12,25 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/capturesegment"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
-// W1b (docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
-// research polls one registry source into web_capture objects. Failure modes
-// pinned: a re-poll writes duplicate captures; conditional GET state is lost
+type paperGuest struct{}
+
+func (paperGuest) LookupGuestContext(context.Context, string) (*vmctl.GuestOwnership, error) {
+	return &vmctl.GuestOwnership{Found: true, UserID: "owner-1", ComputerID: "computer-1"}, nil
+}
+
+// W1b2 (docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
+// research polls one registry source into shared web_capture objects in the
+// store behind corpusd, never this computer's own graph. Failure modes
+// pinned: a capture lands in the guest instead of the shared store; a re-poll
+// writes duplicate captures; conditional GET state is lost
 // between polls; a capture names a body that cannot be read; the result
 // carries bodies instead of counts; an unknown source id is accepted; a
 // huge feed is written without a bound.
@@ -44,10 +54,28 @@ func TestPollSourceWritesCapturesOnceAndKeepsConditionalState(t *testing.T) {
 	}))
 	defer feed.Close()
 
-	st := openTestStore(t)
-	root := t.TempDir()
+	// corpusd's real handler over a shared graph; requests arrive as the
+	// paper computer's guest.
+	mem := objectgraph.NewMemoryStore()
+	shared := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
+	defer shared.Close()
+	og := platform.NewObjectGraphHandler(shared, mem)
+	if err := og.ConfigureGuestBinding(paperGuest{}); err != nil {
+		t.Fatal(err)
+	}
+	og.ConfigureCaptureBodies(t.TempDir())
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.RemoteAddr = "10.200.1.2:40000"
+		switch {
+		case r.URL.Path == "/internal/platform/captures":
+			og.HandleCaptures(w, r)
+		default:
+			og.HandleCaptureBody(w, r)
+		}
+	}))
+	defer corpusd.Close()
 	reg := &sources.Registry{UserAgent: "test", Sources: []sources.Source{{ID: "rss:example", Type: sources.SourceTypeRSS, Name: "Example", URL: feed.URL, MaxItemsPerPoll: 20}}}
-	deps := Dependencies{Store: st, Sources: reg, FilesRoot: root}
+	deps := Dependencies{Sources: reg, Captures: NewCorpusdCaptureSink(corpusd.URL)}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		RunID: "research-run", OwnerID: "owner-1", ComputerID: "computer-1", Profile: agentprofile.Research,
 	})
@@ -78,16 +106,22 @@ func TestPollSourceWritesCapturesOnceAndKeepsConditionalState(t *testing.T) {
 	if entry["title"] == "" || entry["url"] == "" {
 		t.Fatalf("captured entry lacks title or url: %v", entry)
 	}
-	obj, err := st.ObjectGraph().GetObject(context.Background(), entry["capture_id"].(string))
+	obj, err := shared.GetObject(context.Background(), entry["capture_id"].(string))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("capture not in the shared store: %v", err)
 	}
 	meta, err := objectgraph.WebCaptureMetadataFromObject(obj)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if body, err := capturesegment.Read(root, meta.ContentBlobID); err != nil || !strings.Contains(string(body), "Body of story") {
-		t.Fatalf("capture body unreadable: %q %v", body, err)
+	resp, err := http.Get(corpusd.URL + "/internal/platform/captures/bodies/" + meta.ContentBlobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "Body of story") {
+		t.Fatalf("capture body unreadable: %d %q", resp.StatusCode, body)
 	}
 	second := poll()
 	if conditional.Load() != 1 || second["new"] != float64(0) || second["not_modified"] != true {

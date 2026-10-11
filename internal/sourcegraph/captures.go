@@ -7,10 +7,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/capturesegment"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
+
+// BodyStore keeps capture bodies outside Dolt. PutBody stores the bytes
+// durably and returns the ref the capture metadata names.
+type BodyStore interface {
+	PutBody(body []byte) (string, error)
+}
 
 // CaptureWriteConfig names the computer a poll writes into.
 type CaptureWriteConfig struct {
@@ -38,15 +43,15 @@ type CapturedItem struct {
 }
 
 // WriteCaptures writes each polled item as one choir.web_capture whose body
-// lives in the day's capture segment, not in the graph (Autopaper W1). The
-// capture id is stable per item, so an item already captured is a repeat and
-// writes nothing. The body is appended and synced before the object is
-// written, so an object never names bytes that are not there.
-func WriteCaptures(ctx context.Context, graph *objectgraph.Service, segments *capturesegment.Appender, items []sources.Item, cfg CaptureWriteConfig) (CaptureWriteResult, error) {
+// lives in the body store, never in the graph row (Autopaper W1; on the host
+// the graph is Store B). The capture id is stable per item, so an item
+// already captured is a repeat and writes nothing. The body is stored before
+// the object is written, so an object never names bytes that are not there.
+func WriteCaptures(ctx context.Context, graph *objectgraph.Service, bodies BodyStore, items []sources.Item, cfg CaptureWriteConfig) (CaptureWriteResult, error) {
 	var result CaptureWriteResult
 	ownerID := strings.TrimSpace(cfg.OwnerID)
-	if graph == nil || segments == nil || ownerID == "" {
-		return result, fmt.Errorf("write captures: graph, segments and owner are required")
+	if graph == nil || bodies == nil || ownerID == "" {
+		return result, fmt.Errorf("write captures: graph, body store and owner are required")
 	}
 	now := cfg.Now
 	if now.IsZero() {
@@ -69,7 +74,7 @@ func WriteCaptures(ctx context.Context, graph *objectgraph.Service, segments *ca
 		} else if !errors.Is(err, objectgraph.ErrNotFound) {
 			return result, fmt.Errorf("write captures: look up %s: %w", item.ID, err)
 		}
-		ref, err := segments.Append(req.FetchedAt, req.ExtractedText)
+		ref, err := bodies.PutBody(req.ExtractedText)
 		if err != nil {
 			return result, fmt.Errorf("write captures: body for %s: %w", item.ID, err)
 		}

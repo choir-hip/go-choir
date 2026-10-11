@@ -2,13 +2,21 @@ package sourcegraph
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/capturesegment"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
+
+type memoryBodies map[string][]byte
+
+func (m memoryBodies) PutBody(body []byte) (string, error) {
+	ref := fmt.Sprintf("mem:%d", len(m))
+	m[ref] = append([]byte(nil), body...)
+	return ref, nil
+}
 
 // W1b failure modes (docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
 // a re-poll writes duplicate captures; a body lands in og_objects.body; the
@@ -19,8 +27,7 @@ func TestWriteCapturesKeepsBodiesOutOfTheGraphAndSkipsRepeats(t *testing.T) {
 	mem := objectgraph.NewMemoryStore()
 	graph := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
 	defer graph.Close()
-	root := t.TempDir()
-	segments := capturesegment.New(root)
+	bodies := memoryBodies{}
 	fetched := time.Date(2026, 10, 11, 10, 0, 0, 0, time.UTC)
 	items := []sources.Item{
 		{ID: "item-1", SourceID: "rss:example", SourceType: sources.SourceTypeRSS, Title: "One", Body: "Body one", URL: "https://example.com/1", Published: fetched.Add(-time.Hour), FetchedAt: fetched, Language: "en"},
@@ -29,7 +36,7 @@ func TestWriteCapturesKeepsBodiesOutOfTheGraphAndSkipsRepeats(t *testing.T) {
 		{ID: "item-4", SourceID: "rss:example", Title: "No URL", Body: "x", URL: "ftp://example.com/4", FetchedAt: fetched},
 	}
 	cfg := CaptureWriteConfig{OwnerID: "owner-1", ComputerID: "computer-1", Now: fetched}
-	first, err := WriteCaptures(ctx, graph, segments, items, cfg)
+	first, err := WriteCaptures(ctx, graph, bodies, items, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,15 +55,15 @@ func TestWriteCapturesKeepsBodiesOutOfTheGraphAndSkipsRepeats(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		body, err := capturesegment.Read(root, meta.ContentBlobID)
-		if err != nil {
-			t.Fatalf("metadata names unreadable bytes: %v", err)
+		body, ok := bodies[meta.ContentBlobID]
+		if !ok {
+			t.Fatalf("metadata names a body that was never stored: %s", meta.ContentBlobID)
 		}
 		if meta.SourceID != "rss:example" || meta.ItemID == "" || string(body) == "" {
 			t.Fatalf("metadata = %+v body = %q", meta, body)
 		}
 	}
-	second, err := WriteCaptures(ctx, graph, segments, items, cfg)
+	second, err := WriteCaptures(ctx, graph, bodies, items, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -488,6 +488,9 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	researchDeps := researchtools.Dependencies{
 		Store: rt.store, Content: rt.content, Search: searchClient,
 		Source: sourceClient, HTTP: httpClient, Egress: rt.researchEgress,
+		// Autopaper captures are shared content: written to Store B through
+		// corpusd, never this computer's embedded graph (W1b2).
+		Captures: researchtools.NewCorpusdCaptureSink(rt.cfg.CorpusdURL),
 	}
 	rt.researchDeps = &researchDeps
 	var deskCellRegistries = map[string]*toolregistry.ToolRegistry{}

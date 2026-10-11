@@ -9,9 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/capturesegment"
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
@@ -34,8 +31,9 @@ type poller interface {
 	Poll(ctx context.Context, source *sources.Source) (sources.PollResult, error)
 }
 
-// newPollSourceTool polls one registry source into choir.web_capture objects
-// whose bodies live in the day's capture segment (Autopaper W1b). It returns
+// newPollSourceTool polls one registry source and writes its items as shared
+// choir.web_capture objects in Store B through corpusd, bodies on host disk
+// (Autopaper W1b2). It returns
 // counts and capture ids, never bodies.
 func newPollSourceTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
@@ -57,8 +55,8 @@ func newPollSourceTool(deps Dependencies) toolregistry.Tool {
 			if exec.OwnerID == "" {
 				return "", fmt.Errorf("poll_source missing owner context")
 			}
-			if deps.Store == nil {
-				return "", fmt.Errorf("poll_source: store not configured")
+			if deps.Captures == nil {
+				return "", fmt.Errorf("poll_source: the shared capture store is not configured")
 			}
 			reg, err := deps.sourceRegistry()
 			if err != nil {
@@ -113,9 +111,7 @@ func newPollSourceTool(deps Dependencies) toolregistry.Tool {
 				result["error"] = pollErr.Error()
 				return toolregistry.ResultJSON(result)
 			}
-			written, err := sourcegraph.WriteCaptures(ctx, deps.Store.ObjectGraph(), capturesegment.New(deps.filesRoot()), polled.Items, sourcegraph.CaptureWriteConfig{
-				OwnerID: exec.OwnerID, ComputerID: exec.ComputerID,
-			})
+			written, err := deps.Captures.WriteCaptures(ctx, exec.OwnerID, exec.ComputerID, polled.Items)
 			result["new"] = written.New
 			result["repeated"] = written.Repeated
 			result["skipped"] = written.Skipped
@@ -147,13 +143,6 @@ func (d Dependencies) sourceRegistry() (sources.Registry, error) {
 		return *d.Sources, nil
 	}
 	return sources.DefaultRegistry()
-}
-
-func (d Dependencies) filesRoot() string {
-	if strings.TrimSpace(d.FilesRoot) != "" {
-		return d.FilesRoot
-	}
-	return provideriface.ResolveFilesRoot("")
 }
 
 // nearbySourceIDs names known ids sharing the query's prefix (before ':'),

@@ -570,8 +570,9 @@ func (s *ChoirScope) FetchURL(url string) (JSON, error) {
 	return out, err
 }
 
-// PollSource polls one registry source into choir.web_capture objects through
-// the host under the egress budget; returns counts and capture ids as JSON.
+// PollSource polls one registry source through the host under the egress
+// budget and writes its items as shared choir.web_capture objects in the
+// global store behind corpusd; returns counts and the new captures as JSON.
 func (s *ChoirScope) PollSource(sourceID string, maxItems int) (JSON, error) {
 	var out JSON
 	err := s.call(ActionPollSource, PollSourcePayload{SourceID: sourceID, MaxItems: maxItems}, &out)

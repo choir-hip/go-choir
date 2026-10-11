@@ -238,10 +238,10 @@ type Dependencies struct {
 	// unbudgeted (tests only — the Runtime always installs a ledger).
 	Egress *EgressBudgetLedger
 	// Sources is the poll registry (nil: the embedded default) and
-	// FilesRoot is where capture segments live (empty: the computer's
-	// files root). Both are for poll_source (Autopaper W1b).
-	Sources   *sources.Registry
-	FilesRoot string
+	// Captures is where poll_source writes: the shared store behind
+	// corpusd (Autopaper W1b2), never this computer's embedded graph.
+	Sources  *sources.Registry
+	Captures CaptureSink
 }
 
 func Register(registry *toolregistry.ToolRegistry, deps Dependencies) error {

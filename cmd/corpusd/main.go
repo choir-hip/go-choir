@@ -8,6 +8,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"log"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -92,6 +93,7 @@ func main() {
 			log.Fatalf("corpusd object graph guest binding: %v", err)
 		}
 	}
+	ogHandler.ConfigureCaptureBodies(filepath.Join(cfg.ArtifactsRoot, "capture-bodies"))
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
 
 	s.Start()
