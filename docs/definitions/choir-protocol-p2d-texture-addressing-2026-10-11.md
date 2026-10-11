@@ -8,10 +8,10 @@ definition_version: 4
 readiness: drafted
 
 review:
-  reviewer: agentic-consensus file review (pending)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus file review (round one sent back; revised)
+  frozen_ref: 352661de (round one)
+  verdict: send back (Claude, DeepSeek; round one), revised for round two
+  evidence_ref: receipt P2d-review1
 
 start:
   captured_at: 2026-10-11T19:35:00Z
@@ -30,8 +30,27 @@ start:
       A desk's Cast or Note commits through commitLifecycleActIntent
       (internal/agentcore/rlm_reduce.go): one CommitLifecycleAct mints the
       record and a directive packet addressed to the resolved agent.
-      directiveTargetAgentID passes a qualified address through unchanged,
-      so texture:<doc> already resolves to the Texture agent id.
+      directiveTargetAgentID would pass texture:<doc> through, but cell
+      validation refuses it first: validateSemanticActIntent's needTo
+      requires agentprofile.Canonical(ToDesk), which fails on a qualified
+      address (P2d-review1).
+    - >-
+      CommitLifecycleAct writes the packet on the target's trajectory
+      (resolved through the target agent's channel document) but numbers
+      its MessageSeq from the caller's trajectory counter
+      (internal/store/lifecycle_commit_act.go, seq := trajectory.ReducerSeq).
+      A Texture turn's consume boundary compares MessageSeq with the
+      document trajectory's scheduled seq, so a cross-trajectory number is
+      consumed by a run that never saw it, or inflates the boundary.
+    - >-
+      Consume-at-commit takes only producer reports
+      (textureTurnPendingInbound and textureDispositionIneligibleReason,
+      internal/textureowner/texture_turn_runtime.go); the store's turn
+      commit already accepts directives (internal/store/texture_turn.go).
+      A Texture cell does see a directive through choir.Updates()
+      (cellUpdateVisible does not filter direction), but the revision
+      prompt renders channel messages only, and record-native acts send
+      none.
     - >-
       After that commit, every IntentCast runs openDelegatedCastAssignment
       with Kind EngineeringAssignmentImplementation, whatever the
@@ -52,7 +71,14 @@ start:
       submitTextureAgentRevisionRun refuses without an open Texture work
       item on the document's trajectory (errTextureLifecycleOpenWorkUnavailable),
       so a delivery to an idle Texture whose request work has closed
-      cannot start a turn.
+      cannot start a turn; the controller then returns nil without error
+      and the packet stays pending with no visible fate. The wake returns
+      before listing packets when the trajectory is not live.
+    - >-
+      Precedent for minting a Texture subject inside another command:
+      textureSupervisionSubject (internal/store/engineering_assignments.go)
+      mints texture:<doc> and an open work item, with not-exists
+      conditions, inside the engineering report commit.
     - >-
       Consume-at-commit, stranded repair, the delivery-attempt budget and
       the activation breaker (textureDeliveryMaxAttempts, three) already
@@ -72,49 +98,69 @@ start:
 
 finish:
   deliver: >-
-    Any same-owner desk except engineering can Cast or Note to
-    texture:<doc>. The act commits its record and a directive packet to
-    that document's Texture agent, and opens no engineering assignment.
-    The Texture desk wakes on it, even when its request work has closed,
-    and its next committed turn disposes the delivery. A crash restart
-    closes an undelivered directive's wake like any other work wake. The
-    number of directives a Texture takes per owner request is bounded,
-    and so is a management and Texture exchange.
+    Management can Cast or Note to texture:<doc> for any live document of
+    the same owner. The act commits, in one store command, its record, a
+    directive packet numbered on the document's trajectory, and open
+    Texture work when the Texture has none, and opens no engineering
+    assignment. The Texture desk wakes on it, its turn sees it, and the
+    turn's commit consumes it. A directive to a closed or cancelled
+    trajectory is refused at commit. A crash never mints work for a
+    directive; the directive's work was minted with it. Directives to one
+    Texture per owner request are bounded, which also bounds a management
+    and Texture exchange.
   artifact: >-
-    1. The delegated-cast step runs only when the Cast's addressee
-    resolves to an engineering desk; a Cast to research, management or
-    texture:<doc> through the act path commits its record and packet only.
-    2. A third Texture occurrence kind, directive, encoded like the other
-    two and resolved by its commitment record: the record exists, is a
-    directive (cast or note), names texture:<doc> as addressee and the
-    same owner and computer, its emitter is a live same-owner desk other
-    than engineering, and its packet is pending. No producer-work or
-    control-binding check, since the authority is the record.
-    3. Arming: a pending directive to a Texture whose trajectory is live
-    but has no open Texture work opens a Texture work item in the same
-    command that binds the delivery (the initial-work wake path), so the
-    turn has authority. A closed or cancelled trajectory terminalizes the
-    directive as undeliverable (visible fate, no wake).
-    4. Disposition: consume-at-commit as for producer reports; the turn's
-    prompt shows the directive's record id, emitter and body so the turn
-    can answer it. Texture answers through its existing verbs (a Cast to
-    management continues management's open work, P2a).
-    5. Bounds: directives to one Texture per owner request share the
-    research-round counter's shape (four), and a directive emitted by
-    management in response to a Texture dispatch on the same request
-    counts against both, so the pair cannot feed each other without end.
-    The activation breaker still stops a poison directive at three.
-    6. Crash close: the directive's wake kind is in restartWorkKinds.
+    Slice P2d1, the gate (lands first, alone). The post-commit
+    delegated-cast step runs only when the Cast's addressee resolves to
+    the engineering profile, in the record-native and the legacy branch.
+    Today every act-path Cast opens an engineering assignment, whatever
+    its addressee.
+    Slice P2d2, the delivery (one slice, so no state exists where a
+    directive arms but cannot be consumed).
+    1. Validation: needTo accepts texture:<doc> when the caller is
+    management and the document belongs to the same owner and computer;
+    every other qualified address is still refused. Engineering and
+    research Casts or Notes to texture:<doc> are refused at validation.
+    2. Commit (CommitLifecycleAct, target texture:<doc>): conditioned on
+    the document trajectory's version and live status, it bumps that
+    trajectory's ReducerSeq and numbers the packet from it, and, when the
+    trajectory has no open Texture work, mints one open Texture work item
+    (id derived from the record, not-exists condition, as
+    textureSupervisionSubject does). A closed or cancelled trajectory
+    refuses the act with a visible reason. The bound is checked here:
+    directive packets on the document's trajectory since its latest owner
+    input, at most four; because the commit is conditioned on that
+    trajectory, two concurrent directives serialize.
+    3. Occurrence: a directive occurrence kind (encoded like the other
+    two, identity stable across replays) accepted where the adapter
+    canonicalizes Texture dispatches, in ResolveTextureActorOccurrence and
+    in TextureActorOccurrencePostcondition. Its authority is the record:
+    the record exists, is a cast or note directive, is not retracted, its
+    addressee is texture:<doc>, its emitter is the owner's persistent
+    management; the packet matches the record, has direction directive,
+    targets this Texture on this document's trajectory, and is pending.
+    4. Consumption: one predicate shared by textureTurnPendingInbound,
+    textureDispositionIneligibleReason and cellUpdateVisible admits
+    directive packets beside producer reports; consumed directives
+    terminalize as delivered with the turn.
+    5. Rendering: the Texture revision request lists the directives the
+    run will consume (record id, emitter, objective, body), beside the
+    channel messages it renders today.
+    6. Crash: the directive's wake is a coagent_result wake, already in
+    restartWorkKinds, so a markerless boot closes it as
+    interrupted_by_restart; nothing at boot mints work.
   acceptance:
-    - reducer test: management Cast and Note to texture:<doc> commit record and packet, open no engineering assignment; an engineering Cast still opens one
-    - controller tests: a pending directive arms an idle Texture (open work minted), resolves as a directive occurrence, is consumed at commit; a forged directive (wrong owner, engineering emitter, missing record) is refused; a closed trajectory terminalizes it
-    - bound test: the fifth directive in one request is refused or held with a visible reason; a management and Texture exchange stops at the bound
-    - crash test: a markerless boot closes a pending directive's wake as interrupted_by_restart
-    - deployed: on a fresh test computer, a hand-staged management Cast to texture:<doc> (through a management turn, not ProductAPI) produces a Texture revision that cites it, and the audit joins the record, packet and consuming turn
+    - P2d1 reducer test: a management Cast to research or texture:<doc> opens no engineering assignment; an engineering Cast still opens one
+    - validation test: management to texture:<doc> accepted; engineering and research to texture:<doc> refused; another owner's document refused
+    - store test: the act on an idle Texture mints its work and a packet numbered on the document trajectory, in one command; a closed trajectory refuses; the fifth directive in one request refuses; two concurrent directives serialize
+    - controller test: the directive arms the idle Texture, resolves as a directive occurrence, and a forged one (wrong owner, research emitter, retracted record, missing record) is refused
+    - turn test: the revision prompt shows the directive's record id, emitter and body; the commit consumes it; a producer report that arrived after scheduling is not consumed with it
+    - crash test: a markerless boot closes a pre-boot directive wake and mints no work
+    - deployed: on a fresh test computer, a management turn (owner-prompted, not ProductAPI) casts to texture:<doc>; the Texture's next revision answers it, and the audit joins record, packet and consuming turn
   rollback: >-
-    git revert of the station's commits; directive packets written before
-    the revert stay pending and the old resolver refuses them, so the
-    breaker terminalizes them within three attempts (named residual)
+    git revert of the station's commits (P2d1 alone reverts cleanly).
+    Directive packets written by P2d2 stay pending after a revert and the
+    old resolver refuses them; the breaker terminalizes them within three
+    activations (named residual)
   landing:
     required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
 
@@ -123,7 +169,7 @@ value:
   goodharting_would_be: >-
     a directive kind that a Texture can never actually act on (it wakes,
     consumes and ignores), or a bound so tight that W2 cannot feed a story
-  realism_axis: reducer test -> controller tests -> fresh test computer with one hand-staged management Cast -> W2's poll-driven feed (P5)
+  realism_axis: P2d1 gate on staging -> store, controller and turn tests -> fresh test computer with one owner-prompted management Cast -> W2's poll-driven feed (P5)
   mutation_class: red (lifecycle reducer, Texture controller, Texture wake authority)
   authority_sources:
     - docs/precommitment-protocol-design-2026-10-11.md §3
@@ -133,23 +179,24 @@ value:
     - producer_report and document_revision occurrences resolve exactly as today
     - engineering's delegated cast still opens its assignment
     - the activation breaker and the delivery budget
-  excluded: [predictions on directives (P3), scoring (P4), the poll-to-management delivery and story size (P5), engineering addressing a Texture]
-  protected_surfaces: [internal/agentcore/rlm_reduce.go, internal/textureowner/texture_controller.go, internal/agentcore/texture_lifecycle_api.go, internal/store/lifecycle.go, internal/actorruntime/handler.go]
+  excluded: [predictions on directives (P3), scoring (P4), the poll-to-management delivery and story size (P5), engineering or research addressing a Texture, Ask to a Texture (Texture answers through its own verbs)]
+  protected_surfaces: [internal/agentcore/rlm_reduce.go, internal/store/lifecycle_commit_act.go, internal/textureowner/texture_controller.go, internal/textureowner/texture_turn_runtime.go, internal/agentcore/texture_lifecycle_api.go, internal/agentcore/tools_desk.go]
   read_only_dependencies: [internal/agentcore/management_controller.go, internal/agentcore/tools_worker_update.go]
 
 now:
   status: drafted
-  slice: design from the code; review next
-  source_ref: a0598d72
+  slice: revised after round one; round two next
+  source_ref: 352661de
   deploy_identity: staging a2bcf724
   candidate: none
   conjecture:
     id: P2d-1
     claim: >-
-      A directive occurrence authorized by its record, plus arming an idle
-      Texture through its initial-work path, is enough for management to
-      feed any same-owner Texture, with no new wake substrate.
-    test: controller tests, then one hand-staged management Cast on staging
+      A directive committed with its Texture work and numbered on the
+      document's trajectory, resolved by its record, is enough for
+      management to feed any same-owner Texture through the existing wake,
+      consume and breaker machinery.
+    test: store, controller and turn tests, then one owner-prompted management Cast on staging
     edge: missing_oracle
     delta_o: a Texture revision whose turn consumed the directive, joined to the record by the audit
     scope_if_supported: management to Texture on one computer
@@ -157,37 +204,62 @@ now:
     evidence_refs: []
   decision:
     what: >-
-      Directive authority is the record, not a producer work binding: the
-      emitter did not receive a control from this Texture, so there is no
-      binding to check. Engineering is excluded as an emitter because its
-      reports already reach Texture through the producer path and its
-      assignment scope does not name a document.
+      The act's commit mints the Texture's work and numbers the packet on
+      the document's trajectory, rather than a separate arming command
+      before the run is submitted. One command touches two trajectories,
+      as the engineering report commit already does for its supervision
+      subject; in exchange the seq is right, the bound serializes, a
+      closed trajectory refuses visibly, and no boot path mints work.
+      Dissent (Claude, P2d-review1): prefer a smaller pre-submit arming
+      command. Only management may address a Texture in this station;
+      research and engineering already reach a Texture through producer
+      reports.
     kind: architecture
-    status: proposed
-    evidence_ref: none
+    status: proposed (P2d-review1)
+    evidence_ref: receipt P2d-review1
   belief:
-    believed_state: the wake already arms on any pending packet; the gaps are resolution, arming an idle Texture, the delegated-cast gate, and the bound
-    main_uncertainty: whether minting Texture work on arming collides with the initial-work wake's own run-suppression rule
-    next_observation: the file review, reading reconcileAgentWakeLocked and submitTextureAgentRevisionRun
+    believed_state: the wake already arms on any pending packet; the gaps were validation, seq, consumption, rendering, arming, and the delegated-cast gate
+    main_uncertainty: whether conditioning the act on a second trajectory collides with the Texture turn's own head-pinned commits on that trajectory (a concurrent turn would refuse the directive, which then needs a retry)
+    next_observation: round two of the file review
   blocker_or_risk: >-
-    red; the Texture controller is the surface with the most past churn
-    (docs/problems/texture-raced-activation-refused-first-turn-2026-10-11.md
-    is open on the same activation path)
-  next_action: agentic-consensus file review against a frozen worktree
+    red; the Texture controller has the most past churn, and
+    docs/problems/texture-raced-activation-refused-first-turn-2026-10-11.md
+    is open on the same activation path. The bound starves a poll-driven
+    W2 feed until P5 re-bases the request on the story (named residual on
+    W2's start)
+  next_action: round two file review; then P2d1 (the gate) through the landing loop
 
-receipts: []
+receipts:
+  - id: P2d-review1
+    at: 2026-10-11T19:45Z
+    kind: agentic-consensus file review (session scratchpad p2d/review), frozen 352661de
+    result: >-
+      Sent back by Claude and DeepSeek (other panelists failed to start or
+      had not finished). Findings: cell validation refuses texture:<doc>;
+      consume-at-commit admits producer reports only; the packet's seq comes
+      from the caller's trajectory; arming cannot run in the bind step,
+      which follows submit; nothing closes a directive on a closed
+      trajectory; boot-time arming would resume work without a marker;
+      directives never reach the revision prompt; the bound starves W2
+      until P5; cut the delegated-cast gate as its own slice. The seq and
+      consumption gaps were also found by this session while the panel
+      ran. Revised: minting at commit on the document's trajectory,
+      management-only addressing, shared consume predicate, rendering,
+      P2d1 and P2d2.
 ---
 
 # P2d — texture addressing
 
 Autopaper's management has to feed a story's Texture with new evidence.
 The protocol says any desk may address texture:<doc>, and the Texture desk
-decides what to do with the delivery. Today a management Cast to a Texture
-would commit its record and packet, then open an engineering assignment by
-mistake. The Texture would wake on the packet and fail to resolve it, since
-the resolver only knows producer reports and owner revisions. P2d closes
-those two gaps, arms a Texture whose request work has closed, and bounds
-the exchange.
+decides what to do with the delivery. Today cell validation refuses a
+management Cast to texture:<doc>. Past that, the act path would open an
+engineering assignment by mistake, number the packet on the wrong
+trajectory, and the Texture would wake on a packet it can neither resolve
+nor consume. P2d1 fixes the engineering misroute on its own. P2d2 makes
+the delivery whole: the act commits the packet and the Texture's work on
+the document's trajectory, and the Texture resolves, renders and consumes
+it, within a bound.
 
 Ways it can fail, written before the code:
 
@@ -218,6 +290,15 @@ Ways it can fail, written before the code:
 - the supervision-only Texture of an engineering document takes a
   directive and arms a revision cell (refused there, as owner revisions
   are);
+- a directive commits while a Texture turn on the same document is
+  committing, and one of them refuses on the trajectory condition (the
+  turn retries as it does for any concurrent change; the directive's cell
+  is refused visibly and the desk can stage it again);
+- a directive numbered on the caller's trajectory is consumed by a run
+  that never saw it (the packet takes the document trajectory's seq);
+- the gate in P2d1 changes what a management Cast to research did before
+  (it opened an engineering assignment by mistake; the test pins that it
+  no longer does, and that no caller relied on it);
 - a packet pending before the deploy with the directive shape changes
   meaning after it (none exist: no desk could address texture:<doc>
   without opening an engineering assignment, which the audit checks).
