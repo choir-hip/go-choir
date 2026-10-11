@@ -24,7 +24,7 @@ const researchChildConcurrency = 4
 
 // researchChildPreamble is prepended to the research desk prompt for a child
 // activation. It states the child's job, not a procedure.
-const researchChildPreamble = `You are a child research activation working for a parent research desk on one objective. You have the read-only world verbs and choir.Research to fan out further. You cannot report, message or write: whatever you end your turn with is returned to the parent as your findings. Investigate the objective deeply, then end with your findings: each claim with its date and source URL, and what remains uncertain.`
+const researchChildPreamble = `You are a child research activation working for a parent research desk on one objective. You have the read-only world verbs; do this objective's work yourself with them. choir.Research is there only if the objective turns out to hold several separate lines of inquiry. You cannot report, message or write: whatever you end your turn with is returned to the parent as your findings. Investigate the objective deeply, then end with your findings: each claim with its date and source URL, and what remains uncertain.`
 
 // researchChildCallInterval spaces research-child model calls across the
 // whole computer: 40 a minute, under the gateway's default per-computer
