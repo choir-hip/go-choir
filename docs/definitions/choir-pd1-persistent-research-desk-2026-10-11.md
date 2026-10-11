@@ -135,7 +135,7 @@ boundaries:
 
 now:
   status: working
-  slice: S1f — rerun after the S1e fixes (refusals shown, sources kept, prompt v4)
+  slice: S1g — rerun after the search wave fix (9c1c96c7), follow-up after research's first report
   source_ref: 74227bcf (local; pushes after the W1a test run)
   deploy_identity: staging 78c9173e
   candidate:
@@ -182,7 +182,7 @@ now:
       remaining gap is Texture's own selection.
     next_observation: S1f — items, citations per item, unconfirmed leads followed up
   blocker_or_risk: none
-  next_action: push 4ca9b094 and 74227bcf with W1a, verify the deploy, rerun as S1f
+  next_action: after 9c1c96c7 deploys, rerun as S1g with the follow-up held until research has reported
 
 receipts:
   - id: S1c
@@ -250,6 +250,25 @@ receipts:
       shows refusals; research prompt v4; Texture states confirmed claims
       plainly) and 74227bcf (a full replace keeps the sources).
     conjecture: PD1-1 still short on coverage; follow-up confirmation of leads supported once
+  - id: S1f
+    at: 2026-10-11T10:47Z
+    deploy: staging c1d21d5e (refusals shown in cells, research prompt v4, a full replace keeps sources), test computer demo-arxiv-2026-10-10c
+    kind: deployed proof (traces in session scratchpad demo14/final)
+    result: >-
+      Same prompt and follow-up, but the harness sent the follow-up after
+      four quiet minutes, before research's first round reported, so this
+      run is not like-for-like with S1e. Three research rounds (23 cells, 5
+      errors; three verb refusals now visible in the cell, two web search
+      timeouts and one 404 import); Texture 43 cells, 9 errors. The final
+      brief has 618 words, 7 cited sources, all in the body (S1e: 3 in
+      about 1,100 words). It states confirmed items plainly, attributes
+      single-source items once, and holds two leads open without
+      boilerplate. It is short because search failed: guest searches timed
+      out at 30 s while ChatGPT search (median 23 s) held every wave it
+      joined
+      (problems/search-wave-waits-for-its-slowest-provider-2026-10-11.md,
+      fixed in 9c1c96c7).
+    conjecture: PD1-1 still short on coverage; citation and voice fixes supported
 ---
 
 # PD1 — persistent research desk
