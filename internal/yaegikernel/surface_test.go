@@ -204,3 +204,26 @@ func TestSessionCellErrorCarriesSurfaceHint(t *testing.T) {
 		t.Fatalf("choir.Help() in the REPL = %+v", help)
 	}
 }
+
+// Texture probed ApplyTexture with turns built to fail, to read the valid
+// values from the rejection (docs/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md).
+// The help gives the whole edit shape, so the only way to learn it is not
+// a staged write, and it does not invite trial.
+func TestApplyTextureHelpGivesTheWholeEditShape(t *testing.T) {
+	doc := choirFunctionDocs["ApplyTexture"].Summary
+	for _, want := range []string{
+		"update_block_text", "insert_block", "append_block", "delete_node", "insert_source_ref", "mark_source_unused",
+		"block_id", "after_block_id", "node_id", "block_type", "heading_level", "source_entity_id", "display_mode",
+		"update_dispositions", "incorporated", "rejected", "work_disposition", "content",
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("ApplyTexture help does not mention %q", want)
+		}
+	}
+	if strings.Contains(doc, "Rejections name") {
+		t.Errorf("ApplyTexture help must not invite learning the shape from rejections")
+	}
+	if !strings.Contains(doc, "real write") {
+		t.Errorf("ApplyTexture help must say every staged turn is a real write")
+	}
+}
