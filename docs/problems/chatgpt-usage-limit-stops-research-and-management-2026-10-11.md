@@ -56,3 +56,15 @@ observation record; today it does not.
 Until the owner decides, the work continues on whatever does not need
 research inference, and the next research demo waits for the limit to
 reset.
+
+## Owner note (2026-10-11, about 20:30Z)
+
+The owner's local Codex still had ChatGPT credits while staging was at the
+limit, and it is the same account as Node B's. Copying the local
+credentials would add no quota (limits and credits are per account) and
+would share one rotating refresh token between two clients, so nothing was
+moved. Open question (hypothesis): credits may apply to Codex CLI requests
+but not to the gateway's direct calls on the same account. The next time
+staging hits the limit, check whether the gateway's refusal names credits,
+and whether a Codex CLI call on the same account still succeeds at that
+moment.
