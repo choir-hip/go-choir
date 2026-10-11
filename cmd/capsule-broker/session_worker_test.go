@@ -147,21 +147,22 @@ func TestSessionWorkerRealSpawnEndToEnd(t *testing.T) {
 	if err != nil || string(content) != "live" {
 		t.Fatalf("overlay file = %q, %v", content, err)
 	}
-	res := evalCell(t, w, `choir.Message("owner", "note", "hi")`)
+	// choir.Message is retired (protocol P2c); Note is the staged act.
+	res := evalCell(t, w, `choir.Note("owner", "hi")`)
 	if res.Error != "" {
-		t.Fatalf("message: %s", res.Error)
+		t.Fatalf("note: %s", res.Error)
 	}
 	// RLM contract: bound cells stage into the tray for post-cell reduction
 	// instead of synchronously delivering. The intent ships on the result;
 	// worker-local receipts stay empty (nothing was delivered yet).
 	found := false
 	for _, in := range res.Intents {
-		if in.Kind == yaegikernel.IntentMessage && in.ToDesk == "owner" && in.Body == "hi" {
+		if in.Kind == yaegikernel.IntentNote && in.ToDesk == "owner" && in.Body == "hi" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("staged intents = %+v, want owner/note/hi message", res.Intents)
+		t.Fatalf("staged intents = %+v, want an owner/hi note", res.Intents)
 	}
 	if len(res.Receipts) != 0 {
 		t.Fatalf("receipts = %v, want empty (staged, not delivered)", res.Receipts)
