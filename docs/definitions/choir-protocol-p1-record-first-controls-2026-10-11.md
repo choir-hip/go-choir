@@ -137,10 +137,10 @@ boundaries:
 
 now:
   status: working
-  slice: P1a — the record in the control commit
-  source_ref: f1be9e2f
-  deploy_identity: staging 25c8b5b0
-  candidate: none
+  slice: P1 landed on staging; the deployed audit runs with the AI news demo
+  source_ref: 0f1c86c7 (pushed; CI 38157484614 green)
+  deploy_identity: staging 0f1c86c7; reader computer restarted onto it at 17:06:38Z
+  candidate: {id: P1, state: landed, ref: main, base: 3cee2ac9, digest: 0f1c86c7, scope: [internal/store, internal/types, internal/agentcore, internal/textureowner, internal/apihandler]}
   conjecture:
     id: P1-1
     claim: the control accumulator can mint each control's record in its existing conditional batch, with the packet bound to it
@@ -148,8 +148,8 @@ now:
     edge: missing_oracle
     delta_o: records per control in the store after a command and after its replay
     scope_if_supported: Texture controls on one computer
-    status: proposed
-    evidence_refs: []
+    status: testing
+    evidence_refs: [store tests in internal/store/lifecycle_control_record_test.go]
   decision:
     what: >-
       a control opens or continues work, so its record is a directive of
@@ -162,11 +162,16 @@ now:
     status: "settled for P1 (design §2 — Cast opens or continues work)"
     evidence_ref: docs/precommitment-protocol-design-2026-10-11.md §2
   belief:
-    believed_state: dispatch is off-ledger
-    main_uncertainty: whether any reader of packets breaks when SourceRecordID is set on control packets
-    next_observation: the file review, then the store test
-  blocker_or_risk: none
-  next_action: store tests (both entry points, replay, failed batch, owner emitter, the pack comparison), then the code
+    believed_state: >-
+      every control since the deploy minted its cast record (interim audit
+      at 17:20Z: 1 control, 1 record, all checks pass)
+    main_uncertainty: whether later research rounds in the demo keep the one-to-one join
+    next_observation: the full audit when the demo ends
+  blocker_or_risk: >-
+    not P1: the demo's first Texture run took no turn for eight minutes
+    (docs/problems/texture-raced-activation-refused-first-turn-2026-10-11.md,
+    named residual)
+  next_action: full audit at the demo's end; deployed receipt; completion panel
 
 receipts:
   - id: P1-review1
