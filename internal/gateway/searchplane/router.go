@@ -43,6 +43,9 @@ func NewRouter(providers []Provider, store HealthStore, config Config) *Router {
 	if config.MaxWaves < 1 {
 		config.MaxWaves = 1
 	}
+	if config.WaveGrace <= 0 {
+		config.WaveGrace = 1500 * time.Millisecond
+	}
 	if config.RequestTimeout <= 0 {
 		config.RequestTimeout = 30 * time.Second
 	}
@@ -87,7 +90,7 @@ func (r *Router) Search(ctx context.Context, query string, maxResults int) (*Sea
 		if len(pick) == 0 {
 			break
 		}
-		waveAttempts, waveBatches, waveProviders, waveDegraded := r.executeWave(ctx, query, maxResults, pick, now)
+		waveAttempts, waveBatches, waveProviders, waveDegraded := r.executeWave(ctx, query, maxResults, pick, now, batches, targetMin)
 		attempts = append(attempts, waveAttempts...)
 		successProviders = appendUniqueStrings(successProviders, waveProviders...)
 		for _, batch := range waveBatches {
@@ -209,22 +212,35 @@ type providerWaveBatch struct {
 	results  []Result
 }
 
-func (r *Router) executeWave(ctx context.Context, query string, maxResults int, providers []string, now time.Time) ([]Attempt, []providerWaveBatch, []string, bool) {
+// executeWave runs one wave's providers in parallel. Once the merged
+// results (prior waves plus this one) meet targetMin, it waits WaveGrace for
+// the rest and then cancels them: a slow provider no longer holds a wave its
+// faster peers have already satisfied. A provider cancelled that way is
+// superseded, not failed: it records no outcome and does not degrade the
+// result.
+func (r *Router) executeWave(ctx context.Context, query string, maxResults int, providers []string, now time.Time, prior []providerBatch, targetMin int) ([]Attempt, []providerWaveBatch, []string, bool) {
 	type callResult struct {
-		provider string
-		attempt  Attempt
-		results  []Result
-		class    OutcomeClass
+		provider   string
+		attempt    Attempt
+		results    []Result
+		class      OutcomeClass
+		superseded bool
 	}
 	resultsCh := make([]callResult, len(providers))
-	g, gctx := errgroup.WithContext(ctx)
+	waveCtx, stopWave := context.WithCancel(ctx)
+	defer stopWave()
+	done := make(chan int, len(providers))
+	g, gctx := errgroup.WithContext(waveCtx)
+	launched := 0
 	for i, name := range providers {
 		i, name := i, name
 		provider := r.providerByName(name)
 		if provider == nil {
 			continue
 		}
+		launched++
 		g.Go(func() error {
+			defer func() { done <- i }()
 			callCtx, cancel := context.WithTimeout(gctx, r.config.RequestTimeout)
 			defer cancel()
 			started := time.Now()
@@ -232,8 +248,10 @@ func (r *Router) executeWave(ctx context.Context, query string, maxResults int, 
 			class := ClassifyCall(err, len(hits))
 			// The caller going away (cancel, or its own deadline before the
 			// request timeout) is not the provider failing: one cancelled
-			// fan-out must not cool the whole plane down.
-			callerGone := err != nil && ctx.Err() != nil
+			// fan-out must not cool the whole plane down. Neither is a wave
+			// that its faster providers already satisfied.
+			superseded := err != nil && ctx.Err() == nil && waveCtx.Err() != nil
+			callerGone := err != nil && (ctx.Err() != nil || superseded)
 			if callerGone {
 				class = OutcomeCallerGone
 			}
@@ -259,9 +277,32 @@ func (r *Router) executeWave(ctx context.Context, query string, maxResults int, 
 					At:       now,
 				})
 			}
-			resultsCh[i] = callResult{provider: name, attempt: attempt, results: hits, class: class}
+			resultsCh[i] = callResult{provider: name, attempt: attempt, results: hits, class: class, superseded: superseded}
 			return nil
 		})
+	}
+
+	// Collect calls as they finish. resultsCh[i] is written before done
+	// receives i, so reading it here is ordered after the write.
+	var grace <-chan time.Time
+	arrived := append([]providerBatch(nil), prior...)
+	for remaining := launched; remaining > 0; {
+		select {
+		case i := <-done:
+			remaining--
+			res := resultsCh[i]
+			if res.class == OutcomeSuccess {
+				for _, hit := range res.results {
+					arrived = appendBatchResult(arrived, res.provider, hit)
+				}
+			}
+			if grace == nil && len(mergeBatches(arrived, maxResults)) >= targetMin {
+				grace = time.After(r.config.WaveGrace)
+			}
+		case <-grace:
+			stopWave()
+			grace = nil
+		}
 	}
 	_ = g.Wait()
 
@@ -279,7 +320,7 @@ func (r *Router) executeWave(ctx context.Context, query string, maxResults int, 
 			batches = append(batches, providerWaveBatch{provider: res.provider, results: res.results})
 			continue
 		}
-		if res.class != OutcomeSkippedCoolingDown {
+		if res.class != OutcomeSkippedCoolingDown && !res.superseded {
 			degraded = true
 		}
 	}

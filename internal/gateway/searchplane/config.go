@@ -13,7 +13,11 @@ type Config struct {
 	MinMergedResults  int
 	MaxWaves          int
 	RequestTimeout    time.Duration
-	EndpointFor       func(provider string) string
+	// WaveGrace is how long a wave keeps waiting for its slower providers
+	// once the merged results meet the target; then it cancels them
+	// (problems/search-wave-waits-for-its-slowest-provider-2026-10-11.md).
+	WaveGrace   time.Duration
+	EndpointFor func(provider string) string
 }
 
 // ConfigFromEnv loads router settings from environment variables.
@@ -31,6 +35,7 @@ func ConfigFromEnv() Config {
 		MinMergedResults:  envInt("CHOIR_SEARCH_MIN_MERGED_RESULTS", 40),
 		MaxWaves:          envInt("CHOIR_SEARCH_MAX_WAVES", 4),
 		RequestTimeout:    time.Duration(envInt("CHOIR_SEARCH_REQUEST_TIMEOUT_SECONDS", 30)) * time.Second,
+		WaveGrace:         time.Duration(envInt("CHOIR_SEARCH_WAVE_GRACE_MS", 1500)) * time.Millisecond,
 	}
 }
 
