@@ -95,9 +95,10 @@ func TestChoirParityAssignMessageReceipts(t *testing.T) {
 	if !resp.Success {
 		t.Fatalf("dto assign: %s", resp.Error)
 	}
-	messaged, err := scope.Message("activation-choir", "note", "hi")
-	if err != nil || messaged.MessageID == "" {
-		t.Fatalf("symbol message = %+v, %v", messaged, err)
+	// Message is retired (protocol P2c): the symbol still resolves and
+	// refuses, naming the acts to use.
+	if _, err := scope.Message("activation-choir", "note", "hi"); err == nil || !strings.Contains(err.Error(), "choir.ReportPacket") {
+		t.Fatalf("retired message = %v, want a refusal naming ReportPacket", err)
 	}
 }
 

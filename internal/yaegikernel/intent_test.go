@@ -76,12 +76,12 @@ func TestCellBindingInboxAndStaging(t *testing.T) {
 	if got := scope.Inbox(); len(got) != 1 || got[0].Body != "build it" {
 		t.Fatalf("inbox snapshot not isolated: %+v", got)
 	}
-	res, err := scope.Message("management", "evidence_update", "built")
-	if err != nil || res.MessageID == "" {
-		t.Fatalf("bound message = %+v, %v", res, err)
+	res, err := scope.Note("management", "built")
+	if err != nil || res == "" {
+		t.Fatalf("bound note = %q, %v", res, err)
 	}
 	staged := hooks.End()
-	if len(staged) != 1 || staged[0].Kind != IntentMessage {
+	if len(staged) != 1 || staged[0].Kind != IntentNote {
 		t.Fatalf("drained = %+v", staged)
 	}
 	if len(scope.Inbox()) != 0 {
@@ -150,7 +150,7 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 		t.Fatalf("import choir: %v", err)
 	}
 	hooks := scope.BindCell()
-	good, err := serveCell(sess, SessionFrame{ID: "c-ok", Source: `choir.Message("management", "k", "hi")`}, nil, &hooks)
+	good, err := serveCell(sess, SessionFrame{ID: "c-ok", Source: `choir.Note("management", "hi")`}, nil, &hooks)
 	if err != nil {
 		t.Fatalf("good cell: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestServeCellFailedDropsTray(t *testing.T) {
 	}
 	// Runtime failure (not a compile rejection): the cell stages then panics
 	// at execution, so it poisons and ships nothing.
-	bad, err := serveCell(sess, SessionFrame{ID: "c-bad", Source: `choir.Message("management", "k", "x"); panic("boom")`}, nil, &hooks)
+	bad, err := serveCell(sess, SessionFrame{ID: "c-bad", Source: `choir.Note("management", "x"); panic("boom")`}, nil, &hooks)
 	if err == nil {
 		t.Fatal("bad cell must poison")
 	}
