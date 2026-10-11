@@ -33,6 +33,25 @@ confirmed against the files below. No staging exploit was attempted.
    wakes of one generation (a replay, or an actor retry after the poll ran
    but before the commit) both poll.
 
+4. **A failed actor commit loses the successor wake** (GPT-6.1 Sol and
+   GPT-6 Luna). The handler saves the advanced schedule outside the actor
+   transaction; the successor wake is buffered into that transaction. If
+   the commit fails, the successor is dropped and the original wake is
+   retried. Checking the due time alone would refuse that retry and leave
+   the schedule active with no wake; not checking it polls early.
+
+5. **A schedule can sit active with no wake** if re-arming keeps failing
+   until the actor poisons the wake (Claude, GLM, DeepSeek). Nothing shows
+   it except a log line.
+
+6. **A large poll can exceed corpusd's request bound** (GLM): up to 100
+   items of up to 1 MiB each can make a request larger than 64 MiB, which
+   corpusd refuses on every poll.
+
+Guests reach corpusd directly on port 8086 (`CHOIR_PLATFORM_URL`), not
+only through the proxy (DeepSeek), so corpusd's own checks carry the
+generic-route guard as well as the proxy's.
+
 ## Discovered, wider than W1
 
 The same-owner, other-computer overwrite in finding 1 applies to every
@@ -50,4 +69,10 @@ ownership), which is a separate auth-path change.
   capture route.
 - A poll whose capture write fails keeps the previous validators, so the
   next poll fetches the items again and writes them.
-- A wake whose due time is not the schedule's next due time does nothing.
+- A wake of the current generation whose due time already ran does not
+  poll; it re-arms the schedule's saved next poll, which restores a
+  successor lost to a failed commit.
+- The schedule list marks an active schedule whose next poll is long past
+  as overdue.
+- The capture sink splits a poll's items into requests well under
+  corpusd's bound.

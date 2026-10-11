@@ -41,3 +41,18 @@ Through the proxy handler: a bound guest posting captures for its own
 owner and computer reaches corpusd; a guest posting for another computer
 is refused at the proxy; a bound guest reads a body; an unbound caller is
 refused.
+
+## Correction (2026-10-11, 13:40Z)
+
+The cause above is wrong. A guest's corpusd URL is not the proxy: the
+guest init (`nix/autoputer-vm.nix`) writes `CHOIR_PLATFORM_URL` from the
+kernel command line (`choir.platform_url=http://<host>:8086`, set by
+`internal/vmmanager/manager.go`), and `CHOIR_PLATFORM_URL` takes
+precedence over `RUNTIME_CORPUSD_URL` (`internal/provideriface/config.go`,
+`internal/autoputer/run.go`). Guests reach corpusd directly, where the
+capture route checks the tap binding itself. The W1b2 attempt failed only
+because the test computer still ran c1d21d5e. The proxy routes added in
+8574a8e1 are a second path, consistent with the proxy's existing object
+pass-through, but they did not carry the staging capture writes. Found by
+the W1 completion panel (DeepSeek). Lesson: read which setting wins before
+naming a cause from one variable.
