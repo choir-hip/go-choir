@@ -125,6 +125,43 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 	return nil
 }
 
+// InsertObjectIfAbsent writes the object only if no row has its canonical
+// id. INSERT IGNORE leaves an existing row untouched, so two writers racing
+// on one id cannot replace each other's object; a concurrent insert of the
+// same key fails at commit instead of overwriting.
+func (o *ObjectGraphStore) InsertObjectIfAbsent(ctx context.Context, obj objectgraph.Object) (bool, error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return false, fmt.Errorf("platform objectgraph: nil store")
+	}
+	bodyRef, err := o.externalizeBody(obj.Body)
+	if err != nil {
+		return false, err
+	}
+	inlineBody := obj.Body
+	if bodyRef != "" {
+		inlineBody = nil
+	}
+	res, err := o.store.corpus().ExecContext(ctx, `INSERT IGNORE INTO og_objects
+		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
+		obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
+		obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
+		obj.SupersededBy)
+	if err != nil {
+		return false, fmt.Errorf("platform objectgraph: insert object: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("platform objectgraph: insert object: %w", err)
+	}
+	if n == 0 {
+		return false, nil
+	}
+	o.store.markCorpusDirty("objectgraph insert object " + obj.CanonicalID)
+	return true, nil
+}
+
 func (o *ObjectGraphStore) GetObject(ctx context.Context, id string) (objectgraph.Object, error) {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return objectgraph.Object{}, fmt.Errorf("platform objectgraph: nil store")

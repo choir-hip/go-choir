@@ -71,8 +71,16 @@ type SourceSchedule struct {
 	UpdatedAt           time.Time         `json:"updated_at"`
 }
 
+// sourcePollErrorLimit bounds a poll's saved error text: the schedule keeps
+// its last polls and is rewritten on every poll, so an upstream error page
+// must not ride along in full.
+const sourcePollErrorLimit = 512
+
 // RecordPoll appends one poll's usage, bounded to SourcePollUsageLimit.
 func (s *SourceSchedule) RecordPoll(u SourcePollUsage) {
+	if len(u.Error) > sourcePollErrorLimit {
+		u.Error = strings.ToValidUTF8(u.Error[:sourcePollErrorLimit], "") + "…"
+	}
 	s.Totals.Polls++
 	if u.Error != "" {
 		s.Totals.Errors++

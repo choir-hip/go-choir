@@ -20,6 +20,15 @@ type Store interface {
 	Close() error
 }
 
+// InsertOnlyStore is an optional interface for stores that can create an
+// object only when its canonical id is absent, in one atomic step. It
+// reports false, and leaves the existing object untouched, when the id is
+// already present.
+type InsertOnlyStore interface {
+	Store
+	InsertObjectIfAbsent(ctx context.Context, obj Object) (bool, error)
+}
+
 // Batch is a list of object and edge mutations to apply atomically.
 type Batch struct {
 	Objects []Object

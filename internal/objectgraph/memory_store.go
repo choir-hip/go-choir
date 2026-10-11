@@ -26,6 +26,16 @@ func (m *MemoryStore) PutObject(_ context.Context, obj Object) error {
 	return nil
 }
 
+func (m *MemoryStore) InsertObjectIfAbsent(_ context.Context, obj Object) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.objects[obj.CanonicalID]; ok {
+		return false, nil
+	}
+	m.objects[obj.CanonicalID] = obj
+	return true, nil
+}
+
 func (m *MemoryStore) GetObject(_ context.Context, id string) (Object, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -162,5 +164,85 @@ func TestGenericObjectRoutesRefuseCaptures(t *testing.T) {
 	}
 	if _, err := svc.GetObject(t.Context(), id); err == nil {
 		t.Fatal("a capture was written through the generic route")
+	}
+}
+
+// Two computers of one owner post the same new items at once, with
+// different bodies, against Store B's Dolt adapter. Each capture is created
+// once: it keeps one writer's computer and body, the other writer counts a
+// repeat (or fails), and no request replaces the other's capture
+// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+func TestConcurrentSameOwnerCaptureWritesCreateOnce(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	og := NewObjectGraphStore(store)
+	svc := objectgraph.NewService(objectgraph.Config{Durable: og})
+	defer svc.Close()
+	h := NewObjectGraphHandler(svc, og)
+	a := &vmctl.GuestOwnership{Found: true, UserID: "paper-owner", ComputerID: "computer-a"}
+	b := &vmctl.GuestOwnership{Found: true, UserID: "paper-owner", ComputerID: "computer-b"}
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": a, "10.200.1.3": b}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureCaptureBodies(t.TempDir())
+
+	fetched := time.Date(2026, 10, 11, 10, 0, 0, 0, time.UTC)
+	itemsFor := func(computer string) []sources.Item {
+		var items []sources.Item
+		for i := 0; i < 8; i++ {
+			items = append(items, sources.Item{ID: fmt.Sprintf("race-%d", i), SourceID: "rss:example", SourceType: sources.SourceTypeRSS,
+				Title: "Race", Body: "body from " + computer, URL: fmt.Sprintf("https://example.com/race/%d", i), FetchedAt: fetched})
+		}
+		return items
+	}
+	type outcome struct {
+		code   int
+		result struct {
+			New        int      `json:"new"`
+			Repeated   int      `json:"repeated"`
+			CaptureIDs []string `json:"capture_ids"`
+		}
+	}
+	post := func(from, computer string) outcome {
+		raw, _ := json.Marshal(CaptureWriteRequest{OwnerID: "paper-owner", ComputerID: computer, Items: itemsFor(computer)})
+		req := httptest.NewRequest(http.MethodPost, "/internal/platform/captures", bytes.NewReader(raw))
+		req.RemoteAddr = from + ":40000"
+		rec := httptest.NewRecorder()
+		h.HandleCaptures(rec, req)
+		var out outcome
+		out.code = rec.Code
+		_ = json.Unmarshal(rec.Body.Bytes(), &out.result)
+		return out
+	}
+	var wg sync.WaitGroup
+	var got [2]outcome
+	for i, g := range []struct{ ip, computer string }{{"10.200.1.2", "computer-a"}, {"10.200.1.3", "computer-b"}} {
+		wg.Add(1)
+		go func(i int, ip, computer string) { defer wg.Done(); got[i] = post(ip, computer) }(i, g.ip, g.computer)
+	}
+	wg.Wait()
+
+	created := map[string]string{}
+	for i, computer := range []string{"computer-a", "computer-b"} {
+		if got[i].code != http.StatusOK {
+			continue // a conflicting commit fails the request; it must not overwrite
+		}
+		for _, id := range got[i].result.CaptureIDs {
+			if prev, dup := created[id]; dup {
+				t.Fatalf("capture %s reported new by %s and %s", id, prev, computer)
+			}
+			created[id] = computer
+		}
+	}
+	for id, computer := range created {
+		obj, err := og.GetObject(context.Background(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if obj.ComputerID != computer {
+			t.Fatalf("capture %s was created by %s but now names %s", id, computer, obj.ComputerID)
+		}
+	}
+	if got[0].code == http.StatusOK && got[1].code == http.StatusOK && len(created) != 8 {
+		t.Fatalf("both writes succeeded but %d of 8 captures were reported new: %+v", len(created), got)
 	}
 }

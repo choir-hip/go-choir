@@ -2,6 +2,7 @@ package objectgraph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -48,28 +49,74 @@ func NewService(cfg Config) *Service {
 }
 
 func (s *Service) CreateObject(ctx context.Context, req CreateObjectRequest) (Object, error) {
-	reg, err := s.registry.LookupKind(req.Kind)
+	obj, store, err := s.newObject(req)
 	if err != nil {
 		return Object{}, err
 	}
+	if err := store.PutObject(ctx, obj); err != nil {
+		return Object{}, err
+	}
+	return obj, nil
+}
+
+// CreateObjectIfAbsent creates the object only if its canonical id is not
+// already stored, atomically, and reports whether it did. An existing object
+// is returned unchanged with created false. Stores that cannot insert
+// atomically refuse rather than fall back to check-then-write.
+func (s *Service) CreateObjectIfAbsent(ctx context.Context, req CreateObjectRequest) (Object, bool, error) {
+	obj, store, err := s.newObject(req)
+	if err != nil {
+		return Object{}, false, err
+	}
+	var created bool
+	switch st := store.(type) {
+	case InsertOnlyStore:
+		created, err = st.InsertObjectIfAbsent(ctx, obj)
+	case ConditionalBatchStore:
+		err = st.PutBatchConditional(ctx, []ObjectCondition{{CanonicalID: obj.CanonicalID}}, Batch{Objects: []Object{obj}})
+		created = err == nil
+		if errors.Is(err, ErrConflict) {
+			err = nil
+		}
+	default:
+		return Object{}, false, fmt.Errorf("objectgraph: store for %s cannot create atomically", req.Kind)
+	}
+	if err != nil {
+		return Object{}, false, err
+	}
+	if created {
+		return obj, true, nil
+	}
+	existing, err := store.GetObject(ctx, obj.CanonicalID)
+	if err != nil {
+		return Object{}, false, err
+	}
+	return existing, false, nil
+}
+
+func (s *Service) newObject(req CreateObjectRequest) (Object, Store, error) {
+	reg, err := s.registry.LookupKind(req.Kind)
+	if err != nil {
+		return Object{}, nil, err
+	}
 	if req.OwnerID == "" {
-		return Object{}, fmt.Errorf("owner_id is required")
+		return Object{}, nil, fmt.Errorf("owner_id is required")
 	}
 	meta, err := NormalizeMetadata(req.Metadata)
 	if err != nil {
-		return Object{}, err
+		return Object{}, nil, err
 	}
 	contentHash := ContentHash(req.Kind, req.Body, meta)
 	suffix := StableSuffixFromContent(contentHash)
 	if reg.IdentityMode == IdentityExternalKey || req.IdentityKey != "" {
 		if req.IdentityKey == "" {
-			return Object{}, fmt.Errorf("identity_key is required for %s", req.Kind)
+			return Object{}, nil, fmt.Errorf("identity_key is required for %s", req.Kind)
 		}
 		suffix = StableSuffixFromKey(req.IdentityKey)
 	}
 	id, err := BuildCanonicalID(req.Kind, req.OwnerID, suffix)
 	if err != nil {
-		return Object{}, err
+		return Object{}, nil, err
 	}
 	now := req.Now.UTC()
 	if now.IsZero() {
@@ -87,10 +134,7 @@ func (s *Service) CreateObject(ctx context.Context, req CreateObjectRequest) (Ob
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := s.storeFor(reg.Store).PutObject(ctx, obj); err != nil {
-		return Object{}, err
-	}
-	return obj, nil
+	return obj, s.storeFor(reg.Store), nil
 }
 
 func (s *Service) GetObject(ctx context.Context, id string) (Object, error) {

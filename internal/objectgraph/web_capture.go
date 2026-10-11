@@ -79,6 +79,26 @@ func (s *Service) CreateWebCapture(ctx context.Context, req CreateWebCaptureRequ
 	})
 }
 
+// CreateWebCaptureIfAbsent creates the capture only if its id is not already
+// stored, atomically; an existing capture is returned unchanged with created
+// false. Shared captures are written this way so two computers polling the
+// same item cannot replace each other's capture.
+func (s *Service) CreateWebCaptureIfAbsent(ctx context.Context, req CreateWebCaptureRequest) (Object, bool, error) {
+	metadata, err := BuildWebCaptureMetadata(req)
+	if err != nil {
+		return Object{}, false, err
+	}
+	return s.CreateObjectIfAbsent(ctx, CreateObjectRequest{
+		Kind:        WebCaptureObjectKind,
+		OwnerID:     req.OwnerID,
+		ComputerID:  req.ComputerID,
+		IdentityKey: strings.TrimSpace(req.IdentityKey),
+		Body:        req.ExtractedText,
+		Metadata:    metadata,
+		Now:         req.Now,
+	})
+}
+
 func BuildWebCaptureMetadata(req CreateWebCaptureRequest) (WebCaptureMetadata, error) {
 	originalURL, err := normalizeWebCaptureURL(req.URL, "url")
 	if err != nil {

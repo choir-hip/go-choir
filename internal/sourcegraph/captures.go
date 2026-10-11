@@ -90,9 +90,15 @@ func WriteCaptures(ctx context.Context, graph *objectgraph.Service, bodies BodyS
 		req.Language = item.Language
 		req.Region = item.Region
 		req.BodyKind = item.BodyKind
-		obj, err := graph.CreateWebCapture(ctx, req)
+		obj, created, err := graph.CreateWebCaptureIfAbsent(ctx, req)
 		if err != nil {
 			return result, fmt.Errorf("write captures: capture %s: %w", item.ID, err)
+		}
+		if !created {
+			// Another writer created it between the lookup and this insert;
+			// its capture stands (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+			result.Repeated++
+			continue
 		}
 		result.New++
 		result.CaptureIDs = append(result.CaptureIDs, obj.CanonicalID)
