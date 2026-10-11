@@ -85,9 +85,8 @@ func NewChatGPTSearchProviderFromEnv() *ChatGPTSearchProvider {
 	authPath := strings.TrimSpace(os.Getenv("CHATGPT_AUTH_PATH"))
 	var tokenSource chatGPTSearchTokenSource
 	if authPath != "" {
-		tokenSource = &codexSearchTokenSource{auth: llmprovider.NewChatGPTAuth(llmprovider.ChatGPTAuthOptions{
-			Path: authPath,
-		})}
+		// The inference provider refreshes this same file; share its auth.
+		tokenSource = &codexSearchTokenSource{auth: llmprovider.SharedChatGPTAuth(authPath)}
 	}
 
 	return &ChatGPTSearchProvider{
@@ -150,9 +149,8 @@ func (p *ChatGPTSearchProvider) Search(ctx context.Context, query string, maxRes
 	if err != nil {
 		return nil, fmt.Errorf("chatgpt search: %w", err)
 	}
-	if len(results) == 0 {
-		return nil, fmt.Errorf("chatgpt search: response contained no web sources")
-	}
+	// No sources is an empty result, not a provider failure: the plane's
+	// empty-streak rule decides whether to bench.
 	return results, nil
 }
 

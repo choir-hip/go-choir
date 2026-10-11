@@ -795,7 +795,7 @@ func NewChatGPTProvider(cfg ChatGPTConfig) (*ChatGPTProvider, error) {
 	if baseURL == "" {
 		baseURL = defaultChatGPTResponsesURL
 	}
-	auth := NewChatGPTAuth(ChatGPTAuthOptions{Path: cfg.AuthPath})
+	auth := SharedChatGPTAuth(cfg.AuthPath)
 	if _, err := auth.Read(); err != nil {
 		return nil, fmt.Errorf("chatgpt provider requires codex auth: %w", err)
 	}
@@ -2717,6 +2717,20 @@ type oauthRefreshResponse struct {
 	IDToken      string `json:"id_token"`
 }
 
+// sharedChatGPTAuths holds the process's one ChatGPTAuth per auth path.
+var sharedChatGPTAuths sync.Map
+
+// SharedChatGPTAuth returns the process's one ChatGPTAuth for path (the
+// default Codex path when empty). Refresh tokens rotate, so every user of an
+// auth file (each inference model, the search adapter) must refresh under
+// one mutex: two refreshers spending the same refresh token make the second
+// fail.
+func SharedChatGPTAuth(path string) *ChatGPTAuth {
+	auth := NewChatGPTAuth(ChatGPTAuthOptions{Path: path})
+	shared, _ := sharedChatGPTAuths.LoadOrStore(filepath.Clean(auth.path), auth)
+	return shared.(*ChatGPTAuth)
+}
+
 func NewChatGPTAuth(opts ChatGPTAuthOptions) *ChatGPTAuth {
 	auth := &ChatGPTAuth{
 		path:          opts.Path,
@@ -2938,7 +2952,25 @@ func (a *ChatGPTAuth) write(record *codexAuthFile) error {
 	if err := os.MkdirAll(filepath.Dir(a.path), 0o700); err != nil {
 		return fmt.Errorf("create chatgpt auth dir: %w", err)
 	}
-	if err := os.WriteFile(a.path, append(data, '\n'), 0o600); err != nil {
+	// Replace the file whole by rename: a concurrent Read never parses a
+	// half-written file.
+	tmp, err := os.CreateTemp(filepath.Dir(a.path), filepath.Base(a.path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("write chatgpt auth file: %w", err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write chatgpt auth file: %w", err)
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write chatgpt auth file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("write chatgpt auth file: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), a.path); err != nil {
 		return fmt.Errorf("write chatgpt auth file: %w", err)
 	}
 	return nil

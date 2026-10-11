@@ -260,3 +260,23 @@ func writeChatGPTSearchEvent(t *testing.T, w http.ResponseWriter, event any) {
 		t.Fatalf("write event: %v", err)
 	}
 }
+
+// A completed answer with no web sources is an empty result, not a provider
+// failure: an error would bench the provider for minutes on an ordinary
+// no-hit query (review of PR #52).
+func TestChatGPTSearchProviderNoSourcesIsEmptyResult(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeChatGPTSearchEvent(t, w, map[string]any{"type": "response.completed"})
+	}))
+	defer server.Close()
+	provider := &ChatGPTSearchProvider{
+		httpClient: server.Client(), baseURL: server.URL, model: defaultChatGPTSearchModel,
+		reasoningEffort: defaultChatGPTSearchReasoning, searchContextSize: defaultChatGPTSearchContextSize,
+		tokenSource: &fakeChatGPTSearchTokenSource{configured: true, token: "t"},
+	}
+	results, err := provider.Search(context.Background(), "nothing here", 3)
+	if err != nil || len(results) != 0 {
+		t.Fatalf("results = %#v, err = %v; want empty and no error", results, err)
+	}
+}
