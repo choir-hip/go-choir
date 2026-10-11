@@ -66,3 +66,26 @@ document did not move for five minutes.
 - Whether 60 calls a minute is the right budget for a computer doing deep
   research is an owner decision (provider account limits and cost); the
   design should work within whatever budget is set.
+
+## Amendment (00:52Z): the tree never converges; the desks never return
+
+At 00:52, fourteen minutes after the prompt, both research desks were
+still inside their first `choir.Research` call (cells at 00:38:19 and
+00:38:28). The guest log shows children ending at 35 to 185 a minute
+through 00:51 (about 780 in all, 49 with findings), and the gateway still
+rejecting this computer (2,938 rejections and 300 admitted calls between
+00:46 and 00:52). Children delegate again before doing work, so the tree
+keeps widening. A desk's Research call has no deadline of its own when
+its cell sets no `timeout_ms`, and no child is ever told how long it has,
+so nothing forces the tree back to the desk. No report reached Texture;
+the document stayed at its framing revision.
+
+Cause, in the terms of the settled design: M6.5 gives a child "a
+carve-out of the parent's budget". 470a734c shared the egress budget but
+carved out nothing, and time was not budgeted at all. Pacing (above)
+bounds the rate, not the size or the duration of a tree.
+
+Fix direction: carve time. A desk's Research call returns within a fixed
+window; each child gets a share of its parent's remaining time and is told
+it; a child with too little time left to fan out does the work itself.
+Depth and width stay the model's choice within that time.
