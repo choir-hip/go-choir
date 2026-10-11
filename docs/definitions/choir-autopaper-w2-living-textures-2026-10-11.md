@@ -188,7 +188,7 @@ now:
 
 receipts:
   - id: W2-review1
-    at: 2026-10-11T15:40Z
+    at: 2026-10-11T15:30Z
     kind: agentic-consensus file review (session scratchpad w2/review)
     result: >-
       Sent back 5 to 2 (Claude, Codex, GLM, GPT-6 Luna and GPT-6.1 Sol send

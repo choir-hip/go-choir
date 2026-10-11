@@ -318,7 +318,7 @@ receipts:
       not on staging, where one computer polls.
     conjecture: W1-3 supported with both rounds' fixes
   - id: W1-panel3
-    at: 2026-10-11T15:25Z
+    at: 2026-10-11T15:13Z
     deploy: staging 8031258a (frozen 66b96f10)
     kind: agentic-consensus completion panel (session scratchpad w1c/panel3)
     result: >-
