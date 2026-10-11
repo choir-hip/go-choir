@@ -133,7 +133,20 @@ now:
   blocker_or_risk: none
   next_action: read S1d's follow-up research run; record the session line and whether it reused earlier variables
 
-receipts: []
+receipts:
+  - id: S1d-PD2
+    at: 2026-10-11T04:06Z
+    deploy: staging c713d63a
+    kind: deployed proof (trace s1d-final)
+    result: >-
+      Eight research runs of one desk: the first cell of the first run said
+      "new session"; the other seven said "continuing session" with correct
+      cell, run and age counts (for example a232777e continued efd81261's 4
+      cells after 3m31s). A failed cell that killed the worker showed up as a
+      fresh session count in the next run, as designed. The desk did not
+      yet reuse earlier variables: each run re-read choir.Updates() and
+      searched anew.
+    conjecture: PD2 mechanism supported on the product path; PD2-1 (reuse instead of repeat) not yet observed
 ---
 
 # PD2 — desk sessions outlive runs

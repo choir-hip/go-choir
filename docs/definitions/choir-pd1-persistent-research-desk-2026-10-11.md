@@ -207,6 +207,25 @@ receipts:
       First grounded revision came at 02:12:54, 6 minutes after the prompt
       and 4.4 minutes after research reported.
     conjecture: PD1-1 refuted on coverage; identity and follow-up claims supported
+  - id: S1d
+    at: 2026-10-11T04:06Z
+    deploy: staging c713d63a (+ Keenable key on Node B), test computer demo-arxiv-2026-10-10c
+    kind: deployed proof (traces in session scratchpad s1d-1, s1d-final)
+    result: >-
+      Same prompt and follow-up, with the S1c fixes deployed (outline in the
+      cell, frame boundary, ApplyTexture help, one-minute rate-limit bench,
+      Keenable, PD2). One research agent (research:596395c7-...) served
+      eight rounds across the request and the follow-up. First grounded
+      revision came at 3m51s (S1c: 6m), then a revision every 1-3 minutes;
+      13 revisions. Texture: 12 turns, 66 cells, 7 errors, one block-id or
+      probe error (S1c: 87 cells, 34 errors, 11 not-found). Keenable active
+      and succeeding beside Parallel and Tavily; zero gateway 429s. The
+      final document has about 1,700 words and 20 dated in-window mentions,
+      with a section listing contested and unverified reports. That is still
+      short of the baseline's 26 items: the Choir brief withholds items it
+      could not trace to a primary or wire source, which the baseline
+      asserts (for example GPT-6 in ChatGPT).
+    conjecture: PD1-1 still short on coverage within 20 minutes; latency and cadence supported
 ---
 
 # PD1 — persistent research desk
