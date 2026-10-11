@@ -27,6 +27,12 @@ That is thirty seconds and a few hundred milliseconds.
 - The gateway gives each search provider 30 seconds
   (internal/gateway/search.go, every provider's http.Client).
 
+- The gateway's router runs up to four waves by default
+  (internal/gateway/searchplane/config.go, CHOIR_SEARCH_MAX_WAVES=4), each
+  provider call bounded by RequestTimeout (30 seconds), until it has 40
+  merged results. A search can legitimately take two minutes at the
+  gateway.
+
 So any provider call that takes close to its full budget succeeds at the
 gateway after the guest has already returned a timeout to the cell. If the
 gateway falls back from one provider to another after a slow failure, the
@@ -50,6 +56,15 @@ report. Earlier in the same demo it blamed "search-provider cooldowns and
 timeouts" for thin coverage when the gateway had one seven-second outage in
 sixteen calls. A desk that cannot tell a slow search from a failed one
 narrows its own coverage and explains it wrongly.
+
+## Preferred fix (deferred)
+
+Raising the guest's deadline to cover four waves would make a cell wait two
+minutes on one search. The better fix is a total deadline on the gateway's
+router, below the guest's, that returns the merged results it has when the
+deadline arrives (marked degraded), instead of letting waves run past the
+caller. That is a gateway provider-call change (red), off Autopaper's path,
+so it waits; this document is its first commit.
 
 Mutation class of a fix: red (gateway provider calls) on the gateway side,
 orange on the guest client.
