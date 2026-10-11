@@ -126,10 +126,9 @@ finish:
     trajectory has no open Texture work, mints one open Texture work item
     (id derived from the record, not-exists condition, as
     textureSupervisionSubject does). A closed or cancelled trajectory
-    refuses the act with a visible reason. The bound is checked here:
-    directive packets on the document's trajectory since its latest owner
-    input, at most four; because the commit is conditioned on that
-    trajectory, two concurrent directives serialize.
+    refuses the act with a visible reason. The bound (item 7) is checked
+    here; because the commit is conditioned on that trajectory, two
+    concurrent directives serialize.
     3. Occurrence: a directive occurrence kind (encoded like the other
     two, identity stable across replays) accepted where the adapter
     canonicalizes Texture dispatches, in ResolveTextureActorOccurrence and
@@ -138,6 +137,10 @@ finish:
     addressee is texture:<doc>, its emitter is the owner's persistent
     management; the packet matches the record, has direction directive,
     targets this Texture on this document's trajectory, and is pending.
+    The occurrence carries the emitter as its ProducerAgentID, so the
+    actor handler's expected-source check
+    (internal/actorruntime/handler.go) admits the wake instead of
+    consuming it as a foreign source envelope.
     4. Consumption: one predicate shared by textureTurnPendingInbound,
     textureDispositionIneligibleReason and cellUpdateVisible admits
     directive packets beside producer reports; consumed directives
@@ -148,6 +151,21 @@ finish:
     6. Crash: the directive's wake is a coagent_result wake, already in
     restartWorkKinds, so a markerless boot closes it as
     interrupted_by_restart; nothing at boot mints work.
+    7. Bound: at most four directives to one Texture per owner request
+    (since the trajectory's latest owner input). A directive past the
+    bound still commits its record, but its packet commits terminal
+    (disposition delivered, reason bound_spent), with no wake and no
+    work, so the management cell is not refused and the fate is visible.
+    Texture's management Casts get the same drop-with-note bound in
+    textureTurnControls (today only research rounds are bounded), so a
+    management and Texture exchange stops within four rounds each way.
+    8. Retract: a CancelAct of a directive to texture:<doc> commits its
+    stand-down packet terminal (no wake); the original directive, if
+    still pending, terminalizes as cancelled, and resolution re-reads the
+    record so a retracted directive never starts a turn.
+    9. Teaching: management's runtime overlay names texture:<docID> as a
+    Cast and Note addressee for feeding a document's Texture, with a
+    pinning test, and says the Texture desk decides what to do with it.
   acceptance:
     - P2d1 reducer test: a management Cast to research or texture:<doc> opens no engineering assignment; an engineering Cast still opens one
     - validation test: management to texture:<doc> accepted; engineering and research to texture:<doc> refused; another owner's document refused
@@ -155,6 +173,10 @@ finish:
     - controller test: the directive arms the idle Texture, resolves as a directive occurrence, and a forged one (wrong owner, research emitter, retracted record, missing record) is refused
     - turn test: the revision prompt shows the directive's record id, emitter and body; the commit consumes it; a producer report that arrived after scheduling is not consumed with it
     - crash test: a markerless boot closes a pre-boot directive wake and mints no work
+    - bound test: the fifth directive commits its record with a terminal bound_spent packet and no wake; Texture's fifth management Cast in a request is dropped with a runtime note
+    - retract test: a CancelAct of a pending directive terminalizes it and its stand-down packet without a turn
+    - handler test: a directive wake passes the expected-source check
+    - prompt test: management's overlay teaches texture:<docID> and is pinned
     - deployed: on a fresh test computer, a management turn (owner-prompted, not ProductAPI) casts to texture:<doc>; the Texture's next revision answers it, and the audit joins record, packet and consuming turn
   rollback: >-
     git revert of the station's commits (P2d1 alone reverts cleanly).
@@ -180,12 +202,12 @@ value:
     - engineering's delegated cast still opens its assignment
     - the activation breaker and the delivery budget
   excluded: [predictions on directives (P3), scoring (P4), the poll-to-management delivery and story size (P5), engineering or research addressing a Texture, Ask to a Texture (Texture answers through its own verbs)]
-  protected_surfaces: [internal/agentcore/rlm_reduce.go, internal/store/lifecycle_commit_act.go, internal/textureowner/texture_controller.go, internal/textureowner/texture_turn_runtime.go, internal/agentcore/texture_lifecycle_api.go, internal/agentcore/tools_desk.go]
+  protected_surfaces: [internal/agentcore/rlm_reduce.go, internal/store/lifecycle_commit_act.go, internal/textureowner/texture_controller.go, internal/textureowner/texture_turn_runtime.go, internal/textureowner/texture_agent_revision.go, internal/agentcore/texture_lifecycle_api.go, internal/agentcore/tools_desk.go, internal/actorruntime/handler.go, internal/runtimeprompts/overlays/rlm_management_runtime.yaml]
   read_only_dependencies: [internal/agentcore/management_controller.go, internal/agentcore/tools_worker_update.go]
 
 now:
   status: drafted
-  slice: revised after round one; round two next
+  slice: revised after round one; P2d1 (the gate) coded and tested locally; round two next
   source_ref: 352661de
   deploy_identity: staging a2bcf724
   candidate: none
@@ -245,7 +267,14 @@ receipts:
       consumption gaps were also found by this session while the panel
       ran. Revised: minting at commit on the document's trajectory,
       management-only addressing, shared consume predicate, rendering,
-      P2d1 and P2d2.
+      P2d1 and P2d2. Gemini and GLM (finished later) agree and add: the
+      actor handler's expected-source check would consume a directive
+      wake as a foreign source; a CancelAct mints a second packet to the
+      Texture; management is never taught the address; the bound needs a
+      place and a non-refusing fate, and Texture's management Casts are
+      unbounded today; W2 starves under a per-request bound (named
+      residual, P5 re-bases the anchor on the story). Folded in as
+      artifact items 7 to 9 and the protected-surface list.
 ---
 
 # P2d — texture addressing
