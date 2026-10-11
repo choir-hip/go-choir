@@ -4,13 +4,13 @@ definition_version: 4
 # P1 — record-first controls. Station of
 # definitions/choir-precommitment-protocol-metamission-2026-10-11.md;
 # design docs/precommitment-protocol-design-2026-10-11.md §7 P1 and §10.
-readiness: drafted
+readiness: reviewed
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus file review (two rounds)
+  frozen_ref: d30024a1 (round two), revised after it
+  verdict: accept
+  evidence_ref: receipts P1-review1, P1-review2
 
 start:
   captured_at: 2026-10-11T16:20:00Z
@@ -71,11 +71,15 @@ finish:
   artifact: >-
     The accumulator mints the record for both commands; an explicit emitter
     on the control request (agent by default, owner for the management-open
-    route); CommitmentRecord gains the reserved fields (additive JSON:
-    emitter kind, computer id, agent id, model id from the caller's run,
-    subject refs); the desk-pack and supervision record queries exclude
-    directive records in the query rather than after it; a trace audit
-    that joins each control packet to its record one to one.
+    route); the record fills the existing provenance fields (AgentID, and
+    ModelID where the run records one) and gains only what is missing
+    (additive, omitempty: emitter kind, computer id, subject refs); the
+    desk-pack record query excludes directive records in the query
+    (JSON match on $.directive empty, missing matches empty) rather than
+    after it; a read-only internal guest route that lists a document's
+    control packets with their source record ids and the records they
+    name, for the staging audit (orange, read-only); and the audit itself,
+    a one-to-one join.
   acceptance:
     - action: >-
         Store tests: a multi-control command mints one record per control in
@@ -85,16 +89,21 @@ finish:
       proves: the record and its packet commit together or not at all
       evidence_class: unit (store, real Dolt)
     - action: >-
-        On one ledger snapshot, each desk's acting pack, issuer tallies and
-        the supervision projection are identical with and without 300 added
-        cast records.
-      proves: P1 changes nothing a desk or the owner sees
+        On one ledger snapshot S with more than 256 records, including
+        older directives, compare the old pack pipeline (newest 256 of any
+        kind, then drop directives) on S against the new pipeline (drop
+        directives in the query) on S plus 300 cast records, at a fixed
+        clock. The supervision projection and Texture's evidence read are
+        identical; the acting pack differs only by admitting older
+        non-directive records that directives used to push out, and the
+        test names that widening as the one intended change.
+      proves: P1 changes nothing a desk or the owner sees except the intended pack widening
       evidence_class: unit (deterministic)
     - action: >-
-        Run the AI news demo on the reader test computer at P1; join every
-        control packet issued after the deploy to its record by
-        SourceRecordID, checking addressee, emitter, scope and reserved
-        fields, one to one.
+        Run the AI news demo on the reader test computer at P1; through the
+        new read-only route, join every control packet issued after the
+        deploy to its record by SourceRecordID, checking addressee,
+        emitter, scope and reserved fields, one to one.
       proves: every Texture dispatch is on the ledger on staging
       evidence_class: deployed proof (the demo itself is a smoke test, not a comparison)
   rollback: >-
@@ -127,7 +136,7 @@ boundaries:
   protected_surfaces: [internal/store/lifecycle_control_issue.go, internal/types/commitment.go]
 
 now:
-  status: drafted
+  status: working
   slice: P1a — the record in the control commit
   source_ref: f1be9e2f
   deploy_identity: staging 25c8b5b0
@@ -157,9 +166,34 @@ now:
     main_uncertainty: whether any reader of packets breaks when SourceRecordID is set on control packets
     next_observation: the file review, then the store test
   blocker_or_risk: none
-  next_action: second file review; then the store tests, then the code
+  next_action: store tests (both entry points, replay, failed batch, owner emitter, the pack comparison), then the code
 
-receipts: []
+receipts:
+  - id: P1-review1
+    at: 2026-10-11T16:21Z
+    kind: agentic-consensus file review (session scratchpad p1/review)
+    result: >-
+      Sent back 4 to 3 (Claude, Codex, Gemini, GPT-6 Luna send back;
+      DeepSeek, GLM, GPT-6.1 Sol accept). The desk pack's newest-256 window
+      would be crowded by cast records; the owner's management-open control
+      would be recorded as Texture; the accumulator has two entry points;
+      the Cast/Ask rule was unstated; the reserved fields fell short of
+      design §10; the acceptance compared noisy demo output. Revised in
+      d30024a1.
+  - id: P1-review2
+    at: 2026-10-11T16:36Z
+    kind: agentic-consensus file review (session scratchpad p1/review2)
+    result: >-
+      Accepted 3 to 1 among valid verdicts (DeepSeek, Gemini, GLM accept;
+      Claude sends back). Codex, GPT-6 Luna and GPT-6.1 Sol failed: the
+      OpenAI account reached its usage limit. Claude's findings were file
+      edits and are applied: compare the old pack pipeline against the new
+      one at a fixed clock; reuse the provenance agent and model fields
+      (the model id has no source on a run, a named residual); add a
+      read-only route for the staging audit; the record's emitter is
+      authoritative over the packet's transport fields; keep the packet id
+      as the control id; filter directives on $.directive with missing
+      fields matching empty; keep the emitter field omitempty.
 ---
 
 # P1 — record-first controls
@@ -188,13 +222,33 @@ Ways it can fail, written before the code:
   unchanged on a snapshot);
 - only one of the two entry points mints (both share the accumulator;
   test both);
+- the packet id changes: copying the RN3 pattern literally
+  (recordID + ":packet") would break control bindings, the turn record's
+  ControlUpdateIDs and the owner route's wake. The packet keeps
+  UpdateID = control id, and the record id derives from the command and
+  control ids;
+- the directive filter misses older records with no explicit kind (the
+  list query supports equality only; filter on $.directive being empty,
+  with missing fields matching empty);
+- the new emitter field on the control request changes the command digest
+  of existing commands, and replaying a pre-P1 command conflicts (the
+  field is omitempty and empty by default);
+- an owner-issued control is attributed two ways (the record's emitter is
+  authoritative for who spoke; the packet's Role and AgentID stay the
+  transport caller, and P1 does not change them);
+- P1 casts carry no prediction, though design §2 says a cast requires one
+  (P3 enforces it; until then a cast without a prediction is expected);
 - "content hash" means a field that hashes itself (it means the store
   object's existing content hash; nothing new);
 - the commit time is the process clock rather than the commit (the record
   takes the lifecycle receipt's time from the same commit);
 - each report's resolution scan (up to 10,000 records,
-  mechanicalResolveForReport) slows as records grow (named residual; P3
-  replaces it with targeted lookups);
+  mechanicalResolveForReport) can miss a resolution outside its window
+  once records pass 10,000, and mint a second "answered" record. Cast
+  records bring that point closer (named correctness residual; P3
+  replaces the scan with targeted lookups);
+- the run carries no model id (RunRecord has no model field), so ModelID
+  stays empty as it does for existing acts (named residual);
 - the reserved fields are added in a way older readers reject (additive,
   omitempty);
 - the crash-boot phase treats the new records as open work (records are

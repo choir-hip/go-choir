@@ -19,7 +19,7 @@ metamission:
   stations:
     - id: P1
       path: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md
-      readiness: drafted
+      readiness: reviewed
       status: working
       depends_on: []
     - id: P2
@@ -134,7 +134,7 @@ now:
     main_uncertainty: whether the control accumulator can bind each packet to a record without a second commit
     next_observation: P1's file review, then the code
   blocker_or_risk: none
-  next_action: review the P1 file; then build it
+  next_action: build P1 (store tests first); land it; trace audit on staging
 
 receipts: []
 ---
