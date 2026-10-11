@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -94,12 +93,13 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild) yaegikernel.ResearchChildResult {
 	start := time.Now()
 	result := yaegikernel.ResearchChildResult{Objective: spec.Objective}
-	selection, err := researchChildSelection(lineage.selection, spec.Model)
-	result.Model = selection.Model
+	selection, err := rt.researchChildSelection(ctx, lineage, spec.Model)
 	if err != nil {
+		result.Model = spec.Model
 		result.Error = err.Error()
 		return result
 	}
+	result.Model = selection.Model
 	childExec := parent
 	childExec.RunRecord = nil
 	childExec.ChannelID = ""
@@ -153,20 +153,28 @@ func researchBudgetKey(execCtx toolregistry.ExecutionContext) string {
 }
 
 // researchChildSelection resolves a child's model: the caller's own when
-// none is named, otherwise a catalog model served by its catalog provider.
-func researchChildSelection(inherited provideriface.LLMSelection, model string) (provideriface.LLMSelection, error) {
+// none is named, otherwise a model the computer's model policy names, on
+// the provider the policy gives it. The catalog is not the gate: it lists
+// models Choir can route somewhere, not ones this computer is configured to
+// call (problems/research-child-picks-unserved-model-2026-10-11.md).
+func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchLineage, model string) (provideriface.LLMSelection, error) {
+	inherited := lineage.selection
 	model = strings.TrimSpace(model)
 	if model == "" || model == inherited.Model {
 		return inherited, nil
 	}
-	for _, info := range modelcatalog.SupportedModels() {
-		if info.ID == model {
-			return provideriface.LLMSelection{Provider: info.Provider, Model: info.ID, ReasoningEffort: inherited.ReasoningEffort, Source: "research_child"}, nil
+	var configured []provideriface.LLMSelection
+	if rt.modelPolicy != nil {
+		// An invalid policy file still yields the last valid or platform policy.
+		policy, _ := rt.modelPolicy.Load(ctx, lineage.ownerID)
+		configured = policy.Selections()
+	}
+	ids := make([]string, 0, len(configured))
+	for _, selection := range configured {
+		if selection.Model == model {
+			return provideriface.LLMSelection{Provider: selection.Provider, Model: selection.Model, ReasoningEffort: inherited.ReasoningEffort, Source: "research_child"}, nil
 		}
+		ids = append(ids, selection.Model)
 	}
-	ids := make([]string, 0, len(modelcatalog.SupportedModels()))
-	for _, info := range modelcatalog.SupportedModels() {
-		ids = append(ids, info.ID)
-	}
-	return inherited, fmt.Errorf("research: model %q is not in the catalog; catalog models: %s", model, strings.Join(ids, ", "))
+	return inherited, fmt.Errorf("research: model %q is not configured on this computer; configured models: %s", model, strings.Join(ids, ", "))
 }

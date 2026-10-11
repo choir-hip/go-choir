@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -156,6 +157,31 @@ func (p Policy) Resolve(role string) provideriface.LLMSelection {
 		}
 	}
 	return fillSelection(provideriface.LLMSelection{}, p.Defaults)
+}
+
+// Selections returns each distinct model the policy names, defaults first
+// and then roles in name order, filled from the defaults: the models this
+// computer is configured to call.
+func (p Policy) Selections() []provideriface.LLMSelection {
+	roles := make([]string, 0, len(p.Roles))
+	for role := range p.Roles {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	out := make([]provideriface.LLMSelection, 0, len(roles)+1)
+	seen := make(map[string]bool, len(roles)+1)
+	add := func(selection provideriface.LLMSelection) {
+		if selection.Model == "" || seen[selection.Model] {
+			return
+		}
+		seen[selection.Model] = true
+		out = append(out, selection)
+	}
+	add(fillSelection(provideriface.LLMSelection{}, p.Defaults))
+	for _, role := range roles {
+		add(fillSelection(p.Roles[role], p.Defaults))
+	}
+	return out
 }
 
 // NormalizeRole resolves exactly the V2 live vocabulary (identity map with
