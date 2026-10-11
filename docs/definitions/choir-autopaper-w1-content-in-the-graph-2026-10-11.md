@@ -101,10 +101,10 @@ boundaries:
 
 now:
   status: working
-  slice: W1a — upgrade Dolt past the race fix; race-test our packages
-  source_ref: e21e1347
-  deploy_identity: staging 78c9173e
-  candidate: {id: W1a, state: designing, ref: main, base: e21e1347, digest: none, scope: [go.mod, internal/store, internal/objectgraph]}
+  slice: W1b — one source polled by hand (choir.PollSource) on staging
+  source_ref: c1d21d5e (pushed)
+  deploy_identity: staging 5b077256; c1d21d5e deploying
+  candidate: {id: W1b, state: landing, ref: main, base: 5b077256, digest: c1d21d5e, scope: [internal/capturesegment, internal/sourcegraph, internal/researchtools, internal/yaegikernel, internal/sources, internal/objectgraph]}
   conjecture:
     id: W1-1
     claim: >-
@@ -115,22 +115,38 @@ now:
     edge: missing_oracle
     delta_o: a race test reaching the lazy-JSON path (not yet reproduced locally)
     scope_if_supported: one guest process
-    status: proposed
-    evidence_refs: [problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md]
+    status: partially supported (upgrade landed and boots on existing data; widening not yet tried)
+    evidence_refs: [receipt W1a]
   decision:
-    what: fix the substrate (upgrade Dolt) before choosing a capture store
+    what: capture bodies in daily append-only segments in the files root; capture objects carry metadata only and reach the tape through the projection intercept
     kind: architecture
-    status: settled (agent; Convergence Before Patching)
-    evidence_ref: problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md
-    owner_ratification_ref: design §0 constraint 1 leaves the how to W1
+    status: settled (agent; open to owner review)
+    evidence_ref: f78daa03
+    owner_ratification_ref: design §2 "capture bodies live in content storage, not Dolt rows"
   belief:
-    believed_state: race fixed upstream; our pin predates it by one day
-    main_uncertainty: driver v2.2 -> v2.4 API and storage-format compatibility
-    next_observation: build and test on driver v2.4.1
-  blocker_or_risk: a storage format change would make rollback one-way
-  next_action: go get driver v2.4.1; build; run store/objectgraph/textureowner/agentcore with -race where feasible
+    believed_state: >-
+      Dolt is past the race fix on staging. Captures can be written by
+      research through choir.PollSource; every pool still has one
+      connection, so capture writes still queue behind Texture.
+    main_uncertainty: whether a poll's object writes (one tape event each) slow Texture turns measurably before the pool widens
+    next_observation: W1b on staging — a research desk polls one source; counts, segment bytes, and Texture latency during the poll
+  blocker_or_risk: the projection intercept makes one host round trip per capture; a large first poll may take tens of seconds
+  next_action: after c1d21d5e deploys, ask a test computer's research desk to poll arxiv:cs_ai and read the trace
 
-receipts: []
+receipts:
+  - id: W1a
+    at: 2026-10-11T10:02Z
+    deploy: staging 5b077256
+    kind: deployed proof plus local race tests
+    result: >-
+      Dolt a6690826 -> 6bea93f2 (the JSON unescape race fix) with the
+      matching go-mysql-server. go test -race passed on internal/store
+      (23 min) and internal/objectgraph; textureowner, agentcore,
+      yaegikernel and researchtools passed. CI green. After a restart on
+      the new build, demo-arxiv-2026-10-10c reported 5b077256, served its
+      ten documents 7 s after boot, and read all eight revisions of
+      b2352fec with content and sources intact. No pool was widened.
+    conjecture: W1-1 partially supported
 
 # Capture body storage (decision, agent, 2026-10-11; open to owner review):
 # capture bodies are appended to one segment file per UTC day in the

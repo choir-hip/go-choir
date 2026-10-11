@@ -114,9 +114,9 @@ boundaries:
 
 now:
   status: working
-  slice: W1 — content in the graph; first decision is C1 (connection concurrency)
-  source_ref: 78c9173e
-  deploy_identity: staging 78c9173e
+  slice: W1 — content in the graph; W1a landed (Dolt past the race fix), W1b landing (choir.PollSource)
+  source_ref: c1d21d5e
+  deploy_identity: staging 5b077256
   candidate: {id: W1, state: designing, ref: main, base: 78c9173e, digest: none, scope: [internal/store, internal/objectgraph, internal/sources]}
   conjecture:
     id: AP-1
@@ -130,13 +130,13 @@ now:
     scope_if_supported: one Autopaper computer, MVP sources
     status: proposed
     evidence_refs: []
-  decision: {what: C1 approach, kind: architecture, status: open, evidence_ref: W1 experiment, owner_ratification_ref: design §0 constraint 1 (owner brief)}
+  decision: {what: C1 approach — upgrade Dolt past the upstream race fix, then widen the pools in measured steps rather than a second engine, kind: architecture, status: settled (agent), evidence_ref: problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md, owner_ratification_ref: design §0 constraint 1 (owner brief)}
   belief:
-    believed_state: one connection per pool; captures not yet written by any desk
-    main_uncertainty: whether embedded Dolt supports more than one connection per connector under concurrent writes
-    next_observation: W1 experiment on embedded Dolt concurrency
+    believed_state: Dolt past the race fix on staging; one connection per pool still; research can poll a source into captures (W1b, deploying)
+    main_uncertainty: whether capture writes slow Texture before the pools widen
+    next_observation: W1b acceptance on staging with Texture latency measured during the poll
   blocker_or_risk: none
-  next_action: run the W1 concurrency experiment and record the C1 decision
+  next_action: W1b acceptance, then the source schedule as timer obligations and usage records
 
 receipts: []
 ---
