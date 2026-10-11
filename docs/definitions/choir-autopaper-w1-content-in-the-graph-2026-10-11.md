@@ -233,6 +233,31 @@ resumes on its own. Management sees the closed schedules and reopens them
 on its next activation. A planned update restart (with the marker)
 re-arms them once.
 
+Concrete shape (2026-10-11, from the code as it stands):
+
+- **State:** one `choir.source_schedule` object per source in the paper
+  computer's own graph (its working state, not shared content), keyed by
+  source id: interval, max items, state (`active`, `stopped`,
+  `interrupted_by_restart`), a generation number, the next due time,
+  running totals, and the last 24 polls' usage. Usage history is bounded
+  inside the object; there is no per-poll row.
+- **Wake:** kind `source_poll_due`, addressed to a mailbox per source
+  (`source:<id>`), so one source's polls run one at a time and a slow feed
+  never holds management's mailbox. The wake carries the source id and
+  generation; a wake whose generation is not the schedule's current one,
+  or whose schedule is not active, does nothing.
+- **Poll:** the same code as `choir.PollSource`, called directly with no
+  model and no activation ledger; its usage goes to the schedule object.
+- **Next wake:** armed from inside the handled wake, so it becomes durable
+  with that wake's commit.
+- **Control:** `/api/autopaper/sources/schedules` (list, start, stop),
+  served by the runtime and on the product API allowlist, so management
+  calls it with `choir.ProductAPI` and the owner can read it.
+- **Crash boot:** a boot phase marks every active schedule
+  `interrupted_by_restart`, the same as self-development operations; the
+  pre-boot wake is refused by `restartWorkKinds`. A planned boot changes
+  nothing and the pending wake fires.
+
 Ways it can fail, written before the code:
 
 - a crash restart resumes polling (an auto-resume loop): no boot path may
