@@ -99,7 +99,9 @@ start:
 finish:
   deliver: >-
     Management can Cast or Note to texture:<doc> for any live document of
-    the same owner. The act commits, in one store command, its record, a
+    the same owner, and research's Note to its own document's Texture
+    (allowed by the messaging matrix today, and stranded today) is
+    consumed the same way. The act commits, in one store command, its record, a
     directive packet numbered on the document's trajectory, and open
     Texture work when the Texture has none, and opens no engineering
     assignment. The Texture desk wakes on it, its turn sees it, and the
@@ -118,8 +120,13 @@ finish:
     directive arms but cannot be consumed).
     1. Validation: needTo accepts texture:<doc> when the caller is
     management and the document belongs to the same owner and computer;
-    every other qualified address is still refused. Engineering and
-    research Casts or Notes to texture:<doc> are refused at validation.
+    every other qualified address is still refused. Research keeps its
+    bare Note to "texture", which resolves to its own document's Texture
+    (agentprofile.CanMessage already allows research and management to
+    message Texture). Engineering Casts or Notes to texture:<doc> are
+    refused at validation. Other act kinds addressed to a Texture (Ask,
+    Escalate, Reply) are refused at validation, so no packet the resolver
+    cannot consume is minted.
     2. Commit (CommitLifecycleAct, target texture:<doc>): conditioned on
     the document trajectory's version and live status, it bumps that
     trajectory's ReducerSeq and numbers the packet from it, and, when the
@@ -135,7 +142,8 @@ finish:
     in TextureActorOccurrencePostcondition. Its authority is the record:
     the record exists, is a cast or note directive, is not retracted, its
     addressee is texture:<doc>, its emitter is the owner's persistent
-    management; the packet matches the record, has direction directive,
+    management or this document's research desk; the packet matches the
+    record, has direction directive,
     targets this Texture on this document's trajectory, and is pending.
     The occurrence carries the emitter as its ProducerAgentID, so the
     actor handler's expected-source check
@@ -146,8 +154,11 @@ finish:
     directive packets beside producer reports; consumed directives
     terminalize as delivered with the turn.
     5. Rendering: the Texture revision request lists the directives the
-    run will consume (record id, emitter, objective, body), beside the
-    channel messages it renders today.
+    run will consume (record id, emitter, objective, body, and the
+    packet's evidence refs as given; W2's capture payload is defined in
+    P5), beside the channel messages it renders today. An owner revision
+    and a directive pending together arm one run whose prompt carries
+    both, and its commit consumes both.
     6. Crash: the directive's wake is a coagent_result wake, already in
     restartWorkKinds, so a markerless boot closes it as
     interrupted_by_restart; nothing at boot mints work.
@@ -166,6 +177,11 @@ finish:
     9. Teaching: management's runtime overlay names texture:<docID> as a
     Cast and Note addressee for feeding a document's Texture, with a
     pinning test, and says the Texture desk decides what to do with it.
+    10. Refusal fate: an occurrence the resolver refuses (forged,
+    retracted, wrong trajectory) gets a terminal packet disposition with
+    the reason, written by the controller, because today a refusal
+    consumes only the wake, advancing neither the breaker nor the delivery
+    budget, so the packet would re-arm forever.
   acceptance:
     - P2d1 reducer test: a management Cast to research or texture:<doc> opens no engineering assignment; an engineering Cast still opens one
     - validation test: management to texture:<doc> accepted; engineering and research to texture:<doc> refused; another owner's document refused
@@ -177,12 +193,17 @@ finish:
     - retract test: a CancelAct of a pending directive terminalizes it and its stand-down packet without a turn
     - handler test: a directive wake passes the expected-source check
     - prompt test: management's overlay teaches texture:<docID> and is pinned
+    - pre-landing staging audit: count pending directive packets addressed to texture:* agents (research Notes today); the count and the drain decision are recorded before P2d2 deploys
+    - refusal test: a refused directive occurrence terminalizes its packet with the reason and does not re-arm
+    - activation test: an armed directive run passes ValidateOccurrenceActivationAuthority when the document channel also carries eligible channel messages (its scheduled seq is a trajectory seq; the check compares channel-message seqs)
     - deployed: on a fresh test computer, a management turn (owner-prompted, not ProductAPI) casts to texture:<doc>; the Texture's next revision answers it, and the audit joins record, packet and consuming turn
   rollback: >-
     git revert of the station's commits (P2d1 alone reverts cleanly).
-    Directive packets written by P2d2 stay pending after a revert and the
-    old resolver refuses them; the breaker terminalizes them within three
-    activations (named residual)
+    Reverting P2d2 needs a drain first: a store command that terminalizes
+    every pending directive packet addressed to a Texture (disposition
+    delivered, reason rollback), because the old resolver's refusal leaves
+    them pending and re-arming. Texture work minted by P2d2 stays open
+    after a revert and closes at its next committed turn
   landing:
     required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
 
@@ -202,12 +223,12 @@ value:
     - engineering's delegated cast still opens its assignment
     - the activation breaker and the delivery budget
   excluded: [predictions on directives (P3), scoring (P4), the poll-to-management delivery and story size (P5), engineering or research addressing a Texture, Ask to a Texture (Texture answers through its own verbs)]
-  protected_surfaces: [internal/agentcore/rlm_reduce.go, internal/store/lifecycle_commit_act.go, internal/textureowner/texture_controller.go, internal/textureowner/texture_turn_runtime.go, internal/textureowner/texture_agent_revision.go, internal/agentcore/texture_lifecycle_api.go, internal/agentcore/tools_desk.go, internal/actorruntime/handler.go, internal/runtimeprompts/overlays/rlm_management_runtime.yaml]
+  protected_surfaces: [internal/actorruntime/adapter.go, internal/agentcore/rlm_reduce.go, internal/store/lifecycle_commit_act.go, internal/textureowner/texture_controller.go, internal/textureowner/texture_turn_runtime.go, internal/textureowner/texture_agent_revision.go, internal/agentcore/texture_lifecycle_api.go, internal/agentcore/tools_desk.go, internal/actorruntime/handler.go, internal/runtimeprompts/overlays/rlm_management_runtime.yaml]
   read_only_dependencies: [internal/agentcore/management_controller.go, internal/agentcore/tools_worker_update.go]
 
 now:
   status: drafted
-  slice: revised after round one; P2d1 (the gate) coded and tested locally; round two next
+  slice: revised three times after round one; P2d1 (the gate) pushed with P2c (b172895b); round two next
   source_ref: 352661de
   deploy_identity: staging a2bcf724
   candidate: none
@@ -274,7 +295,19 @@ receipts:
       place and a non-refusing fate, and Texture's management Casts are
       unbounded today; W2 starves under a per-request bound (named
       residual, P5 re-bases the anchor on the story). Folded in as
-      artifact items 7 to 9 and the protected-surface list.
+      artifact items 7 to 9 and the protected-surface list. Devin and Muse
+      (finished last): a refused occurrence leaves its packet pending and
+      re-arming, so the rollback claim was false and refusals need a
+      terminal fate; research's Note to its own Texture already mints
+      stranded directives today, so pre-existing packets must be audited
+      before P2d2; Ask, Escalate and Reply to a Texture mint unconsumable
+      packets; the payload for W2 and owner-plus-directive coalescing were
+      unspecified; adapter.go was missing; activation authority compares a
+      trajectory seq with channel-message seqs. Devin preferred one slice
+      for P2d; Muse and Claude preferred the gate first; the gate landed
+      first because it is independent and fixes a live misroute. Folded in
+      as items 1, 3, 5 and 10, the rollback drain, and three acceptance
+      items.
 ---
 
 # P2d — texture addressing
@@ -329,5 +362,12 @@ Ways it can fail, written before the code:
   (it opened an engineering assignment by mistake; the test pins that it
   no longer does, and that no caller relied on it);
 - a packet pending before the deploy with the directive shape changes
-  meaning after it (none exist: no desk could address texture:<doc>
-  without opening an engineering assignment, which the audit checks).
+  meaning after it (research's Note to its own Texture mints such packets
+  today and they strand; the pre-landing audit counts them and P2d2's
+  first consumption of them is recorded, not silent);
+- a refused occurrence leaves its packet pending and re-arming forever
+  (refusals write a terminal disposition);
+- Ask, Escalate or Reply addressed to a Texture mint packets nothing
+  consumes (refused at validation);
+- the old resolver after a rollback re-arms on P2d2's leftover packets
+  (the rollback drains them first).
