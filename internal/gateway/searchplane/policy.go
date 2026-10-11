@@ -29,7 +29,9 @@ func DefaultBackoffPolicy() BackoffPolicy {
 	return BackoffPolicy{
 		BaseSeconds: map[OutcomeClass]int64{
 			OutcomeSuccessEmpty: 5 * 60,
-			OutcomeRateLimited:  24 * 60 * 60,
+			// A rate limit clears in seconds to minutes; a burst must not bench
+			// a provider for a day. Quota exhaustion keeps the long bench.
+			OutcomeRateLimited:  60,
 			OutcomeQuotaLimited: 24 * 60 * 60,
 			OutcomeAuthError:    7 * 24 * 60 * 60,
 			OutcomeServerError:  2 * 60,
@@ -103,6 +105,14 @@ func ClassifyCall(err error, resultCount int) OutcomeClass {
 		return OutcomeTimeout
 	}
 	if strings.Contains(msg, "429") || strings.Contains(msg, "rate limit") || strings.Contains(msg, "too many requests") {
+		// "run out of searches" arrives as a 429 but does not clear in
+		// minutes. Match phrases, not the bare word: a per-second limit's
+		// body can carry quota_limit/quota_current fields.
+		for _, phrase := range []string{"run out", "out of credits", "no more credits", "insufficient", "quota exceeded", "exceeded your quota", "monthly"} {
+			if strings.Contains(msg, phrase) {
+				return OutcomeQuotaLimited
+			}
+		}
 		return OutcomeRateLimited
 	}
 	if strings.Contains(msg, "402") || strings.Contains(msg, "432") ||
