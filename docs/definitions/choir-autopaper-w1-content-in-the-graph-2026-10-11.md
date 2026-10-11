@@ -1,3 +1,38 @@
+now:
+  status: working
+  slice: W1b2 and W1c deployed proof — a guest poll lands in Store B through the proxy; a schedule polls, records usage, and a crash closes it
+  source_ref: 19b2f964 (pushed)
+  deploy_identity: staging cd7221ae (host); gateway 9c1c96c7
+  candidate: {id: W1c, state: landing, ref: main, base: cd7221ae, digest: none, scope: [internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools]}
+  conjecture:
+    id: W1-3
+    claim: >-
+      Captures written through the proxy to corpusd land in Store B with
+      bodies on host disk; a source schedule of generation-fenced durable
+      wakes polls without a model, records usage per poll, and never
+      resumes after a crash.
+    test: deployed — start a schedule on the test computer, watch Store B rows and body files grow, read a body from a second computer, restart the guest
+    edge: missing_oracle
+    delta_o: Store B capture rows and capture-bodies files after scheduled polls; schedule usage from the API; schedule state after a restart
+    scope_if_supported: one paper computer polling a few sources, any computer reading
+    status: proposed
+    evidence_refs: [8574a8e1, 19b2f964]
+  decision:
+    what: captures in Store B behind corpusd; bodies in host content storage by sha256; computers keep overlays; the schedule is the paper computer's own state
+    kind: architecture
+    status: settled (owner, 2026-10-11)
+    evidence_ref: problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md
+    owner_ratification_ref: owner 2026-10-11 "yes, move the write path to host store, update docs, lets not make this mistake again"
+  belief:
+    believed_state: >-
+      Host services run cd7221ae (capture route) and the proxy fix lands with
+      19b2f964. The test computer was still on c1d21d5e at 11:05Z, after the
+      cd7221ae deploy; whether idle computers pick up a deploy promptly is
+      unconfirmed.
+    main_uncertainty: whether the test computer updates to 19b2f964 after the deploy, and whether Store B absorbs scheduled capture writes
+    next_observation: test computer build identity after the deploy; then one scheduled source's first polls
+  blocker_or_risk: Store B is the store that grew to 104 G; bodies must never enter it, and its history needs a bound before polling all sources
+  next_action: after 19b2f964 deploys, confirm the guest build, start a schedule for rss:bbc_world at 5 minutes, verify Store B and body files, then restart the guest
 ---
 definition_version: 4
 
@@ -150,6 +185,21 @@ receipts:
       ten documents 7 s after boot, and read all eight revisions of
       b2352fec with content and sources intact. No pool was widened.
     conjecture: W1-1 partially supported
+  - id: W1b2-attempt
+    at: 2026-10-11T11:00Z
+    deploy: staging cd7221ae (host services); test computer still on c1d21d5e
+    kind: deployed attempt (test computer demo-arxiv-2026-10-10, document cd1bdb26)
+    result: >-
+      Research polled rss:bbc_world (5 new captures, HTTP 200), but the test
+      computer had not updated past c1d21d5e, so the captures went to its
+      own graph by the superseded path. Node B had no capture-bodies
+      directory, and corpusd and the proxy logged nothing. Reading the path
+      showed W1b2 could not have worked anyway: guests reach corpusd only
+      through the proxy, which forwarded objects and edges but not the
+      capture routes
+      (problems/capture-route-unreachable-through-proxy-2026-10-11.md,
+      fixed in 8574a8e1).
+    conjecture: W1-2 untested on staging; the unit tests skipped the proxy hop
   - id: W1b
     at: 2026-10-11T10:29Z
     deploy: staging c1d21d5e
