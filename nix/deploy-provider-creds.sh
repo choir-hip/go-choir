@@ -145,7 +145,7 @@ else
   echo "warning: $CODEX_AUTH not found; ChatGPT provider auth will not be deployed" >&2
 fi
 
-for key in TAVILY_API_KEY BRAVE_API_KEY EXA_API_KEY SERPER_API_KEY PARALLEL_API_KEY SERPAPI_API_KEY; do
+for key in TAVILY_API_KEY BRAVE_API_KEY EXA_API_KEY SERPER_API_KEY PARALLEL_API_KEY SERPAPI_API_KEY KEENABLE_API_KEY; do
   add_env_once "$key"
 done
 

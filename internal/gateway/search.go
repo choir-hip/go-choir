@@ -136,6 +136,7 @@ func NewSearchClient() *SearchClient {
 		&ExaProvider{},
 		&SerperProvider{},
 		&SerpAPIProvider{},
+		&KeenableProvider{},
 	}
 
 	// Filter to only available providers.
@@ -170,7 +171,7 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 		return nil, fmt.Errorf("query is required")
 	}
 	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, or SERPAPI_API_KEY)")
+		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, or KEENABLE_API_KEY)")
 	}
 	return c.searchViaPlane(ctx, req)
 }
@@ -216,6 +217,8 @@ func searchProviderEndpoint(provider string) string {
 		return "https://google.serper.dev/search"
 	case "serpapi":
 		return "https://serpapi.com/search.json"
+	case "keenable":
+		return keenableSearchURL
 	default:
 		return ""
 	}
@@ -318,6 +321,91 @@ func parseSearXNGResults(data []byte, maxResults int) ([]SearchResult, error) {
 		if len(results) >= maxResults {
 			break
 		}
+	}
+	return results, nil
+}
+
+// --- Keenable Provider ---
+
+const keenableSearchURL = "https://api.keenable.ai/v1/search"
+
+// KeenableProvider implements search using Keenable's Search API
+// (https://docs.keenable.ai/api-reference/search). "realtime" mode keeps it
+// on the fast path beside the other providers.
+type KeenableProvider struct {
+	httpClient *http.Client
+}
+
+func (p *KeenableProvider) Name() string { return "keenable" }
+
+func (p *KeenableProvider) IsAvailable() bool {
+	return os.Getenv("KEENABLE_API_KEY") != ""
+}
+
+func (p *KeenableProvider) http() *http.Client {
+	if p.httpClient != nil {
+		return p.httpClient
+	}
+	return &http.Client{Timeout: 30 * time.Second}
+}
+
+func (p *KeenableProvider) Search(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+	apiKey := os.Getenv("KEENABLE_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("KEENABLE_API_KEY not set")
+	}
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+	if maxResults > 50 {
+		maxResults = 50
+	}
+	bodyBytes, err := json.Marshal(map[string]any{"query": query, "max_results": maxResults, "mode": "realtime"})
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, keenableSearchURL, strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+
+	resp, err := p.http().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	bodyBytes, err = io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("status %s: %s", resp.Status, truncateError(bodyBytes))
+	}
+	var result struct {
+		Results []struct {
+			Title       string `json:"title"`
+			URL         string `json:"url"`
+			Description string `json:"description"`
+			Snippet     string `json:"snippet"`
+			PublishedAt string `json:"published_at"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	results := make([]SearchResult, 0, len(result.Results))
+	for _, r := range result.Results {
+		if r.URL == "" {
+			continue
+		}
+		snippet := r.Snippet
+		if snippet == "" {
+			snippet = r.Description
+		}
+		results = append(results, SearchResult{Title: r.Title, URL: r.URL, Snippet: snippet, PublishedAt: r.PublishedAt})
 	}
 	return results, nil
 }
