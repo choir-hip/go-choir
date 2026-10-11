@@ -173,6 +173,13 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	if shown := describeCellValue(frame.Source, res.Value); shown != "" {
 		out.Stdout += shown
 	}
+	if hooks != nil && hooks.Refusals != nil {
+		for _, line := range hooks.Refusals() {
+			if !strings.Contains(out.Stdout, line[strings.Index(line, " refused: ")+len(" refused: "):]) {
+				out.Stdout += line + "\n"
+			}
+		}
+	}
 	return out, nil
 }
 

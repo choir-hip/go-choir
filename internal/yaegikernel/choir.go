@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/traefik/yaegi/interp"
@@ -56,6 +57,16 @@ type ChoirScope struct {
 	// desk (boundary-drain): read via Emits(). The notice turn carries only
 	// a fixed-format line; the untrusted body lives here.
 	emits []PendingEmit
+	// refusals are the errors choir verbs returned during the bound cell,
+	// shown in its result so a refusal is never lost when the cell ends in
+	// a bare call (problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md).
+	refusalMu sync.Mutex
+	refusals  []verbRefusal
+}
+
+type verbRefusal struct {
+	verb string
+	err  string
 }
 
 // SessionRoleResearch is the read-only role: sessions bound to it observe
@@ -137,6 +148,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.pack = frame.Pack
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
 			s.emits = append([]PendingEmit(nil), frame.Emits...)
+			s.takeRefusals()
 		},
 		End: func() []StagedIntent {
 			var out []StagedIntent
@@ -151,7 +163,45 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.emits = nil
 			return out
 		},
+		Refusals: s.takeRefusals,
 	}
+}
+
+// takeRefusals returns and clears the refusals recorded since the last call.
+func (s *ChoirScope) takeRefusals() []string {
+	s.refusalMu.Lock()
+	defer s.refusalMu.Unlock()
+	out := make([]string, 0, len(s.refusals))
+	for _, r := range s.refusals {
+		out = append(out, "choir."+r.verb+" refused: "+r.err)
+	}
+	s.refusals = nil
+	return out
+}
+
+// recordRefusals wraps a verb whose last result is an error so a non-nil
+// error is recorded for the bound cell. The wrapped value keeps the verb's
+// exact type; yaegi sees no difference.
+func (s *ChoirScope) recordRefusals(name string, verb reflect.Value) reflect.Value {
+	typ := verb.Type()
+	errType := reflect.TypeOf((*error)(nil)).Elem()
+	if typ.Kind() != reflect.Func || typ.NumOut() == 0 || typ.Out(typ.NumOut()-1) != errType {
+		return verb
+	}
+	return reflect.MakeFunc(typ, func(args []reflect.Value) []reflect.Value {
+		var results []reflect.Value
+		if typ.IsVariadic() {
+			results = verb.CallSlice(args)
+		} else {
+			results = verb.Call(args)
+		}
+		if last := results[len(results)-1]; !last.IsNil() {
+			s.refusalMu.Lock()
+			s.refusals = append(s.refusals, verbRefusal{verb: name, err: last.Interface().(error).Error()})
+			s.refusalMu.Unlock()
+		}
+		return results
+	})
 }
 
 func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
@@ -302,6 +352,11 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 	if s != nil && s.slot == "verifier" {
 		exports["Verify"] = reflect.ValueOf(s.Verify)
 		exports["InspectBundle"] = reflect.ValueOf(s.InspectBundle)
+	}
+	if s != nil {
+		for name, verb := range exports {
+			exports[name] = s.recordRefusals(name, verb)
+		}
 	}
 	return interp.Exports{"choir/choir": exports}
 }

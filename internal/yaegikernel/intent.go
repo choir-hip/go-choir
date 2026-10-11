@@ -434,4 +434,7 @@ func (t *Tray) Len() int {
 type CellHooks struct {
 	Begin func(frame SessionFrame)
 	End   func() []StagedIntent
+	// Refusals returns the errors choir verbs returned during the cell, as
+	// "choir.Verb refused: ..." lines.
+	Refusals func() []string
 }

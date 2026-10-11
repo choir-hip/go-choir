@@ -45,7 +45,7 @@ var choirFunctionDocs = map[string]FunctionDoc{
 	"Reply":                {Args: []string{"toDesk", "targetRef", "answer"}, Summary: "Answers an Ask you received."},
 	"Note":                 {Args: []string{"toDesk", "body"}, Summary: "Stages raw unscored transport to a desk."},
 	"Report":               {Args: []string{"toDesk", "claim", "evidenceRefs", "resolverID"}, Summary: "Asserts a typed claim with evidence refs and a named resolver.", Example: `choir.Report("management", "tests pass", []string{receiptRef}, "")`},
-	"ReportPacket":         {Args: []string{"toDesk", "packet", "resolverID"}, Summary: "Asserts a report whose body is a full source packet (Go map or JSON)."},
+	"ReportPacket":         {Args: []string{"toDesk", "packet", "resolverID"}, Summary: "Asserts a report whose body is a full source packet (Go map or JSON). Build a long packet in steps (claims = append(claims, map[string]any{...}) per claim) rather than one large literal."},
 	"Precommit":            {Args: []string{"precommit"}, Summary: "Freezes a typed, machine-scoreable prediction on the ledger."},
 	"Resolve":              {Args: []string{"targetRef", "resolve"}, Summary: "Closes a commitment with an evidence-bearing resolver verdict."},
 	"Disagreement":         {Args: []string{"disagreement"}, Summary: "Records a scorer-versus-resolver disagreement as its own act."},
