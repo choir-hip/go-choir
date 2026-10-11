@@ -139,3 +139,56 @@ persistent. This station keeps a desk's Go session alive between its runs
 within one computer boot, tells the desk whether its session is new or
 continuing, and reclaims idle sessions. A restart still erases everything,
 which is what the crash rule requires.
+
+## Failure list (written before code, 2026-10-11)
+
+Read of `internal/agentcore/tools_desk.go`, `research_children.go`,
+`internal/yaegikernel/desk_session_worker.go`, `session_loop.go`,
+`internal/researchtools/egress_budget.go` at 701b0273.
+
+Discovered while reading (heresy, today's code): **desk workers leak.** A
+worker is released only when it dies (`tools_desk.go` after a failed cell) or
+when a research child returns. A run that ends normally leaves its worker
+subprocess (a re-exec of the autoputer binary) idle until the computer
+restarts. Every Texture turn and every research run adds one. Keying by agent
+reduces the count; the idle sweep below removes the leak for every key.
+
+Ways PD2 could fail, and what the change must do about each:
+
+1. **Two runs of one agent at once share a REPL.** Lifecycle serializes an
+   agent's runs, but a stale run can overlap a new one. If the agent's session
+   is busy with another run, the new run gets its own session (keyed by run)
+   rather than waiting on the other run's cell or interleaving with it.
+2. **Research children join their parent's session.** A child carries its
+   parent's agent ID but no run record. Children keep their own per-run
+   worker pool; the agent key applies only to runs with a run record. A child
+   that took the parent's session would block on the parent's in-flight cell
+   forever.
+3. **Later runs act with the first run's lineage.** The worker's Egress
+   closure captures the spawning call's execution context; `choir.Research`
+   children would inherit the first run's run ID and deadline. Egress must
+   read the execution context from the cell's own context, as Emit already
+   does.
+4. **The worker leaks or grows without bound.** Sessions idle past a
+   retention window are closed; the pool keeps at most a fixed number of idle
+   sessions and closes the least recently used beyond it. A busy session is
+   never reclaimed.
+5. **The model doesn't know its session persists, so it redoes the work.** The
+   first cell of each run reports `session`: new, or continuing with how many
+   cells and runs it already holds.
+6. **The model trusts a session that is gone.** After a restart, a dead
+   worker, a timed-out cell, or reclamation, the next cell's session line
+   says "new", so a variable that has vanished doesn't look like a bug.
+7. **A crash restart resumes work through a session.** Sessions are process
+   memory and nothing writes them to disk, so a restart erases them. No
+   resume path is added.
+8. **The config differs between runs.** If a later run's role, root, or
+   computer differs from the session's, the old session is closed and a new
+   one spawned (session line: new).
+9. **The egress budget spans runs.** Not a failure: the budget ledger is on
+   the host, keyed by the run ID read from each cell's context, so each run
+   keeps its own budget even when the session continues.
+10. **The capsule path changes.** Engineering capsule workers
+    (`capsule_go_eval`) are a different pool and are not touched.
+11. **`choir.Context()` reports the first run's activation ID.** It is
+    informational; record it as a known residual rather than re-spawning.
