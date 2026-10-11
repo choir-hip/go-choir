@@ -1512,7 +1512,18 @@ nodes:
     member_of: choir-precommitment-protocol-metamission-2026-10-11
     execution_mode: subordinate_only
     depends_on: [choir-protocol-p1-record-first-controls-2026-10-11]
-    enables: []
+    enables: [choir-protocol-p2d-texture-addressing-2026-10-11]
+  - id: choir-protocol-p2d-texture-addressing-2026-10-11
+    title: P2d — texture addressing (management feeds any Texture through a record; delegated cast only to engineering)
+    path: docs/definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md
+    ledger: ''
+    status: working
+    kind: station
+    entrypoint: false
+    member_of: choir-precommitment-protocol-metamission-2026-10-11
+    execution_mode: subordinate_only
+    depends_on: [choir-protocol-p2-one-surface-2026-10-11]
+    enables: [choir-autopaper-w2-living-textures-2026-10-11]
   - id: choir-autopaper-metamission-2026-10-11
     title: Autopaper (Gate 3) — content in the graph, living Textures, automatic publishing
     path: docs/definitions/choir-autopaper-metamission-2026-10-11.md
@@ -1548,5 +1559,5 @@ nodes:
     entrypoint: false
     member_of: choir-autopaper-metamission-2026-10-11
     execution_mode: subordinate_only
-    depends_on: [choir-autopaper-w1-content-in-the-graph-2026-10-11]
+    depends_on: [choir-autopaper-w1-content-in-the-graph-2026-10-11, choir-protocol-p2d-texture-addressing-2026-10-11]
     enables: []

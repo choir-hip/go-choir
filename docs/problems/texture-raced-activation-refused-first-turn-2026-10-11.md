@@ -74,3 +74,10 @@ for whoever takes it: make the recovered run's first occurrence re-resolve the
 current active run and mutation instead of refusing; and give
 `delivery_failed` a handler that records a visible fate. The second belongs to
 the protocol's observation records (P2 or later).
+
+## Later observation (2026-10-11, 19:20Z)
+
+The P2a deployed demo on a fresh test computer (demo-p2a-2026-10-11,
+staging a2bcf724) took its first Texture turn about twenty seconds after the
+prompt, with no refusal. One clean run does not refute either hypothesis;
+the race may need an existing computer with prior desks.

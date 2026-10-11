@@ -138,12 +138,18 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   landed on staging (0f1c86c7); its audit joins every control to its cast
   record. P2 (one surface: Texture uses Cast and Ask, Message and Emit
   deleted, [`p2`](definitions/choir-protocol-p2-one-surface-2026-10-11.md))
-  is reviewed; P2b (ProductAPI cannot write a Texture) and P2a (Texture
-  dispatches with Cast and Ask, folded into its turn) landed on staging
-  (a2bcf724); P2c (Message and Emit retired) is on branch protocol-p2c. It
-  unblocks Autopaper W2. Staging research is down
-  while the ChatGPT account is at its usage limit
-  ([problem](problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md)).
+  is landing: P2b (ProductAPI cannot write a Texture) and P2a (Texture
+  dispatches with Cast and Ask, folded into its turn) are on staging
+  (a2bcf724) and passed the deployed AI news demo (five dispatches, five
+  cast records, no failures; receipt P2a-deployed); P2c (Message and Emit
+  retired) lands next with P2d1. P2d (texture addressing: management feeds
+  any Texture through a record,
+  [`p2d`](definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md))
+  is drafted and revised after review round one; its slice P2d1 (only a
+  Cast to engineering opens an engineering assignment) lands with P2c. P2d
+  unblocks Autopaper W2. Deployed demos need a fresh test computer, since
+  idle ones keep their old build
+  ([problem](problems/idle-test-computers-keep-old-builds-after-deploy-2026-10-11.md)).
 - **Gate 3 opened 2026-10-11 — Autopaper (working):**
   [`definitions/choir-autopaper-metamission-2026-10-11.md`](definitions/choir-autopaper-metamission-2026-10-11.md).
   Stations: W1 content in the graph (complete,

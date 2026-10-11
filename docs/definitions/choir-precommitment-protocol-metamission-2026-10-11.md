@@ -25,12 +25,12 @@ metamission:
     - id: P2
       path: docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md
       readiness: reviewed
-      status: pending
+      status: working (P2a and P2b deployed and demo-proven; P2c lands with P2d1)
       depends_on: [P1]
     - id: P2d
-      path: none (texture:<doc> addressing — a Texture occurrence kind for directives, its disposition, arming an idle Texture, a round bound, delegated-cast gated to engineering)
-      readiness: intent
-      status: pending
+      path: definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md
+      readiness: drafted (revised after review round one, receipt P2d-review1)
+      status: working (P2d1, the delegated-cast gate, lands with P2c)
       depends_on: [P2]
     - id: P3
       path: none (predictions required on Cast, Ask and Escalate; count resolver)
@@ -113,7 +113,7 @@ boundaries:
 
 now:
   status: working
-  slice: P1 landed and audited; P2a and P2b landed (staging a2bcf724); P2c on a branch
+  slice: P1 landed and audited; P2a and P2b deployed and demo-proven (a2bcf724, receipt P2a-deployed); P2c and P2d1 land together; P2d revised after review round one
   source_ref: a2bcf724
   deploy_identity: staging a2bcf724
   candidate: none
@@ -135,15 +135,19 @@ now:
     status: provisional
     evidence_ref: docs/precommitment-protocol-design-2026-10-11.md §9
   belief:
-    believed_state: every Texture dispatch is a cast record in its own commit (P1, staging audit)
-    main_uncertainty: whether Texture's Cast can reuse the accumulator inside its turn without a second verb set
-    next_observation: P2's file review
+    believed_state: >-
+      every Texture dispatch is a cast record in its own commit (P1), and
+      Texture dispatches with Cast and Ask folded into its turn (P2a; the
+      deployed demo's five dispatches all joined to cast records)
+    main_uncertainty: whether management can feed an arbitrary Texture through a directive without a new wake substrate (P2d)
+    next_observation: P2d review round two
   blocker_or_risk: >-
-    the ChatGPT account's usage limit stops research and management on
-    staging (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md);
-    deployed demos that need research wait for it to reset or for an owner
-    routing decision
-  next_action: P2a deployed demo; P2c draft PR; P1 completion panel when OpenAI reviewers are back
+    one ChatGPT account carries research and management with no fallback
+    (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md,
+    owner routing decision); idle test computers keep their old build
+    after a deploy, so deployed demos use fresh test computers
+    (docs/problems/idle-test-computers-keep-old-builds-after-deploy-2026-10-11.md)
+  next_action: land P2c and P2d1 through the landing loop; P2d review round two, then P2d2; P1 completion panel when OpenAI reviewers are back
 
 receipts: []
 ---

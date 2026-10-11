@@ -250,10 +250,10 @@ boundaries:
 
 now:
   status: working
-  slice: P2b and P2a landed on staging; P2a's deployed demo waits for research inference; P2c on branch protocol-p2c
-  source_ref: a2bcf724 (pushed; CI 38163884955 green)
+  slice: P2a and P2b deployed and demo-proven (receipt P2a-deployed); P2c squashed onto main (b196d666) and lands with P2d1
+  source_ref: b196d666 (local; pushes now that the demo ended)
   deploy_identity: staging a2bcf724
-  candidate: {id: P2a+P2b, state: landed, ref: main, base: 5e34e5ed, digest: a2bcf724, scope: [internal/agentcore, internal/textureowner, internal/textureprompts, internal/runtimeprompts, internal/store, internal/types, internal/yaegikernel]}
+  candidate: {id: P2c, state: built, ref: main, base: a2bcf724, digest: b196d666, scope: [internal/yaegikernel, internal/agentcore, internal/runtimeprompts, cmd/capsule-broker]}
   conjecture:
     id: P2-1
     claim: >-
@@ -264,8 +264,8 @@ now:
     edge: missing_oracle
     delta_o: control packets after the deploy without staged_act (expect zero); research reports incorporated per run against P1's demo
     scope_if_supported: Texture's research and management dispatch on one computer
-    status: proposed
-    evidence_refs: []
+    status: supported (research dispatch on one computer; management Cast not exercised by the demo)
+    evidence_refs: [receipt P2a-deployed]
   decision:
     what: >-
       Texture's Cast compiles into its turn rather than into
@@ -296,17 +296,22 @@ now:
     status: provisional (P2-review1)
     evidence_ref: receipts P2-review1
   belief:
-    believed_state: every Texture dispatch is a record (P1), through a verb only Texture has
-    main_uncertainty: whether models stage Cast with an apply or decide turn reliably, or keep staging Cast alone
-    next_observation: the second file review
+    believed_state: >-
+      Texture dispatches with Cast and Ask like every desk, each dispatch a
+      cast record in its turn's commit (P2a, staging); no desk writes a
+      Texture through ProductAPI (P2b)
+    main_uncertainty: whether P2c's ReportPacket path keeps engineering's progress bound to its work on a live assignment (unit-proven; no deployed engineering run yet)
+    next_observation: CI and staging for P2c and P2d1; a deployed run with an engineering assignment
   blocker_or_risk: >-
-    the P2a deployed proof needs research inference, which is down while
-    the ChatGPT account is at its usage limit
-    (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md)
+    TestRLMReplayGoldens runs only on Node B against a capture dir, so
+    replay row 9's switch to ReportPacket is unverified in CI (named
+    residual); the broker's ActionMessage and ActionEmit remain,
+    unreachable from cells, and go with the reducer's Message branch after
+    one release
   next_action: >-
-    P2a deployed demo on the reader computer once it boots the new build
-    (idle stop about 19:05Z) and ChatGPT inference returns (about 18:59Z);
-    then P2c through a draft PR, since its replay test runs only on Linux CI
+    push P2c with P2d1 through the landing loop; confirm staging identity
+    and a regression demo on a fresh test computer; then close P2
+    (completion panel) and continue P2d2
 
 receipts:
   - id: P2-review1
@@ -368,6 +373,29 @@ receipts:
       changing the command digest. Fixed: the turn's own
       persistent-super-work ids are excluded like research's, with a replay
       case in TestTextureManagementCastContinuesTheRequestsOpenWork.
+  - id: P2a-deployed
+    at: 2026-10-11T20:06Z
+    kind: deployed acceptance (staging a2bcf724), AI news demo with follow-up on fresh test computer demo-p2a-2026-10-11
+    result: >-
+      Texture's first turn cast to research in about twenty seconds (the
+      raced-activation refusal did not recur on a fresh computer). Seven
+      revisions, two of them the owner's. Eight agent dispatches between
+      19:20 and 19:47, all to research: seven Casts and one Note, folded
+      into turns. The P1 audit route joins all eight one to one to eight
+      distinct cast records, each addressed to the packet's target, each
+      naming its control, each with staged_act set; no failures, no
+      agent-emitted record without staged_act. The round bound held: four
+      rounds for the first request, then four after the follow-up reset
+      it. Research reports were incorporated (revisions three, four, five
+      and seven), including an unconfirmed claim (Mistral Large 4, single
+      outlet) later confirmed on the vendor's newsroom. The last rounds'
+      reports carried no sources and Texture rejected them; the trace shows
+      research's search timed out at the guest while the gateway logged
+      success at 30.4 seconds
+      (docs/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md).
+      Revision seven has an empty "Chips and compute" heading (content
+      observation, not a protocol defect). Management Cast was not
+      exercised. Evidence: session scratchpad demo19 and p2a/audit-raw.json.
 ---
 
 # P2 — one surface
