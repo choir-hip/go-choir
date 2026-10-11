@@ -441,6 +441,54 @@ documents:
     annotations: {doc_role: register, authority: support, lifecycle: living}
     witnesses: [docs/operational-invariants-register-2026-10-08.md, docs/evidence/problem-doc-triage-2026-10-08.jsonl, docs/choir-doctrine.md]
     refresh_triggers: [doctrine_change, owner_ratification_change]
+  - path: docs/definitions/choir-persistent-desks-metamission-2026-10-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-pd4-computer-controls-computer-2026-10-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-research-fanout-2026-10-10.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: superseded, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
   - path: docs/definitions/choir-appdev-sh-state-homes-2026-10-08.md
     claim_scope: current
     is_root: []

@@ -1408,3 +1408,72 @@ nodes:
       Deployed schema leg = exactly {desk_go_eval}. Named edge: re-run
       on the owner computer after SA slice 1. Spine receipt
       smg-to-sa-transition-2026-10-06.
+  - id: choir-persistent-desks-metamission-2026-10-11
+    title: Persistent desks — four persistent root desks per computer that scale inside themselves (overnight mission)
+    path: docs/definitions/choir-persistent-desks-metamission-2026-10-11.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    execution_mode: scope_disjoint_maintenance
+    depends_on: []
+    enables:
+      - choir-appdev-gate2-supervised-self-development-2026-10-09
+    note: >-
+      Owner 2026-10-11 overnight mission: PD1 persistent research desk, PD2
+      desk sessions outlive runs, PD3 Texture root desk and master document,
+      PD4 computer controls computer (intent).
+  - id: choir-pd1-persistent-research-desk-2026-10-11
+    title: PD1 — one persistent research desk per computer; rounds, not recursion
+    path: docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md
+    ledger: ''
+    status: working
+    kind: station
+    entrypoint: false
+    member_of: choir-persistent-desks-metamission-2026-10-11
+    execution_mode: subordinate_only
+    depends_on: []
+    enables: [choir-pd2-desk-sessions-outlive-runs-2026-10-11]
+  - id: choir-pd2-desk-sessions-outlive-runs-2026-10-11
+    title: PD2 — a desk's Go session outlives its run
+    path: docs/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md
+    ledger: ''
+    status: blocked
+    kind: station
+    entrypoint: false
+    member_of: choir-persistent-desks-metamission-2026-10-11
+    execution_mode: draft_non_executable
+    depends_on: [choir-pd1-persistent-research-desk-2026-10-11]
+    enables: [choir-pd3-texture-root-desk-2026-10-11]
+  - id: choir-pd3-texture-root-desk-2026-10-11
+    title: PD3 — one Texture root desk per computer with per-document sub-RLMs and a master document
+    path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md
+    ledger: ''
+    status: blocked
+    kind: station
+    entrypoint: false
+    member_of: choir-persistent-desks-metamission-2026-10-11
+    execution_mode: draft_non_executable
+    depends_on: [choir-pd2-desk-sessions-outlive-runs-2026-10-11]
+    enables: [choir-pd4-computer-controls-computer-2026-10-11]
+  - id: choir-pd4-computer-controls-computer-2026-10-11
+    title: PD4 — one autoputer controls another, each with its own four desks (intent)
+    path: docs/definitions/choir-pd4-computer-controls-computer-2026-10-11.md
+    ledger: ''
+    status: blocked
+    kind: station
+    entrypoint: false
+    member_of: choir-persistent-desks-metamission-2026-10-11
+    execution_mode: draft_non_executable
+    depends_on: [choir-pd3-texture-root-desk-2026-10-11]
+    enables: []
+  - id: choir-research-fanout-2026-10-10
+    title: Research fan-out (superseded by PD1)
+    path: docs/definitions/choir-research-fanout-2026-10-10.md
+    ledger: ''
+    status: superseded
+    kind: station
+    entrypoint: false
+    execution_mode: superseded_non_executable
+    depends_on: []
+    enables: [choir-pd1-persistent-research-desk-2026-10-11]

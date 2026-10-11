@@ -116,6 +116,17 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   settles (`texture-research-assignment-finish`), T7/T8 not yet reached
   on a green T6. Cluster record:
   [`clustering-texture-obligation-closure`](problems/clustering-texture-obligation-closure-2026-10-09.md).
+- **Overnight mission 2026-10-11 — persistent desks (working):**
+  [`definitions/choir-persistent-desks-metamission-2026-10-11.md`](definitions/choir-persistent-desks-metamission-2026-10-11.md).
+  Owner: four persistent desks per computer that scale inside themselves
+  and hold a continuing conversation. Stations: PD1 one persistent
+  research desk per computer, rounds not recursion (executable,
+  [`pd1`](definitions/choir-pd1-persistent-research-desk-2026-10-11.md));
+  PD2 desk sessions outlive runs (drafted); PD3 Texture root desk with
+  per-document sub-RLMs and a master document (drafted); PD4 computer
+  controls computer (intent). Supersedes the research fan-out goal
+  ([`research-fanout`](definitions/choir-research-fanout-2026-10-10.md),
+  receipts S1, S1b).
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
   Reality slice: seven M11 reruns, each one layer deeper. Rerun 7

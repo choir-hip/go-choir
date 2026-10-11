@@ -168,7 +168,8 @@ boundaries:
     - no bare models.Call (dataflow recursion) in this mission; separate if needed
 
 now:
-  status: working
+  status: superseded
+  superseded_by: definitions/choir-pd1-persistent-research-desk-2026-10-11.md (owner 2026-10-11: one persistent research desk per computer, rounds not recursion)
   slice: >-
     S1c: rerun the research-only prompt with children paced under the
     computer's model budget, 429s waited out, and the time carve-out (a
