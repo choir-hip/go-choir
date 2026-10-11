@@ -136,11 +136,12 @@ boundaries:
 now:
   status: working
   slice: >-
-    paused after S1i — coverage roughly doubled; citation is the next gap.
-    Research rounds resume on the precommitment-records protocol, where each
-    research question carries a prediction that is scored
-  source_ref: 74227bcf (local; pushes after the W1a test run)
-  deploy_identity: staging 78c9173e
+    prompt hill-climb stopped by the owner (2026-10-11 evening: understand
+    before tuning); root cause found (receipt S1j): research has no loop.
+    The next change is structural (a runtime-owned research job), red, and
+    waits for the owner's review
+  source_ref: ba32e0cb (root-cause document pushed)
+  deploy_identity: staging b172895b
   candidate:
     id: PD1
     state: landing
@@ -184,14 +185,36 @@ now:
       the baseline's item count with a citation per item, or whether the
       remaining gap is Texture's own selection.
     next_observation: S1f — items, citations per item, unconfirmed leads followed up
-  blocker_or_risk: none
+  blocker_or_risk: >-
+    the fix is a red substrate change (a runtime-owned research job with a
+    lead ledger and streaming unconfirmed leads), which the owner reserved
+    for review; no further prompt tuning until then
   next_action: >-
-    owner: restore Serper and SerpAPI quota (billing). Then make a research
-    round search wider before it reports (several queries per thread in one
-    cell) and drop Texture's repeated pending-verification phrasing; rerun as
-    S1h
+    owner reviews docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
+    and docs/search-plane-design-fast-deep-broad-2026-10-11.md; then design
+    the research job as its own station
 
 receipts:
+  - id: S1j
+    at: 2026-10-11T21:45Z
+    kind: root-cause analysis from staging traces and code (no prompt change), docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
+    result: >-
+      The owner stopped hill-climbing until the failure is understood. Two
+      deployed AI news demos (test computers demo-p2a-2026-10-11 and
+      demo-p2c-2026-10-11) and the code show: every research round is one
+      short run (67 to 126 seconds, 2 to 10 searches) that ends within
+      seconds of its first report, and only a Texture turn starts the next,
+      capped at four per request, so research was idle about half the time;
+      prompts v3 to v6 said keep going and runs still ended. A leftover
+      instruction keyed on deleted tool names
+      (shouldRequireResearchUpdateAfterTool, internal/researchtools)
+      tells research on every cell search to submit a 2-4 claim packet
+      first (confirmed in code). Reports carry only claims backed by an
+      imported page, so unconfirmed leads have no path (one demo turned
+      over 1,000 result cards into 10 sources). Search returned full result
+      sets; one search in ten ties the guest's 30-second deadline
+      (docs/search-plane-design-fast-deep-broad-2026-10-11.md). This
+      explains S1c to S1i's plateau better than any prompt difference.
   - id: S1c
     at: 2026-10-11T02:57Z
     deploy: staging 16d7c21a, test computer demo-arxiv-2026-10-10c
