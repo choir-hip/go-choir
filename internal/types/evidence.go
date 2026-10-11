@@ -175,6 +175,19 @@ const (
 	LifecyclePacketDirectionDirective LifecyclePacketDirection = "directive"
 )
 
+// WithinTextureTurnBoundary reports whether a Texture turn scheduled at
+// scheduledSeq for runID consumes this report: it was dispatched to the
+// activation (seq <= scheduledSeq) and is unclaimed or claimed by this run.
+// The turn's commit and its cells' choir.Updates() both use this rule, so a
+// cell never sees a report its turn cannot disposition.
+func (p CoagentSourcePacket) WithinTextureTurnBoundary(runID string, scheduledSeq int64) bool {
+	if scheduledSeq <= 0 || p.MessageSeq > scheduledSeq {
+		return false
+	}
+	bound := strings.TrimSpace(p.DeliveredToRunID)
+	return bound == "" || bound == strings.TrimSpace(runID)
+}
+
 // CoagentSourcePacket is the persisted delivery envelope for one addressed
 // source packet. The Packet field is the canonical update_coagent payload; the
 // surrounding fields are runtime-owned delivery/idempotency metadata.

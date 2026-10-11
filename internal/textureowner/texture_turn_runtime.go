@@ -95,10 +95,7 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunR
 		// scheduledSeq) and either unclaimed or claimed by this run. A packet
 		// bound to another live run is left pending; reconcile re-binds
 		// stranded claims on dead runs before dispatch.
-		if scheduledSeq <= 0 || update.MessageSeq > scheduledSeq {
-			continue
-		}
-		if bound := strings.TrimSpace(update.DeliveredToRunID); bound != "" && bound != strings.TrimSpace(rec.RunID) {
+		if !update.WithinTextureTurnBoundary(rec.RunID, scheduledSeq) {
 			continue
 		}
 		pending[strings.TrimSpace(update.UpdateID)] = update

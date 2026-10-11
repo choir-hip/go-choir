@@ -493,7 +493,7 @@ func pendingCellUpdates(ctx context.Context, rt *Runtime, execCtx toolregistry.E
 	out := make([]yaegikernel.PendingUpdate, 0, len(updates))
 	for _, u := range updates {
 		id := strings.TrimSpace(u.UpdateID)
-		if id == "" || !coagentUpdateDeliverableForRun(rec, u) {
+		if id == "" || !cellUpdateVisible(rec, u) {
 			continue
 		}
 		out = append(out, yaegikernel.PendingUpdate{
@@ -508,6 +508,23 @@ func pendingCellUpdates(ctx context.Context, rt *Runtime, execCtx toolregistry.E
 		})
 	}
 	return out
+}
+
+// cellUpdateVisible reports whether a desk cell's choir.Updates() shows the
+// update. A Texture turn's cells see only what its commit consumes: a report
+// that arrived after the activation was scheduled waits for the next turn,
+// rather than being dispositioned here and refused at commit. Park and chat
+// injection keep their own rule (coagentUpdateDeliverableForRun).
+func cellUpdateVisible(rec *types.RunRecord, u types.CoagentSourcePacket) bool {
+	if !coagentUpdateDeliverableForRun(rec, u) {
+		return false
+	}
+	if isTextureAgentID(rec.AgentID) {
+		if scheduled := int64(metadataIntValue(rec.Metadata, "scheduled_message_seq")); scheduled > 0 {
+			return u.WithinTextureTurnBoundary(rec.RunID, scheduled)
+		}
+	}
+	return true
 }
 
 // pendingCellEmits drains emitted signals addressed to this desk's agent,
