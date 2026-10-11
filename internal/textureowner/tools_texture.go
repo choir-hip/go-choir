@@ -775,6 +775,7 @@ func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (m
 	if err != nil {
 		return materializedTextureEdit{}, err
 	}
+	held := append([]texturedoc.SourceEntity(nil), entities...)
 	entities = mergeStructuredSourceEntityPool(entities, edit.AvailableSources)
 	var unusedSourceEntityIDs []string
 	var editCount int
@@ -787,7 +788,14 @@ func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (m
 		if err != nil {
 			return materializedTextureEdit{}, err
 		}
-		entities = nil
+		// A rewrite replaces the prose, not the evidence: every source the
+		// document held stays, marked unused until an edit cites it again
+		// (problems/texture-full-replace-erases-citations-2026-10-11.md).
+		entities = held
+		for _, entity := range held {
+			unusedSourceEntityIDs = append(unusedSourceEntityIDs, strings.TrimSpace(entity.SourceEntityID))
+		}
+		unusedSourceEntityIDs = append(unusedSourceEntityIDs, revisionUnusedSourceEntityIDs(current)...)
 		editCount = 1
 	case "apply_edits":
 		if len(edit.StructuredEdits) == 0 {
@@ -813,7 +821,7 @@ func materializeTextureToolEdit(edit editTextureArgs, current types.Revision) (m
 	}
 
 	entities = filterDetachedStructuredSourceEntities(doc, entities, unusedSourceEntityIDs...)
-	unusedSourceEntityIDs = dedupeTextureUnusedSourceIDs(unusedSourceEntityIDs)
+	unusedSourceEntityIDs = dedupeTextureUnusedSourceIDs(withoutCitedSourceIDs(doc, unusedSourceEntityIDs))
 	projection, err := texturedoc.Project(doc, entities, unusedSourceEntityIDs...)
 	if err != nil {
 		return materializedTextureEdit{}, fmt.Errorf("structured Texture document validation failed: %w", err)
@@ -1501,6 +1509,20 @@ func filterDetachedStructuredSourceEntities(doc texturedoc.StructuredTextureDoc,
 		id := strings.TrimSpace(entity.SourceEntityID)
 		if referenced[id] || unused[id] {
 			out = append(out, entity)
+		}
+	}
+	return out
+}
+
+// withoutCitedSourceIDs drops unused declarations for sources the body
+// cites: a citation supersedes an earlier unused mark.
+func withoutCitedSourceIDs(doc texturedoc.StructuredTextureDoc, ids []string) []string {
+	cited := map[string]bool{}
+	collectStructuredSourceEntityRefs(doc.Doc, cited)
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !cited[strings.TrimSpace(id)] {
+			out = append(out, id)
 		}
 	}
 	return out

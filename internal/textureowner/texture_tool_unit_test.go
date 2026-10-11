@@ -807,3 +807,70 @@ func structuredDocHasNode(node texturedoc.Node, nodeType, nodeID string) bool {
 
 
 
+
+// S1e (docs/problems/texture-full-replace-erases-citations-2026-10-11.md):
+// Texture's full-replace apply (turn ea5e62fa) dropped every source the
+// document held, and later revisions re-cited only three. Failure modes
+// pinned: a full replace drops the held sources; the dropped sources cannot
+// be cited again in the next edit; the rewrite fails validation because the
+// held sources are now uncited.
+func TestTextureToolReplaceAllKeepsHeldSourcesAsUnused(t *testing.T) {
+	current := structuredTextureToolRevision(t)
+	got, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: current.RevisionID,
+		Operation:      "replace_all",
+		Content:        "A full rewrite of the grounded claim.",
+		Rationale:      "recovery rewrite",
+	}, current)
+	if err != nil {
+		t.Fatalf("materialize replace_all: %v", err)
+	}
+	var entities []texturedoc.SourceEntity
+	if err := json.Unmarshal(got.SourceEntities, &entities); err != nil {
+		t.Fatalf("unmarshal source_entities: %v", err)
+	}
+	if len(entities) != 1 || entities[0].SourceEntityID != "src-web" {
+		t.Fatalf("source_entities = %#v, want src-web kept after a full replace", entities)
+	}
+	if len(got.UnusedSourceEntityIDs) != 1 || got.UnusedSourceEntityIDs[0] != "src-web" {
+		t.Fatalf("unused = %v, want src-web held as unused", got.UnusedSourceEntityIDs)
+	}
+
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(got.BodyDoc, &doc); err != nil {
+		t.Fatalf("unmarshal body_doc: %v", err)
+	}
+	blockID := ""
+	for _, node := range doc.Doc.Content {
+		if node.Type == "paragraph" {
+			blockID = textureNodeStringAttr(node, "id")
+			break
+		}
+	}
+	next := types.Revision{
+		RevisionID:     "rev-after-rewrite",
+		DocID:          current.DocID,
+		Content:        got.Content,
+		BodyDoc:        got.BodyDoc,
+		SourceEntities: got.SourceEntities,
+		Metadata:       addTextureEditRevisionMetadata(nil, got, &types.RunRecord{RunID: "run-1"}),
+	}
+	recited, err := materializeTextureToolEdit(editTextureArgs{
+		DocID:          current.DocID,
+		BaseRevisionID: next.RevisionID,
+		Operation:      "apply_edits",
+		StructuredEdits: []textureStructuredEdit{{
+			Op: "insert_source_ref", BlockID: blockID, SourceEntityID: "src-web",
+		}},
+	}, next)
+	if err != nil {
+		t.Fatalf("re-cite held source after rewrite: %v", err)
+	}
+	if !strings.Contains(recited.Content, "[1]") {
+		t.Fatalf("Content = %q, want the held source cited again", recited.Content)
+	}
+	if len(recited.UnusedSourceEntityIDs) != 0 {
+		t.Fatalf("unused = %v, want the citation to supersede the unused mark", recited.UnusedSourceEntityIDs)
+	}
+}
