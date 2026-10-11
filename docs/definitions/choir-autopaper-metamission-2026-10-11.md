@@ -29,11 +29,16 @@ metamission:
       readiness: drafted
       status: pending
       depends_on: [W1]
+    - id: W3a
+      path: docs/definitions/choir-autopaper-w3a-reader-2026-10-11.md
+      readiness: drafted
+      status: pending (owner review; proposed ahead of W2, design open question 3)
+      depends_on: [W1]
     - id: W3
-      path: none (to be authored when W2 lands)
+      path: none (auto-publish, W3b; to be authored when W2 lands)
       readiness: intent
       status: pending
-      depends_on: [W2]
+      depends_on: [W2, W3a]
 
 start:
   captured_at: 2026-10-11T09:00:00Z

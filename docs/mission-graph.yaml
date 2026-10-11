@@ -1550,6 +1550,17 @@ nodes:
     execution_mode: subordinate_only
     depends_on: []
     enables: [choir-autopaper-w2-living-textures-2026-10-11]
+  - id: choir-autopaper-w3a-reader-2026-10-11
+    title: W3a — the Autopaper reader (one permalink per story, public front page, story pages; old Universal Wire app deleted)
+    path: docs/definitions/choir-autopaper-w3a-reader-2026-10-11.md
+    ledger: ''
+    status: pending
+    kind: station
+    entrypoint: false
+    member_of: choir-autopaper-metamission-2026-10-11
+    execution_mode: subordinate_only
+    depends_on: [choir-autopaper-w1-content-in-the-graph-2026-10-11]
+    enables: []
   - id: choir-autopaper-w2-living-textures-2026-10-11
     title: W2 — living Textures; captures reach management, Textures open and revise on evidence, records and spend per story
     path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md

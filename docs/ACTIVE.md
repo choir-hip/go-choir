@@ -158,6 +158,11 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   ([problem](problems/idle-test-computers-keep-old-builds-after-deploy-2026-10-11.md)).
 - **Gate 3 opened 2026-10-11 — Autopaper (working):**
   [`definitions/choir-autopaper-metamission-2026-10-11.md`](definitions/choir-autopaper-metamission-2026-10-11.md).
+  The app is designed ([design](autopaper-app-design-2026-10-11.md)); the
+  reader station W3a
+  ([`w3a`](definitions/choir-autopaper-w3a-reader-2026-10-11.md), drafted,
+  owner review) is proposed ahead of W2 because it needs nothing from the
+  held P2d2.
   Stations: W1 content in the graph (complete,
   [`w1`](definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md)),
   W2 living Textures (drafted,
