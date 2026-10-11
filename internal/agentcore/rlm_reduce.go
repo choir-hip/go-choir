@@ -1449,7 +1449,10 @@ func (r *rlmCallReduction) commitAddressedPacketIntent(ctx context.Context, in y
 		return 0, fmt.Errorf("reduce: %s %s kind %q does not match packet kind %q", label, in.LocalID, wantKind, packet.Kind)
 	}
 	execution := toolregistry.ExecutionContextFrom(ctx)
-	execution.ToolCallID = intentIdempotencyKey(r.scope, in.LocalID, in.ToDesk, in.Body)
+	// The key derives from the packet: a staged Message carried it in Body,
+	// a ReportPacket carries it in Packet (Body empty), so the same packet
+	// keeps the same identity across the two carriers (protocol P2c).
+	execution.ToolCallID = intentIdempotencyKey(r.scope, in.LocalID, in.ToDesk, packetJSON)
 	toolCallCtx := toolregistry.WithExecutionContext(ctx, execution)
 	authority, err := resolveCoagentUpdateAuthorityWithStore(toolCallCtx, rt, rt.store, strings.TrimSpace(in.ToDesk), "")
 	if err != nil {
