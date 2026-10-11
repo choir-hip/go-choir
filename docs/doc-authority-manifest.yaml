@@ -473,6 +473,22 @@ documents:
     depends_on: [docs/choir-doctrine.md]
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-autopaper-metamission-2026-10-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md, docs/autopaper-sw-design-2026-10-09.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md, docs/autopaper-sw-design-2026-10-09.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
   - path: docs/definitions/choir-pd4-computer-controls-computer-2026-10-11.md
     claim_scope: current
     is_root: []

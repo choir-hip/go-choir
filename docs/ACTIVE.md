@@ -126,7 +126,18 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   per-document sub-RLMs and a master document (drafted); PD4 computer
   controls computer (intent). Supersedes the research fan-out goal
   ([`research-fanout`](definitions/choir-research-fanout-2026-10-10.md),
-  receipts S1, S1b).
+  receipts S1, S1b). PD2 (desk sessions keyed by agent) is deployed and
+  running on staging; the research prompt is version 3 (receipts S1d, S1e).
+- **Gate 3 opened 2026-10-11 — Autopaper (working):**
+  [`definitions/choir-autopaper-metamission-2026-10-11.md`](definitions/choir-autopaper-metamission-2026-10-11.md).
+  Stations: W1 content in the graph (executable,
+  [`w1`](definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md)),
+  W2 living Textures and W3 readers (intent). W1 starts at the substrate:
+  the one-connection embedded Dolt (July cause C1) works around a race
+  that upstream fixed a day after our pin
+  ([problem](problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md)),
+  so slice W1a upgrades Dolt and race-tests it before captures get their
+  own pool.
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
   Reality slice: seven M11 reruns, each one layer deeper. Rerun 7

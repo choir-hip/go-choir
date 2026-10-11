@@ -1438,7 +1438,7 @@ nodes:
     title: PD2 — a desk's Go session outlives its run
     path: docs/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md
     ledger: ''
-    status: blocked
+    status: working  # deployed on staging 2026-10-11 (receipt S1d-PD2); acceptance continues
     kind: station
     entrypoint: false
     member_of: choir-persistent-desks-metamission-2026-10-11
@@ -1477,3 +1477,28 @@ nodes:
     execution_mode: superseded_non_executable
     depends_on: []
     enables: [choir-pd1-persistent-research-desk-2026-10-11]
+  - id: choir-autopaper-metamission-2026-10-11
+    title: Autopaper (Gate 3) — content in the graph, living Textures, automatic publishing
+    path: docs/definitions/choir-autopaper-metamission-2026-10-11.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: [choir-appdev-gate2-supervised-self-development-2026-10-09]
+    enables: []
+    note: >-
+      Owner 2026-10-11 overnight goal: move into Gate 3. Design
+      docs/autopaper-sw-design-2026-10-09.md. Supersedes the 2026-10-01
+      World Wire metamission. Stations W1 (executable), W2 and W3 (intent).
+  - id: choir-autopaper-w1-content-in-the-graph-2026-10-11
+    title: W1 — content in the graph; Dolt past the race fix, captures beside Texture
+    path: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
+    ledger: ''
+    status: working
+    kind: station
+    entrypoint: false
+    member_of: choir-autopaper-metamission-2026-10-11
+    execution_mode: subordinate_only
+    depends_on: []
+    enables: []
