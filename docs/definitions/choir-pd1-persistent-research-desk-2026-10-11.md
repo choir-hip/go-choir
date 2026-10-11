@@ -135,16 +135,16 @@ boundaries:
 
 now:
   status: working
-  slice: design reconciliation — how a persistent research agent takes new work while busy
-  source_ref: 7bcc87eb (local)
-  deploy_identity: staging b3dbc686
+  slice: S1c — deployed proof of one research desk across a request and a follow-up
+  source_ref: 16d7c21a (pushed)
+  deploy_identity: staging deploying 16d7c21a
   candidate:
-    id: none
-    state: none
+    id: PD1
+    state: landing
     ref: main
     base: b3dbc686
-    digest: none
-    scope: []
+    digest: 7bcc87eb, 2ac20789, 8b350515, 16d7c21a (+ ce27ae0c harness, local)
+    scope: [internal/textureowner, internal/store, internal/agentcore, internal/yaegikernel, internal/promptstore, internal/textureprompts]
   conjecture:
     id: PD1-1
     claim: >-
@@ -159,21 +159,31 @@ now:
     status: proposed
     evidence_refs: []
   decision:
-    what: research desk keyed by computer ID (doctrine I26; owner "desks are persistent per computer")
-    kind: architecture
-    status: settled
-    evidence_ref: owner statement 2026-10-11
-    owner_ratification_ref: owner 2026-10-11 ~01:25Z
+    what: >-
+      Landing scope is one research desk per document (research:<doc>), not
+      yet per computer. The store's target rule ties research work to the
+      Texture of the document that opened it; a computer-wide desk serving
+      several documents' Textures needs a routing owner, which is PD3's
+      Texture root. Per-computer research lifts with PD3. Conservative
+      option, recorded under No Blocking Asks.
+    kind: scope
+    status: settled (agent, reversible)
+    evidence_ref: 2ac20789 commit message; internal/store/lifecycle_texture_target.go
+    owner_ratification_ref: not_applicable (narrows, does not contradict, the owner's per-computer direction; lift is scheduled)
   belief:
     believed_state: >-
-      Identity, the second-opener drop, recursion and the prompts are the
-      known changes; follow-up authority across turns is done locally.
+      Texture turns merge openers into one desk per document; later openers
+      become follow-ups on the request's open desk work; rounds per owner
+      request are bounded at 4 with a visible drop note; the store queues a
+      control for a busy desk instead of refusing it; children cannot fan out;
+      prompts say one desk, rounds, report after each.
     main_uncertainty: >-
-      How lifecycle delivery starts a research run for a work item while the
-      same agent has an active run bound to another work item.
-    next_observation: read the lifecycle control delivery / dispatch path for research targets
+      Whether the queued follow-up is delivered to the desk when its current
+      run ends (wakeUpdatedCoagent path) on the product path, and whether the
+      model actually reports per round.
+    next_observation: S1c trace — every research control targets research:<doc>; follow-up run exists
   blocker_or_risk: none
-  next_action: read the research control delivery and dispatch path; then write the tests listed in acceptance
+  next_action: after deploy, restart demo-arxiv-2026-10-10c and run S1c with --followup
 
 receipts: []
 ---

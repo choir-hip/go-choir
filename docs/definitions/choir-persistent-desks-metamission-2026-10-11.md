@@ -153,11 +153,11 @@ boundaries:
 now:
   status: working
   slice: PD1 — persistent research desk per computer, rounds not recursion
-  source_ref: 7bcc87eb (local)
-  deploy_identity: staging b3dbc686
+  source_ref: 16d7c21a (pushed)
+  deploy_identity: staging deploying 16d7c21a
   candidate:
     id: PD1
-    state: rehearsing
+    state: landing
     ref: main
     base: b3dbc686
     digest: none
@@ -191,15 +191,14 @@ now:
     owner_ratification_ref: owner 2026-10-11 ~01:25Z "this all sounds great ... the overnight mission"
   belief:
     believed_state: >-
-      Follow-up authority now spans Texture turns (7bcc87eb, local); research
-      identity is still per opener; sessions are still per run.
-    main_uncertainty: >-
-      Whether a persistent research agent can take a second work item while
-      its first is open (the target validator requires the active research
-      run to bind the target work).
-    next_observation: how persistent management takes new work while busy
+      PD1 pushed (16d7c21a): one research desk per document, follow-ups from
+      any Texture turn, busy desk queues controls, no child recursion,
+      prompts for rounds. Per-computer research lifts with PD3 (see PD1
+      decision). Sessions are still per run (PD2).
+    main_uncertainty: whether queued follow-ups reach the busy desk on the product path
+    next_observation: S1c trace
   blocker_or_risk: none
-  next_action: implement PD1 (see its goal file)
+  next_action: S1c on staging; then PD2 failure list
 
 receipts: []
 ---
