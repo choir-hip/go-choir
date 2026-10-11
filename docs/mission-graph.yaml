@@ -1490,7 +1490,8 @@ nodes:
     note: >-
       Owner 2026-10-11 overnight goal: move into Gate 3. Design
       docs/autopaper-sw-design-2026-10-09.md. Supersedes the 2026-10-01
-      World Wire metamission. Stations W1 (executable), W2 and W3 (intent).
+      World Wire metamission. Stations W1 (executable, closing), W2 (drafted)
+      and W3 (intent).
   - id: choir-autopaper-w1-content-in-the-graph-2026-10-11
     title: W1 — content in the graph; Dolt past the race fix, captures in Store B, the source schedule
     path: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
@@ -1501,4 +1502,15 @@ nodes:
     member_of: choir-autopaper-metamission-2026-10-11
     execution_mode: subordinate_only
     depends_on: []
+    enables: [choir-autopaper-w2-living-textures-2026-10-11]
+  - id: choir-autopaper-w2-living-textures-2026-10-11
+    title: W2 — living Textures; captures reach management, Textures open and revise on evidence, records and spend per story
+    path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
+    ledger: ''
+    status: planned
+    kind: station
+    entrypoint: false
+    member_of: choir-autopaper-metamission-2026-10-11
+    execution_mode: subordinate_only
+    depends_on: [choir-autopaper-w1-content-in-the-graph-2026-10-11]
     enables: []

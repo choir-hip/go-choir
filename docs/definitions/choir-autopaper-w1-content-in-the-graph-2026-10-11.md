@@ -104,8 +104,8 @@ boundaries:
 
 now:
   status: working
-  slice: W1 close — the completion panel sent W1 back; its gaps are fixed in 726aa392; the panel re-runs on the new candidate
-  source_ref: 726aa392 (pushed)
+  slice: W1 close — the second panel sent W1 back on one blocker (a same-owner capture race), fixed in 56ec63e0; land it, then a third panel
+  source_ref: 56ec63e0 (local; pushes after the S1h demo)
   deploy_identity: staging 726aa392 (host and the paper computer)
   candidate: {id: W1, state: landed, ref: main, base: e21e1347, digest: ebe02b17, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel, internal/objectgraph]}
   conjecture:
@@ -135,7 +135,7 @@ now:
       crash restart; a second computer reads a capture and its body. A
       running computer picks up a deploy only at its next boot.
     main_uncertainty: whether the second panel finds another path that breaks ownership, the body bound, or the restart rule
-    next_observation: the second panel's verdict on the frozen candidate
+    next_observation: 56ec63e0 deployed (new captures still created, repeats counted); then the third panel's verdict
   blocker_or_risk: >-
     each scheduled poll rewrites its schedule object, which in a guest is one
     event on the computer's chain per poll; fine for a handful of sources,
@@ -147,9 +147,11 @@ now:
     - sourcecycled (not in Node B's boot set) still writes capture bodies into rows if it is ever enabled; delete or route it through the capture route first
     - discovered heresy, not repaired — a same-owner guest can overwrite another computer's object of any kind through the generic object route (separate auth change)
     - the MVP source list is open; France 24 and UN News refuse Node B
+    - for W2 (second panel) — no per-guest quota on the capture route; a capture is what its writer says, so shared readers filter by a trusted writer; items beyond a poll's max_items are never fetched once validators are kept; a body file written before a failed row write is orphaned
   next_action: >-
-    run the second completion panel on the frozen head; adjudicate; then
-    settle W1 and author W2
+    push 56ec63e0 after the demo; CI, deploy, deployed check; third panel;
+    settle W1; review the W2 file
+    (definitions/choir-autopaper-w2-living-textures-2026-10-11.md, drafted)
 
 receipts:
   - id: W1a
@@ -286,6 +288,21 @@ receipts:
       bytes in rows and 92 body files. The guest-refusal and commit-failure
       paths are proven by unit tests only.
     conjecture: W1-3 supported with the first-round fixes
+  - id: W1-panel2
+    at: 2026-10-11T14:30Z
+    deploy: staging 726aa392 (frozen 1ddb0606)
+    kind: agentic-consensus completion panel (session scratchpad w1c/panel2)
+    result: >-
+      Sent back on one blocker, found by Codex, GPT-6 Luna and GPT-6.1 Sol
+      (Sol reproduced it against the handler and the Dolt adapter): two
+      computers of one owner posting the same new item at once could both
+      pass the existence check, and Store B's upsert let the later replace
+      the earlier computer's capture. Claude and DeepSeek approved; Devin
+      gave no verdict (it stopped at a permission prompt); Gemini and GLM
+      timed out. The first-round fixes held for every reviewer. Fixed in
+      56ec63e0 with an insert-only create; the new regression fails on the
+      old path and passes ten runs on the new one.
+    conjecture: W1-3's ownership claim held sequentially, not concurrently
 ---
 
 # W1 — content in the graph
