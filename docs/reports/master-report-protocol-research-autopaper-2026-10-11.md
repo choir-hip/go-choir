@@ -130,3 +130,13 @@ Then the smaller ones:
 - Verified code points: researchtools.go shouldRequireResearchUpdateAfterTool and its next_instruction; broker.go handleAssign; universal_wire.go fixed claims; platform service.go new publication id per publish; rlm_reduce.go distribution notes in the question packet; lifecycle_commit_act.go 10,000-record scan; gateway handlers.go 30-second search deadline; node-b.nix keepalive mode and warmness_policy.go primary skip.
 - Demos: test computers demo-p2a-2026-10-11 (document 07968375) and demo-p2c-2026-10-11 (document 34f4781e).
 - Operating rule added to CLAUDE.md: understand before tuning; panels for uncertainty, not ceremony.
+
+## Added later the same night
+
+After this report was first published, I kept to design work and drafted three more things for your review. Nothing was built.
+
+The research job is now a drafted station. It keeps one research run alive as a budgeted job instead of ending it after each report. Search results go into a lead list in the computer's evidence store. The runtime streams unconfirmed leads to Texture about once a minute. Its first slice only deletes the stale instruction, and that slice doubles as a measurement. It lives at docs/definitions/choir-research-job-2026-10-11.md.
+
+The search deadline ladder is a drafted station too, at docs/definitions/choir-search-deadline-ladder-2026-10-11.md. It holds the ChatGPT search routing decision for you.
+
+The directive inbox for P2d2 has a design answer, at docs/texture-directive-inbox-design-2026-10-11.md. A directive should carry no work item of its own. It joins the Texture's open request work, or reopens it the way an owner revision does. And a turn may not complete that work while a directive is still waiting. The design also found that the store's turn commit cannot consume a directive at all today. So the consumption change and the store fix must land together, or every Texture turn would fail while a directive is pending.

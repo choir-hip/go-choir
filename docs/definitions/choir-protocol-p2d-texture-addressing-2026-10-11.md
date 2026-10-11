@@ -293,6 +293,14 @@ now:
       a work settlement. Alternative: generalize the run to carry a set of
       work items, a larger change to the Texture root that the owner
       reserved for review.
+      Design answer for review: docs/texture-directive-inbox-design-2026-10-11.md
+      recommends shape D (a directive carries no work item; the act joins
+      the Texture's open request work or reopens it as an owner revise
+      does; a turn cannot complete request work while a directive to it is
+      pending), and confirms the store's turn commit accepts no directive
+      today (ResolveLifecyclePacketWorkBindings has no directive case), so
+      widening consumption without that store fix would fail every Texture
+      turn while a directive is pending.
     kind: architecture
     status: proposed (P2d-review1); open after P2d-review3
     evidence_ref: receipt P2d-review1
