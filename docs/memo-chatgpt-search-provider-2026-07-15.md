@@ -83,3 +83,17 @@ independent `chatgpt` health key.
 - **Conjecture:** ChatGPT's Codex Responses endpoint preserves hosted web-search
   output and citation metadata sufficiently for Choir's normalized search
   contract.
+
+## Review findings before landing (2026-10-11)
+
+- **Several refreshers on one OAuth file.** `NewChatGPTProvider` built a
+  new `ChatGPTAuth` for every inference provider, one per configured model
+  (four on Node B), and this adapter built another. `ChatGPTAuth.mu` is per
+  instance, and refresh tokens rotate. Two instances that refresh together
+  spend the same refresh token, and the second fails. `write` used
+  `os.WriteFile`, so a concurrent reader could parse a half-written file.
+  Fix: one shared `ChatGPTAuth` per auth path for the whole process, and
+  the file replaced by rename.
+- **No sources was an error.** A completed answer with no web sources
+  returned an error, which the search plane benches as a provider failure.
+  Fix: return an empty result and let the plane's empty-streak rule decide.
