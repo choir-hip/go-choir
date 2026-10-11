@@ -221,6 +221,61 @@ receipts:
       owner's decision the same hour
       (problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md).
     conjecture: superseded
+  - id: W1c
+    at: 2026-10-11T11:52Z
+    deploy: staging 19b2f964 (host and guest), test computer demo-arxiv-2026-10-10 restarted onto it
+    kind: deployed proof (session scratchpad w1c/)
+    result: >-
+      The owner API started schedules for rss:bbc_world and
+      rss:aljazeera_all at five minutes, ten items. The first wakes polled
+      at 11:33:40 with no model call: ten new items each, HTTP 200, 42 and 20
+      ms. Store B (corpus database) gained 20 choir.web_capture rows for
+      the owner with no body bytes in any row; Node B gained 20 body files
+      (80 KB) under platform-artifacts/capture-bodies. Polls at 11:38:40 and
+      11:43:40 wrote nothing new: BBC returned ten repeats, Al Jazeera a
+      304. Each schedule's usage (fetched, new, repeated, bytes, times)
+      reads back from the API. corpus-dolt stayed at 36 to 49 MB. A
+      lifecycle restart at 11:44:30 (no planned-restart marker) booted the
+      guest at 11:44:39; the boot closed both schedules as
+      interrupted_by_restart at generation 2, and the two wakes due 11:48:40
+      were refused by the actor handler's crash branch: both schedules
+      still show three polls. The proxy hop (8574a8e1) carried the capture
+      writes.
+    conjecture: W1-3 supported for one paper computer and two sources
+  - id: W1-hour
+    at: 2026-10-11T12:53Z
+    deploy: staging 19b2f964 (host and guest)
+    kind: deployed proof (session scratchpad w1c/hour-end.jsonl, storeb-hour-end.txt)
+    result: >-
+      Six stand-in sources (the MVP list is still open) at ten minutes,
+      twenty items, from 11:52:44 to 12:52:44, plus the two earlier
+      schedules on the same sources. Store B holds 69 captures for the paper
+      owner, exactly the 69 new items the schedules recorded (WHO 20, BBC
+      22, Al Jazeera 27), with no body bytes in any row and 69 body files
+      (312 KB) on host disk. Re-polls wrote nothing (repeats and 304s). DW
+      returned zero items on every poll (RSS 1.0, fixed in f84c29bd after
+      the run); France 24 (403) and UN News (timeout) failed every poll and
+      backed off by doubling. corpus-dolt stayed at 36 to 50 MB; corpusd's
+      anonymous memory is 32 MB (its 530 MB cgroup figure is reclaimable
+      file cache). Store B's Dolt history is three commits with transaction
+      commits off.
+    conjecture: W1-3 supported over one hour, one paper computer, six sources
+  - id: W1-read
+    at: 2026-10-11T13:08Z
+    deploy: staging ebe02b17 (host and both test computers)
+    kind: deployed proof (reader document 69076219 on demo-arxiv-2026-10-10c)
+    result: >-
+      A second computer, owned by a different user (demo-arxiv-2026-10-10c),
+      read a capture the paper computer wrote: research called
+      choir.ReadCapture on the WHO capture key-04d282d8 and returned its
+      title, source id official:who:news, URL, the paper owner's id and the
+      first sentence of its body, read from Store B and host disk through
+      the proxy. On the paper computer after the same deploy, rss:dw_en's
+      first poll fetched 20 items and wrote 20 new captures (zero before
+      the RSS 1.0 fix). The 13:02:44 polls succeeded across the host
+      deploy; the restart onto ebe02b17 closed the schedules, and four were
+      started again (France 24 and UN News stopped, reason "refuses Node B").
+    conjecture: W1-3 supported for the station's acceptance scope
 ---
 
 # W1 — content in the graph
