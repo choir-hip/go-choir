@@ -137,7 +137,7 @@ boundaries:
 
 now:
   status: working
-  slice: P1 landed on staging; the deployed audit runs with the AI news demo
+  slice: P1 landed and audited on staging; completion panel waits for the OpenAI reviewers
   source_ref: 0f1c86c7 (pushed; CI 38157484614 green)
   deploy_identity: staging 0f1c86c7; reader computer restarted onto it at 17:06:38Z
   candidate: {id: P1, state: landed, ref: main, base: 3cee2ac9, digest: 0f1c86c7, scope: [internal/store, internal/types, internal/agentcore, internal/textureowner, internal/apihandler]}
@@ -148,8 +148,8 @@ now:
     edge: missing_oracle
     delta_o: records per control in the store after a command and after its replay
     scope_if_supported: Texture controls on one computer
-    status: testing
-    evidence_refs: [store tests in internal/store/lifecycle_control_record_test.go]
+    status: "supported (thin sample: one control on staging)"
+    evidence_refs: [store tests in internal/store/lifecycle_control_record_test.go, receipt P1-deployed]
   decision:
     what: >-
       a control opens or continues work, so its record is a directive of
@@ -162,16 +162,14 @@ now:
     status: "settled for P1 (design §2 — Cast opens or continues work)"
     evidence_ref: docs/precommitment-protocol-design-2026-10-11.md §2
   belief:
-    believed_state: >-
-      every control since the deploy minted its cast record (interim audit
-      at 17:20Z: 1 control, 1 record, all checks pass)
-    main_uncertainty: whether later research rounds in the demo keep the one-to-one join
-    next_observation: the full audit when the demo ends
+    believed_state: every control since the deploy minted its cast record (one control, one record, all checks pass)
+    main_uncertainty: the sample is one control, because research was down on the ChatGPT limit
+    next_observation: P2a's deployed demo repeats the same join with every research round
   blocker_or_risk: >-
     not P1: the demo's first Texture run took no turn for eight minutes
     (docs/problems/texture-raced-activation-refused-first-turn-2026-10-11.md,
     named residual)
-  next_action: full audit at the demo's end; deployed receipt; completion panel
+  next_action: completion panel once the OpenAI reviewers return (after 18:59Z); P2a's demo widens the sample
 
 receipts:
   - id: P1-review1
@@ -199,6 +197,22 @@ receipts:
       authoritative over the packet's transport fields; keep the packet id
       as the control id; filter directives on $.directive with missing
       fields matching empty; keep the emitter field omitempty.
+  - id: P1-deployed
+    at: 2026-10-11T17:36Z
+    kind: landing loop and deployed audit
+    result: >-
+      Pushed 0f1c86c7; CI 38157484614 green; staging deployed 0f1c86c7;
+      reader test computer demo-arxiv-2026-10-10c restarted onto it at
+      17:06:38Z. AI news demo with the follow-up (session scratchpad
+      demo18). Audit through GET /internal/runtime/control-records: one
+      control after the deploy (17:16:00Z, research:00f36207…), one cast
+      record control:72f48fce3290de5aeb0cdd16a3b1528d, addressed to the
+      target, emitter agent, computer set, subject refs naming the
+      control, zero failures. The sample is one control: Texture's first
+      run took no turn (problems/texture-raced-activation-refused-first-turn-2026-10-11.md)
+      and every research run failed on the ChatGPT usage limit
+      (problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md),
+      so no later rounds were dispatched. Neither failure involves P1.
 ---
 
 # P1 — record-first controls
