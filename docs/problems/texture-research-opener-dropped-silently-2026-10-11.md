@@ -53,3 +53,38 @@ opening research forever. Choices recorded for after the S1 rerun:
 - Leave width to the research desk: with `choir.Research`, one desk can
   fan out as wide as the question needs, so two desks may be enough once
   fan-out works. The S1 rerun with the 2026-10-11 fixes tests this.
+
+## Decision (owner, 2026-10-11 ~01:10Z)
+
+"We shouldn't have multiple research desks for a task ... The one research
+desk should fan out if needed, but Texture shouldn't be managing multiple
+research desks." And on fan-out: "we really shouldn't be encouraging
+recursive fan out. We don't really have the language model or search
+limit ... models can and should do a round of search and then report back
+and then do another round of search ... because we want to get the data to
+the texture agent as soon as possible."
+
+What made Texture manage several desks, besides the budget of two:
+
+- `lifecycleTargetWorkRequestedByTexture` (store) accepts a follow-up only
+  from the Texture run that opened the work. Texture is one agent per
+  document but a new run every turn, so every later turn could not reach
+  the open desk and had to open another.
+- Texture's run prompt says "Use parallel research desks when branches are
+  distinct", "Open additional research entries when branches are
+  distinct", and "Work an earlier Texture run opened ... cannot carry this
+  run's control; open a new research entry".
+
+The change:
+
+1. One research desk per owner request. A follow-up from any turn of this
+   document's Texture reaches it (authority stays with this document's
+   Texture agent; the run match goes). A second opener in the same request
+   becomes a follow-up to that desk instead of being dropped.
+2. The 2026-10-09 loop bound becomes a bound on research rounds per owner
+   request (the opener plus follow-ups), not on desks.
+3. The research desk works in rounds: search, read, report what landed,
+   then the next round on what is still uncovered, all in one run.
+   choir.Research stays on the desk for a question that splits into
+   separate parallel lines; children cannot call it (no recursion).
+4. Texture's prompt says one desk per request, follow-ups to it.
