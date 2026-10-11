@@ -121,10 +121,22 @@ async function api(method, path, body) {
     const text = await response.text();
     try { return { status: response.status, json: JSON.parse(text) }; } catch { return { status: response.status, text }; }
   }, { m: method, p: path, b: body });
-  const first = await attempt();
+  // The desktop reloads itself while a freshly restarted computer finishes
+  // booting; a fetch in flight then loses its page. Wait out the navigation
+  // and retry instead of failing the run before the prompt is typed.
+  const settled = async () => {
+    for (let i = 0; ; i++) {
+      try { return await attempt(); } catch (err) {
+        if (i >= 5 || !/Execution context was destroyed|navigation/i.test(String(err))) throw err;
+        await page.waitForLoadState('domcontentloaded').catch(() => {});
+        await page.waitForTimeout(3000);
+      }
+    }
+  };
+  const first = await settled();
   if (first.status !== 401) return first;
   await page.evaluate(() => fetch('/auth/session', { credentials: 'same-origin' }));
-  return attempt();
+  return settled();
 }
 const getJSON = (path) => api('GET', path);
 const postJSON = (path, body) => api('POST', path, body);
