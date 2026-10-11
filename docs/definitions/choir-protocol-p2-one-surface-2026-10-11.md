@@ -96,9 +96,10 @@ finish:
     Cast(research, objective, packet), Ask(research, question) and
     Note(research, body) become a research opener (a follow-up when the
     request already has open research work); Cast(management, objective,
-    execution_request packet) continues the request's open management work
-    when there is some and otherwise becomes the persistent-management
-    opener; Ask and Note to management are refused naming Cast, because a
+    execution_request packet) folds to the persistent-management opener, and
+    textureTurnControls continues the request's open management work on the
+    trajectory when there is some (a management branch beside research's
+    follow-up branch, since the fold cannot see the lifecycle snapshot); Ask and Note to management are refused naming Cast, because a
     management dispatch needs execution_request actions. On Texture, Cast's
     third argument is a packet, not the cast spec other desks pass (named
     difference). The fold runs in commitTray, which both the commit path and
@@ -107,7 +108,9 @@ finish:
     in two phases: first the model-authored body, refusing one that carries
     controls (naming Cast and Ask), then the injection. It is a pure
     function of the staged intents, so a replayed cell folds to the same
-    bytes. It refuses a second Cast to management in one cell (a turn takes
+    bytes. It refuses a Texture Cast whose third argument is a cast spec rather
+    than a packet (no kind), naming the packet contract. When a dispatch is
+    staged, it refuses a second Cast to management in one cell (a turn takes
     one persistent-management opener), refuses a cell with more
     than one ApplyTexture or with an email one carrying a dispatch, refuses
     a Texture Cast, Ask or Note to any desk other than research or
@@ -115,29 +118,43 @@ finish:
     without an apply or decide ApplyTexture, saying the dispatch commits
     with the turn. A refusal fails the whole cell, as a malformed body does
     today. Each control's record gains
-    subject ref staged_act (cast or ask). Cast joins Texture's module set.
+    subject ref staged_act (cast, ask or note; joined with + when a turn's
+    openers merge). Cast joins Texture's module set.
     Every surface that teaches the controls is rewritten to Cast and Ask:
     internal/textureprompts (run_system.yaml with its worked example,
     revision_policy.yaml, revision_execution_findings.yaml, texture.yaml),
-    tool_profiles.go and the cell author's decode error; a test fails if
-    any served Texture prompt names open_researcher, open_persistent_super
-    or target_work_item_id.
+    tool_profiles.go and the cell author's decode error; the sentences that
+    become false are rewritten too (run_system.yaml and revision_policy.yaml
+    say a direct Message or Note to research is rejected; after P2a a Note
+    to research with a turn is valid); a test fails if any served Texture
+    prompt names open_researcher, open_persistent_super or
+    target_work_item_id.
     Slice P2b (ProductAPI fence). For every desk, ProductAPI refuses each
     non-GET /api/texture/ route, with an explicit exception list (one
     entry, POST merge-preview, which only computes a preview; no desk use
     of a Texture write through ProductAPI appears in the code or the
     evidence record; management starts a new Texture through
     /api/prompt-bar, the owner's path, where Texture writes it), and a
-    test enumerates the registered Texture routes (internal/textureowner/router.go,
-    internal/apihandler/routes.go); management's overlay
+    test lists the registered Texture routes as samples, since the rule is
+    by prefix and method and refuses a later route without the list
+    (internal/textureowner/router.go,
+    internal/apihandler/routes.go), naming POST /api/texture/management-open
+    (the route the audit's owner exception depends on) and
+    /api/texture/documents (registered apart); management's overlay
     (internal/runtimeprompts/overlays/rlm_management_runtime.yaml) stops
     listing /api/texture/ as writable. Slice P2c (deletions). Message and Emit leave every prompt that
     teaches them (the management, engineering and research runtime
     overlays; research's overlay also stops calling Cast retired while its
-    module set grants it), the broker action grants and the Emit egress
+    module set grants it; Texture's prompts, where
+    internal/textureprompts/prompts_test.go today requires choir.Message
+    and choir.Note in a served prompt, and that test changes with them), the broker action grants and the Emit egress
     handler. Their exports stay as stubs that return a refusal naming the
     act to use, so a model that still calls them learns why instead of
-    hitting an undefined symbol. Engineering's progress to management
+    hitting an undefined symbol, and their Help() summaries in
+    internal/yaegikernel/surface.go say they are retired and name the act.
+    The live replay test (internal/agentcore/rlm_replay_linux_test.go) stages
+    choir.Message in live cells; those rows stage the Message intent through
+    the tray directly, so the replay of a pre-deploy tray stays observable. Engineering's progress to management
     moves from Message to ReportPacket, which is already in engineering's
     module set and keeps today's producer_report direction and work-item
     binding (commitAddressedPacketIntent); the overlay and its pinning test
@@ -163,7 +180,9 @@ finish:
         staged_act=cast; a second Cast in a later turn of the same request
         continues that work; two Casts in one cell merge into one round; a
         Cast past the round bound is dropped with the runtime note and the
-        edit still commits; a Cast to management without execution_request
+        edit still commits; a second management Cast in a later turn of the
+        same request continues that request's open management work, and
+        management work from an earlier request is not continued; a Cast to management without execution_request
         is refused; a Cast with no ApplyTexture is refused; a body with
         controls is refused naming Cast and Ask; replay mints nothing.
       proves: Cast and Ask replace the controls on the same transaction path
@@ -171,11 +190,11 @@ finish:
     - action: >-
         AI news demo with the follow-up on the reader test computer at P2a.
         Through the P1 audit route, every control packet created after the
-        deploy joins one to one to a cast record whose staged_act is set,
+        deploy joins one to one to a cast record whose subject ref staged_act is set,
         except controls whose record names the owner as emitter (the owner's
-        management-open route keeps the accumulator directly). The controls
-        field no longer parses, so an unset staged_act on an agent-emitted
-        record would mean a path was missed. Research wakes, reports, and
+        management-open route keeps the accumulator directly). The fold
+        refuses a model-authored controls array, so an unset staged_act on an
+        agent-emitted record would mean a path was missed. Research wakes, reports, and
         Texture incorporates at least one report.
       proves: Texture dispatches through Cast and Ask on staging, and the research chain still closes
       evidence_class: deployed proof (needs research inference; see blocker)
@@ -231,7 +250,7 @@ boundaries:
 
 now:
   status: working
-  slice: P2a — Texture's Cast and Ask fold into its turn
+  slice: P2b (lands first), then P2a — Texture's Cast and Ask fold into its turn
   source_ref: 0f1c86c7
   deploy_identity: staging 0f1c86c7
   candidate: none
@@ -284,7 +303,7 @@ now:
     the P2a deployed proof needs research inference, which is down while
     the ChatGPT account is at its usage limit
     (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md)
-  next_action: second file review; then P2a tests first
+  next_action: land P2b; finish P2a (module set, prompts) after the review accepts
 
 receipts:
   - id: P2-review1
@@ -322,6 +341,19 @@ receipts:
       second management opener; engineering's progress moves to ReportPacket,
       not Note; removed verbs refuse through stubs. Revised: P2d moved to its
       own station; the rest folded into the artifact and failure list.
+  - id: P2-review3
+    at: 2026-10-11T18:10Z
+    kind: agentic-consensus file review, third round (session scratchpad p2/review3), frozen f363650d
+    result: >-
+      Gemini accepts; Claude and DeepSeek send back; GLM timed out. Both
+      blocking findings were the same: Cast(management) promised to
+      continue open management work, but textureTurnControls only
+      continued research. Fixed in code with a test
+      (TestTextureManagementCastContinuesTheRequestsOpenWork). DeepSeek
+      also found the live replay test stages choir.Message (named in P2c)
+      and asked for a refusal of spec-shaped Texture Casts (added, tested);
+      Claude found the textureprompts test requiring choir.Message and the
+      prompt sentences that become false (rewritten in P2a's code).
 ---
 
 # P2 — one surface
