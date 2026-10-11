@@ -221,7 +221,10 @@ update restart (with the marker) re-arms them once.
 Ways it can fail, written before the code:
 
 - a crash restart resumes polling (an auto-resume loop): no boot path may
-  re-arm a schedule without the planned-restart marker;
+  re-arm a schedule without the planned-restart marker, and
+  `source_poll_due` must join `restartWorkKinds`
+  (internal/actorruntime/handler.go), the list a crash boot closes as
+  interrupted_by_restart; a kind missing from it fires after the crash;
 - two wakes for one source run at once (a second arm while one is due):
   one open obligation per source, keyed by source id;
 - a failing feed retries in a tight loop: a failure arms the next wake at
