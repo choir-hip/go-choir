@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -37,13 +39,44 @@ const deskWorkerArg = "desk-session"
 // size (8 GiB virtual; Linux staging enforced).
 const deskWorkerMemoryLimitBytes uint64 = 8 << 30 // 8 GiB
 
+// A desk's session outlives its run (PD2): the next run of the same agent
+// evaluates in the same REPL, so a follow-up continues from the values the
+// desk's earlier runs defined. Sessions are process memory: a restart, a
+// failed or timed-out cell, or deskSessionRetention without a cell ends one,
+// and nothing resumes it.
+const (
+	deskSessionRetention = 30 * time.Minute
+	// deskSessionMaxIdle bounds the idle sessions a computer keeps; beyond
+	// it the least recently used idle session is closed.
+	deskSessionMaxIdle = 12
+)
+
+type deskSession struct {
+	worker   *yaegikernel.DeskSessionWorker
+	cfg      yaegikernel.SessionWorkerConfig
+	started  time.Time
+	lastUsed time.Time
+	cells    int
+	runs     []string
+	// busyRun is the run whose cell is evaluating now; "" when idle.
+	busyRun string
+}
+
 type deskSessionWorkers struct {
-	mu      sync.Mutex
-	workers map[string]*yaegikernel.DeskSessionWorker
+	mu        sync.Mutex
+	sessions  map[string]*deskSession
+	retention time.Duration
+	maxIdle   int
+	now       func() time.Time
 }
 
 func newDeskSessionWorkers() *deskSessionWorkers {
-	return &deskSessionWorkers{workers: map[string]*yaegikernel.DeskSessionWorker{}}
+	return &deskSessionWorkers{
+		sessions:  map[string]*deskSession{},
+		retention: deskSessionRetention,
+		maxIdle:   deskSessionMaxIdle,
+		now:       time.Now,
+	}
 }
 
 // deskSessionWorkers returns the Runtime's shared worker pool, lazily
@@ -57,37 +90,159 @@ func (rt *Runtime) deskSessionWorkers() *deskSessionWorkers {
 	return rt.deskWorkers
 }
 
-// deskWorkerFor returns (or spawns) the activation's host session worker.
-// bin is the daemon's own executable; cfg carries the desk identity/bounds.
-func (m *deskSessionWorkers) deskWorkerFor(activationID string, cfg yaegikernel.DeskSessionWorkerConfig) (*yaegikernel.DeskSessionWorker, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.workers == nil {
-		m.workers = map[string]*yaegikernel.DeskSessionWorker{}
-	}
-	if w := m.workers[activationID]; w != nil && !w.Dead() {
-		return w, nil
-	}
-	if old := m.workers[activationID]; old != nil {
-		old.Close()
-	}
-	w, err := yaegikernel.SpawnDeskSessionWorker(cfg)
-	if err != nil {
-		delete(m.workers, activationID)
-		return nil, err
-	}
-	m.workers[activationID] = w
-	return w, nil
+// deskSessionLease is one cell's hold on a session; done releases it.
+type deskSessionLease struct {
+	key    string
+	worker *yaegikernel.DeskSessionWorker
+	// notice tells the desk whether its session is new or continuing, on
+	// the first cell of each run of a persistent session.
+	notice string
 }
 
-// release terminates and forgets the activation's worker.
-func (m *deskSessionWorkers) release(activationID string) {
+// deskSessionKey names the session a desk cell evaluates in. A desk run (it
+// has a run record) uses its agent's session, so a later run of the same desk
+// continues where the earlier one left off. A cell without a run record (a
+// choir.Research child) keeps a session of its own activation: a child that
+// joined its parent's session would wait on the parent's cell forever.
+func deskSessionKey(execCtx toolregistry.ExecutionContext) (string, bool) {
+	if execCtx.RunRecord != nil {
+		if id := strings.TrimSpace(execCtx.RunRecord.AgentID); id != "" {
+			return "agent:" + id, true
+		}
+	}
+	return deskWorkerActivationID(execCtx), false
+}
+
+// acquire returns the session for key, spawning one if it is missing, dead,
+// or configured differently, and marks it busy for runID's cell. A session
+// that is mid-cell for another run is not shared: runID gets its own.
+func (m *deskSessionWorkers) acquire(key string, persistent bool, runID string, cfg yaegikernel.DeskSessionWorkerConfig) (deskSessionLease, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if w := m.workers[activationID]; w != nil {
-		w.Close()
-		delete(m.workers, activationID)
+	if m.sessions == nil {
+		m.sessions = map[string]*deskSession{}
 	}
+	now := m.clock()
+	m.reclaimLocked(now)
+	why := ""
+	if s := m.sessions[key]; s != nil && s.busyRun != "" && s.busyRun != runID {
+		key += "#run:" + runID
+		why = " (this desk's session is busy with another run's cell)"
+	}
+	s := m.sessions[key]
+	if s != nil && (s.worker.Dead() || !sameDeskSessionConfig(s.cfg, cfg.Session)) {
+		s.worker.Close()
+		delete(m.sessions, key)
+		s = nil
+	}
+	if s == nil {
+		w, err := yaegikernel.SpawnDeskSessionWorker(cfg)
+		if err != nil {
+			return deskSessionLease{}, err
+		}
+		s = &deskSession{worker: w, cfg: cfg.Session, started: now, lastUsed: now}
+		m.sessions[key] = s
+	}
+	lease := deskSessionLease{key: key, worker: s.worker}
+	if (persistent || why != "") && !slices.Contains(s.runs, runID) {
+		if s.cells == 0 {
+			lease.notice = "new session" + why + ": nothing from this desk's earlier runs is defined. A session ends on a restart, a failed or timed-out cell, or " + m.retentionLocked().String() + " without a cell."
+		} else {
+			lease.notice = fmt.Sprintf("continuing session: values defined by this desk's earlier cells are still defined (%d cells over %d earlier runs, started %s ago). Print one before relying on it.",
+				s.cells, len(s.runs), now.Sub(s.started).Round(time.Second))
+		}
+	}
+	if !slices.Contains(s.runs, runID) {
+		s.runs = append(s.runs, runID)
+	}
+	s.busyRun = runID
+	return lease, nil
+}
+
+// done ends a cell's hold on its session.
+func (m *deskSessionWorkers) done(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s := m.sessions[key]; s != nil {
+		s.busyRun = ""
+		s.cells++
+		s.lastUsed = m.clock()
+	}
+	m.reclaimLocked(m.clock())
+}
+
+// reclaimLocked closes idle sessions past retention, then the least recently
+// used idle sessions beyond maxIdle. A busy session is never reclaimed.
+func (m *deskSessionWorkers) reclaimLocked(now time.Time) {
+	idle := make([]string, 0, len(m.sessions))
+	for key, s := range m.sessions {
+		if s.busyRun != "" {
+			continue
+		}
+		if s.worker.Dead() || now.Sub(s.lastUsed) > m.retentionLocked() {
+			s.worker.Close()
+			delete(m.sessions, key)
+			continue
+		}
+		idle = append(idle, key)
+	}
+	limit := m.maxIdle
+	if limit <= 0 {
+		limit = deskSessionMaxIdle
+	}
+	if len(idle) <= limit {
+		return
+	}
+	sort.Slice(idle, func(i, j int) bool { return m.sessions[idle[i]].lastUsed.Before(m.sessions[idle[j]].lastUsed) })
+	for _, key := range idle[:len(idle)-limit] {
+		m.sessions[key].worker.Close()
+		delete(m.sessions, key)
+	}
+}
+
+func (m *deskSessionWorkers) clock() time.Time {
+	if m.now != nil {
+		return m.now()
+	}
+	return time.Now()
+}
+
+func (m *deskSessionWorkers) retentionLocked() time.Duration {
+	if m.retention > 0 {
+		return m.retention
+	}
+	return deskSessionRetention
+}
+
+// count reports live sessions.
+func (m *deskSessionWorkers) count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.sessions)
+}
+
+// release terminates and forgets the session's worker.
+func (m *deskSessionWorkers) release(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if s := m.sessions[key]; s != nil {
+		s.worker.Close()
+		delete(m.sessions, key)
+	}
+}
+
+// closeAll terminates every session.
+func (m *deskSessionWorkers) closeAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for key, s := range m.sessions {
+		s.worker.Close()
+		delete(m.sessions, key)
+	}
+}
+
+func sameDeskSessionConfig(a, b yaegikernel.SessionWorkerConfig) bool {
+	return a.Role == b.Role && a.ComputerID == b.ComputerID && a.AllowedRoot == b.AllowedRoot
 }
 
 // newDeskGoEvalTool evaluates model-authored Go source for a non-capsule desk
@@ -102,7 +257,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 	}
 	return toolregistry.Tool{
 		Name:        "desk_go_eval",
-		Description: "Evaluate model-authored Go source for this desk in a killable host subprocess (restricted stdlib, per-role choir verbs).",
+		Description: "Evaluate model-authored Go source for this desk in a killable host subprocess (restricted stdlib, per-role choir verbs). The desk's session continues across its runs, so values from earlier runs stay defined until a restart, a failed or timed-out cell, or " + deskSessionRetention.String() + " idle; the first cell of each run says whether the session is new or continuing.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"source":     map[string]any{"type": "string", "description": "Raw Go source for one REPL cell; stage desk acts with choir.* verbs."},
 			"timeout_ms": map[string]any{"type": "integer", "description": "Optional evaluation timeout in milliseconds; leaving it unset is normal. A cell that reaches it is killed with its session, so values from earlier cells are lost. Host calls such as choir.WebSearch and choir.FetchURL take several seconds each (up to about 10 s)."},
@@ -147,12 +302,18 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				// table; network/content actions go to researchDeps.HostEgress
 				// under the shared egress ledger — one deps surface, never an
 				// open socket.
+				// Like Emit, the acting run comes from the evaluating cell's
+				// ctx: the session outlives the run that spawned it (PD2).
 				Egress: func(egrCtx context.Context, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+					cellExec := toolregistry.ExecutionContextFrom(egrCtx)
+					if cellExec.RunID == "" && cellExec.RunRecord == nil {
+						cellExec = execCtx
+					}
 					if action == yaegikernel.ActionProductAPI {
-						return rt.productAPIEgress(egrCtx, execCtx.OwnerID, execCtx.OwnerEmail, payload)
+						return rt.productAPIEgress(egrCtx, cellExec.OwnerID, cellExec.OwnerEmail, payload)
 					}
 					if action == yaegikernel.ActionResearch {
-						return rt.runResearchChildren(egrCtx, execCtx, payload)
+						return rt.runResearchChildren(egrCtx, cellExec, payload)
 					}
 					if fn, ok := rt.egressEvidenceTool()[string(action)]; ok {
 						out, err := fn(egrCtx, payload)
@@ -164,10 +325,13 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					return rt.researchDeps.HostEgress(egrCtx, string(action), payload)
 				},
 			}
-			w, err := workers.deskWorkerFor(activationID, workerCfg)
+			sessionKey, persistent := deskSessionKey(execCtx)
+			lease, err := workers.acquire(sessionKey, persistent, activationID, workerCfg)
 			if err != nil {
 				return "", fmt.Errorf("desk_go_eval: spawn worker: %w", err)
 			}
+			defer workers.done(lease.key)
+			w := lease.worker
 			reduction := rlmReductionForDeskCall(ctx, rt)
 			// R3d: a texture cell reads its bound document's head via
 			// choir.ReadDoc(); inject the cell-start snapshot on the same
@@ -200,7 +364,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
 				if w.Dead() {
-					workers.release(activationID)
+					workers.release(lease.key)
 				}
 				result.Error = evalErr.Error()
 				if input.TimeoutMS > 0 && ctx.Err() == nil && evalCtx.Err() == context.DeadlineExceeded {
@@ -234,7 +398,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					rt.noteTextureCell(execCtx.RunID, result.Intents)
 				}
 			}
-			out, _ := json.Marshal(map[string]any{
+			cell := map[string]any{
 				"stdout":   result.Stdout,
 				"stderr":   result.Stderr,
 				"error":    result.Error,
@@ -243,7 +407,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				"diag":     result.DiagKind,
 				"receipts": result.Receipts,
 				"intents":  len(result.Intents),
-			})
+			}
+			if lease.notice != "" {
+				cell["session"] = lease.notice
+			}
+			out, _ := json.Marshal(cell)
 			return string(out), nil
 		},
 	}
