@@ -209,3 +209,15 @@ document's Texture, and that is the authority that matters. A single
 only that channel check relaxed, plus reports routed by work item. It may
 not need the root at all. I'll check that before starting PD3 code: it is
 the smaller step and it is what the owner asked for.
+
+**Correction, same night.** The per-computer research lift needs more than
+the channel check. The store also requires the research desk's active run
+to be on the requesting trajectory (`targetRun.TrajectoryID ==
+req.TrajectoryID`), and Texture validates agents against its trajectory
+snapshot (`textureTurnCallerAgent`: "absent from trajectory snapshot").
+Agents are trajectory-scoped, and each document has its own trajectory. A
+research desk shared across documents is therefore an agent that spans
+trajectories, which is the same lifecycle-model change the root needs, since
+it observes every document. Both belong in this station. First design
+question for PD3: how an agent that spans trajectories appears in each
+trajectory's snapshot, and which trajectory its run binds to.
