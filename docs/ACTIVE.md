@@ -128,6 +128,12 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   ([`research-fanout`](definitions/choir-research-fanout-2026-10-10.md),
   receipts S1, S1b). PD2 (desk sessions keyed by agent) is deployed and
   running on staging; the research prompt is version 3 (receipts S1d, S1e).
+- **Owner review queue (2026-10-11 evening):** the
+  [master report](reports/master-report-protocol-research-autopaper-2026-10-11.md)
+  summarizes the day and seven research and design documents (research
+  desk root cause, search plane, Autopaper app, predictions and scoring,
+  signing, Assign and engineering routing, idle computers). Owner
+  direction: design before building; no tuning before understanding.
 - **Precommitment-records protocol (working, owner 2026-10-11):**
   [`definitions/choir-precommitment-protocol-metamission-2026-10-11.md`](definitions/choir-precommitment-protocol-metamission-2026-10-11.md).
   All inter-agent communication goes through precommitment records
