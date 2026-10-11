@@ -121,3 +121,46 @@ func TestCaptureRouteWritesSharedCapturesWithBodiesOnHostDisk(t *testing.T) {
 		t.Fatalf("oversized request = %d", rec.Code)
 	}
 }
+
+// Captures stay off the generic object routes
+// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md): a
+// guest cannot write one there, and no caller puts a capture body in a row.
+func TestGenericObjectRoutesRefuseCaptures(t *testing.T) {
+	mem := objectgraph.NewMemoryStore()
+	svc := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
+	defer svc.Close()
+	h := NewObjectGraphHandler(svc, mem)
+	paper := &vmctl.GuestOwnership{Found: true, UserID: "paper-owner", ComputerID: "computer-paper"}
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": paper}); err != nil {
+		t.Fatal(err)
+	}
+	send := func(method, from string, internal bool, body any) int {
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(method, "/internal/platform/objects", bytes.NewReader(raw))
+		req.RemoteAddr = from + ":40000"
+		if internal {
+			req.Header.Set("X-Internal-Caller", "true")
+		}
+		rec := httptest.NewRecorder()
+		h.HandleObjects(rec, req)
+		return rec.Code
+	}
+	create := map[string]any{"kind": "choir.web_capture", "owner_id": "paper-owner", "computer_id": "computer-paper", "identity_key": "k", "metadata": map[string]any{"url": "https://example.com"}}
+	if code := send(http.MethodPost, "10.200.1.2", false, create); code != http.StatusForbidden {
+		t.Fatalf("guest create of a capture = %d, want 403", code)
+	}
+	withBody := map[string]any{"kind": "choir.web_capture", "owner_id": "paper-owner", "computer_id": "computer-paper", "identity_key": "k", "body": []byte("inline body"), "metadata": map[string]any{"url": "https://example.com"}}
+	if code := send(http.MethodPost, "127.0.0.1", true, withBody); code != http.StatusBadRequest {
+		t.Fatalf("internal create of a capture with a body = %d, want 400", code)
+	}
+	id, _ := objectgraph.BuildCanonicalID(objectgraph.WebCaptureObjectKind, "paper-owner", objectgraph.StableSuffixFromKey("k"))
+	meta, _ := objectgraph.NormalizeMetadata(map[string]any{"url": "https://example.com"})
+	put := objectgraph.Object{CanonicalID: id, ObjectKind: objectgraph.WebCaptureObjectKind, OwnerID: "paper-owner", ComputerID: "computer-paper",
+		Body: []byte("x"), Metadata: meta, ContentHash: objectgraph.ContentHash(objectgraph.WebCaptureObjectKind, []byte("x"), meta)}
+	if code := send(http.MethodPut, "10.200.1.2", false, put); code != http.StatusForbidden {
+		t.Fatalf("guest put of a valid capture = %d, want 403", code)
+	}
+	if _, err := svc.GetObject(t.Context(), id); err == nil {
+		t.Fatal("a capture was written through the generic route")
+	}
+}

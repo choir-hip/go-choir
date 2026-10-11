@@ -144,6 +144,14 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 	if err != nil || !live {
 		return err
 	}
+	if sched.NextDue.Unix() != due.Due {
+		// A wake of the current generation whose slot already ran: a replay,
+		// or a retry after the schedule was saved but the actor commit that
+		// carried its successor failed. It does not poll again; it re-arms the
+		// saved next poll, which dedupes if the successor already exists
+		// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+		return rt.armSourcePoll(ctx, sched)
+	}
 
 	started := time.Now().UTC()
 	usage := store.SourcePollUsage{At: started}
@@ -168,6 +176,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 	if err != nil {
 		return err
 	}
+	live = live && sched.NextDue.Unix() == due.Due
 	sched.RecordPoll(usage)
 	now := time.Now().UTC()
 	interval := time.Duration(sched.IntervalSeconds) * time.Second
@@ -231,6 +240,22 @@ func (rt *Runtime) closeSourceSchedulesAfterCrash(ctx context.Context) {
 	}
 }
 
+// sourceScheduleOverdueGrace is how long past its next poll an active
+// schedule may go before the list calls it overdue: a wake whose re-arm kept
+// failing leaves a schedule active with nothing queued, and only this flag
+// shows it (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+const sourceScheduleOverdueGrace = 15 * time.Minute
+
+type sourceScheduleView struct {
+	store.SourceSchedule
+	Overdue bool `json:"overdue"`
+}
+
+func sourceScheduleOverdue(sched store.SourceSchedule, now time.Time) bool {
+	return sched.State == store.SourceScheduleActive && !sched.NextDue.IsZero() &&
+		now.After(sched.NextDue.Add(sourceScheduleOverdueGrace))
+}
+
 type sourceScheduleRequest struct {
 	SourceID        string `json:"source_id"`
 	IntervalMinutes int    `json:"interval_minutes,omitempty"`
@@ -254,7 +279,12 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 			return
 		}
-		writeAPIJSON(w, http.StatusOK, map[string]any{"schedules": schedules})
+		now := time.Now().UTC()
+		views := make([]sourceScheduleView, 0, len(schedules))
+		for _, sched := range schedules {
+			views = append(views, sourceScheduleView{SourceSchedule: sched, Overdue: sourceScheduleOverdue(sched, now)})
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]any{"schedules": views})
 	case http.MethodPost:
 		var req sourceScheduleRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

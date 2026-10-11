@@ -131,6 +131,23 @@ type createObjectRequest struct {
 	Now         string          `json:"now,omitempty"`
 }
 
+// genericCaptureWriteRefusal keeps captures off the generic object routes.
+// Captures are shared content with bodies on host disk: a guest writes them
+// only through /internal/platform/captures, and no caller puts a capture
+// body in a row (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+func genericCaptureWriteRefusal(r *http.Request, kind objectgraph.ObjectKind, body []byte) (int, string) {
+	if kind != objectgraph.WebCaptureObjectKind {
+		return 0, ""
+	}
+	if !trustedInternalCaller(r) {
+		return http.StatusForbidden, "captures are written through /internal/platform/captures"
+	}
+	if len(body) > 0 {
+		return http.StatusBadRequest, "a capture's body belongs in host content storage, not the object row"
+	}
+	return 0, ""
+}
+
 func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.service == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "objectgraph unavailable"})
@@ -139,6 +156,10 @@ func (h *ObjectGraphHandler) createObject(w http.ResponseWriter, r *http.Request
 	var req createObjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if status, msg := genericCaptureWriteRefusal(r, objectgraph.ObjectKind(req.Kind), req.Body); status != 0 {
+		writeJSON(w, status, apiError{Error: msg})
 		return
 	}
 	if err := h.requireInternalOrBoundGuest(r, req.OwnerID, req.ComputerID, false); err != nil {
@@ -187,6 +208,10 @@ func (h *ObjectGraphHandler) putObject(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validateObject(obj); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
+		return
+	}
+	if status, msg := genericCaptureWriteRefusal(r, obj.ObjectKind, obj.Body); status != 0 {
+		writeJSON(w, status, apiError{Error: msg})
 		return
 	}
 	if err := h.requireInternalOrBoundGuest(r, obj.OwnerID, obj.ComputerID, false); err != nil {

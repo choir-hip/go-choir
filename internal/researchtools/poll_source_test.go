@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
+	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -129,5 +130,59 @@ func TestPollSourceWritesCapturesOnceAndKeepsConditionalState(t *testing.T) {
 	}
 	if _, err := deps.HostEgress(ctx, "poll_source", json.RawMessage(`{"source_id":"rss:missing"}`)); err == nil || !strings.Contains(err.Error(), "rss:example") {
 		t.Fatalf("unknown source error = %v, want it to name known ids", err)
+	}
+}
+
+type flakySink struct {
+	fail  bool
+	items int
+}
+
+func (s *flakySink) WriteCaptures(_ context.Context, _, _ string, items []sources.Item) (sourcegraph.CaptureWriteResult, error) {
+	if s.fail {
+		s.fail = false
+		return sourcegraph.CaptureWriteResult{}, fmt.Errorf("corpusd unavailable")
+	}
+	s.items += len(items)
+	return sourcegraph.CaptureWriteResult{New: len(items)}, nil
+}
+
+func (s *flakySink) ReadCapture(context.Context, string, int) (json.RawMessage, error) {
+	return nil, fmt.Errorf("not used")
+}
+
+// A failed capture write keeps the feed's previous validators, so the next
+// poll fetches the items again instead of getting a 304 and losing them
+// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+func TestPollSourceKeepsValidatorsOnlyAfterTheWrite(t *testing.T) {
+	prev := sourcefetch.SetAllowPrivateNetworkForTests(true)
+	defer sourcefetch.SetAllowPrivateNetworkForTests(prev)
+	var conditional atomic.Int32
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == `"v1"` {
+			conditional.Add(1)
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", `"v1"`)
+		w.Header().Set("Content-Type", "application/rss+xml")
+		fmt.Fprint(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>F</title><item><title>One</title><link>https://news.example/1</link><description>Body</description><guid>g-1</guid></item></channel></rss>`)
+	}))
+	defer feed.Close()
+	reg := &sources.Registry{UserAgent: "test", Sources: []sources.Source{{ID: "rss:flaky", Type: sources.SourceTypeRSS, Name: "Flaky", URL: feed.URL}}}
+	sink := &flakySink{fail: true}
+	deps := Dependencies{Sources: reg, Captures: sink}
+
+	first, err := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5, nil)
+	if err != nil || first.Error == "" || first.Fetched != 1 {
+		t.Fatalf("first poll = %+v, %v; want a fetched item and a write error", first, err)
+	}
+	second, err := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5, nil)
+	if err != nil || second.NotModified || second.New != 1 || sink.items != 1 || conditional.Load() != 0 {
+		t.Fatalf("second poll = %+v (conditional %d, written %d); want the item fetched again and written", second, conditional.Load(), sink.items)
+	}
+	third, _ := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5, nil)
+	if !third.NotModified || conditional.Load() != 1 {
+		t.Fatalf("third poll = %+v; want a 304 once the items are written", third)
 	}
 }

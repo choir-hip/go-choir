@@ -35,14 +35,63 @@ func NewCorpusdCaptureSink(baseURL string) *CorpusdCaptureSink {
 	return &CorpusdCaptureSink{BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"), Client: &http.Client{Timeout: 60 * time.Second}}
 }
 
+// Corpusd's capture route keeps at most 1 MiB of a body, drops raw feed
+// JSON, takes at most 100 items and refuses a request over 64 MiB. The sink
+// applies the same trims before sending and splits a poll into requests of
+// at most captureBatchItems items and roughly captureBatchBytes, so a large
+// poll never meets the request bound.
+const (
+	captureBodyBytes  = 1 << 20
+	captureBatchItems = 100
+	captureBatchBytes = 8 << 20
+)
+
 func (c *CorpusdCaptureSink) WriteCaptures(ctx context.Context, ownerID, computerID string, items []sources.Item) (sourcegraph.CaptureWriteResult, error) {
 	var out sourcegraph.CaptureWriteResult
 	if c == nil || c.BaseURL == "" {
 		return out, fmt.Errorf("capture sink: corpusd URL is not configured")
 	}
-	if len(items) == 0 {
-		return out, nil
+	for _, batch := range captureBatches(items) {
+		got, err := c.writeCaptureBatch(ctx, ownerID, computerID, batch)
+		if err != nil {
+			return out, err
+		}
+		out.New += got.New
+		out.Repeated += got.Repeated
+		out.Skipped += got.Skipped
+		out.CaptureIDs = append(out.CaptureIDs, got.CaptureIDs...)
+		out.Captured = append(out.Captured, got.Captured...)
 	}
+	return out, nil
+}
+
+// captureBatches trims each item as corpusd would and groups the items into
+// requests under the batch bounds. An item is never split.
+func captureBatches(items []sources.Item) [][]sources.Item {
+	var batches [][]sources.Item
+	var batch []sources.Item
+	size := 0
+	for _, item := range items {
+		if len(item.Body) > captureBodyBytes {
+			item.Body = item.Body[:captureBodyBytes]
+		}
+		item.RawJSON = ""
+		n := len(item.Body) + len(item.Title) + len(item.URL) + 1024
+		if len(batch) > 0 && (len(batch) >= captureBatchItems || size+n > captureBatchBytes) {
+			batches = append(batches, batch)
+			batch, size = nil, 0
+		}
+		batch = append(batch, item)
+		size += n
+	}
+	if len(batch) > 0 {
+		batches = append(batches, batch)
+	}
+	return batches
+}
+
+func (c *CorpusdCaptureSink) writeCaptureBatch(ctx context.Context, ownerID, computerID string, items []sources.Item) (sourcegraph.CaptureWriteResult, error) {
+	var out sourcegraph.CaptureWriteResult
 	raw, err := json.Marshal(map[string]any{"owner_id": ownerID, "computer_id": computerID, "items": items})
 	if err != nil {
 		return out, fmt.Errorf("capture sink: %w", err)

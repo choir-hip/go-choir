@@ -106,6 +106,18 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 			strings.TrimSpace(object.ComputerID) != strings.TrimSpace(ownership.ComputerID) {
 			return fmt.Errorf("guest caller is not bound to object owner and computer")
 		}
+		// corpusd sees this write as the proxy's, so the proxy keeps guests
+		// off the generic route for captures: they go through the capture
+		// route, which owns their identity and keeps bodies out of rows. A
+		// PUT names the kind as object_kind, a POST create as kind.
+		var kinds struct {
+			ObjectKind string `json:"object_kind"`
+			Kind       string `json:"kind"`
+		}
+		_ = json.Unmarshal(body, &kinds)
+		if kinds.ObjectKind == string(objectgraph.WebCaptureObjectKind) || kinds.Kind == string(objectgraph.WebCaptureObjectKind) {
+			return fmt.Errorf("captures are written through /internal/platform/captures")
+		}
 		return nil
 	}
 	var edge objectgraph.Edge

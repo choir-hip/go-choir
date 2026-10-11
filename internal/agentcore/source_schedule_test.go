@@ -98,6 +98,18 @@ func TestSourceSchedulePollsRecordsUsageAndRearms(t *testing.T) {
 	if err := rt.HandleSourcePollDue(ctx, "owner-1", "computer-paper", first.content); err != nil {
 		t.Fatal(err)
 	}
+	// The actor commit that carried the successor fails, so the successor is
+	// lost and the first wake is retried. The retry does not poll again; it
+	// re-arms the saved next poll, the same wake the failed commit dropped
+	// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+	successor := (*wakes)[1]
+	if err := rt.HandleSourcePollDue(ctx, "owner-1", "computer-paper", first.content); err != nil {
+		t.Fatal(err)
+	}
+	if len(*wakes) != 3 || (*wakes)[2].content != successor.content || !(*wakes)[2].notBefore.Equal(successor.notBefore) {
+		t.Fatalf("a retried wake did not re-arm the saved next poll: %+v", *wakes)
+	}
+	*wakes = (*wakes)[:2]
 	got, err := rt.store.GetSourceSchedule(ctx, "owner-1", "rss:sched-a")
 	if err != nil {
 		t.Fatal(err)
@@ -190,5 +202,28 @@ func TestSourceScheduleUsageIsBounded(t *testing.T) {
 	}
 	if len(sched.Recent) != store.SourcePollUsageLimit || sched.Totals.Polls != store.SourcePollUsageLimit+6 || sched.Recent[0].Fetched != 6 {
 		t.Fatalf("usage = %d recent, %d polls, oldest fetched %d", len(sched.Recent), sched.Totals.Polls, sched.Recent[0].Fetched)
+	}
+}
+
+// An active schedule whose next poll is long past has no live wake (its
+// re-arm kept failing), and the list must say so; a stopped or
+// interrupted schedule, or one just due, is not overdue.
+func TestSourceScheduleListMarksADeadScheduleOverdue(t *testing.T) {
+	now := time.Date(2026, 10, 11, 14, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name  string
+		sched store.SourceSchedule
+		want  bool
+	}{
+		{"active, long past due", store.SourceSchedule{State: store.SourceScheduleActive, NextDue: now.Add(-time.Hour)}, true},
+		{"active, just due", store.SourceSchedule{State: store.SourceScheduleActive, NextDue: now.Add(-time.Minute)}, false},
+		{"active, due later", store.SourceSchedule{State: store.SourceScheduleActive, NextDue: now.Add(time.Hour)}, false},
+		{"stopped", store.SourceSchedule{State: store.SourceScheduleStopped, NextDue: now.Add(-time.Hour)}, false},
+		{"interrupted", store.SourceSchedule{State: "interrupted_by_restart"}, false},
+	}
+	for _, c := range cases {
+		if got := sourceScheduleOverdue(c.sched, now); got != c.want {
+			t.Errorf("%s: overdue = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

@@ -103,6 +103,18 @@ func TestGuestCapturesCrossTheProxyToCorpusd(t *testing.T) {
 	if capture.Code != http.StatusOK || json.Unmarshal(capture.Body.Bytes(), &got) != nil || got.Body != "Body one" || got.Title != "One" || got.SourceID != "rss:example" {
 		t.Fatalf("second computer capture read through the proxy = %d %s", capture.Code, capture.Body)
 	}
+	// A guest cannot reach captures through the generic object route
+	// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+	generic := obj
+	generic.ComputerID = "computer-reader"
+	generic.OwnerID = "reader-owner"
+	if rec := send(http.MethodPost, "/internal/platform/objects", "10.200.9.2", generic); rec.Code != http.StatusForbidden {
+		t.Fatalf("guest wrote a capture through the generic object route: %d %s", rec.Code, rec.Body)
+	}
+	create := map[string]any{"kind": "choir.web_capture", "owner_id": "reader-owner", "computer_id": "computer-reader", "identity_key": "x", "body": "aW5saW5l"}
+	if rec := send(http.MethodPost, "/internal/platform/objects", "10.200.9.2", create); rec.Code != http.StatusForbidden {
+		t.Fatalf("guest created a capture through the generic object route: %d %s", rec.Code, rec.Body)
+	}
 	if rec := send(http.MethodGet, bodyPath, "10.200.5.5", nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("unbound caller body read = %d", rec.Code)
 	}

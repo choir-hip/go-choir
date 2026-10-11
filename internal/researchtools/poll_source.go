@@ -134,10 +134,16 @@ func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID,
 	defer cancel()
 	started := time.Now()
 	polled, pollErr := p.Poll(pollCtx, &source)
-	if pollErr == nil {
+	// The feed's validators are kept only once its items are safely written;
+	// otherwise a failed write followed by a 304 would lose them
+	// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+	keepValidators := func() {
 		pollState.Lock()
 		pollState.bySource[source.ID] = source
 		pollState.Unlock()
+	}
+	if pollErr == nil && len(polled.Items) == 0 {
+		keepValidators()
 	}
 	report := PollReport{
 		SourceID:    source.ID,
@@ -155,12 +161,18 @@ func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID,
 		report.TotalMS = report.PollMS
 		return report, nil
 	}
+	if len(polled.Items) == 0 {
+		report.TotalMS = report.PollMS
+		return report, nil
+	}
 	written, err := deps.Captures.WriteCaptures(ctx, ownerID, computerID, polled.Items)
 	report.New, report.Repeated, report.Skipped, report.Captured = written.New, written.Repeated, written.Skipped, written.Captured
 	report.TotalMS = time.Since(started).Milliseconds()
 	if err != nil {
 		report.Error = err.Error()
+		return report, nil
 	}
+	keepValidators()
 	return report, nil
 }
 
