@@ -159,6 +159,7 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 		binding, err = a.store.ValidateLifecycleTextureControlTarget(a.ctx, LifecycleTextureControlTargetRequest{
 			OwnerID: a.ownerID, ComputerID: a.computerID, DocumentID: a.documentID, TrajectoryID: a.trajectoryID,
 			CallerAgentID: a.callerAgentID, CallerRunID: a.callerRunID, TargetAgentID: control.TargetAgentID, TargetWorkItemID: validatorWorkID,
+			OpeningWork: control.OpenWork != nil,
 		})
 		if err != nil {
 			return err
@@ -212,7 +213,9 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 				return ErrLifecycleInvalidTransition
 			}
 		case agentprofile.Research:
-			if control.OpenAgent == nil || binding.TargetAgent.AgentID != control.TargetAgentID {
+			// A new desk (OpenAgent) or new work on the document's existing
+			// desk (PD1), validated above.
+			if binding.TargetAgent.AgentID != control.TargetAgentID {
 				return ErrLifecycleInvalidTransition
 			}
 		default:

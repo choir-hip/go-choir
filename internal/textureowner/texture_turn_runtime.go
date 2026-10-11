@@ -155,17 +155,23 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunR
 	return inbound, nil
 }
 
-// textureResearchBudgetPerOwnerRequest bounds the research assignments
-// Texture opens per owner request (or per document creation). Without it a
-// research report wakes Texture, that turn opens more research, and the
-// document never idles (texture-research-loop-never-idles-2026-10-09).
-const textureResearchBudgetPerOwnerRequest = 2
+// textureResearchRoundsPerOwnerRequest bounds the research controls Texture
+// sends per owner request (or per document creation): the opener plus every
+// follow-up. Without a bound a research report wakes Texture, that turn asks
+// for more research, and the document never idles
+// (texture-research-loop-never-idles-2026-10-09). With one research desk
+// per document (PD1) the bound counts rounds, not desks.
+const textureResearchRoundsPerOwnerRequest = 4
 
-// researchOpenedSinceOwnerInput counts research work opened since the latest
-// owner input on the trajectory (creation or an owner revise), excluding
-// own: the deterministic work ids of the turn being built, so replaying a
-// committed turn computes the same controls.
-func researchOpenedSinceOwnerInput(snapshot types.LifecycleSnapshot, own map[string]bool) int {
+// researchDeskAgentID is the document's one persistent research desk (PD1,
+// docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md).
+func researchDeskAgentID(docID string) string {
+	return agentprofile.Research + ":" + strings.TrimSpace(docID)
+}
+
+// latestOwnerInput is the latest owner input on the trajectory: creation or
+// an owner revise.
+func latestOwnerInput(snapshot types.LifecycleSnapshot) time.Time {
 	var since time.Time
 	for _, ev := range snapshot.Events {
 		ownerInput := ev.Kind == types.LifecycleTrajectoryStarted ||
@@ -174,13 +180,58 @@ func researchOpenedSinceOwnerInput(snapshot types.LifecycleSnapshot, own map[str
 			since = ev.CreatedAt
 		}
 	}
-	n := 0
+	return since
+}
+
+// researchRoundsSinceOwnerInput counts distinct research controls queued
+// since the latest owner input, excluding ownControls: the deterministic
+// control ids of the turn being built, so replaying a committed turn
+// computes the same controls.
+func researchRoundsSinceOwnerInput(snapshot types.LifecycleSnapshot, ownControls map[string]bool) int {
+	since := latestOwnerInput(snapshot)
+	research := map[string]bool{}
 	for _, work := range snapshot.WorkItems {
-		if work.AuthorityProfile == agentprofile.Research && !own[strings.TrimSpace(work.WorkItemID)] && !work.CreatedAt.Before(since) {
-			n++
+		if work.AuthorityProfile == agentprofile.Research {
+			research[strings.TrimSpace(work.WorkItemID)] = true
 		}
 	}
-	return n
+	rounds := map[string]bool{}
+	for _, ev := range snapshot.Events {
+		id := strings.TrimSpace(ev.UpdateID)
+		if ev.Kind == types.LifecycleControlQueued && research[strings.TrimSpace(ev.WorkItemID)] && !ev.CreatedAt.Before(since) && id != "" && !ownControls[id] {
+			rounds[id] = true
+		}
+	}
+	return len(rounds)
+}
+
+// mergeResearchOpeners folds every open_researcher in one turn into the
+// first: one desk per document, so one request carries all of the turn's
+// research questions.
+func mergeResearchOpeners(controls []textureControlArgs) []textureControlArgs {
+	out := make([]textureControlArgs, 0, len(controls))
+	first := -1
+	for _, control := range controls {
+		if !control.OpenResearch {
+			out = append(out, control)
+			continue
+		}
+		if first < 0 {
+			first = len(out)
+			out = append(out, control)
+			continue
+		}
+		merged := &out[first]
+		merged.Objective = strings.TrimSpace(merged.Objective + "; " + control.Objective)
+		if control.Packet.Summary != "" {
+			merged.Packet.Summary = strings.TrimSpace(merged.Packet.Summary + "; " + control.Packet.Summary)
+		}
+		merged.Packet.Questions = append(merged.Packet.Questions, control.Packet.Questions...)
+		merged.Packet.Claims = append(merged.Packet.Claims, control.Packet.Claims...)
+		merged.Packet.Sources = append(merged.Packet.Sources, control.Packet.Sources...)
+		merged.Packet.Notes = append(merged.Packet.Notes, control.Packet.Notes...)
+	}
+	return out
 }
 
 // textureTurnControls builds the turn's controls. A research opener past the
@@ -191,24 +242,48 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 	for _, work := range snapshot.WorkItems {
 		workByID[strings.TrimSpace(work.WorkItemID)] = work
 	}
-	own := map[string]bool{}
+	in.Controls = mergeResearchOpeners(in.Controls)
+	ownWork, ownControls := map[string]bool{}, map[string]bool{}
 	for i, raw := range in.Controls {
 		if raw.OpenResearch {
 			if id, err := textureTurnRuntimeID(rec, in.ToolCallID, "researcher-work", i); err == nil {
-				own[id] = true
+				ownWork[id] = true
 			}
 		}
+		if id, err := textureTurnRuntimeID(rec, in.ToolCallID, "control", i); err == nil {
+			ownControls[id] = true
+		}
 	}
-	researchOpened := researchOpenedSinceOwnerInput(snapshot, own)
+	// The document's research desk, whether an earlier turn created it, and
+	// the open research work of this request (the latest, if several).
+	desk := researchDeskAgentID(doc.DocID)
+	since := latestOwnerInput(snapshot)
+	deskExists := false
+	var requestWork *types.WorkItemRecord
+	for i := range snapshot.WorkItems {
+		work := snapshot.WorkItems[i]
+		if strings.TrimSpace(work.AssignedAgentID) != desk || ownWork[strings.TrimSpace(work.WorkItemID)] {
+			continue
+		}
+		deskExists = true
+		if work.Status == types.WorkItemOpen && !work.CreatedAt.Before(since) && (requestWork == nil || work.CreatedAt.After(requestWork.CreatedAt)) {
+			requestWork = &snapshot.WorkItems[i]
+		}
+	}
+	rounds := researchRoundsSinceOwnerInput(snapshot, ownControls)
 	dropped := 0
 	controls := make([]types.TextureTurnControl, 0, len(in.Controls))
 	for i, raw := range in.Controls {
-		if raw.OpenResearch {
-			if researchOpened >= textureResearchBudgetPerOwnerRequest {
+		researchRound := raw.OpenResearch
+		if !researchRound && raw.TargetWorkItemID != "" {
+			researchRound = workByID[strings.TrimSpace(raw.TargetWorkItemID)].AuthorityProfile == agentprofile.Research
+		}
+		if researchRound {
+			if rounds >= textureResearchRoundsPerOwnerRequest {
 				dropped++
 				continue
 			}
-			researchOpened++
+			rounds++
 		}
 		packet, err := agentcore.PrepareTextureControlPacket(raw.Packet)
 		if err != nil {
@@ -245,17 +320,20 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 				AssignedAgentID: targetAgentID,
 			}
 			openWork = &work
+		} else if raw.OpenResearch && requestWork != nil {
+			// The request already has research work on the desk: this opener
+			// is a follow-up to it.
+			targetAgentID, targetWorkItemID = desk, strings.TrimSpace(requestWork.WorkItemID)
 		} else if raw.OpenResearch {
-			agentIdentity, identityErr := textureTurnRuntimeID(rec, in.ToolCallID, "researcher-agent", i)
-			if identityErr != nil {
-				return nil, "", identityErr
-			}
-			targetAgentID = agentprofile.Research + ":" + agentIdentity
+			targetAgentID = desk
 			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "researcher-work", i)
 			if err != nil {
 				return nil, "", err
 			}
-			agent := types.AgentRecord{AgentID: targetAgentID, Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: doc.DocID}
+			if !deskExists {
+				agent := types.AgentRecord{AgentID: targetAgentID, Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: doc.DocID}
+				openAgent = &agent
+			}
 			work := types.WorkItemRecord{
 				WorkItemID: targetWorkItemID, Objective: strings.TrimSpace(raw.Objective),
 				AuthorityProfile: agentprofile.Research, Status: types.WorkItemOpen,
@@ -267,7 +345,7 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 					"requested_by_run_id":   rec.RunID,
 				},
 			}
-			openAgent, openWork = &agent, &work
+			openWork = &work
 		} else {
 			work, ok := workByID[targetWorkItemID]
 			if !ok || work.Status != types.WorkItemOpen || strings.TrimSpace(work.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) {
@@ -298,7 +376,7 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 	}
 	note := ""
 	if dropped > 0 {
-		note = fmt.Sprintf("[runtime: research budget for this owner request is spent (%d of %d); %d research opener(s) not opened]", textureResearchBudgetPerOwnerRequest, textureResearchBudgetPerOwnerRequest, dropped)
+		note = fmt.Sprintf("[runtime: research rounds for this owner request are spent (%d of %d); %d research control(s) not sent]", textureResearchRoundsPerOwnerRequest, textureResearchRoundsPerOwnerRequest, dropped)
 		log.Printf("textureowner: Texture %s run %s: %s", rec.AgentID, rec.RunID, note)
 	}
 	return controls, note, nil

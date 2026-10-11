@@ -23,10 +23,14 @@ type LifecycleTextureControlTargetRequest struct {
 	CallerRunID      string
 	TargetAgentID    string
 	TargetWorkItemID string
+	// OpeningWork marks a control that creates its target work in the same
+	// transaction: the persistent-Management opener, or new work on the
+	// document's research desk (PD1). TargetWorkItemID is then empty.
+	OpeningWork bool
 }
 
 // LifecycleTextureControlTargetBinding contains only store-proven authority.
-// A nil TargetWorkItem is valid only for a persistent-Management opener.
+// A nil TargetWorkItem is valid only for an opener (OpeningWork).
 type LifecycleTextureControlTargetBinding struct {
 	Trajectory     types.TrajectoryRecord
 	Document       types.Document
@@ -130,9 +134,12 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		}
 		binding.TargetProfile = agentprofile.Management
 	case strings.TrimSpace(targetAgent.Profile) == agentprofile.Research && strings.TrimSpace(targetAgent.Role) == agentprofile.Research:
+		// The document's research desk (PD1): bound to this document's
+		// channel, so only this document's Texture directs it.
 		if targetAgent.AgentID != req.TargetAgentID || targetAgent.OwnerID != ownerID || targetAgent.ComputerID != computerID ||
-			targetAgent.LifecycleVersion <= 0 || req.TargetWorkItemID == "" {
-			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("Research target requires lifecycle identity and an existing target work item")
+			targetAgent.LifecycleVersion <= 0 || strings.TrimSpace(targetAgent.ChannelID) != req.DocumentID ||
+			(req.TargetWorkItemID == "") != req.OpeningWork {
+			return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("Research target must be this document's research desk, with an existing target work item or opening new work")
 		}
 		binding.TargetProfile = agentprofile.Research
 	default:
@@ -150,7 +157,10 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 		}
 		binding.TargetWorkItem = &work
 	}
-	if binding.TargetProfile == agentprofile.Research {
+	// A busy desk queues the control: the target's serialized actor takes it
+	// when the active run ends. TargetRun is bound only when the active run
+	// already holds the target work.
+	if binding.TargetProfile == agentprofile.Research && req.TargetWorkItemID != "" {
 		activeRunID := strings.TrimSpace(targetAgent.ActiveRunID)
 		if activeRunID != "" {
 			targetRun, err := reader.GetLifecycleRun(ctx, ownerID, computerID, activeRunID)
@@ -161,10 +171,12 @@ func validateLifecycleTextureControlTarget(ctx context.Context, reader lifecycle
 			if bindingErr != nil || targetRun.RunID != activeRunID || targetRun.OwnerID != ownerID || targetRun.ComputerID != computerID ||
 				targetRun.TrajectoryID != req.TrajectoryID || targetRun.AgentID != req.TargetAgentID ||
 				strings.TrimSpace(targetRun.AgentProfile) != agentprofile.Research || strings.TrimSpace(targetRun.AgentRole) != agentprofile.Research ||
-				!targetRun.State.Active() || !containsLifecycleIdentity(workItemIDs, req.TargetWorkItemID) {
-				return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("active Research run does not bind the target work")
+				!targetRun.State.Active() {
+				return LifecycleTextureControlTargetBinding{}, invalidLifecycleTextureControlTarget("active Research run is not this desk's run on this trajectory")
 			}
-			binding.TargetRun = &targetRun
+			if containsLifecycleIdentity(workItemIDs, req.TargetWorkItemID) {
+				binding.TargetRun = &targetRun
+			}
 		}
 	}
 	return binding, nil

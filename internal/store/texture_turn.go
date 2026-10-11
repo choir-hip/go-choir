@@ -263,7 +263,13 @@ func validateTextureTurnControls(documentID string, controls []types.TextureTurn
 			if control.OpenWork.WorkItemID != control.TargetWorkItemID || control.Packet.Kind == "" {
 				return fmt.Errorf("%s: opener requires exact work and first typed control packet", operation)
 			}
-			if control.OpenAgent == nil {
+			if control.OpenAgent == nil && control.OpenWork.AuthorityProfile == agentprofile.Research {
+				// New work on the document's existing research desk (PD1); the
+				// store validates the desk against this document.
+				if control.OpenWork.AssignedAgentID != control.TargetAgentID {
+					return fmt.Errorf("%s: Research desk work must be assigned to its target", operation)
+				}
+			} else if control.OpenAgent == nil {
 				persistentManagementOpenerCount++
 				if control.Packet.Kind != "execution_request" || len(control.Packet.Actions) == 0 {
 					return fmt.Errorf("%s: persistent-Management opener requires execution_request actions", operation)

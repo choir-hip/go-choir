@@ -171,7 +171,7 @@ func TestIssueLifecycleControlQueuesPendingPacketAndEvents(t *testing.T) {
 		CallerAgentID: caller.AgentID, CallerRunID: caller.RunID,
 		ExpectedLifecycleVersion: trajectory.LifecycleVersion, ExpectedCallerLifecycleVersion: callerAgent.LifecycleVersion,
 		Controls: []types.TextureTurnControl{textureTurnControl(t, "standalone-control", researchWork.AssignedAgentID, researchWork.WorkItemID)},
-		Reason: "issue durable control without a turn",
+		Reason:   "issue durable control without a turn",
 	}
 	req.CommandDigest, err = ComputeIssueLifecycleControlDigest(req)
 	if err != nil {
@@ -702,4 +702,50 @@ func TestApplyTextureTurnCallerWorkConsequenceAtomicReplayAndRefusal(t *testing.
 			t.Fatalf("wrong caller-work refusal mutated lifecycle")
 		}
 	})
+}
+
+// PD1 (docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md):
+// a document's one research desk takes new work while it is busy with
+// earlier work. Failure modes pinned: opening work on an existing research
+// agent is refused because no new agent is opened; a control is refused
+// because the desk's active run is bound to other work (it must queue); a
+// research agent bound to another document's channel can be given work.
+func TestApplyTextureTurnOpensWorkOnTheBusyResearchDesk(t *testing.T) {
+	s, start, caller, researchWork := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	desk := researchWork.AssignedAgentID
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	req.CommandID = "texture-turn-desk-second-work"
+	control := textureTurnControl(t, "control-desk-second", desk, "work-desk-second")
+	control.Packet = types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "a new request", Questions: []string{"What changed this week?"}}
+	control.Content = "a new request"
+	control.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
+	control.OpenWork = &types.WorkItemRecord{WorkItemID: "work-desk-second", Objective: "a new request", AuthorityProfile: "research", AssignedAgentID: desk}
+	req.Controls = []types.TextureTurnControl{control}
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+	result, err := s.ApplyTextureTurn(ctx, req)
+	if err != nil || len(result.Controls) != 1 {
+		t.Fatalf("new work on the busy desk = %+v, %v", result, err)
+	}
+	work, err := s.GetLifecycleWorkItem(ctx, start.OwnerID, start.ComputerID, "work-desk-second")
+	if err != nil || work.AssignedAgentID != desk || work.Status != types.WorkItemOpen {
+		t.Fatalf("second work = %+v, %v", work, err)
+	}
+	pending, err := s.ListPendingLifecycleUpdates(ctx, start.OwnerID, start.ComputerID, desk, 10)
+	if err != nil || len(pending) != 1 || pending[0].TargetWorkItemID != "work-desk-second" {
+		t.Fatalf("queued control for the busy desk = %+v, %v", pending, err)
+	}
+
+	now := time.Now().UTC()
+	foreign := types.AgentRecord{AgentID: "research:other-document", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		Profile: "research", Role: "research", ChannelID: "some-other-document", CreatedAt: now, UpdatedAt: now}
+	if err := s.UpsertAgent(ctx, foreign); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ValidateLifecycleTextureControlTarget(ctx, LifecycleTextureControlTargetRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, DocumentID: start.InitialDocument.DocID, TrajectoryID: start.TrajectoryID,
+		CallerAgentID: caller.AgentID, CallerRunID: caller.RunID, TargetAgentID: foreign.AgentID, OpeningWork: true,
+	}); err == nil {
+		t.Fatal("another document's research desk accepted work from this document's Texture")
+	}
 }
