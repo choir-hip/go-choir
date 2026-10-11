@@ -97,3 +97,14 @@ independent `chatgpt` health key.
 - **No sources was an error.** A completed answer with no web sources
   returned an error, which the search plane benches as a provider failure.
   Fix: return an empty result and let the plane's empty-streak rule decide.
+
+## Staging verification (2026-10-11, deploy 78c9173e)
+
+During the S1e research demo (test computer demo-arxiv-2026-10-10c),
+`provider=chatgpt` searches returned `status success` with 17-18 results
+per call, alongside Keenable, Parallel and Tavily. ChatGPT inference
+(`gpt-5.6-luna`) kept succeeding on the same gateway, and the gateway log
+had no ChatGPT errors after the deploy. Residual: a ChatGPT result carries
+the domain as its title and "Web source returned for <query>" as its
+snippet, so a desk learns little before it fetches the page. Using the
+answer's citation annotations for title and snippet would fix that.

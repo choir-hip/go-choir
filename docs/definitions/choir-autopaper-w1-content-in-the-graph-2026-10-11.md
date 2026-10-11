@@ -38,7 +38,15 @@ start:
     - >-
       internal/sourcegraph.WriteWebCaptureGraphObjects maps fetched
       sources.Item values to web_capture objects; its only caller is
-      internal/cycle (sourcecycled, slated for deletion).
+      internal/cycle (sourcecycled, slated for deletion). Its content and
+      extracted-text blob ids are labels ("sourcecycled:item:...") naming
+      no stored blob; the text itself goes into og_objects.body.
+    - >-
+      The guest has no blob store outside Dolt. content_items keeps text in
+      Dolt but carries a file_path column; the computer's file root is
+      synced to the platform as encrypted content-addressed chunks
+      (internal/filecas, internal/autoputer/file_sync.go), the path the SH
+      lose-the-disk proof exercised.
 
 finish:
   deliver: >-
@@ -123,6 +131,15 @@ now:
   next_action: go get driver v2.4.1; build; run store/objectgraph/textureowner/agentcore with -race where feasible
 
 receipts: []
+
+# Capture body storage (decision, agent, 2026-10-11; open to owner review):
+# a capture body is a content-addressed file in the computer's file root
+# (captures/<sha256 prefix>/<sha256>.txt). The web_capture metadata names
+# it (content_blob_id "file:sha256:<hex>"), and og_objects.body stays
+# empty. Durability comes from the existing file sync, not a new store; a
+# Dolt ignored table was the alternative and keeps bodies as Dolt rows,
+# which the design rules out. Retention (30 days, pinned when cited) is a
+# later slice.
 ---
 
 # W1 — content in the graph
@@ -134,3 +151,30 @@ W1 starts at the substrate: upgrade Dolt and prove it under the race
 detector. Then captures get their own pool, research polls sources into
 `choir.web_capture` objects with bodies in content storage, the schedule
 runs as timer obligations, and every poll records what it cost.
+
+## W1b — one source polled by hand (planned)
+
+A research verb, `choir.PollSource(sourceID)`, runs the existing poller
+for that source (`internal/sources`: RSS, Telegram web preview, GDELT)
+through the research host egress (`internal/researchtools`, with the
+egress budget charged once per poll). Each new item becomes a body file
+in the file root plus one `choir.web_capture` object whose metadata names
+the file. The verb returns counts and capture ids, not bodies. The source
+list is `configs/sources.json` (211 sources: 137 RSS, 73 Telegram, 1
+GDELT).
+
+Ways it can fail, written before the code:
+
+- a re-poll writes duplicate captures for items it already holds (the
+  item id or content hash must make a second write a no-op);
+- a body lands in `og_objects.body` anyway, or the metadata names a file
+  that was never written (write the file first, then the object);
+- one slow or hostile feed holds the desk cell past its timeout, or a huge
+  feed floods the result (bound items per poll and the result size);
+- the poll writes queue behind Texture on the one connection (measure
+  Texture turn latency during a poll; this is what W1a's pool is for);
+- conditional GET state (ETag, Last-Modified) is lost between polls, so
+  every poll refetches everything;
+- a crash mid-poll leaves files with no object; that is harmless (an
+  orphan file is overwritten by the same hash next time) but must never
+  leave an object without its file.

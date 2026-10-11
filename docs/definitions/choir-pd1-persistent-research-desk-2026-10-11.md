@@ -135,15 +135,15 @@ boundaries:
 
 now:
   status: working
-  slice: S1c — deployed proof of one research desk across a request and a follow-up
-  source_ref: 16d7c21a (pushed)
-  deploy_identity: staging deploying 16d7c21a
+  slice: S1f — rerun after the S1e fixes (refusals shown, sources kept, prompt v4)
+  source_ref: 74227bcf (local; pushes after the W1a test run)
+  deploy_identity: staging 78c9173e
   candidate:
     id: PD1
     state: landing
     ref: main
-    base: b3dbc686
-    digest: 7bcc87eb, 2ac20789, 8b350515, 16d7c21a (+ ce27ae0c harness, local)
+    base: 78c9173e
+    digest: 4ca9b094, 74227bcf
     scope: [internal/textureowner, internal/store, internal/agentcore, internal/yaegikernel, internal/promptstore, internal/textureprompts]
   conjecture:
     id: PD1-1
@@ -172,18 +172,17 @@ now:
     owner_ratification_ref: not_applicable (narrows, does not contradict, the owner's per-computer direction; lift is scheduled)
   belief:
     believed_state: >-
-      Texture turns merge openers into one desk per document; later openers
-      become follow-ups on the request's open desk work; rounds per owner
-      request are bounded at 4 with a visible drop note; the store queues a
-      control for a busy desk instead of refusing it; children cannot fan out;
-      prompts say one desk, rounds, report after each.
+      One research desk per document serves the request and the follow-up
+      in rounds (S1c-S1e). Coverage is now lost after research, not in it:
+      a refused report hid by a bare call, a full replace erasing sources,
+      and Texture hedging every item (S1e).
     main_uncertainty: >-
-      Whether the queued follow-up is delivered to the desk when its current
-      run ends (wakeUpdatedCoagent path) on the product path, and whether the
-      model actually reports per round.
-    next_observation: S1c trace — every research control targets research:<doc>; follow-up run exists
+      Whether, with refusals visible and sources kept, the brief reaches
+      the baseline's item count with a citation per item, or whether the
+      remaining gap is Texture's own selection.
+    next_observation: S1f — items, citations per item, unconfirmed leads followed up
   blocker_or_risk: none
-  next_action: deploy the fixes S1c found (outline in cell, frame boundary, rate-limit bench, Keenable, PD2) and rerun as S1d
+  next_action: push 4ca9b094 and 74227bcf with W1a, verify the deploy, rerun as S1f
 
 receipts:
   - id: S1c
@@ -226,6 +225,31 @@ receipts:
       could not trace to a primary or wire source, which the baseline
       asserts (for example GPT-6 in ChatGPT).
     conjecture: PD1-1 still short on coverage within 20 minutes; latency and cadence supported
+  - id: S1e
+    at: 2026-10-11T09:40Z
+    deploy: staging 78c9173e (research prompt v3, ChatGPT search, shared ChatGPT auth), test computer demo-arxiv-2026-10-10c
+    kind: deployed proof (traces in session scratchpad demo13/t2, demo13/final)
+    result: >-
+      Same prompt and follow-up. One research agent served six rounds
+      (40 cells, 12 errors); Texture took seven turns (50 cells, 6 errors);
+      first grounded revision at 4m12s; final revision at 09:20. ChatGPT
+      search returned 17-18 results per call beside Keenable, Parallel and
+      Tavily, and ChatGPT inference had no errors. Unconfirmed labels
+      appear, and a round-one lead (the Manus raise) was confirmed in round
+      five by CNBC and Reuters. The output is still thin: about 1,130 words,
+      nine items, three citations. The traces show three causes, none in
+      the prompt's intent. (1) Round one's ReportPacket was refused, and
+      the bare call hid the error ("=> "), so the round's funding and
+      compute leads never reached Texture
+      (problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md).
+      (2) A full-replace apply erased the document's sources, and later
+      revisions re-cited only three
+      (problems/texture-full-replace-erases-citations-2026-10-11.md).
+      (3) Texture hedged every item, even ones two outlets reported, and
+      round one told Texture to hold leads back. Fixed in 4ca9b094 (kernel
+      shows refusals; research prompt v4; Texture states confirmed claims
+      plainly) and 74227bcf (a full replace keeps the sources).
+    conjecture: PD1-1 still short on coverage; follow-up confirmation of leads supported once
 ---
 
 # PD1 — persistent research desk
