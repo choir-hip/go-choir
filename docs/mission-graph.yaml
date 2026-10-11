@@ -1506,7 +1506,7 @@ nodes:
     title: P2 — one surface (Texture uses Cast and Ask; Message, Emit and Texture-write ProductAPI routes deleted)
     path: docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md
     ledger: ''
-    status: working
+    status: landed
     kind: station
     entrypoint: false
     member_of: choir-precommitment-protocol-metamission-2026-10-11

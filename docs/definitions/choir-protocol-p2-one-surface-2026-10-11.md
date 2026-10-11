@@ -249,11 +249,11 @@ boundaries:
   read_only_dependencies: [internal/agentcore/management_controller.go, internal/agentcore/texture_lifecycle_api.go, internal/agentcore/tools_worker_update.go (P2a must not change them; a diff there means the fold leaked)]
 
 now:
-  status: working
-  slice: P2a and P2b deployed and demo-proven (receipt P2a-deployed); P2c squashed onto main (b196d666) and lands with P2d1
-  source_ref: b196d666 (local; pushes now that the demo ended)
-  deploy_identity: staging a2bcf724
-  candidate: {id: P2c, state: built, ref: main, base: a2bcf724, digest: b196d666, scope: [internal/yaegikernel, internal/agentcore, internal/runtimeprompts, cmd/capsule-broker]}
+  status: landed
+  slice: P2a, P2b and P2c on staging and demo-proven (receipts P2a-deployed, P2c-deployed); P2d is its own station
+  source_ref: b172895b (pushed; CI 38170958509 green)
+  deploy_identity: staging b172895b
+  candidate: {id: P2c, state: landed, ref: main, base: a2bcf724, digest: b196d666, scope: [internal/yaegikernel, internal/agentcore, internal/runtimeprompts, cmd/capsule-broker]}
   conjecture:
     id: P2-1
     claim: >-
@@ -309,9 +309,9 @@ now:
     unreachable from cells, and go with the reducer's Message branch after
     one release
   next_action: >-
-    push P2c with P2d1 through the landing loop; confirm staging identity
-    and a regression demo on a fresh test computer; then close P2
-    (completion panel) and continue P2d2
+    none for P2 (landed; residuals above). No completion panel: the owner's
+    rule (2026-10-11) is panels for uncertainty, not ceremony, and the
+    result is not uncertain. P2d continues under its own file
 
 receipts:
   - id: P2-review1
@@ -396,6 +396,19 @@ receipts:
       Revision seven has an empty "Chips and compute" heading (content
       observation, not a protocol defect). Management Cast was not
       exercised. Evidence: session scratchpad demo19 and p2a/audit-raw.json.
+  - id: P2c-deployed
+    at: 2026-10-11T21:07Z
+    kind: deployed acceptance (staging b172895b, CI 38170958509 green), regression AI news demo with follow-up on fresh test computer demo-p2c-2026-10-11 (booted 20:22:24Z, after the deploy)
+    result: >-
+      With Message and Emit retired and the delegated-cast gate (P2d1) in,
+      the research chain still closes: eight revisions, five research
+      dispatches (four rounds, then one after the follow-up), five distinct
+      cast records with staged_act cast, no failures. Unit evidence for
+      P2c's other items is in its commit (b196d666). Residuals: the replay
+      golden row 9 runs only on Node B; broker ActionMessage and ActionEmit
+      remain unreachable from cells; no deployed engineering run has
+      exercised ReportPacket progress yet. Evidence: session scratchpad
+      demo20 and demo20/audit-raw.json.
 ---
 
 # P2 — one surface

@@ -25,12 +25,12 @@ metamission:
     - id: P2
       path: docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md
       readiness: reviewed
-      status: working (P2a and P2b deployed and demo-proven; P2c lands with P2d1)
+      status: landed (P2a, P2b, P2c on staging b172895b; receipts P2a-deployed, P2c-deployed)
       depends_on: [P1]
     - id: P2d
       path: definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md
       readiness: drafted (revised after review round one, receipt P2d-review1)
-      status: working (P2d1, the delegated-cast gate, lands with P2c)
+      status: working (P2d1, the delegated-cast gate, on staging b172895b; P2d2 waits for owner review)
       depends_on: [P2]
     - id: P3
       path: none (predictions required on Cast, Ask and Escalate; count resolver)
@@ -113,7 +113,7 @@ boundaries:
 
 now:
   status: working
-  slice: P1 landed and audited; P2a and P2b deployed and demo-proven (a2bcf724, receipt P2a-deployed); P2c and P2d1 land together; P2d revised after review round one
+  slice: P1 and P2 landed (staging b172895b); P2d1 landed; P2d2 designed through two review rounds and held for owner review; owner answered §9 items 1, 2, 8 (design doc)
   source_ref: a2bcf724
   deploy_identity: staging a2bcf724
   candidate: none
@@ -147,7 +147,7 @@ now:
     owner routing decision); idle test computers keep their old build
     after a deploy, so deployed demos use fresh test computers
     (docs/problems/idle-test-computers-keep-old-builds-after-deploy-2026-10-11.md)
-  next_action: land P2c and P2d1 through the landing loop; P2d review round two, then P2d2; P1 completion panel when OpenAI reviewers are back
+  next_action: owner direction 2026-10-11 evening is research and design, not building; the research docs it commissioned feed P2d2, P3 (predictions mandatory) and P5 (Autopaper)
 
 receipts: []
 ---

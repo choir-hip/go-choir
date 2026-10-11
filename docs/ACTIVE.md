@@ -138,17 +138,17 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   landed on staging (0f1c86c7); its audit joins every control to its cast
   record. P2 (one surface: Texture uses Cast and Ask, Message and Emit
   deleted, [`p2`](definitions/choir-protocol-p2-one-surface-2026-10-11.md))
-  is landing: P2b (ProductAPI cannot write a Texture) and P2a (Texture
-  dispatches with Cast and Ask, folded into its turn) are on staging
-  (a2bcf724) and passed the deployed AI news demo (five dispatches, five
-  cast records, no failures; receipt P2a-deployed); P2c (Message and Emit
-  retired) lands next with P2d1. P2d (texture addressing: management feeds
-  any Texture through a record,
+  landed: Texture dispatches with Cast and Ask folded into its turn
+  (P2a), no desk writes a Texture through ProductAPI (P2b), Message and
+  Emit are retired (P2c); staging b172895b, deployed demos receipts
+  P2a-deployed and P2c-deployed. P2d (management feeds any Texture through
+  a record,
   [`p2d`](definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md))
-  is drafted and revised after review round one; its slice P2d1 (only a
-  Cast to engineering opens an engineering assignment) lands with P2c. P2d
-  unblocks Autopaper W2. Deployed demos need a fresh test computer, since
-  idle ones keep their old build
+  has P2d1 on staging (only a Cast to engineering opens an engineering
+  assignment); P2d2 is designed through two review rounds and waits for
+  the owner's review. Owner direction 2026-10-11 evening: research and
+  design before building; predictions are mandatory (P3). P2d unblocks
+  Autopaper W2. Deployed demos need a fresh test computer
   ([problem](problems/idle-test-computers-keep-old-builds-after-deploy-2026-10-11.md)).
 - **Gate 3 opened 2026-10-11 — Autopaper (working):**
   [`definitions/choir-autopaper-metamission-2026-10-11.md`](definitions/choir-autopaper-metamission-2026-10-11.md).
