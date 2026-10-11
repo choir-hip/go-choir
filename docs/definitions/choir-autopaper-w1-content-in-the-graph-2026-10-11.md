@@ -1,6 +1,6 @@
 now:
   status: working
-  slice: W1 hour-long run — six sources every ten minutes into Store B
+  slice: W1 close — second-computer read on staging, then the completion panel
   source_ref: 19b2f964 (pushed)
   deploy_identity: staging cd7221ae (host); gateway 9c1c96c7
   candidate: {id: W1c, state: landing, ref: main, base: cd7221ae, digest: none, scope: [internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools]}
@@ -31,11 +31,15 @@ now:
       unconfirmed.
     main_uncertainty: whether the test computer updates to 19b2f964 after the deploy, and whether Store B absorbs scheduled capture writes
     next_observation: test computer build identity after the deploy; then one scheduled source's first polls
-  blocker_or_risk: Store B is the store that grew to 104 G; bodies must never enter it, and its history needs a bound before polling all sources
+  blocker_or_risk: >-
+    each scheduled poll rewrites its schedule object, which in a guest is one
+    event on the computer's chain per poll; fine for a handful of sources,
+    about 30,000 events a day for all 211 at ten minutes. Bound it (write
+    usage only on change, or batch) before scheduling the full registry.
   next_action: >-
-    the hour-long run (six sources at ten minutes, started 11:52:44Z);
-    then record it, add a guest capture-read verb for the second-computer
-    proof, and close W1
+    after 4ea25d28 and f84c29bd deploy: a second computer reads a paper
+    capture with choir.ReadCapture; DW polls produce items; then the
+    completion panel and W1's close
 ---
 definition_version: 4
 
