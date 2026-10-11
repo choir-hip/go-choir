@@ -170,44 +170,64 @@ boundaries:
 now:
   status: working
   slice: >-
-    S1: measure the research-only prompt on the build with choir.Research,
-    the display fix and the hostlink transport, against the baseline.
+    S1b: rerun the research-only prompt on the build with the S1 fixes
+    (child models gated on the model policy, empty search results no longer
+    bench providers, world-verb JSON prints as text, cells show 48,000
+    characters per value).
   candidate: >-
-    470a734c (choir.Research) + a7320499 (prompt sentence) + 02e19146
-    (prompt trim) + b055ff58 (hostlink), pushed 2026-10-10 ~23:55.
+    8aa8559b + 4d365e47 + 072b8612 + 6906a1ae, pushed 2026-10-11 ~00:25.
   conjecture: >-
-    If research can fan its work out to parallel child activations and
-    reports as findings land, then the week-of-AI-news document reaches the
-    Haiku baseline's in-window item count, with correct dates and working
-    links, within 15 minutes, with a revision every few minutes. EDGE
-    missing_oracle: item correctness needs a checker (ΔO: scripted item
-    extraction plus link spot checks on both reports). Status: proposed.
+    If children run on served models, search stays up under fan-out, and
+    the parent can read every child's findings, then two research desks
+    reach the Haiku baseline's in-window item count, with correct dates and
+    working links, within 15 minutes. EDGE missing_oracle: item correctness
+    needs a checker (ΔO: scripted item extraction plus link spot checks on
+    both reports). Status: proposed.
   decision: >-
     Actor recursion as a synchronous host verb (choir.Research) over the
-    existing model loop, not new runs: it matches M6.5 (nested activation,
-    subset manifest, budget carve-out) and the 2026-09-15 return-value rule
-    without new lifecycle objects. M6.5's depth cap 2-3 is dropped by the
-    owner's 2026-10-10 direction; the shared budget and deadline bound the
-    tree. S0 (prompt-only) was skipped as a separate measurement: its run
-    on a114b46e was broken by a deploy, and the owner measures the result,
-    not attribution.
+    existing model loop (M6.5 nested activation, subset manifest, shared
+    budget; 2026-09-15 return-value rule); no depth cap (owner 2026-10-10).
+    Texture's per-request research budget (2 desks) is left as is until the
+    S1b rerun shows whether working fan-out makes two desks enough
+    (problems/texture-research-opener-dropped-silently-2026-10-11.md).
   belief:
     believed_state: >-
-      S0 on a114b46e (document 04a60c53): Texture opened two research desks;
-      they ran 67 s and 142 s (longer than any earlier run), then a deploy's
-      1 min 48 s host gap stranded Texture and its three result wakes.
+      S1 (0b7250ef, document ee7e8c2b): research used choir.Research
+      unprompted in both desks. Three luna children returned findings
+      (61-125 s); three gpt-5.4-mini children failed on the provider (model
+      named from the catalog list in a refusal). Two narrow empty searches
+      benched parallel, brave and tavily for 5 min. The parent saw only the
+      first 4,000 characters of its children's findings and printed
+      searches as byte values. Document: 2 in-window items, both correct
+      and in the baseline, first grounded revision at 4 min 12 s, then a
+      third research request dropped by the per-request budget.
     main_uncertainty: >-
-      Whether a low-effort desk model uses choir.Research unprompted, and
-      whether the 64-call egress budget caps coverage once it does.
+      Whether two desks with working fan-out reach baseline coverage, and
+      whether the 64-call egress budget caps a desk's tree.
     next_observation: >-
-      S1 traces: choir.Research calls, child durations and findings, egress
-      refusals, revisions over time; then the item comparison.
+      S1b: child models and outcomes, search provider health during the
+      run, items reported per desk, revisions over time; then the item
+      comparison against the baseline.
   blocker: none
   next_action: >-
-    After the push deploys, restart demo-arxiv-2026-10-10c and run the
+    After ce03d075 deploys, restart demo-arxiv-2026-10-10c and run the
     research-only prompt on a fresh document with no pushes during the run.
 
-receipts: []
+receipts:
+  - id: S1
+    at: 2026-10-11T00:01:54Z
+    build: staging 0b7250ef
+    action: research-only prompt on demo-arxiv-2026-10-10c, document ee7e8c2b
+    result: >-
+      2 in-window items (Mistral Large 4, Oct 6; OpenAI GPT-6, Oct 7), both
+      sourced to the vendor page and both in the baseline (26 items). First
+      grounded revision 4 min 12 s after the prompt; 2 agent revisions; one
+      report per research desk; document stalled at 00:06.
+    findings:
+      - problems/research-child-picks-unserved-model-2026-10-11.md (fixed 8aa8559b)
+      - problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md (fixed 4d365e47)
+      - problems/research-parent-cannot-read-its-children-2026-10-11.md (fixed 072b8612, 6906a1ae)
+      - problems/texture-research-opener-dropped-silently-2026-10-11.md (open decision)
 ---
 
 # Research fan-out
