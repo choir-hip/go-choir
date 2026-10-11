@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
@@ -24,11 +26,13 @@ type researchChildProvider struct {
 	provideriface.Provider
 	mu     sync.Mutex
 	routes []string
+	at     []time.Time
 }
 
 func (p *researchChildProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.mu.Lock()
 	p.routes = append(p.routes, req.Provider+"/"+req.Model)
+	p.at = append(p.at, time.Now())
 	p.mu.Unlock()
 	raw := rawMessagesForTest(req.Messages)
 	objective := ""
@@ -155,6 +159,49 @@ fmt.Println(string(b), err)`
 	for _, route := range provider.routes {
 		if strings.Contains(route, "gpt-5.4-mini") || strings.Contains(route, "no-such-model") {
 			t.Fatalf("a model outside the policy reached the provider: %v", provider.routes)
+		}
+	}
+}
+
+// problems/research-fanout-overruns-computer-model-budget-2026-10-11.md: a
+// tree of children called the model as fast as it could and the gateway's
+// per-computer limiter rejected thousands of calls. Failure mode pinned:
+// child model calls are not spaced by one computer-wide gate, so a wide or
+// deep tree bursts past the computer's budget.
+func TestResearchChildModelCallsShareOneComputerGate(t *testing.T) {
+	deskTestWorkerBin(t)
+	provider := &researchChildProvider{}
+	const interval = 150 * time.Millisecond
+	rt := &Runtime{
+		provider:           provider,
+		modelPolicy:        modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
+		researchChildCalls: &callSpacer{interval: interval},
+		researchDeps: &researchtools.Dependencies{
+			Search: &stubSearchClient{},
+			Egress: researchtools.NewEgressBudgetLedger(16, 32<<20),
+		},
+	}
+	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
+	execCtx := deskEvalExecCtx(t)
+	execCtx.RunID = "run-research-gate"
+	execCtx.Profile = agentprofile.Research
+	execCtx.Role = agentprofile.Research
+	ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
+	src := `res, err := choir.Research([]string{"alpha", "beta", "gamma", "alpha again"})
+fmt.Println(len(res), err)`
+	if _, err := tool.Func(ctx, json.RawMessage(`{"source":`+cellSource(src)+`}`)); err != nil {
+		t.Fatalf("desk_go_eval: %v", err)
+	}
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	at := append([]time.Time(nil), provider.at...)
+	sort.Slice(at, func(i, j int) bool { return at[i].Before(at[j]) })
+	if len(at) < 4 {
+		t.Fatalf("children made %d model calls, want at least 4", len(at))
+	}
+	for i := 1; i < len(at); i++ {
+		if gap := at[i].Sub(at[i-1]); gap < interval-20*time.Millisecond {
+			t.Fatalf("child model calls %d and %d were %s apart, want at least %s: %v", i-1, i, gap, interval, at)
 		}
 	}
 }

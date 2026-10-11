@@ -26,6 +26,67 @@ const researchChildConcurrency = 4
 // activation. It states the child's job, not a procedure.
 const researchChildPreamble = `You are a child research activation working for a parent research desk on one objective. You have the read-only world verbs and choir.Research to fan out further. You cannot report, message or write: whatever you end your turn with is returned to the parent as your findings. Investigate the objective deeply, then end with your findings: each claim with its date and source URL, and what remains uncertain.`
 
+// researchChildCallInterval spaces research-child model calls across the
+// whole computer: 40 a minute, under the gateway's default per-computer
+// budget of 60 (internal/gateway/ratelimit.go), leaving the rest for desks.
+// A tree of any depth or width queues on it instead of bursting into 429s
+// (problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
+// It gates calls, not child lifetimes, so a parent waiting on its children
+// never holds a slot they need.
+const researchChildCallInterval = 1500 * time.Millisecond
+
+// callSpacer hands out model-call start times at least interval apart.
+type callSpacer struct {
+	mu       sync.Mutex
+	next     time.Time
+	interval time.Duration
+}
+
+func (s *callSpacer) wait(ctx context.Context) error {
+	s.mu.Lock()
+	at := time.Now()
+	if s.next.After(at) {
+		at = s.next
+	}
+	s.next = at.Add(s.interval)
+	s.mu.Unlock()
+	d := time.Until(at)
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// spacedProvider waits on the computer's research-child call spacer before
+// each model call.
+type spacedProvider struct {
+	provideriface.ToolLoopProvider
+	spacer *callSpacer
+}
+
+func (p spacedProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	if err := p.spacer.wait(ctx); err != nil {
+		return nil, err
+	}
+	return p.ToolLoopProvider.CallWithTools(ctx, req)
+}
+
+func (rt *Runtime) researchChildSpacer() *callSpacer {
+	rt.researchChildCallsOnce.Do(func() {
+		if rt.researchChildCalls == nil {
+			rt.researchChildCalls = &callSpacer{interval: researchChildCallInterval}
+		}
+	})
+	return rt.researchChildCalls
+}
+
 type researchLineageKey struct{}
 
 // researchLineage is what a child inherits from the research run at the
@@ -128,7 +189,8 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 		"content": []any{map[string]string{"type": "text", "text": spec.Objective}},
 	})
 	noEmit := func(types.EventKind, string, json.RawMessage) {}
-	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, toolregistry.AsToolLoopProvider(rt.provider), registry,
+	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.researchChildSpacer()}
+	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
 		[]json.RawMessage{userMsg}, researchChildPreamble+"\n\n"+rolePrompt,
 		provideriface.MaxInteractiveOutputTokensForSelection(selection, agentprofile.Research),
 		noEmit, nil, toolregistry.WithToolLoopLLMConfig(selection))

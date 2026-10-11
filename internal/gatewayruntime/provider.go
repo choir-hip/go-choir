@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -163,9 +164,18 @@ func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoop
 	return out, nil
 }
 
+// maxRateLimitWaits bounds how many Retry-After windows one call waits out
+// before it fails; each wait is at most maxRateLimitWait and never past the
+// caller's context.
+const (
+	maxRateLimitWaits = 10
+	maxRateLimitWait  = time.Minute
+)
+
 func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, error) {
 	req.Stream = false
 	var lastErr error
+	rateLimitWaits := 0
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
 			select {
@@ -183,6 +193,21 @@ func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, erro
 		_ = httpResp.Body.Close()
 		if err != nil {
 			lastErr = fmt.Errorf("gateway client: read response: %w", err)
+			continue
+		}
+		// The gateway's per-computer limiter rejects with 429 and the
+		// seconds until its window resets. Waiting that out queues the call
+		// instead of failing it after 1.5 s
+		// (docs/problems/research-fanout-overruns-computer-model-budget-2026-10-11.md).
+		if wait, ok := retryAfter(httpResp); ok && httpResp.StatusCode == http.StatusTooManyRequests && rateLimitWaits < maxRateLimitWaits {
+			rateLimitWaits++
+			lastErr = gatewayStatusError(httpResp.Status, body)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(wait):
+			}
+			attempt--
 			continue
 		}
 		if httpResp.StatusCode != http.StatusOK {
@@ -207,6 +232,20 @@ func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, erro
 		return &out, nil
 	}
 	return nil, lastErr
+}
+
+// retryAfter reads a Retry-After header given in seconds, capped at
+// maxRateLimitWait.
+func retryAfter(resp *http.Response) (time.Duration, bool) {
+	secs, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After")))
+	if err != nil || secs < 0 {
+		return 0, false
+	}
+	wait := time.Duration(secs) * time.Second
+	if wait > maxRateLimitWait {
+		wait = maxRateLimitWait
+	}
+	return wait, true
 }
 
 func (p *Provider) stream(ctx context.Context, req llmRequest, onChunk func(streamChunk)) (*llmResponse, error) {

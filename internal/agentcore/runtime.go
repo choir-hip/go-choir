@@ -130,9 +130,13 @@ type Runtime struct {
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex
 	modelPolicy           *modelpolicy.Manager
-	qdrantPipelineMu      sync.Mutex
-	qdrantPipeline        *qdrant.Pipeline
-	qdrantPipelineInitErr error
+	// researchChildCalls spaces every research child's model calls on
+	// this computer (research_children.go).
+	researchChildCalls     *callSpacer
+	researchChildCallsOnce sync.Once
+	qdrantPipelineMu       sync.Mutex
+	qdrantPipeline         *qdrant.Pipeline
+	qdrantPipelineInitErr  error
 
 	// dispatchActor is the function hook that the actor runtime adapter
 	// sets. When the business logic needs to start a run or wake an agent,
