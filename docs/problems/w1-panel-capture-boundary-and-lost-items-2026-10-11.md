@@ -76,3 +76,34 @@ ownership), which is a separate auth-path change.
   as overdue.
 - The capture sink splits a poll's items into requests well under
   corpusd's bound.
+
+## Second round (panel on 1ddb0606)
+
+7. **Two computers of one owner can race to create the same capture**
+   (Codex, GPT-6 Luna). `WriteCaptures` (`internal/sourcegraph/captures.go`)
+   checks that the capture id is absent, then creates it; Store B's
+   `PutObject` (`internal/platform/objectgraph_store.go`) is an upsert that
+   replaces `computer_id`, the body reference and the metadata. If two
+   computers of the same owner post the same new item at once, both see no
+   row, and the later write replaces the earlier computer's capture, while
+   both report it as new. The capture id is per owner, so computers of
+   different owners cannot collide. Not reproduced on staging, where one
+   computer polls.
+
+8. **Suggestion: a large error page is saved into every poll's usage**
+   (Claude). The capture sink copies up to 4 MiB of corpusd's error
+   response into the error text, which the schedule keeps in its last 24
+   polls and writes on every poll.
+
+Named for W2, not W1 blockers: the capture route has no per-guest quota;
+a capture is what the writing guest says it is, so shared readers should
+filter by a trusted owner or computer; items beyond a poll's `max_items`
+are never fetched once the validators are kept; a body file written before
+a failed row write is orphaned.
+
+### Test (second round)
+
+- Two computers of one owner create the same capture at once: exactly one
+  row exists, it keeps the first writer's computer and body, and the other
+  request counts a repeat.
+- A poll's saved error text is bounded.
