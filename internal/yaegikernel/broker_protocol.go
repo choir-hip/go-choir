@@ -22,6 +22,7 @@ const (
 	ActionWebSearch            BrokerAction = "web_search"
 	ActionFetchURL             BrokerAction = "fetch_url"
 	ActionPollSource           BrokerAction = "poll_source"
+	ActionReadCapture          BrokerAction = "read_capture"
 	ActionSourceSearch         BrokerAction = "source_search"
 	ActionImportDocument       BrokerAction = "import_document_content"
 	ActionImportURL            BrokerAction = "import_url_content"
@@ -210,6 +211,13 @@ type PollSourcePayload struct {
 	MaxItems int    `json:"max_items,omitempty"`
 }
 
+// ReadCapturePayload defines ActionReadCapture: read one shared capture
+// with its body text (Autopaper W1).
+type ReadCapturePayload struct {
+	CaptureID string `json:"capture_id"`
+	MaxChars  int    `json:"max_chars,omitempty"`
+}
+
 // The remaining research cell verbs. Each action name equals its registry
 // tool name so host egress dispatches into the same deps-bound ToolFunc —
 // one source of truth for charging and projection. Results return as opaque
@@ -288,7 +296,7 @@ func (r *BrokerRequest) Validate() error {
 		ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
 		ActionReadContentItem, ActionListContentSelectors, ActionReadContentSelector, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

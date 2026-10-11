@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,9 +16,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
-// CaptureSink writes one poll's items as shared captures.
+// CaptureSink writes one poll's items as shared captures and reads any
+// shared capture back.
 type CaptureSink interface {
 	WriteCaptures(ctx context.Context, ownerID, computerID string, items []sources.Item) (sourcegraph.CaptureWriteResult, error)
+	ReadCapture(ctx context.Context, captureID string, maxChars int) (json.RawMessage, error)
 }
 
 // CorpusdCaptureSink posts a poll's items to corpusd's capture route, which
@@ -65,4 +69,33 @@ func (c *CorpusdCaptureSink) WriteCaptures(ctx context.Context, ownerID, compute
 		return out, fmt.Errorf("capture sink: decode response: %w", err)
 	}
 	return out, nil
+}
+
+// ReadCapture returns one shared capture's metadata and body text from
+// corpusd. Any bound computer may read any capture.
+func (c *CorpusdCaptureSink) ReadCapture(ctx context.Context, captureID string, maxChars int) (json.RawMessage, error) {
+	if c == nil || c.BaseURL == "" {
+		return nil, fmt.Errorf("capture reader: corpusd URL is not configured")
+	}
+	target := c.BaseURL + "/internal/platform/captures/" + url.PathEscape(strings.TrimSpace(captureID))
+	if maxChars > 0 {
+		target += "?max_chars=" + strconv.Itoa(maxChars)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("capture reader: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, fmt.Errorf("capture reader: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("capture reader: corpusd returned %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	return json.RawMessage(raw), nil
 }

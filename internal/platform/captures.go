@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
@@ -27,7 +29,24 @@ const (
 	maxCaptureItemsPerRequest = 100
 	maxCaptureBodyBytes       = 1 << 20
 	maxCaptureRequestBytes    = 64 << 20
+	defaultCaptureReadChars   = 8000
 )
+
+// CaptureReadResponse is one shared capture with its body text.
+type CaptureReadResponse struct {
+	CaptureID     string `json:"capture_id"`
+	OwnerID       string `json:"owner_id"`
+	ComputerID    string `json:"computer_id,omitempty"`
+	SourceID      string `json:"source_id,omitempty"`
+	Title         string `json:"title,omitempty"`
+	URL           string `json:"url"`
+	PublishedAt   string `json:"published_at,omitempty"`
+	FetchedAt     string `json:"fetched_at,omitempty"`
+	ContentBlobID string `json:"content_blob_id"`
+	Body          string `json:"body"`
+	BodyChars     int    `json:"body_chars"`
+	Truncated     bool   `json:"truncated,omitempty"`
+}
 
 // CaptureWriteRequest is one poll's items from the paper's computer.
 type CaptureWriteRequest struct {
@@ -181,4 +200,62 @@ func (h *ObjectGraphHandler) HandleCaptureBody(w http.ResponseWriter, r *http.Re
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = io.Copy(w, strings.NewReader(string(body)))
+}
+
+// HandleCaptureRead handles GET /internal/platform/captures/<capture id>
+// (?max_chars=) for any bound guest or internal caller: one shared capture's
+// metadata and body text, read from Store B and host disk.
+func (h *ObjectGraphHandler) HandleCaptureRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := h.requireInternalOrBoundGuest(r, "", "", true); err != nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
+		return
+	}
+	if h == nil || h.service == nil || h.captureBodies == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "capture store unavailable"})
+		return
+	}
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/internal/platform/captures/"), "/")
+	kind, _, _, err := objectgraph.ParseCanonicalID(id)
+	if err != nil || kind != objectgraph.WebCaptureObjectKind {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "not a capture id"})
+		return
+	}
+	obj, err := h.service.GetObject(r.Context(), id)
+	if errors.Is(err, objectgraph.ErrNotFound) {
+		writeJSON(w, http.StatusNotFound, apiError{Error: "capture not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	meta, err := objectgraph.WebCaptureMetadataFromObject(obj)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	body, err := h.captureBodies.Body(strings.TrimPrefix(meta.ContentBlobID, "sha256:"))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "capture body: " + err.Error()})
+		return
+	}
+	maxChars := defaultCaptureReadChars
+	if v, convErr := strconv.Atoi(r.URL.Query().Get("max_chars")); convErr == nil && v > 0 && v < maxCaptureBodyBytes {
+		maxChars = v
+	}
+	text := []rune(string(body))
+	out := CaptureReadResponse{
+		CaptureID: obj.CanonicalID, OwnerID: obj.OwnerID, ComputerID: obj.ComputerID,
+		SourceID: meta.SourceID, Title: meta.Title, URL: meta.URL, PublishedAt: meta.PublishedAt,
+		FetchedAt: meta.FetchedAt, ContentBlobID: meta.ContentBlobID, BodyChars: len(text),
+	}
+	if len(text) > maxChars {
+		text, out.Truncated = text[:maxChars], true
+	}
+	out.Body = string(text)
+	writeJSON(w, http.StatusOK, out)
 }

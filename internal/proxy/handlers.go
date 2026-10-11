@@ -1824,6 +1824,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// shared capture bodies through the same bound-guest pass-through.
 	s.HandleFunc("/internal/platform/captures", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/internal/platform/captures/bodies/", h.HandlePlatformObjectGraph)
+	s.HandleFunc("/internal/platform/captures/", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/assets/", h.HandleComputerSurface)
 	s.HandleFunc("/", h.HandleComputerSurface)
 }

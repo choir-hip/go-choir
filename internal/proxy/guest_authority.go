@@ -68,10 +68,10 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		return err
 	}
 	if r.Method == http.MethodGet {
-		// Capture bodies are shared Autopaper content: any bound guest reads
-		// them (W1b2).
+		// Captures and their bodies are shared Autopaper content: any bound
+		// guest reads them (W1b2).
 		if r.URL.Path == "/internal/platform/objects" || r.URL.Path == "/internal/platform/edges" ||
-			strings.HasPrefix(r.URL.Path, "/internal/platform/captures/bodies/") {
+			strings.HasPrefix(r.URL.Path, "/internal/platform/captures/") {
 			return nil
 		}
 		return fmt.Errorf("guest object graph reads must use a collection route")

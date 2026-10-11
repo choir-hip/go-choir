@@ -164,6 +164,36 @@ func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID,
 	return report, nil
 }
 
+// newReadCaptureTool reads one shared capture (any computer's poll) with its
+// body text, from Store B and host disk through corpusd. It is a read of the
+// shared store, not world egress, so it is not charged to the egress ledger.
+func newReadCaptureTool(deps Dependencies) toolregistry.Tool {
+	type args struct {
+		CaptureID string `json:"capture_id"`
+		MaxChars  int    `json:"max_chars,omitempty"`
+	}
+	return toolregistry.Tool{Name: "read_capture",
+		Description: "Read one shared web_capture with its body text.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
+			"capture_id": map[string]any{"type": "string"},
+			"max_chars":  map[string]any{"type": "integer", "minimum": 1},
+		}, []string{"capture_id"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in args
+			if err := json.Unmarshal(raw, &in); err != nil {
+				return "", fmt.Errorf("decode read_capture args: %w", err)
+			}
+			if deps.Captures == nil {
+				return "", fmt.Errorf("read_capture: the shared capture store is not configured")
+			}
+			out, err := deps.Captures.ReadCapture(ctx, in.CaptureID, in.MaxChars)
+			if err != nil {
+				return "", err
+			}
+			return string(out), nil
+		}}
+}
+
 func pollerFor(source sources.Source, userAgent string) (poller, error) {
 	ua := source.EffectiveUserAgent(userAgent)
 	switch source.Type {

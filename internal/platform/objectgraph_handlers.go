@@ -22,6 +22,7 @@ func RegisterObjectGraphRoutes(s *server.Server, h *ObjectGraphHandler) {
 	s.HandleFunc("/internal/platform/edges", h.HandleEdges)
 	s.HandleFunc("/internal/platform/captures", h.HandleCaptures)
 	s.HandleFunc("/internal/platform/captures/bodies/", h.HandleCaptureBody)
+	s.HandleFunc("/internal/platform/captures/", h.HandleCaptureRead)
 }
 
 type ObjectGraphHandler struct {

@@ -21,7 +21,8 @@ import (
 // modes pinned: the capture routes are not forwarded; a guest writes
 // captures for another computer (corpusd trusts the proxy as an internal
 // caller, so the proxy must check); a bound guest cannot read a body; an
-// unbound caller reads one.
+// unbound caller reads one; a second computer cannot read a capture's
+// metadata and text.
 func TestGuestCapturesCrossTheProxyToCorpusd(t *testing.T) {
 	mem := objectgraph.NewMemoryStore()
 	svc := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
@@ -31,6 +32,7 @@ func TestGuestCapturesCrossTheProxyToCorpusd(t *testing.T) {
 	corpusMux := http.NewServeMux()
 	corpusMux.HandleFunc("/internal/platform/captures", og.HandleCaptures)
 	corpusMux.HandleFunc("/internal/platform/captures/bodies/", og.HandleCaptureBody)
+	corpusMux.HandleFunc("/internal/platform/captures/", og.HandleCaptureRead)
 	corpusd := httptest.NewServer(corpusMux)
 	defer corpusd.Close()
 
@@ -95,6 +97,11 @@ func TestGuestCapturesCrossTheProxyToCorpusd(t *testing.T) {
 	read := send(http.MethodGet, bodyPath, "10.200.9.2", nil)
 	if read.Code != http.StatusOK || read.Body.String() != "Body one" {
 		t.Fatalf("second computer body read through the proxy = %d %q", read.Code, read.Body)
+	}
+	capture := send(http.MethodGet, "/internal/platform/captures/"+written.Captured[0].CaptureID, "10.200.9.2", nil)
+	var got platform.CaptureReadResponse
+	if capture.Code != http.StatusOK || json.Unmarshal(capture.Body.Bytes(), &got) != nil || got.Body != "Body one" || got.Title != "One" || got.SourceID != "rss:example" {
+		t.Fatalf("second computer capture read through the proxy = %d %s", capture.Code, capture.Body)
 	}
 	if rec := send(http.MethodGet, bodyPath, "10.200.5.5", nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("unbound caller body read = %d", rec.Code)

@@ -75,6 +75,7 @@ func (d *Dependencies) egressToolTable() map[string]toolregistry.ToolFunc {
 		newReadContentItemSelectorTool(*d),
 		newSearchWireCorpusTool(*d),
 		newPollSourceTool(*d),
+		newReadCaptureTool(*d),
 	} {
 		if tool.Func == nil {
 			continue

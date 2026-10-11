@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -38,6 +39,10 @@ func (s *recordingSink) WriteCaptures(_ context.Context, _, _ string, items []so
 	defer s.mu.Unlock()
 	s.items += len(items)
 	return sourcegraph.CaptureWriteResult{New: len(items)}, nil
+}
+
+func (s *recordingSink) ReadCapture(context.Context, string, int) (json.RawMessage, error) {
+	return nil, fmt.Errorf("not used")
 }
 
 type armedWake struct {
