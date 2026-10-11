@@ -182,8 +182,98 @@ flight drain on the old kinds (consumed, never re-armed). Nothing migrates.
 5. **Where Texture's ProductAPI denial lives:** in the allowlist by caller
    profile, or in the Texture routes by authenticated writer.
    Recommendation: the routes, so no future allowlist entry reopens it.
+6. **Do existing in-record scores migrate?** Recommendation: no. Leave old
+   records as they are (no desk ever wrote one, per the problem record);
+   new scores are separate records from P4.
+7. **Topic scoping:** derived at query time from subject references, or
+   declared by the emitter? Recommendation: derived, with an optional
+   emitter tag that is itself just a claim.
+8. **When signing starts:** with per-computer identity keys, or earlier
+   with a host-held key per computer? Recommendation: wait for real
+   per-computer keys. Until then, a store-assigned commit time and content
+   hash are the integrity floor, and records are marked unsigned.
 
-## 10. Risks
+## 10. One schema for desks, Autopaper and the economy of agents
+
+Owner, 2026-10-11: "we aim to use the same precommitment records between
+desks and in autopaper. The claims that we extract from news and the
+inferences drawn from them are precommitments we score over time ...
+others [make] their own editions (with their own perspectives and private
+data) [and] can also do their own scoring so it's not our hegemonic house
+view only. This is the basis of a track record based reputation system ...
+we can scope scores by scorer and topic."
+
+So the desk protocol is the first use of a record that will travel
+between computers and be scored by people who do not share our view.
+Most of that comes later. A few properties must hold from P1, because
+records written now become track record later and cannot be re-keyed.
+
+**Three kinds of emitter, one record.**
+
+- A desk's act (Cast, Ask, Report): emitter is the agent on a computer.
+- An edition's claim or inference: emitter is the computer (the edition).
+  A Texture's statement "X implies Y by March, p=0.6" is a precommitment.
+- A source's claim ("Reuters reports X"): the emitter is the outlet, which
+  never precommitted. The record is an observation attributed to it.
+  Later reports confirming or contradicting it build the source's track
+  record (design §2 already promises track records for sources).
+
+**Scores are separate records, never fields on the claim.** A record is
+immutable once committed. A score is its own record that references the
+record it scores, with the scorer's identity (computer or edition, desk,
+model, method), the answers, and the evidence it used. Any number of
+scorers can score one record, and their disagreement is kept. Today
+`CommitmentRecord.Scores` sits inside the record and names only a model
+(`internal/types/commitment.go`). P4 writes scores as separate objects
+from the first score.
+
+**Resolution evidence is shared; judgment is not.** What later happened
+(a report, a filing, a revision) is evidence anyone can cite. How it bears
+on a claim is each scorer's call. This keeps design principle 1: show
+what the world indicates, do not adjudicate.
+
+**Reputation is a query, not a number.** A track record is the scores on
+an emitter's records, filtered by scorer, topic and time. No global score
+exists, and readers choose whose scores to trust. A scorer is scored the
+same way: do its scores anticipate later resolutions? That is the defense
+against a crowd of fake scorers.
+
+**Topic is derived, not a taxonomy** (design principle 2). A record
+carries subject references: the story's Texture, sources, entities and
+captures. Topic scopes ("strong on chips, weak on courts") are computed
+at query time from those references, by clustering or tags, and can
+change without rewriting records.
+
+**Commit time must be provable.** A track record is worth something only
+if the prediction demonstrably came before the evidence. Published
+records go to the global store (Store B) with a commit time the store
+assigns and a content hash. Each record is signed by its computer's key
+once per-computer identity keys exist (fork re-keying, CLAUDE.md). A
+private edition commits only a hash and a time publicly and reveals the
+content later (commit and reveal), so private data stays private while
+the track record is real.
+
+**Where records live.** Desk-to-desk records stay in the computer's own
+store by default; they are working state. An edition's published claims,
+inferences and scores go to the global store, where other computers read
+and score them. Overlays decide which scorers a reader trusts. This is the
+storage rule Autopaper already follows (shared content global, overlays
+per computer).
+
+**What P1 to P4 must reserve now:**
+
+- emitter identity on every record: computer, agent or desk, and model,
+  plus an emitter kind (agent, edition, source);
+- subject references on every record;
+- a content hash and a store-assigned commit time;
+- scores as separate records with scorer identity, from the first score
+  in P4.
+
+Signing, commit and reveal, publishing records to the global store, and
+reputation queries are later slices. They start with Autopaper's W2 and
+W3, once editions publish.
+
+## 11. Risks
 
 - **Cost.** A prediction adds tokens to every dispatch, and scoring adds
   calls. Mitigations: resolve by count first, and score with a model only
