@@ -35,8 +35,8 @@ metamission:
       depends_on: []
     - id: PD2
       path: docs/definitions/choir-pd2-desk-sessions-outlive-runs-2026-10-11.md
-      readiness: drafted
-      status: pending
+      readiness: executable
+      status: working
       depends_on: [PD1]
     - id: PD3
       path: docs/definitions/choir-pd3-texture-root-desk-2026-10-11.md
@@ -153,8 +153,8 @@ boundaries:
 now:
   status: working
   slice: PD1 — persistent research desk per computer, rounds not recursion
-  source_ref: 16d7c21a (pushed)
-  deploy_identity: staging deploying 16d7c21a
+  source_ref: c713d63a
+  deploy_identity: staging c713d63a
   candidate:
     id: PD1
     state: landing
@@ -198,7 +198,7 @@ now:
     main_uncertainty: whether queued follow-ups reach the busy desk on the product path
     next_observation: S1c trace
   blocker_or_risk: none
-  next_action: S1c on staging; then PD2 failure list
+  next_action: S1d on staging (c713d63a) proves PD2 and checks the S1c fixes; then PD3 trajectory-spanning agent design
 
 receipts: []
 ---

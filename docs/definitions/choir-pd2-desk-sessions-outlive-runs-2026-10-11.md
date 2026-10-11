@@ -103,9 +103,9 @@ boundaries:
 
 now:
   status: working
-  slice: not started (waits on PD1)
-  source_ref: b3dbc686
-  deploy_identity: staging b3dbc686
+  slice: staging proof in S1d (follow-up research run's first cell continues the session)
+  source_ref: fcb424b9 (in c713d63a)
+  deploy_identity: staging c713d63a
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: PD2-1
@@ -120,14 +120,18 @@ now:
     evidence_refs: []
   decision: {what: none, kind: none, status: none, evidence_ref: none, owner_ratification_ref: not_applicable}
   belief:
-    believed_state: sessions are per run for every desk
+    believed_state: >-
+      Desk sessions are keyed by agent for runs with a run record, retained
+      30 minutes idle, at most 12 idle; children keep per-activation
+      sessions; Egress reads the cell's run. Local tests and the full
+      agentcore package pass; deployed in c713d63a.
     main_uncertainty: >-
       Where desk workers are reclaimed today when a run ends normally, and
       whether a long-lived worker interacts with the cell-terminal deadline
       and reduction state (armCellTerminalDeadline, reduction inbox).
     next_observation: read desk worker release paths and the reduction state carried per worker
   blocker_or_risk: none
-  next_action: after PD1 lands, read the worker lifecycle and write the failure list before code
+  next_action: read S1d's follow-up research run; record the session line and whether it reused earlier variables
 
 receipts: []
 ---
