@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
@@ -55,73 +56,112 @@ func newPollSourceTool(deps Dependencies) toolregistry.Tool {
 			if exec.OwnerID == "" {
 				return "", fmt.Errorf("poll_source missing owner context")
 			}
-			if deps.Captures == nil {
-				return "", fmt.Errorf("poll_source: the shared capture store is not configured")
-			}
-			reg, err := deps.sourceRegistry()
+			report, err := PollSourceOnce(ctx, deps, exec.OwnerID, exec.ComputerID, in.SourceID, in.MaxItems, func() error {
+				return deps.chargeEgressCall(ctx, "poll_source")
+			})
 			if err != nil {
 				return "", err
 			}
-			source, ok := reg.Lookup(in.SourceID)
-			if !ok {
-				return "", fmt.Errorf("poll_source: unknown source %q; known ids include %s", in.SourceID, strings.Join(nearbySourceIDs(reg, in.SourceID, 10), ", "))
-			}
-			maxItems := in.MaxItems
-			if maxItems <= 0 {
-				maxItems = defaultPollMaxItems
-			}
-			if maxItems > maxPollMaxItems {
-				maxItems = maxPollMaxItems
-			}
-			if source.MaxItemsPerPoll <= 0 || source.MaxItemsPerPoll > maxItems {
-				source.MaxItemsPerPoll = maxItems
-			}
-			p, err := pollerFor(source, reg.UserAgent)
-			if err != nil {
-				return "", err
-			}
-			if err := deps.chargeEgressCall(ctx, "poll_source"); err != nil {
-				return "", err
-			}
-
-			pollState.Lock()
-			if prior, ok := pollState.bySource[source.ID]; ok {
-				source.LastETag, source.LastModified, source.LastAuxCursor, source.LastPolled = prior.LastETag, prior.LastModified, prior.LastAuxCursor, prior.LastPolled
-			}
-			pollState.Unlock()
-
-			pollCtx, cancel := context.WithTimeout(ctx, pollSourceTimeout)
-			defer cancel()
-			started := time.Now()
-			polled, pollErr := p.Poll(pollCtx, &source)
-			if pollErr == nil {
-				pollState.Lock()
-				pollState.bySource[source.ID] = source
-				pollState.Unlock()
-			}
-			result := map[string]any{
-				"source_id":    source.ID,
-				"status":       polled.Fetch.Status,
-				"status_code":  polled.Fetch.StatusCode,
-				"fetched":      len(polled.Items),
-				"not_modified": polled.Fetch.Status == "not_modified",
-				"poll_ms":      time.Since(started).Milliseconds(),
-			}
-			if pollErr != nil {
-				result["error"] = pollErr.Error()
-				return toolregistry.ResultJSON(result)
-			}
-			written, err := deps.Captures.WriteCaptures(ctx, exec.OwnerID, exec.ComputerID, polled.Items)
-			result["new"] = written.New
-			result["repeated"] = written.Repeated
-			result["skipped"] = written.Skipped
-			result["captured"] = written.Captured
-			result["total_ms"] = time.Since(started).Milliseconds()
-			if err != nil {
-				result["error"] = err.Error()
-			}
-			return toolregistry.ResultJSON(result)
+			return toolregistry.ResultJSON(report)
 		}}
+}
+
+// PollReport is one poll's outcome and resource use. A fetch or capture
+// write failure is reported in Error; the poll itself still happened.
+type PollReport struct {
+	SourceID    string                     `json:"source_id"`
+	Status      string                     `json:"status"`
+	StatusCode  int                        `json:"status_code"`
+	Fetched     int                        `json:"fetched"`
+	NotModified bool                       `json:"not_modified"`
+	ItemBytes   int                        `json:"item_bytes"`
+	PollMS      int64                      `json:"poll_ms"`
+	New         int                        `json:"new"`
+	Repeated    int                        `json:"repeated"`
+	Skipped     int                        `json:"skipped"`
+	Captured    []sourcegraph.CapturedItem `json:"captured,omitempty"`
+	TotalMS     int64                      `json:"total_ms"`
+	Error       string                     `json:"error,omitempty"`
+}
+
+// PollSourceOnce polls one registry source and writes its new items as
+// shared captures through deps.Captures. research's choir.PollSource and the
+// source schedule (Autopaper W1c) both call it. admit, when set, runs once
+// before the network fetch (the activation egress ledger); the schedule
+// passes nil and records usage on the schedule instead. The returned error
+// is for a poll that could not start (unknown source, no capture store).
+func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID, sourceID string, maxItems int, admit func() error) (PollReport, error) {
+	if strings.TrimSpace(ownerID) == "" {
+		return PollReport{}, fmt.Errorf("poll_source missing owner context")
+	}
+	if deps.Captures == nil {
+		return PollReport{}, fmt.Errorf("poll_source: the shared capture store is not configured")
+	}
+	reg, err := deps.sourceRegistry()
+	if err != nil {
+		return PollReport{}, err
+	}
+	source, ok := reg.Lookup(sourceID)
+	if !ok {
+		return PollReport{}, fmt.Errorf("poll_source: unknown source %q; known ids include %s", sourceID, strings.Join(nearbySourceIDs(reg, sourceID, 10), ", "))
+	}
+	if maxItems <= 0 {
+		maxItems = defaultPollMaxItems
+	}
+	if maxItems > maxPollMaxItems {
+		maxItems = maxPollMaxItems
+	}
+	if source.MaxItemsPerPoll <= 0 || source.MaxItemsPerPoll > maxItems {
+		source.MaxItemsPerPoll = maxItems
+	}
+	p, err := pollerFor(source, reg.UserAgent)
+	if err != nil {
+		return PollReport{}, err
+	}
+	if admit != nil {
+		if err := admit(); err != nil {
+			return PollReport{}, err
+		}
+	}
+
+	pollState.Lock()
+	if prior, ok := pollState.bySource[source.ID]; ok {
+		source.LastETag, source.LastModified, source.LastAuxCursor, source.LastPolled = prior.LastETag, prior.LastModified, prior.LastAuxCursor, prior.LastPolled
+	}
+	pollState.Unlock()
+
+	pollCtx, cancel := context.WithTimeout(ctx, pollSourceTimeout)
+	defer cancel()
+	started := time.Now()
+	polled, pollErr := p.Poll(pollCtx, &source)
+	if pollErr == nil {
+		pollState.Lock()
+		pollState.bySource[source.ID] = source
+		pollState.Unlock()
+	}
+	report := PollReport{
+		SourceID:    source.ID,
+		Status:      polled.Fetch.Status,
+		StatusCode:  polled.Fetch.StatusCode,
+		Fetched:     len(polled.Items),
+		NotModified: polled.Fetch.Status == "not_modified",
+		PollMS:      time.Since(started).Milliseconds(),
+	}
+	for _, item := range polled.Items {
+		report.ItemBytes += len(item.Body)
+	}
+	if pollErr != nil {
+		report.Error = pollErr.Error()
+		report.TotalMS = report.PollMS
+		return report, nil
+	}
+	written, err := deps.Captures.WriteCaptures(ctx, ownerID, computerID, polled.Items)
+	report.New, report.Repeated, report.Skipped, report.Captured = written.New, written.Repeated, written.Skipped, written.Captured
+	report.TotalMS = time.Since(started).Milliseconds()
+	if err != nil {
+		report.Error = err.Error()
+	}
+	return report, nil
 }
 
 func pollerFor(source sources.Source, userAgent string) (poller, error) {

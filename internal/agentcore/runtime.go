@@ -757,6 +757,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
 	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
 	bootPhase("selfdev_close_after_crash", func() { rt.closeSelfDevelopmentOperationsAfterCrash(ctx) })
+	bootPhase("source_schedules_close_after_crash", func() { rt.closeSourceSchedulesAfterCrash(ctx) })
 	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })
 	// M7 derivable continuations: every committed canonical event may carry
 	// a self-development settlement boundary (verification -> approval,

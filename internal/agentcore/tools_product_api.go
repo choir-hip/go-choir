@@ -184,6 +184,7 @@ func validateProductAPIRoute(method, requestURI string) error {
 		"/api/continuations/",
 		"/api/run-acceptances",
 		"/api/run-acceptances/",
+		"/api/autopaper/",
 	} {
 		if path == strings.TrimSuffix(allowed, "/") || strings.HasPrefix(path, allowed) {
 			return nil

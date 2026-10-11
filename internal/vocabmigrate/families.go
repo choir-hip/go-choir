@@ -178,6 +178,7 @@ var frozenOGObjectKinds = map[string]bool{
 	"choir.run_memory_entry":             true,
 	"choir.scheduler_sequence":           true,
 	"choir.source_entity":                true,
+	"choir.source_schedule":              true,
 	"choir.source_ref":                   true,
 	"choir.subject":                      true,
 	"choir.texture_decision":             true,

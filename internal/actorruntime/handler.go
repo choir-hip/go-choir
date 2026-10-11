@@ -110,6 +110,8 @@ var restartWorkKinds = map[string]bool{
 	"owner_revision": true, "lifecycle_work_assigned": true,
 	"delegated_assignment_spawn_deadline":   true,
 	"fresh_mint_management_resume_deadline": true,
+	// Autopaper's source schedule (W1c): a crash never resumes polling.
+	"source_poll_due": true,
 }
 
 func (h *actorHandler) preBootWorkOccurrence(mailboxID string, u actor.Update) bool {
@@ -199,6 +201,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return memory, nil
 	case "selfdev_materialization_retry":
 		return h.handleSelfDevelopmentMaterializationRetry(ctx, u, memory)
+	case "source_poll_due":
+		return h.handleSourcePollDue(ctx, u, memory)
 	case "lifecycle_work_assigned":
 		return h.handleLifecycleWorkAssigned(ctx, u, memory)
 	case "lifecycle_cancellation":
@@ -240,6 +244,19 @@ func (h *actorHandler) handleCellTerminalDeadline(ctx context.Context, u actor.U
 // gate — replayed or superseded wakes are no-ops.
 func (h *actorHandler) handleSelfDevelopmentMaterializationRetry(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
 	h.rt.TriggerSelfDevelopmentReconcile()
+	return memory, nil
+}
+
+// handleSourcePollDue runs one scheduled Autopaper source poll (W1c). The
+// runtime re-reads the schedule, so stale or replayed wakes do nothing.
+func (h *actorHandler) handleSourcePollDue(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, _, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve source poll scope: %w", err)
+	}
+	if err := h.rt.HandleSourcePollDue(ctx, ownerID, computerID, u.Content); err != nil {
+		return nil, fmt.Errorf("actorruntime: source poll: %w", err)
+	}
 	return memory, nil
 }
 
