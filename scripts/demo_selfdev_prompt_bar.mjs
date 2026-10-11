@@ -42,6 +42,11 @@ const approve = arg('approve', false) === true;
 const hours = Number(arg('hours', 3));
 const pollMs = Number(arg('poll-seconds', 20)) * 1000;
 const idleMs = Number(arg('idle-minutes', 30)) * 60_000;
+// --followup sends one owner follow-up on the new document (an owner revise)
+// once the document has been quiet for --followup-after-idle-minutes: the
+// persistent-desk proof (PD1) that the follow-up reaches the same desk.
+const followup = arg('followup', '');
+const followupIdleMs = Number(arg('followup-after-idle-minutes', 4)) * 60_000;
 if (!label || !prompt) throw new Error('--label and --prompt are required');
 
 const credential = JSON.parse(readFileSync(join(homedir(), '.config', 'choir-qa', 'test-computers', `${label}.json`), 'utf8'));
@@ -219,6 +224,8 @@ try {
   if (await page.locator('text=Sign in with your passkey').count()) throw new Error('browser session expired: sign-in shown after the prompt was submitted');
 
   const seenRevisions = new Map();
+  const headRevision = new Map();
+  let followupSent = !followup;
   const operationStates = {};
   const deadline = Date.now() + hours * 3600_000;
   let approved = false;
@@ -236,6 +243,7 @@ try {
         seen.add(revision.revision_id);
         fresh = true;
         lastChange = Date.now();
+        headRevision.set(doc.doc_id, revision.revision_id);
         await saveRevision(doc.doc_id, doc.title, revision, seen.size);
         const texture = manifest.timings.filter((t) => t.event.startsWith('V') && t.event !== 'V0 prompt submitted').length;
         mark(revision.author_kind === 'user' ? `seed revision` : `V${texture + 1} revision`, revision.created_at, { doc_id: doc.doc_id, revision_id: revision.revision_id, author_kind: revision.author_kind });
@@ -274,8 +282,19 @@ try {
       if (['failed', 'rejected', 'cancelled', 'rolled_back'].includes(state)) finished = { state, operationID };
       if (state === 'awaiting_approval' && !approve) finished = { state, operationID };
     }
+    if (!followupSent && headRevision.size > 0 && Date.now() - lastChange > followupIdleMs) {
+      const [docID, head] = [...headRevision.entries()][0];
+      const sent = await postJSON(`/api/texture/documents/${encodeURIComponent(docID)}/revise`, {
+        client_request_id: `demo-followup-${docID}`, prompt: followup, expected_head_revision_id: head,
+      });
+      followupSent = true;
+      lastChange = Date.now();
+      manifest.followup = { at: new Date().toISOString(), doc_id: docID, status: sent.status, prompt: followup };
+      mark('follow-up submitted', new Date(), { doc_id: docID, status: sent.status });
+      log('followup_submitted', { doc: docID, status: sent.status });
+    }
     const open = Object.values(operationStates).some((state) => !['applied', 'failed', 'rejected', 'rolled_back'].includes(state));
-    if (!finished && !open && Date.now() - lastChange > idleMs) finished = { state: 'idle', idle_minutes: idleMs / 60_000 };
+    if (!finished && !open && followupSent && Date.now() - lastChange > idleMs) finished = { state: 'idle', idle_minutes: idleMs / 60_000 };
     await persistSession();
     if (!finished) await page.waitForTimeout(pollMs);
   }
