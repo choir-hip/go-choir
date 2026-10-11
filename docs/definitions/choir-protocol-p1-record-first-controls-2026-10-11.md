@@ -26,12 +26,29 @@ start:
       recovery: git
   observed:
     - >-
-      Texture's ApplyTexture controls (open_researcher,
-      open_persistent_super, target_work_item_id) reach the store as
-      IssueLifecycleControl (internal/store/lifecycle_control_issue.go).
-      Its accumulator mints, per control, the target agent when opening
+      Texture's controls (open_researcher, open_persistent_super,
+      target_work_item_id) reach the store through two commands that share
+      one accumulator (lifecycleControlAccumulator,
+      internal/store/lifecycle_control_issue.go): ApplyTextureTurn
+      (internal/store/texture_turn.go) for controls inside a Texture turn,
+      and IssueLifecycleControl for controls issued outside one. The
+      accumulator mints, per control, the target agent when opening
       research, the work item, the source packet and lifecycle events, all
       in one conditional batch. No commitment record is minted.
+    - >-
+      The owner's management-open route (internal/textureowner/management_open.go,
+      reason "owner_management_open") also calls IssueLifecycleControl,
+      with a Texture run as the caller. That control is the owner's act,
+      not Texture's.
+    - >-
+      Readers of SourceRecordID (management_controller.go, lifecycle_control_delivery.go,
+      lifecycle.go) act only on directive-direction packets; control
+      packets keep their own direction. Directive records are excluded from
+      claims, tallies and the materiality projection (ResolveCommitments,
+      internal/types/commitment_views.go). But the desk pack reads the
+      newest 256 records of any kind before that filter
+      (internal/agentcore/tools_desk.go, ListCommitmentRecords), so new
+      records compete for that window.
     - >-
       CommitLifecycleAct (internal/store/lifecycle_commit_act.go) mints a
       commitment record object (ogKindCommitmentRecord, deterministic
@@ -44,26 +61,46 @@ start:
 
 finish:
   deliver: >-
-    Each Texture control mints one cast record, addressed to the control's
-    target desk, in the same commit as its packet, and the packet names the
-    record as its source. Records carry the fields design §10 reserves:
-    emitter kind and computer, subject references, and a content hash with
-    the store's commit time.
+    Each control mints one cast record, addressed to the control's target
+    agent, in the same commit as its packet, and the packet names the record
+    as its source. A control the owner issued records the owner as its
+    emitter, not Texture. Records carry the fields design §10 reserves.
+    What a desk or the owner sees does not change: packs, tallies and the
+    supervision projection come out the same with and without these
+    records.
   artifact: >-
-    The control accumulator mints the record; CommitmentRecord gains the
-    reserved fields (additive JSON); a trace audit script that counts
-    controls against records.
+    The accumulator mints the record for both commands; an explicit emitter
+    on the control request (agent by default, owner for the management-open
+    route); CommitmentRecord gains the reserved fields (additive JSON:
+    emitter kind, computer id, agent id, model id from the caller's run,
+    subject refs); the desk-pack and supervision record queries exclude
+    directive records in the query rather than after it; a trace audit
+    that joins each control packet to its record one to one.
   acceptance:
     - action: >-
-        Run the AI news demo on the reader test computer at P1, then count
-        Texture's issued controls and the cast records whose packet names
-        them.
-      proves: every Texture dispatch is on the ledger
-      evidence_class: deployed proof
-    - action: compare the demo's research rounds and brief with S1i
-      proves: no desk behavior changed (P1 changes no surface)
-      evidence_class: deployed comparison
-  rollback: git revert; records already minted stay (append-once) and nothing reads them yet
+        Store tests: a multi-control command mints one record per control in
+        the same batch; a failed batch commits none of them; a replay mints
+        nothing; both entry points mint; an owner-issued control records
+        the owner as emitter.
+      proves: the record and its packet commit together or not at all
+      evidence_class: unit (store, real Dolt)
+    - action: >-
+        On one ledger snapshot, each desk's acting pack, issuer tallies and
+        the supervision projection are identical with and without 300 added
+        cast records.
+      proves: P1 changes nothing a desk or the owner sees
+      evidence_class: unit (deterministic)
+    - action: >-
+        Run the AI news demo on the reader test computer at P1; join every
+        control packet issued after the deploy to its record by
+        SourceRecordID, checking addressee, emitter, scope and reserved
+        fields, one to one.
+      proves: every Texture dispatch is on the ledger on staging
+      evidence_class: deployed proof (the demo itself is a smoke test, not a comparison)
+  rollback: >-
+    git revert; records already minted stay (append-once). The query-level
+    directive filter is what keeps them out of packs, so revert it last or
+    not at all
   landing:
     required: true
     environment: staging
@@ -105,16 +142,22 @@ now:
     status: proposed
     evidence_refs: []
   decision:
-    what: a control's record is a directive of subtype cast (open or continue work), addressed to the target agent
+    what: >-
+      a control opens or continues work, so its record is a directive of
+      subtype cast addressed to the target agent; the questions in its
+      packet are the cast's instruction. Ask is reserved for a directed
+      question that resolves on a Reply, which Texture gains in P2. The
+      design's §7 wording ("a Cast or Ask per control") is corrected to
+      match
     kind: architecture
-    status: provisional (design §2; an Ask-shaped question packet stays a cast until P2 splits them)
+    status: "settled for P1 (design §2 — Cast opens or continues work)"
     evidence_ref: docs/precommitment-protocol-design-2026-10-11.md §2
   belief:
     believed_state: dispatch is off-ledger
     main_uncertainty: whether any reader of packets breaks when SourceRecordID is set on control packets
     next_observation: the file review, then the store test
   blocker_or_risk: none
-  next_action: file review; then write the ways P1 can fail and the store test, then the code
+  next_action: second file review; then the store tests, then the code
 
 receipts: []
 ---
@@ -138,6 +181,20 @@ Ways it can fail, written before the code:
   before setting it);
 - the record's body copies the whole packet and grows the ledger (keep the
   objective, the question summaries and a reference to the packet);
+- the owner's management-open control is recorded as Texture speaking
+  (the request carries an explicit emitter; the owner route sets it);
+- cast records crowd the desk pack's newest-256 window and change what a
+  desk sees (exclude directives in the query, and prove packs are
+  unchanged on a snapshot);
+- only one of the two entry points mints (both share the accumulator;
+  test both);
+- "content hash" means a field that hashes itself (it means the store
+  object's existing content hash; nothing new);
+- the commit time is the process clock rather than the commit (the record
+  takes the lifecycle receipt's time from the same commit);
+- each report's resolution scan (up to 10,000 records,
+  mechanicalResolveForReport) slows as records grow (named residual; P3
+  replaces it with targeted lookups);
 - the reserved fields are added in a way older readers reject (additive,
   omitempty);
 - the crash-boot phase treats the new records as open work (records are

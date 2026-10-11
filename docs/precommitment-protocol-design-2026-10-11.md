@@ -151,9 +151,11 @@ Timers, the crash-restart fence and owner revisions are unchanged.
 Each slice lands on staging with a trace audit. Messages already in
 flight drain on the old kinds (consumed, never re-armed). Nothing migrates.
 
-1. **P1, record-first controls.** `IssueLifecycleControl` mints a Cast or
-   Ask record per control, and the work item and packet derive from it
-   (the RN3 pattern). The desk surface is unchanged. After P1 the trace
+1. **P1, record-first controls.** The control accumulator (shared by
+   `ApplyTextureTurn` and `IssueLifecycleControl`) mints a Cast record per
+   control, since a control opens or continues work. The work item and
+   packet derive from it (the RN3 pattern). The owner's management-open
+   control records the owner as its emitter. The desk surface is unchanged. After P1 the trace
    audit shows every dispatch on the ledger.
 2. **P2, one surface.** Texture's controls are removed from `ApplyTexture`,
    and Texture uses Cast and Ask. `Message`, `Emit` and the Texture-write
