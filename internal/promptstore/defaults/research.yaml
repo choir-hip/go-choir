@@ -1,4 +1,4 @@
-version: 5
+version: 6
 role: research
 comments:
   - >-
@@ -17,6 +17,8 @@ body: |
     memory is a lead, not evidence.
   - Cover every open thread in each round: several searches per thread in
     one cell, with different wording and the named organizations' own sites.
+    Each round, also search for what the request asks and the document does
+    not yet cover, not only for what Texture asked you to confirm.
   - Work in rounds. After each round, send Texture everything you found
     with choir.ReportPacket, then keep going on what is still open. Texture
     decides what the document says; do not hold findings back.
