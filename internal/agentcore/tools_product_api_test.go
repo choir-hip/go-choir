@@ -28,7 +28,7 @@ func TestProductAPIRequestUsesCanonicalServerAndRunOwner(t *testing.T) {
 		contentType string
 		body        string
 	}
-	canonical.HandleFunc("/api/texture/documents", func(w http.ResponseWriter, r *http.Request) {
+	canonical.HandleFunc("/api/autopaper/sources/schedules", func(w http.ResponseWriter, r *http.Request) {
 		gotRequest.method = r.Method
 		gotRequest.requestURI = r.URL.RequestURI()
 		gotRequest.ownerID = r.Header.Get("X-Authenticated-User")
@@ -48,12 +48,12 @@ func TestProductAPIRequestUsesCanonicalServerAndRunOwner(t *testing.T) {
 	rt.SetProductAPIHandler(canonical)
 
 	raw, err := rt.productAPIRequest(context.Background(), "user-product-api", "owner@example.com",
-		" post ", "https://ignored.example/api/texture/documents?source=tool",
+		" post ", "https://ignored.example/api/autopaper/sources/schedules?source=tool",
 		json.RawMessage(`{"title":"Product API verb owner proof"}`))
 	if err != nil {
 		t.Fatalf("product api verb: %v", err)
 	}
-	if gotRequest.method != http.MethodPost || gotRequest.requestURI != "/api/texture/documents?source=tool" {
+	if gotRequest.method != http.MethodPost || gotRequest.requestURI != "/api/autopaper/sources/schedules?source=tool" {
 		t.Fatalf("canonical request method/URI = %q %q", gotRequest.method, gotRequest.requestURI)
 	}
 	if gotRequest.ownerID != "user-product-api" || gotRequest.ownerEmail != "owner@example.com" {
@@ -74,7 +74,7 @@ func TestProductAPIRequestUsesCanonicalServerAndRunOwner(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		t.Fatalf("decode product_api response: %v\n%s", err, raw)
 	}
-	if result.Method != http.MethodPost || result.Path != "/api/texture/documents?source=tool" || result.StatusCode != http.StatusCreated {
+	if result.Method != http.MethodPost || result.Path != "/api/autopaper/sources/schedules?source=tool" || result.StatusCode != http.StatusCreated {
 		t.Fatalf("unexpected product API result: %+v", result)
 	}
 	if result.ContentType != "application/json" || result.AllowedBy != "product_api_allowlist" {
@@ -119,7 +119,7 @@ func TestProductAPIRequestRejectsDisallowedRoutes(t *testing.T) {
 	}
 
 	oversized := json.RawMessage(`{"value":"` + strings.Repeat("x", productAPIMaxBodyBytes) + `"}`)
-	if _, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "POST", "/api/texture/documents", oversized); err == nil || !strings.Contains(err.Error(), "body exceeds 1048576 bytes") {
+	if _, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "POST", "/api/autopaper/sources/schedules", oversized); err == nil || !strings.Contains(err.Error(), "body exceeds 1048576 bytes") {
 		t.Fatalf("oversized-body error = %v", err)
 	}
 }
@@ -162,5 +162,59 @@ func TestProductAPIRequestWithoutBoundServerFailsClosed(t *testing.T) {
 	rt := &Runtime{}
 	if _, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "GET", "/api/universal-wire/stories", nil); err == nil || !strings.Contains(err.Error(), "host unavailable") {
 		t.Fatalf("unbound-server error = %v", err)
+	}
+}
+
+// P2b (docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md): only
+// the Texture desk writes a Texture, so ProductAPI refuses every non-GET
+// /api/texture/ route for every desk. The rule is by prefix and method, so a
+// Texture route added later is refused without a list to update; the paths
+// below are the routes registered today (internal/textureowner/router.go,
+// internal/apihandler/routes.go). Reads stay open, including merge-preview,
+// a POST that only computes a preview.
+func TestProductAPIRefusesEveryTextureWrite(t *testing.T) {
+	t.Parallel()
+
+	paths := []string{
+		"/api/texture/documents",
+		"/api/texture/documents/doc-1",
+		"/api/texture/documents/doc-1/revisions",
+		"/api/texture/documents/doc-1/revise",
+		"/api/texture/documents/doc-1/restore",
+		"/api/texture/documents/doc-1/accept-merge",
+		"/api/texture/documents/doc-1/tell",
+		"/api/texture/documents/doc-1/correct",
+		"/api/texture/documents/doc-1/agent-revision",
+		"/api/texture/documents/doc-1/source-open",
+		"/api/texture/revisions/rev-1",
+		"/api/texture/markdown-lineage/import",
+		"/api/texture/files/open",
+		"/api/texture/management-open",
+		"/api/texture/lifecycle-documents",
+		"/api/texture/some-route-added-later",
+	}
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
+		for _, path := range paths {
+			err := validateProductAPIRoute(method, path)
+			if err == nil || !strings.Contains(err.Error(), "only the Texture desk writes a Texture") {
+				t.Errorf("%s %s: error = %v, want a Texture-write refusal", method, path, err)
+			}
+		}
+	}
+	for _, path := range []string{
+		"/api/texture/documents",
+		"/api/texture/documents/doc-1/revisions",
+		"/api/texture/documents/doc-1/history",
+		"/api/texture/diff?from=a&to=b",
+	} {
+		if err := validateProductAPIRoute(http.MethodGet, path); err != nil {
+			t.Errorf("GET %s refused: %v", path, err)
+		}
+	}
+	if err := validateProductAPIRoute(http.MethodPost, "/api/texture/documents/doc-1/merge-preview"); err != nil {
+		t.Errorf("POST merge-preview refused: %v", err)
+	}
+	if err := validateProductAPIRoute(http.MethodPut, "/api/texture/documents/doc-1/merge-preview"); err == nil {
+		t.Errorf("PUT merge-preview allowed")
 	}
 }
