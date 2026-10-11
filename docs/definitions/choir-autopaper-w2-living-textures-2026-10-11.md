@@ -9,10 +9,10 @@ definition_version: 4
 readiness: drafted
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus file review (7 panelists)
+  frozen_ref: b36d58b3
+  verdict: send_back
+  evidence_ref: receipt W2-review1
 
 start:
   captured_at: 2026-10-11T14:40:00Z
@@ -137,8 +137,11 @@ boundaries:
     - internal/actorruntime (wake kinds, restartWorkKinds)
 
 now:
-  status: drafted
-  slice: W2a — find the delivery paths before code
+  status: blocked
+  slice: >-
+    W2 waits on the inter-agent protocol design (owner 2026-10-11: all
+    inter-agent communication through precommitment records); the file is
+    re-based on it before W2a code
   source_ref: 56ec63e0 (local; pushes after the S1h demo)
   deploy_identity: staging 726aa392
   candidate: none
@@ -179,11 +182,27 @@ now:
     so the debounce and the per-story spend record land with the first
     delivery, not after.
   next_action: >-
-    settle W1; review this file with an agentic-consensus panel; then W2a:
-    read how management is addressed and how a report reaches a Texture,
-    write the ways W2a can fail, and send one delivery by hand on staging
+    owner reviews the precommitment-records protocol design; then re-author
+    this file on it (deliveries as records addressed to management and to
+    texture:<doc>; story size as a precommit resolved by count) and re-review
 
-receipts: []
+receipts:
+  - id: W2-review1
+    at: 2026-10-11T15:40Z
+    kind: agentic-consensus file review (session scratchpad w2/review)
+    result: >-
+      Sent back 5 to 2 (Claude, Codex, GLM, GPT-6 Luna and GPT-6.1 Sol send
+      back; DeepSeek and Gemini accept). No general path exists for
+      management to deliver evidence to a Texture outside its own
+      trajectory: channel mail refuses texture targets, and management's
+      report path binds to one exact delivered control, trajectory and work
+      item. ProductAPI lets management write a Texture as the owner
+      (/revisions, /revise, /restore), so "management never writes a
+      Texture" is not enforced and acceptance could pass on owner-authored
+      revisions. A precommit cannot resolve by count (no runtime resolver,
+      no deadline, no story key). The watermark delivery can skip captures
+      (newest-first list with no cursor) and loses a notification if arming
+      fails. The prompt-bar open path cannot carry management's provenance.
 ---
 
 # W2 — living Textures
