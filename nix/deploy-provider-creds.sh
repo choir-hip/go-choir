@@ -56,6 +56,38 @@ else
   echo "warning: $ENV_FILE not found; relying on exported environment variables" >&2
 fi
 
+# Upsert mode: CHOIR_PROVIDER_ONLY_KEYS="KEY1 KEY2" replaces or appends only
+# those keys in the existing remote env file, leaves every other line and
+# the Codex auth file untouched, and restarts the gateway. Use it to add one
+# provider without regenerating (and possibly regressing) everything else.
+if [ -n "${CHOIR_PROVIDER_ONLY_KEYS:-}" ]; then
+  UPSERT=""
+  for key in $CHOIR_PROVIDER_ONLY_KEYS; do
+    value="${!key:-}"
+    if [ -z "$value" ]; then
+      echo "error: $key is not set in $ENV_FILE or the environment" >&2
+      exit 1
+    fi
+    UPSERT="${UPSERT}${key}=${value}
+"
+  done
+  echo "Upserting ${CHOIR_PROVIDER_ONLY_KEYS} into ${HOST}:${REMOTE_ENV_FILE}"
+  # Keys and values travel on stdin, never in process arguments.
+  printf '%s' "$UPSERT" | ssh "$HOST" "set -euo pipefail
+new=\$(cat)
+f=${REMOTE_ENV_FILE}
+touch \$f
+keep=\$(mktemp)
+pattern=\$(printf '%s\n' \"\$new\" | cut -d= -f1 | sed '/^\$/d; s/.*/^&=/' | paste -sd'|' -)
+grep -Ev \"\$pattern\" \$f > \$keep || true
+printf '%s\n' \"\$new\" | sed '/^\$/d' >> \$keep
+mv \$keep \$f.tmp && mv \$f.tmp \$f && chmod 600 \$f
+systemctl restart go-choir-gateway
+systemctl is-active go-choir-gateway"
+  echo "Done."
+  exit 0
+fi
+
 # We detect the provider type by apiKey prefix and baseUrl.
 ENVS=()
 
