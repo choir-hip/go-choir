@@ -421,10 +421,31 @@ func (s *ChoirScope) Emit(toDesk, kind, body string) (EmitResult, error) {
 // WebSearch resolves a web search through the host's search client under the
 // per-activation egress budget — a synchronous broker call, never an open
 // socket. Returns the tool's bounded projection as JSON.
-func (s *ChoirScope) WebSearch(query string, maxResults int) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) WebSearch(query string, maxResults int) (JSON, error) {
+	var out JSON
 	err := s.call(ActionWebSearch, WebSearchPayload{Query: query, MaxResults: maxResults}, &out)
 	return out, err
+}
+
+// JSON is the raw JSON a world verb returns. It is a byte slice, so
+// string(r), json.Unmarshal(r, &v) and []byte parameters take it, and it
+// prints as text: println(r), fmt.Println(r) and %v show the JSON, not a
+// list of byte values, and json.Marshal embeds it as JSON
+// (problems/research-parent-cannot-read-its-children-2026-10-11.md).
+type JSON []byte
+
+func (j JSON) String() string { return string(j) }
+
+func (j JSON) MarshalJSON() ([]byte, error) {
+	if len(j) == 0 {
+		return []byte("null"), nil
+	}
+	return j, nil
+}
+
+func (j *JSON) UnmarshalJSON(data []byte) error {
+	*j = append((*j)[:0], data...)
+	return nil
 }
 
 // Research runs child research activations on the host, in parallel, and
@@ -486,86 +507,86 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 // FetchURL resolves a URL fetch through the host's HTTP client under the
 // per-activation egress budget — synchronous, bounded, never an open socket.
 // Returns the tool's bounded projection as JSON.
-func (s *ChoirScope) FetchURL(url string) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) FetchURL(url string) (JSON, error) {
+	var out JSON
 	err := s.call(ActionFetchURL, FetchURLPayload{URL: url}, &out)
 	return out, err
 }
 
 // SourceSearch queries the Source Service through the host; returns the
 // bounded source-list projection as JSON.
-func (s *ChoirScope) SourceSearch(query string, maxResults int) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) SourceSearch(query string, maxResults int) (JSON, error) {
+	var out JSON
 	err := s.call(ActionSourceSearch, SourceSearchPayload{Query: query, MaxResults: maxResults}, &out)
 	return out, err
 }
 
 // ImportDocument imports a URL or file path into the ContentItem substrate.
-func (s *ChoirScope) ImportDocument(url, filePath, query string) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) ImportDocument(url, filePath, query string) (JSON, error) {
+	var out JSON
 	err := s.call(ActionImportDocument, ImportDocumentPayload{URL: url, FilePath: filePath, Query: query}, &out)
 	return out, err
 }
 
 // ImportURL imports a URL into the ContentItem substrate.
-func (s *ChoirScope) ImportURL(url, query string) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) ImportURL(url, query string) (JSON, error) {
+	var out JSON
 	err := s.call(ActionImportURL, ImportURLPayload{URL: url, Query: query}, &out)
 	return out, err
 }
 
 // ReadContentItem reads an owner-scoped ContentItem's bounded text/metadata.
-func (s *ChoirScope) ReadContentItem(contentID string, maxTextChars, maxSegments int) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) ReadContentItem(contentID string, maxTextChars, maxSegments int) (JSON, error) {
+	var out JSON
 	err := s.call(ActionReadContentItem, ReadContentItemPayload{ContentID: contentID, MaxTextChars: maxTextChars, MaxSegments: maxSegments}, &out)
 	return out, err
 }
 
 // ListContentSelectors lists addressable selectors (pages/slides/chunks).
-func (s *ChoirScope) ListContentSelectors(contentID string) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) ListContentSelectors(contentID string) (JSON, error) {
+	var out JSON
 	err := s.call(ActionListContentSelectors, ListContentSelectorsPayload{ContentID: contentID}, &out)
 	return out, err
 }
 
 // ReadContentSelector reads one exact selector's text from a ContentItem.
-func (s *ChoirScope) ReadContentSelector(contentID, selectorID string, maxTextChars int) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) ReadContentSelector(contentID, selectorID string, maxTextChars int) (JSON, error) {
+	var out JSON
 	err := s.call(ActionReadContentSelector, ReadContentSelectorPayload{ContentID: contentID, SelectorID: selectorID, MaxTextChars: maxTextChars}, &out)
 	return out, err
 }
 
 // SearchWireCorpus searches the owner's published wire corpus.
-func (s *ChoirScope) SearchWireCorpus(query string, limit int) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) SearchWireCorpus(query string, limit int) (JSON, error) {
+	var out JSON
 	err := s.call(ActionSearchWireCorpus, SearchWireCorpusPayload{Query: query, Limit: limit}, &out)
 	return out, err
 }
 
 // SaveEvidence persists evidentiary material into the owner's Dolt workspace.
-func (s *ChoirScope) SaveEvidence(kind, sourceURI, title, content string, metadata json.RawMessage) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := s.call(ActionSaveEvidence, SaveEvidencePayload{Kind: kind, SourceURI: sourceURI, Title: title, Content: content, Metadata: metadata}, &out)
+func (s *ChoirScope) SaveEvidence(kind, sourceURI, title, content string, metadata []byte) (JSON, error) {
+	var out JSON
+	err := s.call(ActionSaveEvidence, SaveEvidencePayload{Kind: kind, SourceURI: sourceURI, Title: title, Content: content, Metadata: json.RawMessage(metadata)}, &out)
 	return out, err
 }
 
 // ReadEvidence reads one saved evidence record by id.
-func (s *ChoirScope) ReadEvidence(evidenceID string) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) ReadEvidence(evidenceID string) (JSON, error) {
+	var out JSON
 	err := s.call(ActionReadEvidence, ReadEvidencePayload{EvidenceID: evidenceID}, &out)
 	return out, err
 }
 
 // ListEvidence lists recent saved evidence for an agent or the owner scope.
-func (s *ChoirScope) ListEvidence(agentID string, limit int) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) ListEvidence(agentID string, limit int) (JSON, error) {
+	var out JSON
 	err := s.call(ActionListEvidence, ListEvidencePayload{AgentID: agentID, Limit: limit}, &out)
 	return out, err
 }
 
 // RunMemoryEntry retrieves one durable run-memory entry by id.
-func (s *ChoirScope) RunMemoryEntry(entryID string) (json.RawMessage, error) {
-	var out json.RawMessage
+func (s *ChoirScope) RunMemoryEntry(entryID string) (JSON, error) {
+	var out JSON
 	err := s.call(ActionGetRunMemoryEntry, GetRunMemoryEntryPayload{EntryID: entryID}, &out)
 	return out, err
 }
@@ -576,9 +597,9 @@ func (s *ChoirScope) RunMemoryEntry(entryID string) (json.RawMessage, error) {
 // absolute /api/... route on the product-path allowlist; body is an optional
 // JSON object. The host validates and serves the route, returning a bounded
 // {status_code, content_type, body} JSON result.
-func (s *ChoirScope) ProductAPI(method, path string, body json.RawMessage) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := s.call(ActionProductAPI, ProductAPIPayload{Method: method, Path: path, Body: body}, &out)
+func (s *ChoirScope) ProductAPI(method, path string, body []byte) (JSON, error) {
+	var out JSON
+	err := s.call(ActionProductAPI, ProductAPIPayload{Method: method, Path: path, Body: json.RawMessage(body)}, &out)
 	return out, err
 }
 
@@ -691,6 +712,8 @@ func jsonCellArg(v any) (string, error) {
 	case string:
 		return t, nil
 	case json.RawMessage:
+		return string(t), nil
+	case JSON:
 		return string(t), nil
 	case []byte:
 		return string(t), nil

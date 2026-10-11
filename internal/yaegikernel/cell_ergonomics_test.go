@@ -1,6 +1,8 @@
 package yaegikernel
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -46,7 +48,7 @@ func TestCellPredeclaresCommonPackagesAndShowsTheFinalValue(t *testing.T) {
 	if out := cell(`y := "assigned"`); out.Stdout != "" {
 		t.Fatalf("assignment cell gained output: %q", out.Stdout)
 	}
-	if out := cell(`strings.Repeat("z", 100000)`); len(out.Stdout) > 9000 {
+	if out := cell(`strings.Repeat("z", 100000)`); len(out.Stdout) > maxShownCellValue+100 {
 		t.Fatalf("huge value not truncated: %d bytes", len(out.Stdout))
 	}
 }
@@ -192,5 +194,55 @@ func TestCellShowsEveryListedNameAndJSONBytesAsText(t *testing.T) {
 	out, err = serveCell(sess, SessionFrame{ID: "cell2", Source: "r"}, nil, &hooks)
 	if err != nil || !strings.Contains(out.Stdout, "=> {\"results\"") {
 		t.Fatalf("final JSON bytes not shown as text: %v %q", err, out.Stdout)
+	}
+}
+
+// problems/research-parent-cannot-read-its-children-2026-10-11.md. Failure
+// modes pinned: println, fmt.Println or %v of a world verb's JSON prints
+// byte values; json.Marshal of a struct holding it base64-encodes it;
+// string(r), json.Unmarshal(r, ...) or passing r to a JSON parameter stop
+// compiling; a listed value of a few thousand characters (a child's
+// findings) is cut off well inside the cell's output limit.
+func TestWorldVerbJSONPrintsAsTextAndListedValuesShowInFull(t *testing.T) {
+	root := t.TempDir()
+	secret := make([]byte, 32)
+	issuer, err := NewHandleIssuer(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := NewBroker(BrokerConfig{ComputerID: "computer-choir", CurrentEpoch: 1, AllowedRoot: root,
+		Egress: func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+			return json.RawMessage(`{"results":[{"title":"x"}]}`), nil
+		}}, issuer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearchChild, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	cell := func(source string) SessionResult {
+		t.Helper()
+		out, err := serveCell(sess, SessionFrame{ID: "cell", Source: source}, nil, &hooks)
+		if err != nil || out.Error != "" {
+			t.Fatalf("cell failed: %v %q\n%s", err, out.Error, source)
+		}
+		return out
+	}
+	const want = `{"results":[{"title":"x"}]}`
+	out := cell("r, err := choir.WebSearch(\"q\", 3)\nprintln(r)\nfmt.Println(r, err)\nfmt.Printf(\"%v|%s\\n\", r, r)\nb, _ := json.Marshal(map[string]any{\"r\": r})\nfmt.Println(string(b))\nvar v map[string]any\nfmt.Println(json.Unmarshal(r, &v), len(string(r)) > 0)")
+	wantOut := want + "\n" + want + " <nil>\n" + want + "|" + want + "\n" + `{"r":` + want + "}\n<nil> true\n"
+	if out.Stdout != wantOut {
+		t.Fatalf("stdout = %q\nwant     %q", out.Stdout, wantOut)
+	}
+	out = cell("long := strings.Repeat(\"f\", 20000)\nlong\nlen(long)")
+	if !strings.Contains(out.Stdout, strings.Repeat("f", 20000)) {
+		t.Fatalf("a 20,000-character listed value was cut: %d bytes shown", len(out.Stdout))
 	}
 }

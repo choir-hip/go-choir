@@ -306,10 +306,8 @@ func classifyExecuteError(evalErr error, panicked bool) DiagnosticKind {
 	return DiagRuntime
 }
 
-// Close retires the session. In-flight Eval calls are unaffected beyond their
-// own contexts; the broker SIGKILLs the worker process for hard termination.
 // maxShownListedValue bounds each listed name's line in a cell result.
-const maxShownListedValue = 4000
+const maxShownListedValue = maxShownCellValue
 
 // showListedNames shows, after a successful cell, each bare name the cell
 // listed before its last statement, as "=> name: value". Reading a variable
@@ -341,6 +339,8 @@ func (s *Session) showListedNames(source string) (out string) {
 	return b.String()
 }
 
+// Close retires the session. In-flight Eval calls are unaffected beyond their
+// own contexts; the broker SIGKILLs the worker process for hard termination.
 func (s *Session) Close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

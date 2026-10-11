@@ -173,8 +173,12 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	return out, nil
 }
 
-// maxShownCellValue bounds the final-value line a cell result carries.
-const maxShownCellValue = 8000
+// maxShownCellValue bounds one value a cell result shows. It is sized under
+// the 100 KB a tool result carries to the model, not for probing: a
+// choir.Research result is several children's multi-thousand-character
+// findings, and a 4,000-character bound hid most of them
+// (problems/research-parent-cannot-read-its-children-2026-10-11.md).
+const maxShownCellValue = 48000
 
 // describeCellValue renders a cell's final value, REPL style, when the cell
 // ends in a bare expression that is not itself a print call. Models probe
