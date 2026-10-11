@@ -233,3 +233,27 @@ Ways it can fail, written before the code:
   the schedule runs (the W1 acceptance), before widening any pool;
 - usage is not recorded: every poll writes one usage record (source,
   items fetched and new, bytes, duration, error).
+
+## Open: where captures live (owner question, 2026-10-11 10:30Z)
+
+Owner: "autopaper shouldnt run on embedded dolt, but global dolt ... the
+point is to make it a resource for everyone. then individual users/vms
+(and eventually, different hosts) can have overlays to filter, customize,
+combine private data."
+
+The 2026-10-09 decision (design §8) puts the paper's working state,
+captures included, in the paper computer's embedded Dolt, with the host
+store behind corpusd holding only published Textures. W1b as landed
+(c1d21d5e) follows it: `choir.PollSource` writes captures into the polling
+computer's own object graph. Under the owner's question, captures are a
+shared resource. They belong in the host store, and each computer keeps an
+overlay of its own filters, private data and Textures that refers to
+shared objects by id and version.
+
+Agent recommendation: captures (metadata in the host store, bodies in
+host content storage, never Dolt rows) and published Textures are global.
+Desk working state, private documents and overlays stay embedded. This
+also takes high-volume ingest off every guest's embedded connection, so
+C1 stops being on Autopaper's path at all. W1c (the schedule inside the
+guest) waits for this decision. The pollers, metadata, dedupe and segment
+format carry over; only the sink changes.
