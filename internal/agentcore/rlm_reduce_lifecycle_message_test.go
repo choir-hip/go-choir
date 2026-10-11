@@ -565,7 +565,12 @@ func TestCommitTrayLifecycleCastMintsBeforeAdmission(t *testing.T) {
 		Profile: agentprofile.Texture, Role: agentprofile.Texture,
 		RunRecord: &caller,
 	})
-	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
+	// The act path under test is the generic desk one; since protocol P2a a
+	// Texture run's Cast or Ask folds into its turn and may not address
+	// engineering, so the reducer runs this fixture's caller as a desk.
+	deskCaller := caller
+	deskCaller.AgentProfile = agentprofile.Management
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &deskCaller}
 
 	// The cast record+packet mint atomically; admission fails on the missing
 	// capsule executor in the test runtime — the same legacy-ordering defect,
@@ -625,7 +630,9 @@ func TestCommitTrayLifecycleAskPrecommitMintRecordNative(t *testing.T) {
 		Profile: agentprofile.Texture, Role: agentprofile.Texture,
 		RunRecord: &caller,
 	})
-	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &caller}
+	deskCaller := caller
+	deskCaller.AgentProfile = agentprofile.Management
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &deskCaller}
 
 	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
 		{LocalID: "ask-1", Kind: yaegikernel.IntentAsk, ToDesk: "engineering", Question: "does the build pass?"},
