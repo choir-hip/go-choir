@@ -183,9 +183,30 @@ now:
       model actually reports per round.
     next_observation: S1c trace — every research control targets research:<doc>; follow-up run exists
   blocker_or_risk: none
-  next_action: after deploy, restart demo-arxiv-2026-10-10c and run S1c with --followup
+  next_action: deploy the fixes S1c found (outline in cell, frame boundary, rate-limit bench, Keenable, PD2) and rerun as S1d
 
-receipts: []
+receipts:
+  - id: S1c
+    at: 2026-10-11T02:57Z
+    deploy: staging 16d7c21a, test computer demo-arxiv-2026-10-10c
+    kind: deployed proof (traces in session scratchpad s1c-1..s1c-final)
+    result: >-
+      Identity and routing hold: one research agent
+      (research:630ce665-...) served the request, the harness follow-up
+      (02:11:30) and four rounds (6939c9b3, 00080325, ff5ffe73, 5732f8f7),
+      each 1-3 minutes. Earlier demos had two research agents per request.
+      Each round closed its work as completed, and Texture opened the next.
+      Coverage misses the conjecture: the final revision (02:37) has about
+      1,000 words and 9 source links against the baseline's 26 items, with
+      two overlapping. Causes from the traces: five of seven search
+      providers were cooling down (24h benches from S1b;
+      problems/search-rate-limit-benches-provider-for-a-day-2026-10-11.md).
+      Texture spent 87 cells, 34 of them failed, mostly probing ApplyTexture
+      and guessing block ids it could not see
+      (problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md).
+      First grounded revision came at 02:12:54, 6 minutes after the prompt
+      and 4.4 minutes after research reported.
+    conjecture: PD1-1 refuted on coverage; identity and follow-up claims supported
 ---
 
 # PD1 — persistent research desk
