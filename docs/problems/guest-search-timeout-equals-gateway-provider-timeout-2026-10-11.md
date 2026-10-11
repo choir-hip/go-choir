@@ -15,7 +15,7 @@ branches stayed open.
 The gateway's log for the same search says it succeeded:
 
 - 19:47:26 search request (query "AI funding deal October 2026 startup investment")
-- 19:47:56 search succeeded (provider tavily, 40 results)
+- 19:47:56 search succeeded (provider tavily alone, 10 results)
 
 That is thirty seconds and a few hundred milliseconds.
 
@@ -27,11 +27,11 @@ That is thirty seconds and a few hundred milliseconds.
 - The gateway gives each search provider 30 seconds
   (internal/gateway/search.go, every provider's http.Client).
 
-- The gateway's router runs up to four waves by default
-  (internal/gateway/searchplane/config.go, CHOIR_SEARCH_MAX_WAVES=4), each
-  provider call bounded by RequestTimeout (30 seconds), until it has 40
-  merged results. A search can legitimately take two minutes at the
-  gateway.
+- The gateway handler bounds the whole search at 30 seconds as well
+  (internal/gateway/handlers.go, context.WithTimeout(r.Context(), 30s)),
+  and returns the partial results it has at that deadline. (An earlier
+  version of this document said a search could take two minutes through
+  the router's waves; that was wrong: the handler's deadline caps it.)
 
 So any provider call that takes close to its full budget succeeds at the
 gateway after the guest has already returned a timeout to the cell. If the
@@ -57,14 +57,17 @@ timeouts" for thin coverage when the gateway had one seven-second outage in
 sixteen calls. A desk that cannot tell a slow search from a failed one
 narrows its own coverage and explains it wrongly.
 
-## Preferred fix (deferred)
+## Measurement and design (2026-10-11, later)
 
-Raising the guest's deadline to cover four waves would make a cell wait two
-minutes on one search. The better fix is a total deadline on the gateway's
-router, below the guest's, that returns the merged results it has when the
-deadline arrives (marked degraded), instead of letting waves run past the
-caller. That is a gateway provider-call change (red), off Autopaper's path,
-so it waits; this document is its first commit.
+docs/search-plane-design-fast-deep-broad-2026-10-11.md measured 509
+searches over 24 hours: 51 (10%) ran to exactly 30.0 seconds at the gateway
+and were logged as succeeded, usually with only one provider's 10 results;
+every guest-side search timeout in two saved demo traces matches one of
+them. The likely stalled provider is ChatGPT web search (inference, medium
+to high confidence). The proposed first fix orders the deadlines so each
+layer gives up before the one above it (provider about 10 seconds, gateway
+about 25, guest about 35). Not built: the owner asked for design before
+building.
 
 Mutation class of a fix: red (gateway provider calls) on the gateway side,
 orange on the guest client.
