@@ -35,6 +35,21 @@ const researchChildPreamble = `You are a child research activation working for a
 // never holds a slot they need.
 const researchChildCallInterval = 1500 * time.Millisecond
 
+// The time carve-out (M6.5: "a carve-out of the parent's budget"). A
+// desk's choir.Research call returns within researchCallWindow, so the desk
+// can report; each child gets researchChildShare of its parent's remaining
+// time and is told it; a child with less than researchMinFanoutTime left
+// cannot fan out and does the work itself. Depth and width stay the model's
+// choice inside that time
+// (problems/research-fanout-overruns-computer-model-budget-2026-10-11.md,
+// amendment 00:52Z).
+var (
+	researchCallWindow    = 10 * time.Minute
+	researchMinFanoutTime = 2 * time.Minute
+)
+
+const researchChildShare = 0.75
+
 // callSpacer hands out model-call start times at least interval apart.
 type callSpacer struct {
 	mu       sync.Mutex
@@ -131,6 +146,16 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 		return nil, fmt.Errorf("research: no model provider on this computer")
 	}
 	lineage := researchLineageFrom(ctx, parent)
+	_, nested := ctx.Value(researchLineageKey{}).(researchLineage)
+	deadline, ok := ctx.Deadline()
+	if !nested && (!ok || time.Until(deadline) > researchCallWindow) {
+		deadline = time.Now().Add(researchCallWindow)
+	}
+	if left := time.Until(deadline); nested && left < researchMinFanoutTime {
+		return nil, fmt.Errorf("research: %s left, too little to fan out; do this work yourself and end with your findings", left.Round(time.Second))
+	}
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 	results := make([]yaegikernel.ResearchChildResult, len(req.Children))
 	sem := make(chan struct{}, researchChildConcurrency)
 	var wg sync.WaitGroup
@@ -169,6 +194,9 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	childExec.Profile = agentprofile.Research
 	childExec.Role = yaegikernel.SessionRoleResearchChild
 	childExec.RunID = researchBudgetKey(parent)
+	share := researchChildDeadline(ctx)
+	ctx, cancel := context.WithDeadline(ctx, share)
+	defer cancel()
 	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, selection: selection})
 	childCtx = toolregistry.WithExecutionContext(childCtx, childExec)
 
@@ -191,7 +219,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	noEmit := func(types.EventKind, string, json.RawMessage) {}
 	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.researchChildSpacer()}
 	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
-		[]json.RawMessage{userMsg}, researchChildPreamble+"\n\n"+rolePrompt,
+		[]json.RawMessage{userMsg}, researchChildPreamble+researchChildTime(share)+"\n\n"+rolePrompt,
 		provideriface.MaxInteractiveOutputTokensForSelection(selection, agentprofile.Research),
 		noEmit, nil, toolregistry.WithToolLoopLLMConfig(selection))
 	result.Findings = strings.TrimSpace(text)
@@ -202,6 +230,21 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	log.Printf("research child: root=%s model=%s duration_ms=%d input_tokens=%d output_tokens=%d findings_chars=%d error=%q",
 		childExec.RunID, selection.Model, result.DurationMs, usage.InputTokens, usage.OutputTokens, len(result.Findings), result.Error)
 	return result
+}
+
+// researchChildDeadline is a child's share of its parent's remaining time,
+// measured when the child starts (queueing counts against the parent).
+func researchChildDeadline(ctx context.Context) time.Time {
+	parentDeadline, ok := ctx.Deadline()
+	if !ok {
+		parentDeadline = time.Now().Add(researchCallWindow)
+	}
+	return time.Now().Add(time.Duration(float64(time.Until(parentDeadline)) * researchChildShare))
+}
+
+// researchChildTime tells the child how long it has.
+func researchChildTime(deadline time.Time) string {
+	return fmt.Sprintf(" You have about %s for this objective; findings you have not returned by then are lost.", time.Until(deadline).Round(time.Second))
 }
 
 // researchBudgetKey is the egress budget key of the root research

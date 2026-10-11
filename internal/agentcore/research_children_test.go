@@ -205,3 +205,87 @@ fmt.Println(len(res), err)`
 		}
 	}
 }
+
+// timedChildProvider: objective "hang" never answers until its deadline;
+// objective "nest" tries to fan out once, then ends with what its cell
+// printed. It records whether each child was told its time.
+type timedChildProvider struct {
+	provideriface.Provider
+	mu   sync.Mutex
+	told []bool
+}
+
+func (p *timedChildProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
+	p.mu.Lock()
+	p.told = append(p.told, strings.Contains(req.System, "You have about"))
+	p.mu.Unlock()
+	raw := rawMessagesForTest(req.Messages)
+	if strings.Contains(raw, "hang") && !strings.Contains(raw, "nest") {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if !strings.Contains(raw, "call-nest-cell") {
+		args, _ := json.Marshal(map[string]any{"source": "r, err := choir.Research(\"hang\")\nfmt.Println(len(r), err)"})
+		return &provideriface.ToolLoopResponse{StopReason: "tool_use", ToolCalls: []types.ToolCall{{ID: "call-nest-cell", Name: "desk_go_eval", Arguments: args}}, Model: "test-model"}, nil
+	}
+	return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "nest saw: " + raw[strings.Index(raw, "call-nest-cell"):], Model: "test-model"}, nil
+}
+
+// problems/research-fanout-overruns-computer-model-budget-2026-10-11.md
+// (amendment 00:52Z): children delegated again and again, and the desk's
+// choir.Research call never returned. Failure modes pinned: a desk's call
+// waits past its window for a child that never answers; a child is not
+// told how long it has; a child with too little time left fans out again
+// instead of being told to do the work itself.
+func TestResearchTreeReturnsWithinItsTime(t *testing.T) {
+	deskTestWorkerBin(t)
+	window, minFanout := researchCallWindow, researchMinFanoutTime
+	researchCallWindow, researchMinFanoutTime = 4*time.Second, 3500*time.Millisecond
+	defer func() { researchCallWindow, researchMinFanoutTime = window, minFanout }()
+	provider := &timedChildProvider{}
+	rt := &Runtime{
+		provider:           provider,
+		modelPolicy:        modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
+		researchChildCalls: &callSpacer{},
+		researchDeps:       &researchtools.Dependencies{Search: &stubSearchClient{}, Egress: researchtools.NewEgressBudgetLedger(16, 32<<20)},
+	}
+	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
+	execCtx := deskEvalExecCtx(t)
+	execCtx.RunID = "run-research-timed"
+	execCtx.Profile = agentprofile.Research
+	execCtx.Role = agentprofile.Research
+	ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
+	src := `res, err := choir.Research([]string{"hang", "nest"})
+b, _ := json.Marshal(res)
+fmt.Println(string(b), err)`
+	start := time.Now()
+	out, err := tool.Func(ctx, json.RawMessage(`{"source":`+cellSource(src)+`}`))
+	if err != nil {
+		t.Fatalf("desk_go_eval: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 4*time.Second+2*time.Second {
+		t.Fatalf("the desk's Research call took %s, past its 4 s window", elapsed)
+	}
+	var cell struct{ Stdout, Error string }
+	if err := json.Unmarshal([]byte(out), &cell); err != nil || cell.Error != "" {
+		t.Fatalf("cell failed: %v %s", err, out)
+	}
+	line := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(cell.Stdout), "<nil>"))
+	var results []yaegikernel.ResearchChildResult
+	if err := json.Unmarshal([]byte(line), &results); err != nil || len(results) != 2 {
+		t.Fatalf("decode results from %q: %v", cell.Stdout, err)
+	}
+	if !strings.Contains(results[0].Error, "deadline") {
+		t.Fatalf("a child that never answered did not end at its deadline: %+v", results[0])
+	}
+	if !strings.Contains(results[1].Findings, "too little to fan out") {
+		t.Fatalf("a child with %s left was not told to do the work itself: %+v", 3*time.Second, results[1])
+	}
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	for i, told := range provider.told {
+		if !told {
+			t.Fatalf("child call %d was not told its time", i)
+		}
+	}
+}
