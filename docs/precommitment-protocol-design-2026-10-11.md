@@ -207,6 +207,24 @@ flight drain on the old kinds (consumed, never re-armed). Nothing migrates.
    per-computer keys. Until then, a store-assigned commit time and content
    hash are the integrity floor, and records are marked unsigned.
 
+### Owner answers (2026-10-11, evening)
+
+- Item 1: predictions are mandatory.
+- Item 2: the scorer is not settled; it is to be learned from iteration
+  (self, the answering desk, or management, possibly with Jev). Design in
+  docs/precommitment-predictions-and-scoring-design-2026-10-11.md.
+- Item 3: open; the owner asks whether Assign is a needless subsystem
+  that can be simplified without changing its essence (review in
+  docs/protocol-review-assign-and-engineering-routing-2026-10-11.md).
+- Item 8: the owner trusts the recommendation and asks what blocks real
+  per-computer keys (docs/precommitment-signing-and-computer-keys-2026-10-11.md).
+- Addressing: management sends records and scores to a Texture desk and
+  never modifies a Texture document. Engineering does not address a
+  Texture; it goes through management, and management (with Jev) decides
+  whether to pass a report through or restate it, to protect the Texture
+  and the owner from overly technical content (review in the same Assign
+  and routing doc).
+
 ## 10. One schema for desks, Autopaper and the economy of agents
 
 Owner, 2026-10-11: "we aim to use the same precommitment records between

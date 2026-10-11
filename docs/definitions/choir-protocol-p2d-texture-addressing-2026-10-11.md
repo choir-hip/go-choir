@@ -292,7 +292,11 @@ now:
     is open on the same activation path. The bound starves a poll-driven
     W2 feed until P5 re-bases the request on the story (named residual on
     W2's start)
-  next_action: round two file review; then P2d1 (the gate) through the landing loop
+  next_action: >-
+    owner direction 2026-10-11 evening: research, review and design before
+    building. P2d2 waits for the owner's review of this file and of
+    docs/protocol-review-assign-and-engineering-routing-2026-10-11.md
+    (engineering reaches a Texture only through management)
 
 receipts:
   - id: P2d-review2

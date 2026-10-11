@@ -200,6 +200,12 @@ fix: do these bugs share a common cause? Is there existing code that addresses
 the root cause but isn't wired in? If 3+ symptoms trace to the same substrate,
 the next action is substrate-level, not symptom-level.
 
+**Understand before tuning; panels for uncertainty** (owner, 2026-10-11).
+Do not hill-climb a prompt or a parameter until the failure is understood
+from traces and code: root-cause first, then change. Use agentic-consensus
+panels where the answer is genuinely uncertain, not as ceremony on settled
+or low-risk slices.
+
 **Escalate on dead ends.** If you've been working on the same problem for 3+
 iterations or 2+ days without convergence, stop patching. Write a structural
 assessment — dependency graph, whether a substrate-level fix would eliminate the
