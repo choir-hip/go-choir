@@ -293,3 +293,23 @@ func TestParseRSSLikeFeedStripsInvalidXMLControlBytes(t *testing.T) {
 		t.Fatalf("items = %+v, want invalid XML control byte stripped", feed.Items)
 	}
 }
+
+// RSS 1.0 (RDF) puts items beside the channel, not inside it
+// (problems/source-polls-fail-quietly-in-first-scheduled-run-2026-10-11.md).
+func TestParseRSSLikeFeedReadsRDFItemsBesideTheChannel(t *testing.T) {
+	feed, err := parseRSSLikeFeed([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+ <channel rdf:about="https://example.com/feed"><title>Example</title><items><rdf:Seq><rdf:li rdf:resource="https://example.com/a"/></rdf:Seq></items></channel>
+ <item rdf:about="https://example.com/a"><title>First</title><link>https://example.com/a</link><description>One</description><dc:date>2026-10-11T11:00:00Z</dc:date></item>
+ <item rdf:about="https://example.com/b"><title>Second</title><link>https://example.com/b</link><description>Two</description><dc:date>2026-10-11T10:00:00Z</dc:date></item>
+</rdf:RDF>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(feed.Items) != 2 || feed.Items[0].Title != "First" || feed.Items[1].Link != "https://example.com/b" {
+		t.Fatalf("RDF items = %+v", feed.Items)
+	}
+	if published, ok := parseFeedTime(feed.Items[0].Published); !ok || published.Hour() != 11 {
+		t.Fatalf("RDF dc:date not read as the published time: %q", feed.Items[0].Published)
+	}
+}

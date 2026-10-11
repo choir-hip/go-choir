@@ -177,6 +177,8 @@ type feedEnvelope struct {
 	Channel *struct {
 		Items []feedItem `xml:"item"`
 	} `xml:"channel"`
+	// RSS 1.0 (RDF) items are children of the root, beside the channel.
+	Items   []feedItem  `xml:"item"`
 	Entries []atomEntry `xml:"entry"`
 }
 
@@ -186,6 +188,8 @@ type feedItem struct {
 	Link        string `xml:"link"`
 	Description string `xml:"description"`
 	Published   string `xml:"pubDate"`
+	// DCDate is RSS 1.0's published time (dc:date).
+	DCDate string `xml:"http://purl.org/dc/elements/1.1/ date"`
 }
 
 type atomEntry struct {
@@ -213,8 +217,18 @@ func parseRSSLikeFeed(data []byte) (parsedFeed, error) {
 	if err := decoder.Decode(&env); err != nil {
 		return parsedFeed{}, err
 	}
-	if env.Channel != nil {
+	if env.Channel != nil && len(env.Channel.Items) > 0 {
 		return parsedFeed{Items: env.Channel.Items}, nil
+	}
+	if len(env.Items) > 0 {
+		items := make([]feedItem, 0, len(env.Items))
+		for _, item := range env.Items {
+			if item.Published == "" {
+				item.Published = item.DCDate
+			}
+			items = append(items, item)
+		}
+		return parsedFeed{Items: items}, nil
 	}
 	items := make([]feedItem, 0, len(env.Entries))
 	for _, entry := range env.Entries {
