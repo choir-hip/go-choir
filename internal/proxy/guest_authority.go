@@ -13,6 +13,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
+// maxGuestCaptureRequestBytes matches corpusd's capture request bound.
+const maxGuestCaptureRequestBytes = 64 << 20
+
 func trustedInternalProxyTransport(r *http.Request) bool {
 	if r == nil {
 		return false
@@ -65,16 +68,37 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		return err
 	}
 	if r.Method == http.MethodGet {
-		if r.URL.Path == "/internal/platform/objects" || r.URL.Path == "/internal/platform/edges" {
+		// Capture bodies are shared Autopaper content: any bound guest reads
+		// them (W1b2).
+		if r.URL.Path == "/internal/platform/objects" || r.URL.Path == "/internal/platform/edges" ||
+			strings.HasPrefix(r.URL.Path, "/internal/platform/captures/bodies/") {
 			return nil
 		}
 		return fmt.Errorf("guest object graph reads must use a collection route")
 	}
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxGuestCaptureRequestBytes+1))
 	if err != nil {
 		return fmt.Errorf("read object graph request: %w", err)
 	}
+	if len(body) > maxGuestCaptureRequestBytes {
+		return fmt.Errorf("object graph request too large")
+	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
+	if r.URL.Path == "/internal/platform/captures" {
+		// corpusd sees the proxy as an internal caller, so the guest's
+		// ownership of the captures it writes is checked here, as for
+		// object writes.
+		var captures struct {
+			OwnerID    string `json:"owner_id"`
+			ComputerID string `json:"computer_id"`
+		}
+		if err := json.Unmarshal(body, &captures); err != nil ||
+			strings.TrimSpace(captures.OwnerID) != strings.TrimSpace(ownership.UserID) ||
+			strings.TrimSpace(captures.ComputerID) != strings.TrimSpace(ownership.ComputerID) {
+			return fmt.Errorf("guest caller is not bound to capture owner and computer")
+		}
+		return nil
+	}
 	if strings.HasSuffix(r.URL.Path, "/objects") {
 		var object objectgraph.Object
 		if err := json.Unmarshal(body, &object); err != nil ||

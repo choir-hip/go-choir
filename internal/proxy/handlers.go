@@ -1768,7 +1768,11 @@ func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Reque
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	w.Header().Set("Content-Type", "application/json")
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(resp.StatusCode)
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		log.Printf("proxy: corpusd objectgraph copy: %v", err)
@@ -1816,6 +1820,10 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/objects", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/internal/platform/objects/", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/internal/platform/edges", h.HandlePlatformObjectGraph)
+	// Autopaper captures (W1b2): a guest writes one poll's captures and reads
+	// shared capture bodies through the same bound-guest pass-through.
+	s.HandleFunc("/internal/platform/captures", h.HandlePlatformObjectGraph)
+	s.HandleFunc("/internal/platform/captures/bodies/", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/assets/", h.HandleComputerSurface)
 	s.HandleFunc("/", h.HandleComputerSurface)
 }
