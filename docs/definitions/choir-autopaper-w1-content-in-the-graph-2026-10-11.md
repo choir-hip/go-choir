@@ -201,3 +201,32 @@ Ways it can fail, written before the code:
 - a crash mid-poll leaves appended bytes with no object; that is harmless
   (a partial last line is skipped by readers and the next append starts a
   new line), but an object must never name bytes that are not there.
+
+## W1c — the source schedule as timer obligations (planned)
+
+The runtime already has durable wakes with a not-before time
+(`scheduleContinuation`, internal/agentcore/continuation_schedule.go).
+The schedule is one wake kind, `source_poll_due`, per scheduled source.
+Its handler runs the same `poll_source` host function with no model call,
+records the poll's usage, and arms the next wake at the source's interval.
+Management starts and stops a source's schedule; research's
+`choir.PollSource` stays the by-hand path.
+
+The owner rule decides restarts: a crash restart closes every open
+obligation, so a crash closes each schedule with the visible fate
+"interrupted by a restart". It never resumes on its own. Management sees
+the closed schedules and reopens them on its next activation. A planned
+update restart (with the marker) re-arms them once.
+
+Ways it can fail, written before the code:
+
+- a crash restart resumes polling (an auto-resume loop): no boot path may
+  re-arm a schedule without the planned-restart marker;
+- two wakes for one source run at once (a second arm while one is due):
+  one open obligation per source, keyed by source id;
+- a failing feed retries in a tight loop: a failure arms the next wake at
+  the interval, doubling up to a day, and records the error;
+- polls pile onto Texture's connection: measure Texture turn latency while
+  the schedule runs (the W1 acceptance), before widening any pool;
+- usage is not recorded: every poll writes one usage record (source,
+  items fetched and new, bytes, duration, error).
