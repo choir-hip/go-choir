@@ -170,12 +170,13 @@ boundaries:
 now:
   status: working
   slice: >-
-    S1b: rerun the research-only prompt on the build with the S1 fixes
-    (child models gated on the model policy, empty search results no longer
-    bench providers, world-verb JSON prints as text, cells show 48,000
-    characters per value).
+    S1c: rerun the research-only prompt with children paced under the
+    computer's model budget, 429s waited out, and the time carve-out (a
+    desk's Research call returns within 10 minutes; children get three
+    quarters of their parent's remaining time).
   candidate: >-
-    8aa8559b + 4d365e47 + 072b8612 + 6906a1ae, pushed 2026-10-11 ~00:25.
+    3faa001a (pacing + Retry-After) + c1da4e97 (time carve-out), pushed
+    2026-10-11 ~01:00.
   conjecture: >-
     If children run on served models, search stays up under fan-out, and
     the parent can read every child's findings, then two research desks
@@ -210,7 +211,7 @@ now:
       comparison against the baseline.
   blocker: none
   next_action: >-
-    After ce03d075 deploys, restart demo-arxiv-2026-10-10c and run the
+    After the push deploys, restart demo-arxiv-2026-10-10c and run the
     research-only prompt on a fresh document with no pushes during the run.
 
 receipts:
@@ -228,6 +229,18 @@ receipts:
       - problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md (fixed 4d365e47)
       - problems/research-parent-cannot-read-its-children-2026-10-11.md (fixed 072b8612, 6906a1ae)
       - problems/texture-research-opener-dropped-silently-2026-10-11.md (open decision)
+  - id: S1b
+    at: 2026-10-11T00:37:47Z
+    build: staging ce03d075
+    action: research-only prompt on demo-arxiv-2026-10-10c, document 211dfcb6
+    result: >-
+      Failed. Both desks called choir.Research with four children; children
+      recursed. 919 child activations ended by 00:58, 114 with findings;
+      the gateway rejected 8,236 of this computer's calls and admitted 1,122
+      (60-a-minute budget). Neither desk's Research call returned in 20
+      minutes; the document stayed at its framing revision.
+    findings:
+      - problems/research-fanout-overruns-computer-model-budget-2026-10-11.md (fixed 3faa001a, c1da4e97)
 ---
 
 # Research fan-out
