@@ -104,8 +104,8 @@ boundaries:
 
 now:
   status: working
-  slice: W1 close — every acceptance item met on staging; the completion panel reviews the landed candidate
-  source_ref: 1f23a13b (pushed)
+  slice: W1 close — the completion panel sent W1 back; its gaps are fixed in 726aa392; the panel re-runs on the new candidate
+  source_ref: 726aa392 (pushed)
   deploy_identity: staging ebe02b17 (host and both test computers)
   candidate: {id: W1, state: landed, ref: main, base: e21e1347, digest: ebe02b17, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel, internal/objectgraph]}
   conjecture:
@@ -134,16 +134,22 @@ now:
       re-poll, record usage, back off, survive a host deploy, close on a
       crash restart; a second computer reads a capture and its body. A
       running computer picks up a deploy only at its next boot.
-    main_uncertainty: whether the completion panel finds a path that breaks ownership, the body bound, or the restart rule
-    next_observation: the panel's findings on the frozen candidate
+    main_uncertainty: whether the second panel finds another path that breaks ownership, the body bound, or the restart rule
+    next_observation: 726aa392 deployed, schedules still polling, a generic capture write refused; then the second panel's verdict
   blocker_or_risk: >-
     each scheduled poll rewrites its schedule object, which in a guest is one
     event on the computer's chain per poll; fine for a handful of sources,
     about 30,000 events a day for all 211 at ten minutes. Bound it (write
     usage only on change, or batch) before scheduling the full registry.
+  residuals:
+    - each scheduled poll adds one event to the paper computer's chain and one actor-log row; bound it before scheduling all 211 sources
+    - source_poll_due wakes share the dispatcher's eight slots with desk work
+    - sourcecycled (not in Node B's boot set) still writes capture bodies into rows if it is ever enabled; delete or route it through the capture route first
+    - discovered heresy, not repaired — a same-owner guest can overwrite another computer's object of any kind through the generic object route (separate auth change)
+    - the MVP source list is open; France 24 and UN News refuse Node B
   next_action: >-
-    run the agentic-consensus completion panel on ebe02b17; adjudicate; then
-    settle W1 and author W2
+    land 726aa392 (CI, deploy, deployed check), re-freeze, re-run the
+    completion panel; then settle W1 and author W2
 
 receipts:
   - id: W1a
@@ -206,8 +212,10 @@ receipts:
       guest at 11:44:39; the boot closed both schedules as
       interrupted_by_restart at generation 2, and the two wakes due 11:48:40
       were refused by the actor handler's crash branch: both schedules
-      still show three polls. The proxy hop (8574a8e1) carried the capture
-      writes.
+      still show three polls. Corpusd's capture route carried the writes;
+      the guest reaches corpusd directly (corrected 13:40Z: an earlier
+      wording credited the proxy hop, problems/capture-route-unreachable-
+      through-proxy-2026-10-11.md).
     conjecture: W1-3 supported for one paper computer and two sources
   - id: W1-hour
     at: 2026-10-11T12:53Z
@@ -237,12 +245,29 @@ receipts:
       choir.ReadCapture on the WHO capture key-04d282d8 and returned its
       title, source id official:who:news, URL, the paper owner's id and the
       first sentence of its body, read from Store B and host disk through
-      the proxy. On the paper computer after the same deploy, rss:dw_en's
+      corpusd (direct, not the proxy; see the correction above). On the paper computer after the same deploy, rss:dw_en's
       first poll fetched 20 items and wrote 20 new captures (zero before
       the RSS 1.0 fix). The 13:02:44 polls succeeded across the host
       deploy; the restart onto ebe02b17 closed the schedules, and four were
       started again (France 24 and UN News stopped, reason "refuses Node B").
     conjecture: W1-3 supported for the station's acceptance scope
+  - id: W1-panel1
+    at: 2026-10-11T13:30Z
+    deploy: staging ebe02b17 (frozen 010b22f8, same code)
+    kind: agentic-consensus completion panel (session scratchpad w1c/panel)
+    result: >-
+      Sent back. Codex named the blockers: a guest could write a
+      choir.web_capture through the generic object route (a body under
+      1 KiB would sit in a row; a same-owner capture could be overwritten),
+      and a failed capture write lost a feed's items because the validators
+      were saved first. GPT-6.1 Sol and GPT-6 Luna found that a failed actor
+      commit drops the successor wake; Claude, GLM and DeepSeek that a
+      schedule can sit active with no wake; GLM that a large poll can pass
+      corpusd's request bound; DeepSeek that guests reach corpusd directly,
+      which corrected an earlier diagnosis. Recorded in
+      problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md and
+      fixed in 726aa392.
+    conjecture: W1-3 held for the observed runs; the panel found paths outside them
 ---
 
 # W1 — content in the graph
