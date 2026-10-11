@@ -5,8 +5,14 @@ down the system so that all interagent comms are done through the
 precommitment records protocol. That's the real design ... Gotta bring the
 future forward." Problem record:
 [problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md](problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md).
-Theory and mechanism:
+Theory: [Prospective Self-Alignment](prospective-self-alignment-2026-10-09.md)
+(working paper, October 9 revision; §2 the record and the loop, §4.1
+procedural fidelity, §7 reputation, §10 implementation status). Mechanism:
 [Precommitment Records — Engineering Memo](Precommitment%20Records%20—%20Engineering%20Memo.md).
+The paper's §10 lists the desk surface for commit, resolve and dispute as
+implemented. The code supports it, but the staging traces in the problem
+record show no desk calling `Precommit` or `Resolve`. This design makes it
+the only path.
 Prior station: S0m record-native messaging (complete 2026-10-01).
 
 Mutation class: red (every desk's delivery path, Texture's control surface,
@@ -18,6 +24,12 @@ One agent affects another only through a commitment record addressed to
 it. The record's derived packet is the only thing that wakes the
 addressee. An act that asks for work carries a typed prediction, frozen
 when the record commits, and the act that answers it resolves it.
+
+The paper's loop holds: commit, authorize, act, observe, resolve, score,
+revise. Committing a prediction does not authorize an act. Casts to
+engineering and material actions still pass the existing authority gates
+(management's admission, capsule boundaries, owner approval for protected
+effects); the record makes the gate inspectable, not optional.
 
 Two consequences:
 
