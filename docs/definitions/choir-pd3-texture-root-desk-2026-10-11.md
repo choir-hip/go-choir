@@ -236,3 +236,30 @@ narrower one: which of research's lifecycle-agent checks (the
 `LifecycleVersion > 0` requirement in target validation, and the active run
 on the requesting trajectory) move to the work item, as they already have
 for management.
+
+**Size of the per-computer research lift (04:25Z).** Persistent management's
+special handling (`isPersistentManagementAgentRun`,
+`persistentManagementAdmissibleReport`, `persistentManagementMailboxInjectable`,
+`EnsurePersistentManagementAgent` and its callers) appears in 19 files across
+agentcore, textureowner and store. A per-computer research desk on the same
+pattern needs its own version of each: ensure-on-demand, work items per
+requesting trajectory, report admission to the requesting Texture, mailbox
+injection for queued work, and crash-restart closure. This is a multi-day red
+substrate change, so it waits for owner review rather than going in
+overnight. Ways it could fail, for that review:
+
+1. A report from work for document A reaches document B's Texture.
+   Reports must route by the work item's requester, never by the agent's
+   channel.
+2. Two documents' work interleaves in one REPL. PD2 sessions are per
+   agent, so a computer-wide desk shares one session across documents.
+   Decide whether that is wanted (shared world knowledge) or must be split
+   per trajectory.
+3. One document starves the others. A single serialized desk takes work
+   in arrival order, so a long round on A delays B's first answer. This
+   needs a fairness rule or bounded rounds per turn.
+4. The store's research checks that assume a lifecycle agent
+   (`LifecycleVersion > 0`, an active run on the requesting trajectory)
+   are relaxed too far. They must move to the work item, not disappear.
+5. A crash restart resumes the desk's queued work. Queued research work
+   must close as "interrupted by a restart" like every other obligation.
