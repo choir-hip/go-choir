@@ -250,7 +250,7 @@ value:
 
 now:
   status: drafted
-  slice: revised after round two (receipt P2d-review2); P2d1 on staging (b172895b); a fix check by Claude and Gemini next
+  slice: P2d1 on staging (b172895b); P2d2 held for owner review after round three found a structural question (receipt P2d-review3)
   source_ref: 352661de
   deploy_identity: staging a2bcf724
   candidate: none
@@ -279,8 +279,22 @@ now:
       command. Only management may address a Texture in this station;
       research and engineering already reach a Texture through producer
       reports.
+    open_question: >-
+      (P2d-review3) A Texture run binds one work item, and directives come
+      from outside the owner's request. The most promising shape follows
+      the existing supervision surface: one standing directive inbox work
+      item per Texture (texture-directives:<doc>, minted once with a
+      not-exists condition, excluded from the initial-work wake by prefix as
+      supervision work is), never settled by turns; the pending directive
+      packets themselves are the wake and are consumed at commit. The open
+      parts are how activation authority accepts an occurrence whose work
+      item differs from a run started for the owner's request (coalescing),
+      and whether the store turn commit consumes a directive packet without
+      a work settlement. Alternative: generalize the run to carry a set of
+      work items, a larger change to the Texture root that the owner
+      reserved for review.
     kind: architecture
-    status: proposed (P2d-review1)
+    status: proposed (P2d-review1); open after P2d-review3
     evidence_ref: receipt P2d-review1
   belief:
     believed_state: the wake already arms on any pending packet; the gaps were validation, seq, consumption, rendering, arming, and the delegated-cast gate
@@ -299,6 +313,24 @@ now:
     (engineering reaches a Texture only through management)
 
 receipts:
+  - id: P2d-review3
+    at: 2026-10-11T21:15Z
+    kind: fix check by Claude and Gemini (session scratchpad p2d/review3), frozen 4b114e61
+    result: >-
+      Both send back on one structural defect. A Texture run binds exactly
+      one work item: ApplyTextureTurn settles only the caller's work item
+      and accepts completed only with a revision; a delivered inbound packet
+      touches no work; ValidateOccurrenceActivationAuthority and
+      validateOccurrenceReconciliationCandidates require the occurrence's
+      resolved work item to equal the run's; submitTextureAgentRevisionRun
+      picks the first open work item. So one work item per directive either
+      never closes (a no-change turn leaves it open and the initial-work
+      wake loops) or collides with a concurrent owner request (the wake is
+      refused and dropped). Gemini also reports the store turn commit's
+      directive acceptance is narrower than round two stated. Not revised:
+      this is a design question about how Texture's run model takes work
+      from outside the owner's request, held for the owner with the shape
+      named in now.decision.
   - id: P2d-review2
     at: 2026-10-11T21:00Z
     kind: agentic-consensus file review round two (session scratchpad p2d/review2), frozen 38dc5486
