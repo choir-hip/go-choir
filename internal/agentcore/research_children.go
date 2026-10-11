@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -153,8 +154,8 @@ func researchBudgetKey(execCtx toolregistry.ExecutionContext) string {
 }
 
 // researchChildSelection resolves a child's model: the caller's own when
-// none is named, otherwise a model the computer's model policy names, on
-// the provider the policy gives it. The catalog is not the gate: it lists
+// none is named, otherwise a model the computer's model policy names (by
+// model ID or by role), on the provider the policy gives it. The catalog is not the gate: it lists
 // models Choir can route somewhere, not ones this computer is configured to
 // call (problems/research-child-picks-unserved-model-2026-10-11.md).
 func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchLineage, model string) (provideriface.LLMSelection, error) {
@@ -163,18 +164,25 @@ func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchL
 	if model == "" || model == inherited.Model {
 		return inherited, nil
 	}
-	var configured []provideriface.LLMSelection
+	var policy modelpolicy.Policy
 	if rt.modelPolicy != nil {
 		// An invalid policy file still yields the last valid or platform policy.
-		policy, _ := rt.modelPolicy.Load(ctx, lineage.ownerID)
-		configured = policy.Selections()
+		policy, _ = rt.modelPolicy.Load(ctx, lineage.ownerID)
 	}
+	child := func(selection provideriface.LLMSelection) provideriface.LLMSelection {
+		return provideriface.LLMSelection{Provider: selection.Provider, Model: selection.Model, ReasoningEffort: inherited.ReasoningEffort, Source: "research_child"}
+	}
+	// A role name means that role's model: the policy's own vocabulary.
+	if _, ok := policy.Roles[model]; ok {
+		return child(policy.Resolve(model)), nil
+	}
+	configured := policy.Selections()
 	ids := make([]string, 0, len(configured))
 	for _, selection := range configured {
 		if selection.Model == model {
-			return provideriface.LLMSelection{Provider: selection.Provider, Model: selection.Model, ReasoningEffort: inherited.ReasoningEffort, Source: "research_child"}, nil
+			return child(selection), nil
 		}
 		ids = append(ids, selection.Model)
 	}
-	return inherited, fmt.Errorf("research: model %q is not configured on this computer; configured models: %s", model, strings.Join(ids, ", "))
+	return inherited, fmt.Errorf("research: model %q is not configured on this computer; configured models: %s (a role name such as %q also works)", model, strings.Join(ids, ", "), agentprofile.Research)
 }

@@ -58,7 +58,7 @@ var choirFunctionDocs = map[string]FunctionDoc{
 	"InspectBundle":        {Summary: "Verifies the mounted frozen bundle's draft and file digests and returns its receipt fields. Verifier slot only."},
 	"WebSearch":            {Args: []string{"query", "maxResults"}, Summary: "Web search through the host under your egress budget; returns JSON."},
 	"FetchURL":             {Args: []string{"url"}, Summary: "Fetches a URL through the host under your egress budget; returns JSON."},
-	"Research":             {Args: []string{"children"}, Summary: "Runs child research activations in parallel and returns each one's findings (objective, model, findings, error). children: an objective, a list of objectives, or a list of {\"objective\", \"model\"} maps. Children take minutes and share your egress budget; leave timeout_ms unset."},
+	"Research":             {Args: []string{"children"}, Summary: "Runs child research activations in parallel and returns each one's findings (objective, model, findings, error). children: an objective, a list of objectives, or a list of {\"objective\", \"model\"} maps; model is empty (your own), a role name such as \"engineering\", or a model ID from this computer's model policy, and an unknown one returns an error naming the configured models. Children take minutes and share your egress budget; leave timeout_ms unset."},
 	"SourceSearch":         {Args: []string{"query", "maxResults"}, Summary: "Searches the Source Service; returns JSON."},
 	"ImportDocument":       {Args: []string{"url", "filePath", "query"}, Summary: "Imports a URL or file into a ContentItem."},
 	"ImportURL":            {Args: []string{"url", "query"}, Summary: "Imports a URL into a ContentItem."},

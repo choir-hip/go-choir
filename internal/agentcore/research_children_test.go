@@ -68,7 +68,8 @@ func (p *researchChildProvider) CallWithTools(ctx context.Context, req provideri
 // problems/research-child-picks-unserved-model-2026-10-11.md: a catalog
 // model the computer's model policy does not name reaches the provider; its
 // refusal does not name the models that would work; a policy model runs on
-// the wrong provider.
+// the wrong provider; a policy role name (research asked for "research") is
+// refused instead of meaning that role's model.
 func TestResearchCellFansOutToChildActivations(t *testing.T) {
 	deskTestWorkerBin(t)
 	provider := &researchChildProvider{}
@@ -89,7 +90,7 @@ func TestResearchCellFansOutToChildActivations(t *testing.T) {
 	execCtx.Role = agentprofile.Research
 	ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
 
-	src := `res, err := choir.Research([]map[string]string{{"objective": "alpha"}, {"objective": "beta"}, {"objective": "report-attempt"}, {"objective": "alpha unknown model", "model": "no-such-model"}, {"objective": "alpha unserved model", "model": "gpt-5.4-mini"}, {"objective": "gamma", "model": "deepseek-v4.1-flash"}})
+	src := `res, err := choir.Research([]map[string]string{{"objective": "alpha"}, {"objective": "beta"}, {"objective": "report-attempt"}, {"objective": "alpha unknown model", "model": "no-such-model"}, {"objective": "alpha unserved model", "model": "gpt-5.4-mini"}, {"objective": "gamma", "model": "deepseek-v4.1-flash"}, {"objective": "gamma by role", "model": "engineering"}})
 b, _ := json.Marshal(res)
 fmt.Println(string(b), err)`
 	out, err := tool.Func(ctx, json.RawMessage(`{"source":`+cellSource(src)+`}`))
@@ -109,10 +110,10 @@ fmt.Println(string(b), err)`
 	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &results); err != nil {
 		t.Fatalf("decode results from %q: %v", cell.Stdout, err)
 	}
-	if len(results) != 6 {
-		t.Fatalf("results = %d, want 6: %+v", len(results), results)
+	if len(results) != 7 {
+		t.Fatalf("results = %d, want 7: %+v", len(results), results)
 	}
-	for i, want := range []string{"alpha", "beta", "report-attempt", "alpha unknown model", "alpha unserved model", "gamma"} {
+	for i, want := range []string{"alpha", "beta", "report-attempt", "alpha unknown model", "alpha unserved model", "gamma", "gamma by role"} {
 		if results[i].Objective != want {
 			t.Fatalf("result %d objective = %q, want %q", i, results[i].Objective, want)
 		}
@@ -145,6 +146,9 @@ fmt.Println(string(b), err)`
 	}
 	if results[5].Findings != "findings for gamma via opencode-go/deepseek-v4.1-flash" || results[5].Error != "" {
 		t.Fatalf("a policy model did not run on its policy provider: %+v", results[5])
+	}
+	if results[6].Findings != "findings for gamma via opencode-go/deepseek-v4.1-flash" || results[6].Model != "deepseek-v4.1-flash" {
+		t.Fatalf("a policy role name did not select that role's model: %+v", results[6])
 	}
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
