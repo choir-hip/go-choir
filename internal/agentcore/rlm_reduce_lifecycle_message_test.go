@@ -596,6 +596,78 @@ func TestCommitTrayLifecycleCastMintsBeforeAdmission(t *testing.T) {
 	}
 }
 
+// Protocol P2d1: only a Cast to engineering opens an engineering assignment.
+// A management Cast to research commits its record and directive packet and
+// opens nothing (before P2d1 every act-path Cast ran delegated-cast admission,
+// which in this runtime fails on the missing capsule executor).
+func TestCommitTrayLifecycleCastToResearchOpensNoAssignment(t *testing.T) {
+	rt, s := testRuntime(t)
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
+
+	fixture := seedTextureLifecycleControl(t, s, "owner-cast-research", "castr", "research:control-castr", agentprofile.Research)
+	caller, err := s.GetLifecycleRun(context.Background(), fixture.run.OwnerID, fixture.run.ComputerID, "texture-run-castr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	researchID := agentprofile.Research + ":" + caller.ChannelID
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(context.Background(), types.AgentRecord{
+		AgentID: researchID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: caller.ChannelID,
+		CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	scope := ReductionScope{
+		FromAgentID: caller.AgentID, DeskAgentID: caller.AgentID,
+		FromRole: agentprofile.Management, ChannelID: caller.ChannelID,
+		RunID: caller.RunID, OwnerID: caller.OwnerID, ComputerID: caller.ComputerID,
+		CellID: "cell-castr",
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: caller.RunID, AgentID: caller.AgentID, OwnerID: caller.OwnerID,
+		ChannelID: caller.ChannelID, ComputerID: caller.ComputerID,
+		Profile: agentprofile.Management, Role: agentprofile.Management,
+		RunRecord: &caller,
+	})
+	deskCaller := caller
+	deskCaller.AgentProfile = agentprofile.Management
+	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &deskCaller}
+
+	if err := reduction.commitTray(ctx, []yaegikernel.StagedIntent{
+		{LocalID: "cast-r", Kind: yaegikernel.IntentCast, ToDesk: "research", Objective: "find the filing", Statement: "spec body"},
+	}, 1); err != nil {
+		t.Fatalf("a Cast to research ran delegated-cast admission: %v", err)
+	}
+	pending, err := s.ListAllPendingLifecycleUpdates(ctx, caller.OwnerID, caller.ComputerID, researchID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0].Direction != types.LifecyclePacketDirectionDirective ||
+		pending[0].SourceRecordID != "cell-castr:cast:cast-r" {
+		t.Fatalf("cast to research did not queue its directive: %+v", pending)
+	}
+	assignments, err := s.ListEngineeringAssignmentsForComputer(ctx, caller.ComputerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assignments) != 0 {
+		t.Fatalf("a Cast to research opened %d engineering assignment(s)", len(assignments))
+	}
+}
+
+func TestCastOpensEngineeringAssignmentOnlyForEngineering(t *testing.T) {
+	for desk, want := range map[string]bool{
+		"engineering": true, "engineering:doc-1": true, " Engineering ": true,
+		"research": false, "research:doc-1": false, "management": false,
+		"texture:doc-1": false, "": false, "not-a-desk": false,
+	} {
+		if got := castOpensEngineeringAssignment(desk); got != want {
+			t.Errorf("castOpensEngineeringAssignment(%q) = %v, want %v", desk, got, want)
+		}
+	}
+}
+
 // Ask/precommit cutover: an addressed staked question mints record+directive
 // packet (Kind=question) in one CommitLifecycleAct; an unaddressed precommit
 // mints the record ledger-only.

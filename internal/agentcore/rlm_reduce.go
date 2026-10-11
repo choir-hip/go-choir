@@ -977,7 +977,7 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	// reducer (consensus precondition) — it resumes from the deferred
 	// delegated_assignment_spawn_deadline wake, or synchronously when kernel
 	// mode is off (test runtimes without the durable wake outbox).
-	if in.Kind == yaegikernel.IntentCast {
+	if in.Kind == yaegikernel.IntentCast && castOpensEngineeringAssignment(in.ToDesk) {
 		if rt := r.rt(); rt != nil && r.rec != nil && controlID != "" {
 			opened, openErr := rt.openDelegatedCastAssignment(ctx, DelegatedCastRequest{
 				Objective:           in.Objective,
@@ -1786,6 +1786,16 @@ func directiveTargetAgentID(scope ReductionScope, addressee string) (string, err
 	return profile + ":" + docID, nil
 }
 
+// castOpensEngineeringAssignment reports whether a Cast's addressee is the
+// engineering desk, the only desk a Cast admits work to through the
+// delegated-cast step (protocol P2d1). A Cast to any other desk commits its
+// record and packet only.
+func castOpensEngineeringAssignment(toDesk string) bool {
+	profile, _, _ := strings.Cut(strings.TrimSpace(toDesk), ":")
+	canonical, err := agentprofile.Canonical(profile)
+	return err == nil && canonical == agentprofile.Engineering
+}
+
 // commitLifecycleActIntent commits one desk-authored act through the
 // record-native path: the commitment record and its derived directive packet
 // mint in ONE CommitLifecycleAct transaction (S0m RN3 — retiring the
@@ -1914,7 +1924,7 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 	// record minted in the act transaction as the parent control. The
 	// spawn/bind/activate saga resumes from the deferred
 	// delegated_assignment_spawn_deadline wake (or synchronously off-kernel).
-	if in.Kind == yaegikernel.IntentCast && !result.Replay && result.RecordCanonicalID != "" && r.rec != nil {
+	if in.Kind == yaegikernel.IntentCast && castOpensEngineeringAssignment(in.ToDesk) && !result.Replay && result.RecordCanonicalID != "" && r.rec != nil {
 		opened, openErr := rt.openDelegatedCastAssignment(ctx, DelegatedCastRequest{
 			Objective:           in.Objective,
 			Kind:                types.EngineeringAssignmentImplementation,
