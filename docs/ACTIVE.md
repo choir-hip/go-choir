@@ -141,7 +141,10 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   standing question 2). W1a (Dolt past the race behind the one-connection
   pools) is landed and boots on existing data. W1b's poll verb works on
   staging but writes to the polling computer's own graph; W1b2 moves the
-  write path to Store B.
+  write path to Store B (corpusd capture route, cd7221ae; the proxy hop
+  guests need, 8574a8e1). W1c, the source schedule as generation-fenced
+  durable wakes with usage per poll and crash-closed schedules, is pushed
+  (19b2f964); its deployed proof is next.
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
   Reality slice: seven M11 reruns, each one layer deeper. Rerun 7

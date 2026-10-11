@@ -1492,7 +1492,7 @@ nodes:
       docs/autopaper-sw-design-2026-10-09.md. Supersedes the 2026-10-01
       World Wire metamission. Stations W1 (executable), W2 and W3 (intent).
   - id: choir-autopaper-w1-content-in-the-graph-2026-10-11
-    title: W1 — content in the graph; Dolt past the race fix, captures beside Texture
+    title: W1 — content in the graph; Dolt past the race fix, captures in Store B, the source schedule
     path: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
     ledger: ''
     status: working
