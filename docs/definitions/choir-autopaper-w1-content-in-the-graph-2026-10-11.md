@@ -1,6 +1,6 @@
 now:
   status: working
-  slice: W1b2 and W1c deployed proof — a guest poll lands in Store B through the proxy; a schedule polls, records usage, and a crash closes it
+  slice: W1 hour-long run — six sources every ten minutes into Store B
   source_ref: 19b2f964 (pushed)
   deploy_identity: staging cd7221ae (host); gateway 9c1c96c7
   candidate: {id: W1c, state: landing, ref: main, base: cd7221ae, digest: none, scope: [internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools]}
@@ -32,7 +32,10 @@ now:
     main_uncertainty: whether the test computer updates to 19b2f964 after the deploy, and whether Store B absorbs scheduled capture writes
     next_observation: test computer build identity after the deploy; then one scheduled source's first polls
   blocker_or_risk: Store B is the store that grew to 104 G; bodies must never enter it, and its history needs a bound before polling all sources
-  next_action: after 19b2f964 deploys, confirm the guest build, start a schedule for rss:bbc_world at 5 minutes, verify Store B and body files, then restart the guest
+  next_action: >-
+    the hour-long run (six sources at ten minutes, started 11:52:44Z);
+    then record it, add a guest capture-read verb for the second-computer
+    proof, and close W1
 ---
 definition_version: 4
 
