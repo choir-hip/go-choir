@@ -46,12 +46,12 @@ const (
 	IntentReply = "reply"
 	// IntentCancel retracts a commitment; IntentEscalate surfaces an issue to
 	// management or the owner. Both are operational, unscored.
-	IntentCancel   = "cancel"
+	IntentCancel = "cancel"
 	// IntentCancelAssignment revokes one engineering assignment capsule with
 	// executor acknowledgement (SMG): the verb carrier for the deleted
 	// cancel_co_super_assignment typed tool. Management desk only.
 	IntentCancelAssignment = "cancel_assignment"
-	IntentEscalate  = "escalate"
+	IntentEscalate         = "escalate"
 	// IntentPrecommit freezes a machine-scoreable prediction on the
 	// commitment ledger.
 	IntentPrecommit = "precommit"

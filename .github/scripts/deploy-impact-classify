@@ -206,7 +206,7 @@ for path in "${changed[@]}"; do
       add_host_service "gateway"
       add_explanation "$path -> gateway host service"
       ;;
-    cmd/sourcecycled/*|internal/cycle/*|internal/sourceapi/*|internal/sources/*|configs/sources.json)
+    cmd/sourcecycled/*|internal/cycle/*|internal/sourceapi/*|internal/sources/*)
       add_host_service "sourcecycled"
       add_host_service "autoputer"
       add_explanation "$path -> source service API/ingestion + autoputer source_search runtime package"

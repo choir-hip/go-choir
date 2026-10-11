@@ -27,9 +27,28 @@ type WebCaptureMetadata struct {
 	ExtractedTextBlobID string `json:"extracted_text_blob_id"`
 	EmbeddingModel      string `json:"embedding_model,omitempty"`
 	EmbeddingVersion    string `json:"embedding_version,omitempty"`
+	// Feed fields (Autopaper W1): a polled item extends the capture's
+	// metadata rather than creating a new kind.
+	SourceID    string `json:"source_id,omitempty"`
+	SourceType  string `json:"source_type,omitempty"`
+	ItemID      string `json:"item_id,omitempty"`
+	PublishedAt string `json:"published_at,omitempty"`
+	Language    string `json:"language,omitempty"`
+	Region      string `json:"region,omitempty"`
+	BodyKind    string `json:"body_kind,omitempty"`
 }
 
 type CreateWebCaptureRequest struct {
+	// IdentityKey, when set, makes the capture's id stable for that key, so
+	// writing the same item twice names the same object.
+	IdentityKey         string
+	SourceID            string
+	SourceType          string
+	ItemID              string
+	PublishedAt         time.Time
+	Language            string
+	Region              string
+	BodyKind            string
 	OwnerID             string
 	ComputerID          string
 	URL                 string
@@ -50,12 +69,13 @@ func (s *Service) CreateWebCapture(ctx context.Context, req CreateWebCaptureRequ
 		return Object{}, err
 	}
 	return s.CreateObject(ctx, CreateObjectRequest{
-		Kind:       WebCaptureObjectKind,
-		OwnerID:    req.OwnerID,
-		ComputerID: req.ComputerID,
-		Body:       req.ExtractedText,
-		Metadata:   metadata,
-		Now:        req.Now,
+		Kind:        WebCaptureObjectKind,
+		OwnerID:     req.OwnerID,
+		ComputerID:  req.ComputerID,
+		IdentityKey: strings.TrimSpace(req.IdentityKey),
+		Body:        req.ExtractedText,
+		Metadata:    metadata,
+		Now:         req.Now,
 	})
 }
 
@@ -83,6 +103,15 @@ func BuildWebCaptureMetadata(req CreateWebCaptureRequest) (WebCaptureMetadata, e
 		ExtractedTextBlobID: strings.TrimSpace(req.ExtractedTextBlobID),
 		EmbeddingModel:      strings.TrimSpace(req.EmbeddingModel),
 		EmbeddingVersion:    strings.TrimSpace(req.EmbeddingVersion),
+		SourceID:            strings.TrimSpace(req.SourceID),
+		SourceType:          strings.TrimSpace(req.SourceType),
+		ItemID:              strings.TrimSpace(req.ItemID),
+		Language:            strings.TrimSpace(req.Language),
+		Region:              strings.TrimSpace(req.Region),
+		BodyKind:            strings.TrimSpace(req.BodyKind),
+	}
+	if !req.PublishedAt.IsZero() {
+		metadata.PublishedAt = req.PublishedAt.UTC().Format(time.RFC3339Nano)
 	}
 	if err := metadata.Validate(); err != nil {
 		return WebCaptureMetadata{}, err

@@ -630,7 +630,7 @@ in
       # Shared captures publish through the host proxy to corpusd; user VMs are never the durable target.
       Environment = [
         "SOURCE_SERVICE_ADDR=0.0.0.0:8787"
-        "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/configs/sources.json"
+        "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/internal/sources/registry.json"
         "SOURCE_SERVICE_OBJECTGRAPH_BASE_URL=http://127.0.0.1:8082"
         "SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID=universal-wire-platform"
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform"

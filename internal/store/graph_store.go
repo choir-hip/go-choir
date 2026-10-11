@@ -82,6 +82,12 @@ const (
 	ogEdgeUserPref       = objectgraph.EdgeKind("user_preference")
 )
 
+// ObjectGraph returns the store's object graph service: writes go through
+// its durable store, so they reach the event tape like every other object.
+func (s *Store) ObjectGraph() *objectgraph.Service {
+	return s.og
+}
+
 // ogPut creates or updates an object in the graph from a Go record.
 // The record is serialized to JSON as the object body. The metadata map
 // stores queryable fields (record ID, state, etc.) for JSON_EXTRACT

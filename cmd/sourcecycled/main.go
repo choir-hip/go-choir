@@ -161,7 +161,7 @@ func sourceServiceConfigPath() string {
 	if configPath := os.Getenv("SOURCECYCLED_CONFIG_PATH"); strings.TrimSpace(configPath) != "" {
 		return strings.TrimSpace(configPath)
 	}
-	return filepath.Join("configs", "sources.json")
+	return filepath.Join("internal", "sources", "registry.json")
 }
 
 func sourceServiceObjectGraphOwnerID() string {

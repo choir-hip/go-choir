@@ -108,7 +108,8 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 			ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
 			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
 			ActionReadContentSelector, ActionSearchWireCorpus,
-			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch}
+			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
+			ActionPollSource}
 	}
 	// SMG: the management desk's product API call rides the broker like the
 	// research egress verbs — the typed product_api_request tool is deleted.
@@ -255,7 +256,7 @@ var deskModuleSets = map[string][]string{
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
 		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
-		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research"},
+		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource"},
 	// A child research activation (choir.Research) reads the world and may
 	// fan out further; it cannot message, report or write. Its findings
 	// return to the parent cell as a value.
@@ -325,6 +326,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"WebSearch":            func() reflect.Value { return reflect.ValueOf(s.WebSearch) },
 		"Research":             func() reflect.Value { return reflect.ValueOf(s.Research) },
 		"FetchURL":             func() reflect.Value { return reflect.ValueOf(s.FetchURL) },
+		"PollSource":           func() reflect.Value { return reflect.ValueOf(s.PollSource) },
 		"SourceSearch":         func() reflect.Value { return reflect.ValueOf(s.SourceSearch) },
 		"ImportDocument":       func() reflect.Value { return reflect.ValueOf(s.ImportDocument) },
 		"ImportURL":            func() reflect.Value { return reflect.ValueOf(s.ImportURL) },
@@ -565,6 +567,14 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 func (s *ChoirScope) FetchURL(url string) (JSON, error) {
 	var out JSON
 	err := s.call(ActionFetchURL, FetchURLPayload{URL: url}, &out)
+	return out, err
+}
+
+// PollSource polls one registry source into choir.web_capture objects through
+// the host under the egress budget; returns counts and capture ids as JSON.
+func (s *ChoirScope) PollSource(sourceID string, maxItems int) (JSON, error) {
+	var out JSON
+	err := s.call(ActionPollSource, PollSourcePayload{SourceID: sourceID, MaxItems: maxItems}, &out)
 	return out, err
 }
 

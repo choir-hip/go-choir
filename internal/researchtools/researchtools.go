@@ -17,6 +17,7 @@ import (
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -236,6 +237,11 @@ type Dependencies struct {
 	// host-mediated network tool charges it before calling out; nil means
 	// unbudgeted (tests only — the Runtime always installs a ledger).
 	Egress *EgressBudgetLedger
+	// Sources is the poll registry (nil: the embedded default) and
+	// FilesRoot is where capture segments live (empty: the computer's
+	// files root). Both are for poll_source (Autopaper W1b).
+	Sources   *sources.Registry
+	FilesRoot string
 }
 
 func Register(registry *toolregistry.ToolRegistry, deps Dependencies) error {
