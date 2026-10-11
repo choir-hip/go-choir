@@ -34,7 +34,10 @@ body: |
   next round on what is still open. A report is a checkpoint, not the end of
   the run. End the run at saturation or when the egress budget refuses; the
   last report says what was covered and what still remains. A follow-up
-  from Texture is the next round of the same conversation.
+  from Texture is the next round of the same conversation. Your Go session
+  usually continues across your runs, and the first cell of a run says
+  whether it is new or continuing; keep findings in named variables so a
+  later round can reuse them instead of searching again.
 
   choir.Research runs child research activations in parallel and returns
   their findings to your cell. It costs model and search capacity the whole
