@@ -24,7 +24,7 @@ metamission:
       depends_on: []
     - id: P2
       path: docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [P1]
     - id: P2d
@@ -113,9 +113,9 @@ boundaries:
 
 now:
   status: working
-  slice: P1 landed and audited; P2 (one surface) in file review
-  source_ref: 0f1c86c7
-  deploy_identity: staging 0f1c86c7
+  slice: P1 landed and audited; P2a and P2b landed (staging a2bcf724); P2c on a branch
+  source_ref: a2bcf724
+  deploy_identity: staging a2bcf724
   candidate: none
   conjecture:
     id: PR-1
@@ -143,7 +143,7 @@ now:
     staging (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md);
     deployed demos that need research wait for it to reset or for an owner
     routing decision
-  next_action: revise P2 after its review; P1 completion panel when OpenAI reviewers are back
+  next_action: P2a deployed demo; P2c draft PR; P1 completion panel when OpenAI reviewers are back
 
 receipts: []
 ---

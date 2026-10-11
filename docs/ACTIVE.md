@@ -138,7 +138,10 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   landed on staging (0f1c86c7); its audit joins every control to its cast
   record. P2 (one surface: Texture uses Cast and Ask, Message and Emit
   deleted, [`p2`](definitions/choir-protocol-p2-one-surface-2026-10-11.md))
-  is in file review. It unblocks Autopaper W2. Staging research is down
+  is reviewed; P2b (ProductAPI cannot write a Texture) and P2a (Texture
+  dispatches with Cast and Ask, folded into its turn) landed on staging
+  (a2bcf724); P2c (Message and Emit retired) is on branch protocol-p2c. It
+  unblocks Autopaper W2. Staging research is down
   while the ChatGPT account is at its usage limit
   ([problem](problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md)).
 - **Gate 3 opened 2026-10-11 — Autopaper (working):**

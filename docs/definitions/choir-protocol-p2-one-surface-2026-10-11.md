@@ -250,10 +250,10 @@ boundaries:
 
 now:
   status: working
-  slice: P2b (lands first), then P2a — Texture's Cast and Ask fold into its turn
-  source_ref: 0f1c86c7
-  deploy_identity: staging 0f1c86c7
-  candidate: none
+  slice: P2b and P2a landed on staging; P2a's deployed demo waits for research inference; P2c on branch protocol-p2c
+  source_ref: a2bcf724 (pushed; CI 38163884955 green)
+  deploy_identity: staging a2bcf724
+  candidate: {id: P2a+P2b, state: landed, ref: main, base: 5e34e5ed, digest: a2bcf724, scope: [internal/agentcore, internal/textureowner, internal/textureprompts, internal/runtimeprompts, internal/store, internal/types, internal/yaegikernel]}
   conjecture:
     id: P2-1
     claim: >-
@@ -303,7 +303,10 @@ now:
     the P2a deployed proof needs research inference, which is down while
     the ChatGPT account is at its usage limit
     (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md)
-  next_action: land P2b; finish P2a (module set, prompts) after the review accepts
+  next_action: >-
+    P2a deployed demo on the reader computer once it boots the new build
+    (idle stop about 19:05Z) and ChatGPT inference returns (about 18:59Z);
+    then P2c through a draft PR, since its replay test runs only on Linux CI
 
 receipts:
   - id: P2-review1
