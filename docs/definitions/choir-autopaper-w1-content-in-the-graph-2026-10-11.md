@@ -133,13 +133,17 @@ now:
 receipts: []
 
 # Capture body storage (decision, agent, 2026-10-11; open to owner review):
-# a capture body is a content-addressed file in the computer's file root
-# (captures/<sha256 prefix>/<sha256>.txt). The web_capture metadata names
-# it (content_blob_id "file:sha256:<hex>"), and og_objects.body stays
-# empty. Durability comes from the existing file sync, not a new store; a
-# Dolt ignored table was the alternative and keeps bodies as Dolt rows,
-# which the design rules out. Retention (30 days, pinned when cited) is a
-# later slice.
+# capture bodies are appended to one segment file per UTC day in the
+# computer's file root (captures/YYYY/MM/DD.jsonl, one JSON line per body).
+# The web_capture metadata names the body by segment, byte offset, length
+# and sha256 (content_blob_id "capseg:YYYY-MM-DD:<offset>:<len>:<sha256>"),
+# and og_objects.body stays empty. Durability comes from the existing file
+# sync, which chunks files at fixed sizes, so an append changes only the
+# last chunk; one file per body would have meant hundreds of thousands of
+# files walked on every sync cycle. A Dolt ignored table was the other
+# alternative and keeps bodies as Dolt rows, which the design rules out.
+# Retention drops whole day files after 30 days, copying cited bodies to a
+# pinned segment first (later slice).
 ---
 
 # W1 — content in the graph
@@ -158,23 +162,26 @@ A research verb, `choir.PollSource(sourceID)`, runs the existing poller
 for that source (`internal/sources`: RSS, Telegram web preview, GDELT)
 through the research host egress (`internal/researchtools`, with the
 egress budget charged once per poll). Each new item becomes a body file
-in the file root plus one `choir.web_capture` object whose metadata names
-the file. The verb returns counts and capture ids, not bodies. The source
-list is `configs/sources.json` (211 sources: 137 RSS, 73 Telegram, 1
+appended to the day's capture segment plus one `choir.web_capture`
+object whose metadata names the segment, offset, length and hash. The verb returns counts and capture ids, not bodies. The source
+list is `internal/sources/registry.json` (moved from configs/, embedded in the guest) (211 sources: 137 RSS, 73 Telegram, 1
 GDELT).
 
 Ways it can fail, written before the code:
 
 - a re-poll writes duplicate captures for items it already holds (the
   item id or content hash must make a second write a no-op);
-- a body lands in `og_objects.body` anyway, or the metadata names a file
-  that was never written (write the file first, then the object);
+- a body lands in `og_objects.body` anyway, or the metadata names bytes
+  that were never written (append and sync the segment first, then write
+  the object; a reader checks the hash);
+- two polls append to one segment at once and interleave lines (one
+  appender per computer, under a lock);
 - one slow or hostile feed holds the desk cell past its timeout, or a huge
   feed floods the result (bound items per poll and the result size);
 - the poll writes queue behind Texture on the one connection (measure
   Texture turn latency during a poll; this is what W1a's pool is for);
 - conditional GET state (ETag, Last-Modified) is lost between polls, so
   every poll refetches everything;
-- a crash mid-poll leaves files with no object; that is harmless (an
-  orphan file is overwritten by the same hash next time) but must never
-  leave an object without its file.
+- a crash mid-poll leaves appended bytes with no object; that is harmless
+  (a partial last line is skipped by readers and the next append starts a
+  new line), but an object must never name bytes that are not there.
