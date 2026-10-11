@@ -35,7 +35,8 @@ start:
       but Texture still has a second verb set no other desk has.
     - >-
       Texture's module set (internal/yaegikernel/choir.go deskModuleSets)
-      has Ask but not Cast. Every other desk has Cast.
+      has Ask but not Cast. Every other desk has Cast (the research-child
+      role does not).
     - >-
       A Cast commits through CommitLifecycleAct and reaches only an agent
       that already exists: directiveTargetAgentID resolves a bare profile
@@ -48,15 +49,16 @@ start:
       (researchDeskAgentID, internal/textureowner/texture_turn_runtime.go),
       the same id the act resolver derives. The address schemes agree.
     - >-
-      Message, Emit and Assign remain on management, engineering and
-      research; Message and Emit on Texture. Emit writes an envelope
+      Message and Emit remain on management, engineering, research and
+      Texture; Assign on engineering only. Emit writes an envelope
       outside the cell tray (pendingCellEmits, internal/agentcore/tools_desk.go).
       The runtime overlays teach Message: engineering reports progress to
       management with it (internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml,
       pinned by tool_profiles_authority_test.go), management lists it as a
       coordination verb, research names it retired while its module set
-      grants it. Broker action grants (ActionMessage, ActionEmit), the Emit
-      egress handler and the rlm replay goldens also carry them.
+      grants it. Broker action grants (ActionMessage, ActionEmit) and the Emit
+      egress handler also carry them; rlm_replay_linux_test.go stages
+      choir.Message (the replay goldens in docs/evidence/rlm-replay do not).
     - >-
       Texture is taught its controls mainly by internal/textureprompts
       (overlays/run_system.yaml, with a worked open_researcher example;
@@ -78,8 +80,10 @@ finish:
     with no open work on the request opens it; a Cast or Ask to a desk with
     open work continues it. ApplyTexture carries document edits and decide
     turns only. No desk can write a Texture through ProductAPI. No desk can
-    stage Message or Emit. Any same-owner desk may address texture:<doc>,
-    and the Texture desk wakes on it.
+    stage Message or Emit. Texture's Ask is answered by research's producer
+    report, as its controls are today; Ask resolved on a Reply arrives with
+    P3. Addressing texture:<doc> from another desk moves to its own station
+    (P2d), because the Texture desk cannot yet dispose a directive packet.
   artifact: >-
     Slice P2a (Texture's verbs). The reducer folds a Texture cell's staged
     Cast and Ask addressed to research or management into that cell's
@@ -89,13 +93,28 @@ finish:
     ApplyTextureTurn through textureTurnControls and the P1 accumulator: one
     transaction path, the edit and its dispatch atomic, the research-round
     bound, opener merge and management's execution_request check unchanged.
-    Cast(research, objective, packet) and Ask(research, question) become a
-    research opener (a follow-up when the request already has open research
-    work); Cast(management, objective, execution_request) becomes the
-    persistent-management opener. A Texture cell that stages Cast or Ask
-    without ApplyTexture is refused with a message saying the dispatch
-    commits with an apply or decide turn. The cell body's controls field is
-    refused with a message naming Cast and Ask. Each control's record gains
+    Cast(research, objective, packet), Ask(research, question) and
+    Note(research, body) become a research opener (a follow-up when the
+    request already has open research work); Cast(management, objective,
+    execution_request packet) continues the request's open management work
+    when there is some and otherwise becomes the persistent-management
+    opener; Ask and Note to management are refused naming Cast, because a
+    management dispatch needs execution_request actions. On Texture, Cast's
+    third argument is a packet, not the cast spec other desks pass (named
+    difference). The fold runs in commitTray, which both the commit path and
+    recoverPartialActCommit reach, before the intent loop and before
+    commitTextureAuthorIntent derives the revision identity. It validates
+    in two phases: first the model-authored body, refusing one that carries
+    controls (naming Cast and Ask), then the injection. It is a pure
+    function of the staged intents, so a replayed cell folds to the same
+    bytes. It refuses a second Cast to management in one cell (a turn takes
+    one persistent-management opener), refuses a cell with more
+    than one ApplyTexture or with an email one carrying a dispatch, refuses
+    a Texture Cast, Ask or Note to any desk other than research or
+    management by name, and refuses a Texture Cast, Ask or Note staged
+    without an apply or decide ApplyTexture, saying the dispatch commits
+    with the turn. A refusal fails the whole cell, as a malformed body does
+    today. Each control's record gains
     subject ref staged_act (cast or ask). Cast joins Texture's module set.
     Every surface that teaches the controls is rewritten to Cast and Ask:
     internal/textureprompts (run_system.yaml with its worked example,
@@ -104,35 +123,41 @@ finish:
     any served Texture prompt names open_researcher, open_persistent_super
     or target_work_item_id.
     Slice P2b (ProductAPI fence). For every desk, ProductAPI refuses each
-    non-GET /api/texture/ route, with an explicit exception list (empty:
-    no desk use of a Texture write through ProductAPI appears in the code
-    or the evidence record; management starts a new Texture through
+    non-GET /api/texture/ route, with an explicit exception list (one
+    entry, POST merge-preview, which only computes a preview; no desk use
+    of a Texture write through ProductAPI appears in the code or the
+    evidence record; management starts a new Texture through
     /api/prompt-bar, the owner's path, where Texture writes it), and a
     test enumerates the registered Texture routes (internal/textureowner/router.go,
     internal/apihandler/routes.go); management's overlay
     (internal/runtimeprompts/overlays/rlm_management_runtime.yaml) stops
-    listing /api/texture/ as writable. Slice P2c (deletions and
-    addressing). Message and Emit leave deskModuleSets and every prompt
-    that teaches them (the management, engineering and research runtime
-    overlays), from the broker action grants and the Emit egress handler,
-    so no new cell can stage them. Engineering's progress to management
-    moves from Message to Note addressed to management (a record-native
-    directive packet, which management already wakes on); the overlay and
-    its pinning test change with it. The reducer keeps their
+    listing /api/texture/ as writable. Slice P2c (deletions). Message and Emit leave every prompt that
+    teaches them (the management, engineering and research runtime
+    overlays; research's overlay also stops calling Cast retired while its
+    module set grants it), the broker action grants and the Emit egress
+    handler. Their exports stay as stubs that return a refusal naming the
+    act to use, so a model that still calls them learns why instead of
+    hitting an undefined symbol. Engineering's progress to management
+    moves from Message to ReportPacket, which is already in engineering's
+    module set and keeps today's producer_report direction and work-item
+    binding (commitAddressedPacketIntent); the overlay and its pinning test
+    change with it. The reducer keeps their
     branches only so a tray staged before the deploy still replays (named
     residual, removed after one release). Assign's module entries are
     unchanged: design §9 item 3 recommends folding Assign into Cast, and
     P2 defers that (a named deviation, since it touches engineering
     delegation and replay goldens), pending the owner's answer.
-    Slice P2d (texture addressing). A new Texture actor occurrence kind for
-    a directive packet addressed to texture:<doc> by a same-owner desk,
-    resolved by the Texture controller (texture_controller.go
-    ResolveTextureActorOccurrence, today producer_report and
-    document_revision only), so the Texture desk wakes on it and decides
-    what to do; a cross-owner address is refused.
+    P2d (texture addressing) is a separate station with its own file: a
+    directive addressed to texture:<doc> needs an occurrence kind, a
+    postcondition branch, a way to arm a Texture with no open work, a
+    disposition the Texture turn commits, a crash-boot close, a round
+    bound, and the delegated-cast step gated to engineering addressees
+    (P2-review2).
   acceptance:
     - action: >-
-        Reducer and store tests for P2a: a Texture cell with ApplyTexture
+        Reducer and store tests for P2a: (P2b lands first, so the demo's
+        audit cannot hide a management-open issued through ProductAPI.) A
+        Texture cell with ApplyTexture
         and a Cast to research commits one turn whose control opens the
         research desk and its work with a cast record carrying
         staged_act=cast; a second Cast in a later turn of the same request
@@ -160,25 +185,18 @@ finish:
       proves: no desk writes a Texture through the product API
       evidence_class: unit
     - action: >-
-        P2c: no desk's surface listing or broker grant contains Message or
-        Emit; a cell calling either is refused with a message naming the
-        act to use; a tray staged with Message before the change still
+        P2c: no served prompt or broker grant names Message or Emit; a cell
+        calling either gets the stub's refusal naming the act to use; a tray staged with Message before the change still
         replays (the replay goldens keep passing); an assigned engineering
-        desk's Note to management wakes management with the progress
-        packet; no served prompt names Message or Emit.
+        desk's ReportPacket to management reaches it as a producer report
+        bound to the assignment's work item; no served prompt names Message
+        or Emit.
       proves: the side channels are gone without stranding in-flight work
       evidence_class: unit
-    - action: >-
-        P2d: a management Cast to texture:<doc> of the same owner wakes
-        that Texture with the directive in its occurrence; the Texture turn
-        can answer it with a decide or apply turn; another owner's address
-        is refused.
-      proves: any desk can feed a Texture without writing it
-      evidence_class: unit plus one staged cell on staging
   rollback: >-
     git revert per slice; records already minted stay (append-once). P2a's
     revert restores the controls field; P2b's restores the allowlist; P2c's
-    restores the verbs; P2d's removes the occurrence kind.
+    restores the verbs.
   landing:
     required: true
     environment: staging
@@ -193,7 +211,7 @@ value:
     the act, and the packet is its delivery
 
 homotopy:
-  realism_axis: reducer and store tests -> demo on staging (P2a) -> enumeration test (P2b) -> deletions (P2c) -> texture addressing with a staged cell (P2d)
+  realism_axis: enumeration test (P2b, lands first) -> reducer and store tests -> demo on staging (P2a) -> deletions (P2c); texture addressing is P2d, its own station
 
 boundaries:
   mutation_class: red (lifecycle reducer, desk surface, Texture authority)
@@ -249,7 +267,12 @@ now:
       transaction path the value criterion forbids. A later station may
       unify packet directions once nothing else depends on the difference.
       Design §9 item 3 (Assign): the recommendation is to fold Assign into
-      Cast; P2 defers it as a named deviation until the owner answers
+      Cast; P2 defers it as a named deviation until the owner answers.
+      P2b refuses Texture writes in the ProductAPI verb rather than on the
+      route side as design §9 item 5 recommends; the verb is the only
+      desk path to those routes, so this is stricter, and a named
+      deviation. Changing the fold later changes replayed turn identity
+      across a deploy (named residual, as with the replay branches)
     kind: architecture
     status: provisional (P2-review1)
     evidence_ref: receipts P2-review1
@@ -284,17 +307,32 @@ receipts:
       recommendation is fold, so keeping it is a deviation;
       ControlUpdateIDs has no readers. Gemini dissents on packet
       direction; recorded in the decision.
+  - id: P2-review2
+    at: 2026-10-11T17:45Z
+    kind: agentic-consensus file review, second round (session scratchpad p2/review2), frozen 612a2174
+    result: >-
+      Sent back 3 to 1 (Gemini accepts; Claude, DeepSeek, GLM send back);
+      the OpenAI panelists were excluded for the usage limit. All four
+      confirm the P2a fold keeps one transaction path, the round bound,
+      opener merge and the research chain. Defects: P2d cannot dispose a
+      directive (no postcondition branch, no turn disposition, no arm for an
+      idle Texture, the delegated-cast step on a management Cast); the fold
+      must live in commitTray to cover crash recovery, validate in two
+      phases, refuse other addressees, multiple applies, email bodies and a
+      second management opener; engineering's progress moves to ReportPacket,
+      not Note; removed verbs refuse through stubs. Revised: P2d moved to its
+      own station; the rest folded into the artifact and failure list.
 ---
 
 # P2 — one surface
 
 After P1 every Texture dispatch is a record, but Texture still dispatches
-through controls that no other desk has. P2 lands in four slices. P2a gives
+through controls that no other desk has. P2 lands in three slices. P2a gives
 Texture Cast and Ask and folds them into its turn, so the dispatch keeps the
 one transaction path P1 put a record on. P2b fences management's ProductAPI
 off every route that writes a Texture. P2c removes Message and Emit
-from every desk. P2d gives the Texture desk a way to wake on a directive
-addressed to texture:<doc>, so any desk of the same owner can feed it.
+from every desk. Texture addressing (P2d) is its own station, because the
+Texture desk cannot yet wake on and dispose a directive packet.
 
 Ways it can fail, written before the code:
 
@@ -334,11 +372,41 @@ Ways it can fail, written before the code:
   after the record committed (the fold removes Texture's Casts and Asks
   from the intent loop before it runs);
 - the audit counts the owner's management-open controls as a missed path
-  (their records carry emitter owner and are excepted by name);
+  (their records carry emitter owner and are excepted by name, which is
+  safe only once P2b refuses that route to desks);
 - a tray staged with Message before P2c fails to replay after it (the
   reducer branches stay one release);
 - engineering is still told to report progress with Message after P2c and
-  loses a cell every turn (the overlay and its pinning test move to Note);
+  loses a cell every turn (the overlay and its pinning test move to
+  ReportPacket);
+- engineering's progress loses its work binding (ReportPacket keeps the
+  producer_report direction; a Note would not);
+- Texture keeps its taught follow-up shape, an Ask or Note to research
+  after the turn commits, and every such cell is refused (the prompt
+  rewrite covers run_system.yaml's follow-up sentence and texture.yaml's
+  Ask and Note guidance; the prompt test also scans for Ask and Note
+  follow-ups outside a turn);
+- a cell with two ApplyTexture intents or only an email one has no fold
+  target (refused);
+- a Texture Cast or Ask to a desk other than research or management falls
+  through to commitLifecycleActIntent and its delegated-cast step (the
+  fold refuses every other Texture addressee at the reduction boundary);
+- a crash-recovery replay reduces Texture's Cast through the act path
+  (the fold lives in commitTray, which recovery also reaches);
+- the fold's own injected controls trip the refusal of model-authored
+  controls (two-phase validation);
+- two management Casts in one cell fail the turn without saying why
+  (refused by name);
+- folded intents vanish from the reduction receipt and break replay
+  accounting (each folded intent is recorded with the turn's seq);
+- a management Cast to texture:<doc> opens an engineering assignment
+  through the delegated-cast step (P2d gates it to engineering targets);
+- Texture wakes on a directive it cannot consume and re-wakes forever
+  (P2d adds consume-at-commit and a crash-boot close);
+- management and Texture feed each other without end (P2d bounds the
+  rounds);
+- management issues a management-open through ProductAPI during the P2a
+  demo and the audit's owner exception hides it (P2b lands first);
 - Texture keeps authoring controls because its main prompt still teaches
   them with a worked example (a test scans every served Texture prompt);
 - two actors open the same desk's work at once (only Texture dispatches

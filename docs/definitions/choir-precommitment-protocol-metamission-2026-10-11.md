@@ -27,6 +27,11 @@ metamission:
       readiness: drafted
       status: pending
       depends_on: [P1]
+    - id: P2d
+      path: none (texture:<doc> addressing — a Texture occurrence kind for directives, its disposition, arming an idle Texture, a round bound, delegated-cast gated to engineering)
+      readiness: intent
+      status: pending
+      depends_on: [P2]
     - id: P3
       path: none (predictions required on Cast, Ask and Escalate; count resolver)
       readiness: intent
@@ -41,7 +46,7 @@ metamission:
       path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md (re-authored on the protocol)
       readiness: intent
       status: pending
-      depends_on: [P4]
+      depends_on: [P4, P2d]
 
 start:
   captured_at: 2026-10-11T16:20:00Z
