@@ -826,6 +826,14 @@ func TestReattachVMAdoptsByIdentity(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+		// Start returns after the fork; wait for the exec, whose cmdline
+		// names the VM (problems/reattach-test-reads-cmdline-before-exec-2026-10-11.md).
+		for deadline := time.Now().Add(5 * time.Second); !firecrackerCmdlineMatchesVM(cmd.Process.Pid, vmID); {
+			if time.Now().After(deadline) {
+				t.Fatalf("fake firecracker for %s never exec'd", vmID)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
 		if err := mgr.savePID(vmID, cmd.Process.Pid); err != nil {
 			t.Fatal(err)
 		}
