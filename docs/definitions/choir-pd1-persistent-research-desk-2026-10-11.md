@@ -135,7 +135,7 @@ boundaries:
 
 now:
   status: working
-  slice: S1h — research depth per round and search capacity, the two remaining coverage levers
+  slice: S1i — Texture spends research rounds on coverage before confirmation (S1h trace); prompt v6 then rerun
   source_ref: 74227bcf (local; pushes after the W1a test run)
   deploy_identity: staging 78c9173e
   candidate:
@@ -294,6 +294,27 @@ receipts:
       Texture's caveats ("noted once, pending verification", "still being
       confirmed") recur on unconfirmed items.
     conjecture: PD1-1 still short on coverage; the wave fix removed timeouts but not the gap
+  - id: S1h
+    at: 2026-10-11T14:54Z
+    deploy: staging ebe02b17 on the reader computer (research prompt v5, Texture caveat line)
+    kind: deployed proof (traces in session scratchpad demo16/trace; final revision demo16/ainews/revisions/12)
+    result: >-
+      Same prompt and follow-up. Eight research runs (13:59 to 14:30), about
+      53 web searches in cell code (S1g 24) and 3 fetches. The final brief
+      has 839 words and 10 cited sources (S1g 790 and 7; baseline 5,765).
+      Claude Haiku 5.5 is now confirmed from Anthropic's own page; the stock
+      caveats are gone; claims are stated in their sources' terms ("TechCrunch
+      reported", "the announcement says"). GPT-6, confirmed in S1g, is
+      absent. Policy is one item, and the follow-up's policy, chips and
+      funding threads end in a "still open" list. The trace shows why:
+      Texture's questions to research after round one were confirmation
+      rounds ("confirm the Oct 4 task-force lead", "dated primary records
+      for the remaining gaps"), and research spent them re-confirming the
+      same few items (the Haiku 5.5 claim reported six times, the task-force
+      lead four). The run_system line "ask research to confirm it" sends
+      every lead back for confirmation while research rounds per request
+      are bounded, so confirmation crowds out coverage.
+    conjecture: PD1-1 still short on coverage; the binding constraint moved from search capacity to how Texture spends research rounds
 ---
 
 # PD1 — persistent research desk
