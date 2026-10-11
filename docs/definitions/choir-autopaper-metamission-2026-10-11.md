@@ -116,29 +116,34 @@ boundaries:
 
 now:
   status: working
-  slice: W1 — content in the graph; W1a landed; W1b2 moves capture writes to Store B (owner correction)
-  source_ref: c1d21d5e
-  deploy_identity: staging 5b077256
-  candidate: {id: W1, state: designing, ref: main, base: 78c9173e, digest: none, scope: [internal/store, internal/objectgraph, internal/sources]}
+  slice: W1 — content in the graph; W1a, W1b2 and W1c on staging; the capture read verb and the RDF parser fix deploy next, then W1 closes
+  source_ref: 2d093972 (local; pushes after the hour-long run)
+  deploy_identity: staging 19b2f964
+  candidate: {id: W1, state: landing, ref: main, base: 78c9173e, digest: none, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel]}
   conjecture:
     id: AP-1
     claim: >-
-      If captures never queue behind Texture and health on one connection,
-      continuous polling and living Textures can share one computer without
-      the July retention failure.
-    test: W1 acceptance (Texture latency under polling load)
+      With captures in Store B (bodies on host disk) and polling as
+      generation-fenced durable wakes with no model call, continuous polling
+      shares the paper computer with Texture and stays inside Store B's
+      memory budget, and a crash never resumes it.
+    test: W1 acceptance on staging (hour-long scheduled run; Store B rows and body files; corpus-dolt memory; crash restart)
     edge: missing_oracle
-    delta_o: Texture turn latency and health latency measured with and without polling load
-    scope_if_supported: one Autopaper computer, MVP sources
-    status: proposed
-    evidence_refs: []
+    delta_o: Texture turn latency under polling load is not yet measured; W2 puts Texture and polling on one computer
+    scope_if_supported: one Autopaper computer, a handful of sources
+    status: testing
+    evidence_refs: [docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md receipts W1c]
   decision: {what: "shared content (captures, published Textures) in Store B behind corpusd, bodies in host content storage; computers hold overlays", kind: architecture, status: settled (owner 2026-10-11), evidence_ref: problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md, owner_ratification_ref: "owner 2026-10-11: yes, move the write path to host store"}
   belief:
-    believed_state: Dolt past the race fix on staging; research can poll a source (W1b) but writes into its own embedded graph, the superseded path
-    main_uncertainty: whether Store B absorbs capture writes without the October 1 memory pressure
-    next_observation: a poll by hand into Store B on staging, read back from a second computer
-  blocker_or_risk: none
-  next_action: W1b2 (corpusd capture route; PollSource writes through it), then the schedule (W1c)
+    believed_state: >-
+      Scheduled polls land in Store B with no body bytes in rows, dedupe on
+      re-poll, record usage, back off on failure, and close on a crash
+      restart. RDF feeds never produced items before the parser fix. Two
+      search providers are out of quota (owner billing).
+    main_uncertainty: whether Texture stays responsive with polling on the same computer (W2's first observation)
+    next_observation: second-computer capture read on staging after the next deploy
+  blocker_or_risk: the MVP source list is still open (design §8 open item 3); W1 used six stand-in sources
+  next_action: push the held commits after the hour-long run, prove the second-computer read, run the completion panel, close W1 and author W2
 
 receipts: []
 ---
