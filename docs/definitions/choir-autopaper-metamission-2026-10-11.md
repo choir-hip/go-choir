@@ -116,7 +116,12 @@ boundaries:
 
 now:
   status: working
-  slice: W2 — living Textures; W1 complete (third completion panel approved); the W2 file is drafted and goes to file review next
+  slice: >-
+    W2 — living Textures, blocked on the inter-agent protocol. W1 complete.
+    Owner 2026-10-11: all inter-agent communication goes through
+    precommitment records first (docs/precommitment-protocol-design-2026-10-11.md,
+    draft for owner review); the W2 file review (sent back 5-2) found W2
+    cannot be built without it
   source_ref: 66b96f10 (pushed)
   deploy_identity: staging 25c8b5b0
   candidate: {id: W1, state: landing, ref: main, base: 78c9173e, digest: 56ec63e0, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel]}
@@ -143,7 +148,7 @@ now:
     main_uncertainty: whether Texture stays responsive with polling on the same computer (W2's first observation)
     next_observation: W2's file review, then Texture turn latency with polling on the paper computer
   blocker_or_risk: the MVP source list is still open (design §8 open item 3); W1 used six stand-in sources
-  next_action: review the drafted W2 file with an agentic-consensus panel; on accept, start W2a (captures reach management)
+  next_action: owner reviews the protocol design; land its slices P1-P4; re-author W2 on it (slice P5)
 
 receipts: []
 ---

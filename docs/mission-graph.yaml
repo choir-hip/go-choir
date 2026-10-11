@@ -1507,7 +1507,7 @@ nodes:
     title: W2 — living Textures; captures reach management, Textures open and revise on evidence, records and spend per story
     path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
     ledger: ''
-    status: planned
+    status: blocked
     kind: station
     entrypoint: false
     member_of: choir-autopaper-metamission-2026-10-11

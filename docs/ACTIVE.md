@@ -151,8 +151,12 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   W1 back twice (a generic-route capture bypass, lost items on a failed
   write, a lost successor wake; then a same-owner capture race); both
   rounds are fixed (726aa392, 56ec63e0), and the third panel approved
-  (seven of eight; W1 complete). W2 is next: its goal file goes to file
-  review.
+  (seven of eight; W1 complete). W2 is blocked on the inter-agent
+  protocol: owner direction 2026-10-11 is that all inter-agent
+  communication goes through precommitment records, and the W2 file review
+  found W2 cannot be built without it
+  ([problem](problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md);
+  [design draft for owner review](precommitment-protocol-design-2026-10-11.md)).
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
   Reality slice: seven M11 reruns, each one layer deeper. Rerun 7
