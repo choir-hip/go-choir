@@ -117,13 +117,18 @@ boundaries:
 now:
   status: working
   slice: >-
-    W2 — living Textures, blocked on the inter-agent protocol. W1 complete.
-    Owner 2026-10-11: all inter-agent communication goes through
-    precommitment records first (docs/precommitment-protocol-design-2026-10-11.md,
-    draft for owner review); the W2 file review (sent back 5-2) found W2
-    cannot be built without it
-  source_ref: 66b96f10 (pushed)
-  deploy_identity: staging 25c8b5b0
+    W1 complete. The protocol's P1 and P2 landed (staging b172895b); W2
+    (living Textures) waits on P2d2, which is designed through three review
+    rounds and held for the owner's review (one open question: how a
+    Texture run takes directive work from outside the owner's request).
+    The Autopaper app is designed
+    (docs/autopaper-app-design-2026-10-11.md): a news front page whose
+    stories open as Textures with quoted, captured sources, built on the
+    protocol. It proposes a reader slice (one permalink per story, a public
+    front page, citations that quote captures) that does not depend on
+    P2d2. Owner direction 2026-10-11 evening: design before building
+  source_ref: 5b93ba54 (pushed)
+  deploy_identity: staging b172895b
   candidate: {id: W1, state: landing, ref: main, base: 78c9173e, digest: 56ec63e0, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel]}
   conjecture:
     id: AP-1
@@ -148,7 +153,12 @@ now:
     main_uncertainty: whether Texture stays responsive with polling on the same computer (W2's first observation)
     next_observation: W2's file review, then Texture turn latency with polling on the paper computer
   blocker_or_risk: the MVP source list is still open (design §8 open item 3); W1 used six stand-in sources
-  next_action: owner reviews the protocol design; land its slices P1-P4; re-author W2 on it (slice P5)
+  next_action: >-
+    owner reviews the master report
+    (docs/reports/master-report-protocol-research-autopaper-2026-10-11.md):
+    the Autopaper app design and its reader slice, P2d2's open question, and
+    the research job (Autopaper's quality depends on research). Then author
+    the reader slice as a station and re-author W2 on P2d
 
 receipts: []
 ---
