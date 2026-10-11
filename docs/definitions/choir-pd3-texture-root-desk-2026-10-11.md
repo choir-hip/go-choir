@@ -138,3 +138,74 @@ gets a sub-RLM that is still its only writer. The root routes wakes, keeps
 the documents coherent with each other, and writes a master document: the
 owner's one place to see every document, every open commitment and every
 desk.
+
+## Design draft (2026-10-11, before code)
+
+Read at 52b8774d. `texture:<doc>` is derived in about 25 places across
+textureowner, agentcore and store (`currentTextureAgentID`,
+`isTextureAgentID`, `docIDFromTextureAgentID`, the store's
+`"texture:"+documentID` checks). All of them mean "the sole writer of this
+document".
+
+**Identity.** The per-document Texture agents stay `texture:<doc>`. They are
+the sub-RLMs, and nothing about their authority changes. The root is a new
+agent with a prefix that no document-desk check matches:
+`texture-root:<computer>`. Reusing `texture:` would let every
+`docIDFromTextureAgentID` call treat the root as a document desk.
+
+**Routing.** In this station the root does not sit in the wake path. Owner
+input, research reports and management reports still wake the document's
+sub-RLM directly. Routing every wake through one root run would make
+documents wait on each other, which is this file's goodharting clause. The
+root instead gets a digest wake after any sub-RLM commit or any desk report:
+debounced, outside the commit transaction, and safe to drop. Root routing
+(the root choosing which document a new owner request belongs to) is a
+later homotopy step.
+
+**Master document.** This is an ordinary Texture document whose only writer
+is the root, so the existing UI and product API show it. It says, per
+document: title, last revision time, open work by desk, and what waits on
+the owner. It also says what each desk is doing. The store refuses a root
+write to any other document and a sub-RLM write to the master document.
+
+**Oracle before product.** A deterministic projection of the ledger (open
+work items, desks, pending owner questions) is built first. It serves as
+the verifier, not as the master document: a root revision passes only if
+it covers every open item in the projection. A timer-regenerated list
+cannot satisfy the station, and a root that writes prose but drops an open
+item fails visibly.
+
+**Isolation.** The root reads the ledger; it holds no lock a sub-RLM needs.
+A sub-RLM failure leaves the root and the other documents running. A root
+failure leaves every document revising, and only the master document goes
+stale.
+
+**Standing questions.**
+1. *Settled by:* the owner settled the direction (2026-10-11). The
+   orchestrator chose to keep the root out of the wake path; that choice is
+   reversible and is flagged for the owner.
+2. *Conformance:* doctrine I26 (four root desks), Texture as sole writer
+   per document, and CLAUDE.md's "Texture renders that ledger into the
+   owner-facing supervision surface". The master document is that surface.
+3. *Deletion citers:* nothing is deleted in this station.
+4. *Production consumer:* the owner, through the document list.
+5. *Single authority:* the lifecycle ledger. The master document is a
+   rendering and is never read back as state.
+6. *Artifact:* the staging acceptance above, with the projection-coverage
+   check recorded per root revision.
+7. *Fate-sharing:* root reads go to the store only. The root does not
+   share fate with any sub-RLM run.
+8. *Restart:* a crash restart closes the root's pending digest wake like
+   any other obligation, and the next sub-RLM commit re-arms it. The root's
+   PD2 session is process memory.
+9. *No SSH:* the master document is visible through the product API and
+   UI.
+
+**Note on PD1's per-computer lift.** The store's research branch requires
+the research agent's channel to be the requesting document. The follow-up
+rule (7bcc87eb) already checks that the target work was opened by this
+document's Texture, and that is the authority that matters. A single
+`research:<computer>` agent serving several documents may therefore need
+only that channel check relaxed, plus reports routed by work item. It may
+not need the root at all. I'll check that before starting PD3 code: it is
+the smaller step and it is what the owner asked for.
