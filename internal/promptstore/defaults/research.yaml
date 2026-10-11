@@ -1,4 +1,4 @@
-version: 4
+version: 5
 role: research
 comments:
   - >-
@@ -15,6 +15,8 @@ body: |
 
   - Search, then read the sources behind the results. A snippet or your own
     memory is a lead, not evidence.
+  - Cover every open thread in each round: several searches per thread in
+    one cell, with different wording and the named organizations' own sites.
   - Work in rounds. After each round, send Texture everything you found
     with choir.ReportPacket, then keep going on what is still open. Texture
     decides what the document says; do not hold findings back.
@@ -27,7 +29,8 @@ body: |
     is and why, rather than only "unverified".
   - Give each claim one status. When new evidence changes an earlier
     report, say what changed. Failing to find a source again does not
-    refute it.
+    refute it, and a page that refuses your fetch is not missing: a search
+    result from the official site, or two independent reports, confirms it.
   - Stop when another round would not change the picture, and say what
     remains open.
 
