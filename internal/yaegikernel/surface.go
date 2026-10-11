@@ -40,7 +40,7 @@ var choirFunctionDocs = map[string]FunctionDoc{
 	"Message":              {Args: []string{"recipientID", "kind", "body"}, Summary: "Stages a typed message to another agent; delivered after the cell reduces."},
 	"Emit":                 {Args: []string{"toDesk", "kind", "body"}, Summary: "Sends an immediate signal to another desk, outside the cell tray, and wakes it before returning."},
 	"Assign":               {Args: []string{"taskID", "actorProfile", "instruction"}, Summary: "Records a worker assignment and returns its receipt."},
-	"Cast":                 {Args: []string{"desk", "objective", "spec"}, Summary: "Stages delegated admission of downstream work to a desk; spec is optional structured detail."},
+	"Cast":                 {Args: []string{"desk", "objective", "spec"}, Summary: "Stages delegated admission of downstream work to a desk; spec is optional structured detail. On Texture, spec is the typed packet and the Cast commits with the same cell's ApplyTexture turn."},
 	"Ask":                  {Args: []string{"toDesk", "question"}, Summary: "Stages a directed question; it resolves on the target's Reply."},
 	"Reply":                {Args: []string{"toDesk", "targetRef", "answer"}, Summary: "Answers an Ask you received."},
 	"Note":                 {Args: []string{"toDesk", "body"}, Summary: "Stages raw unscored transport to a desk."},

@@ -118,3 +118,62 @@ func TestTextureUsesOnePersistentResearchDeskPerDocument(t *testing.T) {
 		t.Fatalf("replay of a committed follow-up changed its controls: %+v note=%q err=%v", again, note, err)
 	}
 }
+
+// P2a (docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md): a
+// Texture Cast to management folds to the persistent-management opener. When
+// the request already has open management work on this trajectory, the
+// opener continues it, as a research opener continues research work, because
+// target_work_item_id is no longer on Texture's surface.
+func TestTextureManagementCastContinuesTheRequestsOpenWork(t *testing.T) {
+	core, handler := testAPISetup(t)
+	installSynchronousTextureOwnerWake(t, core, handler)
+	start := startObservationLifecycle(t, core.Store())
+	resp := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", start.OwnerID, "mgmt-owner-1", "build it", start.InitialRevision.RevisionID)
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("revise status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	agent, _ := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
+	run, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, agent.ActiveRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
+	snapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	ownerInput := latestOwnerInput(snapshot)
+	if ownerInput.IsZero() {
+		t.Fatal("fixture: no owner input")
+	}
+	cast := func(id string) editTextureArgs {
+		return editTextureArgs{ToolCallID: id, WorkDisposition: string(types.WorkItemOpen), Controls: []textureControlArgs{{
+			OpenPersistentManagement: true, Objective: "build the page", StagedAct: "cast",
+			Packet: types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request",
+				Summary: "build the page", Actions: []types.CoagentPacketAction{{Type: "run_tests", Objective: "verify the page",
+				Safety: types.CoagentPacketActionSafety{MutationClass: "yellow", Network: "forbidden", FileMutation: "allowed"}}}},
+		}}}
+	}
+	mgmt := agentprofile.Management + ":" + start.OwnerID
+
+	opened, _, err := handler.textureTurnControls(t.Context(), &run, doc, snapshot, cast("open"))
+	if err != nil || len(opened) != 1 || opened[0].TargetAgentID != mgmt || opened[0].OpenWork == nil || opened[0].StagedAct != "cast" {
+		t.Fatalf("first management Cast did not open management work: %+v err=%v", opened, err)
+	}
+
+	work := types.WorkItemRecord{WorkItemID: "w-mgmt", TrajectoryID: doc.TrajectoryID, AuthorityProfile: agentprofile.Management,
+		Status: types.WorkItemOpen, AssignedAgentID: mgmt, CreatedAt: ownerInput.Add(time.Second)}
+	busy := snapshot
+	busy.WorkItems = append(append([]types.WorkItemRecord(nil), snapshot.WorkItems...), work)
+	follow, _, err := handler.textureTurnControls(t.Context(), &run, doc, busy, cast("follow"))
+	if err != nil || len(follow) != 1 || follow[0].TargetWorkItemID != work.WorkItemID || follow[0].OpenWork != nil {
+		t.Fatalf("a second management Cast in the request did not continue its open work: %+v err=%v", follow, err)
+	}
+
+	// Management work from an earlier request is not continued.
+	stale := snapshot
+	old := work
+	old.CreatedAt = ownerInput.Add(-time.Minute)
+	stale.WorkItems = append(append([]types.WorkItemRecord(nil), snapshot.WorkItems...), old)
+	fresh, _, err := handler.textureTurnControls(t.Context(), &run, doc, stale, cast("fresh"))
+	if err != nil || len(fresh) != 1 || fresh[0].OpenWork == nil {
+		t.Fatalf("management work from an earlier request was continued: %+v err=%v", fresh, err)
+	}
+}

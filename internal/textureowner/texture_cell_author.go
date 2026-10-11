@@ -74,7 +74,7 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 		if why := strictjson.Explain([]byte(bodyJSON), &cellTextureAuthorArgs{}); why != "" {
 			err = fmt.Errorf("%s", why)
 		}
-		return "", fmt.Errorf("texture cell author: decode staged body: %w. Valid top-level fields: op, doc_id, base_revision_id, operation, content, edits, rationale, work_disposition, update_dispositions, controls, decision_kind, reason, evidence_refs, next_action, email. controls[] fields: target_work_item_id, open_persistent_super, open_researcher, objective, packet. packet fields: kind, summary, claims, sources, actions, questions, notes — schema_version is assigned by the runtime; do not send \"type\" or \"schema_version\". Valid packet kind values: evidence_update, execution_request, execution_result, blocker, question, proposal, decision_request", err)
+		return "", fmt.Errorf("texture cell author: decode staged body: %w. Valid top-level fields: op, doc_id, base_revision_id, operation, content, edits, rationale, work_disposition, update_dispositions, decision_kind, reason, evidence_refs, next_action, email. Dispatch to research or management with choir.Cast, choir.Ask or choir.Note in the same cell, not in this body. A Cast packet's fields: kind, summary, claims, sources, actions, questions, notes — schema_version is assigned by the runtime; do not send \"type\" or \"schema_version\". Valid packet kind values: evidence_update, execution_request, execution_result, blocker, question, proposal, decision_request", err)
 	}
 	var receipt string
 	var err error

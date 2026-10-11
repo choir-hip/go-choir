@@ -17,7 +17,7 @@ func TestEveryDeskPromptCarriesItsSurface(t *testing.T) {
 		want    []string
 		absent  []string
 	}{
-		{agentprofile.Texture, nil, []string{"choir.ReadDoc()", "choir.ApplyTexture(edit any)"}, []string{"choir.Exec("}},
+		{agentprofile.Texture, nil, []string{"choir.ReadDoc()", "choir.ApplyTexture(edit any)", "choir.Cast("}, []string{"choir.Exec("}},
 		{agentprofile.Management, nil, []string{"choir.Cast(", "choir.ProductAPI("}, []string{"choir.ApplyTexture("}},
 		{agentprofile.Research, nil, []string{"choir.WebSearch(", "choir.FetchURL("}, []string{"choir.Exec(", "choir.WriteFile("}},
 		{agentprofile.Engineering, map[string]any{runMetadataEngineeringSlot: "verifier"}, []string{"choir.Exec(", "choir.Verify(", "choir.InspectBundle()"}, nil},

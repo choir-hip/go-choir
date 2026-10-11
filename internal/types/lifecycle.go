@@ -190,6 +190,9 @@ type TextureTurnControl struct {
 	Packet           CoagentSourcePacketPayload `json:"packet"`
 	Content          string                     `json:"content"`
 	PayloadDigest    string                     `json:"payload_digest"`
+	// StagedAct names the desk act the control came from (cast, ask or
+	// note; protocol P2a). Empty for the owner's management-open route.
+	StagedAct string `json:"staged_act,omitempty"`
 }
 
 // IssueLifecycleControlRequest queues downward controls without requiring a

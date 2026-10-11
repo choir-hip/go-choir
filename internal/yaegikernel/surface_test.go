@@ -114,7 +114,7 @@ func TestHelpListsExactlyTheDeskSurface(t *testing.T) {
 			t.Errorf("Help() omits callable choir.%s:\n%s", name, help)
 		}
 	}
-	for _, absent := range []string{"choir.Exec(", "choir.Cast(", "choir.WriteFile(", "choir.Verify("} {
+	for _, absent := range []string{"choir.Exec(", "choir.ProductAPI(", "choir.WriteFile(", "choir.Verify("} {
 		if strings.Contains(help, absent) {
 			t.Errorf("Help() lists %s, which texture cannot call", absent)
 		}

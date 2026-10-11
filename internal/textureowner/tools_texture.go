@@ -49,6 +49,9 @@ type textureControlArgs struct {
 	OpenResearch             bool                             `json:"open_researcher,omitempty"`
 	Objective                string                           `json:"objective,omitempty"`
 	Packet                   types.CoagentSourcePacketPayload `json:"packet"`
+	// StagedAct is set by the reducer's fold (cast, ask or note); a model
+	// cannot author controls, so it is never model-written.
+	StagedAct string `json:"staged_act,omitempty"`
 }
 
 type editTextureArgs struct {

@@ -227,6 +227,9 @@ func mergeResearchOpeners(controls []textureControlArgs) []textureControlArgs {
 		merged.Packet.Claims = append(merged.Packet.Claims, control.Packet.Claims...)
 		merged.Packet.Sources = append(merged.Packet.Sources, control.Packet.Sources...)
 		merged.Packet.Notes = append(merged.Packet.Notes, control.Packet.Notes...)
+		if act := strings.TrimSpace(control.StagedAct); act != "" && !strings.Contains("+"+merged.StagedAct+"+", "+"+act+"+") {
+			merged.StagedAct = strings.TrimPrefix(merged.StagedAct+"+"+act, "+")
+		}
 	}
 	return out
 }
@@ -267,6 +270,21 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 			requestWork = &snapshot.WorkItems[i]
 		}
 	}
+	// The request's open management work on this trajectory (the latest, if
+	// several): a management Cast continues it (protocol P2a), since Texture
+	// no longer names work items.
+	managementAgent := agentprofile.Management + ":" + strings.TrimSpace(rec.OwnerID)
+	var requestManagementWork *types.WorkItemRecord
+	for i := range snapshot.WorkItems {
+		work := snapshot.WorkItems[i]
+		if strings.TrimSpace(work.AssignedAgentID) != managementAgent || work.Status != types.WorkItemOpen ||
+			strings.TrimSpace(work.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) || work.CreatedAt.Before(since) {
+			continue
+		}
+		if requestManagementWork == nil || work.CreatedAt.After(requestManagementWork.CreatedAt) {
+			requestManagementWork = &snapshot.WorkItems[i]
+		}
+	}
 	rounds := researchRoundsSinceOwnerInput(snapshot, ownControls)
 	dropped := 0
 	controls := make([]types.TextureTurnControl, 0, len(in.Controls))
@@ -293,7 +311,10 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 		targetAgentID, targetWorkItemID := "", strings.TrimSpace(raw.TargetWorkItemID)
 		var openAgent *types.AgentRecord
 		var openWork *types.WorkItemRecord
-		if raw.OpenPersistentManagement {
+		if raw.OpenPersistentManagement && requestManagementWork != nil {
+			// The request already has open management work: continue it.
+			targetAgentID, targetWorkItemID = managementAgent, strings.TrimSpace(requestManagementWork.WorkItemID)
+		} else if raw.OpenPersistentManagement {
 			targetAgentID = agentprofile.Management + ":" + strings.TrimSpace(rec.OwnerID)
 			// A fresh computer has never registered the persistent management
 			// agent; the HTTP opener ensures it, and so must the turn
@@ -369,6 +390,7 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 		controls = append(controls, types.TextureTurnControl{
 			ControlID: controlID, TargetAgentID: targetAgentID, TargetWorkItemID: targetWorkItemID,
 			OpenAgent: openAgent, OpenWork: openWork, Packet: packet, Content: content, PayloadDigest: payloadDigest,
+			StagedAct: strings.TrimSpace(raw.StagedAct),
 		})
 	}
 	note := ""

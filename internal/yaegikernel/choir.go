@@ -265,10 +265,10 @@ var deskModuleSets = map[string][]string{
 		"ReadEvidence", "ListEvidence"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
-	// not capsule file ops. Children (research probes, persistent management)
-	// open atomically inside the turn via the edit's controls arg — texture
-	// never free-spawns or casts.
-	"texture": {"Message", "Emit", "Ask", "Note", "Reply", "CancelAct",
+	// not capsule file ops. It dispatches to research and management with
+	// Cast, Ask and Note, which the reducer folds into the same cell's
+	// ApplyTexture turn (protocol P2a), so a dispatch commits with the turn.
+	"texture": {"Message", "Emit", "Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"ReadDoc", "ApplyTexture"},
 }

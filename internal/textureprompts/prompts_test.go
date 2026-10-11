@@ -55,7 +55,7 @@ func TestRunOverlayUsesCellVerbs(t *testing.T) {
 	if strings.Contains(overlay, "Source ids only in source inventories") {
 		t.Fatalf("overlay should not include removed negative phrasing: %q", overlay)
 	}
-	for _, want := range []string{"choir.ApplyTexture", "ReadDoc()", "Inbox()", "choir.Message", "choir.Note"} {
+	for _, want := range []string{"choir.ApplyTexture", "ReadDoc()", "Inbox()", "choir.Cast", "choir.Ask", "choir.Note"} {
 		if !strings.Contains(overlay, want) {
 			t.Fatalf("overlay missing cell-verb guidance %q: %q", want, overlay)
 		}
@@ -91,7 +91,7 @@ func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentManagementCapsules(
 	for name, prompt := range prompts {
 		for _, want := range []string{
 			"choir.ApplyTexture",
-			"open_persistent_super=true",
+			`choir.Cast("management", objective, packet)`,
 			"valid execution_request",
 			"never directly opens, requests, or spawns Engineering",
 			"disposable capsule",
@@ -106,7 +106,7 @@ func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentManagementCapsules(
 	for _, prompt := range []string{prompts["run"], prompts["revision"]} {
 		for _, want := range []string{
 			"Protected host, self-development, event, checkpoint, materialization, acceptance, route, VM, and SSH effects are unavailable",
-			"Probe morphisms (research opened atomically in an ApplyTexture controls entry) gather world knowledge",
+			"Probe morphisms (a choir.Cast or choir.Ask to research, committed with the ApplyTexture turn in the same cell) gather world knowledge",
 		} {
 			if !strings.Contains(prompt, want) {
 				t.Fatalf("prompt missing protected boundary or preserved research behavior %q:\n%s", want, prompt)
@@ -127,6 +127,32 @@ func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentManagementCapsules(
 		} {
 			if strings.Contains(prompt, forbidden) {
 				t.Fatalf("%s prompt retains blanket effects-OFF prohibition %q:\n%s", name, forbidden, prompt)
+			}
+		}
+	}
+}
+
+// P2a (docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md): Texture
+// dispatches with choir.Cast, choir.Ask and choir.Note in the same cell as its
+// turn; ApplyTexture no longer takes controls. No served Texture prompt may
+// still teach the control fields.
+func TestServedTexturePromptsTeachCastNotControls(t *testing.T) {
+	entries, err := overlayFS.ReadDir("overlays")
+	if err != nil {
+		t.Fatal(err)
+	}
+	texts := map[string]string{"RunOverlay": RunOverlay()}
+	for _, e := range entries {
+		raw, err := overlayFS.ReadFile("overlays/" + e.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		texts[e.Name()] = string(raw)
+	}
+	for name, text := range texts {
+		for _, retired := range []string{"open_researcher", "open_persistent_super", "target_work_item_id", "controls entry", `"controls":`} {
+			if strings.Contains(text, retired) {
+				t.Errorf("%s still teaches %q", name, retired)
 			}
 		}
 	}

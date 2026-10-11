@@ -378,6 +378,9 @@ func (a *lifecycleControlAccumulator) mintControlRecord(control types.TextureTur
 			"control_id": control.ControlID, "work_item_id": workItemID, "command_id": a.commandID,
 		},
 	}
+	if act := strings.TrimSpace(control.StagedAct); act != "" {
+		rec.SubjectRefs["staged_act"] = act
+	}
 	recordObj, err := lifecycleObject(ogKindCommitmentRecord, a.ownerID, a.computerID, rec.RecordID, rec, map[string]any{
 		"record_id":   rec.RecordID,
 		"agent_id":    rec.Provenance.AgentID,

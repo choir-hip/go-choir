@@ -810,6 +810,21 @@ func (r *rlmCallReduction) recoverPartialActCommit(ctx context.Context, intents 
 
 func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel.StagedIntent, highWater uint64) error {
 	receipt := ReductionReceipt{Cursor: r.scope.Cursor}
+	// Texture dispatches with the turn (protocol P2a): its Cast, Ask and Note
+	// fold into the cell's ApplyTexture body before the loop, so they never
+	// reach the act path. commitTray is shared by commit and crash recovery,
+	// so both fold the same way.
+	if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Texture {
+		var folded []yaegikernel.StagedIntent
+		var err error
+		intents, folded, err = foldTextureDispatch(intents)
+		if err != nil {
+			return err
+		}
+		for _, in := range folded {
+			receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: 0, Kind: in.Kind})
+		}
+	}
 	for _, in := range intents {
 		var seq uint64
 		var err error
