@@ -24,7 +24,7 @@ const researchChildConcurrency = 4
 
 // researchChildPreamble is prepended to the research desk prompt for a child
 // activation. It states the child's job, not a procedure.
-const researchChildPreamble = `You are a child research activation working for a parent research desk on one objective. You have the read-only world verbs; do this objective's work yourself with them. choir.Research is there only if the objective turns out to hold several separate lines of inquiry. You cannot report, message or write: whatever you end your turn with is returned to the parent as your findings. Investigate the objective deeply, then end with your findings: each claim with its date and source URL, and what remains uncertain.`
+const researchChildPreamble = `You are a child research activation working for a parent research desk on one objective. Do this objective's work yourself with the read-only world verbs. You cannot fan out further, report, message or write: whatever you end your turn with is returned to the parent as your findings. Investigate the objective deeply, then end with your findings: each claim with its date and source URL, and what remains uncertain.`
 
 // researchChildCallInterval spaces research-child model calls across the
 // whole computer: 40 a minute, under the gateway's default per-computer
@@ -37,16 +37,11 @@ const researchChildCallInterval = 1500 * time.Millisecond
 
 // The time carve-out (M6.5: "a carve-out of the parent's budget"). A
 // desk's choir.Research call returns within researchCallWindow, so the desk
-// can report; each child gets researchChildShare of its parent's remaining
-// time and is told it; a child with less than researchMinFanoutTime left
-// cannot fan out and does the work itself. Depth and width stay the model's
-// choice inside that time
-// (problems/research-fanout-overruns-computer-model-budget-2026-10-11.md,
-// amendment 00:52Z).
-var (
-	researchCallWindow    = 10 * time.Minute
-	researchMinFanoutTime = 2 * time.Minute
-)
+// can report; each child gets researchChildShare of that time and is told
+// it (problems/research-fanout-overruns-computer-model-budget-2026-10-11.md,
+// amendment 00:52Z). Children cannot call choir.Research: one level of
+// fan-out, rounds over recursion (owner 2026-10-11, PD1).
+var researchCallWindow = 10 * time.Minute
 
 const researchChildShare = 0.75
 
@@ -146,13 +141,9 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 		return nil, fmt.Errorf("research: no model provider on this computer")
 	}
 	lineage := researchLineageFrom(ctx, parent)
-	_, nested := ctx.Value(researchLineageKey{}).(researchLineage)
 	deadline, ok := ctx.Deadline()
-	if !nested && (!ok || time.Until(deadline) > researchCallWindow) {
+	if !ok || time.Until(deadline) > researchCallWindow {
 		deadline = time.Now().Add(researchCallWindow)
-	}
-	if left := time.Until(deadline); nested && left < researchMinFanoutTime {
-		return nil, fmt.Errorf("research: %s left, too little to fan out; do this work yourself and end with your findings", left.Round(time.Second))
 	}
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()

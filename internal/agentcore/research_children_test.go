@@ -235,13 +235,13 @@ func (p *timedChildProvider) CallWithTools(ctx context.Context, req providerifac
 // (amendment 00:52Z): children delegated again and again, and the desk's
 // choir.Research call never returned. Failure modes pinned: a desk's call
 // waits past its window for a child that never answers; a child is not
-// told how long it has; a child with too little time left fans out again
-// instead of being told to do the work itself.
+// told how long it has; a child can fan out again (owner 2026-10-11: rounds,
+// not recursion; PD1).
 func TestResearchTreeReturnsWithinItsTime(t *testing.T) {
 	deskTestWorkerBin(t)
-	window, minFanout := researchCallWindow, researchMinFanoutTime
-	researchCallWindow, researchMinFanoutTime = 4*time.Second, 3500*time.Millisecond
-	defer func() { researchCallWindow, researchMinFanoutTime = window, minFanout }()
+	window := researchCallWindow
+	researchCallWindow = 4 * time.Second
+	defer func() { researchCallWindow = window }()
 	provider := &timedChildProvider{}
 	rt := &Runtime{
 		provider:           provider,
@@ -278,8 +278,8 @@ fmt.Println(string(b), err)`
 	if !strings.Contains(results[0].Error, "deadline") {
 		t.Fatalf("a child that never answered did not end at its deadline: %+v", results[0])
 	}
-	if !strings.Contains(results[1].Findings, "too little to fan out") {
-		t.Fatalf("a child with %s left was not told to do the work itself: %+v", 3*time.Second, results[1])
+	if !strings.Contains(results[1].Findings, "choir has no Research") {
+		t.Fatalf("a child reached choir.Research (children cannot fan out further): %+v", results[1])
 	}
 	provider.mu.Lock()
 	defer provider.mu.Unlock()

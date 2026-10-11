@@ -87,7 +87,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 			ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
 			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
 			ActionReadContentSelector, ActionSearchWireCorpus,
-			ActionReadEvidence, ActionListEvidence, ActionResearch}
+			ActionReadEvidence, ActionListEvidence}
 	} else if readOnly {
 		// Research is read-only on the filesystem but owns the host-mediated
 		// egress verbs (web_search/fetch_url/source_search/import_*/read_*/
@@ -211,7 +211,7 @@ var deskModuleSets = map[string][]string{
 	// return to the parent cell as a value.
 	SessionRoleResearchChild: {"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
 		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
-		"ReadEvidence", "ListEvidence", "Research"},
+		"ReadEvidence", "ListEvidence"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
 	// not capsule file ops. Children (research probes, persistent management)
