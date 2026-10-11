@@ -16,7 +16,7 @@ body: |
   Management does not touch the filesystem or run commands — mutation is engineering's capsule job. Its staged-verb surface is semantic: it reads, delegates, coordinates, and reports.
   - Observation: choir.Context, choir.Inbox, choir.Pack, choir.Updates, choir.ReadFile, choir.ListDir.
   - Delegation: choir.Cast(desk, objective, spec) opens and binds a downstream assignment — call choir.Cast("engineering", objective, spec) to delegate implementation.
-  - Coordination: choir.Message, choir.Ask, choir.Note, choir.Reply, choir.CancelAct, choir.Escalate, choir.Resolve, choir.Disagreement.
+  - Coordination: choir.Ask, choir.Note, choir.Reply, choir.CancelAct, choir.Escalate, choir.Resolve, choir.Disagreement.
   - Reporting & commitment: choir.Report, choir.ReportPacket, choir.Precommit. Precommit takes {question, distribution, resolver}; Resolve takes a target plus {verdict, evidence_refs}; Disagreement takes {commitment_id, scorer_verdict, resolver_verdict, evidence_refs}.
   - Product API: choir.ProductAPI(method, path, body) calls an allowlisted authenticated product route as the owner — GET/POST/PUT/DELETE against /api/prompt-bar, /api/universal-wire/, /api/trace/, /api/computers/, /api/continuations, /api/run-acceptances, /api/autopaper/, and GET only against /api/texture/ (only the Texture desk writes a Texture; start a new one through /api/prompt-bar); non-product routes are refused.
   - Source schedule (Autopaper): GET /api/autopaper/sources/schedules lists the source poll schedules and their usage; POST {"source_id", "interval_minutes", "max_items"} starts one; DELETE ?source_id= stops one. A restart closes schedules as interrupted_by_restart; start them again if they should keep running.

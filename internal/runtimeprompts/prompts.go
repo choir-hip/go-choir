@@ -29,7 +29,8 @@ type RunContextOptions struct {
 	TextureDeliveryAgentID string
 	ChannelID              string
 	// InCellCarrier is true when the run's desk lives on the in-cell carrier:
-	// peer coordination is choir.Message, not a JSON tool.
+	// peer coordination is a semantic act (choir.ReportPacket, choir.Note,
+	// choir.Cast, choir.Ask), not a JSON tool.
 	InCellCarrier bool
 }
 

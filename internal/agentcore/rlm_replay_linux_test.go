@@ -1075,9 +1075,10 @@ if err != nil { panic(err) }
 	}
 	env.rlmAssertCensusEqual(t, ctx, manifest, censusBefore, "verify new-identity")
 
-	// --- Row 9: update_coagent -> choir.Message ---
-	// The cell stages choir.Message; the reducer commits it through
-	// commitMessageIntent under the update authority contract. The update is
+	// --- Row 9: update_coagent -> choir.ReportPacket (choir.Message retired, P2c) ---
+	// The cell stages choir.ReportPacket; the reducer commits it through
+	// commitAddressedPacketIntent under the update authority contract, keyed
+	// on the packet as a staged Message was. The update is
 	// already recorded, so the durable layer dedups to the same update_id.
 	updateGolden := rlmReplayLoadGolden(t, goldenDir, "update_coagent")
 	packetBody, _ := json.Marshal(updateGolden.Input["packet"])
@@ -1110,7 +1111,7 @@ if err != nil { panic(err) }
 	updateCell := fmt.Sprintf(`package main
 import "choir"
 func main() {
-_, err := choir.Message(%q, "execution_result", %q)
+_, err := choir.ReportPacket(%q, %q, "")
 if err != nil { panic(err) }
 }`,
 		updateGolden.Input["agent_id"].(string), string(packetBody))
@@ -1158,7 +1159,7 @@ if err != nil { panic(err) }
 	mutatedBody, _ := json.Marshal(mutatedPacket)
 	mutatedCell := fmt.Sprintf(`package main
 func main() {
-_, err := choir.Message(%q, "execution_result", %q)
+_, err := choir.ReportPacket(%q, %q, "")
 if err != nil { panic(err) }
 }`,
 		updateGolden.Input["agent_id"].(string), string(mutatedBody))

@@ -77,7 +77,7 @@ func (rt *Runtime) channelCast(ctx context.Context, channelID, toAgentID, toRunI
 	// agent-scoped form (texture:doc) and the bare profile name (texture).
 	// Unaddressed broadcasts (ToAgentID empty) are unaffected.
 	if to := message.ToAgentID; to == agentprofile.Texture || strings.HasPrefix(to, agentprofile.Texture+":") {
-		return 0, fmt.Errorf("channel cast: %q is not reachable by channel mail; use the lifecycle packet path (choir.Message/choir.ReportPacket)", to)
+		return 0, fmt.Errorf("channel cast: %q is not reachable by channel mail; use the lifecycle packet path (choir.ReportPacket)", to)
 	}
 	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	if ownerID == "" && message.FromRunID != "" {

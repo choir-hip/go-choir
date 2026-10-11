@@ -202,7 +202,7 @@ func TestAssignedEngineeringPromptNamesExactKindWithoutFutureToolLie(t *testing.
 		if !strings.Contains(prompt, "kind="+string(kind)) {
 			t.Fatalf("prompt does not name exact %s assignment: %s", kind, prompt)
 		}
-		if !strings.Contains(prompt, "choir.Message") {
+		if !strings.Contains(prompt, "Report progress to Management with choir.ReportPacket") {
 			t.Fatalf("assigned Engineering prompt omits the in-cell report channel: %s", prompt)
 		}
 		for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent", "record_assignment_result"} {

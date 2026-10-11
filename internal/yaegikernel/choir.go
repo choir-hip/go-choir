@@ -434,46 +434,20 @@ func (s *ChoirScope) Assign(taskID, actorProfile, instruction string) (AssignRes
 	return result, nil
 }
 
-// Message records a typed inter-agent message and returns its receipt. While
-// a cell is bound it stages into the tray and returns immediately with the
-// cell-local correlation ID (tray bookkeeping, never a delivery receipt);
-// unbound it keeps the legacy synchronous broker call.
+// Message and Emit are retired (protocol P2c,
+// docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md): one agent
+// reaches another only through a record addressed to it. They stay exported
+// so a model that still calls them is told what to use instead of hitting an
+// undefined symbol; the reducer keeps its IntentMessage branch for one release
+// so a tray staged before the change still replays.
+const retiredMessageVerbs = "use choir.ReportPacket(to, packet, \"\") to send a packet to your requester or the desk that cast to you, choir.Note(desk, body) for information, or choir.Cast / choir.Ask to request work"
+
 func (s *ChoirScope) Message(recipientID, kind, body string) (MessageResult, error) {
-	if err := s.mutateDenied("Message"); err != nil {
-		return MessageResult{}, err
-	}
-	if s.tray != nil {
-		if recipientID == "" {
-			return MessageResult{}, fmt.Errorf("choir: message requires a destination desk")
-		}
-		localID, err := s.tray.stage(StagedIntent{Kind: IntentMessage, ToDesk: recipientID, MsgKind: kind, Body: body})
-		if err != nil {
-			return MessageResult{}, err
-		}
-		return MessageResult{MessageID: localID}, nil
-	}
-	var result MessageResult
-	if err := s.call(ActionMessage, MessagePayload{RecipientID: recipientID, Kind: kind, Body: body}, &result); err != nil {
-		return MessageResult{}, err
-	}
-	return result, nil
+	return MessageResult{}, fmt.Errorf("choir.Message is retired: %s", retiredMessageVerbs)
 }
 
-// Emit durably sends an immediate signal to another desk. Unlike Message, it
-// never enters the bound cell's tray: the host writes the "emit" envelope and
-// wakes the recipient before this call returns. The result's AdvisorySeq is
-// the piggyback watermark — the newest emission seq addressed to *this* desk,
-// so a caller can observe a mid-activation arrival without waiting for the
-// next boundary notice.
 func (s *ChoirScope) Emit(toDesk, kind, body string) (EmitResult, error) {
-	if err := s.mutateDenied("Emit"); err != nil {
-		return EmitResult{}, err
-	}
-	var result EmitResult
-	if err := s.call(ActionEmit, EmitPayload{ToDesk: toDesk, Kind: kind, Body: body}, &result); err != nil {
-		return EmitResult{}, err
-	}
-	return result, nil
+	return EmitResult{}, fmt.Errorf("choir.Emit is retired: %s", retiredMessageVerbs)
 }
 
 // WebSearch resolves a web search through the host's search client under the
