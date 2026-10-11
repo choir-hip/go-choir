@@ -130,7 +130,7 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   running on staging; the research prompt is version 3 (receipts S1d, S1e).
 - **Gate 3 opened 2026-10-11 — Autopaper (working):**
   [`definitions/choir-autopaper-metamission-2026-10-11.md`](definitions/choir-autopaper-metamission-2026-10-11.md).
-  Stations: W1 content in the graph (executable,
+  Stations: W1 content in the graph (complete,
   [`w1`](definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md)),
   W2 living Textures (drafted,
   [`w2`](definitions/choir-autopaper-w2-living-textures-2026-10-11.md))
@@ -150,8 +150,9 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   hour-long run and a second computer's read. The completion panel sent
   W1 back twice (a generic-route capture bypass, lost items on a failed
   write, a lost successor wake; then a same-owner capture race); both
-  rounds are fixed (726aa392, 56ec63e0), and a third panel follows the
-  next deploy.
+  rounds are fixed (726aa392, 56ec63e0), and the third panel approved
+  (seven of eight; W1 complete). W2 is next: its goal file goes to file
+  review.
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
   Reality slice: seven M11 reruns, each one layer deeper. Rerun 7

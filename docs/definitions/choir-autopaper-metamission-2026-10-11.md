@@ -22,7 +22,7 @@ metamission:
     - id: W1
       path: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
       readiness: executable
-      status: working
+      status: complete
       depends_on: []
     - id: W2
       path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
@@ -116,9 +116,9 @@ boundaries:
 
 now:
   status: working
-  slice: W1 — content in the graph; every acceptance item met on staging; the completion panel iterates (two rounds sent back, both fixed); W2 drafted
-  source_ref: 56ec63e0 (local; pushes after the S1h demo)
-  deploy_identity: staging 726aa392
+  slice: W2 — living Textures; W1 complete (third completion panel approved); the W2 file is drafted and goes to file review next
+  source_ref: 66b96f10 (pushed)
+  deploy_identity: staging 25c8b5b0
   candidate: {id: W1, state: landing, ref: main, base: 78c9173e, digest: 56ec63e0, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel]}
   conjecture:
     id: AP-1
@@ -131,8 +131,8 @@ now:
     edge: missing_oracle
     delta_o: Texture turn latency under polling load is not yet measured; W2 puts Texture and polling on one computer
     scope_if_supported: one Autopaper computer, a handful of sources
-    status: testing
-    evidence_refs: [docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md receipts W1c, W1-hour, W1-read, W1-fix, W1-panel2]
+    status: supported
+    evidence_refs: [docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md receipts W1c, W1-hour, W1-read, W1-fix, W1-fix2, W1-panel3]
   decision: {what: "shared content (captures, published Textures) in Store B behind corpusd, bodies in host content storage; computers hold overlays", kind: architecture, status: settled (owner 2026-10-11), evidence_ref: problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md, owner_ratification_ref: "owner 2026-10-11: yes, move the write path to host store"}
   belief:
     believed_state: >-
@@ -141,9 +141,9 @@ now:
       restart. RDF feeds never produced items before the parser fix. Two
       search providers are out of quota (owner billing).
     main_uncertainty: whether Texture stays responsive with polling on the same computer (W2's first observation)
-    next_observation: the third W1 panel's verdict on the landed 56ec63e0
+    next_observation: W2's file review, then Texture turn latency with polling on the paper computer
   blocker_or_risk: the MVP source list is still open (design §8 open item 3); W1 used six stand-in sources
-  next_action: land 56ec63e0, run the third W1 panel, settle W1; review the drafted W2 file with a panel and start W2a
+  next_action: review the drafted W2 file with an agentic-consensus panel; on accept, start W2a (captures reach management)
 
 receipts: []
 ---

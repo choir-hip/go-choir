@@ -8,10 +8,10 @@ definition_version: 4
 readiness: executable
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus completion panel (three rounds)
+  frozen_ref: 66b96f10
+  verdict: accept
+  evidence_ref: receipts W1-panel1, W1-panel2, W1-panel3
 
 start:
   captured_at: 2026-10-11T09:10:00Z
@@ -103,11 +103,11 @@ boundaries:
   protected_surfaces: [cmd/corpusd, internal/platform object graph routes, internal/store, go.mod dolt pins]
 
 now:
-  status: working
-  slice: W1 close — both panel rounds fixed and deployed (8031258a); the third panel reviews the landed candidate
-  source_ref: 8031258a (pushed)
+  status: complete
+  slice: W1 complete — the third completion panel approved the landed candidate (seven of eight, none sent back)
+  source_ref: 66b96f10 (pushed; W1 code through 56ec63e0)
   deploy_identity: staging 8031258a (host); the paper computer runs 726aa392 (guest code unchanged since, except the error-text bound)
-  candidate: {id: W1, state: landed, ref: main, base: e21e1347, digest: ebe02b17, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel, internal/objectgraph]}
+  candidate: {id: W1, state: accepted, ref: main, base: e21e1347, digest: 66b96f10, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel, internal/objectgraph]}
   conjecture:
     id: W1-3
     claim: >-
@@ -135,7 +135,7 @@ now:
       crash restart; a second computer reads a capture and its body. A
       running computer picks up a deploy only at its next boot.
     main_uncertainty: whether the second panel finds another path that breaks ownership, the body bound, or the restart rule
-    next_observation: the third panel's verdict
+    next_observation: W2's first delivery to management on the paper computer
   blocker_or_risk: >-
     each scheduled poll rewrites its schedule object, which in a guest is one
     event on the computer's chain per poll; fine for a handful of sources,
@@ -147,9 +147,11 @@ now:
     - sourcecycled (not in Node B's boot set) still writes capture bodies into rows if it is ever enabled; delete or route it through the capture route first
     - discovered heresy, not repaired — a same-owner guest can overwrite another computer's object of any kind through the generic object route (separate auth change)
     - the MVP source list is open; France 24 and UN News refuse Node B
+    - third panel (suggestions) — item titles, ids and URLs are not size-capped in rows; the 1 MiB body cut can split a UTF-8 character; the stale-wake re-arm has no test of its own; a failed schedule save after a poll lets a retry fetch again (captures dedupe)
     - for W2 (second panel) — no per-guest quota on the capture route; a capture is what its writer says, so shared readers filter by a trusted writer; items beyond a poll's max_items are never fetched once validators are kept; a body file written before a failed row write is orphaned
   next_action: >-
-    run the third panel; settle W1; review the W2 file
+    none for W1; W2 (definitions/choir-autopaper-w2-living-textures-2026-10-11.md)
+    is the next station
     (definitions/choir-autopaper-w2-living-textures-2026-10-11.md, drafted)
 
 receipts:
@@ -315,6 +317,17 @@ receipts:
       race itself is proven by the regression against the Dolt adapter,
       not on staging, where one computer polls.
     conjecture: W1-3 supported with both rounds' fixes
+  - id: W1-panel3
+    at: 2026-10-11T15:25Z
+    deploy: staging 8031258a (frozen 66b96f10)
+    kind: agentic-consensus completion panel (session scratchpad w1c/panel3)
+    result: >-
+      Approved. Codex, Claude, DeepSeek, Gemini, GLM, GPT-6 Luna and GPT-6.1
+      Sol approved with no blocker; Devin gave no verdict (it stopped at a
+      permission prompt, as in round two). Every reviewer found the
+      insert-only create closes the same-owner race. Suggestions are named
+      as residuals in the now card.
+    conjecture: W1-3 supported; W1 complete
 ---
 
 # W1 — content in the graph
