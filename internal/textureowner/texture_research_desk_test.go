@@ -167,6 +167,17 @@ func TestTextureManagementCastContinuesTheRequestsOpenWork(t *testing.T) {
 		t.Fatalf("a second management Cast in the request did not continue its open work: %+v err=%v", follow, err)
 	}
 
+	// A replay of the opening turn sees the work it opened and rebuilds the
+	// same opener (same digest), rather than continuing its own work.
+	own := snapshot
+	ownWork := *opened[0].OpenWork
+	ownWork.TrajectoryID, ownWork.CreatedAt = doc.TrajectoryID, ownerInput.Add(time.Second)
+	own.WorkItems = append(append([]types.WorkItemRecord(nil), snapshot.WorkItems...), ownWork)
+	replayed, _, err := handler.textureTurnControls(t.Context(), &run, doc, own, cast("open"))
+	if err != nil || len(replayed) != 1 || replayed[0].OpenWork == nil || replayed[0].TargetWorkItemID != opened[0].TargetWorkItemID {
+		t.Fatalf("replaying the opening turn continued its own work instead of rebuilding the opener: %+v err=%v", replayed, err)
+	}
+
 	// Management work from an earlier request is not continued.
 	stale := snapshot
 	old := work

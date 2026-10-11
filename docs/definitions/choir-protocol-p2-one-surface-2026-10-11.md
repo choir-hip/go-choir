@@ -4,13 +4,13 @@ definition_version: 4
 # P2 — one surface. Station of
 # definitions/choir-precommitment-protocol-metamission-2026-10-11.md;
 # design docs/precommitment-protocol-design-2026-10-11.md §2, §3, §7 P2.
-readiness: drafted
+readiness: reviewed
 
 review:
-  reviewer: agentic-consensus file review (pending)
-  frozen_ref: pending
-  verdict: pending
-  evidence_ref: pending
+  reviewer: agentic-consensus file review (four rounds)
+  frozen_ref: d1d83c39 (round four, with the P2a and P2b code)
+  verdict: accept (round four DeepSeek accept; round three Gemini accept; Claude's last finding fixed with a test)
+  evidence_ref: receipts P2-review1, P2-review2, P2-review3, P2-review4
 
 start:
   captured_at: 2026-10-11T17:25:00Z
@@ -354,6 +354,17 @@ receipts:
       and asked for a refusal of spec-shaped Texture Casts (added, tested);
       Claude found the textureprompts test requiring choir.Message and the
       prompt sentences that become false (rewritten in P2a's code).
+  - id: P2-review4
+    at: 2026-10-11T18:25Z
+    kind: fix check by the round-three senders (session scratchpad p2/review4), frozen d1d83c39
+    result: >-
+      DeepSeek accepts (ran the continuation, fold and prompt tests).
+      Claude sends back on one new defect in the round-three fix: on a
+      retry of a turn that opened management work, the continuation search
+      found the turn's own work and rebuilt the opener as a continuation,
+      changing the command digest. Fixed: the turn's own
+      persistent-super-work ids are excluded like research's, with a replay
+      case in TestTextureManagementCastContinuesTheRequestsOpenWork.
 ---
 
 # P2 — one surface

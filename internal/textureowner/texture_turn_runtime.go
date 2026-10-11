@@ -250,6 +250,13 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 				ownWork[id] = true
 			}
 		}
+		if raw.OpenPersistentManagement {
+			// A replayed turn sees the management work it opened; it must
+			// rebuild the same opener, not continue its own work.
+			if id, err := textureTurnRuntimeID(rec, in.ToolCallID, "persistent-super-work", i); err == nil {
+				ownWork[id] = true
+			}
+		}
 		if id, err := textureTurnRuntimeID(rec, in.ToolCallID, "control", i); err == nil {
 			ownControls[id] = true
 		}
@@ -277,7 +284,7 @@ func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord,
 	var requestManagementWork *types.WorkItemRecord
 	for i := range snapshot.WorkItems {
 		work := snapshot.WorkItems[i]
-		if strings.TrimSpace(work.AssignedAgentID) != managementAgent || work.Status != types.WorkItemOpen ||
+		if strings.TrimSpace(work.AssignedAgentID) != managementAgent || work.Status != types.WorkItemOpen || ownWork[strings.TrimSpace(work.WorkItemID)] ||
 			strings.TrimSpace(work.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) || work.CreatedAt.Before(since) {
 			continue
 		}
