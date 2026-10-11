@@ -241,7 +241,29 @@ type CommitmentRecord struct {
 	ChildIDs       []string `json:"child_ids,omitempty"`
 	RelatedIDs     []string `json:"related_ids,omitempty"`
 	RetrievedByIDs []string `json:"retrieved_by_ids,omitempty"`
+
+	// EmitterKind, ComputerID and SubjectRefs are reserved for records that
+	// will be scored across computers (docs/precommitment-protocol-design-2026-10-11.md
+	// §10): who spoke (an agent, the owner, an edition or an outside
+	// source), on which computer, and what the record is about. Topic
+	// scopes are derived from SubjectRefs when reputation is queried.
+	EmitterKind CommitmentEmitterKind `json:"emitter_kind,omitempty"`
+	ComputerID  string                `json:"computer_id,omitempty"`
+	SubjectRefs map[string]string     `json:"subject_refs,omitempty"`
 }
+
+// CommitmentEmitterKind names who emitted a record. An agent is a desk on a
+// computer; the owner is the person behind the computer, whose acts are
+// not agent speech; an edition is a computer publishing claims; a source is
+// an outside outlet whose claims are observations, never precommitments.
+type CommitmentEmitterKind string
+
+const (
+	CommitmentEmitterAgent   CommitmentEmitterKind = "agent"
+	CommitmentEmitterOwner   CommitmentEmitterKind = "owner"
+	CommitmentEmitterEdition CommitmentEmitterKind = "edition"
+	CommitmentEmitterSource  CommitmentEmitterKind = "source"
+)
 
 // CommitmentRecordSchemaV1 is the schema version stamped into SchemaID.
 const CommitmentRecordSchemaV1 = "commitment_record.v1"

@@ -669,7 +669,9 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 	if agentID == "" || ownerID == "" || computerID == "" {
 		return nil
 	}
-	records, err := rt.store.ListCommitmentRecords(ctx, ownerID, computerID, "", 256)
+	// Directives (including every Texture control's cast, P1) are excluded
+	// in the query so they cannot crowd the desk's own acts out of the window.
+	records, err := rt.store.ListCommitmentClaimRecords(ctx, ownerID, computerID, 256)
 	if err != nil {
 		log.Printf("desk pack: commitment record list for %s: %v", agentID, err)
 		return nil

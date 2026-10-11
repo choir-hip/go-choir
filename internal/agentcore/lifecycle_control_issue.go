@@ -28,12 +28,20 @@ func lifecyclePacketIDForRecord(recordID string) string {
 // desk's ApplyTexture path uses — same validators, same command digest, same
 // target binding.
 func (rt *Runtime) IssueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string) ([]types.CoagentSourcePacket, error) {
-	return rt.issueLifecycleControl(ctx, rec, controls, reason)
+	return rt.issueLifecycleControl(ctx, rec, controls, reason, "")
+}
+
+// IssueOwnerLifecycleControl issues controls that are the owner's act, not
+// the calling Texture agent's (the owner's management-open route). Each
+// control's record names the owner as its emitter; the packet's transport
+// fields still name the Texture run that carries it.
+func (rt *Runtime) IssueOwnerLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string) ([]types.CoagentSourcePacket, error) {
+	return rt.issueLifecycleControl(ctx, rec, controls, reason, types.CommitmentEmitterOwner)
 }
 
 // issueLifecycleControl queues controls from the exact active Texture run and
 // wakes each newly-created target through the normal lifecycle queue path.
- func (rt *Runtime) issueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string) ([]types.CoagentSourcePacket, error) {
+ func (rt *Runtime) issueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string, emitter types.CommitmentEmitterKind) ([]types.CoagentSourcePacket, error) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil, fmt.Errorf("issue lifecycle control: runtime, store, and caller run are required")
 	}
@@ -60,7 +68,7 @@ func (rt *Runtime) IssueLifecycleControl(ctx context.Context, rec *types.RunReco
 		CallerAgentID: rec.AgentID, CallerRunID: rec.RunID,
 		ExpectedLifecycleVersion:       snapshot.Trajectory.LifecycleVersion,
 		ExpectedCallerLifecycleVersion: caller.LifecycleVersion,
-		Controls:                       controls, Reason: reason,
+		Controls:                       controls, Reason: reason, Emitter: emitter,
 	}
 	req.CommandDigest, err = store.ComputeIssueLifecycleControlDigest(req)
 	if err != nil {

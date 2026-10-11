@@ -113,6 +113,89 @@ func (s *Store) ListCommitmentRecords(ctx context.Context, ownerID, computerID, 
 // GetCommitmentRecord returns the stored record body for one record id,
 // or nil when absent. Read-only — used by the learning-claims gate to
 // check whether a verifier ref names a scored record.
+// ListCommitmentClaimRecords lists the newest records that are not
+// directives (note, escalate, cast, retract), filtered in the query before
+// its limit. Directives carry no scored claim, and every Texture control
+// mints a cast (P1, record-first controls); filtering them after the limit
+// would let casts push a desk's own acts out of its pack window. A record
+// with no directive body (including legacy ones) matches.
+func (s *Store) ListCommitmentClaimRecords(ctx context.Context, ownerID, computerID string, limit int) ([]types.CommitmentRecord, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("commitment claim list requires owner and computer")
+	}
+	matches := []objectgraph.JSONFieldMatch{{JSONPath: "$.directive", Value: "", MissingMatchesEmpty: true}}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]types.CommitmentRecord, 0, len(objs))
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, fmt.Errorf("commitment record decode %s: %w", obj.CanonicalID, err)
+		}
+		records = append(records, rec)
+	}
+	return records, nil
+}
+
+// ControlRecordAudit is one control packet and the record it names, for the
+// P1 audit that every control is on the ledger.
+type ControlRecordAudit struct {
+	UpdateID       string                  `json:"update_id"`
+	TargetAgentID  string                  `json:"target_agent_id"`
+	CallerAgentID  string                  `json:"caller_agent_id"`
+	TrajectoryID   string                  `json:"trajectory_id"`
+	CreatedAt      string                  `json:"created_at"`
+	SourceRecordID string                  `json:"source_record_id,omitempty"`
+	Record         *types.CommitmentRecord `json:"record,omitempty"`
+}
+
+// ListControlRecordAudit lists the newest control-direction packets on a
+// computer with the record each one names. Read-only; it never writes.
+func (s *Store) ListControlRecordAudit(ctx context.Context, ownerID, computerID string, limit int) ([]ControlRecordAudit, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("control audit requires owner and computer")
+	}
+	matches := []objectgraph.JSONFieldMatch{{JSONPath: "$.direction", Value: string(types.LifecyclePacketDirectionControl)}}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindWorkerUpdate, ownerID, matches, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ControlRecordAudit, 0, len(objs))
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var packet types.CoagentSourcePacket
+		if err := ogDecode(obj, &packet); err != nil {
+			return nil, fmt.Errorf("control audit decode %s: %w", obj.CanonicalID, err)
+		}
+		row := ControlRecordAudit{UpdateID: packet.UpdateID, TargetAgentID: packet.TargetAgentID, CallerAgentID: packet.AgentID,
+			TrajectoryID: packet.TrajectoryID, CreatedAt: packet.CreatedAt.UTC().Format(time.RFC3339Nano), SourceRecordID: packet.SourceRecordID}
+		if packet.SourceRecordID != "" {
+			rec, err := s.GetCommitmentRecord(ctx, ownerID, computerID, packet.SourceRecordID)
+			if err != nil && !errors.Is(err, ErrNotFound) {
+				return nil, err
+			}
+			row.Record = rec
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
 func (s *Store) GetCommitmentRecord(ctx context.Context, ownerID, computerID, recordID string) (*types.CommitmentRecord, error) {
 	ownerID, computerID, recordID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(recordID)
 	if ownerID == "" || computerID == "" || recordID == "" {

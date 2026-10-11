@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"reflect"
@@ -40,6 +42,7 @@ func normalizeIssueLifecycleControlRequest(req types.IssueLifecycleControlReques
 	req.CallerAgentID = strings.TrimSpace(req.CallerAgentID)
 	req.CallerRunID = strings.TrimSpace(req.CallerRunID)
 	req.Reason = strings.TrimSpace(req.Reason)
+	req.Emitter = types.CommitmentEmitterKind(strings.TrimSpace(string(req.Emitter)))
 	turnLike, err := normalizeTextureTurnDigestRequest(types.ApplyTextureTurnRequest{Controls: req.Controls})
 	if err != nil {
 		return req, err
@@ -58,6 +61,11 @@ func validateIssueLifecycleControlShape(req types.IssueLifecycleControlRequest) 
 	if len(req.Controls) == 0 {
 		return fmt.Errorf("issue lifecycle control: at least one control is required")
 	}
+	switch req.Emitter {
+	case "", types.CommitmentEmitterAgent, types.CommitmentEmitterOwner:
+	default:
+		return fmt.Errorf("issue lifecycle control: emitter %q is not an agent or the owner", req.Emitter)
+	}
 	return validateTextureTurnControls(req.DocumentID, req.Controls, nil, "issue lifecycle control")
 }
 
@@ -73,6 +81,10 @@ type lifecycleControlAccumulator struct {
 	operation                                            string
 	now                                                  time.Time
 	seq                                                  *int64
+	// emitter is who issued the controls when it is not the calling
+	// Texture agent (the owner's management-open route); empty means the
+	// caller agent.
+	emitter types.CommitmentEmitterKind
 
 	conditions     *[]objectgraph.ObjectCondition
 	objects        *[]objectgraph.Object
@@ -285,9 +297,14 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 	} else if !errors.Is(err, objectgraph.ErrNotFound) {
 		return err
 	}
+	record, err := a.mintControlRecord(control, work.WorkItemID)
+	if err != nil {
+		return err
+	}
 	*a.seq++
 	packet := types.CoagentSourcePacket{
-		UpdateID: control.ControlID, ProducerUpdateID: control.ControlID, OwnerID: a.ownerID, ComputerID: a.computerID,
+		SourceRecordID: record.RecordID,
+		UpdateID:       control.ControlID, ProducerUpdateID: control.ControlID, OwnerID: a.ownerID, ComputerID: a.computerID,
 		AgentID: a.callerAgentID, TargetAgentID: control.TargetAgentID, ChannelID: a.documentID,
 		MessageSeq: *a.seq, TrajectoryID: a.trajectoryID, Direction: types.LifecyclePacketDirectionControl,
 		TargetWorkItemID: control.TargetWorkItemID, Role: agentprofile.Texture, SourceRunID: a.callerRunID,
@@ -317,6 +334,67 @@ func (a *lifecycleControlAccumulator) issueOne(control types.TextureTurnControl)
 	*a.controlIDs = append(*a.controlIDs, packet.UpdateID)
 	*a.targetWorkIDs = append(*a.targetWorkIDs, work.WorkItemID)
 	return nil
+}
+
+// controlRecordID derives a control's record id from the command and the
+// control, so a replayed command re-derives the same id and the not-exists
+// condition mints nothing new. The packet keeps UpdateID = control id.
+func controlRecordID(ownerID, computerID, commandID, controlID string) string {
+	sum := sha256.Sum256([]byte(ownerID + "\x00" + computerID + "\x00" + commandID + "\x00" + controlID))
+	return "control:" + hex.EncodeToString(sum[:16])
+}
+
+// mintControlRecord adds a control's cast record to the command's batch (P1,
+// record-first controls): a control opens or continues work, so it is a
+// directive of subtype cast addressed to the control's target agent, and it
+// commits with its packet or not at all. The record keeps the instruction's
+// summary and questions, not the whole packet.
+func (a *lifecycleControlAccumulator) mintControlRecord(control types.TextureTurnControl, workItemID string) (types.CommitmentRecord, error) {
+	emitter, speaker := types.CommitmentEmitterAgent, a.callerAgentID
+	if a.emitter == types.CommitmentEmitterOwner {
+		emitter, speaker = types.CommitmentEmitterOwner, "owner:"+a.ownerID
+	}
+	body := strings.TrimSpace(control.Packet.Summary)
+	if len(control.Packet.Questions) > 0 {
+		body = strings.TrimSpace(body + "\n" + strings.Join(control.Packet.Questions, "\n"))
+	}
+	committedAt := a.now.UTC().Format(time.RFC3339Nano)
+	rec := types.CommitmentRecord{
+		SchemaID:    types.CommitmentRecordSchemaV1,
+		RecordID:    controlRecordID(a.ownerID, a.computerID, a.commandID, control.ControlID),
+		Kind:        types.CommitmentKindDirective,
+		Discrepancy: types.DiscrepancyUnresolved,
+		Directive: &types.CommitmentDirective{
+			Subtype:   types.CommitmentDirectiveCast,
+			Objective: strings.TrimSpace(control.Packet.Summary),
+			Body:      body,
+		},
+		Addressee:   control.TargetAgentID,
+		Provenance:  types.CommitmentProvenance{AgentID: speaker, ContextRef: a.documentID, CommittedAt: committedAt},
+		EmitterKind: emitter,
+		ComputerID:  a.computerID,
+		SubjectRefs: map[string]string{
+			"doc_id": a.documentID, "trajectory_id": a.trajectoryID,
+			"control_id": control.ControlID, "work_item_id": workItemID, "command_id": a.commandID,
+		},
+	}
+	recordObj, err := lifecycleObject(ogKindCommitmentRecord, a.ownerID, a.computerID, rec.RecordID, rec, map[string]any{
+		"record_id":   rec.RecordID,
+		"agent_id":    rec.Provenance.AgentID,
+		"model_id":    rec.Provenance.ModelID,
+		"discrepancy": string(rec.Discrepancy),
+		"schema_id":   rec.SchemaID,
+		"record_kind": string(rec.RecordKind()),
+		"addressee":   strings.TrimSpace(rec.Addressee),
+		"created_at":  committedAt,
+		"updated_at":  committedAt,
+	}, a.now, a.now)
+	if err != nil {
+		return types.CommitmentRecord{}, err
+	}
+	a.addCondition(objectgraph.ObjectCondition{CanonicalID: recordObj.CanonicalID})
+	*a.objects = append(*a.objects, recordObj)
+	return rec, nil
 }
 
 // IssueLifecycleControl atomically queues one or more downward Texture controls
@@ -377,6 +455,7 @@ func (s *Store) IssueLifecycleControl(ctx context.Context, req types.IssueLifecy
 	controlIDs := make([]string, 0, len(req.Controls))
 	targetWorkIDs := make([]string, 0, len(req.Controls))
 	accumulator := newLifecycleControlAccumulator(s, ctx, ownerID, computerID, req.DocumentID, req.TrajectoryID, req.CallerAgentID, req.CallerRunID, req.CommandID, req.CommandDigest, "issue lifecycle control", now, &seq, &conditions, &objects, &events, &controls, &targetWorkItems, &controlIDs, &targetWorkIDs)
+	accumulator.emitter = req.Emitter
 	if err := accumulator.issue(req.Controls); err != nil {
 		return types.LifecycleResult{}, err
 	}

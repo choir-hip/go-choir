@@ -204,7 +204,7 @@ func (h *Handler) issueManagementOpenControl(ctx context.Context, ownerID string
 		return fmt.Errorf("payload digest: %w", err)
 	}
 	controlID := "mgmt-control-" + commandID
-	controls, err := h.Core.IssueLifecycleControl(ctx, &callerRun, []types.TextureTurnControl{{
+	controls, err := h.Core.IssueOwnerLifecycleControl(ctx, &callerRun, []types.TextureTurnControl{{
 		ControlID: controlID, TargetAgentID: targetAgentID, TargetWorkItemID: workItemID,
 		OpenWork: &work, Packet: packet, Content: content, PayloadDigest: payloadDigest,
 	}}, "owner_management_open")

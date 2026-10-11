@@ -208,6 +208,11 @@ type IssueLifecycleControlRequest struct {
 	ExpectedCallerLifecycleVersion int64                `json:"expected_caller_lifecycle_version"`
 	Controls                       []TextureTurnControl `json:"controls"`
 	Reason                         string               `json:"reason,omitempty"`
+	// Emitter names who issued the controls when it is not the calling
+	// Texture agent: the owner's management-open route sets
+	// CommitmentEmitterOwner. Empty means the caller agent, and is omitted
+	// so pre-P1 command digests are unchanged.
+	Emitter CommitmentEmitterKind `json:"emitter,omitempty"`
 }
 
 // CommitLifecycleActRequest mints one addressed commitment record and its
