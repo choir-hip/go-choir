@@ -1,7 +1,11 @@
 package agentcore
 
 import (
+	"context"
+	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -47,5 +51,36 @@ func TestTextureCellSeesOnlyUpdatesItsTurnCanDisposition(t *testing.T) {
 	late.TargetAgentID = "research:doc-1"
 	if !cellUpdateVisible(research, late) {
 		t.Fatalf("the Texture consume boundary must not hide reports from other desks")
+	}
+}
+
+// A Texture cell's choir.ReadDoc() carries the head's outline: the block and
+// node ids its edits address. Without it, a reactivated Texture run whose
+// prompt outline described an older revision guessed ids by staging writes
+// (docs/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md,
+// amendment).
+func TestTextureCellDocSnapshotCarriesTheOutline(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := types.Document{DocID: "doc-outline", OwnerID: "owner-1", Title: "AI news", CreatedAt: now, UpdatedAt: now}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := s.CreateRevision(ctx, types.Revision{
+		RevisionID: "rev-2", DocID: doc.DocID, OwnerID: doc.OwnerID, AuthorKind: types.AuthorAppAgent,
+		Content: "Chips news", BodyDoc: runtimeTestTextureBodyDoc(t, doc.DocID, "rev-2", "Chips news"),
+		Citations: json.RawMessage("[]"), CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create revision: %v", err)
+	}
+	rec := &types.RunRecord{RunID: "run-t", AgentID: "texture:" + doc.DocID, OwnerID: doc.OwnerID, ChannelID: doc.DocID,
+		AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture}
+	snap := textureDocSnapshotForRun(ctx, rt, rec)
+	if snap == nil {
+		t.Fatalf("no snapshot for the bound document")
+	}
+	if want := `paragraph id=p-doc-outline-rev-2 text="Chips news"`; !strings.Contains(snap.Outline, want) {
+		t.Fatalf("snapshot outline missing %q: %q", want, snap.Outline)
 	}
 }

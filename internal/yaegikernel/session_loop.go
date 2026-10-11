@@ -56,6 +56,9 @@ type DocSnapshot struct {
 	RevisionID string `json:"revision_id"`
 	AuthorKind string `json:"author_kind,omitempty"`
 	Content    string `json:"content"`
+	// Outline lists the head's blocks and nodes, one per line, with the ids
+	// ApplyTexture edits address (block_id, after_block_id, node_id).
+	Outline string `json:"outline,omitempty"`
 }
 
 // SessionResult is one newline-delimited JSON response. Value-carrying cells

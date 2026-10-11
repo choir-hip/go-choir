@@ -17,6 +17,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -460,6 +461,7 @@ func textureDocSnapshotForRun(ctx context.Context, rt *Runtime, rec *types.RunRe
 		RevisionID: rev.RevisionID,
 		AuthorKind: string(rev.AuthorKind),
 		Content:    rev.Content,
+		Outline:    texturedoc.Outline(rev.BodyDoc, 0, 0),
 	}
 }
 
