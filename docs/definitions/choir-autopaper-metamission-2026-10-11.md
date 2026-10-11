@@ -1,0 +1,158 @@
+---
+definition_version: 4
+
+# Autopaper (Gate 3): the computer pulls content into its object graph, keeps
+# living Textures revised by evidence, and publishes them automatically.
+# Design: docs/autopaper-sw-design-2026-10-09.md (station SW, owner brief
+# and decisions 2026-10-09). Owner 2026-10-09: "Gate 1 today, Gate 2
+# tomorrow, Gate 3 in October"; "viable meaning no shortcuts". Owner
+# 2026-10-11: "keep going back to the meta mission and keep making progress
+# into gate three". Supersedes the 2026-10-01 World Wire metamission
+# (already marked superseded in the mission graph).
+readiness: executable
+
+review:
+  reviewer: none
+  frozen_ref: none
+  verdict: none
+  evidence_ref: none
+
+metamission:
+  stations:
+    - id: W1
+      path: docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md
+      readiness: executable
+      status: working
+      depends_on: []
+    - id: W2
+      path: none (to be authored when W1 lands)
+      readiness: intent
+      status: pending
+      depends_on: [W1]
+    - id: W3
+      path: none (to be authored when W2 lands)
+      readiness: intent
+      status: pending
+      depends_on: [W2]
+
+start:
+  captured_at: 2026-10-11T09:00:00Z
+  source:
+    canonical_ref: main 78c9173e
+    deploy_identity: staging choir.news 78c9173e
+  worktrees:
+    - path: /Users/wiz/go-choir
+      status: clean
+      class: goal_candidate
+      owner: this session
+      touch: goal_owned
+      recovery: git
+  observed:
+    - >-
+      The design's July cause C1 is still open: the guest's embedded Dolt
+      runs every pool at one connection (configureEmbeddedDoltDB,
+      internal/store/texture.go). A write pool and a read pool share one
+      connector (store.Open).
+    - >-
+      choir.web_capture exists in the object graph
+      (internal/objectgraph/web_capture.go); polling code exists in
+      internal/sources (RSS, Telegram web preview, GDELT, Polymarket).
+    - >-
+      The host store behind corpusd was reset to empty on 2026-10-09;
+      Autopaper starts from zero content.
+    - >-
+      Research is one persistent desk per document with sessions that
+      outlive runs (PD1, PD2 on staging); Texture is one desk per document.
+
+finish:
+  deliver: >-
+    An Autopaper computer that polls the MVP sources into the object graph,
+    keeps Textures revised as evidence arrives, and publishes them at
+    permalinks that logged-out readers can open, with every piece the real
+    mechanism (design §1.8).
+  artifact: W1, W2, W3 landed on staging with deployed acceptance.
+  acceptance:
+    - action: each station's acceptance on staging
+      proves: the station's claim on the product path
+      evidence_class: deployed proof
+  rollback: per station, in reverse order
+  landing:
+    required: true
+    environment: staging
+    required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
+
+value:
+  better_means: >-
+    Maximize grounded, current Textures readable at permalinks per unit of
+    inference, while preserving Texture as sole writer, research read-only,
+    one authority per fact, and reads that never touch the paper's computer.
+  goodharting_would_be: >-
+    Counting captures or revisions that nobody can read; a pipeline of fixed
+    stages instead of desks; a workaround for C1 that a later station has
+    to tear out.
+
+homotopy:
+  realism_axis: >-
+    captures land in the graph without starving Texture -> Textures revise
+    from delivered evidence -> automatic publishing and public permalinks.
+
+boundaries:
+  mutation_class: red (embedded store concurrency, Texture wakes, publishing)
+  authority_sources:
+    - owner brief and decisions 2026-10-09 (design doc)
+    - owner 2026-10-11 overnight goal
+  must_preserve:
+    - Texture is the only writer of a Texture
+    - research has read-only authority toward the world
+    - one authority per fact (one route, one revision chain, one publication state)
+    - published reads never touch the paper's computer
+    - a crash restart never resumes work
+  excluded:
+    - new feeds and beats (design §6)
+    - the per-computer research lift and the Texture root (PD3; owner review) unless W2 needs them
+  protected_surfaces: [internal/store embedded Dolt, object graph, Texture commit path, corpusd host store]
+
+now:
+  status: working
+  slice: W1 — content in the graph; first decision is C1 (connection concurrency)
+  source_ref: 78c9173e
+  deploy_identity: staging 78c9173e
+  candidate: {id: W1, state: designing, ref: main, base: 78c9173e, digest: none, scope: [internal/store, internal/objectgraph, internal/sources]}
+  conjecture:
+    id: AP-1
+    claim: >-
+      If captures never queue behind Texture and health on one connection,
+      continuous polling and living Textures can share one computer without
+      the July retention failure.
+    test: W1 acceptance (Texture latency under polling load)
+    edge: missing_oracle
+    delta_o: Texture turn latency and health latency measured with and without polling load
+    scope_if_supported: one Autopaper computer, MVP sources
+    status: proposed
+    evidence_refs: []
+  decision: {what: C1 approach, kind: architecture, status: open, evidence_ref: W1 experiment, owner_ratification_ref: design §0 constraint 1 (owner brief)}
+  belief:
+    believed_state: one connection per pool; captures not yet written by any desk
+    main_uncertainty: whether embedded Dolt supports more than one connection per connector under concurrent writes
+    next_observation: W1 experiment on embedded Dolt concurrency
+  blocker_or_risk: none
+  next_action: run the W1 concurrency experiment and record the C1 decision
+
+receipts: []
+---
+
+# Autopaper metamission (Gate 3)
+
+Autopaper is the computer reading the world and keeping living documents
+about it. The design fixes only what the substrate must guarantee and
+leaves the rest to the four desks. It is built in three stations:
+
+1. **W1, content in the graph.** Captures land as `choir.web_capture`
+   objects without queueing behind Texture on one connection (the July C1
+   cause). Polling runs on the source schedule, and resource use is
+   tracked from the first poll.
+2. **W2, living Textures.** Management notices stories and opens or feeds
+   Textures; Texture revises on delivered evidence; records flow and
+   resolve.
+3. **W3, readers.** Automatic publishing, the Autopaper app, and public
+   permalinks served from the host store.
