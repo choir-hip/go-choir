@@ -132,12 +132,16 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   [`definitions/choir-autopaper-metamission-2026-10-11.md`](definitions/choir-autopaper-metamission-2026-10-11.md).
   Stations: W1 content in the graph (executable,
   [`w1`](definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md)),
-  W2 living Textures and W3 readers (intent). W1 starts at the substrate:
-  the one-connection embedded Dolt (July cause C1) works around a race
-  that upstream fixed a day after our pin
-  ([problem](problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md)),
-  so slice W1a upgrades Dolt and race-tests it before captures get their
-  own pool.
+  W2 living Textures and W3 readers (intent). Owner correction
+  2026-10-11: Autopaper's shared content (captures, published Textures)
+  lives in the global store, Store B behind corpusd, with bodies in host
+  content storage; each computer keeps overlays in its embedded Dolt
+  ([problem](problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md);
+  the second time Autopaper was designed onto embedded Dolt, see
+  standing question 2). W1a (Dolt past the race behind the one-connection
+  pools) is landed and boots on existing data. W1b's poll verb works on
+  staging but writes to the polling computer's own graph; W1b2 moves the
+  write path to Store B.
 - **Gate 2 opened (drafted):**
   [`definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md`](definitions/choir-appdev-gate2-supervised-self-development-2026-10-09.md).
   Reality slice: seven M11 reruns, each one layer deeper. Rerun 7

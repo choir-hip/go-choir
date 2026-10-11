@@ -3,7 +3,8 @@ definition_version: 4
 
 # W1 — content in the graph. Station of
 # definitions/choir-autopaper-metamission-2026-10-11.md; design
-# docs/autopaper-sw-design-2026-10-09.md §6 W1 and §0 constraint 1.
+# docs/autopaper-sw-design-2026-10-09.md §2 (storage, corrected 2026-10-11)
+# and §6 W1.
 readiness: executable
 
 review:
@@ -19,56 +20,53 @@ start:
     deploy_identity: staging choir.news 78c9173e
   worktrees:
     - path: /Users/wiz/go-choir
-      status: clean apart from an untracked experiment test (build tag experiment)
+      status: clean
       class: goal_candidate
       owner: this session
       touch: goal_owned
       recovery: git
   observed:
     - >-
-      Every embedded Dolt pool runs one connection, and object graph access
-      takes a shared engine mutex. Both work around a race in
-      unescapeHTMLCodepoints that upstream fixed in 6bea93f2 (July 16); we
-      pin July 15
+      Store B (the corpus Dolt behind corpusd) is the world-wire store: the
+      platform object graph and the source and ingestion tables
+      (docs/computer-ontology.md, Dolt Store Taxonomy). corpusd serves
+      /internal/platform/objects to bound guests: a guest may write objects
+      it owns, and any bound guest may list.
+    - >-
+      There is no shared blob store a guest can write. The files CAS
+      (/internal/computers/files/chunks) is per computer and encrypted.
+    - >-
+      internal/sources pollers (RSS, Telegram web preview, GDELT) and the
+      211-source registry exist; internal/sourcegraph maps items to
+      web_capture requests.
+    - >-
+      Every embedded Dolt pool runs one connection, a workaround for a race
+      upstream fixed in 6bea93f2
       (problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md).
-    - >-
-      Capture bodies would land in og_objects.body (LONGBLOB in Dolt) via
-      objectgraph.CreateWebCapture. The design wants bodies in content
-      storage, not Dolt rows.
-    - >-
-      internal/sourcegraph.WriteWebCaptureGraphObjects maps fetched
-      sources.Item values to web_capture objects; its only caller is
-      internal/cycle (sourcecycled, slated for deletion). Its content and
-      extracted-text blob ids are labels ("sourcecycled:item:...") naming
-      no stored blob; the text itself goes into og_objects.body.
-    - >-
-      The guest has no blob store outside Dolt. content_items keeps text in
-      Dolt but carries a file_path column; the computer's file root is
-      synced to the platform as encrypted content-addressed chunks
-      (internal/filecas, internal/autoputer/file_sync.go), the path the SH
-      lose-the-disk proof exercised.
+      With captures in Store B this is no longer on Autopaper's ingest path;
+      it still matters for Texture and every guest.
 
 finish:
   deliver: >-
-    An Autopaper computer polls the MVP sources on a schedule; every new
-    item is a choir.web_capture in its object graph with its body in
-    content storage; Texture and health stay responsive while polling
-    runs; resource use is recorded per poll.
+    The paper's computer polls the MVP sources on a schedule. Every new
+    item becomes a choir.web_capture in Store B, with its body in host
+    content storage, and any bound computer can read it. Resource use is
+    recorded per poll.
   artifact: >-
-    Dolt upgraded past the race fix; captures on their own pool (or their
-    own store) so they never queue behind Texture; a research verb that
-    polls a source into captures; the source schedule as timer obligations;
-    a usage record per poll.
+    Dolt upgraded past the race fix (W1a); a corpusd capture route that
+    writes captures to Store B and bodies to host storage in one request;
+    research's choir.PollSource writing through it; the source schedule as
+    timer obligations; a usage record per poll.
   acceptance:
     - action: >-
-        Staging test computer polls the MVP sources for an hour while the
-        research-only demo runs; Texture turn latency and /health latency
-        are within 20% of the no-polling S1e baseline; captures counted in
-        the graph match items fetched; bodies are not in Dolt rows.
-      proves: C1 cannot recur; content lands in the graph
-      evidence_class: deployed proof (test computer)
-    - action: restart the computer mid-poll
-      proves: a crash restart closes the poll obligation; the schedule resumes on its next timer
+        The paper's test computer polls the MVP sources for an hour. Captures
+        in Store B match items fetched, no body is in a Dolt row, a second
+        computer reads a capture and its body, and corpusd and Store B stay
+        within their memory budget.
+      proves: content lands in the shared graph, readable by everyone, without the 104 G failure
+      evidence_class: deployed proof (test computers)
+    - action: restart the paper's computer mid-poll
+      proves: a crash restart closes the poll obligation and nothing resumes on its own
       evidence_class: deployed proof
   rollback: revert each slice; Dolt downgrade only if no computer has written with the new version
   landing:
@@ -78,60 +76,65 @@ finish:
 
 value:
   better_means: >-
-    Maximize captures landed per minute while keeping Texture and health
-    latency flat, with one authority per capture.
+    Maximize captures landed per minute in the shared store, readable by
+    every computer, with one authority per capture and no body in Dolt.
   goodharting_would_be: >-
-    A second engine or process that hides the race instead of fixing it;
-    capture counts without readable bodies; polling that pauses Texture.
+    Captures counted in one computer's private graph; capture counts without
+    readable bodies; bodies in Dolt rows; a per-computer copy of a shared
+    item.
 
 homotopy:
   realism_axis: >-
-    Dolt fixed and race-tested -> a capture pool beside Texture's ->
-    one source polled by hand -> the schedule -> all MVP sources under load.
+    Dolt fixed and race-tested -> one source polled by hand into Store B ->
+    a second computer reads it -> the schedule -> all MVP sources for an hour.
 
 boundaries:
-  mutation_class: red (embedded store engine and concurrency)
-  authority_sources: [owner design decisions 2026-10-09, owner overnight goal 2026-10-11]
+  mutation_class: red (Store B writes through corpusd; host content storage; embedded store engine)
+  authority_sources:
+    - owner design decisions 2026-10-09 (design doc)
+    - owner 2026-10-11 10:40Z — captures go to the global store; computers hold overlays
+    - docs/computer-ontology.md Dolt Store Taxonomy
   must_preserve:
-    - existing computers boot on their stored data after the upgrade
-    - Texture and lifecycle writes keep their transaction semantics
+    - no capture body in a Dolt row
+    - a guest writes only objects it owns; Store B ownership checks stay in corpusd
+    - existing computers boot on their stored data
     - a crash restart never resumes work
-  excluded: [new feeds, beats, W2 story handling]
-  protected_surfaces: [internal/store, internal/objectgraph, go.mod dolt pins]
+  excluded: [new feeds, beats, W2 story handling, overlays (W2/W3)]
+  protected_surfaces: [cmd/corpusd, internal/platform object graph routes, internal/store, go.mod dolt pins]
 
 now:
   status: working
-  slice: W1b — one source polled by hand (choir.PollSource) on staging
-  source_ref: c1d21d5e (pushed)
-  deploy_identity: staging 5b077256; c1d21d5e deploying
-  candidate: {id: W1b, state: landing, ref: main, base: 5b077256, digest: c1d21d5e, scope: [internal/capturesegment, internal/sourcegraph, internal/researchtools, internal/yaegikernel, internal/sources, internal/objectgraph]}
+  slice: W1b2 — choir.PollSource writes captures to Store B through a corpusd capture route
+  source_ref: 0dbb04c1 (local)
+  deploy_identity: staging c1d21d5e
+  candidate: {id: W1b2, state: designing, ref: main, base: c1d21d5e, digest: none, scope: [internal/platform, cmd/corpusd, internal/researchtools, internal/sourcegraph]}
   conjecture:
-    id: W1-1
+    id: W1-2
     claim: >-
-      With Dolt past 6bea93f2, the embedded engine serves several
-      connections safely, so captures get their own pool rather than their
-      own engine.
-    test: our store/objectgraph/agentcore packages under -race on the upgrade; staging boot on existing data; then a capture pool under load
+      Captures written to Store B through one corpusd request per poll, with
+      bodies on host disk by hash, are shared, deduplicated, and cost the
+      guest one round trip per poll.
+    test: unit test of the route with the real handler; staging poll by hand, then a read from a second computer
     edge: missing_oracle
-    delta_o: a race test reaching the lazy-JSON path (not yet reproduced locally)
-    scope_if_supported: one guest process
-    status: partially supported (upgrade landed and boots on existing data; widening not yet tried)
-    evidence_refs: [receipt W1a]
+    delta_o: Store B row counts and body files after a poll; a second computer's read
+    scope_if_supported: one paper computer writing, any computer reading
+    status: proposed
+    evidence_refs: []
   decision:
-    what: capture bodies in daily append-only segments in the files root; capture objects carry metadata only and reach the tape through the projection intercept
+    what: captures in Store B behind corpusd; bodies in host content storage by sha256; computers keep overlays
     kind: architecture
-    status: settled (agent; open to owner review)
-    evidence_ref: f78daa03
-    owner_ratification_ref: design §2 "capture bodies live in content storage, not Dolt rows"
+    status: settled (owner, 2026-10-11)
+    evidence_ref: problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md
+    owner_ratification_ref: owner 2026-10-11 "yes, move the write path to host store, update docs, lets not make this mistake again"
   belief:
     believed_state: >-
-      Dolt is past the race fix on staging. Captures can be written by
-      research through choir.PollSource; every pool still has one
-      connection, so capture writes still queue behind Texture.
-    main_uncertainty: whether a poll's object writes (one tape event each) slow Texture turns measurably before the pool widens
-    next_observation: W1b on staging — a research desk polls one source; counts, segment bytes, and Texture latency during the poll
-  blocker_or_risk: the projection intercept makes one host round trip per capture; a large first poll may take tens of seconds
-  next_action: after c1d21d5e deploys, ask a test computer's research desk to poll arxiv:cs_ai and read the trace
+      W1b on staging writes captures into the polling computer's embedded
+      graph, which is the superseded path. The poll verb, egress and
+      conditional GET work in a real guest.
+    main_uncertainty: whether Store B absorbs capture writes without the October 1 memory pressure
+    next_observation: a poll by hand into Store B on staging; corpus-dolt memory before and after
+  blocker_or_risk: Store B is the store that grew to 104 G; bodies must never enter it, and its history needs a bound before polling all sources
+  next_action: build the corpusd capture route and switch poll_source's sink to it; delete the guest capture segment
 
 receipts:
   - id: W1a
@@ -147,76 +150,88 @@ receipts:
       ten documents 7 s after boot, and read all eight revisions of
       b2352fec with content and sources intact. No pool was widened.
     conjecture: W1-1 partially supported
-
-# Capture body storage (decision, agent, 2026-10-11; open to owner review):
-# capture bodies are appended to one segment file per UTC day in the
-# computer's file root (captures/YYYY/MM/DD.jsonl, one JSON line per body).
-# The web_capture metadata names the body by segment, byte offset, length
-# and sha256 (content_blob_id "capseg:YYYY-MM-DD:<offset>:<len>:<sha256>"),
-# and og_objects.body stays empty. Durability comes from the existing file
-# sync, which chunks files at fixed sizes, so an append changes only the
-# last chunk; one file per body would have meant hundreds of thousands of
-# files walked on every sync cycle. A Dolt ignored table was the other
-# alternative and keeps bodies as Dolt rows, which the design rules out.
-# Retention drops whole day files after 30 days, copying cited bodies to a
-# pinned segment first (later slice).
+  - id: W1b
+    at: 2026-10-11T10:29Z
+    deploy: staging c1d21d5e
+    kind: deployed proof (test computer demo-arxiv-2026-10-10, trace in session scratchpad w1b/t1)
+    result: >-
+      A prompt asked research to poll arxiv:cs_ai. Research called
+      choir.PollSource("arxiv:cs_ai", 20): HTTP 200 with zero items in 33 ms
+      (arXiv publishes no listings on weekends), then a 304 in 120 ms on
+      the next round. The verb, host egress and conditional GET work in a
+      real guest. The write path (captures into the polling computer's
+      embedded graph, bodies in a file-root segment) is superseded by the
+      owner's decision the same hour
+      (problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md).
+    conjecture: superseded
 ---
 
 # W1 — content in the graph
 
-Captures are the paper's raw material. In July they starved Texture,
-because everything shared one embedded connection. That single connection
-works around a Dolt race that upstream fixed one day after our pin. So
-W1 starts at the substrate: upgrade Dolt and prove it under the race
-detector. Then captures get their own pool, research polls sources into
-`choir.web_capture` objects with bodies in content storage, the schedule
-runs as timer obligations, and every poll records what it cost.
+Captures are the paper's raw material, and they are a resource for
+everyone. They live in Store B, the global store behind corpusd. Bodies
+live in host content storage by hash, never in Dolt rows. Each computer
+keeps its own working state and overlays in its embedded Dolt. The paper's
+computer writes captures; any computer reads them.
 
-## W1b — one source polled by hand (planned)
+W1a upgraded embedded Dolt past an upstream race fix (landed). W1b gave
+research a poll verb, which works on staging but wrote into the polling
+computer's own graph. That was a design error, and its record is in the
+problem doc above. W1b2 moves the write path to Store B.
 
-A research verb, `choir.PollSource(sourceID)`, runs the existing poller
-for that source (`internal/sources`: RSS, Telegram web preview, GDELT)
-through the research host egress (`internal/researchtools`, with the
-egress budget charged once per poll). Each new item becomes a body file
-appended to the day's capture segment plus one `choir.web_capture`
-object whose metadata names the segment, offset, length and hash. The verb returns counts and capture ids, not bodies. The source
-list is `internal/sources/registry.json` (moved from configs/, embedded in the guest) (211 sources: 137 RSS, 73 Telegram, 1
-GDELT).
+## W1b2 — captures to Store B through corpusd
+
+corpusd gets a capture route:
+
+- `POST /internal/platform/captures` takes one poll's items (metadata and
+  body each) from a bound guest. For each item, the host stores the body
+  on disk by sha256, unless it is already there. It then creates the
+  `choir.web_capture` in Store B, unless an object with that item's
+  identity already exists, with the object's body empty. The metadata
+  names the body as `sha256:<hex>`. Owner and computer must match the
+  calling guest, as for every guest object write. The response gives
+  counts and the new captures' ids, titles and URLs.
+- `GET /internal/platform/captures/bodies/<sha256>` returns a body to any
+  bound guest or internal caller.
+
+Research's `choir.PollSource` keeps its surface. Its sink becomes one POST
+to corpusd per poll. The guest capture segment (internal/capturesegment)
+is deleted.
 
 Ways it can fail, written before the code:
 
-- a re-poll writes duplicate captures for items it already holds (the
-  item id or content hash must make a second write a no-op);
-- a body lands in `og_objects.body` anyway, or the metadata names bytes
-  that were never written (append and sync the segment first, then write
-  the object; a reader checks the hash);
-- two polls append to one segment at once and interleave lines (one
-  appender per computer, under a lock);
-- one slow or hostile feed holds the desk cell past its timeout, or a huge
-  feed floods the result (bound items per poll and the result size);
-- the poll writes queue behind Texture on the one connection (measure
-  Texture turn latency during a poll; this is what W1a's pool is for);
-- conditional GET state (ETag, Last-Modified) is lost between polls, so
-  every poll refetches everything;
-- a crash mid-poll leaves appended bytes with no object; that is harmless
-  (a partial last line is skipped by readers and the next append starts a
-  new line), but an object must never name bytes that are not there.
+- a body reaches a Dolt row (the route must write the object with an empty
+  body, whatever the guest sends);
+- a guest writes captures owned by another computer (ownership check as
+  for `/internal/platform/objects`);
+- the metadata names a body that is not on disk (write and sync the body
+  file before the object; a reader checks the hash);
+- a re-poll writes duplicates (identity per item; existing objects are
+  repeats);
+- a huge request exhausts corpusd memory (bound items per request and
+  bytes per body);
+- a partial body file after a crash (write to a temp file and rename;
+  content addressing makes a retry idempotent);
+- a second computer cannot read a capture or its body (list and body reads
+  allow any bound guest);
+- Store B grows without bound (no bodies in Dolt; history bound before all
+  sources poll; the October 1 memory budget for corpus-dolt is watched).
 
 ## W1c — the source schedule as timer obligations (planned)
 
 The runtime already has durable wakes with a not-before time
 (`scheduleContinuation`, internal/agentcore/continuation_schedule.go).
-The schedule is one wake kind, `source_poll_due`, per scheduled source.
-Its handler runs the same `poll_source` host function with no model call,
+The schedule is one wake kind, `source_poll_due`, per scheduled source on
+the paper's computer. Its handler runs the same poll (no model call),
 records the poll's usage, and arms the next wake at the source's interval.
 Management starts and stops a source's schedule; research's
 `choir.PollSource` stays the by-hand path.
 
-The owner rule decides restarts: a crash restart closes every open
-obligation, so a crash closes each schedule with the visible fate
-"interrupted by a restart". It never resumes on its own. Management sees
-the closed schedules and reopens them on its next activation. A planned
-update restart (with the marker) re-arms them once.
+A crash restart closes every open obligation, so a crash closes each
+schedule with the visible fate "interrupted by a restart". It never
+resumes on its own. Management sees the closed schedules and reopens them
+on its next activation. A planned update restart (with the marker)
+re-arms them once.
 
 Ways it can fail, written before the code:
 
@@ -225,35 +240,9 @@ Ways it can fail, written before the code:
   `source_poll_due` must join `restartWorkKinds`
   (internal/actorruntime/handler.go), the list a crash boot closes as
   interrupted_by_restart; a kind missing from it fires after the crash;
-- two wakes for one source run at once (a second arm while one is due):
-  one open obligation per source, keyed by source id;
+- two wakes for one source run at once: one open obligation per source,
+  keyed by source id;
 - a failing feed retries in a tight loop: a failure arms the next wake at
   the interval, doubling up to a day, and records the error;
-- polls pile onto Texture's connection: measure Texture turn latency while
-  the schedule runs (the W1 acceptance), before widening any pool;
-- usage is not recorded: every poll writes one usage record (source,
-  items fetched and new, bytes, duration, error).
-
-## Open: where captures live (owner question, 2026-10-11 10:30Z)
-
-Owner: "autopaper shouldnt run on embedded dolt, but global dolt ... the
-point is to make it a resource for everyone. then individual users/vms
-(and eventually, different hosts) can have overlays to filter, customize,
-combine private data."
-
-The 2026-10-09 decision (design §8) puts the paper's working state,
-captures included, in the paper computer's embedded Dolt, with the host
-store behind corpusd holding only published Textures. W1b as landed
-(c1d21d5e) follows it: `choir.PollSource` writes captures into the polling
-computer's own object graph. Under the owner's question, captures are a
-shared resource. They belong in the host store, and each computer keeps an
-overlay of its own filters, private data and Textures that refers to
-shared objects by id and version.
-
-Agent recommendation: captures (metadata in the host store, bodies in
-host content storage, never Dolt rows) and published Textures are global.
-Desk working state, private documents and overlays stay embedded. This
-also takes high-volume ingest off every guest's embedded connection, so
-C1 stops being on Autopaper's path at all. W1c (the schedule inside the
-guest) waits for this decision. The pollers, metadata, dedupe and segment
-format carry over; only the sink changes.
+- usage is not recorded: every poll writes one usage record (source, items
+  fetched and new, bytes, duration, error).

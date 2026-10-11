@@ -25,7 +25,11 @@ Diff the mission's Real Artifact / architecture sections against the settled
 decision registry before the first execution move.
 *(Caught: the autopaper activation definition hard-coded embedded-Dolt VM
 topology two days after D-WIRE settled sql-server mode — twelve attempts,
-including a 12-hour run, faithfully rebuilt the rejected architecture.)*
+including a 12-hour run, faithfully rebuilt the rejected architecture.
+Again 2026-10-11: the Autopaper design placed captures in the paper
+computer's embedded Dolt, and W1b shipped that, against the Store B
+taxonomy in docs/computer-ontology.md. For Autopaper the answer is fixed:
+shared content lives in Store B behind corpusd; computers hold overlays.)*
 
 ## Before deleting or deprecating
 

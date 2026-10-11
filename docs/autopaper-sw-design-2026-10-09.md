@@ -103,9 +103,9 @@ store is offline (reset at 12:33Z), so it cannot be reproduced live.
 
 **Constraints this design takes on, so the known causes cannot recur:**
 1. **High-volume ingest never shares the guest's single embedded
-   connection with Texture and health (C1).** How (real concurrency in the
-   store, or a separate handle and store for captures) is W1's first
-   engineering decision, made in Gate 1 terms, not worked around.
+   connection with Texture and health (C1).** Settled 2026-10-11: captures
+   are written to the global store through corpusd, so ingest never
+   touches a guest's embedded connection.
 2. One authority per fact: one route record, one revision chain, one
    publication state.
 3. Reads of published Textures never touch the paper's computer (C6 stays
@@ -177,14 +177,28 @@ words, not types. They are dropped.
 
 ### Storage that cannot repeat the 104 G problem
 
-- **The paper's computer** (embedded Dolt plus content storage) holds
-  working state. Capture bodies live in content storage, not Dolt rows.
-  High-volume tables stay out of Dolt history or are committed on a
-  bounded cadence (to be settled in SH; Dolt's ignored-table mechanism is
-  the first candidate). Textures and records are versioned.
-- **The host-level store** (the corpus Dolt behind corpusd) holds published
-  Textures and their revisions, and serves every logged-out read. Its
-  history has a declared bound.
+Corrected 2026-10-11 (owner): "autopaper shouldnt run on embedded dolt,
+but global dolt ... the point is to make it a resource for everyone. then
+individual users/vms (and eventually, different hosts) can have overlays
+to filter, customize, combine private data." This is the store taxonomy in
+docs/computer-ontology.md; the earlier text here put captures on the
+paper's computer
+(problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md).
+
+- **The global store** (Store B: the corpus Dolt behind corpusd) holds the
+  shared resource: every capture as a `choir.web_capture` object, and
+  published Textures and their revisions. It serves every logged-out read
+  and every computer's read of shared content. Capture bodies live in host
+  content storage, addressed by hash, never in Dolt rows. High-volume
+  tables stay out of Dolt history or are committed on a bounded cadence.
+  Its history has a declared bound.
+- **Each computer** (embedded Dolt) holds its own working state: desk
+  state, private documents, and overlays that filter, customize and
+  combine private data with shared objects, referring to them by id and
+  version. Textures and records are versioned.
+- Writes to the global store go through corpusd, authenticated as the
+  writing computer. Reads of shared content never touch the computer that
+  wrote it.
 - Retention: capture bodies have a bounded window (OPEN: 30 days), then
   shrink to a stub. Bodies cited by a Texture or a record are pinned.
 
@@ -323,7 +337,11 @@ Decided on 2026-10-09:
 - **Names:** Autopaper, Autoputer and Autoradio, never camel case. "World
   Wire", "Universal Wire" and "sourcecycled" are retired; the rename is a
   TODO (§9).
-- **Storage:** each computer embeds Dolt; the host-level Dolt behind
+- **Storage (corrected 2026-10-11, owner):** shared content (captures,
+  published Textures) lives in the global store behind corpusd, with
+  bodies in host content storage; each computer embeds Dolt for its own
+  working state and overlays. The 2026-10-09 line read: each computer
+  embeds Dolt; the host-level Dolt behind
   corpusd is the global publish and read store. No cross-computer reading.
 - **Old data:** start from zero content; no backwards compatibility.
 - **Transclusion:** pinned to a revision, with a subtle newer-revision

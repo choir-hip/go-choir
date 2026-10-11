@@ -49,10 +49,12 @@ start:
       recovery: git
   observed:
     - >-
-      The design's July cause C1 is still open: the guest's embedded Dolt
-      runs every pool at one connection (configureEmbeddedDoltDB,
-      internal/store/texture.go). A write pool and a read pool share one
-      connector (store.Open).
+      Corrected 2026-10-11 (owner): Autopaper's shared content lives in the
+      global store (Store B behind corpusd), not in the paper computer's
+      embedded Dolt; computers keep overlays
+      (problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md).
+      The July cause C1 (one embedded connection) is therefore off the
+      ingest path; W1a still upgraded Dolt past the race behind it.
     - >-
       choir.web_capture exists in the object graph
       (internal/objectgraph/web_capture.go); polling code exists in
@@ -114,7 +116,7 @@ boundaries:
 
 now:
   status: working
-  slice: W1 — content in the graph; W1a landed (Dolt past the race fix), W1b landing (choir.PollSource)
+  slice: W1 — content in the graph; W1a landed; W1b2 moves capture writes to Store B (owner correction)
   source_ref: c1d21d5e
   deploy_identity: staging 5b077256
   candidate: {id: W1, state: designing, ref: main, base: 78c9173e, digest: none, scope: [internal/store, internal/objectgraph, internal/sources]}
@@ -130,13 +132,13 @@ now:
     scope_if_supported: one Autopaper computer, MVP sources
     status: proposed
     evidence_refs: []
-  decision: {what: C1 approach — upgrade Dolt past the upstream race fix, then widen the pools in measured steps rather than a second engine, kind: architecture, status: settled (agent), evidence_ref: problems/embedded-dolt-single-connection-is-a-fixed-upstream-race-2026-10-11.md, owner_ratification_ref: design §0 constraint 1 (owner brief)}
+  decision: {what: "shared content (captures, published Textures) in Store B behind corpusd, bodies in host content storage; computers hold overlays", kind: architecture, status: settled (owner 2026-10-11), evidence_ref: problems/autopaper-captures-built-per-computer-against-store-b-2026-10-11.md, owner_ratification_ref: "owner 2026-10-11: yes, move the write path to host store"}
   belief:
-    believed_state: Dolt past the race fix on staging; one connection per pool still; research can poll a source into captures (W1b, deploying)
-    main_uncertainty: whether capture writes slow Texture before the pools widen
-    next_observation: W1b acceptance on staging with Texture latency measured during the poll
+    believed_state: Dolt past the race fix on staging; research can poll a source (W1b) but writes into its own embedded graph, the superseded path
+    main_uncertainty: whether Store B absorbs capture writes without the October 1 memory pressure
+    next_observation: a poll by hand into Store B on staging, read back from a second computer
   blocker_or_risk: none
-  next_action: W1b acceptance, then the source schedule as timer obligations and usage records
+  next_action: W1b2 (corpusd capture route; PollSource writes through it), then the schedule (W1c)
 
 receipts: []
 ---
