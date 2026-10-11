@@ -104,9 +104,9 @@ boundaries:
 
 now:
   status: working
-  slice: W1 close — the second panel sent W1 back on one blocker (a same-owner capture race), fixed in 56ec63e0; land it, then a third panel
-  source_ref: 56ec63e0 (local; pushes after the S1h demo)
-  deploy_identity: staging 726aa392 (host and the paper computer)
+  slice: W1 close — both panel rounds fixed and deployed (8031258a); the third panel reviews the landed candidate
+  source_ref: 8031258a (pushed)
+  deploy_identity: staging 8031258a (host); the paper computer runs 726aa392 (guest code unchanged since, except the error-text bound)
   candidate: {id: W1, state: landed, ref: main, base: e21e1347, digest: ebe02b17, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel, internal/objectgraph]}
   conjecture:
     id: W1-3
@@ -135,7 +135,7 @@ now:
       crash restart; a second computer reads a capture and its body. A
       running computer picks up a deploy only at its next boot.
     main_uncertainty: whether the second panel finds another path that breaks ownership, the body bound, or the restart rule
-    next_observation: 56ec63e0 deployed (new captures still created, repeats counted); then the third panel's verdict
+    next_observation: the third panel's verdict
   blocker_or_risk: >-
     each scheduled poll rewrites its schedule object, which in a guest is one
     event on the computer's chain per poll; fine for a handful of sources,
@@ -149,8 +149,7 @@ now:
     - the MVP source list is open; France 24 and UN News refuse Node B
     - for W2 (second panel) — no per-guest quota on the capture route; a capture is what its writer says, so shared readers filter by a trusted writer; items beyond a poll's max_items are never fetched once validators are kept; a body file written before a failed row write is orphaned
   next_action: >-
-    push 56ec63e0 after the demo; CI, deploy, deployed check; third panel;
-    settle W1; review the W2 file
+    run the third panel; settle W1; review the W2 file
     (definitions/choir-autopaper-w2-living-textures-2026-10-11.md, drafted)
 
 receipts:
@@ -303,6 +302,19 @@ receipts:
       56ec63e0 with an insert-only create; the new regression fails on the
       old path and passes ten runs on the new one.
     conjecture: W1-3's ownership claim held sequentially, not concurrently
+  - id: W1-fix2
+    at: 2026-10-11T15:03Z
+    deploy: staging 8031258a (CI 38149043966; corpusd reports it, deployed 15:01:41Z)
+    kind: deployed proof
+    result: >-
+      The first polls after the deploy went through the insert-only create:
+      BBC wrote 1 new capture and counted 19 repeats, DW and Al Jazeera 20
+      repeats, WHO a 304. Store B holds 102 captures for the paper's owner
+      with no body bytes in any row, and 101 body files (two items share a
+      body, stored once by hash). No schedule is overdue. The concurrent
+      race itself is proven by the regression against the Dolt adapter,
+      not on staging, where one computer polls.
+    conjecture: W1-3 supported with both rounds' fixes
 ---
 
 # W1 — content in the graph
