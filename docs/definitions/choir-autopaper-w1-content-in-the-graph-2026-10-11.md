@@ -106,7 +106,7 @@ now:
   status: working
   slice: W1 close — the completion panel sent W1 back; its gaps are fixed in 726aa392; the panel re-runs on the new candidate
   source_ref: 726aa392 (pushed)
-  deploy_identity: staging ebe02b17 (host and both test computers)
+  deploy_identity: staging 726aa392 (host and the paper computer)
   candidate: {id: W1, state: landed, ref: main, base: e21e1347, digest: ebe02b17, scope: [internal/platform, internal/proxy, internal/agentcore, internal/actorruntime, internal/store, internal/researchtools, internal/sources, internal/yaegikernel, internal/objectgraph]}
   conjecture:
     id: W1-3
@@ -120,7 +120,7 @@ now:
     delta_o: Store B capture rows and capture-bodies files after scheduled polls; schedule usage from the API; schedule state after a restart
     scope_if_supported: one paper computer polling a few sources, any computer reading
     status: supported
-    evidence_refs: [receipts W1c, W1-hour, W1-read]
+    evidence_refs: [receipts W1c, W1-hour, W1-read, W1-fix]
   decision:
     what: captures in Store B behind corpusd; bodies in host content storage by sha256; computers keep overlays; the schedule is the paper computer's own state
     kind: architecture
@@ -135,7 +135,7 @@ now:
       crash restart; a second computer reads a capture and its body. A
       running computer picks up a deploy only at its next boot.
     main_uncertainty: whether the second panel finds another path that breaks ownership, the body bound, or the restart rule
-    next_observation: 726aa392 deployed, schedules still polling, a generic capture write refused; then the second panel's verdict
+    next_observation: the second panel's verdict on the frozen candidate
   blocker_or_risk: >-
     each scheduled poll rewrites its schedule object, which in a guest is one
     event on the computer's chain per poll; fine for a handful of sources,
@@ -148,8 +148,8 @@ now:
     - discovered heresy, not repaired — a same-owner guest can overwrite another computer's object of any kind through the generic object route (separate auth change)
     - the MVP source list is open; France 24 and UN News refuse Node B
   next_action: >-
-    land 726aa392 (CI, deploy, deployed check), re-freeze, re-run the
-    completion panel; then settle W1 and author W2
+    run the second completion panel on the frozen head; adjudicate; then
+    settle W1 and author W2
 
 receipts:
   - id: W1a
@@ -268,6 +268,24 @@ receipts:
       problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md and
       fixed in 726aa392.
     conjecture: W1-3 held for the observed runs; the panel found paths outside them
+  - id: W1-fix
+    at: 2026-10-11T13:58Z
+    deploy: staging 726aa392 (CI 38144278621; corpusd and proxy report it; paper computer restarted onto it)
+    kind: deployed proof (session scratchpad w1c/panel2-deployed.jsonl)
+    result: >-
+      The restart onto 726aa392 (no planned marker) closed the four active
+      schedules as interrupted_by_restart; the list now carries an overdue
+      flag (false for all). Restarted at five minutes at 13:52:10, each
+      schedule polled at 13:52 (20 fetched, 20 repeats, nothing new written)
+      and again at 13:57, then armed 14:02. On the second poll WHO and Al
+      Jazeera answered 304: the validators were kept after the successful
+      write. From Node B loopback, an internal generic POST of a
+      choir.web_capture carrying a body got 400 ("a capture's body belongs
+      in host content storage, not the object row"); Store B holds no row
+      for the probe owner. Store B still holds 92 captures with no body
+      bytes in rows and 92 body files. The guest-refusal and commit-failure
+      paths are proven by unit tests only.
+    conjecture: W1-3 supported with the first-round fixes
 ---
 
 # W1 — content in the graph
