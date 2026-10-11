@@ -221,3 +221,18 @@ trajectories, which is the same lifecycle-model change the root needs, since
 it observes every document. Both belong in this station. First design
 question for PD3: how an agent that spans trajectories appears in each
 trajectory's snapshot, and which trajectory its run binds to.
+
+**Precedent found (04:15Z).** A computer-wide desk already exists:
+persistent management, `management:<owner>`. It is a non-lifecycle agent
+(`LifecycleVersion 0`; the store's management branch requires exactly
+that), so it is in no trajectory's snapshot. Agent objects enter a snapshot
+by their `trajectory_id` metadata (`GetLifecycleSnapshot`'s filter). Each
+request to management becomes a work item on the requesting document's
+trajectory, and reports return through that work item. Per-computer
+research and the Texture root can follow the same shape: one non-lifecycle
+persistent agent per computer, with lifecycle work items and runs bound to
+each requesting trajectory. That replaces the open question above with a
+narrower one: which of research's lifecycle-agent checks (the
+`LifecycleVersion > 0` requirement in target validation, and the active run
+on the requesting trajectory) move to the work item, as they already have
+for management.
