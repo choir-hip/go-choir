@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+// EmptyStreakBeforeCooldown is how many empty results in a row, with no
+// success between them, bench a provider. One empty result is usually the
+// query's doing (a narrow site: filter, a date the index lacks), not the
+// provider's; benching on it took healthy providers out for every caller
+// (docs/problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md).
+const EmptyStreakBeforeCooldown = 10
+
 // BackoffPolicy computes cooldown durations from outcome class and strike count.
 type BackoffPolicy struct {
 	BaseSeconds map[OutcomeClass]int64
@@ -57,6 +64,12 @@ func (p BackoffPolicy) CooldownDuration(class OutcomeClass, strikeCount int) tim
 	}
 	if strikeCount < 1 {
 		strikeCount = 1
+	}
+	if class == OutcomeSuccessEmpty {
+		if strikeCount < EmptyStreakBeforeCooldown {
+			return 0
+		}
+		strikeCount -= EmptyStreakBeforeCooldown - 1
 	}
 	baseSec, ok := p.BaseSeconds[class]
 	if !ok || baseSec <= 0 {
