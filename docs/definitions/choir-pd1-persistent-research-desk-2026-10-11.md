@@ -135,7 +135,7 @@ boundaries:
 
 now:
   status: working
-  slice: S1g — rerun after the search wave fix (9c1c96c7), follow-up after research's first report
+  slice: S1h — research depth per round and search capacity, the two remaining coverage levers
   source_ref: 74227bcf (local; pushes after the W1a test run)
   deploy_identity: staging 78c9173e
   candidate:
@@ -182,7 +182,11 @@ now:
       remaining gap is Texture's own selection.
     next_observation: S1f — items, citations per item, unconfirmed leads followed up
   blocker_or_risk: none
-  next_action: after 9c1c96c7 deploys, rerun as S1g with the follow-up held until research has reported
+  next_action: >-
+    owner: restore Serper and SerpAPI quota (billing). Then make a research
+    round search wider before it reports (several queries per thread in one
+    cell) and drop Texture's repeated pending-verification phrasing; rerun as
+    S1h
 
 receipts:
   - id: S1c
@@ -269,6 +273,27 @@ receipts:
       (problems/search-wave-waits-for-its-slowest-provider-2026-10-11.md,
       fixed in 9c1c96c7).
     conjecture: PD1-1 still short on coverage; citation and voice fixes supported
+  - id: S1g
+    at: 2026-10-11T12:15Z
+    deploy: staging 19b2f964 (gateway 9c1c96c7 wave fix), test computer demo-arxiv-2026-10-10c restarted onto it
+    kind: deployed proof (traces in session scratchpad demo15/trace)
+    result: >-
+      Same prompt and follow-up; the follow-up waited for eight quiet
+      minutes and went after research's first grounded revision (11:40,
+      six minutes in). Six research runs (38 cells; 24 web searches, 7
+      imports, 2 child fan-outs); no search wave timed out. The final brief
+      has 790 words and 7 cited sources (S1f 618 and 7; the baseline 5,765
+      words). GPT-6 moved from unconfirmed to confirmed once research found
+      OpenAI's announcement through search after a direct import got 403.
+      Claude Haiku 5.5 stayed unconfirmed although the baseline confirms
+      it. Policy coverage is one item (baseline seven). Two of seven search
+      providers are out of quota (Serper until 2026-10-15, SerpAPI until
+      2026-10-12), Exa fails to parse responses and SearXNG returns empty,
+      so waves ran on Tavily, Parallel and Keenable. One research child hit
+      its 90-second budget; one cell failed to compile a long literal.
+      Texture's caveats ("noted once, pending verification", "still being
+      confirmed") recur on unconfirmed items.
+    conjecture: PD1-1 still short on coverage; the wave fix removed timeouts but not the gap
 ---
 
 # PD1 — persistent research desk
