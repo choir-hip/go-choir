@@ -10,8 +10,8 @@ readiness: drafted
 review:
   reviewer: agentic-consensus file review (round one sent back; revised)
   frozen_ref: 352661de (round one)
-  verdict: send back (Claude, DeepSeek; round one), revised for round two
-  evidence_ref: receipt P2d-review1
+  verdict: round two GLM accept, Claude and Gemini send back on local defects; revised
+  evidence_ref: receipts P2d-review1, P2d-review2
 
 start:
   captured_at: 2026-10-11T19:35:00Z
@@ -128,11 +128,20 @@ finish:
     Escalate, Reply) are refused at validation, so no packet the resolver
     cannot consume is minted.
     2. Commit (CommitLifecycleAct, target texture:<doc>): conditioned on
-    the document trajectory's version and live status, it bumps that
-    trajectory's ReducerSeq and numbers the packet from it, and, when the
-    trajectory has no open Texture work, mints one open Texture work item
-    (id derived from the record, not-exists condition, as
-    textureSupervisionSubject does). A closed or cancelled trajectory
+    the document trajectory's version and live status (one trajectory
+    object when the caller's trajectory is the document's, two otherwise;
+    loaded, conditioned and bumped once), it bumps that trajectory's
+    ReducerSeq and numbers the packet from it, and always mints one open
+    Texture work item for this directive (id derived from the record,
+    not-exists condition, as textureSupervisionSubject does). The work
+    belongs to the directive, not to whatever Texture work happens to be
+    open: a directive committed during an in-flight turn that completes
+    the request's work still has its own work to wake on, and the turn
+    that consumes the directive settles that work (item 4). A concurrent
+    Texture turn is not lost: applyTextureLifecycleTurn reads the
+    trajectory version just before its commit, and on a collision returns
+    "reload ... and retry this same run" to the same run
+    (internal/textureowner/tools_texture.go). A closed or cancelled trajectory
     refuses the act with a visible reason. The bound (item 7) is checked
     here; because the commit is conditioned on that trajectory, two
     concurrent directives serialize.
@@ -145,18 +154,28 @@ finish:
     management or this document's research desk; the packet matches the
     record, has direction directive,
     targets this Texture on this document's trajectory, and is pending.
+    The resolver sets ResolvedTargetWorkItemID to the directive's own
+    work item; the postcondition reads the packet's disposition (the
+    record is immutable and cannot show consumption).
     The occurrence carries the emitter as its ProducerAgentID, so the
     actor handler's expected-source check
     (internal/actorruntime/handler.go) admits the wake instead of
     consuming it as a foreign source envelope.
     4. Consumption: one predicate shared by textureTurnPendingInbound,
     textureDispositionIneligibleReason and cellUpdateVisible admits
-    directive packets beside producer reports; consumed directives
-    terminalize as delivered with the turn.
-    5. Rendering: the Texture revision request lists the directives the
-    run will consume (record id, emitter, objective, body, and the
+    directive packets beside producer reports, keeping today's difference
+    that a directive is visible to a cell only once bound to that run
+    (DeliveredToRunID and DeliveredAt set) while a producer report may be
+    unbound; the store's turn commit already accepts directives
+    (internal/store/texture_turn.go). A consumed directive terminalizes as
+    delivered with the turn, and the same commit completes the directive's
+    own work item.
+    5. Rendering: the revision request's worker-message slot exists but is
+    passed nil today (buildAgentRevisionRequest's only production call,
+    internal/textureowner/texture_agent_revision.go). This item fills it
+    with the directives the run will consume (record id, emitter, objective, body, and the
     packet's evidence refs as given; W2's capture payload is defined in
-    P5), beside the channel messages it renders today. An owner revision
+    P5). An owner revision
     and a directive pending together arm one run whose prompt carries
     both, and its commit consumes both.
     6. Crash: the directive's wake is a coagent_result wake, already in
@@ -165,13 +184,14 @@ finish:
     7. Bound: at most four directives to one Texture per owner request
     (since the trajectory's latest owner input). A directive past the
     bound still commits its record, but its packet commits terminal
-    (disposition delivered, reason bound_spent), with no wake and no
-    work, so the management cell is not refused and the fate is visible.
+    (disposition delivered, reason bound_spent), with no work and no wake:
+    the act path's wakeUpdatedCoagent call is skipped for a packet
+    committed terminal (today it wakes on every non-replay update), so the management cell is not refused and the fate is visible.
     Texture's management Casts get the same drop-with-note bound in
     textureTurnControls (today only research rounds are bounded), so a
     management and Texture exchange stops within four rounds each way.
     8. Retract: a CancelAct of a directive to texture:<doc> commits its
-    stand-down packet terminal (no wake); the original directive, if
+    stand-down packet terminal (no wake, by the same gate); the original directive, if
     still pending, terminalizes as cancelled, and resolution re-reads the
     record so a retracted directive never starts a turn.
     9. Teaching: management's runtime overlay names texture:<docID> as a
@@ -185,8 +205,9 @@ finish:
   acceptance:
     - P2d1 reducer test: a management Cast to research or texture:<doc> opens no engineering assignment; an engineering Cast still opens one
     - validation test: management to texture:<doc> accepted; engineering and research to texture:<doc> refused; another owner's document refused
-    - store test: the act on an idle Texture mints its work and a packet numbered on the document trajectory, in one command; a closed trajectory refuses; the fifth directive in one request refuses; two concurrent directives serialize
+    - store test: the act on an idle Texture mints its work and a packet numbered on the document trajectory, in one command; a closed trajectory refuses; the fifth directive in one request commits its record with a terminal bound_spent packet, no work and no wake; two concurrent directives serialize
     - controller test: the directive arms the idle Texture, resolves as a directive occurrence, and a forged one (wrong owner, research emitter, retracted record, missing record) is refused
+    - race test: a directive committed while a Texture turn is in flight, where that turn completes the request's work, still wakes a later turn on its own work item and is consumed
     - turn test: the revision prompt shows the directive's record id, emitter and body; the commit consumes it; a producer report that arrived after scheduling is not consumed with it
     - crash test: a markerless boot closes a pre-boot directive wake and mints no work
     - bound test: the fifth directive commits its record with a terminal bound_spent packet and no wake; Texture's fifth management Cast in a request is dropped with a runtime note
@@ -202,8 +223,9 @@ finish:
     Reverting P2d2 needs a drain first: a store command that terminalizes
     every pending directive packet addressed to a Texture (disposition
     delivered, reason rollback), because the old resolver's refusal leaves
-    them pending and re-arming. Texture work minted by P2d2 stays open
-    after a revert and closes at its next committed turn
+    them pending and re-arming, and closes the directive work items they
+    own (a turn's caller work defaults to open, so nothing else would
+    close them, and open Texture work arms an initial-work wake)
   landing:
     required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance]
 
@@ -228,7 +250,7 @@ value:
 
 now:
   status: drafted
-  slice: revised three times after round one; P2d1 (the gate) pushed with P2c (b172895b); round two next
+  slice: revised after round two (receipt P2d-review2); P2d1 on staging (b172895b); a fix check by Claude and Gemini next
   source_ref: 352661de
   deploy_identity: staging a2bcf724
   candidate: none
@@ -273,6 +295,28 @@ now:
   next_action: round two file review; then P2d1 (the gate) through the landing loop
 
 receipts:
+  - id: P2d-review2
+    at: 2026-10-11T21:00Z
+    kind: agentic-consensus file review round two (session scratchpad p2d/review2), frozen 38dc5486
+    result: >-
+      GLM accepts; Claude and Gemini send back; DeepSeek and Muse timed out;
+      Devin could not run tools non-interactively. Agreed defects: the
+      fifth-directive acceptance items contradicted each other; a directive
+      committed during an in-flight turn that completes the request's work
+      strands (work was minted only when none was open), and nothing closes
+      directive-minted work; terminal packets still wake, since the act path
+      wakes on every update; the resolver needs the directive's own work
+      item and the postcondition must read the packet, not the immutable
+      record; the revision prompt renders no worker messages today; cells
+      see a directive only once bound. Gemini's claim that a directive's
+      version bump destroys an in-flight Texture turn was checked against
+      the code and does not hold: applyTextureLifecycleTurn reads the
+      version just before commit and returns a reload-and-retry error to the
+      same run (Claude's reading). Revised: one work item per directive,
+      settled by the consuming turn; the wake gate for terminal packets;
+      resolver and postcondition sources; one-or-two trajectories; the
+      prompt slot; a race acceptance test; the rollback closes directive
+      work.
   - id: P2d-review1
     at: 2026-10-11T19:45Z
     kind: agentic-consensus file review (session scratchpad p2d/review), frozen 352661de
