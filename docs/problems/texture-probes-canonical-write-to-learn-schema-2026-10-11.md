@@ -51,3 +51,28 @@ I also believe the frame should show exactly the updates the commit will
 accept. The test is a focused test: an update past the scheduled seq is
 absent from the frame, or accepted by the commit, but never one without the
 other.
+
+## Amendment 02:30Z — the cell cannot see block ids (root cause)
+
+A later Texture turn in the same demo (run d2a6cdcb, started 02:21:27,
+still running at 02:28 after 18 cells with 10 errors) shows the deeper
+cause. Its probes are not about the op names. It is guessing **block
+ids**: `"14"`, `"No dated, verifiable chips"` (a sentence from the
+document), `p-<doc>-<salt>-5`, each refused with "block_id ... not found".
+One probe was `update_block_text` with text `"probe"`. With a correct id,
+that cell would have overwritten a paragraph of the owner's document with
+the word "probe".
+
+`choir.ReadDoc()` returns the head's revision id and markdown content only;
+it has no block ids. The structured outline with ids is written into the
+run's prompt once, at run start (texture_agent_revision.go). A reactivated
+Texture run (`actor_reactivate_existing_memory`) carries its earlier memory,
+so its outline describes an older revision. After the run's own commit, the
+outline in its context is stale by construction. The cell is the one
+surface that is current at every cell (R3d), and it lacks the ids the edit
+schema requires.
+
+Revised belief: the help text fix (118f3fb6) removes the invitation, but
+probing ends only when the cell's document snapshot carries the current
+outline (block and node ids, type, a text prefix). Test: in the next demo,
+a block-id "not found" rejection in any Texture turn counts as a failure.
