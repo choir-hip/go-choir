@@ -135,7 +135,10 @@ boundaries:
 
 now:
   status: working
-  slice: S1i — Texture spends research rounds on coverage before confirmation (S1h trace); prompt v6 then rerun
+  slice: >-
+    paused after S1i — coverage roughly doubled; citation is the next gap.
+    Research rounds resume on the precommitment-records protocol, where each
+    research question carries a prediction that is scored
   source_ref: 74227bcf (local; pushes after the W1a test run)
   deploy_identity: staging 78c9173e
   candidate:
@@ -315,6 +318,32 @@ receipts:
       every lead back for confirmation while research rounds per request
       are bounded, so confirmation crowds out coverage.
     conjecture: PD1-1 still short on coverage; the binding constraint moved from search capacity to how Texture spends research rounds
+  - id: S1i
+    at: 2026-10-11T16:03Z
+    deploy: staging 25c8b5b0 (research prompt v6; Texture coverage-before-confirmation line); reader computer restarted onto it at 15:12:41Z
+    kind: deployed proof (traces in session scratchpad demo17/trace; final revision demo17/ainews/revisions/09)
+    result: >-
+      Same prompt and follow-up. Texture's second question to research
+      asked it to "open the four branches the document does not cover
+      yet"; six research rounds ran about 59 web searches. The brief (834
+      words) now covers five branches with about sixteen dated items:
+      model releases (Mistral Large 4, Claude Haiku 5.5 confirmed), policy
+      (a New York City Council hearing, H.R. 10701, a reported copyright
+      suit, an EU AI Office check), chips and power, three funding rounds
+      and three arXiv papers. Coverage roughly doubled against S1h. But
+      only 4 sources are cited (S1h 10): most items name their outlet
+      ("CNBC reported") without a citation. Hypothesis, not yet checked in
+      the trace: research reported search-result items without importing
+      the pages, so Texture had no source to cite. GPT-6, the Genesis
+      Mission and ThinkingBox, found in S1g and S1h, are absent, so runs
+      still sample the week differently. The closing paragraph explains
+      search gaps to the reader.
+    conjecture: >-
+      PD1-1 coverage improved by changing how Texture spends rounds; the
+      next gap is citation (importing what is reported). Prompt
+      hill-climbing pauses here: the owner's precommitment-records protocol
+      (docs/precommitment-protocol-design-2026-10-11.md) is the measured
+      replacement for reading these traces by hand
 ---
 
 # PD1 — persistent research desk
