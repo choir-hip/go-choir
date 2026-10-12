@@ -17,7 +17,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -207,16 +206,6 @@ func (s *Store) fileExists(path string) (bool, error) {
 
 // Root returns the filesystem root directory of the store.
 func (s *Store) Root() string { return s.root }
-
-// CopyFrom copies all bytes from src into the store, returning the resulting
-// BlobRef. It is a convenience wrapper around Put for streaming sources.
-func (s *Store) CopyFrom(src io.Reader) (model.BlobRef, error) {
-	data, err := io.ReadAll(src)
-	if err != nil {
-		return "", fmt.Errorf("blob store: read source: %w", err)
-	}
-	return s.Put(data)
-}
 
 // Sentinel errors for the blob store.
 var (

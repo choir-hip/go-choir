@@ -222,10 +222,6 @@ func TestDeriveAfterDelete(t *testing.T) {
 	if _, ok := tree.Versions["base_item_1"]; ok {
 		t.Error("deleted item should have no version entry")
 	}
-
-	if !tree.IsDeleted("base_item_1") {
-		t.Error("IsDeleted should report true for tombstoned item")
-	}
 }
 
 func TestDeriveAfterMove(t *testing.T) {

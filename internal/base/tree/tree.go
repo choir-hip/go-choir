@@ -245,30 +245,3 @@ func maxCursor(events []model.Event) int64 {
 	}
 	return max
 }
-
-// LiveItems returns the items in the tree that are not deleted (no
-// tombstone). This is a convenience for downstream consumers.
-func (t Tree) LiveItems() []model.Item {
-	var out []model.Item
-	for _, it := range t.Items {
-		if it.DeletedAt == nil && it.CurrentVersion != "" {
-			out = append(out, it)
-		}
-	}
-	return out
-}
-
-// IsDeleted reports whether an item is tombstoned in the tree.
-func (t Tree) IsDeleted(id model.ItemID) bool {
-	it, ok := t.Items[id]
-	if !ok {
-		return false
-	}
-	return it.DeletedAt != nil || it.CurrentVersion == ""
-}
-
-// Has reports whether an item exists in the tree (live or tombstoned).
-func (t Tree) Has(id model.ItemID) bool {
-	_, ok := t.Items[id]
-	return ok
-}
