@@ -10,10 +10,10 @@ definition_version: 4
 readiness: drafted
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: convergent agentic-consensus panel (codex, claude opus, gpt-6.1-sol, gemini-3.8-flash, deepseek-v4.1-flash, glm-5.3-flash; gpt-6-luna and muse-spark timed out)
+  frozen_ref: 2d2b864e
+  verdict: send_back (codex, gpt-6.1-sol, deepseek), accept (claude, gemini, glm); repaired in the following commit, re-review pending
+  evidence_ref: docs/re-engineering-decisions-2026-10-12.md §13 (synthesis)
 
 start:
   captured_at: 2026-10-12T19:30:00Z
@@ -23,6 +23,7 @@ start:
   worktrees:
     - path: /Users/wiz/go-choir
       status: dirty (this session's doc edits in progress; decisions, metamission, ACTIVE.md, mission-graph.yaml)
+      correction_2026-10-12: those edits landed at 2d2b864e and the tree was clean at review; Go source is unchanged between 03499ef9 and 2d2b864e, so every cite below holds at both
       class: goal_candidate
       owner: this session
       touch: goal_owned
@@ -47,8 +48,13 @@ start:
       RunRecord nil (research_children.go:182), so they key on their own
       activation (tools_desk.go:108-117), in a fresh pool
       (research_children.go:194). Serializing the parent's pool cannot make
-      a child wait on its parent's lease. Tool calls in one run are
-      sequential (no goroutines in internal/toolregistry/toolloop.go).
+      a child wait on its parent's session. Tool calls in one model turn run
+      in parallel (internal/toolregistry/batch_executor.go:52-60, called
+      from toolloop.go:662) unless one of them is on the sequential list,
+      which includes desk_go_eval (batch_executor.go:145-152). So one run
+      never holds two cells on a session at once, but parallel non-session
+      tools and the goroutines inside one cell do share the worker socket,
+      which is the cross-wire case.
     - >-
       Broker handle: issued once per worker with time.Hour
       (internal/yaegikernel/choir.go:119), checked on every broker verb
@@ -66,8 +72,13 @@ start:
       public /api/runs/{id} returns the run record only (api.go:879-899).
       internal/trace has a causal-chain HTTP handler (trace/query.go:97-122,
       ParentChain) that nothing mounts; /api/trace/* is served by nothing,
-      yet scripts/texture_revision_cadence_probe.mjs:87 and
-      internal/agentcore/run_acceptance.go:573 point at it.
+      yet run_acceptance.go:573, scripts/texture_revision_cadence_probe.mjs:87,
+      scripts/m3_vmctl_refresh_probe.mjs, three frontend/check-*.mjs scripts
+      and nine frontend/tests/*.spec.js request /api/trace/trajectories/...
+      (a different shape from the unmounted handler's /api/trace/events).
+      The internal/trace store also receives runtime event projections
+      (runtime.go:4654-4658, 4693-4699), best-effort, so it is not a
+      completeness guarantee.
     - >-
       Existing no-SSH reads: /api/runtime/obligations (restart kind and
       reason, open work; obligations_surface.go:12-27, 129-132),
@@ -88,6 +99,21 @@ start:
       markerless: a crash. The known violation it should expose:
       docs/problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md.
     - >-
+      A per-computer hold exists: POST /internal/vmctl/hold (host-internal
+      only; internal/vmctl/handlers.go:530-556, 1716) sets a durable
+      maintenance hold (ownership.go:181-205). While held, vmctl refuses
+      every automatic lifecycle action (boot, recover, refresh, reattach,
+      resume, reclaim, retention; pressure_reclaim.go:633,
+      warmness_policy.go:165) and the deploy refresh skips it
+      (.github/workflows/ci.yml:1434). A held computer that is running keeps
+      running its current code. One that boots under the hold gets
+      RUNTIME_MAINTENANCE_HOLD=1 and refuses run admission
+      (agentcore/runtime.go:738, 891-896); /internal/vmctl/maintenance-serve
+      makes it readable under that fence (handlers.go:704-748). Unhold
+      clears it (ownership.go:207-218). An earlier note in Cut 1 said no hold
+      mechanism was visible; that was wrong. The owner chose not to use it
+      (decisions §13.1): the owner's computer takes each cut.
+    - >-
       The -race workflow runs weekly and on dispatch, not on push
       (.github/workflows/race.yml:3-9).
 
@@ -102,24 +128,35 @@ finish:
     (1) Trace export: `choir trace export <trajectory>` writes one JSON
     bundle of the run's causal chain from product API routes only: records,
     deliveries, cells and tool-loop events, turn commits, revisions,
-    publications, and search arrivals once they exist. Missing server reads
-    get one owner-scoped read route: wire internal/trace's unmounted handler
-    if its store carries the run events, otherwise expose the internal run
-    events reader under /api/runs/{id}/events. Dead /api/trace citers are
-    repaired or deleted in the same commit.
+    publications, and search arrivals once they exist. Each layer is marked
+    present, empty or unserved. Missing server reads get one owner-scoped
+    read route over the primary run-event reader, /api/runs/{id}/events
+    (internal/trace's best-effort store is not used as the source of
+    completeness). Each cell's egress calls are run events carrying request
+    id, verb, the request id echoed in the result, and the worker id, so a
+    bundle shows which caller got which answer. Every /api/trace citer listed
+    above is repointed to the new route or deleted in the same commit.
     (2) Tracer: scripts/reeng_tracer.mjs mints a fresh computer
     (qa_test_computer.mjs with the SSH lookup replaced by
     /api/runtime/observability), submits a fixed AI-news story script and a
     follow-up, restarts the computer through the owner route mid-run, runs
     to publication, exports the trace, and keeps the bundle (outside the
     repo, under ~/.config/choir-qa/traces/<label>/, sha256 in the receipt).
+    It also drives the transport under load: one desk cell issues eight
+    parallel tagged choir.* reads, and a second run on the same desk
+    submits a cell while the first is mid-cell, so the deployed bundle
+    shows concurrent egress and overlapping cells on one desk.
     (3) Invariant checker: scripts/reeng_invariants.mjs reads a bundle
     offline and checks substrate facts only, never content quality:
     I1 every revision was written by the Texture desk; I2 every round (today
     every run and trajectory) ends closed or open with a named reason; I3
     no dispatch after a markerless boot whose cause predates the boot; I4
-    every citation resolves to a fetchable source and its quote; I5 inbox
-    cursors only move forward (added when Cut 1 creates them, not stubbed).
+    every citation names a source and a quote, and the quote is found in
+    that source's body when the bundle carries the body (unknown
+    otherwise; the checker never fetches); I5 every egress result's
+    request id equals its caller's, and one desk has one worker at a time;
+    I6 inbox cursors only move forward (added when Cut 1 creates them, not
+    stubbed).
     (4) Request-id fix: one reader loop owns the worker's socket and routes
     StreamBrokerEgressResult frames to waiters by RequestID and StreamCell
     frames to the session loop; study A's probe becomes
@@ -129,39 +166,37 @@ finish:
     run's cell waits for the session (bounded by its context, without
     holding the pool mutex) and gets the same worker; the existing busy
     test is inverted.
-    (6) Survival register: docs/reports/reeng-cut0-survival-register-2026-10-12.md
-    lists what crosses the cuts (published versions; the owner's computer
-    and Textures untouched until the cut is proven; staging test computers
-    disposable; old execution state archived, never migrated), and records
-    an export of the owner's Textures through the product API (bundle kept
-    outside the repo, digests and counts in the register) plus counts and
-    states only for the rest of the owner's computer.
-    (7) Measurements in the register: push to healthy fresh test computer
-    (split into CI, deploy, mint, first ready prompt bar), and whether a
-    desk session older than one hour loses its choir.* verbs.
+    (6) Broker handle. If the 70-minute session (acceptance below) shows
+    choir.* verbs refused after the hour, this cut fixes it: the handle is
+    reissued when a cell is bound, with a test, so a desk keeps its verbs
+    for its whole life. Cut 2's six-hour live window depends on it.
+    (7) Measurements, in docs/reports/reeng-cut0-measurements-2026-10-12.md:
+    push to healthy fresh test computer (split into CI, deploy, mint, first
+    ready prompt bar); per-turn token and latency figures from the three
+    tracer bundles (Cut 2's baseline); and the run-acceptance level today's
+    system reaches on the tracer story (Cut 1's baseline).
+    Nothing is preserved across the cuts (decisions §13.1): no survival
+    register, no owner hold, no Texture export.
   acceptance:
     - action: go test ./internal/yaegikernel -race -run TestEgressConcurrentCallersGetOwnResults (and the full package), then the race workflow dispatched on the landed SHA
       proves: concurrent and late (post-cell) egress callers each get their own result or a clean error, never another caller's; no data race
       evidence_class: local test plus CI receipt
     - action: go test ./internal/agentcore -run TestDeskSession (inverted busy test plus a cancelled-waiter test)
-      proves: a busy persistent session is waited for, never duplicated; a waiter whose context ends returns without a lease
+      proves: a busy persistent session is waited for, never duplicated; a waiter whose context ends returns without the session
       evidence_class: local test
     - action: the invariant checker run against planted-violation copies of a real bundle (one per rule)
       proves: each rule fails when its fact is broken, before any pass is trusted
       evidence_class: local test over a deployed artifact
-    - action: three tracer runs on choir.news at the landed SHA, each on a fresh test computer, crash drill included, bundles kept
-      proves: the export reaches every listed layer without SSH; the checker's verdict per rule on today's system (an I3 failure on the known restart defect is a finding, not a tracer failure)
+    - action: three tracer runs on choir.news at the landed SHA, each on a fresh test computer, crash drill and the concurrency load included, bundles kept
+      proves: every listed layer is marked present, empty or unserved, all without SSH, and no rule passes on an unserved layer; I5 holds under eight parallel tagged calls and overlapping cells on one desk; the checker's verdict per rule on today's system (an I3 failure on the known restart defect is a finding, not a tracer failure)
       evidence_class: deployed proof
-    - action: one test-computer desk session driven past 70 minutes with cells under 30 minutes apart, exported
-      proves: whether the one-hour handle expiry refuses choir.* verbs in a live desk session
+    - action: one test-computer desk session driven past 70 minutes with cells under 30 minutes apart, exported (repeated after the fix in artifact 6, if one was needed)
+      proves: a desk keeps its choir.* verbs for its whole life
       evidence_class: deployed proof
-    - action: survival register reviewed against the owner's computer through the API only
-      proves: the owner's Textures are exported with digests, and the owner computer was read, not changed
-      evidence_class: deployed observation
   rollback: >-
     git revert per commit. No persisted state changes: the transport fix and
     the session pool are process memory, the new read route is read-only,
-    scripts and the register are additive. Test computers are disposable.
+    scripts and the measurements report are additive. Test computers are disposable.
   landing:
     required: true
     environment: staging
@@ -189,16 +224,34 @@ homotopy:
 
 boundaries:
   mutation_class: >-
-    orange (desk cell transport in internal/yaegikernel; desk session pool
-    in internal/agentcore; one read-only owner API route) plus green/yellow
-    (scripts, tests, register). Rollback: git revert.
+    red for the trace export (a new read of the Trace/evidence surface,
+    CLAUDE.md mutation classes);
+    orange for the desk cell transport (internal/yaegikernel) and the desk
+    session pool (internal/agentcore); green/yellow for scripts, tests and
+    the measurements report. Rollback: git revert.
+  red_ceremony:
+    conjecture_delta: C0-1 below (proposed); no prior conjecture is retired
+    protected_surfaces: Trace/evidence (read only, owner-scoped)
+    admissible_evidence: >-
+      deployed bundles from choir.news at the landed SHA with sha256 in the
+      receipt; the checker's verdict on planted violations. Local tests are
+      admissible only for the transport and pool.
+    heresy_delta:
+      discovered: [cross-wired parallel egress, a second REPL per busy desk, /api/trace citers pointing at no route, the restart defect the drill will show]
+      introduced: []
+      repaired: [cross-wired parallel egress, a second REPL per busy desk, /api/trace citers pointing at no route]
+    export_scope: >-
+      the read route answers only the owner of the run's computer (or a
+      key scoped to it); an export from a computer the key does not own is
+      refused, which the acceptance shows with a key for a different test
+      computer
   authority_sources:
-    - docs/re-engineering-decisions-2026-10-12.md §10 item 0, §12.1, §12.4, §12.5, §12.10 (owner 2026-10-12)
+    - docs/re-engineering-decisions-2026-10-12.md §10 item 0, §12.4, §12.5, §12.10, §13 (owner 2026-10-12)
     - CLAUDE.md (landing loop, staging acceptance, restart rule, mutation classes)
     - docs/standing-questions.md (3 deletion citers, 9 no-SSH operability)
   must_preserve:
     - a crash restart never resumes work; the drill observes, it adds no resumer and no marker
-    - the owner's computer and Textures are read only; no restart, prompt or write on them
+    - the tracer acts only on computers it minted
     - Texture is the sole writer of canonical revisions
     - handle verification on every broker verb (the fix routes frames, it does not bypass checks)
     - the 60-minute run limit (prototyping safety constraint)
@@ -242,20 +295,19 @@ now:
     what: >-
       Export in the choir CLI (agent-operable under a scoped key), tracer
       and checker as scripts; checker reads bundles offline; trace bundles
-      and the owner Texture export live outside the repo with digests in
-      receipts; the handle-TTL result, if confirmed, gets a problem doc and
-      is fixed here only if it is a per-cell handle reissue with a test,
-      otherwise it is a named residual for Cut 1
+      live outside the repo with digests in receipts; the handle-TTL result, if confirmed, gets a problem doc and
+      is fixed in this cut (artifact 6); nothing is preserved across the
+      cuts (decisions §13.1)
     kind: operational
     status: proposal
     evidence_ref: docs/re-engineering-decisions-2026-10-12.md §10, §12
     owner_ratification_ref: not_applicable
   belief:
     believed_state: both defects exist as cited at 03499ef9; run events and the causal chain are not reachable through /api today
-    main_uncertainty: whether internal/trace's store holds the run events and parent links the export needs, or only submission events
-    next_observation: read internal/trace writers and one staging trajectory's lifecycle events against the internal run events of the same run
-  blocker_or_risk: the owner Texture export needs a read:texture key on the owner's computer (owner-minted)
-  next_action: agentic-consensus file review of this station
+    main_uncertainty: how long push-to-healthy-test-computer takes; whether the hour-old handle expires in a live session
+    next_observation: the first tracer run's per-phase timings
+  blocker_or_risk: none beyond the red ceremony; no owner act is needed
+  next_action: re-review of the repaired file, then build (4) and (5) test-first
 
 receipts: []
 
@@ -288,11 +340,11 @@ measurement: cross-wired parallel egress and a second REPL per desk.
 trusted more. Then the read route and `choir trace export` (1), the
 SSH-free mint and the tracer (2), and the checker proven on planted
 violations (3). Land, deploy, run the tracer three times. Then the TTL
-session and the register (6, 7). During the cut window, problems fixed in
+session (and its fix, 6) and the measurements (7). During the cut window, problems fixed in
 the same commit go into `docs/problems/reeng-cut0-breakage-2026-10-12.md`
 (decisions §12.4). Others get their own problem doc first.
 
-**Standing questions.** 1: owner-settled scope (§10, §12); the operational
+**Standing questions.** 1: owner-settled scope (§10, §12, §13); the operational
 choices in `now.decision` are proposals. 3: deleting the `#run:` fallback
 and any unmounted trace route needs a grep of tests, docs and scripts in
 the same commit. 5: the trace bundle is a projection; the guest store
@@ -318,8 +370,9 @@ Ways it can fail, written before the code:
   and a rule over an unserved layer reports unknown, never pass);
 - the crash drill hits a computer that is between runs and proves nothing
   (the tracer restarts only after it observes an in-flight run);
-- the owner's computer is touched (the tracer refuses any computer id it
-  did not mint; owner reads use a read-only key);
+- the tracer acts on a computer it did not mint (it refuses any such id);
+- the export leaks another owner's run (the route is owner-scoped; a
+  wrong-owner key is refused in the acceptance);
 - the TTL session dies for another reason first (30-minute idle reclaim,
   failed cell), so "no expiry seen" is not a negative (the export must show
   one worker for the session's full age).

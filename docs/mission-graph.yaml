@@ -1574,8 +1574,11 @@ nodes:
     entrypoint: false
     member_of: choir-autopaper-metamission-2026-10-11
     execution_mode: subordinate_only
-    depends_on: [choir-autopaper-w1-content-in-the-graph-2026-10-11, choir-reeng-cut1-authority-2026-10-12]
+    depends_on: [choir-autopaper-w1-content-in-the-graph-2026-10-11, choir-reeng-cut2-evidence-to-publication-2026-10-12]
     enables: []
+    note: >-
+      Carried by re-engineering Cut 2 (living stories, unit 2b); not executed
+      as a separate station.
   - id: choir-reeng-metamission-2026-10-12
     title: Re-engineering — three cuts to Autopaper live (eyes, authority, evidence to publication)
     path: docs/definitions/choir-reeng-metamission-2026-10-12.md
@@ -1585,10 +1588,11 @@ nodes:
     entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: []
-    enables: [choir-autopaper-w2-living-textures-2026-10-11]
+    enables: []
     note: >-
       Owner 2026-10-12 decisions (docs/re-engineering-decisions-2026-10-12.md
-      §2, §10, §12): radical cutover, no backwards compatibility. Carries the
+      §2, §10, §12, §13): radical cutover, no backwards compatibility,
+      nothing preserved before Autopaper is live. Carries the
       protocol's P2d2 and P3 and Autopaper W2, W3a and W3. Gradual drafts
       R1-R6 (03499ef9) superseded and deleted.
   - id: choir-reeng-cut0-eyes-2026-10-12
@@ -1612,7 +1616,7 @@ nodes:
     member_of: choir-reeng-metamission-2026-10-12
     execution_mode: draft_non_executable
     depends_on: [choir-reeng-cut0-eyes-2026-10-12]
-    enables: [choir-reeng-cut2-evidence-to-publication-2026-10-12, choir-autopaper-w2-living-textures-2026-10-11]
+    enables: [choir-reeng-cut2-evidence-to-publication-2026-10-12]
   - id: choir-reeng-cut2-evidence-to-publication-2026-10-12
     title: "Cut 2 — evidence to publication: async search, research, Texture write, one document model, permalinks, Autopaper live"
     path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
@@ -1623,4 +1627,4 @@ nodes:
     member_of: choir-reeng-metamission-2026-10-12
     execution_mode: draft_non_executable
     depends_on: [choir-reeng-cut1-authority-2026-10-12]
-    enables: []
+    enables: [choir-autopaper-w2-living-textures-2026-10-11]

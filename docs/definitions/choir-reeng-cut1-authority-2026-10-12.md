@@ -14,10 +14,10 @@ definition_version: 4
 readiness: drafted
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: convergent agentic-consensus panel (codex, claude opus, gpt-6.1-sol, gemini-3.8-flash, deepseek-v4.1-flash, glm-5.3-flash; gpt-6-luna and muse-spark timed out)
+  frozen_ref: 2d2b864e
+  verdict: send_back (codex, gpt-6.1-sol, gemini, deepseek), accept with amendments (claude, glm); repaired in the following commit, re-review pending
+  evidence_ref: docs/re-engineering-decisions-2026-10-12.md §13 (synthesis)
 
 start:
   captured_at: 2026-10-12T19:30:00Z
@@ -27,6 +27,7 @@ start:
   worktrees:
     - path: /Users/wiz/go-choir
       status: dirty (this session's doc edits in progress; decisions doc and metamission)
+      correction_2026-10-12: those edits landed at 2d2b864e and the tree was clean at review; Go source is unchanged between 03499ef9 and 2d2b864e
       class: goal_candidate
       owner: this session
       touch: goal_owned
@@ -37,7 +38,8 @@ start:
       (objectgraph choir.work_item; 62 non-test Go files, 1,090 lines match
       WorkItemRecord|WorkItemID|work_item|WorkItem) do six jobs (study B §1).
       Packets (choir.worker_update, types.CoagentSourcePacket at
-      internal/types/evidence.go:178-240; 29 non-test files, 367 lines) carry
+      internal/types/evidence.go:178-240; 40 non-test files, 343 lines,
+      corrected 2026-10-12 from a miscount) carry
       delivery status, claims (DeliveredToRunID, DeliveryAttempts), work
       bindings and report content.
     - >-
@@ -79,7 +81,11 @@ start:
       engineering capsule sweep cancels and wakes the parent
       (engineering_assignment_fate.go:530-573); wire-publication claim
       recovery cancels trajectories every boot (wire_publication.go:21-43);
-      terminal settlement repair (runtime.go:2478-2551). The Texture boot
+      terminal settlement repair (runtime.go:2478-2551); then
+      platform_update_resume, selfdev_close_after_crash,
+      source_schedules_close_after_crash and
+      selfdev_materialization_reconcile (runtime.go:750-761), which this cut
+      keeps (prose, "Restart"). The Texture boot
       calls ReconcileEngineeringDesk (texture_controller.go:110-125), whose
       recast re-opens a restart-cancelled assignment up to 3 times with no
       marker check (engineering_desk.go:44-50, :197-279). The Texture wake
@@ -111,8 +117,28 @@ start:
       named in 31 non-test Go files); research reports hard-set open
       (rlm_reduce.go:2099). choir.Research blocks on all children
       (research_children.go:151-167), a 10-minute window and 0.75 share
-      (:44-46, :238), children get the parent's prompt (:201, :213) and emit
-      no events (:210-215).
+      (:44-46, :238), children get the objective plus a child preamble and
+      role prompt (:201, :213) and emit no events (:210-215).
+    - >-
+      Autonomous wire publication is a second work-item consumer: every
+      eligible Texture revision commit (tools_texture.go:445) calls
+      MaybeAutonomousPublishWireArticle (wire_publication.go:45), which opens
+      a wire_publication work item and publishes to Universal Wire
+      (internal/wirepublish, internal/proxy/wire_platform_publish.go);
+      wire-processor decision work items are minted beside it
+      (wire_publication.go:149-260).
+    - >-
+      Self-development binds to operation state: Freeze looks up the
+      operation by the run's trajectory and requires StateExecuting, opening
+      one lazily through OpenFreezeCandidate when none exists
+      (tools_capsule.go:251-270; rlm_reduce.go:1335-1344); Verify binds
+      through the same lookup and checks the bundle digest
+      (rlm_reduce.go:1388-1405); the materializer acts on operation states
+      (self_development_materializer.go:128-165) and already tells
+      management a verified operation awaits decision with a record of
+      deterministic id (:858-883). The marker is
+      PlannedRestart{Reason, Target, RequestedAt} (planned_restart.go:25-29),
+      with no epoch.
     - >-
       Prompts: hand-written role and overlay files
       (internal/promptstore/defaults/{management,engineering,research}.yaml,
@@ -145,6 +171,11 @@ finish:
   artifact: >-
     One coherent cutover, landed as internal commits behind one deployed
     acceptance (inventory first, then store, then desks, then prompts).
+    (0) Baseline: the run-acceptance level today's system reaches on the
+    tracer story, recorded by Cut 0 (its artifact 7), and an absolute
+    target for this cut (the engineering round trip reaches capsule
+    acceptance with freeze, independent verification, owner decision,
+    apply and restore).
     (1) Records: conversation_id and round stamped by the store; Cast
     hypotheses with store-assigned ids (H1, H2, ...), probability, stakes
     and crux, open uncertainties with stakes, general hypotheses (seed name,
@@ -153,35 +184,49 @@ finish:
     bears_on <id> or outside, settled[{id, outcome}], dropped[{id, reason}],
     stop_reason, final); a system emitter kind and a closure record with a
     deterministic id; subject, EmitterKind and ComputerID on desk-authored
-    records; per-inbox sequence numbers; indexed columns for inbox,
+    records; owner revisions recorded as owner-emitted records that point
+    at the revision, committed with it; per-inbox sequence numbers;
+    indexed columns for inbox,
     inbox_seq, conversation_id, round and record kind. The store validates
     well-formedness only and scores nothing.
-    (2) Delivery by cursor (decisions below): inbox heads, reader cursors on
-    agent records, wakes derived from record commits, Texture's turn commit
-    and each RLM cell commit advancing the cursor in the same transaction
-    as the work.
+    (2) Delivery by cursor (decisions below): inbox heads, reader cursors
+    (a map from inbox to sequence) on agent records, wakes derived from
+    record commits, Texture's turn commit and each RLM cell commit
+    advancing the cursor in the same transaction as the work; activation
+    separated from eligibility (prose, "Cursor and wakes").
     (3) Deleted with every reader (inventory in the prose): work items,
     packets, delivery claims and dispositions, stranded repair, Texture
     breaker, stale-packet expiry, the envelope mailbox and its cursor,
     owner-revise reopen and the 409 class, document settlement, the one
-    management Cast per turn rule.
+    management Cast per turn rule, and the autonomous wire-publication path
+    (MaybeAutonomousPublishWireArticle and its call site, the
+    wire_publication and wire-processor work-item kinds, their boot
+    recovery; Cut 2's per-version publication replaces it). Pre-cut
+    publications need not keep resolving (decisions §13.1).
     (4) Boot: a markerless boot terminalizes pre-boot runs and engineering
     assignments with fate interrupted_by_restart, appends one closure record
     per open round, and dispatches nothing. Deleted: boot passivation and
     passivated-run resume, spawned-work replay, terminal settlement repair,
     Texture wake re-arm, wire-publication claim recovery, the engineering
-    restart recast. A planned-restart marker of the same work-state schema
-    epoch resumes once.
+    restart recast. Kept: platform_update_resume,
+    selfdev_close_after_crash, source_schedules_close_after_crash (a
+    markerless boot closes active schedules and mints no wake; a planned
+    boot keeps the pending wake) and selfdev_materialization_reconcile.
+    The marker gains a work_state_epoch field; a marker of the booting
+    binary's epoch resumes once.
     (5) Routing: path B, Assign, Message, Emit, Emits deleted; engineering's
-    module set without Cast and Ask, its addressee forced to its
-    conversation's sender (management), the reducer refusing any
+    module set loses Cast and keeps Ask and Reply, its addressee forced to
+    its conversation's sender (management), the reducer refusing any
     engineering act addressed to texture:*; management relays an
     engineering Report to Texture by forward (pass-through) or its own
-    Report; the runtime Jev judge and self-development scaffolding removed
-    (public start-operation API, one-open lock, auto-advance and auto-fail
-    from engineering fates, notifySelfDevelopmentDecisionBoundary, prompt
-    special-casing) while freeze, verifier, decision binding, updater,
-    materializer, marker, platform update, route projection and restore stay.
+    Report; the runtime Jev judge and self-development work-state
+    scaffolding removed (public start-operation API, one-open lock,
+    auto-advance and auto-fail from engineering fates, prompt
+    special-casing). The self-development operation stays as the effect
+    journal of one candidate bundle (prose, "Self-development"): Freeze,
+    Verify, owner decision, updater, materializer, marker, platform
+    update, route projection and restore keep working, re-bound to
+    records where they bound to work items or packets.
     (6) Research: round cap, egress budget, Texture and engineering
     tool-loop budgets, forced status report, next_instruction and every
     update_coagent name deleted; research reports carry final. Sub-researchers
@@ -232,19 +277,37 @@ finish:
     - action: research spawns two or more sub-researchers in the tracer run
       proves: child runs leave events, report only to the parent inbox, and the parent cell does not block on them
       evidence_class: deployed proof
-    - action: reverse parity test (fails on a planted stale verb, shown once) and a grep gate on WorkItem|work_item, CoagentSourcePacket, update_coagent, Assign, choir.Message, choir.Emit, textureSupervision, round cap and budget names
-      proves: the deleted names have no non-test citer outside listed decode shims
+    - action: reverse parity test (fails on a planted stale verb, shown once) and a grep gate on WorkItem|work_item, CoagentSourcePacket, update_coagent, Assign, choir.Message, choir.Emit, textureSupervision, MaybeAutonomousPublishWireArticle, wire_publication, round cap and budget names
+      proves: the deleted names have no non-test citer; old objects stay in og_objects as untyped history and no code decodes them
       evidence_class: CI
     - action: run acceptance synthesized for the engineering round-trip trajectory
-      proves: acceptance derives from the fold and reaches the level it reached before the cut for the same path
+      proves: acceptance derives from the fold and reaches the absolute target in artifact 0, at or above Cut 0's recorded baseline
+      evidence_class: deployed proof
+    - action: >-
+        Self-development on a fresh test computer: management Casts
+        engineering; engineering Freezes; management Verifies against the
+        bundle digest named in engineering's final Report; the owner
+        approves; the materializer applies (planned restart with marker);
+        then a restore to the pre-apply head
+      proves: Freeze, Verify, decision, apply and restore work with work items and packets deleted; the apply restart resumes once and the restore lands on the prior head
+      evidence_class: deployed proof (operation states, route receipt and event heads through the product API)
+    - action: >-
+        Late arrival: while a Texture turn runs, management commits a
+        record to it; then, separately, a turn that fails with a record
+        arriving after it started
+      proves: the record that arrived mid-turn starts exactly one more turn after the commit; the failed turn's own records stay unread with no new turn; the record that arrived after the failed turn began still starts a turn
+      evidence_class: deployed proof
+    - action: planned restart with an open round whose records are all read (head equals cursor)
+      proves: the planned-resume wake activates the recipient once, and the following markerless boot closes the round
       evidence_class: deployed proof
   rollback: >-
     Forward-fix (decisions §12.3). Before the cutover push, tag the Cut 0
     landed commit reeng-cut1-last-good. Staging test computers are
     disposable and are re-minted, never reverted: old code cannot read
-    new-format records. The owner's computer stays on last-good until the
-    cut is proven, so its snapshot is its pre-cut checkpoint. Break-glass:
-    redeploy the tag and mint fresh test computers.
+    new-format records. The owner's computer takes the cut at its next
+    boot like any other (decisions §13.1); no state is snapshotted, since
+    none is valuable before Autopaper is live. Break-glass: redeploy the
+    tag and mint fresh test computers.
   landing:
     required: true
     environment: staging
@@ -283,7 +346,6 @@ boundaries:
     - a crash restart never resumes work; a planned restart resumes once
     - engineering never addresses Texture; capsule state stays on EngineeringAssignment
     - research has read-only world authority; one fan-out level
-    - published versions and the owner's computer and Textures untouched until the cut is proven
     - no budgets, round caps, reminders, runtime scoring or circuit breakers are added
     - substrate stays (decisions §1.2) - child concurrency 4 and the 1.5 s spacer, tray quotas, poison-free wakes, the 60-minute run limit as a labelled prototyping constraint
   excluded:
@@ -305,6 +367,7 @@ boundaries:
     product API and Cut 0's trace export, tracer, invariant checker and
     crash drill. Store and reducer tests written before the code shape the
     work and settle nothing. No local claim about wakes, boots or live desks.
+  conjecture_delta_note: the self-development operation stays as effect journal, not work state (prose)
   conjecture_delta: >-
     Architectural mode change: the authority for open work, activation,
     delivery and completion moves from work items and packets to a fold
@@ -319,7 +382,7 @@ boundaries:
       content lives as raw packet JSON in Prediction.Hypothesis
       (rlm_reduce.go:1157); the envelope-mailbox cursor is written after the
       acts, not with them (rlm_reduce.go:481-494, :766-809)
-    introduced: none intended; two cache objects (inbox head, conversation head) written only by the record commit and rebuilt by the checker
+    introduced: none intended; two cache objects (inbox head, conversation head) written only by the record commit and rebuilt by the checker (glm suggests deriving the next sequence by max(seq) in the commit instead; measure on the tracer and drop the head cache if the query is fast enough)
     repaired: none yet; the documented list is the target
 
 now:
@@ -356,35 +419,43 @@ now:
     what: >-
       Delivery and identity, chosen for review (prose "Decisions"). D1 an
       inbox is (desk, subject); its sequence comes from an inbox head
-      advanced in the record's commit; owner revisions take the next number
-      in Texture's inbox but stay on the revision chain. D2 conversation id
+      advanced in the record's commit; an owner revision commits an
+      owner-emitted record pointing at it, in the same transaction, which
+      takes the next number in Texture's inbox; the text stays on the
+      revision chain. D2 conversation id
       is derived from (sender inbox, recipient inbox); round from a
       conversation head in the same commit. D3 a reader's cursor lives on
       its agent record; Texture's turn commit and each RLM cell commit (one
       transaction for all its acts) advance it from the value the work saw.
-      D4 every addressed commit mints one wake for the recipient inbox;
-      failed work never re-wakes; boot mints wakes only under a marker. D5
+      D4 every addressed commit mints one wake row for the recipient
+      inbox; a turn spends the wake rows inside its range; rows past its
+      range fire when the desk is idle; after a committed turn the
+      controller re-checks head > cursor; a failed turn re-arms nothing;
+      boot mints wakes only under a marker. D5
       the closure record is a system Report, final, reason
       interrupted_by_restart, addressed to the sender, id
       <conversation_id>:r<round>:restart, never waking anyone. D6 the store
       assigns hypothesis ids. D7 a marker resumes only within the same
       work-state schema epoch; Cut 1 bumps the epoch, so the cutover boot is
-      a crash boot. D8 a planned resume wakes each desk with an open round
-      or unread records once; runs are never resumed.
+      a crash boot. D8 a planned resume mints one wake per desk with an
+      open round as recipient or unread records, which activates it even
+      when head equals cursor; runs are never resumed. D9 Freeze binds to
+      the engineering run's capsule as today; Verify binds to the
+      operation id and bundle digest named in the engineering Report it
+      answers.
     kind: architecture
     status: proposal
     evidence_ref: docs/re-engineering-decisions-2026-10-12.md §2, §12
-    owner_ratification_ref: decisions §2 and §12 ratify the direction and delegate the mechanism (§12, "I trust your judgement"); D1-D8 are this file's proposal
+    owner_ratification_ref: decisions §2 and §12 ratify the direction and delegate the mechanism (§12, "I trust your judgement"); D1-D9 are this file's proposal
   belief:
-    believed_state: every code claim above holds at 03499ef9; Cut 0 not yet landed
-    main_uncertainty: whether one cutover this size converges inside the redesign tripwire, and how the owner's computer is held at last-good while staging deploys
-    next_observation: Cut 0's survival register and push-to-healthy-computer time, then the deletion inventory re-grepped on Cut 0's landed commit
+    believed_state: every code claim above holds at 2d2b864e (Go unchanged since 03499ef9); Cut 0 not yet landed
+    main_uncertainty: whether one cutover this size converges inside the redesign tripwire
+    next_observation: Cut 0's measurements (push-to-healthy-computer time, baselines), then the deletion inventory re-grepped on Cut 0's landed commit
   blocker_or_risk: >-
     Depends on Cut 0 (tracer, checker, crash drill, fresh computers,
-    request-id fix, one REPL owner per desk). No hold mechanism for the
-    owner's computer is known in code; Cut 0's register must name one or
-    Cut 1 does not push. Red throughout.
-  next_action: convergent panel on this file with the metamission and the Cut 0 and Cut 2 files
+    request-id fix, one REPL owner per desk, broker-handle fix). Red
+    throughout.
+  next_action: re-review of the repaired file; then Cut 0
 
 receipts: []
 ---
@@ -405,9 +476,12 @@ each desk's prompt is written once for this system.
 (`texture:<doc>`, `research:<doc>`, `management:<owner>`,
 `engineering:<doc>`, a sub-researcher's parent) takes the next sequence
 number from that inbox's head, inside the record's commit. An owner
-revision takes the next number in `texture:<doc>` too, so Texture has one
-cursor over both. The head is a cache of the fold, written only by that
-commit and rebuilt by the checker. This fixes P2d's cross-trajectory
+revision commits an owner-emitted record that points at the revision, in
+the same transaction, and that record takes the next number in
+`texture:<doc>`. Texture has one cursor over both, every sequence number
+belongs to a record, and the revision text stays on its chain. The head
+is a cache of the fold, written only by that commit and rebuilt by the
+checker. This fixes P2d's cross-trajectory
 numbering (lifecycle_commit_act.go:298).
 
 **Conversations, rounds, hypotheses.** The store stamps
@@ -425,25 +499,36 @@ may withdraw any of its hypotheses. The owner can close any open round
 with an owner-emitted closure record (same shape as the restart closure,
 reason "closed by the owner"); that is the stop control, not a cap.
 
-**Cursor and wakes.** A reader's cursor ("read through #57") is a field
-on its agent record. Each unit of work shows records in (cursor, head]
-and advances the cursor to that head with a compare-and-set from the old
+**Cursor and wakes.** A reader's cursor ("read through #57") is a map
+from inbox to sequence on its agent record; research and engineering
+read one inbox per document, so they hold one entry per document. Each
+unit of work shows records in (cursor, head] and advances the cursor to that head with a compare-and-set from the old
 value, in the same transaction as its effects:
 
 - **Texture.** `ApplyTextureTurn` already writes the agent record in its
-  transaction (texture_turn.go:289). The turn's prompt lists every record
+  transaction (texture_turn.go:612-623, committed at :652). The turn's prompt lists every record
   in its range, and the turn record stores the range instead of
   `InboundUpdateIDs` and `CallerWorkItemID` (types/lifecycle.go:296-307).
 - **RLM desks.** A cell's frame shows its range. The cell's acts and its
   cursor advance commit as one transaction, replacing per-act commits and
   `recoverPartialActCommit` (rlm_reduce.go:766-830).
 
-Records that commit mid-work have a higher sequence and wait. Every
-addressed commit writes one wake row for the recipient inbox, keyed by
-(inbox, seq). The controller starts work only if head > cursor and no run
-of that desk is active. A turn that fails without committing leaves its
-records unread but mints no wake. So a poison record cannot loop, and the
-delivery-attempt caps and breaker go.
+Eligibility and activation are separate. Every addressed commit writes
+one wake row for the recipient inbox, keyed by (inbox, seq). A desk is
+activated by a wake row when no run of that desk is active. A turn's
+range is (cursor, head] at its start, and it spends every wake row inside
+that range. Rows past the range stay pending:
+
+- after a turn commits, the controller re-checks head > cursor and starts
+  one more turn if a pending row is there (a record that arrived mid-turn
+  is never stranded);
+- a turn that fails without committing leaves its own records unread and
+  re-arms nothing, but a pending row past its range still fires once the
+  desk is idle. A poison record is therefore read again only when a new
+  record arrives, never in a loop, and the delivery-attempt caps and
+  breaker go;
+- a planned-resume wake (below) activates a desk even when head equals
+  cursor, so an open round whose Cast was already read resumes.
 
 **Restart.** At a markerless boot, before the projector starts
 (runtime.go:778-779), one phase does three things:
@@ -456,19 +541,29 @@ delivery-attempt caps and breaker go.
   Report, final, with id `<conversation_id>:r<round>:restart` and
   addressed to the sender. It does not wake anyone.
 
+Four existing phases stay (runtime.go:750-761): platform_update_resume
+(it acts only under a marker), selfdev_close_after_crash,
+source_schedules_close_after_crash (a markerless boot closes active
+schedules with the fate and mints no wake; a planned boot keeps the
+pending wake), and selfdev_materialization_reconcile (it advances
+operations already decided, and never starts desk work).
+
 Pre-boot wake rows are refused, as handler.go already does. Unread
 records wait for the next post-boot commit. A second boot finds no open
 round and writes nothing.
 
 A marker resumes only when its work-state schema epoch equals the
-booting binary's. Under a marker, boot terminalizes runs with fate
+booting binary's. The marker type gains the field
+(`PlannedRestart{Reason, Target, RequestedAt}` today); a marker without
+it is from before the cut and counts as a crash. Under a marker, boot terminalizes runs with fate
 `restarted_for_update` and mints one wake per desk with an open round or
-unread records. Engineering re-provisions its capsule once, as attempt
+unread records, and that wake activates the desk even when head equals
+cursor. Engineering re-provisions its capsule once, as attempt
 n+1. The marker is consumed first (planned_restart.go:94), so one resume
 per planned restart. Cut 1 bumps the epoch, which makes the cutover boot
 a crash boot (decisions §12.2). Old work items, packets and runs stay in
 `og_objects` as archived history and nothing reads them. After a crash,
-Autopaper restarts only by a deliberate management act (§12.9).
+Autopaper restarts only when the owner restarts it by hand (§13.3).
 
 **Routing.** Management's conversation with a Texture carries Texture's
 Cast. Management Casts engineering in its own conversation. Engineering's
@@ -480,9 +575,40 @@ of two ways:
 - its own Report.
 
 There is no hold state, and none is added. Engineering's module set is
-WriteFile, Exec, Complete, Freeze, Report, Ask, Reply and Note. Its
-addressee is always its conversation's sender. The reducer refuses an
+WriteFile, Exec, Complete, Freeze, Report, Ask, Reply and Note; Cast is
+gone. Engineering may Ask its sender (management) inside an open round.
+Its addressee is always its conversation's sender. The reducer refuses an
 engineering act addressed to `texture:*`.
+
+**Self-development.** The operation record stays. It is the effect
+journal of one candidate bundle (digest, verification, decision,
+materialization, route receipt), not a work queue: it says what was
+built and whether it was applied, never what work is open. The path:
+
+1. Management Casts engineering in their conversation.
+2. Engineering works in its capsule and calls Freeze. Freeze binds to the
+   engineering run's capsule and trajectory as today, opening the
+   operation through `OpenFreezeCandidate` when none exists
+   (tools_capsule.go:251-270). Engineering's final Report names the
+   operation id and bundle digest.
+3. Management reads that Report by cursor and runs Verify. Verify binds
+   to the operation id and digest named in the Report it answers,
+   replacing the lookup by management's own trajectory
+   (rlm_reduce.go:1388-1405); a digest mismatch is refused as today.
+4. The materializer tells management that a verified operation awaits
+   the owner's decision with a system record of deterministic id
+   (self_development_materializer.go:858-883 already mints one); it now
+   takes an inbox sequence like any record. A failed materialization is
+   reported the same way instead of re-arming a retry wake; management
+   decides what to do.
+5. The owner decides through the existing approval route. The
+   materializer applies through the updater and writes a marker; the
+   apply restart resumes once. Restore stays as it is.
+
+What goes is the work-state around it: the public start-operation API,
+the one-open lock, auto-advance and auto-fail driven by engineering
+fates, and prompt special-casing. Run acceptance reads capsule
+checkpoints from the Freeze and Verify records.
 
 **Report body.** A typed body on the record replaces the raw packet JSON
 in `Prediction.Hypothesis`. The schema may still change until the first
@@ -507,13 +633,16 @@ permalink (§12.1).
 | occurrence resolution and activation authority (texture_controller.go:283-450, :1167-1500; management_controller.go:1556-1797) | open round or unread records for me |
 | research admission by control fingerprint (runtime.go:3007) | same |
 | obligations surface counts (obligations_surface.go:230) | fold queries |
+| autonomous wire publication and its work item (tools_texture.go:445; wire_publication.go:21-260; internal/wirepublish; proxy/wire_platform_publish.go) | deleted; Cut 2's per-version publication replaces it |
+| wire-processor decision work items (wire_publication.go:149-260) | deleted with the Universal Wire path |
+| self-development decision observation (self_development_materializer.go:858-883) | the same record as a system emitter with an inbox sequence |
 
 The first construct re-greps these on the base commit. Anything not in
 this table is added before deletion starts (standing question 3).
 
 ## Invariants added to Cut 0's checker
 
-These extend `scripts/reeng_invariants.mjs`; Cut 0's I5 (cursors only
+These extend `scripts/reeng_invariants.mjs`; Cut 0's I6 (cursors only
 move forward) is implemented here.
 
 1. Inbox sequences are gapless and unique.
@@ -527,6 +656,8 @@ move forward) is implemented here.
 7. After a markerless boot, every pre-boot open round has exactly one
    closure, and no run starts before a post-boot commit.
 8. The inbox and conversation heads equal their rebuild from records.
+9. No pending wake row is older than the end of the last turn of an
+   idle desk (no record is stranded).
 
 ## Standing questions
 
@@ -568,43 +699,52 @@ move forward) is implemented here.
   crash drill's quiet window catches it.
 - The cutover deploy carries a platform-update marker and resumes old
   work. The epoch check prevents this, and nothing reads old objects.
-- The owner's computer takes the cutover deploy. Do not push until Cut
-  0's register names the hold.
+- The owner's computer breaks under the cutover. Accepted risk (decisions
+  §13.1): it takes each cut like a test computer, and a breakage there is
+  a breakage-log entry, fixed forward.
+- A record that lands during a turn is stranded because no wake fires
+  after the turn. Rows past a turn's range stay pending, the controller
+  re-checks after every commit, and invariant 9 checks it.
 - Several records in one turn are answered as one. The prompt lists each
   record, and the acceptance checks that each is cited or declined.
 - Management and Texture feed each other without end. No bound is added;
   a breaker comes if a loop is observed (§1.4).
 - Engineering finds another way to Texture. The module set, the reducer
   refusal and invariant 6 block it.
-- Removing the self-development state machine breaks the update apply
-  path. Only the listed scaffolding goes. If apply reads a deleted
-  transition, keep it and log it.
-- Run acceptance silently loses a checkpoint. Compare the before and
-  after levels on the same path.
+- Removing self-development work-state breaks the apply path. The
+  operation stays as the effect journal, Verify is re-bound to the
+  Report's operation id, and the self-development acceptance runs Freeze
+  through restore on a fresh computer.
+- Run acceptance silently loses a checkpoint. It must reach the absolute
+  target in artifact 0, at or above Cut 0's recorded baseline.
 - Sub-researchers flood the parent inbox or outlive it. Concurrency 4 and
   the spacer stay, and child runs are runs, closed at a crash.
 - Prompts pass parity by losing instructions desks need. Each deletion
   names the reality it now matches, and the tracer run reads the desks'
   behaviour.
-- Cut 2 rewrites the research and Texture prompts again. Generated verb
-  lists change by themselves; Cut 2 touches role text only where its new
-  verbs need judgement.
+- Cut 2 rewrites the research and Texture prompts again. This cut
+  writes all four prompts' cores; generated verb lists change by
+  themselves; Cut 2 adds role text only where its new verbs (Write,
+  search results, Judge) need judgement.
+- The egress budget is claimed twice. This cut deletes it
+  (egress_budget.go); Cut 2 only builds async search on what remains.
 
 ## Open questions
 
-1. How the owner's computer is held at last-good while staging deploys.
-   No mechanism is visible in code. Cut 0's survival register
-   (docs/reports/reeng-cut0-survival-register-2026-10-12.md) records
-   what must survive but not how it is held, so the register must name a
-   mechanism.
-2. Should owner revisions become owner-emitted records? This file shares
-   only the sequence. Study B recorded an earlier "not yet".
-3. Does Jev get a management verb in Cut 1, or only in Cut 2 for support
-   judgement? Default: Forward only.
-4. Does the materializer's apply path depend on operation states this
-   file deletes?
-5. Settled 2026-10-12 (owner delegation, decisions §12): `CancelAct` and
-   desk Retract are deleted; senders withdraw hypotheses by Cast; the
-   owner closes any round with an owner-emitted closure record.
-6. Is an engineering inbox per document the right granularity, or should
-   it be per management round?
+Answered after the convergent review (decisions §13); none remain open
+for this file.
+
+1. Owner's computer: not held (owner, decisions §13.1). It takes the cut
+   at its next boot; nothing on it is exported or preserved.
+2. Owner revisions: yes, owner-emitted records pointing at the revision
+   (D1), so every inbox sequence belongs to a record.
+3. Jev: Forward in this cut; a management-only `choir.Judge` in Cut 2.
+4. Materializer: yes, Freeze, Verify and the materializer read operation
+   states. The operation stays as the effect journal and Verify is
+   re-bound to records ("Self-development").
+5. `CancelAct` and desk Retract are deleted; senders withdraw hypotheses
+   by Cast; the owner closes any round with an owner-emitted closure
+   record. Decided under the §12 delegation, not by an explicit owner
+   statement.
+6. Engineering inbox: per document (`engineering:<doc>`), keeping
+   conversation identity across rounds.

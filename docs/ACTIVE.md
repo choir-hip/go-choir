@@ -151,7 +151,12 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   from the sender, hypothesis ids as the unit of progress, Kafka-style
   cursors instead of packets, work items deleted) and Cut 2 evidence to
   publication (Autopaper live). The gradual drafts R1-R6 (03499ef9) are
-  superseded; next is a convergent panel on the cut files, then Cut 0.
+  superseded. A convergent panel (6 of 8 answered, decisions §13) sent
+  the cuts back; they are repaired. The owner then ruled (§13): nothing is
+  preserved before Autopaper is live (the owner's computer takes each cut,
+  no hold, no Texture export); an article version is a Texture version;
+  no restart policy yet (restart by hand); production follows the
+  ingestion rhythm. Next: a short re-review of Cut 0 and Cut 1, then Cut 0.
 - **Owner review queue (2026-10-11 evening):** the
   [master report](reports/master-report-protocol-research-autopaper-2026-10-11.md)
   summarizes the day and seven research and design documents (research

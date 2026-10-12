@@ -6,17 +6,18 @@ definition_version: 4
 # before building; then "a more radical cutover, less gradual. We don't
 # have any backwards compatibility needs." Decisions:
 # docs/re-engineering-decisions-2026-10-12.md (§2 conversations and cursors,
-# §10 three cuts, §12 cutover decisions). Studies:
+# §10 three cuts, §12 cutover decisions, §13 later owner rulings and the
+# convergent review). Studies:
 # docs/reports/re-engineering-studies-2026-10-12/. The six gradual station
 # drafts R1-R6 (03499ef9) are superseded by the cuts; their code-cited
 # findings live on in the cut files and at that commit.
 readiness: drafted
 
 review:
-  reviewer: owner (decisions 2026-10-12) and two 10-model panels (divergent, lateral; 16 answers)
-  frozen_ref: 03499ef9 (gradual drafts reviewed)
-  verdict: send_back on the gradual shape; three cuts adopted (decisions §12)
-  evidence_ref: docs/re-engineering-decisions-2026-10-12.md §12
+  reviewer: owner (decisions 2026-10-12) and two 10-model panels (divergent, lateral; 16 answers) on the gradual drafts; a convergent panel (6 of 8 answered) on this file and the three cuts
+  frozen_ref: 03499ef9 (gradual drafts); 2d2b864e (three cuts)
+  verdict: send_back on the gradual shape; three cuts adopted (decisions §12); this file accepted by all six convergent reviewers, the cuts repaired (decisions §13)
+  evidence_ref: docs/re-engineering-decisions-2026-10-12.md §12, §13
 
 metamission:
   stations:
@@ -33,7 +34,8 @@ metamission:
     - id: C2
       path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
       readiness: drafted
-      status: pending (ends with Autopaper live, then the model comparison)
+      status: pending
+      note: ends with Autopaper live, then the model comparison
       depends_on: [C1]
 
 start:
@@ -44,6 +46,7 @@ start:
   worktrees:
     - path: /Users/wiz/go-choir
       status: dirty (this session's doc edits in progress)
+      correction_2026-10-12: those edits landed at 2d2b864e; the tree was clean at review
       class: goal_candidate
       owner: this session
       touch: goal_owned
@@ -78,10 +81,10 @@ finish:
     - action: each cut's acceptance on staging (choir.news), read through Cut 0's tracer, trace export and invariant checker
       proves: the cut's claim on the product path
       evidence_class: deployed proof
-    - action: "the end-to-end story: v1 published, disconfirming evidence arrives, v2 published, v1's link unchanged, logged-out read"
+    - action: "the end-to-end story: published in public from its first revision, disconfirming evidence arrives, a later version corrects it, the earlier version's link unchanged, logged-out read; and the six-hour live window producing stories at the rhythm of ingestion (Cut 2's autopaper_live)"
       proves: Autopaper live
       evidence_class: deployed proof
-  rollback: forward-fix after Cut 1, with a tagged last-good commit and a state snapshot per cut (decisions §12.3)
+  rollback: forward-fix after Cut 1, with a tagged last-good commit per cut; no state is snapshotted, since none is valuable before Autopaper is live (decisions §12.3, §13.1)
   landing:
     required: true
     environment: staging
@@ -104,7 +107,8 @@ homotopy:
     eyes (trace export, tracer, invariants on today's system) -> authority
     (records, conversations, cursors, crash closure, routing) on fresh test
     computers -> evidence to publication on fresh test computers ->
-    Autopaper live on a paper computer -> the owner's computer re-pointed
+    Autopaper live on a paper computer (the owner's computer takes each cut
+    at its next boot throughout)
 
 boundaries:
   mutation_class: red (Cuts 1 and 2 touch run lifecycle, the evidence ledger, gateway calls, Texture canonical writes, publication)
@@ -113,8 +117,8 @@ boundaries:
   must_preserve:
     - Texture is the only writer of a Texture
     - research has read-only authority toward the world
-    - a crash restart never resumes work; a planned restart may, once
-    - published versions and the owner's computer and Textures survive the cut
+    - a crash restart never resumes work; a planned restart may, once; Autopaper has no restart policy yet and is restarted by hand
+    - from the first public Autopaper permalink on, published versions never change
     - no budgets, round caps, runtime research job, runtime scoring or reminders are added
   excluded:
     - shadow folds, dual-writes, interim closers, standing anchors, one-release keeps, feature flags
@@ -126,11 +130,13 @@ boundaries:
 now:
   status: drafted
   slice: >-
-    Decisions recorded (§2 conversations and cursors, §12 cutover). The
-    gradual drafts R1-R6 are superseded; Cut 0, Cut 1 and Cut 2 are being
-    authored. The protocol metamission's P2d2 and P3 and Autopaper W2, W3a
-    and W3 are carried by Cuts 1 and 2.
-  source_ref: 03499ef9
+    Decisions recorded (§2, §12, §13). Cut 0, Cut 1 and Cut 2 authored
+    and repaired after the convergent review; the owner then ruled that
+    nothing is preserved before Autopaper is live, that article versions
+    are Texture versions, that crashes are restarted by hand, and that
+    production follows the ingestion rhythm. The protocol metamission's
+    P2d2 and P3 and Autopaper W2, W3a and W3 are carried by Cuts 1 and 2.
+  source_ref: 2d2b864e
   deploy_identity: staging b172895b
   candidate: none
   conjecture:
@@ -152,14 +158,17 @@ now:
   belief:
     believed_state: the studies' and panels' code claims hold at 03499ef9
     main_uncertainty: how long push-to-healthy-test-computer takes (bounds the pace of every cut) and how large Cut 1's change set is
-    next_observation: a convergent panel on the three cut files, then Cut 0
-  blocker_or_risk: Cut 1 is one large red change across store, agentcore, textureowner and yaegikernel
-  next_action: convergent panel on this file and the three cut files
+    next_observation: a short re-review of the repaired cuts, then Cut 0's first tracer run
+  blocker_or_risk: Cut 1 is one large red change across store, agentcore, textureowner and yaegikernel; the owner's computer takes every cut (accepted risk, §13.1)
+  next_action: re-review the repaired Cut 0 and Cut 1 with two reviewers, then execute Cut 0
 
 receipts:
   - id: panels-2026-10-12
     kind: review
     ref: .agentic-consensus/reeng-divergent-2026-10-12, .agentic-consensus/reeng-lateral-2026-10-12 (session diagnostics); synthesis in decisions §12
+  - id: convergent-2026-10-12
+    kind: review
+    ref: .agentic-consensus/reeng-cuts-convergent-2026-10-12 (session diagnostics, frozen at 2d2b864e); synthesis in decisions §13
 ---
 
 # Re-engineering metamission

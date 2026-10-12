@@ -275,6 +275,8 @@ Each published version of a story has its own immutable permalink
 (`/v<n>`; v7's link always shows v7). Chevrons move between versions; a
 "new version available" control jumps to the latest; the bare story link
 shows the latest in place. Versions are numbered by publish (v1, v2, v3).
+*Revised in §13.2: an article version is a Texture version, so version
+numbers are Texture revision numbers.*
 A version's transcluded source blocks are pinned to it. Supersedes the
 one-permalink shape in the W3a draft and the app design §4.6.
 
@@ -355,10 +357,13 @@ judgement"). Decided:
    never migrated. Before the first public Autopaper permalink, the record
    schema, block ids and reference shape may still change freely; at that
    permalink they freeze. Compatibility begins at the permalink.
+   *Revised in §13.1: nothing survives, including the owner's computer
+   and Textures; only the freeze at the first Autopaper permalink stands.*
 2. **The cutover deploy counts as a crash.** Everything open closes with
    a visible fate; nothing resumes.
 3. **Rollback is forward-fix** after Cut 1, with a tagged last-good commit
    and a state snapshot. A git revert alone cannot read new-format records.
+   *Revised in §13.1: no state snapshot; the tag stays.*
 4. **One breakage log per cut.** During a cut window, each newly found
    problem is appended to `docs/problems/reeng-cut<N>-breakage-<date>.md`
    in the same commit as its fix, and the log is reviewed once per cut.
@@ -376,7 +381,8 @@ judgement"). Decided:
 8. **Living documents don't settle; requests finish.** Document
    settlement stops being an execution authority.
 9. **After a crash, Autopaper restarts by a deliberate management act**,
-   never by a boot-time resumer.
+   never by a boot-time resumer. *Revised in §13.3: no restart policy
+   yet; the owner restarts it by hand.*
 10. **One REPL owner per desk.** The session manager today starts a second
     REPL when a desk's session is busy with another run's cell
     (`internal/agentcore/tools_desk.go:118-131`). A persistent desk has one
@@ -401,3 +407,71 @@ judgement"). Decided:
 Open, measured in Cut 0: how long a push takes to reach a healthy fresh
 test computer (it bounds the pace of every cut), and whether the one-hour
 lifetime of the broker handle breaks long-lived desk sessions.
+
+## 13. Owner rulings and the convergent review (2026-10-12, later)
+
+**Owner rulings**, after reading the cut drafts:
+
+1. **Nothing is preserved before Autopaper goes live.** The owner's
+   computer is not held at a build; it takes each cut like a test
+   computer. "I know we're taking a risk, but I want to take that risk. I
+   like the forcing function." No Texture export: "none of the data is
+   valuable until we actually go live with AutoPaper." Pre-cut
+   publications need not keep resolving. Compatibility begins at the
+   first public Autopaper permalink (§12.1's freeze stands). The state
+   snapshot in §12.3 goes; the tagged last-good commit stays.
+2. **An article is a Texture, and an article version is a Texture
+   version.** Published version numbers are Texture revision numbers, not
+   a second count. Stories work in public from their first revision; a
+   story is publication-ready nearer v5 to v10 than v2.
+3. **No restart policy yet.** After a crash Autopaper stays down until
+   the owner restarts it by hand. A restart policy is a later station.
+4. **Production follows the ingestion rhythm.** Six hours of polling
+   should yield many stories, not three: stories are opened and revised
+   at roughly the cadence captures arrive. The acceptance observes this
+   per poll interval; no quota is added (§1.2).
+
+**Convergent panel** on the metamission and the three cuts, frozen at
+2d2b864e. Six of eight answered (codex, claude opus, gpt-6.1-sol,
+gemini-3.8-flash, deepseek-v4.1-flash, glm-5.3-flash; gpt-6-luna and
+muse-spark timed out). All accepted the metamission. Codex sent back all
+three cuts; gpt-6.1-sol sent back all three; gemini and deepseek sent
+back one or two; claude and glm accepted with amendments. Raw outputs are
+session diagnostics in `.agentic-consensus/reeng-cuts-convergent-2026-10-12/`.
+Adopted, each checked against the code:
+
+- **Cut 0** is red for the trace export (Trace/evidence) and carries the
+  red ceremony. The export marks each layer present, empty or unserved
+  and is owner-scoped. The tracer drives parallel tagged calls and
+  overlapping cells on one desk. Cut 0 owns the broker-handle fix if the
+  70-minute session confirms it. Cut 0 records the run-acceptance and
+  per-turn baselines Cuts 1 and 2 compare against. Tool calls in one turn
+  do run in parallel (toolregistry/batch_executor.go:52-60), correcting
+  the draft.
+- A per-computer maintenance hold exists in vmctl
+  (internal/vmctl/ownership.go:181-205; the deploy skips held computers,
+  ci.yml:1434). It goes unused under ruling 1.
+- **Cut 1:** eligibility is separate from activation. A turn spends the
+  wakes inside its range; later wakes stay pending; after a commit the
+  controller re-checks; a failed turn re-arms nothing; a planned resume
+  activates a desk even when head equals cursor. An owner revision
+  commits an owner-emitted record pointing at it, so every inbox sequence
+  belongs to a record. The self-development operation stays as the
+  effect journal of a candidate bundle. Verify binds to the operation id
+  named in engineering's Report, and a deployed run goes from Freeze
+  through restore. Engineering keeps Ask and Reply to management and
+  loses Cast. The autonomous wire-publication path is a work-item
+  consumer and is deleted. Four boot phases are named as kept. The cursor
+  is a map per inbox, and the marker gains a work_state_epoch.
+  `CancelAct` and Retract are deleted under the §12 delegation, not by an
+  explicit owner statement. The packet citer count is corrected to 40
+  files and 343 lines; the work-item count of 62 files and 1,090 lines
+  stands.
+- **Cut 2:** a version's immutable payload (text, manifest hash,
+  signatures, resolved blocks) is separate from its live nav and check
+  overlay. Search arrivals reach a running cell's store as they land.
+  PDFs become blocks, as §7 already said. ReadDoc stays as the one
+  document read verb for Textures and captures. The crash-closure record
+  never wakes anyone. The tracer's controlled page lives on a
+  `tracer-fixtures` branch.
+

@@ -16,10 +16,10 @@ definition_version: 4
 readiness: drafted
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: convergent agentic-consensus panel (codex, claude opus, gpt-6.1-sol, gemini-3.8-flash, deepseek-v4.1-flash, glm-5.3-flash; gpt-6-luna and muse-spark timed out)
+  frozen_ref: 2d2b864e
+  verdict: send_back (codex, gpt-6.1-sol, gemini), accept as gated draft or with amendments (claude, deepseek, glm); repaired in the following commit; re-verified at C1's landed commit before execution
+  evidence_ref: docs/re-engineering-decisions-2026-10-12.md §13 (synthesis)
 
 start:
   captured_at: 2026-10-12T19:30:00Z
@@ -29,6 +29,7 @@ start:
   worktrees:
     - path: /Users/wiz/go-choir
       status: dirty (docs/re-engineering-decisions-2026-10-12.md and the cut files, this session's doc edits in progress)
+      correction_2026-10-12: those edits landed at 2d2b864e and the tree was clean at review; Go source is unchanged between 03499ef9 and 2d2b864e
       class: goal_candidate
       owner: this session
       touch: goal_owned
@@ -63,8 +64,10 @@ start:
       Research's surface lists retired verbs and four ways to fetch
       (FetchURL, ImportURL, ImportDocument, selector reads), none of which
       keeps what it fetches (choir.go:255-259; FetchURL
-      researchtools.go:790). Only PollSource writes a capture
-      (internal/researchtools/poll_source.go:168). Children get a separate
+      researchtools.go:790). Captures are written by PollSource
+      (internal/researchtools/poll_source.go:168) through corpusd's capture
+      handler (internal/platform/captures.go:150-170 ->
+      sourcegraph.WriteCaptures), the one capture writer. Children get a separate
       read set (choir.go:263-265). The research egress budget is 64 calls
       and 32 MiB (internal/researchtools/egress_budget.go:46-47).
     - >-
@@ -79,7 +82,8 @@ start:
       in any document (internal/texturedoc/schema.go:326) and has no link
       mark (:307). Quotes are checked only for presence
       (internal/textureowner/texture_evidence_sources.go:355); no matcher
-      exists in Go. Mike's cascade (exact, whitespace and case,
+      exists in Go. PDF text and page extraction exists
+      (internal/content/extract.go:104-131) but produces no blocks. Mike's cascade (exact, whitespace and case,
       punctuation-tolerant) is pure string code
       (~/mike/backend/src/modules/chat/engine/verifyCitations.ts:41-58).
     - >-
@@ -91,7 +95,8 @@ start:
       refused (:937). Prompt: role 4,721 characters
       (internal/textureprompts/texture.yaml) plus 35,131 in overlays
       (revision_policy.yaml 16,839, run_system.yaml 14,600). The wake is
-      pointer-only (internal/agentcore/coagent_update_packet.go:161). One
+      pointer-led but still carries source entities and the source
+      instruction (internal/agentcore/coagent_update_packet.go:161). One
       large write takes 76% of model time; turns average about 5 cells
       (study D §0.1-0.2). Texture runs opencode-go deepseek-v4.1-flash at
       high effort (internal/modelpolicy/model_policy.go:370); the
@@ -110,8 +115,8 @@ start:
       Publishing: PublishTexture (internal/platform/service.go:153) mints a
       new publication, version and route on every call (:200-211); the
       version is hard-coded "v1" with no predecessor
-      (internal/platform/publication_graph.go:129, :138); each manifest
-      embeds the whole version history (service.go:246-255); the bundle
+      (internal/platform/publication_graph.go:129, :138); a manifest embeds
+      the version history when one is present (service.go:246-255); the bundle
       read takes the last has_version edge
       (internal/platform/service_publication_read.go:88-96); a citation
       keeps only an entity's first selector
@@ -129,8 +134,11 @@ start:
     - >-
       Autopaper: W1 landed (scheduled polls into Store B captures, no model
       call, closed on a crash). Nothing tells management captures arrived,
-      management cannot feed a Texture other than its own trajectory's (W2
-      review receipt W2-review1), and nothing publishes automatically.
+      and management cannot feed a Texture other than its own trajectory's
+      (W2 review receipt W2-review1). The only automatic publishing is the
+      autonomous Universal Wire path, which Cut 1 deletes. Schedules start
+      only through the owner route POST /api/autopaper/sources/schedules
+      (apihandler/routes.go:31; source_schedule.go:266-295).
 
 finish:
   deliver: >-
@@ -154,12 +162,16 @@ finish:
         completes, then a final line with "M of N providers answered" and
         the cooling providers; bounded by the provider timeout plus a
         margin. The waves, target, grace and the blocking mode are deleted
-        with their only caller. Guest: search.Client.Stream (zero attempt
-        bound, refused-dial retry kept); a host search table keyed by the
-        desk-session key, its streams cancelled in release and
-        reclaimLocked; SessionFrame carries arrivals past the session's
-        cursor; Begin merges them into a lock-guarded store in REPL state
-        that End does not clear. Verbs: choir.SearchStart(q) returns a stub
+        with their only caller (no guest is kept on pre-cut code; decisions
+        §13.1). Guest:
+        search.Client.Stream (zero attempt bound, refused-dial retry kept);
+        a host search table keyed by the desk-session key, its streams
+        cancelled in release and reclaimLocked. The host pushes each
+        provider's arrival to the worker as it lands, as its own frame type;
+        Cut 0's single reader loop writes it into a lock-guarded store in
+        REPL state that End does not clear, so a running cell sees later
+        providers through Searches.Get without waiting or a new cell.
+        Arrival payloads never enter the model's context. Verbs: choir.SearchStart(q) returns a stub
         at once ("s3 started: 4 providers"); choir.Searches.Get/List return
         copies; choir.SearchWait(id, ms) blocks up to ms and returns counts.
         Each cell result gets one count line per search with new arrivals
@@ -171,8 +183,9 @@ finish:
         C1), Research, Ask, Reply, Note. Reports go out as soon as
         understanding changes, each claim tagged with hypothesis ids and an
         epistemic status; the final Report closes the round at diminishing
-        returns relative to the Cast's hypotheses and stakes. The egress
-        budget and the `degraded` field in research results are deleted.
+        returns relative to the Cast's hypotheses and stakes. The
+        `degraded` field in research results is deleted (the egress budget
+        went in Cut 1).
         Captures as block documents: sourcefetch.ExtractBlocks walks the
         DOM with x/net/html (reusing the candidate, skip and noise logic)
         into typed blocks (headings, paragraphs, lists, tables, figures,
@@ -182,7 +195,11 @@ finish:
         cid.k), one normtext function shared with the matcher; identity by
         doc_hash, so a changed re-capture is a new capture and an identical
         one stays Repeated; world documents accept real page text and links
-        ("[12]" stays refused in Texture-authored blocks).
+        ("[12]" stays refused in Texture-authored blocks). PDFs are captured
+        too (decisions §7): content/extract.go's page text is split into
+        paragraph blocks per page, with raw bytes, page numbers and
+        provenance kept, so a quote in a PDF is checked against a block like
+        any other. Layout reconstruction is not attempted.
         One reference shape: a Go Ref {doc, version, cid, hash, quote}
         shared by texturedoc and types, replacing both selector shapes for
         new citations. internal/quotematch ports mike's cascade and returns
@@ -206,21 +223,35 @@ finish:
         and citations; changed blocks only. Wait, Done and Reject replace
         decide, work_disposition and update_dispositions. Prompt core about
         3.5k characters, verb list generated from the module set (C1's
-        generator). ApplyTexture, ReadDoc, the revision_policy and
-        run_system overlays and every retired verb on Texture are deleted.
+        generator). ReadDoc stays as the one document read verb,
+        generalized to any block document (a Texture or a capture) and
+        shared by Texture, management and research; for a long document the
+        frame carries a section digest and ReadDoc fetches the rest.
+        ApplyTexture, the revision_policy and run_system overlays and every
+        retired verb on Texture are deleted. Cut 1 wrote Texture's prompt
+        core; this unit adds the Write, citation and Done/Wait/Reject
+        judgement.
         Management's prompt gains the translation contract: a plain summary
         plus artifact handles that Texture cites as chips, so owner-facing
         prose carries no code, diff, command or log.
     - id: 2b
       name: publication
       artifact: >-
-        Per-version permalinks: one publication per (owner, source doc);
-        publishing appends version n+1 (contiguous ordinals, idempotent on
-        the source revision) with supersedes set, a parsed /v<n> route, and
-        a manifest that references the previous manifest hash instead of
-        embedding every past body. The bundle carries nav {ordinal, prev,
-        next, latest}; the bare link serves the latest in place; chevrons
-        and a "new version available" control. Transclusion: the
+        Per-version permalinks: one publication per (owner, source doc). An
+        article is a Texture and an article version is a Texture version
+        (decisions §13.2): each committed revision of a story publishes as
+        version n, where n is its Texture revision number, idempotent on the
+        revision, with supersedes set, a parsed /v<n> route, and a manifest
+        that references the previous manifest hash instead of embedding
+        every past body. A revision that fails to publish leaves a gap that
+        nav skips; nothing is renumbered. Stories work in public: they
+        publish from their first revision, and a story is usually
+        publication-ready around v5 to v10. The bundle carries nav
+        {revision, prev, next, latest}; the bare link serves the latest in place; chevrons
+        and a "new version available" control. A version has an immutable
+        payload (text, manifest and its hash, signatures, resolved_blocks)
+        and two live fields served beside it (nav, check overlay); only the
+        payload is fixed forever. Transclusion: the
         {{embed}} block node and the cite anchor carry the Ref; publish
         materializes cited and transcluded blocks into the version
         (resolved_blocks, one publication_transclusions row per anchor), so
@@ -233,7 +264,7 @@ finish:
         Management opens a story by a Cast to a new texture:<doc> carrying
         hypotheses, the capture refs and publish: auto, and feeds an
         existing story by a Cast or Note to its texture:<doc>. Management
-        and Texture read capture blocks through one document read verb.
+        and Texture read capture blocks through ReadDoc.
         Management never writes a Texture.
         Automatic publishing (W3): every committed revision of a document
         opened with publish: auto becomes its next version; no human step.
@@ -242,10 +273,12 @@ finish:
         app's front page and story page, logged out, at phone width. The
         Universal Wire app, its route, types.WireStory and the fixed claims
         are deleted, with their specs replaced.
-        Crash: boot closes the paper's open rounds and stops nothing else;
-        no desk wakes at boot and no schedule re-arms itself; Autopaper
-        restarts when management, woken by a non-boot record, deliberately
-        re-arms the schedule (wire_publication claim recovery is gone in C1).
+        Crash: boot closes the paper's open rounds and the active schedules
+        (Cut 1 keeps that phase) and starts nothing; no desk wakes at boot
+        and no schedule re-arms itself. There is no restart policy yet
+        (decisions §13.3): the owner restarts Autopaper by hand through the
+        schedule route (POST /api/autopaper/sources/schedules). A restart
+        policy is a later station.
         Freeze receipt, written before the paper computer's first publish:
         the record schema, normtext, the cid formula and extractor version,
         the Ref shape and the /v<n> route shape, with a digest.
@@ -254,26 +287,33 @@ finish:
     On staging, read through the product API and a logged-out browser, all
     of: (1) a designated paper computer (not a test computer) runs its
     source schedule for 6 continuous hours after one owner act starts it,
-    with no further human step; (2) in that window management opens at
-    least 3 stories from captures and feeds at least one of them a capture
-    that arrived after it opened; (3) each of those stories is published
-    automatically, and at least one reaches v2 from new evidence; (4) the
-    front page at choir.news lists each story once, newest first, marked
-    updated, and every citation on its story pages shows a quote inside its
-    source block with a check badge; (5) public reads keep working while
-    the paper computer is stopped. "Live" is a state that holds; a crash
-    ends it until management restarts it.
+    with no further human step; (2) production follows the ingestion
+    rhythm (decisions §13.4): every poll that writes new captures is
+    answered before the next poll fires, by a new story, a Cast or Note
+    feeding an existing story, or a management record declining those
+    captures with a reason, and the receipt lays stories opened, revisions
+    and captures side by side per poll interval (no story count is set; a
+    six-hour window on real feeds should produce many stories, not a
+    handful); (3) every committed revision of a story is published
+    automatically as its Texture version, several stories reach v5 or
+    later, and in each of those at least one revision cites a capture
+    that arrived after its previous version; (4) the front page at
+    choir.news lists each story once, newest first, marked updated, and
+    every citation on its story pages shows a quote inside its source
+    block with a check badge; (5) public reads keep working while the
+    paper computer is stopped. "Live" is a state that holds; a crash ends
+    it until the owner restarts it by hand.
   acceptance:
     - action: "2a, tracer on a fresh test computer: research cell trace read through the product API (C0 export)"
-      proves: SearchStart returns at once; count lines rise per provider in latency order; the gateway's final line says M of N; every stream ends at N/N or is cancelled with its session; no arrival carries another query's id
+      proves: SearchStart returns at once; count lines rise per provider in latency order; the gateway's final line says M of N; every stream ends at N/N or is cancelled with its session; no arrival carries another query's id; one running cell sees a provider that answered after it started through Searches.Get, with no SearchWait and no new cell
       evidence_class: deployed proof
     - action: "2a, tracer: research on a Cast with hypotheses (including the omission hypothesis)"
       proves: Reports carry hypothesis ids and epistemic status; Read writes captures; a final Report closes the round naming why it stopped; first Report no later than the demo19/20 baseline (about 70 s to 2 min)
       evidence_class: deployed proof
     - action: "2a, tracer: read a tracer-controlled page, change it, read it twice more"
-      proves: a changed re-capture is kept (two captures, different doc_hash, raw bytes and typed block JSON present); an unchanged re-capture is Repeated; a page with "[12]" footnotes and links validates
+      proves: a changed re-capture is kept (two captures, different doc_hash, raw bytes and typed block JSON present); an unchanged re-capture is Repeated; a page with "[12]" footnotes and links validates; a fixture PDF becomes page-numbered paragraph blocks and a quote from it checks
       evidence_class: deployed proof (Store B objects)
-    - action: "2a, tracer: Texture integrates two records in one turn, then an @all rewrite; per-turn metrics against C0's baseline"
+    - action: "2a, tracer: Texture integrates two records in one turn, then an @all rewrite; per-turn metrics against C0's baseline (Cut 0 artifact 7, from its kept tracer bundles)"
       proves: one Write adds a paragraph cited inline; untouched blocks keep ids and citations (revision JSON diff); calls per turn and model-seconds per turn fall; ApplyTexture is absent from the module set and the code
       evidence_class: deployed proof
     - action: "2a, tracer: the owner edits in a sentence citing a real quote that does not support it"
@@ -282,25 +322,23 @@ finish:
     - action: "2a, tracer: an engineering-backed request"
       proves: the owner-facing revision has no code, diff, command or log in its prose, and the change is reachable from a citation chip (Playwright screenshot)
       evidence_class: deployed proof
-    - action: "2b, tracer: a story published v1 automatically; the tracer page changes to disconfirm it; research or management brings the re-capture; v2 publishes"
-      proves: v1's permalink returns a byte-identical bundle before and after v2, with the same resolved_blocks; the bare link shows v2; v1 shows chevrons and "new version available"; pre-cut publications still resolve
+    - action: "2b, tracer: a story publishes each revision automatically; at version n the tracer page changes to disconfirm it; research or management brings the re-capture; a later version m publishes the correction"
+      proves: version numbers equal Texture revision numbers; version n's immutable payload (text, manifest hash, signatures, resolved_blocks) is byte-identical before and after m; n's nav gains next and latest; the check overlay may change and never touches the manifest hash; the bare link shows m; n shows chevrons and "new version available"
       evidence_class: deployed proof
     - action: "2b: logged-out Playwright on choir.news at phone width"
       proves: front page and story page render with numbered sources, quotes in source blocks, check badges and a transcluded block; screenshot artifact; no served route still renders the fixed claims
       evidence_class: deployed proof
     - action: "2b: the autopaper_live window, then a crash restart of the paper computer (no planned marker) through the product API"
-      proves: Autopaper live as defined; after the crash every open round closed "interrupted by a restart", no poll ran and no desk woke until management's deliberate re-arm; reads stayed up throughout
+      proves: Autopaper live as defined; after the crash every open round and schedule closed "interrupted by a restart", no poll ran and no desk woke until the owner restarted the schedule by hand; reads stayed up throughout
       evidence_class: deployed proof
     - action: "after live: model comparison on the tracer script; deepseek-v4.1-flash, gpt-6-luna, glm-5.3-flash, muse-spark-1.3-contributor and the other opencode-go models, 3 runs each; then high, medium, low effort on the leading models"
       proves: a receipt table judged blind by a model panel on grounding (claims supported by their cited blocks, quote accuracy, omissions), with latency and cost beside it; never runtime scoring. The default switch is the owner's routing decision, outside this station
       evidence_class: deployed measurement plus model judgement
   rollback: >-
     Forward-fix (decisions §12.3). Before unit 2a deploys, tag C1's landed
-    commit as reeng-cut2-last-good; before unit 2b deploys, snapshot Store
-    B's publication tables and capture objects. Pre-cut publications,
-    the owner's computer and Textures stay untouched until 2b's acceptance
-    passes. A failed unit is fixed forward on main; the tag and snapshot
-    are the break-glass. Before the freeze receipt, schema, cids and refs
+    commit as reeng-cut2-last-good. Nothing before the first Autopaper
+    permalink is preserved (decisions §13.1). A failed unit is fixed
+    forward on main; the tag is the break-glass. Before the freeze receipt, schema, cids and refs
     may change freely; after it, only compatible changes.
   landing:
     required: true
@@ -331,7 +369,7 @@ homotopy:
     computer with real providers and one controlled page -> Texture
     writing and checks on that tracer story -> the tracer story published,
     disconfirmed and republished -> the paper computer on real feeds,
-    unattended -> crash and deliberate restart -> model comparison on the
+    unattended -> crash and manual restart -> model comparison on the
     live desks
 
 boundaries:
@@ -342,9 +380,9 @@ boundaries:
     - owner 2026-10-11, shared content in Store B behind corpusd; computers hold overlays
   must_preserve:
     - Texture is the sole writer of canonical revisions; checks and judgements never edit text or mint a version
-    - a published version's text, manifest hash and signatures never change; pre-cut publications keep resolving
+    - a published version's text, manifest hash and signatures never change (from the first Autopaper permalink on)
     - public reads never reach a paper computer; shared content and check results live in Store B behind corpusd
-    - a crash closes work; no boot-time resumer of searches, checks, schedules or stories; Autopaper restarts only by management's deliberate act
+    - a crash closes work; no boot-time resumer of searches, checks, schedules or stories; Autopaper restarts only by the owner, by hand (§13.3)
     - support judgement by management or Jev, never research or Texture (§12.7)
     - no budgets, caps, reminders, runtime research job or runtime scoring (§1.2, §12.14)
     - one REPL owner per desk; concurrency on the host; arrivals written only by worker code under the store lock
@@ -353,7 +391,7 @@ boundaries:
   excluded:
     - records, cursors, conversations and crash closure (C1); the tracer and trace export (C0)
     - async sub-RLMs; waking a desk on a search arrival after end_turn
-    - alignment across re-captures (study E stage D); PDFs and transcripts as blocks
+    - alignment across re-captures (study E stage D); transcripts as blocks; PDF layout reconstruction
     - the edition Texture as front page, claims and scores in the reader, email
     - copyright and public quote length (set aside, §7)
     - switching the default Texture model (owner routing decision)
@@ -392,7 +430,7 @@ boundaries:
       - a living story becomes a new publication per publish
       - the reader is signed-in only and shows fixed claims
   standing_questions: >-
-    1 provenance: owner decisions §12; this file's defaults (below) are
+    1 provenance: owner decisions §12 and §13; this file's defaults (below) are
     orchestrator proposals under the owner's delegation. 2 conformance:
     captures, checks and publications in Store B behind corpusd; no new
     store. 3 deletion citers: every removed verb, tool, overlay, route and
@@ -423,7 +461,7 @@ now:
       author's path, then published stories stay grounded at their
       permalinks as evidence changes, with no human step between capture
       and publication.
-    test: unit 2b's tracer v1->v2 run and the live window, then a blind model judgement of the live stories' grounding and an owner read
+    test: unit 2b's tracer correction run (version n to a later version) and the live window, then a blind model judgement of the live stories' grounding and an owner read
     edge: missing_oracle
     delta_o: >-
       the share of research-reported quotes that land inside one extracted
@@ -488,28 +526,35 @@ acceptance, and commits inside a unit are fine.
    story.
 5. Captures reach management as one system record per poll that wrote
    new captures, with no debounce. The cursor batches them (§1.4).
-6. After a crash, no desk wakes at boot. Autopaper stays down until
-   management is woken by a non-boot record (the owner, or the tracer)
-   and re-arms the schedule.
-7. Version numbers count publishes, with no gaps. The bare link serves
-   the latest version in place. A pre-cut publication resolves as v1 of
-   its route, and the first republish after the cut appends to it.
+6. After a crash, no desk wakes at boot and the schedule is closed.
+   Autopaper stays down until the owner restarts it by hand (owner,
+   §13.3).
+7. Version numbers are Texture revision numbers (owner, §13.2). The bare
+   link serves the latest version in place. Pre-cut publications are not
+   carried over.
 
-**Open questions for the owner:**
+**Former open questions**, answered after the convergent review
+(decisions §13):
 
-- May the crash-closure record wake management at boot? If so, it needs
-  a loop guard.
-- How long is the live window? The default is 6 hours.
-- Where does the tracer's controlled page live?
-- Should Texture decide which revisions to publish, instead of every
-  revision of an auto document publishing?
+- The crash-closure record never wakes management at boot. That would be
+  a boot-time resumer (§13.3; Cut 1's D5 and invariant 7).
+- The live window is 6 hours. It is an observation window for the
+  acceptance, not a runtime limit.
+- The tracer's controlled page is a file on a dedicated
+  `tracer-fixtures` branch of this repository, read through
+  raw.githubusercontent.com. The tracer changes it by a commit to that
+  branch (never main), and the receipt records each version's sha256.
+  It is served independently of the paper computer and of choir.news.
+- Every committed revision of a `publish: auto` document publishes.
+  Texture decides publication by deciding when to commit.
 
 Ways it can fail, written before the code:
 
-- Arrivals race the REPL store. Only worker code writes, under the lock,
-  in Begin or SearchWait, and the race test covers it.
+- Arrivals race the REPL store. Only the worker's reader loop writes,
+  under the lock, and the race test covers a cell reading while arrivals
+  land.
 - A stream outlives its session, or the 30 s client cuts it. Streams are
-  bound to the session lease and cancelled in release and reclaim. The
+  bound to the session and cancelled in release and reclaim. The
   stream client has no per-attempt bound, and the gateway deadline is
   the provider timeout plus a margin.
 - "M of N" counts cooling providers as failures. N is the set that was
@@ -536,7 +581,7 @@ Ways it can fail, written before the code:
   the next frame.
 - The frame for a long document outgrows the write it saves. Long
   documents get a section digest plus the recently edited and cited
-  blocks; the rest are read on demand.
+  blocks; the rest are read with ReadDoc.
 - Management wakes on every commit and judges the same pair twice.
   Judgements are memoized by hash pair, and management's cursor batches
   the lists.
@@ -549,8 +594,12 @@ Ways it can fail, written before the code:
   stories. The list is served from Store B only. Clustering stays with
   management, and the tracer counts stories per front page.
 - A schedule or check resumes after a crash. The crash test asserts that
-  no poll or judgement runs before management's deliberate re-arm.
+  no poll or judgement runs before the owner's manual restart.
+- Management falls behind the ingestion rhythm and captures pile up
+  unanswered. The live receipt shows it per poll interval; the response
+  is to understand why from the trace, not to add a quota.
 - The model comparison rewards speed. The judge ranks grounding first,
   and latency is reported beside it, never blended in.
 - The broker handle's one-hour lifetime (choir.go:119) kills a long-lived
-  research session. C0 measures it, and the live window would show it.
+  research session. Cut 0 measures it and fixes it if confirmed (its
+  artifact 6); the live window re-checks it.

@@ -473,6 +473,46 @@ documents:
     depends_on: [docs/choir-doctrine.md]
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/re-engineering-decisions-2026-10-12.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: decision_record, authority: support, lifecycle: living}
+    depends_on: [docs/choir-doctrine.md]
+    witnesses: [docs/re-engineering-decisions-2026-10-12.md, docs/reports/re-engineering-studies-2026-10-12/README.md]
+    refresh_triggers: [owner_ratification_change, doctrine_change]
+  - path: docs/definitions/choir-reeng-metamission-2026-10-12.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md, docs/re-engineering-decisions-2026-10-12.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md, docs/re-engineering-decisions-2026-10-12.md, docs/definitions/choir-reeng-metamission-2026-10-12.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md, docs/re-engineering-decisions-2026-10-12.md, docs/definitions/choir-reeng-metamission-2026-10-12.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
+  - path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: living, entrypoint: false}
+    depends_on: [docs/choir-doctrine.md, docs/re-engineering-decisions-2026-10-12.md, docs/definitions/choir-reeng-metamission-2026-10-12.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, owner_ratification_change, deployed_acceptance]
   - path: docs/definitions/choir-autopaper-metamission-2026-10-11.md
     claim_scope: current
     is_root: []
