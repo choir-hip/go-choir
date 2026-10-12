@@ -56,17 +56,6 @@ func NormalizeSelector(selector map[string]any) map[string]any {
 	return out
 }
 
-func NormalizeSelectors(selectors []map[string]any) []map[string]any {
-	if len(selectors) == 0 {
-		return nil
-	}
-	out := make([]map[string]any, 0, len(selectors))
-	for _, selector := range selectors {
-		out = append(out, NormalizeSelector(selector))
-	}
-	return out
-}
-
 func stringValue(value any) string {
 	if s, ok := value.(string); ok {
 		return s

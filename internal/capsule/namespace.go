@@ -13,57 +13,7 @@ import (
 	"time"
 
 	"github.com/containerd/cgroups/v3/cgroup2"
-	gonso "github.com/cpuguy83/gonso"
 )
-
-// NamespaceSet creates and manages Linux namespaces for a capsule.
-// Uses gonso for safe namespace manipulation in Go.
-type NamespaceSet struct {
-	set *gonso.Set
-}
-
-// CreateCapsuleNamespaces creates a new set of namespaces for a capsule:
-// - CLONE_NEWNS: mount namespace (for overlayfs)
-// - CLONE_NEWPID: PID namespace (process isolation)
-// - CLONE_NEWNET: network namespace (air-gapped, no interfaces)
-// - CLONE_NEWUTS: hostname namespace
-// - CLONE_NEWIPC: IPC namespace
-// - CLONE_NEWUSER: user namespace (for broker privilege separation)
-// - CLONE_NEWCGROUP: cgroup namespace
-//
-// CLONE_NEWNET is the primary network isolation mechanism (v10 design).
-// seccomp socket family filtering is defense-in-depth on top of this.
-func CreateCapsuleNamespaces() (*NamespaceSet, error) {
-	flags := gonso.NS_MNT | gonso.NS_PID | gonso.NS_NET |
-		gonso.NS_UTS | gonso.NS_IPC | gonso.NS_USER | gonso.NS_CGROUP
-
-	nsSet, err := gonso.Unshare(flags)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unshare namespaces: %w", err)
-	}
-
-	return &NamespaceSet{set: &nsSet}, nil
-}
-
-// Do runs a function inside the namespace set.
-func (n *NamespaceSet) Do(fn func() error) error {
-	var execErr error
-	err := n.set.Do(func() {
-		execErr = fn()
-	})
-	if err != nil {
-		return err
-	}
-	return execErr
-}
-
-// Close releases the namespace set resources.
-func (n *NamespaceSet) Close() error {
-	if n.set != nil {
-		return n.set.Close()
-	}
-	return nil
-}
 
 // CgroupManager manages cgroup v2 resources for a capsule.
 type CgroupManager struct {
@@ -282,21 +232,5 @@ func UnmountOverlayFS(mergedDir string) error {
 			return fmt.Errorf("failed to unmount overlayfs at %s: %w", mergedDir, err)
 		}
 	}
-	return nil
-}
-
-// SetupUserNamespaceMappings sets up UID/GID mappings for a user namespace.
-// The root user inside the namespace maps to an unprivileged user outside.
-func SetupUserNamespaceMappings(pid int, uidMap, gidMap string) error {
-	uidMapPath := fmt.Sprintf("/proc/%d/uid_map", pid)
-	gidMapPath := fmt.Sprintf("/proc/%d/gid_map", pid)
-
-	if err := os.WriteFile(uidMapPath, []byte(uidMap), 0o644); err != nil {
-		return fmt.Errorf("failed to write uid_map: %w", err)
-	}
-	if err := os.WriteFile(gidMapPath, []byte(gidMap), 0o644); err != nil {
-		return fmt.Errorf("failed to write gid_map: %w", err)
-	}
-
 	return nil
 }

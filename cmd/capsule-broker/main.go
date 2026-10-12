@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"golang.org/x/sys/unix"
 	"io"
 	"log"
 	"net"
@@ -22,6 +21,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -760,70 +761,6 @@ func (b *Broker) handleKillSession(ctx context.Context, cap *capsule.Capability,
 	}
 
 	return BrokerRPCResponse{Result: json.RawMessage(`"ok"`)}
-}
-
-// handleSyncRevokedCaps updates the revoked capability set.
-func (b *Broker) handleSyncRevokedCaps(params json.RawMessage) BrokerRPCResponse {
-	var p struct {
-		RevokedCapabilityIDs []string `json:"revoked_capability_ids"`
-	}
-	if err := json.Unmarshal(params, &p); err != nil {
-		return BrokerRPCResponse{Error: fmt.Sprintf("failed to parse params: %v", err)}
-	}
-
-	b.mu.Lock()
-	b.revokedCaps = make(map[string]bool, len(p.RevokedCapabilityIDs))
-	for _, id := range p.RevokedCapabilityIDs {
-		b.revokedCaps[id] = true
-	}
-	b.mu.Unlock()
-
-	return BrokerRPCResponse{Result: json.RawMessage(`"ok"`)}
-}
-
-// closeNonStdioFDs closes all file descriptors except stdin (0), stdout (1),
-// and stderr (2). This is the FD hygiene step from the v7 design.
-// We collect all fd numbers first, then close them, to avoid closing
-// the /proc/self/fd directory stream while iterating it.
-func closeNonStdioFDs() error {
-	// Collect fd numbers first (avoids closing the directory fd mid-iteration).
-	entries, err := os.ReadDir("/proc/self/fd")
-	if err != nil {
-		return fmt.Errorf("failed to read /proc/self/fd: %w", err)
-	}
-
-	var fds []int
-	for _, entry := range entries {
-		var fd int
-		if _, err := fmt.Sscanf(entry.Name(), "%d", &fd); err != nil {
-			continue
-		}
-		if fd <= 2 {
-			continue
-		}
-		fds = append(fds, fd)
-	}
-
-	// Now close them all.
-	for _, fd := range fds {
-		syscall.Close(fd)
-	}
-
-	return nil
-}
-
-// stdoutWriter and stderrWriter implement io.Writer for capturing output.
-type stdoutWriter struct{ buf *[]byte }
-type stderrWriter struct{ buf *[]byte }
-
-func (w *stdoutWriter) Write(p []byte) (int, error) {
-	*w.buf = append(*w.buf, p...)
-	return len(p), nil
-}
-
-func (w *stderrWriter) Write(p []byte) (int, error) {
-	*w.buf = append(*w.buf, p...)
-	return len(p), nil
 }
 
 // cappedBuffer bounds total buffered output to maxBytes and records overflow.

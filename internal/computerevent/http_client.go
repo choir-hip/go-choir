@@ -379,7 +379,3 @@ func NewGuestHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClien
 		capability: capability,
 	}, nil
 }
-
-func NewDefaultHTTPClient(baseURL string, capability CapabilitySource) (*HTTPClient, error) {
-	return NewHTTPClient(baseURL, &http.Client{Timeout: 60 * time.Second}, capability, false)
-}

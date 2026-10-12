@@ -15,8 +15,3 @@ const (
 func NormalizeEvidenceState(value string) string {
 	return canonicalFromSchema(embeddedSourceContractSchema.EvidenceStates, value)
 }
-
-func IsRelationalEvidenceState(value string) bool {
-	state := NormalizeEvidenceState(value)
-	return state != "" && embeddedSourceContractSchema.EvidenceStates[state].Relational
-}

@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -537,12 +536,4 @@ func (r *GCRunner) Start(ctx context.Context) {
 			}
 		}
 	}()
-}
-
-// ListGCNamespaces reports the namespaces the reachability sweep covers.
-func ListGCNamespaces() []string {
-	out := make([]string, len(artifactGCNamespaces))
-	copy(out, artifactGCNamespaces)
-	sort.Strings(out)
-	return out
 }

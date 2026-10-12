@@ -1016,13 +1016,6 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	<-relayDone
 }
 
-// autoputerWSURL derives the WebSocket URL for the autoputer /api/ws endpoint
-// from the configured HTTP autoputer URL (static fallback).
-// nolint:unused
-func (h *Handler) autoputerWSURL() string {
-	return autoputerWSURLForBase(h.autoputerURL.String(), "")
-}
-
 // HandleManagementConsoleWS handles GET /api/super-console/ws. It validates the access JWT
 // cookie, denies requests with missing or invalid auth without upgrading, and
 // relays WebSocket frames bidirectionally between the client and the autoputer

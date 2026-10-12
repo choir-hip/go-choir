@@ -6,17 +6,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"html"
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const ExtractionAdapterVersion = 1
@@ -514,15 +513,4 @@ func firstLine(text string) string {
 		}
 	}
 	return ""
-}
-
-func decodeHTMLEntities(value string) string {
-	return html.UnescapeString(value)
-}
-
-func safeBaseName(value string) string {
-	if strings.TrimSpace(value) == "" {
-		return "document"
-	}
-	return filepath.Base(strings.TrimSpace(value))
 }

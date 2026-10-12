@@ -7,15 +7,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
-// Compile-time checks that both implementations satisfy Store.
+// Compile-time check that Storage satisfies Store.
 var _ Store = (*Storage)(nil)
-var _ Store = (*MemoryStore)(nil)
 
-// Store is the persistence interface used by the sourcecycled daemon. The
-// concrete implementation may be database-backed (Storage) or in-memory
-// (MemoryStore). The daemon uses MemoryStore so it has no relational database
-// dependency — source items are projected to the object graph via the runtime
-// API, and the queue/cycle state is ephemeral.
+// Store is the persistence interface used by the sourcecycled daemon. Storage
+// is the database-backed implementation.
 type Store interface {
 	Close() error
 	SaveSources(registry *sources.Registry) error

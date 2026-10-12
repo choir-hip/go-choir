@@ -18,7 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -321,20 +320,4 @@ func readBootTimeline(stateDir, vmID string) (*BootTimeline, error) {
 		return nil, err
 	}
 	return &t, nil
-}
-
-// goBuildCommit returns the module commit stamped into the running binary, so
-// the vmctl-side receipt can carry its own build identity alongside the
-// guest's.
-func goBuildCommit() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return ""
-	}
-	for _, s := range info.Settings {
-		if s.Key == "vcs.revision" {
-			return s.Value
-		}
-	}
-	return ""
 }

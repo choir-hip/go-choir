@@ -53,17 +53,6 @@ func WithTraceStore(s trace.Store) RuntimeOption {
 	}
 }
 
-// WithOnActorFailure sets a callback invoked when an actor's activation dies
-// from a panic. The callback receives the agent ID and the error. It must
-// not block. When not set, failures are logged only.
-func WithOnActorFailure(fn func(agentID string, err error)) RuntimeOption {
-	return func(a *Adapter) {
-		if fn != nil {
-			a.onActorFailure = fn
-		}
-	}
-}
-
 // WithKernelMode is retained for source compatibility but is a no-op: the
 // dispatcher is always the sole delivery authority (ontology kernel). The
 // legacy channel-mailbox runtime was removed at the cutover.
@@ -654,24 +643,6 @@ func (a *Adapter) Stop() {
 	if a.logDB != nil {
 		_ = a.logDB.Close()
 	}
-}
-
-// Drain gracefully shuts down the actor runtime with a timeout, then stops
-// the runtime core. In-flight actor handlers receive a cancellation context;
-// actors that do not finish within the timeout are logged (their partial side
-// effects are visible in the durable log). This is the backpressure-aware
-// alternative to Stop.
-func (a *Adapter) Drain(timeout time.Duration) {
-	a.actorRT.Drain(timeout)
-	a.Runtime.Stop()
-	if a.logDB != nil {
-		_ = a.logDB.Close()
-	}
-}
-
-// ActorRuntime returns the underlying actor runtime (for diagnostics/tests).
-func (a *Adapter) ActorRuntime() *actor.Runtime {
-	return a.actorRT
 }
 
 // actorLogPath derives the actor log SQLite file path from the store path.

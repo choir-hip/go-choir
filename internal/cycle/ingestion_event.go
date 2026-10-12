@@ -95,25 +95,3 @@ func ValidateIngestionEventOrigin(origin string) error {
 func ProcessorRequestEligibleForDispatch(req ProcessorRequest) bool {
 	return len(req.IngestionEventIDs) > 0
 }
-
-func ingestionEventIDsForItems(events []IngestionEvent, itemIDs []string) []string {
-	if len(events) == 0 || len(itemIDs) == 0 {
-		return nil
-	}
-	byArtifact := map[string]string{}
-	for _, event := range events {
-		byArtifact[strings.TrimSpace(event.ArtifactID)] = event.EventID
-	}
-	out := make([]string, 0, len(itemIDs))
-	seen := map[string]bool{}
-	for _, itemID := range itemIDs {
-		itemID = strings.TrimSpace(itemID)
-		eventID := byArtifact[itemID]
-		if eventID == "" || seen[eventID] {
-			continue
-		}
-		seen[eventID] = true
-		out = append(out, eventID)
-	}
-	return out
-}

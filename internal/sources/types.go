@@ -3,7 +3,6 @@ package sources
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -241,14 +240,6 @@ func FinishFetch(fetch FetchRecord, statusCode int, body []byte, err error) Fetc
 	}
 	fetch.Status = "http_error"
 	return fetch
-}
-
-func MarshalRaw(v any) string {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return ""
-	}
-	return string(data)
 }
 
 func errorClass(err error) string {

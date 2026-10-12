@@ -2659,17 +2659,6 @@ func (m *Manager) sourceSeedStagingRoot() (staging string, cleanup func(), err e
 	return dir, cleanup, nil
 }
 
-// CreateSparseDataImage creates the default-sized ext4 data image used by a
-// recover_current staging drive. Its caller owns the path and must not expose
-// the image until this function returns.
-func CreateSparseDataImage(path string) error {
-	return createSparseDataImage(path, dataImageSizeMB, findBinary("mkfs.ext4", "/run/current-system/sw/bin/mkfs.ext4"))
-}
-
-func createSparseDataImage(path string, sizeMB int, mkfsBin string) (err error) {
-	return createSparseDataImageSeeded(path, sizeMB, mkfsBin, "")
-}
-
 func createSparseDataImageSeeded(path string, sizeMB int, mkfsBin string, stagingDir string) (err error) {
 	if sizeMB <= 0 {
 		return fmt.Errorf("data image size must be positive")

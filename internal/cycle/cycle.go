@@ -27,10 +27,6 @@ type PollAllResult struct {
 	Fetches []sources.FetchRecord
 }
 
-func (e *Engine) PollAll(ctx context.Context) PollAllResult {
-	return e.PollBySourceType(ctx, "")
-}
-
 // PollBySourceType polls only sources whose Type matches sourceType. An empty
 // sourceType polls every source (equivalent to PollAll). The filter lets the
 // sourcecycled daemon run per-source-type tickers at independent cadences
@@ -118,21 +114,4 @@ func (e *Engine) hashItem(item sources.Item) string {
 		return item.ID
 	}
 	return sources.ContentHash(item.SourceID, item.OriginalID, item.URL)
-}
-
-func (e *Engine) Cluster(items []sources.Item) [][]sources.Item {
-	// P0 keeps clustering intentionally shallow; provenance is carried by item
-	// IDs and manifests rather than by this editorial grouping.
-	clusters := make(map[string][]sources.Item)
-	for _, item := range items {
-		for _, v := range item.Verticals {
-			clusters[v] = append(clusters[v], item)
-		}
-	}
-
-	var result [][]sources.Item
-	for _, c := range clusters {
-		result = append(result, c)
-	}
-	return result
 }

@@ -234,13 +234,6 @@ func MigrateChannelMessage(msg *types.ChannelMessage, log *ProvenanceLog) Outcom
 	return out
 }
 
-// MigrateInboxDelivery migrates InboxDelivery Role.
-func MigrateInboxDelivery(msg *types.InboxDelivery, log *ProvenanceLog) Outcome {
-	var out Outcome
-	msg.Role = out.mapToken("role", msg.Role, log)
-	return out
-}
-
 // MigrateGrantAttestation migrates EngineeringGrantPolicyAttestation Role.
 // Digest note: the live V2 attestation takes a V2-domain successor digest
 // with the mapping receipt linking the immutable V1 predecessor.

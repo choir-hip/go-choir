@@ -3,7 +3,6 @@ package platform
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -715,28 +714,6 @@ func (s *Service) ArtifactsRoot() string {
 		return ""
 	}
 	return s.artifactsRoot
-}
-
-type statement struct {
-	query string
-	args  []any
-}
-
-func execAll(ctx context.Context, tx *sql.Tx, stmts []statement) error {
-	for _, stmt := range stmts {
-		if _, err := tx.ExecContext(ctx, stmt.query, stmt.args...); err != nil {
-			return fmt.Errorf("platform publish: exec %s: %w", summarizeSQL(stmt.query), err)
-		}
-	}
-	return nil
-}
-
-func summarizeSQL(query string) string {
-	fields := strings.Fields(query)
-	if len(fields) > 5 {
-		fields = fields[:5]
-	}
-	return strings.Join(fields, " ")
 }
 
 func id(prefix string) string {

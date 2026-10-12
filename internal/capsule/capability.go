@@ -72,15 +72,6 @@ func (c *Capability) MarshalForTransport() ([]byte, error) {
 	return json.Marshal(c)
 }
 
-// UnmarshalFromTransport deserializes a capability from wire bytes.
-func UnmarshalFromTransport(data []byte) (*Capability, error) {
-	var cap Capability
-	if err := json.Unmarshal(data, &cap); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal capability: %w", err)
-	}
-	return &cap, nil
-}
-
 // SignCapability signs a capability with the provided guest-core private key.
 // The Signature field is populated in-place.
 func SignCapability(cap *Capability, privateKey ed25519.PrivateKey, keyID string) error {
@@ -110,21 +101,6 @@ func VerifyCapabilityWithKey(cap *Capability, publicKey ed25519.PublicKey, revok
 		return fmt.Errorf("capability %s has been revoked", cap.CapabilityID)
 	}
 	return nil
-}
-
-// CapabilitiesEqual compares two capabilities by their CapabilityID.
-func CapabilitiesEqual(a, b *Capability) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return a.CapabilityID == b.CapabilityID
-}
-
-// signingPayloadBytes is a helper for testing that returns the payload
-// without the signature field.
-func signingPayloadBytes(c *Capability) []byte {
-	payload, _ := c.signingPayload()
-	return payload
 }
 
 // ensure bytes import is used (for potential future use)

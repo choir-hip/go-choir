@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
 	"unicode/utf16"
 	"unicode/utf8"
 )
@@ -153,8 +152,4 @@ func utf16Less(a, b string) bool {
 		}
 	}
 	return len(left) < len(right)
-}
-
-func canonicalInt(value uint64) string {
-	return strconv.FormatUint(value, 10)
 }
