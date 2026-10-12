@@ -20,6 +20,28 @@ full reports, with file:line evidence, origin commits and risks, are in
 This file merges the five reports by subsystem, removes the overlaps and asks
 the owner the questions that a grep cannot answer.
 
+## Owner rulings (2026-10-12)
+
+- **Qdrant is kept, all of it** (A4 withdrawn): the package, the config,
+  the nix service and the boot-time collection. "Once automatic newspaper
+  is operating at scale, we're going to use Qdrant for a retrieval layer."
+  It is dormant, not dead.
+- **PII redaction is kept** (B5): `internal/pii` and `trace/redact.go` are
+  built but not wired, and the trace store they wrap is off. Cut 0 answers
+  "are exported traces redacted?" before it ships trace export. B4 (the
+  trace store) is decided in Cut 0 too.
+- **Auth recovery is kept and noted** (B8): production readiness needs an
+  auth redesign, after Autopaper's functional requirements are met. The
+  broken recovery flow, the passkey and session routes no UI calls, and
+  the unreachable root status are inputs to that redesign, recorded in
+  [docs/problems/auth-redesign-inputs-2026-10-12.md](../problems/auth-redesign-inputs-2026-10-12.md).
+- **Trusted email outbox** (B7): explained to the owner; the
+  recommendation is delete (decisionpolicy stays, it is live in
+  self-development approval). Held until the owner answers.
+- **Everything else: the recommendations stand** (Part A; B1, B2, B3, B6
+  recovery and maild spool, B9 to B16; Part C). Mission probes (A11) still
+  wait for Cut 0's tracer.
+
 ## Size
 
 - Go: 667 functions (about 11,200 lines) unreachable from any `main` on the
@@ -438,7 +460,10 @@ Each of these was built on purpose and might return. A grep cannot decide them.
 ## Part D: live defects found along the way
 
 Each needs a problem record before any fix (CLAUDE.md: problem documentation
-first).
+first). The records, with evidence and owners, are in
+[docs/problems/dead-code-census-live-defects-2026-10-12.md](../problems/dead-code-census-live-defects-2026-10-12.md)
+(D1 to D6). D7 is in the M0 acceptance section of
+docs/model-pools-design-2026-10-12.md.
 
 1. **Compaction points at a missing tool.** After a context rollover, a desk
    is told to call `get_run_memory_entry` for raw content. No desk has it, and
