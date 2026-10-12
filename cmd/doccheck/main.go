@@ -1659,7 +1659,7 @@ func isAllowedTextureRetiredNameLine(path, line string, docs map[string]*docInfo
 	if strings.HasPrefix(path, "cmd/doccheck/") || strings.HasSuffix(path, "_test.go") {
 		return true
 	}
-	if strings.HasPrefix(path, "docs/archive/") || strings.HasPrefix(path, "docs/evidence/") || path == "docs/runtime-dissolution-inventory.yaml" {
+	if strings.HasPrefix(path, "docs/archive/") || strings.HasPrefix(path, "docs/evidence/") {
 		return true
 	}
 	if path == "docs/why-texture-background-2026-06-15.md" {
