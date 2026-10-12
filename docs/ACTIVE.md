@@ -144,8 +144,10 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   → document model and Autopaper. New problems:
   [parallel `choir.*` calls cross-wire](problems/parallel-choir-calls-cross-wire-results-2026-10-12.md),
   [crash restarts leave work open and re-cast engineering](problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md).
-  The research-job and deadline-ladder drafts are deleted. Stations for
-  the order of work are not yet authored.
+  The research-job and deadline-ladder drafts are deleted. Stations:
+  [`reeng metamission`](definitions/choir-reeng-metamission-2026-10-12.md)
+  with R1-R6 drafted and R7 intent; next is R1's file review, then R1
+  ([`r1`](definitions/choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12.md)).
 - **Owner review queue (2026-10-11 evening):** the
   [master report](reports/master-report-protocol-research-autopaper-2026-10-11.md)
   summarizes the day and seven research and design documents (research

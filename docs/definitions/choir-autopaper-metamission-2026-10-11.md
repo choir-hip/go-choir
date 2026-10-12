@@ -27,12 +27,12 @@ metamission:
     - id: W2
       path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
       readiness: drafted
-      status: pending
+      status: pending (re-author on re-engineering R3 and R4; owner 2026-10-12)
       depends_on: [W1]
     - id: W3a
       path: docs/definitions/choir-autopaper-w3a-reader-2026-10-11.md
       readiness: drafted
-      status: pending (owner review; proposed ahead of W2, design open question 3)
+      status: pending (revised 2026-10-12 to a linked permalink per version; independent of the re-engineering stations)
       depends_on: [W1]
     - id: W3
       path: none (auto-publish, W3b; to be authored when W2 lands)

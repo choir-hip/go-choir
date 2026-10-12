@@ -30,17 +30,17 @@ metamission:
     - id: P2d
       path: definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md
       readiness: drafted (revised after review round one, receipt P2d-review1)
-      status: working (P2d1, the delegated-cast gate, on staging b172895b; P2d2 waits for owner review)
+      status: P2d1 landed (staging b172895b); P2d2 carried by re-engineering R3 (owner 2026-10-12; shape D not built)
       depends_on: [P2]
     - id: P3
       path: none (predictions required on Cast, Ask and Escalate; count resolver)
       readiness: intent
-      status: pending
+      status: superseded by re-engineering R3/R4 (owner 2026-10-12, Casts carry hypotheses and uncertainties; no runtime count resolver)
       depends_on: [P2]
     - id: P4
       path: none (scores as separate records; calibration visible in desk packs)
       readiness: intent
-      status: pending
+      status: pending (owner 2026-10-12: scoring needs intelligence, never the runtime; re-author after R3/R4)
       depends_on: [P3]
     - id: P5
       path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md (re-authored on the protocol)
@@ -113,7 +113,7 @@ boundaries:
 
 now:
   status: working
-  slice: P1 and P2 landed (staging b172895b); P2d1 landed; P2d2 designed through two review rounds and held for owner review; owner answered §9 items 1, 2, 8 (design doc)
+  slice: P1 and P2 landed (staging b172895b); P2d1 landed. Owner 2026-10-12 moved the remaining protocol work into the re-engineering metamission (docs/definitions/choir-reeng-metamission-2026-10-12.md): P2d2 is R3's Texture-inbox stage, P3's shape is replaced by hypothesis-shaped Casts
   source_ref: a2bcf724
   deploy_identity: staging a2bcf724
   candidate: none
@@ -147,7 +147,7 @@ now:
     owner routing decision); idle test computers keep their old build
     after a deploy, so deployed demos use fresh test computers
     (docs/problems/idle-test-computers-keep-old-builds-after-deploy-2026-10-11.md)
-  next_action: owner direction 2026-10-11 evening is research and design, not building; the research docs it commissioned feed P2d2, P3 (predictions mandatory) and P5 (Autopaper)
+  next_action: none here; continue in the re-engineering metamission (R1 first)
 
 receipts: []
 ---
