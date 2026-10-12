@@ -246,6 +246,34 @@ the catalog but outside the default pool.
 - `git grep` finds no gpt-5.4, gpt-5.5 or gpt-5.6 in non-test Go, nix or
   scripts.
 
+## Acceptance result (2026-10-12)
+
+Code b0d69d4d, CI 38312172697 green, staging health and the test
+computer's guest build both b0d69d4d. Probe `scripts/m0_pools_acceptance.mjs`
+on a fresh test computer (computer-d57369c008d75ec0d3069dd4efe5a97b),
+artifact docs/evidence/m0-model-pools-acceptance-2026-10-12.json: PASS.
+Four documents authored in 24-35 s; 9 model-bearing runs, every one
+recording spec and hash assignment, every model a pool member; each of 9
+threads kept one model; both members used (gpt-6-luna on 4 threads,
+deepseek-v4.1-flash on 5); no catalog refusals. The first run of the
+probe reported 0/3 documents because it read the revision list in the
+wrong order (newest first); the documents had 3, 6 and 6 desk revisions,
+and the probe was fixed. Gateway journal: both members carry traffic; one
+chatgpt 429 at 21:53:02.
+
+Carried, not proven on staging:
+
+- the `model_failover` event: run events are not owner-readable until
+  Cut 0's trace export; unit tests are the shape evidence until then;
+- `GET /provider/v1/models` needs computer credentials; unit tested only;
+- a research child named explicitly by model (children were assigned by
+  hash; the explicit path is unit tested).
+
+Residual: Node B's hand-written gateway env still lists gpt-5.5, gpt-5.4
+and gpt-5.4-mini in GATEWAY_CHATGPT_MODELS. The catalog refuses them, so
+the line is stale but harmless; rerunning nix/deploy-provider-creds.sh
+(an owner host step) rewrites it.
+
 ## Where it sits
 
 This lands before Cut 0, as station M0. Cut 0's baselines are then
