@@ -167,22 +167,6 @@ export function sourceEntitySnapshotWarnings(entity: any): string[] {
     .slice(0, 8);
 }
 
-export function sourceEntityDisplayPolicy(entity: any): string {
-  const record = sourceEntityRecord(entity);
-  const raw = String(
-    entity?.display_policy ||
-    entity?.display?.display_policy ||
-    entity?.display?.inline_mode ||
-    record?.display_policy ||
-    record?.display?.display_policy ||
-    record?.display?.inline_mode ||
-    ''
-  ).trim();
-  if (raw === 'embedded_excerpt' || raw === 'embedded_preview' || raw === 'expanded' || raw === 'collapsed_citation') return raw;
-  if (sourceEntityExcerptText(entity)) return 'embedded_excerpt';
-  return 'collapsed_citation';
-}
-
 export function sourceEntityKindLabel(kind: unknown): string {
   const normalized = String(kind || '').replace(/_/g, ' ');
   return normalized || 'source';

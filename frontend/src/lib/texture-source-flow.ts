@@ -180,14 +180,6 @@ export function layoutSourceJournalFlowBlocks(options: SourceJournalFlowBlocksOp
   };
 }
 
-export function layoutSourceJournalFlow(options: SourceJournalFlowOptions): SourceJournalFlowLayout {
-  return layoutSourceJournalFlowBlocks({
-    ...options,
-    blocks: [{ text: options.text }],
-    paragraphGap: 0,
-  });
-}
-
 function sourceFlowFont(paragraph: Element): string {
   if (typeof getComputedStyle !== 'function') return '16px serif';
   const style = getComputedStyle(paragraph);

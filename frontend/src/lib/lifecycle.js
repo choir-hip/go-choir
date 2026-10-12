@@ -10,23 +10,6 @@ function requireDurableWorkSchema(value, label) {
 }
 
 
-
-export async function getLifecycleEvents(trajectoryId, options = {}) {
-  if (!trajectoryId) throw new Error('Lifecycle trajectory ID is required')
-  const after = Number.isSafeInteger(options.after) && options.after >= 0 ? options.after : 0
-  const limit = Number.isSafeInteger(options.limit) && options.limit > 0 ? options.limit : 100
-  const response = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}/events?after=${after}&limit=${limit}`)
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-    throw new Error(error.reason || error.error || `Lifecycle events failed (${response.status})`)
-  }
-  return requireDurableWorkSchema(await response.json(), 'Lifecycle events');
-}
-
-
-
-
-
 export async function getLifecycleSnapshot(trajectoryId) {
   if (!trajectoryId) {
     throw new Error('Trajectory ID is required');

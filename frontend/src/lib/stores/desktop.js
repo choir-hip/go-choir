@@ -264,11 +264,6 @@ export const selectedIconId = writable('');
 
 // ---- Derived stores ----
 
-/** Minimized windows (shown in the prompt surface tray) */
-export const minimizedWindows = derived(windows, ($windows) =>
-  $windows.filter((w) => w.mode === 'minimized')
-);
-
 /** Open windows (shown in the prompt surface tray) */
 export const openWindows = derived(windows, ($windows) =>
   $windows.filter((w) => w.mode !== 'closed' && w.mode !== 'hidden')

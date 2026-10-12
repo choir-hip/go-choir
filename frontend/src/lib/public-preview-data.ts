@@ -159,29 +159,6 @@ export const previewTextureDocument = {
   ],
 };
 
-export const previewEmailMessages = [
-  {
-    id: 'preview-email-1',
-    direction: 'inbound',
-    from_address: 'preview@choir.news',
-    subject: 'Email preview',
-    snippet: 'This mailbox is local preview data. Real aliases, drafts, and sending require sign-in.',
-    trust_status: 'public-preview',
-    received_at: '2026-05-29T09:00:00Z',
-    has_attachments: false,
-  },
-  {
-    id: 'preview-email-2',
-    direction: 'draft',
-    from_address: 'preview@choir.news',
-    subject: 'Draft: sign-in required',
-    snippet: 'Compose and send actions are locked until a real mailbox is connected.',
-    trust_status: 'draft-preview',
-    created_at: '2026-05-29T09:02:00Z',
-    has_attachments: false,
-  },
-];
-
 export const previewPodcastItems = [
   {
     content_id: 'preview-podcast-1',

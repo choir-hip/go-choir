@@ -419,10 +419,6 @@ function opaqueColor(value: string | undefined, fallback: string): string {
   return color || fallback;
 }
 
-export function themeStyleString(theme: unknown = DEFAULT_THEME): string {
-  return Object.entries(themeCSSVariables(theme)).map(([key, value]) => `${key}: ${value}`).join('; ');
-}
-
 export function applyThemeToElement(element: HTMLElement | null | undefined, theme: unknown = DEFAULT_THEME): Record<string, string> {
   const normalized = normalizeThemeConfig(theme);
   const variables = themeCSSVariables(normalized);
