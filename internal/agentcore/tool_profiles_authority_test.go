@@ -74,7 +74,7 @@ func TestTextureRegistryHasNoGenericCancellationOrCapsuleLifecycleAuthority(t *t
 		t.Fatalf("install tools: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
-	for _, name := range []string{"cancel_agent", "assign_co_super", "cancel_co_super_assignment", "spawn_capsule", "destroy_capsule", "capsule_exec"} {
+	for _, name := range []string{"cancel_agent", "assign_co_super", "cancel_co_super_assignment", "capsule_exec"} {
 		if _, ok := registry.Lookup(name); ok {
 			t.Fatalf("Texture exposes forbidden generic cancellation/capsule tool %q", name)
 		}
@@ -102,9 +102,8 @@ func TestDelegatedEngineeringCannotReachHostEffectToolsOrCallbacks(t *testing.T)
 		// Owner decisions and product-authority writes.
 		"record_texture_decision", "patch_texture", "rewrite_texture",
 		"request_email_draft", "product_api_request",
-		// Capsule lifecycle and capsule-local execution are absent from the static
-		// host registry; exact assignments receive a per-run overlay only.
-		"spawn_capsule", "destroy_capsule", "list_capsules", "inspect_capsule",
+		// Capsule-local execution is absent from the static host registry;
+		// exact assignments receive a per-run overlay only.
 		"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "record_assignment_result",
 		// Agent lifecycle authority is distinct from result reporting.
 		"spawn_agent", "cancel_agent",
@@ -131,7 +130,7 @@ func TestAssignedEngineeringBuilderIsExactClosedSet(t *testing.T) {
 	if got := registryToolNames(registry); !slices.Equal(got, want) {
 		t.Fatalf("assigned registry tools = %v, want exact %v", got, want)
 	}
-	for _, absent := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "read_file", "glob", "grep", "save_evidence", "verify_model_capability", "spawn_agent", "spawn_capsule", "destroy_capsule", "propose_effect", "finalize_effect", "materialize_self_development", "create_checkpoint"} {
+	for _, absent := range []string{"capsule_exec", "capsule_read_file", "capsule_write_file", "capsule_list_dir", "read_file", "glob", "grep", "save_evidence", "verify_model_capability", "spawn_agent", "propose_effect", "finalize_effect", "materialize_self_development", "create_checkpoint"} {
 		if _, ok := registry.Lookup(absent); ok {
 			t.Fatalf("assigned registry inherited forbidden callback %q", absent)
 		}
@@ -169,7 +168,7 @@ func TestAssignedEngineeringCancellationIsAVerbNotATool(t *testing.T) {
 		t.Fatalf("install tools: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(agentprofile.Management)
-	for _, name := range []string{"assign_co_super", "cancel_co_super_assignment", "report_to_texture", "spawn_capsule"} {
+	for _, name := range []string{"assign_co_super", "cancel_co_super_assignment", "report_to_texture"} {
 		if _, ok := registry.Lookup(name); ok {
 			t.Fatalf("management desk exposes deleted typed tool %q", name)
 		}
@@ -249,7 +248,7 @@ func TestPersistentManagementReportIsAVerbNotATool(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry := rt.ToolRegistryForProfile(agentprofile.Management)
-	for _, name := range []string{"report_to_texture", "assign_co_super", "cancel_co_super_assignment", "spawn_capsule"} {
+	for _, name := range []string{"report_to_texture", "assign_co_super", "cancel_co_super_assignment"} {
 		if _, ok := registry.Lookup(name); ok {
 			t.Fatalf("capsule-unavailable Management exposes deleted tool %s", name)
 		}

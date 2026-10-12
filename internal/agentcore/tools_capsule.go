@@ -3,9 +3,7 @@ package agentcore
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -68,20 +66,6 @@ func capsuleCtxFromCtx(ctx context.Context) *CapsuleToolCtx {
 	return value
 }
 
-// RegisterCapsuleTools installs conductor-only lifecycle tools. Grant minting
-// is deliberately absent: guest core grants processor handles while creating a
-// child run, never through a model-callable tool.
-func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
-	for _, tool := range []toolregistry.Tool{
-		newSpawnCapsuleTool(), newDestroyCapsuleTool(), newListCapsulesTool(), newInspectCapsuleTool(),
-	} {
-		if err := registry.Register(tool); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // RegisterCapsuleLocalTools installs the sole JSON escape hatch scoped to an
 // already-bound capsule. All engineering effects are in-cell affordances
 // staged through choir functions and authored by the reducer.
@@ -136,102 +120,6 @@ func requireCapsuleMutationRole(ctx context.Context) (*CapsuleToolCtx, error) {
 		return nil, fmt.Errorf("capsule mutation requires an exact bound writable Engineering assignment")
 	}
 	return toolCtx, nil
-}
-
-func newSpawnCapsuleTool() toolregistry.Tool {
-	type args struct {
-		MemoryMaxMB int64 `json:"memory_max_mb"`
-		CPUQuota    int64 `json:"cpu_quota"`
-		PidsMax     int64 `json:"pids_max"`
-	}
-	return toolregistry.Tool{
-		Name:        "spawn_capsule",
-		Description: "Create an isolated, networkless work capsule and return an opaque lifecycle handle.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"memory_max_mb": map[string]any{"type": "integer"},
-			"cpu_quota":     map[string]any{"type": "integer"},
-			"pids_max":      map[string]any{"type": "integer"},
-		}, nil, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleManagement)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			if input.MemoryMaxMB == 0 {
-				input.MemoryMaxMB = 1024
-			}
-			if input.CPUQuota == 0 {
-				input.CPUQuota = 100000
-			}
-			if input.PidsMax == 0 {
-				input.PidsMax = 256
-			}
-			id, err := randomCapsuleID()
-			if err != nil {
-				return "", err
-			}
-			created, err := toolCtx.Executor.Spawn(ctx, capsule.SpawnSpec{
-				CapsuleID: id, OwnerRunID: toolCtx.AgentRunID,
-				MemoryMax: input.MemoryMaxMB * 1024 * 1024,
-				CpuQuota:  input.CPUQuota, CpuPeriod: 100000, PidsMax: input.PidsMax,
-			})
-			if err != nil {
-				return "", err
-			}
-			handle, err := toolCtx.Executor.ControlHandle(toolCtx.AgentRunID, created.ID)
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(map[string]any{"handle": handle, "state": created.State.String(), "source_snapshot_digest": created.SourceSnapshotDigest})
-		},
-	}
-}
-
-func newDestroyCapsuleTool() toolregistry.Tool {
-	type args struct {
-		Handle string `json:"handle"`
-		Force  bool   `json:"force"`
-	}
-	return toolregistry.Tool{
-		Name:        "destroy_capsule",
-		Description: "Destroy the capsule identified by an opaque lifecycle handle.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"handle": map[string]any{"type": "string"}, "force": map[string]any{"type": "boolean"},
-		}, []string{"handle"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleManagement)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			if err := toolCtx.Executor.DestroyOwned(ctx, toolCtx.AgentRunID, input.Handle, input.Force); err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(map[string]any{"handle": input.Handle, "destroyed": true})
-		},
-	}
-}
-
-func newListCapsulesTool() toolregistry.Tool {
-	return toolregistry.Tool{
-		Name: "list_capsules", Description: "List this conductor run's capsules by opaque handle.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{}, nil, false),
-		Func: func(ctx context.Context, _ json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleManagement)
-			if err != nil {
-				return "", err
-			}
-			items := toolCtx.Executor.ListOwned(toolCtx.AgentRunID)
-			return toolregistry.ResultJSON(map[string]any{"capsules": items, "count": len(items)})
-		},
-	}
 }
 
 // freezeCapsuleEffectBundle classifies and freezes the capsule diff as a
@@ -637,31 +525,6 @@ func finalizeVerifiedCapsuleBundle(ctx context.Context, toolCtx *CapsuleToolCtx,
 	})
 }
 
-func newInspectCapsuleTool() toolregistry.Tool {
-	type args struct {
-		Handle string `json:"handle"`
-	}
-	return toolregistry.Tool{
-		Name: "inspect_capsule", Description: "Inspect the safe lifecycle projection for an opaque capsule handle.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{"handle": map[string]any{"type": "string"}}, []string{"handle"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleManagement)
-			if err != nil {
-				return "", err
-			}
-			var input args
-			if err := json.Unmarshal(raw, &input); err != nil {
-				return "", err
-			}
-			summary, err := toolCtx.Executor.InspectOwned(toolCtx.AgentRunID, input.Handle)
-			if err != nil {
-				return "", err
-			}
-			return toolregistry.ResultJSON(summary)
-		},
-	}
-}
-
 // newCapsuleGoEvalTool evaluates model-authored Go source inside the assigned
 // capsule through the broker. It is Engineering-only for now: the Research
 // Go-only profile requires a Research capsule-context injection path in
@@ -748,14 +611,6 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			return toolregistry.ResultJSON(result)
 		},
 	}
-}
-
-func randomCapsuleID() (string, error) {
-	var value [16]byte
-	if _, err := rand.Read(value[:]); err != nil {
-		return "", fmt.Errorf("capsule identity: %w", err)
-	}
-	return "capsule-" + hex.EncodeToString(value[:]), nil
 }
 
 func sortedUniqueStrings(values []string) []string {
