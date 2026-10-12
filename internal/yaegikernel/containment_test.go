@@ -8,7 +8,7 @@ import (
 )
 
 func TestContainmentInfiniteLoopTimeout(t *testing.T) {
-	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+	evaluator := newSessionEvaluator(NewDefaultSafeAllowlist(), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
@@ -37,7 +37,7 @@ func main() {
 }
 
 func TestContainmentPanicRecovery(t *testing.T) {
-	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+	evaluator := newSessionEvaluator(NewDefaultSafeAllowlist(), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -62,7 +62,7 @@ func main() {
 // an unbounded wait — the resource experiment's cancellation case. A blocked
 // program must not hang the evaluator past the context deadline.
 func TestContainmentContextCancellationKillsBlockedProgram(t *testing.T) {
-	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+	evaluator := newSessionEvaluator(NewDefaultSafeAllowlist(), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 

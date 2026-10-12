@@ -1,18 +1,16 @@
 package yaegikernel
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/traefik/yaegi/interp"
 )
 
 func TestRefuseBannedPackages(t *testing.T) {
-	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+	evaluator := newSessionEvaluator(NewDefaultSafeAllowlist(), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -45,7 +43,7 @@ func TestRefuseBannedPackages(t *testing.T) {
 }
 
 func TestRefuseUnlistedPackage(t *testing.T) {
-	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+	evaluator := newSessionEvaluator(NewDefaultSafeAllowlist(), nil)
 	ctx := context.Background()
 
 	src := `import "github.com/traefik/yaegi/interp"; func main() {}`
@@ -59,7 +57,7 @@ func TestRefuseUnlistedPackage(t *testing.T) {
 }
 
 func TestAllowSafeStdlib(t *testing.T) {
-	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+	evaluator := newSessionEvaluator(NewDefaultSafeAllowlist(), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -93,32 +91,11 @@ func main() {
 // cannot be statically parsed is refused rather than silently proceeding to the
 // interpreter (the allowlist-bypass risk).
 func TestCheckImportsFailClosedOnParseError(t *testing.T) {
-	evaluator := NewEvaluator(NewDefaultSafeAllowlist(), nil)
-
 	// A snippet whose import block cannot be parsed (no package clause, unbalanced
 	// braces) must be refused by CheckImports, not pass through with nil.
 	src := `import "os/exec"; func main() {`
-	if err := evaluator.CheckImports(src); err == nil {
+	if err := checkImports(NewDefaultSafeAllowlist(), src); err == nil {
 		t.Fatalf("expected CheckImports to fail closed on unparseable import block, got nil")
-	}
-}
-
-// TestRunSubprocessFailClosedWithoutWorker asserts that RunSubprocess refuses to
-// fall back to in-process execution when no worker binary is configured — the
-// process-isolation boundary is the safety contract.
-func TestRunSubprocessFailClosedWithoutWorker(t *testing.T) {
-	runner := NewSidecarRunner(SidecarConfig{
-		Timeout:         1 * time.Second,
-		MaxOutputBytes:  1024,
-		AllowedPackages: []string{"fmt"},
-	})
-	ctx := context.Background()
-	_, err := runner.RunSubprocess(ctx, `package main; import "fmt"; func main() { fmt.Println("x") }`)
-	if err == nil {
-		t.Fatalf("expected RunSubprocess to fail closed without WorkerBinaryPath, got nil")
-	}
-	if !strings.Contains(err.Error(), "fail closed") {
-		t.Fatalf("expected fail-closed error message, got %v", err)
 	}
 }
 
@@ -127,7 +104,7 @@ func TestRunSubprocessFailClosedWithoutWorker(t *testing.T) {
 // empty allowlist that rejects every safe package (nor accepts any package).
 func TestEmptyAllowlistDefaultsToSafe(t *testing.T) {
 	// An empty allowlist must still admit safe packages.
-	e := NewEvaluator(NewAllowlist(), nil)
+	e := newSessionEvaluator(NewAllowlist(), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	res, err := e.Eval(ctx, `package main; import "fmt"; func main(){ fmt.Println("ok") }`)
@@ -152,7 +129,7 @@ func TestEmptyAllowlistDefaultsToSafe(t *testing.T) {
 func TestCannotExpandPackagesPastServerAllowlist(t *testing.T) {
 	// A request allowlisting only "fmt" must refuse "go/parser" even if the
 	// model tried to widen it, because the effective set is server-owned.
-	e := NewEvaluator(NewAllowlist("fmt"), nil)
+	e := newSessionEvaluator(NewAllowlist("fmt"), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := e.Eval(ctx, `package main; import "go/parser"; func main(){}`)
@@ -161,46 +138,11 @@ func TestCannotExpandPackagesPastServerAllowlist(t *testing.T) {
 	}
 }
 
-// TestExecuteWorkerStdinRoundTrip verifies the standalone worker contract
-// end-to-end: feeding a SidecarRequest JSON on stdin produces a
-// SidecarResponse JSON on stdout with the evaluated program output. It re-execs
-// the test binary as a subprocess running ExecuteWorkerStdin.
-func TestExecuteWorkerStdinRoundTrip(t *testing.T) {
-	if os.Getenv("YAEGI_WORKER_EXEC") == "1" {
-		ExecuteWorkerStdin()
-		return
-	}
-	req, _ := json.Marshal(SidecarRequest{
-		Source:          `package main; import "fmt"; func main(){ fmt.Print("worker-ok") }`,
-		AllowedPackages: []string{"fmt"},
-	})
-	cmd := exec.Command(os.Args[0], "-test.run=TestExecuteWorkerStdinRoundTrip")
-	cmd.Env = append(os.Environ(), "YAEGI_WORKER_EXEC=1")
-	cmd.Stdin = bytes.NewReader(req)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("worker subprocess failed: %v stderr=%s", err, stderr.String())
-	}
-	var resp SidecarResponse
-	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal worker response: %v (raw=%q)", err, out.String())
-	}
-	if resp.Error != "" {
-		t.Fatalf("worker returned error: %s", resp.Error)
-	}
-	if !strings.Contains(resp.Stdout, "worker-ok") {
-		t.Fatalf("expected worker output, got stdout=%q", resp.Stdout)
-	}
-}
-
 // TestEvalOutputOverflowFailsClosed asserts that a model-authored program which
 // prints well beyond maxEvalOutputBytes is cut off and returns an overflow
 // error, rather than consuming unbounded memory.
 func TestEvalOutputOverflowFailsClosed(t *testing.T) {
-	e := NewEvaluator(NewDefaultSafeAllowlist(), nil)
+	e := newSessionEvaluator(NewDefaultSafeAllowlist(), nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	src := `package main
@@ -219,4 +161,25 @@ func main() {
 	if len(res.Stdout) > maxEvalOutputBytes {
 		t.Fatalf("stdout exceeded cap: got %d bytes, cap %d", len(res.Stdout), maxEvalOutputBytes)
 	}
+}
+
+// sessionEvaluator runs each source in a fresh live Session (the path desk
+// cells take), so the containment and refusal contracts are pinned on the
+// interpreter the product uses, not on a one-shot prototype.
+type sessionEvaluator struct {
+	allowlist *Allowlist
+	extra     interp.Exports
+}
+
+func newSessionEvaluator(allowlist *Allowlist, extra interp.Exports) *sessionEvaluator {
+	return &sessionEvaluator{allowlist: allowlist, extra: extra}
+}
+
+func (e *sessionEvaluator) Eval(ctx context.Context, src string) (EvalResult, error) {
+	sess, err := NewSession(e.allowlist, e.extra)
+	if err != nil {
+		return EvalResult{}, err
+	}
+	defer sess.Close()
+	return sess.Eval(ctx, src)
 }

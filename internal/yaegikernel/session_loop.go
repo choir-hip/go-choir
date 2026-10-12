@@ -81,24 +81,10 @@ type SessionResult struct {
 	DiagKind DiagnosticKind   `json:"diag_kind,omitempty"`
 }
 
-// RunSessionLoop serves framed eval cells on r/w using a single persistent
-// Session: variables, imports, and definitions survive across frames until a
-// close frame, EOF, or a failed cell. A failed cell poisons the session and
-// the loop exits non-zero so the broker respawns a clean worker (poisoned
-func RunSessionLoop(r io.Reader, w io.Writer, newSession func() (*Session, error)) error {
-	return RunSessionLoopWithDrain(r, w, newSession, nil)
-}
-
-// RunSessionLoopWithDrain serves the same framed loop but attaches
-// worker-local assign/message receipts recorded during each cell (via drain,
-// nil to skip) to that cell's SessionResult, so the host reconciles outcomes
-// without trusting worker memory as durable state.
-func RunSessionLoopWithDrain(r io.Reader, w io.Writer, newSession func() (*Session, error), drain func() []string) error {
-	return RunSessionLoopWithDrainAndHooks(r, w, newSession, drain, nil)
-}
-
-// RunSessionLoopWithDrainAndHooks is RunSessionLoopWithDrain with per-cell
-// tray/inbox binding for RLM reduction. Nil hooks preserve legacy behavior.
+// RunSessionLoopWithDrainAndHooks serves newline-delimited SessionFrames from
+// r and writes one SessionResult per frame to w, with an optional receipt
+// drain and per-cell tray/inbox binding for RLM reduction (nil hooks bind
+// nothing).
 func RunSessionLoopWithDrainAndHooks(r io.Reader, w io.Writer, newSession func() (*Session, error), drain func() []string, hooks *CellHooks) error {
 	sess, err := newSession()
 	if err != nil {
@@ -299,16 +285,9 @@ func endsInBareExpression(source string) bool {
 	return true
 }
 
-// RunSessionLoopFramed serves eval cells over the multiplexed session socket
-// (Step 2 transport): StreamCell frames carry SessionFrame JSON in and
-// SessionResult JSON out. StreamCancel abandons the in-flight cell and
-// poisons the session. Reserved output streams are tolerated and ignored.
-func RunSessionLoopFramed(fc *FramedConn, newSession func() (*Session, error), drain func() []string) error {
-	return RunSessionLoopFramedWithHooks(fc, newSession, drain, nil)
-}
-
-// RunSessionLoopFramedWithHooks is RunSessionLoopFramed with per-cell
-// tray/inbox binding for RLM reduction. Nil hooks preserve legacy behavior.
+// RunSessionLoopFramedWithHooks serves SessionFrames over a FramedConn, with
+// an optional receipt drain and per-cell tray/inbox binding for RLM
+// reduction (nil hooks bind nothing).
 func RunSessionLoopFramedWithHooks(fc *FramedConn, newSession func() (*Session, error), drain func() []string, hooks *CellHooks) error {
 	sess, err := newSession()
 	if err != nil {

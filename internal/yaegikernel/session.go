@@ -75,8 +75,8 @@ func (w *switchWriter) setTarget(target io.Writer) {
 	w.target = target
 }
 
-// NewSession creates a persistent interpreter with the same allowlisted
-// symbol surface as NewEvaluator. Symbols are loaded once; every cell shares
+// NewSession creates a persistent interpreter over the allowlisted symbol
+// surface. Symbols are loaded once; every cell shares
 // them, so prebound modules (Def 2 item 3) are bound once per activation.
 func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, error) {
 	if allowlist == nil {
@@ -353,7 +353,7 @@ func (s *Session) checkImports(src string) error {
 	if s == nil || s.allowlist == nil {
 		return fmt.Errorf("yaegi: session allowlist unavailable")
 	}
-	return (&Evaluator{allowlist: s.allowlist}).CheckImports(src)
+	return checkImports(s.allowlist, src)
 }
 
 // ErrorHint names the desk's choir surface when a cell's failure is about

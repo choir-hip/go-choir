@@ -239,9 +239,9 @@ func TestSessionLoopSurvivesCompileRejection(t *testing.T) {
 		input.WriteByte('\n')
 	}
 	var output bytes.Buffer
-	if err := RunSessionLoop(strings.NewReader(input.String()), &output, func() (*Session, error) {
+	if err := RunSessionLoopWithDrainAndHooks(strings.NewReader(input.String()), &output, func() (*Session, error) {
 		return NewSession(nil, nil)
-	}); err != nil {
+	}, nil, nil); err != nil {
 		t.Fatalf("loop must survive compile rejection: %v", err)
 	}
 	dec := json.NewDecoder(&output)

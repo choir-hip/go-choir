@@ -2,12 +2,10 @@ package yaegikernel
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
-	"io"
 	"reflect"
 	"strings"
 	"sync"
@@ -80,26 +78,8 @@ func AsEvalError(err error) (*EvalError, bool) {
 	return nil, false
 }
 
-// Evaluator evaluates model-authored Go source code in a constrained Yaegi interpreter.
-type Evaluator struct {
-	allowlist *Allowlist
-	symbols   interp.Exports
-}
-
-// NewEvaluator creates a new Evaluator with the specified allowlist and optional exported symbols.
-func NewEvaluator(allowlist *Allowlist, extraSymbols interp.Exports) *Evaluator {
-	if allowlist == nil {
-		allowlist = NewDefaultSafeAllowlist()
-	}
-	return &Evaluator{
-		allowlist: allowlist,
-		symbols:   buildFilteredSymbols(allowlist, extraSymbols),
-	}
-}
-
 // buildFilteredSymbols merges allowlisted stdlib symbols with extra custom
-// symbols (e.g. choir client bindings). Shared by one-shot Evaluator and the
-// persistent Session so both enforce the identical symbol surface.
+// symbols (e.g. choir client bindings) for the persistent Session.
 func buildFilteredSymbols(allowlist *Allowlist, extraSymbols interp.Exports) interp.Exports {
 	filteredSymbols := make(interp.Exports)
 	for pkgKey, symbols := range stdlib.Symbols {
@@ -116,9 +96,9 @@ func buildFilteredSymbols(allowlist *Allowlist, extraSymbols interp.Exports) int
 	return filteredSymbols
 }
 
-// CheckImports statically inspects Go source code and returns an error if any
+// checkImports statically inspects Go source code and returns an error if any
 // import is not permitted under the allowlist.
-func (e *Evaluator) CheckImports(src string) error {
+func checkImports(allowlist *Allowlist, src string) error {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, "src.go", src, parser.ImportsOnly)
 	if err != nil {
@@ -134,107 +114,11 @@ func (e *Evaluator) CheckImports(src string) error {
 
 	for _, imp := range node.Imports {
 		path := imp.Path.Value
-		if err := e.allowlist.IsAllowed(path); err != nil {
+		if err := allowlist.IsAllowed(path); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// Eval executes the Go source code with timeout and output capture.
-func (e *Evaluator) Eval(ctx context.Context, src string) (EvalResult, error) {
-	start := time.Now()
-	res := EvalResult{}
-	// Static check first to fail fast on disallowed imports
-	if err := e.CheckImports(src); err != nil {
-		res.Duration = time.Since(start)
-		return res, err
-	}
-
-	// Bounded, concurrency-safe output capture: a model-authored program that
-	// prints indefinitely must be cut off at MaxOutputBytes (via a second worker
-	// context cancel), or it can consume the capsule memory limit before the
-	// broker's own post-eval cap is reached.
-	stdoutCap := &cappedBuffer{max: maxEvalOutputBytes}
-	stderrCap := &cappedBuffer{max: maxEvalOutputBytes}
-	stdoutOverflow := make(chan struct{}, 1)
-	stderrOverflow := make(chan struct{}, 1)
-	wrapOverflow := func(ch chan struct{}, b *cappedBuffer) io.Writer {
-		return &overflowWriter{c: b, notify: ch}
-	}
-	i := interp.New(interp.Options{
-		Stdout: wrapOverflow(stdoutOverflow, stdoutCap),
-		Stderr: wrapOverflow(stderrOverflow, stderrCap),
-	})
-
-	if err := i.Use(e.symbols); err != nil {
-		res.Duration = time.Since(start)
-		return res, fmt.Errorf("yaegi: load symbols: %w", err)
-	}
-
-	done := make(chan struct{})
-	var val reflect.Value
-	var evalErr error
-	// outCtx derives from ctx so it inherits the caller's deadline but can also
-	// be cancelled on output overflow. Declared before the goroutine uses it.
-	outCtx, outCancel := context.WithCancel(ctx)
-	defer outCancel()
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				evalErr = fmt.Errorf("yaegi panic: %v", r)
-			}
-			close(done)
-		}()
-		val, evalErr = i.EvalWithContext(outCtx, src)
-	}()
-
-	// Kill the interpreter on output overflow by cancelling its own context.
-	// The interpreter runs on outCtx (already declared above) so cancelling it
-	// on overflow actually terminates EvalWithContext rather than leaving a
-	// runaway goroutine. A watcher goroutine cancels outCtx the moment an
-	// overflow fires, so the select below wakes on overflow rather than waiting
-	// for the program to finish.
-	overflowed := make(chan struct{}, 1)
-	go func() {
-		select {
-		case <-stdoutOverflow:
-			outCancel()
-		case <-stderrOverflow:
-			outCancel()
-		case <-done:
-			return
-		}
-		select {
-		case overflowed <- struct{}{}:
-		default:
-		}
-	}()
-
-	select {
-	case <-outCtx.Done():
-		res.Stdout = stdoutCap.String()
-		res.Stderr = stderrCap.String()
-		res.Duration = time.Since(start)
-		select {
-		case <-overflowed:
-			return res, fmt.Errorf("yaegi: evaluation output exceeded limit")
-		default:
-		}
-		return res, fmt.Errorf("yaegi: evaluation timed out: %w", outCtx.Err())
-	case <-done:
-		res.Stdout = stdoutCap.String()
-		res.Stderr = stderrCap.String()
-		res.Value = val
-		res.Duration = time.Since(start)
-		select {
-		case <-overflowed:
-			return res, fmt.Errorf("yaegi: evaluation output exceeded limit")
-		default:
-			return res, evalErr
-		}
-	}
 }
 
 func cleanImportPathFromSymbolKey(key string) string {
