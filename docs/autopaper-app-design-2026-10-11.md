@@ -1,5 +1,7 @@
 # Autopaper app design: the news UI on the protocol
 
+> **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): Publishing changes from one permalink per document to one immutable permalink per version, with chevrons and a "new version available" control; captures share Texture's block model.
+
 Date: 2026-10-11. Status: **design draft for owner review; nothing built.**
 Mutation class of this document: green. The work it proposes ranges from
 orange (the app) to red (publication routes, the Texture citation

@@ -1,5 +1,7 @@
 # Predictions required and scoring: design for protocol stations P3 and P4
 
+> **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): Runtime scoring is withdrawn: scoring needs intelligence (Jev, a model or an RLM, often from several perspectives). The prediction shape is replaced by hypothesis-shaped Casts.
+
 Draft for owner review, 2026-10-11. Stations P3 (predictions required) and
 P4 (scoring) of
 [definitions/choir-precommitment-protocol-metamission-2026-10-11.md](definitions/choir-precommitment-protocol-metamission-2026-10-11.md).

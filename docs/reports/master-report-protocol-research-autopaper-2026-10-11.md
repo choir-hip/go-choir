@@ -1,5 +1,7 @@
 # Choir master report: the protocol, research, and Autopaper 2026-10-11
 
+> **Revised 2026-10-12.** The owner's line-by-line review changed several proposals here: no runtime-owned research job and no budgets, async search instead of the deadline ladder, a permalink per version, no runtime scoring, and "research has no loop" corrected (it loops within a run; what it lacks is a way to end or continue its own work). The research-job and deadline-ladder drafts named below are deleted. See [../re-engineering-decisions-2026-10-12.md](../re-engineering-decisions-2026-10-12.md).
+
 Written Sunday, October eleventh, late evening UTC. It covers the whole day since you decided that precommitment records are the protocol between agents, about ten hours of work. The last two hours were research and design only, at your request, done by seven research agents whose key claims I checked against the code.
 
 Research's real problem is not search: it has no loop, so each round ends after one short report, and almost everything it finds is dropped before Texture sees it.

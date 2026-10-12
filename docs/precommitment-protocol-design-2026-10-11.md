@@ -1,5 +1,7 @@
 # One protocol between agents: precommitment records
 
+> **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): §4-5 are revised: a Cast carries hypotheses, open uncertainties and general hypotheses (not count questions with a deadline), and resolution or scoring is done by intelligence (a model, Jev or an RLM), not by runtime counting. Work becomes a fold over records, which absorbs P2d2.
+
 Draft for owner review, 2026-10-11. Owner direction (2026-10-11): "lock
 down the system so that all interagent comms are done through the
 precommitment records protocol. That's the real design ... Gotta bring the

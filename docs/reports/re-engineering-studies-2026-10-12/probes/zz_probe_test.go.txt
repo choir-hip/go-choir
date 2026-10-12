@@ -1,0 +1,81 @@
+package yaegikernel
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestZZAsyncProbe(t *testing.T) {
+	s, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(src string) {
+		res, err := s.Eval(context.Background(), src)
+		out := res.Stdout
+		if err == nil {
+			out += s.showListedNames(src)
+			out += describeCellValue(src, res.Value)
+		}
+		t.Logf("cell dur=%v err=%v stdout=%q", res.Duration.Round(time.Millisecond), err, out)
+	}
+	run(`import "time"`)
+	run(`type Hit struct{ P string; N int }`)
+	run(`ch := make(chan Hit, 8)
+got := []Hit{}
+for _, p := range []string{"fast", "mid", "slow"} {
+	p := p
+	go func() {
+		d := map[string]int{"fast": 50, "mid": 300, "slow": 900}[p]
+		time.Sleep(time.Duration(d) * time.Millisecond)
+		ch <- Hit{p, d}
+	}()
+}
+select {
+case h := <-ch:
+	got = append(got, h)
+case <-time.After(2 * time.Second):
+}
+len(got)`)
+	time.Sleep(400 * time.Millisecond)
+	run(`drain := func() int {
+	n := 0
+	for {
+		select {
+		case h := <-ch:
+			got = append(got, h)
+			n++
+		default:
+			return n
+		}
+	}
+}
+drain()`)
+	time.Sleep(700 * time.Millisecond)
+	run(`drain()
+got`)
+	run(`go func(){ time.Sleep(100*time.Millisecond); fmt.Println("late print from bg goroutine") }()
+1`)
+	time.Sleep(200 * time.Millisecond)
+	run(`2`)
+	run(`results := make(chan string, 4)
+go func(){ for _, d := range []int{100, 250, 600} { time.Sleep(time.Duration(d)*time.Millisecond); results <- fmt.Sprint("arrival ", d) } ; close(results) }()
+next := func(timeout time.Duration) string {
+	select {
+	case r, ok := <-results:
+		if !ok { return "done" }
+		return r
+	case <-time.After(timeout):
+		return "timeout"
+	}
+}
+next(time.Second)`)
+	run(`next(time.Second)`)
+	run(`next(time.Second)`)
+	run(`next(time.Second)`)
+	// goroutine still blocked when the session is poisoned/closed?
+	run(`go func(){ for { time.Sleep(50*time.Millisecond) } }()
+panic("boom")`)
+	run(`3`)
+}

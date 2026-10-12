@@ -1551,7 +1551,7 @@ nodes:
     depends_on: []
     enables: [choir-autopaper-w2-living-textures-2026-10-11]
   - id: choir-autopaper-w3a-reader-2026-10-11
-    title: W3a — the Autopaper reader (one permalink per story, public front page, story pages; old Universal Wire app deleted)
+    title: W3a — the Autopaper reader (a linked permalink per version, public front page, story pages; old Universal Wire app deleted)
     path: docs/definitions/choir-autopaper-w3a-reader-2026-10-11.md
     ledger: ''
     status: pending

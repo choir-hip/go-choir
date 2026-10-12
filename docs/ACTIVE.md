@@ -128,6 +128,24 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   ([`research-fanout`](definitions/choir-research-fanout-2026-10-10.md),
   receipts S1, S1b). PD2 (desk sessions keyed by agent) is deployed and
   running on staging; the research prompt is version 3 (receipts S1d, S1e).
+- **Re-engineering decisions (owner, 2026-10-12):**
+  [`re-engineering-decisions-2026-10-12.md`](re-engineering-decisions-2026-10-12.md),
+  agreed through an iterative review of the master report and six
+  read-only studies
+  ([studies](reports/re-engineering-studies-2026-10-12/README.md)).
+  Affordance invariant on every desk; intelligence in models, not the
+  runtime (no budgets, round caps, runtime research job or runtime
+  scoring); work as a fold over records (P2d2 becomes its Texture-inbox
+  stage; shape D not built); Casts carry hypotheses, uncertainties and
+  general hypotheses; async search into REPL state; Texture re-engineered
+  before any model comparison; captures in Texture's block model; a
+  permalink per version. Order of work: truthful prompts and deletions →
+  restart rule → records as work → async search and research → Texture
+  → document model and Autopaper. New problems:
+  [parallel `choir.*` calls cross-wire](problems/parallel-choir-calls-cross-wire-results-2026-10-12.md),
+  [crash restarts leave work open and re-cast engineering](problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md).
+  The research-job and deadline-ladder drafts are deleted. Stations for
+  the order of work are not yet authored.
 - **Owner review queue (2026-10-11 evening):** the
   [master report](reports/master-report-protocol-research-autopaper-2026-10-11.md)
   summarizes the day and seven research and design documents (research
@@ -151,8 +169,8 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   a record,
   [`p2d`](definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md))
   has P2d1 on staging (only a Cast to engineering opens an engineering
-  assignment); P2d2 is designed through two review rounds and waits for
-  the owner's review. Owner direction 2026-10-11 evening: research and
+  assignment); P2d2 becomes the Texture-inbox stage of the records-as-work
+  migration (owner 2026-10-12). Owner direction 2026-10-11 evening: research and
   design before building; predictions are mandatory (P3). P2d unblocks
   Autopaper W2. Deployed demos need a fresh test computer
   ([problem](problems/idle-test-computers-keep-old-builds-after-deploy-2026-10-11.md)).
@@ -160,9 +178,9 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   [`definitions/choir-autopaper-metamission-2026-10-11.md`](definitions/choir-autopaper-metamission-2026-10-11.md).
   The app is designed ([design](autopaper-app-design-2026-10-11.md)); the
   reader station W3a
-  ([`w3a`](definitions/choir-autopaper-w3a-reader-2026-10-11.md), drafted,
-  owner review) is proposed ahead of W2 because it needs nothing from the
-  held P2d2.
+  ([`w3a`](definitions/choir-autopaper-w3a-reader-2026-10-11.md), drafted;
+  revised 2026-10-12 to a linked permalink per version) needs nothing from
+  P2d2.
   Stations: W1 content in the graph (complete,
   [`w1`](definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md)),
   W2 living Textures (drafted,

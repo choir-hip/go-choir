@@ -56,19 +56,24 @@ finish:
   deliver: >-
     A logged-out reader at choir.news sees a front page of published story
     Textures, newest first, and opens one as a read-only story page with
-    its numbered sources. Republishing a document adds a version to that
-    document's one permalink, so a revised story stays one item on the
-    front page with an "updated" marker. The old Universal Wire app, its
-    route and its fixed claims are gone.
+    its numbered sources. Each published version of a story has its own
+    immutable permalink (/v<n>; v7's link always shows v7), linked to its
+    neighbours: chevrons move between versions, a "new version available"
+    control jumps to the latest, and the bare story link shows the latest
+    in place. A revised story stays one item on the front page with an
+    "updated" marker. The old Universal Wire app, its route and its fixed
+    claims are gone (owner 2026-10-12, docs/re-engineering-decisions-2026-10-12.md §8).
   artifact: >-
     Step 0, Prototype A (no deploy): a standalone page that takes a real
     PublicationBundle from staging's public resolve route and renders it
     with the existing renderers, judged at phone width (design §6 R3).
-    Step 1, one permalink per document: publishing a document that already
-    has a route appends a version to it instead of minting a new
-    publication; the version history shows each revision (design §6 R2
-    first reads PublishTextureToGraph for which per-publish objects a new
-    version needs). Step 2, the public front list: a GET route listing the
+    Step 1, a version chain per document: publishing a document that
+    already has a publication appends version n+1 with its own immutable
+    route /v<n+1>, sets latest_version_id and supersedes_version_id (the
+    columns exist; publishing hard-codes "v1" today), and stops copying
+    every past revision into each publish. The bundle carries prev, next
+    and latest for the chevrons and the "new version available" control
+    (study docs/reports/re-engineering-studies-2026-10-12/E-unified-document-model.md §5). Step 2, the public front list: a GET route listing the
     paper's published routes with title, dek, updated time and version
     count, served from the shared store, never from a paper computer.
     Step 3, the autopaper app: the front page and the story page, on the
@@ -78,7 +83,7 @@ finish:
     pages.
   acceptance:
     - Prototype A renders a real staging bundle at phone width without editor chrome (screenshot artifact)
-    - publishing the same document twice yields one route with two versions, and the front list shows it once, marked updated
+    - publishing the same document twice yields two immutable version permalinks linked by prev/next, the bare link shows v2, v1's link still shows v1, and the front list shows the story once, marked updated
     - a logged-out Playwright spec on staging opens the front page, opens a story, and sees its numbered sources and version history
     - no served route or app still renders the fixed claims (grep and a request against staging)
   rollback: >-
@@ -91,7 +96,7 @@ finish:
 value:
   better_means: grounded, current Textures readable at permalinks (the metamission's value criterion), visible before the protocol stations finish
   goodharting_would_be: a front page that looks like news while its sources are bare links, or a reader that flattens version history
-  realism_axis: Prototype A against staging bundles -> one-permalink publishing on staging -> logged-out front page and story on staging -> owner-opened AI news stories as the first content
+  realism_axis: Prototype A against staging bundles -> per-version linked permalinks on staging -> logged-out front page and story on staging -> owner-opened AI news stories as the first content
   mutation_class: red (publication and route projection) for steps 1 and 2; orange (app) for steps 3 and 4
   authority_sources:
     - docs/autopaper-sw-design-2026-10-09.md
@@ -115,8 +120,8 @@ now:
     id: W3a-1
     claim: >-
       The existing publication bundle and Texture renderers are enough for
-      a readable public news page once a document keeps one permalink, so
-      the reader needs no new content model.
+      a readable public news page once a document's versions are linked
+      permalinks, so the reader needs no new content model.
     test: Prototype A, then the logged-out Playwright spec on staging
     edge: missing_oracle
     delta_o: whether the renderers read well outside the editor at phone width
@@ -133,7 +138,7 @@ now:
     status: proposed
     evidence_ref: docs/autopaper-app-design-2026-10-11.md §5, §8
   belief:
-    believed_state: the public resolve route and renderers exist; one-permalink publishing and the front list do not
+    believed_state: the public resolve route and renderers exist; per-version linked permalinks and the front list do not
     main_uncertainty: how many per-publish objects a version-append needs (design §6 R2)
     next_observation: the owner's review, then Prototype A
   blocker_or_risk: owner review of the sequencing; publishing changes are red
@@ -146,8 +151,9 @@ receipts: []
 
 The AI news demo already produces story Textures, and staging can already
 serve a published Texture to a logged-out reader. What is missing is the
-paper around them: a front page, a story page outside the editor, and one
-permalink per story so a living story does not multiply. This station
+paper around them: a front page, a story page outside the editor, and a
+linked permalink per version so a living story stays one story while
+every version stays citable. This station
 builds that reader and deletes the old Universal Wire app, without
 touching the protocol work that is held for review.
 
@@ -155,13 +161,15 @@ Ways it can fail, written before the code:
 
 - the renderers depend on editor state and break on a public page
   (Prototype A finds this before any deploy);
-- appending a version to a route breaks the version history's hash chain
-  or its signatures (the version-append reuses the existing chain);
+- appending a version breaks the version history's hash chain or its
+  signatures (the version-append reuses the existing chain);
+- a version's permalink changes after a later publish (each /v<n> is
+  immutable; only the bare link moves);
 - the front list reads from a paper computer and fails when it sleeps
   (served from the shared store only);
-- a story published before this change and again after it gets two routes
-  (the first republish after the change links to the newest existing
-  route for that document);
+- a story published before this change and again after it gets two
+  unlinked publications (the first republish after the change links to
+  the newest existing publication for that document);
 - deleting the old app breaks a Desktop entry or a deep link (the old
   route redirects to the new front page for one release);
 - logged-out reads leak an owner-only document (only published routes are

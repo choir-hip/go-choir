@@ -1,0 +1,82 @@
+package yaegikernel
+
+import (
+	"context"
+	"reflect"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/traefik/yaegi/interp"
+)
+
+type ZZHit struct{ Provider, URL string }
+
+type ZZStore struct {
+	mu   sync.Mutex
+	hits map[string][]ZZHit
+}
+
+func (s *ZZStore) Len(id string) int { s.mu.Lock(); defer s.mu.Unlock(); return len(s.hits[id]) }
+func (s *ZZStore) Get(id string) []ZZHit {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]ZZHit(nil), s.hits[id]...)
+}
+func (s *ZZStore) add(id string, h ZZHit) { s.mu.Lock(); s.hits[id] = append(s.hits[id], h); s.mu.Unlock() }
+
+var zzRaw = map[string][]ZZHit{}
+
+func TestZZStoreProbe(t *testing.T) {
+	store := &ZZStore{hits: map[string][]ZZHit{}}
+	mode := "safe"
+	syms := interp.Exports{"probe/probe": {
+		"Searches": reflect.ValueOf(store),
+		"Raw":      reflect.ValueOf(&zzRaw).Elem(),
+	}}
+	al := NewAllowlist(append(DefaultSafeStdlibPackagesList(), "probe")...)
+	s, err := NewSession(al, syms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(src string) {
+		res, err := s.Eval(context.Background(), src)
+		out := res.Stdout
+		if err == nil {
+			out += describeCellValue(src, res.Value)
+		}
+		t.Logf("[%s] cell dur=%v err=%v out=%q", mode, res.Duration.Round(time.Millisecond), err, out)
+	}
+	run(`import "probe"`)
+	run(`import "time"`)
+	// host goroutine writes arrivals while a cell polls
+	go func() {
+		for i, p := range []string{"keenable", "parallel", "tavily"} {
+			time.Sleep(time.Duration(50*(i+1)) * time.Millisecond)
+			store.add("s3", ZZHit{p, "u"})
+		}
+	}()
+	run(`n := 0
+for i := 0; i < 40; i++ { n = probe.Searches.Len("s3"); if n >= 2 { break }; time.Sleep(5*time.Millisecond) }
+n`)
+	time.Sleep(200 * time.Millisecond)
+	run(`len(probe.Searches.Get("s3"))`)
+	run(`snap := probe.Searches.Get("s3")
+snap[0].Provider`)
+	// live raw map variable: host writes between cells, cell sees it?
+	mode = "raw"
+	zzRaw["s4"] = []ZZHit{{"keenable", "u"}}
+	run(`len(probe.Raw["s4"])`)
+	zzRaw["s4"] = append(zzRaw["s4"], ZZHit{"tavily", "u"})
+	run(`len(probe.Raw["s4"])`)
+	// raw write concurrently with a reading cell (race detector)
+	go func() {
+		for i := 0; i < 20; i++ {
+			zzRaw["s5"] = append(zzRaw["s5"], ZZHit{"x", "u"})
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	run(`m := 0
+for i := 0; i < 30; i++ { m = len(probe.Raw["s5"]); time.Sleep(time.Millisecond) }
+m`)
+}
