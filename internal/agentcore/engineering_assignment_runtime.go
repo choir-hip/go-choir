@@ -852,46 +852,6 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	return AssignedEngineeringStart{Assignment: bound.Assignment, Run: run}, nil
 }
 
-func runtimePersistentManagementControlID(metadata map[string]any, trajectoryID, workItemID string) string {
-	raw, ok := metadata["lifecycle_control_bindings"]
-	if !ok {
-		return ""
-	}
-	var entries []any
-	switch value := raw.(type) {
-	case []any:
-		entries = value
-	case []map[string]any:
-		entries = make([]any, len(value))
-		for i := range value {
-			entries[i] = value[i]
-		}
-	default:
-		return ""
-	}
-	matched := ""
-	for _, rawEntry := range entries {
-		entry, ok := rawEntry.(map[string]any)
-		if !ok {
-			continue
-		}
-		entryTrajectory, _ := entry["trajectory_id"].(string)
-		entryWork, _ := entry["target_work_item_id"].(string)
-		entryUpdate, _ := entry["update_id"].(string)
-		if strings.TrimSpace(entryTrajectory) == trajectoryID && strings.TrimSpace(entryWork) == workItemID && strings.TrimSpace(entryUpdate) != "" {
-			if matched != "" {
-				return ""
-			}
-			matched = strings.TrimSpace(entryUpdate)
-		}
-	}
-	return matched
-}
-
-func persistentManagementRunStateAllowedRuntime(state types.RunState) bool {
-	return state == types.RunPending || state == types.RunRunning || state == types.RunPassivated
-}
-
 // reclaimSupersededAssignmentCapsules enforces one live assignment capsule at
 // a time. Every prior assignment on this computer whose capsule disposition is
 // not already revoked (and that is not the assignment being opened) is durably

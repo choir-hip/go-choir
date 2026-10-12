@@ -183,7 +183,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 			}
 		},
 		nil,
-		WithTerminalToolSuccesses("patch_texture"))
+		WithTerminalToolResult("patch_texture", func(string) bool { return true }))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 	}
 }
 
-func TestRunToolLoopDurableTransitionPassivatesAndDecisionSatisfiesRequiredActivation(t *testing.T) {
+func TestRunToolLoopDurableTransitionPassivates(t *testing.T) {
 	for _, toolName := range []string{"patch_texture", "rewrite_texture", "record_texture_decision"} {
 		t.Run(toolName, func(t *testing.T) {
 			registry := NewToolRegistry()
@@ -218,8 +218,7 @@ func TestRunToolLoopDurableTransitionPassivatesAndDecisionSatisfiesRequiredActiv
 					passivatingProgress = passivatingProgress || (kind == types.EventRunProgress && phase == "passivating_tool_success")
 				}, nil,
 				WithInitialToolChoice("required"),
-				WithRequiredWriteTools("patch_texture", "rewrite_texture", "record_texture_decision"),
-				WithPassivatingToolSuccesses("patch_texture", "rewrite_texture", "record_texture_decision"))
+				WithPassivatingToolResult(toolName, func(string) bool { return true }))
 			if !errors.Is(err, ErrToolLoopPassivated) {
 				t.Fatalf("transition error = %v, want passivation", err)
 			}
@@ -1159,7 +1158,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 		emit,
 		nil,
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"))
+		WithTerminalToolResult("patch_texture", func(string) bool { return true }))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}

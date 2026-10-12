@@ -837,13 +837,6 @@ func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation se
 	return err
 }
 
-func bundleDigestFromRelease(releaseDigest, fallback string) string {
-	if computerevent.IsSHA256(releaseDigest) {
-		return releaseDigest
-	}
-	return fallback
-}
-
 // selfdevBoundaryObserverAgentID is the committing-agent identity stamped on
 // reconciler-minted boundary records — system-committed acts addressed to the
 // management desk, distinct from any cell-authored provenance.

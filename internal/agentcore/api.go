@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/mail"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -184,18 +183,6 @@ func authenticateUser(r *http.Request) (string, error) {
 		return "", fmt.Errorf("missing authenticated user identity")
 	}
 	return user, nil
-}
-
-func authenticatedUserEmail(r *http.Request) string {
-	value := strings.TrimSpace(r.Header.Get("X-Authenticated-Email"))
-	if value == "" || strings.ContainsAny(value, "\r\n") {
-		return ""
-	}
-	addr, err := mail.ParseAddress(value)
-	if err != nil {
-		return ""
-	}
-	return strings.ToLower(strings.TrimSpace(addr.Address))
 }
 
 func requireInternalRuntimeCaller(r *http.Request) error {

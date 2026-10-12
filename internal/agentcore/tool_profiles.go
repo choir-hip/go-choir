@@ -168,28 +168,9 @@ func currentTextureAgentID(docID string) string {
 	return agentprofile.Texture + ":" + docID
 }
 
-func textureAgentIDMatchesDoc(agentID, docID string) bool {
-	agentID = strings.TrimSpace(agentID)
-	docID = strings.TrimSpace(docID)
-	if agentID == "" || docID == "" {
-		return false
-	}
-	return agentID == currentTextureAgentID(docID)
-}
-
 func isTextureAgentID(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
 	return strings.HasPrefix(agentID, agentprofile.Texture+":") || strings.HasPrefix(agentID, agentprofile.Texture+":")
-}
-
-func docIDFromTextureAgentID(agentID string) string {
-	agentID = strings.TrimSpace(agentID)
-	for _, prefix := range []string{agentprofile.Texture + ":", agentprofile.Texture + ":"} {
-		if strings.HasPrefix(agentID, prefix) {
-			return strings.TrimSpace(strings.TrimPrefix(agentID, prefix))
-		}
-	}
-	return ""
 }
 
 func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
@@ -327,8 +308,6 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	b.WriteString(rec.Prompt)
 	return b.String(), nil
 }
-
-type registryToolInstaller func(*toolregistry.ToolRegistry) error
 
 // delegatedEngineeringRegistryInputs is deliberately a closed set of assignment
 // capabilities. Host self-development, event, updater, materialization,

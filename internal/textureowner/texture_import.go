@@ -1,14 +1,11 @@
 package textureowner
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	pathpkg "path"
@@ -439,67 +436,6 @@ func appendIfMissing(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
-}
-
-func extractTextureProjectionFromDOCX(data []byte) textureFileImportProjection {
-	projection := textureFileImportProjection{
-		ImportAdapter:        "docx_ooxml_text_table_projection",
-		ImportAdapterVersion: 1,
-		LossinessScore:       35,
-		Warnings:             []string{"docx_styles_preserved_as_manifest_only"},
-	}
-	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		projection.LossinessScore = 90
-		projection.Warnings = append(projection.Warnings, "docx_zip_open_failed")
-		return projection
-	}
-	var documentXML []byte
-	for _, file := range reader.File {
-		if file.Name != "word/document.xml" {
-			continue
-		}
-		rc, err := file.Open()
-		if err != nil {
-			projection.LossinessScore = 90
-			projection.Warnings = append(projection.Warnings, "docx_document_xml_open_failed")
-			return projection
-		}
-		documentXML, err = io.ReadAll(rc)
-		_ = rc.Close()
-		if err != nil {
-			projection.LossinessScore = 90
-			projection.Warnings = append(projection.Warnings, "docx_document_xml_read_failed")
-			return projection
-		}
-		break
-	}
-	if len(documentXML) == 0 {
-		projection.LossinessScore = 90
-		projection.Warnings = append(projection.Warnings, "docx_document_xml_missing")
-		return projection
-	}
-	projection.ProjectionContent = strings.TrimSpace(contentowner.DOCXDocumentXMLToMarkdown(documentXML))
-	projection.ProjectionContentHash = contentowner.ContentHash(projection.ProjectionContent)
-	return projection
-}
-
-func extractTextureProjectionFromPDF(data []byte) textureFileImportProjection {
-	projection := textureFileImportProjection{
-		ImportAdapter:        "pdf_literal_text_projection",
-		ImportAdapterVersion: 1,
-		LossinessScore:       80,
-		Warnings:             []string{"pdf_layout_is_best_effort"},
-	}
-	text := contentowner.ExtractPDFLiteralText(data)
-	if strings.TrimSpace(text) == "" {
-		projection.LossinessScore = 95
-		projection.Warnings = append(projection.Warnings, "pdf_text_extraction_empty")
-	} else {
-		projection.ProjectionContent = strings.TrimSpace(text)
-	}
-	projection.ProjectionContentHash = contentowner.ContentHash(projection.ProjectionContent)
-	return projection
 }
 
 func buildOriginalFileContentMetadata(projection textureFileImportProjection) json.RawMessage {

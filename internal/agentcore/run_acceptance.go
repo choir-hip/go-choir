@@ -42,19 +42,6 @@ type acceptanceToolResult struct {
 	output map[string]any
 }
 
-type acceptanceToolError struct {
-	tool   string
-	event  types.EventRecord
-	output string
-}
-
-type acceptanceToolInvocation struct {
-	tool      string
-	event     types.EventRecord
-	callID    string
-	arguments map[string]any
-}
-
 // SynthesizeRunAcceptance derives a trajectory-level diagnostic from durable
 // runs, trace events, and guest-local capsule evidence. It never proves a
 // self-development decision, materialization, checkpoint, or route transition.
@@ -190,7 +177,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 
 	addAcceptanceDurableAgentCapsuleCheckpoints(ctx, rt, &builder, trajectoryRuns, events)
 
-	addAcceptanceContinuationAndCompactionCheckpoints(&builder, events)
+	addAcceptanceCompactionCheckpoint(&builder, events)
 
 	builder.record.AcceptanceLevel, builder.record.State = acceptanceLevelAndState(builder.record.Checkpoints)
 	builder.record.EvidenceRefs = builder.evidence
@@ -328,219 +315,6 @@ func collectAcceptanceToolResultsAny(events []types.EventRecord, tools ...string
 	return results
 }
 
-func collectAcceptanceToolErrors(events []types.EventRecord, tool string) []acceptanceToolError {
-	return collectAcceptanceToolErrorsAny(events, tool)
-}
-
-func collectAcceptanceToolErrorsAny(events []types.EventRecord, tools ...string) []acceptanceToolError {
-	wanted := map[string]bool{}
-	for _, tool := range tools {
-		wanted[tool] = true
-	}
-	var results []acceptanceToolError
-	for _, ev := range events {
-		if ev.Kind != types.EventToolResult {
-			continue
-		}
-		payload := parseTracePayload(ev.Payload)
-		tool := payloadString(payload, "tool")
-		if !wanted[tool] {
-			continue
-		}
-		if isError, _ := payload["is_error"].(bool); !isError {
-			continue
-		}
-		output := traceToolErrorText(payload)
-		if output == "" {
-			continue
-		}
-		results = append(results, acceptanceToolError{tool: tool, event: ev, output: output})
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].event.StreamSeq < results[j].event.StreamSeq
-	})
-	return results
-}
-
-func collectAcceptancePendingToolInvocations(events []types.EventRecord, tool string) []acceptanceToolInvocation {
-	return collectAcceptancePendingToolInvocationsAny(events, tool)
-}
-
-func collectAcceptancePendingToolInvocationsAny(events []types.EventRecord, tools ...string) []acceptanceToolInvocation {
-	wanted := map[string]bool{}
-	for _, tool := range tools {
-		wanted[tool] = true
-	}
-	completedCallIDs := map[string]bool{}
-	for _, ev := range events {
-		if ev.Kind != types.EventToolResult {
-			continue
-		}
-		payload := parseTracePayload(ev.Payload)
-		tool := payloadString(payload, "tool")
-		if !wanted[tool] {
-			continue
-		}
-		callID := payloadString(payload, "call_id")
-		if callID != "" {
-			completedCallIDs[callID] = true
-		}
-	}
-
-	var invocations []acceptanceToolInvocation
-	seenPendingCallIDs := map[string]bool{}
-	for _, ev := range events {
-		if ev.Kind != types.EventToolInvoked {
-			continue
-		}
-		payload := parseTracePayload(ev.Payload)
-		tool := payloadString(payload, "tool")
-		if !wanted[tool] {
-			continue
-		}
-		callID := payloadString(payload, "call_id")
-		if callID != "" && completedCallIDs[callID] {
-			continue
-		}
-		if callID != "" {
-			if seenPendingCallIDs[callID] {
-				continue
-			}
-			seenPendingCallIDs[callID] = true
-		}
-		args, _ := payload["arguments"].(map[string]any)
-		invocations = append(invocations, acceptanceToolInvocation{
-			tool:      tool,
-			event:     ev,
-			callID:    callID,
-			arguments: args,
-		})
-	}
-	sort.Slice(invocations, func(i, j int) bool {
-		return invocations[i].event.StreamSeq < invocations[j].event.StreamSeq
-	})
-	return invocations
-}
-
-func traceToolErrorText(payload map[string]any) string {
-	switch value := payload["output"].(type) {
-	case string:
-		text := strings.TrimSpace(value)
-		if text == "" {
-			return ""
-		}
-		var decoded map[string]any
-		if json.Unmarshal([]byte(text), &decoded) == nil {
-			if raw := payloadString(decoded, "raw_output"); raw != "" {
-				return raw
-			}
-			if errText := payloadString(decoded, "error"); errText != "" {
-				return errText
-			}
-		}
-		return text
-	case map[string]any:
-		if raw := payloadString(value, "raw_output"); raw != "" {
-			return raw
-		}
-		if errText := payloadString(value, "error"); errText != "" {
-			return errText
-		}
-	}
-	return ""
-}
-
-func acceptanceOutputSlice(output map[string]any, key string) []map[string]any {
-	switch raw := output[key].(type) {
-	case []map[string]any:
-		items := make([]map[string]any, 0, len(raw))
-		for _, item := range raw {
-			if item != nil {
-				items = append(items, item)
-			}
-		}
-		return items
-	case []any:
-		items := make([]map[string]any, 0, len(raw))
-		for _, item := range raw {
-			mapped, _ := item.(map[string]any)
-			if mapped != nil {
-				items = append(items, mapped)
-			}
-		}
-		return items
-	default:
-		return nil
-	}
-}
-
-func acceptanceAppPackageSummaries(packages []map[string]any) []map[string]any {
-	out := make([]map[string]any, 0, len(packages))
-	for _, pkg := range packages {
-		item := map[string]any{}
-		for _, key := range []string{"status", "package_id", "app_id", "loop_id", "base_sha", "candidate_head_sha", "source_computer_id", "source_candidate_id", "candidate_source_ref", "package_manifest_sha256", "runtime_source_delta_sha256", "ui_source_delta_sha256"} {
-			if value := payloadString(pkg, key); value != "" {
-				item[key] = value
-			} else if value := pkg[key]; value != nil {
-				item[key] = value
-			}
-		}
-		if len(item) > 0 {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func acceptanceStringSlice(output map[string]any, key string) []string {
-	switch raw := output[key].(type) {
-	case []string:
-		return compactStringRefs(raw)
-	case []any:
-		out := make([]string, 0, len(raw))
-		for _, item := range raw {
-			text, _ := item.(string)
-			if text != "" {
-				out = append(out, text)
-			}
-		}
-		return compactStringRefs(out)
-	default:
-		return nil
-	}
-}
-
-func acceptanceStringAnyMap(output map[string]any, key string) map[string]any {
-	switch raw := output[key].(type) {
-	case map[string]any:
-		out := map[string]any{}
-		for k, v := range raw {
-			if strings.TrimSpace(k) != "" {
-				out[strings.TrimSpace(k)] = v
-			}
-		}
-		return out
-	case map[string]int:
-		out := map[string]any{}
-		for k, v := range raw {
-			if strings.TrimSpace(k) != "" {
-				out[strings.TrimSpace(k)] = v
-			}
-		}
-		return out
-	case map[string]string:
-		out := map[string]any{}
-		for k, v := range raw {
-			if strings.TrimSpace(k) != "" && strings.TrimSpace(v) != "" {
-				out[strings.TrimSpace(k)] = strings.TrimSpace(v)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
 func (b *acceptanceBuilder) addRunEvidence(run types.RunRecord, summary string) string {
 	if run.RunID == "" {
 		return ""
@@ -582,24 +356,6 @@ func (b *acceptanceBuilder) addEvidence(ref types.RunAcceptanceEvidenceRef) {
 	}
 	b.evidenceSet[ref.RefID] = true
 	b.evidence = append(b.evidence, ref)
-}
-
-func (b *acceptanceBuilder) addRollbackRef(kind, ref, summary string) {
-	kind = strings.TrimSpace(kind)
-	ref = strings.TrimSpace(ref)
-	if kind == "" || ref == "" {
-		return
-	}
-	for _, existing := range b.record.RollbackRefs {
-		if existing.Kind == kind && existing.Ref == ref {
-			return
-		}
-	}
-	b.record.RollbackRefs = append(b.record.RollbackRefs, types.RunAcceptanceRollbackRef{
-		Kind:    kind,
-		Ref:     ref,
-		Summary: strings.TrimSpace(summary),
-	})
 }
 
 func (b *acceptanceBuilder) addCheckpoint(kind, state string, at time.Time, streamSeq int64, refs []string, details map[string]any) {
@@ -703,7 +459,7 @@ func trajectoryIDFromRuns(runs []types.RunRecord) string {
 	return ""
 }
 
-func addAcceptanceContinuationAndCompactionCheckpoints(builder *acceptanceBuilder, events []types.EventRecord) {
+func addAcceptanceCompactionCheckpoint(builder *acceptanceBuilder, events []types.EventRecord) {
 	compacted := false
 	for _, ev := range events {
 		if compacted {
@@ -715,19 +471,6 @@ func addAcceptanceContinuationAndCompactionCheckpoints(builder *acceptanceBuilde
 			ref := builder.addEventEvidence(ev, "run-memory compaction checkpoint recorded", details)
 			builder.addCheckpoint("compacted", "passed", ev.Timestamp, ev.StreamSeq, []string{ref}, details)
 			compacted = true
-		}
-	}
-	continued := false
-	for _, ev := range events {
-		if continued {
-			break
-		}
-		switch ev.Kind {
-		case types.EventRunContinuationSelected, types.EventRunContinuationStarted:
-			details := acceptanceContinuationEventDetails(ev)
-			ref := builder.addEventEvidence(ev, "run continuation selected or started", details)
-			builder.addCheckpoint("continued", "passed", ev.Timestamp, ev.StreamSeq, []string{ref}, details)
-			continued = true
 		}
 	}
 }
@@ -748,26 +491,6 @@ func acceptanceCompactionEventDetails(ev types.EventRecord) map[string]any {
 		"event_count",
 		"summarized_events",
 		"omitted_delta_events",
-	} {
-		if value, ok := payload[key]; ok && value != nil {
-			details[key] = value
-		}
-	}
-	return details
-}
-
-func acceptanceContinuationEventDetails(ev types.EventRecord) map[string]any {
-	payload := parseTracePayload(ev.Payload)
-	details := map[string]any{"kind": ev.Kind}
-	for _, key := range []string{
-		"continuation_id",
-		"status",
-		"objective_fingerprint",
-		"authority_profile",
-		"next_loop_id",
-		"lease_seconds",
-		"compaction_status",
-		"compaction_error",
 	} {
 		if value, ok := payload[key]; ok && value != nil {
 			details[key] = value

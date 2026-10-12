@@ -196,14 +196,6 @@ func normalizeTarget(raw string, allowed []string) string {
 	return match
 }
 
-func normalizeSlot(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "implementation", "verifier":
-		return strings.ToLower(strings.TrimSpace(value))
-	default:
-		return ""
-	}
-}
 func textureAgentID(docID string) string { return "texture:" + strings.TrimSpace(docID) }
 func trimNonEmpty(values []string) []string {
 	out := make([]string, 0, len(values))

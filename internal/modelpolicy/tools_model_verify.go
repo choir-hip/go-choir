@@ -54,11 +54,6 @@ func NewVerifyModelCapabilityTool(manager *Manager) toolregistry.Tool {
 	}
 }
 
-// RegisterVerifyModelCapabilityTool registers the verifier with registry.
-func RegisterVerifyModelCapabilityTool(registry *toolregistry.ToolRegistry, manager *Manager) error {
-	return registry.Register(NewVerifyModelCapabilityTool(manager))
-}
-
 func (m *Manager) verifyModelCapability(ctx context.Context, input verifyModelCapabilityArgs) (string, error) {
 	if m == nil || m.config.Provider == nil {
 		return "", fmt.Errorf("verify_model_capability missing runtime provider")

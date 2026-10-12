@@ -194,14 +194,6 @@ const (
 	// recoverable context-management action such as overflow compaction.
 	EventRunRetry EventKind = "loop.retry"
 
-	// EventRunContinuationSelected is emitted when the runtime records the next
-	// objective that should continue a completed run.
-	EventRunContinuationSelected EventKind = "loop.continuation.selected"
-
-	// EventRunContinuationStarted is emitted when a selected continuation starts
-	// as a child run.
-	EventRunContinuationStarted EventKind = "loop.continuation.started"
-
 	// EventRunCancelled is emitted when a run is cancelled.
 	EventRunCancelled EventKind = "loop.cancelled"
 
@@ -292,10 +284,6 @@ const (
 	// document revisions.
 	EventTextureDecisionRecorded EventKind = "texture.decision.recorded"
 
-	// EventDesktopStateUpdated is emitted when a user's persisted desktop
-	// workspace changes.
-	EventDesktopStateUpdated EventKind = "desktop.state.updated"
-
 	// EventDesktopDriverLeaseUpdated is emitted when a browser session becomes
 	// the current interaction driver for a desktop.
 	EventDesktopDriverLeaseUpdated EventKind = "desktop.driver_lease.updated"
@@ -325,10 +313,6 @@ const (
 	// EventFileChanged is emitted when the authenticated Files surface creates,
 	// updates, or deletes a file-system entry.
 	EventFileChanged EventKind = "file.changed"
-
-	// EventComputerStatusUpdated is emitted when a user-scoped computer status
-	// snapshot changes.
-	EventComputerStatusUpdated EventKind = "computer.status.updated"
 )
 
 // EventRecord represents a single runtime event emitted during run execution
@@ -397,7 +381,6 @@ const (
 	// dispatched RLM cell. It is reducer metadata, never provider context.
 	RunMemoryEntryCellFate RunMemoryEntryKind = "cell_fate"
 )
-
 
 // RunMemoryEntry is a durable, ordered context record for a runtime run. The
 // provider context is rebuilt from these entries, allowing runs to survive

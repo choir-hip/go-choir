@@ -1491,21 +1491,6 @@ func extractJSONObject(text string) (string, error) {
 	return text[start : end+1], nil
 }
 
-func countRawJSONItems(raw json.RawMessage) int {
-	if len(raw) == 0 {
-		return 0
-	}
-	var arr []any
-	if err := json.Unmarshal(raw, &arr); err == nil {
-		return len(arr)
-	}
-	var obj map[string]any
-	if err := json.Unmarshal(raw, &obj); err == nil && len(obj) > 0 {
-		return 1
-	}
-	return 0
-}
-
 func snippet(value string, limit int) string {
 	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
 	if limit <= 0 || len(value) <= limit {

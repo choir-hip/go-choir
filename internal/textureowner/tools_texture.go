@@ -1658,13 +1658,3 @@ func trajectoryIDForRun(rec *types.RunRecord) string {
 	}
 	return metadataStringValue(rec.Metadata, "trajectory_id")
 }
-
-func trimNonEmpty(items []string) []string {
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		if item = strings.TrimSpace(item); item != "" {
-			out = append(out, item)
-		}
-	}
-	return out
-}

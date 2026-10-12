@@ -470,10 +470,3 @@ func filterReplayHeadObservation(obs computerversion.ObservationSet) computerver
 	obs.Observations = filtered
 	return obs
 }
-
-func sameReplayHead(left, right *computerevent.Head) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right
-}

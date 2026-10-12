@@ -14,12 +14,6 @@ func payloadString(payload map[string]any, key string) string {
 	return strings.TrimSpace(value)
 }
 
-// payloadBool extracts a bool value from a payload map.
-func payloadBool(payload map[string]any, key string) bool {
-	value, _ := payload[key].(bool)
-	return value
-}
-
 // payloadInt64 extracts an int64 value from a payload map.
 func payloadInt64(payload map[string]any, key string) int64 {
 	switch value := payload[key].(type) {

@@ -77,11 +77,6 @@ func NewFilesHandlerWithObserver(rootDir string, observer FileChangeObserver) *F
 	return &FilesHandler{rootDir: rootDir, observer: observer}
 }
 
-// RootDir returns the configured root directory path.
-func (fh *FilesHandler) RootDir() string {
-	return fh.rootDir
-}
-
 func (fh *FilesHandler) relativePath(absPath string) string {
 	rel, err := filepath.Rel(fh.rootDir, absPath)
 	if err != nil || rel == "." {

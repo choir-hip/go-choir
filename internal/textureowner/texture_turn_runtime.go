@@ -3,7 +3,6 @@ package textureowner
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"strings"
@@ -474,12 +473,6 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 		}
 	}
 	return result, nil
-}
-
-func textureTurnAuditDigest(result types.LifecycleResult) string {
-	payload := strings.Join([]string{result.Receipt.CommandID, result.Receipt.CommandDigest, fmt.Sprintf("%d", result.Trajectory.LifecycleVersion)}, "\x00")
-	sum := sha256.Sum256([]byte(payload))
-	return hex.EncodeToString(sum[:])
 }
 
 func textureDecisionTurnOutcome(kind string) types.TextureTurnOutcome {

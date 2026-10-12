@@ -346,20 +346,6 @@ func decodeRoleSection(name string) string {
 	return ""
 }
 
-// RuntimeConfigFallbackSelection resolves the legacy runtime-config fallback.
-func RuntimeConfigFallbackSelection(cfg provideriface.Config) provideriface.LLMSelection {
-	provider := strings.TrimSpace(cfg.LLMProvider)
-	model := strings.TrimSpace(cfg.LLMModel)
-	reasoning := strings.TrimSpace(cfg.LLMReasoningEffort)
-	if provider == "" {
-		provider = defaultChatGPTProvider
-	}
-	if model == "" {
-		model = defaultChatGPTMiniModel
-	}
-	return provideriface.LLMSelection{Provider: provider, Model: model, ReasoningEffort: reasoning, Source: "runtime_config"}
-}
-
 // ProviderPreconditionFallbackSelections deliberately returns no alternate
 // selection. A provider/model precondition failure must surface from the
 // originally selected provider rather than silently changing authority.

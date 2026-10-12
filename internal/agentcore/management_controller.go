@@ -23,12 +23,9 @@ import (
 
 const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
 const runMetadataProducerReportIDs = "producer_report_ids"
-const runMetadataEngineeringReplacementRequested = "cosuper_replacement_requested"
 const runMetadataEngineeringReplacementOmitReports = "cosuper_replacement_omit_reports"
 
 const persistentManagementCoagentInboxPrompt = "Process pending carrier packets for privileged execution. Use choir.Report to assert commitments and choir.Cast to open assignments."
-const persistentManagementEngineeringCancelContinuationPrompt = "Prior implementation Engineering assignment is terminal. Open a fresh implementation Engineering assignment."
-
 const (
 	lifecycleLogicalActivationKeyMetadata = "lifecycle_logical_activation_key"
 	lifecycleFailedAttemptKeyMetadata     = "lifecycle_failed_attempt_key"
@@ -1804,18 +1801,6 @@ func lifecycleActivationVersionsForRun(rec *types.RunRecord) ([]types.LifecycleC
 		return nil, store.ErrLifecycleInvalidTransition
 	}
 	return versions, nil
-}
-
-func sameOrderedStringValues(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if strings.TrimSpace(left[i]) != strings.TrimSpace(right[i]) {
-			return false
-		}
-	}
-	return true
 }
 
 func (rt *Runtime) lifecycleRunHasCanonicalControlDelivery(ctx context.Context, rec *types.RunRecord) (bool, error) {

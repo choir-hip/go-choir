@@ -132,12 +132,6 @@ func IsLive(profile string) bool {
 	}
 }
 
-// IsTexture reports whether profile resolves to the Texture profile.
-func IsTexture(profile string) bool {
-	canonical, _ := Canonical(profile)
-	return canonical == Texture
-}
-
 // CanSpawn reports whether callerProfile may spawn targetProfile, failing
 // closed on unknown profiles on either side.
 func CanSpawn(callerProfile, targetProfile string) (bool, error) {

@@ -19,7 +19,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -276,28 +275,6 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func toolExecutionContextForRun(rec *types.RunRecord) toolregistry.ExecutionContext {
-	if rec == nil {
-		return toolregistry.ExecutionContext{}
-	}
-	execution := toolregistry.ExecutionContext{
-		RunID:      rec.RunID,
-		AgentID:    agentIDForRun(rec),
-		OwnerID:    rec.OwnerID,
-		Profile:    configuredAgentProfileForRun(rec),
-		Role:       agentRoleForRun(rec),
-		ChannelID:  channelIDForRun(rec),
-		ComputerID: rec.ComputerID,
-		DesktopID:  desktopIDForRun(rec),
-		RunRecord:  rec,
-	}
-	if rec.Metadata != nil {
-		execution.WorkingDir, _ = rec.Metadata[runMetadataToolCWD].(string)
-		execution.OwnerEmail, _ = rec.Metadata[runMetadataOwnerEmail].(string)
-	}
-	return execution
-}
-
 func configuredAgentProfileForRun(rec *types.RunRecord) string {
 	if rec == nil {
 		return ""
@@ -333,51 +310,6 @@ func agentRoleForRun(rec *types.RunRecord) string {
 		}
 	}
 	return agentProfileForRun(rec)
-}
-
-func agentIDForRun(rec *types.RunRecord) string {
-	if rec == nil {
-		return ""
-	}
-	if strings.TrimSpace(rec.AgentID) != "" {
-		return strings.TrimSpace(rec.AgentID)
-	}
-	if rec.Metadata != nil {
-		if agentID, _ := rec.Metadata[runMetadataAgentID].(string); strings.TrimSpace(agentID) != "" {
-			return strings.TrimSpace(agentID)
-		}
-	}
-	return strings.TrimSpace(rec.RunID)
-}
-
-func channelIDForRun(rec *types.RunRecord) string {
-	if rec == nil {
-		return ""
-	}
-	if strings.TrimSpace(rec.ChannelID) != "" {
-		return strings.TrimSpace(rec.ChannelID)
-	}
-	if rec.Metadata != nil {
-		if channelID, _ := rec.Metadata[runMetadataChannelID].(string); strings.TrimSpace(channelID) != "" {
-			return strings.TrimSpace(channelID)
-		}
-	}
-	if strings.TrimSpace(rec.AgentID) != "" {
-		return strings.TrimSpace(rec.AgentID)
-	}
-	return strings.TrimSpace(rec.RunID)
-}
-
-func desktopIDForRun(rec *types.RunRecord) string {
-	if rec == nil {
-		return types.PrimaryDesktopID
-	}
-	if rec.Metadata != nil {
-		if desktopID, _ := rec.Metadata[runMetadataDesktopID].(string); strings.TrimSpace(desktopID) != "" {
-			return strings.TrimSpace(desktopID)
-		}
-	}
-	return types.PrimaryDesktopID
 }
 
 func currentTextureAgentID(docID string) string {

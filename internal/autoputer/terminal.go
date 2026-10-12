@@ -434,14 +434,6 @@ func uint64ToDec(n uint64) string {
 	return string(buf[pos:])
 }
 
-// RegisterTerminalRoutes registers the terminal WebSocket route on the given
-// server.
-func RegisterTerminalRoutes(s interface {
-	HandleFunc(string, http.HandlerFunc)
-}, th *TerminalHandler) {
-	s.HandleFunc("/api/terminal/ws", th.HandleTerminalWS)
-}
-
 // RegisterManagementConsoleRoutes registers the singleton Management Console route.
 func RegisterManagementConsoleRoutes(s interface {
 	HandleFunc(string, http.HandlerFunc)

@@ -30,15 +30,6 @@ func requirePersistentManagementRunRecord(rec *types.RunRecord) error {
 	return nil
 }
 
-func requirePersistentManagementExecution(ctx context.Context) (*types.RunRecord, error) {
-	execution := toolregistry.ExecutionContextFrom(ctx)
-	rec := execution.RunRecord
-	if err := requirePersistentManagementRunRecord(rec); err != nil {
-		return nil, err
-	}
-	return rec, nil
-}
-
 // cancelAssignedEngineeringForRun is the verb carrier for
 // cancel_co_super_assignment (SMG): the reducer invokes it for
 // choir.CancelAssignment intents after the persistent-management gate.

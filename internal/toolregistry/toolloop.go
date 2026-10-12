@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"reflect"
-	"sort"
 	"strings"
 	"time"
 
@@ -99,15 +98,11 @@ type toolLoopOptions struct {
 	// one (docs/model-pools-design-2026-10-12.md).
 	fallbackLLMConfigs []provideriface.LLMSelection
 
-	initialToolChoice        string
-	terminalTools            map[string]bool
-	terminalToolResults      map[string]func(string) bool
-	passivatingTools         map[string]bool
-	passivatingToolResults   map[string]func(string) bool
-	requiredWriteTools       map[string]bool
-	requiredWriteToolResults map[string]func(string) bool
-	completionGuard          ToolLoopCompletionGuardFunc
-	parkWaiter               ToolLoopParkWaiterFunc
+	initialToolChoice      string
+	terminalToolResults    map[string]func(string) bool
+	passivatingToolResults map[string]func(string) bool
+	completionGuard        ToolLoopCompletionGuardFunc
+	parkWaiter             ToolLoopParkWaiterFunc
 
 	budget ToolLoopBudget
 }
@@ -175,30 +170,10 @@ func WithInitialToolChoice(choice string) ToolLoopOption {
 	}
 }
 
-// WithTerminalToolSuccesses makes successful tool calls terminal for this loop
-// unless the same tool batch yields a recognized mechanical required-next-tool
-// protocol. This is for side-effect tools whose successful execution is the
-// run's observable result.
-// WithTerminalToolSuccesses makes successful tool calls terminal for this loop
-// (e.g., "apply_patch"). A tool is terminal only when it succeeded and
-// returned structured output.
-func WithTerminalToolSuccesses(names ...string) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		if opts.terminalTools == nil {
-			opts.terminalTools = make(map[string]bool, len(names))
-		}
-		for _, name := range names {
-			if trimmed := strings.TrimSpace(name); trimmed != "" {
-				opts.terminalTools[trimmed] = true
-			}
-		}
-	}
-}
-
 // WithTerminalToolResult makes a tool result terminal when the predicate
 // accepts its structured output (e.g. an eval result carrying a committed
-// terminal assignment fate). Unlike WithTerminalToolSuccesses the decision
-// reads the result payload, not just the tool name.
+// terminal assignment fate). The decision reads the result payload, not just
+// the tool name.
 func WithTerminalToolResult(name string, predicate func(output string) bool) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		if trimmed := strings.TrimSpace(name); trimmed != "" && predicate != nil {
@@ -210,32 +185,10 @@ func WithTerminalToolResult(name string, predicate func(output string) bool) Too
 	}
 }
 
-// WithPassivatingToolSuccesses makes a successful durable-transition tool
-// passivate this activation instead of completing it. Resident actors use this
-// after committing their one semantic outcome so a later wake can resume the
-// same run and memory.
-func WithPassivatingToolSuccesses(names ...string) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		if len(names) == 0 {
-			return
-		}
-		if opts.passivatingTools == nil {
-			opts.passivatingTools = make(map[string]bool, len(names))
-		}
-		for _, name := range names {
-			name = strings.TrimSpace(name)
-			if name != "" {
-				opts.passivatingTools[name] = true
-			}
-		}
-	}
-}
-
 // WithPassivatingToolResult passivates this activation when a successful call
 // to name produces structured output the predicate accepts (e.g. a desk_go_eval
-// result whose receipts carry a committed texture_apply intent). Unlike
-// WithPassivatingToolSuccesses the decision reads the result payload, not just
-// the tool name.
+// result whose receipts carry a committed texture_apply intent). The decision
+// reads the result payload, not just the tool name.
 func WithPassivatingToolResult(name string, predicate func(output string) bool) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		if trimmed := strings.TrimSpace(name); trimmed != "" && predicate != nil {
@@ -243,43 +196,6 @@ func WithPassivatingToolResult(name string, predicate func(output string) bool) 
 				opts.passivatingToolResults = make(map[string]func(string) bool)
 			}
 			opts.passivatingToolResults[trimmed] = predicate
-		}
-	}
-}
-
-// WithRequiredWriteTools specifies tools that must succeed when the initial
-// tool choice is "required" (not an exact tool name). After the first tool
-// turn, if none of the configured durable-transition tools succeeded, the loop
-// retries with a targeted reminder. Callers may include a durable no-change
-// decision tool alongside canonical write tools.
-func WithRequiredWriteTools(names ...string) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		if len(names) == 0 {
-			return
-		}
-		if opts.requiredWriteTools == nil {
-			opts.requiredWriteTools = make(map[string]bool, len(names))
-		}
-		for _, name := range names {
-			name = strings.TrimSpace(name)
-			if name != "" {
-				opts.requiredWriteTools[name] = true
-			}
-		}
-	}
-}
-
-// WithRequiredWriteToolResult requires a call to name whose structured output
-// the predicate accepts when the initial tool choice is "required". Use for
-// carrier desks whose durable transition is a committed cell intent: the bare
-// tool name only proves the cell ran; the predicate proves it authored.
-func WithRequiredWriteToolResult(name string, predicate func(output string) bool) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		if trimmed := strings.TrimSpace(name); trimmed != "" && predicate != nil {
-			if opts.requiredWriteToolResults == nil {
-				opts.requiredWriteToolResults = make(map[string]func(string) bool)
-			}
-			opts.requiredWriteToolResults[trimmed] = predicate
 		}
 	}
 }
@@ -738,41 +654,6 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					}
 					continue
 				}
-				// For "required" (non-exact) initial tool choice, verify a
-				// required write tool succeeded. This prevents the model from
-				// ending the turn after calling only non-write tools.
-				if (len(options.requiredWriteTools) > 0 || len(options.requiredWriteToolResults) > 0) && !requiredWriteToolSucceeded(options.requiredWriteTools, options.requiredWriteToolResults, resp.ToolCalls, toolResults) {
-					initialToolChoiceAttempts++
-					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
-						return "", totalUsage, fmt.Errorf("tool loop: required write tool did not succeed after %d retries", maxRequiredNextToolRetries)
-					}
-					reason := "required_write_tool_not_called"
-					if requiredWriteToolCalled(options.requiredWriteTools, options.requiredWriteToolResults, resp.ToolCalls) {
-						reason = "required_write_tool_failed"
-					}
-					reminder := requiredWriteToolReminderText(options.requiredWriteTools, options.requiredWriteToolResults, reason)
-					reminderMsg, _ := json.Marshal(map[string]any{
-						"role": "user",
-						"content": []map[string]any{{
-							"type": "text",
-							"text": reminder,
-						}},
-					})
-					if err := appendMessage("user", reminderMsg); err != nil {
-						return "", totalUsage, fmt.Errorf("tool loop persist required write-tool retry: %w", err)
-					}
-					forceInitialToolChoiceRetry = true
-					if emit != nil {
-						payload, _ := json.Marshal(map[string]any{
-							"required_write_tools": requiredWriteToolNames(options.requiredWriteTools, options.requiredWriteToolResults),
-							"called_tools":         toolCallNames(resp.ToolCalls),
-							"reason":               reason,
-							"attempt":              initialToolChoiceAttempts,
-						})
-						emit(types.EventRunRetry, "required_write_tool", payload)
-					}
-					continue
-				}
 			}
 			if activeRequired != nil && requiredCalled {
 				requiredNextTool = nil
@@ -786,7 +667,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 						})
 						emit(types.EventRunProgress, "required_next_tool_satisfied", payload)
 					}
-					if terminalTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.terminalTools, options.terminalToolResults); len(terminalTools) > 0 {
+					if terminalTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.terminalToolResults); len(terminalTools) > 0 {
 						if emit != nil {
 							payload, _ := json.Marshal(map[string]any{
 								"iteration": i + 1,
@@ -827,7 +708,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					})
 					emit(types.EventRunRetry, "required_next_tool", payload)
 				}
-			} else if terminalTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.terminalTools, options.terminalToolResults); len(terminalTools) > 0 {
+			} else if terminalTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.terminalToolResults); len(terminalTools) > 0 {
 				if emit != nil {
 					payload, _ := json.Marshal(map[string]any{
 						"iteration": i + 1,
@@ -839,7 +720,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				return combinedFinalText(resp.Text), totalUsage, nil
 			}
 			if requiredNextTool == nil {
-				if passivatingTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.passivatingTools, options.passivatingToolResults); len(passivatingTools) > 0 {
+				if passivatingTools := successfulTerminalToolNamesWithResults(resp.ToolCalls, toolResults, options.passivatingToolResults); len(passivatingTools) > 0 {
 					if emit != nil {
 						payload, _ := json.Marshal(map[string]any{
 							"iteration": i + 1,
@@ -876,39 +757,6 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 							"attempt":       initialToolChoiceAttempts,
 						})
 						emit(types.EventRunRetry, "initial_tool_choice", payload)
-					}
-					continue
-				}
-				// For "required" (non-exact) initial tool choice, the model
-				// ended the turn without calling any tool. If required write
-				// tools are configured, retry with a targeted reminder.
-				if (len(options.requiredWriteTools) > 0 || len(options.requiredWriteToolResults) > 0) && len(toolDefs) > 0 {
-					initialToolChoiceAttempts++
-					if initialToolChoiceAttempts > maxRequiredNextToolRetries {
-						return "", totalUsage, fmt.Errorf("tool loop: required write tool was not called after %d retries", maxRequiredNextToolRetries)
-					}
-					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
-						return "", totalUsage, fmt.Errorf("tool loop persist assistant text before write-tool retry: %w", err)
-					}
-					reminder := requiredWriteToolReminderText(options.requiredWriteTools, options.requiredWriteToolResults, "model_ended_turn_without_required_write_tool")
-					reminderMsg, _ := json.Marshal(map[string]any{
-						"role": "user",
-						"content": []map[string]any{{
-							"type": "text",
-							"text": reminder,
-						}},
-					})
-					if err := appendMessage("user", reminderMsg); err != nil {
-						return "", totalUsage, fmt.Errorf("tool loop persist required write-tool end-turn retry: %w", err)
-					}
-					forceInitialToolChoiceRetry = true
-					if emit != nil {
-						payload, _ := json.Marshal(map[string]any{
-							"required_write_tools": requiredWriteToolNames(options.requiredWriteTools, options.requiredWriteToolResults),
-							"reason":               "model_ended_turn_without_required_write_tool",
-							"attempt":              initialToolChoiceAttempts,
-						})
-						emit(types.EventRunRetry, "required_write_tool", payload)
 					}
 					continue
 				}
@@ -1300,13 +1148,6 @@ func isExactInitialToolChoicePreconditionError(choice string, err error) bool {
 	return isProviderPreconditionError(err)
 }
 
-func isInitialToolChoicePreconditionError(choice string, err error) bool {
-	if strings.TrimSpace(choice) == "" || err == nil {
-		return false
-	}
-	return isProviderPreconditionError(err)
-}
-
 func isProviderPreconditionError(err error) bool {
 	if err == nil {
 		return false
@@ -1455,12 +1296,8 @@ func requiredNextToolProtocolAllowed(string, string, map[string]any) bool {
 	return false
 }
 
-func successfulTerminalToolNames(calls []types.ToolCall, results []types.ToolResult, terminalTools map[string]bool) []string {
-	return successfulTerminalToolNamesWithResults(calls, results, terminalTools, nil)
-}
-
-func successfulTerminalToolNamesWithResults(calls []types.ToolCall, results []types.ToolResult, terminalTools map[string]bool, terminalResults map[string]func(string) bool) []string {
-	if len(terminalTools) == 0 && len(terminalResults) == 0 {
+func successfulTerminalToolNamesWithResults(calls []types.ToolCall, results []types.ToolResult, terminalResults map[string]func(string) bool) []string {
+	if len(terminalResults) == 0 {
 		return nil
 	}
 	limit := len(calls)
@@ -1474,13 +1311,7 @@ func successfulTerminalToolNamesWithResults(calls []types.ToolCall, results []ty
 		if name == "" || results[i].IsError || !IsStructuredToolSuccess(results[i].Output) {
 			continue
 		}
-		terminal := terminalTools[name]
-		if !terminal {
-			if pred, ok := terminalResults[name]; ok && pred(results[i].Output) {
-				terminal = true
-			}
-		}
-		if !terminal {
+		if pred, ok := terminalResults[name]; !ok || !pred(results[i].Output) {
 			continue
 		}
 		if !seen[name] {
@@ -1608,94 +1439,6 @@ func toolCallNames(calls []types.ToolCall) []string {
 		}
 	}
 	return names
-}
-
-// requiredWriteToolSucceeded returns true if at least one required write was
-// satisfied in this batch: a name-listed tool succeeded, or a
-// predicate-listed tool produced output its predicate accepts.
-func requiredWriteToolSucceeded(writeTools map[string]bool, writeResults map[string]func(string) bool, calls []types.ToolCall, results []types.ToolResult) bool {
-	if len(writeTools) == 0 && len(writeResults) == 0 {
-		return true
-	}
-	limit := len(calls)
-	if len(results) < limit {
-		limit = len(results)
-	}
-	for i := 0; i < limit; i++ {
-		if results[i].IsError {
-			continue
-		}
-		name := strings.TrimSpace(calls[i].Name)
-		if writeTools[name] {
-			return true
-		}
-		if pred, ok := writeResults[name]; ok && pred(results[i].Output) {
-			return true
-		}
-	}
-	return false
-}
-
-// requiredWriteToolCalled returns true if at least one of the required write
-// tools (by name or by predicate key) was called in this batch regardless of
-// outcome.
-func requiredWriteToolCalled(writeTools map[string]bool, writeResults map[string]func(string) bool, calls []types.ToolCall) bool {
-	if len(writeTools) == 0 && len(writeResults) == 0 {
-		return true
-	}
-	for _, call := range calls {
-		name := strings.TrimSpace(call.Name)
-		if writeTools[name] {
-			return true
-		}
-		if _, ok := writeResults[name]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-// requiredWriteToolNames returns the sorted union of name-listed and
-// predicate-listed required write tools for use in reminder messages.
-func requiredWriteToolNames(writeTools map[string]bool, writeResults map[string]func(string) bool) []string {
-	seen := make(map[string]bool, len(writeTools)+len(writeResults))
-	for name := range writeTools {
-		seen[name] = true
-	}
-	for name := range writeResults {
-		seen[name] = true
-	}
-	names := make([]string, 0, len(seen))
-	for name := range seen {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// requiredWriteToolReminderText returns a targeted reminder when the model did
-// not produce a successful write-tool call. It differentiates between "called
-// a write tool but it failed" and "did not call any write tool at all".
-func requiredWriteToolReminderText(writeTools map[string]bool, writeResults map[string]func(string) bool, reason string) string {
-	names := requiredWriteToolNames(writeTools, writeResults)
-	listed := strings.Join(names, " or ")
-	// Desk-cell carrier: the durable transition is a committed cell intent
-	// (choir.ApplyTexture stages revision, children controls, and decision in
-	// one turn), not a named write tool.
-	if _, cellCarrier := writeResults["desk_go_eval"]; cellCarrier {
-		switch reason {
-		case "required_write_tool_failed":
-			return fmt.Sprintf("The previous durable transition (%s) did not commit a texture_apply intent. Review the cell error or the reduction rejection and retry against the current document head. Stage choir.ApplyTexture for a real semantic revision, children controls, or an honest no-change, wait, or block decision.", listed)
-		default:
-			return fmt.Sprintf("A %s cell must stage choir.ApplyTexture to commit this activation's durable transition before it can park. ApplyTexture carries a real semantic revision, atomic children controls, or an honest no-change, wait, or block decision.", listed)
-		}
-	}
-	switch reason {
-	case "required_write_tool_failed":
-		return fmt.Sprintf("The previous %s call failed. Review the tool error, fix the issue, and call the write tool again. Use %s for full-document drafts (especially v0→v1 or v1→v2) and %s for targeted block edits. Common fixes: use the current base_revision_id from the document outline, use rewrite_texture when the change spans multiple sections, or use append_block for new paragraphs.", listed, "rewrite_texture", "patch_texture")
-	default:
-		return fmt.Sprintf("You must call %s to produce a document revision before this turn can end. Do not end the turn after calling only non-write tools.", listed)
-	}
 }
 
 func toolLoopMessageRoles(messages []json.RawMessage) []string {

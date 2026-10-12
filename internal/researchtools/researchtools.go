@@ -718,24 +718,6 @@ func shouldRequireResearchUpdateAfterTool(ctx context.Context, deps Dependencies
 	return latestResearch <= latestSubmit
 }
 
-func researchRunHasSuccessfulTool(events []types.EventRecord, toolName string) bool {
-	for _, ev := range events {
-		if ev.Kind != types.EventToolResult {
-			continue
-		}
-		var payload map[string]any
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
-			continue
-		}
-		tool, _ := payload["tool"].(string)
-		isError, _ := payload["is_error"].(bool)
-		if tool == toolName && !isError {
-			return true
-		}
-	}
-	return false
-}
-
 func latestSuccessfulResearchToolSeq(events []types.EventRecord, toolNames ...string) int64 {
 	wanted := make(map[string]bool, len(toolNames))
 	for _, toolName := range toolNames {
@@ -1021,17 +1003,6 @@ func stringValue(value any) string {
 		return v
 	default:
 		return strings.TrimSpace(fmt.Sprint(v))
-	}
-}
-
-func boolValue(value any) bool {
-	switch v := value.(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(strings.TrimSpace(v), "true")
-	default:
-		return false
 	}
 }
 

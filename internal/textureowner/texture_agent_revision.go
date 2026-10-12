@@ -38,17 +38,6 @@ type textureAgentRevisionRequest struct {
 	Provenance             map[string]any        `json:"-"`
 }
 
-// textureAgentRevisionResponse is the JSON response for agent revision
-// submission. It returns the stable task handle so runtime/trace surfaces can
-// correlate the mutation even though the editor now follows the document stream
-// instead of polling the run directly (VAL-ETEXT-004).
-type textureAgentRevisionResponse struct {
-	RunID     string         `json:"loop_id"`
-	DocID     string         `json:"doc_id"`
-	State     types.RunState `json:"state"`
-	CreatedAt string         `json:"created_at"`
-}
-
 // HandleTextureAgentRevision handles POST
 // /api/texture/documents/{id}/revise.
 //
@@ -876,63 +865,6 @@ func workerMessagesContainActiveDelegation(messages []types.ChannelMessage) bool
 		}
 	}
 	return false
-}
-
-func (rt *Handler) recentWorkerMessages(ctx context.Context, ownerID, channelID string, limit int) ([]types.ChannelMessage, error) {
-	if limit <= 0 {
-		limit = 12
-	}
-	messages, err := rt.Store.ListChannelMessages(ctx, ownerID, channelID, 0, 200)
-	if err != nil {
-		return nil, err
-	}
-	runs, err := rt.Core.ListRunsByChannel(ctx, ownerID, channelID, 200)
-	if err != nil {
-		return nil, err
-	}
-	runProfiles := make(map[string]string, len(runs))
-	for _, run := range runs {
-		runProfiles[run.RunID] = agentProfileForRun(&run)
-	}
-	filtered := make([]types.ChannelMessage, 0, len(messages))
-	for _, message := range messages {
-		if !textureAgentIDMatchesDoc(message.ToAgentID, channelID) {
-			continue
-		}
-		switch runProfiles[strings.TrimSpace(message.FromRunID)] {
-		case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
-			filtered = append(filtered, message)
-		}
-	}
-	if len(filtered) > limit {
-		filtered = filtered[len(filtered)-limit:]
-	}
-	return filtered, nil
-}
-
-func (rt *Handler) userRevisionDiffSummaries(ctx context.Context, ownerID, docID string, limit int) ([]string, error) {
-	revs, err := rt.listTextureRevisions(ctx, ownerID, docID, limit)
-	if err != nil {
-		return nil, err
-	}
-	summaries := make([]string, 0, len(revs))
-	for i := len(revs) - 1; i >= 0; i-- {
-		rev := revs[i]
-		if rev.AuthorKind != types.AuthorUser {
-			continue
-		}
-		label := rev.CreatedAt.UTC().Format(time.RFC3339)
-		if rev.ParentRevisionID == "" {
-			summaries = append(summaries, fmt.Sprintf("%s %s: initial user-authored draft", rev.RevisionID, label))
-			continue
-		}
-		diff, err := rt.Store.GetDiff(ctx, rev.ParentRevisionID, rev.RevisionID, ownerID)
-		if err != nil {
-			continue
-		}
-		summaries = append(summaries, fmt.Sprintf("%s %s: %s", rev.RevisionID, label, summarizeDiffResult(diff)))
-	}
-	return summaries, nil
 }
 
 func truncatePromptSnippet(value string, limit int) string {

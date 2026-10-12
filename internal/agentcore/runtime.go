@@ -124,7 +124,6 @@ type Runtime struct {
 	researchDeps *researchtools.Dependencies
 
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
-	textureEditMu         sync.Mutex
 	modelPolicy           *modelpolicy.Manager
 	// researchChildCalls spaces every research child's model calls on
 	// this computer (research_children.go).
@@ -3952,33 +3951,6 @@ func fillConductorDecisionFromRun(rec *types.RunRecord, decision conductorDecisi
 	return decision
 }
 
-func mergeStoredConductorRoute(rec *types.RunRecord, stored types.RunRecord) {
-	if rec == nil {
-		return
-	}
-	if rec.Metadata == nil {
-		rec.Metadata = make(map[string]any)
-	}
-	for _, key := range []string{
-		"doc_id",
-		"user_revision_id",
-		"framing_revision_id",
-		"initial_revision_id",
-		"initial_loop_id",
-	} {
-		if value := metadataStringValue(stored.Metadata, key); value != "" {
-			rec.Metadata[key] = value
-		}
-	}
-	var storedDecision conductorDecision
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stored.Result)), &storedDecision); err == nil &&
-		storedDecision.Action == "open_app" &&
-		isTextureDecisionApp(storedDecision.App) &&
-		strings.TrimSpace(storedDecision.DocID) != "" {
-		rec.Result = stored.Result
-	}
-}
-
 func normalizeConductorDecision(rec *types.RunRecord) string {
 	defaultDecision := fillConductorDecisionFromRun(rec, conductorDecision{})
 	if rec == nil {
@@ -4023,33 +3995,6 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 
 func ptrBool(v bool) *bool {
 	return &v
-}
-
-func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDecision) string {
-	if rec == nil || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
-		return ""
-	}
-	if !isTextureDecisionApp(conductorRequestedApp(rec)) {
-		return ""
-	}
-	seedPrompt := strings.TrimSpace(decision.SeedPrompt)
-	if seedPrompt == "" {
-		seedPrompt = provider.ConductorSeedPrompt(rec)
-	}
-	if seedPrompt == "" {
-		return ""
-	}
-	title := strings.TrimSpace(decision.Title)
-	if title == "" {
-		title = conductorWindowTitle(rec, seedPrompt)
-	}
-	if title == "" {
-		title = provider.InitialTextureTitle(seedPrompt, "")
-	}
-	if title == "" || strings.EqualFold(title, seedPrompt) {
-		return seedPrompt
-	}
-	return "# " + title + "\n\n" + seedPrompt
 }
 
 // engineeringOverlayTerminalFateCommitted reports whether any persisted
@@ -4174,67 +4119,6 @@ func actorToolLoopBudgetFromMetadata(rec *types.RunRecord, budget toolregistry.T
 		budget.SpentOutputTokens = value
 	}
 	return budget
-}
-
-type actorToolLoopBudgetSpend struct {
-	SourceRunID        string
-	ProviderCalls      int
-	InputTokens        int
-	OutputTokens       int
-	ObservedUsageEvent bool
-}
-
-func (rt *Runtime) latestActorToolLoopBudgetSpend(ctx context.Context, ownerID, agentID string) (actorToolLoopBudgetSpend, bool, error) {
-	var spend actorToolLoopBudgetSpend
-	if rt == nil || rt.store == nil {
-		return spend, false, nil
-	}
-	ownerID = strings.TrimSpace(ownerID)
-	agentID = strings.TrimSpace(agentID)
-	if ownerID == "" || agentID == "" {
-		return spend, false, nil
-	}
-	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, rt.TextureComputerID(), agentID, "")
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return spend, false, nil
-		}
-		return spend, false, err
-	}
-	spend.SourceRunID = sourceRunID
-	eventsForRun, err := rt.store.ListEvents(ctx, sourceRunID, 5000)
-	if err != nil {
-		return spend, false, err
-	}
-	providerCallsFromPreflight := 0
-	for _, ev := range eventsForRun {
-		if ev.Kind != types.EventRunProgress {
-			continue
-		}
-		switch ev.Phase {
-		case "provider_call":
-			providerCallsFromPreflight++
-		case "tool_loop_budget_usage", "tool_loop_budget":
-			var payload map[string]any
-			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
-				continue
-			}
-			spend.ObservedUsageEvent = true
-			if value := metadataIntValue(payload, "provider_calls"); value > spend.ProviderCalls {
-				spend.ProviderCalls = value
-			}
-			if value := metadataIntValue(payload, "input_tokens"); value > spend.InputTokens {
-				spend.InputTokens = value
-			}
-			if value := metadataIntValue(payload, "output_tokens"); value > spend.OutputTokens {
-				spend.OutputTokens = value
-			}
-		}
-	}
-	if spend.ProviderCalls == 0 && providerCallsFromPreflight > 0 {
-		spend.ProviderCalls = providerCallsFromPreflight
-	}
-	return spend, true, nil
 }
 
 // handleRunCompletion processes feature-specific side effects after a run
@@ -4376,80 +4260,6 @@ func metadataStringSliceValue(metadata map[string]any, key string) []string {
 		return []string{strings.TrimSpace(values)}
 	}
 	return nil
-}
-
-func (rt *Runtime) channelHasGroundedHistory(ctx context.Context, ownerID, channelID string, before time.Time) (bool, error) {
-	channelID = strings.TrimSpace(channelID)
-	if channelID == "" {
-		return false, nil
-	}
-	runs, err := rt.ListRunsByChannel(ctx, ownerID, channelID, 500)
-	if err != nil {
-		return false, err
-	}
-	groundedRunIDs := make(map[string]struct{})
-	for _, run := range runs {
-		if !before.IsZero() && !run.CreatedAt.Before(before) {
-			continue
-		}
-		switch agentProfileForRun(&run) {
-		case agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
-			groundedRunIDs[run.RunID] = struct{}{}
-		}
-	}
-	if len(groundedRunIDs) == 0 {
-		return false, nil
-	}
-	messages, err := rt.store.ListChannelMessages(ctx, ownerID, channelID, 0, 500)
-	if err != nil {
-		return false, err
-	}
-	for _, message := range messages {
-		if !before.IsZero() && !message.Timestamp.Before(before) {
-			continue
-		}
-		if _, ok := groundedRunIDs[strings.TrimSpace(message.FromRunID)]; ok {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-const (
-	canonicalTextureSourcePathMetadataKey = "canonical_texture_source_path"
-	textureAvailableSourceEntitiesKey     = "texture_available_source_entities"
-)
-
-// durableMetadataKeys lists the revision metadata keys that must survive
-// across appagent revisions so that subsequent revise requests retain
-// the original user context (seed_prompt, source_path, etc.).
-var durableMetadataKeys = []string{
-	"seed_prompt",
-	runMetadataExplicitResearch,
-	"source_path",
-	canonicalTextureSourcePathMetadataKey,
-	"import_manifest",
-	"migration_manifest",
-	"conductor_loop_id",
-	runMetadataTrajectoryID,
-	"artifact_kind",
-	"revision_role",
-	"input_origin",
-	"texture_version_stage",
-	"source_network_cycle_id",
-	"source_network_request_id",
-	"source_network_request_kind",
-	"ingestion_handoff_cycle_id",
-	"ingestion_handoff_request_id",
-	"ingestion_handoff_request_kind",
-	"source_item_ids",
-	"processor_key",
-	"reconciler_scope",
-	"selected_style_sources",
-	"selected_style_rationale",
-	runMetadataOwnerEmail,
-	modelpolicy.MetadataPolicyOverlayID,
-	textureAvailableSourceEntitiesKey,
 }
 
 // handleExecutionError transitions a run to failed/blocked and emits the

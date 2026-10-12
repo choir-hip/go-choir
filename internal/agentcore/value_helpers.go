@@ -1,9 +1,6 @@
 package agentcore
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
@@ -24,38 +21,6 @@ func requestDesktopID(r *http.Request) string {
 	return types.PrimaryDesktopID
 }
 
-func rawJSONOrFallback(raw json.RawMessage, fallback string) json.RawMessage {
-	if len(raw) == 0 || !json.Valid(raw) {
-		return json.RawMessage(fallback)
-	}
-	return raw
-}
-
-func sha256Hex(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
-}
-
-func digestParts(parts ...string) string {
-	return sha256Hex(strings.Join(parts, "\x00"))
-}
-
-func computerKindForID(computerID string) string {
-	if strings.Contains(strings.ToLower(computerID), "platform") {
-		return "platform"
-	}
-	return "user"
-}
-
-func candidateSourceRefForComputer(computerID, kind, candidateID string) string {
-	part := safeRefPart(computerID)
-	candidatePart := safeRefPart(candidateID)
-	if kind == "platform" {
-		return "refs/platform-computers/" + part + "/candidates/" + candidatePart
-	}
-	return "refs/computers/" + part + "/candidates/" + candidatePart
-}
-
 func safeRefPart(value string) string {
 	value = strings.TrimSpace(strings.ToLower(value))
 	if value == "" {
@@ -70,29 +35,6 @@ func safeRefPart(value string) string {
 		b.WriteByte('-')
 	}
 	return strings.Trim(b.String(), "-.")
-}
-
-func normalizeRouteProfile(profile, ownerID, computerID string) string {
-	profile = strings.TrimSpace(profile)
-	if profile == "" {
-		return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
-	}
-	if strings.HasPrefix(profile, "route:") {
-		legacyID := strings.TrimSpace(strings.TrimPrefix(profile, "route:"))
-		if legacyID != "" {
-			return safeRefPart(ownerID) + "/" + safeRefPart(legacyID)
-		}
-		return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
-	}
-	parts := strings.Split(profile, "/")
-	if len(parts) == 2 {
-		ownerPart := strings.TrimSpace(parts[0])
-		computerPart := strings.TrimSpace(parts[1])
-		if ownerPart != "" && computerPart != "" {
-			return ownerPart + "/" + computerPart
-		}
-	}
-	return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
 }
 
 func firstNonEmpty(values ...string) string {
@@ -124,14 +66,6 @@ func firstNonEmptyPromotion(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func stringFromMap(m map[string]any, key string) string {
-	if m == nil {
-		return ""
-	}
-	value, _ := m[key].(string)
-	return strings.TrimSpace(value)
 }
 
 func truncateRunes(value string, maxRunes int) string {
@@ -246,78 +180,5 @@ func normalizeWorkerUpdateRefKey(key string) string {
 		return "event_head"
 	default:
 		return ""
-	}
-}
-
-func executionTargetKind(kind string) bool {
-	switch strings.TrimSpace(kind) {
-	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
-		return true
-	default:
-		return false
-	}
-}
-
-func looksLikeArtifactPath(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" || strings.ContainsAny(value, "\r\n") {
-		return false
-	}
-	return strings.HasPrefix(value, "/") ||
-		strings.HasPrefix(value, "./") ||
-		strings.HasPrefix(value, "../") ||
-		strings.Contains(value, "/")
-}
-
-func isHTTPURL(value string) bool {
-	value = strings.TrimSpace(value)
-	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
-}
-
-func decodeRevisionMetadata(raw json.RawMessage) map[string]any {
-	if len(raw) == 0 {
-		return nil
-	}
-	var metadata map[string]any
-	if err := json.Unmarshal(raw, &metadata); err != nil {
-		return nil
-	}
-	return metadata
-}
-
-func sanitizeExportPart(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "run"
-	}
-	var b strings.Builder
-	for _, r := range raw {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
-			b.WriteRune(r)
-		} else if b.Len() > 0 && b.String()[b.Len()-1] != '-' {
-			b.WriteByte('-')
-		}
-	}
-	if out := strings.Trim(b.String(), "-"); out != "" {
-		return out
-	}
-	return "run"
-}
-
-func intMapValue(values map[string]any, key string) int {
-	switch value := values[key].(type) {
-	case int:
-		return value
-	case int64:
-		return int(value)
-	case uint64:
-		return int(value)
-	case float64:
-		return int(value)
-	case json.Number:
-		parsed, _ := value.Int64()
-		return int(parsed)
-	default:
-		return 0
 	}
 }
