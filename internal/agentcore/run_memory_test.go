@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -317,17 +318,27 @@ func TestRunMemoryCheckpointParsesAndRendersRetrievalHandles(t *testing.T) {
 		RawEntryIDs:           []string{"m1"},
 		RawToolResultEntryIDs: []string{"m2"},
 	}
-	summary := renderRunMemoryCheckpointSummary(checkpoint, plan)
+	summary := renderRunMemoryCheckpointSummary(checkpoint, plan, "")
 	for _, want := range []string{
 		"Run memory LLM checkpoint",
 		"finish provider conformance",
 		"no arbitrary max_tokens",
-		"get_run_memory_entry",
-		"m1",
+		"Compacted raw entry ids:\n- m1",
 	} {
 		if !strings.Contains(summary, want) {
 			t.Fatalf("summary missing %q:\n%s", want, summary)
 		}
+	}
+	// A desk without a retrieval verb is not told to call one; research is
+	// told the verb its module set exports.
+	if strings.Contains(summary, "retrieve one with") {
+		t.Fatalf("summary names a retrieval verb for a desk without one:\n%s", summary)
+	}
+	if research := renderRunMemoryCheckpointSummary(checkpoint, plan, runMemoryRetrievalVerb(&types.RunRecord{AgentProfile: agentprofile.Research})); !strings.Contains(research, "retrieve one with choir.RunMemoryEntry(entry_id)") {
+		t.Fatalf("research summary missing choir.RunMemoryEntry:\n%s", research)
+	}
+	if verb := runMemoryRetrievalVerb(&types.RunRecord{AgentProfile: agentprofile.Texture}); verb != "" {
+		t.Fatalf("texture retrieval verb = %q, want none", verb)
 	}
 	details := checkpointDetails(checkpoint)
 	if got := details["current_objective"]; got != "finish provider conformance" {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
@@ -594,12 +595,17 @@ func (m *runMemoryManager) generateLLMCompaction(ctx context.Context, plan runMe
 	if strings.TrimSpace(m.llmConfig.Provider) == "" || strings.TrimSpace(m.llmConfig.Model) == "" {
 		return runMemoryLLMCompaction{}, fmt.Errorf("llm compactor model selection is incomplete")
 	}
+	retrieval := runMemoryRetrievalVerb(m.rec)
+	preserveHandles := "Preserve exact entry_id handles."
+	if retrieval != "" {
+		preserveHandles = "Preserve exact entry_id handles so the future agent can call " + retrieval + "(entry_id) when details are needed."
+	}
 	system := strings.Join([]string{
 		"You are Choir's runtime run-memory compactor.",
 		"Convert durable run memory into a concise typed checkpoint for the same agent run.",
 		"Return only one JSON object matching the requested schema.",
 		"Do not continue the conversation. Do not expose hidden reasoning.",
-		"Preserve exact entry_id handles so the future agent can call get_run_memory_entry when details are needed.",
+		preserveHandles,
 	}, "\n")
 	userText := buildRunMemoryCompactionPrompt(m.rec, plan)
 	msg, _ := json.Marshal(map[string]any{
@@ -625,7 +631,7 @@ func (m *runMemoryManager) generateLLMCompaction(ctx context.Context, plan runMe
 	if err != nil {
 		return runMemoryLLMCompaction{}, err
 	}
-	summary := renderRunMemoryCheckpointSummary(checkpoint, plan)
+	summary := renderRunMemoryCheckpointSummary(checkpoint, plan, retrieval)
 	details := checkpointDetails(checkpoint)
 	details["llm_stop_reason"] = resp.StopReason
 	details["llm_response_model"] = resp.Model
@@ -649,7 +655,11 @@ func buildRunMemoryCompactionPrompt(rec *types.RunRecord, plan runMemoryCompacti
 	b.WriteString("- Preserve user hard constraints, current objective, tool obligations, failed attempts, source/evidence handles, and next actions.\n")
 	b.WriteString("- Include compacted raw entry ids in raw_entry_handles when they may need exact retrieval.\n")
 	b.WriteString("- Include tool-result entry ids in raw_tool_result_handles.\n")
-	b.WriteString("- Use get_run_memory_entry(entry_id) in retrieval_instructions when exact raw content may matter.\n")
+	if retrieval := runMemoryRetrievalVerb(rec); retrieval != "" {
+		fmt.Fprintf(&b, "- Use %s(entry_id) in retrieval_instructions when exact raw content may matter.\n", retrieval)
+	} else {
+		b.WriteString("- This desk cannot retrieve compacted entries; keep everything the next turn needs in the checkpoint fields.\n")
+	}
 	b.WriteString("- Do not invent facts. Say uncertain when uncertain.\n")
 	b.WriteString("- Keep continuation_checkpoint concise but useful.\n")
 	if rec != nil {
@@ -766,7 +776,18 @@ func checkpointStringListField(raw map[string]any, key string) []string {
 	}
 }
 
-func renderRunMemoryCheckpointSummary(checkpoint runMemoryCheckpoint, plan runMemoryCompactionPlan) string {
+// runMemoryRetrievalVerb names the cell verb a run's desk can use to read a
+// compacted run-memory entry back, or "" when its desk has none. Only the
+// research module set exports choir.RunMemoryEntry; the typed
+// get_run_memory_entry tool is on no live registry.
+func runMemoryRetrievalVerb(rec *types.RunRecord) string {
+	if rec != nil && agentProfileForRun(rec) == agentprofile.Research {
+		return "choir.RunMemoryEntry"
+	}
+	return ""
+}
+
+func renderRunMemoryCheckpointSummary(checkpoint runMemoryCheckpoint, plan runMemoryCompactionPlan, retrieval string) string {
 	var b strings.Builder
 	b.WriteString("Run memory LLM checkpoint\n")
 	b.WriteString("Reason: ")
@@ -788,7 +809,10 @@ func renderRunMemoryCheckpointSummary(checkpoint runMemoryCheckpoint, plan runMe
 	writeCheckpointList(&b, "Retrieval instructions", checkpoint.RetrievalInstructions)
 	writeCheckpointScalar(&b, "Continuation checkpoint", checkpoint.ContinuationCheckpoint)
 	if len(plan.RawEntryIDs) > 0 {
-		b.WriteString("\nCompacted raw entry ids available via get_run_memory_entry:\n")
+		b.WriteString("\nCompacted raw entry ids:\n")
+		if retrieval != "" {
+			fmt.Fprintf(&b, "(retrieve one with %s(entry_id))\n", retrieval)
+		}
 		for _, id := range plan.RawEntryIDs {
 			fmt.Fprintf(&b, "- %s\n", id)
 		}

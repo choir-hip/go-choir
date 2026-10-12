@@ -48,7 +48,6 @@ func RevisionSourceEntitiesIntro() string {
 type RevisionPolicyOptions struct {
 	OwnerPromptRequestRevision bool
 	UserAuthoredRevision       bool
-	ExplicitResearchRequest    bool
 	HasGroundedHistory         bool
 	DocID                      string
 	RevisionID                 string

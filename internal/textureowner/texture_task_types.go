@@ -23,7 +23,6 @@ const (
 	textureJoinBundleDigest               = "self_development_bundle_digest"
 	textureJoinReceiptID                  = "self_development_receipt_id"
 	textureJoinEventHead                  = "self_development_event_head"
-	runMetadataExplicitResearch           = "explicit_researcher_request"
 	runMetadataProcessorKey               = "processor_key"
 	runMetadataReconcilerScope            = "reconciler_scope"
 )
@@ -43,7 +42,6 @@ func textureInputOriginForCaller(profile string) string {
 
 var durableMetadataKeys = []string{
 	"seed_prompt",
-	runMetadataExplicitResearch,
 	"source_path",
 	canonicalTextureSourcePathMetadataKey,
 	"import_manifest",

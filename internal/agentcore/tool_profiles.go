@@ -18,19 +18,18 @@ import (
 )
 
 const (
-	runMetadataAgentProfile     = "agent_profile"
-	runMetadataChannelID        = "channel_id"
-	runMetadataAgentRole        = "agent_role"
-	runMetadataAgentID          = "agent_id"
-	runMetadataModel            = "model"
-	runMetadataDesktopID        = "desktop_id"
-	runMetadataToolCWD          = "tool_cwd"
-	runMetadataOwnerEmail       = "owner_email"
-	runMetadataEngineeringSlot  = "co_super_slot"
-	runMetadataSpawnReused      = "spawn_reused_existing_child"
-	runMetadataProcessorKey     = "processor_key"
-	runMetadataReconcilerScope  = "reconciler_scope"
-	runMetadataExplicitResearch = "explicit_researcher_request"
+	runMetadataAgentProfile    = "agent_profile"
+	runMetadataChannelID       = "channel_id"
+	runMetadataAgentRole       = "agent_role"
+	runMetadataAgentID         = "agent_id"
+	runMetadataModel           = "model"
+	runMetadataDesktopID       = "desktop_id"
+	runMetadataToolCWD         = "tool_cwd"
+	runMetadataOwnerEmail      = "owner_email"
+	runMetadataEngineeringSlot = "co_super_slot"
+	runMetadataSpawnReused     = "spawn_reused_existing_child"
+	runMetadataProcessorKey    = "processor_key"
+	runMetadataReconcilerScope = "reconciler_scope"
 )
 
 func toolExecutionContextForRun(rec *types.RunRecord) toolregistry.ExecutionContext {

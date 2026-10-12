@@ -258,7 +258,7 @@ func extractRunMemoryEntryIDForTest(raw string) string {
 		rest := raw[idx+len(marker):]
 		return firstRunMemoryEntryTokenForTest(rest)
 	}
-	const listMarker = "Compacted raw entry ids available via get_run_memory_entry:"
+	const listMarker = "Compacted raw entry ids:"
 	idx = strings.Index(raw, listMarker)
 	if idx < 0 {
 		return ""

@@ -10,7 +10,6 @@ import (
 const maxSkillPromptExtractBytes = 1200
 
 var runtimePromptSkills = []string{
-	"mission-gradient",
 	"cognitive-transform-portfolio",
 }
 
@@ -41,7 +40,7 @@ func (rt *Runtime) skillContextForProfile(profile string) string {
 	var b strings.Builder
 	b.WriteString("Available repo skills (natural-language use; no slash commands):\n")
 	b.WriteString(strings.Join(entries, "\n\n"))
-	b.WriteString("\n\nUse `mission-gradient` for long-running, staging, self-development, or broad architectural work. Use `cognitive-transform-portfolio` before stopping on a blocker, and again after first correctness when a quality pass can raise the result.")
+	b.WriteString("\n\nUse `cognitive-transform-portfolio` before stopping on a blocker, and again after first correctness when a quality pass can raise the result.")
 	return b.String()
 }
 

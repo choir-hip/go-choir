@@ -199,7 +199,7 @@ func hasRuntimeSkillFiles(root string) bool {
 	if strings.TrimSpace(root) == "" {
 		return false
 	}
-	for _, name := range []string{"mission-gradient", "cognitive-transform-portfolio"} {
+	for _, name := range []string{"cognitive-transform-portfolio"} {
 		if _, err := os.Stat(filepath.Join(root, name, "SKILL.md")); err != nil {
 			return false
 		}

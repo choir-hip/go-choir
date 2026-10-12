@@ -114,7 +114,7 @@ func TestProductAPIRequestRejectsDisallowedRoutes(t *testing.T) {
 		})
 	}
 
-	if _, err := rt.productAPIRequest(context.Background(), "", "", "GET", "/api/universal-wire/stories", nil); err == nil || !strings.Contains(err.Error(), "missing owner context") {
+	if _, err := rt.productAPIRequest(context.Background(), "", "", "GET", "/api/run-acceptances", nil); err == nil || !strings.Contains(err.Error(), "missing owner context") {
 		t.Fatalf("missing-owner error = %v", err)
 	}
 
@@ -128,7 +128,7 @@ func TestProductAPIRequestCapsResponseAndReportsHTTPError(t *testing.T) {
 	t.Parallel()
 
 	canonical := server.NewServer("product-api-response-cap-test", "0")
-	canonical.HandleFunc("/api/trace/oversized", func(w http.ResponseWriter, _ *http.Request) {
+	canonical.HandleFunc("/api/run-acceptances/oversized", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusBadGateway)
 		_, _ = w.Write([]byte(strings.Repeat("x", productAPIMaxBodyBytes+1)))
@@ -136,7 +136,7 @@ func TestProductAPIRequestCapsResponseAndReportsHTTPError(t *testing.T) {
 	rt := &Runtime{}
 	rt.SetProductAPIHandler(canonical)
 
-	raw, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "GET", "/api/trace/oversized", nil)
+	raw, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "GET", "/api/run-acceptances/oversized", nil)
 	if err != nil {
 		t.Fatalf("product api verb: %v", err)
 	}
@@ -160,8 +160,25 @@ func TestProductAPIRequestCapsResponseAndReportsHTTPError(t *testing.T) {
 func TestProductAPIRequestWithoutBoundServerFailsClosed(t *testing.T) {
 	t.Parallel()
 	rt := &Runtime{}
-	if _, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "GET", "/api/universal-wire/stories", nil); err == nil || !strings.Contains(err.Error(), "host unavailable") {
+	if _, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "GET", "/api/run-acceptances", nil); err == nil || !strings.Contains(err.Error(), "host unavailable") {
 		t.Fatalf("unbound-server error = %v", err)
+	}
+}
+
+// The guest router serves no /api/trace/, /api/continuations or
+// /api/universal-wire/ route (the last lives only on the host proxy), so the
+// allowlist no longer names them (D0 census desk-config 1.10).
+func TestProductAPIAllowlistRefusesRoutesTheGuestDoesNotServe(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"/api/trace/events",
+		"/api/continuations",
+		"/api/continuations/c-1",
+		"/api/universal-wire/stories",
+	} {
+		if err := validateProductAPIRoute(http.MethodGet, path); err == nil || !strings.Contains(err.Error(), "not in the product-path allowlist") {
+			t.Errorf("GET %s: error = %v, want an allowlist refusal", path, err)
+		}
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
@@ -302,7 +301,6 @@ func newImportDocumentContentTool(deps Dependencies) toolregistry.Tool {
 				"selector_count": len(selectors),
 				"provenance":     item.Provenance,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
@@ -343,7 +341,7 @@ func newSourceSearchTool(sourceClient SourceSearchClient, deps Dependencies) too
 				"metadata":           resp.Metadata,
 				"results":            resp.Results,
 			}
-			model, metadata := compactSourceSearchProjection(full, resp, shouldRequireResearchUpdateAfterTool(ctx, deps))
+			model, metadata := compactSourceSearchProjection(full, resp)
 			return toolregistry.ProjectionResultJSON(model, full, metadata)
 		}}
 }
@@ -390,7 +388,6 @@ func newImportURLContentTool(deps Dependencies) toolregistry.Tool {
 				"text_chars":    len(item.TextContent),
 				"provenance":    item.Provenance,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
@@ -478,7 +475,6 @@ func newReadContentItemTool(deps Dependencies) toolregistry.Tool {
 				"segment_count":      segmentCount,
 				"segments_truncated": segmentsTruncated,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
@@ -526,7 +522,6 @@ func newListContentItemSelectorsTool(deps Dependencies) toolregistry.Tool {
 				"selector_count": len(previews),
 				"selectors":      previews,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
@@ -599,7 +594,6 @@ func newReadContentItemSelectorTool(deps Dependencies) toolregistry.Tool {
 				"text_chars":     len(selected.Text),
 				"text_truncated": truncated,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
@@ -642,7 +636,7 @@ func newWebSearchTool(searchClient search.Client, deps Dependencies) toolregistr
 		MaxResults int    `json:"max_results,omitempty"`
 	}
 	return toolregistry.Tool{Name: "web_search",
-		Description: "Search the web using the configured multi-provider search client. Research cadence: for a broad first pass, call one web_search, then update_coagent on the next model turn before any additional search-only turn; deeper searches can run after or alongside that checkpoint.",
+		Description: "Search the web using the configured multi-provider search client.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":       map[string]any{"type": "string"},
 			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
@@ -690,64 +684,9 @@ func newWebSearchTool(searchClient search.Client, deps Dependencies) toolregistr
 				full["code"] = resp.Code
 				full["error"] = resp.Error
 			}
-			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchUpdateAfterTool(ctx, deps))
+			model, metadata := compactWebSearchProjection(full, resp)
 			return toolregistry.ProjectionResultJSON(model, full, metadata)
 		}}
-}
-
-func shouldRequireResearchUpdateAfterTool(ctx context.Context, deps Dependencies) bool {
-	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Research {
-		return false
-	}
-	if deps.Store == nil {
-		return false
-	}
-	runID := toolregistry.ExecutionContextFrom(ctx).RunID
-	if runID == "" {
-		return false
-	}
-	events, err := deps.Store.ListEvents(ctx, runID, 200)
-	if err != nil {
-		return false
-	}
-	latestSubmit := latestSuccessfulResearchToolSeq(events, "update_coagent")
-	latestResearch := latestSuccessfulResearchToolSeq(events, "web_search", "source_search", "fetch_url", "import_url_content", "read_content_item")
-	if latestSubmit == 0 {
-		return latestResearch == 0
-	}
-	return latestResearch <= latestSubmit
-}
-
-func latestSuccessfulResearchToolSeq(events []types.EventRecord, toolNames ...string) int64 {
-	wanted := make(map[string]bool, len(toolNames))
-	for _, toolName := range toolNames {
-		if strings.TrimSpace(toolName) != "" {
-			wanted[toolName] = true
-		}
-	}
-	var latest int64
-	for _, ev := range events {
-		if ev.Kind != types.EventToolResult {
-			continue
-		}
-		var payload map[string]any
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
-			continue
-		}
-		tool, _ := payload["tool"].(string)
-		isError, _ := payload["is_error"].(bool)
-		if wanted[tool] && !isError && ev.Seq > latest {
-			latest = ev.Seq
-		}
-	}
-	return latest
-}
-
-func addResearchUpdateCheckpointRequirement(ctx context.Context, deps Dependencies, result map[string]any) {
-	if !shouldRequireResearchUpdateAfterTool(ctx, deps) {
-		return
-	}
-	result["next_instruction"] = "Submit a concise update_coagent source packet from this latest research batch before any additional search/fetch turn. Use schema_version=\"coagent_source_packet.v1\" with kind=\"evidence_update\" or kind=\"blocker\", claims[], packet.sources for citeable handles, questions[], and notes[]."
 }
 
 func newFetchURLTool(httpClient *http.Client, deps Dependencies) toolregistry.Tool {
@@ -809,12 +748,12 @@ func newFetchURLTool(httpClient *http.Client, deps Dependencies) toolregistry.To
 				"content_length": len(data),
 				"content":        content,
 			}
-			model, metadata := compactFetchURLProjection(full, content, shouldRequireResearchUpdateAfterTool(ctx, deps))
+			model, metadata := compactFetchURLProjection(full, content)
 			return toolregistry.ProjectionResultJSON(model, full, metadata)
 		}}
 }
 
-func compactWebSearchProjection(full map[string]any, resp *search.Response, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
+func compactWebSearchProjection(full map[string]any, resp *search.Response) (map[string]any, map[string]any) {
 	// Agent retrieval, not a human result page: show the model a broad candidate
 	// set so a single broad first-pass search yields enough to ground and rerank.
 	// The router already accumulates up to ~40 merged hits (search plane defaults);
@@ -883,8 +822,6 @@ func compactWebSearchProjection(full map[string]any, resp *search.Response, requ
 		}
 		model["gateway_status"] = "search_outage: gateway returned no merged results; use provider_health and attempts for the precise blocker"
 		model["next_instruction"] = "Report a precise blocker from provider_health and attempts. Do not claim live search succeeded or invent grounded facts."
-	} else if requireFindingsCheckpoint {
-		model["next_instruction"] = "Submit a concise first update_coagent source packet from this search result before any additional search-only turn. Include 2-4 grounded claims, packet.sources when citeable handles are ready, notes, questions, or a precise blocker."
 	}
 	if degraded && !resp.Outage {
 		model["gateway_status"] = "one or more providers failed or were unavailable; gateway returned available evidence and preserved provider details in Trace"
@@ -902,7 +839,7 @@ func compactWebSearchProjection(full map[string]any, resp *search.Response, requ
 	return model, metadata
 }
 
-func compactSourceSearchProjection(full map[string]any, resp *SourceSearchResponse, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
+func compactSourceSearchProjection(full map[string]any, resp *SourceSearchResponse) (map[string]any, map[string]any) {
 	const maxVisibleResults = 8
 	const maxBodyChars = 1000
 	visibleResults := make([]map[string]any, 0, researchMinInt(len(resp.Results), maxVisibleResults))
@@ -954,9 +891,6 @@ func compactSourceSearchProjection(full map[string]any, resp *SourceSearchRespon
 		"projection_policy":    "top bounded source-service item cards with compact excerpts",
 		"source_identity":      "each result carries target_kind=source_service_item, item_id, source_id, fetch_id, and content_hash",
 	}
-	if requireFindingsCheckpoint {
-		model["next_instruction"] = "Submit a concise first update_coagent source packet from this source_search result before any additional search-only turn. Include claims[], packet.sources for source/item handles, hashes/caveats in notes[], open gaps, and whether a web_search is still needed."
-	}
 	metadata := map[string]any{
 		"type":                 "source_search",
 		"full_result_count":    len(resp.Results),
@@ -967,7 +901,7 @@ func compactSourceSearchProjection(full map[string]any, resp *SourceSearchRespon
 	return model, metadata
 }
 
-func compactFetchURLProjection(full map[string]any, content string, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
+func compactFetchURLProjection(full map[string]any, content string) (map[string]any, map[string]any) {
 	const maxContentChars = 4000
 	visibleContent := contentowner.TruncateString(content, maxContentChars)
 	model := map[string]any{
@@ -981,9 +915,6 @@ func compactFetchURLProjection(full map[string]any, content string, requireFindi
 		"content":           visibleContent,
 		"full_evidence":     "stored in Trace tool.result full_output/full_output_sha256",
 		"projection_policy": "bounded excerpt; fetch/read deeper only when needed",
-	}
-	if requireFindingsCheckpoint {
-		model["next_instruction"] = "Submit a concise update_coagent source packet from this latest fetch before any additional search/fetch turn. Include new claims, packet.sources for citeable handles, questions, or a precise blocker; if the fetch only proved that final/current evidence is unavailable, report that blocker."
 	}
 	metadata := map[string]any{
 		"type":               "fetch_url",

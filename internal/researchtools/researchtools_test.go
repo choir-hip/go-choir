@@ -299,7 +299,7 @@ func TestWebSearchPreservesBreadthProjectionAndGatewayOutage(t *testing.T) {
 	}
 }
 
-func TestContentReadsPreserveBoundsSelectorsProvenanceAndCheckpointPressure(t *testing.T) {
+func TestContentReadsPreserveBoundsSelectorsAndProvenance(t *testing.T) {
 	st := openTestStore(t)
 	metadata, _ := json.Marshal(map[string]any{
 		"segments": []any{map[string]any{"text": "first"}, map[string]any{"text": "second"}},
@@ -345,11 +345,12 @@ func TestContentReadsPreserveBoundsSelectorsProvenanceAndCheckpointPressure(t *t
 	if readResult["provenance"].(map[string]any)["source"] != "fixture" {
 		t.Fatalf("provenance = %#v", readResult["provenance"])
 	}
-	if !strings.Contains(readResult["next_instruction"].(string), "update_coagent") {
-		t.Fatalf("initial checkpoint instruction = %#v", readResult["next_instruction"])
+	// update_coagent is gone; research results carry no instruction to
+	// call it.
+	if readResult["next_instruction"] != nil {
+		t.Fatalf("read result carries a stale instruction: %#v", readResult["next_instruction"])
 	}
 
-	appendToolResult(t, st, "research-run", item.OwnerID, "read_content_item", 1)
 	raw, err = registry.Execute(toolCtx, "list_content_item_selectors", json.RawMessage(`{"content_id":"content-1"}`))
 	if err != nil {
 		t.Fatalf("list_content_item_selectors: %v", err)
@@ -359,7 +360,6 @@ func TestContentReadsPreserveBoundsSelectorsProvenanceAndCheckpointPressure(t *t
 	if listResult["selector_count"] != float64(2) || listResult["next_instruction"] != nil {
 		t.Fatalf("selector list/checkpoint = %#v", listResult)
 	}
-	appendToolResult(t, st, "research-run", item.OwnerID, "update_coagent", 2)
 
 	raw, err = registry.Execute(toolCtx, "read_content_item_selector", json.RawMessage(`{"content_id":"content-1","selector_id":"page-2","max_text_chars":4}`))
 	if err != nil {
@@ -370,8 +370,8 @@ func TestContentReadsPreserveBoundsSelectorsProvenanceAndCheckpointPressure(t *t
 	if selectorResult["selector_kind"] != "page" || selectorResult["text_content"] != "beta" || selectorResult["text_truncated"] != true {
 		t.Fatalf("selector result = %#v", selectorResult)
 	}
-	if !strings.Contains(selectorResult["next_instruction"].(string), "update_coagent") {
-		t.Fatalf("post-checkpoint instruction = %#v", selectorResult["next_instruction"])
+	if selectorResult["next_instruction"] != nil {
+		t.Fatalf("selector result carries a stale instruction: %#v", selectorResult["next_instruction"])
 	}
 }
 
@@ -422,18 +422,4 @@ func openTestStore(t *testing.T) *store.Store {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	return st
-}
-
-func appendToolResult(t *testing.T, st *store.Store, runID, ownerID, tool string, suffix int) {
-	t.Helper()
-	payload, err := json.Marshal(map[string]any{"tool": tool, "is_error": false})
-	if err != nil {
-		t.Fatalf("marshal event: %v", err)
-	}
-	if err := st.AppendEvent(context.Background(), &types.EventRecord{
-		EventID: "event-" + tool + "-" + string(rune('0'+suffix)), RunID: runID, OwnerID: ownerID,
-		Timestamp: time.Now().UTC(), Kind: types.EventToolResult, Phase: "tool_call", Payload: payload,
-	}); err != nil {
-		t.Fatalf("append tool result: %v", err)
-	}
 }

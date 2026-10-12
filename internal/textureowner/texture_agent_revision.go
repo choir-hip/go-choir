@@ -809,7 +809,6 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString(textureprompts.RevisionPolicyOverlay(textureprompts.RevisionPolicyOptions{
 		OwnerPromptRequestRevision: ownerPromptRequestRevision,
 		UserAuthoredRevision:       current.AuthorKind == types.AuthorUser,
-		ExplicitResearchRequest:    metadataBoolValue(metadata, runMetadataExplicitResearch),
 		HasGroundedHistory:         hasGroundedHistory,
 		DocID:                      current.DocID,
 		RevisionID:                 current.RevisionID,

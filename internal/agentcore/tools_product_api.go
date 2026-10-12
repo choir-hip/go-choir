@@ -184,12 +184,8 @@ func validateProductAPIRoute(method, requestURI string) error {
 	}
 	for _, allowed := range []string{
 		"/api/prompt-bar",
-		"/api/universal-wire/",
 		"/api/texture/",
-		"/api/trace/",
 		"/api/computers/",
-		"/api/continuations",
-		"/api/continuations/",
 		"/api/run-acceptances",
 		"/api/run-acceptances/",
 		"/api/autopaper/",
