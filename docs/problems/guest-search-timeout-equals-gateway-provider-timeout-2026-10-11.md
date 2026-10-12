@@ -71,3 +71,11 @@ building.
 
 Mutation class of a fix: red (gateway provider calls) on the gateway side,
 orange on the guest client.
+
+## Revised 2026-10-12
+
+The deadline-ladder station is deleted. The owner chose asynchronous
+search instead: the call returns a stub at once and each provider's
+results land in REPL state as they arrive, so nothing waits on the slowest
+provider and the 30-second tie stops mattering
+([re-engineering decisions](../re-engineering-decisions-2026-10-12.md) §5).
