@@ -1,5 +1,3 @@
-//go:build comprehensive
-
 package browsercontrol
 
 import (

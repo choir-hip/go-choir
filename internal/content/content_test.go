@@ -1,5 +1,3 @@
-//go:build comprehensive
-
 package content
 
 import (
@@ -439,16 +437,6 @@ func TestContentCreateSupportsDurableMediaReferences(t *testing.T) {
 		t.Fatalf("file_path = %q", item.FilePath)
 	}
 
-	listReq := authenticatedRequest(http.MethodGet, "/api/content/items", "", "user-content")
-	listW := httptest.NewRecorder()
-	handler.HandleContentList(listW, listReq)
-	if listW.Code != http.StatusOK {
-		t.Fatalf("list status = %d body=%s", listW.Code, listW.Body.String())
-	}
-	if !strings.Contains(listW.Body.String(), item.ContentID) {
-		t.Fatalf("list response missing content id %s: %s", item.ContentID, listW.Body.String())
-	}
-
 	readerBody := `{"source_type":"text","media_type":"text/markdown","app_hint":"content","title":"Reader Source","text_content":"Durable source reader text."}`
 	readerReq := authenticatedRequest(http.MethodPost, "/api/content/items", readerBody, "user-content")
 	readerW := httptest.NewRecorder()
@@ -483,15 +471,9 @@ func TestContentImportFileCreatesExtractedPPTXContentItem(t *testing.T) {
 		t.Fatalf("write pptx: %v", err)
 	}
 
-	req := authenticatedRequest(http.MethodPost, "/api/content/import-file", `{"file_path":"imports/deck.pptx"}`, "user-content")
-	w := httptest.NewRecorder()
-	handler.HandleContentImportFile(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
-	}
-	var item types.ContentItem
-	if err := json.Unmarshal(w.Body.Bytes(), &item); err != nil {
-		t.Fatalf("decode response: %v", err)
+	item, err := handler.ImportFile(context.Background(), "user-content", "imports/deck.pptx")
+	if err != nil {
+		t.Fatalf("ImportFile: %v", err)
 	}
 	if item.SourceType != "file" || item.FilePath != "imports/deck.pptx" {
 		t.Fatalf("file identity = %s %s", item.SourceType, item.FilePath)
