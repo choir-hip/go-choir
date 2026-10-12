@@ -429,7 +429,12 @@ lifetime of the broker handle breaks long-lived desk sessions.
 4. **Production follows the ingestion rhythm.** Six hours of polling
    should yield many stories, not three: stories are opened and revised
    at roughly the cadence captures arrive. The acceptance observes this
-   per poll interval; no quota is added (§1.2).
+   per poll interval; no quota is added (§1.2). A poll brings many
+   captures at once, so one interval can open several stories. The point
+   is to cover the consequential stories as they emerge and evolve. Early
+   on, with little corpus, most captures open new stories; over time the
+   share of new stories falls as more captures revise and cite existing
+   ones. That falling ratio is expected, not a defect.
 
 **Convergent panel** on the metamission and the three cuts, frozen at
 2d2b864e. Six of eight answered (codex, claude opus, gpt-6.1-sol,

@@ -294,7 +294,9 @@ finish:
     captures with a reason, and the receipt lays stories opened, revisions
     and captures side by side per poll interval (no story count is set; a
     six-hour window on real feeds should produce many stories, not a
-    handful); (3) every committed revision of a story is published
+    handful; one poll's captures may open several stories at once, and the
+    ratio of new stories to revisions starts high and falls as the corpus
+    grows, which the receipt plots); (3) every committed revision of a story is published
     automatically as its Texture version, several stories reach v5 or
     later, and in each of those at least one revision cites a capture
     that arrived after its previous version; (4) the front page at
