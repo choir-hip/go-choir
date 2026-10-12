@@ -24,10 +24,6 @@
 { config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 
 let
-  genesisG0Receipt = "sha256:31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd";
-  genesisG1Receipt = "sha256:17d04056e19a947df86853a0c4f7b1f97b3fdb4d5513843cdb81c304602b3906";
-  genesisCandidateRef = "9dc1ff913cb7e5402f11bf2d5b64ddb127b31e1b";
-
   documentPython = pkgs.python3.withPackages (ps: with ps; [
     beautifulsoup4
     ebooklib
@@ -105,12 +101,6 @@ let
     # expansion. Pristine updater roots need this exact release to produce a
     # route-bound kernel capability receipt before genesis.
     export CHOIR_BASELINE_RELEASE_ROOT="${goChoirPackages.autoputer}"
-    # Genesis identity is immutable build authority. Reassert it after every
-    # kernel-derived environment value; placeholders make the reviewed source
-    # candidate non-deployable until the G1-authorized exact substitution.
-    export CHOIR_SELF_DEVELOPMENT_G0_RECEIPT="${genesisG0Receipt}"
-    export CHOIR_SELF_DEVELOPMENT_G1_RECEIPT="${genesisG1Receipt}"
-    export CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF="${genesisCandidateRef}"
 
     if [ -z "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
       for param in $(cat /proc/cmdline); do
@@ -448,9 +438,6 @@ EOF
             ;;
           choir.source_service_runtime_owner_id=*)
             echo "SOURCE_SERVICE_RUNTIME_OWNER_ID=''${param#choir.source_service_runtime_owner_id=}" >> "$ENV_FILE"
-            ;;
-          choir.computer_kind=*)
-            echo "CHOIR_COMPUTER_KIND=''${param#choir.computer_kind=}" >> "$ENV_FILE"
             ;;
           choir.owner_id=*)
             echo "CHOIR_OWNER_ID=''${param#choir.owner_id=}" >> "$ENV_FILE"
@@ -791,14 +778,10 @@ EOF
       CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/restart-capability";
       CHOIR_VERIFIER_AUTHORITY_SOCKET = "/run/choir-verifier/authority.sock";
       CHOIR_PRIVACY_KEY_FILE = "/mnt/persistent/choir-credentials/privacy-key";
-      CHOIR_KERNEL_CAPABILITY_PROBE = "/run/choir/kernel-capabilities.json";
       CHOIR_GUEST_IMAGE_MANIFEST = guestImageManifest;
       CHOIR_DEPLOY_RECEIPT_PATH = "/run/go-choir-guest-deploy-receipt.json";
       CHOIR_KERNEL_CONFIG = config.boot.kernelPackages.kernel.configfile;
       CHOIR_GUEST_SIGNER_SOCKET = "/run/choir-signers/guest-core/signer.sock";
-      CHOIR_SELF_DEVELOPMENT_G0_RECEIPT = genesisG0Receipt;
-      CHOIR_SELF_DEVELOPMENT_G1_RECEIPT = genesisG1Receipt;
-      CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF = genesisCandidateRef;
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         busybox
         bash

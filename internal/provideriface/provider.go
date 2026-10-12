@@ -180,13 +180,6 @@ type Config struct {
 	// supervisor has been deleted and this value is currently unused.
 	SupervisionInterval time.Duration
 
-	// ResearchCount is the configured researcher worker count for this VM.
-	ResearchCount int
-
-	// TextureWakeDebounce is the coalescing window for addressed worker findings
-	// before the runtime schedules the next texture synthesis.
-	TextureWakeDebounce time.Duration
-
 	// TextureActorParkIdle enables default park-on-idle for Texture revision
 	// actors when positive. Hand-constructed test configs leave this zero unless
 	// they opt into parked lifecycle behavior explicitly.

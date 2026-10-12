@@ -571,54 +571,44 @@ func Run() {
 		RegisterMailRoutes(s, maildir)
 	}
 
-	// Default-on: install the full per-profile tool registry. Set
-	// RUNTIME_DISABLE_TOOLS=1 to opt out (for stub-only tests where no tools
-	// should run). RUNTIME_ENABLE_TOOLS is still honored for back-compat but
-	// is no longer required.
-	toolsEnabled := os.Getenv("RUNTIME_DISABLE_TOOLS") == ""
-	if toolsEnabled {
-		if err := rt.Runtime.InstallDefaultAgentTools(); err != nil {
-			boot.fatalf("autoputer: install default agent tools: %v", err)
-		}
-	} else {
-		log.Printf("autoputer: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
+	// Install the per-profile tool registries.
+	if err := rt.Runtime.InstallDefaultAgentTools(); err != nil {
+		boot.fatalf("autoputer: install default agent tools: %v", err)
 	}
 
 	textureHandler := textureowner.NewHandler(rt.Runtime)
 	if err := rt.BindTextureOwner(textureHandler); err != nil {
 		boot.fatalf("autoputer: bind Texture lifecycle owner: %v", err)
 	}
-	if toolsEnabled {
-		// R3d: texture is a full-RLM desk — its registry is desk_go_eval only;
-		// authoring is a choir.* cell verb committed by the bound owner via
-		// ApplyTextureTurn. Do NOT register the retired typed texture tools
-		// (patch/rewrite/decision/email-draft) onto the sealed cell registry.
-		rt.Runtime.SetTextureCellAuthorizer(textureHandler)
-		// Frozen self-development candidates are judged by the gateway's
-		// pinned decision model (Jev), not by a second engineering run.
-		if gatewayURL != "" {
-			rt.Runtime.SetCandidateJudge(candidateJudge{client: gatewayruntime.NewJudgmentClient(gatewayURL, provideriface.GatewayToken())})
+	// R3d: texture is a full-RLM desk — its registry is desk_go_eval only;
+	// authoring is a choir.* cell verb committed by the bound owner via
+	// ApplyTextureTurn. Do NOT register the retired typed texture tools
+	// (patch/rewrite/decision/email-draft) onto the sealed cell registry.
+	rt.Runtime.SetTextureCellAuthorizer(textureHandler)
+	// Frozen self-development candidates are judged by the gateway's
+	// pinned decision model (Jev), not by a second engineering run.
+	if gatewayURL != "" {
+		rt.Runtime.SetCandidateJudge(candidateJudge{client: gatewayruntime.NewJudgmentClient(gatewayURL, provideriface.GatewayToken())})
+	}
+	for _, profile := range []string{
+		agentprofile.Conductor,
+		agentprofile.Management,
+		agentprofile.Engineering,
+		agentprofile.Research,
+		agentprofile.Texture,
+	} {
+		// Full-RLM desks (management R3c, texture R3d) are sealed to
+		// desk_go_eval: no spawn_agent tool. They open children through
+		// choir.Cast, not a registry tool.
+		if profile == agentprofile.Management || profile == agentprofile.Texture {
+			continue
 		}
-		for _, profile := range []string{
-			agentprofile.Conductor,
-			agentprofile.Management,
-			agentprofile.Engineering,
-			agentprofile.Research,
-			agentprofile.Texture,
-		} {
-			// Full-RLM desks (management R3c, texture R3d) are sealed to
-			// desk_go_eval: no spawn_agent tool. They open children through
-			// choir.Cast, not a registry tool.
-			if profile == agentprofile.Management || profile == agentprofile.Texture {
-				continue
-			}
-			spawnPolicy, policyErr := agentprofile.PolicyFor(profile)
-			if policyErr != nil {
-				boot.fatalf("autoputer: spawn policy for %s: %v", profile, policyErr)
-			}
-			if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, spawnPolicy); err != nil {
-				boot.fatalf("autoputer: register coagent spawn tool for %s: %v", profile, err)
-			}
+		spawnPolicy, policyErr := agentprofile.PolicyFor(profile)
+		if policyErr != nil {
+			boot.fatalf("autoputer: spawn policy for %s: %v", profile, policyErr)
+		}
+		if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, spawnPolicy); err != nil {
+			boot.fatalf("autoputer: register coagent spawn tool for %s: %v", profile, err)
 		}
 	}
 
@@ -627,19 +617,17 @@ func Run() {
 	runtimeHandler := agentcore.NewAPIHandler(rt.Runtime)
 	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
 	apihandler.RegisterRoutes(s, runtimeHandler, textureHandler, apiHandler, browserHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
-	if toolsEnabled {
-		// SMG: the management desk reaches the product API in-cell via
-		// choir.ProductAPI (broker ActionProductAPI); the typed
-		// product_api_request tool is deleted. The canonical route table is
-		// the same server `s`.
-		rt.Runtime.SetProductAPIHandler(s)
-		log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
-			rt.Runtime.ToolRegistryForProfile(agentprofile.Management).Size(),
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Research)),
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
-		)
-	}
+	// SMG: the management desk reaches the product API in-cell via
+	// choir.ProductAPI (broker ActionProductAPI); the typed
+	// product_api_request tool is deleted. The canonical route table is
+	// the same server `s`.
+	rt.Runtime.SetProductAPIHandler(s)
+	log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
+		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
+		rt.Runtime.ToolRegistryForProfile(agentprofile.Management).Size(),
+		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Research)),
+		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
+	)
 
 	// Readiness endpoint: probes Qdrant and Ollama, the two external
 	// dependencies of the semantic-dedup path. Both degrade gracefully via
@@ -671,7 +659,6 @@ func Run() {
 	// only after the replay reaches the canonical head (B5/B6/B9).
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	log.Printf("autoputer: orchestration topology (super=1, researchers=%d)", rtCfg.ResearchCount)
 	gate := &replayHealthGate{base: s.HealthHandler()}
 	if replayAppender != nil {
 		gate.mu.Lock()
@@ -874,8 +861,6 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		SkillsRoot:                      rtRuntimeCfg.SkillsRoot,
 		ProviderTimeout:                 rtRuntimeCfg.ProviderTimeout,
 		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
-		ResearchCount:                   rtRuntimeCfg.ResearchCount,
-		TextureWakeDebounce:             rtRuntimeCfg.TextureWakeDebounce,
 		TextureActorParkIdle:            rtRuntimeCfg.TextureActorParkIdle,
 		VmctlURL:                        rtRuntimeCfg.VmctlURL,
 		MaildURL:                        rtRuntimeCfg.MaildURL,

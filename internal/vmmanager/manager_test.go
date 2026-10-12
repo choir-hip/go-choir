@@ -1295,13 +1295,16 @@ func TestBuildFirecrackerConfig_LegacyBootIncludesRuntimeServiceURLs(t *testing.
 		"choir.source_service_url=http://10.200.0.1:8787",
 		"choir.source_service_runtime_url=http://127.0.0.1:8085",
 		"choir.source_service_runtime_owner_id=universal-wire-platform",
-		"choir.computer_kind=platform",
 		"choir.owner_id=universal-wire-platform",
 		"choir.desktop_id=platform",
 	} {
 		if !containsStr(bootArgs, arg) {
 			t.Fatalf("legacy boot args missing %s in %q", arg, bootArgs)
 		}
+	}
+	// No guest reads CHOIR_COMPUTER_KIND; the kind stays host metadata.
+	if containsStr(bootArgs, "choir.computer_kind=") {
+		t.Fatalf("boot args carry the unread choir.computer_kind param: %q", bootArgs)
 	}
 }
 
@@ -1365,7 +1368,6 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"choir.source_service_url=http://10.200.0.1:8787",
 		"choir.source_service_runtime_url=http://127.0.0.1:8085",
 		"choir.source_service_runtime_owner_id=owner@example.com",
-		"choir.computer_kind=active",
 		"choir.owner_id=owner@example.com",
 		"choir.desktop_id=primary",
 		"ip=10.200.0.2::10.200.0.1:255.255.255.252::eth0:off",

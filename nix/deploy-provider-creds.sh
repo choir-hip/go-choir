@@ -115,7 +115,6 @@ if [ -f "$SETTINGS" ]; then
     API_KEY=$(jq -r ".customModels[$i].apiKey" "$SETTINGS")
     BASE_URL=$(jq -r ".customModels[$i].baseUrl // empty" "$SETTINGS")
     PROVIDER=$(jq -r ".customModels[$i].provider // empty" "$SETTINGS")
-    MODEL=$(jq -r ".customModels[$i].model // empty" "$SETTINGS")
 
     if [ -z "$API_KEY" ]; then
       continue
@@ -125,7 +124,6 @@ if [ -f "$SETTINGS" ]; then
     if echo "$BASE_URL" | grep -q "z\.ai"; then
       if ! printf '%s\n' "${ENVS[@]}" | grep -q "^ZAI_API_KEY="; then
         ENVS+=("ZAI_API_KEY=${API_KEY}")
-        [ -n "$MODEL" ] && ENVS+=("RUNTIME_ZAI_MODEL=${MODEL}")
       fi
       continue
     fi
@@ -136,7 +134,6 @@ if [ -f "$SETTINGS" ]; then
     if echo "$BASE_URL" | grep -q "bedrock" || echo "$PROVIDER" | grep -qi "bedrock"; then
       if ! printf '%s\n' "${ENVS[@]}" | grep -q "^AWS_BEARER_TOKEN_BEDROCK="; then
         ENVS+=("AWS_BEARER_TOKEN_BEDROCK=${API_KEY}")
-        [ -n "$MODEL" ] && ENVS+=("RUNTIME_BEDROCK_MODEL=${MODEL}")
       fi
       continue
     fi

@@ -70,7 +70,6 @@ type computeRuntimeStatus struct {
 	Service          string                 `json:"service,omitempty"`
 	RuntimeHealth    string                 `json:"runtime_health,omitempty"`
 	RunningRuns      int                    `json:"running_runs,omitempty"`
-	ResearchCount    int                    `json:"researcher_count,omitempty"`
 	ObservationError string                 `json:"observation_error,omitempty"`
 	PersistentDisk   *persistentdisk.Status `json:"persistent_disk,omitempty"`
 }
@@ -677,7 +676,6 @@ func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *computeRuntimeS
 		Service        string                 `json:"service"`
 		RuntimeHealth  string                 `json:"runtime_health"`
 		RunningRuns    int                    `json:"running_runs"`
-		ResearchCount  int                    `json:"researcher_count"`
 		PersistentDisk *persistentdisk.Status `json:"persistent_disk,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
@@ -689,7 +687,6 @@ func (h *Handler) probeRuntimeHealthForTarget(targetURL string) *computeRuntimeS
 		Service:       body.Service,
 		RuntimeHealth: body.RuntimeHealth,
 		RunningRuns:   body.RunningRuns,
-		ResearchCount: body.ResearchCount,
 	}
 	if body.PersistentDisk != nil {
 		runtimeStatus.PersistentDisk = body.PersistentDisk

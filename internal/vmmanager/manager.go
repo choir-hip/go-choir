@@ -1684,9 +1684,6 @@ func guestIdentityKernelParams(cfg VMConfig) []string {
 	if value := kernelParamValue(cfg.RealizationID); value != "" {
 		params = append(params, "choir.realization_id="+value)
 	}
-	if value := kernelParamValue(cfg.ComputerKind); value != "" {
-		params = append(params, "choir.computer_kind="+value)
-	}
 	if value := kernelParamValue(cfg.OwnerID); value != "" {
 		params = append(params, "choir.owner_id="+value)
 	}

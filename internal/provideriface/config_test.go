@@ -1,14 +1,12 @@
 package provideriface
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
-func TestLoadConfigReadsResearchCount(t *testing.T) {
-	t.Setenv("RUNTIME_RESEARCHER_COUNT", "5")
+func TestLoadConfigReadsRuntimeEnv(t *testing.T) {
 	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "7s")
 	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "3s")
 	t.Setenv("RUNTIME_ACTIVATION_BUDGET", "90s")
@@ -16,9 +14,6 @@ func TestLoadConfigReadsResearchCount(t *testing.T) {
 	t.Setenv("RUNTIME_TEXTURE_ACTOR_PARK_IDLE", "45s")
 
 	cfg := LoadConfig()
-	if cfg.ResearchCount != 5 {
-		t.Fatalf("researcher_count = %d, want 5", cfg.ResearchCount)
-	}
 	if cfg.TextureActorParkIdle != 45*time.Second {
 		t.Fatalf("texture_actor_park_idle = %s, want 45s", cfg.TextureActorParkIdle)
 	}
@@ -36,16 +31,6 @@ func TestLoadConfigReadsResearchCount(t *testing.T) {
 	}
 	if cfg.SkillsRoot != "/tmp/choir-skills" {
 		t.Fatalf("skills_root = %q, want env value", cfg.SkillsRoot)
-	}
-}
-
-func TestLoadConfigFallsBackOnInvalidResearchCount(t *testing.T) {
-	_ = os.Setenv("RUNTIME_RESEARCHER_COUNT", "-2")
-	t.Cleanup(func() { _ = os.Unsetenv("RUNTIME_RESEARCHER_COUNT") })
-
-	cfg := LoadConfig()
-	if cfg.ResearchCount != DefaultResearchCount {
-		t.Fatalf("researcher_count = %d, want fallback %d", cfg.ResearchCount, DefaultResearchCount)
 	}
 }
 

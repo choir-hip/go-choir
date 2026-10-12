@@ -23,14 +23,6 @@ const (
 	// terminal progress deadline, not a retry or supervision policy.
 	DefaultActivationBudget = 60 * time.Minute
 
-	// DefaultResearchCount is the default number of researcher workers
-	// the microVM topology should assume when none is configured.
-	DefaultResearchCount = 3
-
-	// DefaultTextureWakeDebounce is the initial coalescing window for worker
-	// findings before the runtime schedules the next texture synthesis.
-	DefaultTextureWakeDebounce = 3 * time.Second
-
 	// DefaultTextureActorParkIdle is how long a Texture revision actor may park
 	// after an idle turn before passivating into a sleeping durable actor. The
 	// parked interval is long enough to catch live researcher/super packets
@@ -111,8 +103,6 @@ func LoadConfig() Config {
 		ProviderTimeout:     durationOr("RUNTIME_PROVIDER_TIMEOUT", DefaultProviderTimeout),
 		ActivationBudget:    durationOr("RUNTIME_ACTIVATION_BUDGET", DefaultActivationBudget),
 		SupervisionInterval: durationOr("RUNTIME_SUPERVISION_INTERVAL", 5*time.Second),
-		ResearchCount:       intOr("RUNTIME_RESEARCHER_COUNT", DefaultResearchCount),
-		TextureWakeDebounce: durationOr("RUNTIME_TEXTURE_WAKE_DEBOUNCE", DefaultTextureWakeDebounce),
 		TextureActorParkIdle: durationOr(
 			"RUNTIME_TEXTURE_ACTOR_PARK_IDLE",
 			DefaultTextureActorParkIdle,
@@ -157,9 +147,6 @@ func NormalizeConfig(cfg Config) Config {
 	}
 	if cfg.ActivationBudget <= 0 {
 		cfg.ActivationBudget = DefaultActivationBudget
-	}
-	if cfg.TextureWakeDebounce <= 0 {
-		cfg.TextureWakeDebounce = DefaultTextureWakeDebounce
 	}
 	if cfg.RunMemoryContextThresholdTokens <= 0 {
 		cfg.RunMemoryContextThresholdTokens = DefaultRunMemoryContextThresholdTokens
