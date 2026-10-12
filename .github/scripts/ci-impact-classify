@@ -56,7 +56,6 @@ done
 non_docs=false
 go=false
 frontend=false
-specs=false
 sbom=false
 flakehub=false
 high_risk_race=false
@@ -78,7 +77,6 @@ if [[ "${CI_FORCE_ALL:-false}" == "true" ]]; then
   non_docs=true
   go=true
   frontend=true
-  specs=true
   sbom=true
   flakehub=true
   high_risk_race=true
@@ -126,12 +124,6 @@ else
     esac
 
     case "$path" in
-      specs/*)
-        mark specs "$path -> TLA+ model check"
-        ;;
-    esac
-
-    case "$path" in
       flake.nix|flake.lock|go.mod|go.sum|skills/*|frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
         mark sbom "$path -> SBOM derivation input"
         ;;
@@ -170,7 +162,6 @@ docs_only=${docs_only}
 non_docs=${non_docs}
 go=${go}
 frontend=${frontend}
-specs=${specs}
 sbom=${sbom}
 flakehub=${flakehub}
 high_risk_race=${high_risk_race}

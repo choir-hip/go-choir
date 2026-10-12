@@ -76,8 +76,8 @@ CLI, prompt bar, and runtime do not implement an end-to-end Definition runner.
 
 The core ontology is maintained in this document,
 [choir-doctrine.md](choir-doctrine.md), and
-[runtime-invariants.md](runtime-invariants.md). The runtime protocols are
-model-checked in `specs/` (TLC runs in CI).
+[runtime-invariants.md](runtime-invariants.md). The historical TLA+ specs
+were removed 2026-10-12 (git history keeps them).
 
 **Live:** the actor runtime is fully wired and is the *only* execution
 substrate — the `dispatchActor` hook panics if nil, with no legacy fallback

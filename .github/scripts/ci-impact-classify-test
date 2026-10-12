@@ -52,9 +52,6 @@ assert_output sbom-helper $'.github/scripts/build-sboms-differential\n' \
 assert_output sbom-verifier $'.github/scripts/verify-sbom-candidate\n' \
   'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
 
-assert_output specs-change $'specs/promotion.tla\n' \
-  'specs=true' 'go=false' 'sbom=false' 'flakehub=true'
-
 sample_output="$tmpdir/sample.out"
 printf 'cmd/auth/main.go\n' | "$classifier" --sha 0000001400000000000000000000000000000000 "$sample_output" >/dev/null
 grep -qxF 'sample_bucket=0' "$sample_output"
@@ -62,7 +59,7 @@ grep -qxF 'sampled_race=true' "$sample_output"
 
 force_output="$tmpdir/force.out"
 printf '' | CI_FORCE_ALL=true "$classifier" --sha 1111111111111111111111111111111111111111 "$force_output" >/dev/null
-for expected in go=true frontend=true specs=true sbom=true flakehub=true high_risk_race=true ci=true; do
+for expected in go=true frontend=true sbom=true flakehub=true high_risk_race=true ci=true; do
   grep -qxF "$expected" "$force_output"
 done
 
