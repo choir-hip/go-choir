@@ -350,51 +350,11 @@ func newTestServer(t *testing.T) (*httptest.Server, *OwnershipRegistry) {
 	mux.HandleFunc("/internal/vmctl/stop", handler.HandleStop)
 	mux.HandleFunc("/internal/vmctl/remove", handler.HandleRemove)
 	mux.HandleFunc("/internal/vmctl/list", handler.HandleList)
-	mux.HandleFunc("/internal/vmctl/hibernate", handler.HandleHibernate)
-	mux.HandleFunc("/internal/vmctl/resume", handler.HandleResume)
-	mux.HandleFunc("/internal/vmctl/recover", handler.HandleRecover)
-	mux.HandleFunc("/internal/vmctl/logout", handler.HandleLogout)
 	mux.HandleFunc("/internal/vmctl/idle-check", handler.HandleIdleCheck)
-	mux.HandleFunc("/internal/vmctl/runtime-package/autoputer", handler.HandleRuntimePackage)
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, reg
-}
-
-func TestHandler_RuntimePackageRejectsMissingAutoputerBuildManifest(t *testing.T) {
-	handler := NewHandler(NewOwnershipRegistry("http://127.0.0.1:8085"))
-	pkgDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(pkgDir, "bin"), 0o755); err != nil {
-		t.Fatalf("mkdir bin: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(pkgDir, "bin", "autoputer"), []byte("autoputer-binary"), 0o755); err != nil {
-		t.Fatalf("write autoputer: %v", err)
-	}
-	handler.SetAutoputerRuntimePackageDir(pkgDir)
-
-	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/autoputer", nil)
-	req.Header.Set("X-Internal-Caller", "true")
-	rr := httptest.NewRecorder()
-	handler.HandleRuntimePackage(rr, req)
-
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d body=%s", rr.Code, http.StatusServiceUnavailable, rr.Body.String())
-	}
-}
-
-func TestHandler_RuntimePackageDeniesExternalCaller(t *testing.T) {
-	handler := NewHandler(NewOwnershipRegistry("http://127.0.0.1:8085"))
-	handler.SetAutoputerRuntimePackageDir(t.TempDir())
-
-	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/autoputer", nil)
-	req.Host = "choir.news"
-	req.RemoteAddr = "203.0.113.10:4444"
-	rr := httptest.NewRecorder()
-	handler.HandleRuntimePackage(rr, req)
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
-	}
 }
 
 func TestHandler_ResolveConcurrentUsersDoNotBlockOnSlowBoot(t *testing.T) {
@@ -910,7 +870,6 @@ func TestOwnershipRegistry_PruneRetentionDeletesOrphansWithoutRouteJoin(t *testi
 		t.Fatalf("non-vmctl dir ownerships-scratch must not be destroyed: %v", mgr.destroys)
 	}
 }
-
 
 func retentionPlanHasVM(plan RetentionPrunePlan, vmID string) bool {
 	for _, candidate := range plan.Candidates {
@@ -2013,119 +1972,6 @@ func TestOwnershipRegistry_ResolveAfterLogout(t *testing.T) {
 }
 
 // --- Handler Lifecycle Tests ---
-
-func TestHandler_ResumeBootsPersistedVMWhenManagerLostInstance(t *testing.T) {
-	srv, reg := newTestServer(t)
-	mock := &mockVMManager{
-		bootResponse: &VMInstanceInfo{
-			HostURL: "http://127.0.0.1:9100",
-			Epoch:   1,
-			Healthy: true,
-			State:   "running",
-		},
-	}
-	reg.SetVMManager(mock)
-
-	body := `{"user_id":"user-resume-orphan"}`
-	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-Internal-Caller", "true")
-	resp1, _ := http.DefaultClient.Do(req1)
-	var result1 resolveResponse
-	if err := json.NewDecoder(resp1.Body).Decode(&result1); err != nil {
-		t.Fatalf("decode result1: %v", err)
-	}
-	_ = resp1.Body.Close()
-
-	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/hibernate", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	_ = resp2.Body.Close()
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 on hibernate, got %d", resp2.StatusCode)
-	}
-
-	mock.boots = nil
-	mock.resumes = nil
-	mock.resumeError = fmt.Errorf("vm not found after vmctl restart")
-	mock.bootResponse = &VMInstanceInfo{
-		HostURL: "http://127.0.0.1:9101",
-		Epoch:   2,
-		Healthy: true,
-		State:   "running",
-	}
-
-	req3, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resume", strings.NewReader(body))
-	req3.Header.Set("Content-Type", "application/json")
-	req3.Header.Set("X-Internal-Caller", "true")
-	resp3, _ := http.DefaultClient.Do(req3)
-	defer func() { _ = resp3.Body.Close() }()
-	if resp3.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 on resume boot fallback, got %d", resp3.StatusCode)
-	}
-
-	var result3 resolveResponse
-	if err := json.NewDecoder(resp3.Body).Decode(&result3); err != nil {
-		t.Fatalf("decode result3: %v", err)
-	}
-	if result3.VMID != result1.VMID {
-		t.Fatalf("resumed VMID = %s, want %s", result3.VMID, result1.VMID)
-	}
-	if result3.ComputerURL != "http://127.0.0.1:9101" {
-		t.Fatalf("ComputerURL = %s, want boot fallback URL", result3.ComputerURL)
-	}
-	if len(mock.boots) != 1 || mock.boots[0].VMID != result1.VMID {
-		t.Fatalf("boot fallback = %+v, want one boot for %s", mock.boots, result1.VMID)
-	}
-}
-
-func TestHandler_RecoverRequiresUnhealthyState(t *testing.T) {
-	srv, reg := newTestServer(t)
-
-	// Create a VM.
-	body := `{"user_id":"user-1"}`
-	req1, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/resolve", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-Internal-Caller", "true")
-	resp1, _ := http.DefaultClient.Do(req1)
-	_ = resp1.Body.Close()
-
-	// Try to recover a healthy VM — should fail.
-	req2, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/recover", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-Internal-Caller", "true")
-	resp2, _ := http.DefaultClient.Do(req2)
-	defer func() { _ = resp2.Body.Close() }()
-
-	if resp2.StatusCode != http.StatusNotFound {
-		t.Errorf("expected 404 for healthy VM recovery, got %d", resp2.StatusCode)
-	}
-
-	// Mark unhealthy.
-	if err := reg.MarkUnhealthy("user-1"); err != nil {
-		t.Fatalf("MarkUnhealthy: %v", err)
-	}
-
-	// Now recover should succeed with a new epoch.
-	req3, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/recover", strings.NewReader(body))
-	req3.Header.Set("Content-Type", "application/json")
-	req3.Header.Set("X-Internal-Caller", "true")
-	resp3, _ := http.DefaultClient.Do(req3)
-	defer func() { _ = resp3.Body.Close() }()
-
-	if resp3.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 on recovery of unhealthy VM, got %d", resp3.StatusCode)
-	}
-
-	var result resolveResponse
-	if err := json.NewDecoder(resp3.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-	if result.State != "active" {
-		t.Errorf("expected active state after recovery, got %s", result.State)
-	}
-}
 
 func TestIssueGatewayToken_GatewayFailure(t *testing.T) {
 	// When the gateway returns an error, issueGatewayToken returns empty string.

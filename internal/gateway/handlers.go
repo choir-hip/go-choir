@@ -582,73 +582,7 @@ func (h *Handler) HandleIssueCredential(w http.ResponseWriter, r *http.Request) 
 	writeGatewayJSON(w, http.StatusCreated, result)
 }
 
-// HandleRevokeCredential handles POST /provider/v1/credentials/revoke.
-// This is an internal operator endpoint for revoking autoputer credentials
-// after lifecycle changes (VAL-GATEWAY-008).
-func (h *Handler) HandleRevokeCredential(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
-		return
-	}
 
-	if !isAuthorizedCredentialCaller(r) {
-		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied"})
-		return
-	}
-
-	var req struct {
-		ComputerID string `json:"computer_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
-		return
-	}
-	if req.ComputerID == "" {
-		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "computer_id is required"})
-		return
-	}
-
-	h.registry.RevokeCredential(req.ComputerID)
-	log.Printf("gateway: revoked credential for autoputer %s", req.ComputerID)
-
-	writeGatewayJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
-}
-
-// HandleRotateCredential handles POST /provider/v1/credentials/rotate.
-// This is an internal operator endpoint for rotating autoputer credentials.
-func (h *Handler) HandleRotateCredential(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
-		return
-	}
-
-	if !isAuthorizedCredentialCaller(r) {
-		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "access denied"})
-		return
-	}
-
-	var req struct {
-		ComputerID string `json:"computer_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
-		return
-	}
-	if req.ComputerID == "" {
-		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "computer_id is required"})
-		return
-	}
-
-	result, err := h.registry.RotateCredential(req.ComputerID)
-	if err != nil {
-		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to rotate credential"})
-		return
-	}
-
-	log.Printf("gateway: rotated credential for autoputer %s (expires=%s)", req.ComputerID, result.ExpiresAt)
-
-	writeGatewayJSON(w, http.StatusOK, result)
-}
 
 // HandleEnsureCredential handles POST /provider/v1/credentials/ensure.
 // It lets host-side lifecycle control reconcile an existing VM bootstrap token
@@ -1054,8 +988,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/provider/v1/search/health", h.HandleSearchHealth)
 	s.HandleFunc("/provider/v1/search/health/reset", h.HandleSearchHealthReset)
 	s.HandleFunc("/provider/v1/credentials/issue", h.HandleIssueCredential)
-	s.HandleFunc("/provider/v1/credentials/revoke", h.HandleRevokeCredential)
-	s.HandleFunc("/provider/v1/credentials/rotate", h.HandleRotateCredential)
 	s.HandleFunc("/provider/v1/credentials/ensure", h.HandleEnsureCredential)
 	s.HandleFunc("/provider/v1/breakers", h.HandleProviderBreakers)
 	s.HandleFunc("/provider/v1/breakers/reset", h.HandleProviderBreakerReset)

@@ -622,72 +622,7 @@ func TestHandleIssueCredential_MissingInternalHeaderDenied(t *testing.T) {
 	}
 }
 
-func TestHandleRevokeCredential(t *testing.T) {
-	h, reg := setupHandlerNoProvider(t)
 
-	// Issue a credential first.
-	result, _ := reg.IssueCredential("autoputer-test")
-
-	// Revoke it.
-	body := `{"computer_id": "autoputer-test"}`
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/revoke", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	req.Host = "localhost:8084"
-	req.RemoteAddr = "127.0.0.1:12345"
-
-	w := httptest.NewRecorder()
-	h.HandleRevokeCredential(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	// Verify the credential is revoked.
-	_, err := reg.ValidateCredential(result.RawToken)
-	if err == nil {
-		t.Fatal("expected credential to be revoked")
-	}
-}
-
-func TestHandleRotateCredential(t *testing.T) {
-	h, reg := setupHandlerNoProvider(t)
-
-	// Issue a credential first.
-	result1, _ := reg.IssueCredential("autoputer-test")
-
-	// Rotate it.
-	body := `{"computer_id": "autoputer-test"}`
-	req := httptest.NewRequest(http.MethodPost, "/provider/v1/credentials/rotate", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	req.Host = "localhost:8084"
-	req.RemoteAddr = "127.0.0.1:12345"
-
-	w := httptest.NewRecorder()
-	h.HandleRotateCredential(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var result2 CredentialResult
-	if err := json.NewDecoder(w.Body).Decode(&result2); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	// Old credential should be invalid.
-	_, err := reg.ValidateCredential(result1.RawToken)
-	if err == nil {
-		t.Fatal("old credential should be invalid after rotation")
-	}
-
-	// New credential should be valid.
-	_, err = reg.ValidateCredential(result2.RawToken)
-	if err != nil {
-		t.Fatalf("new credential should be valid: %v", err)
-	}
-}
 
 func TestHandleEnsureCredentialImportsUnknownCredentialWithoutEchoingToken(t *testing.T) {
 	h, reg := setupHandlerNoProvider(t)

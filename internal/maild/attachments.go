@@ -69,13 +69,6 @@ func (h *Handler) attachmentMaxBytes() int64 {
 	return DefaultAttachmentMaxBytes
 }
 
-func (h *Handler) draftAttachmentMaxBytes() int64 {
-	if h != nil && h.cfg != nil && h.cfg.DraftAttachmentMaxBytes > 0 {
-		return h.cfg.DraftAttachmentMaxBytes
-	}
-	return DefaultDraftAttachmentMaxBytes
-}
-
 // HandleAttachments routes /api/email/attachments and
 // /api/email/attachments/{id}.
 func (h *Handler) HandleAttachments(w http.ResponseWriter, r *http.Request) {

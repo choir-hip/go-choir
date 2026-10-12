@@ -117,9 +117,6 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusCreated, resp)
 }
 
-func (h *Handler) HandlePublicTexture(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotFound, apiError{Error: "corpusd does not render public HTML"})
-}
 
 func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

@@ -23,7 +23,7 @@ func TestNotificationAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	defer autoputer.Close()
 	h, priv := newEmailTestHandler(t, maild.URL, autoputer.URL)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/notifications/completion-email", strings.NewReader(`{"to_email":"owner@example.com","title":"Ready","status":"verified"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/notifications/email-risk-alert", strings.NewReader(`{"risk_kind":"test"}`))
 	req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-real")})
 	req.Header.Set("Authorization", "Bearer client-token")
 	req.Header.Set("X-Authenticated-User", "spoofed")
@@ -37,7 +37,7 @@ func TestNotificationAPIForwardsToMaildWithTrustedUser(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp["path"] != "/api/notifications/completion-email" {
+	if resp["path"] != "/api/notifications/email-risk-alert" {
 		t.Fatalf("maild path = %q", resp["path"])
 	}
 	if resp["user"] != "user-real" || resp["internal_caller"] != "true" {

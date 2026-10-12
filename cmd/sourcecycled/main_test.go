@@ -340,49 +340,6 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	}
 }
 
-
-func TestSourceServiceAPIHealthReportsLedgerCounts(t *testing.T) {
-	store := newTestCycleStorage(t)
-	defer store.Close()
-
-	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
-	if err := store.SaveFetches([]sources.FetchRecord{{
-		FetchID:    "fetch-health-1",
-		SourceID:   "source-health",
-		SourceType: sources.SourceTypeRSS,
-		RequestURL: "https://example.test/feed",
-		Status:     "ok",
-		StartedAt:  now,
-		EndedAt:    now.Add(time.Second),
-		ItemCount:  1,
-	}}); err != nil {
-		t.Fatalf("save fetch: %v", err)
-	}
-	if err := store.SaveItems([]sources.Item{{
-		ID:        "srcitem_health",
-		SourceID:  "source-health",
-		Title:     "Health item",
-		Published: now,
-		FetchedAt: now,
-	}}); err != nil {
-		t.Fatalf("save item: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/health", nil)
-	rec := httptest.NewRecorder()
-	handleSourceServiceHealth(store).ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("health status = %d body=%s", rec.Code, rec.Body.String())
-	}
-	var health sourceapi.HealthResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &health); err != nil {
-		t.Fatalf("decode health: %v", err)
-	}
-	if health.Status != "ok" || health.ItemCount != 1 || health.FetchCount != 1 {
-		t.Fatalf("unexpected health: %+v", health)
-	}
-}
-
 func TestSourceServiceAPIIngestionHandoffLatestReportsAgentHandoffs(t *testing.T) {
 	ctx := context.Background()
 	store := newTestCycleStorage(t)
@@ -406,15 +363,15 @@ func TestSourceServiceAPIIngestionHandoffLatestReportsAgentHandoffs(t *testing.T
 		t.Fatalf("save ingestion events: %v", err)
 	}
 	if err := store.SaveProcessorRequests(ctx, []cycle.ProcessorRequest{{
-		RequestID:         "processor_ingestion_handoff",
-		CycleID:           cycleID,
-		ProcessorKey:      "processor:global_firehose:global:gdelt",
-		Status:            "queued",
-		RuntimeStatus:     "queued",
-		SourceItemIDs:     []string{items[0].ID},
-		SourceCount:       1,
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		RequestID:     "processor_ingestion_handoff",
+		CycleID:       cycleID,
+		ProcessorKey:  "processor:global_firehose:global:gdelt",
+		Status:        "queued",
+		RuntimeStatus: "queued",
+		SourceItemIDs: []string{items[0].ID},
+		SourceCount:   1,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}}); err != nil {
 		t.Fatalf("save frozen processor request: %v", err)
 	}
@@ -522,4 +479,3 @@ func TestSourceServiceAPIIngestionHandoffLatestTreatsNotModifiedAsSuccessfulFetc
 		t.Fatalf("unexpected source item counts: %+v", resp.SourceHealth)
 	}
 }
-

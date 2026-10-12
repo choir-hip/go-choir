@@ -37,7 +37,6 @@ type webCaptureProjectionSummary struct {
 	SkippedItemCount  int
 }
 
-
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("Starting Choir Universal Wire sourcecycled daemon (V0)")
@@ -353,7 +352,6 @@ func startSourceServiceAPI(ctx context.Context, store cycle.Store) *http.Server 
 
 func sourceServiceAPIHandler(store cycle.Store) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
 	mux.HandleFunc("/internal/source-service/ingestion-handoff/latest", handleSourceServiceIngestionHandoffLatest(store))
 	mux.HandleFunc("/internal/source-service/items/", handleSourceServiceItem(store))
@@ -402,28 +400,6 @@ func sourceServiceTrustedInternalTransport(r *http.Request) bool {
 		host = remoteAddr
 	}
 	return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "192.0.2.")
-}
-
-
-func handleSourceServiceHealth(store cycle.Store) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		itemCount, itemErr := store.CountItems(r.Context())
-		fetchCount, fetchErr := store.CountFetches(r.Context())
-		status := "ok"
-		if itemErr != nil || fetchErr != nil {
-			status = "degraded"
-		}
-		writeSourceServiceJSON(w, http.StatusOK, sourceapi.HealthResponse{
-			Status:     status,
-			ItemCount:  itemCount,
-			FetchCount: fetchCount,
-			CheckedAt:  time.Now().UTC(),
-		})
-	}
 }
 
 func handleSourceServiceSearch(store cycle.Store) http.HandlerFunc {
@@ -668,7 +644,6 @@ func writeSourceServiceJSON(w http.ResponseWriter, status int, value any) {
 	}
 }
 
-
 func parsePositiveInt(raw string, fallback int) int {
 	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || parsed <= 0 {
@@ -751,10 +726,8 @@ func runCycle(ctx context.Context, registry *sources.Registry, store cycle.Store
 		"item_count":            len(items),
 	})
 
-
 	cycleDuration := time.Since(cycleStartTime)
 	_ = store.RecordCycleEvent(ctx, cycleID, "", "cycle_completed", "source cycle completed", map[string]any{"duration_ms": cycleDuration.Milliseconds(), "item_count": len(items), "fetch_count": len(pollResult.Fetches)})
 	_ = store.FinishCycle(ctx, cycleID, "completed", len(items), len(pollResult.Fetches), nil)
 	log.Printf("Cycle completed in %v", cycleDuration)
 }
-

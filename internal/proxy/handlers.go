@@ -822,16 +822,11 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/pulse/summary":
 		h.HandlePulseSummary(w, r)
 		return
-	case strings.HasPrefix(path, "/api/system/"):
-		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
-		return
 	case path == "/api/ws":
 		h.HandleWS(w, r)
 		return
 	case path == "/api/super-console/ws":
 		h.HandleManagementConsoleWS(w, r)
-	case path == "/api/terminal/ws":
-		writeJSON(w, http.StatusGone, errorResponse{Error: "terminal app has been replaced by Management Console"})
 		return
 	case path == "/api/universal-wire/stories":
 		h.HandleUniversalWireStories(w, r)

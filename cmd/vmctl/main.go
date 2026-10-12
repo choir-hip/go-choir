@@ -179,7 +179,6 @@ func main() {
 		}
 		artifactVerifier := computerversion.NewLocalArtifactContentVerifier(os.Getenv("VMCTL_ARTIFACTS_ROOT"))
 		inputs := computerversion.NewSQLInputCatalog(routeDB, artifactVerifier)
-		handler.SetImmutableArtifactOpener(artifactVerifier)
 		if err := inputs.EnsureSchema(pingCtx); err != nil {
 			log.Fatalf("vmctl: initialize immutable input catalog: %v", err)
 		}
@@ -204,10 +203,6 @@ func main() {
 		log.Printf("vmctl: route-gated idle sweeper interval set to %s", idleSweepInterval)
 	}
 	startUniversalWirePlatformComputer(registry, handler.AuthorizeComputerVersionRoute)
-	if dir := strings.TrimSpace(os.Getenv("VMCTL_AUTOPUTER_PACKAGE_DIR")); dir != "" {
-		handler.SetAutoputerRuntimePackageDir(dir)
-		log.Printf("vmctl: autoputer runtime package directory configured (%s)", dir)
-	}
 
 	s := server.NewServer("vmctl", port)
 	vmctl.RegisterRoutes(s, handler)

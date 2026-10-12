@@ -308,10 +308,6 @@ func attachmentRowID(messageID, attachmentID string) string {
 	return shaRowID("resend-attachment", messageID+":"+attachmentID)
 }
 
-func ingressEventRowID(messageID, submissionID string) string {
-	return shaRowID("email-ingress-event", messageID+":"+submissionID)
-}
-
 func aliasRowID(domain, localPart string) string {
 	return shaRowID("email-alias", strings.ToLower(strings.TrimSpace(domain))+":"+strings.ToLower(strings.TrimSpace(localPart)))
 }

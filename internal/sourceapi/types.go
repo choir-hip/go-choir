@@ -1,7 +1,5 @@
 package sourceapi
 
-import "time"
-
 const (
 	ProviderName = "source_service_api"
 	TargetKind   = "source_service_item"
@@ -17,13 +15,6 @@ const (
 	ResolutionStateDeferredWithoutStoryRoute        = "all_source_items_deferred_without_story_route"
 	ResolutionStateDecidedWithoutStoryRoute         = "all_source_items_decided_without_story_route"
 )
-
-type HealthResponse struct {
-	Status     string    `json:"status"`
-	ItemCount  int       `json:"item_count"`
-	FetchCount int       `json:"fetch_count"`
-	CheckedAt  time.Time `json:"checked_at"`
-}
 
 // IngestionHandoffResponse retains frozen queue-table projections for
 // historical reads; it does not advertise a live dispatch surface.

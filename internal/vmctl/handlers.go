@@ -1,23 +1,18 @@
 package vmctl
 
 import (
-	"archive/tar"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -127,34 +122,17 @@ type reclaimResponse struct {
 }
 
 // Handler provides HTTP handlers for the vmctl service.
-type immutableArtifactOpener interface {
-	OpenSeekableArtifact(context.Context, string, string) (computerversion.ReadSeekCloser, error)
-}
-
 type Handler struct {
-	registry                   *OwnershipRegistry
-	autoputerRuntimePackageDir string
-	routeAuthority             *RouteAuthority
-	routeAuthorityRequired     bool
-	immutableArtifacts         immutableArtifactOpener
-	coldRecoveryMu             sync.Mutex
-	coldRecoveryState          *coldRecoveryState
+	registry               *OwnershipRegistry
+	routeAuthority         *RouteAuthority
+	routeAuthorityRequired bool
+	coldRecoveryMu         sync.Mutex
+	coldRecoveryState      *coldRecoveryState
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
 func NewHandler(registry *OwnershipRegistry) *Handler {
 	return &Handler{registry: registry}
-}
-
-// SetAutoputerRuntimePackageDir configures the host-side package directory that
-// VM guests fetch at boot. This lets ordinary guest images stay stable while
-// autoputer/runtime code moves through the fast host service pointer path.
-func (h *Handler) SetAutoputerRuntimePackageDir(path string) {
-	h.autoputerRuntimePackageDir = strings.TrimSpace(path)
-}
-
-func (h *Handler) SetImmutableArtifactOpener(opener immutableArtifactOpener) {
-	h.immutableArtifacts = opener
 }
 
 // writeJSON writes a JSON response.
@@ -655,52 +633,6 @@ func (h *Handler) HandleRemove(w http.ResponseWriter, r *http.Request) {
 	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
 
-// HandleHibernate handles POST /internal/vmctl/hibernate.
-// Hibernates the VM for a given user, preserving persistent state
-// for later resume (VAL-VM-008, VAL-CROSS-116).
-func (h *Handler) HandleHibernate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
-			Error: "vmctl control endpoints are not publicly accessible",
-		})
-		return
-	}
-
-	var req resolveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-
-	if req.UserID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id is required"})
-		return
-	}
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	if err := h.registry.HibernateVMForDesktop(req.UserID, req.DesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	own := h.registry.GetOwnershipForDesktop(req.UserID, req.DesktopID)
-	writeVMCTLJSON(w, http.StatusOK, map[string]interface{}{
-		"status":     "hibernated",
-		"vm_id":      own.VMID,
-		"desktop_id": own.DesktopID,
-		"epoch":      own.Epoch,
-	})
-}
-
 // HandleMaintenanceServe boots a held, route-bound computer under the
 // guest-visible maintenance fence. It is an internal recovery exception:
 // the hold must already exist, and replayOnly is deliberately false so the
@@ -744,113 +676,6 @@ func (h *Handler) HandleMaintenanceServe(w http.ResponseWriter, r *http.Request)
 		"computer_id": recovered.ComputerID, "desktop_id": recovered.DesktopID,
 		"computer_url": recovered.ComputerURL, "state": recovered.State,
 		"epoch": recovered.Epoch, "held": recovered.IsHeld(),
-	})
-}
-
-// HandleResume handles POST /internal/vmctl/resume.
-// Resumes a stopped or hibernated VM for a user, restoring the
-// same user's persisted state (VAL-CROSS-116).
-// The epoch does NOT increment on resume (VAL-CROSS-117).
-func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
-			Error: "vmctl control endpoints are not publicly accessible",
-		})
-		return
-	}
-
-	var req resolveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-
-	if req.UserID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id is required"})
-		return
-	}
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	own, err := h.registry.ResumeVMForDesktop(req.UserID, req.DesktopID)
-	if err != nil {
-		if refusal := RecoveryRefusalFrom(err); refusal != nil {
-			writeVMCTLRecoveryRefusal(w, refusal)
-			return
-		}
-		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:        own.VMID,
-		ComputerID:  stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
-		UserID:      own.UserID,
-		DesktopID:   own.DesktopID,
-		Kind:        own.Kind,
-		ComputerURL: own.ComputerURL,
-		State:       string(own.State),
-	})
-}
-
-// HandleRecover handles POST /internal/vmctl/recover.
-// Recovers an unhealthy or failed VM by creating a fresh boot with
-// a new epoch (VAL-VM-009, VAL-CROSS-117).
-func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
-			Error: "vmctl control endpoints are not publicly accessible",
-		})
-		return
-	}
-
-	var req resolveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-
-	if req.UserID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id is required"})
-		return
-	}
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	own, err := h.registry.RecoverVMForDesktop(req.UserID, req.DesktopID)
-	if err != nil {
-		if refusal := RecoveryRefusalFrom(err); refusal != nil {
-			writeVMCTLRecoveryRefusal(w, refusal)
-			return
-		}
-		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:        own.VMID,
-		ComputerID:  stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
-		UserID:      own.UserID,
-		DesktopID:   own.DesktopID,
-		Kind:        own.Kind,
-		ComputerURL: own.ComputerURL,
-		State:       string(own.State),
 	})
 }
 
@@ -915,42 +740,6 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		ComputerURL: own.ComputerURL,
 		State:       string(own.State),
 	})
-}
-
-// HandleLogout handles POST /internal/vmctl/logout.
-// Transitions only the current user's VM to stopped state on logout
-// (VAL-VM-008). Other users' VMs are not affected.
-func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
-			Error: "vmctl control endpoints are not publicly accessible",
-		})
-		return
-	}
-
-	var req resolveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-
-	if req.UserID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id is required"})
-		return
-	}
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	_ = h.registry.LogoutVMForDesktop(req.UserID, req.DesktopID)
-	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "stopped", "reason": "logout"})
 }
 
 func (h *Handler) runReclaimSweep(ctx context.Context) reclaimResponse {
@@ -1085,24 +874,6 @@ func (h *Handler) HandlePulse(w http.ResponseWriter, r *http.Request) {
 	writeVMCTLJSON(w, http.StatusOK, h.registry.PulseSummary())
 }
 
-// HandlePrune handles POST /internal/vmctl/prune. It applies the bounded
-// retention policy for orphan and explicitly ephemeral VM state.
-func (h *Handler) HandlePrune(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{
-			Error: "vmctl control endpoints are not publicly accessible",
-		})
-		return
-	}
-
-	writeVMCTLJSON(w, http.StatusOK, h.registry.PruneRetention(r.Context(), h.AuthorizeComputerVersionRoute))
-}
-
 // HandleList handles GET /internal/vmctl/list.
 // Lists all current ownerships (operator visibility).
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
@@ -1226,190 +997,6 @@ func (h *Handler) HandleBootTimeline(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(raw)
 }
 
-// HandleRuntimePackage streams the current autoputer runtime package as a tar
-// archive. It is intended for guest VMs booting over the vmctl tap path; it
-// never exposes provider credentials and remains guarded by the same internal
-// caller contract as other vmctl control endpoints.
-func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
-		return
-	}
-	if strings.Trim(r.URL.Path, "/") != "internal/vmctl/runtime-package/autoputer" {
-		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "runtime package not found"})
-		return
-	}
-
-	if rawCodeRef := strings.TrimSpace(r.URL.Query().Get("code_ref")); rawCodeRef != "" {
-		if h.routeAuthority == nil || h.routeAuthority.inputs == nil || h.immutableArtifacts == nil {
-			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "immutable runtime package authority is unavailable"})
-			return
-		}
-		codeRef := computerversion.CodeRef(rawCodeRef)
-		closure, err := h.routeAuthority.inputs.ResolveCode(r.Context(), codeRef)
-		if err != nil || closure.Ref != codeRef || closure.Verify() != nil {
-			writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "immutable runtime package not found"})
-			return
-		}
-		var runtimeArtifact *computerversion.CodeArtifact
-		for i := range closure.Artifacts {
-			if closure.Artifacts[i].Name == "autoputer-runtime.tar" {
-				runtimeArtifact = &closure.Artifacts[i]
-				break
-			}
-		}
-		if runtimeArtifact == nil {
-			writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "immutable runtime package artifact not found"})
-			return
-		}
-		artifact, err := h.immutableArtifacts.OpenSeekableArtifact(r.Context(), runtimeArtifact.URI, runtimeArtifact.SHA256)
-		if err != nil {
-			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "immutable runtime package verification failed"})
-			return
-		}
-		defer artifact.Close()
-		if err := validateRuntimePackageTar(artifact); err != nil {
-			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "immutable runtime package archive is invalid"})
-			return
-		}
-		if _, err := artifact.Seek(0, io.SeekStart); err != nil {
-			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "immutable runtime package rewind failed"})
-			return
-		}
-		w.Header().Set("Content-Type", "application/x-tar")
-		w.Header().Set("Content-Disposition", `attachment; filename="go-choir-autoputer-runtime.tar"`)
-		if _, err := io.Copy(w, artifact); err != nil {
-			log.Printf("vmctl: stream immutable runtime package %s: %v", codeRef, err)
-		}
-		return
-	}
-
-	root := h.autoputerRuntimePackageDir
-	if root == "" {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "autoputer runtime package directory is not configured"})
-		return
-	}
-	info, err := os.Stat(root)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "autoputer runtime package directory is not available"})
-		return
-	}
-	if !info.IsDir() {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "autoputer runtime package path is not a directory"})
-		return
-	}
-	artifactBuild, err := autoputerRuntimeBuildInfo(root)
-	if err != nil {
-		log.Printf("vmctl: autoputer runtime build manifest: %v", err)
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "autoputer runtime package build manifest is invalid"})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/x-tar")
-	w.Header().Set("Content-Disposition", `attachment; filename="go-choir-autoputer-runtime.tar"`)
-	tw := tar.NewWriter(w)
-	defer func() {
-		if err := tw.Close(); err != nil {
-			log.Printf("vmctl: close runtime package tar: %v", err)
-		}
-	}()
-
-	if err := writeRuntimePackageTar(tw, root, artifactBuild, runtimePackageServiceEnv(r)); err != nil {
-		log.Printf("vmctl: stream runtime package from %s: %v", root, err)
-		return
-	}
-}
-
-func validateRuntimePackageTar(reader io.Reader) error {
-	archive := tar.NewReader(reader)
-	seen := make(map[string]byte)
-	sawAutoputer := false
-	const maxEntries = 100000
-	for entries := 0; ; entries++ {
-		if entries >= maxEntries {
-			return fmt.Errorf("runtime package: archive has too many entries")
-		}
-		header, err := archive.Next()
-		if err == io.EOF {
-			if entries == 0 || !sawAutoputer {
-				return fmt.Errorf("runtime package: executable bin/autoputer is required")
-			}
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("runtime package: read archive: %w", err)
-		}
-		name := filepath.Clean(header.Name)
-		if name == "." || filepath.IsAbs(name) || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-			return fmt.Errorf("runtime package: unsafe archive path %q", header.Name)
-		}
-		if _, duplicate := seen[name]; duplicate {
-			return fmt.Errorf("runtime package: duplicate archive path %q", name)
-		}
-		for parent := filepath.Dir(name); parent != "."; parent = filepath.Dir(parent) {
-			if seen[parent] == tar.TypeSymlink || seen[parent] == tar.TypeLink {
-				return fmt.Errorf("runtime package: path descends through archive link %q", parent)
-			}
-		}
-		seen[name] = header.Typeflag
-		switch header.Typeflag {
-		case tar.TypeReg, tar.TypeRegA:
-			if name == "bin/autoputer" && header.Mode&0o111 != 0 {
-				sawAutoputer = true
-			}
-		case tar.TypeDir:
-		case tar.TypeSymlink, tar.TypeLink:
-			target := filepath.Clean(header.Linkname)
-			if filepath.IsAbs(target) || target == ".." || strings.HasPrefix(target, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("runtime package: unsafe link target %q", header.Linkname)
-			}
-			resolved := filepath.Clean(filepath.Join(filepath.Dir(name), target))
-			if resolved == ".." || strings.HasPrefix(resolved, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("runtime package: link escapes archive root")
-			}
-		default:
-			return fmt.Errorf("runtime package: unsupported archive entry type %d", header.Typeflag)
-		}
-	}
-}
-
-type runtimePackageBuildManifest struct {
-	SchemaVersion int    `json:"schema_version"`
-	Artifact      string `json:"artifact"`
-	Version       string `json:"version"`
-	Commit        string `json:"commit"`
-	BuiltAt       string `json:"built_at"`
-}
-
-func autoputerRuntimeBuildInfo(root string) (buildinfo.Info, error) {
-	path := filepath.Join(root, "share", "go-choir", "build.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return buildinfo.Info{}, fmt.Errorf("read %s: %w", path, err)
-	}
-	var manifest runtimePackageBuildManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return buildinfo.Info{}, fmt.Errorf("decode %s: %w", path, err)
-	}
-	manifest.Artifact = strings.TrimSpace(manifest.Artifact)
-	manifest.Version = strings.TrimSpace(manifest.Version)
-	manifest.Commit = strings.TrimSpace(manifest.Commit)
-	manifest.BuiltAt = strings.TrimSpace(manifest.BuiltAt)
-	if manifest.SchemaVersion != 1 || manifest.Artifact != "autoputer" || manifest.Commit == "" {
-		return buildinfo.Info{}, fmt.Errorf("manifest must identify a schema-v1 autoputer artifact with a commit")
-	}
-	return buildinfo.Info{
-		Service: "autoputer",
-		Version: manifest.Version,
-		Commit:  manifest.Commit,
-		BuiltAt: manifest.BuiltAt,
-	}, nil
-}
-
 // HandleAutoputerProxy resolves the live autoputer URL and reverse-proxies the request.
 // Path format: /internal/vmctl/autoputer-proxy/{owner-id}/{...remaining-path}
 func (h *Handler) HandleAutoputerProxy(w http.ResponseWriter, r *http.Request) {
@@ -1482,104 +1069,6 @@ func (h *Handler) HandleAutoputerProxy(w http.ResponseWriter, r *http.Request) {
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ServeHTTP(w, r)
-}
-
-func runtimePackageServiceEnv(r *http.Request) map[string]string {
-	out := make(map[string]string)
-	host := strings.TrimSpace(r.Host)
-	if host == "" {
-		return out
-	}
-	wireHost := host
-	if h, _, err := net.SplitHostPort(host); err == nil && h != "" {
-		wireHost = net.JoinHostPort(h, "8082")
-	} else if !strings.Contains(host, ":") {
-		wireHost = net.JoinHostPort(host, "8082")
-	}
-	out["RUNTIME_WIRE_PUBLISH_URL"] = "http://" + wireHost
-	out["RUNTIME_CORPUSD_URL"] = "http://" + wireHost
-	return out
-}
-
-func writeRuntimePackageTar(tw *tar.Writer, root string, snapshot buildinfo.Info, serviceEnv map[string]string) error {
-	root = filepath.Clean(root)
-	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-		rel = filepath.ToSlash(filepath.Clean(rel))
-		if rel == "." || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, "/") {
-			return fmt.Errorf("refuse unsafe runtime package path %q", rel)
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		var link string
-		if info.Mode()&os.ModeSymlink != 0 {
-			link, err = os.Readlink(path)
-			if err != nil {
-				return err
-			}
-		}
-		hdr, err := tar.FileInfoHeader(info, link)
-		if err != nil {
-			return err
-		}
-		hdr.Name = rel
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
-		}
-		if info.Mode().IsRegular() {
-			f, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			_, copyErr := io.Copy(tw, f)
-			closeErr := f.Close()
-			if copyErr != nil {
-				return copyErr
-			}
-			if closeErr != nil {
-				return closeErr
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	deployedAt := strings.TrimSpace(snapshot.DeployedAt)
-	var env string
-	if deployedAt != "" {
-		env = fmt.Sprintf("CHOIR_DEPLOYED_AT=%s\n", shellEnvValue(deployedAt))
-	}
-	for _, key := range []string{"RUNTIME_WIRE_PUBLISH_URL", "RUNTIME_CORPUSD_URL"} {
-		if value := strings.TrimSpace(serviceEnv[key]); value != "" {
-			env += fmt.Sprintf("%s=%s\n", key, shellEnvValue(value))
-		}
-	}
-	hdr := &tar.Header{
-		Name: "choir-runtime.env",
-		Mode: 0o644,
-		Size: int64(len(env)),
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		return err
-	}
-	_, err := tw.Write([]byte(env))
-	return err
-}
-
-func shellEnvValue(value string) string {
-	return strings.NewReplacer("\n", "", "\r", "", "\x00", "").Replace(value)
 }
 
 // isInternalCaller checks whether the request originated from an internal
@@ -1705,12 +1194,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/stop", attributedLifecycle(h.HandleStop))
 	s.HandleFunc("/internal/vmctl/remove", attributedLifecycle(h.HandleRemove))
 	s.HandleFunc("/internal/vmctl/list", h.HandleList)
-	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
 	s.HandleFunc("/internal/vmctl/maintenance-serve", attributedLifecycle(h.HandleMaintenanceServe))
-	s.HandleFunc("/internal/vmctl/resume", attributedLifecycle(h.HandleResume))
-	s.HandleFunc("/internal/vmctl/recover", attributedLifecycle(h.HandleRecover))
 	s.HandleFunc("/internal/vmctl/refresh", attributedLifecycle(h.HandleRefresh))
-	s.HandleFunc("/internal/vmctl/logout", attributedLifecycle(h.HandleLogout))
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 	s.HandleFunc("/internal/vmctl/reclaim", attributedLifecycle(h.HandleReclaim))
 	s.HandleFunc("/internal/vmctl/hold", h.HandleHold)
@@ -1719,8 +1204,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
-	s.HandleFunc("/internal/vmctl/prune", attributedLifecycle(h.HandlePrune))
-	s.HandleFunc("/internal/vmctl/runtime-package/autoputer", h.HandleRuntimePackage)
 	s.HandleFunc("/internal/vmctl/autoputer-proxy/", h.HandleAutoputerProxy)
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
 }
@@ -1777,24 +1260,6 @@ func RemoveEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/remove", baseURL)
 }
 
-// HibernateEndpoint returns the full hibernate endpoint URL for the vmctl
-// service at the given base URL.
-func HibernateEndpoint(baseURL string) string {
-	return fmt.Sprintf("%s/internal/vmctl/hibernate", baseURL)
-}
-
-// ResumeEndpoint returns the full resume endpoint URL for the vmctl
-// service at the given base URL.
-func ResumeEndpoint(baseURL string) string {
-	return fmt.Sprintf("%s/internal/vmctl/resume", baseURL)
-}
-
-// RecoverEndpoint returns the full recover endpoint URL for the vmctl
-// service at the given base URL.
-func RecoverEndpoint(baseURL string) string {
-	return fmt.Sprintf("%s/internal/vmctl/recover", baseURL)
-}
-
 // ColdRecoverEndpoint returns the recover_current endpoint for one stable
 // ComputerID. The ID occupies a path segment and is escaped as such.
 func ColdRecoverEndpoint(baseURL, computerID string) string {
@@ -1811,12 +1276,6 @@ func UnholdEndpoint(baseURL string) string {
 // at the given base URL.
 func RefreshEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/refresh", baseURL)
-}
-
-// LogoutEndpoint returns the full logout endpoint URL for the vmctl
-// service at the given base URL.
-func LogoutEndpoint(baseURL string) string {
-	return fmt.Sprintf("%s/internal/vmctl/logout", baseURL)
 }
 
 // IdleCheckEndpoint returns the full idle-check endpoint URL for the vmctl
@@ -1847,10 +1306,4 @@ func RetentionShadowPlanEndpoint(baseURL string) string {
 // service at the given base URL.
 func PulseEndpoint(baseURL string) string {
 	return fmt.Sprintf("%s/internal/vmctl/pulse", baseURL)
-}
-
-// PruneEndpoint returns the full prune endpoint URL for the vmctl service at
-// the given base URL.
-func PruneEndpoint(baseURL string) string {
-	return fmt.Sprintf("%s/internal/vmctl/prune", baseURL)
 }

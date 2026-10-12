@@ -2003,27 +2003,6 @@ func TestComputeStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
 	}
 }
 
-func TestSystemMonitorRoutesAreHardCutOver(t *testing.T) {
-	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
-	client := vmctl.NewClient(vmctlSrv.URL)
-	token := issueTestAccessJWT(priv, "legacy-system-user")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/system/status", nil)
-	req.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
-	w := httptest.NewRecorder()
-	handler.HandleAPI(w, req)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("legacy system route = %d, want 404 body=%s", w.Code, w.Body.String())
-	}
-
-	own, err := client.LookupDesktop("legacy-system-user", vmctl.PrimaryDesktopID)
-	if err != nil {
-		t.Fatalf("lookup after legacy system route: %v", err)
-	}
-	if own != nil {
-		t.Fatalf("legacy system route should not resolve or create ownership, got %+v", own)
-	}
-}
 
 func TestComputeStatusListsOnlyUserComputers(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)

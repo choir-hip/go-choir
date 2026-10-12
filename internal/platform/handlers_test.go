@@ -62,12 +62,6 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	if len(bundle.Citations) == 0 {
 		t.Fatalf("bundle citations missing")
 	}
-
-	publicW := httptest.NewRecorder()
-	handler.HandlePublicTexture(publicW, httptest.NewRequest(http.MethodGet, resp.RoutePath, nil))
-	if publicW.Code != http.StatusNotFound {
-		t.Fatalf("corpusd public HTML route should be disabled, got %d", publicW.Code)
-	}
 }
 
 func TestInternalListTextureRevisionsUsesTextureEnvelope(t *testing.T) {

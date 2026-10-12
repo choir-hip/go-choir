@@ -62,7 +62,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/email/attachments/", h.HandleAttachments)
 	s.HandleFunc("/api/email/messages", h.HandleMessages)
 	s.HandleFunc("/api/email/messages/", h.HandleMessages)
-	s.HandleFunc("/api/notifications/completion-email", h.HandleCompletionEmail)
 	s.HandleFunc("/api/notifications/email-risk-alert", h.HandleRiskAlert)
 }
 

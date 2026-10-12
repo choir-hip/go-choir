@@ -45,10 +45,6 @@ const maxImportedContentBytes = 2 * 1024 * 1024
 const maxImportedDocumentBytes = 25 * 1024 * 1024
 const maxStoredExtractedText = 300 * 1024
 
-type contentItemListResponse struct {
-	Items []types.ContentItem `json:"items"`
-}
-
 type contentCreateRequest struct {
 	SourceType   string          `json:"source_type"`
 	MediaType    string          `json:"media_type,omitempty"`
@@ -65,10 +61,6 @@ type contentCreateRequest struct {
 type contentImportURLRequest struct {
 	URL   string `json:"url"`
 	Query string `json:"query,omitempty"`
-}
-
-type contentImportFileRequest struct {
-	FilePath string `json:"file_path"`
 }
 
 type extractionRung struct {
@@ -136,8 +128,6 @@ type youtubeCaptionTrack struct {
 
 func (s *Service) HandleContentItemsRoot(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case http.MethodGet:
-		s.HandleContentList(w, r)
 	case http.MethodPost:
 		s.HandleContentCreate(w, r)
 	default:
@@ -150,36 +140,12 @@ func (s *Service) HandleContentRouter(w http.ResponseWriter, r *http.Request) {
 		s.HandleContentImportURL(w, r)
 		return
 	}
-	if r.URL.Path == "/api/content/import-file" {
-		s.HandleContentImportFile(w, r)
-		return
-	}
 	const prefix = "/api/content/items/"
 	if strings.HasPrefix(r.URL.Path, prefix) {
 		s.HandleContentItem(w, r)
 		return
 	}
 	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "content endpoint not found"})
-}
-
-func (s *Service) HandleContentList(w http.ResponseWriter, r *http.Request) {
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-	limit := 50
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 200 {
-			limit = n
-		}
-	}
-	items, err := s.store.ListContentItems(r.Context(), ownerID, limit)
-	if err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list content items"})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, contentItemListResponse{Items: items})
 }
 
 func (s *Service) HandleContentItem(w http.ResponseWriter, r *http.Request) {
@@ -253,31 +219,6 @@ func (s *Service) HandleContentImportURL(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	item, err := s.ImportURL(r.Context(), ownerID, strings.TrimSpace(req.URL), strings.TrimSpace(req.Query))
-	if err != nil {
-		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
-		return
-	}
-	writeAPIJSON(w, http.StatusCreated, item)
-}
-
-func (s *Service) HandleContentImportFile(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-	var req contentImportFileRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid file import request"})
-		return
-	}
-	item, err := s.ImportFile(r.Context(), ownerID, strings.TrimSpace(req.FilePath))
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
 		return

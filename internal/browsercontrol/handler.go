@@ -174,13 +174,6 @@ func (h *Handler) HandleBrowserSessionsRoot(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	switch r.Method {
-	case http.MethodGet:
-		sessions, err := h.store.ListBrowserSessions(r.Context(), ownerID, 50)
-		if err != nil {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list browser sessions"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
 	case http.MethodPost:
 		var req browserSessionCreateRequest
 		if r.Body != nil {
@@ -248,23 +241,6 @@ func (h *Handler) HandleBrowserSessionRouter(w http.ResponseWriter, r *http.Requ
 	sessionID := strings.TrimSpace(parts[0])
 	if sessionID == "" {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "browser session not found"})
-		return
-	}
-	if len(parts) == 1 {
-		if r.Method != http.MethodGet {
-			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
-		}
-		rec, err := h.store.GetBrowserSession(r.Context(), ownerID, sessionID)
-		if err != nil {
-			if err == store.ErrNotFound {
-				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "browser session not found"})
-				return
-			}
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load browser session"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, rec)
 		return
 	}
 	if len(parts) == 2 && parts[1] == "navigate" {
