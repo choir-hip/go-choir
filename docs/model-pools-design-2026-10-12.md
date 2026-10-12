@@ -177,6 +177,54 @@ ChatGPT search moves to gpt-6-luna. Jev is unchanged. The other active
 OpenCode models (glm-5.3-flash, muse-spark, hy3, qwen3.7-max) stay in
 the catalog but outside the default pool.
 
+## First cut: simplifications
+
+- The catalog and pools are a Go literal in internal/modelcatalog, which
+  is compiled into both the gateway and the guest. The gateway validates
+  against it and serves it at `GET /provider/v1/models`. The guest
+  resolves pools from its own compiled copy. Having the guest fetch the
+  pools from the gateway comes later, when pools change without a deploy.
+- The thread key is the Texture agent id (`texture:<doc>`) for a Texture
+  run, so a document keeps one model. For every other run it is the
+  trajectory id, so management, research and engineering mix across
+  stories. For runs today, the provider conversation and its cache are
+  per run anyway (the tool loop's conversation id is the run id).
+- Failover lasts for the rest of the run. The thread's next run hashes
+  back to its assigned model, which may have recovered. Nothing is
+  stored.
+- `choir.Model` (a desk switching its own model) is a second slice, after
+  pools, failover and recording are live on staging.
+
+## Ways it can fail, written before the code
+
+- **Skewed assignment.** Assignment by hash sends every thread to one
+  member. Test: many distinct keys reach both members, and one key is
+  always stable.
+- **Pool spec leaks.** A pool spec reaches the gateway as a model name
+  (`pool:default`). Resolution happens in EnrichMetadata, before any run
+  starts; the gateway refuses non-catalog models, so a leak fails loudly.
+- **Unversioned policy file.** An existing computer keeps an old
+  policy file naming gpt-5.6-luna. The gateway now refuses it, so every
+  run on that computer fails. Mitigation: at load, a file without the
+  current platform-version line is rewritten; a role naming a retired
+  model is re-resolved to the default pool rather than failing.
+- **Failover on the wrong errors.** A cancelled context, or our own
+  malformed request, triggers failover and doubles the damage. Only the
+  listed classes fail over, and a test covers a cancel.
+- **Failover loops.** Failover happens at most once per run.
+- **Replay poisoning.** Replaying one provider's reasoning items into the
+  other provider breaks the request. On a switch, reasoning content is
+  dropped from the history and a fresh conversation id is used.
+- **Unknown-provider refusals.** Gateway validation refuses a provider
+  the catalog does not know (fireworks, for example). Validation applies
+  only to providers that have catalog entries.
+- **Hidden gpt-5.x callers.** Zot, the openai-compat clients and
+  search used gpt-5.5 by default. Each default moves to gpt-6-luna, and
+  the models endpoint lists only catalog ids.
+- **Unsupported model on a live provider.** gpt-6-luna is not enabled on
+  the gateway's ChatGPT account. The first staging run shows it, and
+  failover to deepseek keeps the run alive while it is fixed.
+
 ## Not now
 
 - routing in the guest finer than a pool (weights, per-task rules)
