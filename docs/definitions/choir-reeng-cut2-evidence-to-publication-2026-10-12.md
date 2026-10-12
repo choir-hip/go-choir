@@ -229,7 +229,13 @@ finish:
         shared by Texture, management and research; for a long document the
         frame carries a section digest and ReadDoc fetches the rest.
         ApplyTexture, the revision_policy and run_system overlays and every
-        retired verb on Texture are deleted. Cut 1 wrote Texture's prompt
+        retired verb on Texture are deleted. Texture merge is deleted too
+        (textureowner/texture_merge.go, the /merge-preview and
+        /accept-merge routes, management's ProductAPI exception for them,
+        and TextureCompareMergePanel): a one-shot model call outside any
+        desk that writes owner revisions, already refused for
+        lifecycle-authored documents; the version chevrons replace
+        compare. Cut 1 wrote Texture's prompt
         core; this unit adds the Write, citation and Done/Wait/Reject
         judgement.
         Management's prompt gains the translation contract: a plain summary
