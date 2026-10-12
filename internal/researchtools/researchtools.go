@@ -244,25 +244,6 @@ type Dependencies struct {
 	Captures CaptureSink
 }
 
-func Register(registry *toolregistry.ToolRegistry, deps Dependencies) error {
-	for _, tool := range []toolregistry.Tool{
-		newWebSearchTool(deps.Search, deps),
-		newSourceSearchTool(deps.Source, deps),
-		newFetchURLTool(deps.HTTP, deps),
-		newImportDocumentContentTool(deps),
-		newImportURLContentTool(deps),
-		newReadContentItemTool(deps),
-		newListContentItemSelectorsTool(deps),
-		newReadContentItemSelectorTool(deps),
-		newSearchWireCorpusTool(deps),
-	} {
-		if err := registry.Register(tool); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func newImportDocumentContentTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		URL      string `json:"url,omitempty"`

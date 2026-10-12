@@ -18,7 +18,7 @@ import (
 
 func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 	rt := &Runtime{capsuleExecutor: new(capsule.Executor)}
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
 
@@ -43,9 +43,34 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 	}
 }
 
+// D5 (docs/problems/dead-code-census-live-defects-2026-10-12.md): a run whose
+// profile has no installed registry must get no tool registry at all, not a
+// leftover typed-tool registry. Canonical profiles with no registry entry
+// (the verifier roles, the frozen processor/reconciler tokens) fail closed.
+func TestUnknownProfileRunGetsNoToolRegistry(t *testing.T) {
+	rt := &Runtime{capsuleExecutor: new(capsule.Executor)}
+	if err := rt.InstallDefaultAgentTools(); err != nil {
+		t.Fatalf("install tools: %v", err)
+	}
+	for _, profile := range []string{"verifier", "verifier_multimodal", "processor", "reconciler"} {
+		rec := &types.RunRecord{
+			RunID:        "run-" + profile,
+			AgentProfile: profile,
+			AgentRole:    profile,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: profile,
+				runMetadataAgentRole:    profile,
+			},
+		}
+		if registry := rt.toolRegistryForRun(rec); registry != nil {
+			t.Fatalf("profile %q got a fallback registry with tools %v; want nil (fail closed)", profile, registryToolNames(registry))
+		}
+	}
+}
+
 func TestTextureRegistryHasNoGenericCancellationOrCapsuleLifecycleAuthority(t *testing.T) {
 	rt := &Runtime{capsuleExecutor: new(capsule.Executor)}
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
@@ -58,7 +83,7 @@ func TestTextureRegistryHasNoGenericCancellationOrCapsuleLifecycleAuthority(t *t
 
 func TestDelegatedEngineeringCannotReachHostEffectToolsOrCallbacks(t *testing.T) {
 	rt := &Runtime{capsuleExecutor: new(capsule.Executor)}
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(agentprofile.Engineering)
@@ -140,7 +165,7 @@ func TestAssignedEngineeringCancellationIsAVerbNotATool(t *testing.T) {
 	// cancellation reaches rt.cancelAssignedEngineering through the
 	// choir.CancelAssignment verb (management desk module set only).
 	rt := &Runtime{capsuleExecutor: new(capsule.Executor)}
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(agentprofile.Management)
@@ -220,7 +245,7 @@ func TestPersistentManagementReportIsAVerbNotATool(t *testing.T) {
 	// SMG: report_to_texture's typed registration is deleted; bound lifecycle
 	// reports ride choir.ReportPacket -> persistentManagementBoundReport.
 	rt := &Runtime{}
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatal(err)
 	}
 	registry := rt.ToolRegistryForProfile(agentprofile.Management)

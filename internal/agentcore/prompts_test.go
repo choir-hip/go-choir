@@ -7,7 +7,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -15,11 +14,7 @@ import (
 func testPromptAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 	t.Helper()
 	rt, handler := testAPISetup(t)
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get cwd: %v", err)
-	}
-	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatalf("install default agent tools: %v", err)
 	}
 	return rt, handler

@@ -144,7 +144,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "spawn_agent", "cancel_agent", "save_evidence", "capsule_go_eval", "desk_go_eval":
+	case "spawn_agent", "cancel_agent", "capsule_go_eval", "desk_go_eval":
 		return true
 	default:
 		return false

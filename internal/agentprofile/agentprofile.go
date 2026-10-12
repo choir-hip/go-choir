@@ -18,15 +18,10 @@ const (
 
 // Policy is the canonical capability, spawn, and message policy for an agent profile.
 type Policy struct {
-	Profile                   string
-	AllowReadOnlyFiles        bool
-	AllowResearchTools        bool
-	AllowEvidenceTools        bool
-	AllowMemoryTools          bool
-	AllowModelDiagnosticTools bool
-	AllowCoAgentTools         bool
-	AllowedSpawnTargets       []string
-	AllowedMessageTargets     []string
+	Profile               string
+	AllowCoAgentTools     bool
+	AllowedSpawnTargets   []string
+	AllowedMessageTargets []string
 }
 
 // PolicyFor returns the capability, spawn, and message policy for profile.
@@ -45,26 +40,18 @@ func PolicyFor(profile string) (Policy, error) {
 		}, nil
 	case Research:
 		return Policy{
-			Profile:                   Research,
-			AllowReadOnlyFiles:        true,
-			AllowResearchTools:        true,
-			AllowEvidenceTools:        true,
-			AllowMemoryTools:          true,
-			AllowModelDiagnosticTools: true,
-			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       nil,
-			AllowedMessageTargets:     []string{Texture},
+			Profile:               Research,
+			AllowCoAgentTools:     true,
+			AllowedSpawnTargets:   nil,
+			AllowedMessageTargets: []string{Texture},
 		}, nil
 	case Texture:
-		// Texture is the artifact control plane, not an evidence gatherer. It does
-		// not receive researcher-owned evidence tools (save/read/list_evidence) or
-		// the verify_model_capability diagnostic by default. It keeps run-memory
-		// retrieval so it can recover its own compacted context. Lifecycle target
-		// and cancellation authority stays in atomic Texture controls/reducers;
-		// Texture must not receive the generic model-authored cancel_agent tool.
+		// Texture is the artifact control plane, not an evidence gatherer.
+		// Lifecycle target and cancellation authority stays in atomic Texture
+		// controls/reducers; Texture must not receive the generic
+		// model-authored cancel_agent tool.
 		return Policy{
 			Profile:               Texture,
-			AllowMemoryTools:      true,
 			AllowCoAgentTools:     false,
 			AllowedSpawnTargets:   []string{Research},
 			AllowedMessageTargets: []string{Research, Management},
@@ -81,15 +68,10 @@ func PolicyFor(profile string) (Policy, error) {
 		return Policy{Profile: Engineering, AllowedMessageTargets: []string{Management}}, nil
 	case Management:
 		return Policy{
-			Profile:                   Management,
-			AllowReadOnlyFiles:        true,
-			AllowResearchTools:        true,
-			AllowEvidenceTools:        true,
-			AllowMemoryTools:          true,
-			AllowModelDiagnosticTools: true,
-			AllowCoAgentTools:         true,
-			AllowedSpawnTargets:       []string{Research},
-			AllowedMessageTargets:     []string{Texture, Research},
+			Profile:               Management,
+			AllowCoAgentTools:     true,
+			AllowedSpawnTargets:   []string{Research},
+			AllowedMessageTargets: []string{Texture, Research},
 		}, nil
 	default:
 		// Canonical but unlisted profiles (the verifier roles) get a bare
@@ -133,6 +115,7 @@ func Canonical(profile string) (string, error) {
 		return "", UnknownProfileError{Input: profile}
 	}
 }
+
 // IsLive reports whether a profile may be used for new runtime work.
 // Processor and reconciler remain Canonical solely so stored historical
 // records can be decoded and replayed.

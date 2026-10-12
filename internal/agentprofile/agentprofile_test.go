@@ -14,21 +14,17 @@ func TestPolicyFor(t *testing.T) {
 			AllowedSpawnTargets: []string{Texture},
 		},
 		Research: {
-			Profile: Research, AllowReadOnlyFiles: true, AllowResearchTools: true,
-			AllowEvidenceTools: true, AllowMemoryTools: true,
-			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
+			Profile: Research, AllowCoAgentTools: true,
 			AllowedMessageTargets: []string{Texture},
 		},
 		Texture: {
-			Profile: Texture, AllowMemoryTools: true, AllowCoAgentTools: false,
+			Profile: Texture, AllowCoAgentTools: false,
 			AllowedSpawnTargets: []string{Research}, AllowedMessageTargets: []string{Research, Management},
 		},
 		Email:       {Profile: Email},
 		Engineering: {Profile: Engineering, AllowedMessageTargets: []string{Management}},
 		Management: {
-			Profile: Management, AllowReadOnlyFiles: true, AllowResearchTools: true,
-			AllowEvidenceTools: true, AllowMemoryTools: true,
-			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
+			Profile: Management, AllowCoAgentTools: true,
 			AllowedSpawnTargets: []string{Research}, AllowedMessageTargets: []string{Texture, Research},
 		},
 	}
@@ -175,9 +171,7 @@ func TestPolicyForDefaultIsNotDefaultAllow(t *testing.T) {
 		if err != nil {
 			t.Fatalf("PolicyFor(%q) error = %v", profile, err)
 		}
-		if policy.AllowReadOnlyFiles || policy.AllowResearchTools ||
-			policy.AllowEvidenceTools || policy.AllowMemoryTools ||
-			policy.AllowModelDiagnosticTools || policy.AllowCoAgentTools ||
+		if policy.AllowCoAgentTools ||
 			len(policy.AllowedSpawnTargets) != 0 || len(policy.AllowedMessageTargets) != 0 {
 			t.Fatalf("PolicyFor(%q) grants capabilities: %+v", profile, policy)
 		}

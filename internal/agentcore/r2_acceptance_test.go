@@ -187,7 +187,7 @@ func TestR2TypedResolveGrandfathersLegacyStringCommitment(t *testing.T) {
 // every installed live desk registry.
 func TestR2DeskRegistryCensus(t *testing.T) {
 	rt, _ := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatalf("InstallDefaultAgentTools: %v", err)
 	}
 	for _, profile := range []string{agentprofile.Management, agentprofile.Engineering, agentprofile.Research, agentprofile.Texture} {

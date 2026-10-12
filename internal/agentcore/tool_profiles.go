@@ -3,6 +3,9 @@ package agentcore
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
@@ -12,10 +15,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 )
 
 const (
@@ -401,36 +400,12 @@ func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchto
 	return registry, nil
 }
 
-func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, searchClient search.Client, sourceClient researchtools.SourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
+// buildRegistryForRole builds the typed registry a non-desk profile's policy
+// grants. Only the conductor's cancel_agent remains (Cut 1 deletes it with
+// spawn_agent); management, Texture and research run on sealed desk-cell
+// registries, and email has none.
+func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
-	if spec.AllowReadOnlyFiles {
-		if err := RegisterReadOnlyFileTools(registry, cwd); err != nil {
-			return nil, err
-		}
-	}
-	if spec.AllowResearchTools {
-		if err := researchtools.Register(registry, researchtools.Dependencies{
-			Store: rt.store, Content: rt.content, Search: searchClient, Source: sourceClient, HTTP: httpClient,
-			Egress: rt.researchEgress, // same activation-scoped budget; nil-ledger stays open (tests only)
-		}); err != nil {
-			return nil, err
-		}
-	}
-	if spec.AllowEvidenceTools {
-		if err := RegisterEvidenceTools(registry, rt); err != nil {
-			return nil, err
-		}
-	}
-	if spec.AllowMemoryTools {
-		if err := RegisterRunMemoryTools(registry, rt); err != nil {
-			return nil, err
-		}
-	}
-	if spec.AllowModelDiagnosticTools {
-		if err := RegisterModelDiagnosticTools(registry, rt); err != nil {
-			return nil, err
-		}
-	}
 	if spec.AllowCoAgentTools {
 		if err := RegisterCoAgentTools(registry, rt, spec); err != nil {
 			return nil, err
@@ -439,19 +414,14 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 	return registry, nil
 }
 
-// InstallDefaultAgentTools installs role-bound registries. Management receives only
-// the persistent assignment/cancel authority; capsule effects are runtime-owned.
-// Engineering has an empty static registry. An exact assigned run receives a fresh
-// closed capsule-local registry with capsule_go_eval as its sole capsule-effect
-// entry. Reporting, freeze, and verification are in-cell affordances.
-func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
-	if strings.TrimSpace(cwd) == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("resolve tool cwd: %w", err)
-		}
-		cwd = wd
-	}
+// InstallDefaultAgentTools installs role-bound registries. Management, Texture
+// and research get the sealed desk-cell registry (desk_go_eval only). The
+// conductor gets cancel_agent (autoputer adds spawn_agent until Cut 1). Email
+// and Engineering have empty static registries; an exact assigned Engineering
+// run receives a fresh closed capsule-local registry with capsule_go_eval as
+// its sole capsule-effect entry. Reporting, freeze, and verification are
+// in-cell affordances.
+func (rt *Runtime) InstallDefaultAgentTools() error {
 	engineeringRegistry := toolregistry.MustNewToolRegistry()
 
 	searchClient := search.NewGatewayClientFromEnv()
@@ -461,17 +431,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	// (research-fetch-url-has-no-address-guard-2026-10-10.md, D1/D2).
 	httpClient := sourcefetch.Client(30 * time.Second)
 
-	managementPolicy, err := agentprofile.PolicyFor(agentprofile.Management)
-	if err != nil {
-		return err
-	}
-	managementRegistry, err := rt.buildRegistryForRole(managementPolicy, cwd, searchClient, sourceClient, httpClient)
-	if err != nil {
-		return err
-	}
-	// SMG: no typed registration on the management registry — the desk-cell
-	// registry (desk_go_eval only) shadows it; the base registry stays the
-	// fallback for non-carrier paths.
 	// The D2 cap boundary charges every cell-carrier research request against
 	// the same activation-scoped egress ledger.
 	if rt.researchEgress == nil {
@@ -498,24 +457,18 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		if !deskCarrierLive(deskProfile) {
 			continue
 		}
-		if deskReg, derr := buildDeskCellRegistry(rt, deskProfile, researchDeps); derr == nil {
-			deskCellRegistries[deskProfile] = deskReg
+		deskReg, err := buildDeskCellRegistry(rt, deskProfile, researchDeps)
+		if err != nil {
+			return err
 		}
+		deskCellRegistries[deskProfile] = deskReg
 	}
 
 	conductorPolicy, err := agentprofile.PolicyFor(agentprofile.Conductor)
 	if err != nil {
 		return err
 	}
-	conductorRegistry, err := rt.buildRegistryForRole(conductorPolicy, cwd, searchClient, sourceClient, httpClient)
-	if err != nil {
-		return err
-	}
-	texturePolicy, err := agentprofile.PolicyFor(agentprofile.Texture)
-	if err != nil {
-		return err
-	}
-	textureRegistry, err := rt.buildRegistryForRole(texturePolicy, cwd, searchClient, sourceClient, httpClient)
+	conductorRegistry, err := rt.buildRegistryForRole(conductorPolicy)
 	if err != nil {
 		return err
 	}
@@ -523,19 +476,19 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	emailRegistry, err := rt.buildRegistryForRole(emailPolicy, cwd, searchClient, sourceClient, httpClient)
+	emailRegistry, err := rt.buildRegistryForRole(emailPolicy)
 	if err != nil {
 		return err
 	}
 
-	rt.toolRegistry = managementRegistry
+	// D5: no fallback registry. A run whose profile has no entry below (the
+	// verifier roles, frozen processor/reconciler records) gets no tools.
+	rt.toolRegistry = nil
 	if rt.toolProfiles == nil {
 		rt.toolProfiles = make(map[string]*toolregistry.ToolRegistry)
 	}
 	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
-	rt.toolProfiles[agentprofile.Management] = managementRegistry
 	rt.toolProfiles[agentprofile.Engineering] = engineeringRegistry
-	rt.toolProfiles[agentprofile.Texture] = textureRegistry
 	rt.toolProfiles[agentprofile.Email] = emailRegistry
 	// Install the sealed desk-cell registry for every promoted desk profile.
 	for deskProfile, deskReg := range deskCellRegistries {

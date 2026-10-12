@@ -34,7 +34,7 @@ func TestAssignedEngineeringToolOverlayIsExactRunOnly(t *testing.T) {
 	ctx := context.Background()
 	exec := capsule.NewExecutor("", "", "", 0)
 	rt := &Runtime{capsuleExecutor: exec}
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatal(err)
 	}
 	base := rt.ToolRegistryForProfile(agentprofile.Engineering)

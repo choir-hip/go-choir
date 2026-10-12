@@ -95,7 +95,7 @@ func testAPISetupWithOptions(t *testing.T, optionsForStore func(*store.Store, st
 		}
 		return nil
 	})
-	if err := core.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := core.InstallDefaultAgentTools(); err != nil {
 		t.Fatalf("install generic core tools: %v", err)
 	}
 	handler := NewHandler(core)

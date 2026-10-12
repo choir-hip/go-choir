@@ -43,9 +43,6 @@ type rolePolicyResponse struct {
 	Profile               string   `json:"profile"`
 	AllowedSpawnTargets   []string `json:"allowed_spawn_targets,omitempty"`
 	AllowedMessageTargets []string `json:"allowed_message_targets,omitempty"`
-	AllowReadOnlyFiles    bool     `json:"allow_read_only_files"`
-	AllowResearchTools    bool     `json:"allow_research_tools"`
-	AllowEvidenceTools    bool     `json:"allow_evidence_tools"`
 	AllowCoAgentTools     bool     `json:"allow_coagent_tools"`
 }
 
@@ -65,9 +62,6 @@ func rolePolicyFromSpec(spec agentprofile.Policy) rolePolicyResponse {
 		Profile:               spec.Profile,
 		AllowedSpawnTargets:   append([]string(nil), spec.AllowedSpawnTargets...),
 		AllowedMessageTargets: append([]string(nil), spec.AllowedMessageTargets...),
-		AllowReadOnlyFiles:    spec.AllowReadOnlyFiles,
-		AllowResearchTools:    spec.AllowResearchTools,
-		AllowEvidenceTools:    spec.AllowEvidenceTools,
 		AllowCoAgentTools:     spec.AllowCoAgentTools,
 	}
 }

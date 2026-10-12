@@ -50,7 +50,7 @@ func TestR3rResearchCellReportMintsCommitmentUnderCap(t *testing.T) {
 
 func TestR3rEgressLedgerInstalledOnRuntime(t *testing.T) {
 	rt, _ := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
 	if rt.researchEgress == nil {

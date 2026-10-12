@@ -596,7 +596,7 @@ func TestLifecycleInjectionRestartDerivesSeenFromDurableMemoryAndRejectsSpoof(t 
 
 func TestRuntimeInjectionAppendFailurePassivatesExactResearchRun(t *testing.T) {
 	rt, s := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatal(err)
 	}
 	fixture := bindResearchControlFixture(t, rt, s, "owner-append-failure", "append-failure")
@@ -691,7 +691,7 @@ func persistentMgmtReportForTest(rt *Runtime, ctx context.Context, parent *types
 
 func TestPersistentManagementReportToTextureCanonicalReplayWakeAndInjection(t *testing.T) {
 	rt, s := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatal(err)
 	}
 	var dispatches []string
@@ -766,7 +766,7 @@ func TestPersistentManagementReportToTextureCanonicalReplayWakeAndInjection(t *t
 
 func TestPersistentManagementReportRequiresCompleteAuthenticated101DeliveryAndDispositionsAtomically(t *testing.T) {
 	rt, s := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatal(err)
 	}
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
@@ -874,7 +874,7 @@ func TestPersistentManagementReportAfterCancellationIsHistoricalLateEvidenceOnly
 	for _, oldRunState := range []types.RunState{types.RunCancelled, types.RunPassivated} {
 		t.Run(string(oldRunState), func(t *testing.T) {
 			rt, s := testRuntime(t)
-			if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+			if err := rt.InstallDefaultAgentTools(); err != nil {
 				t.Fatal(err)
 			}
 			var dispatches []string

@@ -15,7 +15,7 @@ import (
 // the address guard's.
 func TestResearchFetchClientRefusesLoopback(t *testing.T) {
 	rt, _ := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
+	if err := rt.InstallDefaultAgentTools(); err != nil {
 		t.Fatal(err)
 	}
 	reached := false

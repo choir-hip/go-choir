@@ -577,11 +577,7 @@ func Run() {
 	// is no longer required.
 	toolsEnabled := os.Getenv("RUNTIME_DISABLE_TOOLS") == ""
 	if toolsEnabled {
-		toolCWD := os.Getenv("RUNTIME_TOOL_CWD")
-		if strings.TrimSpace(toolCWD) == "" {
-			toolCWD = filesRoot
-		}
-		if err := rt.Runtime.InstallDefaultAgentTools(toolCWD); err != nil {
+		if err := rt.Runtime.InstallDefaultAgentTools(); err != nil {
 			boot.fatalf("autoputer: install default agent tools: %v", err)
 		}
 	} else {
