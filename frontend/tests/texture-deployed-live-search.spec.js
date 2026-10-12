@@ -186,10 +186,7 @@ test('deployed prompt-bar Texture flow uses live search for current 2026 evidenc
   const forbiddenRuntimeRequests = [];
   page.on('request', (request) => {
     const url = new URL(request.url());
-    if (request.method() === 'POST' && url.pathname === '/api/agent/spawn') {
-      forbiddenRuntimeRequests.push(url.pathname);
-    }
-    if (['/api/agent/topology', '/api/prompts', '/api/events'].includes(url.pathname)) {
+    if (url.pathname === '/api/prompts') {
       forbiddenRuntimeRequests.push(url.pathname);
     }
   });

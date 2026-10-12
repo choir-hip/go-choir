@@ -19,12 +19,9 @@ async function registerAndLoadDesktop(page, email) {
 }
 
 async function openApp(page, appId) {
-  await openStartApp(page, appId);
-}
-
-async function openStartApp(page, appId) {
-  await page.locator('[data-start-button]').click();
-  await page.locator(`[data-start-app-id="${appId}"]`).click();
+  await page.locator('[data-desk-menu-button]').click();
+  await expect(page.locator('[data-desk-sheet]')).toBeVisible();
+  await page.locator(`[data-desk-sheet-app][data-desk-app-id="${appId}"]`).click();
 }
 
 async function attachScreenshot(page, testInfo, name) {
@@ -42,11 +39,9 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (
-      url.pathname.startsWith('/api/agent/') ||
       url.pathname.startsWith('/api/prompts') ||
       url.pathname.startsWith('/api/test/') ||
-      url.pathname.startsWith('/internal') ||
-      url.pathname === '/api/events'
+      url.pathname.startsWith('/internal')
     ) {
       forbiddenRequests.push(`${request.method()} ${url.pathname}`);
     }

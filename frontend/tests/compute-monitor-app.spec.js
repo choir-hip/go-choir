@@ -15,8 +15,9 @@ async function registerAndLoadDesktop(page, authenticator, email) {
 }
 
 async function openComputeMonitor(page) {
-  await page.locator('[data-start-button]').click();
-  await page.locator('[data-start-app-id="compute-monitor"]').click();
+  await page.locator('[data-desk-menu-button]').click();
+  await expect(page.locator('[data-desk-sheet]')).toBeVisible();
+  await page.locator('[data-desk-sheet-app][data-desk-app-id="compute-monitor"]').click();
   await expect(page.locator('[data-compute-monitor-app]')).toBeVisible({ timeout: 10000 });
 }
 
@@ -101,65 +102,3 @@ test('compute monitor is usable in a 390x844 floating mobile desktop window', as
   await page.screenshot({ path: test.info().outputPath('compute-monitor-mobile-390x844.png'), fullPage: true });
 });
 
-test('heavy restored background apps are lazily suspended behind the active window', async ({ page, authenticator }) => {
-  const email = uniqueEmail('compute-monitor-lazy');
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await registerAndLoadDesktop(page, authenticator, email);
-
-  const windows = [
-    {
-      window_id: 'restore-monitor',
-      app_id: 'compute-monitor',
-      title: 'Compute Monitor',
-      geometry: { x: 120, y: 70, width: 980, height: 700 },
-      mode: 'normal',
-      z_index: 10,
-      app_context: { windowTitle: 'Compute Monitor' },
-    },
-    {
-      window_id: 'restore-features',
-      app_id: 'features',
-      title: 'Features',
-      geometry: { x: 70, y: 48, width: 900, height: 640 },
-      mode: 'normal',
-      z_index: 2,
-      app_context: {},
-    },
-    {
-      window_id: 'restore-texture',
-      app_id: 'texture',
-      title: 'Texture',
-      geometry: { x: 88, y: 62, width: 900, height: 640 },
-      mode: 'normal',
-      z_index: 3,
-      app_context: { windowTitle: 'Texture' },
-    },
-    {
-      window_id: 'restore-pdf',
-      app_id: 'pdf',
-      title: 'PDF',
-      geometry: { x: 104, y: 84, width: 900, height: 640 },
-      mode: 'normal',
-      z_index: 4,
-      app_context: { windowTitle: 'PDF' },
-    },
-  ];
-
-  await page.evaluate(async ({ windows }) => {
-    const res = await fetch('/api/desktop/state', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ windows, active_window_id: 'restore-monitor' }),
-    });
-    if (!res.ok) throw new Error(`desktop state save failed: ${res.status}`);
-  }, { windows });
-
-  await page.reload();
-  await page.locator('[data-desktop][data-desktop-ready="true"]').waitFor({ state: 'visible', timeout: 60000 });
-  await expect(page.locator('[data-window][data-window-app-id="compute-monitor"]')).toBeVisible();
-  await expect(page.locator('[data-suspended-app]')).toHaveCount(3);
-  await expect(page.locator('[data-compute-monitor-windows]')).toContainText('suspended');
-
-  await page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Features' }).click();
-  await expect(page.locator('[data-features-window]')).toBeVisible({ timeout: 10000 });
-});

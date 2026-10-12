@@ -60,36 +60,6 @@ test('first-time user registers and lands in the shell without page reload', asy
   // The guest auth entry should no longer be visible.
   const authEntry = page.locator('[data-auth-entry]');
   await expect(authEntry).not.toBeVisible();
-
-  // The shell should show the current user.
-  const userArea = page.locator('[data-shell-user]');
-  await expect(userArea).toBeVisible();
-  await expect(userArea).toContainText(email);
-});
-
-test('registered user sees desktop shell with live channel after mount', async ({
-  page,
-  authenticator,
-}) => {
-  const email = uniqueEmail();
-
-  // Register via the test helper for reliability.
-  await page.goto(BASE_URL);
-  await registerPasskey(page, email, BASE_URL);
-
-  // Reload so the app re-checks auth and renders the desktop shell.
-  await page.reload();
-  await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
-
-  // NOTE: [data-shell-bootstrap] was removed in M6 desktop rewrite.
-  // Verify the desktop shell is visible with user info.
-  const userArea = page.locator('[data-shell-user]');
-  await expect(userArea).toBeVisible();
-  await expect(userArea).toContainText(email);
-
-  // The live channel status should be visible in the prompt surface.
-  const liveStatus = page.locator('[data-shell-live-status]');
-  await expect(liveStatus).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
@@ -144,11 +114,6 @@ test('returning user logs in from signed-out state and lands in the shell', asyn
   // The guest auth entry should no longer be visible.
   const authEntry = page.locator('[data-auth-entry]');
   await expect(authEntry).not.toBeVisible();
-
-  // The shell should show the current user.
-  const userArea = page.locator('[data-shell-user]');
-  await expect(userArea).toBeVisible();
-  await expect(userArea).toContainText(email);
 });
 
 test('returning user sees desktop shell after login', async ({
@@ -172,40 +137,6 @@ test('returning user sees desktop shell after login', async ({
   // Reload to enter the desktop shell.
   await page.reload();
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
-
-  // NOTE: [data-shell-bootstrap] was removed in M6 desktop rewrite.
-  // Verify the desktop shell is visible with user info.
-  const userArea = page.locator('[data-shell-user]');
-  await expect(userArea).toBeVisible();
-  await expect(userArea).toContainText(email);
-});
-
-test('returning user has live channel connected after login', async ({
-  page,
-  authenticator,
-}) => {
-  const email = uniqueEmail();
-
-  // Register and log out.
-  await page.goto(BASE_URL);
-  await registerPasskey(page, email, BASE_URL);
-  await logout(page, BASE_URL);
-
-  // Log in via the helper.
-  await page.goto(BASE_URL);
-  await loginPasskey(page, email, BASE_URL);
-
-  // Reload to enter the desktop shell.
-  await page.reload();
-  await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
-
-  // Live channel status should be visible in the prompt surface.
-  // NOTE: In some test environments the WebSocket may not reach
-  // "Connected" state due to proxy timing, so we verify the status
-  // element is visible and has content (any connection state is valid).
-  const liveStatus = page.locator('[data-shell-live-status]');
-  await expect(liveStatus).toBeVisible();
-  await expect(liveStatus).not.toBeEmpty();
 });
 
 test('auth cookies are HttpOnly and have SameSite attribute', async ({

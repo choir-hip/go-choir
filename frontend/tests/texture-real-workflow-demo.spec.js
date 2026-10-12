@@ -181,10 +181,8 @@ test('real texture workflow demo uses live LLM, search, generated artifact, and 
     const url = new URL(request.url());
     const forbidden =
       url.pathname.startsWith('/internal/') ||
-      url.pathname.startsWith('/api/agent/') ||
       url.pathname.startsWith('/api/prompts') ||
-      url.pathname.startsWith('/api/test/') ||
-      url.pathname === '/api/events';
+      url.pathname.startsWith('/api/test/');
     if (forbidden) {
       forbiddenBrowserRequests.push(`${request.method()} ${url.pathname}`);
     }

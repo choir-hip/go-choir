@@ -31,22 +31,6 @@ async function expectAuthenticatedSession(page, email) {
   expect(session.user.email).toBe(email);
 }
 
-// ---------------------------------------------------------------------------
-// Helper: wait for live channel to show "Connected"
-// ---------------------------------------------------------------------------
-async function waitForLiveConnected(page, timeout = 10_000) {
-  await page.waitForFunction(
-    (selector) => {
-      const el = document.querySelector(selector);
-      if (!el) return false;
-      const text = el.textContent;
-      return text.includes('Connected') || text.includes('Connecting');
-    },
-    '[data-shell-live-status]',
-    { timeout },
-  );
-}
-
 // NOTE: The M6 desktop rewrite removed [data-shell-bootstrap] from the DOM.
 // Bootstrap data is fetched internally but not displayed.
 // Tests that previously waited for bootstrap data now only verify
@@ -76,9 +60,6 @@ test('hard reload at / rehydrates the authenticated shell from cookies', async (
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
   await expectAuthenticatedSession(page, email);
-
-  // Live channel status should be visible.
-  await expect(page.locator('[data-shell-live-status]')).toBeVisible();
 });
 
 test('new tab at / rehydrates the authenticated shell from cookies', async ({
@@ -104,9 +85,6 @@ test('new tab at / rehydrates the authenticated shell from cookies', async ({
   await newPage.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
   await expectAuthenticatedSession(newPage, email);
-
-  // Live channel status should be visible.
-  await expect(newPage.locator('[data-shell-live-status]')).toBeVisible();
 
   await newPage.close();
 });
@@ -143,9 +121,6 @@ test('expired access cookie renews through refresh rotation on reload', async ({
   await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
 
   await expectAuthenticatedSession(page, email);
-
-  // Live channel status should be visible.
-  await expect(page.locator('[data-shell-live-status]')).toBeVisible();
 });
 
 test('concurrent frontend renewal attempts share one refresh rotation', async ({
@@ -194,49 +169,6 @@ test('concurrent frontend renewal attempts share one refresh rotation', async ({
   expect(result.sessionRequestCount).toBe(1);
   expect(result.renewed).toEqual([true, true, true]);
 
-  const session = await getSession(page, BASE_URL);
-  expect(session.authenticated).toBe(true);
-  expect(session.user.email).toBe(email);
-});
-
-test('live channel reconnects after successful renewal following access expiry', async ({
-  page,
-  authenticator,
-  context,
-}) => {
-  const email = uniqueEmail();
-
-  // Register, land in shell, and wait for live channel to connect.
-  await page.goto(BASE_URL);
-  await registerPasskey(page, email, BASE_URL);
-
-  // Reload so the app re-checks auth and renders the shell.
-  await page.reload();
-  await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
-
-  // Remove the access cookie to simulate expired access JWT.
-  await context.clearCookies({ name: 'choir_access' });
-
-  // Force the WS to close from JavaScript, triggering the Shell's
-  // reconnection logic which should attempt renewal.
-  await page.evaluate(() => {
-    // Find the Shell's WebSocket and close it to trigger reconnection.
-    // The Shell component stores the WS reference; we can close it
-    // by evaluating within the page context.
-    // We trigger reconnection by causing a fetch that will hit 401.
-    return fetch('/api/shell/bootstrap', { credentials: 'include' })
-      .then(res => res.status)
-      .catch(() => -1);
-  });
-
-  // Now reload — this exercises the full rehydration + renewal path.
-  await page.reload();
-  await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
-
-  // After renewal, the live channel status should be visible.
-  await expect(page.locator('[data-shell-live-status]')).toBeVisible();
-
-  // Verify session is still valid (no new passkey was needed).
   const session = await getSession(page, BASE_URL);
   expect(session.authenticated).toBe(true);
   expect(session.user.email).toBe(email);

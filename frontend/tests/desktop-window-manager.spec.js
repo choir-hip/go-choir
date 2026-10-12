@@ -49,7 +49,7 @@ async function openAppViaIcon(page, appId) {
 async function clickDesktopLogout(page) {
   await page.locator('[data-desk-menu-button]').click();
   await page.locator('[data-desk-sheet]').waitFor({ state: 'visible', timeout: 5000 });
-  await page.locator('[data-desktop-logout]').click();
+  await page.locator('[data-prompt-surface-logout]').click();
 }
 
 // ---------------------------------------------------------------
@@ -82,7 +82,7 @@ test('authenticated users reach a real desktop shell', async ({
   // The logout button should be available from the desktop/account menu.
   await page.locator('[data-desk-menu-button]').click();
   await expect(page.locator('[data-desk-sheet]')).toBeVisible();
-  await expect(page.locator('[data-desktop-logout]')).toBeVisible();
+  await expect(page.locator('[data-prompt-surface-logout]')).toBeVisible();
   await page.locator('[data-desk-menu-button]').click();
 });
 
@@ -338,7 +338,7 @@ test('clicking logout returns to public desktop from desktop', async ({
 
   await page.locator('[data-desk-menu-button]').click();
   await expect(page.locator('[data-prompt-surface-login]')).toBeVisible();
-  await expect(page.locator('[data-desktop-logout]')).toHaveCount(0);
+  await expect(page.locator('[data-prompt-surface-logout]')).toHaveCount(0);
 
   // Session should be signed out.
   const session = await getSession(page, BASE_URL);

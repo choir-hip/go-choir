@@ -42,12 +42,6 @@ async function launchTextureApp(page) {
     return;
   }
 
-  const railItem = page.locator('[data-rail-item][data-app-id="texture"], [data-rail-item][data-app-id="texture"]').first();
-  if ((await railItem.count()) > 0 && await railItem.isVisible()) {
-    await railItem.click();
-    return;
-  }
-
   await page.getByRole('button', { name: /Open app switcher|Desk/ }).click();
   const deskApp = page.locator('[data-desk-app-id="texture"], [data-desk-app-id="texture"]').first();
   await expect(deskApp).toBeVisible({ timeout: 10000 });

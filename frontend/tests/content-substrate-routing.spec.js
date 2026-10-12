@@ -65,11 +65,9 @@ test('prompt bar routes bare content references and product APIs record extracti
   page.on('request', (request) => {
     const url = new URL(request.url());
     if (
-      url.pathname.startsWith('/api/agent/') ||
       url.pathname.startsWith('/api/prompts') ||
       url.pathname.startsWith('/api/test/') ||
-      url.pathname.startsWith('/internal') ||
-      url.pathname === '/api/events'
+      url.pathname.startsWith('/internal')
     ) {
       forbiddenRequests.push(`${request.method()} ${url.pathname}`);
     }

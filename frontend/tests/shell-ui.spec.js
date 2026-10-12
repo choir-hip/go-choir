@@ -6,7 +6,6 @@
  * - The shell includes a visible logout control
  * - The shell exposes session-aware UI (current user display)
  * - The shell calls GET /api/shell/bootstrap on mount
- * - The shell opens a live channel via GET /api/ws
  *
  * Uses the Playwright Chromium virtual-authenticator harness to register
  * a passkey and authenticate before testing the shell.
@@ -70,7 +69,7 @@ test('authenticated shell includes a visible logout control', async ({
   await openDesktopMenu(page);
 
   // The logout button should be visible and enabled in the Desk sheet.
-  const logoutBtn = page.locator('[data-shell-logout]');
+  const logoutBtn = page.locator('[data-prompt-surface-logout]');
   await expect(logoutBtn).toBeVisible();
   await expect(logoutBtn).toBeEnabled();
 });
@@ -88,7 +87,7 @@ test('authenticated shell exposes session-aware current user display', async ({
   await openDesktopMenu(page);
 
   // The user area should show the current email in the Desk sheet.
-  const userArea = page.locator('[data-shell-user]');
+  const userArea = page.locator('[data-prompt-surface-user]');
   await expect(userArea).toBeVisible();
   await expect(userArea).toContainText(email);
 });
@@ -140,21 +139,6 @@ test('authenticated shell does not show bootstrap data section', async ({
 });
 
 // ---------------------------------------------------------------
-// Test: shell shows live channel status indicator
-// ---------------------------------------------------------------
-test('authenticated shell shows live channel status indicator', async ({
-  page,
-  authenticator,
-}) => {
-  const email = uniqueEmail();
-  await registerAndReloadShell(page, authenticator, email);
-
-  // The live channel status section should be visible.
-  const liveStatus = page.locator('[data-shell-live-status]');
-  await expect(liveStatus).toBeVisible();
-});
-
-// ---------------------------------------------------------------
 // Test: clicking logout returns to public desktop
 // ---------------------------------------------------------------
 test('clicking logout returns to public desktop', async ({
@@ -166,7 +150,7 @@ test('clicking logout returns to public desktop', async ({
 
   // Click logout from the Desk sheet.
   await openDesktopMenu(page);
-  const logoutBtn = page.locator('[data-shell-logout]');
+  const logoutBtn = page.locator('[data-prompt-surface-logout]');
   await logoutBtn.click();
 
   const shell = page.locator('[data-shell]');
@@ -175,7 +159,7 @@ test('clicking logout returns to public desktop', async ({
 
   await openDesktopMenu(page);
   await expect(page.locator('[data-prompt-surface-login]')).toBeVisible();
-  await expect(page.locator('[data-shell-logout]')).toHaveCount(0);
+  await expect(page.locator('[data-prompt-surface-logout]')).toHaveCount(0);
 
   // Session should be signed out.
   const session = await getSession(page, BASE_URL);

@@ -382,7 +382,7 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
 
   await page.locator('[data-window]').filter({ has: epubViewer }).last().locator('[data-window-close]').click();
 
-  await page.locator('[data-desk-button]').click();
+  await page.locator('[data-desk-menu-button]').click();
   await page.locator('[data-desk-app-id="pdf"]').click();
   const emptyPdfViewer = page.locator('[data-media-app][data-media-kind="pdf"]').last();
   await expect(emptyPdfViewer.locator('[data-media-recent-list]')).toBeVisible({ timeout: 5000 });
@@ -391,7 +391,7 @@ test('clicking PDF and EPUB opens dedicated reader apps instead of downloading',
 
   await page.locator('[data-window]').filter({ has: emptyPdfViewer }).last().locator('[data-window-close]').click();
 
-  await page.locator('[data-desk-button]').click();
+  await page.locator('[data-desk-menu-button]').click();
   await page.locator('[data-desk-app-id="epub"]').click();
   const emptyEpubViewer = page.locator('[data-media-app][data-media-kind="epub"]').last();
   await expect(emptyEpubViewer.locator('[data-media-recent-list]')).toBeVisible({ timeout: 5000 });

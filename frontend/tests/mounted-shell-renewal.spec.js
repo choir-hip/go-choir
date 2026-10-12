@@ -36,28 +36,6 @@ function uniqueEmail() {
 // ---------------------------------------------------------------------------
 
 /**
- * Wait for the desktop shell's live channel to show "Connected".
- * After the M6 desktop rewrite, the live status is rendered by the
- * PromptSurface component inside the Desktop.
- *
- * NOTE: In some test environments the WebSocket may not reach
- * "Connected" state due to proxy timing. This helper also accepts
- * "Connecting" as a valid state.
- */
-async function waitForLiveConnected(page, timeout = 10_000) {
-  await page.waitForFunction(
-    (selector) => {
-      const el = document.querySelector(selector);
-      if (!el) return false;
-      const text = el.textContent;
-      return text.includes('Connected') || text.includes('Connecting');
-    },
-    '[data-shell-live-status]',
-    { timeout },
-  );
-}
-
-/**
  * Registers a user, lands in the desktop shell. Returns the email.
  *
  * NOTE: The M6 desktop rewrite removed the bootstrap accordion
@@ -109,10 +87,6 @@ test('session renewal works after access cookie expiry in desktop shell', async 
   // The shell should remain stable — no new passkey needed.
   await expect(page.locator('[data-shell]')).toBeVisible();
 
-  // The current user should still be shown.
-  const userArea = page.locator('[data-shell-user]');
-  await expect(userArea).toContainText(email);
-
   // Verify the session is still authenticated.
   const session = await getSession(page, BASE_URL);
   expect(session.authenticated).toBe(true);
@@ -136,9 +110,6 @@ test('session renewal keeps the desktop shell stable after access cookie expiry'
   // The desktop shell should remain visible throughout — no guest auth fallback.
   await expect(page.locator('[data-shell]')).toBeVisible();
   await expect(page.locator('[data-auth-entry]')).not.toBeVisible();
-
-  // The live channel status should be visible in the prompt surface.
-  await expect(page.locator('[data-shell-live-status]')).toBeVisible();
 });
 
 test('desktop shell falls back to guest state when refresh cannot restore auth', async ({
@@ -201,26 +172,3 @@ test('session renewal uses standard GET /auth/session flow (no new auth mechanis
   expect(session.user.email).toBe(email);
 });
 
-test('session renewal works when the live channel is already connected', async ({
-  page,
-  authenticator,
-  context,
-}) => {
-  const email = await setupAuthenticatedShell(page);
-
-  // Verify the live channel status element is visible.
-  await expect(page.locator('[data-shell-live-status]')).toBeVisible();
-
-  // Expire the access cookie while WS is still connected.
-  await context.clearCookies({ name: 'choir_access' });
-
-  // Reload to trigger session renewal.
-  await page.reload();
-  await page.locator('[data-shell]').waitFor({ state: 'visible', timeout: 15_000 });
-
-  // Shell remains stable.
-  await expect(page.locator('[data-shell]')).toBeVisible();
-
-  // The live channel status should still be visible.
-  await expect(page.locator('[data-shell-live-status]')).toBeVisible();
-});

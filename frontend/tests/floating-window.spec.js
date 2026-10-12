@@ -403,7 +403,7 @@ test('new windows cascade with 30px offset', async ({ page, authenticator }) => 
   await openAppViaIcon(page, 'browser');
   await page.waitForTimeout(300);
 
-  await openAppViaIcon(page, 'terminal');
+  await openAppViaIcon(page, 'settings');
   await page.waitForTimeout(300);
 
   // Should have 3 windows
@@ -471,10 +471,10 @@ test('window close transfers focus to next window', async ({ page, authenticator
   await openAppViaIcon(page, 'browser');
   await page.waitForTimeout(300);
 
-  await openAppViaIcon(page, 'terminal');
+  await openAppViaIcon(page, 'settings');
   await page.waitForTimeout(300);
 
-  // Close the topmost window (terminal, opened last)
+  // Close the topmost window (settings, opened last)
   await page.locator('[data-window-close]').first().click();
   await page.waitForTimeout(200);
 

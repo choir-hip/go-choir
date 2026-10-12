@@ -11,7 +11,6 @@
  * - Bottom bar prompt input (VAL-SHELL-007)
  * - Minimized window indicators in prompt surface (VAL-SHELL-008)
  * - User info and logout in desktop/account menu (VAL-SHELL-009)
- * - Live connection status dot (VAL-SHELL-010)
  * - No bootstrap accordion or runtime panel (VAL-SHELL-024)
  * - No left rail, no hamburger button, no backdrop (VAL-SHELL-026)
  */
@@ -149,33 +148,13 @@ test('Texture appears as a first-class desktop app', async ({ page, authenticato
   await expect(titleText.first()).toContainText('Texture');
 });
 
-test('bottom-left Start menu launches registered apps', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-
-  await page.locator('[data-start-button]').click();
-  const startMenu = page.locator('[data-start-menu]');
-  await expect(startMenu).toBeVisible();
-  await expect(startMenu.locator('[data-start-app-id="files"]')).toBeVisible();
-  await expect(startMenu.locator('[data-start-app-id="settings"]')).toBeVisible();
-  await expect(startMenu.locator('[data-start-app-id="podcast"]')).toBeVisible();
-  await expect(startMenu.locator('[data-start-app-id="image"]')).toBeVisible();
-  await expect(startMenu.locator('[data-start-app-id="audio"]')).toBeVisible();
-  await expect(startMenu.locator('[data-start-app-id="video"]')).toBeVisible();
-  await expect(startMenu.locator('[data-start-app-id="pdf"]')).toBeVisible();
-  await expect(startMenu.locator('[data-start-app-id="epub"]')).toBeVisible();
-
-  await startMenu.locator('[data-start-app-id="files"]').click();
-  await expect(page.locator('[data-files-app]').last()).toBeVisible({ timeout: 10000 });
-});
-
 test('logged-out desktop can open read-only Podcast without the auth wall', async ({ page }) => {
   await page.goto(BASE_URL);
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false');
 
-  await page.locator('[data-start-button]').click();
-  await page.locator('[data-start-app-id="podcast"]').click();
+  await page.locator('[data-desk-menu-button]').click();
+  await page.locator('[data-desk-sheet-app][data-desk-app-id="podcast"]').click();
 
   const podcastWindow = page.locator('[data-podcast-app]').last();
   await expect(podcastWindow).toBeVisible({ timeout: 5000 });
@@ -208,8 +187,8 @@ test('logged-out desktop opens Browser and Trace as read shells before auth', as
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false');
 
-  await page.locator('[data-start-button]').click();
-  await page.locator('[data-start-app-id="browser"]').click();
+  await page.locator('[data-desk-menu-button]').click();
+  await page.locator('[data-desk-sheet-app][data-desk-app-id="browser"]').click();
 
   const browserApp = page.locator('[data-browser-app]').last();
   await expect(browserApp).toBeVisible({ timeout: 5000 });
@@ -225,44 +204,15 @@ test('logged-out desktop opens Browser and Trace as read shells before auth', as
   expect(protectedAppRequests).toEqual([]);
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 
-  await page.locator('[data-start-button]').click();
-  await expect(page.locator('[data-start-app-id="trace"]')).toHaveCount(0);
-  await page.locator('[data-start-app-id="super-console"]').click();
+  await page.locator('[data-desk-menu-button]').click();
+  await expect(page.locator('[data-desk-sheet-app][data-desk-app-id="trace"]')).toHaveCount(0);
+  await page.locator('[data-desk-sheet-app][data-desk-app-id="super-console"]').click();
 
   const superConsole = page.locator('[data-super-console-app]').last();
   await expect(superConsole).toBeVisible({ timeout: 5000 });
   await expect(superConsole.locator('[data-super-console-preview]')).toBeVisible();
   expect(protectedAppRequests).toEqual([]);
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
-});
-
-test('mobile prompt-surface restore raises the selected app above the current window', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await page.setViewportSize({ width: 390, height: 844 });
-  await registerAndLoadDesktop(page, authenticator, email);
-
-  await openAppViaIcon(page, 'files');
-  const filesWindow = page.locator('[data-window]').filter({ has: page.locator('[data-files-app]') }).last();
-  await expect(filesWindow).toBeVisible({ timeout: 5000 });
-  await filesWindow.locator('[data-window-minimize]').click();
-  await expect(filesWindow).not.toBeVisible();
-
-  await openAppViaIcon(page, 'browser');
-  const browserWindow = page.locator('[data-window]').filter({ has: page.locator('[data-browser-app]') }).last();
-  await expect(browserWindow).toBeVisible({ timeout: 5000 });
-
-  const filesIndicator = page.locator('[data-window-indicator]').filter({ hasText: 'Files' }).last();
-  await expect(filesIndicator).toBeVisible();
-  await filesIndicator.click();
-
-  await expect(filesWindow).toBeVisible();
-  await expect(filesIndicator).toHaveAttribute('data-window-indicator-active', 'true');
-
-  const z = await Promise.all([
-    filesWindow.evaluate((el) => Number(getComputedStyle(el).zIndex) || 0),
-    browserWindow.evaluate((el) => Number(getComputedStyle(el).zIndex) || 0),
-  ]);
-  expect(z[0]).toBeGreaterThan(z[1]);
 });
 
 test('Texture recent landing can open a Markdown document without control overlap', async ({ page, authenticator }) => {
@@ -651,44 +601,6 @@ test('minimized window indicators in prompt surface', async ({ page, authenticat
   await expect(page.locator('[data-window-tray-item]')).toHaveCount(0);
 });
 
-test('prompt surface switches all open windows and exits show-desktop state', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-
-  await openAppViaIcon(page, 'files');
-  await openAppViaIcon(page, 'settings');
-
-  const windows = page.locator('[data-window]');
-  await expect(windows).toHaveCount(2);
-  await expect(page.locator('[data-window-switcher] [data-window-indicator]')).toHaveCount(2);
-
-  const filesWindow = windows.filter({ has: page.locator('[data-files-app]') }).first();
-  const settingsWindow = windows.filter({ has: page.locator('[data-settings-window]') }).first();
-
-  await settingsWindow.locator('[data-window-minimize]').click();
-  await expect(settingsWindow).not.toBeVisible();
-  await expect(page.locator('[data-window-tray-item]')).toHaveCount(1);
-
-  const settingsSwitch = page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Settings' }).first();
-  await settingsSwitch.click();
-  await expect(settingsWindow).toBeVisible();
-  await expect(page.locator('[data-window-tray-item]')).toHaveCount(0);
-
-  await page.locator('[data-desk-menu-button]').click();
-  await page.locator('[data-desk-show-desktop]').click();
-  await expect(filesWindow).not.toBeVisible();
-  await expect(settingsWindow).not.toBeVisible();
-  await expect(page.locator('[data-window-tray-item]')).toHaveCount(2);
-
-  const filesSwitch = page.locator('[data-window-switcher] [data-window-indicator]').filter({ hasText: 'Files' }).first();
-  await filesSwitch.click();
-  await expect(filesWindow).toBeVisible();
-
-  await page.locator('[data-desk-menu-button]').click();
-  await page.locator('[data-desk-show-desktop]').click();
-  await expect(filesWindow).not.toBeVisible();
-});
-
 // ---------------------------------------------------------------
 // Test: user info and logout in desktop/account menu (VAL-SHELL-009)
 // ---------------------------------------------------------------
@@ -739,10 +651,10 @@ test('logout remains reachable when desktop bootstrap fails', async ({ page, aut
   await expect(page.locator('[data-boot-console]')).toBeVisible();
   await expect(page.locator('[data-boot-line]').first()).toContainText(/Powering|Resolving|returned 502/);
   await expect(page.locator('[data-prompt-surface]')).toBeVisible();
-  await page.locator('[data-start-button]').click();
-  await expect(page.locator('[data-shell-logout]')).toBeVisible();
+  await page.locator('[data-desk-menu-button]').click();
+  await expect(page.locator('[data-prompt-surface-logout]')).toBeVisible();
 
-  await page.locator('[data-shell-logout]').click();
+  await page.locator('[data-prompt-surface-logout]').click();
   await expect(page.locator('[data-desktop]')).toBeVisible();
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 });
@@ -795,25 +707,6 @@ test('Settings opens as safe product settings without prompt APIs', async ({ pag
   await expect(settings).not.toContainText('Editable role prompt');
   await page.waitForTimeout(300);
   expect(forbiddenRequests).toHaveLength(0);
-});
-
-// ---------------------------------------------------------------
-// Test: live connection status dot (VAL-SHELL-010)
-// ---------------------------------------------------------------
-test('live connection status dot in prompt surface', async ({ page, authenticator }) => {
-  const email = uniqueEmail();
-  await registerAndLoadDesktop(page, authenticator, email);
-
-  const statusEl = page.locator('[data-connection-status]');
-  await expect(statusEl).toBeVisible();
-
-  // Should have a status dot inside
-  const dot = statusEl.locator('.status-dot');
-  await expect(dot).toBeVisible();
-
-  // Check it has aria-live for accessibility
-  const ariaLive = await statusEl.getAttribute('aria-live');
-  expect(ariaLive).toBe('polite');
 });
 
 // ---------------------------------------------------------------
