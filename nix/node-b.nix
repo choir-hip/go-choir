@@ -706,11 +706,6 @@ in
         "VMCTL_ARTIFACTS_ROOT=${platformArtifactsDir}"
         "VMCTL_BASE_BLOB_ROOT=${platformArtifactsDir}/computer-inputs/blobs"
         "VMCTL_PROMOTION_AUTHORITY_PUBLIC_KEY=oEdoKFfUCLiOsxNX5J8bT3PQDrjqjVeuU8usTLHSYZ4="
-        # Guest images are a stable boot substrate. At boot, guest autoputeres
-        # fetch the current autoputer service package from this host-side pointer
-        # and execute it from their writable data disk, so ordinary runtime code
-        # deploys do not have to rebuild the whole microVM image.
-        "VMCTL_AUTOPUTER_PACKAGE_DIR=/var/lib/go-choir/services/autoputer"
         # Firecracker VM configuration (VAL-VM-010):
         # Guest images are built from the repo via `nix build .#guest-image`.
         # The microvm.nix approach produces:

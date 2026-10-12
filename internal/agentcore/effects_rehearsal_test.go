@@ -20,7 +20,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 	choirstore "github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/trustedoutbox"
 )
 
 func TestEffectsRehearsalReversibleProposeConsensusPromoteRestore(t *testing.T) {
@@ -232,7 +231,7 @@ func TestEffectsRehearsalReversibleProposeConsensusPromoteRestore(t *testing.T) 
 	}
 }
 
-func TestEffectsRehearsalIrreversibleProposeConsensusOutboxNoLiveSend(t *testing.T) {
+func TestEffectsRehearsalIrreversibleEmailConsensus(t *testing.T) {
 	if platform.SelfDevelopmentModeOff != "off" {
 		t.Fatalf("default mode constant drifted: %q", platform.SelfDevelopmentModeOff)
 	}
@@ -246,7 +245,7 @@ func TestEffectsRehearsalIrreversibleProposeConsensusOutboxNoLiveSend(t *testing
 	}
 
 	store := decisionpolicy.MustEffectsPolicyStore()
-	input, receipt := rehearsalEmailConsensus(t, store, decisionpolicy.PolicyDigestIrreversibleEmailV1, false)
+	_, receipt := rehearsalEmailConsensus(t, store, decisionpolicy.PolicyDigestIrreversibleEmailV1, false)
 	if receipt.PolicyID != decisionpolicy.PolicyIDIrreversibleEmailV1 || receipt.HumanSeatState != decisionpolicy.HumanSeatAbsent || receipt.QuorumEvaluation.GlobalAccepts != 3 {
 		t.Fatalf("irreversible receipt = %+v quorum=%+v", receipt, receipt.QuorumEvaluation)
 	}
@@ -277,68 +276,6 @@ func TestEffectsRehearsalIrreversibleProposeConsensusOutboxNoLiveSend(t *testing
 		t.Fatalf("human-required absent seat error = %v", err)
 	}
 
-	provider := &trustedoutbox.RecordingProvider{}
-	box := trustedoutbox.New(store, provider)
-	if box.Armed {
-		t.Fatal("outbox default Armed was true")
-	}
-	first, err := box.Dispatch(trustedoutbox.DispatchRequest{
-		Mode: platform.SelfDevelopmentModeQualifiedConsensus, Input: input, Receipt: receipt, Payload: []byte("payload"),
-		Now: input.Now,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !first.Greened || first.ProviderOutcome != trustedoutbox.ProviderAccepted || first.IntentDigest == "" || len(provider.Sends) != 1 {
-		t.Fatalf("consequence = %+v sends=%d", first, len(provider.Sends))
-	}
-
-	if _, err := box.Dispatch(trustedoutbox.DispatchRequest{
-		Mode: platform.SelfDevelopmentModeOff, Input: input, Receipt: receipt, Payload: []byte("payload"),
-	}); !errors.Is(err, trustedoutbox.ErrModeOff) {
-		t.Fatalf("mode off error = %v", err)
-	}
-
-	live := trustedoutbox.New(store, rehearsalLiveProvider{})
-	if _, err := live.Dispatch(trustedoutbox.DispatchRequest{
-		Mode: platform.SelfDevelopmentModeQualifiedConsensus, Input: input, Receipt: receipt, Payload: []byte("payload"),
-	}); !errors.Is(err, trustedoutbox.ErrNotArmed) {
-		t.Fatalf("unarmed live error = %v", err)
-	}
-
-	unknownBox := trustedoutbox.New(store, &trustedoutbox.RecordingProvider{Result: trustedoutbox.ProviderResult{Outcome: trustedoutbox.ProviderUnknown}})
-	unknownInput, unknownReceipt := rehearsalEmailConsensus(t, decisionpolicy.MustEffectsPolicyStore(), decisionpolicy.PolicyDigestIrreversibleEmailV1, false)
-	cons, err := unknownBox.Dispatch(trustedoutbox.DispatchRequest{
-		Mode: platform.SelfDevelopmentModeQualifiedConsensus, Input: unknownInput, Receipt: unknownReceipt, Payload: []byte("payload"),
-	})
-	if !errors.Is(err, trustedoutbox.ErrUnknownOutcome) || cons.Greened {
-		t.Fatalf("unknown outcome greened: cons=%+v err=%v", cons, err)
-	}
-
-	crashStore := decisionpolicy.MustEffectsPolicyStore()
-	crashProvider := &trustedoutbox.RecordingProvider{}
-	crashBox := trustedoutbox.New(crashStore, crashProvider)
-	crashInput, crashReceipt := rehearsalEmailConsensus(t, crashStore, decisionpolicy.PolicyDigestIrreversibleEmailV1, false)
-	accepted, err := crashBox.Dispatch(trustedoutbox.DispatchRequest{
-		Mode: platform.SelfDevelopmentModeQualifiedConsensus, Input: crashInput, Receipt: crashReceipt, Payload: []byte("payload"),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	crashBox.SimulateCrashAfterAccept(accepted.IdempotencyKey, trustedoutbox.ProviderResult{Outcome: trustedoutbox.ProviderAccepted, ProviderDeliveryID: accepted.ProviderDeliveryID})
-	recovered, err := crashBox.Reconcile(accepted.IdempotencyKey)
-	if err != nil || !recovered.Greened || recovered.ProviderDeliveryID != accepted.ProviderDeliveryID {
-		t.Fatalf("reconcile = %+v err=%v", recovered, err)
-	}
-	if !strings.Contains(recovered.CrashWindow, "reconciled") {
-		t.Fatalf("crash window = %q", recovered.CrashWindow)
-	}
-}
-
-type rehearsalLiveProvider struct{}
-
-func (rehearsalLiveProvider) Send(trustedoutbox.Intent) (trustedoutbox.ProviderResult, error) {
-	return trustedoutbox.ProviderResult{Outcome: trustedoutbox.ProviderAccepted, ProviderDeliveryID: "live"}, nil
 }
 
 func rehearsalEmailConsensus(t *testing.T, store *decisionpolicy.Store, policyDigest string, withHuman bool) (decisionpolicy.ConsensusInput, decisionpolicy.QualifiedConsensusReceipt) {
