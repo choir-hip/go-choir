@@ -53,8 +53,12 @@ traces, so any claim about what a model does is marked as a hypothesis.
   can be reached from any computer's tap network. Recorded first in
   [search-plane-cooldown-on-caller-cancel-2026-10-09.md](search-plane-cooldown-on-caller-cancel-2026-10-09.md)
   (lines 84-98), which proposes `isAuthorizedCredentialCaller`.
-- **Owner:** the D0 removal step (census B10 ruling: keep the routes, add
-  the caller check).
+- **Status: already repaired, not a live defect.** b445fd21 ("fix(gateway):
+  search-health and breaker ops routes are loopback-operator only")
+  landed before the census. All four routes call
+  `isAuthorizedCredentialCaller`, and `internal/gateway/ops_routes_auth_test.go`
+  covers the refusal. The census read the older problem doc rather than
+  the code. Found by the R3 removal agent on 2026-10-12.
 
 ## D5. A run with an unknown profile gets full typed-tool authority
 
