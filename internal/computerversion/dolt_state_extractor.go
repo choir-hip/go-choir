@@ -24,9 +24,17 @@ const (
 	DoltStateSubstrate = "embedded-dolt/workspace"
 )
 
+type doltHeadPayload struct {
+	Database        string `json:"database"`
+	CommitHash      string `json:"commit_hash"`
+	ObjectGraphHead string `json:"object_graph_head,omitempty"`
+	ObjectCount     int    `json:"object_count,omitempty"`
+	EdgeCount       int    `json:"edge_count,omitempty"`
+	Derivation      string `json:"derivation,omitempty"`
+}
+
 // DoltStateExtractor reads dolt_head observations from a live embedded Dolt
-// database. Unlike DoltHeadSnapshot (which is a fixture-only declared head),
-// this extractor connects to a real Dolt workspace, queries table content,
+// database. This extractor connects to a real Dolt workspace, queries table content,
 // and produces content-addressed observations from the actual database state.
 //
 // The extractor performs read-only SQL queries. It does NOT commit, branch,
@@ -210,35 +218,6 @@ func (e DoltStateExtractor) Extract(ctx context.Context, request ExtractRequest)
 		Required:     []ObservationKind{ObservationDoltHead},
 		Observations: observations,
 	}, nil
-}
-
-// DoltStateCapabilityManifest declares the observation scope for the Dolt
-// state extractor. The extractor produces dolt_head observations by querying
-// a live embedded Dolt database, so it supports that kind. It does not
-// produce file_manifest, blob_set, or other observation kinds.
-func DoltStateCapabilityManifest(materializer, substrate string) CapabilityManifest {
-	materializer = strings.TrimSpace(materializer)
-	if materializer == "" {
-		materializer = DoltStateMaterializer
-	}
-	substrate = strings.TrimSpace(substrate)
-	if substrate == "" {
-		substrate = DoltStateSubstrate
-	}
-	return CapabilityManifest{
-		Materializer: materializer,
-		Substrate:    substrate,
-		Supported:    []ObservationKind{ObservationDoltHead},
-		Unsupported: []UnsupportedCapability{
-			{Kind: ObservationFileManifest, Reason: "dolt extractor does not prove file manifest equivalence"},
-			{Kind: ObservationBlobSet, Reason: "dolt extractor does not prove blob set equivalence"},
-			{Kind: ObservationObjectGraphHead, Reason: "dolt extractor does not prove object graph head equivalence"},
-			{Kind: ObservationProvenanceAnswer, Reason: "dolt extractor does not answer provenance queries"},
-			{Kind: ObservationLiveProcessContinuity, Reason: "dolt extractor does not prove live-process continuity"},
-			{Kind: ObservationVMStateManifest, Reason: "dolt extractor does not classify VM launch metadata"},
-			{Kind: ObservationPromotionCertificate, Reason: "dolt extractor does not produce a promotion certificate"},
-		},
-	}
 }
 
 // openDoltWorkspace opens an embedded Dolt connection to the named database
