@@ -175,7 +175,7 @@ func TestTextureAuditFailureDoesNotFailCommittedRevision(t *testing.T) {
 	}
 }
 
-func TestTextureAuditRecordsTitleCycleMergeAndRestore(t *testing.T) {
+func TestTextureAuditRecordsMergeAndRestore(t *testing.T) {
 	rt, handler, pinner := auditedTextureAPISetup(t, false)
 	doc, base := seedAuditDocument(t, handler, "coverage")
 	assertSequence := func(want uint64) {
@@ -186,16 +186,6 @@ func TestTextureAuditRecordsTitleCycleMergeAndRestore(t *testing.T) {
 		}
 	}
 	assertSequence(1)
-	for _, title := range []string{"B", "A"} {
-		request := textureRequest(t, http.MethodPut, "/api/texture/documents/"+doc.DocID, textureUpdateDocRequest{Title: title})
-		response := httptest.NewRecorder()
-		handler.handleTextureUpdateDocument(response, request, doc.DocID)
-		if response.Code != http.StatusOK {
-			t.Fatalf("title %q status = %d body=%s", title, response.Code, response.Body.String())
-		}
-		time.Sleep(time.Millisecond)
-	}
-	assertSequence(3)
 
 	mergeRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/accept-merge", textureAcceptMergeRequest{
 		Content: "merged", TargetRevisionID: base.RevisionID,
@@ -205,7 +195,7 @@ func TestTextureAuditRecordsTitleCycleMergeAndRestore(t *testing.T) {
 	if mergeResponse.Code != http.StatusCreated {
 		t.Fatalf("merge status = %d body=%s", mergeResponse.Code, mergeResponse.Body.String())
 	}
-	assertSequence(4)
+	assertSequence(2)
 
 	restoreRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/restore", textureRestoreRevisionRequest{RevisionID: base.RevisionID})
 	restoreResponse := httptest.NewRecorder()
@@ -213,8 +203,8 @@ func TestTextureAuditRecordsTitleCycleMergeAndRestore(t *testing.T) {
 	if restoreResponse.Code != http.StatusCreated {
 		t.Fatalf("restore status = %d body=%s", restoreResponse.Code, restoreResponse.Body.String())
 	}
-	assertSequence(5)
-	if pinner.privateAttempts != 4 {
-		t.Fatalf("private audit attempts = %d, want 4", pinner.privateAttempts)
+	assertSequence(3)
+	if pinner.privateAttempts != 2 {
+		t.Fatalf("private audit attempts = %d, want 2", pinner.privateAttempts)
 	}
 }

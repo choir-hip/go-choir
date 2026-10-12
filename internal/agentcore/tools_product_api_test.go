@@ -205,7 +205,7 @@ func TestProductAPIRefusesEveryTextureWrite(t *testing.T) {
 		"/api/texture/documents",
 		"/api/texture/documents/doc-1/revisions",
 		"/api/texture/documents/doc-1/history",
-		"/api/texture/diff?from=a&to=b",
+		"/api/texture/documents/doc-1",
 	} {
 		if err := validateProductAPIRoute(http.MethodGet, path); err != nil {
 			t.Errorf("GET %s refused: %v", path, err)

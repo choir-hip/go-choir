@@ -2,9 +2,6 @@ package agentcore
 
 import (
 	"bytes"
-	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +14,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/platform"
@@ -27,7 +23,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 
 	"github.com/yusefmosiah/go-choir/internal/updater"
-	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 const (
@@ -55,17 +50,6 @@ type selfDevelopmentDecisionRequest struct {
 	ExpectedEffectiveStateCommitment string                          `json:"expected_effective_state_commitment"`
 	ModeReceipt                      *computerevent.Receipt          `json:"mode_receipt,omitempty"`
 	QualifiedConsensus               *decisionpolicy.ConsensusBundle `json:"qualified_consensus,omitempty"`
-}
-
-type selfDevelopmentGenesisRequest struct {
-	BaselineVersion    string `json:"baseline_version"`
-	BaselineState      string `json:"baseline_state"`
-	ExpectedAbsent     bool   `json:"expected_absent"`
-	IdempotencyKey     string `json:"idempotency_key"`
-	G0Receipt          string `json:"g0_receipt"`
-	G1Receipt          string `json:"g1_receipt"`
-	CandidateRef       string `json:"candidate_ref"`
-	DeployedReleaseRef string `json:"deployed_release_ref"`
 }
 
 var selfDevelopmentDecisionPolicies = decisionpolicy.MustEffectsPolicyStore()
@@ -188,12 +172,6 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		default:
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		}
-	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "genesis":
-		if r.Method != http.MethodPost {
-			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-			return
-		}
-		h.importSelfDevelopmentGenesis(w, r, ownerID, computerID)
 	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "rollbacks":
 		if r.Method != http.MethodPost {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -441,300 +419,6 @@ func operationReceiptProjection(operation selfdev.Operation) map[string]any {
 		"mode_receipt": operation.ModeReceipt, "lifecycle_receipt": operation.LifecycleReceipt,
 		"terminal_state": operation.State, "error": operation.TerminalError,
 	}
-}
-
-func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {
-	var request selfDevelopmentGenesisRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid genesis request"})
-		return
-	}
-	request.BaselineVersion, request.BaselineState, request.IdempotencyKey = strings.TrimSpace(request.BaselineVersion), strings.TrimSpace(request.BaselineState), strings.TrimSpace(request.IdempotencyKey)
-	request.G0Receipt, request.G1Receipt, request.CandidateRef, request.DeployedReleaseRef = strings.TrimSpace(request.G0Receipt), strings.TrimSpace(request.G1Receipt), strings.TrimSpace(request.CandidateRef), strings.TrimSpace(request.DeployedReleaseRef)
-	if !request.ExpectedAbsent || !computerevent.IsSHA256(request.BaselineVersion) || !computerevent.IsSHA256(request.BaselineState) || request.IdempotencyKey == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "exact absent baseline version, state, and idempotency binding are required"})
-		return
-	}
-	expectedG0 := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G0_RECEIPT"))
-	expectedG1 := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G1_RECEIPT"))
-	expectedCandidate := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF"))
-	if r.Header.Get("X-Self-Development-Disposable") != "true" || r.Header.Get("X-Self-Development-Mode-Generation") != "0" {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires disposable target and absent off-mode state"})
-		return
-	}
-	genesisAuthorityRef, genesisAuthorityPayload, err := selfDevelopmentGenesisAuthorityRef(request, expectedG0, expectedG1, expectedCandidate, strings.TrimSpace(buildinfo.Commit))
-	if err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires exact frozen G0/G1 candidate and deployed release bindings"})
-		return
-	}
-	eventIdempotency := "selfdev-genesis-" + computerevent.DigestBytes([]byte(computerID+"\x00"+request.IdempotencyKey))
-	if existingEvent, found, lookupErr := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency); lookupErr == nil && found {
-		if existingEvent.ProposedEffectRef != request.BaselineVersion || existingEvent.ResultingEffectiveCommitment != request.BaselineState || !selfDevelopmentContainsString(existingEvent.InputArtifactRefs, genesisAuthorityRef) {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis idempotency binding changed"})
-			return
-		}
-		if baseline, baselineFound, baselineErr := h.rt.selfdevOperations.GetByIdempotency(r.Context(), computerID, "genesis-baseline-"+eventIdempotency); baselineErr == nil && baselineFound {
-			head, _ := h.rt.store.Head(r.Context(), computerID)
-			writeAPIJSON(w, http.StatusOK, map[string]any{"event": existingEvent, "head": head, "baseline": baseline})
-			return
-		}
-	}
-	if h.rt.selfdevRoute == nil || h.rt.selfdevUpdater == nil || h.rt.selfdevVerifier == nil || h.rt.selfdevControl == nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "genesis reconstruction authority unavailable"})
-		return
-	}
-	routeSlotID, routeSlotErr := routeledger.RouteSlotID(h.rt.selfdevRouteOwnerID, h.rt.selfdevRouteDesktopID)
-	if routeSlotErr != nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "genesis route identity unavailable"})
-		return
-	}
-	route, routeErr := h.rt.selfdevRoute.ResolveComputerVersionRoute(r.Context(), routeSlotID)
-	if routeErr != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis route is unavailable"})
-		return
-	}
-	versionDigest, digestErr := selfdevprotocol.Digest(route.Slot.Current)
-	manifest, manifestErr := updater.ReadCurrentManifest(h.rt.selfdevUpdaterRoot)
-	if manifestErr != nil {
-		baselineRoot := filepath.Clean(strings.TrimSpace(os.Getenv("CHOIR_BASELINE_RELEASE_ROOT")))
-		if strings.HasPrefix(baselineRoot, "/nix/store/") {
-			manifest, manifestErr = updater.BuildBaselineManifest(baselineRoot, computerID, string(route.Slot.Current.CodeRef), string(route.Slot.Current.ArtifactProgramRef))
-			if manifestErr == nil {
-				importRequest := updater.BaselineImportRequest{
-					ComputerID: computerID, RealizationID: h.rt.selfdevRealizationID,
-					IdempotencyKey: "genesis-baseline-" + request.IdempotencyKey, SourceDir: baselineRoot, Manifest: manifest,
-				}
-				importRequest.RequestCommitment, manifestErr = updater.ComputeBaselineImportCommitment(importRequest)
-				if manifestErr == nil {
-					manifest, manifestErr = h.rt.selfdevUpdater.ImportBaseline(r.Context(), importRequest)
-				}
-			}
-		}
-	}
-	if digestErr != nil || manifestErr != nil || versionDigest != request.BaselineVersion ||
-		manifest.ContentDigest == "" || manifest.CodeRef != string(route.Slot.Current.CodeRef) || manifest.ArtifactProgramRef != string(route.Slot.Current.ArtifactProgramRef) {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis baseline does not match the current immutable release and route"})
-		return
-	}
-	updaterSigner, updaterPublicKey, updaterKeyErr := h.rt.selfdevUpdater.PublicKey(r.Context())
-	verifierSigner, verifierPublicKey, verifierKeyErr := h.rt.selfdevVerifier.PublicKey(r.Context())
-	if updaterKeyErr != nil || verifierKeyErr != nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "genesis guest signing keys unavailable"})
-		return
-	}
-	genesisKeyRefs := []string{
-		"updater-key:" + updaterSigner.KeyID + ":sha256:" + computerevent.DigestBytes(updaterPublicKey),
-		"verifier-key:" + verifierSigner.KeyID + ":sha256:" + computerevent.DigestBytes(verifierPublicKey),
-		"release:sha256:" + manifest.ContentDigest,
-	}
-	if existing, found, err := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency); err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	} else if found {
-		if existing.ProposedEffectRef != request.BaselineVersion || existing.ResultingEffectiveCommitment != request.BaselineState || !selfDevelopmentContainsString(existing.InputArtifactRefs, genesisAuthorityRef) {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis idempotency binding changed"})
-			return
-		}
-		baseline, checkpoint, baselineErr := h.recordGenesisBaseline(r.Context(), request, existing, eventIdempotency, route, manifest)
-		if baselineErr != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: baselineErr.Error()})
-			return
-		}
-		head, _ := h.rt.store.Head(r.Context(), computerID)
-		writeAPIJSON(w, http.StatusOK, map[string]any{"event": existing, "head": head, "checkpoint": checkpoint, "baseline": baseline})
-		return
-	}
-	if head, err := h.rt.store.Head(r.Context(), computerID); err != nil || head != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "GenesisImported requires an absent computer event head"})
-		return
-	}
-	if h.rt.eventAppender == nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer event authority unavailable"})
-		return
-	}
-	eventID, err := computerevent.NewEventID()
-	if err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create genesis event"})
-		return
-	}
-	event := computerevent.Event{
-		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
-		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-		IdempotencyKey: eventIdempotency, RequestCommitment: computerevent.ZeroHead,
-		ActorProfile: agentprofile.Management, AuthorityRef: "external-owner-genesis:" + ownerID, PrivacyClass: "owner",
-		PayloadCommitment: request.BaselineState, ProposedEffectRef: request.BaselineVersion,
-		VerifierRefs: genesisKeyRefs, ResultingEffectiveCommitment: request.BaselineState,
-		ReducerVersion: computerevent.ReducerVersionV1,
-	}
-	receipt, artifactDigests, err := h.rt.eventAppender.AppendNewPayloadSet(r.Context(), event, computerevent.TransitionInput{TargetStateCommitment: request.BaselineState}, []computerevent.EventPayload{{
-		Content: genesisAuthorityPayload, MediaType: "application/vnd.choir.genesis-authority+json",
-		PrivacyClass: "owner", Direction: computerevent.EventPayloadInput,
-	}}, nil)
-	if err == nil && (len(artifactDigests) != 1 || genesisAuthorityRef != "artifact:sha256:"+artifactDigests[0]) {
-		err = fmt.Errorf("genesis authority artifact binding mismatch")
-	}
-	if err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	}
-	event, found, eventErr := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency)
-	if eventErr != nil || !found {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "genesis event projection unavailable"})
-		return
-	}
-	baseline, checkpoint, baselineErr := h.recordGenesisBaseline(r.Context(), request, event, eventIdempotency, route, manifest)
-	if baselineErr != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: baselineErr.Error()})
-		return
-	}
-	head, err := h.rt.store.Head(r.Context(), computerID)
-	if err != nil || head == nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "genesis head projection unavailable"})
-		return
-	}
-	writeAPIJSON(w, http.StatusCreated, map[string]any{"receipt": receipt, "head": head, "checkpoint": checkpoint, "baseline": baseline})
-}
-func selfDevelopmentGenesisAuthorityRef(request selfDevelopmentGenesisRequest, expectedG0, expectedG1, expectedCandidate, deployedRelease string) (string, []byte, error) {
-	if !validGenesisReceiptRef(expectedG0) || !validGenesisReceiptRef(expectedG1) ||
-		!validGenesisCommit(expectedCandidate) || !validGenesisCommit(deployedRelease) ||
-		request.G0Receipt != expectedG0 || request.G1Receipt != expectedG1 || request.CandidateRef != expectedCandidate ||
-		request.DeployedReleaseRef != deployedRelease {
-		return "", nil, fmt.Errorf("genesis authority identity mismatch")
-	}
-	canonical, err := computerevent.CanonicalJSON(map[string]string{
-		"g0_receipt": request.G0Receipt, "g1_receipt": request.G1Receipt,
-		"candidate_ref": request.CandidateRef, "deployed_release_ref": request.DeployedReleaseRef,
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	ref, err := computerevent.ArtifactRefFromDigest(computerevent.DigestBytes(canonical))
-	if err != nil {
-		return "", nil, err
-	}
-	return ref.String(), canonical, nil
-}
-
-func validGenesisReceiptRef(value string) bool {
-	const prefix = "sha256:"
-	return strings.HasPrefix(value, prefix) && computerevent.IsSHA256(strings.TrimPrefix(value, prefix))
-}
-
-func validGenesisCommit(value string) bool {
-	if len(value) != 40 {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
-}
-
-func (h *APIHandler) recordGenesisBaseline(ctx context.Context, request selfDevelopmentGenesisRequest, event computerevent.Event, eventIdempotency string, route vmctl.RouteResolution, manifest updater.ReleaseManifest) (selfdev.Operation, selfdevprotocol.CheckpointResponse, error) {
-	eventDigest, err := event.Digest()
-	if err != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
-	}
-	eventReceipt, found, err := h.rt.store.EventReceiptByIdempotency(ctx, event.ComputerID, eventIdempotency)
-	if err != nil || !found {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, fmt.Errorf("genesis event receipt unavailable")
-	}
-	head, err := h.rt.store.Head(ctx, event.ComputerID)
-	if err != nil || head == nil || head.EffectiveEventHead != eventDigest {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, fmt.Errorf("genesis effective head mismatch")
-	}
-	updaterRef, updaterKey, err := h.rt.selfdevUpdater.PublicKey(ctx)
-	if err != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
-	}
-	verifierRef, verifierKey, err := h.rt.selfdevVerifier.PublicKey(ctx)
-	if err != nil || !selfDevelopmentContainsString(event.VerifierRefs, "updater-key:"+updaterRef.KeyID+":sha256:"+computerevent.DigestBytes(updaterKey)) ||
-		!selfDevelopmentContainsString(event.VerifierRefs, "verifier-key:"+verifierRef.KeyID+":sha256:"+computerevent.DigestBytes(verifierKey)) ||
-		!selfDevelopmentContainsString(event.VerifierRefs, "release:sha256:"+manifest.ContentDigest) {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, fmt.Errorf("genesis signing key and release bindings mismatch")
-	}
-	materializationDigest, err := selfdevprotocol.Digest(struct {
-		ReleaseDigest string                  `json:"release_digest"`
-		Updater       computerevent.SignerRef `json:"updater"`
-		PublicKey     []byte                  `json:"public_key"`
-	}{manifest.ContentDigest, updaterRef, updaterKey})
-	if err != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
-	}
-	verifierCertificate, err := h.rt.selfdevVerifier.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
-		Version: 1, ComputerID: event.ComputerID, OperationID: "genesis-baseline",
-		BundleDigest: manifest.ContentDigest, VerificationEventDigest: eventDigest,
-		VerifierEvidenceRefs: []string{eventDigest}, DecisionEventHead: eventDigest,
-		CodeRef: string(route.Slot.Current.CodeRef), ArtifactProgramRef: string(route.Slot.Current.ArtifactProgramRef),
-		ReleaseDigest: manifest.ContentDigest, Decision: "genesis_baseline",
-	})
-	if err != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
-	}
-	if len(verifierCertificate.Certificate.RequiredSigners) != 1 ||
-		verifierCertificate.PublicKey != base64.RawStdEncoding.EncodeToString(verifierKey) ||
-		verifierCertificate.Certificate.RequiredSigners[0].KeyID != verifierRef.KeyID {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, fmt.Errorf("genesis verifier certificate key changed")
-	}
-	verifierJSON, err := computerevent.CanonicalJSON(verifierCertificate.Certificate)
-	if err != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
-	}
-	verifierDigest := computerevent.DigestBytes(verifierJSON)
-	reconstructionDigest, err := selfdevprotocol.Digest(struct {
-		Version       any    `json:"computer_version"`
-		EffectiveHead string `json:"effective_event_head"`
-		ReleaseDigest string `json:"release_digest"`
-	}{route.Slot.Current, eventDigest, manifest.ContentDigest})
-	if err != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
-	}
-	witness, frontend, err := h.rt.checkpointRestoreBindings(ctx, event.ComputerID, manifest.ContentDigest, manifest.Files)
-	if err != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
-	}
-	checkpoint, err := h.rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
-		ComputerID: event.ComputerID, IdempotencyKey: "selfdev-genesis-checkpoint-" + eventDigest,
-		ComputerVersion: route.Slot.Current, AcceptedEventHead: eventDigest, EffectiveEventHead: eventDigest,
-		EffectiveStateCommitment: request.BaselineState, EventHeadReceiptID: eventReceipt.ReceiptID,
-		ReleaseDigest: manifest.ContentDigest, ReconstructionDigest: reconstructionDigest,
-		MaterializationReceiptDigest: materializationDigest, VerifierCertificateDigest: verifierDigest,
-		VerifierCertificate: verifierCertificate, VerifierTrustBootstrap: true, ReducerVersion: head.ReducerVersion,
-		VMLocalContentWitness: witness, FrontendIdentity: frontend,
-	})
-	if err != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
-	}
-	checkpointRef := "checkpoint:sha256:" + checkpoint.Checkpoint.Digest
-	checkpointEventIdempotency := "selfdev-genesis-checkpoint-published-" + eventDigest
-	if _, found, lookupErr := h.rt.store.EventByIdempotency(ctx, event.ComputerID, checkpointEventIdempotency); lookupErr != nil {
-		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, lookupErr
-	} else if !found {
-		eventID, eventErr := computerevent.NewEventID()
-		if eventErr != nil {
-			return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, eventErr
-		}
-		checkpointEvent := computerevent.Event{
-			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: event.ComputerID,
-			EventKind: computerevent.EventCheckpointPublished, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-			IdempotencyKey: checkpointEventIdempotency, RequestCommitment: computerevent.ZeroHead,
-			ActorProfile: agentprofile.Management, AuthorityRef: "platform-control:checkpoint",
-			PayloadCommitment: computerevent.ZeroHead, PrivacyClass: "owner",
-			ProposedEffectRef: checkpoint.Checkpoint.Digest, DecisionRef: eventDigest, ReducerVersion: computerevent.ReducerVersionV1,
-		}
-		if _, eventErr = h.rt.eventAppender.AppendNew(ctx, checkpointEvent, computerevent.TransitionInput{}, nil); eventErr != nil {
-			return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, eventErr
-		}
-	}
-	baseline, err := h.rt.selfdevOperations.RecordAppliedBaseline(ctx, selfdev.BaselineRequest{
-		ComputerID: event.ComputerID, IdempotencyKey: "genesis-baseline-" + eventIdempotency,
-		EventHead: eventDigest, StateCommitment: request.BaselineState, ReleaseDigest: manifest.ContentDigest,
-		CodeRef: string(route.Slot.Current.CodeRef), ArtifactProgramRef: string(route.Slot.Current.ArtifactProgramRef),
-		VerifierRefs:           []string{eventDigest},
-		MaterializationReceipt: materializationDigest, CheckpointRef: checkpointRef,
-		RouteReceipt: string(route.LatestReceipt.ID), RouteGeneration: route.Slot.Generation,
-	})
-	return baseline, checkpoint, err
 }
 
 func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *http.Request, ownerID, computerID, operationID string) {

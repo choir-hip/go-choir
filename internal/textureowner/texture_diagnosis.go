@@ -56,12 +56,6 @@ type textureTableStructureSummary struct {
 	Signature    string `json:"signature"`
 }
 
-// textureBlameResponse is the JSON response for
-// GET /api/texture/revisions/{id}/blame.
-type textureBlameResponse struct {
-	types.BlameResult
-}
-
 func revisionStructureSummaryFromRecord(rev types.Revision) textureRevisionStructureSummary {
 	lines := strings.Split(strings.ReplaceAll(rev.Content, "\r\n", "\n"), "\n")
 	summary := textureRevisionStructureSummary{

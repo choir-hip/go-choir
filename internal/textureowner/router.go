@@ -15,9 +15,6 @@ const (
 func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	switch path {
-	case "/api/texture/diff":
-		h.HandleTextureDiff(w, r)
-		return
 	case "/api/texture/files/open":
 		h.HandleTextureOpenFile(w, r)
 		return
@@ -29,10 +26,6 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(path, textureRevisionsPathPrefix) {
-		if strings.HasSuffix(path, "/blame") {
-			h.HandleTextureBlame(w, r)
-			return
-		}
 		h.HandleTextureRevision(w, r)
 		return
 	}
@@ -49,10 +42,6 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 			h.HandleTextureDocumentEvents(w, r)
 		case strings.HasSuffix(rest, "/source-open"):
 			h.HandleTextureSourceOpen(w, r)
-		case strings.HasSuffix(rest, "/tell"), strings.HasSuffix(rest, "/correct"):
-			// The owner-instruction side channel is deleted; owner input is a
-			// canonical document revision (POST /revisions or /revise).
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "texture endpoint not found"})
 		case strings.HasSuffix(rest, "/revise"):
 			h.HandleTextureAgentRevision(w, r)
 		case strings.HasSuffix(rest, "/compare"):
@@ -67,10 +56,11 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 			h.HandleTextureDiagnosis(w, r)
 		case strings.HasSuffix(rest, "/export"):
 			h.HandleTextureExportDocument(w, r)
-		case strings.HasSuffix(rest, "/agent-revision"):
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "texture endpoint not found"})
 		case strings.HasSuffix(rest, "/history"):
 			h.HandleTextureHistory(w, r)
+		case strings.Contains(strings.TrimSuffix(rest, "/"), "/"):
+			// An unlisted sub-route under a document is not the document.
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "texture endpoint not found"})
 		default:
 			h.HandleTextureDocument(w, r)
 		}

@@ -9,7 +9,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/server"
-	"github.com/yusefmosiah/go-choir/internal/solitaire"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 )
 
@@ -68,22 +67,10 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 		http.NotFound(w, r)
 	})
 
-	// Texture document/revision/history/diff/blame APIs.
+	// Texture document/revision/history APIs.
 	// All routes are dispatched from a single prefix handler that inspects
 	// the URL path and method to route to the correct handler. This avoids
 	// ambiguity with Go's ServeMux prefix matching.
 	s.HandleFunc("/api/texture/documents", texture.HandleTextureDocumentsRoot)
 	s.HandleFunc("/api/texture/", texture.HandleTextureRouter)
-
-	// Headless Solitaire play API (Candidate A).
-	var solitaireHandler *solitaire.Handler
-	if api != nil && api.store != nil && api.store.DB() != nil {
-		if sStore, err := solitaire.NewStore(api.store.DB()); err == nil {
-			solitaireHandler = solitaire.NewHandler(sStore)
-		}
-	}
-	if solitaireHandler == nil {
-		solitaireHandler = solitaire.NewHandler(nil)
-	}
-	s.HandleFunc("/api/solitaire/", solitaireHandler.HandleSolitaireRouter)
 }

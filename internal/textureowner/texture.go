@@ -8,15 +8,11 @@
 //	POST   /api/texture/documents          — create a new document
 //	GET    /api/texture/documents          — list documents for the authenticated user
 //	GET    /api/texture/documents/{id}     — get a document by ID
-//	PUT    /api/texture/documents/{id}     — update a document (e.g., title)
-//	DELETE /api/texture/documents/{id}     — delete a document and its revisions
 //	POST   /api/texture/documents/{id}/revisions — create a user-authored revision
 //	GET    /api/texture/documents/{id}/revisions — list revisions for a document
 //	GET    /api/texture/documents/{id}/stream — stream document lifecycle changes
 //	GET    /api/texture/revisions/{id}    — get a specific revision (snapshot)
 //	GET    /api/texture/documents/{id}/history — get revision history with attribution
-//	GET    /api/texture/diff?from={id}&to={id} — diff two revisions
-//	GET    /api/texture/revisions/{id}/blame — blame a revision
 package textureowner
 
 import (
@@ -181,11 +177,6 @@ type textureDocumentStreamEvent struct {
 	Error             string `json:"error,omitempty"`
 }
 
-// textureUpdateDocRequest is the JSON payload for PUT /api/texture/documents/{id}.
-type textureUpdateDocRequest struct {
-	Title string `json:"title"`
-}
-
 // textureListDocsResponse is the JSON response for GET /api/texture/documents.
 type textureListDocsResponse struct {
 	Documents []textureDocumentResponse `json:"documents"`
@@ -271,11 +262,6 @@ type textureListRevisionsResponse struct {
 type textureHistoryResponse struct {
 	DocID   string               `json:"doc_id"`
 	Entries []types.HistoryEntry `json:"entries"`
-}
-
-// textureDiffResponse is the JSON response for GET /api/texture/diff.
-type textureDiffResponse struct {
-	types.DiffResult
 }
 
 type textureSemanticCompareResponse struct {
@@ -1022,10 +1008,6 @@ func (h *Handler) HandleTextureDocument(w http.ResponseWriter, r *http.Request) 
 	switch r.Method {
 	case http.MethodGet:
 		h.handleTextureGetDocument(w, r, docID)
-	case http.MethodPut:
-		h.handleTextureUpdateDocument(w, r, docID)
-	case http.MethodDelete:
-		h.handleTextureDeleteDocument(w, r, docID)
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
@@ -1084,77 +1066,6 @@ func (h *Handler) textureTurnInterruptedByRestart(ctx context.Context, doc types
 		return ""
 	}
 	return ""
-}
-
-func (h *Handler) handleTextureUpdateDocument(w http.ResponseWriter, r *http.Request, docID string) {
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	var req textureUpdateDocRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-
-	doc, err := h.getTextureDocument(r.Context(), ownerID, docID)
-	if err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		return
-	}
-	computerID := strings.TrimSpace(doc.ComputerID)
-	if computerID == "" && h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureComputerID())
-	}
-	doc, err = h.Store.UpdateTextureDocumentTitleAuthority(r.Context(), docID, ownerID, computerID, req.Title)
-	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		case errors.Is(err, store.ErrLifecycleInvalidTransition), errors.Is(err, store.ErrConcurrentStateChange):
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		default:
-			log.Printf("texture api: update document: %v", err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update document"})
-		}
-		return
-	}
-	titleMutationID := doc.UpdatedAt.UTC().Format(time.RFC3339Nano)
-	titleDigest := textureAuditDigest("title_updated", ownerID, computerID, docID, req.Title, titleMutationID)
-	h.recordTextureAudit(r.Context(), "title_updated", ownerID, computerID, doc.TrajectoryID, docID, doc.CurrentRevisionID, "texture-title:"+docID+":"+titleMutationID, titleDigest, 0)
-
-	writeAPIJSON(w, http.StatusOK, h.textureDocumentResponse(r.Context(), doc))
-}
-
-func (h *Handler) handleTextureDeleteDocument(w http.ResponseWriter, r *http.Request, docID string) {
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-	computerID := ""
-	if h.Core != nil {
-		computerID = strings.TrimSpace(h.Core.TextureComputerID())
-	}
-	document, err := h.Store.ArchiveTextureDocumentAuthority(r.Context(), docID, ownerID, computerID)
-	if err != nil {
-		switch {
-		case errors.Is(err, store.ErrNotFound):
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		case errors.Is(err, store.ErrLifecycleInvalidTransition), errors.Is(err, store.ErrConcurrentStateChange):
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		default:
-			log.Printf("texture api: archive document %s: %v", docID, err)
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to archive document"})
-		}
-		return
-	}
-	auditComputerID := firstNonEmpty(document.ComputerID, computerID)
-	archiveDigest := textureAuditDigest("artifact_archived", ownerID, auditComputerID, document.TrajectoryID, docID, document.CurrentRevisionID)
-	h.recordTextureAudit(r.Context(), "artifact_archived", ownerID, auditComputerID, document.TrajectoryID, docID, document.CurrentRevisionID, "texture-archive:"+docID+":"+document.CurrentRevisionID, archiveDigest, 0)
-	writeAPIJSON(w, http.StatusOK, map[string]any{"ok": true, "archived_at": document.ArchivedAt})
 }
 
 // HandleTextureRevisions handles POST and GET
@@ -1969,38 +1880,6 @@ func textureStreamEventFromRecord(rec types.EventRecord) (textureDocumentStreamE
 	return event, true
 }
 
-// HandleTextureDiff handles GET /api/texture/diff?from={id}&to={id}.
-// It compares selected from and to revisions and shows the changed
-// sections (VAL-ETEXT-008: diff view compares selected revisions and
-// changed sections).
-func (h *Handler) HandleTextureDiff(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	fromRevID := r.URL.Query().Get("from")
-	toRevID := r.URL.Query().Get("to")
-	if fromRevID == "" || toRevID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "from and to revision IDs are required"})
-		return
-	}
-
-	diff, err := h.Store.GetDiff(r.Context(), fromRevID, toRevID, ownerID)
-	if err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: fmt.Sprintf("failed to compute diff: %v", err)})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusOK, textureDiffResponse{DiffResult: diff})
-}
-
 func (h *Handler) HandleTextureRestoreRevision(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -2168,47 +2047,6 @@ func (h *Handler) HandleTextureDiagnosis(w http.ResponseWriter, r *http.Request)
 		resp.Evidence = evidence
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
-}
-
-// HandleTextureBlame handles GET /api/texture/revisions/{id}/blame.
-// It provides section-level attribution that distinguishes whether the
-// last editor was the user or the agent (VAL-ETEXT-009: blame identifies
-// the last editor per section).
-func (h *Handler) HandleTextureBlame(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	revisionID := extractRevisionID(r.URL.Path)
-	if revisionID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "revision ID is required"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	revision, err := h.getTextureRevision(r.Context(), ownerID, revisionID)
-	if err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
-		return
-	}
-	var blame types.BlameResult
-	if computerID := strings.TrimSpace(revision.ComputerID); computerID != "" {
-		blame, err = h.Store.GetBlameByScope(r.Context(), revisionID, ownerID, computerID)
-	} else {
-		blame, err = h.Store.GetBlame(r.Context(), revisionID, ownerID)
-	}
-	if err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusOK, textureBlameResponse{BlameResult: blame})
 }
 
 // ----- Texture revise -----
