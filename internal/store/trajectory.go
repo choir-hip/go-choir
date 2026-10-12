@@ -2,8 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -46,11 +44,6 @@ func (s *Store) CreateTrajectoryIfAbsent(ctx context.Context, rec types.Trajecto
 
 	return s.CreateTrajectoryIfAbsentOG(ctx, rec)
 }
-
-const selectTrajectoryByID = `SELECT trajectory_id, owner_id, kind, subject_refs_json, status,
-        settlement_rule_json, created_at, updated_at, settled_at
-   FROM trajectories
-  WHERE trajectory_id = ? AND owner_id = ?`
 
 // GetTrajectory returns the trajectory with the given ID, owner-scoped.
 func (s *Store) GetTrajectory(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
@@ -382,99 +375,4 @@ func (s *Store) UpdateWorkItemDetails(ctx context.Context, ownerID, workItemID s
 		return types.WorkItemRecord{}, fmt.Errorf("update work item details: %w", err)
 	}
 	return s.GetWorkItemOG(ctx, ownerID, workItemID)
-}
-
-const workItemColumns = `work_item_id, trajectory_id, owner_id, objective, reason,
-	authority_profile, step_budget, token_budget, objective_fingerprint,
-	status, assigned_agent_id, created_by_loop_id, details_json,
-	created_at, updated_at`
-
-func scanTrajectory(row interface{ Scan(...any) error }) (types.TrajectoryRecord, error) {
-	var rec types.TrajectoryRecord
-	var kind, status, subjectRefsJSON, ruleJSON, createdAt, updatedAt string
-	var settledAt sql.NullString
-
-	err := row.Scan(
-		&rec.TrajectoryID,
-		&rec.OwnerID,
-		&kind,
-		&subjectRefsJSON,
-		&status,
-		&ruleJSON,
-		&createdAt,
-		&updatedAt,
-		&settledAt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return types.TrajectoryRecord{}, ErrNotFound
-		}
-		return types.TrajectoryRecord{}, fmt.Errorf("scan trajectory: %w", err)
-	}
-	rec.Kind = types.TrajectoryKind(kind)
-	rec.Status = types.TrajectoryStatus(status)
-	if err := json.Unmarshal([]byte(subjectRefsJSON), &rec.SubjectRefs); err != nil {
-		return types.TrajectoryRecord{}, fmt.Errorf("decode trajectory subject refs: %w", err)
-	}
-	if err := json.Unmarshal([]byte(ruleJSON), &rec.SettlementRule); err != nil {
-		return types.TrajectoryRecord{}, fmt.Errorf("decode trajectory settlement rule: %w", err)
-	}
-	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
-	if err != nil {
-		return types.TrajectoryRecord{}, fmt.Errorf("parse trajectory created_at: %w", err)
-	}
-	rec.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
-	if err != nil {
-		return types.TrajectoryRecord{}, fmt.Errorf("parse trajectory updated_at: %w", err)
-	}
-	if settledAt.Valid && settledAt.String != "" {
-		t, err := time.Parse(time.RFC3339Nano, settledAt.String)
-		if err != nil {
-			return types.TrajectoryRecord{}, fmt.Errorf("parse trajectory settled_at: %w", err)
-		}
-		rec.SettledAt = &t
-	}
-	return rec, nil
-}
-
-func scanWorkItem(row interface{ Scan(...any) error }) (types.WorkItemRecord, error) {
-	var rec types.WorkItemRecord
-	var status, detailsJSON, createdAt, updatedAt string
-
-	err := row.Scan(
-		&rec.WorkItemID,
-		&rec.TrajectoryID,
-		&rec.OwnerID,
-		&rec.Objective,
-		&rec.Reason,
-		&rec.AuthorityProfile,
-		&rec.StepBudget,
-		&rec.TokenBudget,
-		&rec.ObjectiveFingerprint,
-		&status,
-		&rec.AssignedAgentID,
-		&rec.CreatedByRunID,
-		&detailsJSON,
-		&createdAt,
-		&updatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return types.WorkItemRecord{}, ErrNotFound
-		}
-		return types.WorkItemRecord{}, fmt.Errorf("scan work item: %w", err)
-	}
-	rec.Status = types.WorkItemStatus(status)
-	if err := json.Unmarshal([]byte(detailsJSON), &rec.Details); err != nil {
-		return types.WorkItemRecord{}, fmt.Errorf("decode work item details: %w", err)
-	}
-	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
-	if err != nil {
-		return types.WorkItemRecord{}, fmt.Errorf("parse work item created_at: %w", err)
-	}
-	rec.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
-	if err != nil {
-		return types.WorkItemRecord{}, fmt.Errorf("parse work item updated_at: %w", err)
-	}
-	return rec, nil
 }

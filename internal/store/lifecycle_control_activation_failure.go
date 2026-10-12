@@ -322,16 +322,3 @@ func (s *Store) resolveLifecycleControlActivationFailure(ctx context.Context, ow
 	}
 	return &run, nil
 }
-
-func (s *Store) lifecycleControlActivationFailureEvidence(ctx context.Context, run types.RunRecord, trajectoryID, agentID, logicalKey, failedAttemptKey string, versions []types.LifecycleControlActivationVersion) (bool, error) {
-	commandID := metadataStringValueStore(run.Metadata, lifecycleControlFailureCommandIDMetadata)
-	digest := metadataStringValueStore(run.Metadata, lifecycleControlFailureCommandDigestMetadata)
-	if commandID == "" || digest == "" {
-		return false, nil
-	}
-	result, found, err := s.replayLifecycleCommand(ctx, run.OwnerID, run.ComputerID, commandID, digest)
-	if err != nil || !found {
-		return false, err
-	}
-	return isLifecycleControlActivationFailureEvidence(result, run, trajectoryID, agentID, logicalKey, failedAttemptKey, versions), nil
-}

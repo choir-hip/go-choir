@@ -2,9 +2,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -101,46 +98,4 @@ func (s *Store) ListRunContinuationsBySource(ctx context.Context, ownerID, sourc
 		return nil, fmt.Errorf("list run continuations: source_loop_id is required")
 	}
 	return s.ListRunContinuationsBySourceRunOG(ctx, ownerID, sourceRunID, 500)
-}
-
-func scanRunContinuation(row interface{ Scan(...any) error }) (types.RunContinuationRecord, error) {
-	var rec types.RunContinuationRecord
-	var detailsJSON, createdAt, updatedAt string
-	err := row.Scan(
-		&rec.ContinuationID,
-		&rec.OwnerID,
-		&rec.SourceRunID,
-		&rec.NextRunID,
-		&rec.Objective,
-		&rec.Reason,
-		&rec.AuthorityProfile,
-		&rec.LeaseSeconds,
-		&rec.Status,
-		&detailsJSON,
-		&createdAt,
-		&updatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return types.RunContinuationRecord{}, ErrNotFound
-		}
-		return types.RunContinuationRecord{}, fmt.Errorf("scan run continuation: %w", err)
-	}
-	if detailsJSON != "" && detailsJSON != "{}" {
-		if err := json.Unmarshal([]byte(detailsJSON), &rec.Details); err != nil {
-			return types.RunContinuationRecord{}, fmt.Errorf("decode run continuation details: %w", err)
-		}
-	}
-	if rec.Details == nil {
-		rec.Details = map[string]any{}
-	}
-	rec.CreatedAt, err = time.Parse(time.RFC3339Nano, createdAt)
-	if err != nil {
-		return types.RunContinuationRecord{}, fmt.Errorf("parse run continuation created_at: %w", err)
-	}
-	rec.UpdatedAt, err = time.Parse(time.RFC3339Nano, updatedAt)
-	if err != nil {
-		return types.RunContinuationRecord{}, fmt.Errorf("parse run continuation updated_at: %w", err)
-	}
-	return rec, nil
 }

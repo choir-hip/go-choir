@@ -382,19 +382,6 @@ func (s *Store) findDesktopPlacement(ctx context.Context, ownerID, desktopID, se
 	return s.queryLatestDesktopPlacement(ctx, ownerID, desktopID, appInstanceID)
 }
 
-func (s *Store) queryDesktopPlacement(ctx context.Context, ownerID, desktopID, sessionID, appInstanceID string) (desktopPlacement, bool, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT session_id, x, y, width, height, mode, local_z_index, local_focused, restored_geometry_json, updated_at
-		   FROM desktop_window_placements
-		  WHERE owner_id = ? AND desktop_id = ? AND session_id = ? AND app_instance_id = ?`,
-		ownerID,
-		desktopID,
-		sessionID,
-		appInstanceID,
-	)
-	return scanDesktopPlacement(row)
-}
-
 func (s *Store) queryLatestDesktopPlacement(ctx context.Context, ownerID, desktopID, appInstanceID string) (desktopPlacement, bool, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT session_id, x, y, width, height, mode, local_z_index, local_focused, restored_geometry_json, updated_at

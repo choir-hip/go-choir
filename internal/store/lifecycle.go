@@ -533,18 +533,6 @@ type actorWakeEngineeringProgressContent struct {
 // same window so arm-time and fire-time agree.
 const EngineeringProgressReviewWindow = 30 * time.Minute
 
-type actorWakeRunContent struct {
-	RunID string `json:"run_id"`
-}
-
-func actorWakeRunContentJSON(runID string) (string, error) {
-	content, err := json.Marshal(actorWakeRunContent{RunID: strings.TrimSpace(runID)})
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
-
 func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object, resolver []objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
 	update, err := decodeLifecycleObject[types.CoagentSourcePacket](worker)
 	if err != nil {

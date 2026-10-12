@@ -1,11 +1,8 @@
 package store
 
 import (
-	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -21,10 +18,6 @@ const (
 	TextureSourceRefDisplayNumbered = "numbered_ref"
 	TextureSourceRefDisplayExpanded = "expanded_ref"
 )
-
-type rowScanner interface {
-	Scan(dest ...any) error
-}
 
 type TextureSourceGraphWriteSet struct {
 	SourceEntities []TextureSourceEntityGraphRecord
@@ -221,91 +214,6 @@ func (s *Store) ListTextureSourceGraphForRevisionsByScope(ctx context.Context, o
 	return out, nil
 }
 
-// rollbackTextureSourceGraph deletes the source refs and newly-created
-// source entities that were written by writeTextureSourceGraph for a
-// revision that is being rolled back. Best-effort: errors are ignored.
-// Only entities in createdEntityKeys and refs in writtenRefKeys are deleted
-// (those that were newly created by the write call, not pre-existing ones).
-func (s *Store) rollbackTextureSourceGraph(ctx context.Context, rev types.Revision, graph TextureSourceGraphWriteSet, createdEntityKeys []string, writtenRefKeys []string) {
-	for _, refKey := range writtenRefKeys {
-		refObj, err := s.ogGetByKey(ctx, TextureSourceRefObjectKind, "ref_version_key", refKey)
-		if err == nil {
-			_ = s.ogDelete(ctx, refObj.CanonicalID)
-		}
-	}
-	for _, key := range createdEntityKeys {
-		entityObj, err := s.ogGetByKey(ctx, TextureSourceEntityObjectKind, "entity_version_key", key)
-		if err == nil {
-			_ = s.ogDelete(ctx, entityObj.CanonicalID)
-		}
-	}
-}
-
-func (s *Store) writeTextureSourceGraph(ctx context.Context, rev types.Revision, graph TextureSourceGraphWriteSet) ([]string, []string, error) {
-	if len(graph.SourceEntities) == 0 && len(graph.SourceRefs) == 0 {
-		return nil, nil, nil
-	}
-	var createdEntityKeys []string
-	var writtenRefKeys []string
-	knownEntities := make(map[string]bool, len(graph.SourceEntities))
-	for _, rec := range graph.SourceEntities {
-		normalized, err := normalizeTextureSourceEntityGraphRecord(rec, rev.OwnerID, rev.ComputerID, rev.CreatedAt)
-		if err != nil {
-			// Roll back partial writes before returning.
-			s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-			return nil, nil, fmt.Errorf("texture source entity graph record: %w", err)
-		}
-		existing, err := s.GetTextureSourceEntityOG(ctx, normalized.CanonicalID, normalized.VersionID)
-		if err == nil {
-			if existing.OwnerID != normalized.OwnerID || existing.ContentHash != normalized.ContentHash || !bytes.Equal(existing.Body, normalized.Body) || string(existing.Metadata) != string(normalized.Metadata) {
-				s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-				return nil, nil, fmt.Errorf("texture source entity version conflict for %s/%s", normalized.CanonicalID, normalized.VersionID)
-			}
-		} else if err != ErrNotFound {
-			s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-			return nil, nil, err
-		} else {
-			if err := s.PutTextureSourceEntityOG(ctx, normalized); err != nil {
-				s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-				return nil, nil, err
-			}
-			createdEntityKeys = append(createdEntityKeys, entityVersionKey(normalized.CanonicalID, normalized.VersionID))
-		}
-		knownEntities[entityVersionKey(normalized.CanonicalID, normalized.VersionID)] = true
-	}
-	for _, rec := range graph.SourceRefs {
-		normalized, err := normalizeTextureSourceRefGraphRecord(rec, rev, rev.CreatedAt)
-		if err != nil {
-			s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-			return nil, nil, fmt.Errorf("texture source ref graph record: %w", err)
-		}
-		key := entityVersionKey(normalized.SourceEntityCanonicalID, normalized.SourceEntityVersionID)
-		if !knownEntities[key] {
-			exists, err := s.TextureSourceEntityVersionExistsOG(ctx, normalized.SourceEntityCanonicalID, normalized.SourceEntityVersionID)
-			if err != nil {
-				s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-				return nil, nil, err
-			}
-			if !exists {
-				s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-				return nil, nil, fmt.Errorf("texture source ref points at missing source entity version %s/%s", normalized.SourceEntityCanonicalID, normalized.SourceEntityVersionID)
-			}
-		}
-		// Check if this ref already exists — if so, don't track it for
-		// rollback since we shouldn't delete pre-existing refs.
-		refKey := normalized.CanonicalID + "\x00" + normalized.VersionID
-		refExisted, _ := s.TextureSourceRefVersionExistsOG(ctx, normalized.CanonicalID, normalized.VersionID)
-		if err := s.PutTextureSourceRefOG(ctx, normalized); err != nil {
-			s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-			return nil, nil, err
-		}
-		if !refExisted {
-			writtenRefKeys = append(writtenRefKeys, refKey)
-		}
-	}
-	return createdEntityKeys, writtenRefKeys, nil
-}
-
 func normalizeTextureSourceEntityGraphRecord(rec TextureSourceEntityGraphRecord, ownerID, computerID string, createdAt time.Time) (TextureSourceEntityGraphRecord, error) {
 	rec.OwnerID = strings.TrimSpace(rec.OwnerID)
 	if rec.OwnerID == "" {
@@ -430,144 +338,6 @@ func normalizeTextureSourceRefGraphRecord(rec TextureSourceRefGraphRecord, rev t
 	return rec, nil
 }
 
-func (s *Store) putTextureSourceEntityGraphRecord(ctx context.Context, tx *sql.Tx, rec TextureSourceEntityGraphRecord) error {
-	existing, err := getTextureSourceEntityGraphRecord(ctx, tx, rec.CanonicalID, rec.VersionID)
-	if err == nil {
-		if existing.OwnerID != rec.OwnerID || existing.ContentHash != rec.ContentHash || !bytes.Equal(existing.Body, rec.Body) || string(existing.Metadata) != string(rec.Metadata) {
-			return fmt.Errorf("texture source entity version conflict for %s/%s", rec.CanonicalID, rec.VersionID)
-		}
-		return nil
-	}
-	if !errors.Is(err, ErrNotFound) {
-		return err
-	}
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO texture_source_entities (canonical_id, version_id, owner_id, computer_id, content_hash, body, metadata_json, legacy_source_entity_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rec.CanonicalID,
-		rec.VersionID,
-		rec.OwnerID,
-		rec.ComputerID,
-		rec.ContentHash,
-		string(rec.Body),
-		string(rec.Metadata),
-		rec.LegacySourceEntityID,
-		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("insert texture source entity: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) putTextureSourceRefGraphRecord(ctx context.Context, tx *sql.Tx, rec TextureSourceRefGraphRecord) error {
-	existing, err := getTextureSourceRefGraphRecord(ctx, tx, rec.CanonicalID, rec.VersionID)
-	if err == nil {
-		if existing.OwnerID != rec.OwnerID ||
-			existing.ContentHash != rec.ContentHash ||
-			existing.DocID != rec.DocID ||
-			existing.TextureRevisionID != rec.TextureRevisionID ||
-			existing.SourceEntityCanonicalID != rec.SourceEntityCanonicalID ||
-			existing.SourceEntityVersionID != rec.SourceEntityVersionID ||
-			existing.DisplayMode != rec.DisplayMode ||
-			existing.CitationState != rec.CitationState ||
-			string(existing.Metadata) != string(rec.Metadata) {
-			return fmt.Errorf("texture source ref version conflict for %s/%s", rec.CanonicalID, rec.VersionID)
-		}
-		return nil
-	}
-	if !errors.Is(err, ErrNotFound) {
-		return err
-	}
-	_, err = tx.ExecContext(ctx,
-		`INSERT INTO texture_source_refs (canonical_id, version_id, owner_id, computer_id, content_hash, doc_id, texture_revision_id, body_node_id, body_node_path_hash, legacy_source_entity_id, source_entity_canonical_id, source_entity_version_id, display_mode, citation_state, metadata_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rec.CanonicalID,
-		rec.VersionID,
-		rec.OwnerID,
-		rec.ComputerID,
-		rec.ContentHash,
-		rec.DocID,
-		rec.TextureRevisionID,
-		rec.BodyNodeID,
-		rec.BodyNodePathHash,
-		rec.LegacySourceEntityID,
-		rec.SourceEntityCanonicalID,
-		rec.SourceEntityVersionID,
-		rec.DisplayMode,
-		rec.CitationState,
-		string(rec.Metadata),
-		rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-	)
-	if err != nil {
-		return fmt.Errorf("insert texture source ref: %w", err)
-	}
-	return nil
-}
-
-func getTextureSourceEntityGraphRecord(ctx context.Context, tx *sql.Tx, canonicalID, versionID string) (TextureSourceEntityGraphRecord, error) {
-	row := tx.QueryRowContext(ctx,
-		`SELECT canonical_id, version_id, owner_id, computer_id, content_hash, body, metadata_json, legacy_source_entity_id, created_at
-		   FROM texture_source_entities
-		  WHERE canonical_id = ? AND version_id = ?`,
-		canonicalID,
-		versionID,
-	)
-	return scanTextureSourceEntity(row)
-}
-
-func getTextureSourceRefGraphRecord(ctx context.Context, tx *sql.Tx, canonicalID, versionID string) (TextureSourceRefGraphRecord, error) {
-	row := tx.QueryRowContext(ctx,
-		`SELECT canonical_id, version_id, owner_id, computer_id, content_hash, doc_id, texture_revision_id, body_node_id, body_node_path_hash, legacy_source_entity_id, source_entity_canonical_id, source_entity_version_id, display_mode, citation_state, metadata_json, created_at
-		   FROM texture_source_refs
-		  WHERE canonical_id = ? AND version_id = ?`,
-		canonicalID,
-		versionID,
-	)
-	return scanTextureSourceRef(row)
-}
-
-func textureSourceEntityVersionExists(ctx context.Context, tx *sql.Tx, canonicalID, versionID string) (bool, error) {
-	var count int
-	if err := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM texture_source_entities WHERE canonical_id = ? AND version_id = ?`,
-		canonicalID,
-		versionID,
-	).Scan(&count); err != nil {
-		return false, fmt.Errorf("query texture source entity version: %w", err)
-	}
-	return count > 0, nil
-}
-
-func scanTextureSourceEntity(row rowScanner) (TextureSourceEntityGraphRecord, error) {
-	var rec TextureSourceEntityGraphRecord
-	var body, metadata, createdAt string
-	if err := row.Scan(&rec.CanonicalID, &rec.VersionID, &rec.OwnerID, &rec.ComputerID, &rec.ContentHash, &body, &metadata, &rec.LegacySourceEntityID, &createdAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return TextureSourceEntityGraphRecord{}, ErrNotFound
-		}
-		return TextureSourceEntityGraphRecord{}, fmt.Errorf("scan texture source entity: %w", err)
-	}
-	rec.Body = []byte(body)
-	rec.Metadata = json.RawMessage(metadata)
-	rec.CreatedAt = parseTextureSourceGraphTime(createdAt)
-	return rec, nil
-}
-
-func scanTextureSourceRef(row rowScanner) (TextureSourceRefGraphRecord, error) {
-	var rec TextureSourceRefGraphRecord
-	var metadata, createdAt string
-	if err := row.Scan(&rec.CanonicalID, &rec.VersionID, &rec.OwnerID, &rec.ComputerID, &rec.ContentHash, &rec.DocID, &rec.TextureRevisionID, &rec.BodyNodeID, &rec.BodyNodePathHash, &rec.LegacySourceEntityID, &rec.SourceEntityCanonicalID, &rec.SourceEntityVersionID, &rec.DisplayMode, &rec.CitationState, &metadata, &createdAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return TextureSourceRefGraphRecord{}, ErrNotFound
-		}
-		return TextureSourceRefGraphRecord{}, fmt.Errorf("scan texture source ref: %w", err)
-	}
-	rec.Metadata = json.RawMessage(metadata)
-	rec.CreatedAt = parseTextureSourceGraphTime(createdAt)
-	return rec, nil
-}
-
 func textureSourceEntityIdentityKey(ownerScope, sourceKind, targetIdentity string) (string, error) {
 	ownerScope = strings.TrimSpace(ownerScope)
 	sourceKind = strings.ToLower(strings.TrimSpace(sourceKind))
@@ -623,14 +393,6 @@ func sourceRefVersionBody(rec TextureSourceRefGraphRecord) []byte {
 
 func entityVersionKey(canonicalID, versionID string) string {
 	return canonicalID + "\x00" + versionID
-}
-
-func parseTextureSourceGraphTime(value string) time.Time {
-	t, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
 }
 
 func defaultTextureGraphTime(candidate, fallback time.Time) time.Time {

@@ -2,10 +2,7 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -81,67 +78,4 @@ func (s *Store) ListBrowserSessions(ctx context.Context, ownerID string, limit i
 		limit = 50
 	}
 	return s.ListBrowserSessionsByOwnerOG(ctx, ownerID, limit)
-}
-
-func scanBrowserSession(scanner interface {
-	Scan(dest ...any) error
-}) (types.BrowserSessionRecord, error) {
-	var rec types.BrowserSessionRecord
-	var created, updated string
-	var linksJSON string
-	if err := scanner.Scan(
-		&rec.SessionID,
-		&rec.OwnerID,
-		&rec.Provider,
-		&rec.Mode,
-		&rec.ExecutionScope,
-		&rec.BackendSessionID,
-		&rec.WorldKind,
-		&rec.VMID,
-		&rec.SnapshotID,
-		&rec.SourceRunID,
-		&rec.CandidateTraceID,
-		&rec.State,
-		&rec.CurrentURL,
-		&rec.Title,
-		&rec.TextSnapshot,
-		&rec.HTMLSnapshot,
-		&linksJSON,
-		&rec.ScreenshotPNG,
-		&rec.Error,
-		&created,
-		&updated,
-	); err != nil {
-		if err == sql.ErrNoRows {
-			return types.BrowserSessionRecord{}, ErrNotFound
-		}
-		return types.BrowserSessionRecord{}, fmt.Errorf("scan browser session: %w", err)
-	}
-	createdAt, err := time.Parse(time.RFC3339Nano, created)
-	if err != nil {
-		return types.BrowserSessionRecord{}, fmt.Errorf("parse browser session created_at: %w", err)
-	}
-	updatedAt, err := time.Parse(time.RFC3339Nano, updated)
-	if err != nil {
-		return types.BrowserSessionRecord{}, fmt.Errorf("parse browser session updated_at: %w", err)
-	}
-	rec.CreatedAt = createdAt
-	rec.UpdatedAt = updatedAt
-	if strings.TrimSpace(linksJSON) != "" {
-		if err := json.Unmarshal([]byte(linksJSON), &rec.Links); err != nil {
-			return types.BrowserSessionRecord{}, fmt.Errorf("decode browser session links: %w", err)
-		}
-	}
-	return rec, nil
-}
-
-func encodeBrowserLinks(links []types.BrowserLink) string {
-	if len(links) == 0 {
-		return "[]"
-	}
-	raw, err := json.Marshal(links)
-	if err != nil {
-		return "[]"
-	}
-	return string(raw)
 }
