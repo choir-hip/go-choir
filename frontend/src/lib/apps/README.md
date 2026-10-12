@@ -9,7 +9,7 @@ Adding a shell app should be one registry/component operation:
 2. Add one `ChoirAppDefinition` entry in `registry.ts`.
 3. Use `AppSurface` automatically through `AppHost`.
 
-The registry entry owns app identity, launcher order, desktop icon visibility, mobile switcher participation, singleton/heavy/window geometry, logged-out preview policy, auth-required actions, themed shell data attributes, and surface type. DeskSheet, desktop icons, mobile app switching, app windows, heavy-app metadata, and overview tests derive from the registry projections.
+The registry entry owns app identity, launcher order, desktop icon visibility, singleton/heavy/window geometry, logged-out preview policy, themed shell data attributes, and surface type. DeskSheet, desktop icons, app windows, heavy-app metadata, and overview tests derive from the registry projections.
 
 Logged-out preview data is local UI data owned by the component that renders it. Durable/shared/private mutation, provider spend, account data, publish/send/import/upload/activate, rollback/roll-forward, and owner-scoped actions must dispatch `authrequired` at action time.
 
