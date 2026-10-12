@@ -21,11 +21,17 @@ review:
 
 metamission:
   stations:
+    - id: M0
+      path: docs/model-pools-design-2026-10-12.md
+      readiness: drafted
+      status: pending
+      depends_on: []
+      note: model pools (owner 2026-10-12, "do this configuration setup first"); red; its acceptance is in the design doc
     - id: C0
       path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
       readiness: drafted
       status: pending
-      depends_on: []
+      depends_on: [M0]
     - id: C1
       path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
       readiness: drafted
