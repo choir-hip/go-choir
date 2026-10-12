@@ -11,35 +11,36 @@ definition_version: 4
 # docs/reports/re-engineering-studies-2026-10-12/. The six gradual station
 # drafts R1-R6 (03499ef9) are superseded by the cuts; their code-cited
 # findings live on in the cut files and at that commit.
-readiness: drafted
+readiness: reviewed
 
 review:
   reviewer: owner (decisions 2026-10-12) and two 10-model panels (divergent, lateral; 16 answers) on the gradual drafts; a convergent panel (6 of 8 answered) on this file and the three cuts
   frozen_ref: 03499ef9 (gradual drafts); 2d2b864e (three cuts)
   verdict: send_back on the gradual shape; three cuts adopted (decisions §12); this file accepted by all six convergent reviewers, the cuts repaired (decisions §13)
   evidence_ref: docs/re-engineering-decisions-2026-10-12.md §12, §13
+  rereview: claude opus and gemini-3.8-flash at deb6f760 (codex and gpt-6.1-sol hit a usage limit); accept (claude, gemini); stale register phrase removed
 
 metamission:
   stations:
     - id: M0
       path: docs/model-pools-design-2026-10-12.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: []
       note: model pools (owner 2026-10-12, "do this configuration setup first"); red; its acceptance is in the design doc
     - id: C0
       path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [M0]
     - id: C1
       path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [C0]
     - id: C2
       path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       note: ends with Autopaper live, then the model comparison
       depends_on: [C1]
@@ -188,7 +189,7 @@ gradual drafts were protecting state nobody needs. Three cuts:
 0. **Cut 0, eyes.** See breakage fast: trace export without SSH, an
    end-to-end tracer with a crash drill, an invariant checker, fresh test
    computers; fix the two defects every measurement stands on (parallel
-   calls cross-wiring, a second REPL per desk); register what survives.
+   calls cross-wiring, a second REPL per desk); measure the baselines.
 1. **Cut 1, authority.** Records become the only work state:
    conversations single-threaded from the sender, hypotheses with stable
    ids as the unit of progress, rounds, cursors instead of packets, crash

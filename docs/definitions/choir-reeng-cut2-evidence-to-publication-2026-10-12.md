@@ -13,13 +13,14 @@ definition_version: 4
 # the Autopaper metamission (2026-10-11), and studies A, D, E in
 # docs/reports/re-engineering-studies-2026-10-12/. Their gradual slicing,
 # flags and one-release keeps are rejected; their findings stand.
-readiness: drafted
+readiness: reviewed
 
 review:
   reviewer: convergent agentic-consensus panel (codex, claude opus, gpt-6.1-sol, gemini-3.8-flash, deepseek-v4.1-flash, glm-5.3-flash; gpt-6-luna and muse-spark timed out)
   frozen_ref: 2d2b864e
   verdict: send_back (codex, gpt-6.1-sol, gemini), accept as gated draft or with amendments (claude, deepseek, glm); repaired in the following commit; re-verified at C1's landed commit before execution
   evidence_ref: docs/re-engineering-decisions-2026-10-12.md §13 (synthesis)
+  rereview: claude opus and gemini-3.8-flash at deb6f760 (codex and gpt-6.1-sol hit a usage limit); accept (claude, gemini); rhythm clause amended to report, not gate
 
 start:
   captured_at: 2026-10-12T19:30:00Z
@@ -289,7 +290,9 @@ finish:
     source schedule for 6 continuous hours after one owner act starts it,
     with no further human step; (2) production follows the ingestion
     rhythm (decisions §13.4): every poll that writes new captures is
-    answered before the next poll fires, by a new story, a Cast or Note
+    answered by management's next committed turn after its record (the
+    latency from record to answer is reported per interval, never gated),
+    by a new story, a Cast or Note
     feeding an existing story, or a management record declining those
     captures with a reason, and the receipt lays stories opened, revisions
     and captures side by side per poll interval (no story count is set; a

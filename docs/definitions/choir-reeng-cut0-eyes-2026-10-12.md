@@ -7,13 +7,14 @@ definition_version: 4
 # §12 (cutover decisions win over everything else, including the studies
 # and the superseded drafts R1 and R5 at 03499ef9, whose transport and
 # trace-export findings are carried here).
-readiness: drafted
+readiness: reviewed
 
 review:
   reviewer: convergent agentic-consensus panel (codex, claude opus, gpt-6.1-sol, gemini-3.8-flash, deepseek-v4.1-flash, glm-5.3-flash; gpt-6-luna and muse-spark timed out)
   frozen_ref: 2d2b864e
   verdict: send_back (codex, gpt-6.1-sol, deepseek), accept (claude, gemini, glm); repaired in the following commit, re-review pending
   evidence_ref: docs/re-engineering-decisions-2026-10-12.md §13 (synthesis)
+  rereview: claude opus and gemini-3.8-flash at deb6f760 (codex and gpt-6.1-sol hit a usage limit); accept (gemini), send_back on one amendment from claude (tracer load mechanism; owner-scope acceptance row), applied
 
 start:
   captured_at: 2026-10-12T19:30:00Z
@@ -142,10 +143,15 @@ finish:
     follow-up, restarts the computer through the owner route mid-run, runs
     to publication, exports the trace, and keeps the bundle (outside the
     repo, under ~/.config/choir-qa/traces/<label>/, sha256 in the receipt).
-    It also drives the transport under load: one desk cell issues eight
-    parallel tagged choir.* reads, and a second run on the same desk
-    submits a cell while the first is mid-cell, so the deployed bundle
-    shows concurrent egress and overlapping cells on one desk.
+    It also drives the transport under load: the tracer's script asks a
+    desk for a cell that issues eight parallel tagged choir.* reads, and
+    submits a second run to the same desk while the first is mid-cell.
+    What the model writes is not under the tracer's control, so the bundle
+    is checked for at least two concurrent egress calls in one cell and
+    two runs waiting on one desk; the tracer retries up to three times,
+    and if the load never appears the I5 verdict is unknown, not pass.
+    Correctness under load is proven by the race test in (4); the deployed
+    run shows it holds on the product path.
     (3) Invariant checker: scripts/reeng_invariants.mjs reads a bundle
     offline and checks substrate facts only, never content quality:
     I1 every revision was written by the Texture desk; I2 every round (today
@@ -188,7 +194,7 @@ finish:
       proves: each rule fails when its fact is broken, before any pass is trusted
       evidence_class: local test over a deployed artifact
     - action: three tracer runs on choir.news at the landed SHA, each on a fresh test computer, crash drill and the concurrency load included, bundles kept
-      proves: every listed layer is marked present, empty or unserved, all without SSH, and no rule passes on an unserved layer; I5 holds under eight parallel tagged calls and overlapping cells on one desk; the checker's verdict per rule on today's system (an I3 failure on the known restart defect is a finding, not a tracer failure)
+      proves: every listed layer is marked present, empty or unserved, all without SSH, and no rule passes on an unserved layer; an export with a key scoped to a different test computer is refused; I5 holds wherever the bundle shows concurrent egress and overlapping cells on one desk (unknown if the load never appeared); the checker's verdict per rule on today's system (an I3 failure on the known restart defect is a finding, not a tracer failure)
       evidence_class: deployed proof
     - action: one test-computer desk session driven past 70 minutes with cells under 30 minutes apart, exported (repeated after the fix in artifact 6, if one was needed)
       proves: a desk keeps its choir.* verbs for its whole life

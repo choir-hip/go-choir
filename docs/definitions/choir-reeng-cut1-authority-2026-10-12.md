@@ -11,13 +11,14 @@ definition_version: 4
 # was re-read at 03499ef9 (no Go file changed since a401c878). Their gradual
 # slicing (shadow fold, dual-write, interim closer, standing anchor) is
 # rejected (decisions §12).
-readiness: drafted
+readiness: reviewed
 
 review:
   reviewer: convergent agentic-consensus panel (codex, claude opus, gpt-6.1-sol, gemini-3.8-flash, deepseek-v4.1-flash, glm-5.3-flash; gpt-6-luna and muse-spark timed out)
   frozen_ref: 2d2b864e
   verdict: send_back (codex, gpt-6.1-sol, gemini, deepseek), accept with amendments (claude, glm); repaired in the following commit, re-review pending
   evidence_ref: docs/re-engineering-decisions-2026-10-12.md §13 (synthesis)
+  rereview: claude opus and gemini-3.8-flash at deb6f760 (codex and gpt-6.1-sol hit a usage limit); accept (claude, gemini); baseline wording and D1-D9 amendments applied
 
 start:
   captured_at: 2026-10-12T19:30:00Z
@@ -281,7 +282,7 @@ finish:
       proves: the deleted names have no non-test citer; old objects stay in og_objects as untyped history and no code decodes them
       evidence_class: CI
     - action: run acceptance synthesized for the engineering round-trip trajectory
-      proves: acceptance derives from the fold and reaches the absolute target in artifact 0, at or above Cut 0's recorded baseline
+      proves: acceptance derives from the fold; the tracer story reaches at least Cut 0's recorded level, and the engineering round trip reaches the absolute target in artifact 0
       evidence_class: deployed proof
     - action: >-
         Self-development on a fresh test computer: management Casts
@@ -350,7 +351,7 @@ boundaries:
     - substrate stays (decisions §1.2) - child concurrency 4 and the 1.5 s spacer, tray quotas, poison-free wakes, the 60-minute run limit as a labelled prototyping constraint
   excluded:
     - async search, the research desk's new verbs, Texture's write verb, captures, permalinks, Autopaper (Cut 2)
-    - trace export, tracer, invariant checker, fresh computers, request-id fix, one REPL owner per desk, survival register (Cut 0)
+    - trace export, tracer, invariant checker, fresh computers, request-id fix, one REPL owner per desk, broker-handle fix, baselines (Cut 0)
     - shadow folds, dual-writes, interim closers, standing anchors, one-release keeps, feature flags
     - migrating old execution state (archived as history, never read)
     - Jev as a support judge (Cut 2, decisions §12.7); signing keys
@@ -661,7 +662,7 @@ move forward) is implemented here.
 
 ## Standing questions
 
-- **Provenance.** The owner's §2 and §12; mechanism D1-D8 is this file's
+- **Provenance.** The owner's §2 and §12; mechanism D1-D9 is this file's
   proposal.
 - **Conformance.** No new store. Records stay in the computer's object
   graph.
@@ -716,7 +717,8 @@ move forward) is implemented here.
   Report's operation id, and the self-development acceptance runs Freeze
   through restore on a fresh computer.
 - Run acceptance silently loses a checkpoint. It must reach the absolute
-  target in artifact 0, at or above Cut 0's recorded baseline.
+  target in artifact 0 on the round trip, and the tracer story must
+  reach at least Cut 0's recorded level.
 - Sub-researchers flood the parent inbox or outlive it. Concurrency 4 and
   the spacer stay, and child runs are runs, closed at a crash.
 - Prompts pass parity by losing instructions desks need. Each deletion
