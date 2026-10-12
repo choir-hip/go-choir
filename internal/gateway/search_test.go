@@ -524,7 +524,7 @@ func TestSearXNGProvider_SearchError(t *testing.T) {
 
 func TestHandleSearch_MissingAuth(t *testing.T) {
 	registry := NewIdentityRegistry(time.Hour)
-	h := NewHandler(registry, nil)
+	h := NewHandlerWithRateLimit(registry, nil, nil)
 
 	body := `{"query": "test"}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/v1/search", strings.NewReader(body))
@@ -539,7 +539,7 @@ func TestHandleSearch_MissingAuth(t *testing.T) {
 
 func TestHandleSearch_InvalidBody(t *testing.T) {
 	registry := NewIdentityRegistry(time.Hour)
-	h := NewHandler(registry, nil)
+	h := NewHandlerWithRateLimit(registry, nil, nil)
 
 	// Issue a valid credential
 	cred, err := registry.IssueCredential("test-autoputer")
@@ -561,7 +561,7 @@ func TestHandleSearch_InvalidBody(t *testing.T) {
 
 func TestHandleSearch_EmptyQuery(t *testing.T) {
 	registry := NewIdentityRegistry(time.Hour)
-	h := NewHandler(registry, nil)
+	h := NewHandlerWithRateLimit(registry, nil, nil)
 
 	// Issue a valid credential
 	cred, err := registry.IssueCredential("test-autoputer")
@@ -583,7 +583,7 @@ func TestHandleSearch_EmptyQuery(t *testing.T) {
 
 func TestHandleSearch_NoProvidersConfigured(t *testing.T) {
 	registry := NewIdentityRegistry(time.Hour)
-	h := NewHandler(registry, nil)
+	h := NewHandlerWithRateLimit(registry, nil, nil)
 	h.searchClient = testSearchClient(nil, 1)
 
 	// Issue a valid credential

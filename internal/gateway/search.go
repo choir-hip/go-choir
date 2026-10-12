@@ -86,11 +86,6 @@ type SearchProviderAttempt struct {
 	Error     string `json:"error,omitempty"`
 }
 
-type searchProviderBatch struct {
-	provider string
-	results  []SearchResult
-}
-
 // SearchRequest is the incoming search request payload.
 type SearchRequest struct {
 	// Query is the search query string (required).
@@ -177,18 +172,6 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 	return c.searchViaPlane(ctx, req)
 }
 
-func intFromEnv(name string, fallback int) int {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return fallback
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return fallback
-	}
-	return value
-}
-
 func normalizeSearchResultURL(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -231,14 +214,6 @@ func searchProviderEndpoint(provider string) string {
 	default:
 		return ""
 	}
-}
-
-func truncateSearchAttemptError(err error) string {
-	msg := strings.TrimSpace(searchplane.RedactSummary(err.Error()))
-	if len(msg) > 240 {
-		return msg[:240] + "..."
-	}
-	return msg
 }
 
 // --- SearXNG Provider ---

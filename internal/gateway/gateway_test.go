@@ -336,13 +336,13 @@ func setupHandler(t *testing.T) (*Handler, *IdentityRegistry, *mockProvider) {
 			Usage:        provider.Usage{InputTokens: 10, OutputTokens: 20},
 		},
 	}
-	return NewHandler(reg, mp), reg, mp
+	return NewHandlerWithRateLimit(reg, mp, nil), reg, mp
 }
 
 func setupHandlerNoProvider(t *testing.T) (*Handler, *IdentityRegistry) {
 	t.Helper()
 	reg := NewIdentityRegistry(1 * time.Hour)
-	return NewHandler(reg, nil), reg
+	return NewHandlerWithRateLimit(reg, nil, nil), reg
 }
 
 func TestHandleInference_DeniesExternalPeerWithValidToken(t *testing.T) {
@@ -781,286 +781,6 @@ func TestStaleCredentialAfterRotation(t *testing.T) {
 	}
 }
 
-func TestGatewayClientCall_MissingTokenFailsBeforeHTTP(t *testing.T) {
-	called := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusTeapot)
-	}))
-	defer server.Close()
-
-	client := NewGatewayClient(server.URL, "  ")
-	_, err := client.Call(context.Background(), provider.LLMRequest{
-		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
-	})
-	if err == nil {
-		t.Fatal("expected missing credential error")
-	}
-	if !strings.Contains(err.Error(), "missing autoputer credential") {
-		t.Fatalf("error = %q, want missing autoputer credential", err.Error())
-	}
-	if called {
-		t.Fatal("gateway server was called despite missing token")
-	}
-}
-
-func TestGatewayClientStream_MissingTokenFailsBeforeHTTP(t *testing.T) {
-	called := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called = true
-		w.WriteHeader(http.StatusTeapot)
-	}))
-	defer server.Close()
-
-	client := NewGatewayClient(server.URL, "")
-	_, err := client.Stream(context.Background(), provider.LLMRequest{
-		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
-	}, func(provider.StreamChunk) {})
-	if err == nil {
-		t.Fatal("expected missing credential error")
-	}
-	if !strings.Contains(err.Error(), "missing autoputer credential") {
-		t.Fatalf("error = %q, want missing autoputer credential", err.Error())
-	}
-	if called {
-		t.Fatal("gateway server was called despite missing token")
-	}
-}
-
-func TestGatewayClientCall_InvalidToken(t *testing.T) {
-	reg := NewIdentityRegistry(1 * time.Hour)
-	mp := &mockProvider{name: "bedrock", real: true}
-	handler := NewHandler(reg, mp)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/provider/v1/inference", handler.HandleInference)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	client := NewGatewayClient(server.URL, "invalid-autoputer:invalid-token")
-
-	_, err := client.Call(context.Background(), provider.LLMRequest{
-		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
-	})
-	if err == nil {
-		t.Fatal("expected error with invalid token")
-	}
-	if !strings.Contains(err.Error(), "authentication") && !strings.Contains(err.Error(), "sanitized") {
-		t.Errorf("error = %q, want auth or sanitized error", err.Error())
-	}
-}
-
-func TestGatewayClientCall_RevokedToken(t *testing.T) {
-	reg := NewIdentityRegistry(1 * time.Hour)
-	mp := &mockProvider{name: "bedrock", real: true}
-	handler := NewHandler(reg, mp)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/provider/v1/inference", handler.HandleInference)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	// Issue and immediately revoke.
-	result, _ := reg.IssueCredential("autoputer-revoke-test")
-	reg.RevokeCredential("autoputer-revoke-test")
-
-	client := NewGatewayClient(server.URL, result.RawToken)
-
-	_, err := client.Call(context.Background(), provider.LLMRequest{
-		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
-	})
-	if err == nil {
-		t.Fatal("expected error with revoked token")
-	}
-}
-
-func TestGatewayClientStream(t *testing.T) {
-	reg := NewIdentityRegistry(1 * time.Hour)
-	mp := &mockProvider{
-		name: "zai",
-		real: true,
-		response: &provider.LLMResponse{
-			ID:           "resp-stream-1",
-			Text:         "Streaming response text",
-			Model:        "glm-5-turbo",
-			StopReason:   "end_turn",
-			ProviderName: "zai",
-			Usage:        provider.Usage{InputTokens: 10, OutputTokens: 25},
-		},
-	}
-
-	handler := NewHandler(reg, mp)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/provider/v1/inference", handler.HandleInference)
-	mux.HandleFunc("/health", handler.HandleHealth)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	result, err := reg.IssueCredential("autoputer-stream-test")
-	if err != nil {
-		t.Fatalf("issue credential: %v", err)
-	}
-
-	client := NewGatewayClient(server.URL, result.RawToken)
-
-	// Stream through the gateway client.
-	var chunks []provider.StreamChunk
-	resp, err := client.Stream(context.Background(), provider.LLMRequest{
-		Model:     "glm-5-turbo",
-		System:    "You are helpful",
-		Messages:  []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Say hi"}}}},
-		MaxTokens: 100,
-		Stream:    true,
-	}, func(chunk provider.StreamChunk) {
-		chunks = append(chunks, chunk)
-	})
-	if err != nil {
-		t.Fatalf("stream: %v", err)
-	}
-
-	// Verify the accumulated response text (text comes from delta chunks).
-	if resp.Text != "Streaming response text" {
-		t.Errorf("Text = %q, want %q", resp.Text, "Streaming response text")
-	}
-
-	// Note: Model and StopReason may not be populated in the accumulated
-	// response if the mock provider doesn't emit message_start/message_delta
-	// events. In production, the real providers emit these events. The
-	// GatewayClient.Stream() accumulates them from the SSE stream when present.
-
-	// Verify we received at least one chunk.
-	if len(chunks) == 0 {
-		t.Fatal("expected at least one streaming chunk")
-	}
-
-	// Verify the delta chunk contains the text.
-	hasDelta := false
-	for _, chunk := range chunks {
-		if chunk.Type == "content_block_delta" && chunk.Delta != "" {
-			hasDelta = true
-			if chunk.Delta != "Streaming response text" {
-				t.Errorf("delta = %q, want %q", chunk.Delta, "Streaming response text")
-			}
-		}
-	}
-	if !hasDelta {
-		t.Error("expected content_block_delta chunk with text")
-	}
-}
-
-func TestGatewayClientStream_Error(t *testing.T) {
-	reg := NewIdentityRegistry(1 * time.Hour)
-	mp := &mockProvider{
-		name: "zai",
-		real: true,
-		err:  fmt.Errorf("provider unavailable"),
-	}
-
-	handler := NewHandler(reg, mp)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/provider/v1/inference", handler.HandleInference)
-	server := httptest.NewServer(mux)
-	defer server.Close()
-
-	result, err := reg.IssueCredential("autoputer-stream-err")
-	if err != nil {
-		t.Fatalf("issue credential: %v", err)
-	}
-
-	client := NewGatewayClient(server.URL, result.RawToken)
-
-	_, err = client.Stream(context.Background(), provider.LLMRequest{
-		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
-	}, func(chunk provider.StreamChunk) {})
-	if err == nil {
-		t.Fatal("expected error from streaming with provider error")
-	}
-}
-
-func TestGatewayClientStream_SSEAccumulation(t *testing.T) {
-	// Test parseGatewaySSE directly with a proper SSE stream containing
-	// message_start, content_block_delta, and message_stop events.
-	sseData := `data: {"type":"message_start","id":"msg-1","model":"glm-5-turbo"}
-
-data: {"type":"content_block_delta","delta":"Hello ","index":0}
-
-data: {"type":"content_block_delta","delta":"world","index":0}
-
-data: {"type":"message_delta","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":5}}
-
-data: [DONE]
-
-`
-	var chunks []provider.StreamChunk
-	resp, err := parseGatewaySSE(strings.NewReader(sseData), func(chunk provider.StreamChunk) {
-		chunks = append(chunks, chunk)
-	})
-	if err != nil {
-		t.Fatalf("parseGatewaySSE: %v", err)
-	}
-
-	// Verify accumulated text.
-	if resp.Text != "Hello world" {
-		t.Errorf("Text = %q, want %q", resp.Text, "Hello world")
-	}
-	if resp.Model != "glm-5-turbo" {
-		t.Errorf("Model = %q, want %q", resp.Model, "glm-5-turbo")
-	}
-	if resp.StopReason != "end_turn" {
-		t.Errorf("StopReason = %q, want %q", resp.StopReason, "end_turn")
-	}
-	if resp.ID != "msg-1" {
-		t.Errorf("ID = %q, want %q", resp.ID, "msg-1")
-	}
-	if resp.Usage.InputTokens != 10 || resp.Usage.OutputTokens != 5 {
-		t.Errorf("Usage = %+v, want {10 5}", resp.Usage)
-	}
-
-	// Verify chunks were forwarded.
-	if len(chunks) != 4 { // message_start, 2 deltas, message_delta
-		t.Errorf("chunks = %d, want 4", len(chunks))
-	}
-}
-
-func TestGatewayClientStream_SSEError(t *testing.T) {
-	// Test parseGatewaySSE with an error event in the stream.
-	sseData := `data: {"error":"rate limit exceeded"}
-
-`
-	_, err := parseGatewaySSE(strings.NewReader(sseData), func(chunk provider.StreamChunk) {})
-	if err == nil {
-		t.Fatal("expected error from SSE error event")
-	}
-	if !strings.Contains(err.Error(), "rate limit exceeded") {
-		t.Errorf("error = %q, want rate limit exceeded", err.Error())
-	}
-}
-
-func TestGatewayClientStream_SSEInvalidJSON(t *testing.T) {
-	// Test parseGatewaySSE with invalid JSON (should be skipped, not error).
-	sseData := `data: not-json
-
-data: {"type":"content_block_delta","delta":"valid","index":0}
-
-data: [DONE]
-
-`
-	var chunks []provider.StreamChunk
-	resp, err := parseGatewaySSE(strings.NewReader(sseData), func(chunk provider.StreamChunk) {
-		chunks = append(chunks, chunk)
-	})
-	if err != nil {
-		t.Fatalf("parseGatewaySSE: %v", err)
-	}
-	if resp.Text != "valid" {
-		t.Errorf("Text = %q, want %q", resp.Text, "valid")
-	}
-	if len(chunks) != 1 {
-		t.Errorf("chunks = %d, want 1 (invalid JSON skipped)", len(chunks))
-	}
-}
-
 func TestSanitizeError_BearerLeak(t *testing.T) {
 	err := fmt.Errorf("upstream failed: Authorization: Bearer sk-12345-secret")
 	sanitized := sanitizeError(err)
@@ -1245,7 +965,7 @@ func setupMultiProviderHandler(t *testing.T) (*Handler, *IdentityRegistry) {
 	mp.Register("bedrock", bedrockProvider)
 	mp.Register("chatgpt", chatgptProvider)
 
-	return NewMultiHandler(reg, mp), reg
+	return NewMultiHandlerWithRateLimit(reg, mp, nil), reg
 }
 
 func TestMultiProvider_RoutesToFireworksByProviderField(t *testing.T) {
@@ -1470,7 +1190,7 @@ func TestMultiProvider_ProviderErrorSanitized(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("fireworks", fireworksProvider)
 
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
 	result, _ := reg.IssueCredential("autoputer-fw-err")
 
@@ -1527,7 +1247,7 @@ func TestMultiProvider_FireworksToolCalls(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("fireworks", fireworksProvider)
 
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
 	result, _ := reg.IssueCredential("autoputer-fw-tools")
 
@@ -1652,7 +1372,7 @@ func TestHandleInference_StreamingZAI(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("zai", zaiProvider)
 
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
 	result, _ := reg.IssueCredential("autoputer-zai-stream")
 
@@ -1713,7 +1433,7 @@ func TestHandleInference_StreamingFireworks(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("fireworks", fireworksProvider)
 
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
 	result, _ := reg.IssueCredential("autoputer-fw-stream")
 
@@ -1759,7 +1479,7 @@ func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
 	}
 	mp := provider.NewMultiProvider()
 	mp.Register("chatgpt", chatProvider)
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 	credential, _ := reg.IssueCredential("autoputer-openai")
 
 	body := `{
@@ -1829,7 +1549,7 @@ func TestHandleOpenAIChatCompletions_StreamingSSE(t *testing.T) {
 	}
 	mp := provider.NewMultiProvider()
 	mp.Register("chatgpt", chatProvider)
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 	credential, _ := reg.IssueCredential("autoputer-openai-stream")
 
 	body := `{"model":"gpt-6-luna","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"medium","stream":true}`
@@ -1877,7 +1597,7 @@ func TestHandleOpenAIChatCompletions_StreamingToolCallsAreComplete(t *testing.T)
 	}
 	mp := provider.NewMultiProvider()
 	mp.Register("chatgpt", chatProvider)
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 	credential, _ := reg.IssueCredential("autoputer-openai-stream-tools")
 
 	body := `{
@@ -1962,7 +1682,7 @@ func TestHandleOpenAIChatCompletions_StreamingToolCallsAreComplete(t *testing.T)
 
 func TestHandleOpenAIModelsRequiresAutoputerAuth(t *testing.T) {
 	reg := NewIdentityRegistry(1 * time.Hour)
-	h := NewHandler(reg, nil)
+	h := NewHandlerWithRateLimit(reg, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/provider/openai/v1/models", nil)
 	w := httptest.NewRecorder()
@@ -1999,7 +1719,7 @@ func TestHandleInference_StreamingRequiresAuth(t *testing.T) {
 
 	mp := provider.NewMultiProvider()
 	mp.Register("zai", zaiProvider)
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
 	payload := ProviderRequest{
 		Provider: "zai",
@@ -2033,7 +1753,7 @@ func TestHandleInference_StreamingProviderError(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("zai", zaiProvider)
 
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
 	result, _ := reg.IssueCredential("autoputer-zai-stream-err")
 
@@ -2113,7 +1833,7 @@ func TestProviderRouting(t *testing.T) {
 	mp.Register("zai", zaiProvider)
 	mp.Register("bedrock", bedrockProvider)
 
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 
 	// Issue a single credential for all sub-tests.
 	cred, _ := reg.IssueCredential("autoputer-routing-test")
@@ -2296,7 +2016,7 @@ func TestProviderRouting_InvalidProviderDoesNotLeakCredentials(t *testing.T) {
 	mp := provider.NewMultiProvider()
 	mp.Register("zai", zaiProvider)
 
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 	cred, _ := reg.IssueCredential("autoputer-cred-leak")
 
 	for _, providerName := range []string{"openai", "bedrock", "deepseek", "nonexistent"} {
@@ -2361,60 +2081,5 @@ func TestHandleInference_StreamingModelRoutingToZAI(t *testing.T) {
 	respBody := w.Body.String()
 	if !strings.Contains(respBody, "Hello from Z.AI!") {
 		t.Errorf("expected Z.AI streaming response, got: %s", respBody)
-	}
-}
-
-func TestGatewayClientCall_RetriesTruncatedJSONBody(t *testing.T) {
-	var attempts int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attempts++
-		w.Header().Set("Content-Type", "application/json")
-		if attempts == 1 {
-			// Simulate a connection that dropped after headers — ReadAll
-			// returned partial bytes without error, leaving a JSON decoder
-			// with an unexpected-EOF body.
-			_, _ = w.Write([]byte(`{"id":"r1","text":"part`))
-			return
-		}
-		_, _ = w.Write([]byte(`{"id":"r1","text":"ok","model":"m","stop_reason":"end_turn","usage":{}}`))
-	}))
-	defer server.Close()
-
-	client := NewGatewayClient(server.URL, "tok")
-	resp, err := client.Call(context.Background(), provider.LLMRequest{
-		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
-	})
-	if err != nil {
-		t.Fatalf("Call err = %v, want nil after retrying truncated body", err)
-	}
-	if attempts < 2 {
-		t.Fatalf("attempts = %d, want >=2 (truncated body retried)", attempts)
-	}
-	if resp.Text != "ok" {
-		t.Fatalf("resp.Text = %q, want ok", resp.Text)
-	}
-}
-
-func TestGatewayClientCall_PermanentJSONFailure(t *testing.T) {
-	var attempts int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attempts++
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"r1","text":"part`))
-	}))
-	defer server.Close()
-
-	client := NewGatewayClient(server.URL, "tok")
-	_, err := client.Call(context.Background(), provider.LLMRequest{
-		Messages: []provider.Message{{Role: "user", Content: []provider.Block{{Type: "text", Text: "Hi"}}}},
-	})
-	if err == nil {
-		t.Fatal("expected error when every attempt returns truncated JSON")
-	}
-	if attempts != 3 {
-		t.Fatalf("attempts = %d, want 3 (bounded retries)", attempts)
-	}
-	if !strings.Contains(err.Error(), "decode response") {
-		t.Fatalf("err = %q, want decode response", err.Error())
 	}
 }

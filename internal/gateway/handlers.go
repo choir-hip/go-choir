@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -126,20 +125,6 @@ type Handler struct {
 
 const internalCallerHeader = "X-Internal-Caller"
 
-// NewHandler creates a gateway Handler with the given identity registry
-// and a single provider. The provider may be nil if no real provider is
-// configured; in that case, inference requests will fail with a clear error.
-// No rate limiting is applied when using this constructor.
-func NewHandler(registry *IdentityRegistry, p provider.Provider) *Handler {
-	return &Handler{
-		registry:     registry,
-		provider:     p,
-		providers:    nil,
-		rateLimiter:  nil,
-		searchClient: NewSearchClient(),
-	}
-}
-
 // NewHandlerWithRateLimit creates a gateway Handler with per-autoputer rate
 // limiting and a single provider. Each autoputer identity gets an independent
 // request quota so one noisy autoputer cannot starve another
@@ -150,19 +135,6 @@ func NewHandlerWithRateLimit(registry *IdentityRegistry, p provider.Provider, rl
 		provider:     p,
 		providers:    nil,
 		rateLimiter:  rl,
-		searchClient: NewSearchClient(),
-	}
-}
-
-// NewMultiHandler creates a gateway Handler with multi-provider routing.
-// The gateway selects the appropriate provider based on the request's
-// provider field or model parameter (VAL-LLM-001, VAL-LLM-005).
-func NewMultiHandler(registry *IdentityRegistry, mp *provider.MultiProvider) *Handler {
-	return &Handler{
-		registry:     registry,
-		provider:     nil,
-		providers:    mp,
-		rateLimiter:  nil,
 		searchClient: NewSearchClient(),
 	}
 }
@@ -843,14 +815,6 @@ func writeGatewayJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Printf("gateway: json encode error: %v", err)
-	}
-}
-
-// drainBody reads and discards the response body to allow connection reuse.
-// nolint:unused
-func drainBody(resp *http.Response) {
-	if resp != nil && resp.Body != nil {
-		_, _ = io.Copy(io.Discard, resp.Body)
 	}
 }
 

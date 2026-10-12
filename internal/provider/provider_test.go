@@ -13,9 +13,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestMaxOutputTokensForModelUsesSupportedModelCatalog(t *testing.T) {
@@ -76,7 +73,6 @@ func TestBedrockProviderCallError(t *testing.T) {
 	}
 }
 
-
 // --- Z.AI Provider Tests ---
 
 func TestZAIProviderRequiresAPIKey(t *testing.T) {
@@ -114,7 +110,6 @@ func TestZAIProviderCallError(t *testing.T) {
 		t.Errorf("error message should be sanitized, got: %v", err)
 	}
 }
-
 
 // --- Resolve Provider Tests ---
 
@@ -367,129 +362,6 @@ func testJWTWithExpiry(t *testing.T, exp time.Time) string {
 }
 
 // --- Bridge Provider Tests ---
-
-type mockLLMProvider struct {
-	name    string
-	isReal  bool
-	resp    *LLMResponse
-	err     error
-	called  bool
-	lastReq *LLMRequest
-}
-
-func (m *mockLLMProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
-	m.called = true
-	m.lastReq = &req
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.resp, nil
-}
-
-func (m *mockLLMProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	resp, err := m.Call(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	// Emit a single text delta chunk for the mock.
-	if resp.Text != "" {
-		onChunk(StreamChunk{
-			Type:  "content_block_delta",
-			Delta: resp.Text,
-			Index: 0,
-		})
-	}
-	return resp, nil
-}
-
-func (m *mockLLMProvider) Name() string { return m.name }
-func (m *mockLLMProvider) IsReal() bool { return m.isReal }
-func TestBridgeProviderExecuteFailure(t *testing.T) {
-	mock := &mockLLMProvider{
-		name:   "failing-provider",
-		isReal: true,
-		err:    fmt.Errorf("upstream timeout"),
-	}
-
-	bridge := NewBridgeProvider(mock)
-
-	task := &types.RunRecord{
-		RunID:   "task-2",
-		OwnerID: "user-1",
-		Prompt:  "This should fail",
-	}
-
-	var events []struct {
-		kind    types.EventKind
-		phase   string
-		payload json.RawMessage
-	}
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		events = append(events, struct {
-			kind    types.EventKind
-			phase   string
-			payload json.RawMessage
-		}{kind, phase, payload})
-	}
-
-	err := bridge.Execute(context.Background(), task, emit)
-	if err == nil {
-		t.Fatal("expected error from failed provider call")
-	}
-	if !strings.Contains(err.Error(), "failing-provider") {
-		t.Errorf("error should mention provider name, got: %v", err)
-	}
-	if !strings.Contains(err.Error(), "upstream timeout") {
-		t.Errorf("error should wrap original error, got: %v", err)
-	}
-
-	// Should have emitted a failure event.
-	var lastPayload map[string]string
-	if err := json.Unmarshal(events[len(events)-1].payload, &lastPayload); err != nil {
-		t.Fatalf("unmarshal last event: %v", err)
-	}
-	if lastPayload["status"] != "failed" {
-		t.Errorf("expected last event status 'failed', got: %s", lastPayload["status"])
-	}
-}
-
-func TestBridgeProviderEventsDistinguishRealFromStub(t *testing.T) {
-	// This test verifies that the events emitted by the bridge provider
-	// contain a "real":"true" marker that distinguishes them from the
-	// stub provider's "provider":"stub" marker.
-	mock := &mockLLMProvider{
-		name:   "bedrock",
-		isReal: true,
-		resp: &LLMResponse{
-			Text:         "real response",
-			Model:        "claude-sonnet",
-			StopReason:   "end_turn",
-			Usage:        Usage{InputTokens: 5, OutputTokens: 3},
-			ProviderName: "bedrock",
-		},
-	}
-
-	bridge := NewBridgeProvider(mock)
-	task := &types.RunRecord{RunID: "t1", Prompt: "test"}
-	var collected []map[string]string
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		var m map[string]string
-		_ = json.Unmarshal(payload, &m)
-		collected = append(collected, m)
-	}
-
-	_ = bridge.Execute(context.Background(), task, emit)
-
-	// Every event should have real="true" and a non-stub provider name.
-	for i, ev := range collected {
-		if ev["real"] != "true" {
-			t.Errorf("event %d: expected real=true, got %s", i, ev["real"])
-		}
-		if ev["provider"] == "stub" {
-			t.Errorf("event %d: provider should not be 'stub'", i)
-		}
-	}
-}
 
 // --- Helper types ---
 
@@ -770,44 +642,6 @@ func TestBedrockProviderCallWithMultipleToolUse(t *testing.T) {
 		if tc.Name != names[i] {
 			t.Errorf("tool_calls[%d].name: got %q, want %q", i, tc.Name, names[i])
 		}
-	}
-}
-func TestBridgeProviderCallWithToolsEndTurn(t *testing.T) {
-	// When the inner provider returns end_turn, CallWithTools should
-	// return an end_turn response without tool calls.
-	mock := &mockLLMProvider{
-		name:   "test-provider",
-		isReal: true,
-		resp: &LLMResponse{
-			ID:         "msg_end",
-			Text:       "The answer is 42.",
-			StopReason: "end_turn",
-			Usage:      Usage{InputTokens: 10, OutputTokens: 20},
-			ToolCalls:  nil,
-		},
-	}
-
-	bridge := NewBridgeProvider(mock)
-
-	req := provideriface.ToolLoopRequest{
-		System:    "You are helpful.",
-		Messages:  []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"What is the answer?"}]}`)},
-		MaxTokens: 4096,
-	}
-
-	resp, err := bridge.CallWithTools(context.Background(), req)
-	if err != nil {
-		t.Fatalf("call with tools: %v", err)
-	}
-
-	if resp.StopReason != "end_turn" {
-		t.Errorf("stop_reason: got %q, want end_turn", resp.StopReason)
-	}
-	if resp.Text != "The answer is 42." {
-		t.Errorf("text: got %q, want 'The answer is 42.'", resp.Text)
-	}
-	if len(resp.ToolCalls) != 0 {
-		t.Errorf("tool_calls: got %d, want 0", len(resp.ToolCalls))
 	}
 }
 func TestValidateMediaRequestRejectsTextOnlyModelImages(t *testing.T) {
@@ -1209,94 +1043,10 @@ func TestBedrockProviderStreamFallback(t *testing.T) {
 		t.Errorf("expected at least 3 chunks, got %d", len(chunks))
 	}
 }
+
 // --- Helper: capturing LLM provider ---
 
-// capturingLLMProvider captures the LLMRequest before returning a canned response.
-type capturingLLMProvider struct {
-	name    string
-	resp    *LLMResponse
-	capture func(LLMRequest)
-}
-
-func (c *capturingLLMProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
-	if c.capture != nil {
-		c.capture(req)
-	}
-	return c.resp, nil
-}
-
-func (c *capturingLLMProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	return c.Call(ctx, req)
-}
-
-func (c *capturingLLMProvider) Name() string { return c.name }
-func (c *capturingLLMProvider) IsReal() bool { return true }
-
 // --- BridgeProvider Streaming Tests ---
-
-// streamingMockProvider is a mock LLM provider that emits multiple text chunks
-// during streaming to simulate real SSE behavior.
-type streamingMockProvider struct {
-	name   string
-	chunks []string
-	resp   *LLMResponse
-}
-
-func (s *streamingMockProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
-	return s.resp, nil
-}
-
-func (s *streamingMockProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	for i, chunk := range s.chunks {
-		onChunk(StreamChunk{
-			Type:  "content_block_delta",
-			Delta: chunk,
-			Index: 0,
-		})
-		_ = i
-	}
-	// Emit stop event.
-	onChunk(StreamChunk{
-		Type:       "message_stop",
-		StopReason: s.resp.StopReason,
-		Usage:      &StreamUsage{InputTokens: s.resp.Usage.InputTokens, OutputTokens: s.resp.Usage.OutputTokens},
-	})
-	return s.resp, nil
-}
-
-func (s *streamingMockProvider) Name() string { return s.name }
-func (s *streamingMockProvider) IsReal() bool { return true }
-// streamMethodTrackerProvider tracks which methods (Call vs Stream) are invoked.
-type streamMethodTrackerProvider struct {
-	name         string
-	resp         *LLMResponse
-	streamCalled bool
-	callCalled   bool
-	capturedReq  *LLMRequest
-}
-
-func (s *streamMethodTrackerProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
-	s.callCalled = true
-	s.capturedReq = &req
-	return s.resp, nil
-}
-
-func (s *streamMethodTrackerProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	s.streamCalled = true
-	s.capturedReq = &req
-	// Emit a single delta chunk.
-	if s.resp.Text != "" {
-		onChunk(StreamChunk{
-			Type:  "content_block_delta",
-			Delta: s.resp.Text,
-			Index: 0,
-		})
-	}
-	return s.resp, nil
-}
-
-func (s *streamMethodTrackerProvider) Name() string { return s.name }
-func (s *streamMethodTrackerProvider) IsReal() bool { return true }
 
 func TestOpenCodeProviderFailsClosedWithoutConversationID(t *testing.T) {
 	var calls atomic.Int32

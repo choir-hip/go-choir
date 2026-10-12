@@ -235,7 +235,7 @@ func TestInferencePath_CircuitBreakerOpen(t *testing.T) {
 
 	mp := provider.NewMultiProvider()
 	mp.Register("stub", cbp)
-	h := NewMultiHandler(reg, mp)
+	h := NewMultiHandlerWithRateLimit(reg, mp, nil)
 	breakers := NewBreakerRegistry()
 	breakers.Register("stub", cbp.Breaker())
 	h.SetBreakers(breakers)

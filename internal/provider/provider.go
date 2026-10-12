@@ -1341,35 +1341,6 @@ type openAIChatCompletionUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-type openAIResponse struct {
-	ID     string               `json:"id"`
-	Model  string               `json:"model,omitempty"`
-	Output []openAIResponseItem `json:"output"`
-	Usage  openAIUsage          `json:"usage"`
-}
-
-type openAIUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-	TotalTokens  int `json:"total_tokens"`
-}
-
-type openAIResponseItem struct {
-	Type      string                  `json:"type"`
-	ID        string                  `json:"id,omitempty"`
-	CallID    string                  `json:"call_id,omitempty"`
-	Name      string                  `json:"name,omitempty"`
-	Arguments json.RawMessage         `json:"arguments,omitempty"`
-	Content   []openAIResponseContent `json:"content,omitempty"`
-	Role      string                  `json:"role,omitempty"`
-	Status    string                  `json:"status,omitempty"`
-}
-
-type openAIResponseContent struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-}
-
 func convertOpenAIInput(messages []Message) []openAIItem {
 	out := make([]openAIItem, 0, len(messages))
 	for _, msg := range messages {
@@ -1654,26 +1625,6 @@ func anthropicToolChoice(choice string) any {
 			return map[string]string{"type": "tool", "name": strings.TrimSpace(name)}
 		}
 		return nil
-	}
-}
-
-func anthropicThinkingForReasoning(reasoning string) *anthropicThinking {
-	switch strings.ToLower(strings.TrimSpace(reasoning)) {
-	case "":
-		return nil
-	case "none", "disabled", "off":
-		return &anthropicThinking{Type: "disabled"}
-	case "low":
-		return &anthropicThinking{Type: "enabled", BudgetTokens: 1024}
-	case "medium":
-		return &anthropicThinking{Type: "enabled", BudgetTokens: 2048}
-	case "high":
-		return &anthropicThinking{Type: "enabled", BudgetTokens: 4096}
-	default:
-		if n, err := strconv.Atoi(strings.TrimSpace(reasoning)); err == nil && n > 0 {
-			return &anthropicThinking{Type: "enabled", BudgetTokens: n}
-		}
-		return &anthropicThinking{Type: "enabled", BudgetTokens: 2048}
 	}
 }
 
@@ -2000,52 +1951,6 @@ func parseAnthropicResponse(resp *http.Response, modelID string, providerName st
 		}
 	}
 	result.ReasoningContent = encodeAnthropicThinkingBlocks(payload.Content)
-
-	log.Printf("provider: %s response model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
-		providerName, result.Model, result.StopReason,
-		result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
-
-	return result, nil
-}
-
-func parseOpenAIResponse(resp *http.Response, modelID string, providerName string) (*LLMResponse, error) {
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		logRejectedRequest(providerName, resp)
-		return nil, fmt.Errorf("%s: status %s (sanitized)", providerName, resp.Status)
-	}
-
-	var payload openAIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("%s: decode response: %w", providerName, err)
-	}
-
-	result := &LLMResponse{
-		ID:           payload.ID,
-		Model:        coalesce(payload.Model, modelID),
-		Usage:        Usage{InputTokens: payload.Usage.InputTokens, OutputTokens: payload.Usage.OutputTokens},
-		ProviderName: providerName,
-	}
-
-	for _, item := range payload.Output {
-		switch item.Type {
-		case "message":
-			for _, part := range item.Content {
-				if part.Text != "" {
-					result.Text += part.Text
-				}
-			}
-			if result.StopReason == "" {
-				result.StopReason = "end_turn"
-			}
-		case "function_call":
-			result.ToolCalls = append(result.ToolCalls, ContentToolCall{
-				ID:        item.CallID,
-				Name:      item.Name,
-				Arguments: canonicalJSON(item.Arguments),
-			})
-			result.StopReason = "tool_use"
-		}
-	}
 
 	log.Printf("provider: %s response model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
 		providerName, result.Model, result.StopReason,
