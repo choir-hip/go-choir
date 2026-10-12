@@ -7,7 +7,7 @@ Adding a shell app should be one registry/component operation:
 
 1. Create the Svelte component under `frontend/src/lib`.
 2. Add one `ChoirAppDefinition` entry in `registry.ts`.
-3. Use `AppSurface` automatically through `AppHost`; use `AppToolbar`, `AppButton`, `AppCard`, `AppList`, `AppTabs`, and `AppEmptyState` for app-local UI.
+3. Use `AppSurface` automatically through `AppHost`.
 
 The registry entry owns app identity, launcher order, desktop icon visibility, mobile switcher participation, singleton/heavy/window geometry, logged-out preview policy, auth-required actions, themed shell data attributes, and surface type. DeskSheet, desktop icons, mobile app switching, app windows, heavy-app metadata, and overview tests derive from the registry projections.
 
