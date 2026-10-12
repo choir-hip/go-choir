@@ -5,6 +5,8 @@ Fenced cutover that moves the world-wire/corpus tables out of the
 `go-choir-corpus-dolt` (port 13307). Design:
 `docs/archive/platform-dolt-storage-normalization-2026-09-18.md` (Move 2).
 
+**Tools retired 2026-10-12, see git history:** `scripts/dolt-dump-split`, `scripts/og-body-backfill`, `scripts/og-delta-sync`.
+
 **Class:** red (canonical platform store topology change).
 **Rollback:** the pre-cutover dump is the rollback artifact; the env flip is
 a file delete + restart. Never dual-write.

@@ -128,10 +128,6 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (native Wails distribution module; not installed on Node B or guest closures)"
       continue
       ;;
-    scripts/node-b-storage-*|scripts/node-b-data-img-snapshot|scripts/node-b-nix-root-report)
-      add_explanation "$path -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
-      continue
-      ;;
     start-services.sh)
       add_explanation "$path -> ignored (local developer service harness)"
       continue
@@ -141,7 +137,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
-    scripts/check-*.sh|scripts/lint|scripts/generate_*.py|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs)
+    scripts/check-*.sh|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs)
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
@@ -238,7 +234,7 @@ for path in "${changed[@]}"; do
       mark_guest_boot_contract
       add_explanation "$path -> projection recovery consumers + isolated checkpoint worker"
       ;;
-    cmd/corpusd/*|internal/promotion/*)
+    cmd/corpusd/*)
       add_host_service "corpusd"
       add_explanation "$path -> corpusd host service"
       ;;
@@ -277,10 +273,6 @@ for path in "${changed[@]}"; do
       add_host_service "proxy"
       add_host_service "autoputer"
       add_explanation "$path -> shared Markdown structure dependency for runtime/platform publication exports"
-      ;;
-    cmd/shipper/*|internal/shipper/*)
-      mark_host_service
-      add_explanation "$path -> host service closure (no deployed service pointer yet)"
       ;;
     cmd/autoputer/*|internal/autoputer/*)
       add_host_service "autoputer"

@@ -108,24 +108,6 @@ assert_contains "$desktop_shared_frontend_output" "deploy_active_vm_refresh=true
 assert_contains "$desktop_shared_frontend_output" "frontend/src/lib/auth.js -> frontend bundle"
 assert_not_contains "$desktop_shared_frontend_output" "conservative Go impact"
 
-node_b_storage_tooling_output="$(
-  run_classifier \
-    "scripts/node-b-storage-report" \
-    "scripts/node-b-storage-proof" \
-    "scripts/node-b-storage-snapshot-gates" \
-    "scripts/node-b-storage-verify-report" \
-    "scripts/node-b-storage-vm-gates" \
-    "scripts/node-b-data-img-snapshot" \
-    "scripts/node-b-nix-root-report"
-)"
-assert_contains "$node_b_storage_tooling_output" "deploy_needed=false"
-assert_contains "$node_b_storage_tooling_output" "scripts/node-b-storage-report -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
-assert_contains "$node_b_storage_tooling_output" "scripts/node-b-storage-snapshot-gates -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
-assert_contains "$node_b_storage_tooling_output" "scripts/node-b-storage-vm-gates -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
-assert_contains "$node_b_storage_tooling_output" "scripts/node-b-data-img-snapshot -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
-assert_contains "$node_b_storage_tooling_output" "scripts/node-b-nix-root-report -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
-assert_not_contains "$node_b_storage_tooling_output" "unknown deployed path"
-
 pointer_sync_output="$(run_classifier "scripts/node-b-sync-service-pointers")"
 assert_contains "$pointer_sync_output" "deploy_needed=true"
 assert_contains "$pointer_sync_output" "deploy_host=true"
@@ -194,9 +176,7 @@ assert_not_contains "$skill_runtime_output" "deploy_app_layer"
 
 tooling_scripts_output="$(
   run_classifier \
-    "scripts/generate_carrier_narrative_pdf_2026_09_13.py" \
     "scripts/check-heresies.sh" \
-    "scripts/lint" \
     "scripts/mail-resend-setup" \
     "scripts/m3_vmctl_refresh_probe.mjs" \
     "scripts/m11_selfdev_episode_probe.mjs" \
@@ -204,7 +184,6 @@ tooling_scripts_output="$(
     "docs/reports/some-report.md"
 )"
 assert_contains "$tooling_scripts_output" "deploy_needed=false"
-assert_contains "$tooling_scripts_output" "scripts/generate_carrier_narrative_pdf_2026_09_13.py -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_contains "$tooling_scripts_output" "scripts/check-heresies.sh -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_contains "$tooling_scripts_output" "scripts/mail-resend-setup -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_contains "$tooling_scripts_output" "scripts/m11_selfdev_episode_probe.mjs -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
