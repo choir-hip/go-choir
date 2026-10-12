@@ -238,16 +238,18 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 	go func() {
 		select {
 		case <-stdoutOverflow:
-			outCancel()
 		case <-stderrOverflow:
-			outCancel()
 		case <-done:
 			return
 		}
+		// Record the overflow before cancelling: whoever observes the
+		// cancellation must also see why, or an overflow reads as a
+		// timeout.
 		select {
 		case overflowed <- struct{}{}:
 		default:
 		}
+		outCancel()
 	}()
 
 	finish := func(err error, kind DiagnosticKind) (EvalResult, error) {
