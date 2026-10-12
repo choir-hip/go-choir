@@ -42,7 +42,7 @@
     refresh();
     removeLiveListener = addLiveEventListener((message) => {
       const kind = liveEventKind(message);
-      if (kind === 'computer.status.updated' || kind === 'desktop.state.updated' || kind === 'runtime.health' || kind === 'runtime.degraded') {
+      if (kind === 'runtime.health' || kind === 'runtime.degraded') {
         void refresh();
       }
     });
