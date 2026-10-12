@@ -137,6 +137,13 @@ finish:
     id, verb, the request id echoed in the result, and the worker id, so a
     bundle shows which caller got which answer. Every /api/trace citer listed
     above is repointed to the new route or deleted in the same commit.
+    PII (owner 2026-10-12): a bundle is the owner's own data, read by the
+    owner and kept outside the repo, so the export is unredacted. Anything
+    that leaves the owner (a shared bundle, a review panel, an external
+    model) is redacted first by a private decision model, Jev-style and
+    run privately, never by an external API call; internal/pii's Ollama
+    redactor is not that path. The cut records which bundles may leave
+    and leaves the redactor to the station that ships it.
     (2) Tracer: scripts/reeng_tracer.mjs mints a fresh computer
     (qa_test_computer.mjs with the SSH lookup replaced by
     /api/runtime/observability), submits a fixed AI-news story script and a

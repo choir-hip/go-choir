@@ -29,15 +29,22 @@ the owner the questions that a grep cannot answer.
 - **PII redaction is kept** (B5): `internal/pii` and `trace/redact.go` are
   built but not wired, and the trace store they wrap is off. Cut 0 answers
   "are exported traces redacted?" before it ships trace export. B4 (the
-  trace store) is decided in Cut 0 too.
+  trace store) is decided in Cut 0 too. Owner, later the same day: PII
+  redaction will run on a Jev-style private decision model, never an
+  external API ("we can't call Jev over API for PII redaction; that would
+  be the opposite of what we want"); the Ollama small-model redactor is not
+  the path. Recorded in Cut 0 unit (1).
 - **Auth recovery is kept and noted** (B8): production readiness needs an
   auth redesign, after Autopaper's functional requirements are met. The
   broken recovery flow, the passkey and session routes no UI calls, and
   the unreachable root status are inputs to that redesign, recorded in
   [docs/problems/auth-redesign-inputs-2026-10-12.md](../problems/auth-redesign-inputs-2026-10-12.md).
-- **Trusted email outbox** (B7): explained to the owner; the
-  recommendation is delete (decisionpolicy stays, it is live in
-  self-development approval). Held until the owner answers.
+- **Trusted email outbox** (B7): explained to the owner, who agreed with
+  the recommendation: delete it (decisionpolicy stays; it is live in
+  self-development approval). The receipt design is kept in
+  docs/evidence/effects-trusted-outbox-2026-08-16.md.
+- The owner explicitly and categorically approved all of the deletions
+  above (2026-10-12).
 - **Everything else: the recommendations stand** (Part A; B1, B2, B3, B6
   recovery and maild spool, B9 to B16; Part C). Mission probes (A11) still
   wait for Cut 0's tracer.
