@@ -234,6 +234,14 @@ finish:
     are runs with events, their own short prompt and read-only surface, and
     report to the parent research inbox through records; choir.Research
     returns at once; the all-children barrier, window, share and noEmit go.
+    (6b) One child primitive. spawn_agent and cancel_agent are deleted
+    (internal/coagentowner/spawn_tool.go; registered only for the
+    conductor and the base engineering registry, autoputer/run.go:606-625,
+    since every RLM desk is sealed to desk_go_eval, tool_profiles.go:496-502).
+    A desk's children are sub-RLMs on records. The conductor's one live
+    use, opening a Texture from the prompt bar (conductor.yaml:14-16,
+    conductor_run.yaml:9-13), becomes an owner-emitted Cast to a new
+    texture:<doc>.
     (7) Prompts: four desk prompts written once for this system (role and
     judgment by hand; verb list generated from the module set; general
     hypotheses offered as a space to sample from); wake turns carry

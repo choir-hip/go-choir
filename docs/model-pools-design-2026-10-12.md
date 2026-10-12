@@ -112,8 +112,10 @@ field on the agent record or the document, and as a recorded event.
 
 **4. A desk can choose its own model.** One verb, `choir.Model(spec)`,
 sets the desk's model for its next turns (or, from a Texture, the
-document's). choir.Research's `model` and spawn_agent's `model` go through
-the same resolver, validated against the gateway catalog rather than
+document's). choir.Research's `model` and a Cast's optional model go
+through the same resolver (spawn_agent is deleted in Cut 1, decision 6b:
+sub-RLMs are the one child primitive, so M0 does not plumb its dead
+`model` argument), validated against the gateway catalog rather than
 against the guest policy's role list. A child gets its own conversation
 id and the reasoning effort of its own model, not its parent's.
 
