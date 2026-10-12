@@ -25,14 +25,26 @@ metamission:
     - id: M0
       path: docs/model-pools-design-2026-10-12.md
       readiness: reviewed
-      status: pending
+      status: landed (code b0d69d4d; staging acceptance PASS, docs/evidence/m0-model-pools-acceptance-2026-10-12.json; failover-event proof carried to C0)
       depends_on: []
       note: model pools (owner 2026-10-12, "do this configuration setup first"); red; its acceptance is in the design doc
+    - id: D0
+      path: docs/reports/dead-code-census-2026-10-12.md
+      readiness: draft
+      status: pending
+      depends_on: [M0]
+      note: >-
+        dead-code census, then removal (owner 2026-10-12: "identify all the
+        dead code and remove it, after I learn about it and what it
+        does/did"). The census names every dead item with what it does or
+        did, why it is dead, its citers, and whether a cut already deletes
+        it; the owner reads it and rules; removals land before C0 so the
+        cuts start from a smaller system. Read-only until the owner rules.
     - id: C0
       path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
       readiness: reviewed
       status: pending
-      depends_on: [M0]
+      depends_on: [D0]
     - id: C1
       path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
       readiness: reviewed

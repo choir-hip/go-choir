@@ -1595,6 +1595,21 @@ nodes:
       nothing preserved before Autopaper is live. Carries the
       protocol's P2d2 and P3 and Autopaper W2, W3a and W3. Gradual drafts
       R1-R6 (03499ef9) superseded and deleted.
+  - id: choir-reeng-d0-dead-code-2026-10-12
+    title: "D0 — dead-code census and removal before the cuts"
+    path: docs/reports/dead-code-census-2026-10-12.md
+    ledger: ''
+    status: planned
+    kind: subordinate_contract
+    entrypoint: false
+    member_of: choir-reeng-metamission-2026-10-12
+    execution_mode: draft_non_executable
+    depends_on: []
+    enables: [choir-reeng-cut0-eyes-2026-10-12]
+    note: >-
+      Owner 2026-10-12: identify all dead code, learn what it does or did,
+      then remove it. Census written read-only; removals wait for the
+      owner's rulings on its Part B.
   - id: choir-reeng-cut0-eyes-2026-10-12
     title: "Cut 0 — eyes: trace export, tracer, invariant checker, fresh computers, cross-wire and one-REPL fixes"
     path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
@@ -1604,7 +1619,7 @@ nodes:
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12
     execution_mode: draft_non_executable
-    depends_on: []
+    depends_on: [choir-reeng-d0-dead-code-2026-10-12]
     enables: [choir-reeng-cut1-authority-2026-10-12]
   - id: choir-reeng-cut1-authority-2026-10-12
     title: "Cut 1 — authority: records, conversations, hypothesis ids, cursors, crash closure, routing through management"
