@@ -49,8 +49,6 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/run-acceptances/synthesize", h.HandleRunAcceptanceSynthesize)
 	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
 	s.HandleFunc("/api/evals/texture-prompt", texture.HandleTexturePromptEval)
-	s.HandleFunc("/internal/runtime/channel-casts", h.HandleInternalChannelCast)
-	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	s.HandleFunc("/internal/runtime/control-records", h.HandleInternalControlRecords)
 	s.HandleFunc("/internal/runtime/platform-update", h.HandleInternalPlatformUpdate)

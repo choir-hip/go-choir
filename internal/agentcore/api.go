@@ -1,8 +1,6 @@
 package agentcore
 
 import (
-	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,119 +14,19 @@ import (
 	"os"
 
 	"github.com/google/uuid"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/server"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
 // apiError is a JSON error envelope for API responses.
 type apiError struct {
 	Error  string `json:"error"`
 	Reason string `json:"reason,omitempty"`
-}
-
-type internalChannelCastRequest struct {
-	OwnerID     string `json:"owner_id"`
-	ChannelID   string `json:"channel_id"`
-	ToAgentID   string `json:"to_agent_id,omitempty"`
-	ToRunID     string `json:"to_loop_id,omitempty"`
-	FromAgentID string `json:"from_agent_id,omitempty"`
-	FromRunID   string `json:"from_loop_id,omitempty"`
-	From        string `json:"from,omitempty"`
-	Role        string `json:"role,omitempty"`
-	Content     string `json:"content"`
-}
-
-type internalChannelCastResponse struct {
-	Status string `json:"status"`
-	Cursor uint64 `json:"cursor"`
-}
-
-// internalRunSubmitRequest is the retired private service payload shape for
-// historical ingestion processor and reconciler handoffs. New submissions are
-// rejected, but its metadata remains recognized for historical records.
-type internalRunSubmitRequest struct {
-	OwnerID  string         `json:"owner_id"`
-	Prompt   string         `json:"prompt"`
-	Metadata map[string]any `json:"metadata,omitempty"`
-}
-
-const internalRunSubmissionFingerprintMetadataKey = "internal_run_submission_fingerprint"
-
-// These are the historical sourcecycled processor and reconciler fields used to
-// compare a pre-idempotency run that does not yet carry the durable full-request
-// fingerprint. New submissions persist a fingerprint of the complete normalized
-// request metadata, so future metadata additions automatically participate in
-// conflict detection.
-var internalIngestionSubmissionLegacyFingerprintKeys = []string{
-	runMetadataAgentID,
-	runMetadataChannelID,
-	runMetadataAgentProfile,
-	runMetadataAgentRole,
-	"request_source",
-	"activation_origin",
-	"ingestion_event_ids",
-	"source_network_cycle_id",
-	"source_network_request_id",
-	"source_network_request_kind",
-	"ingestion_handoff_request_kind",
-	"ingestion_handoff_request_id",
-	"ingestion_handoff_cycle_id",
-	runMetadataProcessorKey,
-	"source_item_ids",
-	"source_count",
-	"source_types",
-	"verticals",
-	"regions",
-	"continuity_ref",
-	runMetadataReconcilerScope,
-	"processor_request_ids",
-}
-
-func hashInternalRunSubmission(ownerID, prompt string, metadata map[string]any) (string, error) {
-	payload := struct {
-		OwnerID  string         `json:"owner_id"`
-		Prompt   string         `json:"prompt"`
-		Metadata map[string]any `json:"metadata"`
-	}{
-		OwnerID:  strings.TrimSpace(ownerID),
-		Prompt:   prompt,
-		Metadata: metadata,
-	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(encoded)
-	return fmt.Sprintf("%x", sum[:]), nil
-}
-
-func internalRunSubmissionFingerprint(ownerID, prompt string, metadata map[string]any) (string, error) {
-	normalized := make(map[string]any, len(metadata))
-	for key, value := range metadata {
-		if key == internalRunSubmissionFingerprintMetadataKey {
-			continue
-		}
-		normalized[key] = value
-	}
-	return hashInternalRunSubmission(ownerID, prompt, normalized)
-}
-
-func legacyInternalIngestionSubmissionFingerprint(ownerID, prompt string, metadata map[string]any) (string, error) {
-	normalized := make(map[string]any, len(internalIngestionSubmissionLegacyFingerprintKeys))
-	for _, key := range internalIngestionSubmissionLegacyFingerprintKeys {
-		if value, ok := metadata[key]; ok {
-			normalized[key] = value
-		}
-	}
-	return hashInternalRunSubmission(ownerID, prompt, normalized)
 }
 
 type modelPolicyResolveResponse struct {
@@ -316,78 +214,6 @@ func writeAPIJSON(w http.ResponseWriter, status int, v interface{}) {
 	}
 }
 
-func runStatusFromRecord(rec *types.RunRecord) runStatusResponse {
-	if rec == nil {
-		return runStatusResponse{}
-	}
-	var finishedAt *string
-	if rec.FinishedAt != nil {
-		s := rec.FinishedAt.Format("2006-01-02T15:04:05.000Z")
-		finishedAt = &s
-	}
-	return runStatusResponse{
-		AgentID:          rec.AgentID,
-		RunID:            rec.RunID,
-		ChannelID:        rec.ChannelID,
-		RequestedByRunID: rec.RequestedByRunID,
-		AgentProfile:     rec.AgentProfile,
-		AgentRole:        rec.AgentRole,
-		OwnerID:          rec.OwnerID,
-		ComputerID:       rec.ComputerID,
-		State:            rec.State,
-		Prompt:           rec.Prompt,
-		Result:           rec.Result,
-		Error:            rec.Error,
-		CreatedAt:        rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		UpdatedAt:        rec.UpdatedAt.Format("2006-01-02T15:04:05.000Z"),
-		FinishedAt:       finishedAt,
-		ActiveChildRuns:  0,
-		Metadata:         rec.Metadata,
-	}
-}
-
-func (h *APIHandler) runStatusWithTrajectory(ctx context.Context, rec *types.RunRecord) runStatusResponse {
-	resp := runStatusFromRecord(rec)
-	if h == nil || h.rt == nil || rec == nil {
-		return resp
-	}
-	ownerID := strings.TrimSpace(rec.OwnerID)
-	trajectoryID := strings.TrimSpace(trajectoryIDForRun(rec))
-	if trajectoryID == "" {
-		return resp
-	}
-	// Errors are intentionally swallowed: this is a best-effort status
-	// projection, not an authority surface.
-	obligations, err := h.rt.TrajectoryObligations(ctx, ownerID, trajectoryID)
-	if err != nil {
-		return resp
-	}
-	resp.Trajectory = &runTrajectoryStatusResponse{
-		TrajectoryID:      obligations.Trajectory.TrajectoryID,
-		Status:            obligations.Trajectory.Status,
-		SettlementReady:   obligations.SettlementReady,
-		WaitingOn:         append([]string(nil), obligations.WaitingOn...),
-		OpenWorkItemCount: len(obligations.OpenWorkItems),
-	}
-	profile := agentProfileForRun(rec)
-	if profile == frozenProcessorProfile && ownerID != "" {
-		item, found, err := h.rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
-		if err == nil && found {
-			resp.ProcessorResolution = &runProcessorResolutionStatusResponse{
-				WorkItemID:              item.WorkItemID,
-				Status:                  item.Status,
-				ResolutionState:         metadataStringValue(item.Details, wireDetailKeyResolutionState),
-				SourceItemCount:         metadataIntValue(item.Details, "source_item_count"),
-				ResolvedSourceItemCount: metadataIntValue(item.Details, "resolved_source_item_count"),
-				LastDecision:            metadataStringValue(item.Details, wireDetailKeyLastDecision),
-				StoryDocID:              metadataStringValue(item.Details, wireDetailKeyStoryDocID),
-				CoveredByDocID:          metadataStringValue(item.Details, wireDetailKeyCoveredByDocID),
-			}
-		}
-	}
-	return resp
-}
-
 func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -534,167 +360,6 @@ func (h *APIHandler) HandleRunAcceptanceDetail(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, rec)
-}
-
-// HandleInternalRunSubmission handles private typed ingestion handoffs. Durable
-// agent delegation stays inside the guest runtime and never crosses this route.
-func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	if err := requireInternalRuntimeCaller(r); err != nil {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
-		return
-	}
-
-	var req internalRunSubmitRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-	ownerID := strings.TrimSpace(req.OwnerID)
-	if ownerID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id is required"})
-		return
-	}
-	if strings.TrimSpace(req.Prompt) == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "prompt is required"})
-		return
-	}
-	if req.Metadata == nil {
-		req.Metadata = make(map[string]any)
-	}
-	_, err := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))
-	if err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "agent_profile is required and must be a recognized profile"})
-		return
-	}
-	// Processor and reconciler remain recognizable above only to validate
-	// frozen historical request metadata. They cannot admit new runs.
-	rawRequestID, hasRequestID := req.Metadata["ingestion_handoff_request_id"]
-	rawRequestKind, hasRequestKind := req.Metadata["ingestion_handoff_request_kind"]
-	requestID, requestIDIsString := rawRequestID.(string)
-	requestKind, requestKindIsString := rawRequestKind.(string)
-	requestID = strings.TrimSpace(requestID)
-	requestKind = strings.TrimSpace(requestKind)
-	if hasRequestID != hasRequestKind ||
-		(hasRequestID && (!requestIDIsString || !requestKindIsString || requestID == "" || requestKind == "")) {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "ingestion_handoff_request_id and ingestion_handoff_request_kind must be provided together as non-empty strings"})
-		return
-	}
-	writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal ingestion profiles are retired"})
-}
-
-// HandleInternalRunStatus handles GET /internal/runtime/runs/{id}.
-func (h *APIHandler) HandleInternalRunStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	if err := requireInternalRuntimeCaller(r); err != nil {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
-		return
-	}
-	ownerID := strings.TrimSpace(r.URL.Query().Get("owner_id"))
-	if ownerID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id is required"})
-		return
-	}
-	runID := internalRuntimeRunIDFromPath(r.URL.Path)
-	if runID == "" {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
-		return
-	}
-	rec, err := h.rt.GetRun(r.Context(), runID, ownerID)
-	if err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, h.runStatusWithTrajectory(r.Context(), rec))
-}
-
-// HandleInternalRunCancel handles POST /internal/runtime/runs/{id}/cancel.
-// This is the service-to-service cancellation path used by async worker
-// delegation. It is not browser-public and requires the internal caller header.
-func (h *APIHandler) HandleInternalRunCancel(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	if err := requireInternalRuntimeCaller(r); err != nil {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
-		return
-	}
-	ownerID := strings.TrimSpace(r.URL.Query().Get("owner_id"))
-	if ownerID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id is required"})
-		return
-	}
-	runID := internalRuntimeRunIDFromPath(strings.TrimSuffix(r.URL.Path, "/cancel"))
-	if runID == "" {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
-		return
-	}
-	if err := h.rt.CancelRun(r.Context(), runID, ownerID); err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, runStatusResponse{RunID: runID, State: types.RunCancelled})
-}
-
-// HandleInternalChannelCast handles POST /internal/runtime/channel-casts.
-// It accepts unaddressed audit casts from trusted runtime callers. Addressed
-// agent-to-agent wakes must use update_coagent so authority and delivery shape
-// checks stay on the single durable wake primitive.
-func (h *APIHandler) HandleInternalChannelCast(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	if err := requireInternalRuntimeCaller(r); err != nil {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
-		return
-	}
-	var req internalChannelCastRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-	req.OwnerID = strings.TrimSpace(req.OwnerID)
-	req.ChannelID = strings.TrimSpace(req.ChannelID)
-	req.Content = strings.TrimSpace(req.Content)
-	if req.OwnerID == "" || req.ChannelID == "" || req.Content == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id, channel_id, and content are required"})
-		return
-	}
-	runCtx := toolregistry.WithExecutionContext(r.Context(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        strings.TrimSpace(req.FromRunID),
-		AgentID:      firstNonEmpty(strings.TrimSpace(req.FromAgentID), strings.TrimSpace(req.From)),
-		ChannelID:    req.ChannelID,
-		AgentProfile: strings.TrimSpace(req.Role),
-		AgentRole:    strings.TrimSpace(req.Role),
-		OwnerID:      req.OwnerID,
-		Metadata: map[string]any{
-			runMetadataAgentProfile: strings.TrimSpace(req.Role),
-			runMetadataAgentRole:    strings.TrimSpace(req.Role),
-		},
-	}))
-	targetAgentID := strings.TrimSpace(req.ToAgentID)
-	if targetAgentID != "" || strings.TrimSpace(req.ToRunID) != "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "addressed internal channel casts are disabled; use update_coagent for agent-to-agent wake delivery"})
-		return
-	}
-	cursor, err := h.rt.ChannelCast(runCtx, req.ChannelID, "", "", strings.TrimSpace(req.From), strings.TrimSpace(req.Role), req.Content)
-	if err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, internalChannelCastResponse{Status: "cast", Cursor: cursor})
 }
 
 // HandleInternalRunEvents handles internal service-to-service run events.
@@ -1008,15 +673,12 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 }
 
 // HandleInternalRuntimeRunRouter dispatches internal service-to-service run
-// status and event requests. It is intentionally separate from /api/*.
+// event requests (/internal/runtime/runs/{id}/events). It is intentionally
+// separate from /api/*.
 func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(r.URL.Path, "/events") {
 		h.HandleInternalRunEvents(w, r)
 		return
 	}
-	if strings.HasSuffix(r.URL.Path, "/cancel") {
-		h.HandleInternalRunCancel(w, r)
-		return
-	}
-	h.HandleInternalRunStatus(w, r)
+	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "not found"})
 }

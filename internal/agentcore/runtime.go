@@ -88,10 +88,6 @@ type Runtime struct {
 	// and OOM the 4 GiB guest. Default false so tests and frozen historical
 	// processor records still count durable running runs.
 	bootInProgress atomic.Bool
-	// internalIngestionSubmissionMu serializes the historical ingestion
-	// idempotency lookup. The submission endpoint rejects retired processor and
-	// reconciler profiles before it can create runs.
-	internalIngestionSubmissionMu sync.Mutex
 	// lifecycleWorkReconcileMu makes the active-run check and replacement
 	// creation one process-local critical section across terminal hooks and
 	// boot/periodic sweeps.
@@ -3540,11 +3536,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 		return
 	}
-	if err := rt.awaitRequiredChildRuns(ctx, rec, 5*time.Minute); err != nil {
-		rt.handleExecutionError(ctx, rec, err)
-		return
-	}
-
 	// Transition to completed.
 	now := time.Now().UTC()
 	rec.State = types.RunCompleted

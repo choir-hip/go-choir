@@ -144,7 +144,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "bash", "write_file", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "update_coagent", "save_evidence", "capsule_go_eval", "desk_go_eval":
+	case "spawn_agent", "cancel_agent", "save_evidence", "capsule_go_eval", "desk_go_eval":
 		return true
 	default:
 		return false
@@ -198,97 +198,10 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 			}
 		}
 	}
-	planSideEffectToolSkips(profile, calls, setSkip)
 	if len(skipped) == 0 {
 		return nil
 	}
 	return skipped
-}
-
-func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip func(index int, reason string)) {
-	seenManagementSpawn := map[string]int{}
-	seenCoagentUpdate := map[string]int{}
-	seenBash := map[string]int{}
-
-	for i, call := range calls {
-		switch call.Name {
-		case "bash":
-			if profile != agentprofile.Management && profile != agentprofile.Engineering {
-				continue
-			}
-			key := normalizedToolCallArgs(call)
-			if key == "" {
-				continue
-			}
-			if previous, exists := seenBash[key]; exists {
-				setSkip(i, fmt.Sprintf("tool_error: duplicate bash command already planned in this turn at call %s; wait for the first result instead of running it twice", calls[previous].ID))
-				continue
-			}
-			seenBash[key] = i
-		case "spawn_agent":
-			if profile == agentprofile.Management {
-				key, ok := toolCallManagementEngineeringSpawnKey(call)
-				if !ok {
-					continue
-				}
-				if previous, exists := seenManagementSpawn[key]; exists {
-					setSkip(i, fmt.Sprintf("tool_error: duplicate spawn_agent for %s already planned in this turn at call %s; reuse that child instead of launching or reusing it again", key, calls[previous].ID))
-					continue
-				}
-				seenManagementSpawn[key] = i
-			}
-		case "update_coagent":
-			key := normalizedToolCallArgs(call)
-			if key == "" {
-				continue
-			}
-			if previous, exists := seenCoagentUpdate[key]; exists {
-				setSkip(i, fmt.Sprintf("tool_error: duplicate update_coagent payload already planned in this turn at call %s; one addressed durable update is enough", calls[previous].ID))
-				continue
-			}
-			seenCoagentUpdate[key] = i
-		}
-	}
-}
-
-func toolCallManagementEngineeringSpawnKey(call types.ToolCall) (string, bool) {
-	var in struct {
-		Role      string `json:"role"`
-		Profile   string `json:"profile"`
-		Slot      string `json:"slot"`
-		ChannelID string `json:"channel_id"`
-	}
-	if err := json.Unmarshal(call.Arguments, &in); err != nil {
-		return "", false
-	}
-	profile, _ := agentprofile.Canonical(in.Profile)
-	if profile == "" {
-		profile, _ = agentprofile.Canonical(in.Role)
-	}
-	if profile != agentprofile.Engineering {
-		return "", false
-	}
-	slot := normalizeEngineeringSlot(in.Slot)
-	if slot == "" {
-		return "", false
-	}
-	return profile + ":" + slot + ":" + strings.TrimSpace(in.ChannelID), true
-}
-
-func normalizedToolCallArgs(call types.ToolCall) string {
-	raw := strings.TrimSpace(string(call.Arguments))
-	if raw == "" {
-		return "{}"
-	}
-	var decoded any
-	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
-		return raw
-	}
-	encoded, err := json.Marshal(decoded)
-	if err != nil {
-		return raw
-	}
-	return string(encoded)
 }
 
 func toolCallSpawnProfile(call types.ToolCall) string {
@@ -304,17 +217,6 @@ func toolCallSpawnProfile(call types.ToolCall) string {
 		profile, _ = agentprofile.Canonical(in.Role)
 	}
 	return profile
-}
-
-func normalizeEngineeringSlot(raw string) string {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "implementation", "implementer", "worker", "writer", "builder":
-		return "implementation"
-	case "verifier", "verification", "reviewer", "review", "checker", "tester":
-		return "verifier"
-	default:
-		return ""
-	}
 }
 
 func capToolOutput(output string) string {

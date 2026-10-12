@@ -9,18 +9,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// LifecyclePacketIDForRecord derives the canonical lifecycle control packet ID
-// for an immutable commitment record. Re-minting the same record therefore
-// targets the same durable packet identity.
-func LifecyclePacketIDForRecord(recordID string) string {
-	return recordID + ":packet"
-}
-
-func lifecyclePacketIDForRecord(recordID string) string {
-	return LifecyclePacketIDForRecord(recordID)
-}
-
-
 // IssueLifecycleControl queues controls issued by a lifecycle Texture caller
 // run and wakes each newly-created target through the normal lifecycle queue
 // path. Exported so owner-reachable surfaces (e.g. the deterministic
@@ -41,7 +29,7 @@ func (rt *Runtime) IssueOwnerLifecycleControl(ctx context.Context, rec *types.Ru
 
 // issueLifecycleControl queues controls from the exact active Texture run and
 // wakes each newly-created target through the normal lifecycle queue path.
- func (rt *Runtime) issueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string, emitter types.CommitmentEmitterKind) ([]types.CoagentSourcePacket, error) {
+func (rt *Runtime) issueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string, emitter types.CommitmentEmitterKind) ([]types.CoagentSourcePacket, error) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil, fmt.Errorf("issue lifecycle control: runtime, store, and caller run are required")
 	}

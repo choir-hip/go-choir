@@ -936,18 +936,18 @@ func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 			t.Fatalf("register %s: %v", name, err)
 		}
 	}
-	register("bash")
+	register("desk_go_eval")
 	register("read_file")
 
 	results := toolregistry.ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
-		{ID: "call-1", Name: "bash", Arguments: json.RawMessage(`{}`)},
+		{ID: "call-1", Name: "desk_go_eval", Arguments: json.RawMessage(`{}`)},
 		{ID: "call-2", Name: "read_file", Arguments: json.RawMessage(`{}`)},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
-	if results[0].Output != "bash-result" || results[1].Output != "read_file-result" {
+	if results[0].Output != "desk_go_eval-result" || results[1].Output != "read_file-result" {
 		t.Fatalf("results = %+v, want both tool outputs", results)
 	}
-	want := []string{"start:bash", "end:bash", "start:read_file", "end:read_file"}
+	want := []string{"start:desk_go_eval", "end:desk_go_eval", "start:read_file", "end:read_file"}
 	if strings.Join(order, ",") != strings.Join(want, ",") {
 		t.Fatalf("execution order = %v, want %v", order, want)
 	}
@@ -1021,110 +1021,6 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 	if results[1].IsError || results[1].Output != agentprofile.Texture {
 		t.Fatalf("texture spawn result = %#v, want success", results[1])
 	}
-}
-
-func TestExecuteToolsManagementSkipsDuplicateCoordinationSideEffects(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	var mu sync.Mutex
-	counts := map[string]int{}
-	registerCountingTool := func(name string) {
-		t.Helper()
-		if err := registry.Register(toolregistry.Tool{Name: name,
-			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-				mu.Lock()
-				counts[name]++
-				mu.Unlock()
-				return name + " ok", nil
-			}}); err != nil {
-			t.Fatalf("register %s: %v", name, err)
-		}
-	}
-	registerCountingTool("spawn_agent")
-	registerCountingTool("update_coagent")
-
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "super-run",
-		OwnerID:      "owner",
-		AgentProfile: agentprofile.Management,
-	}))
-	calls := []types.ToolCall{
-		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"engineering","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
-		{ID: "spawn-implementation-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"engineering","slot":"implementation","channel_id":"doc-1","objective":"implement again"}`)},
-		{ID: "spawn-verifier", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"engineering","slot":"verifier","channel_id":"doc-1","objective":"verify"}`)},
-		{ID: "cast-1", Name: "update_coagent", Arguments: json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"proceed with exact evidence","agent_id":"agent-impl","claims":[{"text":"proceed with exact evidence"}]}`)},
-		{ID: "cast-2", Name: "update_coagent", Arguments: json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"proceed with exact evidence","agent_id":"agent-impl","claims":[{"text":"proceed with exact evidence"}]}`)},
-	}
-
-	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-
-	mu.Lock()
-	gotCounts := map[string]int{
-		"spawn_agent":    counts["spawn_agent"],
-		"update_coagent": counts["update_coagent"],
-	}
-	mu.Unlock()
-	if gotCounts["spawn_agent"] != 2 || gotCounts["update_coagent"] != 1 {
-		t.Fatalf("executed counts = %+v, want spawn=2 cast=1", gotCounts)
-	}
-	for _, idx := range []int{1, 4} {
-		if !results[idx].IsError || !strings.Contains(results[idx].Output, "duplicate") {
-			t.Fatalf("result[%d] = %#v, want duplicate skip error", idx, results[idx])
-		}
-	}
-	for _, idx := range []int{0, 2, 3} {
-		if results[idx].IsError {
-			t.Fatalf("result[%d] = %#v, want successful execution", idx, results[idx])
-		}
-	}
-}
-
-func TestExecuteToolsEngineeringSkipsDuplicateBashCommand(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	var mu sync.Mutex
-	executions := 0
-	if err := registry.Register(toolregistry.Tool{Name: "bash",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			mu.Lock()
-			executions++
-			mu.Unlock()
-			return "bash ok", nil
-		}}); err != nil {
-		t.Fatalf("register bash: %v", err)
-	}
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "cosuper-run",
-		OwnerID:      "owner",
-		AgentProfile: agentprofile.Engineering,
-	}))
-	calls := []types.ToolCall{
-		{ID: "bash-1", Name: "bash", Arguments: json.RawMessage(`{"command":"go test ./internal/platform","timeout_ms":60000}`)},
-		{ID: "bash-2", Name: "bash", Arguments: json.RawMessage(`{"command":"go test ./internal/platform","timeout_ms":60000}`)},
-	}
-
-	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-
-	mu.Lock()
-	gotExecutions := executions
-	mu.Unlock()
-	if gotExecutions != 1 {
-		t.Fatalf("bash executions = %d, want one", gotExecutions)
-	}
-	if results[0].IsError {
-		t.Fatalf("first bash = %#v, want success", results[0])
-	}
-	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate bash command") {
-		t.Fatalf("second bash = %#v, want duplicate skip", results[1])
-	}
-}
-
-func envValue(env []string, key string) string {
-	prefix := key + "="
-	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			return strings.TrimPrefix(entry, prefix)
-		}
-	}
-	return ""
 }
 
 func TestExecuteToolsDoesNotCapResearchSearchBatch(t *testing.T) {

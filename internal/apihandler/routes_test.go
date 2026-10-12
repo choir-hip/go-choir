@@ -54,9 +54,7 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/run-acceptances/synthesize",
 		"/api/run-acceptances/acceptance-1",
 		"/api/evals/texture-prompt",
-		"/internal/runtime/channel-casts",
-		"/internal/runtime/runs",
-		"/internal/runtime/runs/run-1",
+		"/internal/runtime/runs/run-1/events",
 		"/internal/texture/documents/document-1",
 		"/internal/texture/revisions/revision-1",
 		"/api/texture/documents",
@@ -80,6 +78,9 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/universal-wire/stories",
 		"/internal/runtime/objectgraph/web-captures",
 		"/internal/self-development/restart-handoff",
+		"/internal/runtime/channel-casts",
+		"/internal/runtime/runs/run-1",
+		"/internal/runtime/runs/run-1/cancel",
 	} {
 		if registeredRouteResponds(srv, path) {
 			t.Fatalf("non-canonical route %q is registered", path)

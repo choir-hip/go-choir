@@ -99,39 +99,14 @@ func TestExecuteToolBatchSequentialPolicy(t *testing.T) {
 		atomic.AddInt32(&active, -1)
 		return `{"ok":true}`, nil
 	}
-	for _, name := range []string{"bash", "read_file"} {
+	for _, name := range []string{"desk_go_eval", "read_file"} {
 		if err := registry.Register(Tool{Name: name, Func: fn}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	results := ExecuteToolBatch(context.Background(), registry, []types.ToolCall{{ID: "1", Name: "bash"}, {ID: "2", Name: "read_file"}}, func(types.EventKind, string, json.RawMessage) {})
+	results := ExecuteToolBatch(context.Background(), registry, []types.ToolCall{{ID: "1", Name: "desk_go_eval"}, {ID: "2", Name: "read_file"}}, func(types.EventKind, string, json.RawMessage) {})
 	if peak != 1 || results[0].IsError || results[1].IsError {
 		t.Fatalf("peak=%d results=%#v", peak, results)
-	}
-}
-
-func TestExecuteToolBatchSideEffectSkipPolicies(t *testing.T) {
-	tests := []struct {
-		name, profile, tool, args string
-		notice                    bool
-	}{
-		{"super bash", agentprofile.Management, "bash", `{"command":"echo x"}`, false},
-		{"cosuper bash", agentprofile.Engineering, "bash", `{"command":"echo x"}`, false},
-		{"super co-super spawn", agentprofile.Management, "spawn_agent", `{"profile":"engineering","slot":"implementation","channel_id":"c"}`, false},
-		{"update", agentprofile.Research, "update_coagent", `{"summary":"x"}`, false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			registry := NewToolRegistry()
-			var executions int
-			if err := registry.Register(Tool{Name: tc.tool, Func: func(context.Context, json.RawMessage) (string, error) { executions++; return `{"ok":true}`, nil }}); err != nil {
-				t.Fatal(err)
-			}
-			results := ExecuteToolBatch(WithExecutionContext(context.Background(), ExecutionContext{Profile: tc.profile}), registry, []types.ToolCall{{ID: "first", Name: tc.tool, Arguments: json.RawMessage(tc.args)}, {ID: "second", Name: tc.tool, Arguments: json.RawMessage(tc.args)}}, func(types.EventKind, string, json.RawMessage) {})
-			if executions != 1 || results[0].IsError || results[1].IsError == tc.notice {
-				t.Fatalf("executions=%d results=%#v", executions, results)
-			}
-		})
 	}
 }
 
