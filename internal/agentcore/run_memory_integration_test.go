@@ -1,5 +1,3 @@
-//go:build comprehensive
-
 package agentcore
 
 import (
@@ -167,8 +165,8 @@ func TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry(t *testing.T) {
 		sentinel: "RAW_ENTRY_SENTINEL_6b8c1f0e_exact",
 	}
 	rt, _ := testRuntimeWithProviderAndRegistry(t, provider, registry)
-	if err := RegisterEvidenceTools(registry, rt); err != nil {
-		t.Fatalf("register evidence tools: %v", err)
+	if err := registry.Register(newGetRunMemoryEntryTool(rt)); err != nil {
+		t.Fatalf("register get_run_memory_entry: %v", err)
 	}
 	rt.cfg.RunMemoryContextThresholdTokens = 1_000_000
 

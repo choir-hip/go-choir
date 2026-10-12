@@ -829,3 +829,14 @@ func TestBridgeProviderFailureSurfacesWithoutCrashing(t *testing.T) {
 		t.Error("second task should have a valid ID")
 	}
 }
+
+func decodeRevisionMetadata(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return nil
+	}
+	return metadata
+}
