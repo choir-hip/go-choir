@@ -27,7 +27,7 @@ metamission:
     - id: W2
       path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md
       readiness: drafted
-      status: pending (re-author on re-engineering R3 and R4; owner 2026-10-12)
+      status: pending (carried by re-engineering Cut 2 on Cut 1; owner 2026-10-12)
       depends_on: [W1]
     - id: W3a
       path: docs/definitions/choir-autopaper-w3a-reader-2026-10-11.md

@@ -1523,10 +1523,10 @@ nodes:
     member_of: choir-precommitment-protocol-metamission-2026-10-11
     execution_mode: subordinate_only
     depends_on: [choir-protocol-p2-one-surface-2026-10-11]
-    enables: [choir-reeng-r3-records-as-work-2026-10-12]
+    enables: [choir-reeng-cut1-authority-2026-10-12]
     note: >-
       P2d1 landed on staging b172895b. P2d2 is carried by re-engineering
-      station R3 as its Texture-inbox stage (owner 2026-10-12); shape D is
+      Cut 1 as its Texture inbox (owner 2026-10-12); shape D is
       not built.
   - id: choir-autopaper-metamission-2026-10-11
     title: Autopaper (Gate 3) — content in the graph, living Textures, automatic publishing
@@ -1574,10 +1574,10 @@ nodes:
     entrypoint: false
     member_of: choir-autopaper-metamission-2026-10-11
     execution_mode: subordinate_only
-    depends_on: [choir-autopaper-w1-content-in-the-graph-2026-10-11, choir-reeng-r3-records-as-work-2026-10-12, choir-reeng-r4-async-search-and-research-2026-10-12]
+    depends_on: [choir-autopaper-w1-content-in-the-graph-2026-10-11, choir-reeng-cut1-authority-2026-10-12]
     enables: []
   - id: choir-reeng-metamission-2026-10-12
-    title: Re-engineering — honest desks, work as records, async search, Texture, one document model
+    title: Re-engineering — three cuts to Autopaper live (eyes, authority, evidence to publication)
     path: docs/definitions/choir-reeng-metamission-2026-10-12.md
     ledger: ''
     status: planned
@@ -1587,12 +1587,13 @@ nodes:
     depends_on: []
     enables: [choir-autopaper-w2-living-textures-2026-10-11]
     note: >-
-      Owner 2026-10-12 decisions (docs/re-engineering-decisions-2026-10-12.md).
-      Stations R1-R6 drafted, R7 intent. Carries the protocol's P2d2, P3
-      and P4.
-  - id: choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12
-    title: R1 — truthful prompts and deletions on every desk
-    path: docs/definitions/choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12.md
+      Owner 2026-10-12 decisions (docs/re-engineering-decisions-2026-10-12.md
+      §2, §10, §12): radical cutover, no backwards compatibility. Carries the
+      protocol's P2d2 and P3 and Autopaper W2, W3a and W3. Gradual drafts
+      R1-R6 (03499ef9) superseded and deleted.
+  - id: choir-reeng-cut0-eyes-2026-10-12
+    title: "Cut 0 — eyes: trace export, tracer, invariant checker, fresh computers, cross-wire and one-REPL fixes"
+    path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
     ledger: ''
     status: planned
     kind: subordinate_contract
@@ -1600,59 +1601,26 @@ nodes:
     member_of: choir-reeng-metamission-2026-10-12
     execution_mode: draft_non_executable
     depends_on: []
-    enables: [choir-reeng-r2-restart-rule-2026-10-12, choir-reeng-r3-records-as-work-2026-10-12, choir-reeng-r4-async-search-and-research-2026-10-12, choir-reeng-r5-texture-2026-10-12, choir-reeng-r6-one-document-model-2026-10-12]
-  - id: choir-reeng-r2-restart-rule-2026-10-12
-    title: R2 — the restart rule in both directions
-    path: docs/definitions/choir-reeng-r2-restart-rule-2026-10-12.md
+    enables: [choir-reeng-cut1-authority-2026-10-12]
+  - id: choir-reeng-cut1-authority-2026-10-12
+    title: "Cut 1 — authority: records, conversations, hypothesis ids, cursors, crash closure, routing through management"
+    path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
     ledger: ''
     status: planned
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12
     execution_mode: draft_non_executable
-    depends_on: [choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12]
-    enables: [choir-reeng-r3-records-as-work-2026-10-12]
-  - id: choir-reeng-r3-records-as-work-2026-10-12
-    title: R3 — records as work (P2d2 as the Texture inbox)
-    path: docs/definitions/choir-reeng-r3-records-as-work-2026-10-12.md
+    depends_on: [choir-reeng-cut0-eyes-2026-10-12]
+    enables: [choir-reeng-cut2-evidence-to-publication-2026-10-12, choir-autopaper-w2-living-textures-2026-10-11]
+  - id: choir-reeng-cut2-evidence-to-publication-2026-10-12
+    title: "Cut 2 — evidence to publication: async search, research, Texture write, one document model, permalinks, Autopaper live"
+    path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
     ledger: ''
     status: planned
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12
     execution_mode: draft_non_executable
-    depends_on: [choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12, choir-reeng-r2-restart-rule-2026-10-12]
-    enables: [choir-reeng-r4-async-search-and-research-2026-10-12, choir-reeng-r5-texture-2026-10-12, choir-autopaper-w2-living-textures-2026-10-11]
-  - id: choir-reeng-r4-async-search-and-research-2026-10-12
-    title: R4 — async search and the research desk
-    path: docs/definitions/choir-reeng-r4-async-search-and-research-2026-10-12.md
-    ledger: ''
-    status: planned
-    kind: subordinate_contract
-    entrypoint: false
-    member_of: choir-reeng-metamission-2026-10-12
-    execution_mode: draft_non_executable
-    depends_on: [choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12, choir-reeng-r3-records-as-work-2026-10-12]
-    enables: [choir-autopaper-w2-living-textures-2026-10-11]
-  - id: choir-reeng-r5-texture-2026-10-12
-    title: R5 — Texture re-engineered, then the model comparison
-    path: docs/definitions/choir-reeng-r5-texture-2026-10-12.md
-    ledger: ''
-    status: planned
-    kind: subordinate_contract
-    entrypoint: false
-    member_of: choir-reeng-metamission-2026-10-12
-    execution_mode: draft_non_executable
-    depends_on: [choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12, choir-reeng-r3-records-as-work-2026-10-12]
-    enables: []
-  - id: choir-reeng-r6-one-document-model-2026-10-12
-    title: R6 — one document model for sources and stories
-    path: docs/definitions/choir-reeng-r6-one-document-model-2026-10-12.md
-    ledger: ''
-    status: planned
-    kind: subordinate_contract
-    entrypoint: false
-    member_of: choir-reeng-metamission-2026-10-12
-    execution_mode: draft_non_executable
-    depends_on: [choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12]
+    depends_on: [choir-reeng-cut1-authority-2026-10-12]
     enables: []

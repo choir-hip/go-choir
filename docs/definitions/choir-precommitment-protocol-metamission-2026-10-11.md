@@ -30,17 +30,17 @@ metamission:
     - id: P2d
       path: definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md
       readiness: drafted (revised after review round one, receipt P2d-review1)
-      status: P2d1 landed (staging b172895b); P2d2 carried by re-engineering R3 (owner 2026-10-12; shape D not built)
+      status: P2d1 landed (staging b172895b); P2d2 carried by re-engineering Cut 1 (owner 2026-10-12; shape D not built)
       depends_on: [P2]
     - id: P3
       path: none (predictions required on Cast, Ask and Escalate; count resolver)
       readiness: intent
-      status: superseded by re-engineering R3/R4 (owner 2026-10-12, Casts carry hypotheses and uncertainties; no runtime count resolver)
+      status: superseded by re-engineering Cut 1 (owner 2026-10-12, Casts carry hypotheses and uncertainties; no runtime count resolver)
       depends_on: [P2]
     - id: P4
       path: none (scores as separate records; calibration visible in desk packs)
       readiness: intent
-      status: pending (owner 2026-10-12: scoring needs intelligence, never the runtime; re-author after R3/R4)
+      status: pending (owner 2026-10-12: scoring needs intelligence, never the runtime; re-author after re-engineering Cut 1)
       depends_on: [P3]
     - id: P5
       path: docs/definitions/choir-autopaper-w2-living-textures-2026-10-11.md (re-authored on the protocol)
@@ -113,7 +113,7 @@ boundaries:
 
 now:
   status: working
-  slice: P1 and P2 landed (staging b172895b); P2d1 landed. Owner 2026-10-12 moved the remaining protocol work into the re-engineering metamission (docs/definitions/choir-reeng-metamission-2026-10-12.md): P2d2 is R3's Texture-inbox stage, P3's shape is replaced by hypothesis-shaped Casts
+  slice: P1 and P2 landed (staging b172895b); P2d1 landed. Owner 2026-10-12 moved the remaining protocol work into the re-engineering metamission (docs/definitions/choir-reeng-metamission-2026-10-12.md): P2d2 is Cut 1's Texture inbox, P3's shape is replaced by hypothesis-shaped Casts
   source_ref: a2bcf724
   deploy_identity: staging a2bcf724
   candidate: none

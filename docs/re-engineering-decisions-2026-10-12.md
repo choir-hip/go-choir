@@ -42,26 +42,63 @@ live. Deferred missions come after.
 7. **Language.** Provider failure is normal: say "M of N search providers
    active". "Degraded" means users get worse searchability or results.
 
-## 2. Work is records
+## 2. Work is records: conversations, rounds, hypotheses, cursors
 
-The work-item abstraction (mutable rows with a status column, doing six
-unrelated jobs, study B §1) is replaced by precommitment records.
+Revised the same day after the divergent and lateral panels (§12). The
+work-item abstraction (mutable rows with a status column, doing six
+unrelated jobs, study B §1) and the delivery packet (a second mutable
+object per record) are replaced by append-only precommitment records and
+one cursor per inbox.
 
-- A Cast opens an obligation. Reports in its thread are progress. A final
-  Report, a Retract, or a system fate record closes it.
-- Status is a fold over append-only records, not a mutable column: open
-  work is a Cast thread with no closing record; the work list is a query;
-  authority to act is an open Cast (or an unconsumed record) addressed to
-  me.
-- A crash boot appends "interrupted by a restart" to every open thread.
-  A planned-restart marker skips this.
-- Texture's obligation is its inbox: every record addressed to
-  `texture:<doc>`. This replaces the rule that one Texture run binds one
-  work item, so **P2d2 becomes a stage of this migration**. The directive
-  inbox design (shape D) is not built.
-- Records need: a final flag on Reports, a system fate record, a
-  store-stamped thread id, the subject on desk-authored addresses, and
-  indexed columns for the fold (study B §2-3).
+- **Conversation.** Communication is single-threaded from the sender's
+  side: one conversation per (sender desk, recipient desk, subject), for
+  example Texture → research about document X. Every Cast the sender
+  sends adds to that one conversation (new hypotheses, revised
+  probabilities, steering, withdrawals). The sender never manages thread
+  ids. Parallelism is the recipient's responsibility: research spreads
+  the work over sub-RLMs; management and engineering spread engineering
+  work over capsules. This is the RLM pattern: each desk is an RLM, each
+  RLM may have sub-RLMs. Depth stays shallow for now and scales toward
+  large swarms as models are post-trained on the pattern; that scale is
+  what makes Autopaper work on global current events.
+- **The unit of progress is the hypothesis** (idea-level supervision, not
+  action-level supervision). Hypotheses have stable ids within a
+  conversation (H1, H2, ...). A later Cast may add H4, revise H2's
+  probability or withdraw H3. Each hypothesis is open, settled (with an
+  outcome) or dropped (with a reason). Reports name the hypotheses they
+  bear on; scoring and calibration are per hypothesis.
+- **Rounds.** A conversation has rounds of work. The recipient closes the
+  open round with a final Report that says what it settled, what it
+  dropped and why it stopped. The next Cast after a close opens a new
+  round in the same conversation. Records are append-only, so a living
+  story's conversation can run through many rounds.
+- **Status is a fold** over the records, never a mutable column: an open
+  round is one with no closing record; the work list is a query;
+  authority to act is an open round or an unread record addressed to me.
+- **Closing is not reading.** A final Report closes the recipient's work;
+  the sender may not have read it yet, and that evidence stays waiting
+  for it. An Ask and its Reply inside a round do not close the round.
+- **A crash closes the open round** ("interrupted by a restart", a system
+  record with a deterministic id). Its hypotheses stay on record, so the
+  next round picks them up deliberately, never by resuming. A
+  planned-restart marker skips this.
+- **Delivery by cursor, as in Kafka.** Every record addressed to an inbox
+  (for example `texture:<doc>`) gets the next sequence number in that
+  inbox. Each reader keeps one cursor: "I have read through #57". A desk
+  wakes when records exist past its cursor. The cursor advances in the
+  same transaction as the work that read the records (for Texture, the
+  revision commit), so a record is never read twice or skipped. Packets
+  and their delivery status machine are deleted; after a crash nothing is
+  stranded, and unread records wait past the cursor for the next turn.
+- **Sub-RLMs are the recipient's own business.** Their work reaches the
+  sender only through the recipient's Reports.
+- **Texture's inbox** is every record addressed to `texture:<doc>` past
+  its cursor. This replaces the rule that one Texture run binds one work
+  item, so **P2d2 is part of this cutover**; the directive inbox design
+  (shape D) is not built.
+- Records need: hypothesis ids and their states, a final flag on Reports,
+  a system record for crash closure, the subject on desk-authored
+  addresses, per-inbox sequence numbers, and indexed columns for the fold.
 
 ## 3. Casts carry hypotheses and uncertainties
 
@@ -75,8 +112,8 @@ for learning and tells the worker how hard to work.
   matter.
 - **General hypotheses** (§3.1), such as "there are important things I
   haven't mentioned", each with its own probability.
-- Reports tag findings with the hypothesis they bear on, or mark them as
-  outside every listed hypothesis. Belief updates are records by the
+- Reports tag findings with the hypothesis ids they bear on, or mark
+  them as outside every listed hypothesis. Belief updates are records by the
   caster or a third party, citing the Reports.
 - Effort follows uncertainty times stakes. Diminishing returns are
   measurable: further work stops moving any hypothesis that matters.
@@ -180,7 +217,7 @@ It owns its work; the runtime does not.
 - The gateway gains a streaming mode that starts every eligible provider
   at once and sends each provider's results as they arrive (the router
   already completes per provider; the guest link already streams for
-  inference). The existing search call stays.
+  inference). Desks lose the blocking search call (§12).
 - Concurrency lives on the host. Model-authored goroutines must not call
   `choir.*` network verbs until the transport correlates by request id
   ([problems/parallel-choir-calls-cross-wire-results-2026-10-12.md](problems/parallel-choir-calls-cross-wire-results-2026-10-12.md)).
@@ -260,20 +297,32 @@ one-permalink shape in the W3a draft and the app design §4.6.
 - **Signing keys** per computer, per desk, perhaps per sub-RLM: deferred
   as a non-functional requirement.
 
-## 10. Order of work
+## 10. Order of work: three cuts
 
-1. Truthful prompts and deletions on all four desks (affordance sweep,
-   dead names, stubs, caps, budgets, Assign). Orange.
-2. Restart rule in both directions. Red.
-3. Records as work, with P2d2 as the Texture inbox stage. Red.
-4. Async search and the research redesign with hypothesis-shaped Casts.
-   Orange and red.
-5. Texture re-engineering, then the model comparison. Red.
-6. One document model and per-version permalinks, then the Autopaper
-   reader and living stories. Red.
+Revised after the panels (§12): a radical cutover, not six gradual
+stations. No shadow folds, dual-writes, interim closers, standing anchors,
+one-release keeps or feature flags.
+
+0. **Cut 0, eyes** (small): trace export through the product API (no SSH),
+   an end-to-end tracer and invariant checker, minting fresh test
+   computers, the request-id fix for parallel `choir.*` calls, one REPL
+   owner per desk, and the register of what survives the cut.
+1. **Cut 1, authority**: records as the only work state (conversations,
+   rounds, hypothesis ids, cursors; work items and packets deleted), crash
+   closure as records, Texture's inbox (P2d2), engineering only through
+   management (path B, Assign and the restart recast deleted),
+   sub-researchers on records, and all four desk prompts written once for
+   this system.
+2. **Cut 2, evidence to publication**: async search and the research desk,
+   Texture's write verb, captures in the block model with quote checks,
+   per-version permalinks, living stories (W2) and the reader: Autopaper
+   live. Then the model comparison.
 
 ## 11. Superseded or revised
 
+- `definitions/choir-reeng-r1` through `r6` (drafted at 03499ef9): deleted;
+  superseded by the three cuts (§10, §12). Their code-cited findings are
+  carried into the cut files.
 - `definitions/choir-research-job-2026-10-11.md`: deleted (runtime-owned
   job and budgets rejected).
 - `definitions/choir-search-deadline-ladder-2026-10-11.md`: deleted
@@ -287,3 +336,68 @@ one-permalink shape in the W3a draft and the app design §4.6.
 - `protocol-review-assign-and-engineering-routing-2026-10-11.md`: Jev
   has no hold; Assign deleted.
 - `texture-directive-inbox-design-2026-10-11.md`: shape D not built.
+
+## 12. Cutover decisions (after the divergent and lateral panels)
+
+Owner, 2026-10-12: "a more radical cutover, less gradual. We don't have
+any backwards compatibility needs." Two 10-model panels (divergent with
+ten lenses, lateral) reviewed the whole metamission; 8 of 10 answered in
+each (raw outputs in `.agentic-consensus/reeng-{divergent,lateral}-2026-10-12/`,
+session diagnostics, not evidence). All 16 answers agreed that the staged
+drafts protected old state the owner does not need. The owner settled
+conversations and cursors (§2) and delegated the rest to the agent's
+judgement ("most of this stuff doesn't move me either way / I trust your
+judgement"). Decided:
+
+1. **What survives the cut.** Published versions, and the owner's
+   computer and Textures, untouched until the cut is proven. Staging test
+   computers are disposable. Old execution state is archived as history,
+   never migrated. Before the first public Autopaper permalink, the record
+   schema, block ids and reference shape may still change freely; at that
+   permalink they freeze. Compatibility begins at the permalink.
+2. **The cutover deploy counts as a crash.** Everything open closes with
+   a visible fate; nothing resumes.
+3. **Rollback is forward-fix** after Cut 1, with a tagged last-good commit
+   and a state snapshot. A git revert alone cannot read new-format records.
+4. **One breakage log per cut.** During a cut window, each newly found
+   problem is appended to `docs/problems/reeng-cut<N>-breakage-<date>.md`
+   in the same commit as its fix, and the log is reviewed once per cut.
+   This is an explicit, time-boxed exception to "documenting a problem
+   comes first" (CLAUDE.md) for the cut windows only; a problem that is
+   not fixed in the same commit gets its own problem doc as usual.
+5. **Redesign tripwire.** If the same layer fails three tracer runs, or a
+   fix needs new mutable state that acts as an authority, stop patching:
+   write a structural assessment and redesign that layer.
+6. **Desks lose the blocking search call**; async search is the only
+   search surface for desks.
+7. **Support judgement** (does a source support a claim) is done by
+   management or Jev, never by research, which found the evidence, and
+   never by Texture, which wrote the claim.
+8. **Living documents don't settle; requests finish.** Document
+   settlement stops being an execution authority.
+9. **After a crash, Autopaper restarts by a deliberate management act**,
+   never by a boot-time resumer.
+10. **One REPL owner per desk.** The session manager today starts a second
+    REPL when a desk's session is busy with another run's cell
+    (`internal/agentcore/tools_desk.go:118-131`). A persistent desk has one
+    execution owner; parallel intelligence is sub-RLMs, parallel I/O is
+    the host.
+11. **Sub-researchers move onto records in Cut 1.** Today `choir.Research`
+    waits for all children, gives each a 10-minute window and 75% of the
+    remaining time, and discards their events
+    (`internal/agentcore/research_children.go:44-46, 167, 210`).
+12. **Boot-time actors are deleted, not gated:** the engineering restart
+    recast, spawned-work replay, terminal settlement repair, the Texture
+    wake re-arm on open work, and wire-publication claim recovery, which
+    cancels trajectories at every boot (`internal/agentcore/wire_publication.go`).
+13. **Prompts are written once, for the system after the cut**, with each
+    desk's verb list generated from its real module set and only role and
+    judgement written by hand. R1's truth pass on today's system is
+    dropped, and so is the baseline demo of the system being deleted.
+14. **Rejected panel suggestions** (they reintroduce caps or reminders): a
+    maximum of three hypotheses per Cast, an automatic "no new findings"
+    notice after two quiet turns, and a hash-cycle detector on Casts.
+
+Open, measured in Cut 0: how long a push takes to reach a healthy fresh
+test computer (it bounds the pace of every cut), and whether the one-hour
+lifetime of the broker handle breaks long-lived desk sessions.

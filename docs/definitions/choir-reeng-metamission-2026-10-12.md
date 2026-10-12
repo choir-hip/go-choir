@@ -1,66 +1,49 @@
 ---
 definition_version: 4
 
-# Re-engineering: honest desks, work as records, async search, Texture, one
-# document model. Owner 2026-10-12, after a line-by-line review of the
-# master report: agreement before building ("extremely high stakes decision
-# making"), then an autonomous run that makes Autopaper live. Decisions:
-# docs/re-engineering-decisions-2026-10-12.md. Studies:
-# docs/reports/re-engineering-studies-2026-10-12/.
+# Re-engineering: three cuts to Autopaper live. Owner 2026-10-12, after a
+# line-by-line review of the master report and six studies: agreement
+# before building; then "a more radical cutover, less gradual. We don't
+# have any backwards compatibility needs." Decisions:
+# docs/re-engineering-decisions-2026-10-12.md (§2 conversations and cursors,
+# §10 three cuts, §12 cutover decisions). Studies:
+# docs/reports/re-engineering-studies-2026-10-12/. The six gradual station
+# drafts R1-R6 (03499ef9) are superseded by the cuts; their code-cited
+# findings live on in the cut files and at that commit.
 readiness: drafted
 
 review:
-  reviewer: owner (decisions agreed 2026-10-12; "Yes, sounds good. Proceed.")
-  frozen_ref: fbb58c23
-  verdict: accept (design direction); station files await file review
-  evidence_ref: docs/re-engineering-decisions-2026-10-12.md
+  reviewer: owner (decisions 2026-10-12) and two 10-model panels (divergent, lateral; 16 answers)
+  frozen_ref: 03499ef9 (gradual drafts reviewed)
+  verdict: send_back on the gradual shape; three cuts adopted (decisions §12)
+  evidence_ref: docs/re-engineering-decisions-2026-10-12.md §12
 
 metamission:
   stations:
-    - id: R1
-      path: docs/definitions/choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12.md
+    - id: C0
+      path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
       readiness: drafted
       status: pending
       depends_on: []
-    - id: R2
-      path: docs/definitions/choir-reeng-r2-restart-rule-2026-10-12.md
+    - id: C1
+      path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
       readiness: drafted
       status: pending
-      depends_on: [R1]
-    - id: R3
-      path: docs/definitions/choir-reeng-r3-records-as-work-2026-10-12.md
+      depends_on: [C0]
+    - id: C2
+      path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
       readiness: drafted
-      status: pending
-      depends_on: [R1, R2]
-    - id: R4
-      path: docs/definitions/choir-reeng-r4-async-search-and-research-2026-10-12.md
-      readiness: drafted
-      status: pending (slice a, async search, may start after R1; slice b needs R3)
-      depends_on: [R1, R3]
-    - id: R5
-      path: docs/definitions/choir-reeng-r5-texture-2026-10-12.md
-      readiness: drafted
-      status: pending
-      depends_on: [R1, R3]
-    - id: R6
-      path: docs/definitions/choir-reeng-r6-one-document-model-2026-10-12.md
-      readiness: drafted
-      status: pending (quote verification and the capture side may start after R1; transclusion needs R5)
-      depends_on: [R1]
-    - id: R7
-      path: none (management translates with Jev pass-through; path B, the runtime Jev judge and the self-development state machine dissolved; study G rows 7-10)
-      readiness: intent
-      status: pending
-      depends_on: [R3]
+      status: pending (ends with Autopaper live, then the model comparison)
+      depends_on: [C1]
 
 start:
-  captured_at: 2026-10-12T18:10:00Z
+  captured_at: 2026-10-12T19:30:00Z
   source:
-    canonical_ref: main fbb58c23
+    canonical_ref: main 03499ef9
     deploy_identity: staging choir.news b172895b
   worktrees:
     - path: /Users/wiz/go-choir
-      status: clean
+      status: dirty (this session's doc edits in progress)
       class: goal_candidate
       owner: this session
       touch: goal_owned
@@ -71,29 +54,34 @@ start:
       describe a system that no longer exists, and runtime rules patching
       the gap. Nearly every fix is a deletion.
     - >-
-      Two live problems contradict standing rules: parallel choir.* calls
-      cross-wire, and a crash restart leaves work open and re-casts
-      engineering (docs/problems/ 2026-10-12).
+      Work items (six unrelated jobs, a closure-bug cluster) and delivery
+      packets are two mutable layers beside the append-only records.
     - >-
-      The protocol's P2d2 is held on the rule that one Texture run binds one
-      work item; Autopaper W2 waits on it.
+      Live problems contradict standing rules: parallel choir.* calls
+      cross-wire; a crash restart leaves work open and re-casts
+      engineering; a busy desk session silently gets a second REPL; boot
+      cancels trajectories through wire-publication recovery.
+    - >-
+      All 16 panel answers judged the gradual drafts to be protecting old
+      state the owner does not need.
 
 finish:
   deliver: >-
-    Desks that are told the truth, own their work, and report as their
-    understanding changes; work and its status read from records; search
-    that never waits on the slowest provider; a Texture that writes only
-    what changed; sources and stories in one document model. Then
-    Autopaper W2 and W3 run on that base and Autopaper goes live.
-  artifact: R1-R6 complete on staging with deployed acceptance; R7 authored
+    Autopaper live on choir.news: captures reach management, stories are
+    living Textures revised as evidence arrives, each published version
+    has its own permanent link, and logged-out readers can read them. It
+    runs on desks that are told the truth, own their work, talk in
+    conversations whose unit of progress is the hypothesis, read their
+    inboxes by cursor, and search without waiting on the slowest provider.
+  artifact: Cuts 0, 1 and 2 landed on staging with deployed acceptance; the model comparison run after Cut 2
   acceptance:
-    - action: each station's acceptance on staging (choir.news)
-      proves: the station's claim on the product path
+    - action: each cut's acceptance on staging (choir.news), read through Cut 0's tracer, trace export and invariant checker
+      proves: the cut's claim on the product path
       evidence_class: deployed proof
-    - action: one AI news demo after each station, same script, compared with R1's baseline
-      proves: the stack moves the product, not only the code
+    - action: "the end-to-end story: v1 published, disconfirming evidence arrives, v2 published, v1's link unchanged, logged-out read"
+      proves: Autopaper live
       evidence_class: deployed proof
-  rollback: per station, in reverse order
+  rollback: forward-fix after Cut 1, with a tagged last-good commit and a state snapshot per cut (decisions §12.3)
   landing:
     required: true
     environment: staging
@@ -101,81 +89,97 @@ finish:
 
 value:
   better_means: >-
-    Maximize grounded, current Textures per unit of inference and owner
-    attention, while preserving Texture as sole writer, the restart rule,
-    authority boundaries, and one authority per fact.
+    Maximize grounded, current Textures readable at permanent links per
+    unit of inference and owner attention, while preserving Texture as
+    sole writer, the restart rule, authority boundaries, and one
+    authority per fact.
   goodharting_would_be: >-
-    Deleting code without the demo moving; new runtime machinery that
-    decides what a model should decide; measuring cells or reports instead
-    of what reaches a reader.
+    Deleting code without the story moving; runtime machinery that decides
+    what a model should decide; counting cells, reports or sources instead
+    of what reaches a reader; a tracer that passes on a happy path while
+    rounds silently stay open.
 
 homotopy:
   realism_axis: >-
-    honest prompts and deletions -> restart rule -> records as work ->
-    async search and research -> Texture -> one document model ->
-    Autopaper live
+    eyes (trace export, tracer, invariants on today's system) -> authority
+    (records, conversations, cursors, crash closure, routing) on fresh test
+    computers -> evidence to publication on fresh test computers ->
+    Autopaper live on a paper computer -> the owner's computer re-pointed
 
 boundaries:
-  mutation_class: red (stations R2-R6 touch run lifecycle, the evidence ledger, gateway calls, Texture canonical writes, publication)
+  mutation_class: red (Cuts 1 and 2 touch run lifecycle, the evidence ledger, gateway calls, Texture canonical writes, publication)
   authority_sources:
-    - owner 2026-10-12 decisions (docs/re-engineering-decisions-2026-10-12.md)
+    - owner 2026-10-12 decisions (docs/re-engineering-decisions-2026-10-12.md), including the delegation in §12
   must_preserve:
     - Texture is the only writer of a Texture
     - research has read-only authority toward the world
     - a crash restart never resumes work; a planned restart may, once
-    - no budgets, round caps, runtime research job or runtime scoring are added
+    - published versions and the owner's computer and Textures survive the cut
+    - no budgets, round caps, runtime research job, runtime scoring or reminders are added
   excluded:
-    - the model comparison before R5's re-engineering lands
+    - shadow folds, dual-writes, interim closers, standing anchors, one-release keeps, feature flags
+    - deep recursion (sub-RLM swarms come later; one fan-out level now)
     - circuit breakers before a pathological loop is observed
     - signing keys per computer, desk or sub-RLM (deferred)
-  protected_surfaces: [see each station]
+  protected_surfaces: [see each cut]
 
 now:
   status: drafted
   slice: >-
-    Decisions agreed and recorded (fbb58c23). Station files R1-R6 authored
-    as drafts; R7 is intent. The protocol metamission's P2d2, P3 and P4 are
-    carried by R3 and R4 here; Autopaper W2 depends on R3 and R4.
-  source_ref: fbb58c23
+    Decisions recorded (§2 conversations and cursors, §12 cutover). The
+    gradual drafts R1-R6 are superseded; Cut 0, Cut 1 and Cut 2 are being
+    authored. The protocol metamission's P2d2 and P3 and Autopaper W2, W3a
+    and W3 are carried by Cuts 1 and 2.
+  source_ref: 03499ef9
   deploy_identity: staging b172895b
   candidate: none
   conjecture:
-    id: RE-1
+    id: RE-2
     claim: >-
       The desks underperform mainly because of false prompts, runtime caps
-      and the work-item substrate, not model capability; fixing those in
-      order makes the AI news demo produce grounded Textures faster and
-      lets Autopaper go live without a model change.
-    test: the same AI news demo after each station against R1's baseline
+      and two mutable layers beside the records, not model capability. A
+      radical cutover on fresh computers, watched by an end-to-end tracer,
+      reaches Autopaper live faster than staged migration, and the
+      failures it surfaces are fixable inside a cut or name a layer to
+      redesign.
+    test: Cut 0's tracer and invariant checker on every cut; the redesign tripwire (decisions §12.5)
     edge: frame_lock
-    delta_o: the demo script and its metrics are fixed in R1 and exported with the guest trace
-    scope_if_supported: AI news and Autopaper on staging test computers
+    delta_o: the trace export and invariant checker make substrate failures visible without SSH
+    scope_if_supported: AI news and Autopaper on staging computers
     status: proposed
-    evidence_refs: [docs/reports/re-engineering-studies-2026-10-12/README.md]
-  decision: {what: "order of work R1 -> R6 with R4a and R6's early slices in parallel", kind: sequencing, status: settled (owner 2026-10-12), evidence_ref: docs/re-engineering-decisions-2026-10-12.md §10}
+    evidence_refs: [docs/reports/re-engineering-studies-2026-10-12/README.md, docs/re-engineering-decisions-2026-10-12.md §12]
+  decision: {what: "three cuts, cutover deploy counts as a crash, forward-fix, one breakage log per cut, redesign tripwire", kind: sequencing, status: settled (owner 2026-10-12, delegated), evidence_ref: docs/re-engineering-decisions-2026-10-12.md §12}
   belief:
-    believed_state: the studies' code claims hold at fbb58c23
-    main_uncertainty: whether R3's fold can replace work items without a long dual-running period
-    next_observation: R1's file review, then R1's grep inventory
-  blocker_or_risk: none for R1; R2-R6 are red and need full ceremony
-  next_action: agentic-consensus file review of R1, then execute R1
+    believed_state: the studies' and panels' code claims hold at 03499ef9
+    main_uncertainty: how long push-to-healthy-test-computer takes (bounds the pace of every cut) and how large Cut 1's change set is
+    next_observation: a convergent panel on the three cut files, then Cut 0
+  blocker_or_risk: Cut 1 is one large red change across store, agentcore, textureowner and yaegikernel
+  next_action: convergent panel on this file and the three cut files
 
-receipts: []
+receipts:
+  - id: panels-2026-10-12
+    kind: review
+    ref: .agentic-consensus/reeng-divergent-2026-10-12, .agentic-consensus/reeng-lateral-2026-10-12 (session diagnostics); synthesis in decisions §12
 ---
 
 # Re-engineering metamission
 
-The studies of 2026-10-12 found that the desks are mostly being told
-untrue things and held back by runtime rules, and that work items carry
-six unrelated jobs and a cluster of closure bugs. This metamission fixes
-that in order, with each station measured by the same AI news demo, and
-then hands a sound base to Autopaper's living Textures and reader.
+The studies of 2026-10-12 found desks told untrue things, held back by
+runtime rules, and running on two mutable layers (work items and delivery
+packets) beside the append-only records. The owner chose a radical
+cutover with no backwards compatibility, and the panels agreed that the
+gradual drafts were protecting state nobody needs. Three cuts:
 
-1. **R1, truthful prompts and deletions** (orange).
-2. **R2, the restart rule in both directions** (red).
-3. **R3, records as work**, with P2d2 as its Texture-inbox stage (red).
-4. **R4, async search and the research desk** (orange and red).
-5. **R5, Texture re-engineered**, then the model comparison (red).
-6. **R6, one document model** for sources and stories (red).
-7. **R7, routing** (intent): management translates, Jev passes through or
-   management reasons, path B and self-development scaffolding dissolve.
+0. **Cut 0, eyes.** See breakage fast: trace export without SSH, an
+   end-to-end tracer with a crash drill, an invariant checker, fresh test
+   computers; fix the two defects every measurement stands on (parallel
+   calls cross-wiring, a second REPL per desk); register what survives.
+1. **Cut 1, authority.** Records become the only work state:
+   conversations single-threaded from the sender, hypotheses with stable
+   ids as the unit of progress, rounds, cursors instead of packets, crash
+   closure as records. Engineering only through management. Prompts
+   written once.
+2. **Cut 2, evidence to publication.** Async search, the research desk,
+   Texture's write verb, captures in the block model with quote checks,
+   per-version permanent links, living stories and the reader: Autopaper
+   live. Then the model comparison.

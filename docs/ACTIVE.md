@@ -144,10 +144,14 @@ Receipts are in `docs/problems/*-2026-10-09.md`:
   → document model and Autopaper. New problems:
   [parallel `choir.*` calls cross-wire](problems/parallel-choir-calls-cross-wire-results-2026-10-12.md),
   [crash restarts leave work open and re-cast engineering](problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md).
-  The research-job and deadline-ladder drafts are deleted. Stations:
+  The research-job and deadline-ladder drafts are deleted. Owner chose a
+  radical cutover (decisions §12, after divergent and lateral panels):
   [`reeng metamission`](definitions/choir-reeng-metamission-2026-10-12.md)
-  with R1-R6 drafted and R7 intent; next is R1's file review, then R1
-  ([`r1`](definitions/choir-reeng-r1-truthful-prompts-and-deletions-2026-10-12.md)).
+  is three cuts, Cut 0 eyes, Cut 1 authority (conversations single-threaded
+  from the sender, hypothesis ids as the unit of progress, Kafka-style
+  cursors instead of packets, work items deleted) and Cut 2 evidence to
+  publication (Autopaper live). The gradual drafts R1-R6 (03499ef9) are
+  superseded; next is a convergent panel on the cut files, then Cut 0.
 - **Owner review queue (2026-10-11 evening):** the
   [master report](reports/master-report-protocol-research-autopaper-2026-10-11.md)
   summarizes the day and seven research and design documents (research

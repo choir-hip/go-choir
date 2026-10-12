@@ -1,0 +1,556 @@
+---
+definition_version: 4
+
+# Cut 2, evidence to publication. Station C2 of
+# docs/definitions/choir-reeng-metamission-2026-10-12.md; depends on C1
+# (docs/definitions/choir-reeng-cut1-authority-2026-10-12.md: records,
+# conversations, rounds, hypothesis ids, cursors, Texture's inbox) and C0
+# (docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md: trace export,
+# tracer, invariant checker, fresh test computers, request-id fix).
+# Authority: docs/re-engineering-decisions-2026-10-12.md §2-§8, §10, §12
+# (owner 2026-10-12; §12 wins over every earlier draft). Code-cited detail
+# carried from the superseded drafts R4, R5, R6 (at 03499ef9), W2, W3a and
+# the Autopaper metamission (2026-10-11), and studies A, D, E in
+# docs/reports/re-engineering-studies-2026-10-12/. Their gradual slicing,
+# flags and one-release keeps are rejected; their findings stand.
+readiness: drafted
+
+review:
+  reviewer: none
+  frozen_ref: none
+  verdict: none
+  evidence_ref: none
+
+start:
+  captured_at: 2026-10-12T19:30:00Z
+  source:
+    canonical_ref: main 03499ef9
+    deploy_identity: staging choir.news b172895b
+  worktrees:
+    - path: /Users/wiz/go-choir
+      status: dirty (docs/re-engineering-decisions-2026-10-12.md and the cut files, this session's doc edits in progress)
+      class: goal_candidate
+      owner: this session
+      touch: goal_owned
+      recovery: git
+  observed:
+    - >-
+      Search is one blocking call. choir.WebSearch (internal/yaegikernel/choir.go:456)
+      reaches the web_search tool (internal/researchtools/researchtools.go:658,
+      egress charge :680), then search.Client with a 30 s hostlink client
+      (internal/search/search.go:85), then HandleSearch
+      (internal/gateway/handlers.go:856) under a fixed 30 s deadline (:914),
+      then Router.Search's waves (internal/gateway/searchplane/router.go:64).
+      executeWave already collects each provider's completion on a done
+      channel (router.go:221, :232, :285-291) but returns one merged list.
+      That tool is the only production caller of the blocking client.
+      hostlink's AttemptTimeout bounds the body too
+      (internal/hostlink/hostlink.go:38-40), so a stream needs a zero bound;
+      inference already streams over the same link (study A §3.3).
+    - >-
+      Search waits on the slowest provider: Keenable about 0.2 s, Tavily
+      and Parallel 2-4 s, ChatGPT about 23 s; 15-27% of searches hit the
+      30 s cap (docs/search-plane-design-fast-deep-broad-2026-10-11.md §1-2).
+    - >-
+      REPL state: a persistent desk session per "agent:"+id
+      (internal/agentcore/tools_desk.go:111), released at :226 and reclaimed
+      at :177. Host values enter a cell only through SessionFrame
+      (internal/yaegikernel/session_loop.go:25) at BindCell Begin
+      (choir.go:145); End drains the staged tray (choir.go:154). The cell
+      result map is built at tools_desk.go:405-416. Study A's race probe:
+      a mutex-guarded store read mid-cell is clean; a raw exported map races.
+    - >-
+      Research's surface lists retired verbs and four ways to fetch
+      (FetchURL, ImportURL, ImportDocument, selector reads), none of which
+      keeps what it fetches (choir.go:255-259; FetchURL
+      researchtools.go:790). Only PollSource writes a capture
+      (internal/researchtools/poll_source.go:168). Children get a separate
+      read set (choir.go:263-265). The research egress budget is 64 calls
+      and 32 MiB (internal/researchtools/egress_budget.go:46-47).
+    - >-
+      Captures: identity is "autopaper:capture:<item.ID>" and an existing
+      id counts as Repeated, so a changed re-capture is dropped
+      (internal/sourcegraph/captures.go:66-73); one flat-text body serves
+      as both ContentBlobID and ExtractedTextBlobID, so raw bytes are lost
+      (:77-84). ExtractReadableHTML returns (title, text)
+      (internal/sourcefetch/readability.go:14-15) to four callers
+      (content.go:1910, sources/article_import.go:59,
+      browsercontrol/handler.go:710, :806). The validator refuses "[12]"
+      in any document (internal/texturedoc/schema.go:326) and has no link
+      mark (:307). Quotes are checked only for presence
+      (internal/textureowner/texture_evidence_sources.go:355); no matcher
+      exists in Go. Mike's cascade (exact, whitespace and case,
+      punctuation-tolerant) is pure string code
+      (~/mike/backend/src/modules/chat/engine/verifyCitations.ts:41-58).
+    - >-
+      Texture: module set ReadDoc and ApplyTexture plus retired Message and
+      Emit (choir.go:271-273); ApplyTexture's surface text (surface.go:39).
+      A whole-document write re-mints every block id
+      (internal/textureowner/tools_texture.go:790); inserted blocks get
+      fresh UUIDs (:1164, :1177); links and numeric markers in content are
+      refused (:937). Prompt: role 4,721 characters
+      (internal/textureprompts/texture.yaml) plus 35,131 in overlays
+      (revision_policy.yaml 16,839, run_system.yaml 14,600). The wake is
+      pointer-only (internal/agentcore/coagent_update_packet.go:161). One
+      large write takes 76% of model time; turns average about 5 cells
+      (study D §0.1-0.2). Texture runs opencode-go deepseek-v4.1-flash at
+      high effort (internal/modelpolicy/model_policy.go:370); the
+      comparison candidates are in internal/modelcatalog/catalog.go:85-146.
+    - >-
+      Management reports to Texture "with choir.Report, carrying its
+      evidence refs", with no translation contract
+      (internal/promptstore/defaults/management.yaml:21). Desks may not
+      write a Texture through ProductAPI
+      (internal/agentcore/tools_product_api.go:181-184). Jev is a gateway
+      decision endpoint pinned to typesafe/jev-1.13
+      (internal/gateway/jev.go:20-27); only self-development candidate
+      judgement calls it (internal/agentcore/selfdev_candidate_judgment.go:38).
+      No desk has an in-cell Jev verb.
+    - >-
+      Publishing: PublishTexture (internal/platform/service.go:153) mints a
+      new publication, version and route on every call (:200-211); the
+      version is hard-coded "v1" with no predecessor
+      (internal/platform/publication_graph.go:129, :138); each manifest
+      embeds the whole version history (service.go:246-255); the bundle
+      read takes the last has_version edge
+      (internal/platform/service_publication_read.go:88-96); a citation
+      keeps only an entity's first selector
+      (internal/platform/source_metadata.go:152-158). The
+      publication_transclusions table exists (internal/platform/store.go:260).
+      Artifact source targets diff_hunk, patch and test_run exist
+      (internal/texturedoc/schema.go:381).
+    - >-
+      Reader: the old Universal Wire app (frontend/src/lib/UniversalWireApp.svelte,
+      internal/platform/universal_wire.go) is signed-in only and stamps two
+      fixed claims on every story. The public resolve route already serves
+      a published Texture logged out, and the Texture renderers already draw
+      numbered sources with quote popovers and a "newer version" marker
+      (frontend/src/lib/texture-source-renderer.ts:378-500).
+    - >-
+      Autopaper: W1 landed (scheduled polls into Store B captures, no model
+      call, closed on a crash). Nothing tells management captures arrived,
+      management cannot feed a Texture other than its own trajectory's (W2
+      review receipt W2-review1), and nothing publishes automatically.
+
+finish:
+  deliver: >-
+    Autopaper is live on choir.news. Research starts searches that return
+    at once, reads each provider's results as they land, reads the pages
+    that matter into captures, and tells Texture what it learns as soon as
+    its understanding changes. Captures and stories are one kind of
+    document, so every citation points at a source block and a quote that
+    code has checked; management (or Jev) judges whether the source
+    supports the claim, in the background, and Texture writes the
+    correction. Each story revises as evidence arrives, each published
+    version has its own permanent link, and a logged-out reader opens the
+    paper's front page and reads them. Then the same tracer compares
+    Texture models and reasoning effort.
+  units:
+    - id: 2a
+      name: evidence
+      artifact: >-
+        Async search. Gateway: /provider/v1/search streams NDJSON, starting
+        every eligible provider at once, one line per provider as it
+        completes, then a final line with "M of N providers answered" and
+        the cooling providers; bounded by the provider timeout plus a
+        margin. The waves, target, grace and the blocking mode are deleted
+        with their only caller. Guest: search.Client.Stream (zero attempt
+        bound, refused-dial retry kept); a host search table keyed by the
+        desk-session key, its streams cancelled in release and
+        reclaimLocked; SessionFrame carries arrivals past the session's
+        cursor; Begin merges them into a lock-guarded store in REPL state
+        that End does not clear. Verbs: choir.SearchStart(q) returns a stub
+        at once ("s3 started: 4 providers"); choir.Searches.Get/List return
+        copies; choir.SearchWait(id, ms) blocks up to ms and returns counts.
+        Each cell result gets one count line per search with new arrivals
+        ("s3: 3/4 answered, +2 new"), the only push. choir.WebSearch and
+        the web_search tool are removed from every desk.
+        Research desk on it: verbs SearchStart/Searches/SearchWait, Read
+        (fetch into a capture; replaces FetchURL, ImportURL, ImportDocument
+        and the selector reads), Report (final flag and stop reason from
+        C1), Research, Ask, Reply, Note. Reports go out as soon as
+        understanding changes, each claim tagged with hypothesis ids and an
+        epistemic status; the final Report closes the round at diminishing
+        returns relative to the Cast's hypotheses and stakes. The egress
+        budget and the `degraded` field in research results are deleted.
+        Captures as block documents: sourcefetch.ExtractBlocks walks the
+        DOM with x/net/html (reusing the candidate, skip and noise logic)
+        into typed blocks (headings, paragraphs, lists, tables, figures,
+        notes, links); ExtractReadableHTML becomes the block projection for
+        its four callers; a capture keeps raw bytes, block JSON and the
+        projection; cid = hash of kind and normalized text (k-th duplicate
+        cid.k), one normtext function shared with the matcher; identity by
+        doc_hash, so a changed re-capture is a new capture and an identical
+        one stays Repeated; world documents accept real page text and links
+        ("[12]" stays refused in Texture-authored blocks).
+        One reference shape: a Go Ref {doc, version, cid, hash, quote}
+        shared by texturedoc and types, replacing both selector shapes for
+        new citations. internal/quotematch ports mike's cascade and returns
+        the source's own span; results are memoized in Store B keyed by
+        (citing block hash, cited block hash, quote hash, matcher version).
+        Support judgement: when a revision commits, the same transaction
+        appends one system record to management listing the new unjudged
+        pairs; management judges them (calling Jev through a new
+        management-only choir.Judge verb, or reasoning itself); each verdict
+        is a record keyed by the hash pair; a failure is addressed to
+        texture:<doc>; a pass attaches to the existing revision and mints
+        nothing.
+        Texture re-engineered: each turn's frame, rebuilt from C1's inbox
+        past the cursor, carries the document as short-alias blocks b1..bN
+        with citations as tokens and the new records r1..rM with sources
+        r2.c1.. and their quotes; no read cell needed. One verb,
+        choir.Write(edits, why): @replace/@insert/@delete/@move/@section/@all
+        on aliases, inline {{cite <handle> "quote"}} and {{embed <handle>}}
+        tokens resolving to Refs, synchronous line-located refusals, @all
+        reconciling against the prior revision so unchanged blocks keep ids
+        and citations; changed blocks only. Wait, Done and Reject replace
+        decide, work_disposition and update_dispositions. Prompt core about
+        3.5k characters, verb list generated from the module set (C1's
+        generator). ApplyTexture, ReadDoc, the revision_policy and
+        run_system overlays and every retired verb on Texture are deleted.
+        Management's prompt gains the translation contract: a plain summary
+        plus artifact handles that Texture cites as chips, so owner-facing
+        prose carries no code, diff, command or log.
+    - id: 2b
+      name: publication
+      artifact: >-
+        Per-version permalinks: one publication per (owner, source doc);
+        publishing appends version n+1 (contiguous ordinals, idempotent on
+        the source revision) with supersedes set, a parsed /v<n> route, and
+        a manifest that references the previous manifest hash instead of
+        embedding every past body. The bundle carries nav {ordinal, prev,
+        next, latest}; the bare link serves the latest in place; chevrons
+        and a "new version available" control. Transclusion: the
+        {{embed}} block node and the cite anchor carry the Ref; publish
+        materializes cited and transcluded blocks into the version
+        (resolved_blocks, one publication_transclusions row per anchor), so
+        a version's source blocks are pinned to it. Quote-check and
+        judgement results show as a live overlay outside the manifest hash
+        (✓ exact, ≈ tolerant, pending, ✗ failed).
+        Living stories (W2 on the protocol): after a poll writes new
+        captures, the runtime appends one system record to management
+        naming them; management's cursor batches whatever accumulated.
+        Management opens a story by a Cast to a new texture:<doc> carrying
+        hypotheses, the capture refs and publish: auto, and feeds an
+        existing story by a Cast or Note to its texture:<doc>. Management
+        and Texture read capture blocks through one document read verb.
+        Management never writes a Texture.
+        Automatic publishing (W3): every committed revision of a document
+        opened with publish: auto becomes its next version; no human step.
+        Reader (W3a): a public front list served from Store B (title, dek,
+        updated time, version count; one row per story) and the autopaper
+        app's front page and story page, logged out, at phone width. The
+        Universal Wire app, its route, types.WireStory and the fixed claims
+        are deleted, with their specs replaced.
+        Crash: boot closes the paper's open rounds and stops nothing else;
+        no desk wakes at boot and no schedule re-arms itself; Autopaper
+        restarts when management, woken by a non-boot record, deliberately
+        re-arms the schedule (wire_publication claim recovery is gone in C1).
+        Freeze receipt, written before the paper computer's first publish:
+        the record schema, normtext, the cid formula and extractor version,
+        the Ref shape and the /v<n> route shape, with a digest.
+        Compatibility begins at that permalink (decisions §12.1).
+  autopaper_live: >-
+    On staging, read through the product API and a logged-out browser, all
+    of: (1) a designated paper computer (not a test computer) runs its
+    source schedule for 6 continuous hours after one owner act starts it,
+    with no further human step; (2) in that window management opens at
+    least 3 stories from captures and feeds at least one of them a capture
+    that arrived after it opened; (3) each of those stories is published
+    automatically, and at least one reaches v2 from new evidence; (4) the
+    front page at choir.news lists each story once, newest first, marked
+    updated, and every citation on its story pages shows a quote inside its
+    source block with a check badge; (5) public reads keep working while
+    the paper computer is stopped. "Live" is a state that holds; a crash
+    ends it until management restarts it.
+  acceptance:
+    - action: "2a, tracer on a fresh test computer: research cell trace read through the product API (C0 export)"
+      proves: SearchStart returns at once; count lines rise per provider in latency order; the gateway's final line says M of N; every stream ends at N/N or is cancelled with its session; no arrival carries another query's id
+      evidence_class: deployed proof
+    - action: "2a, tracer: research on a Cast with hypotheses (including the omission hypothesis)"
+      proves: Reports carry hypothesis ids and epistemic status; Read writes captures; a final Report closes the round naming why it stopped; first Report no later than the demo19/20 baseline (about 70 s to 2 min)
+      evidence_class: deployed proof
+    - action: "2a, tracer: read a tracer-controlled page, change it, read it twice more"
+      proves: a changed re-capture is kept (two captures, different doc_hash, raw bytes and typed block JSON present); an unchanged re-capture is Repeated; a page with "[12]" footnotes and links validates
+      evidence_class: deployed proof (Store B objects)
+    - action: "2a, tracer: Texture integrates two records in one turn, then an @all rewrite; per-turn metrics against C0's baseline"
+      proves: one Write adds a paragraph cited inline; untouched blocks keep ids and citations (revision JSON diff); calls per turn and model-seconds per turn fall; ApplyTexture is absent from the module set and the code
+      evidence_class: deployed proof
+    - action: "2a, tracer: the owner edits in a sentence citing a real quote that does not support it"
+      proves: the quote check passes, management records a failing support judgement, the failure reaches texture:<doc>, and Texture writes the correcting revision; the next unrelated revision shows memo hits for every unchanged pair
+      evidence_class: deployed proof
+    - action: "2a, tracer: an engineering-backed request"
+      proves: the owner-facing revision has no code, diff, command or log in its prose, and the change is reachable from a citation chip (Playwright screenshot)
+      evidence_class: deployed proof
+    - action: "2b, tracer: a story published v1 automatically; the tracer page changes to disconfirm it; research or management brings the re-capture; v2 publishes"
+      proves: v1's permalink returns a byte-identical bundle before and after v2, with the same resolved_blocks; the bare link shows v2; v1 shows chevrons and "new version available"; pre-cut publications still resolve
+      evidence_class: deployed proof
+    - action: "2b: logged-out Playwright on choir.news at phone width"
+      proves: front page and story page render with numbered sources, quotes in source blocks, check badges and a transcluded block; screenshot artifact; no served route still renders the fixed claims
+      evidence_class: deployed proof
+    - action: "2b: the autopaper_live window, then a crash restart of the paper computer (no planned marker) through the product API"
+      proves: Autopaper live as defined; after the crash every open round closed "interrupted by a restart", no poll ran and no desk woke until management's deliberate re-arm; reads stayed up throughout
+      evidence_class: deployed proof
+    - action: "after live: model comparison on the tracer script; deepseek-v4.1-flash, gpt-6-luna, glm-5.3-flash, muse-spark-1.3-contributor and the other opencode-go models, 3 runs each; then high, medium, low effort on the leading models"
+      proves: a receipt table judged blind by a model panel on grounding (claims supported by their cited blocks, quote accuracy, omissions), with latency and cost beside it; never runtime scoring. The default switch is the owner's routing decision, outside this station
+      evidence_class: deployed measurement plus model judgement
+  rollback: >-
+    Forward-fix (decisions §12.3). Before unit 2a deploys, tag C1's landed
+    commit as reeng-cut2-last-good; before unit 2b deploys, snapshot Store
+    B's publication tables and capture objects. Pre-cut publications,
+    the owner's computer and Textures stay untouched until 2b's acceptance
+    passes. A failed unit is fixed forward on main; the tag and snapshot
+    are the break-glass. Before the freeze receipt, schema, cids and refs
+    may change freely; after it, only compatible changes.
+  landing:
+    required: true
+    environment: staging
+    units: "2a and 2b, one deployed acceptance each (internal commits fine)"
+    required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_acceptance, consensus_review]
+
+value:
+  better_means: >-
+    Minimize the gap between what the world's evidence says and what a
+    logged-out reader sees at a story's permalink (claims not checked
+    against the exact block they cite, evidence that reached the computer
+    but not the story, time from arrival to a published version), while
+    Texture stays sole writer, published versions never change, and the
+    runtime holds no budget, cap, job or score.
+  goodharting_would_be: >-
+    Versions published with no new evidence; tolerant matches shown as
+    exact; support judged by the desk that wrote or found it; count lines
+    that change while the model never reads the store; thin, hedged or
+    early-closed Reports; a front page of stories with bare-link sources;
+    a tracer passing on its own fixture page while real outlet pages fail
+    extraction; "live" claimed from one tracer run; a model chosen for
+    speed while its stories cite less.
+
+homotopy:
+  realism_axis: >-
+    gateway stream probed directly -> tracer research on a fresh test
+    computer with real providers and one controlled page -> Texture
+    writing and checks on that tracer story -> the tracer story published,
+    disconfirmed and republished -> the paper computer on real feeds,
+    unattended -> crash and deliberate restart -> model comparison on the
+    live desks
+
+boundaries:
+  mutation_class: red
+  authority_sources:
+    - owner 2026-10-12, docs/re-engineering-decisions-2026-10-12.md §2-§8, §10, §12
+    - CLAUDE.md Restarts, Mutation Classes, Landing Loop
+    - owner 2026-10-11, shared content in Store B behind corpusd; computers hold overlays
+  must_preserve:
+    - Texture is the sole writer of canonical revisions; checks and judgements never edit text or mint a version
+    - a published version's text, manifest hash and signatures never change; pre-cut publications keep resolving
+    - public reads never reach a paper computer; shared content and check results live in Store B behind corpusd
+    - a crash closes work; no boot-time resumer of searches, checks, schedules or stories; Autopaper restarts only by management's deliberate act
+    - support judgement by management or Jev, never research or Texture (§12.7)
+    - no budgets, caps, reminders, runtime research job or runtime scoring (§1.2, §12.14)
+    - one REPL owner per desk; concurrency on the host; arrivals written only by worker code under the store lock
+    - research has read-only world authority; engineering never addresses Texture
+    - no feature flags, shadow paths or one-release keeps (§10)
+  excluded:
+    - records, cursors, conversations and crash closure (C1); the tracer and trace export (C0)
+    - async sub-RLMs; waking a desk on a search arrival after end_turn
+    - alignment across re-captures (study E stage D); PDFs and transcripts as blocks
+    - the edition Texture as front page, claims and scores in the reader, email
+    - copyright and public quote length (set aside, §7)
+    - switching the default Texture model (owner routing decision)
+  protected_surfaces:
+    - internal/gateway/handlers.go HandleSearch, internal/gateway/searchplane/router.go, internal/gateway/search_plane.go, internal/gateway/jev.go
+    - internal/textureowner and internal/store/texture_turn.go (canonical writes, the turn frame)
+    - internal/texturedoc schema and validator; internal/sourcegraph capture identity; internal/sourcefetch
+    - internal/platform publish, bundle, routes and transclusions; Store B object kinds
+    - internal/yaegikernel module sets, session frame and broker actions
+    - internal/agentcore desk sessions, product API, source schedule wakes
+  admissible_evidence: >-
+    staging only: fresh test computers and the paper computer, read
+    through C0's trace export, the product API, Store B objects, published
+    bundles and logged-out Playwright; the C0 invariant checker on every
+    tracer run. Local and race tests shape code and prove nothing deployed.
+  breakage_log: docs/problems/reeng-cut2-breakage-<date>.md (one per cut window, §12.4)
+  redesign_tripwire: the same layer failing three tracer runs, or a fix that needs new mutable authority, stops patching for a structural assessment (§12.5)
+  conjecture_delta: >-
+    from "research needs a job, Texture needs many cells, citations are
+    selectors checked by presence, and a story is a new publication per
+    publish" to "a truthful RLM with async search, a Texture that writes
+    changed blocks citing Refs, hash-memoized checks off the author's path,
+    and one publication per story with immutable versions keep published
+    stories grounded as evidence changes"
+  heresy_delta:
+    discovered:
+      - the blocking search path's only production caller is the desk tool, so the gateway's waves serve no one after this cut
+      - Jev is unreachable from desks
+      - changed re-captures dropped, raw bytes discarded, "[12]" refused in real pages, one anchor per entity, a quote-match comment with no matcher (R6 at 03499ef9)
+    introduced: [none intended; risk: one management wake per Texture commit with new citations]
+    repaired_target:
+      - search waits on the slowest provider
+      - research cannot read what it fetched or close its own work
+      - Texture rewrites the whole document and loses ids and citations
+      - quotes unchecked; support unjudged
+      - a living story becomes a new publication per publish
+      - the reader is signed-in only and shows fixed claims
+  standing_questions: >-
+    1 provenance: owner decisions §12; this file's defaults (below) are
+    orchestrator proposals under the owner's delegation. 2 conformance:
+    captures, checks and publications in Store B behind corpusd; no new
+    store. 3 deletion citers: every removed verb, tool, overlay, route and
+    type is grepped across prompts, code, tests, specs and docs in the
+    same commit. 4 consumers: the blocking search route and Universal Wire
+    have no consumers after the cut. 5 single authority: the revision head
+    for text, the version chain for publication, records for work, the
+    host table for in-flight streams (the REPL store is a copy). 6
+    artifact: bundles, captures, revisions, records and screenshots, never
+    narration. 7 fate-sharing: public reads depend on corpusd only; a
+    corpusd outage leaves an anchor pending, never hangs a commit. 8
+    restart: streams, tables and REPL stores die with the process; checks
+    and schedules are re-derived only by a later turn. 9 no SSH: every
+    proof through the product API and C0's export.
+
+now:
+  status: drafted
+  slice: authored for review; nothing built; depends on C1 landed and C0's tracer
+  source_ref: 03499ef9
+  deploy_identity: staging choir.news b172895b
+  candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
+  conjecture:
+    id: C2-1
+    claim: >-
+      If research reads per-provider arrivals and reports as its
+      understanding changes, captures are block documents, Texture writes
+      changed blocks citing Refs, and quote and support checks run off the
+      author's path, then published stories stay grounded at their
+      permalinks as evidence changes, with no human step between capture
+      and publication.
+    test: unit 2b's tracer v1->v2 run and the live window, then a blind model judgement of the live stories' grounding and an owner read
+    edge: missing_oracle
+    delta_o: >-
+      the share of research-reported quotes that land inside one extracted
+      block on real outlet captures (unmeasured; DOM heuristics and model
+      copying both unknown), measured read-only on staging captures before 2a's extractor lands
+    scope_if_supported: AI news stories on one paper computer
+    status: proposed
+    evidence_refs: []
+  decision:
+    what: >-
+      Two units with the freeze between them, and the defaults listed in
+      the prose ("Defaults taken"). Each is the conservative choice under
+      decisions §12; each can be reversed before the freeze.
+    kind: architecture
+    status: proposal
+    evidence_ref: docs/re-engineering-decisions-2026-10-12.md §10, §12
+    owner_ratification_ref: "owner 2026-10-12 delegation (§12: 'I trust your judgement'); open questions below"
+  belief:
+    believed_state: the router already completes per provider and the link already streams; no matcher, block capture, Write verb, version chain or public front list exists
+    main_uncertainty: whether real outlet pages extract into blocks that contain the sentences research quotes, and whether research reads arrivals without being pushed
+    next_observation: read-only quote-in-block rate over existing staging captures with a prototype matcher, and C1's landed record fields
+  blocker_or_risk: C1 must land (inbox, cursors, final Reports, crash closure); the gateway and canonical-write changes are red
+  next_action: >-
+    when C1 lands, pre-flight on the then-current main: confirm C1's
+    record fields and inbox, C0's tracer and request-id fix, re-verify
+    every file:line above, then agentic-consensus review of this file
+
+receipts: []
+---
+
+# Cut 2: evidence to publication
+
+Cut 1 makes records the only work state. Cut 2 puts evidence through
+it and out to readers. Search stops waiting on the slowest provider.
+Captures become documents that stories can cite block by block. Texture
+writes only what changed. Code checks quotes and management judges
+support. Each published version gets a permanent link. When the cut
+ends, Autopaper runs by itself and anyone can read it.
+
+**Why two units, not one.** Decision §12.1 freezes the record schema,
+block ids and reference shape at the first public Autopaper permalink.
+Unit 2a proves that shape on disposable test computers: search, research,
+captures, Write, checks and judgements. Unit 2b then publishes it. The
+freeze receipt sits between the units, so the shape is frozen only after
+the tracer has exercised every part of it. Each unit gets one deployed
+acceptance, and commits inside a unit are fine.
+
+**Defaults taken** (No Blocking Asks; each is a proposal until reviewed):
+
+1. The gateway's blocking search mode, its waves and its grace timer are
+   deleted. Their only caller is the desk tool, and the desks lose it
+   (§12.6).
+2. A search arrival never wakes a desk after end_turn. Arrivals wait in
+   the store, and the next cell's count line shows them.
+3. Support judging: the revision commit appends a record that lists the
+   unjudged hash pairs and addresses it to management. Management judges
+   them through a new management-only `choir.Judge` (Jev through the
+   gateway) or by reasoning itself. The runtime lists the pairs; it never
+   judges.
+4. Auto-publish: every committed revision of a `publish: auto` document
+   becomes its next version. Management sets the flag when it opens the
+   story.
+5. Captures reach management as one system record per poll that wrote
+   new captures, with no debounce. The cursor batches them (§1.4).
+6. After a crash, no desk wakes at boot. Autopaper stays down until
+   management is woken by a non-boot record (the owner, or the tracer)
+   and re-arms the schedule.
+7. Version numbers count publishes, with no gaps. The bare link serves
+   the latest version in place. A pre-cut publication resolves as v1 of
+   its route, and the first republish after the cut appends to it.
+
+**Open questions for the owner:**
+
+- May the crash-closure record wake management at boot? If so, it needs
+  a loop guard.
+- How long is the live window? The default is 6 hours.
+- Where does the tracer's controlled page live?
+- Should Texture decide which revisions to publish, instead of every
+  revision of an auto document publishing?
+
+Ways it can fail, written before the code:
+
+- Arrivals race the REPL store. Only worker code writes, under the lock,
+  in Begin or SearchWait, and the race test covers it.
+- A stream outlives its session, or the 30 s client cuts it. Streams are
+  bound to the session lease and cancelled in release and reclaim. The
+  stream client has no per-attempt bound, and the gateway deadline is
+  the provider timeout plus a margin.
+- "M of N" counts cooling providers as failures. N is the set that was
+  eligible when the stream started, and cooling providers are listed
+  separately, never as degraded.
+- The model ends its turn with searches pending and never reads the
+  results. The store persists for the session, and a trace shows whether
+  this happens before any wake is added.
+- Research floods Texture with thin Reports, hedges every claim, or
+  closes early. The goodharting list applies: a blind sample of claims
+  is judged by someone other than research, and the owner reads the
+  stories.
+- The DOM walk drops or merges the paragraph a quote sits in. The
+  acceptance set includes fixtures per outlet, and the extractor is
+  versioned so tuning never re-addresses frozen citations.
+- Tolerant tiers accept a quote the source does not say. The rendered
+  quote is always the source's own span, and a tolerant match shows ≈.
+- Normalization differs between cid and matching. One normtext function
+  serves both.
+- Keeping changed re-captures floods Store B with ad and nonce churn.
+  "Changed" is decided by the block doc_hash, not the raw bytes.
+- @all alignment carries a citation onto text that no longer supports
+  it. A carried citation whose quote is gone is dropped and listed in
+  the next frame.
+- The frame for a long document outgrows the write it saves. Long
+  documents get a section digest plus the recently edited and cited
+  blocks; the rest are read on demand.
+- Management wakes on every commit and judges the same pair twice.
+  Judgements are memoized by hash pair, and management's cursor batches
+  the lists.
+- Judging falls behind publishing. The first version shows "pending",
+  never a wait, and a failure becomes Texture's next version.
+- A version's permalink changes, or its overlay leaks into the manifest
+  hash. Versions are immutable, and the overlay is served live, outside
+  the hash.
+- The front list reads a paper computer, or floods with near-duplicate
+  stories. The list is served from Store B only. Clustering stays with
+  management, and the tracer counts stories per front page.
+- A schedule or check resumes after a crash. The crash test asserts that
+  no poll or judgement runs before management's deliberate re-arm.
+- The model comparison rewards speed. The judge ranks grounding first,
+  and latency is reported beside it, never blended in.
+- The broker handle's one-hour lifetime (choir.go:119) kills a long-lived
+  research session. C0 measures it, and the live window would show it.
