@@ -2,6 +2,7 @@ package modelpolicy
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -52,7 +53,8 @@ func TestManagerPreservesExistingPolicyAndLastValidCache(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	valid := `[defaults]
+	valid := `# owner-edited
+[defaults]
 fallback_provider = "chatgpt"
 fallback_model = "gpt-5.5"
 
@@ -75,7 +77,7 @@ reasoning = "medium"
 	if string(kept) != valid {
 		t.Fatal("existing policy was rewritten")
 	}
-	if err := os.WriteFile(path, []byte("this is not a policy assignment"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("# owner-edited\nthis is not a policy assignment"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	policy, err := manager.Load(context.Background(), "owner")
@@ -128,15 +130,17 @@ reasoning = "medium"
 	if err == nil || !strings.Contains(err.Error(), "overlay expired") {
 		t.Fatalf("expired overlay error = %v", err)
 	}
-	if fallback.Provider != "chatgpt" || fallback.Model != "gpt-5.6-luna" {
+	if fallback.Model != "pool:default" {
 		t.Fatalf("expired overlay fallback = %+v", fallback)
 	}
 }
 
 func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	manager := NewManager(ManagerConfig{})
-	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Management, nil)
-	if metadata[MetadataProvider] != "chatgpt" || metadata[MetadataModel] != "gpt-5.6-luna" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
+	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Management, map[string]any{"trajectory_id": "traj-1"})
+	member := metadata[MetadataProvider].(string) + "/" + metadata[MetadataModel].(string)
+	other := map[string]string{"opencode-go/deepseek-v4.1-flash": "chatgpt/gpt-6-luna", "chatgpt/gpt-6-luna": "opencode-go/deepseek-v4.1-flash"}[member]
+	if other == "" || metadata[MetadataFallbacks] != other || metadata[MetadataSpec] != "pool:default" || metadata[MetadataAssignment] != "hash" || metadata[MetadataThread] != "traj-1" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
 		t.Fatalf("enriched metadata = %#v", metadata)
 	}
 	explicit := map[string]any{MetadataProvider: "custom", MetadataModel: "custom-model"}
@@ -155,5 +159,70 @@ func TestProviderPreconditionFallbacksRefuseAlternativeSelections(t *testing.T) 
 		if fallbacks := ProviderPreconditionFallbackSelections(selection); len(fallbacks) != 0 {
 			t.Fatalf("fallbacks for %+v = %+v, want none", selection, fallbacks)
 		}
+	}
+}
+
+// A pool spec assigns each thread one member by a stable hash: one key is
+// always the same model, and many keys reach every member.
+func TestAssignPoolIsStablePerThreadAndSpreadsAcrossThreads(t *testing.T) {
+	spec := provideriface.LLMSelection{Model: "pool:default", ReasoningEffort: "high"}
+	first, fallbacks, assignment := Assign(spec, "texture:doc-1")
+	for i := 0; i < 5; i++ {
+		again, _, _ := Assign(spec, "texture:doc-1")
+		if again.Model != first.Model {
+			t.Fatalf("thread moved from %s to %s", first.Model, again.Model)
+		}
+	}
+	if assignment != "hash" || len(fallbacks) != 1 || fallbacks[0].Model == first.Model || first.ReasoningEffort != "high" {
+		t.Fatalf("assignment %q, chosen %+v, fallbacks %+v", assignment, first, fallbacks)
+	}
+	seen := map[string]int{}
+	for i := 0; i < 200; i++ {
+		chosen, _, _ := Assign(spec, fmt.Sprintf("trajectory-%d", i))
+		seen[chosen.Model]++
+	}
+	if seen["deepseek-v4.1-flash"] < 50 || seen["gpt-6-luna"] < 50 {
+		t.Fatalf("assignment skewed: %v", seen)
+	}
+}
+
+// A retired model is remapped to the default pool rather than sent to a
+// gateway that refuses it; a concrete pool member falls back to the other.
+func TestAssignRemapsRetiredModelsAndPairsPoolMembers(t *testing.T) {
+	chosen, fallbacks, assignment := Assign(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-5.6-luna"}, "traj")
+	if assignment != "retired_remapped" || chosen.Model == "gpt-5.6-luna" || len(fallbacks) != 1 {
+		t.Fatalf("retired: %q %+v %+v", assignment, chosen, fallbacks)
+	}
+	chosen, fallbacks, assignment = Assign(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-6-luna"}, "traj")
+	if assignment != "explicit" || chosen.Model != "gpt-6-luna" || len(fallbacks) != 1 || fallbacks[0].Model != "deepseek-v4.1-flash" {
+		t.Fatalf("explicit member: %q %+v %+v", assignment, chosen, fallbacks)
+	}
+	chosen, fallbacks, _ = Assign(provideriface.LLMSelection{Provider: "fireworks", Model: "some-model"}, "traj")
+	if chosen.Model != "some-model" || len(fallbacks) != 0 {
+		t.Fatalf("uncatalogued provider: %+v %+v", chosen, fallbacks)
+	}
+}
+
+// A policy file from an older platform default is rewritten at load; the
+// new file uses the default pool everywhere.
+func TestManagerRewritesUnversionedPlatformPolicy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "System", "model-policy.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := "[defaults]\nfallback_provider = \"chatgpt\"\nfallback_model = \"gpt-5.6-luna\"\n"
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := NewManager(ManagerConfig{PolicyPath: path}).Load(context.Background(), "owner")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), policyVersionLine) || strings.Contains(string(raw), "gpt-5.6") {
+		t.Fatalf("policy file not rewritten:\n%s", raw)
+	}
+	if got := policy.Resolve(agentprofile.Texture); got.Model != "pool:default" || got.ReasoningEffort != "high" {
+		t.Fatalf("texture = %+v", got)
 	}
 }

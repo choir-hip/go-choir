@@ -28,8 +28,8 @@ const ARMS = [
   { id: 'sweep-glm-5-2-medium', provider: 'zai', model: 'glm-5.2', reasoning: 'medium' },
   { id: 'sweep-mimo-v2-5-medium', provider: 'xiaomi', model: 'mimo-v2.5', reasoning: 'medium' },
   { id: 'sweep-mimo-v2-5-pro-medium', provider: 'xiaomi', model: 'mimo-v2.5-pro', reasoning: 'medium' },
-  { id: 'sweep-gpt-5-4-mini-medium', provider: 'chatgpt', model: 'gpt-5.4-mini', reasoning: 'medium' },
-  { id: 'sweep-gpt-5-5-low', provider: 'chatgpt', model: 'gpt-5.5', reasoning: 'low' },
+  { id: 'sweep-deepseek-v4-1-flash-high', provider: 'opencode-go', model: 'deepseek-v4.1-flash', reasoning: 'high' },
+  { id: 'sweep-gpt-6-luna-low', provider: 'chatgpt', model: 'gpt-6-luna', reasoning: 'low' },
 ];
 
 const PROMPT = [

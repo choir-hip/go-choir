@@ -926,6 +926,8 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, role, metadata)
 	if model := metadataStringValue(metadata, modelpolicy.MetadataModel); model != "" {
 		metadata[runMetadataModel] = model
+		// Texture's AuthoringModel reads provider beside model.
+		metadata["provider"] = metadataStringValue(metadata, modelpolicy.MetadataProvider)
 	}
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
@@ -1254,6 +1256,8 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, role, metadata)
 	if model := metadataStringValue(metadata, modelpolicy.MetadataModel); model != "" {
 		metadata[runMetadataModel] = model
+		// Texture's AuthoringModel reads provider beside model.
+		metadata["provider"] = metadataStringValue(metadata, modelpolicy.MetadataProvider)
 	}
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
@@ -3469,6 +3473,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	toolLoopOptions := []toolregistry.ToolLoopOption{
 		toolregistry.WithToolLoopMemoryHooks(memory.hooks()),
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
+		toolregistry.WithToolLoopFallbackLLMConfigs(provideriface.FallbackLLMConfigsFromMetadata(rec.Metadata, llmConfig)),
 		toolregistry.WithToolLoopConversationID(rec.RunID),
 	}
 	if assignedEngineeringOverlay {

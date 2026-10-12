@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
 	"github.com/yusefmosiah/go-choir/internal/health"
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -531,6 +532,14 @@ func (h *Handler) resolveFromMultiProvider(req ProviderRequest) (provider.Provid
 		if p == nil {
 			return nil, fmt.Errorf("unsupported provider: %s", req.Provider)
 		}
+		// The host catalog decides which models a catalogued provider serves;
+		// a retired or unknown model is refused here rather than passed
+		// through (docs/model-pools-design-2026-10-12.md).
+		if req.Model != "" && modelcatalog.ProviderCatalogued(req.Provider) {
+			if _, ok := modelcatalog.Lookup(req.Provider, req.Model); !ok {
+				return nil, fmt.Errorf("model %q is not in the catalog for provider %s", req.Model, req.Provider)
+			}
+		}
 		return p, nil
 	}
 
@@ -545,13 +554,8 @@ func (h *Handler) resolveFromMultiProvider(req ProviderRequest) (provider.Provid
 			}
 		}
 
-		// Uncatalogued models must fail routing loudly instead of guessing an
-		// implicit provider authority.
-		if strings.HasPrefix(req.Model, "gpt-") || strings.HasPrefix(req.Model, "o") || strings.Contains(req.Model, "codex") {
-			if p := h.providers.Get("chatgpt"); p != nil {
-				return p, nil
-			}
-		}
+		// Uncatalogued GPT models fail routing loudly: the catalog is the
+		// only authority for which ChatGPT models exist.
 		if strings.HasPrefix(req.Model, "glm-") {
 			if p := h.providers.Get("zai"); p != nil {
 				return p, nil
@@ -1081,6 +1085,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/provider/v1/judgments", h.HandleJudgment)
 	s.HandleFunc("/provider/openai/v1/chat/completions", h.HandleOpenAIChatCompletions)
 	s.HandleFunc("/provider/openai/v1/models", h.HandleOpenAIModels)
+	s.HandleFunc("/provider/v1/models", h.HandleModels)
 	s.HandleFunc("/provider/v1/search", h.HandleSearch)
 	s.HandleFunc("/provider/v1/search/health", h.HandleSearchHealth)
 	s.HandleFunc("/provider/v1/search/health/reset", h.HandleSearchHealthReset)

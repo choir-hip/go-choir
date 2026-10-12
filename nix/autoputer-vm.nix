@@ -873,7 +873,7 @@ EOF
       # Explicit runtime-selected model. Provider credentials remain host-side;
       # guest LLM calls route through the gateway token above.
       RUNTIME_LLM_PROVIDER = "chatgpt";
-      RUNTIME_LLM_MODEL = "gpt-5.6-luna";
+      RUNTIME_LLM_MODEL = "gpt-6-luna";
       RUNTIME_LLM_REASONING_EFFORT = "low";
     };
     serviceConfig = {

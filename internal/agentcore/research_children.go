@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"log"
 	"strings"
 	"sync"
@@ -105,6 +107,7 @@ type researchLineageKey struct{}
 type researchLineage struct {
 	ownerID   string
 	selection provideriface.LLMSelection
+	fallbacks []provideriface.LLMSelection
 }
 
 func researchLineageFrom(ctx context.Context, execCtx toolregistry.ExecutionContext) researchLineage {
@@ -114,6 +117,7 @@ func researchLineageFrom(ctx context.Context, execCtx toolregistry.ExecutionCont
 	lineage := researchLineage{ownerID: execCtx.OwnerID}
 	if execCtx.RunRecord != nil {
 		lineage.selection = provideriface.ResolvedLLMConfigFromMetadata(execCtx.RunRecord.Metadata)
+		lineage.fallbacks = provideriface.FallbackLLMConfigsFromMetadata(execCtx.RunRecord.Metadata, lineage.selection)
 		if lineage.ownerID == "" {
 			lineage.ownerID = execCtx.RunRecord.OwnerID
 		}
@@ -171,7 +175,8 @@ func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.
 func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.ExecutionContext, lineage researchLineage, spec yaegikernel.ResearchChild) yaegikernel.ResearchChildResult {
 	start := time.Now()
 	result := yaegikernel.ResearchChildResult{Objective: spec.Objective}
-	selection, err := rt.researchChildSelection(ctx, lineage, spec.Model)
+	childKey := uuid.NewString()
+	selection, fallbacks, err := rt.researchChildSelection(ctx, lineage, spec.Model, childKey)
 	if err != nil {
 		result.Model = spec.Model
 		result.Error = err.Error()
@@ -188,7 +193,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	share := researchChildDeadline(ctx)
 	ctx, cancel := context.WithDeadline(ctx, share)
 	defer cancel()
-	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, selection: selection})
+	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, selection: selection, fallbacks: fallbacks})
 	childCtx = toolregistry.WithExecutionContext(childCtx, childExec)
 
 	workers := newDeskSessionWorkers()
@@ -212,7 +217,11 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
 		[]json.RawMessage{userMsg}, researchChildPreamble+researchChildTime(share)+"\n\n"+rolePrompt,
 		provideriface.MaxInteractiveOutputTokensForSelection(selection, agentprofile.Research),
-		noEmit, nil, toolregistry.WithToolLoopLLMConfig(selection))
+		noEmit, nil, toolregistry.WithToolLoopLLMConfig(selection),
+		toolregistry.WithToolLoopFallbackLLMConfigs(fallbacks),
+		// OpenCode refuses a call without a conversation id; each child is
+		// its own provider conversation.
+		toolregistry.WithToolLoopConversationID("research-child:"+childKey))
 	result.Findings = strings.TrimSpace(text)
 	if loopErr != nil {
 		result.Error = loopErr.Error()
@@ -250,35 +259,45 @@ func researchBudgetKey(execCtx toolregistry.ExecutionContext) string {
 }
 
 // researchChildSelection resolves a child's model: the caller's own when
-// none is named, otherwise a model the computer's model policy names (by
-// model ID or by role), on the provider the policy gives it. The catalog is not the gate: it lists
-// models Choir can route somewhere, not ones this computer is configured to
-// call (problems/research-child-picks-unserved-model-2026-10-11.md).
-func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchLineage, model string) (provideriface.LLMSelection, error) {
+// none is named; a role name means that role's spec; "pool:<name>" is
+// assigned per child like any thread; a model ID ("model" or
+// "provider/model") must be in the host catalog, which is the authority for
+// what can be called (docs/model-pools-design-2026-10-12.md). It returns the
+// failover order after the chosen model.
+func (rt *Runtime) researchChildSelection(ctx context.Context, lineage researchLineage, model, childKey string) (provideriface.LLMSelection, []provideriface.LLMSelection, error) {
 	inherited := lineage.selection
 	model = strings.TrimSpace(model)
 	if model == "" || model == inherited.Model {
-		return inherited, nil
+		return inherited, lineage.fallbacks, nil
 	}
 	var policy modelpolicy.Policy
 	if rt.modelPolicy != nil {
 		// An invalid policy file still yields the last valid or platform policy.
 		policy, _ = rt.modelPolicy.Load(ctx, lineage.ownerID)
 	}
-	child := func(selection provideriface.LLMSelection) provideriface.LLMSelection {
-		return provideriface.LLMSelection{Provider: selection.Provider, Model: selection.Model, ReasoningEffort: inherited.ReasoningEffort, Source: "research_child"}
+	assign := func(selection provideriface.LLMSelection) (provideriface.LLMSelection, []provideriface.LLMSelection, error) {
+		chosen, fallbacks, _ := modelpolicy.Assign(selection, childKey)
+		chosen.Source = "research_child"
+		return chosen, fallbacks, nil
 	}
-	// A role name means that role's model: the policy's own vocabulary.
 	if _, ok := policy.Roles[model]; ok {
-		return child(policy.Resolve(model)), nil
+		return assign(policy.Resolve(model))
 	}
-	configured := policy.Selections()
-	ids := make([]string, 0, len(configured))
-	for _, selection := range configured {
-		if selection.Model == model {
-			return child(selection), nil
+	if strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) {
+		if _, ok := modelcatalog.Pools()[strings.TrimPrefix(model, modelcatalog.PoolSpecPrefix)]; ok {
+			return assign(provideriface.LLMSelection{Model: model, ReasoningEffort: inherited.ReasoningEffort})
 		}
-		ids = append(ids, selection.Model)
 	}
-	return inherited, fmt.Errorf("research: model %q is not configured on this computer; configured models: %s (a role name such as %q also works)", model, strings.Join(ids, ", "), agentprofile.Research)
+	providerName, modelID := "", model
+	if slash := strings.Index(model, "/"); slash > 0 {
+		providerName, modelID = model[:slash], model[slash+1:]
+	}
+	ids := make([]string, 0)
+	for _, info := range modelcatalog.SupportedModels() {
+		if info.ID == modelID && (providerName == "" || info.Provider == providerName) {
+			return assign(provideriface.LLMSelection{Provider: info.Provider, Model: info.ID, ReasoningEffort: inherited.ReasoningEffort})
+		}
+		ids = append(ids, info.Provider+"/"+info.ID)
+	}
+	return inherited, lineage.fallbacks, fmt.Errorf("research: model %q is not in the catalog; use a role name such as %q, %q, or one of: %s", model, agentprofile.Research, modelcatalog.PoolSpecPrefix+modelcatalog.DefaultPool, strings.Join(ids, ", "))
 }

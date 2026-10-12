@@ -94,6 +94,10 @@ type toolLoopOptions struct {
 	memoryHooks    ToolLoopMemoryHooks
 	llmConfig      provideriface.LLMSelection
 	conversationID string
+	// fallbackLLMConfigs are the pool members after llmConfig, in order. A
+	// failover-class provider error moves the rest of the run to the first
+	// one (docs/model-pools-design-2026-10-12.md).
+	fallbackLLMConfigs []provideriface.LLMSelection
 
 	initialToolChoice        string
 	terminalTools            map[string]bool
@@ -142,6 +146,14 @@ func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
 func WithToolLoopLLMConfig(config provideriface.LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.llmConfig = config
+	}
+}
+
+// WithToolLoopFallbackLLMConfigs names the models a run may fail over to,
+// in order. The loop fails over at most once.
+func WithToolLoopFallbackLLMConfigs(configs []provideriface.LLMSelection) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.fallbackLLMConfigs = append([]provideriface.LLMSelection(nil), configs...)
 	}
 }
 
@@ -429,6 +441,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	}
 
 	transientAttempts := 0
+	failedOver := false
 	for i := 0; ; i++ {
 		if err := checkToolLoopBudgetBeforeProvider(options.budget, i, loopStartedAt); err != nil {
 			emitToolLoopBudgetExhausted(emit, options.budget, i, totalUsage, err)
@@ -563,6 +576,32 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 						"provider_error_kind": "precondition_failed",
 					})
 					emit(types.EventRunRetry, "provider_tool_choice", payload)
+				}
+				continue
+			}
+			// Model failover: a model that still fails after its retries
+			// hands the rest of the run to the next pool member. The cache
+			// breaks; the work continues. Once per run; never on our own
+			// cancellation.
+			if !failedOver && len(options.fallbackLLMConfigs) > 0 && ctx.Err() == nil && IsModelFailoverError(err) {
+				failedOver = true
+				from := activeLLMConfig
+				activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[0], from)
+				if options.conversationID != "" {
+					options.conversationID += "#failover"
+				}
+				messages = stripProviderReplay(messages)
+				transientAttempts = 0
+				if emit != nil {
+					payload, _ := json.Marshal(map[string]any{
+						"reason":         "model_failover",
+						"from_provider":  from.Provider,
+						"from_model":     from.Model,
+						"to_provider":    activeLLMConfig.Provider,
+						"to_model":       activeLLMConfig.Model,
+						"provider_error": err.Error(),
+					})
+					emit(types.EventRunRetry, "model_failover", payload)
 				}
 				continue
 			}
@@ -1283,6 +1322,65 @@ func isProviderPreconditionError(err error) bool {
 // Transient() bool (gatewayHTTPStatusError: 429 + 5xx) are authoritative;
 // the string fallback covers providers that flatten status into the message
 // (matches the existing precondition-detection convention in this file).
+// IsModelFailoverError reports whether a provider error, after its retries,
+// should move a run to the next model in its pool: rate limits and usage
+// limits, 5xx and timeouts, and a model the provider or the catalog does
+// not serve. A malformed request of ours is not one.
+func IsModelFailoverError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	if isTransientProviderError(err) || IsProviderRateLimitError(err) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	text := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"usage limit", "usage_limit", "quota", "not in the catalog", "unsupported model",
+		"model_not_found", "model not found", "does not exist", "timeout", "timed out",
+		"circuit open", "breaker open",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// fillFallbackSelection keeps the run's reasoning effort and output budget
+// on the fallback model unless the fallback names its own.
+func fillFallbackSelection(next, from provideriface.LLMSelection) provideriface.LLMSelection {
+	if next.ReasoningEffort == "" {
+		next.ReasoningEffort = from.ReasoningEffort
+	}
+	if next.MaxTokens <= 0 {
+		next.MaxTokens = from.MaxTokens
+	}
+	if next.Source == "" {
+		next.Source = "model_failover"
+	}
+	return next
+}
+
+// stripProviderReplay drops provider-specific reasoning replay from the
+// history: one provider's reasoning items are not valid input to another.
+func stripProviderReplay(messages []json.RawMessage) []json.RawMessage {
+	out := make([]json.RawMessage, 0, len(messages))
+	for _, msg := range messages {
+		var decoded map[string]any
+		if json.Unmarshal(msg, &decoded) == nil {
+			if _, ok := decoded["reasoning_content"]; ok {
+				delete(decoded, "reasoning_content")
+				if encoded, err := json.Marshal(decoded); err == nil {
+					out = append(out, encoded)
+					continue
+				}
+			}
+		}
+		out = append(out, msg)
+	}
+	return out
+}
+
 func isTransientProviderError(err error) bool {
 	if err == nil {
 		return false

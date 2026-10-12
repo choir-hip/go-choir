@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"log"
 	"net/http"
 	"regexp"
@@ -157,6 +158,8 @@ func (h *Handler) callTextureSemanticMergeModel(ctx context.Context, ownerID str
 	if err != nil {
 		policySource = "policy_error:" + err.Error()
 	}
+	// A pool spec becomes the document's assigned model, as for its desk.
+	selection, _, _ = modelpolicy.Assign(selection, "texture:"+sourceRev.DocID)
 	if strings.TrimSpace(selection.Provider) == "" || strings.TrimSpace(selection.Model) == "" {
 		return textureModelSemanticMergeResult{}, nil, fmt.Errorf("texture model policy did not resolve provider/model")
 	}

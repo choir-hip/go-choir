@@ -141,8 +141,8 @@ fmt.Println(string(b), err)`
 		t.Fatalf("a child reached choir.Report: %q", results[2].Findings)
 	}
 	for _, r := range results[3:5] {
-		if !strings.Contains(r.Error, "not configured on this computer") || !strings.Contains(r.Error, "gpt-5.6-luna") || !strings.Contains(r.Error, "deepseek-v4.1-flash") {
-			t.Fatalf("a model outside the policy was not refused with the configured models: %+v", r)
+		if !strings.Contains(r.Error, "not in the catalog") || !strings.Contains(r.Error, "gpt-6-luna") || !strings.Contains(r.Error, "deepseek-v4.1-flash") || !strings.Contains(r.Error, "pool:default") {
+			t.Fatalf("a model outside the catalog was not refused with the models that work: %+v", r)
 		}
 		if r.Findings != "" || r.DurationMs > 1000 {
 			t.Fatalf("a refused model's child ran: %+v", r)
@@ -151,8 +151,11 @@ fmt.Println(string(b), err)`
 	if results[5].Findings != "findings for gamma via opencode-go/deepseek-v4.1-flash" || results[5].Error != "" {
 		t.Fatalf("a policy model did not run on its policy provider: %+v", results[5])
 	}
-	if results[6].Findings != "findings for gamma via opencode-go/deepseek-v4.1-flash" || results[6].Model != "deepseek-v4.1-flash" {
-		t.Fatalf("a policy role name did not select that role's model: %+v", results[6])
+	// A role name means that role's spec, the default pool: the child is
+	// assigned one member and runs on its provider.
+	viaPool := map[string]string{"deepseek-v4.1-flash": "opencode-go/deepseek-v4.1-flash", "gpt-6-luna": "chatgpt/gpt-6-luna"}[results[6].Model]
+	if viaPool == "" || results[6].Findings != "findings for gamma via "+viaPool {
+		t.Fatalf("a policy role name did not select a member of that role's pool: %+v", results[6])
 	}
 	provider.mu.Lock()
 	defer provider.mu.Unlock()

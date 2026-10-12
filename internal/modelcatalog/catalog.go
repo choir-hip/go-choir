@@ -143,48 +143,63 @@ func SupportedModels() []ModelInfo {
 		},
 
 		{
-			ID:              "gpt-6-luna",
-			DisplayName:     "GPT-6 Luna",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "gpt-5.6-luna",
-			DisplayName:     "GPT-5.6 Luna",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "gpt-5.6-sol",
-			DisplayName:     "GPT-5.6 Sol",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "gpt-5.6-terra",
-			DisplayName:     "GPT-5.6 Terra",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "gpt-5.5",
-			DisplayName:     "GPT-5.5",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "gpt-5.4",
-			DisplayName:     "GPT-5.4",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
-		},
-		{
-			ID:              "gpt-5.4-mini",
-			DisplayName:     "GPT-5.4 Mini",
-			Provider:        "chatgpt",
-			MaxOutputTokens: 65536,
+			ID:                  "gpt-6-luna",
+			DisplayName:         "GPT-6 Luna",
+			Provider:            "chatgpt",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: DefaultContextWindowTokens,
+			Modalities:          []string{"text"},
+			AdapterModalities:   []string{"text"},
 		},
 	}
+}
+
+// DefaultPool names the pool a spec without a model resolves to.
+const DefaultPool = "default"
+
+// PoolSpecPrefix marks a model spec that names a pool instead of a model.
+const PoolSpecPrefix = "pool:"
+
+// PoolMember is one (provider, model) pair in a pool.
+type PoolMember struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+}
+
+// Pools returns the named model pools, each an ordered list of catalog
+// entries. A thread is assigned one member and fails over to the next in
+// order. Owner 2026-10-12: every desk runs on a mix of these two, each the
+// other's only fallback (docs/model-pools-design-2026-10-12.md).
+func Pools() map[string][]PoolMember {
+	return map[string][]PoolMember{
+		DefaultPool: {
+			{Provider: "opencode-go", Model: "deepseek-v4.1-flash"},
+			{Provider: "chatgpt", Model: "gpt-6-luna"},
+		},
+	}
+}
+
+// Lookup returns the catalog entry for (provider, model).
+func Lookup(provider, modelID string) (ModelInfo, bool) {
+	provider, modelID = strings.TrimSpace(provider), strings.TrimSpace(modelID)
+	for _, model := range SupportedModels() {
+		if model.Provider == provider && model.ID == modelID {
+			return model, true
+		}
+	}
+	return ModelInfo{}, false
+}
+
+// ProviderCatalogued reports whether the catalog lists any model for
+// provider. Providers it does not list are not validated by model.
+func ProviderCatalogued(provider string) bool {
+	provider = strings.TrimSpace(provider)
+	for _, model := range SupportedModels() {
+		if model.Provider == provider {
+			return true
+		}
+	}
+	return false
 }
 
 // MaxOutputTokensForModel returns the maximum output tokens for a model ID.

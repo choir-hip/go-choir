@@ -1232,7 +1232,7 @@ func setupMultiProviderHandler(t *testing.T) (*Handler, *IdentityRegistry) {
 		response: &provider.LLMResponse{
 			ID:           "chatgpt-resp-001",
 			Text:         "Hello from ChatGPT!",
-			Model:        "gpt-5.5",
+			Model:        "gpt-6-luna",
 			StopReason:   "end_turn",
 			ProviderName: "chatgpt",
 			Usage:        provider.Usage{InputTokens: 7, OutputTokens: 9},
@@ -1751,7 +1751,7 @@ func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
 		response: &provider.LLMResponse{
 			ID:           "chatcmpl-test",
 			Text:         "hello from gateway",
-			Model:        "gpt-5.5",
+			Model:        "gpt-6-luna",
 			StopReason:   "end_turn",
 			ProviderName: "chatgpt",
 			Usage:        provider.Usage{InputTokens: 11, OutputTokens: 3},
@@ -1763,7 +1763,7 @@ func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
 	credential, _ := reg.IssueCredential("autoputer-openai")
 
 	body := `{
-		"model":"gpt-5.5",
+		"model":"gpt-6-luna",
 		"messages":[
 			{"role":"system","content":"You are Zot inside Choir."},
 			{"role":"user","content":"Say hello"}
@@ -1784,8 +1784,8 @@ func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
 	if chatProvider.lastReq == nil {
 		t.Fatal("provider was not called")
 	}
-	if chatProvider.lastReq.Model != "gpt-5.5" {
-		t.Fatalf("model = %q, want gpt-5.5", chatProvider.lastReq.Model)
+	if chatProvider.lastReq.Model != "gpt-6-luna" {
+		t.Fatalf("model = %q, want gpt-6-luna", chatProvider.lastReq.Model)
 	}
 	if chatProvider.lastReq.ReasoningEffort != "medium" {
 		t.Fatalf("reasoning = %q, want medium", chatProvider.lastReq.ReasoningEffort)
@@ -1798,7 +1798,7 @@ func TestHandleOpenAIChatCompletions_RoutesThroughGateway(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Object != "chat.completion" || resp.Model != "gpt-5.5" {
+	if resp.Object != "chat.completion" || resp.Model != "gpt-6-luna" {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 	if len(resp.Choices) != 1 || resp.Choices[0].Message == nil {
@@ -1821,7 +1821,7 @@ func TestHandleOpenAIChatCompletions_StreamingSSE(t *testing.T) {
 		response: &provider.LLMResponse{
 			ID:           "chatcmpl-stream",
 			Text:         "streamed hello",
-			Model:        "gpt-5.5",
+			Model:        "gpt-6-luna",
 			StopReason:   "end_turn",
 			ProviderName: "chatgpt",
 			Usage:        provider.Usage{InputTokens: 7, OutputTokens: 2},
@@ -1832,7 +1832,7 @@ func TestHandleOpenAIChatCompletions_StreamingSSE(t *testing.T) {
 	h := NewMultiHandler(reg, mp)
 	credential, _ := reg.IssueCredential("autoputer-openai-stream")
 
-	body := `{"model":"gpt-5.5","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"medium","stream":true}`
+	body := `{"model":"gpt-6-luna","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"medium","stream":true}`
 	req := httptest.NewRequest(http.MethodPost, "/provider/openai/v1/chat/completions", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+credential.RawToken)
 	req.Header.Set("Content-Type", "application/json")
@@ -1865,7 +1865,7 @@ func TestHandleOpenAIChatCompletions_StreamingToolCallsAreComplete(t *testing.T)
 		real: true,
 		response: &provider.LLMResponse{
 			ID:         "chatcmpl-stream-tool",
-			Model:      "gpt-5.5",
+			Model:      "gpt-6-luna",
 			StopReason: "tool_use",
 			ToolCalls: []provider.ContentToolCall{{
 				ID:        "call_read_1",
@@ -1881,7 +1881,7 @@ func TestHandleOpenAIChatCompletions_StreamingToolCallsAreComplete(t *testing.T)
 	credential, _ := reg.IssueCredential("autoputer-openai-stream-tools")
 
 	body := `{
-		"model":"gpt-5.5",
+		"model":"gpt-6-luna",
 		"messages":[{"role":"user","content":"read the lineage file"}],
 		"tools":[{
 			"type":"function",
@@ -1979,8 +1979,8 @@ func TestHandleOpenAIModelsRequiresAutoputerAuth(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `"id":"gpt-5.5"`) {
-		t.Fatalf("models response missing gpt-5.5: %s", w.Body.String())
+	if !strings.Contains(w.Body.String(), `"id":"gpt-6-luna"`) {
+		t.Fatalf("models response missing gpt-6-luna: %s", w.Body.String())
 	}
 }
 
@@ -2211,9 +2211,24 @@ func TestProviderRouting(t *testing.T) {
 		{
 			name:             "explicit_provider_overrides_model",
 			provider:         "zai",
-			model:            "accounts/fireworks/models/deepseek-v4-flash",
+			model:            "glm-5.1",
 			wantStatus:       http.StatusOK,
 			wantProviderName: "zai",
+		},
+		// The host catalog decides which models a catalogued provider serves.
+		{
+			name:             "catalogued_provider_refuses_uncatalogued_model",
+			provider:         "zai",
+			model:            "glm-4-plus",
+			wantStatus:       http.StatusBadRequest,
+			wantErrorContain: "not in the catalog",
+		},
+		{
+			name:             "catalogued_provider_refuses_model_of_another_provider",
+			provider:         "zai",
+			model:            "accounts/fireworks/models/deepseek-v4-flash",
+			wantStatus:       http.StatusBadRequest,
+			wantErrorContain: "not in the catalog",
 		},
 	}
 

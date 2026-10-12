@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 )
 
@@ -176,6 +177,10 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 	writeGatewayJSON(w, http.StatusOK, openAIChatCompletionFromProvider(resp))
 }
 
+// defaultOpenAICompatModel names the model an OpenAI-compatible response
+// reports when the provider did not.
+const defaultOpenAICompatModel = "gpt-6-luna"
+
 // HandleOpenAIModels returns a minimal OpenAI-compatible models response. Zot
 // primarily uses launch flags here, but this keeps model discovery healthy for
 // clients that probe the base URL.
@@ -188,18 +193,38 @@ func (h *Handler) HandleOpenAIModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ids := []string{"gpt-5.5", "gpt-5.4", "gpt-5.4-mini"}
-	out := make([]map[string]any, 0, len(ids))
+	out := make([]map[string]any, 0)
 	now := time.Now().Unix()
-	for _, id := range ids {
+	for _, info := range modelcatalog.SupportedModels() {
+		if info.Provider != "chatgpt" {
+			continue
+		}
 		out = append(out, map[string]any{
-			"id":       id,
+			"id":       info.ID,
 			"object":   "model",
 			"created":  now,
 			"owned_by": "choir-gateway",
 		})
 	}
 	writeGatewayJSON(w, http.StatusOK, map[string]any{"object": "list", "data": out})
+}
+
+// HandleModels serves GET /provider/v1/models: the host catalog and its
+// pools, the models a computer may name.
+func (h *Handler) HandleModels(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if _, err := h.authenticateAutoputer(r); err != nil {
+		writeGatewayJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "authentication required"})
+		return
+	}
+	writeGatewayJSON(w, http.StatusOK, map[string]any{
+		"models":       modelcatalog.SupportedModels(),
+		"pools":        modelcatalog.Pools(),
+		"default_pool": modelcatalog.DefaultPool,
+	})
 }
 
 func (h *Handler) authorizeOpenAICompatibleRequest(w http.ResponseWriter, r *http.Request, scope string) (string, bool) {
@@ -367,7 +392,7 @@ func convertOpenAIChatToolChoice(raw json.RawMessage) string {
 func openAIChatCompletionFromProvider(resp *provider.LLMResponse) openAIChatCompletionResponse {
 	model := resp.Model
 	if model == "" {
-		model = "gpt-5.5"
+		model = defaultOpenAICompatModel
 	}
 	msg := &openAIChatMessage{
 		Role:    "assistant",
@@ -537,7 +562,7 @@ func (h *Handler) handleOpenAIStreamingToolChatCompletions(w http.ResponseWriter
 
 func openAIChatCompletionChunk(model string, delta openAIChatDelta, finish string, usage *openAIChatUsage) map[string]any {
 	if model == "" {
-		model = "gpt-5.5"
+		model = defaultOpenAICompatModel
 	}
 	choice := openAIChatChoice{Index: 0, Delta: &delta, FinishReason: finish}
 	chunk := map[string]any{

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
@@ -24,16 +25,32 @@ const (
 	MetadataPolicySource    = "llm_policy_source"
 	MetadataPolicyError     = "llm_policy_error"
 	MetadataPolicyOverlayID = "llm_policy_overlay_id"
+	// MetadataSpec is what was asked for (a pool or a model);
+	// MetadataAssignment says how the model was chosen (hash, explicit,
+	// retired_remapped); MetadataFallbacks lists the failover order as
+	// provider/model, comma-separated; MetadataThread is the hash key.
+	MetadataSpec       = "llm_spec"
+	MetadataAssignment = "llm_assignment"
+	MetadataFallbacks  = "llm_fallbacks"
+	MetadataThread     = "llm_thread"
 
 	VerifierRole           = "verifier"
 	MultimodalVerifierRole = "verifier_multimodal"
 
 	modelPolicyOverlayRelativeDir = "System/model-policy-overlays"
 
-	defaultChatGPTProvider        = "chatgpt"
-	defaultChatGPTMiniModel       = "gpt-5.6-luna"
-	defaultChatGPTForegroundModel = "gpt-5.6-luna"
+	defaultChatGPTProvider  = "chatgpt"
+	defaultChatGPTMiniModel = "gpt-6-luna"
+
+	// policyVersionLine marks a policy file written from the current
+	// platform default. A file without it is rewritten at load; a file
+	// carrying ownerEditedLine is the owner's and is kept.
+	policyVersionLine = "# platform-policy-version: 2"
+	ownerEditedLine   = "# owner-edited"
 )
+
+// defaultPoolSpec is the spec every role uses by default.
+var defaultPoolSpec = modelcatalog.PoolSpecPrefix + modelcatalog.DefaultPool
 
 // ManagerConfig supplies the computer-owned policy path and the server-owned
 // provider dependencies used by verification tools.
@@ -130,6 +147,15 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 	if err != nil {
 		metadata[MetadataPolicyError] = err.Error()
 	}
+	thread := ThreadKey(metadata)
+	spec := SpecOf(selection)
+	selection, fallbacks, assignment := Assign(selection, thread)
+	metadata[MetadataSpec] = spec
+	metadata[MetadataAssignment] = assignment
+	metadata[MetadataThread] = thread
+	if len(fallbacks) > 0 {
+		metadata[MetadataFallbacks] = FormatFallbacks(fallbacks)
+	}
 	if selection.Provider != "" {
 		metadata[MetadataProvider] = selection.Provider
 	}
@@ -146,6 +172,98 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 		metadata[MetadataPolicySource] = selection.Source
 	}
 	return metadata
+}
+
+// ThreadKey is the key a pool assignment hashes: the Texture agent for a
+// Texture run (a document keeps one model), otherwise the trajectory. A run
+// with neither gets a fresh random key.
+func ThreadKey(metadata map[string]any) string {
+	if agentID := metadataString(metadata, "agent_id"); strings.HasPrefix(agentID, "texture:") {
+		return agentID
+	}
+	if trajectory := metadataString(metadata, "trajectory_id"); trajectory != "" {
+		return trajectory
+	}
+	return fmt.Sprintf("random:%d", time.Now().UnixNano())
+}
+
+// SpecOf renders a selection as the spec it was asked as.
+func SpecOf(selection provideriface.LLMSelection) string {
+	model := strings.TrimSpace(selection.Model)
+	if strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) || strings.TrimSpace(selection.Provider) == "" {
+		return model
+	}
+	return strings.TrimSpace(selection.Provider) + "/" + model
+}
+
+// Assign resolves a selection to one concrete model for thread. A pool spec
+// hashes the thread onto a member; the members after it are the fallbacks.
+// A concrete model the catalog has retired is remapped to the default pool.
+// A concrete model in the default pool falls back to the rest of the pool.
+func Assign(selection provideriface.LLMSelection, thread string) (provideriface.LLMSelection, []provideriface.LLMSelection, string) {
+	model := strings.TrimSpace(selection.Model)
+	assignment := "explicit"
+	pool := ""
+	switch {
+	case strings.HasPrefix(model, modelcatalog.PoolSpecPrefix):
+		pool = strings.TrimPrefix(model, modelcatalog.PoolSpecPrefix)
+		assignment = "hash"
+	case modelcatalog.ProviderCatalogued(selection.Provider):
+		if _, ok := modelcatalog.Lookup(selection.Provider, model); !ok {
+			pool = modelcatalog.DefaultPool
+			assignment = "retired_remapped"
+		}
+	}
+	if pool == "" {
+		members := modelcatalog.Pools()[modelcatalog.DefaultPool]
+		for i, member := range members {
+			if member.Provider == selection.Provider && member.Model == model {
+				return selection, poolSelections(rotate(members, i)[1:], selection), assignment
+			}
+		}
+		return selection, nil, assignment
+	}
+	members, ok := modelcatalog.Pools()[pool]
+	if !ok || len(members) == 0 {
+		members = modelcatalog.Pools()[modelcatalog.DefaultPool]
+	}
+	index := int(fnv32(thread) % uint32(len(members)))
+	ordered := poolSelections(rotate(members, index), selection)
+	return ordered[0], ordered[1:], assignment
+}
+
+// FormatFallbacks renders fallbacks as provider/model, comma-separated.
+func FormatFallbacks(fallbacks []provideriface.LLMSelection) string {
+	parts := make([]string, 0, len(fallbacks))
+	for _, fallback := range fallbacks {
+		parts = append(parts, fallback.Provider+"/"+fallback.Model)
+	}
+	return strings.Join(parts, ",")
+}
+
+func rotate(members []modelcatalog.PoolMember, start int) []modelcatalog.PoolMember {
+	out := make([]modelcatalog.PoolMember, 0, len(members))
+	out = append(out, members[start:]...)
+	return append(out, members[:start]...)
+}
+
+func poolSelections(members []modelcatalog.PoolMember, base provideriface.LLMSelection) []provideriface.LLMSelection {
+	out := make([]provideriface.LLMSelection, 0, len(members))
+	for _, member := range members {
+		selection := base
+		selection.Provider, selection.Model = member.Provider, member.Model
+		out = append(out, selection)
+	}
+	return out
+}
+
+func fnv32(key string) uint32 {
+	hash := uint32(2166136261)
+	for i := 0; i < len(key); i++ {
+		hash ^= uint32(key[i])
+		hash *= 16777619
+	}
+	return hash
 }
 
 // Resolve returns the effective selection for role.
@@ -171,6 +289,16 @@ func (p Policy) Selections() []provideriface.LLMSelection {
 	out := make([]provideriface.LLMSelection, 0, len(roles)+1)
 	seen := make(map[string]bool, len(roles)+1)
 	add := func(selection provideriface.LLMSelection) {
+		if strings.HasPrefix(selection.Model, modelcatalog.PoolSpecPrefix) {
+			members := modelcatalog.Pools()[strings.TrimPrefix(selection.Model, modelcatalog.PoolSpecPrefix)]
+			for _, member := range poolSelections(members, selection) {
+				if !seen[member.Model] {
+					seen[member.Model] = true
+					out = append(out, member)
+				}
+			}
+			return
+		}
 		if selection.Model == "" || seen[selection.Model] {
 			return
 		}
@@ -307,85 +435,80 @@ func isSafeOverlayID(id string) bool {
 }
 
 func defaultPolicyText(_ provideriface.Config) string {
-	return `# Choir model policy
-# This computer-owned file maps agent roles to provider/model choices.
+	return policyVersionLine + `
+# Choir model policy
+# This computer-owned file maps agent roles to a model spec: "pool:<name>"
+# (a member is assigned per thread; the others are its fallbacks) or a
+# provider and model. Add a line "# owner-edited" to keep your edits when
+# the platform default changes.
 # Provider secrets stay server-owned; this file names models only.
 # Optional max_tokens requests an explicit per-call budget. Omit it for provider
 # defaults, especially OpenAI-compatible chat completions.
 
 [defaults]
-fallback_provider = "chatgpt"
-fallback_model = "gpt-5.6-luna"
+model = "pool:default"
 reasoning = "low"
 
 [roles.conductor]
-provider = "chatgpt"
-model = "gpt-5.6-luna"
+model = "pool:default"
 reasoning = "low"
 
 [roles.texture]
-provider = "opencode-go"
-model = "deepseek-v4.1-flash"
+model = "pool:default"
 reasoning = "high"
 
 [roles.management]
-provider = "chatgpt"
-model = "gpt-5.6-luna"
+model = "pool:default"
 reasoning = "high"
 
 [roles.engineering]
-provider = "opencode-go"
-model = "deepseek-v4.1-flash"
+model = "pool:default"
 
 [roles.research]
-provider = "chatgpt"
-model = "gpt-5.6-luna"
+model = "pool:default"
 reasoning = "low"
 
-
 [roles.verifier]
-provider = "chatgpt"
-model = "gpt-5.6-luna"
+model = "pool:default"
 requires = ["text", "tool_use"]
 
 [roles.verifier_multimodal]
-provider = "chatgpt"
-model = "gpt-5.6-luna"
+model = "pool:default"
 requires = ["image", "tool_use"]
 `
 }
 
 func fallbackPolicy(_ provideriface.Config) Policy {
-	defaults := provideriface.LLMSelection{Provider: defaultChatGPTProvider, Model: defaultChatGPTMiniModel, ReasoningEffort: "low", Source: "platform_fallback"}
-	chatGPTMini := defaults
-	chatGPTForeground := provideriface.LLMSelection{Provider: defaultChatGPTProvider, Model: defaultChatGPTForegroundModel, ReasoningEffort: "high", Source: "platform_fallback"}
-	// Texture authors canonical document revisions through a yaegi cell API —
-	// map-shaped ApplyTexture bodies with a typed packet schema the model must
-	// reproduce exactly. 2026-09-28 staging evidence: at effort=low the desk
-	// ignored the cell-import rule and invented packet fields until the run
-	// died; texture needs the strongest reasoning available. Owner direction
-	// 2026-10-02: texture moves to the opencode-go/deepseek-v4.1-flash
-	// provider (same as engineering) at high effort — the desk's imperative
-	// verb calls (Ask/Escalate) keep failing at low.
-	textureDesk := provideriface.LLMSelection{Provider: "opencode-go", Model: "deepseek-v4.1-flash", ReasoningEffort: "high", Source: "platform_fallback"}
+	// Owner 2026-10-12: every role runs on the default pool (deepseek-v4.1-flash
+	// and gpt-6-luna), assigned per thread, each the other's fallback. Texture
+	// and management keep high effort; opencode-go ignores the setting.
+	pool := func(effort string) provideriface.LLMSelection {
+		return provideriface.LLMSelection{Model: defaultPoolSpec, ReasoningEffort: effort, Source: "platform_fallback"}
+	}
 	return Policy{
-		Defaults: defaults,
+		Defaults: pool("low"),
 		Roles: map[string]provideriface.LLMSelection{
-			agentprofile.Conductor:   chatGPTMini,
-			agentprofile.Management:  chatGPTForeground,
-			agentprofile.Engineering: {Provider: "opencode-go", Model: "deepseek-v4.1-flash", Source: "platform_fallback"},
-			agentprofile.Research:    chatGPTMini,
-			agentprofile.Texture:     textureDesk,
-			VerifierRole:             chatGPTMini,
-			MultimodalVerifierRole:   chatGPTMini,
+			agentprofile.Conductor:   pool("low"),
+			agentprofile.Management:  pool("high"),
+			agentprofile.Engineering: pool(""),
+			agentprofile.Research:    pool("low"),
+			agentprofile.Texture:     pool("high"),
+			VerifierRole:             pool(""),
+			MultimodalVerifierRole:   pool(""),
 		},
 		Source: "platform_fallback",
 	}
 }
 
 func ensureDefaultPolicyFile(path string, cfg provideriface.Config) error {
-	if _, err := os.Stat(path); err == nil {
-		return nil
+	raw, err := os.ReadFile(path)
+	if err == nil {
+		text := string(raw)
+		if strings.Contains(text, policyVersionLine) || strings.Contains(text, ownerEditedLine) {
+			return nil
+		}
+		// An older platform default (it named retired models): replace it.
+		return os.WriteFile(path, []byte(defaultPolicyText(cfg)), 0o644)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -437,15 +560,24 @@ func parsePolicy(raw, source string) (Policy, error) {
 	if err := scanner.Err(); err != nil {
 		return Policy{}, err
 	}
-	if strings.TrimSpace(policy.Defaults.Provider) == "" || strings.TrimSpace(policy.Defaults.Model) == "" {
-		return Policy{}, fmt.Errorf("defaults require fallback_provider and fallback_model")
+	if !validSelection(policy.Defaults) {
+		return Policy{}, fmt.Errorf("defaults require a pool spec or a provider and model")
 	}
 	for role, selection := range policy.Roles {
-		if strings.TrimSpace(selection.Provider) == "" || strings.TrimSpace(selection.Model) == "" {
-			return Policy{}, fmt.Errorf("role %q requires provider and model", role)
+		if !validSelection(selection) {
+			return Policy{}, fmt.Errorf("role %q requires a pool spec or a provider and model", role)
 		}
 	}
 	return policy, nil
+}
+
+// validSelection accepts a pool spec, or a provider with a model.
+func validSelection(selection provideriface.LLMSelection) bool {
+	model := strings.TrimSpace(selection.Model)
+	if strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) {
+		return len(model) > len(modelcatalog.PoolSpecPrefix)
+	}
+	return strings.TrimSpace(selection.Provider) != "" && model != ""
 }
 
 func parseOverlay(id, raw, source string) (policyOverlay, error) {
@@ -508,8 +640,8 @@ func parseOverlay(id, raw, source string) (policyOverlay, error) {
 		return policyOverlay{}, fmt.Errorf("overlay defaults require model when provider is set")
 	}
 	for role, selection := range overlay.Roles {
-		if strings.TrimSpace(selection.Provider) == "" || strings.TrimSpace(selection.Model) == "" {
-			return policyOverlay{}, fmt.Errorf("overlay role %q requires provider and model", role)
+		if !validSelection(selection) {
+			return policyOverlay{}, fmt.Errorf("overlay role %q requires a pool spec or a provider and model", role)
 		}
 	}
 	if isEmptySelection(overlay.Defaults) && len(overlay.Roles) == 0 {

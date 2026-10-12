@@ -19,7 +19,7 @@ import (
 
 const (
 	defaultChatGPTSearchURL         = "https://chatgpt.com/backend-api/codex/responses"
-	defaultChatGPTSearchModel       = "gpt-5.5"
+	defaultChatGPTSearchModel       = "gpt-6-luna"
 	defaultChatGPTSearchReasoning   = "low"
 	defaultChatGPTSearchContextSize = "low"
 )

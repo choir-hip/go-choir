@@ -1842,8 +1842,6 @@ func modelSupportsImage(modelID string) bool {
 		return false
 	}
 	switch {
-	case strings.HasPrefix(modelID, "gpt-5.5"), strings.HasPrefix(modelID, "gpt-5.4"):
-		return true
 	case strings.Contains(modelID, "kimi-k2p6"):
 		return true
 	default:

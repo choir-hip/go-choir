@@ -70,6 +70,32 @@ func ResolvedLLMConfigFromMetadata(metadata map[string]any) LLMSelection {
 	}
 }
 
+// FallbackLLMConfigsFromMetadata parses the run's failover order
+// (llm_fallbacks: provider/model, comma-separated). Each fallback keeps the
+// primary's reasoning effort and output budget.
+func FallbackLLMConfigsFromMetadata(metadata map[string]any, primary LLMSelection) []LLMSelection {
+	raw := metadataStringValue(metadata, "llm_fallbacks")
+	if raw == "" {
+		return nil
+	}
+	out := make([]LLMSelection, 0, 2)
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		slash := strings.Index(part, "/")
+		if slash <= 0 || slash == len(part)-1 {
+			continue
+		}
+		out = append(out, LLMSelection{
+			Provider:        part[:slash],
+			Model:           part[slash+1:],
+			ReasoningEffort: primary.ReasoningEffort,
+			MaxTokens:       primary.MaxTokens,
+			Source:          "model_failover",
+		})
+	}
+	return out
+}
+
 func metadataStringValue(metadata map[string]any, key string) string {
 	if metadata == nil {
 		return ""

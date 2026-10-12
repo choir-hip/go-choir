@@ -303,7 +303,7 @@ func (th *TerminalHandler) managementConsoleCommandWithGatewayDefaults() []strin
 	}
 	model := strings.TrimSpace(os.Getenv("CHOIR_ZOT_MODEL"))
 	if model == "" {
-		model = "gpt-5.5"
+		model = "gpt-6-luna"
 	}
 	reasoning := strings.TrimSpace(os.Getenv("CHOIR_ZOT_REASONING"))
 	if reasoning == "" {

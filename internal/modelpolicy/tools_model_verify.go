@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
@@ -128,6 +129,8 @@ func (m *Manager) resolveToolModelSelection(ctx context.Context, ownerID, role s
 			policySource = policy.Source
 		}
 		selection = policy.Resolve(role)
+		// A pool spec is verified on the member this call is assigned.
+		selection, _, _ = Assign(selection, fmt.Sprintf("verify:%d", time.Now().UnixNano()))
 	} else {
 		selection = provideriface.LLMSelection{
 			Provider:        strings.TrimSpace(input.Provider),
@@ -231,9 +234,6 @@ func catalogModelSupportsModality(modelID, modality string) bool {
 			}
 		}
 		return false
-	}
-	if modality == "image" && (strings.HasPrefix(modelID, "gpt-5.5") || strings.HasPrefix(modelID, "gpt-5.4")) {
-		return true
 	}
 	return modality == "text"
 }

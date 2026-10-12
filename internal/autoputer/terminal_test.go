@@ -509,7 +509,7 @@ func TestSessionCommandConfiguresRealZotForGateway(t *testing.T) {
 	wantArgs := []string{
 		"/opt/choir/bin/zot",
 		"--provider", "openai",
-		"--model", "gpt-5.5",
+		"--model", "gpt-6-luna",
 		"--reasoning", "medium",
 		"--base-url", "http://127.0.0.1:8084/provider/openai/v1",
 	}

@@ -874,7 +874,7 @@ in
       #   FIREWORKS_API_KEY=...
       #   CHATGPT_AUTH_PATH=/var/lib/go-choir/codex-auth.json
       #   # ChatGPT search reuses the same auth file; optional tuning:
-      #   CHATGPT_SEARCH_MODEL=gpt-5.5
+      #   CHATGPT_SEARCH_MODEL=gpt-6-luna
       #   CHATGPT_SEARCH_REASONING_EFFORT=low
       #   CHATGPT_SEARCH_CONTEXT_SIZE=low
       #   # Search Provider Keys
@@ -902,7 +902,7 @@ in
         "SERVER_WRITE_TIMEOUT=10m30s"
         "GATEWAY_PORT=8084"
         "GATEWAY_IDENTITY_STORE_PATH=/var/lib/go-choir/gateway-identities.json"
-        "GATEWAY_CHATGPT_MODELS=gpt-6-luna,gpt-5.5,gpt-5.4,gpt-5.4-mini"
+        "GATEWAY_CHATGPT_MODELS=gpt-6-luna"
         "GATEWAY_CHATGPT_REASONING_EFFORT=low"
         # Tokens are currently issued at autoputer/VM bootstrap and not
         # proactively rotated. Use a longer TTL in staging to avoid
