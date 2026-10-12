@@ -2946,10 +2946,6 @@ func (rt *Runtime) reconcileAssignedWorkItemActorWithSource(ctx context.Context,
 	return rec, nil
 }
 
-func buildAssignedWorkItemPrompt(workItems []types.WorkItemRecord) string {
-	return buildAssignedWorkItemPromptForCarrier(workItems, false)
-}
-
 func buildAssignedWorkItemPromptForCarrier(workItems []types.WorkItemRecord, choirCarrier bool) string {
 	var b strings.Builder
 	b.WriteString("Resume the open trajectory work item records assigned to you.\n")

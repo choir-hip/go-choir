@@ -476,21 +476,6 @@ func decodeCoagentSourceRejections(value any) []coagentSourceRejection {
 	return out
 }
 
-func mergeCoagentSourceRejectionsIntoRunMetadata(rec *types.RunRecord, incoming []coagentSourceRejection) bool {
-	if rec == nil || len(incoming) == 0 {
-		return false
-	}
-	if rec.Metadata == nil {
-		rec.Metadata = map[string]any{}
-	}
-	existing := decodeCoagentSourceRejections(rec.Metadata[textureSourceRejectionsKey])
-	merged, changed := mergeCoagentSourceRejections(existing, incoming)
-	if changed {
-		rec.Metadata[textureSourceRejectionsKey] = merged
-	}
-	return changed
-}
-
 func mergeCoagentSourceRejectionsIntoMetadata(metadata map[string]any, incoming []coagentSourceRejection) bool {
 	if metadata == nil || len(incoming) == 0 {
 		return false
@@ -729,17 +714,6 @@ func executionSourceDefaultLabel(kind string) string {
 	default:
 		return "Coagent source"
 	}
-}
-
-func looksLikeArtifactPath(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" || strings.ContainsAny(value, "\r\n") {
-		return false
-	}
-	return strings.HasPrefix(value, "/") ||
-		strings.HasPrefix(value, "./") ||
-		strings.HasPrefix(value, "../") ||
-		strings.Contains(value, "/")
 }
 
 func isHTTPURL(value string) bool {

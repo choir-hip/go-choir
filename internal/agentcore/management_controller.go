@@ -1721,32 +1721,6 @@ func coagentUpdateDeliverableForRun(rec *types.RunRecord, update types.CoagentSo
 	return true
 }
 
-func buildPersistentManagementUpdatePrompt(updates []types.CoagentSourcePacket) string {
-	var b strings.Builder
-	b.WriteString("Process the pending carrier records addressed to you as the user's persistent super actor.\n\n")
-	b.WriteString("Each delivered packet is a validated packet.kind=execution_request with executable actions. When you have command output, diffs, tests, artifacts, questions, or blockers, use choir.Report to assert a typed commitment with the evidence. Use choir.Cast to open assignments.\n")
-	for i, update := range updates {
-		b.WriteString("\nUpdate ")
-		b.WriteString(fmt.Sprintf("%d", i+1))
-		if update.ChannelID != "" {
-			b.WriteString(" channel=")
-			b.WriteString(update.ChannelID)
-		}
-		if update.AgentID != "" {
-			b.WriteString(" from=")
-			b.WriteString(update.AgentID)
-		}
-		if kind := coagentPacketKind(update.Packet); kind != "" {
-			b.WriteString(" kind=")
-			b.WriteString(kind)
-		}
-		b.WriteString(":\n")
-		b.WriteString(strings.TrimSpace(update.Content))
-		b.WriteString("\n")
-	}
-	return strings.TrimSpace(b.String())
-}
-
 func (rt *Runtime) hydrateLifecycleControlWorkItems(ctx context.Context, ownerID, computerID, agentID string, updates []types.CoagentSourcePacket) ([]types.WorkItemRecord, map[string]types.WorkItemRecord, string, error) {
 	if len(updates) == 0 {
 		return nil, nil, "", store.ErrLifecycleInvalidTransition
@@ -2239,47 +2213,6 @@ func workItemIDsForMetadata(workItems []types.WorkItemRecord) []string {
 		ids = append(ids, id)
 	}
 	return ids
-}
-
-func buildCoagentBacklogPrompt(updates []types.CoagentSourcePacket, workItems []types.WorkItemRecord) string {
-	updatePrompt := buildCoagentUpdatePrompt(updates)
-	if len(workItems) == 0 {
-		return updatePrompt
-	}
-	workPrompt := buildAssignedWorkItemPrompt(workItems)
-	if updatePrompt == "" {
-		return workPrompt
-	}
-	if workPrompt == "" {
-		return updatePrompt
-	}
-	return updatePrompt + "\n\n" + workPrompt
-}
-
-func buildCoagentUpdatePrompt(updates []types.CoagentSourcePacket) string {
-	var b strings.Builder
-	b.WriteString("Process the pending update_coagent records addressed to you.\n")
-	b.WriteString("Respond with the appropriate tool or final result for your role; report blockers with update_coagent when you cannot proceed.\n")
-	for i, update := range updates {
-		b.WriteString("\nUpdate ")
-		b.WriteString(fmt.Sprintf("%d", i+1))
-		if update.ChannelID != "" {
-			b.WriteString(" channel=")
-			b.WriteString(update.ChannelID)
-		}
-		if update.AgentID != "" {
-			b.WriteString(" from=")
-			b.WriteString(update.AgentID)
-		}
-		if kind := coagentPacketKind(update.Packet); kind != "" {
-			b.WriteString(" kind=")
-			b.WriteString(kind)
-		}
-		b.WriteString(":\n")
-		b.WriteString(strings.TrimSpace(update.Content))
-		b.WriteString("\n")
-	}
-	return strings.TrimSpace(b.String())
 }
 
 func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.InjectUserTurnsFunc {

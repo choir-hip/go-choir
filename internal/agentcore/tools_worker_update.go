@@ -12,149 +12,12 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-
-// CoagentSourcePacketPayloadSchema is the single reducer-facing schema
-// authority for typed packet payloads. Delivery envelope authority (target
-// agent, channel, work, direction, and command/update identities) deliberately
-// lives outside this schema.
-func CoagentSourcePacketPayloadSchema() map[string]any {
-	return toolregistry.JSONSchemaObject(coagentSourcePacketPayloadProperties(), []string{"schema_version", "kind", "summary"}, false)
-}
-
-func coagentSourcePacketPayloadProperties() map[string]any {
-	return map[string]any{
-		"schema_version": map[string]any{"type": "string", "enum": []string{types.CoagentSourcePacketSchemaV1}},
-		"kind":           map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request"}},
-		"summary":        map[string]any{"type": "string"},
-		"claims": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"claim_id":            map[string]any{"type": "string"},
-					"text":                map[string]any{"type": "string"},
-					"source_ids":          stringArraySchema(),
-					"stance":              map[string]any{"type": "string", "enum": []string{"supports", "qualifies", "contradicts", "background"}},
-					"recommended_surface": map[string]any{"type": "string", "enum": []string{"inline_ref", "block_embed", "source_panel", "decision_log"}},
-				},
-				"required":             []string{"text"},
-				"additionalProperties": false,
-			},
-		},
-		"sources": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"source_id": map[string]any{"type": "string"},
-					"kind":      map[string]any{"type": "string", "enum": sourcecontract.SourceKindValues()},
-					"target": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"uri":        map[string]any{"type": "string"},
-							"title":      map[string]any{"type": "string"},
-							"media_type": map[string]any{"type": "string"},
-						},
-						"required":             []string{"uri"},
-						"additionalProperties": false,
-					},
-					"selectors": map[string]any{
-						"type": "array",
-						"items": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"kind":   map[string]any{"type": "string", "enum": sourcecontract.SelectorKindValues()},
-								"quote":  map[string]any{"type": "string"},
-								"start":  map[string]any{"type": "integer"},
-								"end":    map[string]any{"type": "integer"},
-								"x":      map[string]any{"type": "number"},
-								"y":      map[string]any{"type": "number"},
-								"width":  map[string]any{"type": "number"},
-								"height": map[string]any{"type": "number"},
-							},
-							"required":             []string{"kind"},
-							"additionalProperties": false,
-						},
-					},
-					"excerpt": map[string]any{
-						"type":        "string",
-						"description": "Bounded source text to show in Texture source_ref transclusions. Use this for the short source stub when the researcher has read source content.",
-					},
-					"reader_snapshot": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"text_content":        map[string]any{"type": "string"},
-							"snapshot_kind":       map[string]any{"type": "string"},
-							"media_type":          map[string]any{"type": "string"},
-							"original_media_type": map[string]any{"type": "string"},
-							"source_url":          map[string]any{"type": "string"},
-							"access_scope":        map[string]any{"type": "string"},
-							"truncated":           map[string]any{"type": "boolean"},
-						},
-						"additionalProperties": false,
-					},
-					"evidence": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"state":        map[string]any{"type": "string", "enum": []string{"available", "pending", "blocked", "unavailable"}},
-							"confidence":   map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}},
-							"rights_scope": map[string]any{"type": "string"},
-						},
-						"additionalProperties": false,
-					},
-				},
-				"required":             []string{"kind", "target"},
-				"additionalProperties": false,
-			},
-		},
-		"actions": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"action_id": map[string]any{"type": "string"},
-					"type":      map[string]any{"type": "string", "enum": []string{"run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "import_source", "revise_texture"}},
-					"objective": map[string]any{"type": "string"},
-					"inputs":    map[string]any{"type": "object"},
-					"expected_sources": map[string]any{
-						"type": "array",
-						"items": map[string]any{
-							"type": "object",
-							"properties": map[string]any{
-								"kind":     map[string]any{"type": "string", "enum": sourcecontract.SourceKindValues()},
-								"required": map[string]any{"type": "boolean"},
-							},
-							"required":             []string{"kind"},
-							"additionalProperties": false,
-						},
-					},
-					"safety": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"mutation_class": map[string]any{"type": "string", "enum": []string{"green", "yellow", "orange", "red", "black"}},
-							"network":        map[string]any{"type": "string", "enum": []string{"forbidden", "allowed", "required"}},
-							"file_mutation":  map[string]any{"type": "string", "enum": []string{"forbidden", "allowed", "required"}},
-						},
-						"additionalProperties": false,
-					},
-				},
-				"required":             []string{"type", "objective"},
-				"additionalProperties": false,
-			},
-		},
-		"questions": stringArraySchema(),
-		"notes":     stringArraySchema(),
-	}
-}
-
 
 type coagentUpdateAuthorityStore interface {
 	GetAgentByScope(context.Context, string, string, string) (types.AgentRecord, error)
@@ -177,7 +40,6 @@ type coagentUpdateAuthority struct {
 	workItemID    string
 	lifecycle     bool
 }
-
 
 func resolveCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, authorityStore coagentUpdateAuthorityStore, explicitTargetAgentID, requestedWorkItemID string) (coagentUpdateAuthority, error) {
 	var authority coagentUpdateAuthority
@@ -286,7 +148,6 @@ func validateLoadedCallerRun(execution toolregistry.ExecutionContext, run types.
 	}
 	return nil
 }
-
 
 func enforceCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, authorityStore coagentUpdateAuthorityStore, target types.AgentRecord, targetProfile string) error {
 	if rt == nil || authorityStore == nil {
@@ -731,17 +592,6 @@ func validateEngineeringTextureResultPath(ctx context.Context, authorityStore co
 	return nil
 }
 
-func stringArraySchema() map[string]any {
-	return map[string]any{
-		"type":  "array",
-		"items": map[string]any{"type": "string"},
-	}
-}
-
-func workerUpdateEmpty(update types.CoagentSourcePacket) bool {
-	return coagentpacket.Empty(update.Packet)
-}
-
 func buildWorkerUpdateMessage(update types.CoagentSourcePacket) string {
 	packet := update.Packet
 	var b strings.Builder
@@ -963,59 +813,6 @@ func validateExistingWorkerUpdate(existing, want types.CoagentSourcePacket) erro
 	return nil
 }
 
-func rejectLegacyUpdateCoagentFields(raw json.RawMessage) error {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return fmt.Errorf("decode update_coagent args: %w", err)
-	}
-	allowed := map[string]bool{
-		"agent_id":           true,
-		"channel_id":         true,
-		"producer_update_id": true,
-		"work_item_id":       true,
-		"work_disposition":   true,
-		"schema_version":     true,
-		"kind":               true,
-		"summary":            true,
-		"claims":             true,
-		"sources":            true,
-		"actions":            true,
-		"questions":          true,
-		"notes":              true,
-	}
-	legacy := map[string]bool{
-		"update_id":           true,
-		"findings":            true,
-		"evidence_ids":        true,
-		"evidence":            true,
-		"artifacts":           true,
-		"refs":                true,
-		"tests":               true,
-		"proposals":           true,
-		"capability_requests": true,
-	}
-	if rawDisposition, present := fields["work_disposition"]; present {
-		var value any
-		if err := json.Unmarshal(rawDisposition, &value); err != nil {
-			return fmt.Errorf("decode update_coagent work_disposition: %w", err)
-		}
-		disposition, ok := value.(string)
-		if !ok || (strings.TrimSpace(disposition) != "open" && strings.TrimSpace(disposition) != "completed") {
-			return fmt.Errorf("update_coagent work_disposition must be open or completed when present")
-		}
-	}
-	for key := range fields {
-		key = strings.TrimSpace(key)
-		if legacy[key] {
-			return fmt.Errorf("update_coagent legacy field %q is not accepted; use claims, sources, actions, questions, or notes", key)
-		}
-		if !allowed[key] {
-			return fmt.Errorf("update_coagent unknown field %q", key)
-		}
-	}
-	return nil
-}
-
 func newCoagentPacket(kind, summary string, claims []types.CoagentPacketClaim, sources []types.CoagentPacketSource, actions []types.CoagentPacketAction, questions, notes []string) types.CoagentSourcePacketPayload {
 	return coagentpacket.Normalize(types.CoagentSourcePacketPayload{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
@@ -1046,78 +843,6 @@ func coagentSourceFromURI(sourceID, kind, uri, title string) types.CoagentPacket
 	}
 }
 
-func coagentSourcesFromTypedEvidenceRefs(refs []string) []types.CoagentPacketSource {
-	out := make([]types.CoagentPacketSource, 0, len(refs))
-	seen := map[string]bool{}
-	for _, ref := range refs {
-		source, ok := coagentSourceFromTypedEvidenceRef(ref)
-		if !ok {
-			continue
-		}
-		sourceID := strings.TrimSpace(source.SourceID)
-		if sourceID == "" || seen[sourceID] {
-			continue
-		}
-		seen[sourceID] = true
-		out = append(out, source)
-	}
-	return out
-}
-
-func coagentSourceFromTypedEvidenceRef(ref string) (types.CoagentPacketSource, bool) {
-	ref = strings.TrimSpace(ref)
-	if ref == "" {
-		return types.CoagentPacketSource{}, false
-	}
-	key, value := splitTypedWorkerUpdateRef(ref)
-	uri := ref
-	if key == "" && isHTTPURL(ref) {
-		sourceID := "src-" + sanitizeExportPart(ref)
-		if sourceID == "src-" {
-			return types.CoagentPacketSource{}, false
-		}
-		return coagentSourceFromURI(sourceID, "web_url", ref, ""), true
-	}
-	if key == "" && looksLikeArtifactPath(ref) {
-		key = "file_artifact"
-		value = ref
-		uri = "file_artifact:" + ref
-	}
-	if key == "" || value == "" {
-		return types.CoagentPacketSource{}, false
-	}
-	kind := key
-	switch key {
-	case "content_id", "evidence":
-		kind = "content_item"
-	case "source_service_item":
-		kind = "source_service_item"
-	default:
-		if !executionTargetKind(kind) {
-			return types.CoagentPacketSource{}, false
-		}
-	}
-	sourceID := "src-" + sanitizeExportPart(uri)
-	if sourceID == "src-" {
-		return types.CoagentPacketSource{}, false
-	}
-	return coagentSourceFromURI(sourceID, kind, uri, ""), true
-}
-
-func coagentClaimsFromTexts(texts []string, sources []types.CoagentPacketSource) []types.CoagentPacketClaim {
-	sourceIDs := make([]string, 0, len(sources))
-	for _, source := range sources {
-		if id := strings.TrimSpace(source.SourceID); id != "" {
-			sourceIDs = append(sourceIDs, id)
-		}
-	}
-	claims := make([]types.CoagentPacketClaim, 0, len(texts))
-	for _, text := range trimNonEmpty(texts) {
-		claims = append(claims, coagentClaim(text, sourceIDs...))
-	}
-	return claims
-}
-
 func coagentClaim(text string, sourceIDs ...string) types.CoagentPacketClaim {
 	return types.CoagentPacketClaim{
 		Text:               strings.TrimSpace(text),
@@ -1135,61 +860,4 @@ func coagentAction(actionType, objective string, inputs map[string]any, expected
 		ExpectedSources: expected,
 		Safety:          safety,
 	}
-}
-
-func coagentActionsFromTexts(texts []string) []types.CoagentPacketAction {
-	actions := make([]types.CoagentPacketAction, 0, len(texts))
-	for _, text := range trimNonEmpty(texts) {
-		actions = append(actions, coagentAction("revise_texture", text, nil, nil, types.CoagentPacketActionSafety{}))
-	}
-	return actions
-}
-
-func coagentSourcesFromResearchEvidence(items []researchFindingEvidenceInput) []types.CoagentPacketSource {
-	sources := make([]types.CoagentPacketSource, 0, len(items))
-	for i, item := range items {
-		kind := strings.TrimSpace(item.Kind)
-		uri := strings.TrimSpace(item.SourceURI)
-		if kind == "" && uri == "" {
-			continue
-		}
-		sourceID := fmt.Sprintf("src-evidence-%d", i+1)
-		sources = append(sources, coagentSourceFromURI(sourceID, firstNonEmpty(kind, "content_item"), uri, item.Title))
-	}
-	return sources
-}
-
-func coagentPacketSummary(packet types.CoagentSourcePacketPayload) string {
-	return strings.TrimSpace(packet.Summary)
-}
-
-func coagentPacketKind(packet types.CoagentSourcePacketPayload) string {
-	return strings.TrimSpace(packet.Kind)
-}
-
-func coagentPacketQuestions(packet types.CoagentSourcePacketPayload) []string {
-	return trimNonEmpty(packet.Questions)
-}
-
-func coagentPacketNotes(packet types.CoagentSourcePacketPayload) []string {
-	return trimNonEmpty(packet.Notes)
-}
-
-func coagentPacketSourceURIs(packet types.CoagentSourcePacketPayload, kinds ...string) []string {
-	want := map[string]bool{}
-	for _, kind := range kinds {
-		if kind = strings.TrimSpace(kind); kind != "" {
-			want[kind] = true
-		}
-	}
-	out := []string{}
-	for _, source := range packet.Sources {
-		if len(want) > 0 && !want[strings.TrimSpace(source.Kind)] {
-			continue
-		}
-		if uri := strings.TrimSpace(source.Target.URI); uri != "" {
-			out = append(out, uri)
-		}
-	}
-	return out
 }
