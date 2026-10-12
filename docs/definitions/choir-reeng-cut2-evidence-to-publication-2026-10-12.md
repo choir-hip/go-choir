@@ -279,7 +279,19 @@ finish:
         updated time, version count; one row per story) and the autopaper
         app's front page and story page, logged out, at phone width. The
         Universal Wire app, its route, types.WireStory and the fixed claims
-        are deleted, with their specs replaced.
+        are deleted, with their specs replaced; with them the frontend
+        read_owner plumbing (texture.js WIRE_PLATFORM_READ_OWNER,
+        push/popTextureReadOwner, TextureEditor's platform read scope) and
+        the two Universal Wire specs. Texture merge's frontend goes in the
+        same commit as its routes: the TextureEditor and TextureToolbar
+        wiring and the three texture.js fetchers (dead-code census Part C).
+        Also from the census: the sourcecycled daemon (cmd/sourcecycled,
+        internal/cycle, wire/processorkey, its nix unit and flake entry)
+        once captures and schedules are confirmed as the only ingestion
+        path; the 24 Store B tables in internal/platform/store.go that no
+        code reads or writes (DDL only, after an empty-count check on
+        staging); and defect D2, reader proposals delivered to a deleted
+        guest route, decided under the record model.
         Crash: boot closes the paper's open rounds and the active schedules
         (Cut 1 keeps that phase) and starts nothing; no desk wakes at boot
         and no schedule re-arms itself. There is no restart policy yet

@@ -5,6 +5,26 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
+## Current (2026-10-12): re-engineering metamission
+
+The live spine is the
+[re-engineering metamission](definitions/choir-reeng-metamission-2026-10-12.md):
+three cuts to Autopaper live, with decisions in
+[re-engineering-decisions-2026-10-12.md](re-engineering-decisions-2026-10-12.md).
+
+- **M0, model pools: landed.** Code b0d69d4d; staging acceptance passed
+  ([design and result](model-pools-design-2026-10-12.md)). Every desk runs
+  on deepseek-v4.1-flash and gpt-6-luna, each the other's fallback.
+- **D0, dead-code census and removal: landed.** About 50,000 lines
+  deleted, all owner-approved
+  ([census and rulings](reports/dead-code-census-2026-10-12.md)).
+- **Next: C0 (eyes), then C1 (authority), then C2 (evidence to
+  publication, ending with Autopaper live).** All three are reviewed and
+  wait for the owner's go.
+
+The roadmap below is the 2026-10-09 gate view; the cuts replace its Gate 3
+plan.
+
 ## Roadmap (owner-ratified 2026-10-09)
 
 Three gates, in order, each with an exit test — see "v6 plan" in the

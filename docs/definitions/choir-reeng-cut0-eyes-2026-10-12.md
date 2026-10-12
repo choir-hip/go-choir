@@ -150,6 +150,17 @@ finish:
     follow-up, restarts the computer through the owner route mid-run, runs
     to publication, exports the trace, and keeps the bundle (outside the
     repo, under ~/.config/choir-qa/traces/<label>/, sha256 in the receipt).
+    Once the tracer runs, the landed-mission probes it replaces are
+    deleted (dead-code census A11, owner-approved 2026-10-12):
+    scripts/s0b_*, s0m_*, s1a_*, s2_*, smg_*, m0_qa_probe.mjs (its timing
+    baseline moves into the tracer), m3_vmctl_refresh_probe.mjs,
+    m4_jev_roundtrip.mjs, m9a_platform_update_probe.mjs,
+    texture_revision_cadence_probe.mjs, conductor_jev_experiment.mjs and
+    selfdev-turn-census.sh; read the s0m and smg probes first, since they
+    hold the shortest recorded form of each desk handshake. The cut also
+    decides the Dolt trace store (internal/trace, off everywhere because
+    RUNTIME_TRACE_PERSISTENCE_ENABLED is never set): used by the export or
+    deleted (census B4).
     It also drives the transport under load: the tracer's script asks a
     desk for a cell that issues eight parallel tagged choir.* reads, and
     submits a second run to the same desk while the first is mid-cell.

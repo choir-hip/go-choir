@@ -236,12 +236,31 @@ finish:
     returns at once; the all-children barrier, window, share and noEmit go.
     (6b) One child primitive. spawn_agent and cancel_agent are deleted
     (internal/coagentowner/spawn_tool.go; registered only for the
-    conductor and the base engineering registry, autoputer/run.go:606-625,
-    since every RLM desk is sealed to desk_go_eval, tool_profiles.go:496-502).
+    conductor, autoputer/run.go: RegisterSpawnTool returns nil for
+    engineering, whose policy has no spawn targets; dead-code census
+    desk-config.md 1.5). With them go AllowedSpawnTargets, CanSpawn, the
+    allow_coagent_tools flag, the cancel_agent registration and the
+    conductor spawn_agent dedupe in toolregistry/batch_executor.go.
     A desk's children are sub-RLMs on records. The conductor's one live
     use, opening a Texture from the prompt bar (conductor.yaml:14-16,
     conductor_run.yaml:9-13), becomes an owner-emitted Cast to a new
     texture:<doc>.
+    (6c) Deletions the dead-code census found for this cut
+    (docs/reports/dead-code-census-2026-10-12.md Part C, B14): the 17
+    legacy relational tables in internal/store with no production writer
+    (agents, runs, channel_messages, inbox_deliveries, run_acceptances,
+    run_continuations, trajectories, work_items, browser_sessions,
+    worker_updates, coagent_mailboxes, desktop_state,
+    computer_effective_state, texture_documents,
+    texture_controller_checkpoints, content_items, podcast_subscriptions),
+    their legacy readers, and their replay_eligibility.go entries (retire
+    them as absent, the b85af274 path); POST /api/texture/management-open
+    and GET /internal/runtime/control-records, which serve the control
+    accumulator this cut replaces with Casts; the processor and reconciler
+    metadata keys in durableMetadataKeys (runtime.go), api.go and
+    texture_task_types.go, and the handoff metadata copy in
+    textureowner/coagent_route.go. Census defect D3 (research can Cast)
+    is fixed here by gating Cast on the casting desk.
     (7) Prompts: four desk prompts written once for this system (role and
     judgment by hand; verb list generated from the module set; general
     hypotheses offered as a space to sample from); wake turns carry
