@@ -57,7 +57,7 @@ func TestPersistSubmittedRunFailsClosedWithoutTextureMutationAuthority(t *testin
 		Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: rec.ChannelID,
 	}
 	fake := &fakeRunSubmissionStore{mutationErr: errors.New("mutation store unavailable")}
-	err := persistSubmittedRun(context.Background(), fake, events.NewEventBus(), agent, rec, 0, nil)
+	err := persistSubmittedRun(context.Background(), fake, events.NewEventBus(), agent, rec, 0)
 	if err == nil || !strings.Contains(err.Error(), "persist Texture mutation authority") {
 		t.Fatalf("persistence error = %v, want mutation-authority refusal", err)
 	}

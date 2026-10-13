@@ -684,6 +684,9 @@ opencode + a repo-verified correction).
   cursor contract on the canonical event store.
 - `internal/trace`'s store is an *optional duplicate* of the event table —
   decide whether to enable it (one flag) or delete it. Don't run both.
+  (Decided 2026-10-12, Cut 0: deleted with its flag; the owner-scoped
+  read is `GET /api/runs/{id}/events` over the canonical event store, and
+  `choir trace export` assembles the bundle.)
 - Ops/log surface stays journald for now; do not build a shipper or a
   second store. The owner-facing answer to "what did desks do" comes from
   commitment records + provider/tool traces, not service logs.

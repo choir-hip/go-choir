@@ -128,11 +128,10 @@ func LoadConfig() Config {
 			"RUNTIME_RUN_MEMORY_KEEP_RECENT_TOKENS",
 			DefaultRunMemoryKeepRecentTokens,
 		),
-		QdrantURL:               envOr("QDRANT_URL", DefaultQdrantURL),
-		OllamaURL:               envOr("OLLAMA_URL", DefaultOllamaURL),
-		OllamaEmbeddingModel:    envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
-		QdrantDedupThreshold:    float32Or("QDRANT_DEDUP_THRESHOLD", DefaultQdrantDedupThreshold),
-		TracePersistenceEnabled: boolOr("RUNTIME_TRACE_PERSISTENCE_ENABLED", false),
+		QdrantURL:            envOr("QDRANT_URL", DefaultQdrantURL),
+		OllamaURL:            envOr("OLLAMA_URL", DefaultOllamaURL),
+		OllamaEmbeddingModel: envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
+		QdrantDedupThreshold: float32Or("QDRANT_DEDUP_THRESHOLD", DefaultQdrantDedupThreshold),
 	})
 }
 

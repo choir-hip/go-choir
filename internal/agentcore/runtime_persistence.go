@@ -14,7 +14,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -26,11 +25,8 @@ type runSubmissionStore interface {
 }
 
 // persistSubmittedRun persists the agent, run, agent mutation, and the
-// EventRunSubmitted event, then publishes the event on the bus. When traceStore
-// is non-nil, the submitted event is also projected into the canonical trace
-// observability schema (additive; failures are logged and swallowed so a Dolt
-// outage degrades gracefully).
-func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events.EventBus, agentRec types.AgentRecord, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
+// EventRunSubmitted event, then publishes the event on the bus.
+func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events.EventBus, agentRec types.AgentRecord, rec *types.RunRecord, promptLen int) error {
 	if st == nil {
 		return fmt.Errorf("runtime store is required")
 	}
@@ -43,10 +39,10 @@ func persistSubmittedRun(ctx context.Context, st runSubmissionStore, bus *events
 	if err := st.CreateRun(ctx, *rec); err != nil {
 		return fmt.Errorf("persist run: %w", err)
 	}
-	return persistSubmittedRunProjections(ctx, st, bus, rec, promptLen, traceStore)
+	return persistSubmittedRunProjections(ctx, st, bus, rec, promptLen)
 }
 
-func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *events.EventBus, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
+func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *events.EventBus, rec *types.RunRecord, promptLen int) error {
 	if st == nil {
 		return fmt.Errorf("runtime store is required")
 	}
@@ -73,7 +69,7 @@ func persistLifecycleSubmittedRun(ctx context.Context, st *store.Store, bus *eve
 		}
 		return fmt.Errorf("replace durable activation: %w", err)
 	}
-	if err := persistSubmittedRunEvent(ctx, st, bus, rec, promptLen, traceStore); err != nil {
+	if err := persistSubmittedRunEvent(ctx, st, bus, rec, promptLen); err != nil {
 		if mutation == nil {
 			return err
 		}
@@ -140,16 +136,16 @@ func replaceLifecycleActivationWithDeadlineRetry(ctx context.Context, st *store.
 	return types.LifecycleResult{}, lastErr
 }
 
-func persistSubmittedRunProjections(ctx context.Context, st runSubmissionStore, bus *events.EventBus, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
+func persistSubmittedRunProjections(ctx context.Context, st runSubmissionStore, bus *events.EventBus, rec *types.RunRecord, promptLen int) error {
 	if mutation := agentMutationForRun(rec); mutation != nil {
 		if err := st.CreateAgentMutation(ctx, *mutation); err != nil {
 			return fmt.Errorf("persist Texture mutation authority: %w", err)
 		}
 	}
-	return persistSubmittedRunEvent(ctx, st, bus, rec, promptLen, traceStore)
+	return persistSubmittedRunEvent(ctx, st, bus, rec, promptLen)
 }
 
-func persistSubmittedRunEvent(ctx context.Context, st runSubmissionStore, bus *events.EventBus, rec *types.RunRecord, promptLen int, traceStore trace.Store) error {
+func persistSubmittedRunEvent(ctx context.Context, st runSubmissionStore, bus *events.EventBus, rec *types.RunRecord, promptLen int) error {
 	promptLenPayload, _ := json.Marshal(map[string]int{"prompt_length": promptLen})
 	evRec := &types.EventRecord{
 		EventID:      uuid.New().String(),
@@ -164,12 +160,6 @@ func persistSubmittedRunEvent(ctx context.Context, st runSubmissionStore, bus *e
 	}
 	if err := st.AppendEvent(ctx, evRec); err != nil {
 		return fmt.Errorf("persist submitted event: %w", err)
-	}
-	if traceStore != nil {
-		tev := trace.FromEventRecord(evRec)
-		if err := traceStore.Append(ctx, &tev); err != nil {
-			log.Printf("runtime: trace store append submitted %s: %v", evRec.EventID, err)
-		}
 	}
 	if bus != nil {
 		bus.Publish(events.RuntimeEvent{Record: *evRec, Actor: events.ActorRuntime, Cause: events.CauseTaskLifecycle})

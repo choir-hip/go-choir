@@ -39,7 +39,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -71,12 +70,6 @@ type Runtime struct {
 	// kernel projector never binds or otherwise mutates resident runs.
 	kernelMode    bool
 	projectorStop chan struct{}
-	// traceStore is the optional Dolt-backed observability store. When set,
-	// every event emitted via emitEvent/persistEvent/persistSubmittedRun is
-	// projected into the canonical trace schema (additive; existing event
-	// recording and bus publishing are unchanged). Failures are logged and
-	// never propagated so a Dolt outage degrades gracefully.
-	traceStore trace.Store
 
 	runningMu sync.Mutex
 	running   map[string]context.CancelFunc // loop_id → cancel function
@@ -619,18 +612,6 @@ func (rt *Runtime) PromptStore() *promptstore.Store {
 // RuntimeOption configures optional Runtime components.
 type RuntimeOption func(*Runtime)
 
-// WithTraceStore mounts a Dolt-backed trace observability store into the
-// runtime. When set, every emitted event is projected (via trace.FromEventRecord)
-// and appended to the store in addition to the existing event recording and bus
-// publishing. Append failures are logged and never propagated, so a Dolt outage
-// degrades gracefully without changing request handling. The runtime closes the
-// store on Stop when it owns the connection.
-func WithTraceStore(s trace.Store) RuntimeOption {
-	return func(rt *Runtime) {
-		rt.traceStore = s
-	}
-}
-
 // WithDesktopStateOwner composes Runtime tools with the canonical desktop-state
 // owner without giving Runtime direct state persistence authority.
 func WithDesktopStateOwner(owner *desktopstate.Handler) RuntimeOption {
@@ -826,15 +807,6 @@ func (rt *Runtime) Stop() {
 
 	rt.wg.Wait()
 
-	// Close the trace observability store when the runtime owns it (e.g. the
-	// SQLite test backend). The Dolt-backed production store does not own its
-	// *sql.DB and Close is a no-op there; the caller manages the DB lifecycle.
-	if rt.traceStore != nil {
-		if err := rt.traceStore.Close(); err != nil {
-			log.Printf("runtime: close trace store: %v", err)
-		}
-	}
-
 	log.Printf("runtime: stopped")
 }
 
@@ -948,7 +920,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 			existingAgent.Profile != rec.AgentProfile || existingAgent.Role != rec.AgentRole {
 			return nil, fmt.Errorf("durable activation binding mismatch")
 		}
-		if err := persistLifecycleSubmittedRun(ctx, rt.store, rt.bus, rec, len(prompt), rt.traceStore); err != nil {
+		if err := persistLifecycleSubmittedRun(ctx, rt.store, rt.bus, rec, len(prompt)); err != nil {
 			return nil, err
 		}
 	} else {
@@ -956,7 +928,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 			return nil, fmt.Errorf("resolve run subject: %w", existingAgentErr)
 		}
 		rt.stampAndMintTrajectory(ctx, rec)
-		if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt), rt.traceStore); err != nil {
+		if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt)); err != nil {
 			return nil, err
 		}
 	}
@@ -1811,7 +1783,6 @@ func (rt *Runtime) persistActivationStateAndEmit(ctx context.Context, rec *types
 	if !persisted {
 		return false, nil
 	}
-	rt.appendTraceEvent(ctx, evRec)
 	rt.bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
 		Actor:  events.ActorRuntime,
@@ -4457,8 +4428,6 @@ func (rt *Runtime) emitEvent(ctx context.Context, rec *types.RunRecord, kind typ
 		log.Printf("runtime: persist event %s: %v", evRec.EventID, err)
 	}
 
-	rt.appendTraceEvent(ctx, evRec)
-
 	rt.bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
 		Actor:  events.ActorRuntime,
@@ -4483,23 +4452,7 @@ func (rt *Runtime) persistEvent(ctx context.Context, rec *types.RunRecord, kind 
 	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
 		return err
 	}
-	rt.appendTraceEvent(ctx, evRec)
 	return nil
-}
-
-// appendTraceEvent projects the runtime event record into the canonical trace
-// observability schema and persists it to the mounted trace store. This is
-// additive: it runs after the existing store append and never changes request
-// handling. Failures (including a nil store) are logged and swallowed so a Dolt
-// outage degrades gracefully — the event bus and existing recording continue.
-func (rt *Runtime) appendTraceEvent(ctx context.Context, evRec *types.EventRecord) {
-	if rt == nil || rt.traceStore == nil || evRec == nil {
-		return
-	}
-	tev := trace.FromEventRecord(evRec)
-	if err := rt.traceStore.Append(ctx, &tev); err != nil {
-		log.Printf("runtime: trace store append %s: %v", evRec.EventID, err)
-	}
 }
 
 func (rt *Runtime) latestActiveRunByAgent(ctx context.Context, ownerID, agentID string) (types.RunRecord, error) {

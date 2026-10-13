@@ -36,22 +36,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
-	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // RuntimeOption configures optional adapter components.
 type RuntimeOption func(*Adapter)
-
-// WithTraceStore mounts a Dolt-backed trace observability store into the
-// runtime core so trace events are persisted alongside existing event
-// recording. This is a passthrough to runtime.WithTraceStore; the adapter does
-// not own the store connection (the caller manages the *sql.DB lifecycle).
-func WithTraceStore(s trace.Store) RuntimeOption {
-	return func(a *Adapter) {
-		agentcore.WithTraceStore(s)(a.Runtime)
-	}
-}
 
 // WithKernelMode is retained for source compatibility but is a no-op: the
 // dispatcher is always the sole delivery authority (ontology kernel). The

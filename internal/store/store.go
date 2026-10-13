@@ -168,9 +168,8 @@ type Store struct {
 }
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
-// It is exposed so additive observability layers (e.g. the trace store from
-// internal/trace) can wrap the same workspace without opening a second
-// connection. The caller must not close the returned handle; the Store retains
+// It is exposed so layers that share the workspace (e.g. the self-development
+// operation store) can wrap it without opening a second connection. The caller must not close the returned handle; the Store retains
 // ownership and closes it on Store.Close.
 func (s *Store) DB() *sql.DB {
 	if s == nil {

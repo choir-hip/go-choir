@@ -37,7 +37,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -508,21 +507,6 @@ func Run() {
 	// pre-cutover pending rows resume from the tape with no sweep.
 	rtOpts = append(rtOpts, actorruntime.WithKernelMode())
 
-	// Mount the Dolt-backed trace observability store when enabled. The store
-	// wraps the same Dolt *sql.DB that owns runtime/Texture state, so no extra
-	// connection is opened. A schema-application or append failure degrades
-	// gracefully: the runtime logs and continues without persistence (existing
-	// event recording and bus publishing are unchanged).
-	if rtCfg.TracePersistenceEnabled {
-		traceStore, err := trace.NewDoltStore(db.DB())
-		if err != nil {
-			log.Printf("autoputer: trace persistence disabled (dolt store init failed, continuing without): %v", err)
-		} else {
-			rtOpts = append(rtOpts, actorruntime.WithTraceStore(traceStore))
-			log.Printf("autoputer: trace persistence enabled (dolt-backed observability store mounted)")
-		}
-	}
-
 	// Crash or planned restart (AGENTS.md "Restarts End Work (Crash) Or
 	// Resume It"): consume the planned-restart marker once, before any actor
 	// runs. A replay-only recovery drive exits before the runtime starts, so
@@ -878,7 +862,6 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		EnableTestAPIs:                  rtRuntimeCfg.EnableTestAPIs,
 		RunMemoryContextThresholdTokens: rtRuntimeCfg.RunMemoryContextThresholdTokens,
 		RunMemoryKeepRecentTokens:       rtRuntimeCfg.RunMemoryKeepRecentTokens,
-		TracePersistenceEnabled:         rtRuntimeCfg.TracePersistenceEnabled,
 	}
 	if rtCfg.StorePath == "" {
 		rtCfg.StorePath = provideriface.DefaultStorePath
