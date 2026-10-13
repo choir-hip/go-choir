@@ -759,3 +759,69 @@ func TestHandleAPIDispatchesTexturePublication(t *testing.T) {
 		t.Fatalf("router must dispatch /api/platform/texture/publications to the publish handler: got status %d body %s (want 400 = handler reached; 404 = shadowed)", w.Code, w.Body.String())
 	}
 }
+
+// The owner's read of a doc's publication (GET) names the owner from the
+// caller's credential, never from the query, and passes corpusd's answer
+// through, a 404 included.
+func TestHandleTexturePublicationReadIsOwnerScoped(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/internal/platform/publications/owned" {
+			t.Fatalf("corpusd: got %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatalf("corpusd missing internal caller header")
+		}
+		if got := r.URL.Query().Get("owner_id"); got != "user-1" {
+			t.Fatalf("owner_id = %q, want the authenticated user", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("doc_id") != "doc-1" {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "publication not found"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(platform.OwnedPublication{PublicationID: "pub-1", DocID: "doc-1", VersionCount: 2, LatestRevision: 2,
+			Route: platform.FrontRoute{Bare: "/pub/texture/story-pub1", Permalink: "/pub/texture/story-pub1/v2"}})
+	}))
+	defer corpusd.Close()
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       corpusd.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		CorpusdURL:        corpusd.URL}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	read := func(query string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "https://choir.news/api/platform/texture/publications"+query, nil)
+		req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
+		req.Header.Set("X-Authenticated-User", "attacker")
+		w := httptest.NewRecorder()
+		h.HandleTexturePublication(w, req)
+		return w
+	}
+
+	if w := read(""); w.Code != http.StatusBadRequest {
+		t.Fatalf("no doc_id: got %d, want 400", w.Code)
+	}
+	if w := read("?doc_id=doc-2&owner_id=attacker"); w.Code != http.StatusNotFound {
+		t.Fatalf("unpublished doc: got %d body %s, want 404", w.Code, w.Body.String())
+	}
+	w := read("?doc_id=doc-1&owner_id=attacker")
+	if w.Code != http.StatusOK {
+		t.Fatalf("owned read: got %d body %s", w.Code, w.Body.String())
+	}
+	var got struct {
+		platform.OwnedPublication
+		PublicURL string `json:"public_url"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.PublicationID != "pub-1" || got.VersionCount != 2 || got.PublicURL != "https://choir.news/pub/texture/story-pub1" {
+		t.Fatalf("owned read = %+v", got)
+	}
+}

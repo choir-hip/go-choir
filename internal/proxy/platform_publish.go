@@ -69,6 +69,10 @@ type autoputerContentItem struct {
 
 func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
+	if r.Method == http.MethodGet {
+		h.readTexturePublication(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		h.lifecycle.record("platform_publish.method", "method_not_allowed", time.Since(started))
@@ -663,6 +667,73 @@ func (h *Handler) importComputerURLContent(r *http.Request, autoputerBase, userI
 		return autoputerContentItem{}, fmt.Errorf("decode autoputer import response: %w", err)
 	}
 	return item, nil
+}
+
+// readTexturePublication serves GET /api/platform/texture/publications
+// ?doc_id=: the caller's own publication of one doc, whatever its mode and
+// whether or not the front list shows it. The owner is the authenticated
+// user; the query names only the doc.
+func (h *Handler) readTexturePublication(w http.ResponseWriter, r *http.Request) {
+	authResult, err := h.authenticate(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
+		return
+	}
+	if !h.authorizeAPIKeyScope(w, r, authResult) {
+		return
+	}
+	if _, ok := h.requireAPIKeyComputerTarget(w, r, authResult, "", requestDesktopID(r)); !ok {
+		return
+	}
+	docID := strings.TrimSpace(r.URL.Query().Get("doc_id"))
+	if docID == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "doc_id is required"})
+		return
+	}
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/publications/owned")
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read publication"})
+		return
+	}
+	target += "?" + url.Values{"owner_id": {authResult.UserID}, "doc_id": {docID}}.Encode()
+	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read publication"})
+		return
+	}
+	httpReq.Header.Set("X-Internal-Caller", "true")
+	resp, err := h.corpusd.Do(httpReq)
+	if err != nil {
+		log.Printf("proxy: owned publication read: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read publication"})
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read publication"})
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		var out errorResponse
+		if err := json.Unmarshal(body, &out); err != nil || out.Error == "" {
+			out.Error = fmt.Sprintf("corpusd status %d", resp.StatusCode)
+		}
+		writeJSON(w, resp.StatusCode, out)
+		return
+	}
+	var out struct {
+		platform.OwnedPublication
+		PublicURL string `json:"public_url,omitempty"`
+	}
+	if err := json.Unmarshal(body, &out.OwnedPublication); err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read publication"})
+		return
+	}
+	if out.Route.Bare != "" {
+		out.PublicURL = publicURLForRoute(r, out.Route.Bare)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishTextureRequest) (any, int, error) {

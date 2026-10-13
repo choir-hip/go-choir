@@ -120,6 +120,37 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusCreated, resp)
 }
 
+// HandleInternalOwnedPublication serves one owner's publication of one doc,
+// ?owner_id=&doc_id=, whatever its mode and whether or not the front list
+// shows it. The proxy names the owner from the caller's credential.
+func (h *Handler) HandleInternalOwnedPublication(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if !trustedInternalCaller(r) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	ownerID := strings.TrimSpace(r.URL.Query().Get("owner_id"))
+	docID := strings.TrimSpace(r.URL.Query().Get("doc_id"))
+	if ownerID == "" || docID == "" {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "owner_id and doc_id are required"})
+		return
+	}
+	pub, err := h.service.OwnedPublication(r.Context(), ownerID, docID)
+	if errors.Is(err, ErrPublicationNotFound) {
+		writeJSON(w, http.StatusNotFound, apiError{Error: "publication not found"})
+		return
+	}
+	if err != nil {
+		log.Printf("corpusd: owned publication: %v", err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read publication"})
+		return
+	}
+	writeJSON(w, http.StatusOK, pub)
+}
+
 func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -459,6 +490,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)
 	s.HandleFunc("/internal/platform/publications/front", h.HandleInternalFrontStories)
+	s.HandleFunc("/internal/platform/publications/owned", h.HandleInternalOwnedPublication)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)

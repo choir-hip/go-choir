@@ -855,8 +855,8 @@ async function researchScenario(c, out, n, deadline, phase) {
 // and automatic publishing): one owner act starts the source schedules,
 // then nothing else. Its claim: a poll's captures reach management as a
 // record, management opens a story by a Cast to texture:new, Texture writes
-// it, and the story's versions appear on the public front list and render
-// publicly with their citations. The schedules are stopped at the end.
+// it, the story publishes as an Autopaper story (publish_mode auto, read by
+// doc id as its owner), and its public route resolves with its citations. The schedules are stopped at the end.
 async function paperScenario(c, out, n, deadline, phase) {
   const claim = { schedules_started: [], capture_arrivals: 0, stories: [], published: [] };
   for (const source of PAPER_SOURCES) {
@@ -865,12 +865,6 @@ async function paperScenario(c, out, n, deadline, phase) {
     phase('schedule_started', { source_id: source, status: r.status });
   }
   let ownerID = null;
-  const front = async () => {
-    try {
-      const r = await fetch(`${HOST}/api/platform/publications/front?limit=100`, { signal: AbortSignal.timeout(20_000) });
-      return r.ok ? await r.json() : null;
-    } catch { return null; }
-  };
   const seen = new Set();
   while (Date.now() < deadline) {
     if (!ownerID) {
@@ -894,13 +888,16 @@ async function paperScenario(c, out, n, deadline, phase) {
       phase('story_opened', claim.stories[claim.stories.length - 1]);
       if (!out.trajectory_id && d.trajectory_id) out.trajectory_id = d.trajectory_id;
     }
-    const f = await front();
-    for (const row of f?.stories || []) {
-      const story = claim.stories.find((st) => st.title && row.title && (row.title === st.title || row.title.includes(st.title) || st.title.includes(row.title)));
-      if (!story) continue;
+    // Each opened story's publication, read as its owner by doc id: the
+    // front list shows only the allowlisted paper owner's stories, never a
+    // minted test computer's (docs/problems/tracer-paper-blind-to-test-publications-2026-10-13.md).
+    for (const story of claim.stories) {
+      const r = await c.api(`/api/platform/texture/publications?doc_id=${encodeURIComponent(story.doc_id)}`);
+      if (r.status !== 200 || !r.body) continue;
+      const row = r.body;
       const known = claim.published.find((p) => p.doc_id === story.doc_id);
       if (known && known.version_count === row.version_count) continue;
-      const entry = { doc_id: story.doc_id, title: row.title, version_count: row.version_count, latest_revision: row.latest_revision, bare: row.route?.bare || null };
+      const entry = { doc_id: story.doc_id, title: row.title, publish_mode: row.publish_mode, on_front: row.on_front, version_count: row.version_count, latest_revision: row.latest_revision, bare: row.route?.bare || null };
       if (known) Object.assign(known, entry); else claim.published.push(entry);
       phase('story_published', entry);
     }
@@ -923,9 +920,9 @@ async function paperScenario(c, out, n, deadline, phase) {
   }
   out.acceptance = {
     scenario: 'paper',
-    claim: 'one owner act starts the schedules; a poll\'s captures reach management; management opens a story by a Cast to texture:new; the story publishes automatically and is listed on the public front list',
+    claim: 'one owner act starts the schedules; a poll\'s captures reach management; management opens a story by a Cast to texture:new; the story publishes automatically (publish_mode auto) and its public route resolves',
     ...claim, public_bundle: bundleCheck,
-    pass: claim.capture_arrivals > 0 && claim.stories.length > 0 && claim.published.length > 0,
+    pass: claim.capture_arrivals > 0 && claim.stories.length > 0 && claim.published.some((p) => p.publish_mode === 'auto') && bundleCheck?.status === 200,
   };
   phase('acceptance', out.acceptance);
   if (out.trajectory_id) {
