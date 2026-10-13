@@ -1,0 +1,97 @@
+{
+ "cut": "C0 eyes",
+ "definition": "docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md",
+ "landed_commits": [
+  "cd2a224f",
+  "cdeba3fc",
+  "99bdb2d5",
+  "2606c7b5",
+  "764279a9",
+  "c62a8118",
+  "4e755062",
+  "ec15c4b6",
+  "e6995e08",
+  "c5dd8768",
+  "3b19b45a",
+  "668bf32e",
+  "76ce0b89",
+  "182cb5bd",
+  "de4ebea2",
+  "b9f195b1",
+  "287734c5",
+  "19419ee0"
+ ],
+ "ci": {
+  "287734c5": {
+   "run": 38349164843,
+   "conclusion": "success"
+  },
+  "race_dispatch": {
+   "sha": "e6995e08",
+   "run": 38335837507,
+   "conclusion": "success"
+  }
+ },
+ "staging_identity": {
+  "287734c5": "2026-10-13T05:07:30Z",
+  "b1be90b7": "2026-10-13T05:17:47Z"
+ },
+ "local_tests": [
+  "go test ./internal/yaegikernel -race (incl. TestEgressConcurrentCallersGetOwnResults, TestDeskHandleOutlivesItsFirstIssue)",
+  "go test ./internal/agentcore -run TestDeskSession",
+  "node --test scripts/reeng_invariants_test.mjs (35 pass, planted violations per rule)"
+ ],
+ "tracer_runs": [
+  {
+   "label": "c0-tracer-dev-8",
+   "build": "e6995e08",
+   "bundle_sha256_prefix": "ea66916c",
+   "verdicts": {
+    "I1": "pass",
+    "I2": "fail",
+    "I3": "unknown",
+    "I4": "fail",
+    "I5": "fail (B2 mislabel, fixed 668bf32e)"
+   }
+  },
+  {
+   "label": "c0-accept-1",
+   "build": "b9f195b1",
+   "bundle_sha256": "f983df102c1392afc89bddac0ceb390769b79fc7b9aecfac0906addadd3902da",
+   "verdicts": {
+    "I1": "pass",
+    "I2": "fail",
+    "I3": "fail",
+    "I4": "fail",
+    "I5": "unknown (old load rule)"
+   }
+  },
+  {
+   "label": "c0-fast-1",
+   "build": "287734c5",
+   "bundle_sha256": "2306081c7d02072474b05782cedc9d079c51b73192a44531513a299267142ad2",
+   "wall": "12m13s",
+   "verdicts": {
+    "I1": "pass",
+    "I2": "fail",
+    "I3": "fail",
+    "I4": "fail",
+    "I5": "unknown",
+    "I6": "not_defined"
+   },
+   "note": "a b1be90b7 deploy overlapped the drill; I3 dispatches traced to Cut 1 breakage B1"
+  }
+ ],
+ "export_refusal": {
+  "key": "c0-accept-1-a1 (stopped computer)",
+  "target": "computer-8351d4fd7d9f235ca950703d82c0f606 (live, c0-fast-1)",
+  "own_key": "200 on runs and run events",
+  "foreign_key": "502 failed to resolve user autoputer on every route, no data returned"
+ },
+ "findings_owned_by_later_cuts": {
+  "I2/I3": "Cut 1 (restart closure, records)",
+  "I4": "Cut 2 (quote-checked captures)"
+ },
+ "bundles_location": "~/.config/choir-qa/traces/<label>/ (owner data, unredacted, not in repo)",
+ "measurements": "docs/reports/reeng-cut0-measurements-2026-10-12.md"
+}
