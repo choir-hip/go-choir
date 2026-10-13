@@ -30,3 +30,25 @@ living-stories work decides how a publish-auto document is marked).
 Fix: `lifecycleSettlementReady` also requires texture:<doc> to be read
 through its head and no open round on texture:<doc>'s conversations.
 Mutation class red (lifecycle settlement).
+
+## B11. A slice literal that indexes choir.Records() panics the cell compiler
+
+Found while writing the living-stories management test (unit 2b), on a
+local desk worker built from this branch. In a management cell,
+`rs := choir.Records()` followed by `fmt.Println([]string{rs[0].Kind})`,
+`x := []string{rs[0].Kind}` or `[]string{rs[0].Captures.Items[0].CaptureID}`
+fails with `yaegi compile panic: runtime error: invalid memory address or
+nil pointer dereference`; `r := rs[0]` fails with `constant definition
+loop`. A map literal (`map[string]any{"k": rs[0].Kind}`), a plain
+expression (`fmt.Println(rs[0].Kind)`) and a range loop that appends
+(`for _, c := range rs[0].Captures.Items { ids = append(ids, c.CaptureID) }`)
+work. It is not specific to the new Captures body: `rs[0].Kind`, a plain
+string field, trips it too. Hypothesis (not confirmed in the trace or the
+interpreter): the cell normalizer hoists top-level `:=` into package-level
+declarations, and yaegi's global initialization order mishandles a slice
+composite whose element indexes another global's call result.
+
+Not fixed here. The management prompt shows the loop pattern for
+collecting capture ids, and the living-stories test uses it. A model that
+writes the slice literal gets a panic it can read and a fresh session.
+The fix belongs in the cell normalizer or upstream yaegi.
