@@ -1507,8 +1507,10 @@ jobs:
                   dump_deploy_service_diagnostics "active computer refresh or identity verification failed"
                   exit "$refresh_status"
                 fi
-                refreshed_count=$(grep -lx 'refreshed' "${refresh_outcomes_dir}"/* 2>/dev/null | wc -l | tr -d ' ')
-                current_count=$(grep -lx 'current' "${refresh_outcomes_dir}"/* 2>/dev/null | wc -l | tr -d ' ')
+                # grep exits 1 on no match; under pipefail a zero count would
+                # end the script (deploy-refresh-all-deferred-fails-deploy-2026-10-13).
+                refreshed_count=$({ grep -lx 'refreshed' "${refresh_outcomes_dir}"/* 2>/dev/null || true; } | wc -l | tr -d ' ')
+                current_count=$({ grep -lx 'current' "${refresh_outcomes_dir}"/* 2>/dev/null || true; } | wc -l | tr -d ' ')
                 mapfile -t deferred_vms < <(grep -lx 'deferred' "${refresh_outcomes_dir}"/* 2>/dev/null | xargs -r -n1 basename)
                 rm -rf "$refresh_outcomes_dir"
                 deferred_json=$(printf '%s\n' "${deferred_vms[@]}" | jq -R . | jq -sc 'map(select(length > 0))')
