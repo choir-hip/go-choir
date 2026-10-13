@@ -1,7 +1,7 @@
 # The Live Paper Computer Was Reclaimed: There Are No Computer Tiers
 
 Date: 2026-10-13. Found while recording the paper computer's publications
-before C1e B1. Status: documented; owner ruling recorded; fix not started.
+before C1e B1. Status: fixed at 188f98c3 (computer tiers), deployed and verified 2026-10-13 23:51-23:54 UTC.
 
 ## What happened
 
@@ -95,3 +95,34 @@ behavior is unchanged. This is the opening station of the resource
 efficiency and cost mission the owner asked to run tonight.
 
 Mutation class of the fix: red (vmctl, VM lifecycle).
+
+## Resolution (188f98c3, CI 38485963385, deployed 23:51:38 UTC)
+
+- Tiers live in `internal/computertiers/computer-tiers.json`, embedded in
+  vmctl. It lists one paid account (the owner's, now an ordinary paid
+  account) and one platform computer (the paper computer). A tier changes
+  by a reviewed commit and ships with the deploy. The env list,
+  `AlwaysOnUserIDs` and the `vmctl-priority.env` hook are deleted. The
+  file itself is still on Node B but is no longer read.
+- vmctl at start logged `paid_user_count=1 platform_computer_count=1`. At
+  23:51:48 it logged `warmness policy resumed 1 always-on desktop VM(s)`,
+  waking the paper computer. `/internal/vmctl/list` shows it `active` as
+  `critical_protected`, and the owner's computer as `premium_always_on`.
+- Waking it was a crash boot, so its 14 schedules closed
+  `interrupted_by_restart` (23:51:47). The owner act (POST
+  `/api/autopaper/sources/schedules`, under the metamission's standing
+  ruling) restarted all 14 at 15-minute intervals. All 14 polled at
+  23:53:55.
+
+Residuals:
+- The always-on sweep now resumes the platform computer whenever it is
+  stopped. If it crashed on every boot, the sweep would retry on every
+  pass. That is the restart station's L1b, the per-computer boot ledger,
+  which bounds automatic boots per episode. Until L1b lands, the bound is
+  vmctl's existing recovery admission.
+- After any crash boot, Autopaper still needs the owner act to restart
+  its schedules. That is by design: a crash never resumes work.
+- Each interactive guest is shaped at 8 GiB on a 31 GiB host
+  (`nix/node-b.nix`, `VM_INTERACTIVE_MEM_MIB`), so a few active computers
+  reach the pressure threshold. Memory per computer is the resource
+  mission's next question.
