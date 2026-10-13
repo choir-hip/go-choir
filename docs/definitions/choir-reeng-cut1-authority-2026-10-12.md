@@ -500,13 +500,27 @@ now:
     phases are deleted. Planned boots keep park-and-resume (the one resume
     a planned restart allows) until L3 re-derives it from records and
     wakes (D8); passivation itself stays for that path.
-    Acceptance: --scenario crash (every run open at the crash closed with
-    the fate, I3 pass on an observed quiet window). Field run c1-l1-1
+    Accepted 2026-10-13 on 50ed3337 by --scenario crash
+    (docs/evidence/c1-l1-crash-acceptance-2026-10-13.json): the run open at
+    the crash closed with the fate, I3 pass on a 150 s quiet window, 4m54s
+    end to end. Field run c1-l1-1
     (6d676094): the in-flight run closed with the fate, nothing moved until
     the owner asked again, I3 had no violation (two pre-boot packets
     redelivered after owner input, the residual L3 removes).
     L2 deletions (6b, 6c, research caps and budgets) ride L3's push as
     separate commits.
+    L3 is sliced by conversation (orchestrator decision 2026-10-13 under
+    No Blocking Asks, after the inventory put L3 at about 15k lines
+    deleted and 8-9k rewritten across about 80 test files): each slice
+    moves one route wholly onto records and deletes that route's packets
+    and work items, so every route has one authority at every commit (no
+    dual-write, no shadow fold). L3a: the record substrate (inbox
+    sequence, conversations, rounds, hypothesis ids, cursors, wake rows)
+    and the Texture-research conversation. L3b: management's
+    conversations, with L4's routing. L3c: the remaining packet and work
+    item machinery deleted wholesale (owner revise as a record, settlement
+    gate, delivery claims, breaker, obligations counts), the checker on
+    records, and work_state_epoch.
     L3 records, inbox sequence, conversations, rounds, hypothesis ids,
     cursors and wakes (1, 2); packets and work items deleted (3); closure
     records added to L1's boot phase; the planned-restart marker gains

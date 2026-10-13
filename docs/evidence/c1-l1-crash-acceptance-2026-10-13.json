@@ -1,0 +1,15 @@
+{
+ "cut": "C1 authority, landing L1 (crash boot closes pre-boot runs)",
+ "commits": ["6d676094", "877689e1", "50ed3337"],
+ "ci": {"50ed3337": {"run": 38354367639, "conclusion": "success"}, "021e194e": {"run": 38352848069, "conclusion": "failure", "note": "1<<30 header LIMIT ran CI out of memory; corrected in 50ed3337, never deployed"}},
+ "staging_identity": "50ed333772bdfebdcdc2d9c97968ac3391cf78b9",
+ "scenario": "node scripts/reeng_tracer.mjs --label c1-l1-crash-2 --scenario crash --expect-sha 50ed3337",
+ "identity_fence": {"ok": true, "ci_busy": 0},
+ "wall": "4m54s (fence ok 06:10:41 to receipt 06:13:35)",
+ "computer": "computer-9ba09dedb98b526ddc2a1cbeb509ba65 (stopped after)",
+ "trajectory": "714fef1c-b8cb-5604-804f-41f18bb53505",
+ "bundle_sha256": "4cadbbb207e2409e002898dd282607a25e97439d7f17c91ff318aa08b5d9fce4",
+ "acceptance": {"runs_open_at_crash": 1, "all_closed_with_fate": true, "fate": "interrupted_by_restart", "I3": "pass (nothing dispatched in a 150 s quiet window after the markerless boot)", "pass": true},
+ "checker": {"I1": "pass", "I2": "fail (runs half passes; 1 open work item, owned by L3)", "I3": "pass", "I4": "unknown", "I5": "unknown", "I6": "not defined"},
+ "field_run": {"label": "c1-l1-1", "build": "6d676094", "bundle_sha256": "fbe328b3abacbc0a3a8480d7b6811ae5476f31e532d2d5c477871bfb43106abd", "note": "in-flight run closed with the fate; nothing moved until the owner asked again; I3 no violation, two pre-boot packets redelivered after owner input (L3 residual)"}
+}
