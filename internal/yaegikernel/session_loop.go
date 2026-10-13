@@ -285,27 +285,24 @@ func endsInBareExpression(source string) bool {
 	return true
 }
 
-// RunSessionLoopFramedWithHooks serves SessionFrames over a FramedConn, with
-// an optional receipt drain and per-cell tray/inbox binding for RLM
-// reduction (nil hooks bind nothing).
-func RunSessionLoopFramedWithHooks(fc *FramedConn, newSession func() (*Session, error), drain func() []string, hooks *CellHooks) error {
+// runSessionLoopMux serves SessionFrames read through the worker's mux and
+// writes each result on fc, with an optional receipt drain and per-cell
+// tray/inbox binding for RLM reduction (nil hooks bind nothing). The cell
+// boundary is marked on the mux so a host call from a goroutine that
+// outlives its cell is refused instead of riding the next cell.
+func runSessionLoopMux(mux *workerMux, fc *FramedConn, newSession func() (*Session, error), drain func() []string, hooks *CellHooks) error {
 	sess, err := newSession()
 	if err != nil {
 		return err
 	}
 	defer sess.Close()
 	for {
-		stream, payload, err := fc.ReadFrame()
+		stream, payload, err := mux.next()
 		if err != nil {
 			return err
 		}
-		switch stream {
-		case StreamCancel:
+		if stream == StreamCancel {
 			return fmt.Errorf("session: cell cancelled by broker")
-		case StreamCell:
-			// Handled below.
-		default:
-			continue
 		}
 		var frame SessionFrame
 		if err := json.Unmarshal(payload, &frame); err != nil {
@@ -314,7 +311,9 @@ func RunSessionLoopFramedWithHooks(fc *FramedConn, newSession func() (*Session, 
 		if frame.Close {
 			return nil
 		}
+		mux.beginCell()
 		out, evalErr := serveCell(sess, frame, drain, hooks)
+		mux.endCell()
 		raw, err := json.Marshal(out)
 		if err != nil {
 			return fmt.Errorf("session: encode result: %w", err)
