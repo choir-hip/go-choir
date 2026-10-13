@@ -1583,7 +1583,7 @@ nodes:
     title: Re-engineering — three cuts to Autopaper live (eyes, authority, evidence to publication)
     path: docs/definitions/choir-reeng-metamission-2026-10-12.md
     ledger: ''
-    status: working  # executing since 2026-10-12; C0 landed 2026-10-13, C1 executing
+    status: working  # executing since 2026-10-12; C0 landed 2026-10-13, C1 core landed 2026-10-13 (76ab40fd), C2 executing
     kind: spine
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -1625,7 +1625,7 @@ nodes:
     title: "Cut 1 — authority: records, conversations, hypothesis ids, cursors, crash closure, routing through management"
     path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
     ledger: ''
-    status: working  # L1 landed 6d676094; landing order in its now card
+    status: working  # core landed 2026-10-13 at 76ab40fd; C1e items remain, after C2's live window
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12
@@ -1636,7 +1636,7 @@ nodes:
     title: "Cut 2 — evidence to publication: async search, research, Texture write, one document model, permalinks, Autopaper live"
     path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
     ledger: ''
-    status: planned
+    status: working  # executing since 2026-10-13 (pre-flight)
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12

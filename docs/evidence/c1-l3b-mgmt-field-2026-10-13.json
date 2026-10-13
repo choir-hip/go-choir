@@ -1,0 +1,29 @@
+{
+  "cut": "C1 authority, landing L3b (Texture and management on records)",
+  "kind": "field run under the management scenario; found breakage B4",
+  "commit": "49092e2f",
+  "staging_identity": "49092e2f48d8e02646d6fe0a19624e79ed8c1bd9",
+  "scenario": "node scripts/reeng_tracer.mjs --label c1-l3b-mgmt-1 --scenario management --expect-sha 49092e2f --fence-min 45 --timeout-min 15",
+  "tracer_exit": "6 (the claim then in the tracer was 'Texture revises after the Report'; 03ac72bf corrected it to 'a committed Texture turn read the Report')",
+  "bundle_sha256": "ab0561ed5ba23880167a0c8c243717a38892060c2d45540cacd8c036f412e0b2",
+  "computer": "computer-b16135324054c4e5c9c0b92764f2889f (stopped after)",
+  "timeline_utc": {
+    "cast_to_management": "07:45:52 (record management:<owner> seq 1, round 1)",
+    "management_final_report": "07:48:36 (record texture:<doc> seq 1, final, stop completed: blocked, engineering casts unavailable from a records turn on this build)",
+    "texture_reads_report": "07:49:20 run 258b508d committed a decide turn (wait_for_evidence) with a Cast to research; Texture cursor 1",
+    "research_final_report": "07:56:22 (record texture:<doc> seq 2, final)",
+    "stall": "07:56:22.9 run 258b508d reactivated to pending; no loop event before the stop at 08:00:32; Texture cursor stayed 1 under head 2"
+  },
+  "claim_corrected": "holds: Texture's committed turn at 07:49:20 read management's final Report (cursor 1 >= its seq 1)",
+  "checker": {
+    "I1": "pass",
+    "I2": "fail (the reactivated Texture run pending and the earlier parked run; B4)",
+    "I3": "unknown (no restart in this scenario)",
+    "I4": "unknown (no citations)",
+    "I5": "unknown",
+    "I6": "pass (4 records over 3 inboxes; cursors within heads; rounds closed by their recipient)",
+    "I7": "pass (no packet or work item on a records route; no engineering record to texture:*)"
+  },
+  "finding": "B4: a records wake reactivated a parked Texture run and nobody executed it; fixed in 76ab40fd (docs/problems/reeng-cut1-breakage-2026-10-13.md)",
+  "next": "management and crash scenarios on 76ab40fd under the identity fence"
+}

@@ -417,18 +417,28 @@ boundaries:
     repaired: none yet; the documented list is the target
 
 now:
-  status: executing
+  status: core landed; C1e pending
   slice: >-
-    L1 accepted (crash scenario, 50ed3337). L2 deletions landed (spawn and
-    cancel agent, 17 legacy tables, research and tool-loop budgets; the
-    global 60-minute activation budget stays). L3a landed and ran end to
-    end on staging (c1-l3a-story-1, 38d9b553): Texture and research
-    converse on records over three rounds with cursors at their heads
-    (docs/evidence/c1-l3a-story-acceptance-2026-10-13.json). L3b
-    (Texture and management on records) in progress. Breakage B1-B3
-    fixed (docs/problems/reeng-cut1-breakage-2026-10-13.md).
-  source_ref: 7e2250af
-  deploy_identity: staging 38d9b553
+    C1-core landed and accepted on staging 2026-10-13 at 76ab40fd. L1
+    crash closure (c1-l1-crash-2; again c1-core-crash-2: the in-flight run
+    closed interrupted_by_restart, I3 pass on a 150 s quiet window). L2
+    deletions. L3a Texture-research and L3b Texture-management on records
+    (c1-l3a-story-1; c1-core-mgmt-1: Cast, management's final Report, a
+    committed Texture turn reading it, about 3 minutes, I6 and I7 pass).
+    Texture turns on records need no work item; the planned-restart
+    marker's work_state_epoch (D7); late arrival; the routing refusal of
+    engineering acts to Texture (reducer test); I6 and I7 in the checker;
+    L6 surfaces and prompts teach only callable verbs, with the parity test
+    over Texture, research and management prompts. Breakages B1-B4 fixed
+    (docs/problems/reeng-cut1-breakage-2026-10-13.md); B4, a records wake
+    reactivating a parked Texture run that nobody ran, was found by the
+    field run c1-l3b-mgmt-1. Evidence:
+    docs/evidence/c1-core-mgmt-acceptance-2026-10-13.json,
+    docs/evidence/c1-core-crash-acceptance-2026-10-13.json,
+    docs/evidence/c1-l3b-mgmt-field-2026-10-13.json. C1e items remain
+    (scope_split below).
+  source_ref: 76ab40fd
+  deploy_identity: staging 76ab40fd
   candidate:
     id: none
     state: none

@@ -23,13 +23,18 @@ three cuts to Autopaper live, with decisions in
   per desk, broker handle reissue
   ([receipts](evidence/c0-eyes-acceptance-2026-10-13.json),
   [measurements](reports/reeng-cut0-measurements-2026-10-12.md)).
-- **C1, authority: executing.** L1 (a crash boot closes pre-boot runs
-  with fate interrupted_by_restart) landed; next L2+L3 (records, cursors,
-  packets and work items deleted). Landing order and the plan review of
-  2026-10-13 are in the
-  [cut file](definitions/choir-reeng-cut1-authority-2026-10-12.md) and
-  [review](reports/reeng-plan-review-2026-10-13.md).
-- **Then C2 (evidence to publication, ending with Autopaper live).**
+- **C1, authority: core landed 2026-10-13 (76ab40fd).** Crash closure;
+  records as the work state for Texture with research and management;
+  prompts that teach only callable verbs
+  ([cut file](definitions/choir-reeng-cut1-authority-2026-10-12.md),
+  [crash](evidence/c1-core-crash-acceptance-2026-10-13.json) and
+  [management](evidence/c1-core-mgmt-acceptance-2026-10-13.json) receipts).
+  C1e (engineering on records, wholesale deletions) runs after C2's live
+  window.
+- **C2, evidence to publication: executing.** Pre-flight
+  ([drift](reports/reeng-cut2-preflight-2026-10-13.md),
+  [quote census](reports/reeng-c8-quote-census-2026-10-13.md)); unit 2a
+  next, ending with Autopaper live.
 - **Pace (owner 2026-10-13):** fast loop, no long runs; one
   claim-directed tracer scenario per landing (metamission
   `boundaries.pace`).

@@ -1,0 +1,20 @@
+{
+  "cut": "C1 authority, core: crash closure on the C1-core build",
+  "commit": "76ab40fd",
+  "staging_identity": "76ab40fd492c872a3b705c7bc1d72e9b6993a680",
+  "scenario": "node scripts/reeng_tracer.mjs --label c1-core-crash-2 --scenario crash --expect-sha 76ab40fd --fence-min 45 --timeout-min 15",
+  "note": "c1-core-crash-1 never minted (429 too many auth requests: two tracers minted at once); rerun 90 s later",
+  "tracer_exit": 0,
+  "claim": "a markerless boot closes every run open at the crash with fate interrupted_by_restart and dispatches nothing",
+  "result": {
+    "in_flight_run": "3bf4967c (texture) cancelled, error interrupted_by_restart, restart_kind crash_or_stop",
+    "runs_open_at_crash": 1,
+    "closed_with_fate": 1,
+    "restart_to_ready_ms": 9619,
+    "quiet_window_ms": 150000,
+    "I3": "pass"
+  },
+  "bundle_sha256": "0fdd9b2c2bc4a907c4b70a07306e1d4b7f0d58725cab38782ea2038559d2c6b3",
+  "computer": "computer-d642bb514fa2433c204b3a0eb061ca4b (stopped after)",
+  "checker": {"I1": "pass", "I2": "fail (the trajectory stays live after a crash until the owner asks again; by design)", "I3": "pass", "I4": "unknown", "I5": "unknown", "I6": "unknown (no records before the crash)", "I7": "pass"}
+}

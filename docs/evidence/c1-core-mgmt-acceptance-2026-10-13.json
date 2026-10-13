@@ -1,0 +1,28 @@
+{
+  "cut": "C1 authority, core: Texture and management on records (L3b), L6 surfaces and prompts, B4 fix",
+  "commits": ["aef01cef", "0a57a7d3", "03ac72bf", "99f0a7ab", "0255e81c", "76ab40fd"],
+  "ci": {"76ab40fd": {"run": 38367289215}},
+  "staging_identity": "76ab40fd492c872a3b705c7bc1d72e9b6993a680",
+  "scenario": "node scripts/reeng_tracer.mjs --label c1-core-mgmt-1 --scenario management --expect-sha 76ab40fd --fence-min 45 --timeout-min 15",
+  "tracer_exit": 0,
+  "claim": "Texture and management converse on records: Cast to management:<owner>, management's final Report closes the round, a committed Texture turn reads it",
+  "timeline_utc": {
+    "mint": "08:19:11 (12.1 s)",
+    "cast_to_management": "08:19:40",
+    "management_final_report": "08:21:11 (seq 1, round 1)",
+    "texture_read_report": "08:21:53 (cursor 1 = head 1)",
+    "end_to_end": "about 3 minutes"
+  },
+  "bundle_sha256": "a014ae243b2c1f4c6801b6d50c3e21c2539a255a17183305ea65da5666f0dc18",
+  "computer": "computer-694011e5b5fac09df347655e7b102052 (stopped after)",
+  "checker": {
+    "I1": "pass",
+    "I2": "fail (stopped at the claim: research run d2aa6a78 running, two parked Texture runs, the Texture work item open)",
+    "I3": "unknown (no restart in this scenario)",
+    "I4": "fail (1 of 1 citation's quote absent from its source body; Cut 2 quote work)",
+    "I5": "unknown",
+    "I6": "pass (3 records over 3 inboxes)",
+    "I7": "pass (no packet or work item on a records route; no engineering record to texture:*)"
+  },
+  "b4": "not exercised on staging here (Texture's turn moved the head, so the records wake started a fresh run); covered by TestTextureRecordsWakeRunsTheParkedRunItReactivates"
+}

@@ -48,7 +48,7 @@ metamission:
     - id: C1
       path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
       readiness: reviewed
-      status: executing (L1 landed 6d676094)
+      status: core landed (2026-10-13 at 76ab40fd; receipts docs/evidence/c1-core-mgmt-acceptance-2026-10-13.json, c1-core-crash-acceptance-2026-10-13.json); C1e items remain
       depends_on: [C0]
     - id: C1e
       path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md (scope_split, C1e items)
@@ -58,8 +58,8 @@ metamission:
       note: engineering and self-development on records, path B deleted, L5, L7, wholesale packet and work-item deletion; runs after C2's autopaper_live and before the completion review
     - id: C2
       path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
-      readiness: reviewed
-      status: pending
+      readiness: reviewed (pre-flight panel 2026-10-13 running)
+      status: executing (pre-flight 2026-10-13: docs/reports/reeng-cut2-preflight-2026-10-13.md, docs/reports/reeng-c8-quote-census-2026-10-13.md)
       note: ends with Autopaper live, then the model comparison
       depends_on: [C1]
 
@@ -232,16 +232,21 @@ boundaries:
 now:
   status: executing
   slice: >-
-    M0, D0 and C0 landed. C1 executing: L1 (a crash boot closes every
-    pre-boot run with fate interrupted_by_restart, opens no work, wakes no
-    one) landed at 6d676094 and its field run showed the fate and no
-    violation; breakages B1-B3 fixed. The owner's pace ruling and the plan
+    M0, D0 and C0 landed. C1 core landed 2026-10-13 at 76ab40fd: crash
+    closure, records as the work state for Texture with research and with
+    management, Texture turns without work items, the work-state epoch,
+    late arrival, desk surfaces and prompts that teach only callable verbs;
+    accepted by the management and crash scenarios
+    (docs/evidence/c1-core-*-acceptance-2026-10-13.json); breakages B1-B4
+    fixed. C1e (engineering on records and the wholesale deletions) runs
+    after C2's live window. C2 executing: pre-flight done, review panel
+    running, quotematch building. The owner's pace ruling and the plan
     review of 2026-10-13 reshaped the loop: claim-directed tracer
     scenarios, identity fence, batched pushes; a tracer attempt now takes
     7 to 12 minutes instead of 22 to 42. The cell-error analysis found 52%
     of failed desk cells kernel-fixable; the largest class is fixed.
-  source_ref: af92cb94
-  deploy_identity: staging 6d676094
+  source_ref: 76ab40fd
+  deploy_identity: staging 76ab40fd
   candidate: none
   conjecture:
     id: RE-2
@@ -264,7 +269,7 @@ now:
     main_uncertainty: how many fix loops L3 (records, cursors, packets and work items deleted) needs; whether Cut 2 starts tonight
     next_observation: L1's crash-scenario receipt, then L3's
   blocker_or_risk: Cut 1 is a large red change across store, agentcore, textureowner and yaegikernel, now landed commit by commit (boundaries.pace 5); test computers left running hold Node B memory and stall mints (docs/problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md); the owner's computer takes every cut (accepted risk, §13.1)
-  next_action: push the batch (B2, B3, tracer scenarios, docs), read L1's crash scenario, then L2+L3 per Cut 1's landing order; then C2
+  next_action: C2 unit 2a per Cut 2's landing order (quotematch and Refs, block captures and Read, async search in parallel; then Texture Write; then support judgement), one claim-directed scenario per behavior push; tag reeng-cut2-last-good at 76ab40fd before 2a deploys
 
 receipts:
   - id: panels-2026-10-12
