@@ -516,7 +516,12 @@ now:
     owner act restarted them at 18:28:30. E3 rerun passed on a minted test
     computer at cff54bf5 (an 8-record, 40-capture burst: every record
     marked read was returned by a Records() call, a mid-turn arrival woke
-    the next turn, 40 of 40 captures answered; receipts E3_rerun).
+    the next turn, 40 of 40 captures answered; receipts E3_rerun). A1
+    landed at 04a7b0c2 (deployed 8a1477c3): a citation whose source was never
+    captured shows "unread source"; proven by unit test, since the live paper
+    holds no not-captured check (51 stories: 665 exact, 19 tolerant, 6 pending
+    quote checks at 19:40). Published sources now open above the text from a
+    Sources button (owner report, 7c81bbca).
   source_ref: cff54bf5
   deploy_identity: staging choir.news cff54bf5
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
