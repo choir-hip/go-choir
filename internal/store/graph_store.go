@@ -1007,6 +1007,11 @@ func (s *Store) ListPassivatedPersistentManagementControlRunsByOwner(ctx context
 
 const runsByOwnerStatesDefaultLimit = 1024
 
+// ListAllRunHeaders as ListRunsByOwnerStates' limit scans every run header
+// of the owner. The list filters states after reading headers, so a limited
+// scan can miss an old open run behind newer finished ones.
+const ListAllRunHeaders = -1
+
 // ListRunsByOwnerStates returns newest choir.run rows for one owner whose
 // header state is in states. It lists og_objects headers through
 // idx_og_objects_kind_owner (no metadata JSON_EXTRACT, no body), then
@@ -1017,7 +1022,7 @@ func (s *Store) ListRunsByOwnerStates(ctx context.Context, ownerID, computerID s
 	if ownerID == "" {
 		return nil, fmt.Errorf("list runs by owner states: owner_id is required")
 	}
-	if limit <= 0 {
+	if limit <= 0 && limit != ListAllRunHeaders {
 		limit = runsByOwnerStatesDefaultLimit
 	}
 	wanted := map[string]bool{}
@@ -1036,7 +1041,15 @@ func (s *Store) ListRunsByOwnerStates(ctx context.Context, ownerID, computerID s
 	if graph == nil {
 		return nil, fmt.Errorf("store: object graph not initialized")
 	}
-	refs, err := graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, limit)
+	var refs []objectgraph.ObjectRef
+	var err error
+	if limit == ListAllRunHeaders {
+		// Every header, with no LIMIT: the engine sizes a LIMIT's top-N
+		// buffer up front, so a huge limit exhausts memory (Cut 1 B2).
+		refs, err = graph.ListAllObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID)
+	} else {
+		refs, err = graph.ListObjectRefsByKindOwner(ctx, string(ogKindRun), ownerID, limit)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -50,9 +50,14 @@ parked or blocked run behind more than 1,024 newer finished runs is never
 seen, so L1's claim "every pre-boot run is closed" fails on any computer
 with a long history (the owner's computer takes every cut).
 
-Fix (same commit): boot's owner-scoped list scans every run header
-(`preBootRunHeaderScan`; headers carry no bodies and only matching runs
-are loaded). Test: `TestCrashBootClosesOpenRunBehindManyFinishedRuns`
+Fix: boot's owner-scoped list reads every run header with no LIMIT
+(`store.ListAllRunHeaders`, through `ListAllObjectRefsByKindOwner`;
+headers carry no bodies and only matching runs are loaded). The first fix
+(877689e1) passed a limit of 1<<30 instead; CI's race shards then died
+"runtime: out of memory" in the boot tests, because the engine sizes a
+LIMIT's top-N buffer up front. That build never deployed (CI run
+38352848069 failed); a huge LIMIT would have crashed every computer at
+boot. Test: `TestCrashBootClosesOpenRunBehindManyFinishedRuns`
 (one old running run behind 1,030 finished runs; failed with the run
 still running before the fix).
 

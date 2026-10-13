@@ -2355,12 +2355,6 @@ func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.
 // and the same metadata fate, and nothing re-dispatches it.
 const runFateInterruptedByRestart = "interrupted_by_restart"
 
-// preBootRunHeaderScan is the header limit of boot's owner-scoped run list.
-// The list filters states after its limit, so a smaller limit would miss an
-// old open run behind newer finished ones; headers carry no bodies, and
-// only matching runs are loaded.
-const preBootRunHeaderScan = 1 << 30
-
 // forEachPreBootRun visits the runs of this computer in the given states, as
 // boot sees them before any actor runs. Production computers list by owner,
 // over every run header; a computer without an owner id scans by state. fn
@@ -2374,7 +2368,7 @@ func (rt *Runtime) forEachPreBootRun(ctx context.Context, phase string, states [
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	productionComputer := rt.cfg.ComputerID != "" && strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
 	if ownerID != "" {
-		runs, err := rt.store.ListRunsByOwnerStates(ctx, ownerID, computerID, states, preBootRunHeaderScan)
+		runs, err := rt.store.ListRunsByOwnerStates(ctx, ownerID, computerID, states, store.ListAllRunHeaders)
 		if err != nil {
 			log.Printf("runtime: %s owner-scoped list: %v", phase, err)
 			return
