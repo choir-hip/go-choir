@@ -505,39 +505,52 @@ func (w *writer) node(b BodyBlock, id string) texturedoc.Node {
 }
 
 // inline builds a text run from lines joined by spaces, resolving tokens.
+// Emphasis may span the lines of one block; a token may not.
 func (w *writer) inline(lines []Line) []texturedoc.Node {
 	var out []texturedoc.Node
-	appendText := func(s string) {
+	appendText := func(s string, marks []string) {
 		if s == "" {
 			return
 		}
-		if k := len(out) - 1; k >= 0 && out[k].Type == "text" {
+		if k := len(out) - 1; k >= 0 && out[k].Type == "text" && sameMarks(nodeMarks(out[k]), marks) {
 			out[k].Text += s
 			return
 		}
-		out = append(out, texturedoc.Node{Type: "text", Text: s})
-	}
-	for i, l := range lines {
-		text := strings.TrimSpace(l.Text)
-		if i > 0 && text != "" {
-			appendText(" ")
+		n := texturedoc.Node{Type: "text", Text: s}
+		for _, m := range marks {
+			n.Marks = append(n.Marks, texturedoc.Mark{Type: m})
 		}
-		segs, err := parseInline(text, l.N)
+		out = append(out, n)
+	}
+	var pieces []piece
+	for _, l := range lines {
+		text := strings.TrimSpace(l.Text)
+		if text == "" {
+			continue
+		}
+		ps, err := scanInline(text, l.N)
 		if err != nil {
 			*w.errs = append(*w.errs, err)
 			continue
 		}
-		for _, s := range segs {
-			if s.Token == nil {
-				if legacyMarkerRE.MatchString(s.Text) {
-					w.errs.add(l.N, "numeric markers such as [12] and source: links are not citations; cite with {{cite <handle> \"quote\"}}")
-				}
-				appendText(s.Text)
-				continue
+		for _, p := range ps {
+			if p.token == nil && !p.code && legacyMarkerRE.MatchString(p.text) {
+				w.errs.add(l.N, "numeric markers such as [12] and source: links are not citations; cite with {{cite <handle> \"quote\"}}")
+				break
 			}
-			if ref, ok := w.citation(*s.Token); ok {
-				out = append(out, ref)
-			}
+		}
+		if len(pieces) > 0 {
+			pieces = append(pieces, piece{text: " ", pair: -1})
+		}
+		pieces = append(pieces, ps...)
+	}
+	for _, s := range resolveInline(pieces) {
+		if s.Token == nil {
+			appendText(s.Text, s.Marks)
+			continue
+		}
+		if ref, ok := w.citation(*s.Token); ok {
+			out = append(out, ref)
 		}
 	}
 	// A citation is an atom after the text it supports; trim the space a

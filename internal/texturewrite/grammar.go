@@ -5,7 +5,8 @@
 // A Write is a short script of directives on block aliases. The frame names
 // the head document's top-level blocks b1..bN; a directive line starts with
 // @ and the lines under it are the new text, in a small markdown subset
-// (paragraphs, # headings, - and 1. lists, > quotes, ``` code, ---):
+// (paragraphs, # headings, - and 1. lists, > quotes, ``` code, ---, and
+// inline **strong**, *emphasis* and `code`, which become marks):
 //
 //	@replace b3          replace b3 (or a range b3..b5) with the text below
 //	@insert after b2     insert the text below after b2 (also: before bN, start, end)

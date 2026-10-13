@@ -94,11 +94,16 @@ func renderFlow(nodes []texturedoc.Node) string {
 	return strings.Join(parts, " ")
 }
 
+// renderInline writes a text run in the Write grammar: marks as **strong**,
+// *emphasis* and `code`, citations as tokens. A citation does not close the
+// marks around it, so "**a {{cite ...}} b**" reads back as written.
 func renderInline(nodes []texturedoc.Node) string {
 	var b strings.Builder
+	var open []string
 	for _, n := range nodes {
 		switch n.Type {
 		case "text":
+			open = renderMarks(&b, open, nodeMarks(n))
 			b.WriteString(n.Text)
 		case "hard_break":
 			b.WriteByte(' ')
@@ -106,7 +111,22 @@ func renderInline(nodes []texturedoc.Node) string {
 			b.WriteString(TokenText(tokenOf(n)))
 		}
 	}
+	renderMarks(&b, open, nil)
 	return b.String()
+}
+
+// nodeMarks lists a text node's Write marks in nesting order.
+func nodeMarks(n texturedoc.Node) []string {
+	var out []string
+	for _, m := range []string{MarkStrong, MarkEmphasis, MarkCode} {
+		for _, have := range n.Marks {
+			if have.Type == m {
+				out = append(out, m)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // tokenOf is the token a citation renders as.
