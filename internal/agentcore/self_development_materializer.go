@@ -82,9 +82,10 @@ const selfdevInterruptedByRestart = "interrupted by a restart"
 // that desk run, so nothing would advance the operation again, and the busy
 // probe would count it forever
 // (docs/problems/selfdev-zombie-operations-pin-owner-computer-2026-10-10.md).
-// awaiting_approval waits on the owner and stays. The post-decision states
-// stay with the materializer, which recovers them from the updater journal.
-// A planned boot closes nothing.
+// awaiting_approval waits on the owner and stays. The post-decision states,
+// and ops whose owner decision committed before the crash, are marked
+// interrupted: the materializer settles them from the updater journal and
+// never applies them (L1a-3b). A planned boot closes nothing.
 func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context) {
 	if rt == nil || rt.selfdevOperations == nil {
 		return
@@ -96,6 +97,7 @@ func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context)
 	if computerID == "" {
 		return
 	}
+	rt.markSelfDevelopmentOperationsInterruptedAfterCrash(ctx)
 	operations, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.PreDecisionStates...)
 	if err != nil {
 		log.Printf("selfdev: crash boot: list pre-decision operations: %v", err)
@@ -110,6 +112,74 @@ func (rt *Runtime) closeSelfDevelopmentOperationsAfterCrash(ctx context.Context)
 			continue
 		}
 		log.Printf("selfdev: crash boot: %s closed from %s: %s", operation.OperationID, operation.State, selfdevInterruptedByRestart)
+	}
+}
+
+// selfdevApplyInterruptedByRestart is the updater-result outcome a crash boot
+// records for a decided operation the updater never started.
+const selfdevApplyInterruptedByRestart = "interrupted_by_restart"
+
+var errSelfDevJournalMidFlight = errors.New("updater journal is mid-flight; effective state unknown")
+
+// markSelfDevelopmentOperationsInterruptedAfterCrash records the operations a
+// crash boot found decided but unsettled: every post-decision state, and ops
+// awaiting approval whose owner decision already committed. An op the owner
+// decides after this boot is new work and materializes normally.
+func (rt *Runtime) markSelfDevelopmentOperationsInterruptedAfterCrash(ctx context.Context) {
+	computerID := strings.TrimSpace(rt.selfdevComputerID)
+	if computerID == "" {
+		computerID = strings.TrimSpace(rt.TextureComputerID())
+	}
+	if computerID == "" {
+		return
+	}
+	operations, err := rt.selfdevOperations.ListByStates(ctx, computerID, selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending, selfdev.StateDegraded)
+	if err != nil {
+		log.Printf("selfdev: crash boot: list post-decision operations: %v", err)
+		return
+	}
+	interrupted := make(map[string]bool, len(operations))
+	for _, operation := range operations {
+		if operation.State == selfdev.StateAwaitingApproval {
+			if rt.store == nil {
+				continue
+			}
+			if _, found, lookupErr := rt.store.FinalizedDecisionForOperation(ctx, operation.ComputerID, operation.OperationID, operation.TrajectoryID, operation.CapsuleID); lookupErr != nil || !found {
+				continue
+			}
+		}
+		interrupted[operation.OperationID] = true
+		log.Printf("selfdev: crash boot: %s (%s) interrupted; settles from the updater journal, never re-applied", operation.OperationID, operation.State)
+	}
+	rt.selfdevMaterializeMu.Lock()
+	rt.selfdevCrashInterrupted = interrupted
+	rt.selfdevMaterializeMu.Unlock()
+}
+
+// settleSelfDevelopmentOperationAfterCrash closes an interrupted operation
+// with what the updater journal says happened, without calling the updater:
+// no journal means nothing changed (failed, interrupted by a restart); a
+// terminal journal is recorded through the normal path; a mid-flight journal
+// holds the operation, visible, for an owner act.
+func (rt *Runtime) settleSelfDevelopmentOperationAfterCrash(ctx context.Context, operation selfdev.Operation, rollback bool) error {
+	key := "selfdev-apply-" + operation.DecisionEvent
+	if rollback {
+		key = "selfdev-rollback-apply-" + operation.DecisionEvent
+	}
+	journaled, found, err := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, key)
+	switch {
+	case err != nil:
+		return fmt.Errorf("updater journal unreadable: %w", err)
+	case !found && operation.State == selfdev.StateDegraded:
+		return nil // a refused apply already left its terminal row
+	case !found:
+		return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: selfdevApplyInterruptedByRestart}, errors.New(selfdevInterruptedByRestart), operation.State)
+	case !journaled.Terminal:
+		return errSelfDevJournalMidFlight
+	case rollback:
+		return rt.rollbackSelfDevelopmentOperation(ctx, operation, true)
+	default:
+		return rt.materializeSelfDevelopmentOperation(ctx, operation, true)
 	}
 }
 
@@ -151,16 +221,26 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 				continue
 			}
 		}
+		// A degraded operation carrying a route receipt completed a prior
+		// promote and was lost mid-rollback; a degraded operation without one
+		// was lost mid-apply. The route receipt — only ever written by
+		// recordMaterializationApplied — discriminates the two.
+		rollback := operation.State == selfdev.StateRollbackPending ||
+			(operation.State == selfdev.StateDegraded && strings.TrimSpace(operation.RouteReceipt) != "")
+		if rt.selfdevCrashInterrupted[operation.OperationID] {
+			// Decided before a crash boot: settle from the journal, never
+			// apply, and arm no retry (a retry would only settle again).
+			if settleErr := rt.settleSelfDevelopmentOperationAfterCrash(ctx, operation, rollback); settleErr != nil {
+				log.Printf("selfdev materializer: operation %s in %s interrupted by a restart, held: %v",
+					operation.OperationID, operation.State, settleErr)
+			}
+			continue
+		}
 		var operationErr error
-		if operation.State == selfdev.StateRollbackPending ||
-			// A degraded operation carrying a route receipt completed a prior
-			// promote and was lost mid-rollback; a degraded operation without
-			// one was lost mid-apply. The route receipt — only ever written by
-			// recordMaterializationApplied — discriminates the two.
-			(operation.State == selfdev.StateDegraded && strings.TrimSpace(operation.RouteReceipt) != "") {
-			operationErr = rt.rollbackSelfDevelopmentOperation(ctx, operation)
+		if rollback {
+			operationErr = rt.rollbackSelfDevelopmentOperation(ctx, operation, false)
 		} else {
-			operationErr = rt.materializeSelfDevelopmentOperation(ctx, operation)
+			operationErr = rt.materializeSelfDevelopmentOperation(ctx, operation, false)
 		}
 		if errors.Is(operationErr, ErrGuestApplyAttemptsSpent) {
 			// The apply crashed this guest every time it ran; retrying it
@@ -230,7 +310,9 @@ func selfDevelopmentBundleMatchesOperation(bundle transaction.CapsuleEffectBundl
 		bundle.BaseEventHead == operation.BaseHead
 }
 
-func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation) error {
+// journalOnly records the updater journal's terminal outcome without calling
+// the updater (crash-boot settlement, L1a-3b).
+func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
 	bundlePath := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest, "bundle.json")
 	rawBundle, err := os.ReadFile(bundlePath)
 	if err != nil || computerevent.DigestBytes(rawBundle) != operation.BundleDigest {
@@ -320,12 +402,10 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	if err != nil {
 		return err
 	}
-	restartPlanned, spentErr := rt.markPlannedRestart(PlannedRestartSelfDevelopmentApply, operation.OperationID)
-	if spentErr != nil {
-		return spentErr
+	result, applyErr, err := rt.applyOrReadJournal(ctx, applyRequest, PlannedRestartSelfDevelopmentApply, operation.OperationID, journalOnly)
+	if err != nil {
+		return err
 	}
-	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
-	restartPlanned(applyErr)
 	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
 		// The journal is the durable authority: a terminal outcome supersedes
 		// whatever the live Apply returned (including a transport error that
@@ -372,7 +452,7 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	return applyErr
 }
 
-func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation) error {
+func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation, journalOnly bool) error {
 	manifest, releaseDir, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, operation.ReleaseDigest)
 	if err != nil {
 		return fmt.Errorf("materializer: rollback release unavailable: %w", err)
@@ -398,12 +478,10 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 	if err != nil {
 		return err
 	}
-	restartPlanned, spentErr := rt.markPlannedRestart("self_development_rollback", operation.OperationID)
-	if spentErr != nil {
-		return spentErr
+	result, applyErr, err := rt.applyOrReadJournal(ctx, applyRequest, "self_development_rollback", operation.OperationID, journalOnly)
+	if err != nil {
+		return err
 	}
-	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
-	restartPlanned(applyErr)
 	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
 		result, applyErr = journaled.Result, nil
 		if journaled.Result.Outcome != "applied" {
@@ -813,11 +891,16 @@ func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation se
 	if err != nil {
 		return err
 	}
-	recoveryBytes, err := result.RecoveryReceipt.CanonicalBytes()
-	if err != nil {
-		return err
+	// A crash-boot settlement of an apply the updater never started has no
+	// recovery receipt: nothing changed, so nothing was restored.
+	recoveryDigest := ""
+	if result.RecoveryReceipt != nil {
+		recoveryBytes, err := result.RecoveryReceipt.CanonicalBytes()
+		if err != nil {
+			return err
+		}
+		recoveryDigest = computerevent.DigestBytes(recoveryBytes)
 	}
-	recoveryDigest := computerevent.DigestBytes(recoveryBytes)
 	idempotency := "selfdev-materialization-failed-" + operation.DecisionEvent
 	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
 		return lookupErr
@@ -849,6 +932,33 @@ func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation se
 		return nil
 	})
 	return err
+}
+
+// applyOrReadJournal runs the apply, announcing its planned restart, or with
+// journalOnly reads the terminal outcome the updater already journaled for
+// the request without calling the updater. err reports a refused or absent
+// attempt; applyErr is the apply's own result error.
+func (rt *Runtime) applyOrReadJournal(ctx context.Context, request updater.ApplyRequest, reason, target string, journalOnly bool) (updater.ApplyResult, error, error) {
+	if journalOnly {
+		journaled, found, err := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, request.IdempotencyKey)
+		if err != nil {
+			return updater.ApplyResult{}, nil, err
+		}
+		if !found || !journaled.Terminal {
+			return updater.ApplyResult{}, nil, errSelfDevJournalMidFlight
+		}
+		if journaled.Result.Outcome != "applied" {
+			return journaled.Result, errors.New(journaled.Failure), nil
+		}
+		return journaled.Result, nil, nil
+	}
+	restartPlanned, spentErr := rt.markPlannedRestart(reason, target)
+	if spentErr != nil {
+		return updater.ApplyResult{}, nil, spentErr
+	}
+	result, applyErr := rt.selfdevUpdater.Apply(ctx, request)
+	restartPlanned(applyErr)
+	return result, applyErr, nil
 }
 
 // selfdevBoundaryObserverAgentID is the committing-agent identity stamped on

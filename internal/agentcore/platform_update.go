@@ -235,28 +235,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 			return report, fmt.Errorf("platform update: materialization-start refused: %w", appendErr)
 		}
 	}
-	// Finalize the manifest with the real accepted head, then stage payload
-	// into the updater's trusted incoming store.
-	manifest := offer.Manifest
-	manifest.AcceptedEventHead = acceptedDigest
-	manifest, err = updater.FinalizeManifest(manifest)
-	if err != nil {
-		return report, err
-	}
-	releaseDigest := manifest.ContentDigest
-	incomingDir, err := rt.stagePlatformUpdatePayload(ctx, offer, releaseDigest)
-	if err != nil {
-		return report, err
-	}
-
-	applyRequest := updater.ApplyRequest{
-		ComputerID: computerID, RealizationID: rt.selfdevRealizationID,
-		OperationID:       "platform-update-" + offer.UpdateID,
-		IdempotencyKey:    platformUpdateIdempotencyKey("apply", offer.UpdateID),
-		AcceptedEventHead: acceptedDigest,
-		SourceDir:         incomingDir, Manifest: manifest,
-	}
-	applyRequest.RequestCommitment, err = updater.ComputeApplyRequestCommitment(applyRequest)
+	applyRequest, err := rt.platformUpdateApplyRequest(ctx, offer, acceptedDigest)
 	if err != nil {
 		return report, err
 	}
@@ -287,13 +266,48 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 			return report, rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, result, applyErr, false)
 		}
 	}
+	return rt.commitPlatformUpdateApplied(ctx, offer, offerDigest, acceptedDigest, result, resolver, applyRequest.OperationID, report)
+}
+
+// platformUpdateApplyRequest finalizes the offer's manifest under its accepted
+// event, stages the payload into the updater's trusted incoming store, and
+// returns the updater request. The request is deterministic over the offer
+// and accepted head, so its idempotency key names one updater journal.
+func (rt *Runtime) platformUpdateApplyRequest(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, acceptedDigest string) (updater.ApplyRequest, error) {
+	manifest := offer.Manifest
+	manifest.AcceptedEventHead = acceptedDigest
+	manifest, err := updater.FinalizeManifest(manifest)
+	if err != nil {
+		return updater.ApplyRequest{}, err
+	}
+	incomingDir, err := rt.stagePlatformUpdatePayload(ctx, offer, manifest.ContentDigest)
+	if err != nil {
+		return updater.ApplyRequest{}, err
+	}
+	request := updater.ApplyRequest{
+		ComputerID: offer.ComputerID, RealizationID: rt.selfdevRealizationID,
+		OperationID:       "platform-update-" + offer.UpdateID,
+		IdempotencyKey:    platformUpdateIdempotencyKey("apply", offer.UpdateID),
+		AcceptedEventHead: acceptedDigest,
+		SourceDir:         incomingDir, Manifest: manifest,
+	}
+	request.RequestCommitment, err = updater.ComputeApplyRequestCommitment(request)
+	return request, err
+}
+
+// commitPlatformUpdateApplied records an applied updater result: the applied
+// event closes the pending transition, then the tail (checkpoint, route)
+// runs.
+func (rt *Runtime) commitPlatformUpdateApplied(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest, acceptedDigest string, result updater.ApplyResult, resolver updaterReceiptKeyResolver, operationID string, report PlatformUpdateReport) (PlatformUpdateReport, error) {
 	if result.Outcome != "applied" || result.MaterializationReceipt.Verify(resolver) != nil || result.HealthReceipt.Verify(resolver) != nil {
 		return report, fmt.Errorf("platform update: invalid applied receipts")
 	}
 	report.ReleaseDigest = result.ReleaseDigest
 	report.PriorReleaseDigest = result.PriorReleaseDigest
+	computerID := offer.ComputerID
+	appliedKey := platformUpdateIdempotencyKey("applied", offer.UpdateID)
 
-	head, err = rt.store.Head(ctx, computerID)
+	head, err := rt.store.Head(ctx, computerID)
 	if err != nil || head == nil {
 		return report, fmt.Errorf("platform update: applied projection unavailable")
 	}
@@ -303,7 +317,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 		return report, err
 	}
 	resultPayload, _ := json.Marshal(result)
-	appliedEvent = computerevent.Event{
+	appliedEvent := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: appliedEventID, ComputerID: computerID,
 		EventKind: computerevent.EventMaterializationApplied, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: appliedKey,
@@ -323,7 +337,7 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	appliedEventHead := head.CanonicalEventHead
 	report.AppliedEventHead = appliedEventHead
 
-	return rt.drivePlatformUpdateTail(ctx, offer, offerDigest, acceptedDigest, result, appliedEventHead, applyRequest.OperationID, report)
+	return rt.drivePlatformUpdateTail(ctx, offer, offerDigest, acceptedDigest, result, appliedEventHead, operationID, report)
 }
 
 // drivePlatformUpdateTail commits the post-apply half of a platform update:
@@ -811,48 +825,16 @@ func (h *APIHandler) HandleInternalPlatformUpdate(w http.ResponseWriter, r *http
 //     finds the latest platform-update-applied event and re-drives when its
 //     route-projection-updated sibling is absent.
 func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
-	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.eventPayloadReader == nil || rt.selfdevUpdater == nil {
-		return
-	}
-	head, err := rt.store.Head(ctx, rt.selfdevComputerID)
-	if err != nil || head == nil {
-		return
-	}
-	if head.PendingTransitionRef == "" {
+	offer, acceptedDigest, noPending, ok := rt.pendingPlatformUpdate(ctx)
+	if noPending {
 		// No pending transition — but an applied event whose tail never
 		// committed is still a strand: applied clears the pending ref, so
 		// the pending gate is blind to it.
 		rt.resumeStrandedPlatformUpdateTail(ctx)
 		return
 	}
-	// PendingTransitionRef is the accepted event's digest: it stays bound until
-	// the transition closes (applied/failed). materialization_started committing
-	// between them is the normal mid-flight shape — not a reason to skip.
-	pendingEvent, found, evErr := rt.store.EventByDigest(ctx, rt.selfdevComputerID, head.PendingTransitionRef)
-	if evErr != nil || !found || pendingEvent.EventKind != computerevent.EventEffectAccepted {
-		return // pending transition is not an update-accepted event
-	}
-	if !computerevent.IsSHA256(pendingEvent.PayloadCommitment) {
-		log.Printf("runtime: platform update resume: accepted event pins no offer payload — transition %s orphaned", head.PendingTransitionRef[:12])
+	if !ok {
 		return
-	}
-	raw, fetchErr := rt.eventPayloadReader.FetchPayload(ctx, rt.selfdevComputerID, pendingEvent.PayloadCommitment)
-	if fetchErr != nil {
-		log.Printf("runtime: platform update resume: offer payload fetch: %v", fetchErr)
-		return
-	}
-	var offer selfdevprotocol.PlatformUpdateOffer
-	if err := json.Unmarshal(raw, &offer); err != nil {
-		log.Printf("runtime: platform update resume: offer payload decode: %v", err)
-		return
-	}
-	appliedKey := platformUpdateIdempotencyKey("applied", offer.UpdateID)
-	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, appliedKey); lookupErr != nil || found {
-		return // applied committed (or store error) — tail done or in flight
-	}
-	failedKey := platformUpdateIdempotencyKey("failed", offer.UpdateID)
-	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, failedKey); lookupErr != nil || found {
-		return // failed committed — the update already lost; do not retry
 	}
 	log.Printf("runtime: platform update resume: re-driving update %s after guest restart", offer.UpdateID)
 	_, applyErr := rt.ApplyPlatformUpdate(ctx, offer)
@@ -880,7 +862,7 @@ func (rt *Runtime) resumePendingPlatformUpdate(ctx context.Context) {
 	// the failed event carries RestoredPriorEffective to clear the transition.
 	if err := rt.recordPlatformUpdateFailed(ctx,
 		selfdevprotocol.PlatformUpdateOffer{ComputerID: rt.selfdevComputerID, UpdateID: offer.UpdateID},
-		offerDigest, head.PendingTransitionRef,
+		offerDigest, acceptedDigest,
 		updater.ApplyResult{Outcome: "refused"},
 		ErrPlatformUpdateRealizationBound, false); err != nil {
 		log.Printf("runtime: platform update resume: discharge failed: %v", err)
@@ -951,5 +933,140 @@ func (rt *Runtime) resumePendingPlatformUpdateAfterReady(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	rt.resumePendingPlatformUpdate(ctx)
+	rt.settleOrResumePlatformUpdate(ctx)
+}
+
+// settleOrResumePlatformUpdate is the boot phase for a platform update the
+// tape has not closed. A planned boot resumes it once; a crash boot settles it
+// from the updater journal and never calls the updater (CLAUDE.md "Restarts
+// End Work (Crash) Or Resume It (Planned Update)"; L1a-3a).
+func (rt *Runtime) settleOrResumePlatformUpdate(ctx context.Context) {
+	if _, planned := rt.BootWasPlannedRestart(); planned {
+		rt.resumePendingPlatformUpdate(ctx)
+		return
+	}
+	rt.settlePendingPlatformUpdateAfterCrash(ctx)
+}
+
+// platformUpdateInterruptedByRestart is the outcome a crash boot records for
+// an update the updater never started.
+const platformUpdateInterruptedByRestart = "interrupted_by_restart"
+
+var errPlatformUpdateInterruptedByRestart = errors.New("interrupted by a restart before the updater started it")
+
+// settlePendingPlatformUpdateAfterCrash closes the pending update with what
+// the updater journal says happened: no journal means nothing changed (failed,
+// interrupted by a restart); a terminal applied journal is recorded as
+// applied; a terminal failure with a verified recovery receipt as failed. A
+// mid-flight journal leaves the transition pending: the effective state is
+// unknown, and refusing later updates until an owner act is fail-closed. An
+// applied update whose tail never committed still gets its tail, which
+// publishes what already happened and starts no apply.
+func (rt *Runtime) settlePendingPlatformUpdateAfterCrash(ctx context.Context) {
+	offer, acceptedDigest, noPending, ok := rt.pendingPlatformUpdate(ctx)
+	if noPending {
+		rt.resumeStrandedPlatformUpdateTail(ctx)
+		return
+	}
+	if !ok {
+		return
+	}
+	if strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {
+		log.Printf("runtime: crash boot: platform update %s left pending: no updater root to read its journal", offer.UpdateID)
+		return
+	}
+	offerDigest, err := offer.Digest()
+	if err != nil {
+		log.Printf("runtime: crash boot: platform update %s offer digest: %v", offer.UpdateID, err)
+		return
+	}
+	journaled, found, err := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, platformUpdateIdempotencyKey("apply", offer.UpdateID))
+	if err != nil {
+		log.Printf("runtime: crash boot: platform update %s left pending: journal unreadable: %v", offer.UpdateID, err)
+		return
+	}
+	if !found {
+		_ = rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest,
+			updater.ApplyResult{Outcome: platformUpdateInterruptedByRestart}, errPlatformUpdateInterruptedByRestart, false)
+		rt.logPlatformUpdateCrashSettlement(ctx, offer, "failed (interrupted by a restart before the updater started it)")
+		return
+	}
+	if !journaled.Terminal {
+		log.Printf("runtime: crash boot: platform update %s left pending: updater journal is mid-flight, effective state unknown", offer.UpdateID)
+		return
+	}
+	ref, publicKey, err := rt.selfdevUpdater.PublicKey(ctx)
+	if err != nil {
+		log.Printf("runtime: crash boot: platform update %s left pending: updater key: %v", offer.UpdateID, err)
+		return
+	}
+	resolver := updaterReceiptKeyResolver{ref: ref, key: publicKey}
+	switch {
+	case journaled.Result.Outcome == "applied":
+		report := PlatformUpdateReport{UpdateID: offer.UpdateID, ComputerID: offer.ComputerID, AcceptedEventHead: acceptedDigest}
+		if _, err := rt.commitPlatformUpdateApplied(ctx, offer, offerDigest, acceptedDigest, journaled.Result, resolver, "platform-update-"+offer.UpdateID, report); err != nil {
+			log.Printf("runtime: crash boot: platform update %s: record journaled apply: %v", offer.UpdateID, err)
+			return
+		}
+		rt.logPlatformUpdateCrashSettlement(ctx, offer, "applied (from the updater journal)")
+	case journaled.Result.RecoveryReceipt != nil && journaled.Result.RecoveryReceipt.Verify(resolver) == nil:
+		_ = rt.recordPlatformUpdateFailed(ctx, offer, offerDigest, acceptedDigest, journaled.Result, errors.New(journaled.Failure), true)
+		rt.logPlatformUpdateCrashSettlement(ctx, offer, "failed (prior release restored, from the updater journal)")
+	default:
+		log.Printf("runtime: crash boot: platform update %s left pending: journal outcome %q has no verified recovery", offer.UpdateID, journaled.Result.Outcome)
+	}
+}
+
+func (rt *Runtime) logPlatformUpdateCrashSettlement(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, outcome string) {
+	head, err := rt.store.Head(ctx, offer.ComputerID)
+	if err != nil || head == nil || head.PendingTransitionRef != "" {
+		log.Printf("runtime: crash boot: platform update %s: settling as %s did not close the transition", offer.UpdateID, outcome)
+		return
+	}
+	log.Printf("runtime: crash boot: platform update %s settled as %s", offer.UpdateID, outcome)
+}
+
+// pendingPlatformUpdate returns the offer behind the head's pending
+// transition when it is a platform update the tape has not closed. noPending
+// reports a head with no pending transition.
+func (rt *Runtime) pendingPlatformUpdate(ctx context.Context) (offer selfdevprotocol.PlatformUpdateOffer, acceptedDigest string, noPending, ok bool) {
+	if rt == nil || rt.store == nil || rt.eventAppender == nil || rt.eventPayloadReader == nil || rt.selfdevUpdater == nil {
+		return offer, "", false, false
+	}
+	head, err := rt.store.Head(ctx, rt.selfdevComputerID)
+	if err != nil || head == nil {
+		return offer, "", false, false
+	}
+	if head.PendingTransitionRef == "" {
+		return offer, "", true, false
+	}
+	// PendingTransitionRef is the accepted event's digest: it stays bound until
+	// the transition closes (applied/failed). materialization_started committing
+	// between them is the normal mid-flight shape — not a reason to skip.
+	pendingEvent, found, evErr := rt.store.EventByDigest(ctx, rt.selfdevComputerID, head.PendingTransitionRef)
+	if evErr != nil || !found || pendingEvent.EventKind != computerevent.EventEffectAccepted {
+		return offer, "", false, false // pending transition is not an update-accepted event
+	}
+	if !computerevent.IsSHA256(pendingEvent.PayloadCommitment) {
+		log.Printf("runtime: platform update resume: accepted event pins no offer payload — transition %s orphaned", head.PendingTransitionRef[:12])
+		return offer, "", false, false
+	}
+	raw, fetchErr := rt.eventPayloadReader.FetchPayload(ctx, rt.selfdevComputerID, pendingEvent.PayloadCommitment)
+	if fetchErr != nil {
+		log.Printf("runtime: platform update resume: offer payload fetch: %v", fetchErr)
+		return offer, "", false, false
+	}
+	if err := json.Unmarshal(raw, &offer); err != nil {
+		log.Printf("runtime: platform update resume: offer payload decode: %v", err)
+		return offer, "", false, false
+	}
+	appliedKey := platformUpdateIdempotencyKey("applied", offer.UpdateID)
+	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, appliedKey); lookupErr != nil || found {
+		return offer, "", false, false // applied committed (or store error) — tail done or in flight
+	}
+	failedKey := platformUpdateIdempotencyKey("failed", offer.UpdateID)
+	if _, found, lookupErr := rt.store.EventByIdempotency(ctx, rt.selfdevComputerID, failedKey); lookupErr != nil || found {
+		return offer, "", false, false // failed committed — the update already lost; do not retry
+	}
+	return offer, head.PendingTransitionRef, false, true
 }

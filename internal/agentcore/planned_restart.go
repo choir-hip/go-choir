@@ -279,7 +279,10 @@ func spendGuestApplyAttempt(storePath, reason, target string) error {
 // markPlannedRestart spends one of the apply's attempts and announces that
 // the apply about to run restarts this guest on purpose. It refuses the apply
 // (and writes no marker) once the attempts are spent. The returned func
-// clears the marker when the apply returned without restarting.
+// clears the marker once the apply returns: the updater answers only a caller
+// that is still alive, so the restart already happened (a resume replayed
+// from the journal) or never will, and a marker left behind would read a
+// later crash as planned (L1a-3a).
 func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr error), error) {
 	storePath := ""
 	if rt != nil {
@@ -295,12 +298,9 @@ func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr erro
 		log.Printf("runtime: %v (restart will be treated as a crash)", err)
 		return func(error) {}, nil
 	}
-	return func(applyErr error) {
-		if applyErr == nil {
-			return
-		}
+	return func(error) {
 		if err := ClearPlannedRestartMarker(storePath); err != nil {
-			log.Printf("runtime: clear planned restart marker after failed apply: %v", err)
+			log.Printf("runtime: clear planned restart marker after apply returned: %v", err)
 		}
 	}, nil
 }

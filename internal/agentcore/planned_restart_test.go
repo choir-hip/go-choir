@@ -55,7 +55,10 @@ func TestPlannedRestartMarkerStaleOrCorruptIsACrash(t *testing.T) {
 	}
 }
 
-func TestMarkPlannedRestartClearsAfterFailedApply(t *testing.T) {
+// The updater answers only a caller that is still alive: either the apply
+// restarted this guest already (a resume) or it never will. Either way the
+// marker is stale once Apply returns (L1a-3a).
+func TestMarkPlannedRestartClearsWhenApplyReturns(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "state")
 	rt := &Runtime{}
 	rt.cfg.StorePath = store
@@ -69,8 +72,8 @@ func TestMarkPlannedRestartClearsAfterFailedApply(t *testing.T) {
 	}
 	done, _ = rt.markPlannedRestart("self_development_apply", "op-2")
 	done(nil)
-	if _, err := os.Stat(PlannedRestartMarkerPath(store)); err != nil {
-		t.Fatalf("successful apply lost its marker: %v", err)
+	if _, err := os.Stat(PlannedRestartMarkerPath(store)); !os.IsNotExist(err) {
+		t.Fatalf("an apply that returned success left a marker: %v", err)
 	}
 }
 

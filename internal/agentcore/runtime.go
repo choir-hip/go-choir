@@ -234,6 +234,11 @@ type Runtime struct {
 	// re-entrant).
 	managementReconcileMu sync.Mutex
 	selfdevMaterializeMu  sync.Mutex
+	// selfdevCrashInterrupted names the self-development operations a crash
+	// boot found decided but unsettled (L1a-3b): the reconciler settles them
+	// from the updater journal and never calls the updater for them. Guarded
+	// by selfdevMaterializeMu.
+	selfdevCrashInterrupted map[string]bool
 	// selfdevReconcilePending is the M7 derivable-continuation signal: the
 	// canonical post-commit observer sets it and a single drain loop
 	// collapses bursts into one reconcile per settlement boundary.

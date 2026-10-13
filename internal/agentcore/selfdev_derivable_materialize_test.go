@@ -320,6 +320,8 @@ type derivableSelfDevFixture struct {
 	programs    map[string]computerversion.ArtifactProgram
 	controlFail *atomic.Bool
 	updaterRoot string
+	engine      *updater.Updater
+	applyCalls  atomic.Int32
 	service     *derivableServiceManager
 	platformKey ed25519.PrivateKey
 	baseSource  *liveBaseSource
@@ -400,6 +402,7 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 	if err != nil {
 		t.Fatal(err)
 	}
+	fx.engine = engine
 	updaterMux := http.NewServeMux()
 	updaterMux.HandleFunc("/v1/public-key", func(w http.ResponseWriter, r *http.Request) {
 		ref, publicKey, keyErr := guestSigner.PublicKey(r.Context())
@@ -413,6 +416,7 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 		})
 	})
 	updaterMux.HandleFunc("/v1/apply", func(w http.ResponseWriter, r *http.Request) {
+		fx.applyCalls.Add(1)
 		var request updater.ApplyRequest
 		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&request) != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -982,7 +986,7 @@ func (fx *derivableSelfDevFixture) waitForState(t *testing.T, operationID string
 		// operation to surface the real failure.
 		var stepErr error
 		if operation.State == selfdev.StateAccepted || operation.State == selfdev.StateMaterializing {
-			stepErr = fx.rt.materializeSelfDevelopmentOperation(context.Background(), operation)
+			stepErr = fx.rt.materializeSelfDevelopmentOperation(context.Background(), operation, false)
 		} else if operation.State == selfdev.StateAwaitingApproval {
 			_, _, stepErr = fx.rt.recoverSelfDevelopmentDecision(context.Background(), operation)
 		}
