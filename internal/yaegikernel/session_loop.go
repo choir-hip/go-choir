@@ -87,6 +87,10 @@ type SessionResult struct {
 	// the last cell result ("s3: 3/4 answered, +2 new"): the only push of
 	// search arrivals to the model, counts and never results.
 	Searches []string `json:"searches,omitempty"`
+	// RecordsShown is the highest record seq a choir.Records() call in the
+	// cell returned (0: the cell never called it). The cell's commit marks
+	// read only through it (autopaper-arrivals-unanswered-2026-10-13).
+	RecordsShown int64 `json:"records_shown,omitempty"`
 }
 
 // RunSessionLoopWithDrainAndHooks serves newline-delimited SessionFrames from
@@ -141,6 +145,9 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	out := SessionResult{ID: frame.ID, Stdout: res.Stdout, Stderr: res.Stderr, DurationMs: time.Since(start).Milliseconds()}
 	if drain != nil {
 		out.Receipts = drain()
+	}
+	if hooks != nil && hooks.RecordsShown != nil {
+		out.RecordsShown = hooks.RecordsShown()
 	}
 	var staged []StagedIntent
 	if hooks != nil && hooks.End != nil {

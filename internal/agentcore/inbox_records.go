@@ -136,6 +136,42 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 	return out, nil
 }
 
+// noteRecordsShown folds a cell's shown mark into its run's and returns
+// the run's: a record an earlier cell of the run showed stays read.
+func (rt *Runtime) noteRecordsShown(runID string, cell int64) int64 {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return cell
+	}
+	for {
+		prev, loaded := rt.recordsRunShown.LoadOrStore(runID, cell)
+		if !loaded {
+			return cell
+		}
+		p, _ := prev.(int64)
+		if cell <= p {
+			return p
+		}
+		if rt.recordsRunShown.CompareAndSwap(runID, prev, cell) {
+			return cell
+		}
+	}
+}
+
+// capToShown limits the range a cell marks read to the records its run was
+// shown through choir.Records() (autopaper-arrivals-unanswered-2026-10-13):
+// a record that landed after the desk last looked stays unread and wakes
+// the next turn instead of being consumed unseen.
+func (c cellRecords) capToShown(shown int64) cellRecords {
+	if shown < c.through {
+		c.through = shown
+	}
+	if c.through < c.after {
+		c.through = c.after
+	}
+	return c
+}
+
 // cursorAdvance is the compare-and-set that marks this range read, or nil
 // when the range is empty.
 func (c cellRecords) cursorAdvance() *types.InboxCursorAdvance {
@@ -537,25 +573,24 @@ func (rt *Runtime) InboxUnread(ctx context.Context, ownerID, computerID, deskAge
 
 // recheckRecordsInbox is the post-turn re-check (decision D4). A record that
 // arrived while the desk's run was active found the desk busy and woke
-// nobody. After a completed turn, any unread record starts one more turn.
-// After a failed or cancelled turn, only records committed after that turn
-// began do: the records it already had stay unread and re-arm nothing, so a
-// record that breaks the desk is read again only when a new record arrives,
-// never in a loop. A crash closure re-arms nothing at all.
+// nobody. After any ended turn, an unread record committed after that turn
+// began starts one more turn. The records the turn already had stay unread
+// and re-arm nothing: after a failed turn, so a record that breaks the desk
+// is read again only when a new record arrives; after a completed one,
+// because a turn marks read only what choir.Records() showed it
+// (autopaper-arrivals-unanswered-2026-10-13), so a desk that never reads
+// cannot wake itself in a loop. A crash closure re-arms nothing at all.
 func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord) {
 	rt.closeRoundsOfEndedRun(ctx, rec)
 	// A parked run counts too (B7): its turn ended though the run did not.
-	// A park after a committed turn is a completed turn; any other park is
-	// a turn that committed nothing.
 	parked := rec != nil && rec.State == types.RunPassivated
 	if rt != nil && rec != nil && (rec.State.Terminal() || parked) {
 		rt.recordsRunStart.Delete(rec.RunID)
+		rt.recordsRunShown.Delete(rec.RunID)
 	}
 	if rt == nil || rt.store == nil || rec == nil || !(rec.State.Terminal() || parked) || rec.Error == runFateInterruptedByRestart {
 		return
 	}
-	completed := rec.State == types.RunCompleted ||
-		(parked && metadataStringValue(rec.Metadata, "passivated_reason") == "durable_transition_success")
 	if !recordsDesk(agentProfileForRun(rec)) {
 		return
 	}
@@ -568,21 +603,19 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	if err != nil || head <= cursor {
 		return
 	}
-	if !completed {
-		unread, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, cursor, head)
-		if err != nil {
-			return
+	unread, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, cursor, head)
+	if err != nil {
+		return
+	}
+	late := false
+	for _, r := range unread {
+		if committed, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt); perr == nil && committed.After(rec.CreatedAt) {
+			late = true
+			break
 		}
-		late := false
-		for _, r := range unread {
-			if committed, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt); perr == nil && committed.After(rec.CreatedAt) {
-				late = true
-				break
-			}
-		}
-		if !late {
-			return
-		}
+	}
+	if !late {
+		return
 	}
 	content, _ := json.Marshal(map[string]string{"inbox": rec.AgentID, "recheck_after_run": rec.RunID})
 	if err := rt.DispatchActor(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, "inbox_record", string(content), "", ""); err != nil {

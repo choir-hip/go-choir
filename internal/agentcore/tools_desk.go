@@ -481,6 +481,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				}
 			}
 			if reduction.active && result.Error == "" {
+				if deskRole != agentprofile.Texture {
+					reduction.records = reduction.records.capToShown(rt.noteRecordsShown(execCtx.RunID, result.RecordsShown))
+				}
 				if rerr := reduction.commit(ctx, result.Intents); rerr != nil {
 					return "", rerr
 				}

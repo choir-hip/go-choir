@@ -64,6 +64,10 @@ type Runtime struct {
 	// cell (run id -> int64): choir.Records() shows the run every record
 	// past it (B13).
 	recordsRunStart sync.Map
+	// recordsRunShown holds the highest record seq a choir.Records() call
+	// in each running desk run returned (run id -> int64): a cell's commit
+	// marks read only through it.
+	recordsRunShown sync.Map
 
 	cfg         provideriface.Config
 	store       *store.Store

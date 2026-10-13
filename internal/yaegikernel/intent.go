@@ -559,4 +559,7 @@ type CellHooks struct {
 	// SearchCounts returns one count line per async search with arrivals
 	// the desk has not been told about ("s3: 3/4 answered, +2 new").
 	SearchCounts func() []string
+	// RecordsShown returns the highest record seq a choir.Records() call in
+	// the cell returned (0: none).
+	RecordsShown func() int64
 }

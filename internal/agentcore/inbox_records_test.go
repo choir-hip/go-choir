@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -397,5 +398,100 @@ func TestOpeningCastFieldsLiftOntoTheTypedCast(t *testing.T) {
 	}
 	if _, err := castBodyFromPacket(`{"publish":"weekly"}`); err == nil || !strings.Contains(err.Error(), "auto") {
 		t.Fatalf("unknown publish mode = %v, want a refusal naming auto", err)
+	}
+}
+
+// A cell marks read only the records a choir.Records() call in its run
+// returned (docs/problems/autopaper-arrivals-unanswered-2026-10-13.md).
+// Before, every cell's commit advanced the cursor to the head at cell
+// start, so eight capture records that landed between a turn's Records()
+// call and its acting cell were consumed unseen. Ways this could fail,
+// written first: (a) a cell that never calls Records() advances the
+// cursor; (b) a record that arrives mid-run is marked read by a later cell
+// that did not look; (c) a record the run never showed, committed before
+// the run began, re-arms a completed turn forever; (d) a later cell of the
+// run forgets what an earlier cell showed and leaves it unread.
+func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	owner, computer := "owner-shown", rt.cfg.ComputerID
+	management, source := "management:"+owner, "source:rss:test"
+	var woke []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, to, kind, _, _, _ string) error {
+		if kind == "inbox_record" {
+			woke = append(woke, to)
+		}
+		return nil
+	})
+	note := func(id string, at time.Time) {
+		t.Helper()
+		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "shown-" + id, Records: []types.CommitmentRecord{{
+			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
+			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: id},
+			Inbox: management, SenderInbox: source, Addressee: management, EmitterKind: types.CommitmentEmitterSystem,
+			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: "system:captures", CommittedAt: at.Format(time.RFC3339Nano)},
+		}}}
+		req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
+		if _, err := s.CommitInboxRecords(ctx, req); err != nil {
+			t.Fatalf("commit %s: %v", id, err)
+		}
+	}
+	cursor := func() int64 {
+		c, _ := s.ReaderCursor(ctx, owner, computer, management, management)
+		return c
+	}
+	start := time.Now().UTC()
+	note("first", start.Add(-time.Second))
+	rec := types.RunRecord{RunID: "run-shown", AgentID: management, OwnerID: owner, ComputerID: computer, ChannelID: management,
+		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, State: types.RunRunning, CreatedAt: start,
+		Metadata: map[string]any{"request_source": inboxRecordRequestSource}}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+	execCtx := toolregistry.ExecutionContext{RunID: rec.RunID, AgentID: rec.AgentID, OwnerID: owner, ChannelID: management, ComputerID: computer,
+		Profile: agentprofile.Management, Role: agentprofile.Management, RunRecord: &rec}
+	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Management)
+	calls := 0
+	cell := func(src string) string {
+		t.Helper()
+		calls++
+		execCtx.ToolCallID = fmt.Sprintf("call-%d", calls)
+		payload, _ := json.Marshal(map[string]any{"source": src, "timeout_ms": 15000})
+		out, err := tool.Func(toolregistry.WithExecutionContext(ctx, execCtx), payload)
+		if err != nil {
+			t.Fatalf("desk_go_eval: %v", err)
+		}
+		return out
+	}
+
+	if out := cell(`fmt.Println("looking elsewhere")`); cursor() != 0 {
+		t.Fatalf("(a) a cell that never called Records() advanced the cursor to %d: %s", cursor(), out)
+	}
+	if out := cell(`fmt.Println("read", len(choir.Records()))`); !strings.Contains(out, "read 1") || cursor() != 1 {
+		t.Fatalf("Records() showed the first record but cursor = %d: %s", cursor(), out)
+	}
+	note("mid-run", time.Now().UTC())
+	if out := cell(`fmt.Println("acting on what I read")`); cursor() != 1 {
+		t.Fatalf("(b) a mid-run record was marked read by a cell that did not look: cursor %d: %s", cursor(), out)
+	}
+	if out := cell(`fmt.Println("read", len(choir.Records()))`); !strings.Contains(out, "read 2") || cursor() != 2 {
+		t.Fatalf("(d) Records() showed both records but cursor = %d: %s", cursor(), out)
+	}
+
+	// (c) The post-turn re-check wakes the desk for a record that arrived
+	// after the turn began and went unshown, never for one it had at start.
+	note("after-read", time.Now().UTC())
+	done := rec
+	done.State = types.RunCompleted
+	rt.recheckRecordsInbox(ctx, &done)
+	if len(woke) != 1 {
+		t.Fatalf("an unshown record that arrived mid-run did not start one more turn: %v", woke)
+	}
+	idle := rec
+	idle.RunID, idle.State, idle.CreatedAt = "run-shown-2", types.RunCompleted, time.Now().UTC().Add(time.Minute)
+	rt.recheckRecordsInbox(ctx, &idle)
+	if len(woke) != 1 {
+		t.Fatalf("(c) a completed turn that never showed a record it had at start re-armed it: %v", woke)
 	}
 }
