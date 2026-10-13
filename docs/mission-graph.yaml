@@ -1588,7 +1588,7 @@ nodes:
     entrypoint: false
     execution_mode: mission_orchestrator
     depends_on: []
-    enables: []
+    enables: [choir-ledger-metamission-2026-10-13]
     note: >-
       Owner 2026-10-12 decisions (docs/re-engineering-decisions-2026-10-12.md
       §2, §10, §12, §13): radical cutover, no backwards compatibility,
@@ -1643,3 +1643,19 @@ nodes:
     execution_mode: draft_non_executable
     depends_on: [choir-reeng-cut1-authority-2026-10-12]
     enables: [choir-autopaper-w2-living-textures-2026-10-11]
+  - id: choir-ledger-metamission-2026-10-13
+    title: Ledger — bounded attention, hypotheses settled and scored, Taiwan vertical, read models, no crash loops
+    path: docs/definitions/choir-ledger-metamission-2026-10-13.md
+    ledger: ''
+    status: drafted  # owner asked for it 2026-10-13; L0 is closing the re-engineering metamission; stations L2-L5 are intent
+    kind: spine
+    entrypoint: false
+    execution_mode: draft_non_executable
+    depends_on: [choir-reeng-metamission-2026-10-12]
+    enables: []
+    note: >-
+      Owner 2026-10-13: precommitment records are the throughline; cost and
+      performance first; Taiwan and East Asia first; no crash loops; the
+      roadmap becomes a metamission that stays open to additions. Roadmap
+      reviewed in docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md;
+      restart design (station L1) in docs/restart-subsystem-design-2026-10-13.md.

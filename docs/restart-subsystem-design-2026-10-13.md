@@ -1,6 +1,8 @@
 # Restart subsystem: bounded recovery, no crash loops (design draft, 2026-10-13)
 
-Status: **v2** after a lateral review (seven panelists, 2026-10-13; §8). Draft for the convergent round; requested by the owner requested by the owner
+Status: **v3**: v2 after a lateral review (seven panelists, §8), amended by
+the convergent round (six answered, five ready with changes, §9). Where §9
+and the text above it differ, §9 governs. Requested by the owner
 ("Another thing we have to build is the restarting subsystem ... is there a
 way we can guarantee we never get into a crash loop?"; "design, verify this
 with other agents, and then slot it into the roadmap"). Mutation class when
@@ -32,13 +34,18 @@ recovery, it is a loop waiting to happen. A long-healthy computer that
 crashes again simply opens a new episode only if an external event occurred
 in between; otherwise it spends the remaining allowance and then holds.
 
-Why it is a guarantee: the gate sits at the single actuator every boot path
-already funnels through (vmmanager `bootVM`, whose `ReserveBootEpoch` is the
-sole epoch authority), so no caller can skip it; the ledger is written
-before the spawn and fails closed (missing, corrupt or unwritable means
-hold); and the allowance is only replenished by events that change the
-inputs. Any number of callers (resolve, warm sweeps, proxy retries, a
-browser's auto-refresh) can only ask; they cannot add boots.
+Why it is a guarantee: the gate sits at the one call every Firecracker
+spawn passes through (vmmanager `launchFirecracker`, reached from both
+`bootVM` and `ResumeVM`; §9 corrects v2, which named `bootVM`), so no caller
+can skip it; grants are keyed by a per-computer spawn sequence, so a resume
+that reuses an epoch cannot reuse a grant; the ledger is written before the
+spawn and fails closed (missing, corrupt or unwritable means hold); and the
+allowance is only replenished by events that change the inputs. Any number
+of callers (resolve, warm sweeps, proxy retries, a browser's auto-refresh)
+can only ask; they cannot add boots. Inside a running VM, systemd start
+limits bound restarts of each unit, so the total is at most
+(1 + allowance) spawns times each unit's start-limit burst per external
+event.
 
 **Invariant W (work).** A crash boot is side-effect free: it loads state,
 closes every open obligation as `interrupted_by_restart` (as a completion
@@ -208,20 +215,31 @@ reconcile, no update resume); an apply crash is a crash boot; an owner act
 or a new-build deploy releases exactly one new episode; the mass-hold
 detector fires once for the host fault.
 
-## 6. Order of work
+## 6. Order of work (v3, per §9)
 
-1. Host gate and ledger at `bootVM`, holds, warm-sweep and resolve rules,
-   proxy and starting-page behaviour (host only; closes the unbounded
-   resolve, warm and platform loops).
-2. StartLimits on every unit, the durable boot guard (host and guest
-   images).
-3. Side-effect-free crash boot and host-attested planned transitions (guest
-   and host; closes the self-minted-marker loop and the re-driver edges).
-4. Mass-hold detector and owner visibility.
-5. Owner decision on schedules (option A or B), then the paper's path.
+1. **L1a, the self-sustaining loops** (small; guest and Nix): start limits
+   and `OnFailure` on every restarting unit, guest and host; a markerless or
+   guest-self-marked boot runs no re-driver (platform-update resume,
+   engineering capsule reconcile, self-development reconcile and
+   post-commit, the wake projector's pre-boot sweep, the
+   `selfdev_materialization_retry` exemption), and crash closure settles
+   those transitions to terminal fates instead; warm sweeps never warm a
+   computer stopped as wedged, failed or `recovery_failed`.
+2. **L1b, the boot ledger**: grants at `launchFirecracker` keyed by spawn
+   sequence, no ungranted epoch auto-increment, exhaustion sets the existing
+   hold with a `recovery-ledger` class, owner acts are explicit mutations
+   only, the held page does not refresh, the proxy treats the hold refusal
+   as final, deploy refresh releases a recovery hold only for a different
+   build.
+3. **L1c, host-asserted planned boots**: the host passes planned-ness and
+   its transition record at boot (boot parameter or credential disk); the
+   guest writes no marker of its own; crash closure becomes a barrier.
+4. Visibility (the ledger's tail in `vmctl list` and the owner's computer
+   page; an alert on any hold).
+5. Schedules option B, once the owner ratifies it.
 6. A/B image slots (later).
 
-## 7. Open questions for the convergent round
+## 7. Open questions for the convergent round (answered in §9)
 
 - One automatic retry per episode, or two?
 - Should a deploy of the *same* build release a hold (it is an owner-
@@ -266,3 +284,122 @@ deepseek-v4.1-flash, muse-spark, opencode); outputs under
   blacklisting must not follow host faults (deepseek).
 - Reopen: owner-only for now (all seven); the paper needs an explicit
   standing policy (codex, claude, muse).
+
+## 9. Convergent round (2026-10-13), adjudicated
+
+Panel: convergent, seven selected plus glm-5.3. Answered: claude opus,
+gemini-3.8-flash, muse-spark, deepseek-v4.1-flash, glm-5.3-flash (**ready
+with changes**), opencode (**not ready**; three blocking findings that the
+others share). codex and gpt-6.1-sol failed on an OpenAI usage limit.
+Raw outputs: `.agentic-consensus/restart-convergent-2026-10-13/` and
+`-glm/` (session diagnostics).
+
+### Blocking findings, adopted
+
+1. **`bootVM` is not the single actuator** (all six). `ResumeVM`
+   (`internal/vmmanager/manager.go:966`) copies the launch sequence and calls
+   `launchFirecracker` itself (`:1036`) without `ReserveBootEpoch`; its live
+   caller is the platform warmer (`internal/vmctl/platform_computer.go:75`).
+   The gate moves to `launchFirecracker` (`manager.go:1827`), and
+   `consumeBootEpoch`'s auto-increment for an unsupplied epoch
+   (`manager.go:628-654`) must not mint a spawn without a grant.
+2. **Grants keyed by epoch are replayable** (claude, glm, deepseek): resume
+   deliberately keeps the epoch (`manager.go:1027-1031`). Grants are keyed by
+   a per-computer spawn sequence; the epoch is a recorded field.
+3. **"Owner opening the computer" is a refill** (all six). The starting page
+   meta-refreshes every 5-30 s (`internal/proxy/computer_surface_page.go:66`),
+   resolve of a failed computer recovers it (`ownership.go:1150-1155`), and
+   for the platform computer every proxied request re-runs the ensure path
+   (`handlers.go:1040-1045`). An owner act is an explicit authenticated
+   mutation only: the lifecycle start, restart or recover routes
+   (`computer_lifecycle.go`), unhold (`handlers.go:555`), or a schedule
+   restart. Resolve, page loads, probes and proxy retries never open an
+   episode; a held computer's page does not auto-refresh and offers a retry
+   button; the proxy treats the hold refusal as final.
+4. **A hold already exists** (claude, deepseek, glm). `HoldStatus`,
+   `SetHold` and `ClearHold` (`ownership.go:157-200`) are durable and
+   host-owned, honoured by resolve, both warmers, idle candidates and deploy
+   refresh. Exhaustion sets that hold with `held_by=recovery-ledger`; the
+   ledger only counts and records the cause chain (one state authority).
+   Deploy refresh skips held computers today; it changes to "release a
+   recovery-ledger hold only when the build differs from the build recorded
+   at hold time".
+5. **The fastest loop never spawns Firecracker** (all six). Guest units
+   restart after 1 s with no start limit (`nix/autoputer-vm.nix:590,626,702,
+   827`), and every boot runs re-drivers (`internal/agentcore/runtime.go:
+   761-770,783-788`). An apply that crashes the runtime restarts it in a
+   second, the guest re-mints its marker (`platform_update.go:263`;
+   `self_development_materializer.go:315,390`), the boot reads planned and
+   re-applies. The boot ledger never sees it. Start limits and crash-boot
+   re-driver gating move to the first slice (L1a), and §1 now counts the
+   in-guest bound.
+6. **Invariant W and v2 §3.3 contradicted each other** (deepseek, muse). W
+   governs: a crash boot never re-drives. Crash closure settles each
+   transition to a terminal fate (`update_failed_after_restart`; a
+   self-development op failed by restart) and discharges the
+   pending-transition reference (`platform_update.go:829-834`) so later
+   updates are not refused forever.
+7. **Wakes**: closure does not touch unprojected actor wakes; the projector
+   sweeps immediately on any boot, redrive mints salted generations with a
+   fresh `CreatedAt` (`runtime.go:2527-2547`) that pass the handler's
+   wall-clock pre-boot check, and retry counts are process-local
+   (`actor_wake_projector.go:26-34`). The sweep is gated on boot kind (crash
+   boots mark pre-boot wakes interrupted), and
+   `selfdev_materialization_retry` loses its exemption on crash boots
+   (`internal/actorruntime/handler.go:98-113`).
+8. **Warm sweeps warm wedged computers** (muse, deepseek):
+   `WarmAlwaysOnDesktops` filters state but not `stopped_by=wedged`
+   (`ownership.go:3051-3053`). Filter it in L1a; it closes the wedge-warm
+   cycle on its own.
+
+### Non-blocking, adopted
+
+- The guest boot guard's 60 s window resets on a loop just over a minute
+  (`autoputer-vm.nix:162-178`); the start limits replace it as the bound.
+- Ownership and epoch writes lack fsync (`ownership.go:565-570,598`;
+  `manager.go:2476-2486`); the ledger is the durable authority, and holds
+  must not depend on `ownerships.json` alone.
+- Maintenance recovery bypasses admission (`ownership.go:2661-2665`): it is
+  an operator act, so it passes the gate as a recorded external grant.
+- Crash closure skips production computers without an owner id and logs and
+  continues on errors (`runtime.go:2400-2421,2438-2460`); L1c makes it a
+  barrier.
+- Check that the proxy's transient-error test excludes the hold refusal.
+
+### Answers to §7
+
+- **Retries: one** automatic retry per episode (all six), at least 60 s
+  after the failure, plus the fallback boot only for an episode that began
+  with an image change and a failure that never reached userspace.
+- **Same-build deploy: never releases a hold** (all six). Only a different
+  build (recorded in the ledger at hold time) or an explicit owner act.
+- **Turn boundary: wait, then defer** (claude, glm, deepseek; muse, gemini
+  and opencode preferred wait-then-force). Adopted: defer, because CLAUDE.md
+  says deploys never restart a busy computer and the paper idles between
+  polls. A recorded forced-refresh kind is added only if a never-idle
+  computer blocks a needed fix.
+- **Schedules: option B as the default** (all six), pending the owner's
+  ratification: a crash closes the occurrence in flight; the next tick is
+  new work on a granted boot; a durable per-schedule count closes a
+  schedule whose ticks crash the computer twice, with a visible
+  "paper stopped" record. Every idle hibernate wake today is a crash boot
+  that closes schedules (glm), so option A silences the paper routinely.
+
+### Over-built, trimmed
+
+- The nonce handshake and admission fence (§3.3) give way to a host-asserted
+  planned boot (muse): the host already injects per-boot material, so it
+  passes planned-ness and its transition record at boot and the guest
+  writes nothing. Self-minting becomes impossible by construction. The
+  guest's busy endpoint stays for deferral.
+- The mass-hold detector becomes an alert on any hold (two computers).
+- The `recovery {...}` view and `restart_report` start as the ledger's tail
+  beside `HoldStatus` in `vmctl list`.
+
+### Acceptance additions
+
+Matrix cells added: platform-warmer resume, guest unit start limit, a
+resolve storm after a hold (no spawn for 60 minutes), a same-build deploy
+(no release), page open (no release), resume with a reused epoch (no
+reused grant), and an apply that crashes the runtime (crash boot, settled,
+no re-apply).

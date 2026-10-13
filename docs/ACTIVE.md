@@ -5,6 +5,19 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
+## Next (2026-10-13): ledger metamission (drafted)
+
+The [ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md)
+turns the roadmap the owner asked for into stations: L0 closes the
+re-engineering metamission below (E3 rerun passed, A1 badge, C1e, final
+review); L1 ends crash loops
+([restart design v3](restart-subsystem-design-2026-10-13.md)); L2 bounded
+attention; L3 hypotheses settled and scored; L4 Taiwan and East Asia as
+standing questions; L5 the evidence reader and an Autoradio prototype. It
+stays open to additions. Owner decisions open: the cost amendment,
+Telegram and commercial status, Taiwan first, Autoradio's slot, and
+schedules option B.
+
 ## Current (2026-10-13): re-engineering metamission
 
 The live spine is the
