@@ -1,37 +1,50 @@
 /**
- * Autopaper reader, logged out at phone width (Cut 2 unit 2b, Reader W3a;
- * docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md,
- * autopaper_live (4) and the "logged-out Playwright on choir.news at phone
- * width" acceptance).
+ * Autopaper, logged out at phone width: the front list, and stories read in
+ * the Texture app's read-only published mode (owner direction 2026-10-13:
+ * "open Textures in the Texture app rather than opening the stories in the
+ * Autopaper app"; the logged-out home opens Autopaper).
  *
  * Runs against the deployed origin (CHOIR_DEPLOYED_BASE_URL, default
  * https://choir.news) with no session:
- *   - the front page lists each story once, newest first, marked "Updated"
- *     when a story has more than one version;
- *   - every citation on a story page shows its quote inside its numbered
- *     source block with a check badge (exact, tolerant, pending, failed), and
- *     every transclusion renders as a block;
- *   - a story with more than one version shows chevrons, and an older
- *     version offers the newer one;
- *   - no page scrolls horizontally at 375px.
- * Screenshots of each page are attached and written under test-results.
- * The spec skips when no Autopaper story is published yet.
+ *   - the logged-out home opens the Autopaper window with the front list, and
+ *     a story clicked there opens as a published Texture window titled with
+ *     the story title;
+ *   - /autopaper lists each story once, newest first, marked "Updated" when a
+ *     story has more than one version, and a story clicked there opens at
+ *     /autopaper/<slug> as the standalone Texture published view;
+ *   - every citation renders as a numbered source whose quote sits inside its
+ *     pinned source block (inline popover and the source list) with a check
+ *     badge (exact, tolerant, pending, failed); every transclusion renders as
+ *     a block; the view offers no editing affordance;
+ *   - a story with more than one version moves between versions with the
+ *     Texture chevrons, and an older version offers the newer one;
+ *   - nothing scrolls horizontally at 375px.
+ * Screenshots are attached and written under test-results (or
+ * AUTOPAPER_SCREENSHOT_DIR when set). Skips when no story is published.
  *
  *   cd frontend && npx playwright test tests/autopaper-reader-deployed.spec.js
  */
+import fs from 'node:fs';
+import nodePath from 'node:path';
 import { expect, test } from '@playwright/test';
 
 const BASE_URL = (process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news').replace(/\/+$/, '');
 const MAX_STORIES = Number(process.env.AUTOPAPER_MAX_STORIES || 8);
+const SHOT_DIR = process.env.AUTOPAPER_SCREENSHOT_DIR || '';
 const CHECK_STATES = new Set(['exact', 'tolerant', 'pending', 'failed']);
 
 test.use({ viewport: { width: 375, height: 812 }, storageState: { cookies: [], origins: [] } });
-test.setTimeout(180_000);
+test.setTimeout(240_000);
 
 async function getJSON(request, path) {
   const res = await request.get(`${BASE_URL}${path}`, { timeout: 30_000 });
   expect(res.status(), `${path} status`).toBe(200);
   return res.json();
+}
+
+async function publishedStories(request) {
+  const front = await getJSON(request, '/api/platform/publications/front?limit=50');
+  return Array.isArray(front.stories) ? front.stories : [];
 }
 
 function slugOf(route) {
@@ -40,7 +53,11 @@ function slugOf(route) {
 
 async function expectNoHorizontalScroll(page, label) {
   const overflow = await page.evaluate(() => {
-    const els = [document.scrollingElement, document.querySelector('[data-autopaper]')].filter(Boolean);
+    const els = [
+      document.scrollingElement,
+      document.querySelector('[data-autopaper]'),
+      document.querySelector('[data-texture-editor-area]'),
+    ].filter(Boolean);
     return els.map((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
   });
   for (const { scroll, client } of overflow) {
@@ -48,25 +65,72 @@ async function expectNoHorizontalScroll(page, label) {
   }
 }
 
-async function shoot(page, testInfo, name) {
+async function shoot(page, testInfo, name, scroller = '') {
+  const files = [];
   const path = testInfo.outputPath(`${name}.png`);
-  await page.screenshot({ path, fullPage: false });
+  await page.screenshot({ path });
+  files.push(path);
   await testInfo.attach(name, { path, contentType: 'image/png' });
-  // The reader scrolls inside its own container; capture the whole story too.
-  const full = testInfo.outputPath(`${name}-full.png`);
-  const root = page.locator('[data-autopaper]');
-  const height = await root.evaluate((el) => el.scrollHeight).catch(() => 0);
-  if (height > 0) {
-    await page.setViewportSize({ width: 375, height: Math.min(height + 80, 12_000) });
-    await page.screenshot({ path: full, fullPage: true });
-    await page.setViewportSize({ width: 375, height: 812 });
-    await testInfo.attach(`${name}-full`, { path: full, contentType: 'image/png' });
+  // The document scrolls inside its own container; capture all of it too.
+  if (scroller) {
+    const height = await page.locator(scroller).first().evaluate((el) => el.scrollHeight).catch(() => 0);
+    if (height > 0) {
+      const full = testInfo.outputPath(`${name}-full.png`);
+      await page.setViewportSize({ width: 375, height: Math.min(height + 160, 12_000) });
+      await page.waitForTimeout(250);
+      await page.screenshot({ path: full });
+      await page.setViewportSize({ width: 375, height: 812 });
+      files.push(full);
+      await testInfo.attach(`${name}-full`, { path: full, contentType: 'image/png' });
+    }
+  }
+  if (SHOT_DIR) {
+    fs.mkdirSync(SHOT_DIR, { recursive: true });
+    for (const file of files) fs.copyFileSync(file, nodePath.join(SHOT_DIR, nodePath.basename(file)));
   }
 }
 
-test('Autopaper front page and story pages, logged out at phone width', async ({ page, request }, testInfo) => {
-  const front = await getJSON(request, '/api/platform/publications/front?limit=50');
-  const stories = Array.isArray(front.stories) ? front.stories : [];
+function manifestOf(bundle) {
+  const manifest = bundle.payload?.manifest;
+  return typeof manifest === 'string' ? JSON.parse(manifest) : manifest || {};
+}
+
+async function expectReadOnly(reader, page, label) {
+  await expect(reader, `${label}: not editable`).toHaveAttribute('contenteditable', 'false');
+  await expect(page.locator('[data-texture-edit-published]'), `${label}: no edit action`).toHaveCount(0);
+  await expect(page.locator('[data-texture-prompt]'), `${label}: no revise action`).toHaveCount(0);
+  await expect(page.locator('[data-texture-publish]'), `${label}: no publish action`).toHaveCount(0);
+}
+
+test('logged-out home opens Autopaper; a story opens as a published Texture window', async ({ page, request }, testInfo) => {
+  const stories = await publishedStories(request);
+
+  await page.goto(`${BASE_URL}/?intro=0`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false', { timeout: 30_000 });
+  const home = page.locator('[data-window][data-window-id="public-preview-autopaper"]');
+  await expect(home).toBeVisible({ timeout: 30_000 });
+  await expect(home.locator('[data-autopaper-front]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-window]')).toHaveCount(1);
+  await expect(page.locator('[data-texture-editor]')).toHaveCount(0);
+  test.skip(stories.length === 0, 'no Autopaper story is published yet');
+
+  const firstRow = home.locator('[data-autopaper-story-row]').first();
+  await expect(firstRow).toBeVisible({ timeout: 30_000 });
+  await shoot(page, testInfo, 'home-autopaper-window');
+
+  await firstRow.locator('a').click();
+  const reader = page.locator('[data-texture-app] [data-texture-published-reader]').last();
+  await expect(reader).toBeVisible({ timeout: 30_000 });
+  await expect(reader).toHaveAttribute('data-publication-route', stories[0].route.bare);
+  const storyWindow = page.locator('[data-window]').filter({ has: reader });
+  await expect(storyWindow.locator('[data-window-titlebar]')).toContainText(stories[0].title.trim().slice(0, 24));
+  await expectReadOnly(reader, page, 'home story window');
+  await expectNoHorizontalScroll(page, 'home story window');
+  await shoot(page, testInfo, 'home-story-texture-window');
+});
+
+test('Autopaper front list and stories as Texture published views, logged out at phone width', async ({ page, request }, testInfo) => {
+  const stories = await publishedStories(request);
   test.skip(stories.length === 0, 'no Autopaper story is published yet');
 
   // The list itself: one row per story, newest first.
@@ -77,7 +141,7 @@ test('Autopaper front page and story pages, logged out at phone width', async ({
     expect(times[i], `story ${i} is not newer than story ${i - 1}`).toBeLessThanOrEqual(times[i - 1]);
   }
 
-  // Front page.
+  // Front list.
   await page.goto(`${BASE_URL}/autopaper`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await expect(page.locator('[data-autopaper-front]')).toBeVisible({ timeout: 30_000 });
   const rows = page.locator('[data-autopaper-story-row]');
@@ -88,32 +152,46 @@ test('Autopaper front page and story pages, logged out at phone width', async ({
   expect(titles.map((t) => t.trim())).toEqual(stories.slice(0, shown).map((s) => s.title.trim()));
   const updatedRows = stories.slice(0, shown).filter((s) => s.version_count > 1).length;
   await expect(page.locator('[data-updated-marker]')).toHaveCount(updatedRows);
-  await expectNoHorizontalScroll(page, 'front page');
-  await shoot(page, testInfo, 'autopaper-front');
+  await expectNoHorizontalScroll(page, 'front list');
+  await shoot(page, testInfo, 'autopaper-front', '[data-autopaper]');
 
-  // Story pages: every citation's quote sits in its source block with a badge.
+  // A row opens the story as the Texture published view.
+  await rows.first().locator('a').click();
+  await expect(page).toHaveURL(new RegExp(`/autopaper/${slugOf(stories[0].route.bare)}$`));
+  const opened = page.locator('[data-texture-published-reader]');
+  await expect(opened).toBeVisible({ timeout: 30_000 });
+  await expect(opened).toHaveAttribute('data-publication-revision', String(stories[0].latest_revision));
+  await expect(page.locator('[data-autopaper-story-title]')).toHaveText(stories[0].title.trim());
+
+  // Each story: numbered sources, quotes in their source blocks, badges, embeds.
   const checked = [];
   for (const story of stories.slice(0, MAX_STORIES)) {
     const slug = slugOf(story.route?.bare);
     const bundle = await getJSON(request, `/api/platform/publications/resolve?route=${encodeURIComponent(story.route.bare)}`);
-    const manifest = typeof bundle.payload?.manifest === 'string' ? JSON.parse(bundle.payload.manifest) : bundle.payload?.manifest || {};
-    const anchors = Array.isArray(manifest.anchors) ? manifest.anchors : [];
+    const anchors = Array.isArray(manifestOf(bundle).anchors) ? manifestOf(bundle).anchors : [];
     expect(bundle.nav?.latest, `${slug}: bare link serves the latest`).toBe(story.latest_revision);
 
     await page.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    const article = page.locator('[data-autopaper-story]');
-    await expect(article).toBeVisible({ timeout: 30_000 });
-    await expect(article).toHaveAttribute('data-revision', String(story.latest_revision));
+    const reader = page.locator('[data-texture-published-reader]');
+    await expect(reader).toBeVisible({ timeout: 30_000 });
+    await expect(reader).toHaveAttribute('data-publication-revision', String(story.latest_revision));
+    await expectReadOnly(reader, page, slug);
 
     const cites = anchors.filter((a) => a.relation !== 'embeds' || a.ref?.quote);
     const embeds = anchors.filter((a) => a.relation === 'embeds');
     if (anchors.length) {
-      const numbers = await page.locator('[data-source-block]').evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-source-number'))));
+      const numbers = await reader.locator('[data-source-block]').evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-source-number'))));
       expect(numbers.length, `${slug}: numbered sources`).toBeGreaterThan(0);
       expect(numbers, `${slug}: sources numbered 1..n`).toEqual(numbers.map((_, i) => i + 1));
     }
     for (const anchor of cites) {
-      const item = page.locator(`[data-source-block] [data-citation-anchor="${anchor.anchor_id}"]`);
+      const marker = reader.locator(`[data-texture-source-ref][data-citation-anchor="${anchor.anchor_id}"]`);
+      await expect(marker, `${slug}: numbered marker for ${anchor.anchor_id}`).toHaveCount(1);
+      await expect(marker.locator('[data-texture-source-ref-popover] [data-citation-quote]'), `${slug}: popover quote of ${anchor.anchor_id}`).not.toHaveCount(0);
+      const state = await marker.getAttribute('data-check');
+      expect(CHECK_STATES.has(state), `${slug}: marker check state ${state}`).toBe(true);
+
+      const item = reader.locator(`[data-source-block] [data-citation-anchor="${anchor.anchor_id}"]`);
       await expect(item, `${slug}: citation ${anchor.anchor_id} in a source block`).toHaveCount(1);
       await expect(item.locator('[data-citation-quote]').first(), `${slug}: quote of ${anchor.anchor_id}`).toBeVisible();
       const badge = item.locator('[data-check-badge]');
@@ -121,18 +199,31 @@ test('Autopaper front page and story pages, logged out at phone width', async ({
       expect(CHECK_STATES.has(await badge.getAttribute('data-check-badge'))).toBe(true);
     }
     for (const anchor of embeds) {
-      await expect(page.locator(`[data-embed-block][data-citation-anchor="${anchor.anchor_id}"]`), `${slug}: transclusion ${anchor.anchor_id} as a block`).toHaveCount(1);
+      await expect(reader.locator(`[data-embed-block][data-citation-anchor="${anchor.anchor_id}"]`), `${slug}: transclusion ${anchor.anchor_id} as a block`).toHaveCount(1);
     }
     await expectNoHorizontalScroll(page, `story ${slug}`);
     checked.push({ slug, versions: story.version_count, citations: cites.length, embeds: embeds.length });
-    if (checked.length === 1 || (anchors.length && !checked.some((c) => c.shot))) {
-      await shoot(page, testInfo, `autopaper-story-${checked.length}`);
-      checked[checked.length - 1].shot = true;
+
+    if (checked.length === 1) {
+      await shoot(page, testInfo, 'autopaper-story-1', '[data-texture-editor-area]');
+      if (cites.length) {
+        // A number opens its quote in its source block beside the text.
+        const marker = reader.locator(`[data-texture-source-ref][data-citation-anchor="${cites[0].anchor_id}"]`);
+        await marker.scrollIntoViewIfNeeded();
+        await marker.click();
+        const note = reader.locator('[data-texture-source-flow-note]').first();
+        await expect(note).toBeVisible({ timeout: 10_000 });
+        await expect(note.locator('[data-citation-quote]').first()).toBeVisible();
+        await expect(note.locator('[data-check-badge]')).toHaveCount(1);
+        await expectNoHorizontalScroll(page, `story ${slug} source note`);
+        await shoot(page, testInfo, 'autopaper-story-1-source-note');
+        await note.locator('[data-texture-source-flow-collapse]').click();
+      }
     }
   }
   testInfo.annotations.push({ type: 'stories-checked', description: JSON.stringify(checked) });
 
-  // Chevrons and "new version available" on a story with several versions.
+  // Version chevrons and "new version available" on a story with several versions.
   const versioned = stories.find((s) => s.version_count > 1);
   if (!versioned) {
     testInfo.annotations.push({ type: 'chevrons', description: 'skipped: no story has more than one version yet' });
@@ -140,23 +231,29 @@ test('Autopaper front page and story pages, logged out at phone width', async ({
   }
   const slug = slugOf(versioned.route.bare);
   await page.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-  const nav = page.locator('[data-version-nav]');
-  await expect(nav).toBeVisible({ timeout: 30_000 });
-  const prev = nav.locator('[data-version-prev]');
-  await expect(prev).toBeVisible();
-  await expect(page.locator('[data-new-version]')).toHaveCount(0);
+  const reader = page.locator('[data-texture-published-reader]');
+  await expect(reader).toHaveAttribute('data-publication-revision', String(versioned.latest_revision), { timeout: 30_000 });
+  const prev = page.locator('[data-texture-prev]');
+  await expect(prev).toBeEnabled();
+  await expect(page.locator('[data-texture-next]')).toBeDisabled();
+  await expect(page.locator('[data-texture-new-version]')).toHaveCount(0);
   await prev.click();
   await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}/v\\d+$`));
-  const older = page.locator('[data-autopaper-story]');
-  await expect(older).toBeVisible();
-  const olderRevision = Number(await older.getAttribute('data-revision'));
+  await expect(reader).not.toHaveAttribute('data-publication-revision', String(versioned.latest_revision), { timeout: 30_000 });
+  const olderRevision = Number(await reader.getAttribute('data-publication-revision'));
   expect(olderRevision).toBeLessThan(versioned.latest_revision);
-  await expect(page.locator('[data-version-nav] [data-version-next]')).toBeVisible();
-  await expect(page.locator('[data-new-version]')).toBeVisible();
+  await expect(page.locator('[data-texture-version]')).toHaveText(`v${olderRevision}`);
+  await expect(page.locator('[data-texture-next]')).toBeEnabled();
+  await expect(page.locator('[data-texture-new-version]')).toBeVisible();
   await expectNoHorizontalScroll(page, `story ${slug} v${olderRevision}`);
   await shoot(page, testInfo, 'autopaper-story-older-version');
 
-  await page.locator('[data-new-version-open]').click();
+  await page.locator('[data-texture-new-version]').click();
   await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}$`));
-  await expect(page.locator('[data-autopaper-story]')).toHaveAttribute('data-revision', String(versioned.latest_revision));
+  await expect(reader).toHaveAttribute('data-publication-revision', String(versioned.latest_revision), { timeout: 30_000 });
+
+  // Back returns to the older version.
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}/v${olderRevision}$`));
+  await expect(reader).toHaveAttribute('data-publication-revision', String(olderRevision), { timeout: 30_000 });
 });
