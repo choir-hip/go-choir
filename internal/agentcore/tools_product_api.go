@@ -177,9 +177,7 @@ func validateProductAPIRoute(method, requestURI string) error {
 	// Only the Texture desk writes a Texture (protocol P2b): a desk reads
 	// Texture routes but never mutates one. A desk that needs a Texture
 	// changed casts to it; a new Texture starts through /api/prompt-bar.
-	// merge-preview is a POST that only reads (it computes a preview).
-	if method != http.MethodGet && (path == "/api/texture" || strings.HasPrefix(path, "/api/texture/")) &&
-		!(method == http.MethodPost && strings.HasSuffix(path, "/merge-preview")) {
+	if method != http.MethodGet && (path == "/api/texture" || strings.HasPrefix(path, "/api/texture/")) {
 		return fmt.Errorf("product_api refuses %s %s: only the Texture desk writes a Texture; read it with GET, or address the Texture desk", method, path)
 	}
 	for _, allowed := range []string{

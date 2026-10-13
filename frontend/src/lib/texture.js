@@ -214,50 +214,6 @@ export async function getRevision(revisionId, { readOwner = '' } = {}) {
   return res.json();
 }
 
-export async function semanticCompareTexture(docId, { sourceRevisionId, targetRevisionId = '', readOwner = '' } = {}) {
-  const params = new URLSearchParams({
-    source: sourceRevisionId || '',
-    target: targetRevisionId || '',
-  });
-  const res = await fetchWithRenewal(withReadOwnerQuery(texturePath(`/documents/${encodeURIComponent(docId)}/compare?${params.toString()}`), { readOwner }), {
-    method: 'GET',
-  });
-
-  if (!res.ok) {
-    await decodeError(res, `Compare Texture versions failed (${res.status})`);
-  }
-
-  return res.json();
-}
-
-export async function previewTextureMerge(docId, payload = {}) {
-  const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/merge-preview`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    await decodeError(res, `Preview Texture merge failed (${res.status})`);
-  }
-
-  return res.json();
-}
-
-export async function acceptTextureMerge(docId, payload = {}) {
-  const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/accept-merge`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) {
-    await decodeError(res, `Accept Texture merge failed (${res.status})`);
-  }
-
-  return res.json();
-}
-
 export async function restoreTextureRevision(docId, { revisionId, mode = 'restore_as_latest' } = {}) {
   const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/restore`), {
     method: 'POST',

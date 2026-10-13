@@ -156,8 +156,8 @@ function snapshotOf(bundle) {
 // Owner revisions are legitimate: every owner path writes author_kind "user"
 // (types.AuthorUser, texture.go:36) with author_label = the owner id
 // (texture_lifecycle_create.go:100, texture_agent_revision.go:160-167,
-// texture.go:595-600, 719-724, 1180-1185, 1328-1333, 1933-1938,
-// texture_merge.go:519-524, texture_handoff.go:243-245,
+// texture.go:530-535, 654-659, 1115-1120, 1263-1268, 1821-1826,
+// texture_handoff.go:243-245,
 // agentcore/selfdev_texture_join.go:79-81). So: a "user" revision passes
 // only when author_label equals the revision's owner_id (and that owner is
 // the trajectory's owner). Anything else, including the frozen processor

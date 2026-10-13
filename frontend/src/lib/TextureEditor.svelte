@@ -10,7 +10,6 @@
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { AuthRequiredError, fetchWithRenewal } from './auth.js';
   import {
-    acceptTextureMerge,
     cancelAgentRevision,
     createDocument,
     createRevision,
@@ -23,11 +22,9 @@
     lifecycleCurrentDocumentRevisionID,
     listRevisions,
     openDocumentStream,
-    previewTextureMerge,
     publishTexture,
     resolvePublication,
     restoreTextureRevision,
-    semanticCompareTexture,
     submitAgentRevision,
     submitPublicationProposal,
     WIRE_PLATFORM_READ_OWNER,
@@ -35,7 +32,6 @@
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
   import { previewTextureDocument } from './public-preview-data';
-  import TextureCompareMergePanel from './TextureCompareMergePanel.svelte';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
   import TextureVersionHistory from './TextureVersionHistory.svelte';
   import TextureSourcePanel from './TextureSourcePanel.svelte';
@@ -69,7 +65,6 @@
     explicitPublishAccessPolicy,
     explicitPublishExportPolicy,
     markdownTableBlockCount,
-    nextVersionNumber as computeNextVersionNumber,
     revisionVersionNumber,
     shortHash,
     sortRevisionsChronologically,
@@ -136,13 +131,7 @@
   let publishResult = null;
   let publishMenuOpen = false;
   let cancelPending = false;
-  let compareResult = null;
-  let compareError = '';
-  let comparePending = false;
-  let mergePending = false;
   let restorePending = false;
-  let mergePreview = null;
-  let selectedMergeSuggestionIds = [];
   let sourcePanelOpen = false;
   let sourceDiagnosis = null;
   let sourceDiagnosisPending = false;
@@ -397,10 +386,6 @@
     return computeDocumentCurrentVersionNumber(doc, revisions);
   }
 
-  function nextVersionNumber() {
-    return computeNextVersionNumber(currentDoc, revisions);
-  }
-
   function buildRevisionMetadata() {
     const metadata = {
       source_path: appContext.sourcePath || '',
@@ -454,39 +439,6 @@
       return true;
     } catch (_err) {
       return false;
-    }
-  }
-
-  function resetCompareMergeState({ keepEditor = true } = {}) {
-    compareResult = null;
-    compareError = '';
-    mergePreview = null;
-    selectedMergeSuggestionIds = [];
-    if (!keepEditor && currentRevision) {
-      setEditorFromRevision(currentRevision);
-      tick().then(() => syncEditorSurface(renderDocumentHTML(editorValue), { force: true }));
-    }
-  }
-
-  function targetRevisionForCompare() {
-    if (!currentDoc?.current_revision_id) return null;
-    const target = revisions.find((rev) => rev.revision_id === currentDoc.current_revision_id) || revisions[revisions.length - 1];
-    return target || null;
-  }
-
-  function compareTargetVersionLabel() {
-    const target = targetRevisionForCompare();
-    if (!target) return 'latest';
-    const index = revisions.findIndex((rev) => rev.revision_id === target.revision_id);
-    return index >= 0 ? versionLabelForRevision(target, index) : 'latest';
-  }
-
-  function toggleMergeSuggestion(id) {
-    if (!id) return;
-    if (selectedMergeSuggestionIds.includes(id)) {
-      selectedMergeSuggestionIds = selectedMergeSuggestionIds.filter((item) => item !== id);
-    } else {
-      selectedMergeSuggestionIds = [...selectedMergeSuggestionIds, id];
     }
   }
 
@@ -654,7 +606,6 @@
   let revisionLoadSeq = 0;
   async function loadRevisionAt(index) {
     if (index < 0 || index >= revisions.length) return;
-    resetCompareMergeState();
     sourcePanelError = '';
     const seq = ++revisionLoadSeq;
     const summary = revisions[index];
@@ -908,7 +859,6 @@
     sourceDiagnosisPending = false;
     cancelSourceDiagnosis();
     sourcePanelError = '';
-    resetCompareMergeState();
     clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
@@ -1256,101 +1206,6 @@
     }
   }
 
-  async function handleCompareToDraft() {
-    if (!currentDoc || !currentRevision || loading || comparePending || submitting || agentPending) return;
-    const target = targetRevisionForCompare();
-    if (!target?.revision_id || target.revision_id === currentRevision.revision_id) {
-      saveStatus = 'Choose a historical version to compare';
-      return;
-    }
-    comparePending = true;
-    error = '';
-    compareError = '';
-    publishResult = null;
-    mergePreview = null;
-    try {
-      compareResult = await semanticCompareTexture(currentDoc.doc_id, {
-        sourceRevisionId: currentRevision.revision_id,
-        targetRevisionId: target.revision_id,
-        readOwner: textureReadOwner,
-      });
-      selectedMergeSuggestionIds = (compareResult.suggestions || []).slice(0, 3).map((suggestion) => suggestion.id);
-      saveStatus = `Comparing ${versionLabel} to ${compareTargetVersionLabel()}`;
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      compareError = err.message || 'Failed to compare versions';
-      saveStatus = 'Compare failed';
-    } finally {
-      comparePending = false;
-    }
-  }
-
-  async function handlePreviewMerge() {
-    if (!currentDoc || !currentRevision || !compareResult || mergePending) return;
-    const target = targetRevisionForCompare();
-    if (!target?.revision_id) return;
-    mergePending = true;
-    error = '';
-    try {
-      mergePreview = await previewTextureMerge(currentDoc.doc_id, {
-        source_revision_id: compareResult.source_revision_id || currentRevision.revision_id,
-        target_revision_id: target.revision_id,
-        suggestion_ids: selectedMergeSuggestionIds,
-        source_version_label: versionLabel,
-        target_version_label: compareTargetVersionLabel(),
-      });
-      editorValue = mergePreview.content || editorValue;
-      editorBodyDoc = null;
-      lastAutosavedContent = editorValue;
-      await tick();
-      syncEditorSurface(renderDocumentHTML(editorValue), { force: true });
-      saveStatus = `${nextVersionLabel} preview`;
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      error = err.message || 'Failed to preview merge';
-      saveStatus = 'Merge preview failed';
-    } finally {
-      mergePending = false;
-    }
-  }
-
-  async function handleAcceptMerge() {
-    if (!currentDoc || !mergePreview || mergePending) return;
-    mergePending = true;
-    error = '';
-    try {
-      const revision = await acceptTextureMerge(currentDoc.doc_id, {
-        preview_id: mergePreview.preview_id,
-        content: editorValue,
-        source_revision_id: mergePreview.source_revision_id,
-        target_revision_id: mergePreview.target_revision_id,
-        suggestion_ids: (mergePreview.suggestions || []).map((suggestion) => suggestion.id),
-        metadata: {
-          draft_line: mergePreview.draft_line || { id: 'primary', name: 'Primary draft' },
-          merge_provenance: mergePreview.provenance || {},
-        },
-      });
-      resetCompareMergeState();
-      await reloadDocument(revision.revision_id);
-      saveStatus = `Accepted ${versionLabel}`;
-    } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        dispatch('authexpired');
-        return;
-      }
-      error = err.message || 'Failed to accept merge';
-      saveStatus = 'Accept failed';
-    } finally {
-      mergePending = false;
-    }
-  }
-
   async function handleRestoreHistoricalRevision() {
     if (!currentDoc || !currentRevision || !isViewingHistorical || restorePending) return;
     restorePending = true;
@@ -1361,7 +1216,6 @@
         revisionId: currentRevision.revision_id,
         mode: 'restore_as_latest',
       });
-      resetCompareMergeState();
       await reloadDocument(revision.revision_id);
       saveStatus = `Restored ${versionLabel}`;
     } catch (err) {
@@ -1480,20 +1334,6 @@
       sourceDiagnosisAbortReason = '';
       sourceDiagnosisPending = false;
     }
-  }
-
-  async function handleDiscardMerge() {
-    const targetId = mergePreview?.target_revision_id || currentDoc?.current_revision_id || currentRevision?.revision_id || '';
-    resetCompareMergeState();
-    if (targetId) {
-      const targetIndex = revisions.findIndex((rev) => rev.revision_id === targetId);
-      if (targetIndex >= 0) {
-        await loadRevisionAt(targetIndex);
-      } else if (currentDoc) {
-        await reloadDocument(targetId);
-      }
-    }
-    saveStatus = 'Merge preview discarded';
   }
 
   async function handleCopyPublishedURL() {
@@ -1852,7 +1692,6 @@
   $: isViewingHistorical = revisions.length > 0 && activeRevisionIndex !== revisions.length - 1;
   $: isDirty = !!currentDoc && !isViewingHistorical && editorValue !== (currentRevision?.content || '');
   $: versionLabel = currentRevision ? versionLabelForRevision(currentRevision, activeRevisionIndex) : `v${documentCurrentVersionNumber()}`;
-  $: nextVersionLabel = `v${nextVersionNumber()}`;
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
@@ -1862,30 +1701,26 @@
     currentDoc.owner_id !== currentUser.id &&
     appContext?.appHint === 'universal-wire'
   );
-  $: isEditorReadOnly = !!mergePreview || isViewingHistorical || loading || isPublishedReadOnly || isForeignPlatformWireArticle;
+  $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly || isForeignPlatformWireArticle;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published Texture document' : 'Texture document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
   $: revisionLineLabel = isViewingHistorical ? 'Historical' : 'Latest';
   $: previousVersionLabel = activeRevisionIndex > 0 ? versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1) : '';
   $: nextRevisionLabel = activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? versionLabelForRevision(revisions[activeRevisionIndex + 1], activeRevisionIndex + 1) : '';
-  $: toolbarStateLabel = mergePreview
-    ? `${nextVersionLabel} preview`
-    : compareResult
-      ? `Comparing to ${compareTargetVersionLabel()}`
-      : isPublishedMode && !publishedDerivativeActive
-        ? (currentUser ? 'Published reader' : 'Guest reader')
-        : isPublishedMode && publishedDerivativeActive
-          ? 'Private proposal draft'
-          : publishResult
-            ? `Published ${versionLabel}`
-            : isViewingHistorical
-              ? 'Historical version'
-              : isDirty
-                ? 'Unsaved edit'
-                : agentPending
-                  ? synthStatusLabel()
-                  : 'Latest';
-  $: if (publishMenuOpen && (!currentDoc || isPublishedMode || loading || submitting || agentPending || !!mergePreview)) publishMenuOpen = false;
+  $: toolbarStateLabel = isPublishedMode && !publishedDerivativeActive
+    ? (currentUser ? 'Published reader' : 'Guest reader')
+    : isPublishedMode && publishedDerivativeActive
+      ? 'Private proposal draft'
+      : publishResult
+        ? `Published ${versionLabel}`
+        : isViewingHistorical
+          ? 'Historical version'
+          : isDirty
+            ? 'Unsaved edit'
+            : agentPending
+              ? synthStatusLabel()
+              : 'Latest';
+  $: if (publishMenuOpen && (!currentDoc || isPublishedMode || loading || submitting || agentPending)) publishMenuOpen = false;
   $: sourceEntities = revisionSourceEntities(currentRevision, publishedBundle);
   $: sourceSummary = sourceDiagnosisSummary(sourceDiagnosis);
   $: sourceStructures = sourceStructureEvidence(sourceDiagnosis);
@@ -1976,21 +1811,16 @@
       isPublishedReader={isPublishedMode && !publishedDerivativeActive}
       {isPublishedMode}
       {isViewingHistorical}
-      hasMergePreview={!!mergePreview}
-      hasCompareResult={!!compareResult}
       {currentUser}
       {loading}
       {submitting}
       {agentPending}
       {cancelPending}
-      {comparePending}
-      {mergePending}
       {restorePending}
       {publishedActionPending}
       {publishMenuOpen}
       {promptLabel}
       sourceCandidateCount={sourceEntities.length}
-      selectedMergeSuggestionCount={selectedMergeSuggestionIds.length}
       hasCurrentDoc={!!currentDoc}
       hasCurrentRevision={!!currentRevision}
       on:prev={handlePrevVersion}
@@ -2001,12 +1831,8 @@
       on:prompt={handlePrompt}
       on:cancel-revision={handleCancelRevision}
       on:submit-proposal={handleSubmitProposal}
-      on:accept-merge={handleAcceptMerge}
-      on:discard-merge={handleDiscardMerge}
-      on:compare={handleCompareToDraft}
       on:sources={handleOpenSourcePanel}
       on:restore={handleRestoreHistoricalRevision}
-      on:merge-preview={handlePreviewMerge}
       on:toggle-publish={() => (publishMenuOpen = !publishMenuOpen)}
       on:publish-confirm={handlePublishCurrent}
       on:publish-cancel={() => (publishMenuOpen = false)}
@@ -2048,20 +1874,6 @@
           on:source-entity-open={(event) => handleSourceEntityOpen(event.detail.entity)}
         />
       {/if}
-
-      <TextureCompareMergePanel
-        {compareResult}
-        {mergePreview}
-        {comparePending}
-        {mergePending}
-        {compareError}
-        {versionLabel}
-        {nextVersionLabel}
-        compareTargetVersionLabel={compareTargetVersionLabel()}
-        {selectedMergeSuggestionIds}
-        on:retry-compare={handleCompareToDraft}
-        on:toggle-suggestion={(event) => toggleMergeSuggestion(event.detail)}
-      />
 
       <TexturePublicationResult
         {publishResult}

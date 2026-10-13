@@ -412,63 +412,6 @@ test('texture does not auto-restore a differing local draft over a non-empty can
   await expect(textureWindow.locator('[data-texture-state]')).toContainText('Latest');
 });
 
-test('texture compares historical version and accepts merge preview as next revision', async ({ page, authenticator }) => {
-  await registerAndLoadDesktop(page, authenticator, uniqueEmail());
-  const fileName = `semantic-merge-${Date.now()}.md`;
-  const initialContent = [
-    '# Legal Cloud Proposal',
-    '',
-    'Earlier executive framing has the clearest problem statement.',
-    '',
-    '## Glossary',
-    '',
-    '- Matter workspace: a durable client work surface.',
-  ].join('\n');
-  const latestContent = [
-    '# Legal Cloud Proposal',
-    '',
-    'Latest draft adds newer support and a source marker [1].',
-    '',
-    '## Conclusion',
-    '',
-    'The newest conclusion should remain in the primary draft.',
-  ].join('\n');
-
-  await seedTextFile(page, fileName, initialContent);
-  const opened = await openFileInTexture(page, fileName);
-  await createExternalRevision(page, opened.doc_id, opened.current_revision_id, latestContent);
-
-  const editor = page.locator('[data-texture-app] [data-texture-editor-area]').last();
-  await expect(editor).toContainText('Latest draft adds newer support', { timeout: 10000 });
-
-  await page.locator('[data-texture-app] [data-texture-prev]').last().click();
-  await expect(editor).toContainText('Earlier executive framing', { timeout: 10000 });
-  await page.locator('[data-texture-app] [data-texture-compare]').last().click();
-  await expect(page.locator('[data-texture-app] [data-texture-compare-panel]').last()).toContainText(/Compare|Model compare|changed/i, { timeout: 30000 });
-  await expect(page.locator('[data-texture-app] [data-texture-merge-suggestion]').first()).toBeVisible({ timeout: 30000 });
-  await page.locator('[data-texture-app] [data-texture-merge-preview]').last().click();
-  await expect(page.locator('[data-texture-app] [data-texture-compare-panel]').last()).toContainText(/Merge preview|Model merge|Merged into/i, { timeout: 30000 });
-  await expect(editor).toContainText('newest conclusion should remain', { timeout: 10000 });
-  await expect(editor).not.toContainText('Texture merge preview provenance');
-  await page.locator('[data-texture-app] [data-texture-accept-merge]').last().click();
-
-  const revisions = await waitForRevisionTotal(page, opened.doc_id, 3, 12000);
-  const currentDoc = await page.evaluate(async (docId) => {
-    const res = await fetch(`/api/texture/documents/${encodeURIComponent(docId)}`, {
-      method: 'GET',
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      throw new Error(`failed to load current doc: ${res.status}`);
-    }
-    return res.json();
-  }, opened.doc_id);
-  const accepted = revisions.revisions.find((revision) => revision.revision_id === currentDoc.current_revision_id);
-  expect(accepted.metadata?.source).toBe('texture_concept_merge');
-  expect(accepted.metadata?.draft_line?.name).toBe('Primary draft');
-  expect(accepted.content).not.toContain('Texture merge preview provenance');
-});
-
 test('reopening the same file path resolves to the same canonical texture doc', async ({ page, authenticator }) => {
   await registerAndLoadDesktop(page, authenticator, uniqueEmail());
   const fileName = `canonical-alias-${Date.now()}.txt`;

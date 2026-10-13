@@ -98,10 +98,6 @@ export function documentCurrentVersionNumber(doc: any, revisions: any[] = []) {
   return 0;
 }
 
-export function nextVersionNumber(doc: any, revisions: any[] = []) {
-  return documentCurrentVersionNumber(doc, revisions) + 1;
-}
-
 export function explicitPublishAccessPolicy() {
   return {
     visibility: 'public',

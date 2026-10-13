@@ -12,21 +12,16 @@
   export let isPublishedReader = false;
   export let isPublishedMode = false;
   export let isViewingHistorical = false;
-  export let hasMergePreview = false;
-  export let hasCompareResult = false;
   export let currentUser = null;
   export let loading = false;
   export let submitting = false;
   export let agentPending = false;
   export let cancelPending = false;
-  export let comparePending = false;
-  export let mergePending = false;
   export let restorePending = false;
   export let publishedActionPending = false;
   export let publishMenuOpen = false;
   export let promptLabel = 'Revise';
   export let sourceCandidateCount = 0;
-  export let selectedMergeSuggestionCount = 0;
   export let hasCurrentDoc = false;
   export let hasCurrentRevision = false;
 
@@ -37,7 +32,7 @@
   $: nextAriaLabel = nextRevisionLabel ? `Newer version (${nextRevisionLabel})` : 'At latest version';
   $: previousTitle = previousVersionLabel ? `Go to ${previousVersionLabel}` : 'At oldest version';
   $: nextTitle = nextRevisionLabel ? `Go to ${nextRevisionLabel}` : 'At latest version';
-  $: publishDisabled = loading || submitting || agentPending || hasMergePreview || publishedActionPending || !hasCurrentDoc;
+  $: publishDisabled = loading || submitting || agentPending || publishedActionPending || !hasCurrentDoc;
   $: normalizedRevisionLineLabel = String(revisionLineLabel || '').trim().toLowerCase();
   $: normalizedStateLabel = String(stateLabel || '').trim().toLowerCase();
   $: visibleStateLabel = normalizedStateLabel && normalizedStateLabel !== normalizedRevisionLineLabel ? stateLabel : '';
@@ -126,72 +121,27 @@
           <span class="label-tiny">{publishedActionPending ? '…' : 'Propose'}</span>
         </button>
       {:else}
-        {#if hasMergePreview}
-          <button
-            class="prompt-btn"
-            data-texture-accept-merge
-            on:click={() => dispatch('accept-merge')}
-            disabled={mergePending || publishedActionPending || !hasCurrentDoc}
-          >
-            <span class="label-full">{mergePending ? 'Accepting…' : 'Accept'}</span>
-            <span class="label-compact">{mergePending ? '…' : 'Accept'}</span>
-            <span class="label-tiny">{mergePending ? '…' : 'Accept'}</span>
-          </button>
-          <button
-            class="secondary-action danger"
-            data-texture-discard-merge
-            on:click={() => dispatch('discard-merge')}
-            disabled={mergePending || publishedActionPending}
-          >
-            <span class="label-full">Discard</span>
-            <span class="label-compact">Discard</span>
-            <span class="label-tiny">Discard</span>
-          </button>
-        {:else}
+        <button
+          class="secondary-action"
+          data-texture-source-panel
+          on:click={() => dispatch('sources')}
+          disabled={loading || submitting || agentPending || !hasCurrentDoc}
+        >
+          <span class="label-full">Sources{sourceCandidateCount ? ` ${sourceCandidateCount}` : ''}</span>
+          <span class="label-compact">Sources</span>
+          <span class="label-tiny">Sources</span>
+        </button>
+        {#if isViewingHistorical}
           <button
             class="secondary-action"
-            data-texture-compare
-            on:click={() => dispatch('compare')}
-            disabled={loading || submitting || agentPending || comparePending || nextDisabled}
+            data-texture-restore-version
+            on:click={() => dispatch('restore')}
+            disabled={loading || submitting || agentPending || restorePending || !hasCurrentRevision}
           >
-            <span class="label-full">{comparePending ? 'Comparing…' : 'Compare'}</span>
-            <span class="label-compact">{comparePending ? '…' : 'Compare'}</span>
-            <span class="label-tiny">{comparePending ? '…' : 'Compare'}</span>
+            <span class="label-full">{restorePending ? 'Restoring…' : 'Restore'}</span>
+            <span class="label-compact">{restorePending ? '…' : 'Restore'}</span>
+            <span class="label-tiny">{restorePending ? '…' : 'Restore'}</span>
           </button>
-          <button
-            class="secondary-action"
-            data-texture-source-panel
-            on:click={() => dispatch('sources')}
-            disabled={loading || submitting || agentPending || !hasCurrentDoc}
-          >
-            <span class="label-full">Sources{sourceCandidateCount ? ` ${sourceCandidateCount}` : ''}</span>
-            <span class="label-compact">Sources</span>
-            <span class="label-tiny">Sources</span>
-          </button>
-          {#if isViewingHistorical}
-            <button
-              class="secondary-action"
-              data-texture-restore-version
-              on:click={() => dispatch('restore')}
-              disabled={loading || submitting || agentPending || restorePending || !hasCurrentRevision}
-            >
-              <span class="label-full">{restorePending ? 'Restoring…' : 'Restore'}</span>
-              <span class="label-compact">{restorePending ? '…' : 'Restore'}</span>
-              <span class="label-tiny">{restorePending ? '…' : 'Restore'}</span>
-            </button>
-          {/if}
-          {#if hasCompareResult}
-            <button
-              class="secondary-action"
-              data-texture-merge-preview
-              on:click={() => dispatch('merge-preview')}
-              disabled={mergePending || selectedMergeSuggestionCount === 0}
-            >
-              <span class="label-full">{mergePending ? 'Merging…' : 'Merge into draft'}</span>
-              <span class="label-compact">{mergePending ? '…' : 'Merge'}</span>
-              <span class="label-tiny">{mergePending ? '…' : 'Merge'}</span>
-            </button>
-          {/if}
         {/if}
         <div class="publish-menu-wrap">
           <button
@@ -677,10 +627,6 @@
 
   @container (max-width: 460px) {
     .draft-line {
-      display: none;
-    }
-
-    .secondary-action[data-texture-compare]:disabled {
       display: none;
     }
 

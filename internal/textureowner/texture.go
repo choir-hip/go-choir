@@ -264,74 +264,9 @@ type textureHistoryResponse struct {
 	Entries []types.HistoryEntry `json:"entries"`
 }
 
-type textureSemanticCompareResponse struct {
-	CompareID        string                   `json:"compare_id"`
-	SourceRevisionID string                   `json:"source_revision_id"`
-	TargetRevisionID string                   `json:"target_revision_id"`
-	DraftLine        textureDraftLineSummary  `json:"draft_line"`
-	Summary          []string                 `json:"summary"`
-	Suggestions      []textureMergeSuggestion `json:"suggestions"`
-	Diff             types.DiffResult         `json:"diff"`
-	ModelEvidence    map[string]any           `json:"model_evidence,omitempty"`
-	EvidenceID       string                   `json:"evidence_id,omitempty"`
-}
-
 type textureDraftLineSummary struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-}
-
-type textureMergeSuggestion struct {
-	ID          string `json:"id"`
-	Label       string `json:"label"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-	Source      string `json:"source"`
-	Preview     string `json:"preview,omitempty"`
-}
-
-type textureMergePreviewRequest struct {
-	SourceRevisionID   string   `json:"source_revision_id"`
-	TargetRevisionID   string   `json:"target_revision_id"`
-	SuggestionIDs      []string `json:"suggestion_ids"`
-	SourceVersionLabel string   `json:"source_version_label,omitempty"`
-	TargetVersionLabel string   `json:"target_version_label,omitempty"`
-}
-
-type textureMergePreviewResponse struct {
-	PreviewID        string                   `json:"preview_id"`
-	DocID            string                   `json:"doc_id"`
-	SourceRevisionID string                   `json:"source_revision_id"`
-	TargetRevisionID string                   `json:"target_revision_id"`
-	DraftLine        textureDraftLineSummary  `json:"draft_line"`
-	Content          string                   `json:"content"`
-	Provenance       map[string]any           `json:"provenance"`
-	Suggestions      []textureMergeSuggestion `json:"suggestions"`
-	ModelEvidence    map[string]any           `json:"model_evidence,omitempty"`
-	EvidenceID       string                   `json:"evidence_id,omitempty"`
-}
-
-type textureModelMergeEdit struct {
-	SuggestionID string `json:"suggestion_id,omitempty"`
-	Operation    string `json:"operation"`
-	OldText      string `json:"old_text,omitempty"`
-	NewText      string `json:"new_text,omitempty"`
-	Rationale    string `json:"rationale,omitempty"`
-}
-
-type textureModelSemanticMergeResult struct {
-	Summary     []string                 `json:"summary"`
-	Suggestions []textureMergeSuggestion `json:"suggestions"`
-	Edits       []textureModelMergeEdit  `json:"edits,omitempty"`
-}
-
-type textureAcceptMergeRequest struct {
-	PreviewID        string         `json:"preview_id"`
-	Content          string         `json:"content"`
-	SourceRevisionID string         `json:"source_revision_id"`
-	TargetRevisionID string         `json:"target_revision_id"`
-	SuggestionIDs    []string       `json:"suggestion_ids"`
-	Metadata         map[string]any `json:"metadata,omitempty"`
 }
 
 type textureRestoreRevisionRequest struct {
@@ -1367,53 +1302,6 @@ func mergeTextureRevisionMetadata(raw json.RawMessage, additions map[string]any)
 
 func defaultDraftLine() textureDraftLineSummary {
 	return textureDraftLineSummary{ID: "primary", Name: "Primary draft"}
-}
-
-func shortHash(value string) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= 10 {
-		return value
-	}
-	return value[:10]
-}
-
-func mustMarshalString(value any) string {
-	data, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return fmt.Sprintf(`{"marshal_error":%q}`, err.Error())
-	}
-	return string(data)
-}
-
-func extractJSONObject(text string) (string, error) {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return "", fmt.Errorf("empty model response")
-	}
-	if strings.HasPrefix(text, "```") {
-		lines := strings.Split(text, "\n")
-		if len(lines) >= 3 {
-			lines = lines[1 : len(lines)-1]
-			text = strings.TrimSpace(strings.Join(lines, "\n"))
-		}
-	}
-	start := strings.Index(text, "{")
-	end := strings.LastIndex(text, "}")
-	if start < 0 || end <= start {
-		return "", fmt.Errorf("model response did not contain a JSON object")
-	}
-	return text[start : end+1], nil
-}
-
-func snippet(value string, limit int) string {
-	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
-	if limit <= 0 || len(value) <= limit {
-		return value
-	}
-	if limit <= 3 {
-		return value[:limit]
-	}
-	return value[:limit-3] + "..."
 }
 
 func (h *Handler) textureDocumentResponse(ctx context.Context, doc types.Document) textureDocumentResponse {

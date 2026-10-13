@@ -44,12 +44,6 @@ func (h *Handler) HandleTextureRouter(w http.ResponseWriter, r *http.Request) {
 			h.HandleTextureSourceOpen(w, r)
 		case strings.HasSuffix(rest, "/revise"):
 			h.HandleTextureAgentRevision(w, r)
-		case strings.HasSuffix(rest, "/compare"):
-			h.HandleTextureSemanticCompare(w, r)
-		case strings.HasSuffix(rest, "/merge-preview"):
-			h.HandleTextureMergePreview(w, r)
-		case strings.HasSuffix(rest, "/accept-merge"):
-			h.HandleTextureAcceptMerge(w, r)
 		case strings.HasSuffix(rest, "/restore"):
 			h.HandleTextureRestoreRevision(w, r)
 		case strings.HasSuffix(rest, "/diagnosis"):

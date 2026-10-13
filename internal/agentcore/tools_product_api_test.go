@@ -187,8 +187,7 @@ func TestProductAPIAllowlistRefusesRoutesTheGuestDoesNotServe(t *testing.T) {
 // /api/texture/ route for every desk. The rule is by prefix and method, so a
 // Texture route added later is refused without a list to update; the paths
 // below are the routes registered today (internal/textureowner/router.go,
-// internal/apihandler/routes.go). Reads stay open, including merge-preview,
-// a POST that only computes a preview.
+// internal/apihandler/routes.go). Reads stay open.
 func TestProductAPIRefusesEveryTextureWrite(t *testing.T) {
 	t.Parallel()
 
@@ -198,7 +197,6 @@ func TestProductAPIRefusesEveryTextureWrite(t *testing.T) {
 		"/api/texture/documents/doc-1/revisions",
 		"/api/texture/documents/doc-1/revise",
 		"/api/texture/documents/doc-1/restore",
-		"/api/texture/documents/doc-1/accept-merge",
 		"/api/texture/documents/doc-1/tell",
 		"/api/texture/documents/doc-1/correct",
 		"/api/texture/documents/doc-1/agent-revision",
@@ -226,11 +224,5 @@ func TestProductAPIRefusesEveryTextureWrite(t *testing.T) {
 		if err := validateProductAPIRoute(http.MethodGet, path); err != nil {
 			t.Errorf("GET %s refused: %v", path, err)
 		}
-	}
-	if err := validateProductAPIRoute(http.MethodPost, "/api/texture/documents/doc-1/merge-preview"); err != nil {
-		t.Errorf("POST merge-preview refused: %v", err)
-	}
-	if err := validateProductAPIRoute(http.MethodPut, "/api/texture/documents/doc-1/merge-preview"); err == nil {
-		t.Errorf("PUT merge-preview allowed")
 	}
 }

@@ -1,45 +1,16 @@
 package textureowner
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
-
-	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-type semanticMergeTestProvider struct {
-	response string
-	req      provideriface.ToolLoopRequest
-	calls    int
-}
-
-func (p *semanticMergeTestProvider) ProviderName() string { return "semantic-merge-test" }
-
-func (p *semanticMergeTestProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
-	task.Result = p.response
-	return nil
-}
-
-func (p *semanticMergeTestProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
-	p.calls++
-	p.req = req
-	return &provideriface.ToolLoopResponse{
-		ID:         "model-response-1",
-		StopReason: "end_turn",
-		Text:       p.response,
-		Usage:      provideriface.TokenUsage{InputTokens: 321, OutputTokens: 123},
-		Model:      "semantic-test-model",
-	}, nil
-}
 
 func TestCleanTextureToolContentRemovesWrapperTags(t *testing.T) {
 	tests := []struct {
@@ -577,90 +548,6 @@ func TestTextureToolSourceGraphDuplicateLegacyIDsResolveToSharedGraphEntity(t *t
 	}
 	if !seenLegacyRefs["src-a"] || !seenLegacyRefs["src-b"] {
 		t.Fatalf("source refs legacy ids = %#v, want src-a and src-b", seenLegacyRefs)
-	}
-}
-
-
-
-func TestTextureSemanticMergeUsesProviderBackedJSON(t *testing.T) {
-	provider := &semanticMergeTestProvider{response: `{
-		"summary": ["Older version has a stronger client-control framing."],
-		"suggestions": [{
-			"id": "client_control_frame",
-			"label": "Restore client-control framing",
-			"description": "Bring the sharper control argument into the Primary draft while keeping current evidence.",
-			"status": "Clean merge",
-			"source": "rev-source",
-			"preview": "client control"
-		}]
-	}`}
-	core := agentcore.New(provideriface.Config{}, nil, nil, provider)
-	h := NewHandler(core)
-	source := types.Revision{RevisionID: "rev-source", Content: "# Proposal\n\nClients control the system."}
-	target := types.Revision{RevisionID: "rev-target", Content: "# Proposal\n\nThe system has current evidence."}
-
-	result, evidence, err := h.callTextureSemanticMergeModel(context.Background(), "owner-1", source, target, types.DiffResult{AddedLines: 1, RemovedLines: 1}, "compare", nil, "v4", "v5")
-	if err != nil {
-		t.Fatalf("model semantic compare: %v", err)
-	}
-	if provider.calls != 1 {
-		t.Fatalf("provider calls = %d, want 1", provider.calls)
-	}
-	if provider.req.ToolChoice != "none" {
-		t.Fatalf("tool choice = %q, want none", provider.req.ToolChoice)
-	}
-	if provider.req.Model == "" || provider.req.Provider == "" {
-		t.Fatalf("provider/model not resolved in request: %+v", provider.req)
-	}
-	if got := result.Suggestions[0].Label; got != "Restore client-control framing" {
-		t.Fatalf("suggestion label = %q", got)
-	}
-	if strings.Contains(strings.ToLower(result.Suggestions[0].ID+" "+result.Suggestions[0].Label), "restore_glossary") {
-		t.Fatalf("semantic merge returned old hard-coded suggestion: %+v", result.Suggestions[0])
-	}
-	if evidence["model_input_tokens"] != 321 || evidence["model_output_tokens"] != 123 {
-		t.Fatalf("token evidence missing: %+v", evidence)
-	}
-}
-
-func TestTextureSemanticMergePromotesModelSummaryToSuggestion(t *testing.T) {
-	result, err := normalizeModelSemanticMergeResult(textureModelSemanticMergeResult{
-		Summary: []string{"Earlier draft has a sharper ownership argument."},
-	}, types.Revision{RevisionID: "rev-source"}, types.Revision{RevisionID: "rev-target"}, false)
-	if err != nil {
-		t.Fatalf("normalize summary-only model result: %v", err)
-	}
-	if len(result.Suggestions) != 1 {
-		t.Fatalf("suggestions = %d, want 1", len(result.Suggestions))
-	}
-	if result.Suggestions[0].ID != "model_finding_1" || result.Suggestions[0].Description != result.Summary[0] {
-		t.Fatalf("summary-derived suggestion mismatch: %+v", result.Suggestions[0])
-	}
-	if strings.Contains(strings.ToLower(result.Suggestions[0].Label), "glossary") {
-		t.Fatalf("summary fallback reintroduced domain stub: %+v", result.Suggestions[0])
-	}
-}
-
-func TestApplyTextureModelMergeEditsStripsVisibleProvenance(t *testing.T) {
-	target := "# Proposal\n\nCurrent paragraph.\n\n<!-- Texture merge preview provenance\n- leaked metadata\n-->\n"
-	content, applied, err := applyTextureModelMergeEdits(target, []textureModelMergeEdit{{
-		SuggestionID: "client_control_frame",
-		Operation:    "replace_exact",
-		OldText:      "Current paragraph.",
-		NewText:      "Current paragraph with restored client-control framing.",
-		Rationale:    "Selected source concept improves framing.",
-	}})
-	if err != nil {
-		t.Fatalf("apply edits: %v", err)
-	}
-	if strings.Contains(content, "Texture merge preview provenance") || strings.Contains(content, "<!--") {
-		t.Fatalf("visible provenance leaked into content: %q", content)
-	}
-	if !strings.Contains(content, "restored client-control framing") {
-		t.Fatalf("model edit not applied: %q", content)
-	}
-	if len(applied) != 1 || applied[0]["operation"] != "replace_exact" {
-		t.Fatalf("applied edit evidence mismatch: %+v", applied)
 	}
 }
 

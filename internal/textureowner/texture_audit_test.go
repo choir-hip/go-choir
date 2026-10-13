@@ -175,7 +175,7 @@ func TestTextureAuditFailureDoesNotFailCommittedRevision(t *testing.T) {
 	}
 }
 
-func TestTextureAuditRecordsMergeAndRestore(t *testing.T) {
+func TestTextureAuditRecordsRevisionAndRestore(t *testing.T) {
 	rt, handler, pinner := auditedTextureAPISetup(t, false)
 	doc, base := seedAuditDocument(t, handler, "coverage")
 	assertSequence := func(want uint64) {
@@ -187,13 +187,13 @@ func TestTextureAuditRecordsMergeAndRestore(t *testing.T) {
 	}
 	assertSequence(1)
 
-	mergeRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/accept-merge", textureAcceptMergeRequest{
-		Content: "merged", TargetRevisionID: base.RevisionID,
+	revisionRequest := textureRequest(t, http.MethodPost, "/api/texture/documents/"+doc.DocID+"/revisions", textureCreateRevisionRequest{
+		Content: "revised", ParentRevisionID: base.RevisionID,
 	})
-	mergeResponse := httptest.NewRecorder()
-	handler.HandleTextureAcceptMerge(mergeResponse, mergeRequest)
-	if mergeResponse.Code != http.StatusCreated {
-		t.Fatalf("merge status = %d body=%s", mergeResponse.Code, mergeResponse.Body.String())
+	revisionResponse := httptest.NewRecorder()
+	handler.HandleTextureRevisions(revisionResponse, revisionRequest)
+	if revisionResponse.Code != http.StatusCreated {
+		t.Fatalf("revision status = %d body=%s", revisionResponse.Code, revisionResponse.Body.String())
 	}
 	assertSequence(2)
 
