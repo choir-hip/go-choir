@@ -131,7 +131,7 @@ func (rt *Runtime) currentTextureFrame(ctx context.Context, rec *types.RunRecord
 	if err != nil {
 		return texturewrite.Frame{}, err
 	}
-	records, err := rt.loadCellRecords(ctx, rec.OwnerID, rec.ComputerID, strings.TrimSpace(rec.AgentID))
+	records, err := rt.loadCellRecords(ctx, rec.OwnerID, rec.ComputerID, strings.TrimSpace(rec.AgentID), "")
 	if err != nil {
 		return texturewrite.Frame{}, err
 	}

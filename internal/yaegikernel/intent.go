@@ -176,6 +176,17 @@ type InboxRecord struct {
 	CreatedAt time.Time                 `json:"created_at"`
 }
 
+// String prints a record as its JSON, so a cell that prints records sees
+// their bodies (cast, report, support, captures) rather than pointer
+// addresses (B13).
+func (r InboxRecord) String() string {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return fmt.Sprintf("{record_id:%s kind:%s from:%s}", r.RecordID, r.Kind, r.From)
+	}
+	return string(b)
+}
+
 // PendingUpdate is one pending update_coagent record bound into the cell at
 // cell-start, readable via choir.Updates(). The RLM contract puts the update
 // payload in a REPL variable instead of inline in the model's context window;

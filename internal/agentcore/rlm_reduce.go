@@ -706,7 +706,12 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 	}
 	var records cellRecords
 	if recordsDesk(role) {
-		if records, err = rt.loadCellRecords(ctx, execCtx.OwnerID, execCtx.ComputerID, deskAgentForCursor(execCtx)); err != nil {
+		runID := ""
+		if role != agentprofile.Texture {
+			// Texture's frame decides what its cells see (Cut 2 2a).
+			runID = execCtx.RunID
+		}
+		if records, err = rt.loadCellRecords(ctx, execCtx.OwnerID, execCtx.ComputerID, deskAgentForCursor(execCtx), runID); err != nil {
 			return inert
 		}
 		// A Texture cell reads, and marks read, only the records its frame

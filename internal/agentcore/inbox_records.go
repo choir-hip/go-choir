@@ -95,7 +95,13 @@ type cellRecords struct {
 
 // loadCellRecords reads the records in (cursor, head] of a records desk's
 // inbox for one cell.
-func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, deskAgentID string) (cellRecords, error) {
+//
+// With a runID, the cell sees every record past the cursor the run started
+// at, not only those past the current cursor (B13): a committed cell marks
+// what it read, but the desk keeps seeing this turn's records in every
+// later cell of the run. The compare-and-set still runs from the current
+// cursor, and the next run starts past what this one read.
+func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, deskAgentID, runID string) (cellRecords, error) {
 	inbox := strings.TrimSpace(deskAgentID)
 	after, err := rt.store.ReaderCursor(ctx, ownerID, computerID, inbox, inbox)
 	if err != nil {
@@ -105,12 +111,22 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 	if err != nil {
 		return cellRecords{}, fmt.Errorf("records: head of %s: %w", inbox, err)
 	}
+	from := after
+	if runID = strings.TrimSpace(runID); runID != "" {
+		if start, loaded := rt.recordsRunStart.LoadOrStore(runID, after); loaded {
+			if s, ok := start.(int64); ok && s < from {
+				from = s
+			}
+		}
+	}
 	out := cellRecords{inbox: inbox, after: after, through: head}
 	if head <= after {
 		out.through = after
+	}
+	if out.through <= from {
 		return out, nil
 	}
-	recs, err := rt.store.ListInboxRecords(ctx, ownerID, computerID, inbox, after, head)
+	recs, err := rt.store.ListInboxRecords(ctx, ownerID, computerID, inbox, from, out.through)
 	if err != nil {
 		return cellRecords{}, fmt.Errorf("records: list %s (%d, %d]: %w", inbox, after, head, err)
 	}
@@ -532,6 +548,9 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	// A park after a committed turn is a completed turn; any other park is
 	// a turn that committed nothing.
 	parked := rec != nil && rec.State == types.RunPassivated
+	if rt != nil && rec != nil && (rec.State.Terminal() || parked) {
+		rt.recordsRunStart.Delete(rec.RunID)
+	}
 	if rt == nil || rt.store == nil || rec == nil || !(rec.State.Terminal() || parked) || rec.Error == runFateInterruptedByRestart {
 		return
 	}

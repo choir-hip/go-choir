@@ -60,6 +60,11 @@ var ErrPreGenesis = errors.New("computer is pre-genesis")
 // the store so that run handles and events survive autoputer process restarts
 // (VAL-RUNTIME-010).
 type Runtime struct {
+	// recordsRunStart holds each running desk run's cursor at its first
+	// cell (run id -> int64): choir.Records() shows the run every record
+	// past it (B13).
+	recordsRunStart sync.Map
+
 	cfg         provideriface.Config
 	store       *store.Store
 	bus         *events.EventBus

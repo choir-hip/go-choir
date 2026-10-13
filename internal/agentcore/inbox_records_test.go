@@ -80,9 +80,22 @@ choir.ReportPacket("texture", map[string]interface{}{"kind":"evidence_update","s
 	if rounds, _ := s.OpenRounds(ctx, owner, computer, research); len(rounds) != 0 {
 		t.Fatalf("round still open after the final Report: %+v", rounds)
 	}
+	// B13 (docs/problems/reeng-cut2-breakage-2026-10-13.md): the records a
+	// run started with stay visible for the whole run, so a desk can look
+	// at them in as many cells as it likes; the next run starts past them.
+	if out := cell(`import "choir"
+fmt.Println("seen", len(choir.Records()))`); !strings.Contains(out, "seen 1") {
+		t.Fatalf("a later cell of the same run lost the records the run started with: %s", out)
+	}
+	next := rec
+	next.RunID = "run-research-records-2"
+	if err := s.CreateRun(ctx, next); err != nil {
+		t.Fatalf("seed next run: %v", err)
+	}
+	execCtx.RunID, execCtx.RunRecord = next.RunID, &next
 	if out := cell(`import "choir"
 fmt.Println("seen", len(choir.Records()))`); !strings.Contains(out, "seen 0") {
-		t.Fatalf("the next cell shows read records again: %s", out)
+		t.Fatalf("the next run shows records an earlier run read: %s", out)
 	}
 }
 
