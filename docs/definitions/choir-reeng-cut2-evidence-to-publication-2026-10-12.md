@@ -471,10 +471,20 @@ boundaries:
     proof through the product API and C0's export.
 
 now:
-  status: drafted
-  slice: authored for review; nothing built; depends on C1 landed and C0's tracer
-  source_ref: 03499ef9
-  deploy_identity: staging choir.news b172895b
+  status: executing
+  slice: >-
+    Pre-flight done 2026-10-13 on 76ab40fd (C1 core landed): every cited
+    fact re-verified (docs/reports/reeng-cut2-preflight-2026-10-13.md),
+    the offline quote census run
+    (docs/reports/reeng-c8-quote-census-2026-10-13.md), and a convergent
+    panel accepted the plan with amendments
+    (docs/reports/reeng-cut2-preflight-review-2026-10-13.md; its rulings
+    on A1-A8 amend unit 2a and 2b and bind). Unit 2a item (i), normtext,
+    quotematch and the Ref shape, landed at b5059bd9 (pure code). Items
+    (ii) block captures and Read, and (iii) async search, are building
+    in parallel worktrees.
+  source_ref: b5059bd9
+  deploy_identity: staging choir.news 76ab40fd
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: C2-1
@@ -489,29 +499,42 @@ now:
     edge: missing_oracle
     delta_o: >-
       the share of research-reported quotes that land inside one extracted
-      block on real outlet captures (unmeasured; DOM heuristics and model
-      copying both unknown), measured read-only on staging captures before 2a's extractor lands
+      block on real outlet captures. The offline census bounds it at 91%
+      of judgeable quotes on flattened text (60% exact) and finds 46% of
+      quotes cite pages never captured; the real rate is measured by
+      rerunning the census on 2a's tracer bundles through the captures
+      layer, together with the share of citations not captured.
     scope_if_supported: AI news stories on one paper computer
     status: proposed
-    evidence_refs: []
+    evidence_refs: [docs/reports/reeng-c8-quote-census-2026-10-13.md]
   decision:
     what: >-
-      Two units with the freeze between them, and the defaults listed in
-      the prose ("Defaults taken"). Each is the conservative choice under
-      decisions §12; each can be reversed before the freeze.
+      Two units with the freeze between them; the defaults in the prose
+      ("Defaults taken"), amended by the pre-flight review: four citation
+      states (matched, not found, not captured, pending), Write refuses a
+      cite naming no captured block, strict one-block ellipsis matching,
+      table rows as " | " blocks, the opening-Cast schema defined in 2a and
+      frozen, the story-opening constraint for 2b (no owner-authored seed
+      revision, no work item, no racing run), and the Universal Wire path
+      deleted before the paper's first schedule run.
     kind: architecture
-    status: proposal
-    evidence_ref: docs/re-engineering-decisions-2026-10-12.md §10, §12
-    owner_ratification_ref: "owner 2026-10-12 delegation (§12: 'I trust your judgement'); open questions below"
+    status: settled (pre-flight panel 2026-10-13 under the owner's delegation)
+    evidence_ref: docs/reports/reeng-cut2-preflight-review-2026-10-13.md
+    owner_ratification_ref: "owner 2026-10-12 delegation (§12: 'I trust your judgement')"
   belief:
-    believed_state: the router already completes per provider and the link already streams; no matcher, block capture, Write verb, version chain or public front list exists
+    believed_state: C1 core landed (records for Texture with research and management, crash closure); normtext, quotematch and Ref exist; no block capture, Read verb, async search, Write verb, version chain or public front list yet
     main_uncertainty: whether real outlet pages extract into blocks that contain the sentences research quotes, and whether research reads arrivals without being pushed
-    next_observation: read-only quote-in-block rate over existing staging captures with a prototype matcher, and C1's landed record fields
-  blocker_or_risk: C1 must land (inbox, cursors, final Reports, crash closure); the gateway and canonical-write changes are red
+    next_observation: (ii)'s and (iii)'s tracer scenarios on staging (a real outlet read and the census rerun; per-provider count lines in one running cell)
+  blocker_or_risk: red surfaces (gateway search, capture identity, canonical writes); parallel worktrees collide on yaegikernel/choir.go and surface.go, so integration is serialized
   next_action: >-
-    when C1 lands, pre-flight on the then-current main: confirm C1's
-    record fields and inbox, C0's tracer and request-id fix, re-verify
-    every file:line above, then agentic-consensus review of this file
+    Landing order (pre-flight review A8): integrate (ii) and (iii) one at a
+    time onto main, each with a claim-directed tracer scenario under
+    --expect-sha (a research Cast that reads a real outlet page into a
+    capture and reports a quote that checks; a research cell that sees
+    per-provider count lines rise). Then (iv) Texture Write (with the
+    opening-Cast schema and the Universal Wire hook dropped), then (v)
+    support judgement, (vi) the management translation contract anytime.
+    Then 2a's deployed acceptance, the freeze receipt, and 2b.
 
 receipts: []
 ---
