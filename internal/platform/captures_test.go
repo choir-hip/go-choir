@@ -126,6 +126,51 @@ func TestCaptureRouteWritesSharedCapturesWithBodiesOnHostDisk(t *testing.T) {
 	}
 }
 
+// A capture write and a verdict push are both a bound guest's write and
+// meet one rule (B12): the host-internal caller (loopback with the marker)
+// or the guest vmctl binds to the owner and computer the write names.
+func TestCaptureWriteAdmitsItsBoundGuestAndInternalCallers(t *testing.T) {
+	mem := objectgraph.NewMemoryStore()
+	svc := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
+	defer svc.Close()
+	h := NewObjectGraphHandler(svc, mem)
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{
+		"10.200.44.2": {Found: true, UserID: "paper-owner", ComputerID: "computer-paper"},
+		"10.200.9.9":  {Found: true, UserID: "paper-owner", ComputerID: "computer-other"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureCaptureBodies(t.TempDir())
+	fetched := time.Date(2026, 10, 13, 12, 35, 8, 0, time.UTC)
+	for i, c := range []struct {
+		label    string
+		from     string
+		internal bool
+		want     int
+	}{
+		{"the bound guest that owns the captures", "10.200.44.2", false, http.StatusOK},
+		{"the host-internal caller", "127.0.0.1", true, http.StatusOK},
+		{"a guest bound to another computer", "10.200.9.9", false, http.StatusForbidden},
+		{"an unbound outside caller", "203.0.113.9", false, http.StatusForbidden},
+		{"an outside caller claiming to be internal", "203.0.113.9", true, http.StatusForbidden},
+		{"a loopback caller without the internal marker", "127.0.0.1", false, http.StatusForbidden},
+	} {
+		items := []sourcegraph.CaptureItem{{Item: sources.Item{ID: fmt.Sprintf("item-%d", i), SourceID: "rss:npr_world", SourceType: sources.SourceTypeRSS,
+			Title: "Item", Body: "Body", URL: fmt.Sprintf("https://example.com/%d", i), FetchedAt: fetched}}}
+		raw, _ := json.Marshal(CaptureWriteRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Items: items})
+		req := httptest.NewRequest(http.MethodPost, "/internal/platform/captures", bytes.NewReader(raw))
+		req.RemoteAddr = c.from + ":40000"
+		if c.internal {
+			req.Header.Set("X-Internal-Caller", "true")
+		}
+		rec := httptest.NewRecorder()
+		h.HandleCaptures(rec, req)
+		if rec.Code != c.want {
+			t.Fatalf("%s = %d %s; want %d", c.label, rec.Code, rec.Body, c.want)
+		}
+	}
+}
+
 // Captures stay off the generic object routes
 // (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md): a
 // guest cannot write one there, and no caller puts a capture body in a row.

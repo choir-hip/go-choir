@@ -61,3 +61,25 @@ func bindTapCaller(ctx context.Context, lookup guestOwnershipLookup, r *http.Req
 func trustedInternalCaller(r *http.Request) bool {
 	return trustedInternalTransport(r) && r.Header.Get("X-Internal-Caller") == "true"
 }
+
+// requireInternalOrBoundGuestWrite is the one rule for a write a computer
+// sends corpusd (captures, support verdicts): a host-internal caller, or
+// the guest vmctl binds to exactly the owner and computer the write names.
+// A guest reaches corpusd directly at its platform URL (choir.platform_url),
+// not through the proxy, so every guest write route needs this rule, not
+// trustedInternalCaller alone (B12).
+func requireInternalOrBoundGuestWrite(ctx context.Context, lookup guestOwnershipLookup, r *http.Request, ownerID, computerID string) error {
+	if trustedInternalCaller(r) {
+		return nil
+	}
+	ownership, err := bindTapCaller(ctx, lookup, r)
+	if err != nil {
+		return errInternalCallerRequired
+	}
+	if strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" ||
+		strings.TrimSpace(ownerID) != strings.TrimSpace(ownership.UserID) ||
+		strings.TrimSpace(computerID) != strings.TrimSpace(ownership.ComputerID) {
+		return errInternalCallerRequired
+	}
+	return nil
+}

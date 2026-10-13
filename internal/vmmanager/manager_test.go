@@ -1291,6 +1291,8 @@ func TestBuildFirecrackerConfig_LegacyBootIncludesRuntimeServiceURLs(t *testing.
 		"choir.vmctl_url=http://10.200.0.1:8083",
 		"choir.maild_url=http://10.200.0.1:8087",
 		"choir.platform_url=http://10.200.0.1:8086",
+		// Story versions publish through the proxy (B12).
+		"choir.proxy_url=http://10.200.0.1:8082",
 		"choir.owner_id=universal-wire-platform",
 		"choir.desktop_id=platform",
 	} {
@@ -1364,6 +1366,7 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"choir.vmctl_url=http://10.200.0.1:8083",
 		"choir.maild_url=http://10.200.0.1:8087",
 		"choir.platform_url=http://10.200.0.1:8086",
+		"choir.proxy_url=http://10.200.0.1:8082",
 		"choir.owner_id=owner@example.com",
 		"choir.desktop_id=primary",
 		"ip=10.200.0.2::10.200.0.1:255.255.255.252::eth0:off",

@@ -29,6 +29,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -2017,6 +2018,67 @@ func (r *OwnershipRegistry) GetOwnershipForComputer(userID, computerID string) *
 		if own != nil && own.UserID == userID && stableComputerID(own.UserID, own.DesktopID, own.ComputerID) == computerID {
 			snapshot := *own
 			return &snapshot
+		}
+	}
+	return nil
+}
+
+// guestBindTier ranks how far an ownership's computer URL names the guest
+// calling from that address now: 2 for a running VM (its URL was set when
+// its boot completed), 1 for a booting VM (its URL is a placeholder or the
+// one from its last boot until this boot completes), 0 for a stopped,
+// hibernated or failed computer, whose old URL may already belong to a
+// newer computer.
+func guestBindTier(state VMState) int {
+	switch state {
+	case VMStateActive, VMStateDegraded, VMStateStopping:
+		return 2
+	case VMStateBooting:
+		return 1
+	}
+	return 0
+}
+
+// GuestOwnershipForAddress is the one rule that binds a guest's source
+// address to its computer: the single live ownership whose computer URL
+// host is that address, a running VM's claim before a booting one's. It
+// returns nil when no live ownership claims the address, or when more than
+// one claims it in the deciding tier (fail closed rather than guess).
+// Stale ownerships never bind: walking every ownership and taking the first
+// match bound a live guest to a stopped computer that once had its address,
+// at random (B12, docs/problems/reeng-cut2-breakage-2026-10-13.md).
+func (r *OwnershipRegistry) GuestOwnershipForAddress(host string) *VMOwnership {
+	host = strings.TrimSpace(host)
+	if r == nil || host == "" {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	claims := map[int][]*VMOwnership{}
+	for _, own := range r.ownerships {
+		if own == nil {
+			continue
+		}
+		tier := guestBindTier(own.State)
+		if tier == 0 {
+			continue
+		}
+		u, err := url.Parse(strings.TrimSpace(own.ComputerURL))
+		if err != nil || !strings.EqualFold(u.Hostname(), host) {
+			continue
+		}
+		claims[tier] = append(claims[tier], own)
+	}
+	for tier := 2; tier >= 1; tier-- {
+		switch len(claims[tier]) {
+		case 0:
+			continue
+		case 1:
+			snapshot := *claims[tier][0]
+			return &snapshot
+		default:
+			log.Printf("vmctl: guest address %s is claimed by %d live computers; binding none", host, len(claims[tier]))
+			return nil
 		}
 	}
 	return nil

@@ -63,7 +63,8 @@ type storyPublishing struct {
 }
 
 // SetStoryPublisher installs the publisher (tests, or a nil to publish
-// nothing). Without one the runtime publishes through its platform URL.
+// nothing). Without one the runtime publishes versions through its proxy
+// URL and verdicts to its platform URL.
 func (rt *Runtime) SetStoryPublisher(p StoryPublisher) {
 	if rt == nil {
 		return
@@ -77,8 +78,9 @@ func (rt *Runtime) storyPublisher() StoryPublisher {
 	rt.stories.mu.Lock()
 	defer rt.stories.mu.Unlock()
 	if !rt.stories.set {
-		if base := strings.TrimSpace(rt.cfg.CorpusdURL); base != "" {
-			rt.stories.publisher = NewHTTPStoryPublisher(base)
+		proxy, platform := strings.TrimSpace(rt.cfg.ProxyURL), strings.TrimSpace(rt.cfg.CorpusdURL)
+		if proxy != "" || platform != "" {
+			rt.stories.publisher = NewHTTPStoryPublisher(proxy, platform)
 		}
 		rt.stories.set = true
 	}
@@ -230,26 +232,34 @@ func (rt *Runtime) publishStoryVerdicts(ownerID, computerID string, verdicts []t
 	})
 }
 
-// httpStoryPublisher publishes through the proxy's guest routes: the proxy
-// binds the calling guest to its owner and computer, runs the owner's
-// publish path for it, and writes verdicts to corpusd.
+// httpStoryPublisher publishes versions through the proxy's guest route
+// (the proxy binds the calling guest to its owner and computer, reads the
+// revision back from it and runs the owner's publish path) and pushes
+// verdicts to the computer's platform URL, corpusd, which admits the bound
+// guest under the same rule as its capture writes (B12).
 type httpStoryPublisher struct {
-	baseURL string
-	client  *http.Client
+	proxyURL    string
+	platformURL string
+	client      *http.Client
 }
 
-// NewHTTPStoryPublisher publishes to the platform at baseURL (the
-// computer's CHOIR_PLATFORM_URL, the proxy).
-func NewHTTPStoryPublisher(baseURL string) StoryPublisher {
-	return &httpStoryPublisher{baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"), client: &http.Client{Timeout: storyPublishTimeout}}
+// NewHTTPStoryPublisher publishes versions to proxyURL (choir.proxy_url) and
+// verdicts to platformURL (choir.platform_url, corpusd). A version with no
+// proxy URL is a gap whose error says so.
+func NewHTTPStoryPublisher(proxyURL, platformURL string) StoryPublisher {
+	trim := func(s string) string { return strings.TrimRight(strings.TrimSpace(s), "/") }
+	return &httpStoryPublisher{proxyURL: trim(proxyURL), platformURL: trim(platformURL), client: &http.Client{Timeout: storyPublishTimeout}}
 }
 
-func (p *httpStoryPublisher) post(ctx context.Context, path string, body, out any) error {
+func (p *httpStoryPublisher) post(ctx context.Context, baseURL, path string, body, out any) error {
+	if baseURL == "" {
+		return fmt.Errorf("%s: no host URL to send it to", path)
+	}
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+path, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+path, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
@@ -276,7 +286,10 @@ func (p *httpStoryPublisher) PublishVersion(ctx context.Context, v StoryVersion)
 		Revision      int    `json:"revision"`
 		PermalinkPath string `json:"permalink_path"`
 	}
-	if err := p.post(ctx, types.StoryPublishPath, types.StoryPublishRequest{DocID: v.DocID, RevisionID: v.RevisionID}, &resp); err != nil {
+	if p.proxyURL == "" {
+		return fmt.Errorf("no proxy URL (choir.proxy_url) to publish through; this computer booted without one")
+	}
+	if err := p.post(ctx, p.proxyURL, types.StoryPublishPath, types.StoryPublishRequest{DocID: v.DocID, RevisionID: v.RevisionID}, &resp); err != nil {
 		return err
 	}
 	if resp.Revision != v.Revision {
@@ -286,5 +299,5 @@ func (p *httpStoryPublisher) PublishVersion(ctx context.Context, v StoryVersion)
 }
 
 func (p *httpStoryPublisher) PublishVerdicts(ctx context.Context, req types.StoryVerdictsRequest) error {
-	return p.post(ctx, types.StoryVerdictsPath, req, nil)
+	return p.post(ctx, p.platformURL, types.StoryVerdictsPath, req, nil)
 }

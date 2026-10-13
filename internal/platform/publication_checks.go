@@ -141,20 +141,21 @@ func (s *Service) RecordSupportVerdicts(ctx context.Context, req types.StoryVerd
 	return nil
 }
 
-// HandleSupportVerdicts serves POST types.StoryVerdictsPath for the proxy,
-// which binds the calling guest to the owner and computer it names.
+// HandleSupportVerdicts serves POST types.StoryVerdictsPath for a computer
+// pushing its stories' verdicts (straight from the guest, whose platform URL
+// is corpusd, or through the proxy) under the one bound-guest write rule.
 func (h *Handler) HandleSupportVerdicts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if !trustedInternalCaller(r) {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
-		return
-	}
 	var req types.StoryVerdictsRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
+		return
+	}
+	if err := requireInternalOrBoundGuestWrite(r.Context(), h.guestLookup, r, req.OwnerID, req.ComputerID); err != nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 		return
 	}
 	if err := h.service.RecordSupportVerdicts(r.Context(), req); err != nil {

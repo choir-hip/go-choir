@@ -405,6 +405,9 @@ EOF
           choir.platform_url=*)
             echo "CHOIR_PLATFORM_URL=''${param#choir.platform_url=}" >> "$ENV_FILE"
             ;;
+          choir.proxy_url=*)
+            echo "CHOIR_PROXY_URL=''${param#choir.proxy_url=}" >> "$ENV_FILE"
+            ;;
           choir.owner_id=*)
             echo "CHOIR_OWNER_ID=''${param#choir.owner_id=}" >> "$ENV_FILE"
             ;;

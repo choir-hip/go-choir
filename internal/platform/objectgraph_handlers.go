@@ -338,18 +338,13 @@ func (h *ObjectGraphHandler) listEdges(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ObjectGraphHandler) requireInternalOrBoundGuest(r *http.Request, ownerID, computerID string, allowAnyGuest bool) error {
+	if !allowAnyGuest {
+		return requireInternalOrBoundGuestWrite(r.Context(), h.guestLookup, r, ownerID, computerID)
+	}
 	if trustedInternalCaller(r) {
 		return nil
 	}
-	ownership, err := bindTapCaller(r.Context(), h.guestLookup, r)
-	if err != nil {
-		return errInternalCallerRequired
-	}
-	if allowAnyGuest {
-		return nil
-	}
-	if strings.TrimSpace(ownerID) != strings.TrimSpace(ownership.UserID) ||
-		strings.TrimSpace(computerID) != strings.TrimSpace(ownership.ComputerID) {
+	if _, err := bindTapCaller(r.Context(), h.guestLookup, r); err != nil {
 		return errInternalCallerRequired
 	}
 	return nil

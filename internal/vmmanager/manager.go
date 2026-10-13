@@ -1595,6 +1595,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
 			fmt.Sprintf("choir.platform_url=http://%s:8086", hostIP),
+			// Story versions publish through the proxy, which reads the
+			// revision back from this computer; corpusd has no such route.
+			fmt.Sprintf("choir.proxy_url=http://%s:8082", hostIP),
 			fmt.Sprintf("ip=%s::%s:255.255.255.252::eth0:off", guestIP, hostIP),
 		}
 		runtimeArgs = append(runtimeArgs, guestIdentityKernelParams(cfg)...)
@@ -1623,6 +1626,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
 			fmt.Sprintf("choir.platform_url=http://%s:8086", hostIP),
+			fmt.Sprintf("choir.proxy_url=http://%s:8082", hostIP),
 		}
 		for _, arg := range append(legacyRuntimeArgs, guestIdentityKernelParams(cfg)...) {
 			bootArgs += " " + arg

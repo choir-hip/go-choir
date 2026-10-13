@@ -123,18 +123,49 @@ func TestStoreOverlayServesQuoteChecksAndLateVerdictsOutsideTheManifest(t *testi
 	}
 }
 
-func TestSupportVerdictRouteIsInternalOnly(t *testing.T) {
+// A computer pushes its stories' verdicts straight to corpusd: its platform
+// URL (choir.platform_url) is corpusd, not the proxy. So the route admits
+// the bound guest that owns the verdicts by the same rule as a capture
+// write, as well as a host-internal caller (B12: every guest verdict push
+// was 403 "internal caller required").
+func TestSupportVerdictRouteAdmitsItsBoundGuestAndInternalCallers(t *testing.T) {
 	svc, _, checks := publishCheckedVersion(t)
 	h := NewHandler(svc)
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{
+		"10.200.44.2": {Found: true, UserID: "owner-1", ComputerID: "computer-paper"},
+		"10.200.9.9":  {Found: true, UserID: "owner-1", ComputerID: "computer-other"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	body, _ := json.Marshal(types.StoryVerdictsRequest{OwnerID: "owner-1", ComputerID: "computer-paper",
 		Verdicts: []types.StoryVerdict{{Key: checks[0].Pair, Verdict: types.SupportSupported, Judge: "management"}}})
-	outside := httptest.NewRequest(http.MethodPost, types.StoryVerdictsPath, bytes.NewReader(body))
-	outside.RemoteAddr = "203.0.113.9:4000"
-	rec := httptest.NewRecorder()
-	h.HandleSupportVerdicts(rec, outside)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("outside caller = %d %s; want 403", rec.Code, rec.Body)
+	push := func(from string, internal bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, types.StoryVerdictsPath, bytes.NewReader(body))
+		req.RemoteAddr = from + ":4000"
+		if internal {
+			req.Header.Set("X-Internal-Caller", "true")
+		}
+		rec := httptest.NewRecorder()
+		h.HandleSupportVerdicts(rec, req)
+		return rec
 	}
+	for _, c := range []struct {
+		label    string
+		from     string
+		internal bool
+		want     int
+	}{
+		{"the bound guest that owns the verdicts", "10.200.44.2", false, http.StatusOK},
+		{"a guest bound to another computer", "10.200.9.9", false, http.StatusForbidden},
+		{"an unbound outside caller", "203.0.113.9", false, http.StatusForbidden},
+		{"an outside caller claiming to be internal", "203.0.113.9", true, http.StatusForbidden},
+		{"a loopback caller without the internal marker", "127.0.0.1", false, http.StatusForbidden},
+	} {
+		if rec := push(c.from, c.internal); rec.Code != c.want {
+			t.Fatalf("%s = %d %s; want %d", c.label, rec.Code, rec.Body, c.want)
+		}
+	}
+	rec := httptest.NewRecorder()
 	inside := httptest.NewRequest(http.MethodPost, types.StoryVerdictsPath, bytes.NewReader(body))
 	inside.RemoteAddr = "127.0.0.1:4000"
 	inside.Header.Set("X-Internal-Caller", "true")

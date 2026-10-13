@@ -179,7 +179,9 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 // source IP?" for host-internal services that need to authenticate a
 // tap-sourced caller (maild, corpusd, proxy). It is a host-only endpoint:
 // isInternalCaller admits loopback/UDS only, and the response is keyed by
-// RemoteAddr, which a guest cannot forge under tap anti-spoofing.
+// RemoteAddr, which a guest cannot forge under tap anti-spoofing. The
+// answer is the registry's one binding rule (GuestOwnershipForAddress):
+// the single live computer at that address, never a stale one.
 // POST /internal/vmctl/lookup-guest {"remote_addr":"10.200.0.2"} ->
 //
 //	200 {"found":true,"user_id":...,"computer_url":...,"computer_id":...}
@@ -209,14 +211,7 @@ func (h *Handler) HandleLookupGuestOwnership(w http.ResponseWriter, r *http.Requ
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "remote_addr is required"})
 		return
 	}
-	for _, own := range h.registry.ListOwnerships() {
-		if own == nil {
-			continue
-		}
-		u, err := url.Parse(strings.TrimSpace(own.ComputerURL))
-		if err != nil || !strings.EqualFold(u.Hostname(), wantHost) {
-			continue
-		}
+	if own := h.registry.GuestOwnershipForAddress(wantHost); own != nil {
 		writeVMCTLJSON(w, http.StatusOK, map[string]any{
 			"found":        true,
 			"user_id":      own.UserID,
@@ -1086,60 +1081,52 @@ func guestRemoteAddrHost(r *http.Request) string {
 	return ""
 }
 
-// bindRequestToGuestComputer checks that the caller's tap source IP
-// belongs to the ownership named by wantComputerID: the guest's
-// computer_url host is its tap IP, and remote_addr post-DNAT carries
-// that IP verbatim (observed 2026-10-04, s1a evidence). Returns nil
-// when the caller is bound, an error otherwise. Loopback callers are
-// rejected by the caller's loopback gate, not here.
+// bindRequestToGuestComputer checks that the caller's tap source IP binds,
+// by the registry's one rule (GuestOwnershipForAddress), to the computer
+// named by wantComputerID: the guest's computer_url host is its tap IP, and
+// remote_addr post-DNAT carries that IP verbatim (observed 2026-10-04, s1a
+// evidence). A stale ownership whose old address a newer computer now holds
+// never binds. Returns nil when the caller is bound, an error otherwise.
+// Loopback callers are rejected by the caller's loopback gate, not here.
 func (h *Handler) bindRequestToGuestComputer(r *http.Request, wantComputerID string) error {
 	srcHost := guestRemoteAddrHost(r)
 	if srcHost == "" {
 		return fmt.Errorf("guest-scoped call requires a tap-sourced request (remote_addr=%s)", r.RemoteAddr)
 	}
-	own := h.registry.GetOwnershipByComputerID(wantComputerID)
+	own := h.registry.GuestOwnershipForAddress(srcHost)
 	if own == nil {
-		return fmt.Errorf("no ownership for computer %s", wantComputerID)
+		return fmt.Errorf("caller %s is not bound to a live computer", srcHost)
 	}
-	u, err := url.Parse(strings.TrimSpace(own.ComputerURL))
-	if err != nil {
-		return fmt.Errorf("ownership for computer %s has no usable computer_url", wantComputerID)
-	}
-	if !strings.EqualFold(u.Hostname(), srcHost) {
-		return fmt.Errorf("caller %s is not bound to computer %s (bound guest IP %s)", srcHost, wantComputerID, u.Hostname())
+	if strings.TrimSpace(own.ComputerID) != strings.TrimSpace(wantComputerID) {
+		return fmt.Errorf("caller %s is bound to computer %s, not %s", srcHost, own.ComputerID, wantComputerID)
 	}
 	return nil
 }
 
-// bindRequestToRouteSlot checks that the caller's tap source IP belongs to the
-// ownership named by a route slot's owner:desktop pair. The ComputerVersion
-// route slot ID is computer:<owner>:<desktop> — its third segment is the
-// desktop, not a stable computer ID, so the slot resolves via
-// GetOwnershipForDesktop and the tap IP must match that ownership's
-// computer_url. Returns nil when the caller is bound.
+// bindRequestToRouteSlot checks that the caller's tap source IP binds, by
+// the registry's one rule, to the ownership named by a route slot's
+// owner:desktop pair. The ComputerVersion route slot ID is
+// computer:<owner>:<desktop> — its third segment is the desktop, not a
+// stable computer ID. Returns nil when the caller is bound.
 func (h *Handler) bindRequestToRouteSlot(r *http.Request, ownerID, desktopID string) error {
 	srcHost := guestRemoteAddrHost(r)
 	if srcHost == "" {
 		return fmt.Errorf("guest-scoped call requires a tap-sourced request (remote_addr=%s)", r.RemoteAddr)
 	}
-	own := h.registry.GetOwnershipForDesktop(ownerID, desktopID)
+	own := h.registry.GuestOwnershipForAddress(srcHost)
 	if own == nil {
-		return fmt.Errorf("no ownership for route slot %s:%s", ownerID, desktopID)
+		return fmt.Errorf("caller %s is not bound to a live computer", srcHost)
 	}
-	u, err := url.Parse(strings.TrimSpace(own.ComputerURL))
-	if err != nil {
-		return fmt.Errorf("route slot %s:%s has no usable computer_url", ownerID, desktopID)
-	}
-	if !strings.EqualFold(u.Hostname(), srcHost) {
-		return fmt.Errorf("caller %s is not bound to route slot %s:%s (bound guest IP %s)", srcHost, ownerID, desktopID, u.Hostname())
+	if strings.TrimSpace(own.UserID) != strings.TrimSpace(ownerID) || normalizeDesktopID(own.DesktopID) != normalizeDesktopID(desktopID) {
+		return fmt.Errorf("caller %s is not bound to route slot %s:%s", srcHost, ownerID, desktopID)
 	}
 	return nil
 }
 
 // callerBoundToAnyOwnership reports whether the request came over a guest
-// tap AND its source IP matches some live ownership's computer_url host.
-// Used for guest-scoped endpoints whose payload names no computer (the
-// inputs-resolve POST): bound guest identity is enforced by the tap
+// tap AND its source IP binds to a live computer by the registry's one
+// rule. Used for guest-scoped endpoints whose payload names no computer
+// (the inputs-resolve POST): bound guest identity is enforced by the tap
 // anti-spoof rule + this check, and what they read is a public artifact
 // lookup, so any bound guest may call.
 func (h *Handler) callerBoundToAnyOwnership(r *http.Request) bool {
@@ -1147,15 +1134,7 @@ func (h *Handler) callerBoundToAnyOwnership(r *http.Request) bool {
 	if srcHost == "" || h.registry == nil {
 		return false
 	}
-	for _, own := range h.registry.ListOwnerships() {
-		if own == nil {
-			continue
-		}
-		if u, err := url.Parse(strings.TrimSpace(own.ComputerURL)); err == nil && strings.EqualFold(u.Hostname(), srcHost) {
-			return true
-		}
-	}
-	return false
+	return h.registry.GuestOwnershipForAddress(srcHost) != nil
 }
 func isInternalCaller(r *http.Request) bool {
 	// S1a: internal authority is transport-bound, not caller-asserted.

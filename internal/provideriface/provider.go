@@ -194,6 +194,11 @@ type Config struct {
 	// guest it is the host-mediated platform URL.
 	CorpusdURL string
 
+	// ProxyURL is the host proxy as a guest reaches it (choir.proxy_url).
+	// A computer publishes its story versions there: publishing reads the
+	// document back from the computer, which corpusd does not do.
+	ProxyURL string
+
 	// LLMProvider is the explicitly selected provider for runtime LLM calls.
 	// Empty means no provider is selected by this runtime config.
 	LLMProvider string
