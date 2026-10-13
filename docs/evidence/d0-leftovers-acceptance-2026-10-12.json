@@ -1,0 +1,242 @@
+{
+  "probe": "m0_model_pools_acceptance",
+  "host": "https://choir.news",
+  "computer": "computer-779ea55381c44b0bcbf4409c3c97351d",
+  "started_at": "2026-10-13T01:13:26.354Z",
+  "submissions": [
+    {
+      "text": "What changed in open-weight language models this week?",
+      "trajectory_id": "d08c77ed-6106-5325-8913-383a3393f683",
+      "doc_id": "630bd828-9350-5271-9311-74c4a3ab7930",
+      "owner_revision": "eb30657c-25db-54c7-bb9c-897874c51428",
+      "first_desk_revision": "b8a136bb-83e2-5ff9-85ec-6d02f907c900"
+    },
+    {
+      "text": "Summarize the state of grid-scale battery storage deployments.",
+      "trajectory_id": "ccb8df85-cf6c-5ade-aff0-0ffd30098195",
+      "doc_id": "bd65581d-8178-5e58-af3e-9c559ad94113",
+      "owner_revision": "16b34457-165d-5db9-a915-e86dd5d0315b",
+      "first_desk_revision": "1c153aa9-2509-5553-8004-b5e40fc55add"
+    },
+    {
+      "text": "What is new in semiconductor export controls?",
+      "trajectory_id": "7e39b9f0-4768-599c-a8c1-c5c373f66e02",
+      "doc_id": "537580ef-1070-597d-b2d5-bf3381f2cb55",
+      "owner_revision": "1c62b7ae-e09e-5555-9c8a-9dfe29f913c7",
+      "first_desk_revision": "f387df56-2a77-5b38-88e7-1e635438c8d3"
+    },
+    {
+      "text": "What are the latest results on protein structure prediction?",
+      "trajectory_id": "01aaabe8-e86f-55b5-86b0-75d85049f458",
+      "doc_id": "719501ef-91b7-5e80-92f0-162735091b39",
+      "owner_revision": "96b0383a-7b21-5dbe-8cfa-28479d731b5f",
+      "first_desk_revision": "9a1a9580-c662-5064-b568-a0a38d251589"
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "79a05916-5fc3-4300-83e7-5719ea1025fc",
+      "profile": "research",
+      "state": "running",
+      "spec": "pool:default",
+      "assignment": "hash",
+      "thread": "01aaabe8-e86f-55b5-86b0-75d85049f458",
+      "model": "chatgpt/gpt-6-luna",
+      "fallbacks": "opencode-go/deepseek-v4.1-flash",
+      "error": null
+    },
+    {
+      "run_id": "3cf22a16-43dd-4982-9ec8-b0c69465b335",
+      "profile": "research",
+      "state": "running",
+      "spec": "pool:default",
+      "assignment": "hash",
+      "thread": "d08c77ed-6106-5325-8913-383a3393f683",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "fallbacks": "chatgpt/gpt-6-luna",
+      "error": null
+    },
+    {
+      "run_id": "dca8eb9d-9b6b-4ad7-a53b-cdf2cfebbab9",
+      "profile": "research",
+      "state": "running",
+      "spec": "pool:default",
+      "assignment": "hash",
+      "thread": "ccb8df85-cf6c-5ade-aff0-0ffd30098195",
+      "model": "chatgpt/gpt-6-luna",
+      "fallbacks": "opencode-go/deepseek-v4.1-flash",
+      "error": null
+    },
+    {
+      "run_id": "ab4f7acb-42d0-4c12-b3ef-7627bdab08f9",
+      "profile": "research",
+      "state": "running",
+      "spec": "pool:default",
+      "assignment": "hash",
+      "thread": "7e39b9f0-4768-599c-a8c1-c5c373f66e02",
+      "model": "chatgpt/gpt-6-luna",
+      "fallbacks": "opencode-go/deepseek-v4.1-flash",
+      "error": null
+    },
+    {
+      "run_id": "6234b901-2e1e-456e-87ad-312abde2c10d",
+      "profile": "texture",
+      "state": "passivated",
+      "spec": "pool:default",
+      "assignment": "hash",
+      "thread": "texture:719501ef-91b7-5e80-92f0-162735091b39",
+      "model": "opencode-go/deepseek-v4.1-flash",
+      "fallbacks": "chatgpt/gpt-6-luna",
+      "error": null
+    },
+    {
+      "run_id": "63c6b7a3-069a-55f5-8df6-0281e5cd7f65",
+      "profile": "conductor",
+      "state": "completed",
+      "spec": null,
+      "assignment": null,
+      "thread": null,
+      "model": null,
+      "fallbacks": null,
+      "error": null
+    },
+    {
+      "run_id": "ca076fca-7db1-44b5-87c2-9e5540a5db9a",
+      "profile": "texture",
+      "state": "passivated",
+      "spec": "pool:default",
+      "assignment": "hash",
+      "thread": "texture:537580ef-1070-597d-b2d5-bf3381f2cb55",
+      "model": "chatgpt/gpt-6-luna",
+      "fallbacks": "opencode-go/deepseek-v4.1-flash",
+      "error": null
+    },
+    {
+      "run_id": "a78422fb-64e0-5226-a1c0-e6d7ee91a586",
+      "profile": "conductor",
+      "state": "completed",
+      "spec": null,
+      "assignment": null,
+      "thread": null,
+      "model": null,
+      "fallbacks": null,
+      "error": null
+    },
+    {
+      "run_id": "de5778d8-7426-4b99-9ce2-ee4030f0b77a",
+      "profile": "texture",
+      "state": "passivated",
+      "spec": "pool:default",
+      "assignment": "hash",
+      "thread": "texture:bd65581d-8178-5e58-af3e-9c559ad94113",
+      "model": "chatgpt/gpt-6-luna",
+      "fallbacks": "opencode-go/deepseek-v4.1-flash",
+      "error": null
+    },
+    {
+      "run_id": "45bb74d4-6516-50d0-be68-2c0277d4da20",
+      "profile": "conductor",
+      "state": "completed",
+      "spec": null,
+      "assignment": null,
+      "thread": null,
+      "model": null,
+      "fallbacks": null,
+      "error": null
+    },
+    {
+      "run_id": "0b7b8b26-c6ac-4343-8a79-21489fc65d78",
+      "profile": "texture",
+      "state": "passivated",
+      "spec": "pool:default",
+      "assignment": "hash",
+      "thread": "texture:630bd828-9350-5271-9311-74c4a3ab7930",
+      "model": "chatgpt/gpt-6-luna",
+      "fallbacks": "opencode-go/deepseek-v4.1-flash",
+      "error": null
+    },
+    {
+      "run_id": "252652e0-48e9-544d-be01-ef05fb77b21c",
+      "profile": "conductor",
+      "state": "completed",
+      "spec": null,
+      "assignment": null,
+      "thread": null,
+      "model": null,
+      "fallbacks": null,
+      "error": null
+    }
+  ],
+  "checks": {
+    "documents_authored": {
+      "pass": true,
+      "detail": "4/4"
+    },
+    "runs_seen": {
+      "pass": true,
+      "detail": "8 runs with a model (12 total)"
+    },
+    "spec_and_assignment_recorded": {
+      "pass": true,
+      "detail": []
+    },
+    "models_in_pool": {
+      "pass": true,
+      "detail": {
+        "chatgpt/gpt-6-luna": 6,
+        "opencode-go/deepseek-v4.1-flash": 2
+      }
+    },
+    "thread_keeps_one_model": {
+      "pass": true,
+      "detail": {
+        "01aaabe8-e86f-55b5-86b0-75d85049f458": [
+          "chatgpt/gpt-6-luna"
+        ],
+        "d08c77ed-6106-5325-8913-383a3393f683": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "ccb8df85-cf6c-5ade-aff0-0ffd30098195": [
+          "chatgpt/gpt-6-luna"
+        ],
+        "7e39b9f0-4768-599c-a8c1-c5c373f66e02": [
+          "chatgpt/gpt-6-luna"
+        ],
+        "texture:719501ef-91b7-5e80-92f0-162735091b39": [
+          "opencode-go/deepseek-v4.1-flash"
+        ],
+        "texture:537580ef-1070-597d-b2d5-bf3381f2cb55": [
+          "chatgpt/gpt-6-luna"
+        ],
+        "texture:bd65581d-8178-5e58-af3e-9c559ad94113": [
+          "chatgpt/gpt-6-luna"
+        ],
+        "texture:630bd828-9350-5271-9311-74c4a3ab7930": [
+          "chatgpt/gpt-6-luna"
+        ]
+      }
+    },
+    "both_members_used": {
+      "pass": true,
+      "detail": {
+        "chatgpt/gpt-6-luna": 6,
+        "opencode-go/deepseek-v4.1-flash": 2
+      }
+    },
+    "no_catalog_refusals": {
+      "pass": true,
+      "detail": []
+    }
+  },
+  "ok": true,
+  "guest_build": {
+    "service": "autoputer",
+    "version": "0.1.0",
+    "commit": "964bdd2584fd5bd81d42c34f6c3f70c5793dd430",
+    "built_at": "20261013010016",
+    "deployed_at": "2026-10-13T01:13:10Z",
+    "deployed_commit": "964bdd2584fd5bd81d42c34f6c3f70c5793dd430"
+  },
+  "finished_at": "2026-10-13T01:14:00.701Z",
+  "total_wall_ms": 34347
+}

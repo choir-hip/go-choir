@@ -101,6 +101,9 @@ the owner the questions that a grep cannot answer.
   - Kept on purpose: the decision-policy JSON still names the solitaire
     tables in `blast_radius`. That JSON is hash-pinned and stored self-dev
     receipts cite its digests, so editing it would orphan those receipts.
+  - Leftovers landed in 964bdd25; acceptance PASS on fresh computer
+    computer-779ea55381c44b0bcbf4409c3c97351d (guest build 964bdd25):
+    `docs/evidence/d0-leftovers-acceptance-2026-10-12.json`.
 
 ## Size
 
