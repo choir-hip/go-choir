@@ -95,6 +95,18 @@ function manifestOf(bundle) {
   return typeof manifest === 'string' ? JSON.parse(manifest) : manifest || {};
 }
 
+// Stories publish new versions while the spec runs, so "the latest" is read
+// from the page: the bare link serves a version equal to its own latest, and
+// never older than the front list said.
+async function expectServesLatest(reader, atLeast, label) {
+  await expect(reader).toHaveAttribute('data-publication-revision', /^[1-9][0-9]*$/, { timeout: 30_000 });
+  const revision = Number(await reader.getAttribute('data-publication-revision'));
+  const latest = Number(await reader.getAttribute('data-publication-latest'));
+  expect(revision, `${label}: bare link serves the latest`).toBe(latest);
+  expect(revision, `${label}: not older than the front list`).toBeGreaterThanOrEqual(atLeast);
+  return revision;
+}
+
 async function expectReadOnly(reader, page, label) {
   await expect(reader, `${label}: not editable`).toHaveAttribute('contenteditable', 'false');
   await expect(page.locator('[data-texture-edit-published]'), `${label}: no edit action`).toHaveCount(0);
@@ -160,7 +172,7 @@ test('Autopaper front list and stories as Texture published views, logged out at
   await expect(page).toHaveURL(new RegExp(`/autopaper/${slugOf(stories[0].route.bare)}$`));
   const opened = page.locator('[data-texture-published-reader]');
   await expect(opened).toBeVisible({ timeout: 30_000 });
-  await expect(opened).toHaveAttribute('data-publication-revision', String(stories[0].latest_revision));
+  await expectServesLatest(opened, stories[0].latest_revision, 'first row');
   await expect(page.locator('[data-autopaper-story-title]')).toHaveText(stories[0].title.trim());
 
   // Each story: numbered sources, quotes in their source blocks, badges, embeds.
@@ -169,12 +181,12 @@ test('Autopaper front list and stories as Texture published views, logged out at
     const slug = slugOf(story.route?.bare);
     const bundle = await getJSON(request, `/api/platform/publications/resolve?route=${encodeURIComponent(story.route.bare)}`);
     const anchors = Array.isArray(manifestOf(bundle).anchors) ? manifestOf(bundle).anchors : [];
-    expect(bundle.nav?.latest, `${slug}: bare link serves the latest`).toBe(story.latest_revision);
+    expect(bundle.nav?.latest, `${slug}: bare link serves the latest`).toBeGreaterThanOrEqual(story.latest_revision);
 
     await page.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     const reader = page.locator('[data-texture-published-reader]');
     await expect(reader).toBeVisible({ timeout: 30_000 });
-    await expect(reader).toHaveAttribute('data-publication-revision', String(story.latest_revision));
+    await expectServesLatest(reader, story.latest_revision, slug);
     await expectReadOnly(reader, page, slug);
 
     const cites = anchors.filter((a) => a.relation !== 'embeds' || a.ref?.quote);
@@ -232,16 +244,16 @@ test('Autopaper front list and stories as Texture published views, logged out at
   const slug = slugOf(versioned.route.bare);
   await page.goto(`${BASE_URL}/autopaper/${slug}`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   const reader = page.locator('[data-texture-published-reader]');
-  await expect(reader).toHaveAttribute('data-publication-revision', String(versioned.latest_revision), { timeout: 30_000 });
+  const latestRevision = await expectServesLatest(reader, versioned.latest_revision, slug);
   const prev = page.locator('[data-texture-prev]');
   await expect(prev).toBeEnabled();
   await expect(page.locator('[data-texture-next]')).toBeDisabled();
   await expect(page.locator('[data-texture-new-version]')).toHaveCount(0);
   await prev.click();
   await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}/v\\d+$`));
-  await expect(reader).not.toHaveAttribute('data-publication-revision', String(versioned.latest_revision), { timeout: 30_000 });
+  await expect(reader).not.toHaveAttribute('data-publication-revision', String(latestRevision), { timeout: 30_000 });
   const olderRevision = Number(await reader.getAttribute('data-publication-revision'));
-  expect(olderRevision).toBeLessThan(versioned.latest_revision);
+  expect(olderRevision).toBeLessThan(latestRevision);
   await expect(page.locator('[data-texture-version]')).toHaveText(`v${olderRevision}`);
   await expect(page.locator('[data-texture-next]')).toBeEnabled();
   await expect(page.locator('[data-texture-new-version]')).toBeVisible();
@@ -250,7 +262,8 @@ test('Autopaper front list and stories as Texture published views, logged out at
 
   await page.locator('[data-texture-new-version]').click();
   await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}$`));
-  await expect(reader).toHaveAttribute('data-publication-revision', String(versioned.latest_revision), { timeout: 30_000 });
+  await expect(reader).not.toHaveAttribute('data-publication-revision', String(olderRevision), { timeout: 30_000 });
+  await expectServesLatest(reader, latestRevision, `${slug} latest again`);
 
   // Back returns to the older version.
   await page.goBack();
