@@ -11,6 +11,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -134,8 +135,9 @@ type ComputerEventAppender struct {
 	// CAS + receipt verification + projection finalize succeed (M7): the
 	// canonical derivable-continuation seam. It runs detached — the
 	// append never waits and the observer can never block or alter the
-	// event commit.
-	postCommitObserver func(kind EventKind)
+	// event commit. Atomic so it can be swapped while appends run
+	// (docs/problems/post-commit-observer-race-2026-10-13.md).
+	postCommitObserver atomic.Pointer[func(kind EventKind)]
 	mu                 sync.Mutex
 	// Replay progress snapshot (guarded by mu) so the guest health surface can
 	// report a replay in progress with its sequence to the host wait-for-ready
@@ -186,7 +188,11 @@ func (a *ComputerEventAppender) SetPostCommitObserver(observer func(kind EventKi
 	if a == nil {
 		return
 	}
-	a.postCommitObserver = observer
+	if observer == nil {
+		a.postCommitObserver.Store(nil)
+		return
+	}
+	a.postCommitObserver.Store(&observer)
 }
 
 // ReplaySnapshot describes the durable replay progress for the liveness probe.
@@ -684,8 +690,8 @@ func (a *ComputerEventAppender) appendLocked(ctx context.Context, event Event, i
 	if err := a.finalizeProjection(ctx, event, digest, receipt); err != nil {
 		return Receipt{}, fmt.Errorf("%w: finalize embedded projection: %w", ErrNeedsProjectionRepair, ClassifyProjectionFailure(err))
 	}
-	if a.postCommitObserver != nil {
-		go a.postCommitObserver(event.EventKind)
+	if observer := a.postCommitObserver.Load(); observer != nil {
+		go (*observer)(event.EventKind)
 	}
 	return receipt, nil
 }
