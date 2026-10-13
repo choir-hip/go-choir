@@ -84,3 +84,58 @@ reached management, which opened 5 stories by Casts to texture:new
 
 Both block autopaper_live: (1) means nothing reaches readers; (2) loses
 captures and leaves every citation pending in the public overlay.
+
+### Root causes (from code at 3f018e55 and Node B, read-only)
+
+1. **Every story revision inherits the seed's role.** The opening's seed
+   revision carries `revision_role: story_seed`
+   (internal/store/story_open.go:126). `revision_role` is a durable
+   metadata key (internal/textureowner/texture_task_types.go:50), so
+   `buildAppagentRevisionMetadata`
+   (internal/textureowner/texture_revision_metadata.go:26 and :38) copies it
+   from the parent onto every Texture revision. `AutoPublishRevision`
+   (internal/agentcore/story_publish.go:149) then sees `story_seed` on
+   every revision and returns without a log line. The existing tests
+   missed it because their story lived on a computer other than the
+   runtime's (`computer-story` vs `autoputer-test`); the parent read
+   (`getTextureRevision`, handler.go:123, keyed by the runtime's
+   computer id) failed there, so nothing was carried. Deployed, the story
+   lives on the runtime's own computer and the parent read succeeds.
+2. **Captures 403 at random: vmctl binds a guest address to a stale
+   computer.** A guest's platform URL is corpusd itself
+   (`choir.platform_url=http://<host>:8086`, internal/vmmanager/manager.go:1597;
+   confirmed in the live fc-config.json), and guest packets keep their
+   tap source address after the DNAT to 127.0.0.1:8086 (locally
+   delivered packets never pass POSTROUTING). corpusd binds the caller
+   by vmctl's lookup-guest, which walked every ownership in map order and
+   answered with the first whose computer_url host matched, whatever its
+   state (internal/vmctl/handlers.go:212-228). Stopped computers keep
+   their old computer_url and tap addresses are reused: on Node B,
+   10.200.44.2 is claimed by computer-695920e (stopped 05:01) and by the
+   c2-paper-3 computer computer-0d1dcde (booted 12:35:08); 10.200.43.2
+   (c2-paper-2's computer-2da63a1) by six ownerships. About half (or six
+   in seven) of the lookups named another computer, and corpusd refused
+   the write as "internal caller required". The proxy and maild bind
+   guests through the same lookup. The same address-to-ownership walk in
+   `bindRequestToGuestComputer`, `bindRequestToRouteSlot` and
+   `callerBoundToAnyOwnership` lets a guest at a reused address pass as
+   the stale computer (heresy discovered).
+3. **Verdict pushes always 403: corpusd's verdict route admits no
+   guest.** `HandleSupportVerdicts` (internal/platform/publication_checks.go:151)
+   required `trustedInternalCaller` only, written for a proxy hop the
+   guest never takes (the publisher posted to the platform URL, corpusd).
+4. **Found on the way: a story version would 404.** The guest's
+   publisher posted `types.StoryPublishPath` to the same platform URL,
+   but only the proxy serves that route (it reads the revision back from
+   the computer); corpusd has none. Once (1) is fixed every version would
+   be a gap with a 404.
+
+Fix (one rule for a bound guest's write): vmctl's registry binds an
+address to the single live ownership claiming it (running before
+booting; stale ownerships never; two claims bind none) and every vmctl
+binding uses it; corpusd's capture and verdict routes share one
+internal-or-bound-guest rule; the guest publishes versions to a new
+`choir.proxy_url` and verdicts to its platform URL; the seed role is
+never carried forward; every early return of the publish path logs.
+Mutation class red (vmctl guest binding, corpusd authority, VM boot
+args).
