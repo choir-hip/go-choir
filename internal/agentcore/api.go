@@ -60,25 +60,24 @@ type cancelResponse struct {
 
 // runStatusResponse is the public /api/runs projection.
 type runStatusResponse struct {
-	AgentID             string                                `json:"agent_id"`
-	RunID               string                                `json:"run_id"`
-	ChannelID           string                                `json:"channel_id,omitempty"`
-	RequestedByRunID    string                                `json:"requested_by_run_id,omitempty"`
-	AgentProfile        string                                `json:"agent_profile,omitempty"`
-	AgentRole           string                                `json:"agent_role,omitempty"`
-	OwnerID             string                                `json:"owner_id"`
-	ComputerID          string                                `json:"computer_id"`
-	State               types.RunState                        `json:"state"`
-	Prompt              string                                `json:"prompt"`
-	Result              string                                `json:"result,omitempty"`
-	Error               string                                `json:"error,omitempty"`
-	CreatedAt           string                                `json:"created_at"`
-	UpdatedAt           string                                `json:"updated_at"`
-	FinishedAt          *string                               `json:"finished_at,omitempty"`
-	ActiveChildRuns     int                                   `json:"active_child_runs,omitempty"`
-	Metadata            map[string]any                        `json:"metadata,omitempty"`
-	Trajectory          *runTrajectoryStatusResponse          `json:"trajectory,omitempty"`
-	ProcessorResolution *runProcessorResolutionStatusResponse `json:"processor_resolution,omitempty"`
+	AgentID          string                       `json:"agent_id"`
+	RunID            string                       `json:"run_id"`
+	ChannelID        string                       `json:"channel_id,omitempty"`
+	RequestedByRunID string                       `json:"requested_by_run_id,omitempty"`
+	AgentProfile     string                       `json:"agent_profile,omitempty"`
+	AgentRole        string                       `json:"agent_role,omitempty"`
+	OwnerID          string                       `json:"owner_id"`
+	ComputerID       string                       `json:"computer_id"`
+	State            types.RunState               `json:"state"`
+	Prompt           string                       `json:"prompt"`
+	Result           string                       `json:"result,omitempty"`
+	Error            string                       `json:"error,omitempty"`
+	CreatedAt        string                       `json:"created_at"`
+	UpdatedAt        string                       `json:"updated_at"`
+	FinishedAt       *string                      `json:"finished_at,omitempty"`
+	ActiveChildRuns  int                          `json:"active_child_runs,omitempty"`
+	Metadata         map[string]any               `json:"metadata,omitempty"`
+	Trajectory       *runTrajectoryStatusResponse `json:"trajectory,omitempty"`
 }
 
 type runTrajectoryStatusResponse struct {
@@ -87,17 +86,6 @@ type runTrajectoryStatusResponse struct {
 	SettlementReady   bool                   `json:"settlement_ready"`
 	WaitingOn         []string               `json:"waiting_on,omitempty"`
 	OpenWorkItemCount int                    `json:"open_work_item_count"`
-}
-
-type runProcessorResolutionStatusResponse struct {
-	WorkItemID              string               `json:"work_item_id"`
-	Status                  types.WorkItemStatus `json:"status"`
-	ResolutionState         string               `json:"resolution_state,omitempty"`
-	SourceItemCount         int                  `json:"source_item_count,omitempty"`
-	ResolvedSourceItemCount int                  `json:"resolved_source_item_count,omitempty"`
-	LastDecision            string               `json:"last_decision,omitempty"`
-	StoryDocID              string               `json:"story_doc_id,omitempty"`
-	CoveredByDocID          string               `json:"covered_by_doc_id,omitempty"`
 }
 
 // runListResponse is the JSON response for GET /api/agent/loops.

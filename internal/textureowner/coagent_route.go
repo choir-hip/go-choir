@@ -90,7 +90,6 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 		"ingestion_handoff_cycle_id":     metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id"),
 		"ingestion_handoff_request_id":   metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
 		"ingestion_handoff_request_kind": metadataString(parentRec.Metadata, "ingestion_handoff_request_kind"),
-		"reconciler_scope":               metadataString(parentRec.Metadata, runMetadataReconcilerScope),
 	}
 	rec, err := h.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
 		Intent:           "universal_wire_" + callerProfile + "_article_revision",
@@ -196,8 +195,6 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		"ingestion_handoff_request_id":   metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
 		"ingestion_handoff_request_kind": metadataString(parentRec.Metadata, "ingestion_handoff_request_kind"),
 		"source_item_ids":                firstNonEmptySourceItemIDs(req.SourceItemIDs, metadataStringSlice(parentRec.Metadata["source_item_ids"])),
-		"processor_key":                  metadataString(parentRec.Metadata, runMetadataProcessorKey),
-		"reconciler_scope":               metadataString(parentRec.Metadata, runMetadataReconcilerScope),
 		"selected_style_sources":         selectedStyles,
 		"selected_style_rationale":       styleRationale,
 	}

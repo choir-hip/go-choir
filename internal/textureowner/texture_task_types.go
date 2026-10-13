@@ -23,8 +23,6 @@ const (
 	textureJoinBundleDigest               = "self_development_bundle_digest"
 	textureJoinReceiptID                  = "self_development_receipt_id"
 	textureJoinEventHead                  = "self_development_event_head"
-	runMetadataProcessorKey               = "processor_key"
-	runMetadataReconcilerScope            = "reconciler_scope"
 )
 
 // textureInputOriginForCaller preserves the two retired origins when reading
@@ -59,8 +57,6 @@ var durableMetadataKeys = []string{
 	"ingestion_handoff_request_id",
 	"ingestion_handoff_request_kind",
 	"source_item_ids",
-	"processor_key",
-	"reconciler_scope",
 	"selected_style_sources",
 	"selected_style_rationale",
 	"owner_email",

@@ -43,15 +43,6 @@ import (
 
 // textureSchemaDDL creates the texture tables if they do not already exist.
 const textureSchemaDDL = `
-CREATE TABLE IF NOT EXISTS texture_documents (
-	doc_id              VARCHAR(255) PRIMARY KEY,
-	owner_id            VARCHAR(255) NOT NULL,
-	title               VARCHAR(1024) NOT NULL DEFAULT '',
-	current_revision_id VARCHAR(255) NOT NULL DEFAULT '',
-	created_at          DATETIME NOT NULL,
-	updated_at          DATETIME NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS texture_revisions (
 	revision_id         VARCHAR(255) PRIMARY KEY,
 	doc_id              VARCHAR(255) NOT NULL,
@@ -113,7 +104,6 @@ CREATE TABLE IF NOT EXISTS texture_document_aliases (
 	PRIMARY KEY (owner_id, computer_id, source_path)
 );
 
-CREATE INDEX IF NOT EXISTS idx_texture_docs_owner ON texture_documents(owner_id);
 CREATE INDEX IF NOT EXISTS idx_texture_revs_doc ON texture_revisions(doc_id);
 CREATE INDEX IF NOT EXISTS idx_texture_revs_owner ON texture_revisions(owner_id);
 CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_created ON texture_revisions(doc_id, created_at DESC);
@@ -137,16 +127,6 @@ CREATE TABLE IF NOT EXISTS texture_agent_mutations (
 CREATE INDEX IF NOT EXISTS idx_texture_mutations_doc ON texture_agent_mutations(doc_id);
 CREATE INDEX IF NOT EXISTS idx_texture_mutations_run ON texture_agent_mutations(loop_id);
 
-CREATE TABLE IF NOT EXISTS texture_controller_checkpoints (
-	doc_id                 VARCHAR(255) NOT NULL,
-	owner_id               VARCHAR(255) NOT NULL,
-	integrated_message_seq BIGINT NOT NULL DEFAULT 0,
-	updated_at             DATETIME NOT NULL,
-	PRIMARY KEY (doc_id, owner_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_texture_controller_owner ON texture_controller_checkpoints(owner_id);
-
 
 CREATE TABLE IF NOT EXISTS agent_evidence (
 	evidence_id    VARCHAR(255) PRIMARY KEY,
@@ -163,42 +143,6 @@ CREATE TABLE IF NOT EXISTS agent_evidence (
 CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_agent ON agent_evidence(owner_id, agent_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_created ON agent_evidence(owner_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS content_items (
-	content_id     VARCHAR(255) PRIMARY KEY,
-	owner_id       VARCHAR(255) NOT NULL,
-	source_type    VARCHAR(64) NOT NULL,
-	media_type     VARCHAR(255) NOT NULL DEFAULT '',
-	app_hint       VARCHAR(64) NOT NULL DEFAULT '',
-	title          LONGTEXT NOT NULL DEFAULT '',
-	source_url     VARCHAR(2048) NOT NULL DEFAULT '',
-	canonical_url  VARCHAR(2048) NOT NULL DEFAULT '',
-	file_path      VARCHAR(2048) NOT NULL DEFAULT '',
-	text_content   LONGTEXT NOT NULL DEFAULT '',
-	content_hash   VARCHAR(128) NOT NULL DEFAULT '',
-	metadata_json  LONGTEXT NOT NULL DEFAULT '{}',
-	provenance_json LONGTEXT NOT NULL DEFAULT '{}',
-	created_at     DATETIME NOT NULL,
-	updated_at     DATETIME NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_content_items_owner_updated ON content_items(owner_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_content_items_owner_app ON content_items(owner_id, app_hint, updated_at DESC);
-
-CREATE TABLE IF NOT EXISTS podcast_subscriptions (
-	subscription_id VARCHAR(255) PRIMARY KEY,
-	owner_id        VARCHAR(255) NOT NULL,
-	feed_url        VARCHAR(2048) NOT NULL,
-	content_id      VARCHAR(255) NOT NULL DEFAULT '',
-	title           LONGTEXT NOT NULL DEFAULT '',
-	author          LONGTEXT NOT NULL DEFAULT '',
-	artwork_url     VARCHAR(2048) NOT NULL DEFAULT '',
-	last_fetched_at DATETIME,
-	created_at      DATETIME NOT NULL,
-	updated_at      DATETIME NOT NULL,
-	UNIQUE KEY uniq_podcast_subscriptions_owner_feed (owner_id, feed_url)
-);
-
-CREATE INDEX IF NOT EXISTS idx_podcast_subscriptions_owner_updated ON podcast_subscriptions(owner_id, updated_at DESC);
 `
 
 const (
@@ -412,6 +356,15 @@ func (s *Store) bootstrapTexture() error {
 	// retired_absent contract.
 	if _, err := s.textureHandle().Exec(`DROP TABLE IF EXISTS texture_decisions`); err != nil {
 		return fmt.Errorf("drop retired texture_decisions: %w", err)
+	}
+	// The legacy relational document, controller-checkpoint, content and
+	// podcast tables are retired with no production reader or writer. Drop
+	// any table a pre-retirement computer still carries (declared
+	// retired_absent in the replay airworthiness manifest).
+	for _, table := range retiredTextureTables {
+		if _, err := s.textureHandle().Exec("DROP TABLE IF EXISTS " + table); err != nil {
+			return fmt.Errorf("drop retired %s: %w", table, err)
+		}
 	}
 	if err := s.ensureTextureColumn("texture_agent_mutations", "scheduled_message_seq", "BIGINT NOT NULL DEFAULT 0"); err != nil {
 		return err

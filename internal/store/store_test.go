@@ -136,19 +136,15 @@ func TestOpenDoesNotImportLegacySQLiteRuntimeRows(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	var ownerID string
-	err = s.db.QueryRowContext(context.Background(),
-		`SELECT owner_id FROM runs WHERE loop_id = ?`, "legacy-run",
-	).Scan(&ownerID)
-	if !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("legacy SQLite run was imported: owner=%q err=%v", ownerID, err)
+	if testDoltTableExists(t, s, "runs") {
+		t.Fatal("retired runs table exists; the legacy SQLite run could have been imported")
 	}
 	if info, err := os.Stat(path); err != nil || info.Size() == 0 {
 		t.Fatalf("legacy SQLite evidence was not retained: info=%+v err=%v", info, err)
 	}
 }
 
-func TestOpenMigratesWorkerUpdatesBeforeDeliveryIndex(t *testing.T) {
+func TestOpenDropsRetiredWorkerUpdatesTable(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)
 	t.Cleanup(func() { cleanupTestStorePath(path) })
@@ -196,61 +192,16 @@ CREATE TABLE worker_updates (
 
 	s, err := Open(path)
 	if err != nil {
-		t.Fatalf("open migrated worker_updates store: %v", err)
+		t.Fatalf("open store carrying retired worker_updates: %v", err)
 	}
 	defer func() { _ = s.Close() }()
 
-	for _, column := range []string{"kind", "summary", "packet_json", "delivered_to_loop_id", "delivered_at"} {
-		if !testDoltColumnExists(t, s, "worker_updates", column) {
-			t.Fatalf("expected worker_updates.%s to be added before delivery index creation", column)
-		}
+	if testDoltTableExists(t, s, "worker_updates") {
+		t.Fatal("retired worker_updates table survived bootstrap")
 	}
 }
 
-// TestWorkerUpdateLegacyShapeRowIsNotDeliverable proves the E3.1 hard
-// cutover: a worker_updates row written in the legacy shape (kind/summary
-// populated, packet_json empty) is migrated to have the packet_json column
-// but is NOT deliverable as a live CoagentSourcePacket. scanWorkerUpdate
-// must reject it rather than reconstructing a fake packet from kind/summary.
-// This is the structural enforcement of the Family-A quarantine policy from
-// docs/mission-update-coagent-source-centric-deletion-v0.md §E2.
-func TestWorkerUpdateLegacyShapeRowIsNotDeliverable(t *testing.T) {
-	path := testStorePath(t)
-	cleanupTestStorePath(path)
-	t.Cleanup(func() { cleanupTestStorePath(path) })
-
-	s, err := Open(path)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-	ctx := context.Background()
-	ownerID := "user-legacy-quarantine"
-
-	// Insert a legacy-shape row directly: the kind/summary columns populated,
-	// packet_json empty, mimicking a pre-cutover row that the D9 write path
-	// never would have produced.
-	_, err = s.db.ExecContext(ctx, `INSERT INTO worker_updates
-		(owner_id, update_id, agent_id, target_agent_id, channel_id, message_seq,
-		 trajectory_id, role, kind, summary, packet_json, content, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		ownerID, "update-legacy-1", "research:legacy", "texture:doc-legacy",
-		"doc-legacy", 1, "traj-legacy", "research",
-		"findings", "legacy findings summary", "", "Coagent update ready.\nKind: findings.",
-		time.Now().UTC(),
-	)
-	if err != nil {
-		t.Fatalf("seed legacy-shape row: %v", err)
-	}
-
-	// Live delivery read must fail, not reconstruct. This is the hard cutover.
-	_, err = s.GetWorkerUpdate(ctx, ownerID, "update-legacy-1")
-	if err == nil {
-		t.Fatal("GetWorkerUpdate unexpectedly reconstructed a legacy-shape row into a live CoagentSourcePacket; hard cutover requires empty packet_json to fail live delivery reads")
-	}
-}
-
-func TestOpenMigratesRunsRequestedByRunIDBeforeIndex(t *testing.T) {
+func TestOpenDropsRetiredRunsTable(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)
 	t.Cleanup(func() { cleanupTestStorePath(path) })
@@ -295,12 +246,12 @@ CREATE TABLE runs (
 
 	s, err := Open(path)
 	if err != nil {
-		t.Fatalf("open migrated runs store: %v", err)
+		t.Fatalf("open store carrying retired runs: %v", err)
 	}
 	defer func() { _ = s.Close() }()
 
-	if !testDoltColumnExists(t, s, "runs", "requested_by_run_id") {
-		t.Fatal("expected runs.requested_by_run_id to be added before index creation")
+	if testDoltTableExists(t, s, "runs") {
+		t.Fatal("retired runs table survived bootstrap")
 	}
 }
 
@@ -385,7 +336,7 @@ func TestGetRunRespondsWhileWriteTransactionOpen(t *testing.T) {
 		t.Fatalf("begin tx: %v", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `UPDATE runs SET result = ? WHERE loop_id = ?`, "uncommitted", rec.RunID); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE og_objects SET body = ? WHERE canonical_id = (SELECT canonical_id FROM (SELECT canonical_id FROM og_objects WHERE object_kind = 'choir.run' LIMIT 1) r)`, "{}"); err != nil {
 		t.Fatalf("hold write tx: %v", err)
 	}
 

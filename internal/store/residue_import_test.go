@@ -178,19 +178,15 @@ func TestImportResidueSnapshotCoMovesRuntimeResidueForOwner(t *testing.T) {
 	computerID := "computer-residue-runtime"
 	prepareGenesis(t, productStore, computerID, "genesis-residue-runtime")
 	now := time.Date(2026, 8, 18, 7, 0, 0, 0, time.UTC)
-	if _, err := productStore.db.ExecContext(ctx,
-		`INSERT INTO runs (loop_id, owner_id, computer_id, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		"run-residue-runtime", "owner-runtime", computerID, "completed", now, now); err != nil {
+	if err := productStore.CreateRunOG(ctx, types.RunRecord{
+		RunID: "run-residue-runtime", AgentID: "agent-runtime", OwnerID: "owner-runtime",
+		ComputerID: computerID, State: types.RunCompleted, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := productStore.db.ExecContext(ctx,
 		`INSERT INTO run_memory_entries (entry_id, loop_id, owner_id, agent_id, seq, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		"memory-residue-runtime", "run-residue-runtime", "owner-runtime", "agent-runtime", 1, "message", now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := productStore.db.ExecContext(ctx,
-		`INSERT INTO runs (loop_id, owner_id, computer_id, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		"run-residue-other", "owner-other", "computer-other", "completed", now, now); err != nil {
 		t.Fatal(err)
 	}
 	commitment := storeTestDigest('8')
@@ -265,17 +261,6 @@ func TestSnapshotResidueRuntimeIncludesCanonicalRunMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := productStore.db.ExecContext(ctx,
-		`INSERT INTO runs (loop_id, owner_id, computer_id, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		"run-residue-legacy", "owner-runtime", computerID, string(types.RunCompleted), now, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := productStore.db.ExecContext(ctx,
-		`INSERT INTO run_memory_entries (entry_id, loop_id, owner_id, agent_id, seq, kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		"memory-residue-legacy", "run-residue-legacy", "owner-runtime", "agent-legacy", 1, "message", now); err != nil {
-		t.Fatal(err)
-	}
-
 	otherComputerRun := canonicalRun
 	otherComputerRun.RunID = "run-residue-other-computer"
 	otherComputerRun.ComputerID = "computer-other"
@@ -296,8 +281,8 @@ func TestSnapshotResidueRuntimeIncludesCanonicalRunMemory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if counts.runMemory != 2 || len(ops) != 2 {
-		t.Fatalf("runtime residue counts=%+v ops=%d, want two canonical/legacy entries", counts, len(ops))
+	if counts.runMemory != 1 || len(ops) != 1 {
+		t.Fatalf("runtime residue counts=%+v ops=%d, want one canonical entry", counts, len(ops))
 	}
 	seen := map[string]computerevent.RunMemoryEntryProjection{}
 	for _, op := range ops {
@@ -312,9 +297,6 @@ func TestSnapshotResidueRuntimeIncludesCanonicalRunMemory(t *testing.T) {
 	}
 	if got := seen["memory-residue-canonical"]; got.RunID != canonicalRun.RunID || got.OwnerID != canonicalRun.OwnerID || got.Seq != 1 {
 		t.Fatalf("canonical residue projection=%+v", got)
-	}
-	if got := seen["memory-residue-legacy"]; got.RunID != "run-residue-legacy" || got.OwnerID != canonicalRun.OwnerID {
-		t.Fatalf("legacy residue projection=%+v", got)
 	}
 	if _, ok := seen["memory-residue-other-computer"]; ok {
 		t.Fatalf("foreign computer residue was selected: %+v", seen["memory-residue-other-computer"])

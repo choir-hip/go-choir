@@ -159,8 +159,15 @@ func TestDesktopAndOGAreEventProjectionAfterLiveResidueImport(t *testing.T) {
 			t.Fatalf("%s class=%q, want event_projection after live residue import", table, got)
 		}
 	}
-	if got := manifest.Entries["desktop_state"]; got != ReplayEmptyUntilSupported {
-		t.Fatalf("desktop_state class=%q, want empty_until_supported leftover", got)
+	for _, table := range []string{
+		"agents", "runs", "channel_messages", "inbox_deliveries", "run_acceptances",
+		"run_continuations", "trajectories", "work_items", "browser_sessions",
+		"worker_updates", "coagent_mailboxes", "desktop_state", "computer_effective_state",
+		"texture_documents", "texture_controller_checkpoints", "content_items", "podcast_subscriptions",
+	} {
+		if got := manifest.Entries[table]; got != ReplayRetiredAbsent {
+			t.Fatalf("%s class=%q, want retired_absent", table, got)
+		}
 	}
 	invalid := manifest
 	invalid.Entries = map[string]ReplayObservationClass{"desktop_sessions": ReplayObservationClass("presence_volatile")}

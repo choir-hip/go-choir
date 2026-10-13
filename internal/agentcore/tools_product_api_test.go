@@ -206,7 +206,6 @@ func TestProductAPIRefusesEveryTextureWrite(t *testing.T) {
 		"/api/texture/revisions/rev-1",
 		"/api/texture/markdown-lineage/import",
 		"/api/texture/files/open",
-		"/api/texture/management-open",
 		"/api/texture/lifecycle-documents",
 		"/api/texture/some-route-added-later",
 	}

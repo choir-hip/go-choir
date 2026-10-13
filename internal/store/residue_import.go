@@ -297,8 +297,7 @@ type residueRunScope struct {
 }
 
 // residueRunScopes joins legacy SQL memory rows to the current canonical run
-// authority. Production runs are object-graph records; the SQL runs table is
-// retained only as a compatibility source for rows created before that cutover.
+// authority. Production runs are object-graph records.
 func (s *Store) residueRunScopes(ctx context.Context, ownerID, computerID string, objects []objectgraph.Object) ([]residueRunScope, error) {
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	scopes := make(map[residueRunScope]struct{})
@@ -374,30 +373,6 @@ func (s *Store) residueRunScopes(ctx context.Context, ownerID, computerID string
 			return nil, err
 		}
 	}
-
-	legacyQuery := `SELECT loop_id, owner_id FROM runs WHERE computer_id=?`
-	legacyArgs := []any{strings.TrimSpace(computerID)}
-	if strings.TrimSpace(ownerID) != "" {
-		legacyQuery += ` AND owner_id=?`
-		legacyArgs = append(legacyArgs, strings.TrimSpace(ownerID))
-	}
-	rows, err := s.db.QueryContext(ctx, legacyQuery, legacyArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("store: list legacy residue runs: %w", err)
-	}
-	for rows.Next() {
-		var runID, runOwnerID string
-		if err := rows.Scan(&runID, &runOwnerID); err != nil {
-			_ = rows.Close()
-			return nil, fmt.Errorf("store: scan legacy residue run: %w", err)
-		}
-		add(runOwnerID, runID)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return nil, fmt.Errorf("store: iterate legacy residue runs: %w", err)
-	}
-	_ = rows.Close()
 
 	out := make([]residueRunScope, 0, len(scopes))
 	for scope := range scopes {

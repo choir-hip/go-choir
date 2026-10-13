@@ -219,37 +219,6 @@ func (s *Store) markDoltHistoryDirty() {
 
 // schemaDDL creates the runtime tables if they do not already exist.
 const schemaDDL = `
-CREATE TABLE IF NOT EXISTS agents (
-	agent_id    VARCHAR(255) PRIMARY KEY,
-	owner_id    VARCHAR(255) NOT NULL,
-	computer_id  VARCHAR(255) NOT NULL,
-	profile     VARCHAR(255) NOT NULL DEFAULT '',
-	role        VARCHAR(255) NOT NULL DEFAULT '',
-	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
-	created_at  DATETIME NOT NULL,
-	updated_at  DATETIME NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS runs (
-	loop_id     VARCHAR(255) PRIMARY KEY,
-	agent_id    VARCHAR(255) NOT NULL DEFAULT '',
-	channel_id  VARCHAR(255) NOT NULL DEFAULT '',
-	requested_by_run_id VARCHAR(255) NOT NULL DEFAULT '',
-	trajectory_id VARCHAR(255) NOT NULL DEFAULT '',
-	agent_profile VARCHAR(255) NOT NULL DEFAULT '',
-	agent_role VARCHAR(255) NOT NULL DEFAULT '',
-	owner_id    VARCHAR(255) NOT NULL,
-	computer_id  VARCHAR(255) NOT NULL,
-	state       VARCHAR(64) NOT NULL,
-	prompt      LONGTEXT NOT NULL DEFAULT '',
-	result      LONGTEXT NOT NULL DEFAULT '',
-	error       LONGTEXT NOT NULL DEFAULT '',
-	created_at  DATETIME NOT NULL,
-	updated_at  DATETIME NOT NULL,
-	finished_at DATETIME,
-	metadata_json LONGTEXT NOT NULL DEFAULT '{}'
-);
-
 CREATE TABLE IF NOT EXISTS events (
 	event_id   VARCHAR(255) NOT NULL,
 	loop_id    VARCHAR(255) NOT NULL DEFAULT '',
@@ -264,38 +233,6 @@ CREATE TABLE IF NOT EXISTS events (
 	phase      VARCHAR(255) NOT NULL DEFAULT '',
 	payload_json LONGTEXT NOT NULL DEFAULT '{}',
 	PRIMARY KEY (event_id)
-);
-
-CREATE TABLE IF NOT EXISTS channel_messages (
-	channel_id      VARCHAR(255) NOT NULL,
-	seq             BIGINT NOT NULL,
-	owner_id        VARCHAR(255) NOT NULL DEFAULT '',
-	from_agent_id   VARCHAR(255) NOT NULL DEFAULT '',
-	from_loop_id    VARCHAR(255) NOT NULL DEFAULT '',
-	to_agent_id     VARCHAR(255) NOT NULL DEFAULT '',
-	to_loop_id      VARCHAR(255) NOT NULL DEFAULT '',
-	trajectory_id   VARCHAR(255) NOT NULL DEFAULT '',
-	from_name       VARCHAR(255) NOT NULL DEFAULT '',
-	role            VARCHAR(64) NOT NULL DEFAULT '',
-	content         LONGTEXT NOT NULL,
-	created_at      DATETIME NOT NULL,
-	PRIMARY KEY (channel_id, seq)
-);
-
-CREATE TABLE IF NOT EXISTS inbox_deliveries (
-	delivery_id          VARCHAR(255) PRIMARY KEY,
-	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
-	to_agent_id          VARCHAR(255) NOT NULL DEFAULT '',
-	to_loop_id           VARCHAR(255) NOT NULL DEFAULT '',
-	from_agent_id        VARCHAR(255) NOT NULL DEFAULT '',
-	from_loop_id         VARCHAR(255) NOT NULL DEFAULT '',
-	channel_id           VARCHAR(255) NOT NULL DEFAULT '',
-	role                 VARCHAR(64) NOT NULL DEFAULT '',
-	content              LONGTEXT NOT NULL,
-	trajectory_id        VARCHAR(255) NOT NULL DEFAULT '',
-	created_at           DATETIME NOT NULL,
-	delivered_to_loop_id VARCHAR(255) NOT NULL DEFAULT '',
-	delivered_at         DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS run_memory_entries (
@@ -319,123 +256,6 @@ CREATE TABLE IF NOT EXISTS run_memory_entries (
 );
 
 
-CREATE TABLE IF NOT EXISTS run_acceptances (
-	acceptance_id        VARCHAR(255) PRIMARY KEY,
-	target_mission_id    VARCHAR(255) NOT NULL DEFAULT '',
-	source_prompt_or_objective LONGTEXT NOT NULL DEFAULT '',
-	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
-	desktop_id           VARCHAR(255) NOT NULL DEFAULT '',
-	trajectory_id        VARCHAR(255) NOT NULL DEFAULT '',
-	loop_id              VARCHAR(255) NOT NULL DEFAULT '',
-	authority_profile    VARCHAR(255) NOT NULL DEFAULT '',
-	base_sha             VARCHAR(128) NOT NULL DEFAULT '',
-	deployment_commit    VARCHAR(128) NOT NULL DEFAULT '',
-	ci_run_id            VARCHAR(255) NOT NULL DEFAULT '',
-	deploy_run_id        VARCHAR(255) NOT NULL DEFAULT '',
-	staging_url          LONGTEXT NOT NULL DEFAULT '',
-	health_commit        VARCHAR(128) NOT NULL DEFAULT '',
-	acceptance_level     VARCHAR(64) NOT NULL DEFAULT '',
-	vm_mode              VARCHAR(64) NOT NULL DEFAULT '',
-	gateway_provider_evidence LONGTEXT NOT NULL DEFAULT '',
-	state                VARCHAR(64) NOT NULL DEFAULT '',
-	checkpoints_json     LONGTEXT NOT NULL DEFAULT '[]',
-	invariant_checks_json LONGTEXT NOT NULL DEFAULT '[]',
-	verifier_contracts_json LONGTEXT NOT NULL DEFAULT '[]',
-	evidence_refs_json   LONGTEXT NOT NULL DEFAULT '[]',
-	rollback_refs_json   LONGTEXT NOT NULL DEFAULT '[]',
-	failure_residual_risks_json LONGTEXT NOT NULL DEFAULT '[]',
-	created_at           DATETIME NOT NULL,
-	updated_at           DATETIME NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS run_continuations (
-	continuation_id    VARCHAR(255) PRIMARY KEY,
-	owner_id           VARCHAR(255) NOT NULL DEFAULT '',
-	source_loop_id     VARCHAR(255) NOT NULL DEFAULT '',
-	next_loop_id       VARCHAR(255) NOT NULL DEFAULT '',
-	objective          LONGTEXT NOT NULL,
-	reason             LONGTEXT NOT NULL DEFAULT '',
-	authority_profile  VARCHAR(255) NOT NULL DEFAULT '',
-	lease_seconds      BIGINT NOT NULL DEFAULT 0,
-	status             VARCHAR(64) NOT NULL,
-	details_json       LONGTEXT NOT NULL DEFAULT '{}',
-	created_at         DATETIME NOT NULL,
-	updated_at         DATETIME NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS trajectories (
-	trajectory_id        VARCHAR(255) PRIMARY KEY,
-	owner_id             VARCHAR(255) NOT NULL DEFAULT '',
-	kind                 VARCHAR(64) NOT NULL DEFAULT '',
-	subject_refs_json    LONGTEXT NOT NULL DEFAULT '{}',
-	status               VARCHAR(64) NOT NULL DEFAULT 'live',
-	settlement_rule_json LONGTEXT NOT NULL DEFAULT '{}',
-	created_at           DATETIME NOT NULL,
-	updated_at           DATETIME NOT NULL,
-	settled_at           DATETIME
-);
-
-CREATE TABLE IF NOT EXISTS work_items (
-	work_item_id          VARCHAR(255) PRIMARY KEY,
-	trajectory_id         VARCHAR(255) NOT NULL DEFAULT '',
-	owner_id              VARCHAR(255) NOT NULL DEFAULT '',
-	objective             LONGTEXT NOT NULL,
-	reason                LONGTEXT NOT NULL DEFAULT '',
-	authority_profile     VARCHAR(255) NOT NULL DEFAULT '',
-	step_budget           BIGINT NOT NULL DEFAULT 0,
-	token_budget          BIGINT NOT NULL DEFAULT 0,
-	objective_fingerprint VARCHAR(255) NOT NULL DEFAULT '',
-	status                VARCHAR(64) NOT NULL DEFAULT 'open',
-	assigned_agent_id     VARCHAR(255) NOT NULL DEFAULT '',
-	created_by_loop_id    VARCHAR(255) NOT NULL DEFAULT '',
-	details_json          LONGTEXT NOT NULL DEFAULT '{}',
-	created_at            DATETIME NOT NULL,
-	updated_at            DATETIME NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS browser_sessions (
-	session_id       VARCHAR(255) PRIMARY KEY,
-	owner_id         VARCHAR(255) NOT NULL DEFAULT '',
-	provider         VARCHAR(255) NOT NULL DEFAULT '',
-	mode             VARCHAR(64) NOT NULL DEFAULT '',
-	execution_scope  VARCHAR(64) NOT NULL DEFAULT '',
-	backend_session_id VARCHAR(255) NOT NULL DEFAULT '',
-	world_kind      VARCHAR(64) NOT NULL DEFAULT '',
-	vm_id           VARCHAR(255) NOT NULL DEFAULT '',
-	snapshot_id     VARCHAR(255) NOT NULL DEFAULT '',
-	source_loop_id  VARCHAR(255) NOT NULL DEFAULT '',
-	candidate_trace_id VARCHAR(255) NOT NULL DEFAULT '',
-	state            VARCHAR(64) NOT NULL DEFAULT '',
-	current_url      LONGTEXT NOT NULL DEFAULT '',
-	title            LONGTEXT NOT NULL DEFAULT '',
-	text_snapshot    LONGTEXT NOT NULL DEFAULT '',
-	html_snapshot    LONGTEXT NOT NULL DEFAULT '',
-	links_json       LONGTEXT NOT NULL DEFAULT '[]',
-	screenshot_png_base64 LONGTEXT NOT NULL DEFAULT '',
-	error            LONGTEXT NOT NULL DEFAULT '',
-	created_at       DATETIME NOT NULL,
-	updated_at       DATETIME NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS worker_updates (
-	owner_id          VARCHAR(255) NOT NULL DEFAULT '',
-	update_id         VARCHAR(255) NOT NULL DEFAULT '',
-	agent_id          VARCHAR(255) NOT NULL DEFAULT '',
-	target_agent_id   VARCHAR(255) NOT NULL DEFAULT '',
-	channel_id        VARCHAR(255) NOT NULL DEFAULT '',
-	message_seq       BIGINT NOT NULL DEFAULT 0,
-	trajectory_id     VARCHAR(255) NOT NULL DEFAULT '',
-	role              VARCHAR(64) NOT NULL DEFAULT '',
-	kind              VARCHAR(64) NOT NULL DEFAULT '',
-	summary           LONGTEXT NOT NULL DEFAULT '',
-	packet_json       LONGTEXT NOT NULL DEFAULT '{}',
-	content           LONGTEXT NOT NULL DEFAULT '',
-	created_at        DATETIME NOT NULL,
-	delivered_to_loop_id VARCHAR(255) NOT NULL DEFAULT '',
-	delivered_at      DATETIME,
-	PRIMARY KEY (owner_id, update_id)
-);
-
 CREATE TABLE IF NOT EXISTS wire_publish_debounce_entries (
 	entry_id    BIGINT NOT NULL AUTO_INCREMENT,
 	owner_id    VARCHAR(255) NOT NULL,
@@ -456,15 +276,6 @@ CREATE TABLE IF NOT EXISTS wire_publish_debounce_state (
 
 CREATE INDEX IF NOT EXISTS idx_wire_publish_debounce_entries_scope
 	ON wire_publish_debounce_entries(owner_id, computer_id, agent_id, entry_id);
-
-CREATE TABLE IF NOT EXISTS coagent_mailboxes (
-	owner_id              VARCHAR(255) NOT NULL DEFAULT '',
-	agent_id              VARCHAR(255) NOT NULL DEFAULT '',
-	channel_id            VARCHAR(255) NOT NULL DEFAULT '',
-	processed_message_seq BIGINT NOT NULL DEFAULT 0,
-	updated_at            DATETIME NOT NULL,
-	PRIMARY KEY (owner_id, agent_id)
-);
 
 CREATE TABLE IF NOT EXISTS co_super_slots (
 	owner_id       VARCHAR(255) NOT NULL DEFAULT '',
@@ -514,55 +325,20 @@ CREATE TABLE IF NOT EXISTS user_preferences (
 	PRIMARY KEY (owner_id, preference_key)
 );
 
-CREATE INDEX IF NOT EXISTS idx_agents_owner_id ON agents(owner_id);
-CREATE INDEX IF NOT EXISTS idx_agents_channel_id ON agents(channel_id);
-CREATE INDEX IF NOT EXISTS idx_runs_owner_id ON runs(owner_id);
-CREATE INDEX IF NOT EXISTS idx_runs_state ON runs(state);
-CREATE INDEX IF NOT EXISTS idx_runs_computer_id ON runs(computer_id);
-CREATE INDEX IF NOT EXISTS idx_runs_agent_id ON runs(agent_id);
-CREATE INDEX IF NOT EXISTS idx_runs_owner_agent_state_updated ON runs(owner_id, agent_id, state, updated_at);
-CREATE INDEX IF NOT EXISTS idx_runs_channel_id ON runs(channel_id);
-CREATE INDEX IF NOT EXISTS idx_trajectories_owner_status ON trajectories(owner_id, status, updated_at);
-CREATE INDEX IF NOT EXISTS idx_work_items_trajectory_status ON work_items(trajectory_id, status, updated_at);
-CREATE INDEX IF NOT EXISTS idx_work_items_owner_status ON work_items(owner_id, status, updated_at);
-CREATE INDEX IF NOT EXISTS idx_work_items_fingerprint ON work_items(owner_id, trajectory_id, objective_fingerprint);
 CREATE INDEX IF NOT EXISTS idx_events_loop_id_seq ON events(loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_events_owner_id ON events(owner_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent_id ON events(agent_id);
 CREATE INDEX IF NOT EXISTS idx_events_channel_id_ts ON events(channel_id, ts);
 CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
-CREATE INDEX IF NOT EXISTS idx_channel_messages_owner_id ON channel_messages(owner_id);
-CREATE INDEX IF NOT EXISTS idx_channel_messages_created_at ON channel_messages(created_at);
-CREATE INDEX IF NOT EXISTS idx_channel_messages_to_agent_id ON channel_messages(to_agent_id);
-CREATE INDEX IF NOT EXISTS idx_channel_messages_trajectory_id ON channel_messages(trajectory_id);
-CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_created_at ON inbox_deliveries(created_at);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_loop_seq ON run_memory_entries(loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_loop_seq ON run_memory_entries(owner_id, loop_id, seq);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_owner_agent_created ON run_memory_entries(owner_id, agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_run_memory_entries_parent ON run_memory_entries(parent_entry_id);
-CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_updated ON run_acceptances(owner_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_trajectory ON run_acceptances(owner_id, trajectory_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_run_acceptances_owner_loop ON run_acceptances(owner_id, loop_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_run_acceptances_target_mission ON run_acceptances(target_mission_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_run_continuations_owner_status ON run_continuations(owner_id, status, updated_at);
-CREATE INDEX IF NOT EXISTS idx_run_continuations_source_loop ON run_continuations(source_loop_id);
-CREATE INDEX IF NOT EXISTS idx_run_continuations_next_loop ON run_continuations(next_loop_id);
-CREATE INDEX IF NOT EXISTS idx_browser_sessions_owner_updated ON browser_sessions(owner_id, updated_at);
-CREATE INDEX IF NOT EXISTS idx_worker_updates_channel_id ON worker_updates(channel_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_worker_updates_target_agent_id ON worker_updates(target_agent_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_worker_updates_trajectory_id ON worker_updates(trajectory_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_co_super_slots_run_id ON co_super_slots(run_id);
 CREATE INDEX IF NOT EXISTS idx_co_super_slots_agent_id ON co_super_slots(owner_id, agent_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_media_progress_owner_kind_updated ON media_progress(owner_id, media_kind, updated_at);
 CREATE INDEX IF NOT EXISTS idx_media_recents_owner_kind_opened ON media_recents(owner_id, media_kind, opened_at);
 CREATE INDEX IF NOT EXISTS idx_user_preferences_owner_updated ON user_preferences(owner_id, updated_at);
-
-CREATE TABLE IF NOT EXISTS desktop_state (
-	owner_id       VARCHAR(255) PRIMARY KEY,
-	windows_json   LONGTEXT NOT NULL DEFAULT '[]',
-	active_window  VARCHAR(255) NOT NULL DEFAULT '',
-	updated_at     DATETIME NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS desktop_workspaces (
 	owner_id       VARCHAR(255) NOT NULL,
@@ -669,24 +445,6 @@ CREATE TABLE IF NOT EXISTS computer_event_index (
 );
 
 CREATE INDEX IF NOT EXISTS idx_computer_event_index_status ON computer_event_index(computer_id, status, sequence);
-
-CREATE TABLE IF NOT EXISTS computer_effective_state (
-	computer_id                    VARCHAR(128) PRIMARY KEY,
-	canonical_event_head           CHAR(64) NOT NULL,
-	desired_event_head             CHAR(64) NOT NULL,
-	effective_event_head           CHAR(64) NOT NULL,
-	desired_state_commitment       CHAR(64) NOT NULL,
-	effective_state_commitment     CHAR(64) NOT NULL,
-	pending_transition_ref         CHAR(64) NULL,
-	reducer_version                BIGINT UNSIGNED NOT NULL,
-	effective_code_ref             LONGTEXT NOT NULL,
-	effective_artifact_program_ref LONGTEXT NOT NULL,
-	embedded_state_ref             LONGTEXT NOT NULL,
-	release_digest                 CHAR(64) NOT NULL,
-	checkpoint_ref                 LONGTEXT NOT NULL,
-	last_receipt_digest            CHAR(64) NOT NULL,
-	updated_at                     DATETIME(6) NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS self_development_start_intents (
 	computer_id        VARCHAR(128) NOT NULL,
@@ -936,6 +694,21 @@ func Open(dbPath string) (*Store, error) {
 	return s, nil
 }
 
+// retiredRuntimeTables are the legacy relational runtime tables dropped at
+// bootstrap. They are declared retired_absent in the replay airworthiness
+// manifest.
+var retiredRuntimeTables = []string{
+	"agents", "runs", "channel_messages", "inbox_deliveries", "run_acceptances",
+	"run_continuations", "trajectories", "work_items", "browser_sessions",
+	"worker_updates", "coagent_mailboxes", "desktop_state", "computer_effective_state",
+}
+
+// retiredTextureTables are the legacy relational texture-workspace tables
+// dropped at texture bootstrap.
+var retiredTextureTables = []string{
+	"texture_documents", "texture_controller_checkpoints", "content_items", "podcast_subscriptions",
+}
+
 // bootstrap applies the schema DDL to the database.
 func (s *Store) bootstrap() error {
 	_, err := s.db.Exec(schemaDDL)
@@ -951,43 +724,28 @@ func (s *Store) bootstrap() error {
 			return fmt.Errorf("drop retired %s: %w", table, err)
 		}
 	}
+	// The legacy relational runtime tables are retired (Cut 1 L2, 6c): runs,
+	// agents, messages, deliveries, acceptances, work items and updates live
+	// on the object graph and the canonical event tape, and no production
+	// path reads or writes these tables. Drop any table a pre-retirement
+	// computer still carries so replay eligibility sees the declared
+	// retired_absent contract.
+	for _, table := range retiredRuntimeTables {
+		if _, err := s.db.Exec("DROP TABLE IF EXISTS " + table); err != nil {
+			return fmt.Errorf("drop retired %s: %w", table, err)
+		}
+	}
 
 	if err := s.ensureColumns([]struct {
 		table string
 		name  string
 		ddl   string
 	}{
-		{"runs", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"runs", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"runs", "requested_by_run_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"runs", "agent_profile", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"runs", "agent_role", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"runs", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"co_super_slots", "requested_by_run_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "channel_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"events", "stream_seq", "BIGINT NOT NULL DEFAULT 0"},
-		{"channel_messages", "to_agent_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"channel_messages", "to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"channel_messages", "trajectory_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"inbox_deliveries", "delivered_to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"inbox_deliveries", "delivered_at", "DATETIME"},
-		{"browser_sessions", "html_snapshot", "LONGTEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "links_json", "LONGTEXT NOT NULL DEFAULT '[]'"},
-		{"browser_sessions", "screenshot_png_base64", "LONGTEXT NOT NULL DEFAULT ''"},
-		{"browser_sessions", "execution_scope", "VARCHAR(64) NOT NULL DEFAULT ''"},
-		{"browser_sessions", "backend_session_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"browser_sessions", "world_kind", "VARCHAR(64) NOT NULL DEFAULT ''"},
-		{"browser_sessions", "vm_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"browser_sessions", "snapshot_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"browser_sessions", "source_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"browser_sessions", "candidate_trace_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"worker_updates", "kind", "VARCHAR(64) NOT NULL DEFAULT ''"},
-		{"worker_updates", "summary", "LONGTEXT NOT NULL DEFAULT ''"},
-		{"worker_updates", "packet_json", "LONGTEXT NOT NULL DEFAULT '{}'"},
-		{"worker_updates", "delivered_to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
-		{"worker_updates", "delivered_at", "DATETIME"},
 		{"self_development_operations", "route_receipt", "VARCHAR(128) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "release_digest", "CHAR(64) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "code_ref", "VARCHAR(96) NOT NULL DEFAULT ''"},
@@ -1004,24 +762,8 @@ func (s *Store) bootstrap() error {
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_owner_stream_seq ON events(owner_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_owner_stream_seq: %w", err)
 	}
-	// After column migration so existing databases gain runs.trajectory_id before its index.
-	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_runs_trajectory_id ON runs(trajectory_id)`); err != nil {
-		return fmt.Errorf("create idx_runs_trajectory_id: %w", err)
-	}
-	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_runs_requested_by_run_id ON runs(requested_by_run_id)`); err != nil {
-		return fmt.Errorf("create idx_runs_requested_by_run_id: %w", err)
-	}
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_events_trajectory_stream_seq ON events(trajectory_id, stream_seq)`); err != nil {
 		return fmt.Errorf("create idx_events_trajectory_stream_seq: %w", err)
-	}
-	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_inbox_deliveries_owner_target ON inbox_deliveries(owner_id, to_agent_id, delivered_at)`); err != nil {
-		return fmt.Errorf("create idx_inbox_deliveries_owner_target: %w", err)
-	}
-	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_worker_updates_pending_target ON worker_updates(owner_id, target_agent_id, delivered_at, created_at)`); err != nil {
-		return fmt.Errorf("create idx_worker_updates_pending_target: %w", err)
-	}
-	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_coagent_mailboxes_channel ON coagent_mailboxes(owner_id, channel_id)`); err != nil {
-		return fmt.Errorf("create idx_coagent_mailboxes_channel: %w", err)
 	}
 	if err := s.ensureDesktopPrimaryKeys(); err != nil {
 		return err
@@ -1032,18 +774,6 @@ func (s *Store) bootstrap() error {
 func (s *Store) backfillDerivedRuntimeState() error {
 	if _, err := s.db.Exec(`UPDATE events SET stream_seq = seq WHERE stream_seq = 0`); err != nil {
 		return fmt.Errorf("backfill events.stream_seq: %w", err)
-	}
-	if _, err := s.db.Exec(`
-		INSERT INTO desktop_workspaces (owner_id, computer_id, desktop_id, windows_json, active_window, updated_at)
-		SELECT owner_id, '', 'primary', windows_json, active_window, updated_at
-		  FROM desktop_state
-		 WHERE NOT EXISTS (
-			SELECT 1
-			  FROM desktop_workspaces dw
-			 WHERE dw.owner_id = desktop_state.owner_id
-			   AND dw.desktop_id = 'primary'
-		 )`); err != nil {
-		return fmt.Errorf("migrate desktop_state to desktop_workspaces: %w", err)
 	}
 	return nil
 }
