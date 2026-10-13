@@ -165,3 +165,21 @@ Fix: choir.Records() shows every record past the cursor the run started
 at, for the whole run, so a desk can read its records in as many cells as
 it likes; the cursor still advances with each committed cell, and the
 next run starts past it. Capture and other bodies print as values.
+
+## B12b. The guest's proxy URL is read and then dropped
+
+Found by c2-paper-6 on 215d8f6f. B13's fix held: management opened 12
+stories within seconds of the first arrivals, Texture wrote them, and
+support verdicts published (403s gone). Every version publish failed:
+"no proxy URL (choir.proxy_url) to publish through; this computer booted
+without one". On Node B the VM's boot args carry
+choir.proxy_url=http://10.200.43.1:8082, and the guest image (built from
+215d8f6f) writes CHOIR_PROXY_URL into /run/go-choir-autoputer.env, which
+the runtime unit loads. provideriface.LoadConfig reads it; but
+internal/autoputer/run.go buildRuntimeConfig copies the runtime config
+field by field and omits ProxyURL, so the runtime never sees it. B12's
+tests built the runtime config directly, past this copy.
+
+Fix: buildRuntimeConfig carries ProxyURL; a test pins that every
+provideriface.Config field the guest sets from its environment survives
+the copy.

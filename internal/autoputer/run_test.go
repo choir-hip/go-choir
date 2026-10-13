@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -93,5 +94,32 @@ func TestSelfDevelopmentVerifierOptionRejectsRelativeSocket(t *testing.T) {
 	_, _, err := selfDevelopmentVerifierOption()
 	if err == nil {
 		t.Fatal("expected relative verifier socket to fail")
+	}
+}
+
+// B12b (docs/problems/reeng-cut2-breakage-2026-10-13.md): buildRuntimeConfig
+// copies the runtime config field by field, and a field it leaves out is
+// read from the guest's environment and then dropped (CHOIR_PROXY_URL was).
+// Every string field LoadConfig sets must survive the copy, except the ones
+// the copy takes from the computer's own config.
+func TestBuildRuntimeConfigKeepsEveryLoadedStringField(t *testing.T) {
+	fromComputer := map[string]bool{"ComputerID": true, "StorePath": true}
+	var loaded provideriface.Config
+	v := reflect.ValueOf(&loaded).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		if f := v.Field(i); f.Kind() == reflect.String && f.CanSet() {
+			f.SetString("set-" + v.Type().Field(i).Name)
+		}
+	}
+	t.Setenv("CHOIR_PLATFORM_URL", "")
+	got := reflect.ValueOf(buildRuntimeConfig(Config{ComputerID: "vm-test", StorePath: "/store"}, loaded, "/files"))
+	for i := 0; i < v.NumField(); i++ {
+		name := v.Type().Field(i).Name
+		if v.Field(i).Kind() != reflect.String || fromComputer[name] {
+			continue
+		}
+		if got.Field(i).String() != v.Field(i).String() {
+			t.Errorf("buildRuntimeConfig drops %s: got %q, loaded %q", name, got.Field(i).String(), v.Field(i).String())
+		}
 	}
 }

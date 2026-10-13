@@ -825,6 +825,7 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		VmctlURL:                        rtRuntimeCfg.VmctlURL,
 		MaildURL:                        rtRuntimeCfg.MaildURL,
 		CorpusdURL:                      rtRuntimeCfg.CorpusdURL,
+		ProxyURL:                        rtRuntimeCfg.ProxyURL,
 		QdrantURL:                       rtRuntimeCfg.QdrantURL,
 		OllamaURL:                       rtRuntimeCfg.OllamaURL,
 		OllamaEmbeddingModel:            rtRuntimeCfg.OllamaEmbeddingModel,
