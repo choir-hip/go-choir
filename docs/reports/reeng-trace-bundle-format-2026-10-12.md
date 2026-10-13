@@ -1,0 +1,119 @@
+# Trace bundle format (Cut 0)
+
+The contract between `choir trace export` (writer), `scripts/reeng_tracer.mjs`
+(driver) and `scripts/reeng_invariants.mjs` (checker). Station C0 of
+`docs/definitions/choir-reeng-metamission-2026-10-12.md`; artifact (1) of
+`docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md`.
+
+A bundle is one JSON file describing one trajectory on one computer, read only
+through product API routes (`https://choir.news/api/...`) under the owner's
+session or a scoped API key. No SSH, no `/internal/*`. The guest store stays
+the authority; a bundle is a projection (standing question 5). Bundles are
+the owner's data and are written unredacted, outside the repo.
+
+## Top level
+
+```json
+{
+  "schema": "choir.trace_bundle.v1",
+  "exported_at": "RFC3339",
+  "base_url": "https://choir.news",
+  "computer_id": "computer-...",
+  "trajectory_id": "...",
+  "build": { "commit": "...", "deployed_commit": "...", "built_at": "..." },
+  "drill": null,
+  "layers": { "<layer>": { ... } }
+}
+```
+
+`drill` is filled by the tracer, not the exporter (see below).
+
+## Layers
+
+Every layer has the same envelope:
+
+```json
+{ "status": "present | empty | unserved", "sources": ["GET /api/..."], "note": "", "items": [] }
+```
+
+- `present`: the route answered and returned at least one item.
+- `empty`: the route answered with nothing.
+- `unserved`: no product route serves this layer today, or the route
+  failed. `note` says which. A checker rule that needs an unserved layer
+  reports `unknown`, never `pass`.
+
+| layer | items | source |
+|---|---|---|
+| `trajectory` | one `LifecycleSnapshot` (trajectory, work_items, agents, co_super_assignments, head, updates) | `GET /api/trajectories/{id}` |
+| `lifecycle_events` | `LifecycleEvent` rows, all pages, in `reducer_seq` order | `GET /api/trajectories/{id}/events?after=&limit=1000` |
+| `runs` | `RunRecord` for every run of the trajectory, including Management lifecycle-control runs whose `metadata.assignment_trajectory_id` names it and every run named by an event, packet or assignment | `GET /api/runs?trajectory_id=`, `GET /api/runs/{id}` |
+| `run_events` | `EventRecord` rows of every run in `runs`, each with `loop_id`, ordered by (`loop_id`, `seq`) | `GET /api/runs/{id}/events?after=&limit=1000` (new, owner-scoped) |
+| `cells` | one item per `desk.cell` run event (below) | derived from `run_events` |
+| `egress` | one item per `desk.egress` run event (below) | derived from `run_events` |
+| `deliveries` | the snapshot's `updates` (delivery packets) and `work_items` | derived from `trajectory` |
+| `records` | commitment records | `unserved` in Cut 0 (no route; Cut 1 makes records the work state and adds the read) |
+| `turn_commits` | lifecycle events of kind `texture_turn_committed` | derived from `lifecycle_events` |
+| `revisions` | every revision of every Texture document the trajectory touched (head doc, docs named by runs or events) | `GET /api/texture/documents/{id}/revisions` |
+| `publications` | `PublicationBundle` for each published route of those documents | `GET /api/platform/publications/resolve?route=` (`unserved` with a note if no route can be found from the product API) |
+| `search_arrivals` | async search arrivals | `unserved` until Cut 2 |
+| `research_children` | child activations of `choir.Research` | `unserved` (children run without a run record and emit no events) |
+| `obligations` | one `GET /api/runtime/obligations` body at export time | `GET /api/runtime/obligations` |
+| `boot` | one item: `{computer_id, build, recent_log, restart: {kind, reason}}` from observability and obligations | `GET /api/runtime/observability` |
+
+A derived layer takes `unserved` if its parent layer is `unserved`.
+
+## Run event kinds added in Cut 0
+
+Both are persisted on the acting desk run (not published on the live bus).
+
+`desk.cell`, one per `desk_go_eval` cell:
+
+```json
+{
+  "desk_session": "agent:<agent_id> | <activation id>",
+  "worker_pid": 1234,
+  "run_id": "...",
+  "started_at": "RFC3339Nano", "finished_at": "RFC3339Nano",
+  "duration_ms": 0,
+  "waited_for_run": "", "waited_ms": 0,
+  "error": "", "reuse": "", "diag": "",
+  "intents": 0
+}
+```
+
+`desk.egress`, one per host-mediated `choir.*` network or product call made
+from a cell:
+
+```json
+{
+  "request_id": "id the worker minted",
+  "response_request_id": "id on the result frame the host wrote",
+  "verb": "web_search | fetch_url | product_api | research | ...",
+  "desk_session": "...", "worker_pid": 1234, "run_id": "...",
+  "started_at": "RFC3339Nano", "finished_at": "RFC3339Nano",
+  "is_error": false, "error": ""
+}
+```
+
+Cell source and output stay in the existing `tool.invoked` / `tool.result`
+rows (`tool = desk_go_eval`).
+
+## Drill block (written by the tracer)
+
+```json
+{
+  "label": "...",
+  "restart_requested_at": "RFC3339",
+  "in_flight_run_id": "run observed running when the restart was sent",
+  "ready_at": "RFC3339",
+  "obligations_before": {}, "obligations_after": {},
+  "load": { "parallel_cell_requested": true, "second_run_submitted_at": "RFC3339" },
+  "attempts": 1
+}
+```
+
+## Checker verdicts
+
+`scripts/reeng_invariants.mjs <bundle>` prints one line per rule and writes
+JSON `{rule, verdict: pass | fail | unknown, evidence: [...], reason}`.
+Rules I1–I5 are defined in the Cut 0 file; I6 arrives with Cut 1's cursors.
