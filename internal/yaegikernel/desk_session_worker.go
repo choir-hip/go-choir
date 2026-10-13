@@ -422,8 +422,27 @@ func (w *DeskSessionWorker) serviceEgress(ctx context.Context, payload []byte) {
 		w.writeEgressResult(req.RequestID, nil, fmt.Errorf("%s host unavailable", req.Action))
 		return
 	}
-	res, err := handler(ctx, req.Action, req.Payload)
+	res, err := handler(withEgressFrame(ctx, req.RequestID, w.pid), req.Action, req.Payload)
 	w.writeEgressResult(req.RequestID, res, err)
+}
+
+type egressFrameKey struct{}
+
+type egressFrame struct {
+	requestID string
+	workerPID int
+}
+
+func withEgressFrame(ctx context.Context, requestID string, pid int) context.Context {
+	return context.WithValue(ctx, egressFrameKey{}, egressFrame{requestID: requestID, workerPID: pid})
+}
+
+// EgressFrameFromContext returns the request id of the broker frame an Egress
+// handler is serving and the worker process that sent it. The host answers
+// on a result frame carrying the same request id (writeEgressResult).
+func EgressFrameFromContext(ctx context.Context) (requestID string, workerPID int) {
+	f, _ := ctx.Value(egressFrameKey{}).(egressFrame)
+	return f.requestID, f.workerPID
 }
 
 func (w *DeskSessionWorker) writeEgressResult(requestID string, res json.RawMessage, cause error) {

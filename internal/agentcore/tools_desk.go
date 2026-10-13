@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -101,6 +102,10 @@ type deskSessionLease struct {
 	// notice tells the desk whether its session is new or continuing, on
 	// the first cell of each run of a persistent session.
 	notice string
+	// waitedFor names the run whose cell this one waited for; waited is how
+	// long. Both are zero when the session was free.
+	waitedFor string
+	waited    time.Duration
 }
 
 // deskSessionKey names the session a desk cell evaluates in. A desk run (it
@@ -129,6 +134,7 @@ func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent
 		m.sessions = map[string]*deskSession{}
 	}
 	shared := ""
+	waitStart := time.Now()
 	for {
 		s := m.sessions[key]
 		if s == nil || s.busyRun == "" || s.busyRun == runID {
@@ -162,6 +168,10 @@ func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent
 		m.sessions[key] = s
 	}
 	lease := deskSessionLease{key: key, worker: s.worker}
+	if shared != "" {
+		lease.waitedFor = shared
+		lease.waited = time.Since(waitStart)
+	}
 	if persistent && !slices.Contains(s.runs, runID) {
 		if s.cells == 0 {
 			lease.notice = "new session: nothing from this desk's earlier runs is defined. A session ends on a restart, a failed or timed-out cell, or " + m.retentionLocked().String() + " without a cell."
@@ -304,6 +314,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			if activationID == "" {
 				return "", fmt.Errorf("desk_go_eval: no activation identity for desk worker")
 			}
+			sessionKey, persistent := deskSessionKey(execCtx)
 			workerCfg := yaegikernel.DeskSessionWorkerConfig{
 				Bin:       deskWorkerBinary(),
 				WorkerArg: deskWorkerArg,
@@ -338,23 +349,22 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					if cellExec.RunID == "" && cellExec.RunRecord == nil {
 						cellExec = execCtx
 					}
-					if action == yaegikernel.ActionProductAPI {
-						return rt.productAPIEgress(egrCtx, cellExec.OwnerID, cellExec.OwnerEmail, payload)
+					started := time.Now().UTC()
+					out, err := rt.deskEgress(egrCtx, cellExec, action, payload)
+					requestID, pid := yaegikernel.EgressFrameFromContext(egrCtx)
+					ev := map[string]any{
+						"request_id": requestID, "response_request_id": requestID,
+						"verb": string(action), "desk_session": sessionKey, "worker_pid": pid,
+						"run_id": cellExec.RunID, "started_at": started, "finished_at": time.Now().UTC(),
+						"is_error": err != nil,
 					}
-					if action == yaegikernel.ActionResearch {
-						return rt.runResearchChildren(egrCtx, cellExec, payload)
+					if err != nil {
+						ev["error"] = err.Error()
 					}
-					if fn, ok := rt.egressEvidenceTool()[string(action)]; ok {
-						out, err := fn(egrCtx, payload)
-						return json.RawMessage(out), err
-					}
-					if rt.researchDeps == nil {
-						return nil, fmt.Errorf("%s host unavailable", action)
-					}
-					return rt.researchDeps.HostEgress(egrCtx, string(action), payload)
+					rt.recordDeskEvent(egrCtx, cellExec, types.EventDeskEgress, ev)
+					return out, err
 				},
 			}
-			sessionKey, persistent := deskSessionKey(execCtx)
 			lease, err := workers.acquire(ctx, sessionKey, persistent, activationID, workerCfg)
 			if err != nil {
 				return "", fmt.Errorf("desk_go_eval: spawn worker: %w", err)
@@ -389,6 +399,17 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			}
 			evalStart := time.Now()
 			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits)
+			cellEvent := map[string]any{
+				"desk_session": lease.key, "worker_pid": w.PID(), "run_id": execCtx.RunID,
+				"started_at": evalStart.UTC(), "finished_at": time.Now().UTC(),
+				"duration_ms":    time.Since(evalStart).Milliseconds(),
+				"waited_for_run": lease.waitedFor, "waited_ms": lease.waited.Milliseconds(),
+				"error": res.Error, "reuse": res.Reuse, "diag": res.DiagKind, "intents": len(res.Intents),
+			}
+			if evalErr != nil {
+				cellEvent["error"] = evalErr.Error()
+			}
+			rt.recordDeskEvent(ctx, execCtx, types.EventDeskCell, cellEvent)
 
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
@@ -908,4 +929,66 @@ func cellTimeoutError(timeoutMS int, elapsed time.Duration) string {
 	return fmt.Sprintf("cell stopped by its own timeout_ms=%d after %d ms; the session was killed, so values defined in earlier cells are gone. "+
 		"Host calls such as choir.WebSearch and choir.FetchURL take several seconds each (up to about 10 s): leave timeout_ms unset or allow for them",
 		timeoutMS, elapsed.Milliseconds())
+}
+
+// deskEgress resolves one host-mediated choir.* call from a desk cell.
+// Evidence/run-memory actions resolve through rt-bound tools; the management
+// desk's product_api action serves through the canonical route table;
+// network/content actions go to researchDeps.HostEgress under the shared
+// egress ledger — one deps surface, never an open socket.
+func (rt *Runtime) deskEgress(egrCtx context.Context, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
+	if action == yaegikernel.ActionProductAPI {
+		return rt.productAPIEgress(egrCtx, cellExec.OwnerID, cellExec.OwnerEmail, payload)
+	}
+	if action == yaegikernel.ActionResearch {
+		return rt.runResearchChildren(egrCtx, cellExec, payload)
+	}
+	if fn, ok := rt.egressEvidenceTool()[string(action)]; ok {
+		out, err := fn(egrCtx, payload)
+		return json.RawMessage(out), err
+	}
+	if rt.researchDeps == nil {
+		return nil, fmt.Errorf("%s host unavailable", action)
+	}
+	return rt.researchDeps.HostEgress(egrCtx, string(action), payload)
+}
+
+// recordDeskEvent persists a desk.cell or desk.egress run event for the trace
+// export. It is recorded on the cell's run; a choir.Research child has no run
+// record, so its events land on the root run its RunID names. The event is
+// not published on the live bus, and a failure to record never fails the
+// cell.
+func (rt *Runtime) recordDeskEvent(ctx context.Context, exec toolregistry.ExecutionContext, kind types.EventKind, payload map[string]any) {
+	if rt == nil || rt.store == nil {
+		return
+	}
+	rec := exec.RunRecord
+	if rec == nil {
+		if exec.RunID == "" || exec.OwnerID == "" {
+			return
+		}
+		loaded, err := rt.getRunForComputer(ctx, exec.OwnerID, exec.RunID)
+		if err != nil {
+			return
+		}
+		rec = &loaded
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	ev := &types.EventRecord{
+		EventID:      uuid.New().String(),
+		RunID:        rec.RunID,
+		AgentID:      rec.AgentID,
+		ChannelID:    rec.ChannelID,
+		OwnerID:      rec.OwnerID,
+		TrajectoryID: trajectoryIDForRun(rec),
+		Timestamp:    time.Now().UTC(),
+		Kind:         kind,
+		Payload:      raw,
+	}
+	if err := rt.store.AppendEvent(context.WithoutCancel(ctx), ev); err != nil {
+		log.Printf("desk_go_eval: record %s event: %v", kind, err)
+	}
 }

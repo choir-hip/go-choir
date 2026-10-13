@@ -212,6 +212,16 @@ const (
 	// payload includes the tool name, call ID, and result summary.
 	EventToolResult EventKind = "tool.result"
 
+	// EventDeskCell records one desk_go_eval cell for the trace export: the
+	// desk session, worker process, start/finish and any wait for another
+	// run's cell (Cut 0, docs/reports/reeng-trace-bundle-format-2026-10-12.md).
+	EventDeskCell EventKind = "desk.cell"
+
+	// EventDeskEgress records one host-mediated choir.* call a cell made: the
+	// request id the worker minted, the id on the result frame, the verb and
+	// the worker process, so a bundle shows which caller got which answer.
+	EventDeskEgress EventKind = "desk.egress"
+
 	// EventChannelMessage is emitted when a message is posted to an agent
 	// channel, making inter-agent coordination observable through the
 	// event stream.
