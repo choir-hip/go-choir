@@ -1,0 +1,28 @@
+{
+  "cut": "C2 autopaper_live on the designated paper computer",
+  "paper_computer": "computer-1355b83bced1613eb048ee28d66688a8 (owner e5962310-8767-4624-87e5-a9b93a4e1db1; docs/reports/reeng-autopaper-paper-computer-2026-10-13.md)",
+  "builds": "paper guest 761d94c5; host 07af852a then cf91e617 (Texture-app reader) during the window",
+  "freeze_receipt": "docs/reports/reeng-cut2-freeze-receipt-2026-10-13.md, final before the paper's first publish",
+  "owner_act": "15:22:39 UTC POST /api/autopaper/sources/schedules for rss:bbc_world, rss:guardian_world, rss:npr_world, arxiv:cs_ai; 15:28:56 tier 1 added (rss:techcrunch, theverge, wired, ars, venturebeat, theregister, technologyreview, openai_news, hn_frontpage, hn_best) on the owner's tiered-rollout ruling",
+  "window": "15:22-16:22 UTC, sampled every 5 minutes (12 samples)",
+  "results": {
+    "polls": 54, "new_captures": 80, "poll_errors": 2,
+    "management_answers_every_poll": "management's cursor equalled its inbox head at all 12 samples (3 -> 71 records), including after tier 1 tripled the sources",
+    "stories": 26, "versions": 76, "stories_at_v5_or_later": 4,
+    "front_list": "26 stories, each listed once, newest first, served logged out from Store B",
+    "check_badges": {"exact": 194, "tolerant": 9, "failed": 14, "pending": 84}
+  },
+  "crash_proof": {
+    "restart": "16:24:08 POST /api/computers/{id}/lifecycle/restart (no planned marker) answered 201 at 16:24:29",
+    "public_reads_during": "a story bundle answered 200 at every 5 s sample 16:24:08-16:25:07 (front-list samples lost to a shell glob; the front list answered 26 stories at 16:25:31)",
+    "closed": "14 of 14 schedules interrupted_by_restart ('interrupted by a restart'); 2 in-flight runs cancelled interrupted_by_restart; open rounds closed by system reports to their caster (management inbox 71 -> 100), which wake no one",
+    "quiet_window": "16:24:29-16:37:49: poll total stayed 58, run count unchanged, management cursor unchanged, front list 26",
+    "owner_restart": "16:37:49 the owner act restarted all 14 schedules; each polled at once (poll total 58 -> 72); the paper is running at receipt time"
+  },
+  "not_verified": [
+    "that each v5+ story has a revision citing a capture that arrived after its previous version",
+    "2a acceptance: an owner edit citing a real but unsupporting quote, corrected by Texture after management's failing verdict (14 failed badges show failing verdicts exist; the correction loop is unreceipted)",
+    "the model comparison on the tracer script"
+  ],
+  "found_during": ["published story prose shows raw ** bold and Texture status notes (docs/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md)"]
+}
