@@ -179,3 +179,37 @@ fixed this at `rlm_research_runtime.yaml:29`.
   - Only failed cells carry source, so cascades are inferred from those cells alone.
   - 818 of the 828 cells have a desk/model count.
   - Fix shares are estimates for the first attempt.
+
+## Fixes landed and first measurement (2026-10-13)
+
+Landed on staging at d2324a55:
+
+- B: 0e270be6.
+- A, the stopgap: 65060843. A compile panic now preserves the session, gets a loop-form hint, and the hint scanner skips literals.
+- E, F and G: c21dee79.
+- D: 67162152.
+- Prompts: d2324a55. Texture gets the fragment rule, and management's recovery rule was corrected.
+
+Two fixes followed: C's decode hint (cdffb40d) and the field hint that names every type or the exact case (a17ea6c3).
+
+The paper run on d2324a55 (docs/evidence/free-models-paper-3-2026-10-13.json):
+
+- 37 of 283 cells failed, 13.1% (19.9% before).
+- Clusters A to G account for 6 failed cells (about 105 before).
+- No session was poisoned by a compile panic.
+
+By model:
+
+| model | failure rate |
+|---|---|
+| deepseek | 13.6% |
+| luna | 10.0% |
+| cat-jam | 17.3% |
+| longcat | 5.6% (18 cells) |
+
+This is one shorter run on different news, so read it as a direction, not a size. Residuals:
+
+- the typed Read result (C);
+- yaegi's global type analysis (A);
+- named funcs mixed with statements (H; 2 cells in the new run);
+- Texture's whole-program cells that walk the filesystem (cat-jam).

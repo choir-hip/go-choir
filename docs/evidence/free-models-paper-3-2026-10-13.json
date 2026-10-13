@@ -1,0 +1,150 @@
+{
+ "schema": "choir.evidence.v1",
+ "label": "freemodels-paper-3",
+ "date": "2026-10-13",
+ "claim": "the paper tracer passes on a minted test computer once it reads publications by doc id (29bbab97), and the kernel and prompt fixes for the cross-model cell errors (d2324a55) lower the failure rate",
+ "build": "d2324a5513c312d0d7ac94aaeaa7d173b095db91",
+ "ci_run": "38472156933 success",
+ "tracer": {
+  "command": "node scripts/reeng_tracer.mjs --scenario paper --label freemodels-paper-3 --expect-sha d2324a55 --sources rss:bbc_world,rss:guardian_world,rss:npr_world --interval-min 10 --max-items 4 --timeout-min 25 --keep-computer",
+  "exit_code": 0,
+  "pass": true,
+  "computer_id": "computer-a1aab695be2905fbff7f3bc50f18efcb",
+  "trajectory_id": "9c824dd5-ccb6-5dc1-89f3-0095e135db04",
+  "bundle_sha256": "858ee36537ffc253bf04f855baca50510b287efcfd9e0822ce6558a6d0110c98",
+  "capture_arrivals": 3,
+  "stories_opened": 13,
+  "published": [
+   {
+    "doc_id": "3c2c540f-c753-5625-a7a2-0bad8a39de12",
+    "publish_mode": "auto",
+    "on_front": false,
+    "version_count": 1,
+    "latest_revision": 2,
+    "bare": "/pub/texture/mi5-chief-warns-of-uk-threats-from-russia-iran-and-ai-pubcaa17f3b2"
+   },
+   {
+    "doc_id": "5c5110aa-63f4-551a-b8ee-ba195c0a0555",
+    "publish_mode": "auto",
+    "on_front": false,
+    "version_count": 1,
+    "latest_revision": 2,
+    "bare": "/pub/texture/pope-diagnosed-with-lung-cancer-and-has-successful-surgery-vatican-says-pubd5ea89a76"
+   },
+   {
+    "doc_id": "0d14b508-5dae-5d2b-83c4-1cb2065724a8",
+    "publish_mode": "auto",
+    "on_front": false,
+    "version_count": 1,
+    "latest_revision": 2,
+    "bare": "/pub/texture/pakistan-imposes-emergency-rule-in-the-former-prime-ministers-stronghold-pub644693697"
+   },
+   {
+    "doc_id": "951d6628-f187-5c15-994b-c2c8383b7c57",
+    "publish_mode": "auto",
+    "on_front": false,
+    "version_count": 1,
+    "latest_revision": 2,
+    "bare": "/pub/texture/missiles-intercepted-near-riyadh-after-saudi-coalition-strike-on-a-yemen-fuel-depot-pubed1fa6281"
+   },
+   {
+    "doc_id": "919708d6-e297-56a1-9a63-ff9b2f849ac2",
+    "publish_mode": "auto",
+    "on_front": false,
+    "version_count": 2,
+    "latest_revision": 3,
+    "bare": "/pub/texture/icj-judge-navi-pillay-wins-the-nobel-peace-prize-pubbd3d41f73"
+   },
+   {
+    "doc_id": "419c8480-ac89-5cb7-b2af-d6f241e457b0",
+    "publish_mode": "auto",
+    "on_front": false,
+    "version_count": 1,
+    "latest_revision": 2,
+    "bare": "/pub/texture/isaias-becomes-the-first-atlantic-hurricane-of-the-2026-season-pub1350b70d7"
+   },
+   {
+    "doc_id": "79316a8a-76ea-51bb-9dac-24ded1a73c00",
+    "publish_mode": "auto",
+    "on_front": false,
+    "version_count": 1,
+    "latest_revision": 2,
+    "bare": "/pub/texture/us-russia-diesel-deal-and-record-us-diesel-prices-pubf9136e829"
+   },
+   {
+    "doc_id": "71256839-51bb-52b3-b2f7-8810e75b1c35",
+    "publish_mode": "auto",
+    "on_front": false,
+    "version_count": 1,
+    "latest_revision": 2,
+    "bare": "/pub/texture/us-government-spent-millions-on-pro-trump-ads-after-the-president-said-it-would-not-pub84407f840"
+   }
+  ],
+  "public_bundle": {
+   "status": 200,
+   "citations": 0,
+   "states": [],
+   "nav": {
+    "revision": 2,
+    "prev": 0,
+    "next": 0,
+    "latest": 2
+   }
+  },
+  "duration": "21:48:51Z to 21:52:52Z"
+ },
+ "cell_errors": {
+  "after": {
+   "build": "d2324a55",
+   "cells": 283,
+   "failed": 37,
+   "rate": 0.131,
+   "per_model": {
+    "deepseek-v4.1-flash": {
+     "cells": 110,
+     "failed": 15,
+     "rate": 0.136
+    },
+    "gpt-6-luna": {
+     "cells": 80,
+     "failed": 8,
+     "rate": 0.1
+    },
+    "cat-jam-free": {
+     "cells": 75,
+     "failed": 13,
+     "rate": 0.173
+    },
+    "longcat-2.5-preview-free": {
+     "cells": 18,
+     "failed": 1,
+     "rate": 0.056
+    }
+   },
+   "clusters_A_to_G": {
+    "A": 2,
+    "B": 2,
+    "D": 1,
+    "E": 1
+   },
+   "session_poisoned": 0,
+   "window": "about 20 minutes, measured twice (220 and 283 cells)"
+  },
+  "before": {
+   "build": "18d01cc0",
+   "cells": 828,
+   "failed": 165,
+   "rate": 0.199,
+   "clusters_A_to_G": 105,
+   "panics_killing_the_worker": 41,
+   "source": "docs/reports/cross-model-cell-errors-2026-10-13.md"
+  },
+  "limits": "one run each, different news and window lengths (25 minutes against about 20), and the after run is a third of the cells; the model of a cell is the last provider call before it"
+ },
+ "observations": [
+  "the first published story resolved publicly with 0 citations (public_bundle.citations 0)",
+  "one runtime reflect.Set DocSnapshot -> ActingPack on Texture (cat-jam) with no captured source; whether the model wrote = itself is unknown",
+  "the field hint for s.ID named Block.ID; fixed at a17ea6c3"
+ ],
+ "computer_stop": "POST lifecycle/stop 201 after measurement"
+}
