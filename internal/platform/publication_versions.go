@@ -122,12 +122,15 @@ type PublicationCheckOverlay struct {
 
 // CitationCheck is one citation's live check result.
 type CitationCheck struct {
-	AnchorID  string    `json:"anchor_id"`
-	Ref       types.Ref `json:"ref"`
-	Quote     string    `json:"quote"`
-	Judgement string    `json:"judgement,omitempty"`
-	Detail    string    `json:"detail,omitempty"`
-	CheckedAt string    `json:"checked_at,omitempty"`
+	AnchorID string    `json:"anchor_id"`
+	Ref      types.Ref `json:"ref"`
+	// State is the badge: exact or tolerant once the quote matched and the
+	// support verdict passed, failed when either failed, else pending.
+	State     string `json:"state,omitempty"`
+	Quote     string `json:"quote"`
+	Judgement string `json:"judgement,omitempty"`
+	Detail    string `json:"detail,omitempty"`
+	CheckedAt string `json:"checked_at,omitempty"`
 }
 
 // CheckOverlayVersion keys an overlay by the published version.
@@ -167,7 +170,7 @@ func (pendingCheckOverlay) CheckOverlay(_ context.Context, _ CheckOverlayVersion
 func pendingOverlay(citations []CheckOverlayCitation) PublicationCheckOverlay {
 	out := PublicationCheckOverlay{Source: CheckPending, Citations: make([]CitationCheck, 0, len(citations))}
 	for _, c := range citations {
-		out.Citations = append(out.Citations, CitationCheck{AnchorID: c.AnchorID, Ref: c.Ref, Quote: CheckPending, Judgement: CheckPending})
+		out.Citations = append(out.Citations, CitationCheck{AnchorID: c.AnchorID, Ref: c.Ref, State: CheckPending, Quote: CheckPending, Judgement: CheckPending})
 	}
 	return out
 }

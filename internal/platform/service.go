@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -527,6 +528,12 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 
 	if err := s.graphStore.PublishTextureToGraph(ctx, graphParams); err != nil {
 		return nil, fmt.Errorf("platform publish: graph write: %w", err)
+	}
+	// The version's quote checks go beside it in Store B, keyed by version
+	// and citation, outside the manifest (Cut 2 2b). A failed write leaves
+	// those citations pending in the live overlay; the version stands.
+	if err := s.writeVersionChecks(ctx, req.OwnerID, versionID, anchors, req.Metadata, now); err != nil {
+		log.Printf("platform publish: %s checks: %v", versionID, err)
 	}
 
 	return &PublishTextureResponse{

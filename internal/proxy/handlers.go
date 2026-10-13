@@ -26,6 +26,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -1720,6 +1721,11 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/captures", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/internal/platform/captures/bodies/", h.HandlePlatformObjectGraph)
 	s.HandleFunc("/internal/platform/captures/", h.HandlePlatformObjectGraph)
+	// Living stories (Cut 2 2b): a guest publishes its own story revisions
+	// through the owner's publish path, and writes its stories' support
+	// verdicts to Store B, both bound to the guest's owner and computer.
+	s.HandleFunc(types.StoryPublishPath, h.HandleGuestTexturePublication)
+	s.HandleFunc(types.StoryVerdictsPath, h.HandlePlatformObjectGraph)
 	s.HandleFunc("/assets/", h.HandleComputerSurface)
 	s.HandleFunc("/", h.HandleComputerSurface)
 }

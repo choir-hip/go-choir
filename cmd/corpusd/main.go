@@ -39,6 +39,9 @@ func main() {
 	}()
 
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
+	// Published versions' check overlay reads quote checks and support
+	// verdicts from Store B, never from a paper computer (Cut 2 2b).
+	svc.SetCheckOverlayProvider(platform.NewStoreCheckOverlay(svc))
 	// Periodic platform-artifacts reachability GC (dry-run unless explicitly
 	// activated). The on-demand endpoint /internal/platform/artifact-gc admits
 	// the same sweep on demand for the deployed-proof report.

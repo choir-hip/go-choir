@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -70,7 +71,7 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 		return fmt.Errorf("object graph request too large")
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
-	if r.URL.Path == "/internal/platform/captures" {
+	if r.URL.Path == "/internal/platform/captures" || r.URL.Path == types.StoryVerdictsPath {
 		// corpusd sees the proxy as an internal caller, so the guest's
 		// ownership of the captures it writes is checked here, as for
 		// object writes.
