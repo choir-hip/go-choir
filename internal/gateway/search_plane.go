@@ -2,14 +2,18 @@ package gateway
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
 )
 
-// ProviderHealthSummary is exposed in search responses and ops APIs.
+// searchStreamMargin is how long a search stream stays open past the
+// provider request timeout, so every provider's own timeout lands on the
+// stream before the stream's bound does.
+const searchStreamMargin = 5 * time.Second
+
+// ProviderHealthSummary is exposed by the search health ops API.
 type ProviderHealthSummary struct {
 	State            searchplane.ProviderState `json:"state"`
 	CooldownUntil    string                    `json:"cooldown_until,omitempty"`
@@ -18,13 +22,45 @@ type ProviderHealthSummary struct {
 	LastErrorSummary string                    `json:"last_error_summary,omitempty"`
 }
 
-// SearchOutageResponse is returned when every provider is unavailable or empty.
-type SearchOutageResponse struct {
-	Error          string                           `json:"error"`
-	Code           string                           `json:"code"`
-	Query          string                           `json:"query,omitempty"`
-	ProviderHealth map[string]ProviderHealthSummary `json:"provider_health,omitempty"`
-	Attempts       []SearchProviderAttempt          `json:"attempts,omitempty"`
+// POST /provider/v1/search answers with NDJSON, one object per line: a
+// SearchStreamStart, then one SearchStreamArrival per provider in the order
+// the providers answer, then a SearchStreamDone.
+
+// SearchStreamStart is a search stream's first line: the providers the
+// search started (the N of "M of N answered") and the ones it skipped.
+type SearchStreamStart struct {
+	Type      string                  `json:"type"`
+	Query     string                  `json:"query"`
+	Providers []string                `json:"providers"`
+	Cooling   []SearchCoolingProvider `json:"cooling"`
+}
+
+// SearchCoolingProvider is a provider a search skipped because it was
+// cooling down or disabled. It is not a failure of that search.
+type SearchCoolingProvider struct {
+	Provider string `json:"provider"`
+	State    string `json:"state"`
+	Until    string `json:"until,omitempty"`
+}
+
+// SearchStreamArrival is one provider's completed call.
+type SearchStreamArrival struct {
+	Type      string         `json:"type"`
+	Provider  string         `json:"provider"`
+	Status    string         `json:"status"`
+	LatencyMs int64          `json:"latency_ms"`
+	Results   []SearchResult `json:"results"`
+	Error     string         `json:"error,omitempty"`
+}
+
+// SearchStreamDone is a search stream's last line. Pending names the
+// providers still out when the stream's bound ended it.
+type SearchStreamDone struct {
+	Type     string                  `json:"type"`
+	Answered int                     `json:"answered"`
+	Total    int                     `json:"total"`
+	Pending  []string                `json:"pending,omitempty"`
+	Cooling  []SearchCoolingProvider `json:"cooling"`
 }
 
 type searchProviderAdapter struct {
@@ -57,23 +93,8 @@ func (c *SearchClient) ensurePlane() error {
 		return nil
 	}
 	cfg := c.planeConfig
-	if cfg.ProvidersPerQuery == 0 && c.providersPerQuery > 0 {
-		cfg.ProvidersPerQuery = c.providersPerQuery
-	}
-	if cfg.ProvidersPerQuery == 0 {
-		cfg = searchplane.ConfigFromEnv()
-		if c.providersPerQuery > 0 {
-			cfg.ProvidersPerQuery = c.providersPerQuery
-		}
-	}
-	if cfg.MinMergedResults <= 0 {
-		cfg.MinMergedResults = 1
-	}
-	if cfg.MaxWaves <= 0 {
-		cfg.MaxWaves = 2
-	}
 	if cfg.RequestTimeout <= 0 {
-		cfg.RequestTimeout = 30 * time.Second
+		cfg = searchplane.ConfigFromEnv()
 	}
 	cfg.EndpointFor = searchProviderEndpoint
 	adapters := make([]searchplane.Provider, len(c.providers))
@@ -90,90 +111,6 @@ func (c *SearchClient) ensurePlane() error {
 	}
 	c.plane = searchplane.NewRouter(adapters, store, cfg)
 	return nil
-}
-
-func convertPlaneResult(query string, result *searchplane.SearchResult) *SearchResponse {
-	resp := &SearchResponse{
-		Results:        make([]SearchResult, len(result.Results)),
-		Provider:       result.Primary,
-		Providers:      result.Providers,
-		Attempts:       make([]SearchProviderAttempt, len(result.Attempts)),
-		Query:          query,
-		MergedCount:    result.MergedCount,
-		Waves:          result.Waves,
-		Degraded:       result.Degraded,
-		ProviderHealth: map[string]ProviderHealthSummary{},
-	}
-	for i, hit := range result.Results {
-		resp.Results[i] = SearchResult{
-			Title:       hit.Title,
-			URL:         hit.URL,
-			Snippet:     hit.Snippet,
-			PublishedAt: hit.PublishedAt,
-			Score:       hit.Score,
-			Provider:    hit.Provider,
-		}
-	}
-	for i, attempt := range result.Attempts {
-		resp.Attempts[i] = SearchProviderAttempt{
-			Provider:  attempt.Provider,
-			Endpoint:  attempt.Endpoint,
-			Status:    attempt.Status,
-			LatencyMs: attempt.LatencyMs,
-			Results:   attempt.Results,
-			Error:     searchplane.RedactSummary(attempt.Error),
-		}
-	}
-	for name, health := range result.ProviderHealth {
-		summary := ProviderHealthSummary{
-			State:            health.State,
-			StrikeCount:      health.StrikeCount,
-			LastFailureClass: health.LastFailureClass,
-			LastErrorSummary: searchplane.RedactSummary(health.LastErrorSummary),
-		}
-		if health.CooldownUntil != nil {
-			summary.CooldownUntil = health.CooldownUntil.UTC().Format("2006-01-02T15:04:05Z07:00")
-		}
-		resp.ProviderHealth[name] = summary
-	}
-	return resp
-}
-
-func searchOutageResponse(err error) (*SearchOutageResponse, bool) {
-	var outage *searchplane.OutageError
-	if !errors.As(err, &outage) {
-		return nil, false
-	}
-	resp := &SearchOutageResponse{
-		Error:          "search_outage",
-		Code:           outage.Code(),
-		Query:          outage.Query,
-		ProviderHealth: map[string]ProviderHealthSummary{},
-		Attempts:       make([]SearchProviderAttempt, len(outage.Attempts)),
-	}
-	for i, attempt := range outage.Attempts {
-		resp.Attempts[i] = SearchProviderAttempt{
-			Provider:  attempt.Provider,
-			Endpoint:  attempt.Endpoint,
-			Status:    attempt.Status,
-			LatencyMs: attempt.LatencyMs,
-			Results:   attempt.Results,
-			Error:     searchplane.RedactSummary(attempt.Error),
-		}
-	}
-	for name, health := range outage.Health {
-		summary := ProviderHealthSummary{
-			State:            health.State,
-			StrikeCount:      health.StrikeCount,
-			LastFailureClass: health.LastFailureClass,
-			LastErrorSummary: searchplane.RedactSummary(health.LastErrorSummary),
-		}
-		if health.CooldownUntil != nil {
-			summary.CooldownUntil = health.CooldownUntil.UTC().Format("2006-01-02T15:04:05Z07:00")
-		}
-		resp.ProviderHealth[name] = summary
-	}
-	return resp, true
 }
 
 // HealthStore returns the durable provider health store when initialized.
@@ -194,23 +131,81 @@ func (c *SearchClient) ResetProviderHealth(provider string) error {
 	return err
 }
 
-func (c *SearchClient) searchViaPlane(ctx context.Context, req SearchRequest) (*SearchResponse, error) {
+// Stream starts the search on every eligible provider and returns at once;
+// the stream's Arrivals carry each provider's answer as it lands.
+func (c *SearchClient) Stream(ctx context.Context, req SearchRequest) (*searchplane.Stream, error) {
+	if req.Query == "" {
+		return nil, fmt.Errorf("query is required")
+	}
+	if len(c.providers) == 0 {
+		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, KEENABLE_API_KEY, or CHATGPT_AUTH_PATH)")
+	}
 	if err := c.ensurePlane(); err != nil {
 		return nil, fmt.Errorf("search plane: %w", err)
 	}
 	maxResults := req.MaxResults
 	if maxResults <= 0 {
-		// Agent retrieval, not human reading: default deep so each search yields
-		// a broad candidate set (per-provider fan-out + dedup) for grounding and
-		// reranking. A 5-10 result page is a human default; agents want ~40.
+		// Agent retrieval, not human reading: each provider returns a broad
+		// candidate set for grounding and reranking.
 		maxResults = 40
 	}
 	if maxResults > 50 {
 		maxResults = 50
 	}
-	result, err := c.plane.Search(ctx, req.Query, maxResults)
-	if err != nil {
-		return nil, err
+	return c.plane.Start(ctx, req.Query, maxResults)
+}
+
+// StreamBound is how long a search stream stays open: the provider request
+// timeout plus a margin.
+func (c *SearchClient) StreamBound() time.Duration {
+	timeout := c.planeConfig.RequestTimeout
+	if c.plane != nil {
+		timeout = c.plane.RequestTimeout()
 	}
-	return convertPlaneResult(req.Query, result), nil
+	if timeout <= 0 {
+		timeout = searchplane.ConfigFromEnv().RequestTimeout
+	}
+	margin := c.streamMargin
+	if margin <= 0 {
+		margin = searchStreamMargin
+	}
+	return timeout + margin
+}
+
+func searchStreamStart(stream *searchplane.Stream) SearchStreamStart {
+	return SearchStreamStart{Type: "start", Query: stream.Query, Providers: append([]string{}, stream.Providers...), Cooling: searchCoolingProviders(stream.Cooling)}
+}
+
+func searchCoolingProviders(cooling []searchplane.Cooling) []SearchCoolingProvider {
+	out := make([]SearchCoolingProvider, 0, len(cooling))
+	for _, c := range cooling {
+		entry := SearchCoolingProvider{Provider: c.Provider, State: string(c.State)}
+		if !c.Until.IsZero() {
+			entry.Until = c.Until.UTC().Format(time.RFC3339)
+		}
+		out = append(out, entry)
+	}
+	return out
+}
+
+func searchStreamArrival(a searchplane.Arrival) SearchStreamArrival {
+	line := SearchStreamArrival{
+		Type:      "provider",
+		Provider:  a.Provider,
+		Status:    a.Status,
+		LatencyMs: a.LatencyMs,
+		Results:   make([]SearchResult, len(a.Results)),
+		Error:     searchplane.RedactSummary(a.Error),
+	}
+	for i, hit := range a.Results {
+		line.Results[i] = SearchResult{
+			Title:       hit.Title,
+			URL:         hit.URL,
+			Snippet:     hit.Snippet,
+			PublishedAt: hit.PublishedAt,
+			Score:       hit.Score,
+			Provider:    hit.Provider,
+		}
+	}
+	return line
 }

@@ -216,7 +216,7 @@ func TestSearchRateLimitDoesNotConsumeInferenceBudget(t *testing.T) {
 		searchFunc: func(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
 			return []SearchResult{{Title: "Result", URL: "http://example.com", Snippet: "snippet"}}, nil
 		},
-	}}, 1)
+	}})
 
 	cred, err := reg.IssueCredential("autoputer-mixed-rate")
 	if err != nil {

@@ -1,10 +1,9 @@
-// Package gateway implements web search functionality with multi-provider
-// rotation and fallback. Supports SearXNG (self-hosted, free), Tavily, Brave,
-// Parallel, Exa, Serper, SerpAPI, and ChatGPT/Codex hosted web search.
+// Package gateway implements web search across SearXNG (self-hosted, free),
+// Tavily, Brave, Parallel, Exa, Serper, SerpAPI, Keenable and ChatGPT/Codex
+// hosted web search.
 //
-// The SearchClient uses round-robin rotation across available providers and
-// queries more than one provider per request by default for result diversity.
-// It automatically falls back to the next provider if one fails.
+// A search starts every eligible provider at once and streams each
+// provider's results as that provider answers (search_plane.go).
 package gateway
 
 import (
@@ -43,55 +42,13 @@ type SearchResult struct {
 	Provider string `json:"provider,omitempty"`
 }
 
-// SearchResponse is the unified response from the search endpoint.
-type SearchResponse struct {
-	// Results is the list of search results.
-	Results []SearchResult `json:"results"`
-
-	// Provider identifies the first successful search provider for backward
-	// compatibility with older clients.
-	Provider string `json:"provider"`
-
-	// Providers identifies every successful search provider contributing
-	// results to this response.
-	Providers []string `json:"providers,omitempty"`
-
-	// Attempts records every provider attempted for this request, including
-	// failures. It is safe for owner-scoped Trace and does not include secrets.
-	Attempts []SearchProviderAttempt `json:"attempts,omitempty"`
-
-	// ProviderHealth is the post-request health snapshot for configured providers.
-	ProviderHealth map[string]ProviderHealthSummary `json:"provider_health,omitempty"`
-
-	// MergedCount is the number of deduplicated hits returned.
-	MergedCount int `json:"merged_count,omitempty"`
-
-	// Waves is how many parallel provider waves executed.
-	Waves int `json:"waves,omitempty"`
-
-	// Degraded is true when some providers failed but merged results exist.
-	Degraded bool `json:"degraded,omitempty"`
-
-	// Query is the original search query.
-	Query string `json:"query"`
-}
-
-// SearchProviderAttempt records one provider call within a logical search.
-type SearchProviderAttempt struct {
-	Provider  string `json:"provider"`
-	Endpoint  string `json:"endpoint,omitempty"`
-	Status    string `json:"status"`
-	LatencyMs int64  `json:"latency_ms"`
-	Results   int    `json:"results"`
-	Error     string `json:"error,omitempty"`
-}
-
 // SearchRequest is the incoming search request payload.
 type SearchRequest struct {
 	// Query is the search query string (required).
 	Query string `json:"query"`
 
-	// MaxResults is the maximum number of results (default 40, max 50).
+	// MaxResults is the maximum number of results each provider returns
+	// (default 40, max 50).
 	MaxResults int `json:"max_results,omitempty"`
 }
 
@@ -108,20 +65,18 @@ type SearchProvider interface {
 	IsAvailable() bool
 }
 
-// SearchClient provides round-robin rotation across multiple search providers
-// with automatic fallback on failure.
+// SearchClient streams searches across the available providers.
 type SearchClient struct {
-	providers         []SearchProvider
-	providersPerQuery int
-	healthStore       searchplane.HealthStore
-	planeConfig       searchplane.Config
-	plane             *searchplane.Router
+	providers   []SearchProvider
+	healthStore searchplane.HealthStore
+	planeConfig searchplane.Config
+	plane       *searchplane.Router
+	// streamMargin is how long a search stream stays open past the provider
+	// request timeout; zero means searchStreamMargin.
+	streamMargin time.Duration
 }
 
 // NewSearchClient creates a SearchClient with all available providers.
-// Providers are registered in priority order; the client uses round-robin
-// rotation starting from the current position, falling back to subsequent
-// providers if one fails.
 func NewSearchClient() *SearchClient {
 	providers := []SearchProvider{
 		&SearXNGProvider{},
@@ -148,11 +103,6 @@ func NewSearchClient() *SearchClient {
 	}
 }
 
-// Search executes a search query using round-robin rotation across providers.
-// It gathers results from a small provider fanout for diversity, falling back
-// across the configured provider list until at least one provider succeeds.
-// Returns an error if all providers fail.
-
 // AvailableProviders returns the names of configured search providers.
 func (c *SearchClient) AvailableProviders() []string {
 	names := make([]string, len(c.providers))
@@ -160,16 +110,6 @@ func (c *SearchClient) AvailableProviders() []string {
 		names[i] = p.Name()
 	}
 	return names
-}
-
-func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchResponse, error) {
-	if req.Query == "" {
-		return nil, fmt.Errorf("query is required")
-	}
-	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, KEENABLE_API_KEY, or CHATGPT_AUTH_PATH)")
-	}
-	return c.searchViaPlane(ctx, req)
 }
 
 func normalizeSearchResultURL(raw string) string {

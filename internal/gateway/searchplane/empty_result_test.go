@@ -8,8 +8,8 @@ import (
 
 // docs/problems/search-plane-empty-result-benches-healthy-providers-2026-10-11.md.
 // Failure modes: one narrow query that finds nothing cools down every
-// provider it reached, so the next caller's broad query gets an outage; a
-// provider that returns nothing on every query is never benched.
+// provider it reached, so the next caller's broad query starts no provider;
+// a provider that returns nothing on every query is never benched.
 func TestRouter_EmptyResultDoesNotBenchHealthyProviders(t *testing.T) {
 	answers := func(name string) *stubProvider {
 		return &stubProvider{name: name, searchFn: func(ctx context.Context, query string, maxResults int) ([]Result, error) {
@@ -20,11 +20,15 @@ func TestRouter_EmptyResultDoesNotBenchHealthyProviders(t *testing.T) {
 		}}
 	}
 	store := NewMemoryHealthStore()
-	router := NewRouter([]Provider{answers("a"), answers("b"), answers("c")}, store, Config{
-		ProvidersPerQuery: 3, MinMergedResults: 1, MaxWaves: 1, RequestTimeout: time.Second,
-	})
-	if _, err := router.Search(context.Background(), "site:example.invalid nothing here", 5); err == nil {
-		t.Fatal("a query nobody can answer returned results")
+	router := NewRouter([]Provider{answers("a"), answers("b"), answers("c")}, store, Config{RequestTimeout: time.Second})
+	stream, err := router.Start(context.Background(), "site:example.invalid nothing here", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range drain(t, stream) {
+		if a.Status != string(OutcomeSuccessEmpty) || !a.Answered() {
+			t.Fatalf("empty arrival = %+v, want an answered success_empty", a)
+		}
 	}
 	health, err := store.Snapshot()
 	if err != nil {
@@ -35,18 +39,27 @@ func TestRouter_EmptyResultDoesNotBenchHealthyProviders(t *testing.T) {
 			t.Fatalf("provider %s benched by one empty result: %+v", name, health[name])
 		}
 	}
-	if _, err := router.Search(context.Background(), "ai news", 5); err != nil {
-		t.Fatalf("the next query after an empty one got an outage: %v", err)
+	next, err := router.Start(context.Background(), "ai news", 5)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if len(next.Providers) != 3 {
+		t.Fatalf("the next query after an empty one started %v, want every provider", next.Providers)
+	}
+	drain(t, next)
 }
 
 func TestRouter_ProviderEmptyOnEveryQueryIsBenched(t *testing.T) {
 	store := NewMemoryHealthStore()
 	router := NewRouter([]Provider{&stubProvider{name: "hollow", searchFn: func(ctx context.Context, query string, maxResults int) ([]Result, error) {
 		return nil, nil
-	}}}, store, Config{ProvidersPerQuery: 1, MinMergedResults: 1, MaxWaves: 1, RequestTimeout: time.Second})
+	}}}, store, Config{RequestTimeout: time.Second})
 	for i := 0; i < EmptyStreakBeforeCooldown; i++ {
-		_, _ = router.Search(context.Background(), "q", 5)
+		stream, err := router.Start(context.Background(), "q", 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		drain(t, stream)
 	}
 	rec, err := store.Get("hollow")
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
 )
 
 type fakeChatGPTSearchTokenSource struct {
@@ -228,22 +230,27 @@ func TestChatGPTSearchProviderIntegration(t *testing.T) {
 		t.Skip("CHATGPT_AUTH_PATH not set")
 	}
 	provider := NewChatGPTSearchProviderFromEnv()
-	client := testSearchClient([]SearchProvider{provider}, 1)
+	client := testSearchClient([]SearchProvider{provider})
 	client.planeConfig.RequestTimeout = 60 * time.Second
-	response, err := client.Search(context.Background(), SearchRequest{
+	stream, err := client.Stream(context.Background(), SearchRequest{
 		Query:      "official OpenAI Responses API web search documentation",
 		MaxResults: 3,
 	})
 	if err != nil {
-		t.Fatalf("Search: %v", err)
+		t.Fatalf("Stream: %v", err)
 	}
-	if len(response.Results) == 0 || len(response.Results) > 3 {
-		t.Fatalf("result count = %d, want 1..3", len(response.Results))
+	var arrivals []searchplane.Arrival
+	for a := range stream.Arrivals {
+		arrivals = append(arrivals, a)
 	}
-	if len(response.Attempts) != 1 || response.Attempts[0].Provider != "chatgpt" {
-		t.Fatalf("attempts = %#v", response.Attempts)
+	if len(arrivals) != 1 || arrivals[0].Provider != "chatgpt" {
+		t.Fatalf("arrivals = %#v", arrivals)
 	}
-	for _, result := range response.Results {
+	results := arrivals[0].Results
+	if len(results) == 0 || len(results) > 3 {
+		t.Fatalf("result count = %d, want 1..3", len(results))
+	}
+	for _, result := range results {
 		if result.Title == "" || result.URL == "" || result.Provider != "chatgpt" {
 			t.Errorf("invalid normalized result: %#v", result)
 		}

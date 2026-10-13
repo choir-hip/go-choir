@@ -63,16 +63,6 @@ type ProviderHealth struct {
 	UpdatedAt          time.Time     `json:"updated_at"`
 }
 
-// Attempt records one provider interaction within a logical search.
-type Attempt struct {
-	Provider  string `json:"provider"`
-	Endpoint  string `json:"endpoint,omitempty"`
-	Status    string `json:"status"`
-	LatencyMs int64  `json:"latency_ms"`
-	Results   int    `json:"results"`
-	Error     string `json:"error,omitempty"`
-}
-
 // Outcome is passed to the health store after each provider call or skip.
 type Outcome struct {
 	Provider string

@@ -753,8 +753,9 @@ func writeGatewayJSON(w http.ResponseWriter, status int, v interface{}) {
 }
 
 // HandleSearch handles POST /provider/v1/search for web search requests.
-// It authenticates the autoputer caller, validates the request, and routes
-// to available search providers with round-robin rotation and fallback.
+// It authenticates the autoputer caller, validates the request, starts every
+// eligible provider at once, and streams NDJSON: a start line, one line per
+// provider as that provider answers, and a final line with M of N answered.
 func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeGatewayJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "method not allowed"})
@@ -812,27 +813,66 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	log.Printf("gateway: search request from autoputer %s (query=%q max_results=%d)",
 		computerID, req.Query, req.MaxResults)
 
-	// Step 5: Execute the search with timeout.
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	// Step 5: Start every eligible provider and stream each one's answer as
+	// it lands. The stream is bounded by the provider timeout plus a margin.
+	ctx, cancel := context.WithTimeout(r.Context(), h.searchClient.StreamBound())
 	defer cancel()
 
-	resp, err := h.searchClient.Search(ctx, req)
+	stream, err := h.searchClient.Stream(ctx, req)
 	if err != nil {
-		if outage, ok := searchOutageResponse(err); ok {
-			log.Printf("gateway: search outage for autoputer %s (query=%q)", computerID, req.Query)
-			writeGatewayJSON(w, http.StatusServiceUnavailable, outage)
-			return
-		}
 		sanitized := sanitizeError(err)
 		log.Printf("gateway: search failed for autoputer %s: %v", computerID, sanitized)
 		writeGatewayJSON(w, http.StatusBadGateway, ErrorResponse{Error: sanitized})
 		return
 	}
 
-	log.Printf("gateway: search succeeded for autoputer %s (provider=%s providers=%s results=%d)",
-		computerID, resp.Provider, strings.Join(resp.Providers, ","), len(resp.Results))
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	enc := json.NewEncoder(w)
+	writeLine := func(v any) {
+		if err := enc.Encode(v); err != nil {
+			log.Printf("gateway: search stream write for autoputer %s: %v", computerID, err)
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
 
-	writeGatewayJSON(w, http.StatusOK, resp)
+	writeLine(searchStreamStart(stream))
+	pending := map[string]bool{}
+	for _, name := range stream.Providers {
+		pending[name] = true
+	}
+	answered := 0
+	for len(pending) > 0 {
+		var arrival searchplane.Arrival
+		var ok bool
+		select {
+		case arrival, ok = <-stream.Arrivals:
+		case <-ctx.Done():
+		}
+		if !ok {
+			break
+		}
+		delete(pending, arrival.Provider)
+		if arrival.Answered() {
+			answered++
+		}
+		writeLine(searchStreamArrival(arrival))
+	}
+	done := SearchStreamDone{Type: "done", Answered: answered, Total: len(stream.Providers), Cooling: searchCoolingProviders(stream.Cooling)}
+	for _, name := range stream.Providers {
+		if pending[name] {
+			done.Pending = append(done.Pending, name)
+		}
+	}
+	writeLine(done)
+
+	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending)",
+		computerID, answered, len(stream.Providers), len(stream.Cooling), len(done.Pending))
 }
 
 // HandleSearchHealth handles GET /provider/v1/search/health. Like the

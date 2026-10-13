@@ -2,7 +2,6 @@ package searchplane
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -12,7 +11,7 @@ import (
 
 // docs/problems/search-plane-cooldown-on-caller-cancel-2026-10-09.md.
 // Failure modes: a caller that goes away (cancel or its own shorter
-// deadline) strikes every provider in the wave and cools the plane down; a
+// deadline) strikes every provider it started and cools the plane down; a
 // provider that really overruns the request timeout is no longer struck; a
 // provider error carrying its request URL stores or returns the API key.
 
@@ -39,35 +38,44 @@ func assertNoStrike(t *testing.T, store HealthStore, names ...string) {
 
 func TestRouter_CallerCancelDoesNotStrikeProviders(t *testing.T) {
 	store := NewMemoryHealthStore()
-	router := NewRouter([]Provider{blockingProvider("a"), blockingProvider("b"), blockingProvider("c")}, store, Config{
-		ProvidersPerQuery: 3, MinMergedResults: 1, MaxWaves: 1, RequestTimeout: 10 * time.Second,
-	})
+	router := NewRouter([]Provider{blockingProvider("a"), blockingProvider("b"), blockingProvider("c")}, store, Config{RequestTimeout: 10 * time.Second})
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(50*time.Millisecond, cancel)
-	_, err := router.Search(ctx, "q", 5)
-	if err == nil {
-		t.Fatal("expected an error after the caller cancelled")
+	stream, err := router.Start(ctx, "q", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range drain(t, stream) {
+		if a.Status != string(OutcomeCallerGone) {
+			t.Fatalf("arrival after the caller cancelled = %+v, want caller_gone", a)
+		}
 	}
 	assertNoStrike(t, store, "a", "b", "c")
 }
 
 func TestRouter_CallerDeadlineShorterThanRequestTimeoutDoesNotStrike(t *testing.T) {
 	store := NewMemoryHealthStore()
-	router := NewRouter([]Provider{blockingProvider("a")}, store, Config{
-		ProvidersPerQuery: 1, MinMergedResults: 1, MaxWaves: 1, RequestTimeout: 10 * time.Second,
-	})
+	router := NewRouter([]Provider{blockingProvider("a")}, store, Config{RequestTimeout: 10 * time.Second})
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, _ = router.Search(ctx, "q", 5)
+	stream, err := router.Start(ctx, "q", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drain(t, stream)
 	assertNoStrike(t, store, "a")
 }
 
 func TestRouter_ProviderOverrunningRequestTimeoutIsStillStruck(t *testing.T) {
 	store := NewMemoryHealthStore()
-	router := NewRouter([]Provider{blockingProvider("slow")}, store, Config{
-		ProvidersPerQuery: 1, MinMergedResults: 1, MaxWaves: 1, RequestTimeout: 50 * time.Millisecond,
-	})
-	_, _ = router.Search(context.Background(), "q", 5)
+	router := NewRouter([]Provider{blockingProvider("slow")}, store, Config{RequestTimeout: 50 * time.Millisecond})
+	stream, err := router.Start(context.Background(), "q", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if arrivals := drain(t, stream); len(arrivals) != 1 || arrivals[0].Status != string(OutcomeTimeout) {
+		t.Fatalf("arrivals = %+v, want one timeout", arrivals)
+	}
 	health, _ := store.Snapshot()
 	if rec := health["slow"]; rec.StrikeCount != 1 || rec.LastFailureClass != string(OutcomeTimeout) {
 		t.Fatalf("a provider that overran the request timeout must be struck as timeout: %+v", rec)
@@ -88,15 +96,14 @@ func TestProviderErrorSummaryNeverHoldsKeyOrQuery(t *testing.T) {
 	store := NewMemoryHealthStore()
 	router := NewRouter([]Provider{&stubProvider{name: "serpapi", searchFn: func(ctx context.Context, query string, maxResults int) ([]Result, error) {
 		return nil, urlError(testSecret)
-	}}}, store, Config{ProvidersPerQuery: 1, MinMergedResults: 1, MaxWaves: 1, RequestTimeout: time.Second})
-	_, err := router.Search(context.Background(), "private query", 5)
-	var outage *OutageError
-	if !errors.As(err, &outage) {
-		t.Fatalf("expected outage, got %v", err)
+	}}}, store, Config{RequestTimeout: time.Second})
+	stream, err := router.Start(context.Background(), "private query", 5)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, a := range outage.Attempts {
-		if strings.Contains(a.Error, testSecret) || strings.Contains(a.Error, "private") {
-			t.Fatalf("attempt error leaks the request query: %q", a.Error)
+	for _, a := range drain(t, stream) {
+		if a.Error == "" || strings.Contains(a.Error, testSecret) || strings.Contains(a.Error, "private") {
+			t.Fatalf("arrival error leaks the request query (or is empty): %q", a.Error)
 		}
 	}
 	health, _ := store.Snapshot()
