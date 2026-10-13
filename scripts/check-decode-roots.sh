@@ -56,7 +56,6 @@ EXEMPT=(
   "cmd/choir/main.go:WorkState:anonymous texture-watch struct, not a charter type:WorkState"
   "internal/buildinfo/buildinfo.go:deployReceipt:deployment receipt, not a charter type:&receipt"
   "internal/capsule/executor.go:CapsuleFateReceipt:capsule-local receipt types, outside Event/CASRequest/DurableEvent scope:&receipt"
-  "internal/cycle/storage.go:event.Metadata:cycle metadata map, not a charter type:event.Metadata"
   "internal/maild/webhook.go:resendWebhookEvent:webhook event, not a charter type:&event"
   "internal/provider/provider.go:ContentBlock:provider message events, distinct namespace:&event"
 )

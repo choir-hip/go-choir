@@ -57,7 +57,7 @@ func (p *recordingStoryPublisher) PublishVerdicts(context.Context, types.StoryVe
 func (p *recordingStoryPublisher) next(t *testing.T) agentcore.StoryVersion {
 	t.Helper()
 	select {
-	case v := <-p.done:
+	case v := <-p.done: // hang-guard: bounded by the time.After case below
 		return v
 	case <-time.After(10 * time.Second):
 		t.Fatal("no publish within 10s")
@@ -68,7 +68,7 @@ func (p *recordingStoryPublisher) next(t *testing.T) agentcore.StoryVersion {
 func (p *recordingStoryPublisher) none(t *testing.T, label string) {
 	t.Helper()
 	select {
-	case v := <-p.done:
+	case v := <-p.done: // hang-guard: bounded by the time.After case below
 		t.Fatalf("%s published %+v", label, v)
 	case <-time.After(300 * time.Millisecond):
 	}
