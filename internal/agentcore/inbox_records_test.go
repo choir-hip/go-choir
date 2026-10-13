@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // Cut 1 L3a through a real research cell: the cell's frame shows the
@@ -255,5 +256,27 @@ func TestRecordsRecheckAfterTurn(t *testing.T) {
 	rt.recheckRecordsInbox(ctx, run(types.RunCompleted, ""))
 	if len(woke) != 2 {
 		t.Fatalf("a completed turn with unread records did not start one more turn: %v", woke)
+	}
+}
+
+// Cut 1 routing, invariant 6: engineering reaches Texture only through
+// management. The reducer refuses an engineering act addressed to Texture
+// by desk name or by a Texture inbox, for every addressed kind, before
+// anything commits; management and research may address a Texture inbox.
+func TestReducerRefusesEngineeringActsToTexture(t *testing.T) {
+	for _, to := range []string{"texture", "texture:doc-1"} {
+		for _, kind := range []string{yaegikernel.IntentReport, yaegikernel.IntentNote, yaegikernel.IntentAsk, yaegikernel.IntentCast} {
+			in := yaegikernel.StagedIntent{Kind: kind, LocalID: "tray-1", ToDesk: to, Objective: "x", Body: "x", Claim: "x"}
+			err := validateCellIntents(ReductionScope{FromRole: agentprofile.Engineering}, []yaegikernel.StagedIntent{in})
+			if err == nil || !strings.Contains(err.Error(), "only through management") {
+				t.Errorf("engineering %s to %s: want the routing refusal, got %v", kind, to, err)
+			}
+		}
+	}
+	report := yaegikernel.StagedIntent{Kind: yaegikernel.IntentReport, LocalID: "tray-1", ToDesk: "texture:doc-1", Claim: "x"}
+	for _, from := range []string{agentprofile.Management, agentprofile.Research} {
+		if err := validateCellIntents(ReductionScope{FromRole: from}, []yaegikernel.StagedIntent{report}); err != nil && strings.Contains(err.Error(), "only through management") {
+			t.Errorf("%s report to a Texture inbox refused by the engineering rule: %v", from, err)
+		}
 	}
 }

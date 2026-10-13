@@ -55,7 +55,7 @@ func TestRunOverlayUsesCellVerbs(t *testing.T) {
 	if strings.Contains(overlay, "Source ids only in source inventories") {
 		t.Fatalf("overlay should not include removed negative phrasing: %q", overlay)
 	}
-	for _, want := range []string{"choir.ApplyTexture", "ReadDoc()", "Inbox()", "choir.Cast", "choir.Ask", "choir.Note"} {
+	for _, want := range []string{"choir.ApplyTexture", "ReadDoc()", "Records()", "choir.Cast", "choir.Ask", "choir.Note"} {
 		if !strings.Contains(overlay, want) {
 			t.Fatalf("overlay missing cell-verb guidance %q: %q", want, overlay)
 		}

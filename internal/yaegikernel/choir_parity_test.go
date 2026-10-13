@@ -221,7 +221,14 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 		}
 	}
 	// Message authority is present (R2): staged verbs export for research.
-	for _, sym := range []string{"Message", "Cast", "Report", "Escalate"} {
+	// The retired Message and Emit transports and their Inbox and Emits
+	// mail are gone (Cut 1 L6): research converses on records.
+	for _, sym := range []string{"Message", "Emit", "Inbox", "Emits", "Updates"} {
+		if _, ok := exports[sym]; ok {
+			t.Fatalf("researcher exports retired transport %s", sym)
+		}
+	}
+	for _, sym := range []string{"Records", "Cast", "Report", "Escalate"} {
 		if _, ok := exports[sym]; !ok {
 			t.Fatalf("researcher missing message authority %s", sym)
 		}
@@ -229,7 +236,7 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	// Emit + the host-mediated egress verbs export: research's signal plane and
 	// world evidence surface ride the broker, not filesystem mutation (M-SUB /
 	// M0a). read-only denies WriteFile/Exec only — messaging stays open.
-	for _, sym := range []string{"Emit", "WebSearch", "FetchURL", "SourceSearch",
+	for _, sym := range []string{"WebSearch", "FetchURL", "SourceSearch",
 		"ImportDocument", "ImportURL", "ReadContentItem", "ListContentSelectors",
 		"ReadContentSelector", "SearchWireCorpus", "SaveEvidence", "ReadEvidence",
 		"ListEvidence", "RunMemoryEntry"} {
@@ -332,6 +339,11 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 		"../runtimeprompts/overlays/rlm_research_runtime.yaml",
 		"../runtimeprompts/overlays/rlm_engineering_runtime.yaml",
 		"../runtimeprompts/overlays/rlm_management_runtime.yaml",
+		"../textureprompts/texture.yaml",
+		"../textureprompts/overlays/run_system.yaml",
+		"../textureprompts/overlays/revision_policy.yaml",
+		"../textureprompts/overlays/revision_execution_findings.yaml",
+		"../textureprompts/overlays/revision_source_entities_intro.yaml",
 	} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -347,6 +359,7 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 		"research":    SessionRoleResearch,
 		"engineering": "engineering",
 		"management":  "management",
+		"texture":     "texture",
 		// core.yaml is shared by every desk — check it against the most
 		// restrictive desk surfaces.
 		"core": SessionRoleResearch,

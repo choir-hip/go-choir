@@ -273,7 +273,7 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering).
-	"management": {"Message", "Emit", "Cast", "Ask", "Note", "Reply",
+	"management": {"Cast", "Ask", "Note", "Reply",
 		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"ProductAPI"},
 	// Engineering mutates inside its capsule and reports fate.
@@ -282,7 +282,7 @@ var deskModuleSets = map[string][]string{
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
-	"research": {"Message", "Emit", "Cast", "Ask", "Note", "Reply", "CancelAct",
+	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
 		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
@@ -298,9 +298,29 @@ var deskModuleSets = map[string][]string{
 	// not capsule file ops. It dispatches to research and management with
 	// Cast, Ask and Note, which the reducer folds into the same cell's
 	// ApplyTexture turn (protocol P2a), so a dispatch commits with the turn.
-	"texture": {"Message", "Emit", "Cast", "Ask", "Note", "Reply", "CancelAct",
+	"texture": {"Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
 		"ReadDoc", "ApplyTexture"},
+}
+
+// legacyObservation gates the observation verbs of the packet transports
+// (Cut 1 L6). Texture, research and management converse on records and read
+// choir.Records. Inbox and Emits read the retired Message and Emit mail, and
+// Updates reads update packets: engineering keeps all three until its
+// conversation moves onto records (C1e), and Texture and management keep
+// Updates for the terminal outcomes still delivered as packets.
+func (s *ChoirScope) legacyObservation(name string) bool {
+	if s == nil {
+		return true
+	}
+	switch s.desk {
+	case "texture", "management":
+		return name == "Updates"
+	case "research", SessionRoleResearchChild:
+		return false
+	default:
+		return true
+	}
 }
 
 func (s *ChoirScope) deskModule(name string) bool {
@@ -325,12 +345,18 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ReadFile": reflect.ValueOf(s.ReadFile),
 		"ListDir":  reflect.ValueOf(s.ListDir),
 		"Context":  reflect.ValueOf(s.Context),
-		"Inbox":    reflect.ValueOf(s.Inbox),
-		"Updates":  reflect.ValueOf(s.Updates),
-		"Emits":    reflect.ValueOf(s.Emits),
 		"Records":  reflect.ValueOf(s.Records),
 		"Pack":     reflect.ValueOf(s.Pack),
 		"Help":     reflect.ValueOf(s.Help),
+	}
+	if s.legacyObservation("Inbox") {
+		exports["Inbox"] = reflect.ValueOf(s.Inbox)
+	}
+	if s.legacyObservation("Updates") {
+		exports["Updates"] = reflect.ValueOf(s.Updates)
+	}
+	if s.legacyObservation("Emits") {
+		exports["Emits"] = reflect.ValueOf(s.Emits)
 	}
 	verbs := map[string]func() reflect.Value{
 		"WriteFile":            func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
