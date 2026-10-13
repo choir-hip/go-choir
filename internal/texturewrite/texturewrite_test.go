@@ -355,6 +355,36 @@ func TestFrameRendersAliasesRecordsAndSources(t *testing.T) {
 	}
 }
 
+// Support judgement (Cut 2 2a (v)): a committed citation's check carries its
+// tier and pair, and management's failing verdict reaches Texture's frame on
+// the block it fails. Ways it can fail: a tolerant match is reported exact;
+// the pair hashes the sentence with its citation tokens in it, so the key
+// changes whenever a citation is added beside it; the failure names a block
+// id Texture cannot address, or drops why.
+func TestChecksPairCitationsAndTheFrameShowsAFailure(t *testing.T) {
+	doc, _ := citedBase(t)
+	checks, pairs := Checks(doc, "doc", "rev-1")
+	if len(checks) != 1 || len(pairs) != 1 {
+		t.Fatalf("checks %+v, pairs %+v; want one of each", checks, pairs)
+	}
+	p := pairs[0]
+	if checks[0].Outcome != quotematch.Matched || checks[0].Tier != quotematch.TierWSCase || checks[0].Pair != p.Key {
+		t.Fatalf("check = %+v; want a tolerant match naming its pair", checks[0])
+	}
+	if p.Text != "The court ruled that the merger may proceed." || p.BlockHash != TextHash(p.Text) || p.Key != PairKey(p.BlockHash, p.Cited.Hash, p.Cited.Quote) {
+		t.Fatalf("pair = %+v; want the sentence's words without tokens, hashed", p)
+	}
+	failure := types.SupportVerdict{Key: p.Key, Verdict: types.SupportUnsupported, Why: "the ruling was stayed", Judge: "management", Pair: &p}
+	records := RecordsFrom([]RecordInput{{Seq: 3, RecordID: "rec-3", Kind: "support_failure", From: "management:owner",
+		Support: &types.CommitmentSupport{Failures: []types.SupportVerdict{failure}}}})
+	frame := Frame{DocID: "doc", RevisionID: "rev-1", Blocks: DocBlocks(doc), Records: records}.Render()
+	for _, want := range []string{"r1 support_failure from management:owner", "unsupported citations", "- b2 cites cap-court", "the ruling was stayed"} {
+		if !strings.Contains(frame, want) {
+			t.Fatalf("frame missing %q:\n%s", want, frame)
+		}
+	}
+}
+
 // A long document's frame carries a section digest with the recently edited
 // and cited blocks in full, not every block.
 func TestLongDocumentFrameDigests(t *testing.T) {

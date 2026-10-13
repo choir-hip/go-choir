@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"regexp"
+	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -45,9 +47,16 @@ func PairKey(blockHash, citedHash, quote string) string {
 	return types.SupportPairKey(blockHash, citedHash, quote, quotematch.Version)
 }
 
-// PlainText is a block's words without its citations, the citing text a
-// pair hashes and management judges.
-func PlainText(n texturedoc.Node) string { return plainText(n) }
+// CitingText is a block's words without its citations, the citing text a
+// pair hashes and management judges: whitespace collapsed, and no space
+// left before closing punctuation where a citation token stood, so adding
+// or removing a citation beside a sentence keeps its hash.
+func CitingText(n texturedoc.Node) string {
+	text := strings.Join(strings.Fields(plainText(n)), " ")
+	return spaceBeforeCloseRE.ReplaceAllString(text, "$1")
+}
+
+var spaceBeforeCloseRE = regexp.MustCompile(` ([,.;:!?)\]])`)
 
 // Checks lists every citation of doc in document order with its quote
 // check, and the support pairs of the captured ones, one per key. A
@@ -58,7 +67,7 @@ func Checks(doc texturedoc.StructuredTextureDoc, docID, revisionID string) ([]Qu
 	var pairs []types.CitationPair
 	seen := map[string]bool{}
 	for _, block := range DocBlocks(doc) {
-		text := plainText(block.Node)
+		text := CitingText(block.Node)
 		blockHash := TextHash(text)
 		for _, ref := range sourceRefs(block.Node) {
 			check := QuoteCheck{RefID: nodeID(ref), BlockID: block.ID}

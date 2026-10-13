@@ -129,7 +129,7 @@ func inboxRecordView(rec types.CommitmentRecord) yaegikernel.InboxRecord {
 	view := yaegikernel.InboxRecord{
 		Seq: rec.InboxSeq, RecordID: rec.RecordID, Kind: inboxRecordKind(rec), From: rec.SenderInbox,
 		ConversationID: rec.ConversationID, Round: rec.Round, Final: rec.Final,
-		Cast: rec.Cast, Report: rec.Report,
+		Cast: rec.Cast, Report: rec.Report, Support: rec.Support,
 	}
 	if t, err := time.Parse(time.RFC3339Nano, rec.Provenance.CommittedAt); err == nil {
 		view.CreatedAt = t
@@ -148,6 +148,10 @@ func inboxRecordView(rec types.CommitmentRecord) yaegikernel.InboxRecord {
 
 func inboxRecordKind(rec types.CommitmentRecord) string {
 	switch {
+	case rec.Support != nil && len(rec.Support.Pairs) > 0:
+		return "support_pairs"
+	case rec.Support != nil && len(rec.Support.Failures) > 0:
+		return "support_failure"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:
@@ -299,8 +303,21 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		}
 	}
 	var localIDs []yaegikernel.StagedIntent
+	// Management's support verdicts (Cut 2 2a (v)) commit in the same
+	// transaction as its records and cursor.
+	var verdicts []types.SupportVerdict
+	var judged []yaegikernel.StagedIntent
 	openRound := map[string]bool{}
 	for _, in := range intents {
+		if in.Kind == yaegikernel.IntentJudge && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management {
+			staged, err := stagedVerdicts(in)
+			if err != nil {
+				return nil, err
+			}
+			verdicts = append(verdicts, staged...)
+			judged = append(judged, in)
+			continue
+		}
 		toInbox, onRoute, routeErr := recordsRoute(r.scope.DeskAgentID, r.scope.OwnerID, in.ToDesk)
 		if routeErr != nil && recordsIntent(in) {
 			return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, routeErr)
@@ -330,12 +347,15 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		localIDs = append(localIDs, in)
 	}
 	cursor := r.records.cursorAdvance()
-	if len(records) == 0 && cursor == nil {
+	if len(records) == 0 && cursor == nil && len(verdicts) == 0 {
 		return rest, nil
 	}
 	req := types.CommitInboxRecordsRequest{
 		OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID,
 		CommandID: "cell-records:" + r.scope.CellID, Records: records, Cursor: cursor,
+	}
+	if len(verdicts) > 0 {
+		req.Judge, req.Verdicts = r.scope.DeskAgentID, verdicts
 	}
 	digest, err := store.ComputeCommitInboxRecordsDigest(req)
 	if err != nil {
@@ -353,7 +373,22 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		}
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: uint64(seq), Kind: in.Kind})
 	}
+	for _, in := range judged {
+		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Kind: in.Kind})
+	}
 	return rest, nil
+}
+
+// stagedVerdicts decodes a Judge intent's verdicts.
+func stagedVerdicts(in yaegikernel.StagedIntent) ([]types.SupportVerdict, error) {
+	var verdicts []types.SupportVerdict
+	if err := json.Unmarshal([]byte(in.Body), &verdicts); err != nil {
+		return nil, fmt.Errorf("reduce: judge %s: %w", in.LocalID, err)
+	}
+	if len(verdicts) == 0 {
+		return nil, fmt.Errorf("reduce: judge %s stages no verdict", in.LocalID)
+	}
+	return verdicts, nil
 }
 
 // inboxRecordRequestSource marks a run a records desk started because its
@@ -382,8 +417,8 @@ func (rt *Runtime) WakeResearchInbox(ctx context.Context, ownerID, computerID, d
 // recordsInboxPrompts is the first user turn of a run a records desk starts
 // for its inbox.
 var recordsInboxPrompts = map[string]string{
-	agentprofile.Research: "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round.",
-	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened.",
+	agentprofile.Research:   "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round.",
+	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A support_pairs record lists a Texture's new citations in r.Support.Pairs: judge them with choir.Judge(r.Support.Pairs).",
 }
 
 // WakeRecordsInbox starts a turn for a records desk (research or

@@ -47,7 +47,7 @@ func blockIDAt(t *testing.T, rev types.Revision, i int) (string, string) {
 	if i >= len(blocks) {
 		t.Fatalf("revision has %d blocks, want block %d", len(blocks), i+1)
 	}
-	return blocks[i].ID, texturewrite.PlainText(blocks[i].Node)
+	return blocks[i].ID, texturewrite.CitingText(blocks[i].Node)
 }
 
 func TestCommitListsNewCitationPairsToManagementOnce(t *testing.T) {
@@ -64,6 +64,9 @@ func TestCommitListsNewCitationPairsToManagementOnce(t *testing.T) {
 	}
 	v1 := headOf(t, s, rec)
 	blockID, blockText := blockIDAt(t, v1, 1)
+	if blockText != "The court ruled that the merger may proceed, and the regulator appealed." {
+		t.Fatalf("citing text = %q; want the sentence without its citation tokens", blockText)
+	}
 
 	got, err := s.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, management, 0, 10)
 	if err != nil || len(got) != 1 {

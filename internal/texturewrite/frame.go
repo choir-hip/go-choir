@@ -184,6 +184,24 @@ func (f Frame) renderRecord(b *strings.Builder, r FrameRecord) {
 	if r.Publish != "" {
 		b.WriteString("  publish: " + r.Publish + "\n")
 	}
+	if len(r.Failures) > 0 {
+		alias := map[string]string{}
+		for _, blk := range f.Blocks {
+			alias[blk.ID] = blk.Alias
+		}
+		b.WriteString("  unsupported citations (the cited passage does not support the sentence; correct the sentence or its citation with choir.Write):\n")
+		for _, fail := range r.Failures {
+			where := alias[fail.BlockID]
+			if where == "" {
+				where = "a block no longer in the document"
+			}
+			fmt.Fprintf(b, "  - %s cites %s %s", where, fail.Doc, strconv.Quote(clip(fail.Quote, 300)))
+			if fail.Why != "" {
+				b.WriteString(": " + fail.Why)
+			}
+			b.WriteString("\n")
+		}
+	}
 }
 
 // RecordInput is one inbox record as the runtime reads it.
@@ -198,6 +216,7 @@ type RecordInput struct {
 	Body      string
 	Cast      *types.CommitmentCast
 	Report    *types.CommitmentReport
+	Support   *types.CommitmentSupport
 }
 
 // FrameRecord is one record as the frame shows it.
@@ -216,6 +235,17 @@ type FrameRecord struct {
 	Claims     []FrameClaim
 	Sources    []Source
 	Publish    string
+	// Failures are management's failing support verdicts (Cut 2 2a (v)).
+	Failures []FrameFailure
+}
+
+// FrameFailure is one citation management judged unsupported: the citing
+// block, the cited capture and quote, and why.
+type FrameFailure struct {
+	BlockID string
+	Doc     string
+	Quote   string
+	Why     string
 }
 
 // FrameClaim is a claim with the handles of the sources it rests on.
@@ -268,6 +298,14 @@ func RecordsFrom(in []RecordInput) []FrameRecord {
 		if r.Report != nil && len(fr.Claims) == 0 {
 			for _, c := range r.Report.Claims {
 				fr.Claims = append(fr.Claims, FrameClaim{Text: c.Text})
+			}
+		}
+		if r.Support != nil {
+			for _, v := range r.Support.Failures {
+				if v.Pair == nil {
+					continue
+				}
+				fr.Failures = append(fr.Failures, FrameFailure{BlockID: v.Pair.BlockID, Doc: v.Pair.Cited.Doc, Quote: v.Pair.Cited.Quote, Why: v.Why})
 			}
 		}
 		if r.Cast != nil {

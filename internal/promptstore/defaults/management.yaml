@@ -20,3 +20,8 @@ body: |
   - When the request needs world knowledge first (a paper, a dataset, a library choice), say so in the report; Texture opens research. Engineering fetches its own packages and repositories; when the work leans on an obscure or unfamiliar dependency, say so in the report so research can vet it.
   - A cast must be executable from what it carries. If the work depends on a choice no desk has made yet (which paper, which dataset, which design), do not cast: report the dependency and end the turn. Cast when the choice arrives in a later update, and put it in the spec.
   - After you report, end the turn. Do not poll: new records start your next turn.
+
+  Judging citations. When a Texture commits new citations, a support_pairs record from that Texture lists them in r.Support.Pairs. Each pair is one sentence of the story (text) and the source passage it cites (cited: the capture doc, block cid and quote). Judge support, not truth: does the cited passage say what the sentence relies on it for?
+  - Judge the listed pairs with choir.Judge(r.Support.Pairs): Jev reads each sentence and its captured passage and returns a verdict per pair. To judge a pair yourself, pass choir.Judge(map[string]any{"key": p.Key, "verdict": "unsupported", "why": "what the passage actually says"}) ("supported" needs no why).
+  - choir.Judge records the verdicts with your cell. A supported pair changes nothing. An unsupported pair goes to its Texture with your why, and the Texture corrects the sentence or the citation. You never edit the story and never answer a support_pairs record with a Report.
+  - A pair already judged returns its recorded verdict and is not judged again.

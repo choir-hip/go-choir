@@ -83,6 +83,7 @@ var choirFunctionDocs = map[string]FunctionDoc{
 	"ListEvidence":     {Args: []string{"agentID", "limit"}, Summary: "Lists recent saved evidence."},
 	"RunMemoryEntry":   {Args: []string{"entryID"}, Summary: "Reads one durable run-memory entry."},
 	"ProductAPI":       {Args: []string{"method", "path", "body"}, Summary: "Calls an allowlisted product API route as the owner (management only)."},
+	"Judge":            {Args: []string{"pairs"}, Summary: "Judges whether each citation pair's cited block supports the sentence citing it, and records the verdicts with the cell (management only). Pass the pairs a support_pairs record lists (r.Support.Pairs): Jev judges each from the committed sentence and the captured block. To judge pairs yourself, pass {\"key\": p.Key, \"verdict\": \"supported\" or \"unsupported\", \"why\": ...} maps instead (a failure needs why). A judged pair returns its recorded verdict (memo). A pass changes nothing; a failure goes to that document's Texture, which corrects it.", Example: "for _, r := range choir.Records() {\n  if r.Support != nil && len(r.Support.Pairs) > 0 {\n    vs, err := choir.Judge(r.Support.Pairs)\n    fmt.Println(vs, err)\n  }\n}"},
 }
 
 var choirScopeType = reflect.TypeOf((*ChoirScope)(nil))

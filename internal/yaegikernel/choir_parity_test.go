@@ -417,3 +417,48 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 		}
 	}
 }
+
+// TestChoirJudgeIsManagementOnly pins support judgement's authority (Cut 2
+// 2a (v); decisions §12.7): only management judges whether a source supports
+// a sentence, never research or Texture. Ways it can fail: another desk's
+// module set exports Judge, or its session handle authorizes the judge
+// action, so a cell that reached the method anyway would call Jev or stage
+// a verdict.
+func TestChoirJudgeIsManagementOnly(t *testing.T) {
+	root := t.TempDir()
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		t.Fatal(err)
+	}
+	issuer, err := NewHandleIssuer(secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := NewBroker(BrokerConfig{ComputerID: "computer-choir", CurrentEpoch: 1, AllowedRoot: root}, issuer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgmt, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, "management", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := mgmt.ChoirExports()["choir/choir"]["Judge"]; !ok {
+		t.Fatal("management scope must export choir.Judge")
+	}
+	for _, role := range []string{SessionRoleResearch, SessionRoleResearchChild, "engineering", "texture"} {
+		scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, role, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := scope.ChoirExports()["choir/choir"]["Judge"]; ok {
+			t.Fatalf("%s scope must not export choir.Judge", role)
+		}
+		scope.tray = &Tray{}
+		if _, err := scope.Judge([]map[string]any{{"key": "sp-x"}}); err == nil || !strings.Contains(err.Error(), "judge") {
+			t.Fatalf("%s Judge call should fail handle verify, got %v", role, err)
+		}
+		if scope.tray.Len() != 0 {
+			t.Fatalf("%s Judge staged a verdict", role)
+		}
+	}
+}

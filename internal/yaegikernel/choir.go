@@ -127,7 +127,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	// SMG: the management desk's product API call rides the broker like the
 	// research egress verbs — the typed product_api_request tool is deleted.
 	if normalizeDeskRole(role) == "management" {
-		actions = append(actions, ActionProductAPI)
+		actions = append(actions, ActionProductAPI, ActionJudge)
 	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, sessionHandleTTL)
 	if err != nil {
@@ -277,10 +277,11 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 // "commit" = Complete+Freeze; "epistemic" = the full semantic-act surface.
 var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
-	// the filesystem (mutation is capsule-bound under engineering).
+	// the filesystem (mutation is capsule-bound under engineering). It alone
+	// judges citation support (Judge, decisions §12.7).
 	"management": {"Cast", "Ask", "Note", "Reply",
 		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"ProductAPI"},
+		"ProductAPI", "Judge"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
@@ -399,6 +400,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ListEvidence":     func() reflect.Value { return reflect.ValueOf(s.ListEvidence) },
 		"RunMemoryEntry":   func() reflect.Value { return reflect.ValueOf(s.RunMemoryEntry) },
 		"ProductAPI":       func() reflect.Value { return reflect.ValueOf(s.ProductAPI) },
+		"Judge":            func() reflect.Value { return reflect.ValueOf(s.Judge) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -668,6 +670,72 @@ func (s *ChoirScope) ProductAPI(method, path string, body []byte) (JSON, error) 
 	var out JSON
 	err := s.call(ActionProductAPI, ProductAPIPayload{Method: method, Path: path, Body: json.RawMessage(body)}, &out)
 	return out, err
+}
+
+// Judge judges whether each listed citation pair's cited block supports its
+// citing sentence (Cut 2 2a (v)), and stages the verdicts to commit with the
+// cell. pairs is a support list's pairs (r.Support.Pairs), one pair, or
+// {"key", "verdict", "why"} maps: a pair with a verdict ("supported" or
+// "unsupported", a failure with why) is management's own judgement, and the
+// others go to Jev through the host, which reads the committed sentence and
+// the captured block itself. A cell cannot set a field of a pair it was
+// given (yaegi), so its own verdicts are maps. A pair already judged
+// returns its memoized verdict (Memo) and is not judged again. The cell's
+// commit records each verdict by its pair key: a pass mints nothing, a
+// failure reaches the pair's Texture as a record.
+func (s *ChoirScope) Judge(pairs any) ([]types.SupportVerdict, error) {
+	t, err := s.boundTray("judge")
+	if err != nil {
+		return nil, err
+	}
+	list, err := judgePairsArg(pairs)
+	if err != nil {
+		return nil, err
+	}
+	var out []types.SupportVerdict
+	if err := s.call(ActionJudge, JudgePayload{Pairs: list}, &out); err != nil {
+		return nil, err
+	}
+	var fresh []types.SupportVerdict
+	for _, v := range out {
+		if v.Memo {
+			continue
+		}
+		v.Pair = nil
+		fresh = append(fresh, v)
+	}
+	if len(fresh) > 0 {
+		raw, err := json.Marshal(fresh)
+		if err != nil {
+			return nil, fmt.Errorf("choir: judge: %w", err)
+		}
+		if _, err := t.Judge(string(raw)); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// judgePairsArg reads Judge's argument: a list of pairs or maps, or one.
+func judgePairsArg(pairs any) ([]types.CitationPair, error) {
+	raw, err := jsonCellArg(pairs)
+	if err != nil {
+		return nil, err
+	}
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "{") {
+		raw = "[" + raw + "]"
+	}
+	var list []types.CitationPair
+	if raw != "" && raw != "null" {
+		if err := json.Unmarshal([]byte(raw), &list); err != nil {
+			return nil, fmt.Errorf("choir: judge: pairs are a support list's pairs or {\"key\", \"verdict\", \"why\"} maps: %w", err)
+		}
+	}
+	if len(list) == 0 {
+		return nil, fmt.Errorf("choir: judge: no pairs; pass the pairs a support_pairs record lists (r.Support.Pairs)")
+	}
+	return list, nil
 }
 
 // Complete marks the assignment finished with a typed verdict. It stages

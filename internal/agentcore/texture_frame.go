@@ -114,7 +114,7 @@ func textureRecordInputs(view []yaegikernel.InboxRecord) []texturewrite.RecordIn
 	for _, r := range view {
 		out = append(out, texturewrite.RecordInput{
 			Seq: r.Seq, RecordID: r.RecordID, Kind: r.Kind, From: r.From, Round: r.Round, Final: r.Final,
-			Objective: r.Objective, Body: r.Body, Cast: r.Cast, Report: r.Report,
+			Objective: r.Objective, Body: r.Body, Cast: r.Cast, Report: r.Report, Support: r.Support,
 		})
 	}
 	return out

@@ -24,8 +24,8 @@ const (
 // (top-level block id, the hash and text of its words without citations)
 // and the cited Ref. Matcher is the quote matcher's version, part of Key;
 // Tier is the tier its quote matched at (exact or tolerant). Verdict and
-// Why are empty in a list; management sets them on a pair it judges itself
-// before passing it to choir.Judge.
+// Why are empty in a list; they carry management's own judgement of a pair
+// it passes to choir.Judge (as {"key", "verdict", "why"}).
 type CitationPair struct {
 	Key        string `json:"key"`
 	DocID      string `json:"doc_id"`

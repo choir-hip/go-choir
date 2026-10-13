@@ -71,6 +71,11 @@ const (
 	// ApplyTextureTurn transaction; it is not a semantic act and mints no
 	// mailbox envelope — the commit lands on the lifecycle/document head.
 	IntentTextureTurn = "texture_turn"
+	// IntentJudge is management's support verdicts (Cut 2 2a (v)): its Body
+	// is a JSON list of types.SupportVerdict without pairs. The reducer
+	// commits them with the cell's records: each is memoized by its pair
+	// key, and the failures reach their Texture as one record each.
+	IntentJudge = "judge"
 )
 
 // TextureTurn is the body of a Texture cell's turn. A cell sets Write,
@@ -162,7 +167,10 @@ type InboxRecord struct {
 	Body           string                  `json:"body,omitempty"`
 	Cast           *types.CommitmentCast   `json:"cast,omitempty"`
 	Report         *types.CommitmentReport `json:"report,omitempty"`
-	CreatedAt      time.Time               `json:"created_at"`
+	// Support is a support list's pairs (to management) or management's
+	// failing verdicts (to a Texture), Cut 2 2a (v).
+	Support   *types.CommitmentSupport `json:"support,omitempty"`
+	CreatedAt time.Time                `json:"created_at"`
 }
 
 // PendingUpdate is one pending update_coagent record bound into the cell at
@@ -437,6 +445,16 @@ func (t *Tray) Disagreement(disagreementJSON string) (string, error) {
 		return "", fmt.Errorf("tray: disagreement requires a typed disagreement body")
 	}
 	return t.stage(StagedIntent{Kind: IntentDisagreement, Disagreement: disagreementJSON})
+}
+
+// Judge stages management's support verdicts (a JSON list of
+// types.SupportVerdict). Verdicts from several Judge calls in one cell
+// stage separately; the reducer commits them together.
+func (t *Tray) Judge(verdictsJSON string) (string, error) {
+	if strings.TrimSpace(verdictsJSON) == "" {
+		return "", fmt.Errorf("tray: judge requires verdicts")
+	}
+	return t.stage(StagedIntent{Kind: IntentJudge, Body: verdictsJSON})
 }
 
 // TextureTurn builds the cell's one Texture turn: the first call stages it,

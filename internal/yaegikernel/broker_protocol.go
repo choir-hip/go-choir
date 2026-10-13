@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const ProtocolVersion = 1
@@ -38,6 +40,10 @@ const (
 	ActionListEvidence      BrokerAction = "list_evidence"
 	ActionGetRunMemoryEntry BrokerAction = "get_run_memory_entry"
 	ActionProductAPI        BrokerAction = "product_api"
+	// ActionJudge asks the decision model (Jev, through the gateway) whether
+	// listed citation pairs are supported: management's choir.Judge (Cut 2
+	// 2a (v)).
+	ActionJudge BrokerAction = "judge"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -191,6 +197,13 @@ type ProductAPIPayload struct {
 	Body   json.RawMessage `json:"body,omitempty"`
 }
 
+// JudgePayload defines ActionJudge: the citation pairs to judge, as a
+// support list named them. A pair with Verdict set is management's own
+// judgement and is not sent to Jev.
+type JudgePayload struct {
+	Pairs []types.CitationPair `json:"pairs"`
+}
+
 // ReadPayload defines ActionRead: a host-resolved fetch into a shared
 // capture; the cell receives the capture id and bounded blocks, never a
 // socket.
@@ -268,7 +281,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
 		ActionSearchStart, ActionRead, ActionSourceSearch, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionJudge:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)
