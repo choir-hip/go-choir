@@ -25,7 +25,10 @@ import (
 //     the guest);
 //   - an unbound caller publishes;
 //   - the version number comes from the caller rather than the revision;
-//   - a guest writes verdicts for another owner.
+//   - a guest writes verdicts for another owner;
+//   - the guest's publish is not marked publish_mode auto, so its story
+//     never reaches the Autopaper front; or the guest names the owner or
+//     the mode in its body and the proxy forwards it.
 
 func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 	var mu sync.Mutex
@@ -113,10 +116,20 @@ func TestGuestPublishesItsStoryThroughTheOwnerPath(t *testing.T) {
 	mu.Lock()
 	if len(published) != 1 || published[0].OwnerID != "paper-owner" || published[0].SourceDocID != "doc-story" ||
 		published[0].SourceRevisionID != "rev-2" || published[0].RevisionNumber != 2 || published[0].Title != "Harbor reopens" ||
-		!strings.Contains(string(published[0].Metadata), "texture_citation_checks") {
+		!strings.Contains(string(published[0].Metadata), "texture_citation_checks") || published[0].PublishMode != platform.PublishModeAuto {
 		t.Fatalf("corpusd publish = %+v", published)
 	}
 	mu.Unlock()
+	// The guest names only the document and revision: an owner or a mode
+	// in its body is refused, never forwarded.
+	for _, body := range []map[string]string{
+		{"doc_id": "doc-story", "revision_id": "rev-2", "owner_id": "reader-owner"},
+		{"doc_id": "doc-story", "revision_id": "rev-2", "publish_mode": "owner"},
+	} {
+		if rec := send(types.StoryPublishPath, "10.200.1.2", body); rec.Code != http.StatusBadRequest {
+			t.Fatalf("guest body %v: %d %s", body, rec.Code, rec.Body)
+		}
+	}
 	// A revision the owner's computer does not have is not published.
 	if rec := send(types.StoryPublishPath, "10.200.1.2", types.StoryPublishRequest{DocID: "doc-story", RevisionID: "rev-9"}); rec.Code < 400 {
 		t.Fatalf("a missing revision published: %d", rec.Code)

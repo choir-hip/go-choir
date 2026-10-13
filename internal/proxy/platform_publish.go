@@ -134,7 +134,7 @@ func (h *Handler) HandleTexturePublication(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	h.lifecycle.record("platform_publish.resolve", "ok", time.Since(resolveStarted))
-	h.publishTextureRevision(w, r, authResult.UserID, autoputerURL, req, started)
+	h.publishTextureRevision(w, r, authResult.UserID, autoputerURL, req, platform.PublishModeOwner, started)
 }
 
 // HandleGuestTexturePublication serves POST types.StoryPublishPath: a
@@ -162,14 +162,16 @@ func (h *Handler) HandleGuestTexturePublication(w http.ResponseWriter, r *http.R
 		return
 	}
 	req := publishTextureRequest{DocID: strings.TrimSpace(story.DocID), RevisionID: strings.TrimSpace(story.RevisionID)}
-	h.publishTextureRevision(w, r, strings.TrimSpace(ownership.UserID), strings.TrimSpace(ownership.ComputerURL), req, started)
+	// A computer's own publish is an Autopaper story: publish_mode auto.
+	h.publishTextureRevision(w, r, strings.TrimSpace(ownership.UserID), strings.TrimSpace(ownership.ComputerURL), req, platform.PublishModeAuto, started)
 }
 
 // publishTextureRevision is the publish path once the caller is bound to an
 // owner and a computer: read the owner's document and revision from that
 // computer, prepare its source metadata, and publish it to corpusd as
-// version n, n its number on the revision chain.
-func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request, userID, autoputerURL string, req publishTextureRequest, started time.Time) {
+// version n, n its number on the revision chain. userID is the bound
+// owner and publishMode is set by the route, never by the request body.
+func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request, userID, autoputerURL string, req publishTextureRequest, publishMode string, started time.Time) {
 	authResult := &AuthResult{UserID: userID}
 	var doc autoputerTextureDocument
 	if err := h.fetchAutoputerJSON(r, autoputerURL, "/api/texture/documents/"+url.PathEscape(req.DocID), authResult.UserID, &doc); err != nil {
@@ -236,6 +238,7 @@ func (h *Handler) publishTextureRevision(w http.ResponseWriter, r *http.Request,
 		// n its number on the revision chain (Cut 2 unit 2b).
 		RevisionNumber: types.RevisionNumber(rev.VersionNumber),
 		RevisionHash:   rev.RevisionHash,
+		PublishMode:    publishMode,
 	}
 	platformResp, status, err := h.postPlatformPublication(r, platformReq)
 	if err != nil {

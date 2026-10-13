@@ -42,6 +42,9 @@ func main() {
 	// Published versions' check overlay reads quote checks and support
 	// verdicts from Store B, never from a paper computer (Cut 2 2b).
 	svc.SetCheckOverlayProvider(platform.NewStoreCheckOverlay(svc))
+	// The Autopaper front lists only these owners' auto stories when
+	// CORPUSD_AUTOPAPER_OWNERS is set; every owner's when unset.
+	svc.SetAutopaperOwners(platform.ParseAutopaperOwners(cfg.AutopaperOwnersRaw))
 	// Periodic platform-artifacts reachability GC (dry-run unless explicitly
 	// activated). The on-demand endpoint /internal/platform/artifact-gc admits
 	// the same sweep on demand for the deployed-proof report.

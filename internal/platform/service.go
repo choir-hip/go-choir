@@ -46,6 +46,10 @@ type Service struct {
 	// overlay supplies the live check overlay served beside a version.
 	overlayMu sync.RWMutex
 	overlay   CheckOverlayProvider
+	// autopaperOwners, when non-empty, limits the front list to these
+	// owners' stories (CORPUSD_AUTOPAPER_OWNERS).
+	frontMu         sync.RWMutex
+	autopaperOwners map[string]bool
 }
 
 type citationInput struct {
@@ -178,8 +182,16 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	req.Title = strings.TrimSpace(req.Title)
 	req.RequestedBy = strings.TrimSpace(req.RequestedBy)
 	req.SourceTraceID = strings.TrimSpace(req.SourceTraceID)
+	req.PublishMode = strings.TrimSpace(req.PublishMode)
 	if req.OwnerID == "" {
 		return nil, fmt.Errorf("owner_id is required")
+	}
+	switch req.PublishMode {
+	case "":
+		req.PublishMode = PublishModeOwner
+	case PublishModeAuto, PublishModeOwner:
+	default:
+		return nil, fmt.Errorf("publish_mode %q is not %q or %q", req.PublishMode, PublishModeAuto, PublishModeOwner)
 	}
 	if req.RequestedBy == "" {
 		req.RequestedBy = req.OwnerID
@@ -260,15 +272,24 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 
 	// The bare route is fixed by the first version: a story's link never
 	// changes, whatever later titles or slugs say.
+	// So are its publish mode and owner: a story stays a story, and a hand
+	// published Texture stays off the front, whatever later versions say.
 	routePath := publicTexturePrefix + slugify(firstNonEmpty(req.Slug, req.Title)) + "-" + shortID(ident.PublicationID)
+	publishMode, publicationOwner := req.PublishMode, req.OwnerID
 	if !newPublication {
 		var pubMeta struct {
-			RoutePath string `json:"route_path"`
+			RoutePath   string `json:"route_path"`
+			PublishMode string `json:"publish_mode"`
+			OwnerID     string `json:"owner_id"`
 		}
 		if err := json.Unmarshal(pubObj.Metadata, &pubMeta); err != nil || strings.TrimSpace(pubMeta.RoutePath) == "" {
 			return nil, fmt.Errorf("platform publish: publication %s has no route", ident.PublicationID)
 		}
 		routePath = pubMeta.RoutePath
+		// A publication written before modes were recorded takes this
+		// version's mode.
+		publishMode = firstNonEmpty(strings.TrimSpace(pubMeta.PublishMode), publishMode)
+		publicationOwner = firstNonEmpty(strings.TrimSpace(pubMeta.OwnerID), publicationOwner)
 	}
 	versionID := publicationVersionID(ident.PublicationID, revision)
 	versionCanonicalID, err := publicationVersionCanonicalID(req.OwnerID, versionID)
@@ -406,6 +427,8 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		VersionCanonicalID:         versionCanonicalID,
 		PreviousVersionCanonicalID: previousCanonicalID,
 		NewPublication:             newPublication,
+		PublishMode:                publishMode,
+		PublicationOwnerID:         publicationOwner,
 		Revision:                   revision,
 		VersionMetadata: versionMetadata{
 			EditionLabel:         "v" + strconv.Itoa(revision),

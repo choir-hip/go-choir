@@ -96,17 +96,49 @@ type frontPublicationMeta struct {
 	State         string `json:"state"`
 	RoutePath     string `json:"route_path"`
 	PublishMode   string `json:"publish_mode"`
+	OwnerID       string `json:"owner_id"`
 }
 
-// isAutopaperStory decides whether a publication is an Autopaper story.
-// Stories are the documents opened with publish: auto; until the publish
-// path records publish_mode on every publication, a publication with no
-// mode is listed, and one with another mode (a hand-published Texture) is
-// not.
-// SEAM: once publish_mode is recorded on every publication, this is
-// `return meta.PublishMode == "auto"`.
-func isAutopaperStory(meta frontPublicationMeta) bool {
-	return meta.PublishMode == "" || meta.PublishMode == "auto"
+// ParseAutopaperOwners splits CORPUSD_AUTOPAPER_OWNERS: comma-separated
+// owner ids, blanks dropped.
+func ParseAutopaperOwners(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// SetAutopaperOwners limits the front list to these owners' stories; an
+// empty list lists every owner's.
+func (s *Service) SetAutopaperOwners(owners []string) {
+	set := map[string]bool{}
+	for _, owner := range owners {
+		if owner = strings.TrimSpace(owner); owner != "" {
+			set[owner] = true
+		}
+	}
+	s.frontMu.Lock()
+	defer s.frontMu.Unlock()
+	if len(set) == 0 {
+		set = nil
+	}
+	s.autopaperOwners = set
+}
+
+// isAutopaperStory decides whether a publication is an Autopaper story: a
+// publication a computer opened through its story publish route
+// (publish_mode auto), from an allowed owner when an allowlist is set. A
+// hand-published Texture (mode owner) or one with no recorded mode is not.
+func (s *Service) isAutopaperStory(meta frontPublicationMeta) bool {
+	if meta.PublishMode != PublishModeAuto {
+		return false
+	}
+	s.frontMu.RLock()
+	defer s.frontMu.RUnlock()
+	return s.autopaperOwners == nil || s.autopaperOwners[strings.TrimSpace(meta.OwnerID)]
 }
 
 // ListFrontStories returns one page of the front list, newest first. limit
@@ -235,7 +267,7 @@ func (s *Service) frontStory(ctx context.Context, og *ObjectGraphStore, pub fron
 	if err := json.Unmarshal(pub.Metadata, &meta); err != nil {
 		return FrontStory{}, false, nil
 	}
-	if meta.State != "published" || strings.TrimSpace(meta.RoutePath) == "" || !isAutopaperStory(meta) {
+	if meta.State != "published" || strings.TrimSpace(meta.RoutePath) == "" || !s.isAutopaperStory(meta) {
 		return FrontStory{}, false, nil
 	}
 	versions, err := publishedVersions(ctx, og, pub.CanonicalID)

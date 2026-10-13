@@ -8,7 +8,14 @@ package platform
 //     first: a story revised after another was opened must sort above it.
 //  3. Paging repeats or drops a story across pages.
 //  4. A hand-published Texture (publish_mode other than auto) is listed as
-//     an Autopaper story.
+//     an Autopaper story; or a publication with no recorded mode is, since
+//     only the guest story route records "auto".
+//  7. With an owner allowlist set (CORPUSD_AUTOPAPER_OWNERS), another
+//     owner's auto story is listed; or, unset, an allowed owner's story is
+//     dropped.
+//  8. publish_mode and owner_id are recorded on the first version only and
+//     lost when a later version rewrites the publication's metadata, or a
+//     later publish in another mode flips a story on or off the front.
 //  5. The dek is the title, a heading or a citation marker instead of the
 //     story's first paragraph.
 //  6. Building the list calls a computer (a guest lookup or any outbound
@@ -34,22 +41,48 @@ type frontFixture struct {
 	routes map[string]string
 }
 
+// publishStoryRevision publishes as the paper computer's story route does:
+// publish_mode auto.
 func publishStoryRevision(t *testing.T, svc *Service, doc string, n int, title, content string, bodyDoc json.RawMessage) *PublishTextureResponse {
 	t.Helper()
+	return publishAs(t, svc, "paper-owner", PublishModeAuto, doc, n, title, content, bodyDoc)
+}
+
+func publishAs(t *testing.T, svc *Service, owner, mode, doc string, n int, title, content string, bodyDoc json.RawMessage) *PublishTextureResponse {
+	t.Helper()
 	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
-		OwnerID:          "paper-owner",
+		OwnerID:          owner,
 		SourceDocID:      doc,
 		SourceRevisionID: fmt.Sprintf("%s-rev-%d", doc, n),
 		RevisionNumber:   n,
 		Title:            title,
 		Content:          content,
 		BodyDoc:          bodyDoc,
-		RequestedBy:      "paper-owner",
+		RequestedBy:      owner,
+		PublishMode:      mode,
 	})
 	if err != nil {
-		t.Fatalf("publish %s v%d: %v", doc, n, err)
+		t.Fatalf("publish %s v%d as %s/%s: %v", doc, n, owner, mode, err)
 	}
 	return resp
+}
+
+func frontTitles(t *testing.T, svc *Service) []string {
+	t.Helper()
+	page, err := svc.ListFrontStories(context.Background(), 0, "")
+	if err != nil {
+		t.Fatalf("front: %v", err)
+	}
+	return storyIDs(page)
+}
+
+func hasTitle(titles []string, title string) bool {
+	for _, got := range titles {
+		if got == title {
+			return true
+		}
+	}
+	return false
 }
 
 // setPublicationUpdatedAt spaces the fixture's publications a second apart.
@@ -171,39 +204,98 @@ func TestFrontPagesWithoutRepeatsOrGaps(t *testing.T) {
 	}
 }
 
-// Failure mode 4: the story filter seam reads publish_mode when present.
+// Failure mode 4: a Texture the owner published by hand, or a publication
+// with no recorded mode, never reaches the front.
 func TestFrontSkipsHandPublishedTextures(t *testing.T) {
 	f := newFrontFixture(t)
-	publishStoryRevision(t, f.svc, "doc-essay", 1, "An essay", "Hand published.", nil)
-	ident, err := publicationIdentityFor("paper-owner", "doc-essay")
+	publishAs(t, f.svc, "paper-owner", PublishModeOwner, "doc-essay", 1, "An essay", "Hand published.", nil)
+	publishAs(t, f.svc, "paper-owner", "", "doc-unmarked", 1, "Unmarked", "No mode given.", nil)
+	titles := frontTitles(t, f.svc)
+	if hasTitle(titles, "An essay") || hasTitle(titles, "Unmarked") {
+		t.Fatalf("a non-story publication is listed: %v", titles)
+	}
+	want := []string{"Harbor reopens", "Canal dredged", "Bridge closes"}
+	if fmt.Sprint(titles) != fmt.Sprint(want) {
+		t.Fatalf("front = %v, want %v", titles, want)
+	}
+	if _, err := f.svc.PublishTexture(context.Background(), PublishTextureRequest{OwnerID: "paper-owner", SourceDocID: "doc-odd",
+		SourceRevisionID: "doc-odd-rev-1", RevisionNumber: 1, Title: "Odd", Content: "x", PublishMode: "manual"}); err == nil {
+		t.Fatalf("an unknown publish_mode was accepted")
+	}
+}
+
+// Failure mode 7: the owner allowlist.
+func TestFrontOwnerAllowlist(t *testing.T) {
+	f := newFrontFixture(t)
+	publishAs(t, f.svc, "other-owner", PublishModeAuto, "doc-rival", 1, "Rival story", "Another computer's story.", nil)
+	if titles := frontTitles(t, f.svc); !hasTitle(titles, "Rival story") || len(titles) != 4 {
+		t.Fatalf("no allowlist: every auto story is listed, got %v", titles)
+	}
+	f.svc.SetAutopaperOwners(ParseAutopaperOwners(" paper-owner , ,"))
+	titles := frontTitles(t, f.svc)
+	if hasTitle(titles, "Rival story") {
+		t.Fatalf("another owner's auto story is listed under the allowlist: %v", titles)
+	}
+	if want := []string{"Harbor reopens", "Canal dredged", "Bridge closes"}; fmt.Sprint(titles) != fmt.Sprint(want) {
+		t.Fatalf("allowlisted front = %v, want %v", titles, want)
+	}
+	f.svc.SetAutopaperOwners(nil)
+	if titles := frontTitles(t, f.svc); len(titles) != 4 {
+		t.Fatalf("cleared allowlist: front = %v, want 4 stories", titles)
+	}
+}
+
+func TestLoadConfigReadsAutopaperOwners(t *testing.T) {
+	t.Setenv("CORPUSD_AUTOPAPER_OWNERS", "paper-owner, second-owner")
+	cfg, err := LoadConfig()
 	if err != nil {
-		t.Fatalf("identity: %v", err)
+		t.Fatalf("load config: %v", err)
 	}
-	og := f.svc.ogStore()
-	obj, err := og.GetObject(context.Background(), ident.CanonicalID)
-	if err != nil {
-		t.Fatalf("get publication: %v", err)
+	if got := ParseAutopaperOwners(cfg.AutopaperOwnersRaw); fmt.Sprint(got) != "[paper-owner second-owner]" {
+		t.Fatalf("autopaper owners = %v", got)
 	}
-	var meta map[string]any
-	if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
-		t.Fatalf("decode: %v", err)
+	if got := ParseAutopaperOwners(""); len(got) != 0 {
+		t.Fatalf("unset allowlist parsed to %v", got)
 	}
-	meta["publish_mode"] = "manual"
-	obj.Metadata, _ = json.Marshal(meta)
-	if err := og.PutObject(context.Background(), obj); err != nil {
-		t.Fatalf("put publication: %v", err)
-	}
-	page, err := f.svc.ListFrontStories(context.Background(), 0, "")
-	if err != nil {
-		t.Fatalf("front: %v", err)
-	}
-	for _, s := range page.Stories {
-		if s.Title == "An essay" {
-			t.Fatalf("hand-published Texture listed: %+v", s)
+}
+
+// Failure mode 8: the mode and owner set by the first version stay on the
+// publication through later versions.
+func TestPublishModeAndOwnerPersistAcrossVersions(t *testing.T) {
+	f := newFrontFixture(t)
+	publicationMeta := func(owner, doc string) frontPublicationMeta {
+		t.Helper()
+		ident, err := publicationIdentityFor(owner, doc)
+		if err != nil {
+			t.Fatalf("identity: %v", err)
 		}
+		obj, err := f.svc.ogStore().GetObject(context.Background(), ident.CanonicalID)
+		if err != nil {
+			t.Fatalf("get publication: %v", err)
+		}
+		var meta frontPublicationMeta
+		if err := json.Unmarshal(obj.Metadata, &meta); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return meta
 	}
-	if len(page.Stories) != 3 {
-		t.Fatalf("front lists %d stories, want 3", len(page.Stories))
+	// harbor has three auto versions.
+	if meta := publicationMeta("paper-owner", "doc-harbor"); meta.PublishMode != PublishModeAuto || meta.OwnerID != "paper-owner" {
+		t.Fatalf("harbor after v3: publish_mode %q owner_id %q", meta.PublishMode, meta.OwnerID)
+	}
+	// A later version in another mode does not change the story's mode.
+	publishAs(t, f.svc, "paper-owner", PublishModeOwner, "doc-harbor", 4, "Harbor reopens", "The harbor is open.", nil)
+	if meta := publicationMeta("paper-owner", "doc-harbor"); meta.PublishMode != PublishModeAuto || meta.OwnerID != "paper-owner" {
+		t.Fatalf("harbor after an owner-mode v4: publish_mode %q owner_id %q", meta.PublishMode, meta.OwnerID)
+	}
+	publishAs(t, f.svc, "paper-owner", PublishModeOwner, "doc-essay", 1, "An essay", "Hand published.", nil)
+	publishAs(t, f.svc, "paper-owner", PublishModeAuto, "doc-essay", 2, "An essay", "Hand published, revised.", nil)
+	if meta := publicationMeta("paper-owner", "doc-essay"); meta.PublishMode != PublishModeOwner || meta.OwnerID != "paper-owner" {
+		t.Fatalf("essay after an auto-mode v2: publish_mode %q owner_id %q", meta.PublishMode, meta.OwnerID)
+	}
+	titles := frontTitles(t, f.svc)
+	if hasTitle(titles, "An essay") || !hasTitle(titles, "Harbor reopens") {
+		t.Fatalf("front after mixed-mode versions = %v", titles)
 	}
 }
 

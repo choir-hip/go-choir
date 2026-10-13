@@ -29,7 +29,19 @@ type PublishTextureRequest struct {
 	// RevisionHash is the source revision's chain hash
 	// (types.ComputeStructuredRevisionHash), recorded in the manifest.
 	RevisionHash string `json:"revision_hash,omitempty"`
+	// PublishMode is how the publication came to be: PublishModeAuto from a
+	// computer's story publish route, PublishModeOwner from the owner's
+	// publish action. The proxy sets it from the route, never from a body.
+	// The first version's mode is recorded on the publication and kept;
+	// only auto publications are Autopaper stories. Empty means owner.
+	PublishMode string `json:"publish_mode,omitempty"`
 }
+
+// Publish modes (PublishTextureRequest.PublishMode).
+const (
+	PublishModeAuto  = "auto"
+	PublishModeOwner = "owner"
+)
 
 type PublishTextureResponse struct {
 	PublicationID        string   `json:"publication_id"`

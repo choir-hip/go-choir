@@ -177,6 +177,10 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	if gotPlatformReq.OwnerID != "user-1" || gotPlatformReq.RequestedBy != "user-1" {
 		t.Fatalf("platform owner/requester mismatch: %#v", gotPlatformReq)
 	}
+	// The owner's publish action is never an Autopaper story.
+	if gotPlatformReq.PublishMode != platform.PublishModeOwner {
+		t.Fatalf("owner publish_mode = %q, want %q", gotPlatformReq.PublishMode, platform.PublishModeOwner)
+	}
 	if gotPlatformReq.SourceDocID != "doc-1" || gotPlatformReq.SourceRevisionID != "rev-2" {
 		t.Fatalf("platform source mismatch: %#v", gotPlatformReq)
 	}
@@ -325,6 +329,44 @@ func TestHandleTexturePublicationRejectsMalformedPolicy(t *testing.T) {
 	}
 	if corpusdCalled {
 		t.Fatalf("corpusd was called for malformed policy")
+	}
+}
+
+// The owner's publish action can fail the Autopaper front by letting the
+// browser body pick the publish mode (an owner's Texture listed as a
+// story) or the owner (a story recorded under someone else). Both fields
+// are refused before corpusd is called.
+func TestHandleTexturePublicationRefusesModeAndOwnerInBody(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	corpusdCalled := false
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		corpusdCalled = true
+	}))
+	defer corpusd.Close()
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       "http://127.0.0.1:1",
+		AuthPublicKeyPath: "/unused/in/test",
+		CorpusdURL:        corpusd.URL}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	for _, body := range []string{
+		`{"doc_id":"doc-1","publish_mode":"auto"}`,
+		`{"doc_id":"doc-1","owner_id":"user-2"}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "https://choir.news/api/platform/texture/publications", strings.NewReader(body))
+		req.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(priv, "user-1")})
+		w := httptest.NewRecorder()
+		h.HandleTexturePublication(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("body %s: status %d %s", body, w.Code, w.Body.String())
+		}
+	}
+	if corpusdCalled {
+		t.Fatalf("corpusd was called for a body naming the mode or owner")
 	}
 }
 

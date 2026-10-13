@@ -25,6 +25,10 @@ type Config struct {
 	ArtifactGCGrace       string
 	ArtifactGCInterval    string
 	ArtifactGCMaxDeletes  string
+	// AutopaperOwnersRaw is CORPUSD_AUTOPAPER_OWNERS: comma-separated owner
+	// ids whose auto stories the front list shows; unset shows every
+	// owner's (ParseAutopaperOwners).
+	AutopaperOwnersRaw string
 }
 
 func LoadConfig() (*Config, error) {
@@ -41,6 +45,7 @@ func LoadConfig() (*Config, error) {
 		ArtifactGCGrace:       os.Getenv("PLATFORM_ARTIFACT_GC_GRACE"),
 		ArtifactGCInterval:    os.Getenv("PLATFORM_ARTIFACT_GC_INTERVAL"),
 		ArtifactGCMaxDeletes:  os.Getenv("PLATFORM_ARTIFACT_GC_MAX_DELETES"),
+		AutopaperOwnersRaw:    os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
