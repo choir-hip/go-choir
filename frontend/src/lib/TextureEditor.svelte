@@ -1879,7 +1879,7 @@
           on:keydown={handleEditorKeydown}
           on:scroll={handleDocumentScroll}
         ></article>
-        <TextureVersionHistory versionHistory={publishedBundle?.version_history} />
+        <TextureVersionHistory nav={publishedBundle?.nav} route={publishedBundle?.route} manifestHash={publishedBundle?.payload?.manifest_hash || publishedBundle?.version?.manifest_hash || ''} />
       {:else}
         <div
           class="rendered-doc editable-doc"
