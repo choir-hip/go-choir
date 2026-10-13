@@ -12,20 +12,18 @@ import (
 
 // foldTextureDispatch is how a Texture cell dispatches (protocol P2a,
 // docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md). Texture's
-// staged Cast, Ask and Note to research or management become controls on the
-// cell's one apply or decide ApplyTexture body, so each dispatch commits with
-// the turn through textureTurnControls and the control accumulator: the round
-// bound, opener merge and the research chain stay exactly as they are, and the
-// accumulator mints each dispatch's record (P1). The returned intents exclude
-// the folded ones; folded lists them for the receipt.
+// staged Cast, Ask and Note to research or management fold into the cell's
+// one apply or decide ApplyTexture body, so each dispatch commits with the
+// turn. The returned intents exclude the folded ones; folded lists them for
+// the receipt.
 //
 // The fold is a pure function of the staged intents, so a replayed cell folds
 // to the same bytes. A cell with no dispatch keeps its body byte-identical.
 //
-// Cut 1 L3a: the research conversation is on records. A dispatch to research
-// becomes an addressed record committed with the turn (inbox_records), and
-// every ApplyTexture body carries the cursor advance over the range the cell
-// read (inbox_cursor). Management stays a control until L3b.
+// Cut 1 L3a/L3b: Texture's conversations with research and management are on
+// records. A dispatch becomes an addressed record committed with the turn
+// (inbox_records), and every apply or decide body carries the cursor advance
+// over the range the cell read (inbox_cursor).
 func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScope, records cellRecords) (out, folded []yaegikernel.StagedIntent, err error) {
 	applyAt := -1
 	applies := 0
@@ -50,55 +48,36 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScop
 		}
 	}
 
-	var controls []map[string]any
 	var inboxRecords []types.CommitmentRecord
-	managementCasts := 0
 	for _, in := range intents {
 		if in.Kind != yaegikernel.IntentCast && in.Kind != yaegikernel.IntentAsk && in.Kind != yaegikernel.IntentNote {
 			out = append(out, in)
 			continue
 		}
 		desk, _ := agentprofile.Canonical(strings.TrimSpace(in.ToDesk))
-		var control map[string]any
-		switch {
-		case desk == agentprofile.Research:
-			toInbox, onRoute := recordsCounterpartInbox(scope.DeskAgentID, agentprofile.Research)
-			if !onRoute {
-				return nil, nil, fmt.Errorf("reduce: Texture %s: no research inbox for desk %q", in.LocalID, scope.DeskAgentID)
-			}
-			if in.Kind == yaegikernel.IntentNote && strings.TrimSpace(in.Body) == "" {
-				return nil, nil, fmt.Errorf("reduce: Texture %s: a note to research needs a body", in.LocalID)
-			}
-			rec, recErr := inboxRecordForIntent(scope, in, toInbox, false)
-			if recErr != nil {
-				return nil, nil, recErr
-			}
-			// The fold is a pure function of the staged intents: the commit
-			// stamps the record's time.
-			rec.Provenance.CommittedAt = ""
-			rec.Prediction.CommittedAt = ""
-			inboxRecords = append(inboxRecords, rec)
-			folded = append(folded, in)
-			continue
-		case desk == agentprofile.Management && in.Kind == yaegikernel.IntentCast:
-			managementCasts++
-			if managementCasts > 1 {
-				return nil, nil, fmt.Errorf("reduce: Texture %s: a turn takes one management Cast; put every action in one execution_request", in.LocalID)
-			}
-			control, err = foldManagementCast(in)
-		case desk == agentprofile.Management:
-			return nil, nil, fmt.Errorf("reduce: Texture %s: management takes work only as choir.Cast with an execution_request packet", in.LocalID)
-		default:
+		if desk != agentprofile.Research && desk != agentprofile.Management {
 			return nil, nil, fmt.Errorf("reduce: Texture %s: Texture dispatches only to research or management, not %q", in.LocalID, in.ToDesk)
 		}
-		if err != nil {
-			return nil, nil, err
+		toInbox, onRoute, routeErr := recordsRoute(scope.DeskAgentID, scope.OwnerID, desk)
+		if routeErr != nil || !onRoute {
+			return nil, nil, fmt.Errorf("reduce: Texture %s: no %s inbox for desk %q: %v", in.LocalID, desk, scope.DeskAgentID, routeErr)
 		}
-		controls = append(controls, control)
+		if in.Kind == yaegikernel.IntentNote && strings.TrimSpace(in.Body) == "" {
+			return nil, nil, fmt.Errorf("reduce: Texture %s: a note to %s needs a body", in.LocalID, desk)
+		}
+		rec, recErr := inboxRecordForIntent(scope, in, toInbox, false)
+		if recErr != nil {
+			return nil, nil, recErr
+		}
+		// The fold is a pure function of the staged intents: the commit
+		// stamps the record's time.
+		rec.Provenance.CommittedAt = ""
+		rec.Prediction.CommittedAt = ""
+		inboxRecords = append(inboxRecords, rec)
 		folded = append(folded, in)
 	}
 	cursor := records.cursorAdvance()
-	if len(controls) == 0 && len(inboxRecords) == 0 {
+	if len(inboxRecords) == 0 {
 		if cursor == nil || applyAt < 0 {
 			return intents, nil, nil
 		}
@@ -121,9 +100,6 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScop
 	if op, _ := body["op"].(string); op != "apply" && op != "decide" {
 		return nil, nil, fmt.Errorf("reduce: Texture %s: a dispatch commits with an apply or decide ApplyTexture in the same cell", folded[0].LocalID)
 	}
-	if len(controls) > 0 {
-		body["controls"] = controls
-	}
 	if len(inboxRecords) > 0 {
 		body["inbox_records"] = inboxRecords
 	}
@@ -142,58 +118,8 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScop
 	return out, folded, nil
 }
 
-func foldResearchDispatch(in yaegikernel.StagedIntent) (map[string]any, error) {
-	switch in.Kind {
-	case yaegikernel.IntentCast:
-		packet, err := foldPacket(in, in.Statement)
-		if err != nil {
-			return nil, err
-		}
-		if packet == nil {
-			packet = map[string]any{"kind": "question", "summary": in.Objective, "questions": []string{in.Objective}}
-		}
-		return map[string]any{"open_researcher": true, "objective": in.Objective, "packet": packet, "staged_act": "cast"}, nil
-	case yaegikernel.IntentAsk:
-		q := strings.TrimSpace(in.Question)
-		return map[string]any{"open_researcher": true, "objective": q, "staged_act": "ask",
-			"packet": map[string]any{"kind": "question", "summary": q, "questions": []string{q}}}, nil
-	default: // Note
-		body := strings.TrimSpace(in.Body)
-		if body == "" {
-			return nil, fmt.Errorf("reduce: Texture %s: a note to research needs a body", in.LocalID)
-		}
-		return map[string]any{"open_researcher": true, "objective": body, "staged_act": "note",
-			"packet": map[string]any{"kind": "evidence_update", "summary": body, "notes": []string{body}}}, nil
-	}
-}
 
-func foldManagementCast(in yaegikernel.StagedIntent) (map[string]any, error) {
-	packet, err := foldPacket(in, in.Statement)
-	if err != nil {
-		return nil, err
-	}
-	if kind, _ := packet["kind"].(string); kind != "execution_request" {
-		return nil, fmt.Errorf("reduce: Texture %s: a management Cast carries an execution_request packet with actions", in.LocalID)
-	}
-	return map[string]any{"open_persistent_super": true, "objective": in.Objective, "packet": packet, "staged_act": "cast"}, nil
-}
 
-// foldPacket decodes a Texture Cast's third argument, which on Texture is the
-// typed packet (on other desks it is the cast spec). Empty means no packet.
-func foldPacket(in yaegikernel.StagedIntent, raw string) (map[string]any, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || raw == "null" {
-		return nil, nil
-	}
-	var packet map[string]any
-	if err := json.Unmarshal([]byte(raw), &packet); err != nil {
-		return nil, fmt.Errorf("reduce: Texture %s: a Cast's third argument is the packet (kind, summary, questions, actions ...): %w", in.LocalID, err)
-	}
-	if kind, _ := packet["kind"].(string); strings.TrimSpace(kind) == "" {
-		return nil, fmt.Errorf("reduce: Texture %s: on Texture a Cast's third argument is the packet, which needs a kind (question, evidence_update, execution_request ...) and a summary, not a cast spec", in.LocalID)
-	}
-	return packet, nil
-}
 
 // withFoldedBody rewrites the one staged ApplyTexture body with set applied.
 func withFoldedBody(intents []yaegikernel.StagedIntent, applyAt int, set func(map[string]any)) (out, folded []yaegikernel.StagedIntent, err error) {

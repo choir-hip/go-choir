@@ -418,9 +418,17 @@ boundaries:
 
 now:
   status: executing
-  slice: L1 (crash boot closes pre-boot runs) landed and field-traced; breakage B1-B3 fixed (docs/problems/reeng-cut1-breakage-2026-10-13.md); next L1's crash-scenario receipt, then L2+L3
-  source_ref: af92cb94
-  deploy_identity: staging 6d676094
+  slice: >-
+    L1 accepted (crash scenario, 50ed3337). L2 deletions landed (spawn and
+    cancel agent, 17 legacy tables, research and tool-loop budgets; the
+    global 60-minute activation budget stays). L3a landed and ran end to
+    end on staging (c1-l3a-story-1, 38d9b553): Texture and research
+    converse on records over three rounds with cursors at their heads
+    (docs/evidence/c1-l3a-story-acceptance-2026-10-13.json). L3b
+    (Texture and management on records) in progress. Breakage B1-B3
+    fixed (docs/problems/reeng-cut1-breakage-2026-10-13.md).
+  source_ref: 7e2250af
+  deploy_identity: staging 38d9b553
   candidate:
     id: none
     state: none
@@ -516,8 +524,14 @@ now:
     and work items, so every route has one authority at every commit (no
     dual-write, no shadow fold). L3a: the record substrate (inbox
     sequence, conversations, rounds, hypothesis ids, cursors, wake rows)
-    and the Texture-research conversation. L3b: management's
-    conversations, with L4's routing. L3c: the remaining packet and work
+    and the Texture-research conversation (landed). L3b: Texture and
+    management on records (management reads its inbox by cursor and
+    answers each Texture at texture:<doc>; engineering acts addressed to
+    texture:* refused); a records turn's Cast to engineering is refused
+    until L3b-2. L3b-2: management and engineering on records with L4's
+    routing; engineering cells run in the capsule, whose request carries
+    only Inbox and Updates, so Records reach engineering only with a
+    capsule image update (inventory 2026-10-13). L3c: the remaining packet and work
     item machinery deleted wholesale (owner revise as a record, settlement
     gate, delivery claims, breaker, obligations counts), the checker on
     records, and work_state_epoch.

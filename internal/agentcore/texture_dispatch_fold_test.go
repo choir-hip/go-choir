@@ -105,17 +105,20 @@ func TestFoldTextureDispatchCastIntoApply(t *testing.T) {
 }
 
 func TestFoldTextureDispatchManagementCast(t *testing.T) {
+	scope := foldScope
+	scope.OwnerID = "owner-fold"
 	out, folded, err := foldTextureDispatch([]yaegikernel.StagedIntent{
 		foldApply("tray-1", `{"op":"decide","decision_kind":"wait_for_evidence","reason":"r"}`),
 		{Kind: yaegikernel.IntentCast, LocalID: "tray-2", ToDesk: agentprofile.Management, Objective: "build it",
-			Statement: `{"kind":"execution_request","summary":"build","actions":[{"type":"run_tests","objective":"verify the page","safety":{"mutation_class":"yellow","network":"forbidden","file_mutation":"allowed"}}]}`},
-	}, foldScope, cellRecords{})
-	if err != nil || len(folded) != 1 {
+			Statement: `{"kind":"execution_request","summary":"build","actions":[{"type":"run_tests","objective":"verify the page"}]}`},
+		{Kind: yaegikernel.IntentAsk, LocalID: "tray-3", ToDesk: agentprofile.Management, Question: "is a build possible?"},
+	}, scope, cellRecords{})
+	if err != nil || len(folded) != 2 {
 		t.Fatalf("fold: %v (folded %d)", err, len(folded))
 	}
-	controls := foldedControls(t, out[0].Body)
-	if len(controls) != 1 || controls[0]["open_persistent_super"] != true || controls[0]["staged_act"] != "cast" {
-		t.Fatalf("management control = %v", controls)
+	records, _ := foldedInbox(t, out[0].Body)
+	if len(records) != 2 || records[0].Inbox != "management:owner-fold" || records[0].Directive == nil || records[0].Directive.Objective != "build it" || records[1].Precommit == nil {
+		t.Fatalf("management records = %+v\nbody=%s", records, out[0].Body)
 	}
 }
 
@@ -167,8 +170,7 @@ func TestFoldTextureDispatchRefusals(t *testing.T) {
 		{"two applies", []yaegikernel.StagedIntent{apply, foldApply("tray-2", `{"op":"apply","content":"v2"}`), cast(agentprofile.Research)}, "one ApplyTexture"},
 		{"email turn", []yaegikernel.StagedIntent{foldApply("tray-1", `{"op":"email","email":{}}`), cast(agentprofile.Research)}, "with an apply or decide"},
 		{"other desk", []yaegikernel.StagedIntent{apply, cast(agentprofile.Engineering)}, "research or management"},
-		{"ask management", []yaegikernel.StagedIntent{apply, {Kind: yaegikernel.IntentAsk, LocalID: "tray-3", ToDesk: agentprofile.Management, Question: "q"}}, "choir.Cast"},
-		{"two management casts", []yaegikernel.StagedIntent{apply, cast(agentprofile.Management), cast(agentprofile.Management)}, "one management"},
+		{"management without an owner", []yaegikernel.StagedIntent{apply, cast(agentprofile.Management)}, "no management inbox"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := foldTextureDispatch(tc.intents, foldScope, cellRecords{})

@@ -24,40 +24,60 @@ import (
 // advances the cursor to that head in the same transaction as its acts.
 // Management and engineering routes stay on packets until L3b.
 
-// recordsDesk reports whether a desk's conversation with its counterpart is
-// on records.
+// recordsDesk reports whether a desk's conversations are on records:
+// Texture with research (L3a) and with management (L3b), research with
+// Texture, management with Texture. Engineering stays on packets until its
+// landing.
 func recordsDesk(profile string) bool {
 	switch strings.TrimSpace(profile) {
-	case agentprofile.Texture, agentprofile.Research:
+	case agentprofile.Texture, agentprofile.Research, agentprofile.Management:
 		return true
 	}
 	return false
 }
 
-// recordsCounterpartInbox is the inbox a records desk addresses for a desk
-// name or agent id it staged: Texture talks to research:<doc>, research to
-// texture:<doc>. ok is false for any other route (it stays on its packet
-// path).
-func recordsCounterpartInbox(fromAgentID, toDesk string) (string, bool) {
-	fromDesk, doc, found := strings.Cut(strings.TrimSpace(fromAgentID), ":")
-	if !found || strings.TrimSpace(doc) == "" {
-		return "", false
-	}
+// recordsRoute is the inbox a records desk addresses for the desk name or
+// agent id it staged. ok is false for a route that stays on its packet
+// path. Texture talks to research:<doc> and management:<owner>; research to
+// texture:<doc>; management to texture:<doc>, which it must name (it holds
+// conversations with every Texture of its owner).
+func recordsRoute(fromAgentID, ownerID, toDesk string) (string, bool, error) {
+	fromDesk, fromSubject, _ := strings.Cut(strings.TrimSpace(fromAgentID), ":")
 	to := strings.TrimSpace(toDesk)
-	toName, toDoc, hasDoc := strings.Cut(to, ":")
-	if hasDoc && toDoc != doc {
-		return "", false
-	}
-	if !hasDoc {
+	toName, toSubject, hasSubject := strings.Cut(to, ":")
+	if !hasSubject {
 		toName = to
 	}
-	switch {
-	case fromDesk == agentprofile.Texture && toName == agentprofile.Research:
-		return agentprofile.Research + ":" + doc, true
-	case fromDesk == agentprofile.Research && toName == agentprofile.Texture:
-		return agentprofile.Texture + ":" + doc, true
+	switch fromDesk {
+	case agentprofile.Texture:
+		if fromSubject == "" {
+			return "", false, nil
+		}
+		switch toName {
+		case agentprofile.Research:
+			if hasSubject && toSubject != fromSubject {
+				return "", false, nil
+			}
+			return agentprofile.Research + ":" + fromSubject, true, nil
+		case agentprofile.Management:
+			if strings.TrimSpace(ownerID) == "" || (hasSubject && toSubject != ownerID) {
+				return "", false, nil
+			}
+			return agentprofile.Management + ":" + ownerID, true, nil
+		}
+	case agentprofile.Research:
+		if fromSubject != "" && toName == agentprofile.Texture && (!hasSubject || toSubject == fromSubject) {
+			return agentprofile.Texture + ":" + fromSubject, true, nil
+		}
+	case agentprofile.Management:
+		if toName == agentprofile.Texture {
+			if !hasSubject || strings.TrimSpace(toSubject) == "" {
+				return "", false, fmt.Errorf("management addresses a Texture by its inbox: pass the record's from (texture:<doc>), not \"texture\"")
+			}
+			return agentprofile.Texture + ":" + strings.TrimSpace(toSubject), true, nil
+		}
 	}
-	return "", false
+	return "", false, nil
 }
 
 // cellRecords is the range of a desk's inbox one cell reads.
@@ -243,15 +263,34 @@ func reportBodyFromPacket(rawPacket, claim string) (*types.CommitmentReport, boo
 // on their existing paths (ledger-only acts, other routes, other kinds).
 func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yaegikernel.StagedIntent, receipt *ReductionReceipt) ([]yaegikernel.StagedIntent, error) {
 	rt := r.rt()
-	if rt == nil || r.ledger == nil {
+	if rt == nil || r.ledger == nil || r.rec == nil {
+		return intents, nil
+	}
+	// The desk's inbox is its agent id; a run whose agent id names another
+	// desk than its profile is not on a records route.
+	if deskOfAgent, _, _ := strings.Cut(strings.TrimSpace(r.scope.DeskAgentID), ":"); deskOfAgent != strings.TrimSpace(r.rec.AgentProfile) {
 		return intents, nil
 	}
 	var rest []yaegikernel.StagedIntent
 	var records []types.CommitmentRecord
+	if strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management && metadataStringValue(r.rec.Metadata, "request_source") == inboxRecordRequestSource {
+		for _, in := range intents {
+			if in.Kind == yaegikernel.IntentCast && strings.HasPrefix(strings.TrimSpace(in.ToDesk), agentprofile.Engineering) {
+				// Cut 1 L3b moves management's conversations with Texture onto
+				// records; its conversation with engineering moves in the
+				// next landing, and until then an engineering assignment
+				// needs the control path this run did not come from.
+				return nil, fmt.Errorf("reduce: %s: engineering casts from a records turn are not available on this build (Cut 1 landing L3b-2 moves them onto records); report the execution request back to the Texture as blocked", in.LocalID)
+			}
+		}
+	}
 	var localIDs []yaegikernel.StagedIntent
 	openRound := map[string]bool{}
 	for _, in := range intents {
-		toInbox, onRoute := recordsCounterpartInbox(r.scope.DeskAgentID, in.ToDesk)
+		toInbox, onRoute, routeErr := recordsRoute(r.scope.DeskAgentID, r.scope.OwnerID, in.ToDesk)
+		if routeErr != nil && recordsIntent(in) {
+			return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, routeErr)
+		}
 		if !recordsIntent(in) || !onRoute {
 			rest = append(rest, in)
 			continue
@@ -320,52 +359,79 @@ func (rt *Runtime) inboxUnread(ctx context.Context, ownerID, computerID, deskAge
 	return head > cursor, nil
 }
 
-// WakeResearchInbox starts a research turn when the desk has unread records
-// and no active run; an active run reads them in its next cell. The run is
-// the desk's lifecycle activation on its document's trajectory.
+// WakeResearchInbox starts a research turn for unread records; see
+// WakeRecordsInbox.
 func (rt *Runtime) WakeResearchInbox(ctx context.Context, ownerID, computerID, deskAgentID string) (*types.RunRecord, error) {
+	return rt.WakeRecordsInbox(ctx, ownerID, computerID, deskAgentID)
+}
+
+// recordsInboxPrompts is the first user turn of a run a records desk starts
+// for its inbox.
+var recordsInboxPrompts = map[string]string{
+	agentprofile.Research: "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round.",
+	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened.",
+}
+
+// WakeRecordsInbox starts a turn for a records desk (research or
+// management) when it has unread records and no active run; an active run
+// reads them in its next cell. A research run is its desk's lifecycle
+// activation on its document's trajectory; a management run is the owner's
+// persistent management desk, which spans documents and has no trajectory.
+func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, deskAgentID string) (*types.RunRecord, error) {
 	if rt == nil || rt.store == nil {
 		return nil, nil
 	}
-	agent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, deskAgentID)
+	profile, _, _ := strings.Cut(strings.TrimSpace(deskAgentID), ":")
+	prompt, ok := recordsInboxPrompts[profile]
+	if !ok {
+		return nil, nil
+	}
+	var agent types.AgentRecord
+	var err error
+	if profile == agentprofile.Management {
+		if deskAgentID != persistentManagementAgentID(ownerID) {
+			return nil, nil
+		}
+		agent, err = rt.EnsurePersistentManagementAgent(ctx, ownerID)
+	} else {
+		agent, err = rt.store.GetAgentByScope(ctx, ownerID, computerID, deskAgentID)
+	}
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("research inbox: load desk %s: %w", deskAgentID, err)
-	}
-	if profile, _ := agentprofile.Canonical(agent.Profile); profile != agentprofile.Research {
-		return nil, nil
+		return nil, fmt.Errorf("records inbox: load desk %s: %w", deskAgentID, err)
 	}
 	if _, found, err := rt.activeRunByAgent(ctx, ownerID, deskAgentID); err != nil {
-		return nil, fmt.Errorf("research inbox: active run of %s: %w", deskAgentID, err)
+		return nil, fmt.Errorf("records inbox: active run of %s: %w", deskAgentID, err)
 	} else if found {
 		return nil, nil
 	}
 	if unread, err := rt.inboxUnread(ctx, ownerID, computerID, deskAgentID); err != nil {
-		return nil, fmt.Errorf("research inbox: unread of %s: %w", deskAgentID, err)
+		return nil, fmt.Errorf("records inbox: unread of %s: %w", deskAgentID, err)
 	} else if !unread {
 		return nil, nil
 	}
-	doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, agent.ChannelID)
-	if err != nil {
-		return nil, fmt.Errorf("research inbox: document %s: %w", agent.ChannelID, err)
-	}
 	metadata := map[string]any{
-		runMetadataAgentProfile: agentprofile.Research,
-		runMetadataAgentRole:    agentprofile.Research,
+		runMetadataAgentProfile: profile,
+		runMetadataAgentRole:    profile,
 		runMetadataAgentID:      deskAgentID,
 		runMetadataChannelID:    agent.ChannelID,
-		runMetadataTrajectoryID: doc.TrajectoryID,
 		"request_source":        inboxRecordRequestSource,
 	}
-	prompt := "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective, body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round."
+	if profile == agentprofile.Research {
+		doc, err := rt.store.GetLifecycleDocument(ctx, ownerID, computerID, agent.ChannelID)
+		if err != nil {
+			return nil, fmt.Errorf("records inbox: document %s: %w", agent.ChannelID, err)
+		}
+		metadata[runMetadataTrajectoryID] = doc.TrajectoryID
+	}
 	rec, err := rt.StartRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
-		return nil, fmt.Errorf("research inbox: start run for %s: %w", deskAgentID, err)
+		return nil, fmt.Errorf("records inbox: start run for %s: %w", deskAgentID, err)
 	}
 	if err := rt.CheckedActorDispatchError("initial_dispatch", rec.RunID); err != nil {
-		return nil, fmt.Errorf("research inbox: dispatch run %s: %w", rec.RunID, err)
+		return nil, fmt.Errorf("records inbox: dispatch run %s: %w", rec.RunID, err)
 	}
 	return rec, nil
 }

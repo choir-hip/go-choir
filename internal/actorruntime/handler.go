@@ -415,9 +415,9 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 		if _, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, agentprofile.Texture+":")); err != nil {
 			return nil, fmt.Errorf("%w: actorruntime: Texture inbox wake: %v", actor.ErrDeferUnprocessed, err)
 		}
-	case strings.HasPrefix(agentID, agentprofile.Research+":"):
-		if _, err := h.rt.WakeResearchInbox(ctx, ownerID, computerID, agentID); err != nil {
-			return nil, fmt.Errorf("%w: actorruntime: Research inbox wake: %v", actor.ErrDeferUnprocessed, err)
+	case strings.HasPrefix(agentID, agentprofile.Research+":"), strings.HasPrefix(agentID, agentprofile.Management+":"):
+		if _, err := h.rt.WakeRecordsInbox(ctx, ownerID, computerID, agentID); err != nil {
+			return nil, fmt.Errorf("%w: actorruntime: inbox wake for %s: %v", actor.ErrDeferUnprocessed, agentID, err)
 		}
 	}
 	return nil, nil

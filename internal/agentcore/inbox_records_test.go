@@ -128,3 +128,73 @@ func TestCrashBootClosesOpenRoundsOnce(t *testing.T) {
 		}
 	}
 }
+
+// Cut 1 L3b through a real management cell: management reads a Texture's
+// Cast from its inbox and answers that Texture in the same conversation;
+// the bare "texture" is refused (management holds a conversation with every
+// Texture of its owner); a records turn's Cast to engineering is refused
+// until the engineering landing.
+//
+// Ways this could fail, written first: the cell sees nothing because the
+// management inbox is keyed by something other than management:<owner>; the
+// Report lands in a new conversation so the round never closes; a bare
+// "texture" is guessed to some document; an engineering Cast falls through
+// to the control path and fails with an unrelated admission error.
+func TestManagementCellAnswersTextureOnRecords(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	owner, computer := "owner-mgmt", rt.cfg.ComputerID
+	texture, management := "texture:doc-mgmt", "management:"+owner
+
+	cast := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "seed-mgmt-cast", Records: []types.CommitmentRecord{{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cast:mgmt", Kind: types.CommitmentKindDirective,
+		Directive:   &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "publish the page", Body: `{"kind":"execution_request","summary":"publish"}`},
+		Cast:        &types.CommitmentCast{},
+		Inbox:       management, SenderInbox: texture, Addressee: management,
+		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
+		Provenance:  types.CommitmentProvenance{AgentID: texture},
+	}}}
+	cast.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(cast)
+	if _, err := s.CommitInboxRecords(ctx, cast); err != nil {
+		t.Fatalf("seed Cast: %v", err)
+	}
+	rec := types.RunRecord{RunID: "run-mgmt-records", AgentID: management, OwnerID: owner, ComputerID: computer, ChannelID: management,
+		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, State: types.RunRunning,
+		Metadata: map[string]any{"request_source": inboxRecordRequestSource}}
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("seed run: %v", err)
+	}
+	execCtx := toolregistry.ExecutionContext{RunID: rec.RunID, AgentID: rec.AgentID, OwnerID: owner, ChannelID: management, ComputerID: computer,
+		Profile: agentprofile.Management, Role: agentprofile.Management, RunRecord: &rec}
+	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Management)
+	cell := func(src string) string {
+		t.Helper()
+		payload, _ := json.Marshal(map[string]any{"source": src, "timeout_ms": 15000})
+		out, err := tool.Func(toolregistry.WithExecutionContext(ctx, execCtx), payload)
+		if err != nil {
+			out += err.Error()
+		}
+		return out
+	}
+
+	if out := cell(`choir.ReportPacket("texture", map[string]interface{}{"kind":"blocker","summary":"x","notes":[]string{"x"}}, "")`); !strings.Contains(out, "texture:<doc>") {
+		t.Fatalf("a bare \"texture\" was not refused: %s", out)
+	}
+	if out := cell(`choir.Cast("engineering", "build it", map[string]interface{}{})`); !strings.Contains(out, "not available on this build") {
+		t.Fatalf("an engineering Cast from a records turn was not refused: %s", out)
+	}
+	out := cell(`rs := choir.Records()
+fmt.Println(len(rs), rs[0].Kind, rs[0].From)
+choir.ReportPacket(rs[0].From, map[string]interface{}{"kind":"blocker","summary":"engineering is not on records yet","notes":[]string{"blocked"},"work_disposition":"completed"}, "")`)
+	if !strings.Contains(out, "1 cast "+texture) {
+		t.Fatalf("management did not read the Cast: %s", out)
+	}
+	got, err := s.ListInboxRecords(ctx, owner, computer, texture, 0, 10)
+	if err != nil || len(got) != 1 || !got[0].Final || got[0].SenderInbox != management {
+		t.Fatalf("Texture inbox after management's Report = %+v, %v", got, err)
+	}
+	if rounds, _ := s.OpenRounds(ctx, owner, computer, management); len(rounds) != 0 {
+		t.Fatalf("round still open: %+v", rounds)
+	}
+}

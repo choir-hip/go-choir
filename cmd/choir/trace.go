@@ -571,8 +571,9 @@ func deriveTurnCommits(parent *traceLayer) *traceLayer {
 // as a supplement, by Universal Wire stories whose source document is one of
 // the trajectory's documents.
 // exportInboxRecords reads every record of the Texture and research inboxes
-// of the trajectory's documents (Cut 1 L3a: their conversation is on
-// records), and each inbox's head, cursor and open rounds.
+// of the trajectory's documents and of its owners' management inboxes (Cut 1
+// L3a, L3b: their conversations are on records), and each inbox's head,
+// cursor and open rounds.
 func (e *traceExporter) exportInboxRecords(bundle *traceBundle, docIDs map[string]bool) (*traceLayer, *traceLayer) {
 	records := newLayer("GET /api/inboxes/{inbox}/records?after=&limit=1000")
 	inboxes := newLayer("GET /api/inboxes/{inbox}/records (head, cursor, open_rounds)")
@@ -580,42 +581,58 @@ func (e *traceExporter) exportInboxRecords(bundle *traceBundle, docIDs map[strin
 		records.fail("revisions is unserved, so the documents' inboxes are unknown")
 		inboxes.fail("revisions is unserved, so the documents' inboxes are unknown")
 	}
+	// Management holds one inbox per owner (Cut 1 L3b); its owners are the
+	// owners of the trajectory's runs.
+	owners := map[string]bool{}
+	for _, item := range bundle.Layers["runs"].Items {
+		var run struct {
+			OwnerID string `json:"owner_id"`
+		}
+		if json.Unmarshal(item, &run) == nil && strings.TrimSpace(run.OwnerID) != "" {
+			owners[strings.TrimSpace(run.OwnerID)] = true
+		}
+	}
+	var inboxIDs []string
 	for _, docID := range sortedKeys(docIDs) {
-		for _, inbox := range []string{"texture:" + docID, "research:" + docID} {
-			after := int64(0)
-			for pages := 0; ; pages++ {
-				if pages >= traceMaxPages {
-					records.fail("inbox %s paging exceeded %d pages", inbox, traceMaxPages)
-					break
-				}
-				path := fmt.Sprintf("/api/inboxes/%s/records?after=%d&limit=%d", url.PathEscape(inbox), after, traceEventPageLimit)
-				var page struct {
-					Inbox      string            `json:"inbox"`
-					Head       int64             `json:"head"`
-					Cursor     int64             `json:"cursor"`
-					Records    []json.RawMessage `json:"records"`
-					OpenRounds []json.RawMessage `json:"open_rounds"`
-					NextAfter  int64             `json:"next_after"`
-				}
-				if err := e.get(path, &page); err != nil {
-					records.fail("%s", routeFailure(path, err))
-					inboxes.fail("%s", routeFailure(path, err))
-					break
-				}
-				records.add(page.Records...)
-				if after == 0 {
-					state, _ := json.Marshal(map[string]any{"inbox": inbox, "head": page.Head, "cursor": page.Cursor, "open_rounds": page.OpenRounds})
-					inboxes.add(state)
-				}
-				if page.NextAfter == 0 {
-					break
-				}
-				if page.NextAfter <= after {
-					records.fail("GET %s: cursor did not advance past %d", path, after)
-					break
-				}
-				after = page.NextAfter
+		inboxIDs = append(inboxIDs, "texture:"+docID, "research:"+docID)
+	}
+	for _, ownerID := range sortedKeys(owners) {
+		inboxIDs = append(inboxIDs, "management:"+ownerID)
+	}
+	for _, inbox := range inboxIDs {
+		after := int64(0)
+		for pages := 0; ; pages++ {
+			if pages >= traceMaxPages {
+				records.fail("inbox %s paging exceeded %d pages", inbox, traceMaxPages)
+				break
 			}
+			path := fmt.Sprintf("/api/inboxes/%s/records?after=%d&limit=%d", url.PathEscape(inbox), after, traceEventPageLimit)
+			var page struct {
+				Inbox      string            `json:"inbox"`
+				Head       int64             `json:"head"`
+				Cursor     int64             `json:"cursor"`
+				Records    []json.RawMessage `json:"records"`
+				OpenRounds []json.RawMessage `json:"open_rounds"`
+				NextAfter  int64             `json:"next_after"`
+			}
+			if err := e.get(path, &page); err != nil {
+				records.fail("%s", routeFailure(path, err))
+				inboxes.fail("%s", routeFailure(path, err))
+				break
+			}
+			records.add(page.Records...)
+			if after == 0 {
+				state, _ := json.Marshal(map[string]any{"inbox": inbox, "head": page.Head, "cursor": page.Cursor, "open_rounds": page.OpenRounds})
+				inboxes.add(state)
+			}
+			if page.NextAfter == 0 {
+				break
+			}
+			if page.NextAfter <= after {
+				records.fail("GET %s: cursor did not advance past %d", path, after)
+				break
+			}
+			after = page.NextAfter
 		}
 	}
 	return records.finish(), inboxes.finish()

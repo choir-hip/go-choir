@@ -99,7 +99,13 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		return fmt.Errorf("reduce: %d intents exceed cell quota %d", len(intents), yaegikernel.MaxIntentsPerCell)
 	}
 	complete := 0
+	fromDesk, _, _ := strings.Cut(strings.TrimSpace(scope.FromRole), ":")
 	for i, in := range intents {
+		// Engineering reaches Texture only through management (Cut 1
+		// routing, invariant 6).
+		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); fromDesk == agentprofile.Engineering && toDesk == agentprofile.Texture {
+			return fmt.Errorf("reduce: %s %s: engineering reaches Texture only through management; address management", in.Kind, in.LocalID)
+		}
 		switch in.Kind {
 		case yaegikernel.IntentMessage:
 			if in.ToDesk == "" {
@@ -167,7 +173,10 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		if to == "" {
 			return fmt.Errorf("reduce: %s %s missing destination desk", in.Kind, in.LocalID)
 		}
-		if _, err := agentprofile.Canonical(to); err != nil || !agentprofile.IsLive(to) {
+		// A desk inbox (texture:<doc>, research:<doc>) names the desk and the
+		// subject; records routes address one (Cut 1 L3b).
+		desk, _, _ := strings.Cut(to, ":")
+		if _, err := agentprofile.Canonical(desk); err != nil || !agentprofile.IsLive(desk) {
 			return fmt.Errorf("reduce: %s %s targets unknown desk %q", in.Kind, in.LocalID, in.ToDesk)
 		}
 		return nil
@@ -836,9 +845,10 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: 0, Kind: in.Kind})
 		}
 	}
-	// Research's conversation with Texture is on records (Cut 1 L3a): its
-	// acts to Texture and its cursor advance commit as one transaction.
-	if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Research && recordsDesk(agentprofile.Research) {
+	// Research's and management's conversations with Texture are on records
+	// (Cut 1 L3a, L3b): their acts to Texture and their cursor advance commit
+	// as one transaction.
+	if r.rec != nil && (strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Research || strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management) {
 		var err error
 		if intents, err = r.commitRecordsRoute(ctx, intents, &receipt); err != nil {
 			return err
