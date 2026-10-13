@@ -1,0 +1,17 @@
+{
+ "schema": "choir.evidence.v1",
+ "id": "l1a3-landing",
+ "date": "2026-10-13",
+ "commit": "18d01cc0",
+ "ci": "38463609655 success",
+ "deploy": "staging /health build.deployed_commit 18d01cc0396e0a7eaf64f0a8553f085562ad10d6",
+ "local_proof": "internal/agentcore/crash_settle_test.go (9 tests: unstarted, journaled, mid-flight platform updates; planned boot still resumes; crash dispatch; decided-before-crash self-development op fails, journaled op records without re-apply, mid-flight op held, op decided after boot materializes); full agentcore and actorruntime suites green",
+ "deployed_regression": {
+  "command": "node scripts/reeng_tracer.mjs --scenario crash --label l1a3-crash-2 --expect-sha 18d01cc0",
+  "result": "pass: 1 run open at the crash closed with fate interrupted_by_restart, nothing dispatched; restart to ready 9.9 s",
+  "checker": "I1 pass, I2 fail (trajectory live after a crash plus one open work item; same by-design verdict as c1-core-crash; C1e deletes work items), I3 pass, I7 pass",
+  "bundle_sha256": "466d8dd014b8648ff0bbb4e3a2d43136cdfa9b72b719c767bc81f4441c51646c"
+ },
+ "not_yet": "the L1 matrix cells that inject a crash with a pending platform update or a decided self-development op on a minted test computer; no fault-injection harness exists yet",
+ "first_attempt": "l1a3-crash-1 never minted: auth refused a second concurrent key mint (429); run sequentially"
+}

@@ -124,9 +124,9 @@ boundaries:
 
 now:
   status: working
-  slice: L1a-3 — crash boots run no re-driver and settle from the updater journal (docs/problems/crash-boots-redrive-applies-2026-10-13.md); 3a platform-update resume and the leaked marker; 3b self-development reconcile, both the boot trigger and the post-commit observer, for every op decided before the boot (engineering capsule reconcile only closes work; the retry wake finds nothing once 3b settles)
-  source_ref: fdc70329
-  deploy_identity: staging fdc70329 (CI 38456685282 success)
+  slice: L1a landed (L1a-1, L1a-2, L1a-3); next the fault-injection harness for the matrix cells, then L1b. Was L1a-3 — crash boots run no re-driver and settle from the updater journal (docs/problems/crash-boots-redrive-applies-2026-10-13.md); 3a platform-update resume and the leaked marker; 3b self-development reconcile, both the boot trigger and the post-commit observer, for every op decided before the boot (engineering capsule reconcile only closes work; the retry wake finds nothing once 3b settles)
+  source_ref: 18d01cc0
+  deploy_identity: staging 18d01cc0 (CI 38463609655 success)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: L1-1
@@ -152,8 +152,8 @@ now:
       until L1c moves planned-ness to the host.
     main_uncertainty: whether gating self-development materialization reconcile on crash boots strands post-decision ops that tests expect to recover (TestSelfDevReconcileRecoversMaterializingOperation)
     next_observation: which boot re-drivers already settle on crash and which re-drive
-  blocker_or_risk: L1a-3 touches the same boot re-drivers C1e deletes; C1e waits for it. A loop slower than the start limit (one crash every 2 minutes or more, such as a poisoned record re-read after each boot) escapes the unit bound; the boot ledger (L1b) is the bound for it
-  next_action: land L1a-3 through the Landing Loop and run its crash-boot cells on a minted test computer
+  blocker_or_risk: L1a's code is landed, so C1e may start; L1a's deployed matrix cells are still unproven. A loop slower than the start limit (one crash every 2 minutes or more, such as a poisoned record re-read after each boot) escapes the unit bound; the boot ledger (L1b) is the bound for it
+  next_action: build the matrix fault-injection harness (a minted test computer with a pending platform update or a decided self-development op, then a crash restart) and run L1a's cells; then L1b
 
 receipts:
   - id: L1a-1
@@ -170,6 +170,13 @@ receipts:
     rollback_ref: revert c08ead07
     disposition: durable per-apply attempt budget (3); crash boots mark pre-boot work wakes interrupted_by_restart
     landing: {source_commit: fdc70329 (batch), ci_ref: 38456685282 success, deploy_ref: CI deploy job success, environment_identity: staging fdc70329, deployed_acceptance: not yet run (L1's matrix cells)}
+  - id: L1a-3
+    boundary: implement
+    identity: 18d01cc0
+    proof_refs: [docs/problems/crash-boots-redrive-applies-2026-10-13.md, internal/agentcore/crash_settle_test.go, docs/evidence/l1a3-landing-2026-10-13.json]
+    rollback_ref: revert 18d01cc0
+    disposition: crash boots settle platform updates and decided self-development ops from the updater journal and never call the updater; the planned marker clears whenever an apply returns
+    landing: {source_commit: 18d01cc0, ci_ref: 38463609655 success, deploy_ref: CI deploy job success, environment_identity: staging 18d01cc0, deployed_acceptance: crash scenario l1a3-crash-2 pass (regression); matrix cells not yet run}
 ---
 
 # L1: no crash loops

@@ -20,7 +20,14 @@ stays open to additions. Owner decisions open: the cost amendment,
 Telegram and commercial status, Taiwan first, Autoradio's slot, and
 schedules option B. Convergent round 1 sent the spine back; round 2
 accepted the repaired spine and the L1 station file (2026-10-13). L1a-3
-(crash boots settle from the updater journal, never re-apply) is next.
+(crash boots settle from the updater journal, never re-apply) landed at
+18d01cc0. Open tasks: the cross-model cell-error analysis (owner
+2026-10-13: errors every model makes point at the tool and prompt
+surface; report at docs/reports/cross-model-cell-errors-2026-10-13.md),
+the paper tracer's blind spot for test-computer publications
+(docs/problems/tracer-paper-blind-to-test-publications-2026-10-13.md),
+L1's fault-injection harness, then C1e from
+docs/reports/c1e-deletion-inventory-2026-10-13.md.
 
 ## Current (2026-10-13): re-engineering metamission
 
