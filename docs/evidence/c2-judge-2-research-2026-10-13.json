@@ -1,0 +1,11 @@
+{
+  "cut": "C2 2a with B10 (records-gated settlement) and the public reader",
+  "commit": "afb9c7f1",
+  "staging_identity": "afb9c7f1ceb211feeac654e86d59f76e3abb37cc",
+  "scenario": "node scripts/reeng_tracer.mjs --label c2-judge-2 --scenario research --expect-sha afb9c7f1 --fence-min 60 --timeout-min 20",
+  "tracer_exit": 0,
+  "bundle_sha256": "see ~/.config/choir-qa/traces/c2-judge-2/receipt.json",
+  "result": "pass: 13 async searches (29 of 37 providers answered, 5 cell results with new arrivals); research's final Report at 11:29:51 read by a committed Texture turn at 11:31:35; the trajectory stayed live (B10 held: c2-judge-1 settled under the same shape)",
+  "support_judgement": "not exercised: no citation committed before export, so no pairs record; needs its own scenario",
+  "checker": {"I1": "pass", "I2": "fail (a run still open at export; trajectory live with no open work: I2 needs re-expression for the records route)", "I4": "unknown (no citations at export)", "I6": "pass", "I7": "pass"}
+}
