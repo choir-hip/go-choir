@@ -691,3 +691,11 @@ func publicURLForRoute(r *http.Request, routePath string) string {
 	}
 	return proto + "://" + host + "/" + strings.TrimLeft(routePath, "/")
 }
+
+func textureSourceEntitiesRequireBodyDoc(sourceEntities, bodyDoc json.RawMessage) bool {
+	sourceEntitiesText := strings.TrimSpace(string(sourceEntities))
+	if sourceEntitiesText == "" || sourceEntitiesText == "null" || sourceEntitiesText == "[]" {
+		return false
+	}
+	return strings.TrimSpace(string(bodyDoc)) == ""
+}

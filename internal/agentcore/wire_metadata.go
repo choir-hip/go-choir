@@ -14,3 +14,7 @@ const (
 	// time for relative temporal language such as "today" or "tomorrow".
 	textureMetadataPromptUnixTS = "prompt_unix_ts"
 )
+
+// wireDetailKeyResolutionState is the work-item detail key the retired
+// processor pipeline wrote; stored wire work items are still read by it.
+const wireDetailKeyResolutionState = "resolution_state"

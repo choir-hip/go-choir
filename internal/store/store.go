@@ -132,7 +132,6 @@ type Store struct {
 	runMemoryMu             sync.Mutex
 	textureMutationMu       sync.Mutex
 	channelMsgMu            sync.Mutex
-	wirePublishDebounceMu   sync.Mutex
 	eventMu                 sync.Mutex
 	presenceMu              sync.Mutex
 	sessionPresence         map[string]types.DesktopSessionContext

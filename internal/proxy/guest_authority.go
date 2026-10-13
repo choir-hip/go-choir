@@ -42,20 +42,6 @@ func (h *Handler) boundProxyGuest(r *http.Request) (*vmctl.GuestOwnership, error
 	return ownership, nil
 }
 
-func (h *Handler) requireWirePlatformPublishCaller(r *http.Request) error {
-	if trustedInternalProxyTransport(r) {
-		if r.Header.Get("X-Internal-Caller") == "true" {
-			return nil
-		}
-		return fmt.Errorf("internal caller required")
-	}
-	ownership, err := h.boundProxyGuest(r)
-	if err != nil || ownership.UserID != vmctl.UniversalWirePlatformOwnerID || ownership.ComputerID != vmctl.UniversalWirePlatformComputerID {
-		return fmt.Errorf("guest caller is not bound to the wire platform computer")
-	}
-	return nil
-}
-
 func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 	if trustedInternalProxyTransport(r) {
 		if r.Header.Get("X-Internal-Caller") == "true" {

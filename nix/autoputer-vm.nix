@@ -102,28 +102,6 @@ let
     # route-bound kernel capability receipt before genesis.
     export CHOIR_BASELINE_RELEASE_ROOT="${goChoirPackages.autoputer}"
 
-    if [ -z "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
-      for param in $(cat /proc/cmdline); do
-        case "$param" in
-          choir.wire_publish_url=*)
-            export RUNTIME_WIRE_PUBLISH_URL="''${param#choir.wire_publish_url=}"
-            ;;
-          choir.vmctl_url=*)
-            vmctl_url="''${param#choir.vmctl_url=}"
-            if [ -n "$vmctl_url" ]; then
-              export RUNTIME_WIRE_PUBLISH_URL="$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8082/')"
-            fi
-            ;;
-        esac
-      done
-    fi
-
-    if [ -n "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
-      echo "go-choir-autoputer: wire publish URL configured"
-    else
-      echo "go-choir-autoputer: wire publish URL not configured" >&2
-    fi
-
     export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
     export RUNTIME_SKILLS_ROOT="${goChoirPackages.autoputer}/share/go-choir/skills"
 
@@ -424,9 +402,6 @@ EOF
           choir.maild_url=*)
             echo "RUNTIME_MAILD_URL=''${param#choir.maild_url=}" >> "$ENV_FILE"
             ;;
-          choir.wire_publish_url=*)
-            echo "RUNTIME_WIRE_PUBLISH_URL=''${param#choir.wire_publish_url=}" >> "$ENV_FILE"
-            ;;
           choir.platform_url=*)
             echo "CHOIR_PLATFORM_URL=''${param#choir.platform_url=}" >> "$ENV_FILE"
             ;;
@@ -463,13 +438,6 @@ EOF
         vmctl_url="$(sed -n 's/^RUNTIME_VMCTL_URL=//p' "$ENV_FILE" | tail -n1)"
         if [ -n "$vmctl_url" ]; then
           printf 'RUNTIME_MAILD_URL=%s\n' "$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8087/')" >> "$ENV_FILE"
-        fi
-      fi
-
-      if ! grep -q '^RUNTIME_WIRE_PUBLISH_URL=' "$ENV_FILE"; then
-        vmctl_url="$(sed -n 's/^RUNTIME_VMCTL_URL=//p' "$ENV_FILE" | tail -n1)"
-        if [ -n "$vmctl_url" ]; then
-          printf 'RUNTIME_WIRE_PUBLISH_URL=%s\n' "$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8082/')" >> "$ENV_FILE"
         fi
       fi
 

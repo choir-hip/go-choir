@@ -1290,7 +1290,6 @@ func TestBuildFirecrackerConfig_LegacyBootIncludesRuntimeServiceURLs(t *testing.
 		"choir.gateway_url=http://10.200.0.1:8084",
 		"choir.vmctl_url=http://10.200.0.1:8083",
 		"choir.maild_url=http://10.200.0.1:8087",
-		"choir.wire_publish_url=http://10.200.0.1:8082",
 		"choir.platform_url=http://10.200.0.1:8086",
 		"choir.source_service_url=http://10.200.0.1:8787",
 		"choir.source_service_runtime_url=http://127.0.0.1:8085",
@@ -1363,7 +1362,6 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"choir.gateway_url=http://10.200.0.1:8084",
 		"choir.vmctl_url=http://10.200.0.1:8083",
 		"choir.maild_url=http://10.200.0.1:8087",
-		"choir.wire_publish_url=http://10.200.0.1:8082",
 		"choir.platform_url=http://10.200.0.1:8086",
 		"choir.source_service_url=http://10.200.0.1:8787",
 		"choir.source_service_runtime_url=http://127.0.0.1:8085",
@@ -1389,7 +1387,6 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 	//   - RUNTIME_GATEWAY_URL / RUNTIME_GATEWAY_TOKEN (autoputer auth only)
 	//   - RUNTIME_VMCTL_URL (tap-subnet control plane for super VM tools)
 	//   - RUNTIME_MAILD_URL (tap-subnet draft persistence only)
-	//   - RUNTIME_WIRE_PUBLISH_URL (tap-subnet host-mediated wire publish only)
 	//   - SOURCE_SERVICE_BASE_URL (tap-subnet source retrieval only)
 	//   - SOURCE_SERVICE_RUNTIME_BASE_URL / SOURCE_SERVICE_RUNTIME_OWNER_ID
 	//     (tap-subnet ingestion handoff lifecycle evidence only)
@@ -1403,7 +1400,6 @@ func TestGuestInitScript_NoProviderCredentials(t *testing.T) {
 		"RUNTIME_GATEWAY_TOKEN",
 		"RUNTIME_VMCTL_URL",
 		"RUNTIME_MAILD_URL",
-		"RUNTIME_WIRE_PUBLISH_URL",
 		"SOURCE_SERVICE_BASE_URL",
 		"SOURCE_SERVICE_RUNTIME_BASE_URL",
 		"SOURCE_SERVICE_RUNTIME_OWNER_ID",

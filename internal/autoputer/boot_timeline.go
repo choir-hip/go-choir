@@ -641,13 +641,11 @@ var diagHTTPProbeHeaderAllowlist = map[string]bool{
 }
 
 // diagHTTPProbePostPathAllowlist bounds which paths accept method=post. Only
-// the two S1a refusal endpoints that are POST-only — the corpusd
-// platform-update mint and the proxy wire publish — may carry a method other
-// than GET; anything else would let the oracle mutate arbitrary
-// guest-reachable state.
+// the S1a refusal endpoint that is POST-only — the corpusd platform-update
+// mint — may carry a method other than GET; anything else would let the
+// oracle mutate arbitrary guest-reachable state.
 var diagHTTPProbePostPathAllowlist = map[string]bool{
-	"/internal/computers/platform-updates/offer":   true,
-	"/internal/wire/platform/publications/texture": true,
+	"/internal/computers/platform-updates/offer": true,
 }
 
 // handleDiagHTTPProbe issues one bounded http://addr<path> request from inside
@@ -687,8 +685,8 @@ func handleDiagHTTPProbe(w http.ResponseWriter, r *http.Request, addr string) {
 		headers[strings.TrimSpace(name)] = strings.TrimSpace(value)
 	}
 	// POST is permitted only to path-allowlisted refusal targets: the S1a
-	// authority-binding legs are POST-only endpoints (corpusd mint, proxy
-	// wire publish), and the refusal matrix needs the real method to
+	// authority-binding leg is a POST-only endpoint (corpusd mint), and the
+	// refusal matrix needs the real method to
 	// distinguish a 403 authority denial from a pre-fix 405 method reject.
 	method := http.MethodGet
 	if strings.EqualFold(r.URL.Query().Get("method"), "post") {

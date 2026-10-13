@@ -523,8 +523,8 @@ async function attempt(n, out) {
   drill.continued_after_restart = { revision_id: continued?.revision_id || null, owner_asked_again: askedAgain };
 
   // Publication. A prompt-bar story has no autonomous publish path today
-  // (wirepublish.EligibleForAutonomousPublish admits only the platform wire
-  // owner); publishing is the owner's POST /api/platform/texture/publications.
+  // (the platform-owner wire publish path was deleted in Cut 2); publishing
+  // is the owner's POST /api/platform/texture/publications.
   drill.publication = { autonomous: false, owner_act: null };
   if (OWNER_PUBLISH && continued) {
     const pub = await c.api('/api/platform/texture/publications', 'POST', { doc_id: out.doc_id }, 120_000);

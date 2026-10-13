@@ -1800,7 +1800,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	// vmctl control endpoints are internal-only; they must not be
 	// exposed as public browser-facing routes.
 	s.HandleFunc("/internal/vmctl/", h.HandleVMctlDeny)
-	s.HandleFunc("/internal/wire/platform/publications/texture", h.HandleInternalWirePlatformPublish)
 	// Object graph API: forward runtime objectgraph HTTPStore calls to
 	// corpusd. The runtime (inside a VM) reaches corpusd through the
 	// proxy; these routes pass through /internal/platform/objects and

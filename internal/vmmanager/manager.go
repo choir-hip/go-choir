@@ -1594,7 +1594,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.gateway_url=http://%s:8084", hostIP),
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
-			fmt.Sprintf("choir.wire_publish_url=http://%s:8082", hostIP),
 			fmt.Sprintf("choir.platform_url=http://%s:8086", hostIP),
 			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
 			fmt.Sprintf("choir.source_service_runtime_url=http://127.0.0.1:%d", cfg.GuestPort),
@@ -1612,7 +1611,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
 		// URLs as the microvm.nix path so guest env extraction can configure
-		// gateway, vmctl, maild, wire publish, and source service uniformly.
+		// gateway, vmctl, maild, and source service uniformly.
 		bootArgs = fmt.Sprintf(
 			"console=ttyS0 reboot=k panic=1 pci=off "+
 				"root=/dev/vda rw init=/bin/init "+
@@ -1626,7 +1625,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.gateway_url=http://%s:8084", hostIP),
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
-			fmt.Sprintf("choir.wire_publish_url=http://%s:8082", hostIP),
 			fmt.Sprintf("choir.platform_url=http://%s:8086", hostIP),
 			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
 			fmt.Sprintf("choir.source_service_runtime_url=http://127.0.0.1:%d", cfg.GuestPort),

@@ -824,7 +824,6 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		TextureActorParkIdle:            rtRuntimeCfg.TextureActorParkIdle,
 		VmctlURL:                        rtRuntimeCfg.VmctlURL,
 		MaildURL:                        rtRuntimeCfg.MaildURL,
-		WirePublishURL:                  rtRuntimeCfg.WirePublishURL,
 		CorpusdURL:                      rtRuntimeCfg.CorpusdURL,
 		QdrantURL:                       rtRuntimeCfg.QdrantURL,
 		OllamaURL:                       rtRuntimeCfg.OllamaURL,

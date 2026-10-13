@@ -8,7 +8,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
 // buildAppagentRevisionMetadata constructs the metadata JSON for an
@@ -50,7 +49,7 @@ func (rt *Handler) buildAppagentRevisionMetadata(_ context.Context, rec *types.R
 		}
 	}
 	promptOnlyInitialModelPrior := promptOnlyInitialModelPriorTextureRevision(rec, meta)
-	if wirepublish.IsWireArticleRevisionRun(rec) && !promptOnlyInitialModelPrior {
+	if isWireArticleRevisionRun(rec) && !promptOnlyInitialModelPrior {
 		meta["artifact_kind"] = "article_revision"
 		meta["revision_role"] = textureRevisionRoleCanonical
 		meta["texture_version_stage"] = "article_revision"
@@ -100,3 +99,24 @@ func promptOnlyInitialModelPriorTextureRevision(rec *types.RunRecord, meta map[s
 	return false
 }
 
+
+// isWireArticleRevisionRun reports whether a Texture run came from the
+// retired wire article handoff (universal_wire_* intents, or a Texture agent
+// revision carrying ingestion lineage). Such revisions keep the canonical
+// article_revision stamp they always had.
+func isWireArticleRevisionRun(rec *types.RunRecord) bool {
+	if rec == nil {
+		return false
+	}
+	intent := metadataStringValue(rec.Metadata, "request_intent")
+	if strings.HasPrefix(intent, "universal_wire_") && strings.HasSuffix(intent, "_article_revision") {
+		return true
+	}
+	if metadataStringValue(rec.Metadata, "type") != textureAgentRevisionTaskType {
+		return false
+	}
+	return firstNonEmpty(
+		metadataStringValue(rec.Metadata, "source_network_cycle_id"),
+		metadataStringValue(rec.Metadata, "ingestion_handoff_cycle_id"),
+	) != ""
+}

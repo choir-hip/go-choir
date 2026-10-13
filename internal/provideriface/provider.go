@@ -190,13 +190,8 @@ type Config struct {
 	// must not expose raw send authority to runtime agents.
 	MaildURL string
 
-	// WirePublishURL is the host-mediated proxy route for autonomous Universal
-	// Wire platform publication. Platform VM autoputeres call this instead of
-	// corpusd directly.
-	WirePublishURL string
-
-	// CorpusdURL is an optional direct corpusd endpoint for local publish
-	// tests or host-colocated autoputeres when WirePublishURL is unset.
+	// CorpusdURL is the corpusd endpoint (captures, restore bases); in a
+	// guest it is the host-mediated platform URL.
 	CorpusdURL string
 
 	// LLMProvider is the explicitly selected provider for runtime LLM calls.
