@@ -50,6 +50,9 @@ type InboxRecordReceipt struct {
 	// WakeID is the actor wake outbox row minted for the recipient; empty
 	// for system records, which wake no one, except a support pairs list.
 	WakeID string `json:"wake_id,omitempty"`
+	// OpenedStory marks a Cast to StoryOpenInbox that opened a new story;
+	// Inbox names the story's texture:<doc> (Cut 2 2b).
+	OpenedStory bool `json:"opened_story,omitempty"`
 }
 
 // InboxCommitReceipt is the durable receipt of one inbox command; a replay

@@ -78,6 +78,8 @@ type ReducedIntent struct {
 	LocalID string
 	Seq     uint64
 	Kind    string
+	// Inbox names the story a Cast to texture:new opened (Cut 2 2b).
+	Inbox string
 }
 
 // ReductionReceipt is the two-phase ack: Committed is true only when every
@@ -182,7 +184,15 @@ func validateSemanticActIntent(in yaegikernel.StagedIntent) error {
 		}
 		// A desk inbox (texture:<doc>, research:<doc>) names the desk and the
 		// subject; records routes address one (Cut 1 L3b).
-		desk, _, _ := strings.Cut(to, ":")
+		desk, subject, _ := strings.Cut(to, ":")
+		if desk == captureSourceDesk && strings.TrimSpace(subject) != "" {
+			// A source's inbox takes management's decline of its captures,
+			// a Note, and nothing else (Cut 2 2b).
+			if in.Kind != yaegikernel.IntentNote {
+				return fmt.Errorf("reduce: %s %s: a source takes only a Note: decline its captures with choir.Note(r.From, reason)", in.Kind, in.LocalID)
+			}
+			return nil
+		}
 		if _, err := agentprofile.Canonical(desk); err != nil || !agentprofile.IsLive(desk) {
 			return fmt.Errorf("reduce: %s %s targets unknown desk %q", in.Kind, in.LocalID, in.ToDesk)
 		}

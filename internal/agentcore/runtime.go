@@ -152,6 +152,9 @@ type Runtime struct {
 	// the Write commit checks quotes against it. Nil until the capture store
 	// is wired; then no source counts as captured.
 	textureCaptures texturewrite.CaptureSource
+	// stories publishes publish-auto story revisions and their support
+	// verdicts to the platform, off the commit's path (Cut 2 2b).
+	stories storyPublishing
 	// textureCells records what each running Texture activation's cells
 	// staged; the activation's end answers an unanswered trigger from it
 	// (answerIdleTextureTrigger).

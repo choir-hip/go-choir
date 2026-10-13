@@ -367,8 +367,12 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	h.emitTextureDocumentRevisionEventForRun(ctx, rec, stored)
 	completed, _ := json.Marshal(map[string]string{"doc_id": doc.DocID, "revision_id": stored.RevisionID, "loop_id": rec.RunID})
 	h.emitTextureAgentEvent(ctx, rec, types.EventTextureAgentRevisionCompleted, events.CauseToolExecution, completed)
-	// The commit-time Universal Wire publish hook is gone (Cut 2 pre-flight
-	// review A7); publication moves to 2b's per-version permalinks.
+	// A story opened with publish auto publishes this revision as its next
+	// version, after the commit and off its path (Cut 2 2b). A failed
+	// publish is a gap; nothing here waits for it.
+	if durableLifecycle && h.Core != nil {
+		h.Core.AutoPublishRevision(ctx, rec.OwnerID, doc, stored)
+	}
 	out, _ := json.Marshal(map[string]any{
 		"turn": string(types.TextureTurnRevision), "doc_id": stored.DocID, "revision_id": stored.RevisionID,
 		"base_revision_id": stored.ParentRevisionID, "trajectory_id": stored.TrajectoryID,

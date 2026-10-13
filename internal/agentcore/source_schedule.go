@@ -168,6 +168,12 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		if pollErr != nil {
 			usage.Status, usage.Error = "error", pollErr.Error()
 		}
+		// The poll's new captures reach management as one record (Cut 2
+		// 2b). A failed append loses only the announcement: the captures
+		// are in Store B, and the next poll's record carries its own.
+		if err := rt.appendCaptureArrival(ctx, ownerID, computerID, sched.SourceID, report.Captured); err != nil {
+			log.Printf("source schedule: %s: %v", sched.SourceID, err)
+		}
 	}
 
 	sourceScheduleMu.Lock()

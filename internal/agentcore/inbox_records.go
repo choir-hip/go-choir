@@ -70,6 +70,11 @@ func recordsRoute(fromAgentID, ownerID, toDesk string) (string, bool, error) {
 			return agentprofile.Texture + ":" + fromSubject, true, nil
 		}
 	case agentprofile.Management:
+		if toName == captureSourceDesk && hasSubject && strings.TrimSpace(toSubject) != "" {
+			// A decline of a poll's captures goes back to the source that
+			// sent them (Cut 2 2b); no desk reads it.
+			return captureSourceDesk + ":" + strings.TrimSpace(toSubject), true, nil
+		}
 		if toName == agentprofile.Texture {
 			if !hasSubject || strings.TrimSpace(toSubject) == "" {
 				return "", false, fmt.Errorf("management addresses a Texture by its inbox: pass the record's from (texture:<doc>), not \"texture\"")
@@ -129,7 +134,7 @@ func inboxRecordView(rec types.CommitmentRecord) yaegikernel.InboxRecord {
 	view := yaegikernel.InboxRecord{
 		Seq: rec.InboxSeq, RecordID: rec.RecordID, Kind: inboxRecordKind(rec), From: rec.SenderInbox,
 		ConversationID: rec.ConversationID, Round: rec.Round, Final: rec.Final,
-		Cast: rec.Cast, Report: rec.Report, Support: rec.Support,
+		Cast: rec.Cast, Report: rec.Report, Support: rec.Support, Captures: rec.Captures,
 	}
 	if t, err := time.Parse(time.RFC3339Nano, rec.Provenance.CommittedAt); err == nil {
 		view.CreatedAt = t
@@ -152,6 +157,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "support_pairs"
 	case rec.Support != nil && len(rec.Support.Failures) > 0:
 		return "support_failure"
+	case rec.Captures != nil:
+		return "captures"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:
@@ -322,6 +329,9 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		if routeErr != nil && recordsIntent(in) {
 			return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, routeErr)
 		}
+		if strings.HasPrefix(strings.TrimSpace(in.ToDesk), captureSourceDesk+":") && !onRoute {
+			return nil, fmt.Errorf("reduce: %s: only management declines a source's captures", in.LocalID)
+		}
 		if !recordsIntent(in) || !onRoute {
 			rest = append(rest, in)
 			continue
@@ -367,11 +377,21 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		return nil, fmt.Errorf("reduce: commit records: %w", err)
 	}
 	for i, in := range localIDs {
-		seq := int64(0)
+		seq, opened := int64(0), ""
 		if i < len(committed.Records) {
 			seq = committed.Records[i].InboxSeq
+			if committed.Records[i].OpenedStory {
+				// The receipt names the story a Cast to texture:new opened,
+				// so management can feed it (Cut 2 2b).
+				opened = committed.Records[i].Inbox
+			}
 		}
-		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: uint64(seq), Kind: in.Kind})
+		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: uint64(seq), Kind: in.Kind, Inbox: opened})
+	}
+	// Verdicts reach the published overlay of the stories they judge, off
+	// the commit's path (Cut 2 2b).
+	if len(committed.Verdicts) > 0 {
+		rt.publishStoryVerdicts(r.scope.OwnerID, r.scope.ComputerID, committed.Verdicts)
 	}
 	for _, in := range judged {
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Kind: in.Kind})
@@ -394,6 +414,11 @@ func stagedVerdicts(in yaegikernel.StagedIntent) ([]types.SupportVerdict, error)
 // inboxRecordRequestSource marks a run a records desk started because its
 // inbox has unread records (Cut 1 L3a).
 const inboxRecordRequestSource = "inbox_record"
+
+// captureSourceDesk names a source's inbox (source:<source_id>): the
+// sender of its capture arrivals and the addressee of management's
+// declines (Cut 2 2b).
+const captureSourceDesk = "source"
 
 // inboxUnread reports whether a desk's inbox head is past its cursor.
 func (rt *Runtime) inboxUnread(ctx context.Context, ownerID, computerID, deskAgentID string) (bool, error) {
@@ -418,7 +443,7 @@ func (rt *Runtime) WakeResearchInbox(ctx context.Context, ownerID, computerID, d
 // for its inbox.
 var recordsInboxPrompts = map[string]string{
 	agentprofile.Research:   "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round.",
-	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A support_pairs record lists a Texture's new citations in r.Support.Pairs: judge them with choir.Judge(r.Support.Pairs).",
+	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A support_pairs record lists a Texture's new citations in r.Support.Pairs: judge them with choir.Judge(r.Support.Pairs). A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline with choir.Note(r.From, reason).",
 }
 
 // WakeRecordsInbox starts a turn for a records desk (research or

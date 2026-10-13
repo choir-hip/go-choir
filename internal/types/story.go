@@ -1,0 +1,122 @@
+package types
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"sort"
+	"strings"
+)
+
+// Living stories (Cut 2 unit 2b,
+// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
+// "Living stories"; pre-flight review A6 and A6').
+//
+// Captures reach management as one system record per poll that wrote new
+// captures. Management opens a story with a Cast addressed to
+// StoryOpenInbox: the store creates the story's document and trajectory in
+// that Cast's commit (desk origin management, an empty system seed that is
+// no owner's input, no work item) and delivers the Cast to the new
+// texture:<doc>, whose wake starts Texture's first turn. Management feeds a
+// story by a Cast or Note to its texture:<doc> and never writes a Texture.
+
+// StoryOpenInbox is the address a management Cast names to open a story.
+// The store rewrites it to the new story's texture:<doc> at commit; no
+// record is ever stored under it.
+const StoryOpenInbox = "texture:new"
+
+// TrajectoryKindStory is a living story's trajectory. It has no work
+// items, so it never settles because its work drained: a story stays live
+// for every later Cast or Note management sends it.
+const TrajectoryKindStory TrajectoryKind = "story"
+
+// Subject refs a story's trajectory carries.
+const (
+	// StoryRefOriginDesk names the desk that opened the story (management).
+	StoryRefOriginDesk = "origin_desk"
+	// StoryRefOpeningRecord names the Cast record that opened it.
+	StoryRefOpeningRecord = "opening_record"
+	// StoryRefPublish is CastPublishAuto when every committed revision
+	// publishes as its next version.
+	StoryRefPublish = "publish"
+)
+
+// StorySeedRole marks a story's seed revision: the empty revision the
+// opening commits because a document needs a head. It is no owner's input,
+// no Texture's writing, and never publishes.
+const StorySeedRole = "story_seed"
+
+// CommitmentCaptures is the body of a capture arrival record.
+type CommitmentCaptures struct {
+	SourceID string           `json:"source_id"`
+	Items    []CaptureArrival `json:"items"`
+}
+
+// CaptureArrival names one new capture: its id (a Ref's doc), title, URL
+// and publish time. Never its body: management reads blocks with ReadDoc.
+type CaptureArrival struct {
+	CaptureID   string `json:"capture_id"`
+	Title       string `json:"title,omitempty"`
+	URL         string `json:"url"`
+	PublishedAt string `json:"published_at,omitempty"`
+}
+
+// CaptureArrivalSystemAgentID is the provenance of a capture arrival
+// record: the runtime speaking for the poll.
+const CaptureArrivalSystemAgentID = "system:captures"
+
+// CaptureArrivalSenderInbox is the sender inbox of a source's arrival
+// records, so each source's arrivals form one conversation with
+// management.
+func CaptureArrivalSenderInbox(sourceID string) string {
+	return "source:" + strings.TrimSpace(sourceID)
+}
+
+// CaptureArrivalRecordID is deterministic in the source and the set of
+// capture ids, so a replayed poll that names the same captures is one
+// record, not two.
+func CaptureArrivalRecordID(sourceID string, captureIDs []string) string {
+	ids := append([]string(nil), captureIDs...)
+	sort.Strings(ids)
+	sum := sha256.Sum256([]byte(strings.TrimSpace(sourceID) + "\x00" + strings.Join(ids, "\x00")))
+	return "capture-arrival:" + strings.TrimSpace(sourceID) + ":" + hex.EncodeToString(sum[:12])
+}
+
+// StoryPublishesAuto reports a story trajectory opened with publish auto:
+// every committed revision of its document publishes as its next version.
+func StoryPublishesAuto(trajectory TrajectoryRecord) bool {
+	return trajectory.Kind == TrajectoryKindStory && trajectory.SubjectRefs[StoryRefPublish] == CastPublishAuto
+}
+
+// Routes a computer reaches the platform by (through the proxy, which binds
+// the guest to its owner and computer) to publish its stories (Cut 2 2b).
+const (
+	// StoryPublishPath publishes one committed revision of a story as its
+	// version: the owner's publish path, run for the bound guest.
+	StoryPublishPath = "/internal/platform/texture/publications"
+	// StoryVerdictsPath records support verdicts in Store B, where the
+	// published check overlay reads them.
+	StoryVerdictsPath = "/internal/platform/support-verdicts"
+)
+
+// StoryPublishRequest names the revision a computer publishes.
+type StoryPublishRequest struct {
+	DocID      string `json:"doc_id"`
+	RevisionID string `json:"revision_id"`
+}
+
+// StoryVerdictsRequest carries a computer's support verdicts to Store B.
+type StoryVerdictsRequest struct {
+	OwnerID    string         `json:"owner_id"`
+	ComputerID string         `json:"computer_id"`
+	Verdicts   []StoryVerdict `json:"verdicts"`
+}
+
+// StoryVerdict is the public part of one support verdict: the pair key,
+// the verdict, why, and who judged. The overlay joins it to a version's
+// citations by pair key.
+type StoryVerdict struct {
+	Key     string `json:"key"`
+	Verdict string `json:"verdict"`
+	Why     string `json:"why,omitempty"`
+	Judge   string `json:"judge"`
+}

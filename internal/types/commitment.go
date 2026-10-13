@@ -279,6 +279,10 @@ type CommitmentRecord struct {
 	// a Texture commit's list of pairs to management, or management's
 	// failing verdicts to the Texture.
 	Support *CommitmentSupport `json:"support,omitempty"`
+	// Captures is the body of a capture arrival record (Cut 2 2b): the
+	// system record a source poll that wrote new captures sends
+	// management:<owner>, naming them.
+	Captures *CommitmentCaptures `json:"captures,omitempty"`
 }
 
 // CastHypothesis is one hypothesis a Cast opens. The store assigns ID

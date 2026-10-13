@@ -485,7 +485,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					return "", rerr
 				}
 				for _, in := range reduction.receipt.Intents {
-					result.Receipts = append(result.Receipts, fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq))
+					receipt := fmt.Sprintf("rlm:%s:%d", in.Kind, in.Seq)
+					if in.Inbox != "" {
+						receipt += " to " + in.Inbox
+					}
+					result.Receipts = append(result.Receipts, receipt)
 				}
 				// A Texture cell records what it staged. The activation's end,
 				// not the cell, answers a trigger no cell authored a turn for

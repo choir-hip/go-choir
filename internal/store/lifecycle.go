@@ -2719,6 +2719,11 @@ func (s *Store) lifecycleSettlementReady(ctx context.Context, trajectory types.T
 	if err := validateLifecycleSettlementRule(trajectory.SettlementRule, trajectory.SubjectRefs); err != nil {
 		return false, err
 	}
+	if trajectory.Kind == types.TrajectoryKindStory {
+		// A living story has no work items (Cut 2 2b), so "no open work"
+		// holds from its first commit: it never settles by draining work.
+		return false, nil
+	}
 	if strings.TrimSpace(trajectory.TerminalArtifactHeadRef) == "" {
 		return false, nil
 	}

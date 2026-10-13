@@ -127,7 +127,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	// SMG: the management desk's product API call rides the broker like the
 	// research egress verbs — the typed product_api_request tool is deleted.
 	if normalizeDeskRole(role) == "management" {
-		actions = append(actions, ActionProductAPI, ActionJudge)
+		actions = append(actions, ActionProductAPI, ActionJudge, ActionReadCapture)
 	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, sessionHandleTTL)
 	if err != nil {
@@ -278,10 +278,12 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
 	// the filesystem (mutation is capsule-bound under engineering). It alone
-	// judges citation support (Judge, decisions §12.7).
+	// judges citation support (Judge, decisions §12.7). It reads the captures
+	// a capture arrival names (ReadCapture) to open and feed stories (Cut 2
+	// 2b); it never fetches the world.
 	"management": {"Cast", "Ask", "Note", "Reply",
 		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"ProductAPI", "Judge"},
+		"ProductAPI", "Judge", "ReadCapture"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",

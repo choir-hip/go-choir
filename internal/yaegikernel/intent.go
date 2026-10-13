@@ -169,8 +169,11 @@ type InboxRecord struct {
 	Report         *types.CommitmentReport `json:"report,omitempty"`
 	// Support is a support list's pairs (to management) or management's
 	// failing verdicts (to a Texture), Cut 2 2a (v).
-	Support   *types.CommitmentSupport `json:"support,omitempty"`
-	CreatedAt time.Time                `json:"created_at"`
+	Support *types.CommitmentSupport `json:"support,omitempty"`
+	// Captures is a capture arrival's source and new captures (to
+	// management), Cut 2 2b.
+	Captures  *types.CommitmentCaptures `json:"captures,omitempty"`
+	CreatedAt time.Time                 `json:"created_at"`
 }
 
 // PendingUpdate is one pending update_coagent record bound into the cell at

@@ -177,6 +177,12 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 	if rec.Final && (kind != types.CommitmentKindReport || rec.Report == nil || strings.TrimSpace(rec.Report.StopReason) == "") {
 		return inboxRefused("final record %s must be a report with a stop_reason", rec.RecordID)
 	}
+	if rec.Captures != nil && (rec.EmitterKind != types.CommitmentEmitterSystem || strings.TrimSpace(rec.Captures.SourceID) == "" || len(rec.Captures.Items) == 0) {
+		return inboxRefused("capture arrival %s must be a system record naming its source and at least one capture", rec.RecordID)
+	}
+	if rec.Inbox == types.StoryOpenInbox {
+		return inboxRefused("record %s is addressed to %s; only a management Cast committed through CommitInboxRecords opens a story", rec.RecordID, types.StoryOpenInbox)
+	}
 	return nil
 }
 
@@ -187,12 +193,19 @@ func validProbability(p float64) bool { return p >= 0 && p <= 1 }
 // closure is minted at boot, and waking its caster there would resume work
 // after a crash. The one exception is a support pairs list (Cut 2 2a (v)):
 // it asks management to judge, nothing else would wake management for it,
-// and it is minted only by a live Texture commit, never at boot.
+// and it is minted only by a live Texture commit, never at boot. So is a
+// capture arrival (Cut 2 2b): it is minted only by a live source poll, and
+// a crash boot closes every schedule, so no poll runs at boot.
 func inboxRecordWakes(rec types.CommitmentRecord) bool {
+	if strings.HasPrefix(rec.Inbox, "source:") {
+		// A source's inbox (management's declines of its captures) has no
+		// reader desk; its mailbox is the source's poll chain.
+		return false
+	}
 	if rec.EmitterKind != types.CommitmentEmitterSystem {
 		return true
 	}
-	return rec.Support != nil && len(rec.Support.Pairs) > 0
+	return (rec.Support != nil && len(rec.Support.Pairs) > 0) || (rec.Captures != nil && len(rec.Captures.Items) > 0)
 }
 
 // stepConversation validates rec against its conversation head, stamps its
@@ -547,7 +560,13 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 	if err != nil {
 		return types.InboxCommitReceipt{}, err
 	}
-	records := req.Records
+	// A management Cast to texture:new opens its story in this commit (Cut 2
+	// 2b): the story's objects join the batch and the Cast is delivered to
+	// the new texture:<doc>.
+	records, storyObjects, storyConditions, storyEdges, opened, err := s.planStoryOpenings(ctx, ownerID, computerID, req.CommandID, req.Records, now)
+	if err != nil {
+		return types.InboxCommitReceipt{}, err
+	}
 	if len(failures) > 0 {
 		records = append(append([]types.CommitmentRecord(nil), records...), failures...)
 	}
@@ -561,6 +580,10 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 			return types.InboxCommitReceipt{}, err
 		}
 	}
+	for i := range receipt.Records {
+		receipt.Records[i].OpenedStory = opened[receipt.Records[i].RecordID]
+	}
+	objects, conditions = append(objects, storyObjects...), append(conditions, storyConditions...)
 	objects, conditions = append(objects, verdictObjects...), append(conditions, verdictConditions...)
 	receipt.Verdicts = recorded
 	receipt.CommandID, receipt.CommandDigest = req.CommandID, req.CommandDigest
@@ -571,7 +594,7 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 	}
 	objects = append(objects, commandObj)
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: commandObj.CanonicalID})
-	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects}); err != nil {
+	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: storyEdges}); err != nil {
 		if errors.Is(err, objectgraph.ErrConflict) {
 			if replay, found, replayErr := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
 				return replay, replayErr
