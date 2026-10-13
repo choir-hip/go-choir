@@ -1,0 +1,18 @@
+{
+ "cut": "C1 authority, landing L3a (Texture-research conversation on records) with L2 deletions",
+ "commits": ["dee09974", "f01c98ef", "916146c5", "8d3437b4", "790b14b0", "c37d97e0", "38d9b553"],
+ "ci": {"38d9b553": {"run": 38360145782, "tests": "all shards success"}},
+ "staging_identity": "38d9b5539424903122201c5c50f00d431ccfe7f3",
+ "scenario": "node scripts/reeng_tracer.mjs --label c1-l3a-story-1 --scenario story --owner-publish --expect-sha 38d9b553",
+ "bundle_sha256": "f33aade227061bb80ad5b9e4d26bc1982385590d389ee1d1152ea8ec4a299c7c",
+ "computer": "computer-3a790ae45ce75ff464444a223b2c3baa (stopped after)",
+ "records": {
+  "research_inbox": "7 Casts from Texture over rounds 1-3 (round 1: three Casts in two cells; round 2: three; round 3: one)",
+  "texture_inbox": "3 Reports from research: round 1 final (before the crash), round 2 interim then final",
+  "cursors": "both cursors equal their heads at export (texture 3/3, research 7/7)",
+  "open_rounds_at_export": "round 3 (research run in progress, not quiescent)"
+ },
+ "runs": "three research runs started by inbox_record wakes, each admitted without a control fingerprint; the in-flight Texture run and two parked Texture runs closed with interrupted_by_restart at the crash; no run started before the owner asked again",
+ "checker": {"I1": "pass", "I2": "fail (1 run open at export: research round 3 in progress; 1 open work item, L3c)", "I3": "unknown (2 Texture turns started by records were stamped update_coagent; fixed in the following commit)", "I4": "fail (3 of 3 citations lack a quote; Cut 2)", "I5": "unknown (no parallel egress in one cell)", "I6": "not defined"},
+ "watch": "Texture opened three research rounds in about six minutes with no round cap; whether the loop idles on its own is the next observation (docs/problems/texture-research-loop-never-idles-2026-10-09.md is the prior receipt)"
+}
