@@ -1643,6 +1643,17 @@ nodes:
     execution_mode: draft_non_executable
     depends_on: [choir-reeng-cut1-authority-2026-10-12]
     enables: [choir-autopaper-w2-living-textures-2026-10-11]
+  - id: choir-reeng-c1e-engineering-on-records-2026-10-13
+    title: "C1e — engineering and self-development on records, path B deleted, L5, L7, packets and work items deleted"
+    path: docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md
+    ledger: ''
+    status: working  # reviewed 2026-10-13 (convergent round 3 accept); next B0, the instruments
+    kind: subordinate_contract
+    entrypoint: false
+    member_of: choir-reeng-metamission-2026-10-12
+    execution_mode: mission_orchestrator
+    depends_on: [choir-reeng-cut1-authority-2026-10-12, choir-reeng-cut2-evidence-to-publication-2026-10-12]
+    enables: []
   - id: choir-ledger-metamission-2026-10-13
     title: Ledger — bounded attention, hypotheses settled and scored, Taiwan vertical, read models, no crash loops
     path: docs/definitions/choir-ledger-metamission-2026-10-13.md
@@ -1665,7 +1676,7 @@ nodes:
     title: L1 — no crash loops (start limits, crash boots never re-drive, boot ledger and holds)
     path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md
     ledger: ''
-    status: working  # L1a-1 dc184db2 and L1a-2 c08ead07 landed; L1a-3 next, before C1e
+    status: working  # L1a landed (L1a-3 at 18d01cc0); next the fault-injection harness, then L1b
     kind: station
     entrypoint: false
     execution_mode: mission_orchestrator

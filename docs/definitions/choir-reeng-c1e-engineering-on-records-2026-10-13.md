@@ -9,13 +9,13 @@ definition_version: 4
 # and the dependency order are docs/reports/c1e-deletion-inventory-2026-10-13.md
 # (read-only inventory on 18d01cc0). This file is the executable station
 # over that scope; it adds no scope.
-readiness: drafted
+readiness: reviewed
 
 review:
-  reviewer: agentic-consensus convergent rounds 1 (79d60be4, 7 of 7 send_back) and 2 (1617a002, send_back; repairs confirmed, remaining findings adopted below); round 3 next
-  frozen_ref: none (round 3 binds it)
-  verdict: send_back
-  evidence_ref: .agentic-consensus/c1e-station-convergent-r1-2026-10-13/, .agentic-consensus/c1e-station-convergent-r2-2026-10-13/
+  reviewer: agentic-consensus convergent rounds 1 (79d60be4, 7 of 7 send_back), 2 (1617a002, send_back), 3 (ac4885d1; claude, codex, gemini, deepseek, glm accept; gpt-6.1-sol send_back, its three findings and the accepters' non-blocking notes adopted after the round; opencode failed to run)
+  frozen_ref: git blob d7b956d944653201f1d1daf3754c0d598301cb7c (this file at ac4885d1; sha256 e533a369…)
+  verdict: accept
+  evidence_ref: .agentic-consensus/c1e-station-convergent-r1-2026-10-13/, -r2-2026-10-13/, -r3-2026-10-13/
 
 start:
   captured_at: 2026-10-13T22:00:00Z
@@ -78,7 +78,7 @@ finish:
     minted test computer; the paper, research, engineering and crash
     scenarios passing on the final deletion commit
   batches: >-
-    Commit order is the eight steps below; deploy order is five batches,
+    Commit order is the nine steps (0-8) below; deploy order is six batches,
     each fenced with --expect-sha on its own deployed identity. B0 = step 0
     (instruments). B1 = steps 1-4 in one push. B2 = step 5. B3 = step 6.
     B4 = step 7. B5 = step 8. A batch is rolled back whole, never a step
@@ -98,7 +98,9 @@ finish:
         patterns: `exclude: docs/**, *.md, *_test.go, *_test.mjs,
         frontend/tests/**, internal/vocabmigrate/families.go;` — docs and
         tests are history and instruments, not code; families.go is the
-        frozen list of retired kind names, which decodes nothing. Every
+        frozen kind-membership table for historical vocabulary
+        (DecodeOGObjectKind recognizes retired kinds; it decodes no
+        work-item or packet object into a live type). Every
         other hit is deleted, including scripts/reeng_tracer.mjs and
         scripts/reeng_invariants.mjs once re-expressed. The live body type
         CoagentSourcePacketPayload is renamed in its own commit in step 0,
@@ -128,7 +130,7 @@ finish:
         acceptance, which lands in B3), on B3's identity with run
         acceptance synthesized from the fold for the round-trip
         trajectory, and on B5's identity
-      proves: Freeze, Verify, decision, apply and restore work on records and, on B5, with work items and packets deleted; the apply restart resumes once and the restore lands on the prior head; on B3 and B5, run acceptance derives from the fold and the round trip reaches the absolute target in cut 1's artifact 0
+      proves: Freeze, Verify, decision, apply and restore work on records and, on B5, with work items and packets deleted; the operation is opened by Freeze as the candidate bundle's effect journal, with no public start-operation route, no one-open-operation lock and no engineering-fate auto-advance or auto-fail; the apply restart resumes once and the restore lands on the prior head; on B3 and B5, run acceptance derives from the fold and the round trip reaches the absolute target in cut 1's artifact 0
       evidence_class: deployed proof (operation states, route receipt and event heads through the product API; accepted trajectory, run and acceptance ids)
     - action: >-
         node scripts/reeng_tracer.mjs --scenario research, extended in step
@@ -137,8 +139,16 @@ finish:
       proves: child runs leave events, report only to the parent inbox, and the parent cell does not block on them (cut 1 L5); the all-children barrier in research_children.go, kept on C2's research path until now, is gone
       evidence_class: deployed proof
     - action: >-
-        node scripts/reeng_tracer.mjs --scenario paper on B1's, B2's, B4's
-        and B5's identities
+        L7's story baseline: on B3's and B5's identities, the tracer story
+        scenario's fold-derived run acceptance is fetched and compared with
+        Cut 0's recorded level (docs/reports/reeng-cut0-measurements-2026-10-12.md
+        §4), recording trajectory, acceptance id, level reached and the
+        comparison
+      proves: the tracer story reaches at least Cut 0's recorded level with acceptance derived from the fold (cut 1 L7)
+      evidence_class: deployed proof
+    - action: >-
+        node scripts/reeng_tracer.mjs --scenario paper on B0's, B1's, B2's,
+        B4's and B5's identities
       proves: Autopaper still opens, writes and publishes stories after every batch that touches store/lifecycle.go, research_children.go or the Autopaper residue
       evidence_class: deployed proof
     - action: >-
@@ -162,10 +172,13 @@ finish:
     before each batch: reeng-c1e-pre-b0 ... reeng-c1e-pre-b5. Staging test
     computers are disposable and are re-minted, never reverted: old code
     cannot read new-format records. Break-glass: redeploy the tag before
-    the failing batch and mint fresh test computers. The paper computer and
-    the owner's computer take each batch at their next idle refresh like
-    any other; a batch that breaks the paper scenario is fixed forward or
-    its tag redeployed before the paper computer refreshes
+    the failing batch and mint fresh test computers. Live computers (the
+    paper computer, the owner's) are refreshed by the deploy itself when
+    idle (.github/workflows/ci.yml), before any acceptance run, so a
+    failing batch can reach them first: their recovery is forward-only.
+    Before B1, B4 and B5 the paper computer's publications are recorded
+    (count, routes, latest versions) and re-read after its refresh, so the
+    cutover shows its published history retained
   landing:
     required: true
     environment: staging
@@ -220,13 +233,16 @@ boundaries:
 now:
   status: blocked_incomplete
   slice: >-
-    Drafted from the inventory. Round 1 sent it back 7 of 7; round 2
+    Reviewed (round 3 accept). Drafted from the inventory. Round 1 sent it back 7 of 7; round 2
     confirmed those repairs and sent it back on what remained, all adopted:
     cut 1's full self-development drill and L5 discriminators restored,
     commit order separated from five deploy batches, forward-fix rollback
     and untyped history per cut 1, a checker that fails on missing
     evidence, the gate's full cut-1 name list with a parser-safe exclude
-    list, engineering's Cast removed. Round 3 next
+    list, engineering's Cast removed. Round 3 accepted; gpt-6.1-sol's
+    findings adopted (self-development work-state deletions named, the
+    story baseline for L7, forward-only recovery for live computers).
+    Next: B0
   source_ref: 29bbab97
   deploy_identity: staging 18d01cc0
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -235,15 +251,16 @@ now:
     claim: >-
       Records already carry everything the work-item and packet tables
       carry for engineering (conversation, round, Report, cursor), so
-      moving engineering onto records and deleting path B removes the last
-      readers of both tables without a new mechanism.
+      moving engineering onto records and deleting path B removes the
+      engineering readers of both tables without a new mechanism (the
+      Autopaper readers go in step 7).
     test: steps 1-4 land with the reducer tests and a deployed round trip (acceptance 3), and no step through step 7 needs a new table or record kind
     edge: missing_oracle
-    delta_o: the I7 checker widened to every route, reading zero minted work items and packets on a deployed engineering round trip
+    delta_o: the I7 checker route-scoped to the engineering pairs from B1, reading zero minted work items and packets on the deployed engineering drill; zero everywhere from B4
     scope_if_supported: engineering and self-development on staging
     status: proposed
     evidence_refs: [docs/reports/c1e-deletion-inventory-2026-10-13.md]
-  decision: {what: "run the inventory's eight steps in order, each its own commit, steps 1-4 batched per push", kind: operational, status: proposal, evidence_ref: docs/reports/c1e-deletion-inventory-2026-10-13.md, owner_ratification_ref: not_applicable}
+  decision: {what: "run steps 0-8 in order, each its own commit, deployed as batches B0-B5", kind: operational, status: proposal, evidence_ref: docs/reports/c1e-deletion-inventory-2026-10-13.md, owner_ratification_ref: not_applicable}
   belief:
     believed_state: >-
       Nothing of C1e is landed. L1a is landed, so the boot re-drivers C1e
@@ -256,7 +273,7 @@ now:
     management_controller.go on the live Autopaper path. Second: deleting
     I2/I3's inputs before re-expressing them on records would blind C1e's
     own acceptance instrument
-  next_action: convergent round 3 on the repaired file; on accept, promote to reviewed and repoint the metamission's C1e station here; then B0
+  next_action: B0 — the wire-neutral payload rename, the gate row in report mode with the exact cap and budget literals, the forbidden-object census and the checker's missing-evidence failures, I2/I3 on records, the tracer off work_items; then B1
 
 receipts: []
 ---
@@ -266,40 +283,54 @@ receipts: []
 The scope is cut 1's `scope_split`; the map is the inventory. This file
 tracks execution.
 
-Order of work (inventory §5, repaired after convergent rounds 1 and 2).
+Order of work (inventory §5, repaired after convergent rounds 1-3).
 Steps are commits; batches B0-B5 are deploys (see `finish.batches`).
 
 0. **Instruments (B0).** Rename `CoagentSourcePacketPayload` (own
-   commit). Land the gate row in report mode with the exact cap and budget
-   literals. Make the exporter serve a forbidden-object census and the
-   checker fail on missing inputs or unknown verdicts; re-express I2/I3 on
-   records; re-point `scripts/reeng_tracer.mjs` off `work_items`. Write the
-   answer to the main uncertainty (what management reads from a
-   terminal-outcome packet) if it is cheap now; it gates step 7.
+   commit) to a name containing no gate literal, keeping every JSON tag,
+   so the rename is wire-neutral. Land the gate row in report mode with
+   the exact cap and budget literals. Make the exporter serve a
+   forbidden-object census whose kind names come from
+   `internal/vocabmigrate/families.go` (gate-excluded, so the census
+   outlives B5) and make the checker fail on missing inputs or unknown
+   verdicts; re-express I2/I3 on records; re-point
+   `scripts/reeng_tracer.mjs` off `work_items`. Write the answer to the
+   main uncertainty (what management reads from a terminal-outcome
+   packet) if it is cheap now; it gates step 7. The checker reads only
+   tracked files, so `.claude/worktrees/` copies never count. Paper run.
 1. **Engineering conversation on records (B1).** Engineering joins
    `recordsDesk` and `recordsRoute` (management to engineering); the
    capsule gets `Records`; engineering's module set becomes WriteFile,
    Exec, Complete, Freeze, Report, Ask, Reply, Note, losing `Cast`,
    `Inbox`, `Updates`, `Emits`, `Assign`, `Message` and `Emit`; the
-   refusal at `inbox_records.go:360` goes; engineering's Report goes to
+   refusal at `inbox_records.go:360` goes; the six other verbs it has today
+   (`CancelAct`, `Escalate`, `Precommit`, `ReportPacket`, `Resolve`,
+   `Disagreement`) go too; engineering's Report goes to
    management instead of `buildEngineeringReturnPacket`; its prompts and
    verb list teach only that set, with the parity test (acceptance 2).
 2. **Records-authorized assignments (B1).** Conversation and round
    authority replace `ParentWorkItemID`/`AssignedWorkItemID`.
-   `RequireNoOpenWorkItems` leaves the engineering seed and
-   `selfdev_texture_join.go` only; its live-path setters
+   `RequireNoOpenWorkItems` is removed from the engineering seed and
+   `selfdev_texture_join.go` and nowhere else; its live-path setters
    (`texture_lifecycle_create.go`, `texture_handoff.go`,
    `coagent_route.go`, `story_open.go`) and its enforcement die in step 8.
-3. **Delete path B (B1).** Retarget, supervision mint,
-   `selfdev_texture_join.go`, recast and judge, Texture exclusions, the
-   handler entry, the path-B branch in `run_acceptance.go`.
+3. **Delete path B and self-development work state (B1).** Retarget,
+   supervision mint, `selfdev_texture_join.go`, recast and judge, Texture
+   exclusions, the handler entry, the path-B branch in
+   `run_acceptance.go`. With it, cut 1's self-development deletions: the
+   public start-operation API (`api_self_development.go`), the
+   one-open-operation lock (`selfdev/operations.go`), engineering-fate
+   auto-advance and auto-fail (`engineering_assignment_fate.go`) and the
+   prompt special-casing. The operation stays only as the candidate
+   bundle's effect journal, opened by Freeze; approval, materialization
+   and restore routes stay.
 4. **Management Verify (B1)** bound to the operation id and bundle digest
    the engineering Report names; the `--scenario engineering` drill
    (acceptance 3). B1 deploys here, with a paper run.
 5. **L5 (B2)**: sub-researchers as runs; the research scenario extended
    (acceptance 4); paper run.
 6. **L7 (B3)**: run acceptance on the fold; the engineering drill again
-   with fold-derived acceptance.
+   with fold-derived acceptance, and the story baseline against Cut 0.
 7. **Autopaper residue (B4)**, gated on the written answer to the main
    uncertainty, with records-side delivery, cursor and wake evidence for
    succeeded, failed and cancelled outcomes: Texture's work-item
@@ -309,7 +340,13 @@ Steps are commits; batches B0-B5 are deploys (see `finish.batches`).
    everywhere; paper run.
 8. **Store and types (B5).** The work-item and packet tables, types,
    registry kinds, the typed migrators in `internal/vocabmigrate`
-   (`MigrateWorkItemRecord` and its kin) and `internal/store/vocab_migrate_og.go`'s
-   uses, `cmd/choir/trace.go`; then the gate turns to `enforce: zero`
+   (`MigrateWorkItemRecord` and its kin), the kind literals in
+   `internal/store/vocab_migrate_og.go`'s `ogIdentityFormulas`, the
+   retirement guards that name the dropped tables (`store.go`
+   `retiredRuntimeTables`, `replay_eligibility.go`), the retired-verb
+   stubs in `yaegikernel/choir.go` (a stale call then gets the
+   unknown-name hint), comment and identifier scrubs the gate finds, the
+   frontend specs' `open_work_items`/`worker_updates_consumed`
+   assertions, `cmd/choir/trace.go`; then the gate turns to `enforce: zero`
    with its planted-hit proof, and the engineering, research, paper and
    crash scenarios run on B5's identity.

@@ -51,9 +51,9 @@ metamission:
       status: core landed (2026-10-13 at 76ab40fd; receipts docs/evidence/c1-core-mgmt-acceptance-2026-10-13.json, c1-core-crash-acceptance-2026-10-13.json); C1e items remain
       depends_on: [C0]
     - id: C1e
-      path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md (scope_split, C1e items)
-      readiness: reviewed (scope split panel 2026-10-13)
-      status: pending
+      path: docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md (scope: cut 1 scope_split, C1e items)
+      readiness: reviewed (convergent round 3 accept 2026-10-13)
+      status: working (next B0, the instruments)
       depends_on: [C2]
       note: engineering and self-development on records, path B deleted, L5, L7, wholesale packet and work-item deletion; runs after C2's autopaper_live and before the completion review; waits for the ledger metamission's L1a (docs/definitions/choir-ledger-l1-restart-2026-10-13.md), which changes the same boot re-drivers (one shared-runtime cutover at a time, 2026-10-13)
     - id: C2
