@@ -95,7 +95,10 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   `move3-cas-externalization` + amended acceptance. Revisit: when world-wire
   search is designed; the residual is bounded by a Store B growth SLO
   (monitor `items` table bytes + oldgen; reopen if growth threatens Store B
-  capacity).
+  capacity). Update 2026-10-13: Cut 2 unit 2b deleted the readers
+  (`internal/cycle`, sourcecycled's `/internal/source-service/search` and
+  research's `source_search`), so nothing reads `items` any more; what is left
+  is a Store B table cleanup, not a search redesign.
 
 ## Closed
 

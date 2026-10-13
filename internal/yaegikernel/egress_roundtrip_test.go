@@ -11,7 +11,7 @@ import (
 // over a real socketpair: the host EvalCell services a StreamBrokerEgress
 // frame via the configured Egress handler, writes StreamBrokerEgressResult,
 // and the cell's StreamCell result still completes the Eval. This is the
-// choir.SourceSearch/Read boundary — the cell never holds a socket.
+// choir.SearchWireCorpus/Read boundary — the cell never holds a socket.
 func TestDeskWorkerEgressRoundTrip(t *testing.T) {
 	host, worker, err := SocketPair()
 	if err != nil {
@@ -46,8 +46,8 @@ func TestDeskWorkerEgressRoundTrip(t *testing.T) {
 	if _, _, err := wfc.ReadFrame(); err != nil { // cell request
 		t.Fatalf("worker read cell frame: %v", err)
 	}
-	payload, _ := json.Marshal(SourceSearchPayload{Query: "choir", MaxResults: 2})
-	req, _ := json.Marshal(BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "e1", Action: ActionSourceSearch, Payload: payload})
+	payload, _ := json.Marshal(SearchWireCorpusPayload{Query: "choir", Limit: 2})
+	req, _ := json.Marshal(BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "e1", Action: ActionSearchWireCorpus, Payload: payload})
 	if err := wfc.WriteFrame(StreamBrokerEgress, req); err != nil {
 		t.Fatalf("worker write egress: %v", err)
 	}
@@ -65,10 +65,10 @@ func TestDeskWorkerEgressRoundTrip(t *testing.T) {
 	if !resp.Success {
 		t.Fatalf("egress refused: %s", resp.Error)
 	}
-	if gotAction != ActionSourceSearch {
-		t.Fatalf("host egress action=%q want source_search", gotAction)
+	if gotAction != ActionSearchWireCorpus {
+		t.Fatalf("host egress action=%q want search_wire_corpus", gotAction)
 	}
-	var gotQuery SourceSearchPayload
+	var gotQuery SearchWireCorpusPayload
 	_ = json.Unmarshal(gotPayload, &gotQuery)
 	if gotQuery.Query != "choir" {
 		t.Fatalf("host egress payload query=%q want choir", gotQuery.Query)

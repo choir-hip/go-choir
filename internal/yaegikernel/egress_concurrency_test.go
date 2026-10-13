@@ -9,13 +9,13 @@ import (
 	"time"
 )
 
-// echoEgressHost answers every source search with the query it was asked, so a
+// echoEgressHost answers every corpus search with the query it was asked, so a
 // cell can tell whether each caller got its own answer. The first query is
 // slow, which is the case the cross-wire probe caught: the reply to "a"
 // arrived last and was taken by whichever caller read next
 // (problems/parallel-choir-calls-cross-wire-results-2026-10-12.md).
 func echoEgressHost(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
-	var p SourceSearchPayload
+	var p SearchWireCorpusPayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func researchWorker(t *testing.T) *DeskSessionWorker {
 }
 
 // TestEgressConcurrentCallersGetOwnResults runs eight goroutines in one cell,
-// each calling choir.SourceSearch with its own query, against a real worker
+// each calling choir.SearchWireCorpus with its own query, against a real worker
 // process. Every caller must get the answer to its own query.
 func TestEgressConcurrentCallersGetOwnResults(t *testing.T) {
 	w := researchWorker(t)
@@ -53,7 +53,7 @@ results := make(chan string, 8)
 for _, q := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 	q := q
 	go func() {
-		r, err := choir.SourceSearch(q, 1)
+		r, err := choir.SearchWireCorpus(q, 1)
 		if err != nil {
 			results <- q + " ERR " + err.Error()
 			return
@@ -93,7 +93,7 @@ fmt.Println(strings.Join(got, "\n"))
 }
 
 // TestEgressLateCallerGetsCleanError starts a goroutine that calls
-// choir.SourceSearch after its cell has returned. It must get an error naming
+// choir.SearchWireCorpus after its cell has returned. It must get an error naming
 // the reason, never another caller's result, and the next cell's own egress
 // and result frames must be untouched.
 func TestEgressLateCallerGetsCleanError(t *testing.T) {
@@ -104,7 +104,7 @@ func TestEgressLateCallerGetsCleanError(t *testing.T) {
 late := make(chan string, 1)
 go func() {
 	time.Sleep(100 * time.Millisecond)
-	r, err := choir.SourceSearch("late", 1)
+	r, err := choir.SearchWireCorpus("late", 1)
 	if err != nil {
 		late <- "ERR " + err.Error()
 		return
@@ -117,7 +117,7 @@ go func() {
 	}
 	time.Sleep(300 * time.Millisecond)
 	second, err := w.Eval(ctx, `
-r, err := choir.SourceSearch("second", 1)
+r, err := choir.SearchWireCorpus("second", 1)
 fmt.Println("own", string(r), err)
 fmt.Println("late", <-late)
 `)

@@ -41,7 +41,7 @@ const (
 	StreamBrokerEmit       = 4
 	StreamBrokerEmitResult = 5
 	// StreamBrokerEgress carries one synchronous host-mediated network call
-	// (search_start / read / source_search) from the cell worker to its
+	// (search_start / read / read_capture) from the cell worker to its
 	// host; StreamBrokerEgressResult returns the bounded result. One generic
 	// egress stream for all host-resolved network verbs — the payload's
 	// BrokerAction names which.

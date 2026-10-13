@@ -112,15 +112,15 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit}
 	if role == SessionRoleResearchChild {
 		actions = []BrokerAction{ActionReadFile, ActionListDir,
-			ActionSearchStart, ActionRead, ActionReadCapture, ActionSourceSearch, ActionSearchWireCorpus,
+			ActionSearchStart, ActionRead, ActionReadCapture, ActionSearchWireCorpus,
 			ActionReadEvidence, ActionListEvidence}
 	} else if readOnly {
 		// Research is read-only on the filesystem but owns the host-mediated
-		// egress verbs (search_start/read/read_capture/source_search/
-		// search_wire_corpus/poll_source + evidence/run-memory) — the handle
+		// egress verbs (search_start/read/read_capture/search_wire_corpus/
+		// poll_source + evidence/run-memory) — the handle
 		// must authorize the frame actions the cell verbs dispatch.
 		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit,
-			ActionSearchStart, ActionRead, ActionSourceSearch, ActionSearchWireCorpus,
+			ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
 			ActionPollSource, ActionReadCapture}
 	}
@@ -290,13 +290,13 @@ var deskModuleSets = map[string][]string{
 	// read-only world access is not read-only messaging.
 	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SourceSearch", "SearchWireCorpus",
+		"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
 		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource"},
 	// A child research activation (choir.Research) reads the world and may
 	// fan out further; it cannot message, report or write. Its findings
 	// return to the parent cell as a value. It runs on the same desk-session
 	// machinery as its parent, so it searches the same async way.
-	SessionRoleResearchChild: {"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SourceSearch", "SearchWireCorpus",
+	SessionRoleResearchChild: {"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SearchWireCorpus",
 		"ReadEvidence", "ListEvidence"},
 	// Texture writes its document with one verb, Write, and closes a turn
 	// with Done, Wait or Reject (Cut 2 2a); the cell's turn commits through
@@ -393,7 +393,6 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Read":             func() reflect.Value { return reflect.ValueOf(s.Read) },
 		"PollSource":       func() reflect.Value { return reflect.ValueOf(s.PollSource) },
 		"ReadCapture":      func() reflect.Value { return reflect.ValueOf(s.ReadCapture) },
-		"SourceSearch":     func() reflect.Value { return reflect.ValueOf(s.SourceSearch) },
 		"SearchWireCorpus": func() reflect.Value { return reflect.ValueOf(s.SearchWireCorpus) },
 		"SaveEvidence":     func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
 		"ReadEvidence":     func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
@@ -614,14 +613,6 @@ func (s *ChoirScope) PollSource(sourceID string, maxItems int) (JSON, error) {
 func (s *ChoirScope) ReadCapture(captureID string, fromBlock, maxChars int) (JSON, error) {
 	var out JSON
 	err := s.call(ActionReadCapture, ReadCapturePayload{CaptureID: captureID, FromBlock: fromBlock, MaxChars: maxChars}, &out)
-	return out, err
-}
-
-// SourceSearch queries the Source Service through the host; returns the
-// bounded source-list projection as JSON.
-func (s *ChoirScope) SourceSearch(query string, maxResults int) (JSON, error) {
-	var out JSON
-	err := s.call(ActionSourceSearch, SourceSearchPayload{Query: query, MaxResults: maxResults}, &out)
 	return out, err
 }
 

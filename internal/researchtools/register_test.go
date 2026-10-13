@@ -8,7 +8,6 @@ import "github.com/yusefmosiah/go-choir/internal/toolregistry"
 // harness to drive each tool's Func by name.
 func Register(registry *toolregistry.ToolRegistry, deps Dependencies) error {
 	for _, tool := range []toolregistry.Tool{
-		newSourceSearchTool(deps.Source, deps),
 		newReadTool(deps),
 		newSearchWireCorpusTool(deps),
 	} {

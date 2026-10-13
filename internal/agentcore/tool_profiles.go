@@ -385,7 +385,6 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 	engineeringRegistry := toolregistry.MustNewToolRegistry()
 
 	searchClient := search.NewGatewayClientFromEnv()
-	sourceClient := researchtools.NewSourceClientFromEnv()
 	// choir.Read's client refuses loopback, private, link-local, CGNAT and
 	// metadata addresses and dials the address it checked
 	// (research-fetch-url-has-no-address-guard-2026-10-10.md, D1/D2).
@@ -396,7 +395,7 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 	// (R3d), and research (R3r) are live unconditionally.
 	researchDeps := researchtools.Dependencies{
 		Store: rt.store, Search: searchClient,
-		Source: sourceClient, HTTP: httpClient,
+		HTTP: httpClient,
 		// Autopaper captures are shared content: written to Store B through
 		// corpusd, never this computer's embedded graph (W1b2).
 		Captures: researchtools.NewCorpusdCaptureSink(rt.cfg.CorpusdURL),

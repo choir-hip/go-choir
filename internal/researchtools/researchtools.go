@@ -3,232 +3,21 @@ package researchtools
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
-	"syscall"
 	"time"
 
-	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/search"
-	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
-type SourceSearchClient interface {
-	SearchSources(ctx context.Context, query string, maxResults int) (*SourceSearchResponse, error)
-}
-
-type SourceItemResolveClient interface {
-	ResolveSourceItem(ctx context.Context, itemID string) (*sourceapi.ItemResult, error)
-}
-
-type IngestionHandoffStatusClient interface {
-	IngestionHandoffLatest(ctx context.Context) (*sourceapi.IngestionHandoffResponse, error)
-}
-
-type SourceSearchResponse struct {
-	Query    string           `json:"query"`
-	Provider string           `json:"provider"`
-	Results  []map[string]any `json:"results"`
-	BaseURL  string           `json:"base_url,omitempty"`
-	Metadata map[string]any   `json:"metadata,omitempty"`
-}
-
-type SourceClientConfig struct {
-	BaseURL    string
-	HTTPClient *http.Client
-}
-
-type HTTPSourceClient struct {
-	baseURL    string
-	httpClient *http.Client
-}
-
-func NewSourceClient(config SourceClientConfig) *HTTPSourceClient {
-	baseURL := strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
-	if baseURL == "" {
-		return nil
-	}
-	if _, err := url.ParseRequestURI(baseURL); err != nil {
-		return nil
-	}
-	client := config.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
-	}
-	return &HTTPSourceClient{baseURL: baseURL, httpClient: client}
-}
-
-func NewSourceClientFromEnv() *HTTPSourceClient {
-	return NewSourceClient(SourceClientConfig{
-		BaseURL: strings.TrimSpace(getenvFirst("SOURCE_SERVICE_BASE_URL", "SOURCE_SERVICE_URL", "SOURCECYCLED_API_URL")),
-	})
-}
-
-func getenvFirst(names ...string) string {
-	for _, name := range names {
-		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func (c *HTTPSourceClient) SearchSources(ctx context.Context, query string, maxResults int) (*SourceSearchResponse, error) {
-	if c == nil || strings.TrimSpace(c.baseURL) == "" {
-		return nil, fmt.Errorf("source search client not configured")
-	}
-	endpoint, err := url.Parse(c.baseURL + "/internal/source-service/search")
-	if err != nil {
-		return nil, fmt.Errorf("parse source service search URL: %w", err)
-	}
-	params := endpoint.Query()
-	params.Set("q", strings.TrimSpace(query))
-	if maxResults > 0 {
-		params.Set("max_results", fmt.Sprintf("%d", maxResults))
-	}
-	endpoint.RawQuery = params.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("create source service search request: %w", err)
-	}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, sourceServiceCallError("search", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("source service search returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
-	var apiResp sourceapi.SearchResponse
-	err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&apiResp)
-	if err != nil {
-		return nil, fmt.Errorf("decode source service search response: %w", err)
-	}
-	results := make([]map[string]any, 0, len(apiResp.Results))
-	for _, item := range apiResp.Results {
-		results = append(results, sourceAPIItemMap(item))
-	}
-	metadata := map[string]any{}
-	if apiResp.Metadata.TargetKind != "" {
-		metadata["target_kind"] = apiResp.Metadata.TargetKind
-	}
-	return &SourceSearchResponse{
-		Query:    apiResp.Query,
-		Provider: firstNonEmptyString(apiResp.Provider, sourceapi.ProviderName),
-		Results:  results,
-		BaseURL:  c.baseURL,
-		Metadata: metadata,
-	}, nil
-}
-
-func (c *HTTPSourceClient) IngestionHandoffLatest(ctx context.Context) (*sourceapi.IngestionHandoffResponse, error) {
-	if c == nil || strings.TrimSpace(c.baseURL) == "" {
-		return nil, fmt.Errorf("source search client not configured")
-	}
-	endpoint, err := url.Parse(c.baseURL + "/internal/source-service/ingestion-handoff/latest")
-	if err != nil {
-		return nil, fmt.Errorf("parse source service ingestion handoff URL: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("create source service ingestion handoff request: %w", err)
-	}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, sourceServiceCallError("ingestion handoff", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("source service ingestion handoff returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
-	var apiResp sourceapi.IngestionHandoffResponse
-	err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&apiResp)
-	if err != nil {
-		return nil, fmt.Errorf("decode source service ingestion handoff response: %w", err)
-	}
-	return &apiResp, nil
-}
-
-func (c *HTTPSourceClient) ResolveSourceItem(ctx context.Context, itemID string) (*sourceapi.ItemResult, error) {
-	itemID = strings.TrimSpace(itemID)
-	if c == nil || strings.TrimSpace(c.baseURL) == "" {
-		return nil, fmt.Errorf("source search client not configured")
-	}
-	if itemID == "" {
-		return nil, fmt.Errorf("source item id is required")
-	}
-	endpoint, err := url.Parse(c.baseURL + "/internal/source-service/items/" + url.PathEscape(itemID))
-	if err != nil {
-		return nil, fmt.Errorf("parse source service item URL: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("create source service item request: %w", err)
-	}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, sourceServiceCallError("item", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("source service item returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
-	}
-	var apiResp sourceapi.ResolveItemResponse
-	err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&apiResp)
-	if err != nil {
-		return nil, fmt.Errorf("decode source service item response: %w", err)
-	}
-	return &apiResp.Item, nil
-}
-
-func sourceAPIItemMap(item sourceapi.ItemResult) map[string]any {
-	return map[string]any{
-		"rank":                 item.Rank,
-		"target_kind":          firstNonEmptyString(item.TargetKind, sourceapi.TargetKind),
-		"item_id":              item.ItemID,
-		"source_id":            item.SourceID,
-		"source_type":          item.SourceType,
-		"fetch_id":             item.FetchID,
-		"original_id":          item.OriginalID,
-		"title":                item.Title,
-		"body":                 item.Body,
-		"url":                  item.URL,
-		"canonical_url":        item.CanonicalURL,
-		"published_at":         item.PublishedAt,
-		"fetched_at":           item.FetchedAt,
-		"verticals":            item.Verticals,
-		"language":             item.Language,
-		"region":               item.Region,
-		"content_hash":         item.ContentHash,
-		"body_kind":            item.BodyKind,
-		"body_length":          item.BodyLength,
-		"reader_snapshot":      item.ReaderSnapshot,
-		"source_tos_class":     item.SourceTOSClass,
-		"source_robots_policy": item.SourceRobotsPolicy,
-		"source_auth_policy":   item.SourceAuthPolicy,
-		"store_body_policy":    item.StoreBodyPolicy,
-		"evidence_level":       item.EvidenceLevel,
-		"vintage_policy":       item.VintagePolicy,
-		"lookahead_status":     item.LookaheadStatus,
-		"release_date":         item.ReleaseDate,
-	}
-}
-
 type Dependencies struct {
 	Store  *store.Store
 	Search search.Client
-	Source SourceSearchClient
 	// HTTP is the address-guarded client choir.Read fetches with.
 	HTTP *http.Client
 	// Sources is the poll registry (nil: the embedded default) and
@@ -236,139 +25,6 @@ type Dependencies struct {
 	// corpusd (Autopaper W1b2), never this computer's embedded graph.
 	Sources  *sources.Registry
 	Captures CaptureSink
-}
-
-func newSourceSearchTool(sourceClient SourceSearchClient, deps Dependencies) toolregistry.Tool {
-	type args struct {
-		Query      string `json:"query"`
-		MaxResults int    `json:"max_results,omitempty"`
-	}
-	return toolregistry.Tool{Name: "source_search",
-		Description: "Search the configured Choir Source Service ledger for durable source items. Research-only: use results as untrusted source evidence, then checkpoint source IDs, item IDs, hashes, caveats, and unresolved gaps for Texture.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"query":       map[string]any{"type": "string"},
-			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
-		}, []string{"query"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode source_search args: %w", err)
-			}
-			if sourceClient == nil {
-				return "", fmt.Errorf("source search client not configured")
-			}
-			if strings.TrimSpace(in.Query) == "" {
-				return "", fmt.Errorf("query must not be empty")
-			}
-			resp, err := sourceClient.SearchSources(ctx, strings.TrimSpace(in.Query), in.MaxResults)
-			if err != nil {
-				return "", err
-			}
-			full := map[string]any{
-				"query":              resp.Query,
-				"provider":           resp.Provider,
-				"source_service_url": resp.BaseURL,
-				"metadata":           resp.Metadata,
-				"results":            resp.Results,
-			}
-			model, metadata := compactSourceSearchProjection(full, resp)
-			return toolregistry.ProjectionResultJSON(model, full, metadata)
-		}}
-}
-
-func compactSourceSearchProjection(full map[string]any, resp *SourceSearchResponse) (map[string]any, map[string]any) {
-	const maxVisibleResults = 8
-	const maxBodyChars = 1000
-	visibleResults := make([]map[string]any, 0, researchMinInt(len(resp.Results), maxVisibleResults))
-	for idx, result := range resp.Results {
-		if idx >= maxVisibleResults {
-			break
-		}
-		visible := map[string]any{
-			"rank":             result["rank"],
-			"target_kind":      "source_service_item",
-			"item_id":          stringValue(result["item_id"]),
-			"source_id":        stringValue(result["source_id"]),
-			"source_type":      stringValue(result["source_type"]),
-			"fetch_id":         stringValue(result["fetch_id"]),
-			"title":            stringValue(result["title"]),
-			"url":              stringValue(result["url"]),
-			"canonical_url":    stringValue(result["canonical_url"]),
-			"published_at":     stringValue(result["published_at"]),
-			"fetched_at":       stringValue(result["fetched_at"]),
-			"body_excerpt":     contentowner.TruncateString(stringValue(result["body"]), maxBodyChars),
-			"content_hash":     stringValue(result["content_hash"]),
-			"body_kind":        stringValue(result["body_kind"]),
-			"body_length":      result["body_length"],
-			"reader_snapshot":  result["reader_snapshot"],
-			"evidence_level":   stringValue(result["evidence_level"]),
-			"vintage_policy":   stringValue(result["vintage_policy"]),
-			"lookahead_status": stringValue(result["lookahead_status"]),
-			"release_date":     stringValue(result["release_date"]),
-		}
-		if verticals, ok := result["verticals"]; ok {
-			visible["verticals"] = verticals
-		}
-		if language := stringValue(result["language"]); language != "" {
-			visible["language"] = language
-		}
-		if region := stringValue(result["region"]); region != "" {
-			visible["region"] = region
-		}
-		visibleResults = append(visibleResults, visible)
-	}
-	model := map[string]any{
-		"query":                resp.Query,
-		"provider":             resp.Provider,
-		"result_count":         len(resp.Results),
-		"visible_result_count": len(visibleResults),
-		"omitted_result_count": researchMaxInt(0, len(resp.Results)-len(visibleResults)),
-		"results":              visibleResults,
-		"full_evidence":        "stored in Trace tool.result full_output/full_output_sha256",
-		"projection_policy":    "top bounded source-service item cards with compact excerpts",
-		"source_identity":      "each result carries target_kind=source_service_item, item_id, source_id, fetch_id, and content_hash",
-	}
-	metadata := map[string]any{
-		"type":                 "source_search",
-		"full_result_count":    len(resp.Results),
-		"visible_result_count": len(visibleResults),
-		"full_output_bytes":    len(researchMustJSON(full)),
-		"model_output_bytes":   len(researchMustJSON(model)),
-	}
-	return model, metadata
-}
-
-func stringValue(value any) string {
-	switch v := value.(type) {
-	case nil:
-		return ""
-	case string:
-		return v
-	default:
-		return strings.TrimSpace(fmt.Sprint(v))
-	}
-}
-
-func researchMustJSON(value any) string {
-	out, err := json.Marshal(value)
-	if err != nil {
-		return ""
-	}
-	return string(out)
-}
-
-func researchMinInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func researchMaxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
@@ -438,22 +94,12 @@ func firstNonEmptyString(values ...string) string {
 	return ""
 }
 
+// universalWirePlatformOwnerID is the corpus owner search_wire_corpus scopes
+// to by default: this computer's owner (the guest boot's choir.owner_id).
 func universalWirePlatformOwnerID() string {
-	ownerID := strings.TrimSpace(getenvFirst("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
+	ownerID := strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
 	if ownerID == "" {
 		ownerID = "universal-wire-platform"
 	}
 	return ownerID
-}
-
-// sourceServiceCallError names a refused connection for what it is. The
-// source service is off by default on the host (go-choir-sourcecycled is not
-// in the boot set), so a refusal means "not running here", not an outage,
-// and research should use the verbs that do work (R1,
-// docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md).
-func sourceServiceCallError(op string, err error) error {
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return fmt.Errorf("source service %s: the source service is not running on this host; use choir.SearchStart to find sources and choir.Read to read them: %w", op, err)
-	}
-	return fmt.Errorf("call source service %s: %w", op, err)
 }

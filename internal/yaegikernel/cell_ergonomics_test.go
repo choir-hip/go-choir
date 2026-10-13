@@ -236,7 +236,7 @@ func TestWorldVerbJSONPrintsAsTextAndListedValuesShowInFull(t *testing.T) {
 		return out
 	}
 	const want = `{"results":[{"title":"x"}]}`
-	out := cell("r, err := choir.SourceSearch(\"q\", 3)\nprintln(r)\nfmt.Println(r, err)\nfmt.Printf(\"%v|%s\\n\", r, r)\nb, _ := json.Marshal(map[string]any{\"r\": r})\nfmt.Println(string(b))\nvar v map[string]any\nfmt.Println(json.Unmarshal(r, &v), len(string(r)) > 0)")
+	out := cell("r, err := choir.SearchWireCorpus(\"q\", 3)\nprintln(r)\nfmt.Println(r, err)\nfmt.Printf(\"%v|%s\\n\", r, r)\nb, _ := json.Marshal(map[string]any{\"r\": r})\nfmt.Println(string(b))\nvar v map[string]any\nfmt.Println(json.Unmarshal(r, &v), len(string(r)) > 0)")
 	wantOut := want + "\n" + want + " <nil>\n" + want + "|" + want + "\n" + `{"r":` + want + "}\n<nil> true\n"
 	if out.Stdout != wantOut {
 		t.Fatalf("stdout = %q\nwant     %q", out.Stdout, wantOut)

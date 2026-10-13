@@ -30,7 +30,6 @@ const (
 	ActionRead             BrokerAction = "read"
 	ActionPollSource       BrokerAction = "poll_source"
 	ActionReadCapture      BrokerAction = "read_capture"
-	ActionSourceSearch     BrokerAction = "source_search"
 	ActionSearchWireCorpus BrokerAction = "search_wire_corpus"
 	// ActionResearch runs child research activations on the host and
 	// returns their findings to the calling cell (RLM actor recursion).
@@ -230,10 +229,6 @@ type ReadCapturePayload struct {
 // tool name so host egress dispatches into the same deps-bound ToolFunc —
 // one source of truth for charging and projection. Results return as opaque
 // JSON (the tool's bounded projection) into the cell.
-type SourceSearchPayload struct {
-	Query      string `json:"query"`
-	MaxResults int    `json:"max_results,omitempty"`
-}
 type SearchWireCorpusPayload struct {
 	Query string `json:"query"`
 	Limit int    `json:"limit,omitempty"`
@@ -279,7 +274,7 @@ func (r *BrokerRequest) Validate() error {
 	}
 	switch r.Action {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
-		ActionSearchStart, ActionRead, ActionSourceSearch, ActionSearchWireCorpus,
+		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionJudge:
 		return nil

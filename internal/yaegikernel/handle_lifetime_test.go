@@ -46,7 +46,7 @@ func TestDeskHandleOutlivesItsFirstIssue(t *testing.T) {
 	hooks := scope.BindCell()
 	cell := func() SessionResult {
 		t.Helper()
-		out, err := serveCell(sess, SessionFrame{ID: "cell", Source: `_, err := choir.SourceSearch("q", 1)
+		out, err := serveCell(sess, SessionFrame{ID: "cell", Source: `_, err := choir.SearchWireCorpus("q", 1)
 if err != nil {
 	panic(err)
 }`}, nil, &hooks)

@@ -346,14 +346,16 @@ Code-present/current foundations:
    route shim; deletion receipt: `texture-hard-cutover-v0`), sanitized
    publication bundles, export, retrieval search, proposal delivery state, and
    private-derivative/proposal flows.
-6. The source/Wire substrate has current code in `cmd/sourcecycled`,
-   `internal/cycle`, `internal/sourcefetch`, `internal/sourcecontract`,
-   `internal/sources`, runtime content/source entity handling, and frontend
-   source panels/viewers. `source_search` can query Source Service for research
-   turns when configured, and Texture can preserve `source_service_item:<id>`
-   refs, but there is not yet a user-facing Wire app over an edition Texture,
-   subscription/event stream, newsletter pipeline, or durable per-source
-   scheduling proof.
+6. The source substrate is captures: the source schedule
+   (`internal/agentcore/source_schedule.go`) polls registry sources
+   (`internal/sources`) into shared block-document captures in Store B
+   behind `corpusd` (`internal/sourcegraph`, `internal/sourcefetch`), and
+   research reads pages into captures with `choir.Read`. The sourcecycled
+   daemon, `internal/cycle` and research's `source_search` were deleted in
+   Cut 2 unit 2b. Texture can still render legacy
+   `source_service_item:<id>` refs, but there is not yet a user-facing Wire
+   app over an edition Texture, subscription/event stream, or newsletter
+   pipeline.
 
 Active hardening:
 

@@ -34,7 +34,7 @@ type BrokerConfig struct {
 	Emit EmitHandler
 	// Egress is the generic host-mediated research boundary (research phase 1):
 	// the worker binds it to a StreamBrokerEgress frame round-trip so the host
-	// resolves any egress action (search_start/read/source_search/
+	// resolves any egress action (search_start/read/
 	// read_capture/poll_source/search_wire_corpus) against its deps. nil
 	// refuses the verb.
 	Egress func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error)
@@ -169,7 +169,7 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 		return b.handleMessage(ctx, req, receiptID, start)
 	case ActionEmit:
 		return b.handleEmit(ctx, req, receiptID, start)
-	case ActionSearchStart, ActionRead, ActionSourceSearch, ActionSearchWireCorpus,
+	case ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionJudge:
 		return b.handleEgress(ctx, req, receiptID, start)

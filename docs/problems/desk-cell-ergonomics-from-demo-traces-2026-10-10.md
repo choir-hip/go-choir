@@ -118,7 +118,8 @@ management, research; scratchpad trace_all.sh snapshots, 18:05–18:40Z).
 
 ## Research (tools)
 
-- R1. (open) `choir.SourceSearch` fails `dial tcp 10.200.57.1:8787:
+- R1. (closed 2026-10-13: `choir.SourceSearch` and sourcecycled were deleted
+  in Cut 2 unit 2b) `choir.SourceSearch` fails `dial tcp 10.200.57.1:8787:
   connection refused`. The source service (go-choir-sourcecycled) is
   deliberately default-off on Node B since 2026-10-05, but research is
   still offered the verb. Research run 64f09172 spent a cell on it, and

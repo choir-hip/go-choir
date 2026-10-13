@@ -236,7 +236,7 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	// Emit + the host-mediated egress verbs export: research's signal plane and
 	// world evidence surface ride the broker, not filesystem mutation (M-SUB /
 	// M0a). read-only denies WriteFile/Exec only — messaging stays open.
-	for _, sym := range []string{"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SourceSearch",
+	for _, sym := range []string{"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture",
 		"SearchWireCorpus", "SaveEvidence", "ReadEvidence",
 		"ListEvidence", "RunMemoryEntry"} {
 		if _, ok := exports[sym]; !ok {
