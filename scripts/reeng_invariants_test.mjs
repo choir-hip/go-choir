@@ -28,7 +28,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkBundle, checkI1, checkI2, checkI3, checkI4, checkI5, exitCode } from './reeng_invariants.mjs';
+import { checkBundle, checkI1, checkI2, checkI3, checkI4, checkI5, checkI6, checkI7, exitCode } from './reeng_invariants.mjs';
 import { plantI1, plantI2, plantI3, plantI4, plantI5, PLANTS } from './reeng_invariants_plant.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -273,12 +273,13 @@ const unserve = (b, ...names) => {
   return c;
 };
 
-test('clean bundle passes I1-I5 and prints I6 as not yet defined', () => {
+test('clean bundle passes I1-I5; I6 and I7 read nothing without the records layer', () => {
   const b = buildCleanBundle();
   const rules = checkBundle(b);
   const v = Object.fromEntries(rules.map((r) => [r.rule, r]));
   for (const r of RULES) assert.equal(v[r].verdict, 'pass', `${r}: ${v[r].reason}`);
-  assert.equal(v.I6.verdict, 'not_defined');
+  assert.equal(v.I6.verdict, 'unknown');
+  assert.equal(v.I7.verdict, 'unknown');
   assert.equal(exitCode(rules), 0);
   // the passes read real items
   assert.match(v.I3.reason, /post-boot dispatches all trace to owner input/);
@@ -424,6 +425,33 @@ test('I3 treats an upper-bound boot_at as approximate and reads from the restart
   assert.equal(Date.parse(r.evidence[0].boot_at), Date.parse(b.drill.restart_requested_at));
 });
 
+test('I6 and I7 on records: a gap, a cursor past head, a foreign closer and a packet on a records route fail', () => {
+  const b = buildCleanBundle();
+  const rec = (id, inbox, sender, seq, extra = {}) => ({ record_id: id, inbox, sender_inbox: sender, inbox_seq: seq, conversation_id: `conv:research:${DOC}|texture:${DOC}`, round: 1, provenance: { committed_at: at(10 + seq) }, ...extra });
+  b.layers.records = { status: 'present', sources: ['GET /api/inboxes/{inbox}/records'], note: '', items: [
+    rec('c1', `research:${DOC}`, `texture:${DOC}`, 1, { directive: { subtype: 'cast' } }),
+    rec('r1', `texture:${DOC}`, `research:${DOC}`, 1, { final: true }),
+  ] };
+  b.layers.inboxes = { status: 'present', sources: ['same'], note: '', items: [
+    { inbox: `research:${DOC}`, head: 1, cursor: 1, open_rounds: [] }, { inbox: `texture:${DOC}`, head: 1, cursor: 1, open_rounds: [] },
+  ] };
+  assert.equal(checkI6(b).verdict, 'pass', checkI6(b).reason);
+  const gap = structuredClone(b);
+  gap.layers.records.items[1].inbox_seq = 2;
+  assert.equal(checkI6(gap).verdict, 'fail');
+  const past = structuredClone(b);
+  past.layers.inboxes.items[0].cursor = 5;
+  assert.equal(checkI6(past).verdict, 'fail');
+  const foreign = structuredClone(b);
+  foreign.layers.records.items[1].sender_inbox = `management:${OWNER}`;
+  assert.equal(checkI6(foreign).verdict, 'fail');
+  assert.equal(checkI7(b).verdict, 'fail', 'the clean fixture carries Cut 0 packets between Texture and research');
+  const clean = structuredClone(b);
+  clean.layers.trajectory.items[0].updates = [];
+  clean.layers.trajectory.items[0].work_items = [];
+  assert.equal(checkI7(clean).verdict, 'pass', checkI7(clean).reason);
+});
+
 test('exit code: 3 when no rule passed', () => {
   assert.equal(exitCode([{ rule: 'I1', verdict: 'unknown' }, { rule: 'I6', verdict: 'not_defined' }]), 3);
   assert.equal(exitCode([{ rule: 'I1', verdict: 'unknown' }, { rule: 'I2', verdict: 'fail' }]), 1);
@@ -551,9 +579,9 @@ test('checker CLI: exit 0 on clean, 1 on a planted copy, 2 on unreadable input; 
   const ok = spawnSync(process.execPath, [join(here, 'reeng_invariants.mjs'), clean, '--json', out], { encoding: 'utf8' });
   assert.equal(ok.status, 0, ok.stderr);
   assert.match(ok.stdout, /^I1 pass/m);
-  assert.match(ok.stdout, /^I6 not yet defined/m);
+  assert.match(ok.stdout, /^I6 unknown/m);
   const report = JSON.parse(readFileSync(out, 'utf8'));
-  assert.equal(report.rules.length, 6);
+  assert.equal(report.rules.length, 7);
   assert.match(report.bundle_sha256, /^[0-9a-f]{64}$/);
 
   const plantedDir = join(dir, 'planted');

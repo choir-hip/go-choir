@@ -21,11 +21,18 @@ import (
 // boot.
 const plannedRestartMaxAge = 15 * time.Minute
 
+// CurrentWorkStateEpoch is the work-state schema this binary reads (decision
+// D7 of Cut 1). Cut 1 made records the work state and bumped it to 1: a
+// marker written before the cut has no epoch, so the cutover boot is a
+// crash boot and nothing resumes into the new schema.
+const CurrentWorkStateEpoch = 1
+
 // PlannedRestart describes an intentional restart.
 type PlannedRestart struct {
-	Reason      string    `json:"reason"`
-	Target      string    `json:"target,omitempty"`
-	RequestedAt time.Time `json:"requested_at"`
+	Reason         string    `json:"reason"`
+	Target         string    `json:"target,omitempty"`
+	RequestedAt    time.Time `json:"requested_at"`
+	WorkStateEpoch int       `json:"work_state_epoch,omitempty"`
 }
 
 // PlannedRestartMarkerPath is the marker beside the runtime store, on the
@@ -47,6 +54,7 @@ func WritePlannedRestartMarker(storePath string, marker PlannedRestart) error {
 	if marker.RequestedAt.IsZero() {
 		marker.RequestedAt = time.Now().UTC()
 	}
+	marker.WorkStateEpoch = CurrentWorkStateEpoch
 	raw, err := json.Marshal(marker)
 	if err != nil {
 		return fmt.Errorf("planned restart marker: encode: %w", err)
@@ -113,6 +121,10 @@ func ConsumePlannedRestartMarker(storePath string, now time.Time) (PlannedRestar
 	var marker PlannedRestart
 	if err := json.Unmarshal(raw, &marker); err != nil || marker.RequestedAt.IsZero() {
 		log.Printf("agentcore: planned restart marker invalid; treating boot as a crash")
+		return PlannedRestart{}, false
+	}
+	if marker.WorkStateEpoch != CurrentWorkStateEpoch {
+		log.Printf("agentcore: planned restart marker has work-state epoch %d, this binary reads %d; treating boot as a crash", marker.WorkStateEpoch, CurrentWorkStateEpoch)
 		return PlannedRestart{}, false
 	}
 	if age := now.Sub(marker.RequestedAt); age < 0 || age > plannedRestartMaxAge {

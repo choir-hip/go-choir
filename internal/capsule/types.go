@@ -128,6 +128,10 @@ type GoEvalRequest struct {
 	// cell (RLM prompt-as-variable): the cell reads them via
 	// choir.Updates(); the wake turn in chat carries only their ids.
 	Updates []yaegikernel.PendingUpdate `json:"updates,omitempty"`
+	// Records carries the records addressed to the engineering desk's inbox
+	// in (cursor, head] at cell start, read through choir.Records() (Cut 1
+	// L3b-2).
+	Records []yaegikernel.InboxRecord `json:"records,omitempty"`
 }
 
 // GoEvalResult is the result of evaluating Go source in the capsule. Intents

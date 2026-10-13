@@ -494,7 +494,9 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 				break
 			}
 		}
-		if _, ok := runMetadata["lifecycle_work_item_id"]; !ok {
+		// A turn started for unread records needs no open work item: the
+		// records authorize it (Cut 1). Any other turn still needs one.
+		if _, ok := runMetadata["lifecycle_work_item_id"]; !ok && req.Provenance["request_source"] != "inbox_record" {
 			return nil, fmt.Errorf("load lifecycle work for Texture revision: %w", errTextureLifecycleOpenWorkUnavailable)
 		}
 	}

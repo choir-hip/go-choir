@@ -3,6 +3,7 @@ package agentcore
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -70,5 +71,34 @@ func TestMarkPlannedRestartClearsAfterFailedApply(t *testing.T) {
 	done(nil)
 	if _, err := os.Stat(PlannedRestartMarkerPath(store)); err != nil {
 		t.Fatalf("successful apply lost its marker: %v", err)
+	}
+}
+
+// D7 (Cut 1): a planned-restart marker resumes only within one work-state
+// schema epoch. A marker without the field, or from another epoch, was
+// written by a binary whose work state this one does not read, so its boot
+// is a crash. Ways this could fail, written first: the writer omits the
+// epoch, so every planned restart becomes a crash; a pre-cut marker resumes
+// runs into the records-only schema.
+func TestPlannedRestartMarkerResumesOnlyWithinItsWorkStateEpoch(t *testing.T) {
+	dir := t.TempDir()
+	store := filepath.Join(dir, "store.db")
+	now := time.Now().UTC()
+	if err := WritePlannedRestartMarker(store, PlannedRestart{Reason: "platform_update", RequestedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if marker, planned := ConsumePlannedRestartMarker(store, now); !planned || marker.WorkStateEpoch != CurrentWorkStateEpoch {
+		t.Fatalf("a marker this binary wrote = %+v planned=%v, want planned with epoch %d", marker, planned, CurrentWorkStateEpoch)
+	}
+	for _, raw := range []string{
+		`{"reason":"platform_update","requested_at":"` + now.Format(time.RFC3339Nano) + `"}`,
+		`{"reason":"platform_update","requested_at":"` + now.Format(time.RFC3339Nano) + `","work_state_epoch":` + strconv.Itoa(CurrentWorkStateEpoch+1) + `}`,
+	} {
+		if err := os.WriteFile(PlannedRestartMarkerPath(store), []byte(raw), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, planned := ConsumePlannedRestartMarker(store, now); planned {
+			t.Fatalf("a marker from another work-state epoch resumed: %s", raw)
+		}
 	}
 }

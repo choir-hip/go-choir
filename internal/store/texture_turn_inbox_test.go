@@ -103,3 +103,43 @@ func TestTextureTurnCastsResearchAndReadsItsReportByCursor(t *testing.T) {
 		t.Fatalf("a turn with a stale cursor committed")
 	}
 }
+
+// A Texture turn on records needs no open work item (Cut 1 core): its
+// agent, run and document authorize it, and its cursor advance commits with
+// it. A turn without work cannot claim to complete work.
+func TestTextureTurnWithoutWorkItemCommitsOnRecords(t *testing.T) {
+	s, start, caller, _ := setupLifecycleTextureTargetFixture(t)
+	ctx := context.Background()
+	textureInbox := start.Agent.AgentID
+	seed := types.CommitInboxRecordsRequest{OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "seed-no-work", Records: []types.CommitmentRecord{{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "mgmt:note:no-work", Kind: types.CommitmentKindDirective,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: "fyi"},
+		Inbox: textureInbox, SenderInbox: "management:" + start.OwnerID, Addressee: textureInbox,
+		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
+		Provenance: types.CommitmentProvenance{AgentID: "management:" + start.OwnerID},
+	}}}
+	seed.CommandDigest, _ = ComputeCommitInboxRecordsDigest(seed)
+	if _, err := s.CommitInboxRecords(ctx, seed); err != nil {
+		t.Fatalf("seed note: %v", err)
+	}
+	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	req.CommandID = "texture-turn-no-work"
+	req.CallerWorkItemID = ""
+	req.InboxCursor = &types.InboxCursorAdvance{ReaderAgentID: textureInbox, Inbox: textureInbox, ExpectedSeq: 0, Seq: 1}
+	setTextureTurnDigest(t, &req, TextureSourceGraphWriteSet{})
+	result, err := s.ApplyTextureTurn(ctx, req)
+	if err != nil {
+		t.Fatalf("work-free turn: %v", err)
+	}
+	if result.WorkItem != nil || result.TextureTurn.InboxCursor == nil || result.TextureTurn.InboxCursor.Seq != 1 {
+		t.Fatalf("work-free turn result = work %+v, cursor %+v", result.WorkItem, result.TextureTurn.InboxCursor)
+	}
+	done := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
+	done.CommandID = "texture-turn-no-work-completed"
+	done.CallerWorkItemID = ""
+	done.CallerWorkDisposition = types.WorkItemCompleted
+	setTextureTurnDigest(t, &done, TextureSourceGraphWriteSet{})
+	if _, err := s.ApplyTextureTurn(ctx, done); err == nil {
+		t.Fatalf("a work-free turn completed work it does not have")
+	}
+}

@@ -965,15 +965,106 @@ export function checkI5(bundle) {
 
 // ---------------------------------------------------------------- driver
 
+// ---------------------------------------------------------------- I6, I7 (Cut 1)
+
+// I6: the records' own bookkeeping. Every inbox's sequence numbers are
+// gapless from 1, its head equals its last record, its cursor is never past
+// its head; a conversation has at most one open round; only the round's
+// recipient's final Report or a system closure closes a round (Cut 1
+// invariants 1-4 and 8, read from the records and inboxes layers).
+export function checkI6(bundle) {
+  const recL = layer(bundle, 'records');
+  const inL = layer(bundle, 'inboxes');
+  if (!recL.usable || !inL.usable) return result('I6', 'unknown', `layers unserved: ${[recL, inL].filter((l) => !l.usable).map((l) => l.name).join(', ')}`);
+  if (recL.items.length === 0) return result('I6', 'unknown', 'no records: the rule read nothing');
+  const fails = [];
+  const byInbox = new Map();
+  for (const r of recL.items) {
+    const k = str(r.inbox);
+    if (!byInbox.has(k)) byInbox.set(k, []);
+    byInbox.get(k).push(r);
+  }
+  for (const [inbox, recs] of byInbox) {
+    const seqs = recs.map((r) => Number(r.inbox_seq)).sort((a, b) => a - b);
+    seqs.forEach((q, i) => { if (q !== i + 1) fails.push({ inbox, why: `sequence ${seqs.join(',')} is not gapless from 1` }); });
+    const state = inL.items.find((i) => str(i.inbox) === inbox);
+    const last = seqs[seqs.length - 1] || 0;
+    if (state && Number(state.head) !== last) fails.push({ inbox, why: `head ${state.head} != last record ${last}` });
+    if (state && Number(state.cursor) > Number(state.head)) fails.push({ inbox, why: `cursor ${state.cursor} past head ${state.head}` });
+  }
+  const byConv = new Map();
+  for (const r of recL.items) {
+    const k = str(r.conversation_id);
+    if (!k) continue;
+    if (!byConv.has(k)) byConv.set(k, []);
+    byConv.get(k).push(r);
+  }
+  for (const [conv, recs] of byConv) {
+    recs.sort((a, b) => ts(a.provenance?.committed_at) - ts(b.provenance?.committed_at));
+    let open = null; // {round, caster, recipient}
+    for (const r of recs) {
+      const isCast = str(r.directive?.subtype) === 'cast';
+      const round = Number(r.round) || 0;
+      if (isCast && !open) open = { round, caster: str(r.sender_inbox), recipient: str(r.inbox) };
+      else if (isCast && open && round !== open.round) fails.push({ conversation: conv, record_id: str(r.record_id), why: `Cast into round ${round} while round ${open.round} is open` });
+      if (r.final) {
+        const system = str(r.emitter_kind) === 'system';
+        if (!open) fails.push({ conversation: conv, record_id: str(r.record_id), why: 'final Report with no open round' });
+        else if (!system && str(r.sender_inbox) !== open.recipient) fails.push({ conversation: conv, record_id: str(r.record_id), why: `final Report from ${r.sender_inbox}, not the round's recipient ${open.recipient}` });
+        open = null;
+      }
+    }
+  }
+  for (const state of inL.items) {
+    const seen = new Set();
+    for (const round of state.open_rounds || []) {
+      const k = str(round.conversation_id);
+      if (seen.has(k)) fails.push({ inbox: str(state.inbox), why: `conversation ${k} has two open rounds` });
+      seen.add(k);
+    }
+  }
+  if (fails.length) return result('I6', 'fail', `${fails.length} records bookkeeping violation(s)`, fails);
+  return result('I6', 'pass', `${recL.items.length} records over ${byInbox.size} inboxes: sequences gapless, heads equal their last record, cursors within heads, one open round per conversation, rounds closed by their recipient or the system`);
+}
+
+// I7: one authority per route. The conversations on records (Texture with
+// research and with management) mint no packet and no work item, and no
+// engineering record is addressed to texture:* (Cut 1 routing).
+const RECORDS_ROUTE = (a, b) => {
+  const da = str(a).split(':')[0];
+  const db = str(b).split(':')[0];
+  const pair = [da, db].sort().join('|');
+  return pair === 'research|texture' || pair === 'management|texture';
+};
+export function checkI7(bundle) {
+  const trajL = layer(bundle, 'trajectory');
+  const recL = layer(bundle, 'records');
+  if (!trajL.usable || !recL.usable) return result('I7', 'unknown', `layers unserved: ${[trajL, recL].filter((l) => !l.usable).map((l) => l.name).join(', ')}`);
+  const snap = trajL.items[0] || {};
+  const fails = [];
+  for (const p of Array.isArray(snap.updates) ? snap.updates : []) {
+    const producer = str(p.agent_id) || str(p.producer_agent_id);
+    if (RECORDS_ROUTE(producer, p.target_agent_id)) fails.push({ update_id: str(p.update_id), from: producer, to: str(p.target_agent_id), why: 'packet on a records route' });
+  }
+  for (const w of Array.isArray(snap.work_items) ? snap.work_items : []) {
+    const assignee = str(w.assigned_agent_id);
+    if (assignee.startsWith('research:') || assignee.startsWith('management:')) fails.push({ work_item_id: str(w.work_item_id), assignee, why: 'work item on a records route' });
+  }
+  for (const r of recL.items) {
+    if (str(r.sender_inbox).startsWith('engineering') && str(r.inbox).startsWith('texture:')) fails.push({ record_id: str(r.record_id), why: 'engineering record addressed to texture:*' });
+  }
+  if (fails.length) return result('I7', 'fail', `${fails.length} route authority violation(s)`, fails);
+  return result('I7', 'pass', 'no packet or work item on a records route; no engineering record to texture:*');
+}
+
 export function checkBundle(bundle) {
-  const rules = [checkI1, checkI2, checkI3, checkI4, checkI5].map((fn) => {
+  const rules = [checkI1, checkI2, checkI3, checkI4, checkI5, checkI6, checkI7].map((fn) => {
     try {
       return fn(bundle);
     } catch (err) {
       return result(fn.name.replace('check', ''), 'unknown', `checker error: ${err?.message || err}`);
     }
   });
-  rules.push({ rule: 'I6', verdict: 'not_defined', reason: 'inbox cursors only move forward; arrives with Cut 1', evidence: [] });
   return rules;
 }
 

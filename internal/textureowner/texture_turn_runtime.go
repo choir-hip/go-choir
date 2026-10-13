@@ -447,7 +447,8 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	}
 	callerWorkItemID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id"))
 	callerWorkDisposition := types.WorkItemStatus(strings.TrimSpace(in.WorkDisposition))
-	if callerWorkDisposition == "" {
+	if callerWorkDisposition == "" || callerWorkItemID == "" {
+		// A turn on records has no work item to settle (Cut 1).
 		callerWorkDisposition = types.WorkItemOpen
 	}
 	req := types.ApplyTextureTurnRequest{
