@@ -204,6 +204,17 @@ func TestCellErrorHintNamesWhatExists(t *testing.T) {
 			}
 		}
 	}
+	// Cluster A: the top-level forms yaegi cannot compile get the loop form.
+	for _, msg := range []string{"1:8: constant definition loop", "yaegi compile panic: nil type", "yaegi compile panic: runtime error: invalid memory address or nil pointer dereference"} {
+		if hint := cellErrorHint(surface, "rec := recs[0]", msg); !strings.Contains(hint, "for _, r := range") || !strings.Contains(hint, "func() {") {
+			t.Errorf("hint for top-level %q lacks the loop form: %q", msg, hint)
+		}
+	}
+	// Text inside string literals and comments is not code: a capture id
+	// is not a reference to choir.web_capture.
+	if hint := cellErrorHint(surface, "r := choir.Inbox() // choir.Ledger\nid := \"obj:choir.web_capture:abc\"\n_ = r.ID", "3:7: undefined method: ID"); strings.Contains(hint, "web_capture") || strings.Contains(hint, "Ledger") {
+		t.Errorf("hint read a string literal or comment as code: %q", hint)
+	}
 	if hint := cellErrorHint(surface, "x := 1 +", "1:9: expected operand"); hint != "" {
 		t.Errorf("an unrelated compile error got a choir hint: %q", hint)
 	}

@@ -196,12 +196,15 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 	// (compileSrc with inc=true), so accepted programs are identical.
 	prog, err, compilePanic := s.compileCell(src)
 	if compilePanic != nil {
-		// yaegi's compiler can panic (e.g. compDefineX on `b, _ := pkg.F()`
-		// with pkg undefined). A panic mid-compile may have installed partial
-		// symbols, so it poisons instead of crashing the worker process.
+		// yaegi's compiler can panic (compDefineX on `b, _ := pkg.F()` with
+		// pkg undefined; a top-level comma-ok or `x := v[i].F`). Nothing
+		// executed, so it is a compile error and the session is preserved:
+		// the same defect family already preserves as "constant definition
+		// loop", and a panic leaves the same zero-valued ghosts an ordinary
+		// failed compile does (cluster A,
+		// docs/reports/cross-model-cell-errors-2026-10-13.md).
 		res.Duration = time.Since(start)
-		s.poisoned = compilePanic
-		return res, &EvalError{err: compilePanic, Reuse: ReuseUnsafeToReuse, Kind: DiagPanic}
+		return res, &EvalError{err: withCompileErrorLine(compilePanic, src), Reuse: ReusePreserve, Kind: DiagCompile}
 	}
 	if err != nil {
 		res.Duration = time.Since(start)

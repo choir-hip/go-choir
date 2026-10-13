@@ -2,6 +2,8 @@ package yaegikernel
 
 import (
 	"fmt"
+	"go/scanner"
+	"go/token"
 	"reflect"
 	"regexp"
 	"sort"
@@ -281,6 +283,9 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 	if len(surface) == 0 {
 		return ""
 	}
+	// String literals and comments are not code: a capture id
+	// "obj:choir.web_capture:..." names no choir function.
+	src = codeOnly(src)
 	names := make([]string, 0, len(surface))
 	for name := range surface {
 		names = append(names, name)
@@ -317,7 +322,43 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 	if len(bare) > 0 {
 		return "Call choir functions with the choir. prefix: did you mean " + strings.Join(bare, ", ") + "?"
 	}
+	if topLevelDefineRE.MatchString(msg) {
+		return topLevelDefineHint
+	}
 	return ""
+}
+
+// topLevelDefineRE matches what yaegi reports for a top-level `x := v[i]`,
+// `x := v.F.G` or `a, ok := ...` it cannot compile (cluster A,
+// docs/reports/cross-model-cell-errors-2026-10-13.md).
+var topLevelDefineRE = regexp.MustCompile(`constant definition loop|compile panic`)
+
+const topLevelDefineHint = "At cell top level, `x := v[i]`, `x := v.F.G` and `a, ok := ...` do not compile here. " +
+	"Write them inside a loop or a function: `for _, r := range recs { ... }` or `func() { ... }()`."
+
+// codeOnly blanks string literals and comments, keeping offsets and lines.
+func codeOnly(src string) string {
+	var sc scanner.Scanner
+	fset := token.NewFileSet()
+	file := fset.AddFile("cell.go", -1, len(src))
+	sc.Init(file, []byte(src), nil, scanner.ScanComments)
+	out := []byte(src)
+	for {
+		pos, tok, lit := sc.Scan()
+		if tok == token.EOF {
+			break
+		}
+		if tok != token.STRING && tok != token.CHAR && tok != token.COMMENT {
+			continue
+		}
+		start := file.Offset(pos)
+		for i := start; i < start+len(lit) && i < len(out); i++ {
+			if out[i] != '\n' {
+				out[i] = ' '
+			}
+		}
+	}
+	return string(out)
 }
 
 // closestName picks the surface name that contains, or is contained in, the

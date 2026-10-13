@@ -340,3 +340,32 @@ func TestSessionImportStatementMix(t *testing.T) {
 		t.Fatal("disallowed import inside import+statement mix bypassed preflight")
 	}
 }
+
+// Cluster A (docs/reports/cross-model-cell-errors-2026-10-13.md): yaegi
+// v0.16.1 panics compiling a top-level comma-ok or `x := v[i].F`, and the
+// panic poisoned the worker, losing its heap, 21 times in one run. The same
+// defect family as "constant definition loop", which already preserves.
+// Failure modes pinned: a compile panic still poisons; the earlier bindings
+// are gone after it; the function-scope form of the same code fails after
+// it; the error loses its "compile panic" text.
+func TestCompilePanicPreservesSession(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	sess, err := NewSession(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	if _, err := sess.Eval(ctx, "x := 7\nm := map[string]int{\"a\": 1}"); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	_, err = sess.Eval(ctx, "q, ok := m[\"a\"]\nfmt.Println(q, ok)")
+	ee, ok := AsEvalError(err)
+	if !ok || ee.Reuse != ReusePreserve || ee.Kind != DiagCompile || !strings.Contains(ee.Error(), "compile panic") {
+		t.Fatalf("compile panic = %v %+v, want preserve/compile with its text", ok, ee)
+	}
+	res, err := sess.Eval(ctx, "func() {\n\tq, ok := m[\"a\"]\n\tfmt.Println(x, q, ok)\n}()")
+	if err != nil || res.Stdout != "7 1 true\n" {
+		t.Fatalf("after a compile panic: %v %q, want the bindings and the function-scope form", err, res.Stdout)
+	}
+}
