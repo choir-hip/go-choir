@@ -61,6 +61,9 @@ type deskSession struct {
 	runs     []string
 	// busyRun is the run whose cell is evaluating now; "" when idle.
 	busyRun string
+	// freed is closed when the busy cell ends, waking runs that wait for
+	// this session.
+	freed chan struct{}
 }
 
 type deskSessionWorkers struct {
@@ -115,21 +118,35 @@ func deskSessionKey(execCtx toolregistry.ExecutionContext) (string, bool) {
 }
 
 // acquire returns the session for key, spawning one if it is missing, dead,
-// or configured differently, and marks it busy for runID's cell. A session
-// that is mid-cell for another run is not shared: runID gets its own.
-func (m *deskSessionWorkers) acquire(key string, persistent bool, runID string, cfg yaegikernel.DeskSessionWorkerConfig) (deskSessionLease, error) {
+// or configured differently, and marks it busy for runID's cell. A desk has
+// one REPL: a session that is mid-cell for another run is waited for, outside
+// the pool mutex and bounded by ctx, and then serves runID in the same
+// worker. The lease's notice names the run it shared with.
+func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent bool, runID string, cfg yaegikernel.DeskSessionWorkerConfig) (deskSessionLease, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.sessions == nil {
 		m.sessions = map[string]*deskSession{}
 	}
+	shared := ""
+	for {
+		s := m.sessions[key]
+		if s == nil || s.busyRun == "" || s.busyRun == runID {
+			break
+		}
+		other, freed := s.busyRun, s.freed
+		m.mu.Unlock()
+		select {
+		case <-freed:
+			m.mu.Lock()
+			shared = other
+		case <-ctx.Done():
+			m.mu.Lock()
+			return deskSessionLease{}, fmt.Errorf("this desk's session is busy with run %s's cell: %w", other, ctx.Err())
+		}
+	}
 	now := m.clock()
 	m.reclaimLocked(now)
-	why := ""
-	if s := m.sessions[key]; s != nil && s.busyRun != "" && s.busyRun != runID {
-		key += "#run:" + runID
-		why = " (this desk's session is busy with another run's cell)"
-	}
 	s := m.sessions[key]
 	if s != nil && (s.worker.Dead() || !sameDeskSessionConfig(s.cfg, cfg.Session)) {
 		s.worker.Close()
@@ -145,22 +162,29 @@ func (m *deskSessionWorkers) acquire(key string, persistent bool, runID string, 
 		m.sessions[key] = s
 	}
 	lease := deskSessionLease{key: key, worker: s.worker}
-	if (persistent || why != "") && !slices.Contains(s.runs, runID) {
+	if persistent && !slices.Contains(s.runs, runID) {
 		if s.cells == 0 {
-			lease.notice = "new session" + why + ": nothing from this desk's earlier runs is defined. A session ends on a restart, a failed or timed-out cell, or " + m.retentionLocked().String() + " without a cell."
+			lease.notice = "new session: nothing from this desk's earlier runs is defined. A session ends on a restart, a failed or timed-out cell, or " + m.retentionLocked().String() + " without a cell."
 		} else {
 			lease.notice = fmt.Sprintf("continuing session: values defined by this desk's earlier cells are still defined (%d cells over %d earlier runs, started %s ago). Print one before relying on it.",
 				s.cells, len(s.runs), now.Sub(s.started).Round(time.Second))
 		}
 	}
+	if shared != "" {
+		if lease.notice != "" {
+			lease.notice += " "
+		}
+		lease.notice += fmt.Sprintf("This cell waited for run %s's cell: one REPL per desk, so values that run defines are visible here and the same names collide.", shared)
+	}
 	if !slices.Contains(s.runs, runID) {
 		s.runs = append(s.runs, runID)
 	}
 	s.busyRun = runID
+	s.freed = make(chan struct{})
 	return lease, nil
 }
 
-// done ends a cell's hold on its session.
+// done ends a cell's hold on its session and wakes any run waiting for it.
 func (m *deskSessionWorkers) done(key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -168,6 +192,10 @@ func (m *deskSessionWorkers) done(key string) {
 		s.busyRun = ""
 		s.cells++
 		s.lastUsed = m.clock()
+		if s.freed != nil {
+			close(s.freed)
+			s.freed = nil
+		}
 	}
 	m.reclaimLocked(m.clock())
 }
@@ -327,7 +355,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				},
 			}
 			sessionKey, persistent := deskSessionKey(execCtx)
-			lease, err := workers.acquire(sessionKey, persistent, activationID, workerCfg)
+			lease, err := workers.acquire(ctx, sessionKey, persistent, activationID, workerCfg)
 			if err != nil {
 				return "", fmt.Errorf("desk_go_eval: spawn worker: %w", err)
 			}
