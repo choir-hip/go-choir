@@ -141,6 +141,36 @@ func SupportedModels() []ModelInfo {
 			AdapterModalities:   []string{"text"},
 			RecommendedFor:      []string{"engineering", "verifier"},
 		},
+		// Free opencode-go models (owner 2026-10-13: "add these to our pool,
+		// and see how much usage we can get out of them"). Chat completions,
+		// probed with a tool call on 2026-10-13.
+		{
+			ID:                  "cat-jam-free",
+			DisplayName:         "Cat Jam (free)",
+			Provider:            "opencode-go",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: 262144,
+			Modalities:          []string{"text"},
+			AdapterModalities:   []string{"text"},
+		},
+		{
+			ID:                  "longcat-2.5-preview-free",
+			DisplayName:         "LongCat 2.5 Preview (free)",
+			Provider:            "opencode-go",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: DefaultContextWindowTokens,
+			Modalities:          []string{"text"},
+			AdapterModalities:   []string{"text"},
+		},
+		{
+			ID:                  "step-5-preview-free",
+			DisplayName:         "Step 5 Preview (free)",
+			Provider:            "opencode-go",
+			MaxOutputTokens:     65536,
+			ContextWindowTokens: DefaultContextWindowTokens,
+			Modalities:          []string{"text"},
+			AdapterModalities:   []string{"text"},
+		},
 
 		{
 			ID:                  "gpt-6-luna",
@@ -168,12 +198,18 @@ type PoolMember struct {
 
 // Pools returns the named model pools, each an ordered list of catalog
 // entries. A thread is assigned one member and fails over to the next in
-// order. Owner 2026-10-12: every desk runs on a mix of these two, each the
-// other's only fallback (docs/model-pools-design-2026-10-12.md).
+// order. Owner 2026-10-12: every desk runs on a mix of deepseek and luna
+// (docs/model-pools-design-2026-10-12.md). Owner 2026-10-13: the free
+// opencode-go models join the pool to measure how much they carry and
+// whether they meet the bar; gpt-6-luna sits last so a thread that fails
+// over from it wraps to deepseek. step-5-preview-free stays catalog-only
+// until its upstream answers (429 "endpoint unavailable" when probed).
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
 			{Provider: "opencode-go", Model: "deepseek-v4.1-flash"},
+			{Provider: "opencode-go", Model: "cat-jam-free"},
+			{Provider: "opencode-go", Model: "longcat-2.5-preview-free"},
 			{Provider: "chatgpt", Model: "gpt-6-luna"},
 		},
 	}

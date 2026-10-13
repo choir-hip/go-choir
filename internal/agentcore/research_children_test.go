@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
@@ -147,7 +148,12 @@ fmt.Println(string(b), err)`
 	}
 	// A role name means that role's spec, the default pool: the child is
 	// assigned one member and runs on its provider.
-	viaPool := map[string]string{"deepseek-v4.1-flash": "opencode-go/deepseek-v4.1-flash", "gpt-6-luna": "chatgpt/gpt-6-luna"}[results[6].Model]
+	viaPool := ""
+	for _, m := range modelcatalog.Pools()[modelcatalog.DefaultPool] {
+		if m.Model == results[6].Model {
+			viaPool = m.Provider + "/" + m.Model
+		}
+	}
 	if viaPool == "" || results[6].Findings != "findings for gamma via "+viaPool {
 		t.Fatalf("a policy role name did not select a member of that role's pool: %+v", results[6])
 	}

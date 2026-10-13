@@ -1082,6 +1082,10 @@ func TestOpenCodeProviderUsesFrozenWireShapesAndSessionHeaders(t *testing.T) {
 		{name: "deepseek-v4.1-flash", path: "/chat/completions"},
 		{name: "glm-5.3-flash", path: "/chat/completions"},
 		{name: "hy3", path: "/chat/completions"},
+		// Free opencode-go models (owner 2026-10-13), probed on chat completions.
+		{name: "cat-jam-free", path: "/chat/completions"},
+		{name: "longcat-2.5-preview-free", path: "/chat/completions"},
+		{name: "step-5-preview-free", path: "/chat/completions"},
 		{name: "muse-spark-1.3-contributor", path: "/responses"},
 		{name: "muse-spark-1.3-contributor-free", path: "/responses"},
 		{name: "qwen3.7-max", path: "/messages"},

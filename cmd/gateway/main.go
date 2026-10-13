@@ -150,6 +150,9 @@ func loadProviderConfig() provider.ProviderConfig {
 			"muse-spark-1.3-contributor",
 			"hy3",
 			"qwen3.7-max",
+			"cat-jam-free",
+			"longcat-2.5-preview-free",
+			"step-5-preview-free",
 		},
 		OpenCodeZenModels: []string{"muse-spark-1.3-contributor-free"},
 	}

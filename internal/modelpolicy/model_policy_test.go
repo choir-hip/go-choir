@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
@@ -139,7 +140,20 @@ func TestManagerEnrichesMetadataAndPreservesExplicitSelection(t *testing.T) {
 	manager := NewManager(ManagerConfig{})
 	metadata := manager.EnrichMetadata(context.Background(), "owner", agentprofile.Management, map[string]any{"trajectory_id": "traj-1"})
 	member := metadata[MetadataProvider].(string) + "/" + metadata[MetadataModel].(string)
-	other := map[string]string{"opencode-go/deepseek-v4.1-flash": "chatgpt/gpt-6-luna", "chatgpt/gpt-6-luna": "opencode-go/deepseek-v4.1-flash"}[member]
+	// The fallbacks are the other pool members in pool order after the
+	// assigned one, wrapping.
+	pool := modelcatalog.Pools()[modelcatalog.DefaultPool]
+	var rest []string
+	for i, m := range pool {
+		if m.Provider+"/"+m.Model != member {
+			continue
+		}
+		for j := 1; j < len(pool); j++ {
+			next := pool[(i+j)%len(pool)]
+			rest = append(rest, next.Provider+"/"+next.Model)
+		}
+	}
+	other := strings.Join(rest, ",")
 	if other == "" || metadata[MetadataFallbacks] != other || metadata[MetadataSpec] != "pool:default" || metadata[MetadataAssignment] != "hash" || metadata[MetadataThread] != "traj-1" || metadata[MetadataReasoningEffort] != "high" || metadata[MetadataPolicySource] != "platform_fallback" {
 		t.Fatalf("enriched metadata = %#v", metadata)
 	}
@@ -173,16 +187,24 @@ func TestAssignPoolIsStablePerThreadAndSpreadsAcrossThreads(t *testing.T) {
 			t.Fatalf("thread moved from %s to %s", first.Model, again.Model)
 		}
 	}
-	if assignment != "hash" || len(fallbacks) != 1 || fallbacks[0].Model == first.Model || first.ReasoningEffort != "high" {
+	pool := modelcatalog.Pools()[modelcatalog.DefaultPool]
+	if assignment != "hash" || len(fallbacks) != len(pool)-1 || first.ReasoningEffort != "high" {
 		t.Fatalf("assignment %q, chosen %+v, fallbacks %+v", assignment, first, fallbacks)
 	}
+	for _, f := range fallbacks {
+		if f.Model == first.Model {
+			t.Fatalf("a thread falls back to its own model: chosen %+v, fallbacks %+v", first, fallbacks)
+		}
+	}
 	seen := map[string]int{}
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 400; i++ {
 		chosen, _, _ := Assign(spec, fmt.Sprintf("trajectory-%d", i))
 		seen[chosen.Model]++
 	}
-	if seen["deepseek-v4.1-flash"] < 50 || seen["gpt-6-luna"] < 50 {
-		t.Fatalf("assignment skewed: %v", seen)
+	for _, m := range pool {
+		if seen[m.Model] < 400/len(pool)/2 {
+			t.Fatalf("assignment skewed: %v", seen)
+		}
 	}
 }
 
@@ -190,11 +212,12 @@ func TestAssignPoolIsStablePerThreadAndSpreadsAcrossThreads(t *testing.T) {
 // gateway that refuses it; a concrete pool member falls back to the other.
 func TestAssignRemapsRetiredModelsAndPairsPoolMembers(t *testing.T) {
 	chosen, fallbacks, assignment := Assign(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-5.6-luna"}, "traj")
-	if assignment != "retired_remapped" || chosen.Model == "gpt-5.6-luna" || len(fallbacks) != 1 {
+	poolSize := len(modelcatalog.Pools()[modelcatalog.DefaultPool])
+	if assignment != "retired_remapped" || chosen.Model == "gpt-5.6-luna" || len(fallbacks) != poolSize-1 {
 		t.Fatalf("retired: %q %+v %+v", assignment, chosen, fallbacks)
 	}
 	chosen, fallbacks, assignment = Assign(provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-6-luna"}, "traj")
-	if assignment != "explicit" || chosen.Model != "gpt-6-luna" || len(fallbacks) != 1 || fallbacks[0].Model != "deepseek-v4.1-flash" {
+	if assignment != "explicit" || chosen.Model != "gpt-6-luna" || len(fallbacks) != poolSize-1 || fallbacks[0].Model != "deepseek-v4.1-flash" {
 		t.Fatalf("explicit member: %q %+v %+v", assignment, chosen, fallbacks)
 	}
 	chosen, fallbacks, _ = Assign(provideriface.LLMSelection{Provider: "fireworks", Model: "some-model"}, "traj")
