@@ -1,0 +1,11 @@
+{
+  "what": "owner-approved refresh of the owner's computer onto the current platform",
+  "approved_by": "owner in session, 2026-10-13 (twice: update now; then the crash-restart consequences)",
+  "computer": "computer-03335285269bdba4f94377e56879f9e6",
+  "plan": "docs/reports/owner-computer-unpin-plan-2026-10-13.md (step 3, operator path)",
+  "preflight": {"state": "active", "epoch": 1189, "held": false, "running_runs": 0, "desk_pending_mutations": 1, "deploy_in_flight": false, "mem_available_gib": 23},
+  "action": "POST /internal/vmctl/refresh {user_id, desktop_id: primary}, caller header owner-approved-unpin-refresh-2026-10-13, 15:11:30-15:12:01 UTC",
+  "after": {"state": "active", "epoch": 1190, "computer_url": "http://10.200.44.2:8085", "build": "761d94c51b6c57040e375023f0b10b7fcf0c2346", "served_spa": "assets/index-DDhnvWxb.js", "status": "ready", "running_runs": 0},
+  "boot_kind": "crash boot by design (D7); pre-boot parked runs and open rounds close as interrupted by a restart",
+  "follow_up": "CI's refresh selection skips snapshot_kind constructed-computer-version and deploys restart no active computer by default, so this computer falls behind again at the next deploy until that changes"
+}
