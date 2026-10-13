@@ -487,13 +487,23 @@ now:
     final (docs/reports/reeng-cut2-freeze-receipt-2026-10-13.md). The owner
     redirected the reader during the window: stories open in the Texture app
     (read-only published view) and the logged-out home opens Autopaper
-    (cf91e617, staging spec 2 of 2). Breakages B10-B13 and B12b fixed
-    (docs/problems/reeng-cut2-breakage-2026-10-13.md). Open: the 2a
-    correction scenario (an unsupporting quote corrected after a failing
-    verdict), the check that v5+ stories cite captures newer than their
-    previous version, the model comparison, the story-prose defects
-    (docs/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md),
-    and tier 2 and 3 sources (all RSS, then GDELT and Telegram).
+    (cf91e617, staging spec 2 of 2). Breakages B10, B12, B12b and B13
+    fixed; B11 (cell compiler panic on a slice literal over
+    choir.Records()) open (docs/problems/reeng-cut2-breakage-2026-10-13.md).
+    The close review panel (docs/reports/c2-close-review-adjudication-2026-10-13.md)
+    split 5 holds-with-residuals to 2 reopen; adjudicated: C2 acceptance
+    stays open on four read-only receipts owed from the live paper, E1 v5+
+    versions cite captures that arrived after the previous version, E2
+    published versions stay byte-identical after later publishes, E3 each
+    arrival joined to the management turn that answered it with latency,
+    E4 the support-failure correction loop (reported already in the
+    ledger) with the 14 failed badges split by cause. Also open: the A1
+    "unread source" badge (not-captured shows as pending), pending badges
+    that never drain, the model comparison (transfer by amendment), the
+    story-prose defects
+    (docs/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md,
+    fixed for new revisions at d75cb193), and tier 2 and 3 sources gated on
+    E3's latency table.
   source_ref: f124766f
   deploy_identity: staging choir.news cf91e617
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
