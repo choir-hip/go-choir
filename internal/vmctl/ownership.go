@@ -920,11 +920,11 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 			log.Printf("vmctl: warmness policy resumed %d universal wire platform computer(s)", warmed)
 		}
 		if plan := r.PressureReclaimPlan(); plan.Mode == PressureReclaimModeDryRun {
-			log.Printf("vmctl: pressure reclaim dry-run decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v",
-				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
+			log.Printf("vmctl: pressure reclaim dry-run decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v reclaim_pressure=%v signals=%s",
+				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure, plan.Pressure.ReclaimPressure, strings.Join(plan.Pressure.Signals, ","))
 		} else if plan.Mode == PressureReclaimModeActive {
-			log.Printf("vmctl: pressure reclaim active decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v",
-				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
+			log.Printf("vmctl: pressure reclaim active decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v reclaim_pressure=%v signals=%s",
+				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure, plan.Pressure.ReclaimPressure, strings.Join(plan.Pressure.Signals, ","))
 			if reclaimed := r.ReclaimPressureVMs(ctx, guard); reclaimed > 0 {
 				log.Printf("vmctl: pressure reclaim hibernated %d VM(s)", reclaimed)
 			}

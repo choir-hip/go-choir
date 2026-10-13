@@ -40,32 +40,38 @@ type PressureReclaimConfig struct {
 
 // HostPressureSample is a single host resource-pressure observation.
 type HostPressureSample struct {
-	SampledAt                      string  `json:"sampled_at"`
-	MemoryTotalBytes               uint64  `json:"memory_total_bytes,omitempty"`
-	MemoryAvailableBytes           uint64  `json:"memory_available_bytes,omitempty"`
-	MemoryAvailablePercent         float64 `json:"memory_available_percent,omitempty"`
-	MemorySomeAvg10                float64 `json:"memory_some_avg10,omitempty"`
-	MemoryFullAvg10                float64 `json:"memory_full_avg10,omitempty"`
-	CPUSomeAvg10                   float64 `json:"cpu_some_avg10,omitempty"`
-	CPUFullAvg10                   float64 `json:"cpu_full_avg10,omitempty"`
-	IOSomeAvg10                    float64 `json:"io_some_avg10,omitempty"`
-	IOFullAvg10                    float64 `json:"io_full_avg10,omitempty"`
-	StateDirAvailableBytes         uint64  `json:"state_dir_available_bytes,omitempty"`
-	StateDirAvailablePercent       float64 `json:"state_dir_available_percent,omitempty"`
-	PIDCurrent                     int     `json:"pid_current,omitempty"`
-	PIDMax                         int     `json:"pid_max,omitempty"`
-	PIDAvailable                   int     `json:"pid_available,omitempty"`
-	ObservationError               string  `json:"observation_error,omitempty"`
-	MemoryPressure                 bool    `json:"memory_pressure"`
-	CPUPressure                    bool    `json:"cpu_pressure"`
-	IOPressure                     bool    `json:"io_pressure"`
-	StateDirPressure               bool    `json:"state_dir_pressure"`
-	Pressure                       bool    `json:"pressure"`
-	MemoryAvailableThresholdText   string  `json:"memory_available_threshold,omitempty"`
-	StateDirAvailableThresholdText string  `json:"state_dir_available_threshold,omitempty"`
-	MemoryPSIThresholdText         string  `json:"memory_psi_threshold,omitempty"`
-	CPUPSIThresholdText            string  `json:"cpu_psi_threshold,omitempty"`
-	IOPSIThresholdText             string  `json:"io_psi_threshold,omitempty"`
+	SampledAt                string  `json:"sampled_at"`
+	MemoryTotalBytes         uint64  `json:"memory_total_bytes,omitempty"`
+	MemoryAvailableBytes     uint64  `json:"memory_available_bytes,omitempty"`
+	MemoryAvailablePercent   float64 `json:"memory_available_percent,omitempty"`
+	MemorySomeAvg10          float64 `json:"memory_some_avg10,omitempty"`
+	MemoryFullAvg10          float64 `json:"memory_full_avg10,omitempty"`
+	CPUSomeAvg10             float64 `json:"cpu_some_avg10,omitempty"`
+	CPUFullAvg10             float64 `json:"cpu_full_avg10,omitempty"`
+	IOSomeAvg10              float64 `json:"io_some_avg10,omitempty"`
+	IOFullAvg10              float64 `json:"io_full_avg10,omitempty"`
+	StateDirAvailableBytes   uint64  `json:"state_dir_available_bytes,omitempty"`
+	StateDirAvailablePercent float64 `json:"state_dir_available_percent,omitempty"`
+	PIDCurrent               int     `json:"pid_current,omitempty"`
+	PIDMax                   int     `json:"pid_max,omitempty"`
+	PIDAvailable             int     `json:"pid_available,omitempty"`
+	ObservationError         string  `json:"observation_error,omitempty"`
+	MemoryPressure           bool    `json:"memory_pressure"`
+	CPUPressure              bool    `json:"cpu_pressure"`
+	IOPressure               bool    `json:"io_pressure"`
+	StateDirPressure         bool    `json:"state_dir_pressure"`
+	// Pressure is any signal over its threshold, reported. ReclaimPressure
+	// is the subset a hibernation can relieve (memory, state-dir disk): a
+	// CPU or IO stall is reported, never answered by killing a guest
+	// (docs/reports/resource-efficiency-memory-assessment-2026-10-13.md, R3).
+	Pressure                       bool     `json:"pressure"`
+	ReclaimPressure                bool     `json:"reclaim_pressure"`
+	Signals                        []string `json:"signals,omitempty"`
+	MemoryAvailableThresholdText   string   `json:"memory_available_threshold,omitempty"`
+	StateDirAvailableThresholdText string   `json:"state_dir_available_threshold,omitempty"`
+	MemoryPSIThresholdText         string   `json:"memory_psi_threshold,omitempty"`
+	CPUPSIThresholdText            string   `json:"cpu_psi_threshold,omitempty"`
+	IOPSIThresholdText             string   `json:"io_psi_threshold,omitempty"`
 }
 
 type PressureReclaimInventory struct {
@@ -245,6 +251,8 @@ func annotatePressure(sample *HostPressureSample, cfg PressureReclaimConfig) {
 	sample.IOPressure = false
 	sample.StateDirPressure = false
 	sample.Pressure = false
+	sample.ReclaimPressure = false
+	sample.Signals = nil
 	sample.MemoryAvailableThresholdText = ""
 	sample.StateDirAvailableThresholdText = ""
 	sample.MemoryPSIThresholdText = ""
@@ -302,7 +310,16 @@ func annotatePressure(sample *HostPressureSample, cfg PressureReclaimConfig) {
 			sample.StateDirPressure = true
 		}
 	}
-	sample.Pressure = sample.MemoryPressure || sample.CPUPressure || sample.IOPressure || sample.StateDirPressure
+	for _, signal := range []struct {
+		name string
+		on   bool
+	}{{"memory", sample.MemoryPressure}, {"state_dir", sample.StateDirPressure}, {"cpu", sample.CPUPressure}, {"io", sample.IOPressure}} {
+		if signal.on {
+			sample.Signals = append(sample.Signals, signal.name)
+		}
+	}
+	sample.Pressure = len(sample.Signals) > 0
+	sample.ReclaimPressure = sample.MemoryPressure || sample.StateDirPressure
 }
 
 func readMemInfo() (totalBytes uint64, availableBytes uint64, err error) {
@@ -485,18 +502,21 @@ func (r *OwnershipRegistry) pressureReclaimPlan(busy func(*VMOwnership) bool) Pr
 		plan.Reason = "no unprotected active ownerships are eligible for pressure reclaim"
 		return plan
 	}
-	if sample.Pressure && cfg.Mode == PressureReclaimModeActive {
+	if sample.ReclaimPressure && cfg.Mode == PressureReclaimModeActive {
 		plan.Decision = "reclaim"
 		plan.Reason = "host pressure crossed active threshold; eligible VMs may be hibernated"
 		return plan
 	}
-	if sample.Pressure {
+	if sample.ReclaimPressure {
 		plan.Decision = "would_reclaim"
 		plan.Reason = "host pressure crossed dry-run threshold; no VM hibernated"
 		return plan
 	}
 	plan.Decision = "observe"
 	plan.Reason = "host pressure below reclaim threshold"
+	if sample.Pressure {
+		plan.Reason = "cpu or io stall reported; reclaim answers memory and disk pressure only"
+	}
 	return plan
 }
 
@@ -520,7 +540,7 @@ func (r *OwnershipRegistry) pressureReclaimActionCandidates() []pressureCandidat
 	}
 	sample := sampler(cfg)
 	annotatePressure(&sample, cfg)
-	if !sample.Pressure {
+	if !sample.ReclaimPressure {
 		return nil
 	}
 

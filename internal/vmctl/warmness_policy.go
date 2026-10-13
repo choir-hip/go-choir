@@ -209,7 +209,7 @@ func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig
 		if warmnessClassProtected(class) {
 			continue
 		}
-		if class == WarmnessClassPrimary && cfg.PrimaryKeepaliveMode == PrimaryKeepaliveModeUnderCapacity && !pressure.Pressure {
+		if class == WarmnessClassPrimary && cfg.PrimaryKeepaliveMode == PrimaryKeepaliveModeUnderCapacity && !pressure.ReclaimPressure {
 			continue
 		}
 		candidates = append(candidates, idleOwnershipCandidate{
@@ -229,7 +229,7 @@ func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig
 		}
 		return left.own.VMID < right.own.VMID
 	})
-	if cfg.PrimaryKeepaliveMode == PrimaryKeepaliveModeUnderCapacity && pressure.Pressure {
+	if cfg.PrimaryKeepaliveMode == PrimaryKeepaliveModeUnderCapacity && pressure.ReclaimPressure {
 		hasLowerPriority := false
 		for _, candidate := range candidates {
 			if candidate.class != WarmnessClassPrimary {
