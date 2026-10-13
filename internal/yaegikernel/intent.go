@@ -156,8 +156,11 @@ type IncomingMessage struct {
 // cursor advances only when the cell's acts commit, in the same
 // transaction.
 type InboxRecord struct {
-	Seq            int64                   `json:"seq"`
-	RecordID       string                  `json:"record_id"`
+	Seq      int64  `json:"seq"`
+	RecordID string `json:"record_id"`
+	// ID is RecordID under the name models reach for (cluster D,
+	// docs/reports/cross-model-cell-errors-2026-10-13.md).
+	ID             string                  `json:"-"`
 	Kind           string                  `json:"kind"`
 	From           string                  `json:"from"`
 	ConversationID string                  `json:"conversation_id,omitempty"`
@@ -192,7 +195,9 @@ func (r InboxRecord) String() string {
 // payload in a REPL variable instead of inline in the model's context window;
 // the wake turn carries only update IDs. A terminal write disposes each update.
 type PendingUpdate struct {
-	UpdateID        string                           `json:"update_id"`
+	UpdateID string `json:"update_id"`
+	// ID is UpdateID under the name models reach for.
+	ID              string                           `json:"-"`
 	FromAgentID     string                           `json:"from_agent_id"`
 	FromRole        string                           `json:"from_role,omitempty"`
 	ChannelID       string                           `json:"channel_id,omitempty"`

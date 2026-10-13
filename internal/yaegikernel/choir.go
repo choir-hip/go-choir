@@ -819,7 +819,11 @@ func (s *ChoirScope) Updates() []PendingUpdate {
 	if s == nil {
 		return []PendingUpdate{}
 	}
-	return append([]PendingUpdate(nil), s.updates...)
+	out := append([]PendingUpdate(nil), s.updates...)
+	for i := range out {
+		out[i].ID = out[i].UpdateID
+	}
+	return out
 }
 
 // Records returns the cell-start snapshot of records addressed to this desk
@@ -832,6 +836,9 @@ func (s *ChoirScope) Records() []InboxRecord {
 		return []InboxRecord{}
 	}
 	out := append([]InboxRecord(nil), s.records...)
+	for i := range out {
+		out[i].ID = out[i].RecordID
+	}
 	for _, r := range out {
 		for {
 			cur := s.recordsShown.Load()

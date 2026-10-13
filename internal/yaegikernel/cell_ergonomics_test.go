@@ -329,3 +329,30 @@ func TestChoirImportPathsMinMaxAndSearchTotal(t *testing.T) {
 		t.Fatalf("Search.Total = %d, want 3", got.Total)
 	}
 }
+
+// Cluster D (docs/reports/cross-model-cell-errors-2026-10-13.md): models
+// read a record's or update's id as .ID (15 of 16 cells in Texture's first
+// survey cell); the fields are RecordID and UpdateID, and "undefined
+// method: ID" named neither. Failure modes pinned: r.ID does not compile
+// or is empty; u.ID likewise; an unknown field on a choir result names no
+// real field.
+func TestRecordAndUpdateIDAndFieldHint(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	frame := SessionFrame{ID: "cell", Source: "for _, r := range choir.Records() { fmt.Println(r.ID, r.RecordID) }\nfor _, u := range choir.Updates() { fmt.Println(u.ID) }",
+		Records: []InboxRecord{{Seq: 1, RecordID: "rec-1", Kind: "cast"}},
+		Updates: []PendingUpdate{{UpdateID: "upd-1"}}}
+	out, err := serveCell(sess, frame, nil, &hooks)
+	if err != nil || out.Error != "" || out.Stdout != "rec-1 rec-1\nupd-1\n" {
+		t.Fatalf("record and update ids: %v %q stdout %q", err, out.Error, out.Stdout)
+	}
+	hint := sess.ErrorHint("for _, r := range choir.Records() { fmt.Println(r.Titel) }", "1:51: undefined method: Titel")
+	if !strings.Contains(hint, ".Title") {
+		t.Fatalf("unknown-field hint names no real field: %q", hint)
+	}
+}

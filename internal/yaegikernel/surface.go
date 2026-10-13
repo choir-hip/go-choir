@@ -322,10 +322,81 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 	if len(bare) > 0 {
 		return "Call choir functions with the choir. prefix: did you mean " + strings.Join(bare, ", ") + "?"
 	}
+	if m := undefinedFieldRE.FindStringSubmatch(msg); m != nil {
+		return resultFieldHint(m[1])
+	}
 	if topLevelDefineRE.MatchString(msg) {
 		return topLevelDefineHint
 	}
 	return ""
+}
+
+var undefinedFieldRE = regexp.MustCompile(`undefined (?:method|field): (\w+)`)
+
+// resultFieldHint names the choir result field closest to a missing one,
+// with that type's fields: models guess fields from prompt prose and JSON
+// names (cluster D, docs/reports/cross-model-cell-errors-2026-10-13.md).
+func resultFieldHint(missing string) string {
+	best, bestType := "", reflect.Type(nil)
+	for _, t := range choirResultTypes() {
+		fields := make([]string, 0, t.NumField())
+		for i := 0; i < t.NumField(); i++ {
+			if f := t.Field(i); f.IsExported() {
+				fields = append(fields, f.Name)
+			}
+		}
+		if c := closestName(missing, fields); c != "" && (best == "" || strings.EqualFold(c, missing) && !strings.EqualFold(best, missing)) {
+			best, bestType = c, t
+		}
+	}
+	if bestType == nil {
+		return ""
+	}
+	fields := make([]string, 0, bestType.NumField())
+	for i := 0; i < bestType.NumField(); i++ {
+		if f := bestType.Field(i); f.IsExported() {
+			fields = append(fields, f.Name)
+		}
+	}
+	return fmt.Sprintf("No field %s. Closest: %s.%s. %s fields: %s.", missing, bestType.Name(), best, bestType.Name(), strings.Join(fields, ", "))
+}
+
+// choirResultTypes lists the struct types choir functions return, sorted
+// by name, reached through pointers, slices and namespace methods.
+func choirResultTypes() []reflect.Type {
+	seen := map[reflect.Type]bool{}
+	var out []reflect.Type
+	var add func(t reflect.Type)
+	add = func(t reflect.Type) {
+		for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct || t.Name() == "" || seen[t] {
+			return
+		}
+		seen[t] = true
+		out = append(out, t)
+		for i := 0; i < t.NumField(); i++ {
+			if f := t.Field(i); f.IsExported() {
+				add(f.Type)
+			}
+		}
+	}
+	addFunc := func(ft reflect.Type) {
+		for i := 0; i < ft.NumOut(); i++ {
+			add(ft.Out(i))
+		}
+	}
+	for i := 0; i < choirScopeType.NumMethod(); i++ {
+		addFunc(choirScopeType.Method(i).Type)
+	}
+	for _, ns := range choirNamespaces {
+		for i := 0; i < ns.NumMethod(); i++ {
+			addFunc(ns.Method(i).Type)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
+	return out
 }
 
 // topLevelDefineRE matches what yaegi reports for a top-level `x := v[i]`,
