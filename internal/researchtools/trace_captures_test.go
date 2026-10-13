@@ -140,4 +140,3 @@ func bodyStoreFor(t *testing.T, og *platform.ObjectGraphHandler) sourcegraph.Bod
 	}
 	return store
 }
-

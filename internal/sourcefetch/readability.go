@@ -577,4 +577,3 @@ func collapseWhitespace(s string) string {
 func stripHTMLTags(source string) string {
 	return regexp.MustCompile(`(?is)<[^>]+>`).ReplaceAllString(source, " ")
 }
-
