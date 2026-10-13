@@ -5,7 +5,7 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Next (2026-10-13): ledger metamission (drafted)
+## Next (2026-10-13): ledger metamission (reviewed)
 
 The [ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md)
 turns the roadmap the owner asked for into stations: L0 closes the
@@ -18,8 +18,9 @@ attention; L3 hypotheses settled and scored; L4 Taiwan and East Asia as
 standing questions; L5 the evidence reader and an Autoradio prototype. It
 stays open to additions. Owner decisions open: the cost amendment,
 Telegram and commercial status, Taiwan first, Autoradio's slot, and
-schedules option B. A convergent round on the spine sent it back;
-the findings are adopted and a round on the repaired file is next.
+schedules option B. Convergent round 1 sent the spine back; round 2
+accepted the repaired spine and the L1 station file (2026-10-13). L1a-3
+(crash boots settle from the updater journal, never re-apply) is next.
 
 ## Current (2026-10-13): re-engineering metamission
 

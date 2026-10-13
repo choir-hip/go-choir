@@ -1647,7 +1647,7 @@ nodes:
     title: Ledger — bounded attention, hypotheses settled and scored, Taiwan vertical, read models, no crash loops
     path: docs/definitions/choir-ledger-metamission-2026-10-13.md
     ledger: ''
-    status: drafted  # owner asked for it 2026-10-13; L0 is closing the re-engineering metamission; stations L2-L5 are intent
+    status: reviewed  # convergent round 2 accepted 2026-10-13; owner ratification and owner decisions gate executable; L0 closing, L1 working, L2-L5 intent
     kind: spine
     entrypoint: false
     execution_mode: draft_non_executable
@@ -1659,7 +1659,8 @@ nodes:
       roadmap becomes a metamission that stays open to additions. Roadmap
       reviewed in docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md;
       restart design (station L1) in docs/restart-subsystem-design-2026-10-13.md.
-      Convergent round on the spine (8a1477c3): send_back, findings adopted.
+      Convergent round 1 (8a1477c3): send_back, findings adopted; round 2
+      (d46d3d08): accept.
   - id: choir-ledger-l1-restart-2026-10-13
     title: L1 — no crash loops (start limits, crash boots never re-drive, boot ledger and holds)
     path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md

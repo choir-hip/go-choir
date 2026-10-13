@@ -9,13 +9,17 @@ definition_version: 4
 # round (7 of 7) and a convergent round (5 ready with changes, 1 not ready)
 # adjudicated in its §9. This file is the executable station over that
 # design; the design stays the specification.
-readiness: drafted
+# Review: convergent round 2 on d46d3d08 (opencode, gemini, deepseek, glm
+# accept; claude send_back for four documentation repairs, adopted after the
+# round: receipt landing blocks, the two recorded deviations, red ceremony,
+# the post-commit trigger named in L1a-3).
+readiness: reviewed
 
 review:
-  reviewer: none (the design it executes is reviewed; this file is not)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: docs/restart-subsystem-design-2026-10-13.md
+  reviewer: agentic-consensus convergent round 2 on d46d3d08 (4 accept, 1 send_back adopted)
+  frozen_ref: git blob 761687463de8e9c3636915b1f7b2148d12249457 (this file at d46d3d08)
+  verdict: accept
+  evidence_ref: .agentic-consensus/ledger-metamission-convergent-r2-2026-10-13/
 
 start:
   captured_at: 2026-10-13T20:40:00Z
@@ -35,9 +39,10 @@ start:
       after any failure with no start limit, and host units had none either
       (nix/autoputer-vm.nix; design §9 finding 5).
     - >-
-      A guest writes its own planned marker before each platform-update,
-      self-development apply or rollback, so an apply that crashes the
-      runtime boots as planned and applies again (finding 5).
+      Before L1a-2, a guest wrote its own planned marker before each
+      platform-update, self-development apply or rollback, so an apply that
+      crashed the runtime booted as planned and applied again without bound
+      (finding 5).
     - >-
       Boot runs platform-update resume, engineering capsule reconcile and
       self-development materialization reconcile on every boot, crash or
@@ -101,12 +106,27 @@ boundaries:
     - schedules option B before the owner ratifies it
     - A/B image slots
   protected_surfaces: [vmctl boot actuator and ownership, guest boot and systemd units, run acceptance, self-development materialization, platform update]
+  admissible_evidence: deployed proof on a minted test computer on staging; unit tests and nix eval shape a slice but never prove vmctl, boot or restart behavior
+  deviations_from_design:
+    - id: D1
+      design: §6 item 1, "a markerless or guest-self-marked boot runs no re-driver"
+      instead: L1a covers markerless (crash) boots; a guest-self-marked boot still resumes its own apply, bounded at 3 attempts per apply (L1a-2), because the post-restart re-push is the second half of every apply
+      repaired_by: L1c (the host asserts planned boots; the guest writes no marker)
+      consequence: until L1c, the matrix cell "an apply that crashes the runtime" shows up to 3 replays per apply, by design, not a regression
+    - id: D2
+      design: §6 item 1, "start limits and OnFailure on every restarting unit"
+      instead: L1a-1 added start limits only; a guest unit that latches failed is silent while the VM stays up
+      repaired_by: L1c visibility (the ledger tail in vmctl list and an alert on any hold)
+  heresy_delta:
+    discovered: [guest self-written planned markers, unbounded guest and host units, ResumeVM launching without a grant, warm sweeps booting wedged computers, crash boots re-driving platform updates and self-development applies, a leaked planned marker after a replayed apply, a lost apply response read as a refusal]
+    introduced: [up to 3 replays per apply on guest-self-marked boots until L1c (D1)]
+    repaired: [unbounded units (L1a-1), unbounded self-applies and crash-boot re-drive of pre-boot work wakes (L1a-2)]
 
 now:
   status: working
-  slice: L1a-3 — crash boots run no re-driver (platform-update resume, engineering capsule reconcile, self-development materialization reconcile, the selfdev_materialization_retry exemption) and settle those transitions to terminal fates
+  slice: L1a-3 — crash boots run no re-driver and settle from the updater journal (docs/problems/crash-boots-redrive-applies-2026-10-13.md); 3a platform-update resume and the leaked marker; 3b self-development reconcile, both the boot trigger and the post-commit observer, for every op decided before the boot (engineering capsule reconcile only closes work; the retry wake finds nothing once 3b settles)
   source_ref: fdc70329
-  deploy_identity: staging 8a1477c3 (fdc70329 deploying)
+  deploy_identity: staging fdc70329 (CI 38456685282 success)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: L1-1
@@ -132,22 +152,24 @@ now:
       until L1c moves planned-ness to the host.
     main_uncertainty: whether gating self-development materialization reconcile on crash boots strands post-decision ops that tests expect to recover (TestSelfDevReconcileRecoversMaterializingOperation)
     next_observation: which boot re-drivers already settle on crash and which re-drive
-  blocker_or_risk: L1a-3 touches the same boot re-drivers C1e deletes; C1e waits for it
-  next_action: document the crash-boot re-drivers that still run (problem doc), then land L1a-3
+  blocker_or_risk: L1a-3 touches the same boot re-drivers C1e deletes; C1e waits for it. A loop slower than the start limit (one crash every 2 minutes or more, such as a poisoned record re-read after each boot) escapes the unit bound; the boot ledger (L1b) is the bound for it
+  next_action: land L1a-3 through the Landing Loop and run its crash-boot cells on a minted test computer
 
 receipts:
   - id: L1a-1
     boundary: implement
     identity: dc184db2
-    proof_refs: [nix eval of rendered guest and host units, .github/workflows/ci.yml reset-failed]
+    proof_refs: [nix eval of the rendered units in session (output not kept), .github/workflows/ci.yml reset-failed]
     rollback_ref: revert dc184db2
-    disposition: start limits on every restarting guest (5 in 10 min) and host (10 in 10 min) unit; deploys reset-failed before restart; warm filter moved to L1b
+    disposition: start limits on every restarting guest (5 in 10 min) and host (10 in 10 min) unit; deploys reset-failed before restarting host units (not the Dolt units, which deploys do not restart); warm filter moved to L1b
+    landing: {source_commit: fdc70329 (batch), ci_ref: 38456685282 success, deploy_ref: CI deploy job success, environment_identity: staging fdc70329, deployed_acceptance: not yet run (L1's matrix cells)}
   - id: L1a-2
     boundary: implement
     identity: c08ead07
     proof_refs: [internal/agentcore/restart_bound_test.go]
     rollback_ref: revert c08ead07
     disposition: durable per-apply attempt budget (3); crash boots mark pre-boot work wakes interrupted_by_restart
+    landing: {source_commit: fdc70329 (batch), ci_ref: 38456685282 success, deploy_ref: CI deploy job success, environment_identity: staging fdc70329, deployed_acceptance: not yet run (L1's matrix cells)}
 ---
 
 # L1: no crash loops
@@ -156,7 +178,8 @@ The design is the specification; this file tracks its execution.
 
 - **L1a** (guest and Nix, before C1e): start limits (L1a-1), bounded
   self-applies and wake gating (L1a-2), crash boots run no re-driver
-  (L1a-3).
+  (L1a-3). Two departures from the design are recorded as D1 and D2 in
+  `boundaries.deviations_from_design`.
 - **L1b** (host, may run beside C1e): grants at `launchFirecracker` keyed by
   spawn sequence; exhaustion sets the existing hold with a
   `recovery-ledger` class; a wedged or failed computer gets the one

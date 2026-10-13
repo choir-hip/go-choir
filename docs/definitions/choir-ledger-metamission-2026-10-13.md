@@ -15,7 +15,7 @@ definition_version: 4
 # research (docs/reports/multilingual-osint-sourcing-research-2026-10-13.md,
 # docs/reports/taiwan-sinosphere-discourse-sources-research-2026-10-13.md)
 # and the restart design (docs/restart-subsystem-design-2026-10-13.md).
-readiness: drafted
+readiness: reviewed
 
 # Review history: the roadmap this file encodes passed a lateral round (8 of
 # 8) and a convergent round (5 ready with changes, 1 not ready) on
@@ -26,12 +26,15 @@ readiness: drafted
 # into L0, schema enums, a dated start correction, a one-move now card, L5's
 # dependencies). Raw outputs:
 # .agentic-consensus/ledger-metamission-convergent-2026-10-13/ (session
-# diagnostics). Promotion to reviewed needs a round on the repaired file.
+# diagnostics). Round 2 on the repaired file at d46d3d08 (claude, opencode,
+# gemini, deepseek, glm; muse timed out; codex and gpt-6.1-sol hit an OpenAI
+# usage limit) accepted it unanimously. Raw outputs:
+# .agentic-consensus/ledger-metamission-convergent-r2-2026-10-13/.
 review:
-  reviewer: agentic-consensus convergent panel on 8a1477c3 (send_back, adopted)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md
+  reviewer: agentic-consensus convergent round 2 on d46d3d08 (5 accept of 5 answering)
+  frozen_ref: git blob a560388a80f0dc5018ec3e0d84b0deb1604eb6dd (this file at d46d3d08)
+  verdict: accept
+  evidence_ref: .agentic-consensus/ledger-metamission-convergent-r2-2026-10-13/
   open_to_additions: >-
     Owner 2026-10-13: this spine stays open while L0 runs. New directions
     enter as `intent` stations or as station scope notes, with the owner's
@@ -61,7 +64,7 @@ metamission:
         36kr, WHO, Agriculture Dive), retiring qdrant_dedup.go.
     - id: L1
       path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md
-      readiness: drafted
+      readiness: reviewed
       status: working
       depends_on: []
       note: >-
@@ -296,7 +299,8 @@ owner_decisions_open:
   - restart schedules policy (design §3.4; option B is the adjudicated default pending ratification)
 
 now:
-  # This spine is drafted and authorizes nothing by itself. L0 executes
+  # This spine is reviewed; owner ratification (decision below) and the open
+  # owner decisions gate `executable`. L0 executes
   # under its own reviewed file; L1a executes under the L1 station file over
   # the reviewed restart design. The spine's card points at the live station.
   status: working
