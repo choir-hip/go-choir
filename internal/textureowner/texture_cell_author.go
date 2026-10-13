@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -370,7 +371,12 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	// A story opened with publish auto publishes this revision as its next
 	// version, after the commit and off its path (Cut 2 2b). A failed
 	// publish is a gap; nothing here waits for it.
-	if durableLifecycle && h.Core != nil {
+	switch {
+	case !durableLifecycle:
+		log.Printf("story publish: %s revision %s not considered: the document is not a lifecycle document", doc.DocID, stored.RevisionID)
+	case h.Core == nil:
+		log.Printf("story publish: %s revision %s not considered: no runtime to publish through", doc.DocID, stored.RevisionID)
+	default:
 		h.Core.AutoPublishRevision(ctx, rec.OwnerID, doc, stored)
 	}
 	out, _ := json.Marshal(map[string]any{

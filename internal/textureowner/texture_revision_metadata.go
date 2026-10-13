@@ -66,6 +66,12 @@ func (rt *Handler) buildAppagentRevisionMetadata(_ context.Context, rec *types.R
 			meta["revision_role"] = textureRevisionRoleInput
 		}
 	}
+	// A story's seed role names the one empty revision its opening
+	// committed; it is never carried forward. Inherited, it marked every
+	// Texture revision of a story as the seed, so none published (B12).
+	if metadataStringValue(meta, "revision_role") == types.StorySeedRole {
+		delete(meta, "revision_role")
+	}
 	join := selfDevelopmentJoinFromSourceEntities(decodeAvailableTextureSourceEntities(rec.Metadata))
 	mergeSelfDevelopmentJoinIntoMetadata(meta, join)
 	// Available source entities are run-time prompt context, not durable revision metadata.

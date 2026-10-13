@@ -25,7 +25,13 @@ import (
 //     is renumbered to fill the gap;
 //   - a story opened without publish auto, or the empty seed, publishes;
 //   - a crash boot publishes a revision committed before the crash (a
-//     boot-time resumer).
+//     boot-time resumer);
+//   - a Write inherits the seed's revision_role (story_seed) through the
+//     durable metadata carried forward from the parent revision, so every
+//     revision looks like the seed and none publishes (B12, staging
+//     c2-paper-3). This only shows when the story lives on the runtime's
+//     own computer, as it does deployed: the carry-forward reads the parent
+//     by the runtime's computer id.
 
 type recordingStoryPublisher struct {
 	mu       sync.Mutex
@@ -79,7 +85,9 @@ func (p *recordingStoryPublisher) none(t *testing.T, label string) {
 func openStoryForTexture(t *testing.T, h *Handler, s *store.Store, suffix string, publish string) types.RunRecord {
 	t.Helper()
 	ctx := context.Background()
-	owner, computer := "owner-story-"+suffix, "computer-story"
+	// The story lives on the runtime's own computer, as it does deployed
+	// (B12: a story on another computer hid the seed-role carry-forward).
+	owner, computer := "owner-story-"+suffix, h.Core.TextureComputerID()
 	management := agentprofile.Management + ":" + owner
 	cast := types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cell-open-" + suffix + ":cast:c1", Kind: types.CommitmentKindDirective,
@@ -137,6 +145,10 @@ func storyWrite(t *testing.T, h *Handler, s *store.Store, rec *types.RunRecord, 
 	return head
 }
 
+func revisionMetadataString(rev types.Revision, key string) string {
+	return metadataStringValue(decodeRevisionMetadata(rev.Metadata), key)
+}
+
 func storySetup(t *testing.T) (*agentcore.Runtime, *Handler, *store.Store, *recordingStoryPublisher) {
 	t.Helper()
 	core, h := testAPISetup(t)
@@ -158,6 +170,9 @@ func TestRevisionOfAPublishAutoStoryPublishesAsItsVersion(t *testing.T) {
 	}
 	if v.RevisionID == seed.RevisionID {
 		t.Fatal("the seed published")
+	}
+	if role := revisionMetadataString(first, "revision_role"); role == types.StorySeedRole {
+		t.Fatalf("Texture's revision %s carries the seed's role %q", first.RevisionID, role)
 	}
 	second := storyWrite(t, h, s, &rec, "write-2", "The harbor reopens Monday. Ferries resume Tuesday.")
 	if v := pub.next(t); v.RevisionID != second.RevisionID || v.Revision != 3 {

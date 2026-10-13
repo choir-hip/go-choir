@@ -137,16 +137,30 @@ func (rt *Runtime) storyPublishesAuto(ctx context.Context, ownerID, computerID, 
 // AutoPublishRevision publishes a committed revision of a publish-auto
 // story as its version, after the commit and off its path. The Texture
 // owner calls it once per committed revision; it returns at once.
+//
+// Every outcome logs one "story publish:" line, the decisions not to
+// publish included: a silent return is how B12 (every story revision
+// inherited the seed's role and none published) hid on staging.
 func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc types.Document, rev types.Revision) {
-	if rt == nil || rt.store == nil || strings.TrimSpace(doc.TrajectoryID) == "" {
+	if rt == nil || rt.store == nil {
+		log.Printf("story publish: %s revision %s not considered: no runtime store", doc.DocID, rev.RevisionID)
+		return
+	}
+	if strings.TrimSpace(doc.TrajectoryID) == "" {
+		log.Printf("story publish: %s revision %s not published: the document has no trajectory, so it is no story", doc.DocID, rev.RevisionID)
 		return
 	}
 	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
 	if err != nil {
-		log.Printf("story publish: %s: read trajectory: %v", doc.DocID, err)
+		log.Printf("story publish: %s revision %s is a gap: read trajectory %s: %v", doc.DocID, rev.RevisionID, doc.TrajectoryID, err)
 		return
 	}
-	if !types.StoryPublishesAuto(trajectory) || revisionRole(rev) == types.StorySeedRole {
+	if !types.StoryPublishesAuto(trajectory) {
+		log.Printf("story publish: %s revision %s not published: trajectory %s is kind %q with publish %q, not a publish-auto story", doc.DocID, rev.RevisionID, doc.TrajectoryID, trajectory.Kind, trajectory.SubjectRefs[types.StoryRefPublish])
+		return
+	}
+	if revisionRole(rev) == types.StorySeedRole {
+		log.Printf("story publish: %s revision %s not published: it is the story's seed", doc.DocID, rev.RevisionID)
 		return
 	}
 	v := StoryVersion{OwnerID: ownerID, ComputerID: doc.ComputerID, DocID: doc.DocID, RevisionID: rev.RevisionID, Revision: types.RevisionNumber(rev.VersionNumber)}
@@ -181,6 +195,7 @@ func (rt *Runtime) publishStoryVerdicts(ownerID, computerID string, verdicts []t
 	}
 	publisher := rt.storyPublisher()
 	if publisher == nil {
+		log.Printf("story verdicts: %d verdicts not published: no platform to publish to", len(verdicts))
 		return
 	}
 	verdicts = append([]types.SupportVerdict(nil), verdicts...)
@@ -204,11 +219,14 @@ func (rt *Runtime) publishStoryVerdicts(ownerID, computerID string, verdicts []t
 			}
 		}
 		if len(req.Verdicts) == 0 {
+			log.Printf("story verdicts: none of %d verdicts judges a publish-auto story; nothing to publish", len(verdicts))
 			return
 		}
 		if err := publisher.PublishVerdicts(ctx, req); err != nil {
 			log.Printf("story verdicts: %d verdicts not published; their citations stay pending in the overlay: %v", len(req.Verdicts), err)
+			return
 		}
+		log.Printf("story verdicts: published %d verdicts", len(req.Verdicts))
 	})
 }
 
