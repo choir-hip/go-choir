@@ -63,6 +63,11 @@
   background: var(--choir-status-warning-soft, var(--choir-surface-control));
 }
 
+.rendered-doc .texture-check-badge[data-check-badge='unread'] {
+  border-style: dashed;
+  color: var(--choir-text-muted, var(--choir-text-primary));
+}
+
 .rendered-doc .texture-check-badge[data-check-badge='failed'] {
   border-color: var(--choir-status-danger);
   background: var(--choir-status-danger-soft, var(--choir-surface-control));

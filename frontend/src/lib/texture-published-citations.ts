@@ -6,7 +6,7 @@
 //
 //   - one numbered source per cited source, numbered in reading order;
 //   - per citation: its quote, the resolved blocks it is pinned to, and its
-//     check state (exact ✓, tolerant ≈, pending, failed ✗);
+//     check state (exact ✓, tolerant ≈, pending, unread source, failed ✗);
 //   - HTML for the inline numbered marker (with its quote popover), for a
 //     transcluded embed drawn as a block, and for the closing source list.
 //
@@ -15,7 +15,7 @@
 
 import { escapeHTML, sourceEntityID, sourceEntityTitle, sourceEntityTargetURL } from './texture-source-renderer';
 
-export type CheckState = 'exact' | 'tolerant' | 'pending' | 'failed';
+export type CheckState = 'exact' | 'tolerant' | 'pending' | 'unread' | 'failed';
 
 export type PinnedBlock = { cid: string; text: string; kind: string };
 
@@ -52,8 +52,9 @@ const EMBED_BLOCK_LIMIT = 8;
 
 /**
  * The badge a citation's live check earns: ✓ exact, ≈ tolerant, pending,
- * ✗ failed. A failed quote or an unsupported judgement is failed; a quote
- * not yet checked is pending.
+ * unread source, ✗ failed. A failed quote or an unsupported judgement is
+ * failed; a quote whose source was never captured is unread; a quote not yet
+ * checked is pending.
  */
 export function checkState(check: any): CheckState {
   const quote = String(check?.quote || '').toLowerCase();
@@ -61,6 +62,7 @@ export function checkState(check: any): CheckState {
   if (quote === 'failed' || judgement === 'failed' || judgement === 'unsupported') return 'failed';
   if (quote === 'exact') return 'exact';
   if (quote === 'tolerant') return 'tolerant';
+  if (quote === 'unread') return 'unread';
   return 'pending';
 }
 
@@ -72,6 +74,8 @@ export function checkLabel(state: CheckState): string {
       return '≈ tolerant';
     case 'failed':
       return '✗ failed';
+    case 'unread':
+      return 'unread source';
     default:
       return 'pending';
   }

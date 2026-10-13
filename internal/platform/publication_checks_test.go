@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
@@ -182,5 +183,26 @@ func TestSupportVerdictRouteAdmitsItsBoundGuestAndInternalCallers(t *testing.T) 
 	h.HandleSupportVerdicts(rec, badReq)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("an unknown verdict = %d; want 400", rec.Code)
+	}
+}
+
+// A1 (Cut 2 pre-flight amendment): a citation whose source was never
+// captured is "unread source", not "pending". Ways it can fail: a
+// not-captured quote shows as pending forever (the reader cannot tell a
+// check in progress from a source nobody read); an unread source hides a
+// failed judgement; an unread source shows as checked.
+func TestNotCapturedCitationIsUnreadSource(t *testing.T) {
+	if got := quoteState(publicationCheck{Outcome: string(quotematch.NotCaptured)}); got != CheckUnread {
+		t.Fatalf("quoteState(not captured) = %q; want %q", got, CheckUnread)
+	}
+	for _, c := range []struct{ quote, judgement, want string }{
+		{CheckUnread, CheckPending, CheckUnread},
+		{CheckUnread, types.SupportSupported, CheckUnread},
+		{CheckUnread, CheckFailed, CheckFailed},
+		{CheckExact, CheckPending, CheckPending},
+	} {
+		if got := badgeState(c.quote, c.judgement); got != c.want {
+			t.Fatalf("badgeState(%q, %q) = %q; want %q", c.quote, c.judgement, got, c.want)
+		}
 	}
 }

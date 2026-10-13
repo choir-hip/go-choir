@@ -235,8 +235,8 @@ func (o *StoreCheckOverlay) judgement(ctx context.Context, og *ObjectGraphStore,
 }
 
 // quoteState maps a committed quote check to the overlay: a matched quote
-// is exact or tolerant by its tier, a quote not found failed, anything else
-// (not captured) is pending.
+// is exact or tolerant by its tier, a quote not found failed, a source never
+// captured unread, anything else pending.
 func quoteState(c publicationCheck) string {
 	switch quotematch.Outcome(c.Outcome) {
 	case quotematch.Matched:
@@ -246,6 +246,8 @@ func quoteState(c publicationCheck) string {
 		return CheckTolerant
 	case quotematch.NotFound:
 		return CheckFailed
+	case quotematch.NotCaptured:
+		return CheckUnread
 	}
 	return CheckPending
 }
@@ -261,11 +263,14 @@ func judgementState(verdict string) string {
 }
 
 // badgeState is the one badge a reader sees: failed if the quote or the
-// support failed, pending until both are known, else the quote's tier.
+// support failed, unread if the source was never captured, pending until
+// both are known, else the quote's tier.
 func badgeState(quote, judgement string) string {
 	switch {
 	case quote == CheckFailed || judgement == CheckFailed:
 		return CheckFailed
+	case quote == CheckUnread:
+		return CheckUnread
 	case quote == CheckPending || judgement == CheckPending:
 		return CheckPending
 	}

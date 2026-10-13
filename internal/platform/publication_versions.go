@@ -103,11 +103,13 @@ type PublicationNav struct {
 }
 
 // Quote-check states a check overlay reports per citation (✓ exact,
-// ≈ tolerant, pending, ✗ failed).
+// ≈ tolerant, pending, unread source, ✗ failed). Unread means the cited
+// source was never captured, so no check can run.
 const (
 	CheckExact    = "exact"
 	CheckTolerant = "tolerant"
 	CheckPending  = "pending"
+	CheckUnread   = "unread"
 	CheckFailed   = "failed"
 )
 

@@ -14,7 +14,7 @@
  *     /autopaper/<slug> as the standalone Texture published view;
  *   - every citation renders as a numbered source whose quote sits inside its
  *     pinned source block (inline popover and the source list) with a check
- *     badge (exact, tolerant, pending, failed); every transclusion renders as
+ *     badge (exact, tolerant, pending, unread, failed); every transclusion renders as
  *     a block; the view offers no editing affordance;
  *   - a story with more than one version moves between versions with the
  *     Texture chevrons, and an older version offers the newer one;
@@ -31,7 +31,7 @@ import { expect, test } from '@playwright/test';
 const BASE_URL = (process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news').replace(/\/+$/, '');
 const MAX_STORIES = Number(process.env.AUTOPAPER_MAX_STORIES || 8);
 const SHOT_DIR = process.env.AUTOPAPER_SCREENSHOT_DIR || '';
-const CHECK_STATES = new Set(['exact', 'tolerant', 'pending', 'failed']);
+const CHECK_STATES = new Set(['exact', 'tolerant', 'pending', 'unread', 'failed']);
 
 test.use({ viewport: { width: 375, height: 812 }, storageState: { cookies: [], origins: [] } });
 test.setTimeout(240_000);
