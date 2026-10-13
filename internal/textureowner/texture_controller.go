@@ -731,9 +731,13 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		}
 		return ""
 	}(), "integrate_execution_findings")
-	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent: intent,
-	}, scheduledSeq)
+	revisionReq := textureAgentRevisionRequest{Intent: intent}
+	if recordsPending && len(armedUpdates) == 0 && !ownerHeadPending && !initialWorkWake {
+		// A turn started for unread records says so, so the trace links it
+		// to the records that caused it (Cut 1 L3a).
+		revisionReq.Provenance = map[string]any{"request_source": "inbox_record"}
+	}
+	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, revisionReq, scheduledSeq)
 	if err != nil {
 		if errors.Is(err, errTextureLifecycleOpenWorkUnavailable) {
 			// The submit-time work gate is the durable guard against a run minted
