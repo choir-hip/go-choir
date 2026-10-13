@@ -9,23 +9,17 @@ func TestPolicyFor(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]Policy{
-		Conductor: {
-			Profile: Conductor, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Texture},
-		},
+		Conductor: {Profile: Conductor},
 		Research: {
-			Profile: Research, AllowCoAgentTools: true,
-			AllowedMessageTargets: []string{Texture},
+			Profile: Research, AllowedMessageTargets: []string{Texture},
 		},
 		Texture: {
-			Profile: Texture, AllowCoAgentTools: false,
-			AllowedSpawnTargets: []string{Research}, AllowedMessageTargets: []string{Research, Management},
+			Profile: Texture, AllowedMessageTargets: []string{Research, Management},
 		},
 		Email:       {Profile: Email},
 		Engineering: {Profile: Engineering, AllowedMessageTargets: []string{Management}},
 		Management: {
-			Profile: Management, AllowCoAgentTools: true,
-			AllowedSpawnTargets: []string{Research}, AllowedMessageTargets: []string{Texture, Research},
+			Profile: Management, AllowedMessageTargets: []string{Texture, Research},
 		},
 	}
 	for profile, want := range tests {
@@ -50,21 +44,14 @@ func TestPolicyFor(t *testing.T) {
 			t.Errorf("PolicyFor(%q) unexpectedly accepted a retired profile", profile)
 		}
 	}
-	for _, operation := range []func(string, string) (bool, error){CanSpawn, CanMessage} {
-		if _, err := operation(Conductor, "processor"); err == nil {
-			t.Error("retired target unexpectedly accepted")
-		}
+	if _, err := CanMessage(Conductor, "processor"); err == nil {
+		t.Error("retired target unexpectedly accepted")
 	}
 }
-func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
+func TestMessagePolicyIsExhaustive(t *testing.T) {
 	t.Parallel()
 
 	profiles := []string{Conductor, Management, Engineering, Research, Texture, Email}
-	spawn := map[string]map[string]bool{
-		Conductor:  {Texture: true},
-		Management: {Research: true},
-		Texture:    {Research: true},
-	}
 	message := map[string]map[string]bool{
 		Management:  {Texture: true, Research: true},
 		Engineering: {Management: true},
@@ -76,13 +63,6 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		t.Run(caller, func(t *testing.T) {
 			t.Parallel()
 			for _, target := range profiles {
-				gotSpawn, err := CanSpawn(caller, target)
-				if err != nil {
-					t.Fatalf("CanSpawn(%q, %q) error = %v", caller, target, err)
-				}
-				if gotSpawn != spawn[caller][target] {
-					t.Errorf("CanSpawn(%q, %q) = %v, want %v", caller, target, gotSpawn, spawn[caller][target])
-				}
 				gotMsg, err := CanMessage(caller, target)
 				if err != nil {
 					t.Fatalf("CanMessage(%q, %q) error = %v", caller, target, err)
@@ -94,14 +74,6 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		})
 	}
 
-	mustSpawn := func(caller, target string) bool {
-		t.Helper()
-		ok, err := CanSpawn(caller, target)
-		if err != nil {
-			t.Fatalf("CanSpawn(%q, %q) error = %v", caller, target, err)
-		}
-		return ok
-	}
 	mustMessage := func(caller, target string) bool {
 		t.Helper()
 		ok, err := CanMessage(caller, target)
@@ -110,17 +82,14 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		}
 		return ok
 	}
-	if mustSpawn(Texture, Management) || !mustMessage(Texture, Management) {
-		t.Fatal("Texture must message but never spawn Management")
+	if !mustMessage(Texture, Management) {
+		t.Fatal("Texture must message Management")
 	}
 	if mustMessage(Texture, Engineering) {
 		t.Fatal("Texture must never message Engineering")
 	}
-	if !mustSpawn(Conductor, Texture) || mustMessage(Conductor, Texture) {
-		t.Fatal("Conductor keeps spawn-only Texture authority under V2 names")
-	}
-	if _, err := CanSpawn(Conductor, "document_agent"); err == nil {
-		t.Fatal("retired alias document_agent must refuse spawn")
+	if mustMessage(Conductor, Texture) {
+		t.Fatal("Conductor must not message Texture")
 	}
 	if _, err := CanMessage(Conductor, "document_agent"); err == nil {
 		t.Fatal("retired alias document_agent must refuse message")
@@ -133,12 +102,6 @@ func TestSpawnAndMessagePoliciesAreSeparatedExhaustively(t *testing.T) {
 		{Management, "unknown"},
 		{"unknown", "unknown"},
 	} {
-		if ok, _ := CanSpawn(check.caller, check.target); ok {
-			t.Errorf("unknown policy unexpectedly allowed spawn %q -> %q", check.caller, check.target)
-		}
-		if _, err := CanSpawn(check.caller, check.target); err == nil {
-			t.Errorf("unknown policy missing spawn error %q -> %q", check.caller, check.target)
-		}
 		if ok, _ := CanMessage(check.caller, check.target); ok {
 			t.Errorf("unknown policy unexpectedly allowed message %q -> %q", check.caller, check.target)
 		}
@@ -163,7 +126,7 @@ func TestCanonicalVerifierSpellingUnifies(t *testing.T) {
 
 // TestPolicyForDefaultIsNotDefaultAllow pins the fail-closed default: a
 // canonical-but-unlisted profile (the verifier roles) gets a bare policy
-// with every capability false and no spawn/message targets.
+// with no message targets.
 func TestPolicyForDefaultIsNotDefaultAllow(t *testing.T) {
 	t.Parallel()
 	for _, profile := range []string{"verifier", "verifier_multimodal"} {
@@ -171,8 +134,7 @@ func TestPolicyForDefaultIsNotDefaultAllow(t *testing.T) {
 		if err != nil {
 			t.Fatalf("PolicyFor(%q) error = %v", profile, err)
 		}
-		if policy.AllowCoAgentTools ||
-			len(policy.AllowedSpawnTargets) != 0 || len(policy.AllowedMessageTargets) != 0 {
+		if len(policy.AllowedMessageTargets) != 0 {
 			t.Fatalf("PolicyFor(%q) grants capabilities: %+v", profile, policy)
 		}
 	}

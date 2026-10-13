@@ -80,23 +80,6 @@ type HandoffDecision struct {
 	Conductor ConductorDecision
 }
 
-// HandoffKindForCaller maps lifecycle actor profiles to their Texture product path.
-func HandoffKindForCaller(profile string) HandoffKind {
-	callerKind, _ := agentprofile.Canonical(profile)
-	switch callerKind {
-	case agentprofile.Conductor:
-		return HandoffKindUserPrompt
-	case "processor":
-		// Frozen historical handoff only; processor is not a live profile.
-		return HandoffKindSourceOpen
-	case "reconciler":
-		// Frozen historical handoff only; reconciler is not a live profile.
-		return HandoffKindCorpusWake
-	default:
-		return ""
-	}
-}
-
 // EnsureTextureHandoff owns the product transition from a lifecycle actor into Texture.
 func (h *Handler) EnsureTextureHandoff(ctx context.Context, parentRec *types.RunRecord, req HandoffRequest) (HandoffDecision, error) {
 	if h == nil {

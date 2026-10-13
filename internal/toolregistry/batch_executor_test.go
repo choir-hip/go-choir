@@ -110,29 +110,6 @@ func TestExecuteToolBatchSequentialPolicy(t *testing.T) {
 	}
 }
 
-func TestExecuteToolBatchConductorTextureOwnsRoute(t *testing.T) {
-	registry := NewToolRegistry()
-	var executed []string
-	if err := registry.Register(Tool{Name: "spawn_agent", Func: func(_ context.Context, args json.RawMessage) (string, error) {
-		var in struct {
-			Profile string `json:"profile"`
-		}
-		_ = json.Unmarshal(args, &in)
-		executed = append(executed, in.Profile)
-		return `{"ok":true}`, nil
-	}}); err != nil {
-		t.Fatal(err)
-	}
-	results := ExecuteToolBatch(WithExecutionContext(context.Background(), ExecutionContext{Profile: agentprofile.Conductor}), registry, []types.ToolCall{
-		{ID: "texture", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"texture"}`)},
-		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"research"}`)},
-		{ID: "texture-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"profile":"texture"}`)},
-	}, func(types.EventKind, string, json.RawMessage) {})
-	if len(executed) != 1 || executed[0] != agentprofile.Texture || results[1].IsError || results[2].IsError {
-		t.Fatalf("executed=%#v results=%#v", executed, results)
-	}
-}
-
 func TestExecuteToolBatchProjectionAndCaps(t *testing.T) {
 	registry := NewToolRegistry()
 	durable := strings.Repeat("d", 513*1024)

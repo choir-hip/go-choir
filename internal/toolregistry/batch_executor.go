@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -41,11 +40,9 @@ func ExecuteToolBatch(ctx context.Context, registry *ToolRegistry, calls []types
 		return results
 	}
 
-	skipped := plannedToolSkips(ctx, calls)
-
 	if shouldExecuteToolsSequentially(calls) {
 		for i, call := range calls {
-			results[i] = executeOneTool(ctx, registry, call, skipped[i], emit)
+			results[i] = executeOneTool(ctx, registry, call, emit)
 		}
 		return results
 	}
@@ -55,14 +52,14 @@ func ExecuteToolBatch(ctx context.Context, registry *ToolRegistry, calls []types
 		wg.Add(1)
 		go func(index int, call types.ToolCall) {
 			defer wg.Done()
-			results[index] = executeOneTool(ctx, registry, call, skipped[index], emit)
+			results[index] = executeOneTool(ctx, registry, call, emit)
 		}(i, call)
 	}
 	wg.Wait()
 	return results
 }
 
-func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.ToolCall, skipReason string, emit provideriface.EventEmitFunc) types.ToolResult {
+func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.ToolCall, emit provideriface.EventEmitFunc) types.ToolResult {
 	args := json.RawMessage(strings.TrimSpace(string(call.Arguments)))
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
@@ -75,31 +72,21 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 	emit(types.EventToolInvoked, "tool_call", invokedPayload)
 
 	isError := false
-	output := skipReason
-	if skipReason != "" {
-		if strings.HasPrefix(skipReason, "tool_notice:") {
-			output = strings.TrimSpace(strings.TrimPrefix(skipReason, "tool_notice:"))
-		} else {
-			isError = true
-		}
-	} else {
-		execution := ExecutionContextFrom(ctx)
-		execution.ToolCallID = strings.TrimSpace(call.ID)
-		callCtx := WithExecutionContext(ctx, execution)
-		var err error
-		toolStart := time.Now()
-		output, err = registry.Execute(callCtx, call.Name, call.Arguments)
-		if elapsed := time.Since(toolStart); elapsed > slowToolLogThreshold {
-			// A single tool call that holds the serialized store lock for
-			// tens of seconds stalls a Management drain carrier's whole
-			// iteration. Log which call owns the stall so a slow-path
-			// residual names the offending tool, not just "the store".
-			log.Printf("tool loop: slow tool call tool=%s call_id=%s dur=%s err=%v", call.Name, call.ID, elapsed.Round(time.Millisecond), err)
-		}
-		if err != nil {
-			output = fmt.Sprintf("tool_error: %v", err)
-			isError = true
-		}
+	execution := ExecutionContextFrom(ctx)
+	execution.ToolCallID = strings.TrimSpace(call.ID)
+	callCtx := WithExecutionContext(ctx, execution)
+	toolStart := time.Now()
+	output, err := registry.Execute(callCtx, call.Name, call.Arguments)
+	if elapsed := time.Since(toolStart); elapsed > slowToolLogThreshold {
+		// A single tool call that holds the serialized store lock for
+		// tens of seconds stalls a Management drain carrier's whole
+		// iteration. Log which call owns the stall so a slow-path
+		// residual names the offending tool, not just "the store".
+		log.Printf("tool loop: slow tool call tool=%s call_id=%s dur=%s err=%v", call.Name, call.ID, elapsed.Round(time.Millisecond), err)
+	}
+	if err != nil {
+		output = fmt.Sprintf("tool_error: %v", err)
+		isError = true
 	}
 
 	visibleOutput := output
@@ -144,7 +131,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "spawn_agent", "cancel_agent", "capsule_go_eval", "desk_go_eval":
+	case "capsule_go_eval", "desk_go_eval":
 		return true
 	default:
 		return false
@@ -163,62 +150,6 @@ func validateEngineeringBatchAdmission(calls []types.ToolCall) error {
 	}
 	return nil
 }
-func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]string {
-	profile := ExecutionContextFrom(ctx).Profile
-	if profile == "" || len(calls) == 0 {
-		return nil
-	}
-	skipped := make(map[int]string)
-	setSkip := func(index int, reason string) {
-		if _, exists := skipped[index]; !exists {
-			skipped[index] = reason
-		}
-	}
-
-	if profile == agentprofile.Conductor {
-		firstTexture := -1
-		for i, call := range calls {
-			if call.Name != "spawn_agent" {
-				continue
-			}
-			if toolCallSpawnProfile(call) == agentprofile.Texture {
-				if firstTexture == -1 {
-					firstTexture = i
-				} else {
-					setSkip(i, "tool_notice: conductor already routed this prompt to texture; duplicate texture route skipped")
-				}
-			}
-		}
-		if firstTexture != -1 {
-			for i, call := range calls {
-				if i == firstTexture || call.Name != "spawn_agent" {
-					continue
-				}
-				setSkip(i, "tool_notice: conductor routed this prompt to texture; texture owns downstream researcher/super requests")
-			}
-		}
-	}
-	if len(skipped) == 0 {
-		return nil
-	}
-	return skipped
-}
-
-func toolCallSpawnProfile(call types.ToolCall) string {
-	var in struct {
-		Role    string `json:"role"`
-		Profile string `json:"profile"`
-	}
-	if err := json.Unmarshal(call.Arguments, &in); err != nil {
-		return ""
-	}
-	profile, _ := agentprofile.Canonical(in.Profile)
-	if profile == "" {
-		profile, _ = agentprofile.Canonical(in.Role)
-	}
-	return profile
-}
-
 func capToolOutput(output string) string {
 	const maxToolOutput = 100 * 1024
 	if len(output) <= maxToolOutput {

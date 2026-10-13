@@ -378,27 +378,12 @@ func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchto
 	return registry, nil
 }
 
-// buildRegistryForRole builds the typed registry a non-desk profile's policy
-// grants. Only the conductor's cancel_agent remains (Cut 1 deletes it with
-// spawn_agent); management, Texture and research run on sealed desk-cell
-// registries, and email has none.
-func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy) (*toolregistry.ToolRegistry, error) {
-	registry := toolregistry.MustNewToolRegistry()
-	if spec.AllowCoAgentTools {
-		if err := RegisterCoAgentTools(registry, rt, spec); err != nil {
-			return nil, err
-		}
-	}
-	return registry, nil
-}
-
 // InstallDefaultAgentTools installs role-bound registries. Management, Texture
 // and research get the sealed desk-cell registry (desk_go_eval only). The
-// conductor gets cancel_agent (autoputer adds spawn_agent until Cut 1). Email
-// and Engineering have empty static registries; an exact assigned Engineering
-// run receives a fresh closed capsule-local registry with capsule_go_eval as
-// its sole capsule-effect entry. Reporting, freeze, and verification are
-// in-cell affordances.
+// conductor, email and engineering have empty static registries; an exact
+// assigned Engineering run receives a fresh closed capsule-local registry with
+// capsule_go_eval as its sole capsule-effect entry. Reporting, freeze, and
+// verification are in-cell affordances.
 func (rt *Runtime) InstallDefaultAgentTools() error {
 	engineeringRegistry := toolregistry.MustNewToolRegistry()
 
@@ -442,22 +427,8 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 		deskCellRegistries[deskProfile] = deskReg
 	}
 
-	conductorPolicy, err := agentprofile.PolicyFor(agentprofile.Conductor)
-	if err != nil {
-		return err
-	}
-	conductorRegistry, err := rt.buildRegistryForRole(conductorPolicy)
-	if err != nil {
-		return err
-	}
-	emailPolicy, err := agentprofile.PolicyFor(agentprofile.Email)
-	if err != nil {
-		return err
-	}
-	emailRegistry, err := rt.buildRegistryForRole(emailPolicy)
-	if err != nil {
-		return err
-	}
+	conductorRegistry := toolregistry.MustNewToolRegistry()
+	emailRegistry := toolregistry.MustNewToolRegistry()
 
 	// D5: no fallback registry. A run whose profile has no entry below (the
 	// verifier roles, frozen processor/reconciler records) gets no tools.

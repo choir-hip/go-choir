@@ -20,7 +20,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
-	"github.com/yusefmosiah/go-choir/internal/coagentowner"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
@@ -574,28 +573,6 @@ func Run() {
 	if gatewayURL != "" {
 		rt.Runtime.SetCandidateJudge(candidateJudge{client: gatewayruntime.NewJudgmentClient(gatewayURL, provideriface.GatewayToken())})
 	}
-	for _, profile := range []string{
-		agentprofile.Conductor,
-		agentprofile.Management,
-		agentprofile.Engineering,
-		agentprofile.Research,
-		agentprofile.Texture,
-	} {
-		// Full-RLM desks (management R3c, texture R3d) are sealed to
-		// desk_go_eval: no spawn_agent tool. They open children through
-		// choir.Cast, not a registry tool.
-		if profile == agentprofile.Management || profile == agentprofile.Texture {
-			continue
-		}
-		spawnPolicy, policyErr := agentprofile.PolicyFor(profile)
-		if policyErr != nil {
-			boot.fatalf("autoputer: spawn policy for %s: %v", profile, policyErr)
-		}
-		if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, spawnPolicy); err != nil {
-			boot.fatalf("autoputer: register coagent spawn tool for %s: %v", profile, err)
-		}
-	}
-
 	// Register canonical API routes (overrides default /health).
 	bootMark("runtime_built")
 	runtimeHandler := agentcore.NewAPIHandler(rt.Runtime)

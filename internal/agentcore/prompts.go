@@ -41,9 +41,7 @@ type toolDescriptorResponse struct {
 
 type rolePolicyResponse struct {
 	Profile               string   `json:"profile"`
-	AllowedSpawnTargets   []string `json:"allowed_spawn_targets,omitempty"`
 	AllowedMessageTargets []string `json:"allowed_message_targets,omitempty"`
-	AllowCoAgentTools     bool     `json:"allow_coagent_tools"`
 }
 
 func promptSourceLabel(source string) string {
@@ -60,9 +58,7 @@ func promptSourceLabel(source string) string {
 func rolePolicyFromSpec(spec agentprofile.Policy) rolePolicyResponse {
 	return rolePolicyResponse{
 		Profile:               spec.Profile,
-		AllowedSpawnTargets:   append([]string(nil), spec.AllowedSpawnTargets...),
 		AllowedMessageTargets: append([]string(nil), spec.AllowedMessageTargets...),
-		AllowCoAgentTools:     spec.AllowCoAgentTools,
 	}
 }
 
@@ -129,11 +125,6 @@ func (h *APIHandler) promptResponse(ownerID string, prompt promptstore.Descripto
 	}
 	rolePolicy := rolePolicyFromSpec(promptPolicy)
 	providerPolicy := providerPolicyForRuntime(h.rt.provider)
-	if !rolePolicy.AllowCoAgentTools {
-		providerPolicy.SupportsPerRunModelOverride = false
-		providerPolicy.Notes = append(providerPolicy.Notes,
-			"This role cannot spawn child agents, so it cannot request model overrides through spawn_agent.")
-	}
 	return promptDescriptorResponse{
 		Role:                  prompt.Role,
 		Content:               prompt.Content,

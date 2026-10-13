@@ -23,7 +23,7 @@ func TestDefaultProfileRegistriesExactAuthorityContract(t *testing.T) {
 	}
 
 	expected := map[string][]string{
-		agentprofile.Conductor:   {"cancel_agent"},
+		agentprofile.Conductor:   {},
 		agentprofile.Management:  {"desk_go_eval"},
 		agentprofile.Engineering: {},
 		// Research is cell-only; it has no typed tool registry surface.

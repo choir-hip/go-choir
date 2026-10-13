@@ -255,12 +255,6 @@ func drillAssertAuthzEquivalence(t *testing.T, s *Store, rep *MigrationReport, s
 			}
 			cRest := restored[caller.id]
 			tRest := restored[target.id]
-			spawnRest, spawnRestErr := agentprofile.CanSpawn(cRest[0], tRest[0])
-			spawnOrig, spawnOrigErr := agentprofile.CanSpawn(cOrig[0], tOrig[0])
-			if spawnRest != spawnOrig || (spawnRestErr == nil) != (spawnOrigErr == nil) {
-				t.Fatalf("drill authz: CanSpawn(%q,%q) mismatch after restore (orig %q,%q)",
-					cRest[0], tRest[0], cOrig[0], tOrig[0])
-			}
 			msgRest, msgRestErr := agentprofile.CanMessage(cRest[0], tRest[0])
 			msgOrig, msgOrigErr := agentprofile.CanMessage(cOrig[0], tOrig[0])
 			if msgRest != msgOrig || (msgRestErr == nil) != (msgOrigErr == nil) {

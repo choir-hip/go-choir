@@ -1,5 +1,5 @@
 // Package agentprofile defines canonical agent profile identifiers,
-// normalization, capabilities, and spawn/message policy.
+// normalization, capabilities, and message policy.
 package agentprofile
 
 import (
@@ -16,15 +16,13 @@ const (
 	Email       = "email"
 )
 
-// Policy is the canonical capability, spawn, and message policy for an agent profile.
+// Policy is the canonical capability and message policy for an agent profile.
 type Policy struct {
 	Profile               string
-	AllowCoAgentTools     bool
-	AllowedSpawnTargets   []string
 	AllowedMessageTargets []string
 }
 
-// PolicyFor returns the capability, spawn, and message policy for profile.
+// PolicyFor returns the capability and message policy for profile.
 // It fails closed on unknown profiles: no default policy is synthesized.
 func PolicyFor(profile string) (Policy, error) {
 	canonical, err := Canonical(profile)
@@ -33,27 +31,18 @@ func PolicyFor(profile string) (Policy, error) {
 	}
 	switch canonical {
 	case Conductor:
-		return Policy{
-			Profile:             Conductor,
-			AllowCoAgentTools:   true,
-			AllowedSpawnTargets: []string{Texture},
-		}, nil
+		return Policy{Profile: Conductor}, nil
 	case Research:
 		return Policy{
 			Profile:               Research,
-			AllowCoAgentTools:     true,
-			AllowedSpawnTargets:   nil,
 			AllowedMessageTargets: []string{Texture},
 		}, nil
 	case Texture:
 		// Texture is the artifact control plane, not an evidence gatherer.
 		// Lifecycle target and cancellation authority stays in atomic Texture
-		// controls/reducers; Texture must not receive the generic
-		// model-authored cancel_agent tool.
+		// controls/reducers.
 		return Policy{
 			Profile:               Texture,
-			AllowCoAgentTools:     false,
-			AllowedSpawnTargets:   []string{Research},
 			AllowedMessageTargets: []string{Research, Management},
 		}, nil
 	case "processor", "reconciler":
@@ -69,13 +58,11 @@ func PolicyFor(profile string) (Policy, error) {
 	case Management:
 		return Policy{
 			Profile:               Management,
-			AllowCoAgentTools:     true,
-			AllowedSpawnTargets:   []string{Research},
 			AllowedMessageTargets: []string{Texture, Research},
 		}, nil
 	default:
 		// Canonical but unlisted profiles (the verifier roles) get a bare
-		// policy: every capability flag false, no spawn or message targets.
+		// policy: no message targets.
 		// This is fail-closed by construction — never add a permissive
 		// default here.
 		return Policy{Profile: strings.TrimSpace(profile)}, nil
@@ -130,29 +117,6 @@ func IsLive(profile string) bool {
 	default:
 		return false
 	}
-}
-
-// CanSpawn reports whether callerProfile may spawn targetProfile, failing
-// closed on unknown profiles on either side.
-func CanSpawn(callerProfile, targetProfile string) (bool, error) {
-	policy, err := PolicyFor(callerProfile)
-	if err != nil {
-		return false, err
-	}
-	target, err := Canonical(targetProfile)
-	if err != nil || !IsLive(target) {
-		return false, UnknownProfileError{Input: targetProfile}
-	}
-	for _, allowed := range policy.AllowedSpawnTargets {
-		canonicalAllowed, err := Canonical(allowed)
-		if err != nil {
-			return false, err
-		}
-		if target == canonicalAllowed {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // CanMessage reports whether callerProfile may address targetProfile,

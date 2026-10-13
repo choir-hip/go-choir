@@ -655,46 +655,6 @@ func TestExecuteToolsOutputTruncation(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	executed := []string{}
-	if err := registry.Register(toolregistry.Tool{Name: "spawn_agent",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			var in struct {
-				Role string `json:"role"`
-			}
-			if err := json.Unmarshal(args, &in); err != nil {
-				return "", err
-			}
-			executed = append(executed, in.Role)
-			return in.Role, nil
-		}}); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "conductor-run",
-		OwnerID:      "owner",
-		AgentProfile: agentprofile.Conductor,
-	}))
-	calls := []types.ToolCall{
-		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"research","objective":"research"}`)},
-		{ID: "texture", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"texture","objective":"open document","initial_content":"# Draft"}`)},
-	}
-
-	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-
-	if len(executed) != 1 || executed[0] != agentprofile.Texture {
-		t.Fatalf("executed = %#v, want only texture", executed)
-	}
-	if results[0].IsError || !strings.Contains(results[0].Output, "texture owns downstream") {
-		t.Fatalf("research spawn result = %#v, want non-error skipped downstream worker notice", results[0])
-	}
-	if results[1].IsError || results[1].Output != agentprofile.Texture {
-		t.Fatalf("texture spawn result = %#v, want success", results[1])
-	}
-}
-
 func TestExecuteToolsDoesNotCapResearchSearchBatch(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var searches int32
