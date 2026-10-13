@@ -246,3 +246,43 @@ func TestWorldVerbJSONPrintsAsTextAndListedValuesShowInFull(t *testing.T) {
 		t.Fatalf("a 20,000-character listed value was cut: %d bytes shown", len(out.Stdout))
 	}
 }
+
+// Cluster B (docs/reports/cross-model-cell-errors-2026-10-13.md): the
+// bound-define rewrite turned every `x := e` on a bound x into `x = e`, so
+// a new type failed at compile time ("cannot use type") or at runtime
+// through reflect.Set, which killed the worker. Failure modes pinned: a
+// bound name redefined with a new type fails; the redefinition is not
+// what later cells see; the self-referencing rebind (`y := y * 2`) reads
+// a fresh zero y again.
+func TestBoundNameRedefinedWithNewTypeRuns(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	cell := func(source string) SessionResult {
+		t.Helper()
+		out, err := serveCell(sess, SessionFrame{ID: "cell", Source: source}, nil, &hooks)
+		if err != nil || out.Error != "" || out.Reuse == ReuseUnsafeToReuse {
+			t.Fatalf("cell failed: %v %q reuse=%q\n%s", err, out.Error, out.Reuse, source)
+		}
+		return out
+	}
+	cell("v := []int{1, 2}\nn := 3")
+	if out := cell("v := \"text\"\nfmt.Println(v + \"!\")"); out.Stdout != "text!\n" {
+		t.Fatalf("redefined with a new type: stdout = %q", out.Stdout)
+	}
+	cell("pair := func() (map[string]int, string) { return map[string]int{\"a\": 1}, \"four\" }")
+	if out := cell("v, n := pair()\nfmt.Println(v[\"a\"], n)"); out.Stdout != "1 four\n" {
+		t.Fatalf("two names redefined: stdout = %q", out.Stdout)
+	}
+	if out := cell("fmt.Println(len(v), n)"); out.Stdout != "1 four\n" {
+		t.Fatalf("later cell sees = %q, want the redefinition", out.Stdout)
+	}
+	cell("k := 4")
+	if out := cell("k := k * 2\nfmt.Println(k)"); out.Stdout != "8\n" {
+		t.Fatalf("self-referencing rebind = %q, want 8", out.Stdout)
+	}
+}

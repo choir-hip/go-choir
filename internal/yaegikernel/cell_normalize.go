@@ -216,11 +216,31 @@ func expandOneLineImportLists(src string) string {
 	return strings.Join(lines, "\n")
 }
 
+// readsAny reports whether any of exprs mentions one of names.
+func readsAny(exprs []ast.Expr, names []string) bool {
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
+	found := false
+	for _, e := range exprs {
+		ast.Inspect(e, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok && want[id.Name] {
+				found = true
+			}
+			return !found
+		})
+	}
+	return found
+}
+
 // degradeBoundDefines handles the statement-fragment cell. Top-level
 // compound statements run inside func() { ... }() (see below). A top-level
 // `x := e` whose names are all already bound becomes `x = e`: yaegi's
 // statement mode would otherwise declare a fresh x, so `y := y * 2` reads the
-// new, zero y. The names a fragment's top-level `:=` introduces are recorded
+// new, zero y. Only a right-hand side that reads one of the names is
+// rewritten; any other redefinition stays a fresh declaration, whatever
+// its type. The names a fragment's top-level `:=` introduces are recorded
 // for the next cell. Source that needs no rewrite, or does not parse as
 // statements, passes through verbatim so yaegi's diagnostics and the final
 // expression's value stay authoritative.
@@ -281,7 +301,11 @@ func (s *Session) degradeBoundDefines(src string) string {
 				allBound = false
 			}
 		}
-		if allBound && len(names) > 0 {
+		// Only a right-hand side that reads a bound name needs the rewrite.
+		// Any other redefinition stays a fresh declaration: assigning it
+		// fails "cannot use type", or kills the worker through reflect.Set,
+		// when its type changed (cluster B, cross-model-cell-errors-2026-10-13).
+		if allBound && len(names) > 0 && readsAny(as.Rhs, names) {
 			as.Tok = token.ASSIGN
 			rewrote = true
 		}
