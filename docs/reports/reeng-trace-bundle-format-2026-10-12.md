@@ -51,7 +51,8 @@ Every layer has the same envelope:
 | `cells` | one item per `desk.cell` run event (below) | derived from `run_events` |
 | `egress` | one item per `desk.egress` run event (below) | derived from `run_events` |
 | `deliveries` | the snapshot's `updates` (delivery packets) and `work_items` | derived from `trajectory` |
-| `records` | commitment records | `unserved` in Cut 0 (no route; Cut 1 makes records the work state and adds the read) |
+| `records` | every record of the Texture and research inboxes of the trajectory's documents (Cut 1 L3a: their conversation is on records), each with `inbox`, `inbox_seq`, `sender_inbox`, `conversation_id`, `round`, `final` | `GET /api/inboxes/{inbox}/records?after=&limit=1000` |
+| `inboxes` | one item per inbox read: `{inbox, head, cursor, open_rounds}` (cursor is the inbox's own desk's) | the same route |
 | `turn_commits` | lifecycle events of kind `texture_turn_committed` | derived from `lifecycle_events` |
 | `revisions` | every revision of every Texture document the trajectory touched (head doc, docs named by runs or events) | `GET /api/texture/documents/{id}/revisions` |
 | `publications` | `PublicationBundle` for each published route of those documents | `GET /api/platform/publications/resolve?route=` (`unserved` with a note if no route can be found from the product API) |
@@ -91,6 +92,14 @@ A derived layer takes `unserved` if its parent layer is `unserved`.
 - Any failing route (non-2xx other than the 404s above, or a cursor that
   does not advance) marks its layer `unserved`, with the HTTP status in
   `note`. Items read before the failure stay in the layer.
+
+### Records in I3 (Cut 1 L3a)
+
+A record committed after the boot is a dispatch node caused by its sender's
+run active at that moment (a system closure record is the restart's own
+fate). A run whose `metadata.request_source` is `inbox_record` is caused by
+the newest record of its inbox committed before it; a pre-boot record with
+no owner input since the boot makes it a violation.
 
 ## Run event kinds added in Cut 0
 

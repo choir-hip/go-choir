@@ -46,6 +46,9 @@ type SessionFrame struct {
 	// turn carries only a fixed-format line (sender/kind/seq/snippet), never
 	// the body.
 	Emits []PendingEmit `json:"emits,omitempty"`
+	// Records carries the records addressed to this desk's inbox in
+	// (cursor, head] at cell start, read through choir.Records().
+	Records []InboxRecord `json:"records,omitempty"`
 }
 
 // DocSnapshot is the bound texture document's head a cell authors against:

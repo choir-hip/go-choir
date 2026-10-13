@@ -429,6 +429,19 @@ test('exit code: 3 when no rule passed', () => {
   assert.equal(exitCode([{ rule: 'I1', verdict: 'unknown' }, { rule: 'I2', verdict: 'fail' }]), 1);
 });
 
+test('I3 catches a research run started after the boot by a pre-boot record (Cut 1 records route)', () => {
+  const b = buildCleanBundle();
+  b.layers.records = { status: 'present', sources: ['GET /api/inboxes/{inbox}/records'], note: '', items: [
+    { record_id: 'texture-cell:cast:tray-1', inbox: `research:${DOC}`, sender_inbox: `texture:${DOC}`, provenance: { agent_id: `texture:${DOC}`, committed_at: at(100) } },
+  ] };
+  b.layers.runs.items.push(run('run-research-inbox', `research:${DOC}`, 'research', 141, { state: 'completed', finished_at: at(145), metadata: { request_source: 'inbox_record' } }));
+  const r = checkI3(b);
+  assert.equal(r.verdict, 'fail', r.reason + ' ' + JSON.stringify(r.evidence));
+  const hit = r.evidence.find((e) => e.dispatch === 'run_dispatched' && e.loop_id === 'run-research-inbox');
+  assert.ok(hit, JSON.stringify(r.evidence));
+  assert.ok(hit.causes.some((c) => c.kind === 'record' && c.resolved === 'pre_boot'), JSON.stringify(hit.causes));
+});
+
 test('I3 catches the documented restart recast of an engineering assignment', () => {
   const b = buildCleanBundle();
   const snap = b.layers.trajectory.items[0];

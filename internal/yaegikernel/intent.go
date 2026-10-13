@@ -101,6 +101,26 @@ type IncomingMessage struct {
 	Body         string    `json:"body"`
 }
 
+// InboxRecord is one record addressed to this desk's inbox, shown in the
+// cell frame as the range (cursor, head] the cell reads (Cut 1, records are
+// the only work state). The cell reads them through choir.Records(); the
+// cursor advances only when the cell's acts commit, in the same
+// transaction.
+type InboxRecord struct {
+	Seq            int64                   `json:"seq"`
+	RecordID       string                  `json:"record_id"`
+	Kind           string                  `json:"kind"`
+	From           string                  `json:"from"`
+	ConversationID string                  `json:"conversation_id,omitempty"`
+	Round          int                     `json:"round,omitempty"`
+	Final          bool                    `json:"final,omitempty"`
+	Objective      string                  `json:"objective,omitempty"`
+	Body           string                  `json:"body,omitempty"`
+	Cast           *types.CommitmentCast   `json:"cast,omitempty"`
+	Report         *types.CommitmentReport `json:"report,omitempty"`
+	CreatedAt      time.Time               `json:"created_at"`
+}
+
 // PendingUpdate is one pending update_coagent record bound into the cell at
 // cell-start, readable via choir.Updates(). The RLM contract puts the update
 // payload in a REPL variable instead of inline in the model's context window;

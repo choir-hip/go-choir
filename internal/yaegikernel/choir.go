@@ -63,6 +63,9 @@ type ChoirScope struct {
 	// desk (boundary-drain): read via Emits(). The notice turn carries only
 	// a fixed-format line; the untrusted body lives here.
 	emits []PendingEmit
+	// records is the cell-start snapshot of records addressed to this
+	// desk's inbox in (cursor, head], read via Records().
+	records []InboxRecord
 	// refusals are the errors choir verbs returned during the bound cell,
 	// shown in its result so a refusal is never lost when the cell ends in
 	// a bare call (problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md).
@@ -174,6 +177,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.pack = frame.Pack
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
 			s.emits = append([]PendingEmit(nil), frame.Emits...)
+			s.records = append([]InboxRecord(nil), frame.Records...)
 			s.takeRefusals()
 		},
 		End: func() []StagedIntent {
@@ -187,6 +191,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.pack = nil
 			s.updates = nil
 			s.emits = nil
+			s.records = nil
 			return out
 		},
 		Refusals: s.takeRefusals,
@@ -323,6 +328,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Inbox":    reflect.ValueOf(s.Inbox),
 		"Updates":  reflect.ValueOf(s.Updates),
 		"Emits":    reflect.ValueOf(s.Emits),
+		"Records":  reflect.ValueOf(s.Records),
 		"Pack":     reflect.ValueOf(s.Pack),
 		"Help":     reflect.ValueOf(s.Help),
 	}
@@ -760,6 +766,17 @@ func (s *ChoirScope) Updates() []PendingUpdate {
 		return []PendingUpdate{}
 	}
 	return append([]PendingUpdate(nil), s.updates...)
+}
+
+// Records returns the cell-start snapshot of records addressed to this desk
+// in (cursor, head]: Casts, Asks, Notes and Reports, each with its sequence
+// number, sender inbox, conversation and round. Side-effect-free inside the
+// cell; the cursor moves only when the cell's acts commit.
+func (s *ChoirScope) Records() []InboxRecord {
+	if s == nil {
+		return []InboxRecord{}
+	}
+	return append([]InboxRecord(nil), s.records...)
 }
 
 // Emits returns the cell-start snapshot of emitted signals addressed to this

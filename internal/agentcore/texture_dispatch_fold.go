@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -20,7 +21,12 @@ import (
 //
 // The fold is a pure function of the staged intents, so a replayed cell folds
 // to the same bytes. A cell with no dispatch keeps its body byte-identical.
-func foldTextureDispatch(intents []yaegikernel.StagedIntent) (out, folded []yaegikernel.StagedIntent, err error) {
+//
+// Cut 1 L3a: the research conversation is on records. A dispatch to research
+// becomes an addressed record committed with the turn (inbox_records), and
+// every ApplyTexture body carries the cursor advance over the range the cell
+// read (inbox_cursor). Management stays a control until L3b.
+func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScope, records cellRecords) (out, folded []yaegikernel.StagedIntent, err error) {
 	applyAt := -1
 	applies := 0
 	for i, in := range intents {
@@ -35,10 +41,17 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent) (out, folded []yaeg
 			if raw, ok := probe["controls"]; ok && json.Unmarshal(raw, &authored) == nil && len(authored) > 0 {
 				return nil, nil, fmt.Errorf("reduce: Texture %s: ApplyTexture no longer takes controls; dispatch with choir.Cast or choir.Ask to research or management in the same cell", in.LocalID)
 			}
+			if _, ok := probe["inbox_records"]; ok {
+				return nil, nil, fmt.Errorf("reduce: Texture %s: ApplyTexture does not take inbox_records; dispatch to research with choir.Cast, choir.Ask or choir.Note in the same cell", in.LocalID)
+			}
+			if _, ok := probe["inbox_cursor"]; ok {
+				return nil, nil, fmt.Errorf("reduce: Texture %s: ApplyTexture does not take inbox_cursor; the runtime advances it", in.LocalID)
+			}
 		}
 	}
 
 	var controls []map[string]any
+	var inboxRecords []types.CommitmentRecord
 	managementCasts := 0
 	for _, in := range intents {
 		if in.Kind != yaegikernel.IntentCast && in.Kind != yaegikernel.IntentAsk && in.Kind != yaegikernel.IntentNote {
@@ -49,7 +62,24 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent) (out, folded []yaeg
 		var control map[string]any
 		switch {
 		case desk == agentprofile.Research:
-			control, err = foldResearchDispatch(in)
+			toInbox, onRoute := recordsCounterpartInbox(scope.DeskAgentID, agentprofile.Research)
+			if !onRoute {
+				return nil, nil, fmt.Errorf("reduce: Texture %s: no research inbox for desk %q", in.LocalID, scope.DeskAgentID)
+			}
+			if in.Kind == yaegikernel.IntentNote && strings.TrimSpace(in.Body) == "" {
+				return nil, nil, fmt.Errorf("reduce: Texture %s: a note to research needs a body", in.LocalID)
+			}
+			rec, recErr := inboxRecordForIntent(scope, in, toInbox, false)
+			if recErr != nil {
+				return nil, nil, recErr
+			}
+			// The fold is a pure function of the staged intents: the commit
+			// stamps the record's time.
+			rec.Provenance.CommittedAt = ""
+			rec.Prediction.CommittedAt = ""
+			inboxRecords = append(inboxRecords, rec)
+			folded = append(folded, in)
+			continue
 		case desk == agentprofile.Management && in.Kind == yaegikernel.IntentCast:
 			managementCasts++
 			if managementCasts > 1 {
@@ -67,8 +97,17 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent) (out, folded []yaeg
 		controls = append(controls, control)
 		folded = append(folded, in)
 	}
-	if len(controls) == 0 {
-		return intents, nil, nil
+	cursor := records.cursorAdvance()
+	if len(controls) == 0 && len(inboxRecords) == 0 {
+		if cursor == nil || applyAt < 0 {
+			return intents, nil, nil
+		}
+		// No dispatch, but an apply or decide turn marks its range read.
+		return withFoldedBody(intents, applyAt, func(body map[string]any) {
+			if op, _ := body["op"].(string); op == "apply" || op == "decide" {
+				body["inbox_cursor"] = cursor
+			}
+		})
 	}
 	if applies > 1 {
 		return nil, nil, fmt.Errorf("reduce: a Texture cell that dispatches stages one ApplyTexture, not %d", applies)
@@ -82,7 +121,15 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent) (out, folded []yaeg
 	if op, _ := body["op"].(string); op != "apply" && op != "decide" {
 		return nil, nil, fmt.Errorf("reduce: Texture %s: a dispatch commits with an apply or decide ApplyTexture in the same cell", folded[0].LocalID)
 	}
-	body["controls"] = controls
+	if len(controls) > 0 {
+		body["controls"] = controls
+	}
+	if len(inboxRecords) > 0 {
+		body["inbox_records"] = inboxRecords
+	}
+	if cursor != nil {
+		body["inbox_cursor"] = cursor
+	}
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("reduce: encode folded ApplyTexture body: %w", err)
@@ -146,4 +193,20 @@ func foldPacket(in yaegikernel.StagedIntent, raw string) (map[string]any, error)
 		return nil, fmt.Errorf("reduce: Texture %s: on Texture a Cast's third argument is the packet, which needs a kind (question, evidence_update, execution_request ...) and a summary, not a cast spec", in.LocalID)
 	}
 	return packet, nil
+}
+
+// withFoldedBody rewrites the one staged ApplyTexture body with set applied.
+func withFoldedBody(intents []yaegikernel.StagedIntent, applyAt int, set func(map[string]any)) (out, folded []yaegikernel.StagedIntent, err error) {
+	var body map[string]any
+	if err := json.Unmarshal([]byte(intents[applyAt].Body), &body); err != nil {
+		return nil, nil, fmt.Errorf("reduce: Texture %s: decode ApplyTexture body: %w", intents[applyAt].LocalID, err)
+	}
+	set(body)
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("reduce: encode folded ApplyTexture body: %w", err)
+	}
+	out = append([]yaegikernel.StagedIntent(nil), intents...)
+	out[applyAt].Body = string(raw)
+	return out, nil, nil
 }

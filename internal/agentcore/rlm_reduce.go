@@ -574,7 +574,11 @@ type rlmCallReduction struct {
 	toolCtx   *CapsuleToolCtx
 	inbox     []yaegikernel.IncomingMessage
 	highWater uint64
-	receipt   ReductionReceipt
+	// records is the range of a records desk's inbox this cell reads (Cut 1
+	// L3a); its acts on the records route and the cursor advance commit as
+	// one transaction.
+	records cellRecords
+	receipt ReductionReceipt
 	// fateTerminal is set when a Complete intent committed a terminal
 	// assignment fate; the eval tool surfaces it so the run loop can end.
 	fateTerminal bool
@@ -674,7 +678,14 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 	if role == "" && execCtx.RunRecord != nil {
 		role = agentProfileForRun(execCtx.RunRecord)
 	}
+	var records cellRecords
+	if recordsDesk(role) {
+		if records, err = rt.loadCellRecords(ctx, execCtx.OwnerID, execCtx.ComputerID, deskAgentForCursor(execCtx)); err != nil {
+			return inert
+		}
+	}
 	return &rlmCallReduction{
+		records: records,
 		active:  true,
 		mb:      rt,
 		st:      rt.store,
@@ -817,12 +828,20 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 	if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Texture {
 		var folded []yaegikernel.StagedIntent
 		var err error
-		intents, folded, err = foldTextureDispatch(intents)
+		intents, folded, err = foldTextureDispatch(intents, r.scope, r.records)
 		if err != nil {
 			return err
 		}
 		for _, in := range folded {
 			receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: 0, Kind: in.Kind})
+		}
+	}
+	// Research's conversation with Texture is on records (Cut 1 L3a): its
+	// acts to Texture and its cursor advance commit as one transaction.
+	if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Research && recordsDesk(agentprofile.Research) {
+		var err error
+		if intents, err = r.commitRecordsRoute(ctx, intents, &receipt); err != nil {
+			return err
 		}
 	}
 	for _, in := range intents {

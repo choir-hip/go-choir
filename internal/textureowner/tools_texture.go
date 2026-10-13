@@ -55,19 +55,24 @@ type textureControlArgs struct {
 }
 
 type editTextureArgs struct {
-	DocID                 string                     `json:"doc_id"`
-	BaseRevisionID        string                     `json:"base_revision_id"`
-	Operation             string                     `json:"operation,omitempty"`
-	Content               string                     `json:"content,omitempty"`
-	StructuredEdits       []textureStructuredEdit    `json:"edits,omitempty"`
-	UpdateDispositions    []textureUpdateDisposition `json:"update_dispositions,omitempty"`
-	Controls              []textureControlArgs       `json:"controls,omitempty"`
-	AvailableSources      []texturedoc.SourceEntity  `json:"-"`
-	Rationale             string                     `json:"rationale,omitempty"`
-	WorkDisposition       string                     `json:"work_disposition,omitempty"`
-	SourceTool            string                     `json:"-"`
-	UnusedSourceEntityIDs []string                   `json:"-"`
-	ToolCallID            string                     `json:"-"`
+	DocID              string                     `json:"doc_id"`
+	BaseRevisionID     string                     `json:"base_revision_id"`
+	Operation          string                     `json:"operation,omitempty"`
+	Content            string                     `json:"content,omitempty"`
+	StructuredEdits    []textureStructuredEdit    `json:"edits,omitempty"`
+	UpdateDispositions []textureUpdateDisposition `json:"update_dispositions,omitempty"`
+	Controls           []textureControlArgs       `json:"controls,omitempty"`
+	// InboxRecords and InboxCursor are written by the runtime's dispatch
+	// fold (Cut 1 L3a), never by the model: Texture's records to research
+	// and the cursor advance over the range the cell read.
+	InboxRecords          []types.CommitmentRecord  `json:"inbox_records,omitempty"`
+	InboxCursor           *types.InboxCursorAdvance `json:"inbox_cursor,omitempty"`
+	AvailableSources      []texturedoc.SourceEntity `json:"-"`
+	Rationale             string                    `json:"rationale,omitempty"`
+	WorkDisposition       string                    `json:"work_disposition,omitempty"`
+	SourceTool            string                    `json:"-"`
+	UnusedSourceEntityIDs []string                  `json:"-"`
+	ToolCallID            string                    `json:"-"`
 }
 
 func validateTextureControls(toolName string, controls []textureControlArgs) error {
@@ -128,6 +133,11 @@ type recordTextureDecisionArgs struct {
 	NextAction         string                     `json:"next_action,omitempty"`
 	UpdateDispositions []textureUpdateDisposition `json:"update_dispositions,omitempty"`
 	Controls           []textureControlArgs       `json:"controls,omitempty"`
+	// InboxRecords and InboxCursor are written by the runtime's dispatch
+	// fold (Cut 1 L3a), never by the model: Texture's records to research
+	// and the cursor advance over the range the cell read.
+	InboxRecords []types.CommitmentRecord  `json:"inbox_records,omitempty"`
+	InboxCursor  *types.InboxCursorAdvance `json:"inbox_cursor,omitempty"`
 }
 
 // normalizeTextureDecisionKind maps the desk model's natural spellings onto

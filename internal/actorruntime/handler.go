@@ -112,6 +112,9 @@ var restartWorkKinds = map[string]bool{
 	"fresh_mint_management_resume_deadline": true,
 	// Autopaper's source schedule (W1c): a crash never resumes polling.
 	"source_poll_due": true,
+	// Cut 1 L3a: a record's wake starts a turn; unread records wait for the
+	// next post-boot commit.
+	"inbox_record": true,
 }
 
 func (h *actorHandler) preBootWorkOccurrence(mailboxID string, u actor.Update) bool {
@@ -203,6 +206,8 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleSelfDevelopmentMaterializationRetry(ctx, u, memory)
 	case "source_poll_due":
 		return h.handleSourcePollDue(ctx, u, memory)
+	case "inbox_record":
+		return h.handleInboxRecord(ctx, u, memory)
 	case "lifecycle_work_assigned":
 		return h.handleLifecycleWorkAssigned(ctx, u, memory)
 	case "lifecycle_cancellation":
@@ -391,6 +396,31 @@ func (h *actorHandler) handleOwnerRevision(ctx context.Context, u actor.Update, 
 	}
 	u.Kind, u.Content = "coagent_result", encoded
 	return h.handleCoagentResult(ctx, u, memory)
+}
+
+// handleInboxRecord starts a turn for a records desk whose inbox took a
+// record (Cut 1 L3a, the Texture-research conversation). The wake carries no
+// work: the desk reads its records in (cursor, head] when its turn runs, and
+// an active turn reads them in its next cell.
+func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
+	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
+	if err != nil {
+		return nil, fmt.Errorf("actorruntime: resolve inbox record scope: %w", err)
+	}
+	switch {
+	case strings.HasPrefix(agentID, agentprofile.Texture+":"):
+		if h.textureOwner == nil {
+			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
+		}
+		if _, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, agentprofile.Texture+":")); err != nil {
+			return nil, fmt.Errorf("%w: actorruntime: Texture inbox wake: %v", actor.ErrDeferUnprocessed, err)
+		}
+	case strings.HasPrefix(agentID, agentprofile.Research+":"):
+		if _, err := h.rt.WakeResearchInbox(ctx, ownerID, computerID, agentID); err != nil {
+			return nil, fmt.Errorf("%w: actorruntime: Research inbox wake: %v", actor.ErrDeferUnprocessed, err)
+		}
+	}
+	return nil, nil
 }
 
 // handleChannelMessage resumes a parked recipient against the durable channel

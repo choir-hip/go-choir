@@ -415,7 +415,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				rt.armCellTerminalDeadline(ctx, reduction)
 			}
 			evalStart := time.Now()
-			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits)
+			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits, reduction.records.view)
 			cellEvent := map[string]any{
 				"desk_session": workers.sessionLabel(lease.key), "worker_pid": w.PID(), "run_id": execCtx.RunID,
 				"started_at": evalStart.UTC(), "finished_at": time.Now().UTC(),

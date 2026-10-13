@@ -444,6 +444,14 @@ export function checkI3(bundle) {
   const runByID = new Map(runs.map((r) => [runID(r), r]));
   const packets = Array.isArray(snap.updates) ? snap.updates : [];
   const packetByID = new Map(packets.map((p) => [str(p.update_id), p]));
+  // Cut 1 L3a: the Texture-research conversation is on records. A record is
+  // committed by its sender's run; a run started for an inbox
+  // (request_source inbox_record) is caused by the newest record of that
+  // inbox committed before it.
+  const recL = layer(bundle, 'records');
+  const recordsList = recL.usable ? recL.items : [];
+  const recordByID = new Map(recordsList.map((r) => [str(r.record_id), r]));
+  const recordAt = (r) => ts(r?.provenance?.committed_at);
   const workItems = Array.isArray(snap.work_items) ? snap.work_items : [];
   const workByID = new Map(workItems.map((w) => [str(w.work_item_id), w]));
   const revByID = new Map(revL.items.map((r) => [str(r.revision_id), r]));
@@ -472,6 +480,15 @@ export function checkI3(bundle) {
     if (str(m.current_revision_id)) c.push({ kind: 'revision', id: str(m.current_revision_id) });
     if (str(m.lifecycle_work_item_id)) c.push({ kind: 'work_item', id: str(m.lifecycle_work_item_id) });
     for (const p of deliveredTo(runID(r))) c.push({ kind: 'packet', id: str(p.update_id) });
+    if (str(m.request_source) === 'inbox_record') {
+      const created = ts(r.created_at);
+      let newest = null;
+      for (const rec of recordsList) {
+        if (str(rec.inbox) !== str(r.agent_id) || !(recordAt(rec) <= created)) continue;
+        if (!newest || recordAt(rec) > recordAt(newest)) newest = rec;
+      }
+      if (newest) c.push({ kind: 'record', id: str(newest.record_id) });
+    }
     return c;
   };
 
@@ -552,6 +569,21 @@ export function checkI3(bundle) {
     if (q < B) nodes.push({ kind: 'packet_redelivered', id: u, t: d.t, causes: [{ kind: 'packet_self', id: u }], ev: { update_id: u, queued_at: iso(q), event_id: d.event_id } });
     else nodes.push({ kind: 'packet_delivery_unresolved', id: u, t: d.t, causes: [], ev: { update_id: u, queued_at: Number.isFinite(q) ? iso(q) : null, event_id: d.event_id } });
   }
+  // records committed after the boot: caused by the sender's run active then
+  for (const rec of recordsList) {
+    const t = recordAt(rec);
+    if (!(t >= B)) continue;
+    const sender = str(rec.sender_inbox) || str(rec.provenance?.agent_id);
+    const c = [];
+    if (str(rec.emitter_kind) === 'system') c.push({ kind: 'system_record', id: str(rec.record_id) });
+    for (const r of runs) {
+      if (str(r.agent_id) !== sender || !(ts(r.created_at) <= t)) continue;
+      const end = ts(r.finished_at);
+      if (Number.isFinite(end) && end < t) continue;
+      c.push({ kind: 'run', id: runID(r) });
+    }
+    nodes.push({ kind: 'record_committed', id: str(rec.record_id), t, causes: c, ev: { record_id: str(rec.record_id), inbox: str(rec.inbox), sender: sender, committed_at: rec.provenance?.committed_at } });
+  }
   // e
   for (const w of workItems) {
     const created = ts(w.created_at);
@@ -578,6 +610,7 @@ export function checkI3(bundle) {
   const runStatus = new Map(); // run id -> {status, t}
   const packetStatus = new Map();
   const workStatus = new Map();
+  const recordStatus = new Map();
   for (const n of nodes) {
     const resolved = n.causes.map((c) => resolveCause(c, n.t));
     let st;
@@ -591,6 +624,7 @@ export function checkI3(bundle) {
     if (n.kind === 'run_dispatched' || n.kind === 'run_resumed') runStatus.set(n.id, { status: st, t: n.t });
     if (n.kind === 'packet_created' || n.kind === 'packet_redelivered') packetStatus.set(n.id, { status: st, t: n.t });
     if (n.kind === 'work_opened') workStatus.set(n.id, { status: st, t: n.t });
+    if (n.kind === 'record_committed') recordStatus.set(n.id, { status: st, t: n.t });
   }
 
   function resolveCause(c, t) {
@@ -600,6 +634,16 @@ export function checkI3(bundle) {
         return 'pre_boot';
       case 'assignment_prior':
         return 'pre_boot';
+      case 'system_record':
+        // A closure the boot writes (Cut 1 L3) is the restart's own fate.
+        return 'legit';
+      case 'record': {
+        const s = recordStatus.get(c.id);
+        if (s && s.t <= t) return s.status === 'legit' ? 'legit' : s.status === 'violation' ? 'violation' : 'unrelated';
+        const rec = recordByID.get(c.id);
+        if (rec && recordAt(rec) < B) return 'pre_boot';
+        return 'unresolved';
+      }
       case 'run': {
         if (ownerRunIDs.has(c.id)) return ownerInputTime(c.id) <= t ? 'legit' : 'unrelated';
         const s = runStatus.get(c.id);

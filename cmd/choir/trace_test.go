@@ -156,6 +156,14 @@ func (s *traceStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeStubJSON(w, map[string]any{"route": map[string]any{"route_path": "/wire/story-1"}})
+	case r.URL.Path == "/api/inboxes/texture:doc-1/records":
+		writeStubJSON(w, map[string]any{"inbox": "texture:doc-1", "head": 1, "cursor": 1, "open_rounds": []any{},
+			"records": []any{map[string]any{"record_id": "r-report", "inbox": "texture:doc-1", "inbox_seq": 1, "final": true}}, "next_after": 0})
+	case r.URL.Path == "/api/inboxes/research:doc-1/records":
+		writeStubJSON(w, map[string]any{"inbox": "research:doc-1", "head": 1, "cursor": 1, "open_rounds": []any{},
+			"records": []any{map[string]any{"record_id": "r-cast", "inbox": "research:doc-1", "inbox_seq": 1}}, "next_after": 0})
+	case strings.HasPrefix(r.URL.Path, "/api/inboxes/"):
+		writeStubJSON(w, map[string]any{"head": 0, "cursor": 0, "records": []any{}, "open_rounds": []any{}, "next_after": 0})
 	case r.URL.Path == "/api/runtime/obligations":
 		writeStubJSON(w, map[string]any{"computer_id": "computer-1", "restart": map[string]any{"kind": "crash", "reason": "no marker"}})
 	case r.URL.Path == "/api/runtime/observability":
@@ -235,7 +243,8 @@ func TestTraceExportHealthyBundleLayers(t *testing.T) {
 		"cells":             "present",
 		"egress":            "present",
 		"deliveries":        "present",
-		"records":           "unserved",
+		"records":           "present",
+		"inboxes":           "present",
 		"turn_commits":      "present",
 		"revisions":         "present",
 		"publications":      "present",

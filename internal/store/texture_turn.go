@@ -601,6 +601,50 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 	if err := accumulator.issue(req.Controls); err != nil {
 		return types.LifecycleResult{}, err
 	}
+	var inboxReceipt types.InboxCommitReceipt
+	// A record to research:<doc> addresses the document's research desk; the
+	// first one mints its lifecycle subject, as an opening control did.
+	mintedDesks := map[string]bool{}
+	for _, rec := range req.InboxRecords {
+		inbox := strings.TrimSpace(rec.Inbox)
+		if inbox != agentprofile.Research+":"+req.DocumentID || mintedDesks[inbox] {
+			continue
+		}
+		mintedDesks[inbox] = true
+		deskCanonicalID, idErr := lifecycleCanonicalID(ogKindAgent, ownerID, computerID, inbox)
+		if idErr != nil {
+			return types.LifecycleResult{}, idErr
+		}
+		if _, getErr := s.lifecycleGraph().GetObject(ctx, deskCanonicalID); getErr == nil {
+			continue
+		} else if !errors.Is(getErr, objectgraph.ErrNotFound) {
+			return types.LifecycleResult{}, getErr
+		}
+		desk := types.AgentRecord{
+			AgentID: inbox, OwnerID: ownerID, ComputerID: computerID,
+			Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: req.DocumentID,
+			LifecycleVersion: 1, LastReducerSeq: seq, CreatedAt: now, UpdatedAt: now,
+		}
+		deskMeta := lifecycleMetadata("agent_id", inbox, computerID, req.TrajectoryID, seq)
+		deskMeta["channel_id"] = desk.ChannelID
+		deskObj, objErr := lifecycleObject(ogKindAgent, ownerID, computerID, inbox, desk, deskMeta, now, now)
+		if objErr != nil {
+			return types.LifecycleResult{}, objErr
+		}
+		addCondition(objectgraph.ObjectCondition{CanonicalID: deskObj.CanonicalID})
+		objects = append(objects, deskObj)
+	}
+	if len(req.InboxRecords) > 0 || req.InboxCursor != nil {
+		inboxObjects, inboxConditions, planned, planErr := s.planInboxRecords(ctx, ownerID, computerID, req.InboxRecords, req.InboxCursor, now)
+		if planErr != nil {
+			return types.LifecycleResult{}, planErr
+		}
+		for _, condition := range inboxConditions {
+			addCondition(condition)
+		}
+		objects = append(objects, inboxObjects...)
+		inboxReceipt = planned
+	}
 
 	if trajectory.SubjectRefs == nil {
 		trajectory.SubjectRefs = make(map[string]string)
@@ -636,7 +680,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		Outcome: req.Outcome, PriorHeadRevisionID: req.ExpectedHeadRevisionID, HeadRevisionID: resultDocument.CurrentRevisionID,
 		InboundUpdateIDs: inboundIDs, ControlUpdateIDs: controlIDs, TargetWorkItemIDs: targetWorkIDs,
 		CallerWorkItemID: callerWork.WorkItemID, CallerWorkDisposition: req.CallerWorkDisposition,
-		Reason: req.Reason,
+		Reason: req.Reason, InboxRecords: inboxReceipt.Records, InboxCursor: inboxReceipt.Cursor,
 	}
 	receipt, receiptObj, err := s.lifecycleTransitionReceipt(now, ownerID, computerID, req.TrajectoryID, req.CommandID,
 		req.CommandDigest, types.LifecycleApplyTextureTurn, seq, eventObjs)

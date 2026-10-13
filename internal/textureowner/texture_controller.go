@@ -638,8 +638,15 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 	}
 	breakerReason := fmt.Sprintf("activation_breaker: %d consecutive desk activations terminated without a committed turn", breakerStreak)
 
+	// Records addressed to Texture past its cursor are pressure like a
+	// pending report (Cut 1 L3a); they carry no delivery budget, so the
+	// breaker does not gate them.
+	recordsPending, recordsErr := rt.Core.InboxUnread(ctx, ownerID, doc.ComputerID, textureAgentID)
+	if recordsErr != nil {
+		return nil, fmt.Errorf("load Texture inbox: %w", recordsErr)
+	}
 	initialWorkWake := false
-	if len(armedUpdates) == 0 && !ownerHeadPending {
+	if len(armedUpdates) == 0 && !ownerHeadPending && !recordsPending {
 		for _, work := range snapshot.WorkItems {
 			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID &&
 				!store.IsTextureSupervisionWorkItem(work.WorkItemID) {
@@ -679,7 +686,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 
 	// Nothing armed: repair exhausted bindings and record the breaker trip,
 	// then stop. No dispatch means no new delivery claims.
-	if len(armedUpdates) == 0 && !ownerHeadPending && !initialWorkWake {
+	if len(armedUpdates) == 0 && !ownerHeadPending && !initialWorkWake && !recordsPending {
 		if recErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, "", nil, exhausted, breakerTripped, breakerStreak, breakerNewestRun, breakerReason); recErr != nil {
 			return nil, recErr
 		}
@@ -688,13 +695,13 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 	// Breaker-tripped update-driven pressure: exhaust the packet claims so
 	// poison packets die, emit the durable breaker event, and refuse dispatch.
 	// Owner-head pressure bypasses this gate entirely.
-	if breakerTripped && !ownerHeadPending {
+	if breakerTripped && !ownerHeadPending && !recordsPending {
 		if recErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, "", armedUpdates, exhausted, true, breakerStreak, breakerNewestRun, breakerReason); recErr != nil {
 			return nil, recErr
 		}
 		return nil, nil
 	}
-	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake); err != nil {
+	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake || recordsPending); err != nil {
 		return nil, err
 	} else if reactivated {
 		if bindErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, rec.RunID, armedUpdates, exhausted, false, 0, "", ""); bindErr != nil {

@@ -420,7 +420,17 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	if resultRef == "" {
 		resultRef = strings.TrimSpace(doc.CurrentRevisionID)
 	}
-	inbound, err := textureTurnPendingInbound(snapshot, rec, in.UpdateDispositions, resultRef)
+	// A record needs no disposition (Cut 1 L3a): the turn's cursor advance
+	// marks what it read. A disposition naming a record id is dropped, not
+	// refused.
+	dispositions := make([]textureUpdateDisposition, 0, len(in.UpdateDispositions))
+	for _, d := range in.UpdateDispositions {
+		if isRecord, recErr := h.Store.CommitmentRecordExists(ctx, rec.OwnerID, doc.ComputerID, strings.TrimSpace(d.UpdateID)); recErr == nil && isRecord {
+			continue
+		}
+		dispositions = append(dispositions, d)
+	}
+	inbound, err := textureTurnPendingInbound(snapshot, rec, dispositions, resultRef)
 	if err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -450,6 +460,7 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 		CallerWorkItemID:               callerWorkItemID,
 		CallerWorkDisposition:          callerWorkDisposition,
 		Outcome:                        outcome, Revision: revision, Reason: strings.TrimSpace(reason), Inbound: inbound, Controls: controls,
+		InboxRecords: in.InboxRecords, InboxCursor: in.InboxCursor,
 	}
 	req.CommandDigest, err = store.ComputeApplyTextureTurnWithSourceGraphDigest(req, graph)
 	if err != nil {
@@ -533,7 +544,8 @@ func (h *Handler) commitTextureNonRevisionTurn(ctx context.Context, rec *types.R
 	}
 	editIn := editTextureArgs{
 		DocID: docID, BaseRevisionID: in.BaseRevisionID, UpdateDispositions: in.UpdateDispositions,
-		Controls: in.Controls, WorkDisposition: string(types.WorkItemOpen), ToolCallID: strings.TrimSpace(toolCallID),
+		Controls: in.Controls, InboxRecords: in.InboxRecords, InboxCursor: in.InboxCursor,
+		WorkDisposition: string(types.WorkItemOpen), ToolCallID: strings.TrimSpace(toolCallID),
 	}
 	result, err := h.applyTextureLifecycleTurn(ctx, rec, doc, editIn, textureDecisionTurnOutcome(in.DecisionKind), types.Revision{}, store.TextureSourceGraphWriteSet{}, in.Reason)
 	if err != nil {

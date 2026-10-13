@@ -728,6 +728,7 @@ func (rt *Runtime) Start(ctx context.Context) {
 		bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
 	} else {
 		bootPhase("close_pre_boot_runs_after_crash", func() { rt.closePreBootRunsAfterCrash(ctx) })
+		bootPhase("close_open_rounds_after_crash", func() { rt.closeOpenRoundsAfterCrash(ctx) })
 	}
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	bootPhase("platform_update_resume", func() {
@@ -2998,6 +2999,31 @@ func (rt *Runtime) admitLifecycleResearchProviderEntry(ctx context.Context, rec 
 		strings.TrimSpace(agent.ActiveRunID) != stored.RunID {
 		return deny("Research agent does not own the exact live run")
 	}
+	if metadataStringValue(stored.Metadata, "request_source") == inboxRecordRequestSource {
+		// Records route (Cut 1 L3a): the authority is unread records or an
+		// open round addressed to this desk, not a control fingerprint.
+		unread, unreadErr := rt.inboxUnread(ctx, ownerID, computerID, agentID)
+		if unreadErr != nil {
+			return true, false, "", fmt.Errorf("load Research inbox: %w", unreadErr)
+		}
+		if !unread {
+			rounds, roundsErr := rt.store.OpenRounds(ctx, ownerID, computerID, agentID)
+			if roundsErr != nil {
+				return true, false, "", fmt.Errorf("load Research open rounds: %w", roundsErr)
+			}
+			for _, round := range rounds {
+				if round.RecipientInbox == agentID {
+					unread = true
+					break
+				}
+			}
+		}
+		if !unread {
+			return deny("Research desk has no unread records and no open round addressed to it")
+		}
+		*rec = stored
+		return true, true, "", nil
+	}
 	if metadataStringValue(stored.Metadata, "request_source") != "lifecycle_texture_control" ||
 		metadataStringValue(stored.Metadata, lifecycleLogicalActivationKeyMetadata) == "" ||
 		metadataStringValue(stored.Metadata, lifecycleFailedAttemptKeyMetadata) == "" ||
@@ -3529,6 +3555,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		log.Printf("runtime: completed %s result=%q", wireLifecycleSummary(rec), strings.ReplaceAll(preview, "\n", " "))
 	}
 	rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
+	rt.recheckRecordsInbox(persistCtx, rec)
 }
 
 const runtimeInjectionAppendFailurePassivationReason = "runtime_injection_append_failed"
@@ -3648,6 +3675,7 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 		log.Printf("runtime: passivated idle %s reason=%s", wireLifecycleSummary(rec), reason)
 	}
 	rt.maybeContinuePersistentManagementInbox(context.Background(), rec)
+	rt.recheckRecordsInbox(context.Background(), rec)
 }
 
 func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types.RunRecord) error {
@@ -3761,6 +3789,7 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
+	rt.recheckRecordsInbox(persistCtx, rec)
 
 }
 
@@ -4316,6 +4345,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	log.Printf("runtime: run %s → %s: %v", rec.RunID, state, err)
 	if state.Terminal() {
 		rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
+		rt.recheckRecordsInbox(persistCtx, rec)
 	}
 
 }

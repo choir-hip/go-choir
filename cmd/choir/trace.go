@@ -363,7 +363,6 @@ func (e *traceExporter) export(now time.Time) *traceBundle {
 	bundle.Layers["cells"] = deriveRunEventKind(bundle.Layers["run_events"], "desk.cell")
 	bundle.Layers["egress"] = deriveRunEventKind(bundle.Layers["run_events"], "desk.egress")
 	bundle.Layers["deliveries"] = deriveDeliveries(bundle.Layers["trajectory"])
-	bundle.Layers["records"] = unservedLayer("no product route in Cut 0; Cut 1 makes records the work state and adds the read")
 	bundle.Layers["turn_commits"] = deriveTurnCommits(bundle.Layers["lifecycle_events"])
 
 	// revisions: every Texture document the trajectory touched.
@@ -406,6 +405,7 @@ func (e *traceExporter) export(now time.Time) *traceBundle {
 	}
 	bundle.Layers["revisions"] = revisions.finish()
 
+	bundle.Layers["records"], bundle.Layers["inboxes"] = e.exportInboxRecords(bundle, docIDs)
 	bundle.Layers["publications"] = e.exportPublications(bundle, docIDs)
 	bundle.Layers["search_arrivals"] = unservedLayer("async search arrivals have no product route until Cut 2")
 	bundle.Layers["research_children"] = unservedLayer("choir.Research children run without a run record and emit no events")
@@ -570,6 +570,57 @@ func deriveTurnCommits(parent *traceLayer) *traceLayer {
 // accepted), by lifecycle refs recorded for an accepted publication, and,
 // as a supplement, by Universal Wire stories whose source document is one of
 // the trajectory's documents.
+// exportInboxRecords reads every record of the Texture and research inboxes
+// of the trajectory's documents (Cut 1 L3a: their conversation is on
+// records), and each inbox's head, cursor and open rounds.
+func (e *traceExporter) exportInboxRecords(bundle *traceBundle, docIDs map[string]bool) (*traceLayer, *traceLayer) {
+	records := newLayer("GET /api/inboxes/{inbox}/records?after=&limit=1000")
+	inboxes := newLayer("GET /api/inboxes/{inbox}/records (head, cursor, open_rounds)")
+	if bundle.Layers["revisions"].Status == traceStatusUnserved {
+		records.fail("revisions is unserved, so the documents' inboxes are unknown")
+		inboxes.fail("revisions is unserved, so the documents' inboxes are unknown")
+	}
+	for _, docID := range sortedKeys(docIDs) {
+		for _, inbox := range []string{"texture:" + docID, "research:" + docID} {
+			after := int64(0)
+			for pages := 0; ; pages++ {
+				if pages >= traceMaxPages {
+					records.fail("inbox %s paging exceeded %d pages", inbox, traceMaxPages)
+					break
+				}
+				path := fmt.Sprintf("/api/inboxes/%s/records?after=%d&limit=%d", url.PathEscape(inbox), after, traceEventPageLimit)
+				var page struct {
+					Inbox      string            `json:"inbox"`
+					Head       int64             `json:"head"`
+					Cursor     int64             `json:"cursor"`
+					Records    []json.RawMessage `json:"records"`
+					OpenRounds []json.RawMessage `json:"open_rounds"`
+					NextAfter  int64             `json:"next_after"`
+				}
+				if err := e.get(path, &page); err != nil {
+					records.fail("%s", routeFailure(path, err))
+					inboxes.fail("%s", routeFailure(path, err))
+					break
+				}
+				records.add(page.Records...)
+				if after == 0 {
+					state, _ := json.Marshal(map[string]any{"inbox": inbox, "head": page.Head, "cursor": page.Cursor, "open_rounds": page.OpenRounds})
+					inboxes.add(state)
+				}
+				if page.NextAfter == 0 {
+					break
+				}
+				if page.NextAfter <= after {
+					records.fail("GET %s: cursor did not advance past %d", path, after)
+					break
+				}
+				after = page.NextAfter
+			}
+		}
+	}
+	return records.finish(), inboxes.finish()
+}
+
 func (e *traceExporter) exportPublications(bundle *traceBundle, docIDs map[string]bool) *traceLayer {
 	b := newLayer("GET /api/platform/publications/resolve?route=", "GET /api/universal-wire/stories")
 	routes := map[string]bool{}

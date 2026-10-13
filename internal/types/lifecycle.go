@@ -289,6 +289,11 @@ type ApplyTextureTurnRequest struct {
 	SubjectRefs                    map[string]string               `json:"subject_refs,omitempty"`
 	Inbound                        []TextureTurnInboundDisposition `json:"inbound"`
 	Controls                       []TextureTurnControl            `json:"controls,omitempty"`
+	// InboxRecords are the turn's own addressed records (Texture's Cast,
+	// Ask and Note to research), committed with the turn; InboxCursor
+	// advances Texture's cursor over the range the turn read (Cut 1).
+	InboxRecords []CommitmentRecord  `json:"inbox_records,omitempty"`
+	InboxCursor  *InboxCursorAdvance `json:"inbox_cursor,omitempty"`
 }
 
 // TextureTurnRecord is stored in the lifecycle command receipt. It is the
@@ -298,6 +303,10 @@ type TextureTurnRecord struct {
 	PriorHeadRevisionID   string             `json:"prior_head_revision_id"`
 	HeadRevisionID        string             `json:"head_revision_id"`
 	InboundUpdateIDs      []string           `json:"inbound_update_ids,omitempty"`
+	// InboxRecords and InboxCursor are what the turn's inbox commit
+	// stamped: its own records and the range it read.
+	InboxRecords []InboxRecordReceipt `json:"inbox_records,omitempty"`
+	InboxCursor  *InboxCursorAdvance  `json:"inbox_cursor,omitempty"`
 	ControlUpdateIDs      []string           `json:"control_update_ids,omitempty"`
 	TargetWorkItemIDs     []string           `json:"target_work_item_ids,omitempty"`
 	CallerWorkItemID      string             `json:"caller_work_item_id"`

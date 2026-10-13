@@ -13,10 +13,25 @@ import (
 )
 
 // P2a (docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md): a
-// Texture cell's staged Cast, Ask and Note to research or management fold
-// into the cell's one apply or decide ApplyTexture body as controls, so the
-// dispatch commits with the turn through textureTurnControls and the P1
-// accumulator. Everything else about the cell is unchanged.
+// Texture cell's staged dispatch folds into the cell's one apply or decide
+// ApplyTexture body, so it commits with the turn. Cut 1 L3a: dispatches to
+// research fold as addressed records (inbox_records) with the cursor advance
+// over the range the cell read (inbox_cursor); a management Cast is still a
+// control until L3b. Everything else about the cell is unchanged.
+
+var foldScope = ReductionScope{DeskAgentID: "texture:doc-fold", FromAgentID: "texture:doc-fold", CellID: "cell-fold", ComputerID: "autoputer-test"}
+
+func foldedInbox(t *testing.T, body string) ([]types.CommitmentRecord, *types.InboxCursorAdvance) {
+	t.Helper()
+	var decoded struct {
+		Records []types.CommitmentRecord  `json:"inbox_records"`
+		Cursor  *types.InboxCursorAdvance `json:"inbox_cursor"`
+	}
+	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
+		t.Fatalf("decode folded body: %v\n%s", err, body)
+	}
+	return decoded.Records, decoded.Cursor
+}
 
 func foldApply(local, body string) yaegikernel.StagedIntent {
 	return yaegikernel.StagedIntent{Kind: yaegikernel.IntentTextureApply, LocalID: local, Body: body}
@@ -42,7 +57,8 @@ func TestFoldTextureDispatchCastIntoApply(t *testing.T) {
 		{Kind: yaegikernel.IntentNote, LocalID: "tray-4", ToDesk: agentprofile.Research, Body: "prefer primary sources"},
 		{Kind: yaegikernel.IntentEscalate, LocalID: "tray-5", ToDesk: agentprofile.Management, Body: "stuck"},
 	}
-	out, folded, err := foldTextureDispatch(intents)
+	read := cellRecords{inbox: "texture:doc-fold", after: 2, through: 5}
+	out, folded, err := foldTextureDispatch(intents, foldScope, read)
 	if err != nil {
 		t.Fatalf("fold: %v", err)
 	}
@@ -52,20 +68,29 @@ func TestFoldTextureDispatchCastIntoApply(t *testing.T) {
 	if len(out) != 2 || out[0].Kind != yaegikernel.IntentTextureApply || out[1].Kind != yaegikernel.IntentEscalate {
 		t.Fatalf("remaining intents = %+v, want the apply and the escalate", out)
 	}
-	controls := foldedControls(t, out[0].Body)
-	if len(controls) != 3 {
-		t.Fatalf("controls = %d, want 3: %s", len(controls), out[0].Body)
+	if controls := foldedControls(t, out[0].Body); len(controls) != 0 {
+		t.Fatalf("research dispatch became controls: %s", out[0].Body)
 	}
-	for i, want := range []string{"cast", "ask", "note"} {
-		if controls[i]["open_researcher"] != true || controls[i]["staged_act"] != want {
-			t.Fatalf("control %d = %v, want a research opener with staged_act %q", i, controls[i], want)
+	records, cursor := foldedInbox(t, out[0].Body)
+	if len(records) != 3 {
+		t.Fatalf("records = %d, want 3: %s", len(records), out[0].Body)
+	}
+	for i, rec := range records {
+		if rec.Inbox != "research:doc-fold" || rec.SenderInbox != "texture:doc-fold" || rec.Provenance.CommittedAt != "" {
+			t.Fatalf("record %d = %+v, want texture:doc-fold -> research:doc-fold with the time left to the commit", i, rec)
 		}
 	}
-	if controls[0]["objective"] != "cover chips" {
-		t.Fatalf("cast objective = %v", controls[0]["objective"])
+	if d := records[0].Directive; d == nil || d.Subtype != types.CommitmentDirectiveCast || d.Objective != "cover chips" || records[0].Cast == nil {
+		t.Fatalf("cast record = %+v", records[0])
 	}
-	if pkt, _ := controls[1]["packet"].(map[string]any); pkt["kind"] != "question" || pkt["summary"] != "who funded it?" {
-		t.Fatalf("ask packet = %v", controls[1]["packet"])
+	if records[1].Precommit == nil || records[1].Precommit.Question != "who funded it?" {
+		t.Fatalf("ask record = %+v", records[1])
+	}
+	if d := records[2].Directive; d == nil || d.Subtype != types.CommitmentDirectiveNote || d.Body != "prefer primary sources" {
+		t.Fatalf("note record = %+v", records[2])
+	}
+	if cursor == nil || cursor.Inbox != "texture:doc-fold" || cursor.ExpectedSeq != 2 || cursor.Seq != 5 {
+		t.Fatalf("cursor advance = %+v, want texture:doc-fold 2 -> 5", cursor)
 	}
 	if !strings.Contains(out[0].Body, `"content":"v1"`) || !strings.Contains(out[0].Body, `"base_revision_id":"rev-1"`) {
 		t.Fatalf("the authored edit was not preserved: %s", out[0].Body)
@@ -73,7 +98,7 @@ func TestFoldTextureDispatchCastIntoApply(t *testing.T) {
 
 	// A replayed cell folds to the same bytes, so the revision identity
 	// derived from the body is stable.
-	again, _, err := foldTextureDispatch(intents)
+	again, _, err := foldTextureDispatch(intents, foldScope, read)
 	if err != nil || again[0].Body != out[0].Body {
 		t.Fatalf("fold is not deterministic: %v\n%s\n%s", err, out[0].Body, again[0].Body)
 	}
@@ -84,7 +109,7 @@ func TestFoldTextureDispatchManagementCast(t *testing.T) {
 		foldApply("tray-1", `{"op":"decide","decision_kind":"wait_for_evidence","reason":"r"}`),
 		{Kind: yaegikernel.IntentCast, LocalID: "tray-2", ToDesk: agentprofile.Management, Objective: "build it",
 			Statement: `{"kind":"execution_request","summary":"build","actions":[{"type":"run_tests","objective":"verify the page","safety":{"mutation_class":"yellow","network":"forbidden","file_mutation":"allowed"}}]}`},
-	})
+	}, foldScope, cellRecords{})
 	if err != nil || len(folded) != 1 {
 		t.Fatalf("fold: %v (folded %d)", err, len(folded))
 	}
@@ -97,9 +122,14 @@ func TestFoldTextureDispatchManagementCast(t *testing.T) {
 func TestFoldTextureDispatchLeavesPlainCellsByteIdentical(t *testing.T) {
 	body := `{"content":"v1","op":"apply","base_revision_id":"rev-1"}`
 	intents := []yaegikernel.StagedIntent{foldApply("tray-1", body)}
-	out, folded, err := foldTextureDispatch(intents)
+	out, folded, err := foldTextureDispatch(intents, foldScope, cellRecords{inbox: "texture:doc-fold", after: 3, through: 3})
 	if err != nil || len(folded) != 0 || len(out) != 1 || out[0].Body != body {
 		t.Fatalf("plain cell changed: err=%v folded=%d body=%q", err, len(folded), out[0].Body)
+	}
+	// A turn with nothing to dispatch still marks the records it read.
+	out, _, err = foldTextureDispatch(intents, foldScope, cellRecords{inbox: "texture:doc-fold", after: 3, through: 4})
+	if _, cursor := foldedInbox(t, out[0].Body); err != nil || cursor == nil || cursor.ExpectedSeq != 3 || cursor.Seq != 4 {
+		t.Fatalf("plain turn over unread records: err=%v body=%s", err, out[0].Body)
 	}
 }
 
@@ -107,7 +137,7 @@ func TestFoldTextureDispatchLeavesPlainCellsByteIdentical(t *testing.T) {
 // dispatch and is not refused.
 func TestFoldTextureDispatchAcceptsEmptyControls(t *testing.T) {
 	body := `{"op":"apply","content":"v1","controls":[]}`
-	out, _, err := foldTextureDispatch([]yaegikernel.StagedIntent{foldApply("tray-1", body)})
+	out, _, err := foldTextureDispatch([]yaegikernel.StagedIntent{foldApply("tray-1", body)}, foldScope, cellRecords{})
 	if err != nil || out[0].Body != body {
 		t.Fatalf("empty controls refused or changed: err=%v body=%q", err, out[0].Body)
 	}
@@ -127,17 +157,21 @@ func TestFoldTextureDispatchRefusals(t *testing.T) {
 		{"authored controls", []yaegikernel.StagedIntent{
 			foldApply("tray-1", `{"op":"apply","content":"v1","controls":[{"open_researcher":true}]}`),
 		}, "choir.Cast"},
+		{"authored inbox records", []yaegikernel.StagedIntent{
+			foldApply("tray-1", `{"op":"apply","content":"v1","inbox_records":[]}`),
+		}, "inbox_records"},
+		{"authored inbox cursor", []yaegikernel.StagedIntent{
+			foldApply("tray-1", `{"op":"apply","content":"v1","inbox_cursor":{"seq":9}}`),
+		}, "inbox_cursor"},
 		{"dispatch without a turn", []yaegikernel.StagedIntent{cast(agentprofile.Research)}, "with an apply or decide"},
 		{"two applies", []yaegikernel.StagedIntent{apply, foldApply("tray-2", `{"op":"apply","content":"v2"}`), cast(agentprofile.Research)}, "one ApplyTexture"},
 		{"email turn", []yaegikernel.StagedIntent{foldApply("tray-1", `{"op":"email","email":{}}`), cast(agentprofile.Research)}, "with an apply or decide"},
 		{"other desk", []yaegikernel.StagedIntent{apply, cast(agentprofile.Engineering)}, "research or management"},
 		{"ask management", []yaegikernel.StagedIntent{apply, {Kind: yaegikernel.IntentAsk, LocalID: "tray-3", ToDesk: agentprofile.Management, Question: "q"}}, "choir.Cast"},
-		{"cast spec instead of a packet", []yaegikernel.StagedIntent{apply, {Kind: yaegikernel.IntentCast, LocalID: "tray-4",
-			ToDesk: agentprofile.Research, Objective: "o", Statement: `{"statement":"look into it"}`}}, "not a cast spec"},
 		{"two management casts", []yaegikernel.StagedIntent{apply, cast(agentprofile.Management), cast(agentprofile.Management)}, "one management"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := foldTextureDispatch(tc.intents)
+			_, _, err := foldTextureDispatch(tc.intents, foldScope, cellRecords{})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want containing %q", err, tc.want)
 			}
@@ -154,7 +188,7 @@ func TestDeskGoEvalTextureCastFoldsIntoTheTurn(t *testing.T) {
 	auth := &stubCellAuthorizer{}
 	rt.SetTextureCellAuthorizer(auth)
 	rec := types.RunRecord{
-		RunID: "run-texture-cast", AgentID: "agent-texture", OwnerID: "owner-1", ComputerID: "autoputer-test",
+		RunID: "run-texture-cast", AgentID: "texture:doc-cast", OwnerID: "owner-1", ComputerID: "autoputer-test",
 		ChannelID: "channel-texture", AgentProfile: agentprofile.Texture, AgentRole: agentprofile.Texture, State: types.RunRunning,
 	}
 	if err := s.CreateRun(context.Background(), rec); err != nil {
@@ -178,9 +212,9 @@ choir.Cast("research", "cover chips", map[string]interface{}{"kind":"question","
 	if len(auth.seen) != 1 {
 		t.Fatalf("authorizer calls = %d, want 1; out=%s", len(auth.seen), out)
 	}
-	controls := foldedControls(t, auth.seen[0])
-	if len(controls) != 1 || controls[0]["open_researcher"] != true || controls[0]["staged_act"] != "cast" || controls[0]["objective"] != "cover chips" {
-		t.Fatalf("authorizer body controls = %v\nbody=%s", controls, auth.seen[0])
+	records, _ := foldedInbox(t, auth.seen[0])
+	if len(records) != 1 || records[0].Inbox != "research:doc-cast" || records[0].Directive == nil || records[0].Directive.Objective != "cover chips" {
+		t.Fatalf("authorizer body records = %+v\nbody=%s", records, auth.seen[0])
 	}
 
 	lone := `import "choir"

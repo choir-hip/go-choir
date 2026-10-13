@@ -301,7 +301,7 @@ func TestCommitTrayLifecycleProducerReportMintsRecordNativePacket(t *testing.T) 
 }
 
 // Desk-name ToDesk ("texture", as overlays document it) resolves to the
-// caller trajectory's current Texture agent — the record-native report must
+// document's Texture inbox — the record-native report must
 // not require the cell to spell texture:<doc_id>. (s0m-report-desk-target-resolution)
 func TestCommitTrayLifecycleProducerReportResolvesDeskName(t *testing.T) {
 	rt, s := testRuntime(t)
@@ -357,17 +357,24 @@ func TestCommitTrayLifecycleProducerReportResolvesDeskName(t *testing.T) {
 		t.Fatalf("commitTray desk-name producer report failed: %v", err)
 	}
 
+	// Cut 1 L3a: research's conversation with Texture is on records, so the
+	// report lands in Texture's inbox as a record and queues no packet.
 	pending, err := s.ListAllPendingLifecycleUpdates(ctx, run.OwnerID, run.ComputerID, textureAgentID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pending) != 1 {
-		t.Fatalf("desk-name producer report did not queue: pending=%d", len(pending))
+	if len(pending) != 0 {
+		t.Fatalf("research report queued a packet on the records route: %+v", pending)
 	}
-	if pending[0].Direction != types.LifecyclePacketDirectionProducerReport ||
-		pending[0].SourceRecordID != "cell-desk-report:report:report-1" {
-		t.Fatalf("desk-name report packet malformed: %+v", pending[0])
+	inbox, ok := recordsCounterpartInbox(run.AgentID, "texture")
+	if !ok {
+		t.Fatalf("no Texture inbox for research desk %q", run.AgentID)
 	}
+	recs, err := s.ListInboxRecords(ctx, run.OwnerID, run.ComputerID, inbox, 0, 10)
+	if err != nil || len(recs) != 1 || recs[0].RecordID != "cell-desk-report:report:report-1" || recs[0].SenderInbox != run.AgentID {
+		t.Fatalf("desk-name report record = %+v, %v", recs, err)
+	}
+	_ = textureAgentID
 }
 
 // Ledger-only kinds (resolve, disagreement) mint through CommitLifecycleAct

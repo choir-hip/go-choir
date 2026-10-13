@@ -365,6 +365,11 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 
 	for _, rec := range records {
 		rec.RecordID, rec.Inbox, rec.SenderInbox = strings.TrimSpace(rec.RecordID), strings.TrimSpace(rec.Inbox), strings.TrimSpace(rec.SenderInbox)
+		if strings.TrimSpace(rec.Provenance.CommittedAt) == "" {
+			// A record folded into a replayable body leaves its time to the
+			// commit.
+			rec.Provenance.CommittedAt = now.UTC().Format(time.RFC3339Nano)
+		}
 		if err := validateInboxRecordShape(rec); err != nil {
 			return nil, nil, receipt, err
 		}

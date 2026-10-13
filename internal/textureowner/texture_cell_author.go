@@ -35,6 +35,11 @@ type cellTextureAuthorArgs struct {
 	WorkDisposition    string                     `json:"work_disposition,omitempty"`
 	UpdateDispositions []textureUpdateDisposition `json:"update_dispositions,omitempty"`
 	Controls           []textureControlArgs       `json:"controls,omitempty"`
+	// InboxRecords and InboxCursor are written by the runtime's dispatch
+	// fold (Cut 1 L3a), never by the model: Texture's records to research
+	// and the cursor advance over the range the cell read.
+	InboxRecords []types.CommitmentRecord  `json:"inbox_records,omitempty"`
+	InboxCursor  *types.InboxCursorAdvance `json:"inbox_cursor,omitempty"`
 	// decide fields.
 	DecisionKind string   `json:"decision_kind,omitempty"`
 	Reason       string   `json:"reason,omitempty"`
@@ -147,6 +152,8 @@ func (h *Handler) commitCellTextureApply(ctx context.Context, rec *types.RunReco
 		StructuredEdits:    in.StructuredEdits,
 		UpdateDispositions: in.UpdateDispositions,
 		Controls:           in.Controls,
+		InboxRecords:       in.InboxRecords,
+		InboxCursor:        in.InboxCursor,
 		Rationale:          in.Rationale,
 		WorkDisposition:    strings.TrimSpace(in.WorkDisposition),
 		ToolCallID:         strings.TrimSpace(revisionIdentity),
@@ -174,6 +181,8 @@ func (h *Handler) commitCellTextureDecide(ctx context.Context, rec *types.RunRec
 		NextAction:         strings.TrimSpace(in.NextAction),
 		UpdateDispositions: in.UpdateDispositions,
 		Controls:           in.Controls,
+		InboxRecords:       in.InboxRecords,
+		InboxCursor:        in.InboxCursor,
 	}
 	result, err := h.commitTextureNonRevisionTurn(ctx, rec, dec, revisionIdentity)
 	if err != nil {
