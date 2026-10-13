@@ -36,3 +36,16 @@ error (`errors: 49` with `by_status: {http_201: 49}`).
    guest is told at publish time and does not keep.
 
 Option 1 is the honest instrument and has owner value.
+
+## Resolution (2026-10-13)
+
+Option 1 landed at 29bbab97. `GET /api/platform/texture/publications?doc_id=`
+takes the owner from the caller's credential, and corpusd answers at
+`/internal/platform/publications/owned`. The response also says whether the
+front list shows the publication (`on_front`). The paper scenario passes on
+a publication with `publish_mode` auto whose public route resolves.
+
+It passed on d2324a55 (docs/evidence/free-models-paper-3-2026-10-13.json):
+8 stories published from a test computer, all with `on_front` false, as the
+allowlist intends. The proxy counter that files 201s under errors is still
+open.
