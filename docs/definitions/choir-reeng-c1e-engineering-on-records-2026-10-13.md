@@ -12,10 +12,10 @@ definition_version: 4
 readiness: drafted
 
 review:
-  reviewer: none yet (convergent panel next)
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus convergent round 1 on 79d60be4 (7 of 7 send_back; every blocking finding adopted below, round 2 next)
+  frozen_ref: none (round 2 binds it)
+  verdict: send_back
+  evidence_ref: .agentic-consensus/c1e-station-convergent-r1-2026-10-13/
 
 start:
   captured_at: 2026-10-13T22:00:00Z
@@ -66,30 +66,83 @@ start:
 finish:
   deliver: >-
     Engineering and self-development conversations run on records like
-    the other desks; path B is gone; management verifies an engineering
-    Report against the operation and bundle it names; sub-researchers are
-    runs on records (L5); run acceptance folds from records (L7); packets
-    and work items are deleted from production code, with a CI gate that
-    keeps them at zero.
+    the other desks, with engineering's prompts and generated verb list
+    teaching only its post-C1e exports; path B is gone; management
+    verifies an engineering Report against the operation and bundle it
+    names; sub-researchers are runs on records (L5); run acceptance folds
+    from records (L7); packets and work items are deleted from production
+    code, with a CI gate that keeps them at zero.
   artifact: >-
     a heresy-detector row (enforce: zero) for the cut-1 vocabulary green on
     main; a deployed self-development round trip on records on a minted
     test computer; the paper and crash scenarios passing on the final
     deletion commit
   acceptance:
-    - action: scripts/check-heresies.sh --fail-on-regression with the C1e row (WorkItem|work_item, \bCoagentSourcePacket\b, update_coagent, engineering Assign, choir.Message, choir.Emit, textureSupervision) at zero in production code, excluding tests, vocabmigrate historical decode and .claude/worktrees
-      proves: the deletion holds and cannot regrow
+    - action: >-
+        a docs/heresy-detectors.md row, enforce: zero, in the checker's own
+        syntax: scripts/check-heresies.sh counts literal substrings, not
+        regexes, so the row lists one backticked literal per name —
+        `WorkItem`, `workItem`, `work_item`, `CoagentSourcePacket`,
+        `worker_update`, `update_coagent`, `"Assign"`, `choir.Message`,
+        `choir.Emit`, `textureSupervision`, `RequireNoOpenWorkItems` —
+        with exclude: docs/**, *.md, *_test.go, internal/vocabmigrate/**
+        (historical decode of old tapes),
+        scripts/reeng_invariants.mjs (I7 must name the kinds it asserts are
+        never minted). The live body type CoagentSourcePacketPayload is
+        renamed in its own commit before the row lands, so the literal
+        `CoagentSourcePacket` cannot match it. The row lands in report mode
+        at step 1 (its count is the progress measure) and turns to
+        enforce: zero at step 8, with a planted-hit commit on a branch
+        showing CI fail
+      proves: the deletion holds and cannot regrow, and the gate is not vacuous
       evidence_class: CI
-    - action: a tracer scenario on a minted test computer where management casts engineering on records, engineering returns a Report naming an operation and bundle digest, management Verifies it, and the self-development decision materializes
-      proves: engineering and self-development work on records end to end, with no work item or packet minted (I7 widened to every route)
+    - action: >-
+        engineering's prompts (internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml
+        and its desk overlay) and generated verb list name only its
+        post-step-1 exports, with the reverse parity test
+        (internal/yaegikernel/choir_parity_test.go) extended to engineering
+      proves: engineering is not taught verbs it no longer has
+      evidence_class: CI
+    - action: >-
+        node scripts/reeng_tracer.mjs --scenario engineering --expect-sha
+        <step-4 sha>, a scenario authored in step 4: on a minted test
+        computer, management casts engineering on records, engineering
+        returns a Report naming an operation id and bundle digest,
+        management Verifies it, the self-development decision materializes,
+        and run acceptance for the round-trip trajectory is synthesized
+        from the fold (L7); the checker reports I7 (widened to every route)
+        pass, with no work item or packet minted, and the accepted
+        trajectory and run ids recorded
+      proves: engineering and self-development work on records end to end, and run acceptance reads the fold
       evidence_class: deployed proof
-    - action: the paper scenario (scripts/reeng_tracer.mjs --scenario paper) on the commit that deletes the Autopaper residue (step 7) and again on the final commit
-      proves: Autopaper still opens, writes and publishes stories after the packets and work items it used are gone
+    - action: >-
+        node scripts/reeng_tracer.mjs --scenario research --expect-sha
+        <step-5 sha>: a research cast spawns sub-researchers that appear
+        as runs on records; the all-children barrier in
+        research_children.go is gone; the parent reads its children's
+        Reports from records
+      proves: L5 on the live research path
       evidence_class: deployed proof
-    - action: the crash scenario on the final commit, with I2 and I3 re-expressed on records
+    - action: >-
+        node scripts/reeng_tracer.mjs --scenario paper --expect-sha <sha>
+        after the pushes for steps 2, 5 and 7 and on the final commit
+      proves: Autopaper still opens, writes and publishes stories at every step that touches store/lifecycle.go, research_children.go or the Autopaper residue
+      evidence_class: deployed proof
+    - action: >-
+        the crash scenario on the final commit, with I2 and I3 re-expressed
+        on records before their old inputs are deleted; the expected
+        verdicts are fixed in advance: I3 pass, and I2 reading open rounds
+        on records, where a round open at the crash closes with fate
+        interrupted_by_restart, so I2 passes
       proves: crash closure still holds and the checker still sees it once its old inputs are deleted
       evidence_class: deployed proof
-  rollback: revert per step (each step is its own commit or batch); tag the last-good commit before step 7 and before step 8
+  rollback: >-
+    revert per step (each step is its own commit or batch); tag the
+    last-good commit before step 4, before step 7 and before step 8. Step 8
+    keeps the registry kinds choir.work_item and choir.worker_update
+    decodable (vocabmigrate historical decode) so old tapes still replay
+    and a revert alone restores the prior build on a computer whose tape
+    moved on
   landing:
     required: true
     environment: staging
@@ -117,6 +170,7 @@ homotopy:
 boundaries:
   mutation_class: red
   authority_sources:
+    - docs/re-engineering-decisions-2026-10-12.md (§2, §9, §10, §12; D9 for the Verify binding)
     - docs/definitions/choir-reeng-cut1-authority-2026-10-12.md scope_split (convergent panel 2026-10-13, .agentic-consensus/c1-scope-2026-10-13)
     - docs/definitions/choir-reeng-metamission-2026-10-12.md (C1e station; runs after C2's autopaper_live and L1a)
     - docs/choir-doctrine.md (Texture sole canonical writer; management admits engineering through delegated casts; engineering capsule-bound mutation)
@@ -125,25 +179,30 @@ boundaries:
     - engineering mutates only inside a capsule management admitted
     - a crash boot never resumes or re-drives work (L1a)
     - Autopaper keeps publishing through every step; a step that breaks the paper scenario is reverted, not patched forward
+    - old tapes still replay: historical choir.work_item and choir.worker_update objects stay decodable after step 8
+    - self-development materialization stays refused for engineering-on-records work until management Verify (step 4) lands; steps 1-4 go out in one push
   excluded:
     - the packet body CoagentSourcePacketPayload (the live Report content); rename it only if the gate needs it, as its own commit
     - schedules option B, restart subsystem L1b/L1c work, and the vocabmigrate historical decoders
   protected_surfaces: [run acceptance, self-development materialization, Texture canonical writes, Trace/evidence (the checker), management admission of engineering]
   admissible_evidence: deployed proof on a minted test computer on staging for behavior; CI for the gate; unit and reducer tests shape a step but never prove it
+  known_costs:
+    - the cutover bumps the work-state epoch (cut 1 D7), so the first boot after it is treated as a crash boot; any engineering work item or packet open on a computer then closes with fate interrupted_by_restart instead of carrying over
+    - engineering's records surface reaches a computer only with a capsule image update; step 1 is not proven until acceptance 3 runs on a computer that has it
   heresy_delta:
-    discovered: [engineering refused on records turns since C1-core, path B dual routing, checker invariants bound to the tables being deleted]
+    discovered: [engineering refused on records turns since C1-core, path B dual routing, checker invariants bound to the tables being deleted, a deletion gate that a literal-substring checker cannot express as drafted]
     introduced: []
     repaired: []
 
 now:
   status: blocked
   slice: >-
-    Drafted from the inventory; needs a convergent review before it runs.
-    Steps in the inventory's order: (1) engineering conversation on
-    records, (2) records-authorized assignments, (3) delete path B, (4)
-    management Verify and the self-development round trip, (5) L5 beside
-    the deletions, (6) L7 after path B, (7) Autopaper residue with its own
-    paper runs, (8) store and types, then enforce the gate
+    Drafted from the inventory; convergent round 1 sent it back 7 of 7
+    and every blocking finding is adopted (gate in the checker's literal
+    syntax with a planted-hit proof, the engineering prompt and parity
+    test, acceptance lines for L5 and L7 and a named engineering scenario,
+    paper runs at steps 2, 5 and 7, step 2 narrowed, instruments first as
+    step 0). Round 2 next
   source_ref: 29bbab97
   deploy_identity: staging 18d01cc0
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -154,7 +213,7 @@ now:
       carry for engineering (conversation, round, Report, cursor), so
       moving engineering onto records and deleting path B removes the last
       readers of both tables without a new mechanism.
-    test: step 1 and 2 land with the reducer tests and a deployed round trip, and no step needs a new table or record kind
+    test: steps 1-4 land with the reducer tests and a deployed round trip (acceptance 3), and no step through step 7 needs a new table or record kind
     edge: missing_oracle
     delta_o: the I7 checker widened to every route, reading zero minted work items and packets on a deployed engineering round trip
     scope_if_supported: engineering and self-development on staging
@@ -168,13 +227,13 @@ now:
       matching the live Payload type) is known and avoided with word
       boundaries.
     main_uncertainty: whether management_controller.go's packet activation can be removed in step 7 without a records-side replacement for terminal outcomes reaching management
-    next_observation: what management reads today from a terminal-outcome packet that a records Report does not carry
+    next_observation: what management reads today from a terminal-outcome packet that a records Report does not carry; answered in writing, with records-side delivery, cursor and wake evidence for succeeded, failed and cancelled outcomes, before step 7 starts
   blocker_or_risk: >-
     Not reviewed yet. Riskiest coupling: store/lifecycle.go and
     management_controller.go on the live Autopaper path. Second: deleting
     I2/I3's inputs before re-expressing them on records would blind C1e's
     own acceptance instrument
-  next_action: run a convergent panel on this file; adopt or answer its findings; promote to reviewed; then step 1
+  next_action: convergent round 2 on the repaired file; on accept, promote to reviewed and repoint the metamission's C1e station here; then step 0 (the payload rename and the gate row in report mode), then step 1
 
 receipts: []
 ---
@@ -184,28 +243,42 @@ receipts: []
 The scope is cut 1's `scope_split`; the map is the inventory. This file
 tracks execution.
 
-Order of work (inventory §5):
+Order of work (inventory §5, repaired after convergent round 1):
 
+0. **Instruments first.** Rename `CoagentSourcePacketPayload` (own
+   commit); land the gate row in report mode; widen I7 to every route and
+   re-express I2/I3 on records, so every later step is measured by an
+   instrument that already landed.
 1. **Engineering conversation on records.** Engineering joins
    `recordsDesk` and `recordsRoute` (management to engineering); the
    capsule gets `Records`; engineering loses `Inbox`, `Updates`, `Emits`,
    `Assign`, `Message` and `Emit`; the refusal at
    `inbox_records.go:360` goes; engineering's Report goes to management
-   instead of `buildEngineeringReturnPacket`.
+   instead of `buildEngineeringReturnPacket`; engineering's prompts and
+   verb list teach only what it has, with the reverse parity test
+   (acceptance 2).
 2. **Records-authorized assignments.** Conversation and round authority
-   replace `ParentWorkItemID`/`AssignedWorkItemID`;
-   `RequireNoOpenWorkItems` goes.
+   replace `ParentWorkItemID`/`AssignedWorkItemID`.
+   `RequireNoOpenWorkItems` leaves the engineering seed and
+   `selfdev_texture_join.go` only; its live-path setters
+   (`texture_lifecycle_create.go`, `texture_handoff.go`,
+   `coagent_route.go`, `story_open.go`) and its enforcement die in step 8
+   with the tables. Paper run after this push.
 3. **Delete path B.** Retarget, supervision mint, `selfdev_texture_join.go`,
    recast and judge, Texture exclusions, the handler entry, the path-B
    branch in `run_acceptance.go`.
 4. **Management Verify** bound to the operation id and bundle digest the
    engineering Report names; then the self-development round trip on
-   records (acceptance 2).
-5. **L5**: sub-researchers as runs (independent; beside 1-4).
-6. **L7**: run acceptance on the fold (after 3).
-7. **Autopaper residue**: Texture's work-item fallbacks, `Updates`, the
+   records, with the new `--scenario engineering` (acceptance 3). Steps 1-4
+   ship in one push; materialization stays refused until Verify is in.
+5. **L5**: sub-researchers as runs (acceptance 4), with a paper run after
+   its push: `research_children.go` is on the live research path.
+6. **L7**: run acceptance on the fold (after 3; proven inside acceptance 3).
+7. **Autopaper residue**, gated on the written answer to the main
+   uncertainty: Texture's work-item fallbacks, `Updates`, the
    terminal-outcome packets, spawned work items and the assigned-work
    sweep, actorruntime occurrence wakes, management's packet activation.
-   Own paper runs (acceptance 3).
-8. **Store and types**, the checker re-expressed on records first, then
-   the gate set to `enforce: zero` (acceptance 1 and 4).
+   Own paper runs (acceptance 5).
+8. **Store and types**, keeping historical decode, then the gate turns to
+   `enforce: zero` with a planted-hit proof (acceptance 1) and the crash
+   scenario runs (acceptance 6).
