@@ -1,6 +1,9 @@
 package types
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Commitment records (precommitment records): the durable unit of the
 // commitment ledger. A record is a typed prediction committed before the
@@ -250,6 +253,113 @@ type CommitmentRecord struct {
 	EmitterKind CommitmentEmitterKind `json:"emitter_kind,omitempty"`
 	ComputerID  string                `json:"computer_id,omitempty"`
 	SubjectRefs map[string]string     `json:"subject_refs,omitempty"`
+
+	// Inbox addressing (Cut 1, definitions/choir-reeng-cut1-authority
+	// "Inboxes and sequence"). Inbox is the addressee inbox
+	// ("texture:<doc>", "research:<doc>", "management:<owner>",
+	// "engineering:<doc>") and SenderInbox the inbox the sender reads. The
+	// store stamps InboxSeq (next number in Inbox), ConversationID (from the
+	// unordered inbox pair) and Round (the open round, 0 outside any round)
+	// at commit; a caller leaves them zero, or names the round it answers.
+	Inbox          string `json:"inbox,omitempty"`
+	SenderInbox    string `json:"sender_inbox,omitempty"`
+	InboxSeq       int64  `json:"inbox_seq,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Round          int    `json:"round,omitempty"`
+	// Final marks a Report that closes its round. Only the round's
+	// recipient (or a system closure) may send one.
+	Final bool `json:"final,omitempty"`
+	// Cast and Report are the typed work bodies (decisions §2-§3): a Cast
+	// opens, revises and withdraws hypotheses; a Report tags findings by
+	// hypothesis id and settles or drops them. The schema may still change
+	// until Cut 2's freeze.
+	Cast   *CommitmentCast   `json:"cast,omitempty"`
+	Report *CommitmentReport `json:"report,omitempty"`
+}
+
+// CastHypothesis is one hypothesis a Cast opens. The store assigns ID
+// (H1, H2, ... per conversation); a caller leaves it empty. A general
+// hypothesis (decisions §3.1) names its seed in General and the
+// operational meaning of its key word in Meaning.
+type CastHypothesis struct {
+	ID          string  `json:"id,omitempty"`
+	Statement   string  `json:"statement"`
+	Probability float64 `json:"probability"`
+	Stakes      string  `json:"stakes,omitempty"`
+	Crux        string  `json:"crux,omitempty"`
+	General     string  `json:"general,omitempty"`
+	Meaning     string  `json:"meaning,omitempty"`
+}
+
+// CastUncertainty is an open question with no hypothesis yet, weighted by
+// how much it matters.
+type CastUncertainty struct {
+	Question string `json:"question"`
+	Stakes   string `json:"stakes,omitempty"`
+}
+
+// CastRevision revises an open hypothesis the same sender opened. Empty
+// fields and a nil Probability leave the prior value.
+type CastRevision struct {
+	ID          string   `json:"id"`
+	Statement   string   `json:"statement,omitempty"`
+	Probability *float64 `json:"probability,omitempty"`
+	Stakes      string   `json:"stakes,omitempty"`
+	Crux        string   `json:"crux,omitempty"`
+	Reason      string   `json:"reason,omitempty"`
+}
+
+// CastWithdrawal withdraws an open hypothesis the same sender opened.
+type CastWithdrawal struct {
+	ID     string `json:"id"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// CommitmentCast is the typed body of a cast directive. The objective
+// stays on Directive.Objective.
+type CommitmentCast struct {
+	Hypotheses    []CastHypothesis  `json:"hypotheses,omitempty"`
+	Uncertainties []CastUncertainty `json:"uncertainties,omitempty"`
+	Revisions     []CastRevision    `json:"revisions,omitempty"`
+	Withdrawals   []CastWithdrawal  `json:"withdrawals,omitempty"`
+}
+
+// ReportClaim is one claim a Report makes, with the sources it rests on.
+type ReportClaim struct {
+	Text    string   `json:"text"`
+	Sources []string `json:"sources,omitempty"`
+}
+
+// ReportFinding bears on one or more hypothesis ids, or lies outside every
+// listed hypothesis; exactly one of the two.
+type ReportFinding struct {
+	Text    string   `json:"text"`
+	BearsOn []string `json:"bears_on,omitempty"`
+	Outside bool     `json:"outside,omitempty"`
+}
+
+// HypothesisSettlement settles an open hypothesis with an outcome.
+type HypothesisSettlement struct {
+	ID      string `json:"id"`
+	Outcome string `json:"outcome"`
+}
+
+// HypothesisDrop drops an open hypothesis with a reason.
+type HypothesisDrop struct {
+	ID     string `json:"id"`
+	Reason string `json:"reason"`
+}
+
+// CommitmentReport is the typed Report body that replaces raw packet JSON
+// in Prediction.Hypothesis. Whether it closes its round is the record's
+// Final flag; StopReason says why the recipient stopped and is required on
+// a final Report.
+type CommitmentReport struct {
+	Claims     []ReportClaim          `json:"claims,omitempty"`
+	Findings   []ReportFinding        `json:"findings,omitempty"`
+	Settled    []HypothesisSettlement `json:"settled,omitempty"`
+	Dropped    []HypothesisDrop       `json:"dropped,omitempty"`
+	StopReason string                 `json:"stop_reason,omitempty"`
 }
 
 // CommitmentEmitterKind names who emitted a record. An agent is a desk on a
@@ -263,7 +373,72 @@ const (
 	CommitmentEmitterOwner   CommitmentEmitterKind = "owner"
 	CommitmentEmitterEdition CommitmentEmitterKind = "edition"
 	CommitmentEmitterSource  CommitmentEmitterKind = "source"
+	// CommitmentEmitterSystem is the store or boot speaking for no desk: a
+	// round closure after a crash. System records never wake anyone.
+	CommitmentEmitterSystem CommitmentEmitterKind = "system"
 )
+
+// Round closure reasons and their record-id slugs (D5).
+const (
+	ClosureReasonInterruptedByRestart = "interrupted_by_restart"
+	closureSystemAgentID              = "system:closure"
+)
+
+// IsCast reports whether the record is a cast directive.
+func (rec CommitmentRecord) IsCast() bool {
+	return rec.RecordKind() == CommitmentKindDirective && rec.Directive != nil &&
+		rec.Directive.Subtype == CommitmentDirectiveCast
+}
+
+// RoundClosureRecordID is the deterministic closure id
+// "<conversation_id>:r<round>:<reason-slug>"; interrupted_by_restart
+// slugs to "restart".
+func RoundClosureRecordID(conversationID string, round int, reason string) string {
+	slug := "restart"
+	if reason != ClosureReasonInterruptedByRestart {
+		slug = strings.Map(func(r rune) rune {
+			switch {
+			case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+				return r
+			case r >= 'A' && r <= 'Z':
+				return r + ('a' - 'A')
+			}
+			return '-'
+		}, strings.TrimSpace(reason))
+	}
+	return strings.TrimSpace(conversationID) + ":r" + strconv.Itoa(round) + ":" + slug
+}
+
+// NewRoundClosureRecord builds the system Report that closes an open round:
+// final, sent on behalf of the round's recipient and addressed to its
+// sender (the caster), with the deterministic id above. The store refuses
+// it unless that round is the conversation's open round.
+func NewRoundClosureRecord(casterInbox, recipientInbox string, round int, reason, committedAt string) CommitmentRecord {
+	conversationID := InboxConversationID(casterInbox, recipientInbox)
+	return CommitmentRecord{
+		SchemaID:    CommitmentRecordSchemaV1,
+		RecordID:    RoundClosureRecordID(conversationID, round, reason),
+		Kind:        CommitmentKindReport,
+		Discrepancy: DiscrepancyUnresolved,
+		Provenance:  CommitmentProvenance{AgentID: closureSystemAgentID, CommittedAt: committedAt},
+		Observation: CommitmentObservation{Excerpt: reason, ObservedAt: committedAt},
+		EmitterKind: CommitmentEmitterSystem,
+		Inbox:       strings.TrimSpace(casterInbox), SenderInbox: strings.TrimSpace(recipientInbox),
+		ConversationID: conversationID, Round: round, Final: true,
+		Report: &CommitmentReport{StopReason: reason},
+	}
+}
+
+// InboxConversationID derives the conversation id from the two inboxes.
+// The pair is unordered so a Cast and the Reports answering it share one
+// conversation; who cast a round is on the conversation head.
+func InboxConversationID(a, b string) string {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	if b < a {
+		a, b = b, a
+	}
+	return "conv:" + a + "|" + b
+}
 
 // CommitmentRecordSchemaV1 is the schema version stamped into SchemaID.
 const CommitmentRecordSchemaV1 = "commitment_record.v1"
