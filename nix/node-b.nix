@@ -65,8 +65,7 @@ let
     fi
     exec "${package}/bin/${name}" "$@"
   '';
-  # vmctl-priority.env is mutable by design, but may only tune priority IDs.
-  # Reassert credential authority after EnvironmentFile expansion.
+  # Reassert credential authority in the exec wrapper.
   vmctlExec = pkgs.writeShellScript "go-choir-vmctl-exec" ''
     set -euo pipefail
     export VMCTL_CORPUSD_URL="http://127.0.0.1:8086"
@@ -682,11 +681,10 @@ in
       StateDirectory = "go-choir/vm-state";
       ReadWritePaths = [ "/var/lib/go-choir" "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" ];
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" ];
-      # Optional runtime priority overrides. This is intentionally outside the
-      # repo-tracked Nix closure so operators can add paid/real-user always-on
-      # IDs without a platform rebuild:
-      #   VMCTL_ALWAYS_ON_USER_IDS=<auth user UUID>,<auth user UUID>
-      EnvironmentFile = "-/var/lib/go-choir/vmctl-priority.env";
+      # Computer tiers (paid accounts, platform computers) are not host
+      # configuration: they live in internal/computertiers/computer-tiers.json,
+      # embedded in vmctl and changed by a reviewed commit (owner ruling
+      # 2026-10-13). The old vmctl-priority.env always-on list is retired.
       Environment = [
         "VMCTL_PORT=8083"
         # D-ROUTE and immutable ComputerVersion inputs are tables on the same
@@ -718,8 +716,7 @@ in
         # RTT, health unreachable) and was rolled back per the owner-approved
         # plan (docs/problems/guest-store-history-bloat-and-memory-shape-
         # 2026-10-09.md). Host swap is bounded by the memory budget, not by
-        # guest size. This is the only memory setting: do not override it in
-        # /var/lib/go-choir/vmctl-priority.env.
+        # guest size. This is the only memory setting.
         "VM_INTERACTIVE_CPU_COUNT=4"
         "VM_INTERACTIVE_MEM_MIB=8192"
         "VM_HEALTH_CHECK_INTERVAL=15s"

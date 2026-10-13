@@ -1807,16 +1807,11 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 	epoch := r.nextEpoch()
 
 	own := &VMOwnership{
-		VMID:       vmID,
-		UserID:     userID,
-		DesktopID:  desktopID,
-		ComputerID: stableComputerID(userID, desktopID, ""),
-		Kind:       VMKindInteractive,
-		WarmnessClass: warmnessClassForOwnership(&VMOwnership{
-			UserID:    userID,
-			DesktopID: desktopID,
-			Kind:      VMKindInteractive,
-		}, r.warmnessPolicy),
+		VMID:         vmID,
+		UserID:       userID,
+		DesktopID:    desktopID,
+		ComputerID:   stableComputerID(userID, desktopID, ""),
+		Kind:         VMKindInteractive,
 		ComputerURL:  r.autoputerURLForVM(vmID),
 		State:        VMStateBooting,
 		CreatedAt:    time.Now(),
@@ -3016,49 +3011,45 @@ func (r *OwnershipRegistry) StopIdleVMs(ctx context.Context, guard ComputerVersi
 	return stopped
 }
 
-// WarmAlwaysOnDesktops resumes configured primary computers that already have
-// an ownership record; it never creates ownerships.
-func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard ComputerVersionRouteGuard) int {
+type alwaysOnWarmTarget struct {
+	userID    string
+	desktopID string
+	vmID      string
+}
+
+// alwaysOnWarmTargets lists the stopped or hibernated computers the tiers
+// keep on: a paid account's primary computer, and every platform computer.
+// A held computer, or one the owner stopped to recover, is left alone.
+func (r *OwnershipRegistry) alwaysOnWarmTargets() []alwaysOnWarmTarget {
 	r.mu.RLock()
+	defer r.mu.RUnlock()
 	cfg := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
-	if len(cfg.AlwaysOnUserIDs) == 0 {
-		r.mu.RUnlock()
-		return 0
-	}
-	type warmTarget struct {
-		userID    string
-		desktopID string
-		vmID      string
-	}
-	targets := make([]warmTarget, 0)
+	targets := make([]alwaysOnWarmTarget, 0)
 	for _, own := range r.ownerships {
-		if own == nil {
-			continue
-		}
-		if own.IsHeld() {
-			// A held computer is never warm-resumed by the always-on policy.
-			continue
-		}
-		if own.DesktopID != PrimaryDesktopID {
-			continue
-		}
-		if !cfg.AlwaysOnUserIDs[strings.TrimSpace(own.UserID)] {
-			continue
-		}
-		if own.StoppedBy == "recover_current" {
+		if own == nil || own.IsHeld() || own.StoppedBy == "recover_current" {
 			continue
 		}
 		if own.State != VMStateStopped && own.State != VMStateHibernated {
 			continue
 		}
-		targets = append(targets, warmTarget{
-			userID:    own.UserID,
-			desktopID: own.DesktopID,
-			vmID:      own.VMID,
-		})
+		switch warmnessClassForOwnership(own, cfg) {
+		case WarmnessClassCriticalProtected:
+		case WarmnessClassPremiumAlwaysOn:
+			if own.DesktopID != PrimaryDesktopID {
+				continue
+			}
+		default:
+			continue
+		}
+		targets = append(targets, alwaysOnWarmTarget{userID: own.UserID, desktopID: own.DesktopID, vmID: own.VMID})
 	}
-	r.mu.RUnlock()
+	return targets
+}
 
+// WarmAlwaysOnDesktops resumes the computers the tiers keep on that already
+// have an ownership record; it never creates ownerships.
+func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard ComputerVersionRouteGuard) int {
+	targets := r.alwaysOnWarmTargets()
 	warmed := 0
 	for _, target := range targets {
 		if guard == nil {

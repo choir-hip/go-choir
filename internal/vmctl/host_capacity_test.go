@@ -115,7 +115,7 @@ func TestReconcileNeverReapsProtectedComputer(t *testing.T) {
 	mgr := newProcessControlVMManager()
 	mgr.reattachError = errors.New("guest health check failed")
 	reg, now := hostCapacityRegistry(t, mgr)
-	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{AlwaysOnUserIDs: map[string]bool{"owner": true}})
+	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PaidUserIDs: map[string]bool{"owner": true}})
 	addOwnership(reg, &VMOwnership{VMID: "vm-owner", UserID: "owner", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive,
 		State: VMStateStopped, StoppedBy: "vmctl-restart", ComputerURL: "http://10.0.0.3:8085"})
 	addOwnership(reg, &VMOwnership{VMID: "vm-critical", UserID: "crit", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive,
@@ -212,7 +212,7 @@ func TestHostMemoryAdmissionRefusesNewComputerBelowFloor(t *testing.T) {
 		t.Fatal("refused start left an ownership behind")
 	}
 
-	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{AlwaysOnUserIDs: map[string]bool{"owner": true}})
+	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PaidUserIDs: map[string]bool{"owner": true}})
 	if _, err := reg.ResolveOrAssign("owner"); err != nil {
 		t.Fatalf("premium computer refused under pressure: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestHostMemoryAdmissionRefusesNewComputerBelowFloor(t *testing.T) {
 func TestReconcileAppliesOOMPriorityByClass(t *testing.T) {
 	mgr := newProcessControlVMManager()
 	reg, _ := hostCapacityRegistry(t, mgr)
-	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{AlwaysOnUserIDs: map[string]bool{"owner": true}})
+	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PaidUserIDs: map[string]bool{"owner": true}})
 	addOwnership(reg, &VMOwnership{VMID: "vm-owner", UserID: "owner", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive})
 	addOwnership(reg, &VMOwnership{VMID: "vm-qa", UserID: "qa", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive})
 	mgr.live["vm-owner"] = []int{1}

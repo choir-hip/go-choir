@@ -20,14 +20,19 @@ const (
 	PrimaryKeepaliveModeUnderCapacity = "under-capacity"
 )
 
+// WarmnessPolicyConfig carries the computer tiers (internal/computertiers):
+// paid accounts, whose computers are always on, and platform computers, a
+// tier above every user tier (owner ruling 2026-10-13).
 type WarmnessPolicyConfig struct {
 	PrimaryKeepaliveMode string
-	AlwaysOnUserIDs      map[string]bool
+	PaidUserIDs          map[string]bool
+	PlatformComputerIDs  map[string]bool
 }
 
 type WarmnessPolicyConfigSummary struct {
-	PrimaryKeepaliveMode string `json:"primary_keepalive_mode"`
-	AlwaysOnUserCount    int    `json:"always_on_user_count,omitempty"`
+	PrimaryKeepaliveMode  string `json:"primary_keepalive_mode"`
+	PaidUserCount         int    `json:"paid_user_count,omitempty"`
+	PlatformComputerCount int    `json:"platform_computer_count,omitempty"`
 }
 
 type WarmnessHealthSummary struct {
@@ -47,7 +52,8 @@ type idleOwnershipCandidate struct {
 func DefaultWarmnessPolicyConfig() WarmnessPolicyConfig {
 	return WarmnessPolicyConfig{
 		PrimaryKeepaliveMode: PrimaryKeepaliveModeOff,
-		AlwaysOnUserIDs:      map[string]bool{},
+		PaidUserIDs:          map[string]bool{},
+		PlatformComputerIDs:  map[string]bool{},
 	}
 }
 
@@ -61,43 +67,62 @@ func normalizeWarmnessPolicyConfig(cfg WarmnessPolicyConfig) WarmnessPolicyConfi
 	default:
 		cfg.PrimaryKeepaliveMode = PrimaryKeepaliveModeOff
 	}
-	if cfg.AlwaysOnUserIDs == nil {
-		cfg.AlwaysOnUserIDs = map[string]bool{}
-	}
-	normalized := make(map[string]bool, len(cfg.AlwaysOnUserIDs))
-	for userID, enabled := range cfg.AlwaysOnUserIDs {
-		userID = strings.TrimSpace(userID)
-		if userID != "" && enabled {
-			normalized[userID] = true
+	cfg.PaidUserIDs = normalizedIDSet(cfg.PaidUserIDs)
+	cfg.PlatformComputerIDs = normalizedIDSet(cfg.PlatformComputerIDs)
+	return cfg
+}
+
+func normalizedIDSet(in map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(in))
+	for id, enabled := range in {
+		id = strings.TrimSpace(id)
+		if id != "" && enabled {
+			out[id] = true
 		}
 	}
-	cfg.AlwaysOnUserIDs = normalized
-	return cfg
+	return out
 }
 
 func warmnessPolicySummary(cfg WarmnessPolicyConfig) WarmnessPolicyConfigSummary {
 	cfg = normalizeWarmnessPolicyConfig(cfg)
 	return WarmnessPolicyConfigSummary{
-		PrimaryKeepaliveMode: cfg.PrimaryKeepaliveMode,
-		AlwaysOnUserCount:    len(cfg.AlwaysOnUserIDs),
+		PrimaryKeepaliveMode:  cfg.PrimaryKeepaliveMode,
+		PaidUserCount:         len(cfg.PaidUserIDs),
+		PlatformComputerCount: len(cfg.PlatformComputerIDs),
 	}
 }
 
+// warmnessClassForOwnership derives a computer's class. A platform
+// computer (by computer id, or a computer-level class persisted on the
+// ownership) is critical_protected or public_platform. A paid account's
+// computer is premium_always_on, read live from the tiers so a downgrade
+// takes effect; an account-derived class persisted on an older ownership is
+// ignored. Everything else is primary.
 func warmnessClassForOwnership(own *VMOwnership, cfg WarmnessPolicyConfig) WarmnessClass {
 	if own == nil {
 		return ""
 	}
 	cfg = normalizeWarmnessPolicyConfig(cfg)
-	if cfg.AlwaysOnUserIDs[strings.TrimSpace(own.UserID)] {
+	if cfg.PlatformComputerIDs[strings.TrimSpace(own.ComputerID)] {
+		return WarmnessClassCriticalProtected
+	}
+	if class := computerLevelClass(own.WarmnessClass); class != "" {
+		return class
+	}
+	if cfg.PaidUserIDs[strings.TrimSpace(own.UserID)] {
 		return WarmnessClassPremiumAlwaysOn
 	}
-	if own.WarmnessClass != "" {
-		switch own.WarmnessClass {
-		case WarmnessClassPremiumAlwaysOn, WarmnessClassPrimary, WarmnessClassCriticalProtected, WarmnessClassPublicPlatform:
-			return own.WarmnessClass
-		}
-	}
 	return WarmnessClassPrimary
+}
+
+// computerLevelClass returns class when it belongs to the computer itself
+// (a platform computer), and "" when it would be derived from the account.
+func computerLevelClass(class WarmnessClass) WarmnessClass {
+	switch class {
+	case WarmnessClassCriticalProtected, WarmnessClassPublicPlatform:
+		return class
+	}
+	return ""
 }
 
 func warmnessPriority(class WarmnessClass) int {

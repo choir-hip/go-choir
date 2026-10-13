@@ -29,7 +29,7 @@ func wedgeRegistry(t *testing.T) (*OwnershipRegistry, *processControlVMManager, 
 	mgr := newProcessControlVMManager()
 	mgr.reattachError = errors.New("guest health check failed")
 	reg, now := hostCapacityRegistry(t, mgr)
-	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{AlwaysOnUserIDs: map[string]bool{"owner": true}})
+	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PaidUserIDs: map[string]bool{"owner": true}})
 	refusing := map[string]bool{}
 	reg.guestNetworkProbe = func(url string) bool { return !refusing[url] }
 	return reg, mgr, now, refusing

@@ -970,7 +970,7 @@ func TestOwnershipRegistry_PremiumAlwaysOnIsModeledAndProtected(t *testing.T) {
 	})
 	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{
 		PrimaryKeepaliveMode: PrimaryKeepaliveModeUnderCapacity,
-		AlwaysOnUserIDs:      map[string]bool{"premium-user": true},
+		PaidUserIDs:          map[string]bool{"premium-user": true},
 	})
 	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
 		return HostPressureSample{
@@ -1005,8 +1005,8 @@ func TestOwnershipRegistry_PremiumAlwaysOnIsModeledAndProtected(t *testing.T) {
 	if summary.Policy.PrimaryKeepaliveMode != PrimaryKeepaliveModeUnderCapacity {
 		t.Fatalf("policy mode = %s, want under-capacity", summary.Policy.PrimaryKeepaliveMode)
 	}
-	if summary.Policy.AlwaysOnUserCount != 1 {
-		t.Fatalf("always-on user count = %d, want 1", summary.Policy.AlwaysOnUserCount)
+	if summary.Policy.PaidUserCount != 1 {
+		t.Fatalf("paid user count = %d, want 1", summary.Policy.PaidUserCount)
 	}
 	if summary.ByClass[string(WarmnessClassPremiumAlwaysOn)] != 1 {
 		t.Fatalf("warmness summary = %+v, want one premium class", summary)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -114,9 +115,12 @@ func main() {
 		registry.SetRetentionShadowPruneConfig(cfg)
 		log.Printf("vmctl: retention shadow prune mode=dry-run requested_mode=%s ephemeral_domains=%s ephemeral_user_prefixes=%s max_deletes=%d max_bytes=%d", cfg.Mode, strings.Join(cfg.EphemeralEmailDomains, ","), strings.Join(cfg.EphemeralUserIDPrefixes, ","), cfg.MaxDeletes, cfg.MaxBytes)
 	}
-	warmnessPolicy := warmnessPolicyConfigFromEnv()
+	warmnessPolicy, err := warmnessPolicyConfigFromEnv()
+	if err != nil {
+		log.Fatalf("vmctl: computer tiers: %v", err)
+	}
 	registry.SetWarmnessPolicyConfig(warmnessPolicy)
-	log.Printf("vmctl: warmness policy primary_keepalive_mode=%s always_on_user_count=%d", warmnessPolicy.PrimaryKeepaliveMode, len(warmnessPolicy.AlwaysOnUserIDs))
+	log.Printf("vmctl: warmness policy primary_keepalive_mode=%s paid_user_count=%d platform_computer_count=%d", warmnessPolicy.PrimaryKeepaliveMode, len(warmnessPolicy.PaidUserIDs), len(warmnessPolicy.PlatformComputerIDs))
 
 	// Check if Firecracker is available on this host.
 	// If so, create a VM manager for real Firecracker lifecycle management
@@ -536,17 +540,25 @@ func splitEnvList(raw string) []string {
 	return out
 }
 
-func warmnessPolicyConfigFromEnv() vmctl.WarmnessPolicyConfig {
+// warmnessPolicyConfigFromEnv reads the keepalive mode from the environment
+// and the computer tiers from the embedded tier file
+// (internal/computertiers). The tiers are not configurable on the host: a
+// tier changes by a reviewed commit, and a malformed file fails vmctl's
+// start rather than dropping every computer to the free tier.
+func warmnessPolicyConfigFromEnv() (vmctl.WarmnessPolicyConfig, error) {
 	cfg := vmctl.DefaultWarmnessPolicyConfig()
 	cfg.PrimaryKeepaliveMode = envOr("VMCTL_PRIMARY_KEEPALIVE_MODE", vmctl.PrimaryKeepaliveModeUnderCapacity)
-	cfg.AlwaysOnUserIDs = map[string]bool{}
-	for _, raw := range strings.Split(os.Getenv("VMCTL_ALWAYS_ON_USER_IDS"), ",") {
-		userID := strings.TrimSpace(raw)
-		if userID != "" {
-			cfg.AlwaysOnUserIDs[userID] = true
-		}
+	tiers, err := computertiers.Load()
+	if err != nil {
+		return cfg, err
 	}
-	return cfg
+	for _, id := range tiers.PaidUserIDs() {
+		cfg.PaidUserIDs[id] = true
+	}
+	for _, id := range tiers.PlatformComputerIDs() {
+		cfg.PlatformComputerIDs[id] = true
+	}
+	return cfg, nil
 }
 
 func envBool(key string, fallback bool) bool {

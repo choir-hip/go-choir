@@ -1,0 +1,15 @@
+{
+  "schema": "choir.computer_tiers.v1",
+  "paid_accounts": [
+    {
+      "user_id": "5bd6de97-3b58-408c-bf89-c42c81b083de",
+      "note": "the owner's account, an ordinary paid account (owner ruling 2026-10-13); pre-billing: set by commit"
+    }
+  ],
+  "platform_computers": [
+    {
+      "computer_id": "computer-1355b83bced1613eb048ee28d66688a8",
+      "note": "Autopaper paper computer (docs/reports/reeng-autopaper-paper-computer-2026-10-13.md)"
+    }
+  ]
+}
