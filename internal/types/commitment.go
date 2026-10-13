@@ -317,12 +317,25 @@ type CastWithdrawal struct {
 
 // CommitmentCast is the typed body of a cast directive. The objective
 // stays on Directive.Objective.
+//
+// Captures and Publish are the opening-Cast fields a management Cast to a
+// Texture may carry (Cut 2 pre-flight review, A6'): with Hypotheses they are
+// everything a story is opened with, and they enter the freeze receipt.
+// Captures lists capture ids Texture may cite at once (its frame shows them
+// as the Cast record's sources); Publish is "" or CastPublishAuto, which
+// publishes every committed revision of the document (2b). Texture reads
+// them in its frame and never writes them.
 type CommitmentCast struct {
 	Hypotheses    []CastHypothesis  `json:"hypotheses,omitempty"`
 	Uncertainties []CastUncertainty `json:"uncertainties,omitempty"`
 	Revisions     []CastRevision    `json:"revisions,omitempty"`
 	Withdrawals   []CastWithdrawal  `json:"withdrawals,omitempty"`
+	Captures      []string          `json:"captures,omitempty"`
+	Publish       string            `json:"publish,omitempty"`
 }
+
+// CastPublishAuto is the one publish mode an opening Cast may set.
+const CastPublishAuto = "auto"
 
 // ReportClaim is one claim a Report makes, with the sources it rests on.
 type ReportClaim struct {

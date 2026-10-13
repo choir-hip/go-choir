@@ -212,11 +212,25 @@ func castBodyFromPacket(raw string) (*types.CommitmentCast, error) {
 		Uncertainties []types.CastUncertainty `json:"uncertainties"`
 		Revisions     []types.CastRevision    `json:"revisions"`
 		Withdrawals   []types.CastWithdrawal  `json:"withdrawals"`
+		Captures      []string                `json:"captures"`
+		Publish       string                  `json:"publish"`
 	}
 	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
 		return nil, fmt.Errorf("a Cast's packet is not JSON: %w", err)
 	}
 	cast.Hypotheses, cast.Uncertainties, cast.Revisions, cast.Withdrawals = probe.Hypotheses, probe.Uncertainties, probe.Revisions, probe.Withdrawals
+	// The opening-Cast fields (A6'): capture ids and the publish mode.
+	for _, id := range probe.Captures {
+		if id = strings.TrimSpace(id); id != "" {
+			cast.Captures = append(cast.Captures, id)
+		}
+	}
+	switch publish := strings.TrimSpace(probe.Publish); publish {
+	case "", types.CastPublishAuto:
+		cast.Publish = publish
+	default:
+		return nil, fmt.Errorf("a Cast's publish is %q; the only publish mode is %q", publish, types.CastPublishAuto)
+	}
 	return cast, nil
 }
 

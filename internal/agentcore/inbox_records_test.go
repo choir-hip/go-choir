@@ -368,3 +368,21 @@ func TestRecipientRunEndClosesItsOpenRounds(t *testing.T) {
 		t.Fatalf("a second end closed the closed round again: records=%d woke=%v", len(records), woke)
 	}
 }
+
+// A6' (Cut 2 pre-flight review): a management Cast that opens a story
+// carries hypotheses, capture refs and publish "auto" on the typed Cast
+// body. Ways it could fail: the capture refs stay in the opaque packet where
+// Texture's frame cannot list them; an unknown publish mode slips through
+// and is frozen into the record schema.
+func TestOpeningCastFieldsLiftOntoTheTypedCast(t *testing.T) {
+	cast, err := castBodyFromPacket(`{"kind":"question","summary":"open the story","hypotheses":[{"statement":"the merger closes","probability":0.6}],"captures":["cap-1"," ","cap-2"],"publish":"auto"}`)
+	if err != nil {
+		t.Fatalf("castBodyFromPacket: %v", err)
+	}
+	if len(cast.Hypotheses) != 1 || strings.Join(cast.Captures, ",") != "cap-1,cap-2" || cast.Publish != types.CastPublishAuto {
+		t.Fatalf("cast = %+v", cast)
+	}
+	if _, err := castBodyFromPacket(`{"publish":"weekly"}`); err == nil || !strings.Contains(err.Error(), "auto") {
+		t.Fatalf("unknown publish mode = %v, want a refusal naming auto", err)
+	}
+}
