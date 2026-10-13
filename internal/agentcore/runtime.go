@@ -3292,24 +3292,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 		return
 	}
 
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		cause := events.CauseProviderProgress
-		if kind == types.EventToolInvoked || kind == types.EventToolResult {
-			cause = events.CauseToolExecution
-		}
-		if runHasProfile(rec, agentprofile.Texture) && kind == types.EventRunProgress {
-			if docID := metadataStringValue(rec.Metadata, "doc_id"); docID != "" {
-				progressPayload, _ := json.Marshal(map[string]string{
-					"doc_id":  docID,
-					"loop_id": rec.RunID,
-					"phase":   phase,
-				})
-				rt.emitEvent(ctx, rec, types.EventTextureAgentRevisionProgress,
-					events.CauseProviderProgress, progressPayload)
-			}
-		}
-		rt.emitEvent(ctx, rec, kind, cause, payload)
-	}
+	emit := rt.runEventEmitter(ctx, rec)
 
 	registry := rt.toolRegistryForRun(rec)
 	overlayProfile := agentProfileForRun(rec)
@@ -3330,6 +3313,56 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	} else {
 		rt.executeWithProvider(ctx, rec, emit)
 	}
+}
+
+// runEventEmitter returns the emit function a run's provider loop reports
+// progress through. The store keeps the payload, not EventRecord.Phase, so a
+// progress event's phase ("tool_loop", "tool_loop_budget_usage", ...) is
+// written into its payload unless the payload names one already; cost
+// extraction and the trace export read it there.
+func (rt *Runtime) runEventEmitter(ctx context.Context, rec *types.RunRecord) provideriface.EventEmitFunc {
+	return func(kind types.EventKind, phase string, payload json.RawMessage) {
+		cause := events.CauseProviderProgress
+		if kind == types.EventToolInvoked || kind == types.EventToolResult {
+			cause = events.CauseToolExecution
+		}
+		if kind == types.EventRunProgress {
+			payload = payloadWithPhase(payload, phase)
+		}
+		if runHasProfile(rec, agentprofile.Texture) && kind == types.EventRunProgress {
+			if docID := metadataStringValue(rec.Metadata, "doc_id"); docID != "" {
+				progressPayload, _ := json.Marshal(map[string]string{
+					"doc_id":  docID,
+					"loop_id": rec.RunID,
+					"phase":   phase,
+				})
+				rt.emitEvent(ctx, rec, types.EventTextureAgentRevisionProgress,
+					events.CauseProviderProgress, progressPayload)
+			}
+		}
+		rt.emitEvent(ctx, rec, kind, cause, payload)
+	}
+}
+
+// payloadWithPhase adds "phase" to a JSON object payload that lacks one.
+// Any other payload is returned unchanged.
+func payloadWithPhase(payload json.RawMessage, phase string) json.RawMessage {
+	if strings.TrimSpace(phase) == "" {
+		return payload
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &obj); err != nil || obj == nil {
+		return payload
+	}
+	if _, ok := obj["phase"]; ok {
+		return payload
+	}
+	obj["phase"], _ = json.Marshal(phase)
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return payload
+	}
+	return out
 }
 
 // executeWithToolLoop runs the run through the real tool-calling loop.
