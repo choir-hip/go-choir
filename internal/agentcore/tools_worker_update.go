@@ -171,7 +171,7 @@ func enforceCoagentUpdateAuthorityWithStore(ctx context.Context, rt *Runtime, au
 	}
 	if !canMessage {
 		if targetProfile == agentprofile.Email {
-			return fmt.Errorf("update_coagent %s cannot message %s; route owner intent through Texture's choir.ApplyTexture email op", callerProfile, targetProfile)
+			return fmt.Errorf("update_coagent %s cannot message %s; an Email draft is not reachable from update_coagent", callerProfile, targetProfile)
 		}
 		return fmt.Errorf("update_coagent %s cannot message %s", callerProfile, targetProfile)
 	}

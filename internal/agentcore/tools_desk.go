@@ -18,7 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -420,12 +419,12 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			defer workers.done(lease.key)
 			w := lease.worker
 			reduction := rlmReductionForDeskCall(ctx, rt)
-			// R3d: a texture cell reads its bound document's head via
-			// choir.ReadDoc(); inject the cell-start snapshot on the same
-			// frame as the inbox so authoring is a genuine turn, not blind.
+			// A Texture cell works against its frame (Cut 2 2a): the
+			// revision the frame showed, its blocks by alias for Write, and
+			// the frame's record sources for {{cite}} handles.
 			var docSnapshot *yaegikernel.DocSnapshot
 			if deskRole == agentprofile.Texture && execCtx.RunRecord != nil {
-				docSnapshot = textureDocSnapshotForRun(ctx, rt, execCtx.RunRecord)
+				docSnapshot = textureDocSnapshotForRun(ctx, rt, execCtx.RunRecord, reduction.records)
 			}
 			// R4: the acting desk's commitment pack rides the same frame —
 			// score-free by construction (types.ActingPack), so the
@@ -517,53 +516,6 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			out, _ := json.Marshal(cell)
 			return string(out), nil
 		},
-	}
-}
-
-// textureDocSnapshotForRun loads the bound texture document's head for a
-// texture desk cell (R3d) — the current revision id + content injected as the
-// cell-start ReadDoc snapshot. The doc id resolves the same way the authoring
-// commit does (run metadata doc_id, else the texture channel). Returns nil
-// when the run is not doc-bound or the doc cannot be read; the cell still
-// sees the doc on its prompt in that case.
-func textureDocSnapshotForRun(ctx context.Context, rt *Runtime, rec *types.RunRecord) *yaegikernel.DocSnapshot {
-	if rt == nil || rt.store == nil || rec == nil {
-		return nil
-	}
-	docID := strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id"))
-	if docID == "" {
-		docID = strings.TrimSpace(rec.ChannelID)
-	}
-	if docID == "" {
-		return nil
-	}
-	ownerID := strings.TrimSpace(rec.OwnerID)
-	computerID := strings.TrimSpace(rec.ComputerID)
-	var doc types.Document
-	var err error
-	if subject, subErr := rt.store.GetAgentByScope(ctx, ownerID, computerID, rec.AgentID); subErr == nil && subject.LifecycleVersion > 0 {
-		doc, err = rt.store.GetLifecycleDocument(ctx, ownerID, computerID, docID)
-	} else {
-		doc, err = rt.store.GetDocument(ctx, docID, ownerID)
-	}
-	if err != nil || strings.TrimSpace(doc.CurrentRevisionID) == "" {
-		return nil
-	}
-	var rev types.Revision
-	if strings.TrimSpace(doc.TrajectoryID) != "" {
-		rev, err = rt.store.GetLifecycleRevision(ctx, ownerID, computerID, doc.CurrentRevisionID)
-	} else {
-		rev, err = rt.store.GetRevision(ctx, doc.CurrentRevisionID, ownerID)
-	}
-	if err != nil {
-		return nil
-	}
-	return &yaegikernel.DocSnapshot{
-		DocID:      docID,
-		RevisionID: rev.RevisionID,
-		AuthorKind: string(rev.AuthorKind),
-		Content:    rev.Content,
-		Outline:    texturedoc.Outline(rev.BodyDoc, 0, 0),
 	}
 }
 
@@ -859,7 +811,8 @@ func (rt *Runtime) newestEmissionSeqTo(ctx context.Context, execCtx toolregistry
 }
 
 // textureActivationCells is what one Texture activation's completed cells
-// staged: a texture_apply (the activation authored a turn) or any other act.
+// staged: a turn (a texture_turn, or a Cast, Ask or Note, which commits as
+// a Wait) or any other act.
 type textureActivationCells struct {
 	applied bool
 	staged  bool
@@ -878,9 +831,10 @@ func (rt *Runtime) noteTextureCell(runID string, intents []yaegikernel.StagedInt
 	}
 	cells := rt.textureCells[runID]
 	for _, in := range intents {
-		if in.Kind == yaegikernel.IntentTextureApply {
+		switch {
+		case in.Kind == yaegikernel.IntentTextureTurn, in.Kind == yaegikernel.IntentCast, in.Kind == yaegikernel.IntentAsk, in.Kind == yaegikernel.IntentNote:
 			cells.applied = true
-		} else if strings.TrimSpace(in.Kind) != "" {
+		case strings.TrimSpace(in.Kind) != "":
 			cells.staged = true
 		}
 	}
@@ -946,19 +900,11 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 	if doc.CurrentRevisionID == "" {
 		return nil
 	}
-	decisionKind := "no_worker_needed"
 	reason := "desk activation completed with no authoring act; consuming the owner revision"
 	if cells.staged {
-		decisionKind = "delegation_skipped"
 		reason = "desk activation committed an act off the texture doc (no revision needed); consuming the owner revision"
 	}
-	body, err := json.Marshal(map[string]any{
-		"op":               "decide",
-		"doc_id":           docID,
-		"base_revision_id": doc.CurrentRevisionID,
-		"decision_kind":    decisionKind,
-		"reason":           reason,
-	})
+	body, err := json.Marshal(yaegikernel.TextureTurn{BaseRevisionID: doc.CurrentRevisionID, Idle: reason})
 	if err != nil {
 		return err
 	}

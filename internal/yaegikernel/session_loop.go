@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -51,17 +52,17 @@ type SessionFrame struct {
 	Records []InboxRecord `json:"records,omitempty"`
 }
 
-// DocSnapshot is the bound texture document's head a cell authors against:
-// the current revision id (the base_revision_id a staged ApplyTexture must
-// cite) and its full content.
+// DocSnapshot is the bound Texture document as the cell's frame showed it:
+// the revision a Write applies to, its text, and its top-level blocks by
+// alias (b1..bN) in the Write grammar. Sources are the frame's record
+// sources by handle (r2.c1), the handles a {{cite}} may name.
 type DocSnapshot struct {
-	DocID      string `json:"doc_id"`
-	RevisionID string `json:"revision_id"`
-	AuthorKind string `json:"author_kind,omitempty"`
-	Content    string `json:"content"`
-	// Outline lists the head's blocks and nodes, one per line, with the ids
-	// ApplyTexture edits address (block_id, after_block_id, node_id).
-	Outline string `json:"outline,omitempty"`
+	DocID      string                `json:"doc_id"`
+	RevisionID string                `json:"revision_id"`
+	AuthorKind string                `json:"author_kind,omitempty"`
+	Content    string                `json:"content"`
+	Blocks     []texturewrite.Block  `json:"blocks,omitempty"`
+	Sources    []texturewrite.Source `json:"sources,omitempty"`
 }
 
 // SessionResult is one newline-delimited JSON response. Value-carrying cells

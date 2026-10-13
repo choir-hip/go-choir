@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 func runtimeTestTextureBodyDoc(t *testing.T, docID, revisionID, content string) json.RawMessage {
 	t.Helper()
-	doc := plainStructuredTextureToolDoc(docID, revisionID, content)
+	doc := texturewrite.PlainDoc(docID, revisionID, content)
 	bodyDoc, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatalf("marshal test body_doc: %v", err)

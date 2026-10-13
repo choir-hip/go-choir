@@ -1,59 +1,46 @@
 package textureowner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/strictjson"
-	"github.com/yusefmosiah/go-choir/internal/types"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
+	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// texture_cell_author.go — the full-RLM texture authoring commit path (R3d).
-// The texture desk's cell stages a texture intent via choir.ApplyTexture /
-// the texture op verbs; the desk-cell reducer calls CommitCellTextureAuthor
-// (the agentcore.TextureCellAuthorizer seam) with the run record and the
-// staged body. This dispatches on op and commits through the SAME atomic
-// ApplyTextureTurn / lifecycle commit the retired typed tools used — the
-// genuine authoring turn, not a projection and not a parallel write path.
-
-// cellTextureAuthorArgs is the staged texture act body the cell authors. op
-// selects the turn: "apply" authors a revision (the patch_texture/rewrite
-// successor), "decide" records a non-revision decision turn
-// (record_texture_decision successor), "email" requests an Email appagent
-// draft handoff (request_email_draft successor).
-type cellTextureAuthorArgs struct {
-	Op             string `json:"op"`
-	DocID          string `json:"doc_id,omitempty"`
-	BaseRevisionID string `json:"base_revision_id,omitempty"`
-	// apply fields — one of content (full replace) or edits (structured).
-	Operation          string                     `json:"operation,omitempty"`
-	Content            string                     `json:"content,omitempty"`
-	StructuredEdits    []textureStructuredEdit    `json:"edits,omitempty"`
-	Rationale          string                     `json:"rationale,omitempty"`
-	WorkDisposition    string                     `json:"work_disposition,omitempty"`
-	UpdateDispositions []textureUpdateDisposition `json:"update_dispositions,omitempty"`
-	Controls           []textureControlArgs       `json:"controls,omitempty"`
-	// InboxRecords and InboxCursor are written by the runtime's dispatch
-	// fold (Cut 1 L3a), never by the model: Texture's records to research
-	// and the cursor advance over the range the cell read.
-	InboxRecords []types.CommitmentRecord  `json:"inbox_records,omitempty"`
-	InboxCursor  *types.InboxCursorAdvance `json:"inbox_cursor,omitempty"`
-	// decide fields.
-	DecisionKind string   `json:"decision_kind,omitempty"`
-	Reason       string   `json:"reason,omitempty"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
-	NextAction   string   `json:"next_action,omitempty"`
-	// email fields — forwarded verbatim to the Email appagent handoff.
-	Email json.RawMessage `json:"email,omitempty"`
-}
+// texture_cell_author.go — a Texture cell's turn (Cut 2 2a). The cell builds
+// one yaegikernel.TextureTurn with choir.Write, Done, Wait and Reject; the
+// reducer folds its dispatch in and calls CommitCellTextureAuthor (the
+// agentcore.TextureCellAuthorizer seam), which commits it through the atomic
+// ApplyTextureTurn transaction:
+//
+//   - Write: the script materializes against the revision the cell's frame
+//     showed (internal/texturewrite) and commits as the next revision; with
+//     Done in the same cell it completes the caller's work.
+//   - Done alone completes the work at the current revision.
+//   - Wait commits a wait turn; Reject and the runtime's Idle commit a turn
+//     with no semantic change. Rejects name records (the reason is the
+//     turn's) or leftover update packets (rejected dispositions).
+//
+// Texture stays the sole writer of canonical revisions: nothing else here
+// mints one.
 
 // CommitCellTextureAuthor implements agentcore.TextureCellAuthorizer. bodyJSON
-// is the staged texture act; revisionIdentity is the deterministic per-cell
-// idempotency identity the reducer derives (it substitutes for the retired
-// provider tool_call_id so a replayed cell replays the same commit).
-// Returns a JSON receipt describing the commit.
+// is the folded turn; revisionIdentity is the deterministic per-cell
+// idempotency identity the reducer derives, so a replayed cell replays the
+// same commit. Returns a JSON receipt describing the commit.
 func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRecord, bodyJSON string, revisionIdentity string) (string, error) {
 	if h == nil || h.Store == nil {
 		return "", fmt.Errorf("texture cell author: runtime store unavailable")
@@ -68,31 +55,13 @@ func (h *Handler) CommitCellTextureAuthor(ctx context.Context, rec *types.RunRec
 	if receipt, ok := h.cellAuthorReceipt(ctx, rec, revisionIdentity); ok {
 		return receipt, nil
 	}
-	var in cellTextureAuthorArgs
+	var turn yaegikernel.TextureTurn
 	dec := json.NewDecoder(strings.NewReader(bodyJSON))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		// Name where an unknown field sits: the list below is the top
-		// level's, and a field valid there but misplaced in a nested object
-		// read as a contradiction (Texture lost five cells to it,
-		// desk-cell-ergonomics-from-demo-traces-2026-10-10, T2).
-		if why := strictjson.Explain([]byte(bodyJSON), &cellTextureAuthorArgs{}); why != "" {
-			err = fmt.Errorf("%s", why)
-		}
-		return "", fmt.Errorf("texture cell author: decode staged body: %w. Valid top-level fields: op, doc_id, base_revision_id, operation, content, edits, rationale, work_disposition, update_dispositions, decision_kind, reason, evidence_refs, next_action, email. Dispatch to research or management with choir.Cast, choir.Ask or choir.Note in the same cell, not in this body. A Cast packet's fields: kind, summary, claims, sources, actions, questions, notes — schema_version is assigned by the runtime; do not send \"type\" or \"schema_version\". Valid packet kind values: evidence_update, execution_request, execution_result, blocker, question, proposal, decision_request", err)
+	if err := dec.Decode(&turn); err != nil {
+		return "", fmt.Errorf("texture cell author: decode turn: %w", err)
 	}
-	var receipt string
-	var err error
-	switch strings.TrimSpace(in.Op) {
-	case "apply":
-		receipt, err = h.commitCellTextureApply(ctx, rec, in, revisionIdentity)
-	case "decide":
-		receipt, err = h.commitCellTextureDecide(ctx, rec, in, revisionIdentity)
-	case "email":
-		receipt, err = h.commitCellTextureEmail(ctx, rec, in, revisionIdentity)
-	default:
-		return "", fmt.Errorf("texture cell author: unknown op %q (want apply|decide|email)", in.Op)
-	}
+	receipt, err := h.commitTextureTurn(ctx, rec, turn, strings.TrimSpace(revisionIdentity))
 	if err != nil {
 		return "", err
 	}
@@ -140,79 +109,262 @@ func (h *Handler) recordCellAuthorReceipt(ctx context.Context, rec *types.RunRec
 	})
 }
 
-// commitCellTextureApply authors a doc revision: structured edits or a full
-// content replace committed as an AuthorAppAgent revision through
-// applyTextureLifecycleTurn — the genuine authoring turn.
-func (h *Handler) commitCellTextureApply(ctx context.Context, rec *types.RunRecord, in cellTextureAuthorArgs, revisionIdentity string) (string, error) {
-	edit := editTextureArgs{
-		DocID:              strings.TrimSpace(in.DocID),
-		BaseRevisionID:     strings.TrimSpace(in.BaseRevisionID),
-		Operation:          strings.TrimSpace(in.Operation),
-		Content:            in.Content,
-		StructuredEdits:    in.StructuredEdits,
-		UpdateDispositions: in.UpdateDispositions,
-		Controls:           in.Controls,
-		InboxRecords:       in.InboxRecords,
-		InboxCursor:        in.InboxCursor,
-		Rationale:          in.Rationale,
-		WorkDisposition:    strings.TrimSpace(in.WorkDisposition),
-		ToolCallID:         strings.TrimSpace(revisionIdentity),
+// textureTurnReason is the committed reason of a turn: why it was written,
+// done or waited, and every rejection.
+func textureTurnReason(turn yaegikernel.TextureTurn) string {
+	var parts []string
+	if turn.Write != nil {
+		parts = append(parts, strings.TrimSpace(turn.Write.Why))
 	}
-	rev, err := h.commitTextureToolEdit(ctx, rec, edit)
-	if err != nil {
-		return "", err
+	if turn.Done != "" {
+		parts = append(parts, "done: "+strings.TrimSpace(turn.Done))
 	}
-	out, _ := json.Marshal(map[string]any{
-		"op": "apply", "doc_id": rev.DocID, "revision_id": rev.RevisionID,
-		"base_revision_id": rev.ParentRevisionID, "trajectory_id": rev.TrajectoryID,
-	})
-	return string(out), nil
+	if turn.Wait != "" {
+		parts = append(parts, "waiting: "+strings.TrimSpace(turn.Wait))
+	}
+	for _, r := range turn.Rejects {
+		parts = append(parts, "rejected "+firstNonEmpty(r.RecordID, r.UpdateID)+": "+strings.TrimSpace(r.Why))
+	}
+	if turn.Idle != "" {
+		parts = append(parts, strings.TrimSpace(turn.Idle))
+	}
+	return strings.Join(parts, "; ")
 }
 
-// commitCellTextureDecide records a non-revision decision turn
-// (record_texture_decision successor) through the same atomic lifecycle turn.
-func (h *Handler) commitCellTextureDecide(ctx context.Context, rec *types.RunRecord, in cellTextureAuthorArgs, revisionIdentity string) (string, error) {
-	dec := recordTextureDecisionArgs{
-		DocID:              strings.TrimSpace(in.DocID),
-		BaseRevisionID:     strings.TrimSpace(in.BaseRevisionID),
-		DecisionKind:       normalizeTextureDecisionKind(in.DecisionKind),
-		Reason:             strings.TrimSpace(in.Reason),
-		EvidenceRefs:       in.EvidenceRefs,
-		NextAction:         strings.TrimSpace(in.NextAction),
-		UpdateDispositions: in.UpdateDispositions,
-		Controls:           in.Controls,
-		InboxRecords:       in.InboxRecords,
-		InboxCursor:        in.InboxCursor,
+// textureCaptures is the capture store a Write cites from.
+func (h *Handler) textureCaptures() texturewrite.CaptureSource {
+	if h == nil || h.Core == nil {
+		return nil
 	}
-	result, err := h.commitTextureNonRevisionTurn(ctx, rec, dec, revisionIdentity)
-	if err != nil {
-		return "", err
-	}
-	out, _ := json.Marshal(map[string]any{
-		"op": "decide", "doc_id": strings.TrimSpace(in.DocID), "decision_kind": dec.DecisionKind,
-		"outcome": result.TextureTurn.Outcome, "head_revision_id": result.TextureTurn.HeadRevisionID,
-		"command_id": result.Receipt.CommandID, "replay": result.Replay,
-	})
-	return string(out), nil
+	return h.Core.TextureCaptures()
 }
 
-// commitCellTextureEmail forwards an Email appagent draft handoff
-// (request_email_draft successor).
-func (h *Handler) commitCellTextureEmail(ctx context.Context, rec *types.RunRecord, in cellTextureAuthorArgs, revisionIdentity string) (string, error) {
-	if h.Core == nil {
-		return "", fmt.Errorf("texture cell author: core runtime unavailable")
+func (h *Handler) commitTextureTurn(ctx context.Context, rec *types.RunRecord, turn yaegikernel.TextureTurn, identity string) (string, error) {
+	h.textureEditMu.Lock()
+	defer h.textureEditMu.Unlock()
+	if turn.Write == nil && turn.Done == "" && turn.Wait == "" && len(turn.Rejects) == 0 && turn.Idle == "" {
+		return "", fmt.Errorf("texture cell author: the turn has no Write, Done, Wait or Reject")
 	}
-	var draft agentcore.TextureEmailDraftRequest
-	if len(in.Email) == 0 {
-		return "", fmt.Errorf("texture cell author: email op requires an email body")
+	if turn.Write != nil && turn.Wait != "" {
+		return "", fmt.Errorf("texture cell author: a turn either Writes or Waits")
 	}
-	if err := json.Unmarshal(in.Email, &draft); err != nil {
-		return "", fmt.Errorf("texture cell author: decode email body: %w", err)
-	}
-	result, err := h.Core.RecordTextureEmailDraftRequest(ctx, rec, draft)
+	computerID := strings.TrimSpace(rec.ComputerID)
+	mutation, err := h.Store.GetAgentMutationByRun(ctx, rec.OwnerID, agentMutationComputerID(rec), rec.RunID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("get texture mutation: %w", err)
 	}
-	out, _ := json.Marshal(map[string]any{"op": "email", "result": result})
+	if mutation == nil {
+		return "", fmt.Errorf("texture mutation not found for run %s", rec.RunID)
+	}
+	if mutation.State != "pending" {
+		return "", fmt.Errorf("texture mutation is %s, not pending: this Texture actor run is no longer writable", mutation.State)
+	}
+	docID := strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID, mutation.DocID))
+	if docID == "" {
+		return "", fmt.Errorf("doc_id must not be empty")
+	}
+	if rec.ChannelID != "" && rec.ChannelID != docID {
+		return "", fmt.Errorf("doc_id %q does not match texture channel %q", docID, rec.ChannelID)
+	}
+	if mutation.DocID != docID || mutation.OwnerID != rec.OwnerID {
+		return "", fmt.Errorf("texture mutation does not match the turn's document")
+	}
+	subject, subjectErr := h.Store.GetAgentByScope(ctx, rec.OwnerID, computerID, rec.AgentID)
+	durableLifecycle := subjectErr == nil && subject.LifecycleVersion > 0
+	if metadataStringValue(rec.Metadata, "lifecycle_work_item_id") != "" && !durableLifecycle {
+		return "", fmt.Errorf("get scoped lifecycle Texture subject: %w", subjectErr)
+	}
+	var doc types.Document
+	if durableLifecycle {
+		doc, err = h.Store.GetLifecycleDocument(ctx, rec.OwnerID, computerID, docID)
+	} else {
+		doc, err = h.Store.GetDocument(ctx, docID, rec.OwnerID)
+	}
+	if err != nil {
+		return "", fmt.Errorf("get texture document: %w", err)
+	}
+	head := strings.TrimSpace(doc.CurrentRevisionID)
+	if head == "" {
+		return "", fmt.Errorf("document has no current revision")
+	}
+	base := strings.TrimSpace(turn.BaseRevisionID)
+	if base == "" {
+		base = head
+	}
+	if base != head {
+		return "", fmt.Errorf("the document changed since your frame (your frame showed revision %s; the head is now %s). Nothing was committed; your next frame shows the new head, so write against it", base, head)
+	}
+	args := textureTurnArgs{InboxRecords: turn.InboxRecords, InboxCursor: turn.InboxCursor, WorkDisposition: types.WorkItemOpen, ToolCallID: identity}
+	if turn.Done != "" {
+		args.WorkDisposition = types.WorkItemCompleted
+	}
+	for _, r := range turn.Rejects {
+		if r.UpdateID != "" {
+			args.UpdateDispositions = append(args.UpdateDispositions, textureUpdateDisposition{UpdateID: r.UpdateID, Disposition: string(types.UpdateRejected), Reason: r.Why})
+		}
+	}
+	reason := textureTurnReason(turn)
+	if !durableLifecycle && (turn.Write == nil || len(args.InboxRecords) > 0 || args.InboxCursor != nil || len(args.UpdateDispositions) > 0) {
+		return "", fmt.Errorf("Texture turns without a revision, dispatch and rejections need a lifecycle Texture document")
+	}
+	if turn.Write == nil {
+		outcome := types.TextureTurnNoSemanticChange
+		if turn.Wait != "" {
+			outcome = types.TextureTurnWait
+		}
+		if doc.TrajectoryID == "" || rec.AgentID != currentTextureAgentID(docID) {
+			return "", fmt.Errorf("texture turn requires the exact lifecycle Texture caller")
+		}
+		result, err := h.applyTextureLifecycleTurn(ctx, rec, doc, args, outcome, types.Revision{}, store.TextureSourceGraphWriteSet{}, reason)
+		if err != nil {
+			return "", fmt.Errorf("apply atomic Texture turn: %w", err)
+		}
+		out, _ := json.Marshal(map[string]any{
+			"turn": string(result.TextureTurn.Outcome), "doc_id": docID, "head_revision_id": result.TextureTurn.HeadRevisionID,
+			"command_id": result.Receipt.CommandID, "replay": result.Replay, "done": turn.Done != "",
+		})
+		return string(out), nil
+	}
+	return h.commitTextureWrite(ctx, rec, doc, mutation, turn, args, reason, durableLifecycle)
+}
+
+// commitTextureWrite materializes a Write against the head and commits it.
+func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, doc types.Document, mutation *store.AgentMutation, turn yaegikernel.TextureTurn, args textureTurnArgs, reason string, durableLifecycle bool) (string, error) {
+	computerID := strings.TrimSpace(rec.ComputerID)
+	var baseRev types.Revision
+	var err error
+	if durableLifecycle {
+		baseRev, err = h.Store.GetLifecycleRevision(ctx, rec.OwnerID, computerID, doc.CurrentRevisionID)
+	} else {
+		baseRev, err = h.Store.GetRevision(ctx, doc.CurrentRevisionID, rec.OwnerID)
+	}
+	if err != nil {
+		return "", fmt.Errorf("get base revision: %w", err)
+	}
+	baseDoc, baseEntities, err := texturewrite.Base(baseRev)
+	if err != nil {
+		return "", fmt.Errorf("read base revision: %w", err)
+	}
+	result, err := texturewrite.Apply(ctx, texturewrite.Input{
+		OwnerID: rec.OwnerID, DocID: doc.DocID, Seed: baseRev.RevisionID,
+		Base: baseDoc, Entities: baseEntities, Script: turn.Write.Edits,
+		Handles: turn.Handles, Resolver: h.textureCaptures(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("choir.Write refused, nothing committed: %w", err)
+	}
+	projection, err := texturedoc.Project(result.Doc, result.Entities)
+	if err != nil {
+		return "", fmt.Errorf("choir.Write refused, nothing committed: the result is not a valid document: %w", err)
+	}
+	bodyDoc, err := json.Marshal(result.Doc)
+	if err != nil {
+		return "", fmt.Errorf("encode Texture body: %w", err)
+	}
+	entities, err := json.Marshal(result.Entities)
+	if err != nil {
+		return "", fmt.Errorf("encode Texture source entities: %w", err)
+	}
+	if prior, _ := json.Marshal(baseDoc); bytes.Equal(prior, bodyDoc) {
+		return "", fmt.Errorf("choir.Write refused, nothing committed: the Write changes nothing; use choir.Wait or choir.Done to close a turn without a revision")
+	}
+	content := strings.TrimSpace(projection.Text)
+	if content == "" {
+		return "", fmt.Errorf("choir.Write refused, nothing committed: the document would have no text")
+	}
+	if strings.TrimSpace(doc.TrajectoryID) == "" {
+		if err := h.canonicalizeAliasedTextureDocumentTitle(ctx, rec.OwnerID, &doc, time.Now().UTC()); err != nil {
+			return "", fmt.Errorf("canonicalize texture document title: %w", err)
+		}
+	}
+	meta := decodeRevisionMetadata(h.buildAppagentRevisionMetadata(ctx, rec, doc, rec.OwnerID, mutation, 0))
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	meta["texture_write_why"] = strings.TrimSpace(turn.Write.Why)
+	meta["texture_write_directives"] = result.Ops
+	meta["texture_write_base_revision_id"] = baseRev.RevisionID
+	if len(result.Dropped) > 0 {
+		meta[texturewrite.DroppedMetadataKey] = result.Dropped
+	}
+	if strings.TrimSpace(doc.TrajectoryID) == "" {
+		canonicalPath, err := h.ensureCanonicalTextureProjectionPath(ctx, rec.OwnerID, doc)
+		if err != nil {
+			return "", fmt.Errorf("ensure canonical texture projection path: %w", err)
+		}
+		if canonicalPath != "" {
+			meta[canonicalTextureSourcePathMetadataKey] = canonicalPath
+		}
+	}
+	rawMeta, _ := json.Marshal(meta)
+	now := time.Now().UTC()
+	rev := types.Revision{
+		RevisionID:       uuid.NewString(),
+		DocID:            doc.DocID,
+		OwnerID:          rec.OwnerID,
+		AuthorKind:       types.AuthorAppAgent,
+		AuthorLabel:      "appagent",
+		Content:          content,
+		BodyDoc:          bodyDoc,
+		SourceEntities:   entities,
+		Citations:        json.RawMessage("[]"),
+		Metadata:         sanitizeTextureToolRevisionMetadata(rawMeta),
+		Provenance:       buildStructuredAppagentRevisionProvenance(rec, entities, now),
+		ParentRevisionID: baseRev.RevisionID,
+		CreatedAt:        now,
+	}
+	graph, err := textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: bodyDoc, SourceEntities: entities}, rec)
+	if err != nil {
+		return "", fmt.Errorf("build Texture source graph: %w", err)
+	}
+	if strings.TrimSpace(doc.TrajectoryID) != "" {
+		// A turn on records has no work item (Cut 1); the caller agent and
+		// run authorize it, and the store checks a named work item.
+		if agentID := strings.TrimSpace(rec.AgentID); agentID == "" || agentID != currentTextureAgentID(doc.DocID) {
+			return "", fmt.Errorf("create Texture revision: run agent %q does not own lifecycle subject %q", agentID, currentTextureAgentID(doc.DocID))
+		}
+		rev.RevisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{
+			"choir:texture:lifecycle-revision", doc.TrajectoryID, baseRev.RevisionID, objectgraph.SHA256(bodyDoc),
+		}, ":"))).String()
+		rev.ComputerID = strings.TrimSpace(doc.ComputerID)
+		if graph, err = textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: bodyDoc, SourceEntities: entities}, rec); err != nil {
+			return "", fmt.Errorf("build Texture source graph: %w", err)
+		}
+		applied, applyErr := h.applyTextureLifecycleTurn(ctx, rec, doc, args, types.TextureTurnRevision, rev, graph, reason)
+		if applyErr != nil {
+			if errors.Is(applyErr, store.ErrConcurrentStateChange) || errors.Is(applyErr, store.ErrStaleDocumentHead) {
+				// A late owner edit invalidates this attempt only: the run and
+				// its mutation stay alive and the next frame shows the head.
+				return "", fmt.Errorf("the document or its owner instructions changed while this turn committed; nothing was committed, and your next frame shows the new head: %w", applyErr)
+			}
+			return "", fmt.Errorf("apply atomic Texture turn: %w", applyErr)
+		}
+		h.recordTextureAudit(ctx, "revision_committed", rec.OwnerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, rev.RevisionID, applied.Receipt.CommandID, applied.Receipt.CommandDigest, applied.Trajectory.LifecycleVersion)
+	} else if err := h.Store.CreateRevisionWithSourceGraph(ctx, rev, graph); err != nil {
+		return "", fmt.Errorf("create Texture revision: %w", err)
+	}
+	var stored types.Revision
+	if durableLifecycle {
+		stored, err = h.Store.GetLifecycleRevision(ctx, rec.OwnerID, computerID, rev.RevisionID)
+	} else {
+		stored, err = h.Store.GetRevision(ctx, rev.RevisionID, rec.OwnerID)
+	}
+	if err != nil {
+		return "", fmt.Errorf("load created Texture revision: %w", err)
+	}
+	if !durableLifecycle {
+		auditDigest := textureAuditDigest("revision_committed", rec.OwnerID, computerID, doc.DocID, stored.RevisionID, stored.RevisionHash)
+		h.recordTextureAudit(ctx, "revision_committed", rec.OwnerID, computerID, stored.TrajectoryID, doc.DocID, stored.RevisionID, "texture-revision:"+doc.DocID+":"+stored.RevisionID, auditDigest, 0)
+	}
+	h.emitTextureDocumentRevisionEventForRun(ctx, rec, stored)
+	completed, _ := json.Marshal(map[string]string{"doc_id": doc.DocID, "revision_id": stored.RevisionID, "loop_id": rec.RunID})
+	h.emitTextureAgentEvent(ctx, rec, types.EventTextureAgentRevisionCompleted, events.CauseToolExecution, completed)
+	// The commit-time Universal Wire publish hook is gone (Cut 2 pre-flight
+	// review A7); publication moves to 2b's per-version permalinks.
+	out, _ := json.Marshal(map[string]any{
+		"turn": string(types.TextureTurnRevision), "doc_id": stored.DocID, "revision_id": stored.RevisionID,
+		"base_revision_id": stored.ParentRevisionID, "trajectory_id": stored.TrajectoryID,
+		"dropped_citations": len(result.Dropped), "done": turn.Done != "",
+	})
 	return string(out), nil
 }

@@ -140,13 +140,12 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			if strings.TrimSpace(in.BundleDigest) == "" {
 				return fmt.Errorf("reduce: verify %s requires the inspected bundle digest", in.LocalID)
 			}
-		case yaegikernel.IntentTextureApply:
-			// Full-RLM texture authoring (R3d): the staged edit body carries
-			// the cell's authored change; the commit arm runs ApplyTextureTurn
-			// via the bound owner. A non-empty body is the only quota-relevant
-			// field — doc bodies bind by the tray's aggregate quota.
+		case yaegikernel.IntentTextureTurn:
+			// A Texture cell's turn (Cut 2 2a): the commit arm runs
+			// ApplyTextureTurn via the bound owner. Doc bodies bind by the
+			// tray's aggregate quota.
 			if strings.TrimSpace(in.Body) == "" {
-				return fmt.Errorf("reduce: texture_apply %s missing edit body", in.LocalID)
+				return fmt.Errorf("reduce: texture_turn %s missing its body", in.LocalID)
 			}
 		default:
 			if err := validateSemanticActIntent(in); err != nil {
@@ -692,6 +691,11 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 		if records, err = rt.loadCellRecords(ctx, execCtx.OwnerID, execCtx.ComputerID, deskAgentForCursor(execCtx)); err != nil {
 			return inert
 		}
+		// A Texture cell reads, and marks read, only the records its frame
+		// showed (Cut 2 2a).
+		if role == agentprofile.Texture {
+			records = capToTextureFrame(records, rt.textureFrameMarkForRun(ctx, execCtx.RunRecord))
+		}
 	}
 	return &rlmCallReduction{
 		records: records,
@@ -831,7 +835,7 @@ func (r *rlmCallReduction) recoverPartialActCommit(ctx context.Context, intents 
 func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel.StagedIntent, highWater uint64) error {
 	receipt := ReductionReceipt{Cursor: r.scope.Cursor}
 	// Texture dispatches with the turn (protocol P2a): its Cast, Ask and Note
-	// fold into the cell's ApplyTexture body before the loop, so they never
+	// fold into the cell's turn before the loop, so they never
 	// reach the act path. commitTray is shared by commit and crash recovery,
 	// so both fold the same way.
 	if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Texture {
@@ -910,9 +914,9 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			} else {
 				seq, err = castStagedIntent(ctx, r.mb, r.scope, in)
 			}
-		case yaegikernel.IntentTextureApply:
-			// Full-RLM authoring (R3d): no mailbox envelope — commit the
-			// staged edit through ApplyTextureTurn via the bound owner.
+		case yaegikernel.IntentTextureTurn:
+			// A Texture turn: no mailbox envelope — commit it through
+			// ApplyTextureTurn via the bound owner.
 			seq, err = r.commitTextureAuthorIntent(ctx, in)
 		default:
 			// Semantic acts (mission R2): ledger-bound kinds append the
@@ -1069,17 +1073,17 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	return seq, err
 }
 
-// commitTextureAuthorIntent commits one staged full-RLM texture authoring
-// intent (R3d: choir.ApplyTexture) through the bound texture lifecycle
-// owner's ApplyTextureTurn transaction. The staged Body is the edit JSON the
-// cell authored; the revision identity is deterministic per cell so a
-// replayed cell replays the same commit rather than minting a second head.
+// commitTextureAuthorIntent commits a Texture cell's turn (choir.Write,
+// Done, Wait, Reject, with its dispatch folded in) through the bound texture
+// lifecycle owner's ApplyTextureTurn transaction. The revision identity is
+// deterministic per cell so a replayed cell replays the same commit rather
+// than minting a second head.
 // It mails no envelope — the commit lands on the lifecycle/document head, so
 // it returns sequence 0 (not a mailbox act).
 func (r *rlmCallReduction) commitTextureAuthorIntent(ctx context.Context, in yaegikernel.StagedIntent) (uint64, error) {
 	rt := r.rt()
 	if rt == nil || rt.textureCellAuthorizer == nil {
-		return 0, fmt.Errorf("reduce: texture_apply intent without a bound texture authorizer")
+		return 0, fmt.Errorf("reduce: texture_turn intent without a bound texture authorizer")
 	}
 	revisionIdentity := intentIdempotencyKey(r.scope, in.LocalID, "texture", in.Body)
 	receipt, err := rt.textureCellAuthorizer.CommitCellTextureAuthor(ctx, r.rec, in.Body, revisionIdentity)

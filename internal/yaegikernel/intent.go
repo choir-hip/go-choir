@@ -1,10 +1,12 @@
 package yaegikernel
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -63,13 +65,55 @@ const (
 	// IntentDisagreement records a scorer verdict that differs from the
 	// resolver verdict as a distinct supervision act.
 	IntentDisagreement = "disagreement"
-	// IntentTextureApply stages a full-RLM texture authoring turn (R3d):
-	// the texture cell edits its bound document and the reducer commits the
-	// staged edit as an AuthorAppAgent revision through the atomic
-	// ApplyTextureTurn transaction. It is not a semantic act and mints no
+	// IntentTextureTurn is a Texture cell's turn (Cut 2 2a): the one intent
+	// choir.Write, Done, Wait and Reject build together. Its Body is a
+	// TextureTurn. The reducer commits it through the atomic
+	// ApplyTextureTurn transaction; it is not a semantic act and mints no
 	// mailbox envelope — the commit lands on the lifecycle/document head.
-	IntentTextureApply = "texture_apply"
+	IntentTextureTurn = "texture_turn"
 )
+
+// TextureTurn is the body of a Texture cell's turn. A cell sets Write,
+// Done, Wait and Rejects through its verbs; the runtime alone sets Idle,
+// Handles, InboxRecords and InboxCursor.
+type TextureTurn struct {
+	// BaseRevisionID is the revision the cell's frame showed; a Write
+	// applies to it and the commit refuses if the head moved.
+	BaseRevisionID string `json:"base_revision_id,omitempty"`
+	// Write revises the document.
+	Write *TextureWrite `json:"write,omitempty"`
+	// Done says the requested work is complete; its value is why.
+	Done string `json:"done,omitempty"`
+	// Wait records waiting for evidence without a revision; its value is
+	// why.
+	Wait string `json:"wait,omitempty"`
+	// Rejects decline records or leftover update packets, each with a reason.
+	Rejects []TextureReject `json:"rejects,omitempty"`
+	// Idle is the runtime's turn for an activation that ended without one.
+	Idle string `json:"idle,omitempty"`
+	// Handles are the frame's record sources, set by the runtime from the
+	// records the cell read.
+	Handles map[string]texturewrite.Source `json:"handles,omitempty"`
+	// InboxRecords and InboxCursor are the dispatch fold (Cut 1 L3a):
+	// Texture's records to research and management and the cursor advance
+	// over the range the cell read.
+	InboxRecords []types.CommitmentRecord  `json:"inbox_records,omitempty"`
+	InboxCursor  *types.InboxCursorAdvance `json:"inbox_cursor,omitempty"`
+}
+
+// TextureWrite is one Write: the edit script and why.
+type TextureWrite struct {
+	Edits string `json:"edits"`
+	Why   string `json:"why"`
+}
+
+// TextureReject declines one record (by record id) or one leftover update
+// packet (by update id).
+type TextureReject struct {
+	RecordID string `json:"record_id,omitempty"`
+	UpdateID string `json:"update_id,omitempty"`
+	Why      string `json:"why"`
+}
 
 // Completion results for IntentComplete.
 const (
@@ -395,18 +439,41 @@ func (t *Tray) Disagreement(disagreementJSON string) (string, error) {
 	return t.stage(StagedIntent{Kind: IntentDisagreement, Disagreement: disagreementJSON})
 }
 
-// ApplyTexture stages a full-RLM texture authoring turn (R3d): editJSON is the
-// JSON-encoded texture edit — {doc_id?, base_revision_id, content? or edits?,
-// update_dispositions?, controls?, work_disposition?, rationale?} — the same
-// field set the retired patch_texture/rewrite_texture tools decoded. The
-// reducer commits it as an AuthorAppAgent revision through the atomic
-// ApplyTextureTurn transaction. Doc bodies may exceed the message cap, so
-// this kind is bound by the aggregate tray quota, not MaxIntentBody.
-func (t *Tray) ApplyTexture(editJSON string) (string, error) {
-	if strings.TrimSpace(editJSON) == "" {
-		return "", fmt.Errorf("tray: apply_texture requires a non-empty edit body")
+// TextureTurn builds the cell's one Texture turn: the first call stages it,
+// later calls revise it in place. update refuses a combination the turn
+// cannot hold, leaving the turn as it was. Doc bodies may exceed the message
+// cap, so this kind is bound by the aggregate tray quota, not MaxIntentBody.
+func (t *Tray) TextureTurn(baseRevisionID string, update func(*TextureTurn) error) (string, error) {
+	at := -1
+	for i, in := range t.intents {
+		if in.Kind == IntentTextureTurn {
+			at = i
+			break
+		}
 	}
-	return t.stage(StagedIntent{Kind: IntentTextureApply, Body: editJSON})
+	turn := TextureTurn{BaseRevisionID: baseRevisionID}
+	if at >= 0 {
+		if err := json.Unmarshal([]byte(t.intents[at].Body), &turn); err != nil {
+			return "", fmt.Errorf("tray: texture turn body: %w", err)
+		}
+	}
+	if err := update(&turn); err != nil {
+		return "", err
+	}
+	raw, err := json.Marshal(turn)
+	if err != nil {
+		return "", fmt.Errorf("tray: encode texture turn: %w", err)
+	}
+	if at < 0 {
+		return t.stage(StagedIntent{Kind: IntentTextureTurn, Body: string(raw)})
+	}
+	grown := len(raw) - len(t.intents[at].Body)
+	if t.bytes+grown > MaxTrayBytes {
+		return "", fmt.Errorf("tray: aggregate payload exceeds %d bytes", MaxTrayBytes)
+	}
+	t.bytes += grown
+	t.intents[at].Body = string(raw)
+	return t.intents[at].LocalID, nil
 }
 
 func (t *Tray) stage(in StagedIntent) (string, error) {
@@ -421,7 +488,7 @@ func (t *Tray) stage(in StagedIntent) (string, error) {
 			size += len(ref)
 		}
 	}
-	if in.Kind != IntentTextureApply && len(in.Body) > MaxIntentBody {
+	if in.Kind != IntentTextureTurn && len(in.Body) > MaxIntentBody {
 		return "", fmt.Errorf("tray: message body %d bytes exceeds %d", len(in.Body), MaxIntentBody)
 	}
 	if t.bytes+size > MaxTrayBytes {

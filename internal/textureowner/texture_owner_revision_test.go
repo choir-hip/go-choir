@@ -3,7 +3,6 @@ package textureowner
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,7 +129,7 @@ func TestLifecycleTextureWaitBlockNoChangeThenOwnerRevisionResumesSameResidentRu
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, editTextureArgs{ToolCallID: "first-transition-" + string(outcome), WorkDisposition: string(types.WorkItemOpen)}, outcome, types.Revision{}, store.TextureSourceGraphWriteSet{}, "durable first outcome"); err != nil {
+			if _, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, textureTurnArgs{ToolCallID: "first-transition-" + string(outcome), WorkDisposition: types.WorkItemOpen}, outcome, types.Revision{}, store.TextureSourceGraphWriteSet{}, "durable first outcome"); err != nil {
 				t.Fatalf("first %s transition: %v", outcome, err)
 			}
 			if err := core.Store().SleepAgentMutationAfterTextureTurn(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID, run.RunID); err != nil {
@@ -158,58 +157,6 @@ func TestLifecycleTextureWaitBlockNoChangeThenOwnerRevisionResumesSameResidentRu
 				t.Fatalf("resumed injection=%s err=%v", messages, err)
 			}
 		})
-	}
-}
-
-func TestLifecycleTextureResearchOpenerDerivesIdentitiesAndCommitsBeforeWake(t *testing.T) {
-	core, handler := testAPISetup(t)
-	installSynchronousTextureOwnerWake(t, core, handler)
-	start := startObservationLifecycle(t, core.Store())
-	first := postOwnerInstruction(t, handler, "/api/texture/documents/"+start.InitialDocument.DocID+"/revise", start.OwnerID, "researcher-opener", "research exact gap", start.InitialRevision.RevisionID)
-	if first.Code != http.StatusAccepted {
-		t.Fatalf("tell status=%d body=%s", first.Code, first.Body.String())
-	}
-	agent, _ := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, start.Agent.AgentID)
-	run, err := core.Store().GetLifecycleRun(t.Context(), start.OwnerID, start.ComputerID, agent.ActiveRunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	inject := handler.coagentUpdateTurnInjector(&run)
-	if _, err := inject(false); err != nil {
-		t.Fatal(err)
-	}
-	doc, _ := core.Store().GetLifecycleDocument(t.Context(), start.OwnerID, start.ComputerID, start.InitialDocument.DocID)
-	args := editTextureArgs{ToolCallID: "open-researcher-tool", WorkDisposition: string(types.WorkItemOpen), Controls: []textureControlArgs{{
-		OpenResearch: true, Objective: "research exact gap",
-		Packet: types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}},
-	}}}
-	snapshot, _ := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
-	controls, _, err := handler.textureTurnControls(t.Context(), &run, doc, snapshot, args)
-	if err != nil || len(controls) != 1 || controls[0].OpenAgent == nil || controls[0].OpenWork == nil || !strings.HasPrefix(controls[0].TargetAgentID, "research:") || controls[0].OpenAgent.AgentID != controls[0].TargetAgentID || controls[0].OpenWork.WorkItemID != controls[0].TargetWorkItemID {
-		t.Fatalf("runtime-derived Research opener=%+v err=%v", controls, err)
-	}
-	openWork := controls[0].OpenWork
-	if openWork.CreatedByRunID != run.RunID || openWork.Details["requested_by_profile"] != "texture" || openWork.Details["requested_by_agent_id"] != run.AgentID || openWork.Details["requested_by_run_id"] != run.RunID {
-		t.Fatalf("Research work item lacks requester Texture binding: %+v", openWork)
-	}
-	if _, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, controls[0].TargetAgentID); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("Research agent existed before atomic turn: %v", err)
-	}
-	result, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, args, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "research requested")
-	if err != nil || result.TextureTurn == nil || len(result.Controls) != 1 {
-		t.Fatalf("atomic Research runtime turn=%+v err=%v", result, err)
-	}
-	createdAgent, err := core.Store().GetAgentByScope(t.Context(), start.OwnerID, start.ComputerID, controls[0].TargetAgentID)
-	if err != nil || createdAgent.Profile != "research" || createdAgent.LifecycleVersion != 1 {
-		t.Fatalf("created Research=%+v err=%v", createdAgent, err)
-	}
-	legacy, err := core.Store().ListPendingWorkerUpdates(t.Context(), start.OwnerID, controls[0].TargetAgentID, 10)
-	if err != nil || len(legacy) != 0 {
-		t.Fatalf("Research first control leaked to legacy mailbox: %+v err=%v", legacy, err)
-	}
-	replay, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, args, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "research requested")
-	if err != nil || !replay.Replay || len(replay.Controls) != 1 || replay.Controls[0].TargetAgentID != controls[0].TargetAgentID {
-		t.Fatalf("Research runtime opener replay=%+v err=%v", replay, err)
 	}
 }
 
@@ -488,7 +435,7 @@ func TestResidentTextureInjectsAndConsumesCurrentOwnerRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, editTextureArgs{ToolCallID: "consume-current-owner-revision", WorkDisposition: string(types.WorkItemOpen)}, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "consume current owner revision"); err != nil {
+	if _, err := handler.applyTextureLifecycleTurn(t.Context(), &run, doc, textureTurnArgs{ToolCallID: "consume-current-owner-revision", WorkDisposition: types.WorkItemOpen}, types.TextureTurnWait, types.Revision{}, store.TextureSourceGraphWriteSet{}, "consume current owner revision"); err != nil {
 		t.Fatal(err)
 	}
 	snapshot, err := core.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
@@ -564,7 +511,6 @@ func TestOwnerRevisionSurvivesPassivationRaceAndWaitsAcrossBoot(t *testing.T) {
 		t.Fatalf("boot owner revision injection=%s err=%v", messages, err)
 	}
 }
-
 
 // A document whose latest Texture turn was cut off by a restart says so,
 // instead of showing "Revising…" or nothing (owner rule: a restart is a

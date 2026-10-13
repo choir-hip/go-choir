@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -16,8 +15,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
-	"github.com/yusefmosiah/go-choir/internal/texturedoc"
-	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -422,16 +419,6 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	workerWake := scheduledMessageSeq > 0 || strings.HasPrefix(strings.TrimSpace(req.Intent), "integrate_")
-	hasGroundedHistory := false
-	if workerWake {
-		historyState, historyErr := rt.Core.TextureChannelHasGroundedHistory(ctx, ownerID, doc.DocID, time.Time{})
-		if historyErr != nil {
-			log.Printf("texture api: check grounded history: %v", historyErr)
-		} else {
-			hasGroundedHistory = historyState
-		}
-	}
-
 	currentSources := decodeTextureSourceEntities(currentRevision.SourceEntities)
 	mediaSourceEntities, addedMediaSourceEntities, err := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, currentSources)
 	if err != nil {
@@ -462,7 +449,7 @@ func (rt *Handler) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	}
 
 	contextMode := textureAgentRevisionContextMode(currentRevision, previousRevision)
-	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary, hasGroundedHistory, nil, nil)
+	agentPrompt := buildAgentRevisionRequest(currentRevision, previousRevision, metadata, req, diffSummary)
 
 	// Create the runtime run with Texture agent revision metadata.
 	// Carry forward durable context keys from the current head revision
@@ -654,160 +641,60 @@ func textureUseFocusedUserEditContext(current types.Revision, previous *types.Re
 	return current.AuthorKind == types.AuthorUser && previous != nil && len(current.Content) >= 12000
 }
 
-// buildAgentRevisionRequest constructs the backend-owned Texture revision
-// request sent as the user turn for the Texture appagent.
-func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req textureAgentRevisionRequest, diffSummary string, hasGroundedHistory bool, recentWorkerMessages []types.ChannelMessage, _ []string) string {
+// buildAgentRevisionRequest is the first user turn of a Texture run: why it
+// woke and what the owner asked. The document itself and the records past
+// the cursor arrive as the frame turn right after it (Cut 2 2a), so this
+// turn carries no document text, outline or source list.
+func buildAgentRevisionRequest(current types.Revision, previous *types.Revision, metadata map[string]any, req textureAgentRevisionRequest, diffSummary string) string {
 	var b strings.Builder
-	ownerPromptRequestRevision := current.AuthorKind == types.AuthorUser && metadataStringValue(metadata, "input_origin") == textureInputOriginUserPrompt
-	b.WriteString("A revise event was triggered for the current Texture document.")
-
 	intent := strings.TrimSpace(req.Intent)
 	if intent == "" {
 		intent = "revise"
 	}
-	b.WriteString("\nIntent: ")
-	b.WriteString(intent)
-	b.WriteString(".")
-
+	b.WriteString("Your document woke you. Intent: " + intent + ". Your frame follows: the document as blocks b1..bN and the records addressed to you.")
 	if seedPrompt := metadataString(metadata, "seed_prompt"); seedPrompt != "" {
-		b.WriteString("\n\nOriginal user request:\n")
+		b.WriteString("\n\nThe owner's request:\n")
 		b.WriteString(seedPrompt)
 	}
 	if ownerPrompt := metadataString(metadata, "owner_prompt"); ownerPrompt != "" {
-		b.WriteString("\n\nOwner directive for this revision:\n")
+		b.WriteString("\n\nThe owner's direction for this revision:\n")
 		b.WriteString(ownerPrompt)
 	}
 	if promptUnixTS := metadataIntValue(metadata, textureMetadataPromptUnixTS); promptUnixTS > 0 {
 		referenceTime := time.Unix(int64(promptUnixTS), 0).UTC()
 		b.WriteString("\n\nOwner prompt reference time: ")
 		b.WriteString(referenceTime.Format(time.RFC3339))
-		b.WriteString(" UTC (Unix ")
-		b.WriteString(fmt.Sprintf("%d", promptUnixTS))
-		b.WriteString("). Treat this as authoritative \"now\" when interpreting relative time words such as \"today\", \"tomorrow\", or \"this week\".")
+		b.WriteString(fmt.Sprintf(" UTC (Unix %d). Treat this as authoritative \"now\" when interpreting relative time words such as \"today\", \"tomorrow\", or \"this week\".", promptUnixTS))
 	}
 	if legacyPrompt := strings.TrimSpace(req.Prompt); legacyPrompt != "" {
-		b.WriteString("\n\nAdditional user instruction:\n")
+		b.WriteString("\n\nAdditional instruction from the owner:\n")
 		b.WriteString(legacyPrompt)
 	}
 	if sourcePath := metadataString(metadata, "source_path"); sourcePath != "" {
-		b.WriteString("\n\nSource path: ")
-		b.WriteString(sourcePath)
-		b.WriteString(". Preserve the file-backed structure while producing the next version.")
+		b.WriteString("\n\nSource path: " + sourcePath + ". Preserve the file-backed structure while producing the next version.")
 	}
-	if conductorLoopID := metadataString(metadata, "conductor_loop_id"); conductorLoopID != "" {
-		b.WriteString("\nConductor loop: ")
-		b.WriteString(conductorLoopID)
-		b.WriteString(".")
-	}
-	sourceEntities := decodeTextureSourceEntities(current.SourceEntities)
-	sourceEntities, _ = mergeTextureSourceEntities(sourceEntities, decodeAvailableTextureSourceEntities(metadata))
-	if formattedEntities := formatTextureSourceEntitiesForPrompt(sourceEntities); formattedEntities != "" {
-		b.WriteString("\n\nDetected Texture source entities:\n")
-		b.WriteString(formattedEntities)
-		b.WriteString(textureprompts.RevisionSourceEntitiesIntro())
-	}
-	if formattedRejections := formatCoagentSourceRejectionsForPrompt(decodeCoagentSourceRejections(metadata[textureSourceRejectionsKey])); formattedRejections != "" {
-		b.WriteString("\n\nRejected packet.sources that could not become Texture source entities:\n")
-		b.WriteString(formattedRejections)
-		b.WriteString("\nTreat these as explicit source blockers or source gaps. Do not replace them with ordinary markdown links or uncited prose.\n")
-	}
-	if current.RevisionID != "" {
-		b.WriteString("\n\nCurrent head revision: ")
-		b.WriteString(current.RevisionID)
-		b.WriteString(" (")
-		b.WriteString(string(current.AuthorKind))
-		b.WriteString(" by ")
-		b.WriteString(current.AuthorLabel)
-		b.WriteString(").")
-	}
-	if previous != nil {
-		b.WriteString("\nPrevious revision: ")
-		b.WriteString(previous.RevisionID)
-		b.WriteString(".")
+	if current.AuthorKind == types.AuthorUser {
+		if metadataStringValue(metadata, "input_origin") == textureInputOriginUserPrompt {
+			b.WriteString("\n\nThe current revision is the owner's request itself, not prose to keep: write the first useful document that answers it.")
+		} else {
+			b.WriteString("\n\nThe owner edited the document. Read the edit as the instruction: replace text the owner replaced, act on instructions they wrote inline, and keep what they wrote as prose.")
+		}
 	}
 	if diffSummary != "" {
 		if current.AuthorKind == types.AuthorUser {
-			b.WriteString("\n\nUser edit diff from previous canonical revision to current user-authored draft:\n")
+			b.WriteString("\n\nThe owner's edit, from the previous revision:\n")
 		} else {
-			b.WriteString("\n\nLatest revision diff/context:\n")
+			b.WriteString("\n\nThe last change:\n")
 		}
 		b.WriteString(diffSummary)
 	}
-	if len(recentWorkerMessages) > 0 {
-		b.WriteString("\n\nRecent addressed worker messages:\n")
-		for _, message := range recentWorkerMessages {
-			b.WriteString("- [")
-			if !message.Timestamp.IsZero() {
-				b.WriteString(message.Timestamp.UTC().Format(time.RFC3339))
-			} else {
-				b.WriteString("unknown-time")
-			}
-			b.WriteString("] ")
-			if role := strings.TrimSpace(message.Role); role != "" {
-				b.WriteString(role)
-			} else {
-				b.WriteString("worker")
-			}
-			if from := strings.TrimSpace(message.From); from != "" {
-				b.WriteString(" ")
-				b.WriteString(from)
-			}
-			b.WriteString(": ")
-			b.WriteString(truncatePromptSnippet(message.Content, 800))
-			b.WriteString("\n")
-		}
-		b.WriteString(textureprompts.RevisionExecutionFindingsOverlay(textureprompts.RevisionExecutionFindingsOptions{
-			IntegrateExecutionFindings: strings.EqualFold(intent, "integrate_execution_findings"),
-			ActiveExecution:            workerMessagesContainActiveDelegation(recentWorkerMessages),
-		}))
-	}
-	if textureUseFocusedUserEditContext(current, previous) {
-		b.WriteString("\n\nFocused current-head context for this long user-authored draft:\n---\n")
-		b.WriteString(summarizeFocusedUserEditContext(current, previous))
-		b.WriteString("\n---\n")
-		b.WriteString("\nThe complete current document is intentionally not preloaded in this ordinary long-document revise turn. Use the exact changed regions above and the user edit diff to stage a choir.ApplyTexture structured edit against the current base revision. Retrieve prior versions, source context, or broader document context only when the edit cannot be safely resolved from the changed regions.")
-	} else {
-		b.WriteString("\n\nCurrent canonical document content:\n---\n")
-		if current.Content != "" {
-			b.WriteString(current.Content)
-		} else {
-			b.WriteString("(empty document)")
-		}
-		b.WriteString("\n---\n")
-	}
-	if outline := formatTextureBodyDocOutlineForPrompt(current.BodyDoc); outline != "" {
-		b.WriteString("\n\nStructured document outline for choir.ApplyTexture block/node ids:\n")
-		b.WriteString(outline)
-	}
-	hardRequirements := textureHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content)
-	hasManagementDelivery := textureWorkerMessagesContainRole(recentWorkerMessages, agentprofile.Management)
-	if !hasManagementDelivery {
-		hardRequirements = textureFilterFinalCommandEvidenceRequirements(hardRequirements)
-		if strings.Contains(metadataString(metadata, "seed_prompt")+req.Prompt+current.Content, "[CMD]") {
-			hardRequirements = append(hardRequirements, "Pending command evidence rule: before a super delivery exists, do not include a Source Ledger row, status row, or placeholder whose label is [CMD]; describe command evidence as pending without that label.")
+	if hard := textureFilterFinalCommandEvidenceRequirements(textureHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content)); len(hard) > 0 {
+		b.WriteString("\n\nKeep these exactly in every revision unless the owner changes them:\n")
+		for _, requirement := range hard {
+			b.WriteString("- " + requirement + "\n")
 		}
 	}
-	if len(hardRequirements) > 0 {
-		b.WriteString("\nHard requirements checklist for the next canonical revision:\n")
-		for _, requirement := range hardRequirements {
-			b.WriteString("- ")
-			b.WriteString(requirement)
-			b.WriteString("\n")
-		}
-		b.WriteString("Treat this checklist as acceptance criteria for the next choir.ApplyTexture revision; preserve these prefixes, labels, values, and headings verbatim unless the user explicitly changed them.\n")
-	}
-	b.WriteString(textureprompts.RevisionPolicyOverlay(textureprompts.RevisionPolicyOptions{
-		OwnerPromptRequestRevision: ownerPromptRequestRevision,
-		UserAuthoredRevision:       current.AuthorKind == types.AuthorUser,
-		HasGroundedHistory:         hasGroundedHistory,
-		DocID:                      current.DocID,
-		RevisionID:                 current.RevisionID,
-	}))
 	return b.String()
-}
-
-func formatTextureBodyDocOutlineForPrompt(raw json.RawMessage) string {
-	return texturedoc.Outline(raw, 64, 4000)
 }
 
 func textureFilterFinalCommandEvidenceRequirements(requirements []string) []string {
@@ -822,38 +709,6 @@ func textureFilterFinalCommandEvidenceRequirements(requirements []string) []stri
 		filtered = append(filtered, requirement)
 	}
 	return filtered
-}
-
-func textureWorkerMessagesContainRole(messages []types.ChannelMessage, role string) bool {
-	role = strings.TrimSpace(role)
-	if role == "" {
-		return false
-	}
-	for _, message := range messages {
-		if strings.EqualFold(strings.TrimSpace(message.Role), role) {
-			return true
-		}
-	}
-	return false
-}
-
-func workerMessagesContainActiveDelegation(messages []types.ChannelMessage) bool {
-	for _, message := range messages {
-		content := strings.ToLower(message.Content)
-		for _, marker := range []string{
-			"worker_run_active",
-			"finish_ready=false",
-			"finish_ready: false",
-			"active_worker_obligation=true",
-			"runtime supervision continuation required",
-			"missing_terminal_evidence",
-		} {
-			if strings.Contains(content, marker) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func truncatePromptSnippet(value string, limit int) string {
@@ -926,170 +781,6 @@ func summarizeDiffResult(diff types.DiffResult) string {
 		changesShown++
 	}
 	return b.String()
-}
-
-func summarizeFocusedUserEditContext(current types.Revision, previous *types.Revision) string {
-	currentLines := splitPromptLines(current.Content)
-	if previous == nil {
-		return truncatePromptSnippet(current.Content, 12000)
-	}
-	changed := changedToLineIndexes(previous.Content, current.Content)
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Document length: %d chars, %d lines. Full document omitted for ordinary long-document edit latency.\n", len(current.Content), len(currentLines)))
-	if len(changed) == 0 {
-		b.WriteString("No changed lines detected. First bounded current-head excerpt:\n")
-		b.WriteString(truncatePromptSnippet(current.Content, 6000))
-		return b.String()
-	}
-	ranges := focusedLineRanges(changed, len(currentLines), 4)
-	const maxChars = 18000
-	for i, r := range ranges {
-		if b.Len() >= maxChars {
-			b.WriteString("\nAdditional changed regions omitted for prompt size.")
-			break
-		}
-		start, end := r[0], r[1]
-		if start < 0 {
-			start = 0
-		}
-		if end >= len(currentLines) {
-			end = len(currentLines) - 1
-		}
-		if start > end || start >= len(currentLines) {
-			continue
-		}
-		excerpt := strings.Join(currentLines[start:end+1], "")
-		if len(excerpt) > 5000 {
-			excerpt = truncatePromptSnippet(excerpt, 5000)
-		}
-		b.WriteString(fmt.Sprintf("\nChanged region %d, current lines %d-%d:\n", i+1, start+1, end+1))
-		b.WriteString(excerpt)
-		if !strings.HasSuffix(excerpt, "\n") {
-			b.WriteString("\n")
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func splitPromptLines(content string) []string {
-	if content == "" {
-		return nil
-	}
-	lines := strings.SplitAfter(content, "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	return lines
-}
-
-type promptLineMatch struct {
-	from int
-	to   int
-}
-
-func changedToLineIndexes(from, to string) []int {
-	fromLines := splitPromptLines(from)
-	toLines := splitPromptLines(to)
-	matches := promptLineLCS(fromLines, toLines)
-	changed := make(map[int]bool)
-	fi, ti := 0, 0
-	markToGap := func(start, end int) {
-		for i := start; i < end; i++ {
-			if i >= 0 && i < len(toLines) {
-				changed[i] = true
-			}
-		}
-	}
-	for _, match := range matches {
-		if ti < match.to {
-			markToGap(ti, match.to)
-		}
-		if fi < match.from && ti == match.to {
-			if match.to < len(toLines) {
-				changed[match.to] = true
-			} else if match.to > 0 {
-				changed[match.to-1] = true
-			}
-		}
-		fi = match.from + 1
-		ti = match.to + 1
-	}
-	if ti < len(toLines) {
-		markToGap(ti, len(toLines))
-	}
-	if fi < len(fromLines) && ti == len(toLines) && len(toLines) > 0 {
-		changed[len(toLines)-1] = true
-	}
-	out := make([]int, 0, len(changed))
-	for idx := range changed {
-		out = append(out, idx)
-	}
-	sort.Ints(out)
-	return out
-}
-
-func promptLineLCS(fromLines, toLines []string) []promptLineMatch {
-	m, n := len(fromLines), len(toLines)
-	if m == 0 || n == 0 {
-		return nil
-	}
-	dp := make([][]int, m+1)
-	for i := range dp {
-		dp[i] = make([]int, n+1)
-	}
-	for i := m - 1; i >= 0; i-- {
-		for j := n - 1; j >= 0; j-- {
-			if fromLines[i] == toLines[j] {
-				dp[i][j] = dp[i+1][j+1] + 1
-			} else if dp[i+1][j] >= dp[i][j+1] {
-				dp[i][j] = dp[i+1][j]
-			} else {
-				dp[i][j] = dp[i][j+1]
-			}
-		}
-	}
-	var matches []promptLineMatch
-	for i, j := 0, 0; i < m && j < n; {
-		switch {
-		case fromLines[i] == toLines[j]:
-			matches = append(matches, promptLineMatch{from: i, to: j})
-			i++
-			j++
-		case dp[i+1][j] >= dp[i][j+1]:
-			i++
-		default:
-			j++
-		}
-	}
-	return matches
-}
-
-func focusedLineRanges(changed []int, lineCount, radius int) [][2]int {
-	if lineCount <= 0 {
-		return nil
-	}
-	if radius < 0 {
-		radius = 0
-	}
-	ranges := make([][2]int, 0, len(changed))
-	for _, idx := range changed {
-		start := idx - radius
-		if start < 0 {
-			start = 0
-		}
-		end := idx + radius
-		if end >= lineCount {
-			end = lineCount - 1
-		}
-		if len(ranges) == 0 || start > ranges[len(ranges)-1][1]+1 {
-			ranges = append(ranges, [2]int{start, end})
-			continue
-		}
-		if end > ranges[len(ranges)-1][1] {
-			ranges[len(ranges)-1][1] = end
-		}
-	}
-	return ranges
 }
 
 // emitTextureAgentEvent is a helper that emits an texture-specific agent revision

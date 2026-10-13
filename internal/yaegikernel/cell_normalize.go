@@ -36,7 +36,7 @@ import (
 //     append one explicit call (keeps `return` semantics, kills auto-rerun);
 //   - import/statement mixes (imports followed by bare statements — the
 //     shape models actually emit, e.g. `import "choir"` then a bare
-//     `choir.ApplyTexture(...)`) — hoist the import lines into an import
+//     `choir.Write(...)`) — hoist the import lines into an import
 //     decl, lift top-level `x := e` to `var x = e`, wrap the remaining
 //     statements in a synthetic `func main`, and let the decl path rename +
 //     invoke it. Without this the cell compiles in yaegi file mode, which

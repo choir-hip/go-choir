@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/traefik/yaegi/interp"
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -295,14 +297,12 @@ var deskModuleSets = map[string][]string{
 	// machinery as its parent, so it searches the same async way.
 	SessionRoleResearchChild: {"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SourceSearch", "SearchWireCorpus",
 		"ReadEvidence", "ListEvidence"},
-	// Texture authors document revisions and escalates; artifact writes are
-	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
-	// not capsule file ops. It dispatches to research and management with
-	// Cast, Ask and Note, which the reducer folds into the same cell's
-	// ApplyTexture turn (protocol P2a), so a dispatch commits with the turn.
-	"texture": {"Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"ReadDoc", "ApplyTexture"},
+	// Texture writes its document with one verb, Write, and closes a turn
+	// with Done, Wait or Reject (Cut 2 2a); the cell's turn commits through
+	// ApplyTextureTurn. It dispatches to research and management with Cast,
+	// Ask and Note, which the reducer folds into the same cell's turn
+	// (protocol P2a), so a dispatch commits with the turn.
+	"texture": {"Cast", "Ask", "Note", "ReadDoc", "Write", "Done", "Wait", "Reject"},
 }
 
 // legacyObservation gates the observation verbs of the packet transports
@@ -381,7 +381,10 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Resolve":          func() reflect.Value { return reflect.ValueOf(s.Resolve) },
 		"Disagreement":     func() reflect.Value { return reflect.ValueOf(s.Disagreement) },
 		"ReadDoc":          func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
-		"ApplyTexture":     func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
+		"Write":            func() reflect.Value { return reflect.ValueOf(s.Write) },
+		"Done":             func() reflect.Value { return reflect.ValueOf(s.Done) },
+		"Wait":             func() reflect.Value { return reflect.ValueOf(s.Wait) },
+		"Reject":           func() reflect.Value { return reflect.ValueOf(s.Reject) },
 		"SearchStart":      func() reflect.Value { return reflect.ValueOf(s.SearchStart) },
 		"SearchWait":       func() reflect.Value { return reflect.ValueOf(s.SearchWait) },
 		"Searches":         func() reflect.Value { return reflect.ValueOf(s.searches) }, // a value: choir.Searches.Get(id), .List()
@@ -813,10 +816,10 @@ func (s *ChoirScope) Context() map[string]string {
 	}
 }
 
-// ReadDoc returns the cell-start texture document snapshot for a texture desk
-// cell (R3d): the bound document's current revision id — the base_revision_id
-// a staged ApplyTexture must cite — plus its full content. Side-effect-free
-// inside the cell; the snapshot is injected by autoputer at cell launch.
+// ReadDoc returns the bound Texture document as the cell's frame showed it:
+// its revision, text and every top-level block by alias with its full text
+// (a long document's frame digests blocks; ReadDoc does not).
+// Side-effect-free inside the cell; the snapshot is injected at cell launch.
 // Empty for non-texture scopes.
 func (s *ChoirScope) ReadDoc() DocSnapshot {
 	if s == nil || s.doc == nil {
@@ -825,23 +828,127 @@ func (s *ChoirScope) ReadDoc() DocSnapshot {
 	return *s.doc
 }
 
-// ApplyTexture stages a full-RLM texture authoring turn (R3d). edit is the
-// cell-authored texture body — {op, doc_id?, base_revision_id, content? or
-// edits?, update_dispositions?, controls?, work_disposition?, rationale?}
-// — accepted as a JSON-encoded string or any JSON-marshalable Go value (the
-// map literal form a cell naturally writes). The reducer commits it as an
-// AuthorAppAgent revision through the atomic ApplyTextureTurn transaction —
-// the genuine authoring turn, not a projection.
-func (s *ChoirScope) ApplyTexture(edit any) (string, error) {
-	t, err := s.boundTray("apply_texture")
+// Write stages the cell's revision of the bound document: edits is a script
+// of directives on the frame's block aliases (see texturewrite), why says
+// what the revision does. The grammar, aliases and frame handles are checked
+// now and a refusal names its script line; capture handles and quotes are
+// checked when the turn commits after the cell, with the same line numbers.
+// One Write per cell.
+func (s *ChoirScope) Write(edits, why string) (string, error) {
+	t, err := s.boundTray("write")
 	if err != nil {
 		return "", err
 	}
-	editJSON, err := jsonCellArg(edit)
+	if s.doc == nil || strings.TrimSpace(s.doc.RevisionID) == "" {
+		return "", fmt.Errorf("choir: Write has no bound document in this cell")
+	}
+	if strings.TrimSpace(why) == "" {
+		return "", fmt.Errorf("choir: Write needs why: one line on what this revision changes and why")
+	}
+	handles := make(map[string]bool, len(s.doc.Sources))
+	for _, src := range s.doc.Sources {
+		handles[src.Handle] = true
+	}
+	if err := texturewrite.Check(edits, len(s.doc.Blocks), handles); err != nil {
+		return "", fmt.Errorf("choir: Write refused, nothing staged: %w", err)
+	}
+	return t.TextureTurn(s.doc.RevisionID, func(turn *TextureTurn) error {
+		switch {
+		case turn.Write != nil:
+			return fmt.Errorf("choir: one Write per cell; put every directive in one script")
+		case turn.Wait != "":
+			return fmt.Errorf("choir: this cell already called Wait, which records a turn without a revision; a cell either Writes or Waits")
+		}
+		turn.Write = &TextureWrite{Edits: edits, Why: strings.TrimSpace(why)}
+		return nil
+	})
+}
+
+// Done says the requested work is complete. With a Write in the same cell
+// the revision completes it; alone it completes it at the current revision.
+func (s *ChoirScope) Done(why string) (string, error) {
+	return s.closeTurn("done", why, func(turn *TextureTurn, why string) error {
+		switch {
+		case turn.Done != "":
+			return fmt.Errorf("choir: Done once per cell")
+		case turn.Wait != "":
+			return fmt.Errorf("choir: this cell already called Wait; the work is either done or waiting")
+		}
+		turn.Done = why
+		return nil
+	})
+}
+
+// Wait records that the document is waiting for evidence: a turn without a
+// revision. A Cast, Ask or Note in the same cell commits with it.
+func (s *ChoirScope) Wait(why string) (string, error) {
+	return s.closeTurn("wait", why, func(turn *TextureTurn, why string) error {
+		switch {
+		case turn.Wait != "":
+			return fmt.Errorf("choir: Wait once per cell")
+		case turn.Write != nil:
+			return fmt.Errorf("choir: this cell already called Write; Wait is a turn without a revision")
+		case turn.Done != "":
+			return fmt.Errorf("choir: this cell already called Done; the work is either done or waiting")
+		}
+		turn.Wait = why
+		return nil
+	})
+}
+
+// Reject declines a record from the frame (its alias such as "r2", or its
+// record id) or a leftover update packet from choir.Updates() (its update
+// id), with the reason. The reason is committed with the cell's turn.
+func (s *ChoirScope) Reject(record, why string) (string, error) {
+	record = strings.TrimSpace(record)
+	reject := TextureReject{}
+	if strings.HasPrefix(record, "r") {
+		if n, err := strconv.Atoi(record[1:]); err == nil && n >= 1 && n <= len(s.records) {
+			reject.RecordID = s.records[n-1].RecordID
+		}
+	}
+	for _, r := range s.records {
+		if reject.RecordID == "" && r.RecordID == record {
+			reject.RecordID = r.RecordID
+		}
+	}
+	for _, u := range s.updates {
+		if reject.RecordID == "" && reject.UpdateID == "" && u.UpdateID == record {
+			reject.UpdateID = u.UpdateID
+		}
+	}
+	if reject.RecordID == "" && reject.UpdateID == "" {
+		return "", fmt.Errorf("choir: Reject: %q is not a record in your frame (r1..r%d or a record id) or an update id from choir.Updates()", record, len(s.records))
+	}
+	return s.closeTurn("reject", why, func(turn *TextureTurn, why string) error {
+		for _, prior := range turn.Rejects {
+			if prior.RecordID == reject.RecordID && prior.UpdateID == reject.UpdateID {
+				return fmt.Errorf("choir: %s is already rejected in this cell", record)
+			}
+		}
+		reject.Why = why
+		turn.Rejects = append(turn.Rejects, reject)
+		return nil
+	})
+}
+
+func (s *ChoirScope) closeTurn(verb, why string, update func(*TextureTurn, string) error) (string, error) {
+	t, err := s.boundTray(verb)
 	if err != nil {
 		return "", err
 	}
-	return t.ApplyTexture(editJSON)
+	why = strings.TrimSpace(why)
+	if why == "" {
+		return "", fmt.Errorf("choir: %s needs why", verb)
+	}
+	base := ""
+	if s.doc != nil {
+		base = s.doc.RevisionID
+	}
+	if base == "" {
+		return "", fmt.Errorf("choir: %s has no bound document in this cell", verb)
+	}
+	return t.TextureTurn(base, func(turn *TextureTurn) error { return update(turn, why) })
 }
 
 // Pack returns the acting desk's cell-start commitment pack (R4): its own

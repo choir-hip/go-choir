@@ -8,16 +8,34 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
+// Texture's turn through the real store (Cut 2 2a, item iv). Ways it can
+// fail, written first:
+//   - a Write that adds one paragraph re-mints every block id, so citations
+//     and judgements keyed on block ids churn (revision JSON diff);
+//   - a cite of an uncaptured source commits (A2), or the refusal loses its
+//     line;
+//   - a turn written against a frame the owner has since edited commits over
+//     the edit;
+//   - Done leaves the caller's work open, or cannot close it without a
+//     revision;
+//   - Wait or Reject drops the dispatch fold: the Cast's record never
+//     reaches research, the research desk is never minted, or the cursor
+//     does not advance;
+//   - a replayed cell commits twice.
+
 // seedCellAuthorLifecycle starts a bound Texture document lifecycle (doc +
-// initial user revision + texture agent + open work item) and projects the
-// texture caller run onto it, then creates the pending agent mutation the
-// activation opens. It returns the caller run record the cell commits under.
-func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix string) types.RunRecord {
+// initial owner revision + texture agent + open work item) and projects the
+// texture caller run onto it. It returns the caller run record a cell
+// commits under.
+func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix, content string) types.RunRecord {
 	t.Helper()
 	ctx := context.Background()
 	computerID := "autoputer-cell-author"
@@ -32,7 +50,7 @@ func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix strin
 		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork:     types.WorkItemRecord{WorkItemID: "work-cell-author-" + suffix, Objective: "author the supervision doc", AssignedAgentID: textureAgentID, AuthorityProfile: agentprofile.Texture},
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Cell author " + suffix, CreatedAt: now, UpdatedAt: now},
-		InitialRevision: types.Revision{RevisionID: "revision-cell-author-base-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: "initial head content", CreatedAt: now},
+		InitialRevision: types.Revision{RevisionID: "revision-cell-author-base-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: content, CreatedAt: now},
 		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
@@ -61,182 +79,222 @@ func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix strin
 	return caller
 }
 
-// TestCommitCellTextureApplyCommitsAuthorRevision proves the R3d acceptance
-// assertion: a staged choir.ApplyTexture apply body commits through
-// ApplyTextureTurn as an AuthorAppAgent revision that advances the doc head,
-// its metadata carries the texture_cell source — and no worker_updates legs.
-// A replayed commit replays rather than minting a second head.
-func TestCommitCellTextureApplyCommitsAuthorRevision(t *testing.T) {
-	s, err := store.Open(t.TempDir() + "/cell-author.db")
-	if err != nil {
-		t.Fatalf("open store: %v", err)
+type fakeCaptureStore map[string]texturewrite.Capture
+
+func (f fakeCaptureStore) CaptureBlocks(_ context.Context, _ string, handle string) (texturewrite.Capture, error) {
+	if c, ok := f[handle]; ok {
+		return c, nil
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	return texturewrite.Capture{}, texturewrite.ErrNotCaptured
+}
+
+var courtCapture = fakeCaptureStore{"https://example.org/court": {
+	Doc: "cap-court", Version: "doc-hash-1", URL: "https://example.org/court", Title: "Court ruling",
+	Blocks: []quotematch.Block{
+		{ID: "cid-1", Text: "The court ruled that the merger may proceed."},
+		{ID: "cid-2", Text: "The appeal was filed on Monday by the regulator."},
+	},
+}}
+
+func cellAuthorSetup(t *testing.T, suffix string) (*Handler, *store.Store, types.RunRecord) {
+	t.Helper()
+	core, h := testAPISetup(t)
+	core.SetTextureCaptures(courtCapture)
+	s := core.Store()
+	rec := seedCellAuthorLifecycle(t, s, "owner-cell-author", suffix, "# Merger\n\nOpening line.\n\nClosing line.")
+	h.createAgentMutationForRun(context.Background(), &rec)
+	return h, s, rec
+}
+
+func turnBody(t *testing.T, turn yaegikernel.TextureTurn) string {
+	t.Helper()
+	raw, err := json.Marshal(turn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
+}
+
+func headOf(t *testing.T, s *store.Store, rec types.RunRecord) types.Revision {
+	t.Helper()
+	doc, err := s.GetLifecycleDocument(context.Background(), rec.OwnerID, rec.ComputerID, rec.ChannelID)
+	if err != nil {
+		t.Fatalf("get document: %v", err)
+	}
+	rev, err := s.GetLifecycleRevision(context.Background(), rec.OwnerID, rec.ComputerID, doc.CurrentRevisionID)
+	if err != nil {
+		t.Fatalf("get head: %v", err)
+	}
+	return rev
+}
+
+func blocksByID(t *testing.T, rev types.Revision) map[string]string {
+	t.Helper()
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(rev.BodyDoc, &doc); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	out := map[string]string{}
+	for _, n := range doc.Doc.Content {
+		raw, _ := json.Marshal(n)
+		out[n.Attrs["id"].(string)] = string(raw)
+	}
+	return out
+}
+
+func TestWriteCommitsACitedParagraphAndKeepsUntouchedBlocks(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "write")
 	ctx := context.Background()
-	ownerID := "owner-cell-author"
-	rec := seedCellAuthorLifecycle(t, s, ownerID, "one")
-
-	h := &Handler{Store: s, Bus: events.NewEventBus()}
-	h.createAgentMutationForRun(ctx, &rec)
-
-	body := `{"op":"apply","content":"# Revised\n\ncell-authored head","rationale":"incorporate ledger finding"}`
-	receipt, err := h.CommitCellTextureAuthor(ctx, &rec, body, "cell-author-idem-1")
+	base := headOf(t, s, rec)
+	first := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}.",
+		Why:   "state the ruling",
+	}})
+	receipt, err := h.CommitCellTextureAuthor(ctx, &rec, first, "write-1")
 	if err != nil {
-		t.Fatalf("CommitCellTextureAuthor: %v", err)
+		t.Fatalf("first Write: %v", err)
 	}
-	var out struct {
-		Op         string `json:"op"`
-		DocID      string `json:"doc_id"`
-		RevisionID string `json:"revision_id"`
+	v1 := headOf(t, s, rec)
+	if v1.RevisionID == base.RevisionID || v1.AuthorKind != types.AuthorAppAgent || !strings.Contains(receipt, v1.RevisionID) {
+		t.Fatalf("first Write did not commit an appagent revision: %s", receipt)
 	}
-	if err := json.Unmarshal([]byte(receipt), &out); err != nil {
-		t.Fatalf("decode receipt: %v", err)
-	}
-	if out.Op != "apply" || out.RevisionID == "" || out.DocID != rec.ChannelID {
-		t.Fatalf("unexpected receipt %q", receipt)
+	if again, err := h.CommitCellTextureAuthor(ctx, &rec, first, "write-1"); err != nil || again != receipt {
+		t.Fatalf("replay = %q, %v; want the first receipt", again, err)
 	}
 
-	doc, err := s.GetLifecycleDocument(ctx, ownerID, rec.ComputerID, rec.ChannelID)
-	if err != nil {
-		t.Fatalf("get lifecycle document: %v", err)
+	second := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@insert after b2\nThe regulator appealed {{cite https://example.org/court \"appeal was filed on Monday\"}}.",
+		Why:   "add the appeal",
+	}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, second, "write-2"); err != nil {
+		t.Fatalf("second Write: %v", err)
 	}
-	if doc.CurrentRevisionID != out.RevisionID {
-		t.Fatalf("doc head did not advance: head=%s committed=%s", doc.CurrentRevisionID, out.RevisionID)
+	v2 := headOf(t, s, rec)
+	before, after := blocksByID(t, v1), blocksByID(t, v2)
+	if len(after) != len(before)+1 {
+		t.Fatalf("blocks %d -> %d, want one more", len(before), len(after))
 	}
-	rev, err := s.GetLifecycleRevision(ctx, ownerID, rec.ComputerID, out.RevisionID)
-	if err != nil {
-		t.Fatalf("get committed revision: %v", err)
-	}
-	if rev.AuthorKind != types.AuthorAppAgent {
-		t.Fatalf("cell-authored revision must be AuthorAppAgent, got %s", rev.AuthorKind)
-	}
-	meta := decodeRevisionMetadata(rev.Metadata)
-	if metadataString(meta, "source") != "texture_cell" {
-		t.Fatalf("revision source=%v, want texture_cell: %s", meta["source"], rev.Metadata)
-	}
-	for key := range meta {
-		if strings.HasPrefix(key, "worker_updates") {
-			t.Fatalf("revision metadata carries retired worker_updates leg %q", key)
+	for id, raw := range before {
+		if after[id] != raw {
+			t.Fatalf("untouched block %s changed:\nv1 %s\nv2 %s", id, raw, after[id])
 		}
 	}
-	mutation, err := s.GetAgentMutationByRun(ctx, ownerID, rec.ComputerID, rec.RunID)
-	if err != nil {
-		t.Fatalf("get mutation: %v", err)
+	var refs int
+	for _, raw := range after {
+		refs += strings.Count(raw, `"source_ref"`)
 	}
-	// Consume-at-commit: the mutation stays pending until run completion
-	// terminalizes it from the applied-turn row — it must never be failed or
-	// stale while the cell is still live.
-	if mutation == nil || mutation.State != "pending" {
-		t.Fatalf("mutation must remain pending mid-run: %+v", mutation)
+	if refs != 2 || !strings.Contains(v2.Content, "The regulator appealed") {
+		t.Fatalf("v2 citations = %d, content %q", refs, v2.Content)
 	}
-
-	// Replay: same staged body + same revision identity replays the commit —
-	// no second head.
-	receipt2, err := h.CommitCellTextureAuthor(ctx, &rec, body, "cell-author-idem-1")
-	if err != nil {
-		t.Fatalf("replayed CommitCellTextureAuthor: %v", err)
+	var entities []texturedoc.SourceEntity
+	if err := json.Unmarshal(v2.SourceEntities, &entities); err != nil || len(entities) != 1 || entities[0].Target.URI != "https://example.org/court" {
+		t.Fatalf("source entities = %s", v2.SourceEntities)
 	}
-	var out2 struct {
-		RevisionID string `json:"revision_id"`
-	}
-	_ = json.Unmarshal([]byte(receipt2), &out2)
-	if out2.RevisionID != out.RevisionID {
-		t.Fatalf("replay minted a second head: %s vs %s", out2.RevisionID, out.RevisionID)
-	}
-	doc2, err := s.GetLifecycleDocument(ctx, ownerID, rec.ComputerID, rec.ChannelID)
-	if err != nil {
-		t.Fatalf("get lifecycle document after replay: %v", err)
-	}
-	if doc2.CurrentRevisionID != out.RevisionID {
-		t.Fatalf("replay advanced head: %s", doc2.CurrentRevisionID)
+	if meta := decodeRevisionMetadata(v2.Metadata); metadataString(meta, "source") != "texture_cell" || metadataString(meta, "texture_write_why") != "add the appeal" {
+		t.Fatalf("revision metadata = %s", v2.Metadata)
 	}
 }
 
-// TestCommitCellTextureDecideRecordsTurn covers the decide op: a non-revision
-// lifecycle decision turn (record_texture_decision successor) commits through
-// the same atomic path without advancing the doc head.
-func TestCommitCellTextureDecideRecordsTurn(t *testing.T) {
-	s, err := store.Open(t.TempDir() + "/cell-decide.db")
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+func TestWriteRefusalsCommitNothing(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "refuse")
 	ctx := context.Background()
-	ownerID := "owner-cell-author"
-	rec := seedCellAuthorLifecycle(t, s, ownerID, "decide")
-
-	h := &Handler{Store: s, Bus: events.NewEventBus()}
-	h.createAgentMutationForRun(ctx, &rec)
-
-	docBefore, err := s.GetLifecycleDocument(ctx, ownerID, rec.ComputerID, rec.ChannelID)
-	if err != nil {
-		t.Fatalf("get lifecycle document: %v", err)
+	base := headOf(t, s, rec)
+	uncaptured := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@insert end\nFirst.\n\nA claim {{cite https://example.org/snippet \"some words\"}}.", Why: "x",
+	}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, uncaptured, "refuse-1"); err == nil || !strings.Contains(err.Error(), "line 4") || !strings.Contains(err.Error(), "not captured") {
+		t.Fatalf("uncaptured cite = %v, want a line-4 not-captured refusal", err)
 	}
-	receipt, err := h.CommitCellTextureAuthor(ctx, &rec,
-		`{"op":"decide","decision_kind":"wait_for_evidence","reason":"no ledger evidence yet","next_action":"await child report","base_revision_id":"`+docBefore.CurrentRevisionID+`"}`,
-		"cell-author-idem-2")
-	if err != nil {
-		t.Fatalf("CommitCellTextureAuthor decide: %v", err)
+	split := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@insert end\nBoth {{cite https://example.org/court \"the merger may proceed ... filed on Monday\"}}.", Why: "x",
+	}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, split, "refuse-2"); err == nil || !strings.Contains(err.Error(), "two cites") {
+		t.Fatalf("cross-block ellipsis = %v, want the split refusal", err)
 	}
-	var out struct {
-		Op           string `json:"op"`
-		Outcome      string `json:"outcome"`
-		HeadRevID    string `json:"head_revision_id"`
-		DecisionKind string `json:"decision_kind"`
+	stale := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: "an-older-revision", Write: &yaegikernel.TextureWrite{Edits: "@delete b3", Why: "x"}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, stale, "refuse-3"); err == nil || !strings.Contains(err.Error(), "changed since your frame") {
+		t.Fatalf("stale frame = %v, want the changed-since-your-frame refusal", err)
 	}
-	if err := json.Unmarshal([]byte(receipt), &out); err != nil {
-		t.Fatalf("decode decide receipt: %v", err)
-	}
-	if out.Op != "decide" || out.DecisionKind != "wait_for_evidence" {
-		t.Fatalf("unexpected decide receipt %q", receipt)
-	}
-	docAfter, err := s.GetLifecycleDocument(ctx, ownerID, rec.ComputerID, rec.ChannelID)
-	if err != nil {
-		t.Fatalf("get lifecycle document after decide: %v", err)
-	}
-	if docAfter.CurrentRevisionID != docBefore.CurrentRevisionID {
-		t.Fatalf("decide op advanced doc head: %s -> %s", docBefore.CurrentRevisionID, docAfter.CurrentRevisionID)
+	if head := headOf(t, s, rec); head.RevisionID != base.RevisionID {
+		t.Fatalf("a refused Write moved the head to %s", head.RevisionID)
 	}
 }
 
-// The desk model's natural spelling "wait" normalizes to the canonical
-// wait_for_evidence at ingest — same atomic turn, same non-advancing head,
-// canonical kind on the receipt.
-// Receipt: docs/problems/texture-desk-decision-kind-wait-rejected-2026-09-28.md.
-func TestCommitCellTextureDecideNormalizesWaitKind(t *testing.T) {
-	s, err := store.Open(t.TempDir() + "/cell-decide-alias.db")
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+func TestDoneAloneCompletesTheWorkAtTheCurrentRevision(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "done")
 	ctx := context.Background()
-	ownerID := "owner-cell-author-alias"
-	rec := seedCellAuthorLifecycle(t, s, ownerID, "decide")
-
-	h := &Handler{Store: s, Bus: events.NewEventBus()}
-	h.createAgentMutationForRun(ctx, &rec)
-
-	docBefore, err := s.GetLifecycleDocument(ctx, ownerID, rec.ComputerID, rec.ChannelID)
+	base := headOf(t, s, rec)
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Done: "the document already answers the request"}), "done-1"); err != nil {
+		t.Fatalf("Done: %v", err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID)
 	if err != nil {
-		t.Fatalf("get lifecycle document: %v", err)
+		t.Fatal(err)
 	}
-	receipt, err := h.CommitCellTextureAuthor(ctx, &rec,
-		`{"op":"decide","decision_kind":"wait","reason":"durable engineering desk still running","next_action":"await child report","base_revision_id":"`+docBefore.CurrentRevisionID+`"}`,
-		"cell-author-idem-alias")
+	for _, w := range snapshot.WorkItems {
+		if w.WorkItemID == metadataStringValue(rec.Metadata, "lifecycle_work_item_id") && (w.Status != types.WorkItemCompleted || w.ResultRef != base.RevisionID) {
+			t.Fatalf("work = %+v, want completed at %s", w, base.RevisionID)
+		}
+	}
+	if head := headOf(t, s, rec); head.RevisionID != base.RevisionID {
+		t.Fatalf("Done minted a revision")
+	}
+}
+
+func TestWaitAndRejectCarryTheDispatchFoldAndTheCursor(t *testing.T) {
+	h, s, rec := cellAuthorSetup(t, "wait")
+	ctx := context.Background()
+	base := headOf(t, s, rec)
+	texture, research := rec.AgentID, agentprofile.Research+":"+rec.ChannelID
+	cast := types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cast:tray-1", Kind: types.CommitmentKindDirective,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "cover the ruling", Body: `{"kind":"question","summary":"ruling"}`},
+		Cast:      &types.CommitmentCast{}, Inbox: research, SenderInbox: texture, Addressee: research, ComputerID: rec.ComputerID,
+		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture},
+	}
+	wait := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Wait: "asked research for the ruling", InboxRecords: []types.CommitmentRecord{cast}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, wait, "wait-1"); err != nil {
+		t.Fatalf("Wait with a Cast: %v", err)
+	}
+	if head, err := s.InboxHead(ctx, rec.OwnerID, rec.ComputerID, research); err != nil || head != 1 {
+		t.Fatalf("research inbox head = %d, %v; want the Cast", head, err)
+	}
+	if _, err := s.GetAgentByScope(ctx, rec.OwnerID, rec.ComputerID, research); err != nil {
+		t.Fatalf("the research desk was not minted with the Cast: %v", err)
+	}
+
+	report := types.CommitInboxRecordsRequest{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: "seed-report", Records: []types.CommitmentRecord{{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "research-cell:report:tray-1", Kind: types.CommitmentKindReport,
+		Report: &types.CommitmentReport{Claims: []types.ReportClaim{{Text: "off topic"}}}, Inbox: texture, SenderInbox: research, Addressee: texture,
+		ComputerID: rec.ComputerID, EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: research},
+	}}}
+	report.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(report)
+	if _, err := s.CommitInboxRecords(ctx, report); err != nil {
+		t.Fatalf("seed report: %v", err)
+	}
+	reject := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID,
+		Rejects:     []yaegikernel.TextureReject{{RecordID: "research-cell:report:tray-1", Why: "it does not bear on the ruling"}},
+		InboxCursor: &types.InboxCursorAdvance{ReaderAgentID: texture, Inbox: texture, ExpectedSeq: 0, Seq: 1}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, reject, "reject-1"); err != nil {
+		t.Fatalf("Reject: %v", err)
+	}
+	if cursor, err := s.ReaderCursor(ctx, rec.OwnerID, rec.ComputerID, texture, texture); err != nil || cursor != 1 {
+		t.Fatalf("texture cursor = %d, %v; want 1", cursor, err)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, rec.OwnerID, rec.ComputerID, rec.TrajectoryID)
 	if err != nil {
-		t.Fatalf("CommitCellTextureAuthor decide(wait): %v", err)
+		t.Fatal(err)
 	}
-	var out struct {
-		DecisionKind string `json:"decision_kind"`
-		Outcome      string `json:"outcome"`
+	found := false
+	for _, ev := range snapshot.Events {
+		if ev.Kind == types.LifecycleTextureTurnCommitted && strings.Contains(ev.Reason, "rejected research-cell:report:tray-1: it does not bear on the ruling") {
+			found = true
+		}
 	}
-	if err := json.Unmarshal([]byte(receipt), &out); err != nil {
-		t.Fatalf("decode decide receipt: %v", err)
+	if !found {
+		t.Fatal("the rejection reason was not committed with the turn")
 	}
-	if out.DecisionKind != "wait_for_evidence" {
-		t.Fatalf("decision_kind = %q, want canonical wait_for_evidence", out.DecisionKind)
-	}
-	if out.Outcome != string(types.TextureTurnWait) {
-		t.Fatalf("outcome = %q, want %q", out.Outcome, types.TextureTurnWait)
+	if head := headOf(t, s, rec); head.RevisionID != base.RevisionID {
+		t.Fatal("Wait or Reject minted a revision")
 	}
 }

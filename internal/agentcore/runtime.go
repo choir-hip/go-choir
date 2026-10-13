@@ -38,11 +38,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // ErrPromptCommandConflict marks reuse of a public command identity with a
@@ -141,12 +143,17 @@ type Runtime struct {
 	desktopState    *desktopstate.Handler
 	content         *contentowner.Service
 	capsuleExecutor *capsule.Executor
-	// textureCellAuthorizer commits a staged texture-authoring cell intent
-	// (R3d: choir.ApplyTexture) through the canonical ApplyTextureTurn
+	// textureCellAuthorizer commits a Texture cell's turn (choir.Write,
+	// Done, Wait, Reject) through the canonical ApplyTextureTurn
 	// transaction. Bound by autoputer to the texture lifecycle owner —
 	// the desk-cell carrier cannot import the owner, so this is an
 	// interface seam (same shape as the actor-dispatch hooks).
 	textureCellAuthorizer TextureCellAuthorizer
+	// textureCaptures resolves a citation handle to its capture as a block
+	// document (Cut 2 2a): the frame marks which sources are captured, and
+	// the Write commit checks quotes against it. Nil until the capture store
+	// is wired; then no source counts as captured.
+	textureCaptures texturewrite.CaptureSource
 	// textureCells records what each running Texture activation's cells
 	// staged; the activation's end answers an unanswered trigger from it
 	// (answerIdleTextureTrigger).
@@ -277,10 +284,10 @@ func (rt *Runtime) SetDispatchActor(fn func(ctx context.Context, ownerID, comput
 // reducer calls it — the desk carrier never imports the owner package, so
 // this is the structural seam.
 type TextureCellAuthorizer interface {
-	// CommitCellTextureAuthor commits bodyJSON — the staged texture act
-	// {"op": "apply"|"decide"|"email", ...args} — for the desk activation
-	// run rec, through the same atomic ApplyTextureTurn / lifecycle commit
-	// the retired typed tools used. revisionIdentity is the deterministic
+	// CommitCellTextureAuthor commits bodyJSON — a yaegikernel.TextureTurn
+	// (Write, Done, Wait, Reject, or the runtime's Idle, with the dispatch
+	// fold) — for the desk activation run rec, through the atomic
+	// ApplyTextureTurn / lifecycle commit. revisionIdentity is the deterministic
 	// per-cell idempotency identity the reducer derives so a replayed cell
 	// replays the same commit rather than minting a second head. Returns a
 	// JSON receipt describing the commit (revision_id/command/result).
@@ -291,6 +298,19 @@ type TextureCellAuthorizer interface {
 // commit path (R3d). autoputer calls it after building the owner handler.
 func (rt *Runtime) SetTextureCellAuthorizer(a TextureCellAuthorizer) {
 	rt.textureCellAuthorizer = a
+}
+
+// SetTextureCaptures binds the capture store Texture cites from.
+func (rt *Runtime) SetTextureCaptures(c texturewrite.CaptureSource) {
+	rt.textureCaptures = c
+}
+
+// TextureCaptures is the capture store Texture cites from, or nil.
+func (rt *Runtime) TextureCaptures() texturewrite.CaptureSource {
+	if rt == nil {
+		return nil
+	}
+	return rt.textureCaptures
 }
 
 // SetScheduleActor sets the kernel-only hook for durable not-before events.
@@ -3395,14 +3415,21 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if appendInitialMailboxTurns {
 		initialMailboxPhase = coagentPacketDeliveryThread
 	}
-	injectUserTurns := rt.coagentUpdateTurnInjectorWithInitialPhase(rec, initialMailboxPhase)
+	// A Texture run reads its frame before its first model call and again
+	// whenever its document or records change (Cut 2 2a).
+	frameTurns := rt.textureFrameInjector(rec)
+	injectUserTurns := composeInjectors(frameTurns, rt.coagentUpdateTurnInjectorWithInitialPhase(rec, initialMailboxPhase))
 	initialMessages, err = memory.initialize(ctx, initialMessages)
 	if err != nil {
 		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
 		return
 	}
-	if appendInitialMailboxTurns && injectUserTurns != nil {
-		injected, err := injectUserTurns(false)
+	initialTurns := frameTurns
+	if appendInitialMailboxTurns {
+		initialTurns = injectUserTurns
+	}
+	if initialTurns != nil {
+		injected, err := initialTurns(false)
 		if err != nil {
 			rt.handleExecutionError(ctx, rec, fmt.Errorf("inject initial mailbox turns for actor: %w", err))
 			return
@@ -3459,14 +3486,15 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
 	if runHasProfile(rec, agentprofile.Texture) {
-		// R3d: texture's durable transition is a committed texture_apply cell
-		// intent (choir.ApplyTexture), committed by the bound authorizer inside
-		// ApplyTextureTurn. desk_go_eval receipts carry it as rlm:texture_apply.
+		// Texture's durable transition is a committed texture_turn cell intent
+		// (choir.Write, Done, Wait, Reject, or a dispatch committed as a Wait),
+		// committed by the bound authorizer inside ApplyTextureTurn.
+		// desk_go_eval receipts carry it as rlm:texture_turn.
 		// No initial-tool-choice or required-write choreography: the desk has
 		// one tool, and a turn without a committed write is a completed no-op —
 		// the next semantic event re-arms the reconcile loop. Forcing a write
 		// tool only converted model slips into run-fatal retries.
-		textureAuthored := func(output string) bool { return strings.Contains(output, "rlm:texture_apply:") }
+		textureAuthored := func(output string) bool { return strings.Contains(output, "rlm:"+yaegikernel.IntentTextureTurn+":") }
 		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
 			// One committed authoring turn parks the resident run instead of
 			// turning it terminal.

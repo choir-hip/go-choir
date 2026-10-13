@@ -360,7 +360,7 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 		} else {
 			b.WriteString("y")
 		}
-		b.WriteString(" in reader-facing article prose through structured choir.ApplyTexture insert_source_ref operations placed after the supported sentence or clause. Use display_mode expanded_ref only when a block excerpt is editorially required. If a source is immaterial, use mark_source_unused with a short rationale. Every material source must appear as a source_ref in the body; no source is silently ignored.")
+		b.WriteString(" in reader-facing article prose with a {{ref <source_entity_id>}} token in choir.Write, placed after the sentence or clause it supports. Every material source must appear as a citation in the body.")
 		b.WriteString("\n\nSource briefs (excerpt text for synthesis):\n")
 		for _, entity := range sourceEntities {
 			if strings.TrimSpace(entity.EntityID) == "" {
@@ -384,10 +384,10 @@ func buildCoagentTextureRevisionPrompt(parentRec *types.RunRecord, req coagentTe
 		}
 	}
 	b.WriteString("\n\nHard requirements:")
-	b.WriteString("\n- Use choir.ApplyTexture to write the canonical Texture revision; do not leave the article only in the run result.")
+	b.WriteString("\n- Use choir.Write to write the canonical Texture revision; do not leave the article only in the run result.")
 	b.WriteString("\n- The current document head after this run must be a publishable article or correction/update draft, not a Source Brief, Working Revision, Evidence Gathering note, outline, or placeholder.")
 	b.WriteString("\n- Treat processor/reconciler notes as source context, not final prose.")
-	b.WriteString("\n- Preserve source entities and use native Texture source_ref operations inside article prose; do not replace them with ordinary clickable links, markdown source links, Source: lines, a plain source manifest, or an inventory section.")
+	b.WriteString("\n- Preserve source entities and cite inside article prose with {{ref}} or {{cite}} tokens; do not replace them with ordinary clickable links, markdown source links, Source: lines, a plain source manifest, or an inventory section.")
 	b.WriteString("\n- Use the selected Style.texture sources to shape voice, structure, and editorial judgment; do not name the selected Style.texture or style rationale in reader-facing prose unless it is genuinely part of the story.")
 	b.WriteString("\n- Transclude related Textures where editorially useful; do not render bare related-Texture ID lists as article content.")
 	b.WriteString("\n- Keep Style.texture selection, source inventories, provenance notes, revision state, and handoff mechanics out of the visible article body unless they are editorially necessary. They belong in revision metadata and native source/transclusion affordances, not as reader-facing sections.")

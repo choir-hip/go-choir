@@ -5,155 +5,53 @@ import (
 	"testing"
 )
 
-func TestDefaultSystemPromptIsNonEmpty(t *testing.T) {
+// Texture's prompt core (Cut 2 2a). Ways it can fail: it keeps teaching the
+// retired ApplyTexture body, decide turns, work_disposition, update
+// dispositions or controls; it loses the owner's revision-shape rules; it
+// grows back past its budget; it teaches Texture to open engineering.
+func TestPromptCoreTeachesWriteCitationsAndTurnVerbs(t *testing.T) {
 	prompt := DefaultSystemPrompt()
-	if prompt == "" {
-		t.Fatal("default system prompt should not be empty")
-	}
-	if !strings.Contains(prompt, "system prompt for the texture agent in Choir") {
-		t.Fatalf("unexpected default prompt: %q", prompt)
-	}
-	if !strings.Contains(prompt, "unit of work is not a turn") {
-		t.Fatalf("default prompt should carry why-texture theory: %q", prompt)
-	}
-}
-
-func TestRunOverlayIncludesArticleAndProbeGuidance(t *testing.T) {
-	overlay := RunOverlay()
-	if !strings.Contains(overlay, "Probe (research) is the morphism class for world knowledge") {
-		t.Fatalf("overlay missing probe guidance: %q", overlay)
-	}
-	if !strings.Contains(overlay, "Write a coherent article with clear information hierarchy") {
-		t.Fatalf("overlay missing unconditional article-format guidance: %q", overlay)
-	}
-	if strings.Contains(overlay, "insert_source_embed") {
-		t.Fatalf("overlay should not reference removed insert_source_embed: %q", overlay)
-	}
-}
-
-func TestRevisionPolicyOverlayIncludesApplyTextureExample(t *testing.T) {
-	prompt := RevisionPolicyOverlay(RevisionPolicyOptions{
-		DocID:      "doc-1",
-		RevisionID: "rev-1",
-	})
 	for _, want := range []string{
-		"choir.ApplyTexture",
-		`"op":"apply"`,
-		`"base_revision_id":"rev-1"`,
+		"choir.Write(edits, why)", "@replace", "@insert", "@delete", "@move", "@section", "@all",
+		`{{cite r2.c1 "`, "{{embed", "{{ref", "names its line",
+		"choir.Done(why)", "choir.Wait(why)", "choir.Reject(record, why)",
+		`choir.Cast("research", objective, packet)`, `choir.Cast("management", objective, packet)`, "execution_request",
+		"choir.ReadDoc()", "frame", "r1..rM", "b1..bN",
 	} {
 		if !strings.Contains(prompt, want) {
-			t.Fatalf("revision policy missing cell-authoring guidance %q: %q", want, prompt)
+			t.Errorf("prompt core does not teach %q", want)
 		}
 	}
 }
 
-func TestRunOverlayUsesCellVerbs(t *testing.T) {
-	overlay := RunOverlay()
-	if strings.Contains(overlay, "Universal Wire article revision runs") {
-		t.Fatalf("overlay should not include removed Wire branch: %q", overlay)
-	}
-	if strings.Contains(overlay, "Source ids only in source inventories") {
-		t.Fatalf("overlay should not include removed negative phrasing: %q", overlay)
-	}
-	for _, want := range []string{"choir.ApplyTexture", "ReadDoc()", "Records()", "choir.Cast", "choir.Ask", "choir.Note"} {
-		if !strings.Contains(overlay, want) {
-			t.Fatalf("overlay missing cell-verb guidance %q: %q", want, overlay)
-		}
-	}
-	for _, retired := range []string{
-		"patch" + "_texture",
-		"rewrite" + "_texture",
-		"record" + "_texture_decision",
-		"request" + "_email_draft",
-		"spawn" + "_agent",
-		"update" + "_coagent",
-		"mark" + "_source_unused",
+func TestPromptCoreKeepsTheOwnerRevisionShape(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	for _, want := range []string{
+		"V1, your first revision on a new request, is a fast acknowledgment",
+		"dispatched in the same cell",
+		"Every later revision rewrites the ideas, not a log. Never narrate actions.",
+		"Texture never writes programs.",
+		"state it plainly with its citation",
+		"you never open engineering yourself",
 	} {
-		if strings.Contains(overlay, retired) {
-			t.Fatalf("overlay retains retired authoring vocabulary %q: %q", retired, overlay)
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt core lost the owner's rule %q", want)
 		}
 	}
 }
 
-func TestEffectsOffPromptAuthorityPermitsOnlyAtomicPersistentManagementCapsules(t *testing.T) {
-	prompts := map[string]string{
-		"run": RunOverlay(),
-		"revision": RevisionPolicyOverlay(RevisionPolicyOptions{
-			UserAuthoredRevision: true,
-			HasGroundedHistory:   true,
-			DocID:                "doc-1",
-			RevisionID:           "rev-1",
-		}),
-		"execution findings": RevisionExecutionFindingsOverlay(RevisionExecutionFindingsOptions{
-			ActiveExecution: true,
-		}),
-	}
-	for name, prompt := range prompts {
-		for _, want := range []string{
-			"choir.ApplyTexture",
-			`choir.Cast("management", objective, packet)`,
-			"valid execution_request",
-			"never directly opens, requests, or spawns Engineering",
-			"disposable capsule",
-			"durable execution or capsule evidence",
-		} {
-			if !strings.Contains(prompt, want) {
-				t.Fatalf("%s prompt missing exact effects-OFF authority %q:\n%s", name, want, prompt)
-			}
+func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	for _, retired := range []string{
+		"ApplyTexture", `"op"`, "decide", "work_disposition", "update_dispositions", "decision_kind",
+		"open_researcher", "open_persistent_super", "target_work_item_id", `"controls"`,
+		"insert_source_ref", "mark_source_unused", "base_revision_id",
+	} {
+		if strings.Contains(prompt, retired) {
+			t.Errorf("prompt core still teaches %q", retired)
 		}
 	}
-
-	for _, prompt := range []string{prompts["run"], prompts["revision"]} {
-		for _, want := range []string{
-			"Protected host, self-development, event, checkpoint, materialization, acceptance, route, VM, and SSH effects are unavailable",
-			"Probe morphisms (a choir.Cast or choir.Ask to research, committed with the ApplyTexture turn in the same cell) gather world knowledge",
-		} {
-			if !strings.Contains(prompt, want) {
-				t.Fatalf("prompt missing protected boundary or preserved research behavior %q:\n%s", want, prompt)
-			}
-		}
-	}
-	if !strings.Contains(prompts["revision"], `"op":"email"`) {
-		t.Fatalf("revision prompt lost email draft handoff behavior:\n%s", prompts["revision"])
-	}
-
-	for name, prompt := range prompts {
-		for _, forbidden := range []string{
-			"Execution effects are unavailable in effects-OFF runtime",
-			"effectful work is unavailable in this effects-OFF runtime",
-			"record that effectful work is unavailable; do not request or spawn Management or Engineering",
-			"effects-OFF runtime must not request or imply follow-on execution",
-			"Do not request or spawn Management or Engineering",
-		} {
-			if strings.Contains(prompt, forbidden) {
-				t.Fatalf("%s prompt retains blanket effects-OFF prohibition %q:\n%s", name, forbidden, prompt)
-			}
-		}
-	}
-}
-
-// P2a (docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md): Texture
-// dispatches with choir.Cast, choir.Ask and choir.Note in the same cell as its
-// turn; ApplyTexture no longer takes controls. No served Texture prompt may
-// still teach the control fields.
-func TestServedTexturePromptsTeachCastNotControls(t *testing.T) {
-	entries, err := overlayFS.ReadDir("overlays")
-	if err != nil {
-		t.Fatal(err)
-	}
-	texts := map[string]string{"RunOverlay": RunOverlay()}
-	for _, e := range entries {
-		raw, err := overlayFS.ReadFile("overlays/" + e.Name())
-		if err != nil {
-			t.Fatal(err)
-		}
-		texts[e.Name()] = string(raw)
-	}
-	for name, text := range texts {
-		for _, retired := range []string{"open_researcher", "open_persistent_super", "target_work_item_id", "controls entry", `"controls":`} {
-			if strings.Contains(text, retired) {
-				t.Errorf("%s still teaches %q", name, retired)
-			}
-		}
+	if n := len(prompt); n > 4000 {
+		t.Errorf("prompt core is %d characters; the budget is about 3.5k", n)
 	}
 }

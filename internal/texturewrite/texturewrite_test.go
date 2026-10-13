@@ -30,6 +30,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type fakeCaptures struct {
@@ -245,7 +246,7 @@ func TestRefusalsAreLineLocated(t *testing.T) {
 	doc, entities := citedBase(t)
 	cases := []struct {
 		name, script, want string
-		line             int
+		line               int
 	}{
 		{"bad alias", "@replace b2\nfine\n\n@delete b9", "b9", 4},
 		{"quote not in capture", "@insert end\nX {{cite https://example.org/court \"the court dismissed it\"}}.", "not found", 2},
@@ -373,5 +374,25 @@ func TestLongDocumentFrameDigests(t *testing.T) {
 	}
 	if !strings.Contains(digest, edited.Alias+" "+edited.Text) {
 		t.Fatalf("the edited block %s is not in full", edited.Alias)
+	}
+}
+
+// An owner draft is stored as one paragraph of lines joined by hard breaks.
+// Read as one block, the whole draft is b1 and every Write rewrites all of
+// it; read as markdown, the owner's headings and paragraphs are blocks.
+func TestBaseReadsAnOwnerDraftAsItsBlocks(t *testing.T) {
+	lines := []texturedoc.Node{{Type: "text", Text: "# Title"}, {Type: "hard_break"}, {Type: "hard_break"}, {Type: "text", Text: "First."}, {Type: "hard_break"}, {Type: "hard_break"}, {Type: "text", Text: "Second."}}
+	body, _ := json.Marshal(baseDoc(texturedoc.Node{Type: "paragraph", Attrs: map[string]any{"id": "p"}, Content: lines}))
+	doc, _, err := Base(types.Revision{RevisionID: "r", DocID: "d", AuthorKind: types.AuthorUser, Content: "# Title\n\nFirst.\n\nSecond.", BodyDoc: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks := DocBlocks(doc)
+	if len(blocks) != 3 || blocks[0].Text != "# Title" || blocks[2].Text != "Second." {
+		t.Fatalf("owner draft blocks = %+v", blocks)
+	}
+	again, _, _ := Base(types.Revision{RevisionID: "r", DocID: "d", AuthorKind: types.AuthorUser, Content: "# Title\n\nFirst.\n\nSecond.", BodyDoc: body})
+	if DocBlocks(again)[1].ID != blocks[1].ID {
+		t.Fatal("owner draft block ids are not stable, so the frame and the commit would disagree")
 	}
 }

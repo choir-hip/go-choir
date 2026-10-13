@@ -165,13 +165,15 @@ func TestHelpOnFunctionShowsSignatureAndReturnFields(t *testing.T) {
 
 func TestDeskSurfacePromptBlock(t *testing.T) {
 	block := DeskSurface("texture", "", false)
-	for _, want := range []string{"choir.ApplyTexture(edit any)", "choir.ReadDoc()", "choir.Help()", "choir.Updates()"} {
+	for _, want := range []string{"choir.Write(edits string, why string)", "choir.Done(why string)", "choir.Wait(why string)", "choir.Reject(record string, why string)", "choir.ReadDoc()", "choir.Help()", "choir.Updates()"} {
 		if !strings.Contains(block, want) {
 			t.Errorf("texture surface block missing %q:\n%s", want, block)
 		}
 	}
-	if strings.Contains(block, "choir.Exec(") {
-		t.Errorf("texture surface block lists Exec:\n%s", block)
+	for _, retired := range []string{"choir.Exec(", "choir.ApplyTexture(", "choir.Report(", "choir.ReportPacket(", "choir.Resolve(", "choir.Precommit("} {
+		if strings.Contains(block, retired) {
+			t.Errorf("texture surface block lists %s:\n%s", retired, block)
+		}
 	}
 	if verifier := DeskSurface("engineering", "verifier", false); !strings.Contains(verifier, "choir.Verify(") || !strings.Contains(verifier, "choir.InspectBundle()") {
 		t.Errorf("verifier surface omits its slot functions:\n%s", verifier)
@@ -179,7 +181,7 @@ func TestDeskSurfacePromptBlock(t *testing.T) {
 }
 
 func TestCellErrorHintNamesWhatExists(t *testing.T) {
-	names := []string{"ApplyTexture", "Help", "Inbox", "ReadDoc", "Report", "Updates"}
+	names := []string{"Write", "Help", "Inbox", "ReadDoc", "Report", "Updates"}
 	cases := []struct {
 		src, msg string
 		want     []string
@@ -219,31 +221,21 @@ func TestSessionCellErrorCarriesSurfaceHint(t *testing.T) {
 		t.Fatalf("cell error lacks the surface hint: %q", out.Error)
 	}
 	help, _ := serveCell(sess, SessionFrame{ID: "c2", Source: "println(choir.Help())"}, nil, nil)
-	if help.Error != "" || !strings.Contains(help.Stdout+help.Stderr, "choir.ApplyTexture(") {
+	if help.Error != "" || !strings.Contains(help.Stdout+help.Stderr, "choir.Write(") {
 		t.Fatalf("choir.Help() in the REPL = %+v", help)
 	}
 }
 
-// Texture probed ApplyTexture with turns built to fail, to read the valid
+// Texture probed its write verb with turns built to fail, to read the valid
 // values from the rejection (docs/problems/texture-probes-canonical-write-to-learn-schema-2026-10-11.md).
-// The help gives the whole edit shape, so the only way to learn it is not
-// a staged write, and it does not invite trial.
-func TestApplyTextureHelpGivesTheWholeEditShape(t *testing.T) {
-	doc := choirFunctionDocs["ApplyTexture"].Summary
-	for _, want := range []string{
-		"update_block_text", "insert_block", "append_block", "delete_node", "insert_source_ref", "mark_source_unused",
-		"block_id", "after_block_id", "node_id", "block_type", "heading_level", "source_entity_id", "display_mode",
-		"update_dispositions", "incorporated", "rejected", "work_disposition", "content",
-	} {
+// Write's help gives the whole grammar, so the only way to learn it is not
+// a staged write.
+func TestWriteHelpGivesTheWholeGrammar(t *testing.T) {
+	doc := choirFunctionDocs["Write"].Summary
+	for _, want := range []string{"@replace", "@insert", "@delete", "@move", "@section", "@all", "{{cite", "{{embed", "{{ref", "line"} {
 		if !strings.Contains(doc, want) {
-			t.Errorf("ApplyTexture help does not mention %q", want)
+			t.Errorf("Write help does not mention %q", want)
 		}
-	}
-	if strings.Contains(doc, "Rejections name") {
-		t.Errorf("ApplyTexture help must not invite learning the shape from rejections")
-	}
-	if !strings.Contains(doc, "real write") {
-		t.Errorf("ApplyTexture help must say every staged turn is a real write")
 	}
 }
 

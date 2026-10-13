@@ -13,7 +13,7 @@ import (
 // run and wakes each newly-created target through the normal lifecycle queue
 // path. Exported so owner-reachable surfaces (e.g. the deterministic
 // management-open endpoint) can issue through the same canonical reducer the
-// desk's ApplyTexture path uses — same validators, same command digest, same
+// desk's retired control path used — same validators, same command digest, same
 // target binding.
 func (rt *Runtime) IssueLifecycleControl(ctx context.Context, rec *types.RunRecord, controls []types.TextureTurnControl, reason string) ([]types.CoagentSourcePacket, error) {
 	return rt.issueLifecycleControl(ctx, rec, controls, reason, "")

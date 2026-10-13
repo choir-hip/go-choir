@@ -356,11 +356,9 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 		"../runtimeprompts/overlays/rlm_research_runtime.yaml",
 		"../runtimeprompts/overlays/rlm_engineering_runtime.yaml",
 		"../runtimeprompts/overlays/rlm_management_runtime.yaml",
+		// Texture's prompt is its core alone (Cut 2 2a): the per-run
+		// overlays were deleted with ApplyTexture.
 		"../textureprompts/texture.yaml",
-		"../textureprompts/overlays/run_system.yaml",
-		"../textureprompts/overlays/revision_policy.yaml",
-		"../textureprompts/overlays/revision_execution_findings.yaml",
-		"../textureprompts/overlays/revision_source_entities_intro.yaml",
 	} {
 		raw, err := os.ReadFile(path)
 		if err != nil {

@@ -170,7 +170,7 @@ func WithTerminalToolResult(name string, predicate func(output string) bool) Too
 
 // WithPassivatingToolResult passivates this activation when a successful call
 // to name produces structured output the predicate accepts (e.g. a desk_go_eval
-// result whose receipts carry a committed texture_apply intent). The decision
+// result whose receipts carry a committed texture_turn intent). The decision
 // reads the result payload, not just the tool name.
 func WithPassivatingToolResult(name string, predicate func(output string) bool) ToolLoopOption {
 	return func(opts *toolLoopOptions) {

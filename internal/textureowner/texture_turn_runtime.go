@@ -4,14 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"log"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/agentcore"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -151,263 +147,21 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunR
 	return inbound, nil
 }
 
-// textureResearchRoundsPerOwnerRequest bounds the research controls Texture
-// sends per owner request (or per document creation): the opener plus every
-// follow-up. Without a bound a research report wakes Texture, that turn asks
-// for more research, and the document never idles
-// (texture-research-loop-never-idles-2026-10-09). With one research desk
-// per document (PD1) the bound counts rounds, not desks.
-const textureResearchRoundsPerOwnerRequest = 4
-
-// researchDeskAgentID is the document's one persistent research desk (PD1,
-// docs/definitions/choir-pd1-persistent-research-desk-2026-10-11.md).
-func researchDeskAgentID(docID string) string {
-	return agentprofile.Research + ":" + strings.TrimSpace(docID)
+// textureTurnArgs is what a Texture turn commits besides its outcome: the
+// leftover update packets it rejects, the dispatch fold (records and the
+// cursor advance), the caller work disposition, and the per-cell identity.
+type textureTurnArgs struct {
+	UpdateDispositions []textureUpdateDisposition
+	InboxRecords       []types.CommitmentRecord
+	InboxCursor        *types.InboxCursorAdvance
+	WorkDisposition    types.WorkItemStatus
+	ToolCallID         string
 }
 
-// latestOwnerInput is the latest owner input on the trajectory: creation or
-// an owner revise.
-func latestOwnerInput(snapshot types.LifecycleSnapshot) time.Time {
-	var since time.Time
-	for _, ev := range snapshot.Events {
-		ownerInput := ev.Kind == types.LifecycleTrajectoryStarted ||
-			(ev.Kind == types.LifecycleArtifactHeadAdvanced && strings.HasPrefix(ev.CommandID, "owner-revise:"))
-		if ownerInput && ev.CreatedAt.After(since) {
-			since = ev.CreatedAt
-		}
-	}
-	return since
-}
-
-// researchRoundsSinceOwnerInput counts distinct research controls queued
-// since the latest owner input, excluding ownControls: the deterministic
-// control ids of the turn being built, so replaying a committed turn
-// computes the same controls.
-func researchRoundsSinceOwnerInput(snapshot types.LifecycleSnapshot, ownControls map[string]bool) int {
-	since := latestOwnerInput(snapshot)
-	research := map[string]bool{}
-	for _, work := range snapshot.WorkItems {
-		if work.AuthorityProfile == agentprofile.Research {
-			research[strings.TrimSpace(work.WorkItemID)] = true
-		}
-	}
-	rounds := map[string]bool{}
-	for _, ev := range snapshot.Events {
-		id := strings.TrimSpace(ev.UpdateID)
-		if ev.Kind == types.LifecycleControlQueued && research[strings.TrimSpace(ev.WorkItemID)] && !ev.CreatedAt.Before(since) && id != "" && !ownControls[id] {
-			rounds[id] = true
-		}
-	}
-	return len(rounds)
-}
-
-// mergeResearchOpeners folds every open_researcher in one turn into the
-// first: one desk per document, so one request carries all of the turn's
-// research questions.
-func mergeResearchOpeners(controls []textureControlArgs) []textureControlArgs {
-	out := make([]textureControlArgs, 0, len(controls))
-	first := -1
-	for _, control := range controls {
-		if !control.OpenResearch {
-			out = append(out, control)
-			continue
-		}
-		if first < 0 {
-			first = len(out)
-			out = append(out, control)
-			continue
-		}
-		merged := &out[first]
-		merged.Objective = strings.TrimSpace(merged.Objective + "; " + control.Objective)
-		if control.Packet.Summary != "" {
-			merged.Packet.Summary = strings.TrimSpace(merged.Packet.Summary + "; " + control.Packet.Summary)
-		}
-		merged.Packet.Questions = append(merged.Packet.Questions, control.Packet.Questions...)
-		merged.Packet.Claims = append(merged.Packet.Claims, control.Packet.Claims...)
-		merged.Packet.Sources = append(merged.Packet.Sources, control.Packet.Sources...)
-		merged.Packet.Notes = append(merged.Packet.Notes, control.Packet.Notes...)
-		if act := strings.TrimSpace(control.StagedAct); act != "" && !strings.Contains("+"+merged.StagedAct+"+", "+"+act+"+") {
-			merged.StagedAct = strings.TrimPrefix(merged.StagedAct+"+"+act, "+")
-		}
-	}
-	return out
-}
-
-// textureTurnControls builds the turn's controls. A research opener past the
-// per-request budget is dropped, not failed: the turn still commits, and the
-// returned note goes into the committed reason.
-func (h *Handler) textureTurnControls(ctx context.Context, rec *types.RunRecord, doc types.Document, snapshot types.LifecycleSnapshot, in editTextureArgs) ([]types.TextureTurnControl, string, error) {
-	workByID := make(map[string]types.WorkItemRecord, len(snapshot.WorkItems))
-	for _, work := range snapshot.WorkItems {
-		workByID[strings.TrimSpace(work.WorkItemID)] = work
-	}
-	in.Controls = mergeResearchOpeners(in.Controls)
-	ownWork, ownControls := map[string]bool{}, map[string]bool{}
-	for i, raw := range in.Controls {
-		if raw.OpenResearch {
-			if id, err := textureTurnRuntimeID(rec, in.ToolCallID, "researcher-work", i); err == nil {
-				ownWork[id] = true
-			}
-		}
-		if raw.OpenPersistentManagement {
-			// A replayed turn sees the management work it opened; it must
-			// rebuild the same opener, not continue its own work.
-			if id, err := textureTurnRuntimeID(rec, in.ToolCallID, "persistent-super-work", i); err == nil {
-				ownWork[id] = true
-			}
-		}
-		if id, err := textureTurnRuntimeID(rec, in.ToolCallID, "control", i); err == nil {
-			ownControls[id] = true
-		}
-	}
-	// The document's research desk, whether an earlier turn created it, and
-	// the open research work of this request (the latest, if several).
-	desk := researchDeskAgentID(doc.DocID)
-	since := latestOwnerInput(snapshot)
-	deskExists := false
-	var requestWork *types.WorkItemRecord
-	for i := range snapshot.WorkItems {
-		work := snapshot.WorkItems[i]
-		if strings.TrimSpace(work.AssignedAgentID) != desk || ownWork[strings.TrimSpace(work.WorkItemID)] {
-			continue
-		}
-		deskExists = true
-		if work.Status == types.WorkItemOpen && !work.CreatedAt.Before(since) && (requestWork == nil || work.CreatedAt.After(requestWork.CreatedAt)) {
-			requestWork = &snapshot.WorkItems[i]
-		}
-	}
-	// The request's open management work on this trajectory (the latest, if
-	// several): a management Cast continues it (protocol P2a), since Texture
-	// no longer names work items.
-	managementAgent := agentprofile.Management + ":" + strings.TrimSpace(rec.OwnerID)
-	var requestManagementWork *types.WorkItemRecord
-	for i := range snapshot.WorkItems {
-		work := snapshot.WorkItems[i]
-		if strings.TrimSpace(work.AssignedAgentID) != managementAgent || work.Status != types.WorkItemOpen || ownWork[strings.TrimSpace(work.WorkItemID)] ||
-			strings.TrimSpace(work.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) || work.CreatedAt.Before(since) {
-			continue
-		}
-		if requestManagementWork == nil || work.CreatedAt.After(requestManagementWork.CreatedAt) {
-			requestManagementWork = &snapshot.WorkItems[i]
-		}
-	}
-	rounds := researchRoundsSinceOwnerInput(snapshot, ownControls)
-	dropped := 0
-	controls := make([]types.TextureTurnControl, 0, len(in.Controls))
-	for i, raw := range in.Controls {
-		researchRound := raw.OpenResearch
-		if !researchRound && raw.TargetWorkItemID != "" {
-			researchRound = workByID[strings.TrimSpace(raw.TargetWorkItemID)].AuthorityProfile == agentprofile.Research
-		}
-		if researchRound {
-			if rounds >= textureResearchRoundsPerOwnerRequest {
-				dropped++
-				continue
-			}
-			rounds++
-		}
-		packet, err := agentcore.PrepareTextureControlPacket(raw.Packet)
-		if err != nil {
-			return nil, "", fmt.Errorf("Texture controls[%d] packet: %w", i, err)
-		}
-		controlID, err := textureTurnRuntimeID(rec, in.ToolCallID, "control", i)
-		if err != nil {
-			return nil, "", err
-		}
-		targetAgentID, targetWorkItemID := "", strings.TrimSpace(raw.TargetWorkItemID)
-		var openAgent *types.AgentRecord
-		var openWork *types.WorkItemRecord
-		if raw.OpenPersistentManagement && requestManagementWork != nil {
-			// The request already has open management work: continue it.
-			targetAgentID, targetWorkItemID = managementAgent, strings.TrimSpace(requestManagementWork.WorkItemID)
-		} else if raw.OpenPersistentManagement {
-			targetAgentID = agentprofile.Management + ":" + strings.TrimSpace(rec.OwnerID)
-			// A fresh computer has never registered the persistent management
-			// agent; the HTTP opener ensures it, and so must the turn
-			// (docs/problems/prompt-bar-minesweeper-demo-2026-10-10.md F1).
-			if h.Core == nil {
-				return nil, "", fmt.Errorf("Texture controls[%d] persistent-Management opener: runtime unavailable", i)
-			}
-			if _, err := h.Core.EnsurePersistentManagementAgent(ctx, rec.OwnerID); err != nil {
-				return nil, "", fmt.Errorf("Texture controls[%d] ensure persistent Management agent: %w", i, err)
-			}
-			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "persistent-super-work", i)
-			if err != nil {
-				return nil, "", err
-			}
-			if packet.Kind != "execution_request" || len(packet.Actions) == 0 {
-				return nil, "", fmt.Errorf("Texture controls[%d] persistent-Management opener requires execution_request actions", i)
-			}
-			work := types.WorkItemRecord{
-				WorkItemID: targetWorkItemID, Objective: strings.TrimSpace(raw.Objective),
-				AuthorityProfile: agentprofile.Management, Status: types.WorkItemOpen,
-				AssignedAgentID: targetAgentID,
-			}
-			openWork = &work
-		} else if raw.OpenResearch && requestWork != nil {
-			// The request already has research work on the desk: this opener
-			// is a follow-up to it.
-			targetAgentID, targetWorkItemID = desk, strings.TrimSpace(requestWork.WorkItemID)
-		} else if raw.OpenResearch {
-			targetAgentID = desk
-			targetWorkItemID, err = textureTurnRuntimeID(rec, in.ToolCallID, "researcher-work", i)
-			if err != nil {
-				return nil, "", err
-			}
-			if !deskExists {
-				agent := types.AgentRecord{AgentID: targetAgentID, Profile: agentprofile.Research, Role: agentprofile.Research, ChannelID: doc.DocID}
-				openAgent = &agent
-			}
-			work := types.WorkItemRecord{
-				WorkItemID: targetWorkItemID, Objective: strings.TrimSpace(raw.Objective),
-				AuthorityProfile: agentprofile.Research, Status: types.WorkItemOpen,
-				AssignedAgentID: targetAgentID,
-				CreatedByRunID:  rec.RunID,
-				Details: map[string]any{
-					"requested_by_profile":  agentprofile.Texture,
-					"requested_by_agent_id": rec.AgentID,
-					"requested_by_run_id":   rec.RunID,
-				},
-			}
-			openWork = &work
-		} else {
-			work, ok := workByID[targetWorkItemID]
-			if !ok || work.Status != types.WorkItemOpen || strings.TrimSpace(work.TrajectoryID) != strings.TrimSpace(doc.TrajectoryID) {
-				return nil, "", fmt.Errorf("Texture controls[%d] target work is not an open current-trajectory obligation", i)
-			}
-			targetAgentID = strings.TrimSpace(work.AssignedAgentID)
-			if targetAgentID == "" {
-				return nil, "", fmt.Errorf("Texture controls[%d] target work is unassigned", i)
-			}
-		}
-		// Runtime lookup is an early fail-closed refusal for existing targets; a
-		// Research opener proves absence and creates its runtime-derived agent in
-		// the same ApplyTextureTurn CAS as work and first control.
-		if openAgent == nil {
-			if _, err := h.Store.GetAgentByScope(ctx, rec.OwnerID, doc.ComputerID, targetAgentID); err != nil {
-				return nil, "", fmt.Errorf("Texture controls[%d] load exact target: %w", i, err)
-			}
-		}
-		content := agentcore.BuildTextureLifecycleControlContent(packet, targetAgentID, targetWorkItemID)
-		payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
-		if err != nil {
-			return nil, "", fmt.Errorf("Texture controls[%d] payload digest: %w", i, err)
-		}
-		controls = append(controls, types.TextureTurnControl{
-			ControlID: controlID, TargetAgentID: targetAgentID, TargetWorkItemID: targetWorkItemID,
-			OpenAgent: openAgent, OpenWork: openWork, Packet: packet, Content: content, PayloadDigest: payloadDigest,
-			StagedAct: strings.TrimSpace(raw.StagedAct),
-		})
-	}
-	note := ""
-	if dropped > 0 {
-		note = fmt.Sprintf("[runtime: research rounds for this owner request are spent (%d of %d); %d research control(s) not sent]", textureResearchRoundsPerOwnerRequest, textureResearchRoundsPerOwnerRequest, dropped)
-		log.Printf("textureowner: Texture %s run %s: %s", rec.AgentID, rec.RunID, note)
-	}
-	return controls, note, nil
-}
-
-func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunRecord, doc types.Document, in editTextureArgs, outcome types.TextureTurnOutcome, revision types.Revision, graph store.TextureSourceGraphWriteSet, reason string) (types.LifecycleResult, error) {
+// applyTextureLifecycleTurn commits one Texture turn through the atomic
+// ApplyTextureTurn transaction: its outcome (a revision or none), the
+// records it sends, the cursor advance and the caller's work disposition.
+func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunRecord, doc types.Document, in textureTurnArgs, outcome types.TextureTurnOutcome, revision types.Revision, graph store.TextureSourceGraphWriteSet, reason string) (types.LifecycleResult, error) {
 	snapshot, err := h.Store.GetLifecycleSnapshot(ctx, rec.OwnerID, doc.ComputerID, doc.TrajectoryID)
 	if err != nil {
 		return types.LifecycleResult{}, fmt.Errorf("load Texture lifecycle turn snapshot: %w", err)
@@ -420,26 +174,9 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 	if resultRef == "" {
 		resultRef = strings.TrimSpace(doc.CurrentRevisionID)
 	}
-	// A record needs no disposition (Cut 1 L3a): the turn's cursor advance
-	// marks what it read. A disposition naming a record id is dropped, not
-	// refused.
-	dispositions := make([]textureUpdateDisposition, 0, len(in.UpdateDispositions))
-	for _, d := range in.UpdateDispositions {
-		if isRecord, recErr := h.Store.CommitmentRecordExists(ctx, rec.OwnerID, doc.ComputerID, strings.TrimSpace(d.UpdateID)); recErr == nil && isRecord {
-			continue
-		}
-		dispositions = append(dispositions, d)
-	}
-	inbound, err := textureTurnPendingInbound(snapshot, rec, dispositions, resultRef)
+	inbound, err := textureTurnPendingInbound(snapshot, rec, in.UpdateDispositions, resultRef)
 	if err != nil {
 		return types.LifecycleResult{}, err
-	}
-	controls, budgetNote, err := h.textureTurnControls(ctx, rec, doc, snapshot, in)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	if budgetNote != "" {
-		reason = strings.TrimSpace(reason + " " + budgetNote)
 	}
 	commandUUID, err := textureTurnRuntimeID(rec, in.ToolCallID, "command", 0)
 	if err != nil {
@@ -460,7 +197,7 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 			callerWorkItemID = ""
 		}
 	}
-	callerWorkDisposition := types.WorkItemStatus(strings.TrimSpace(in.WorkDisposition))
+	callerWorkDisposition := in.WorkDisposition
 	if callerWorkDisposition == "" || callerWorkItemID == "" {
 		// A turn on records has no work item to settle (Cut 1).
 		callerWorkDisposition = types.WorkItemOpen
@@ -474,97 +211,12 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 		ExpectedHeadRevisionID:         doc.CurrentRevisionID,
 		CallerWorkItemID:               callerWorkItemID,
 		CallerWorkDisposition:          callerWorkDisposition,
-		Outcome:                        outcome, Revision: revision, Reason: strings.TrimSpace(reason), Inbound: inbound, Controls: controls,
+		Outcome:                        outcome, Revision: revision, Reason: strings.TrimSpace(reason), Inbound: inbound,
 		InboxRecords: in.InboxRecords, InboxCursor: in.InboxCursor,
 	}
 	req.CommandDigest, err = store.ComputeApplyTextureTurnWithSourceGraphDigest(req, graph)
 	if err != nil {
 		return types.LifecycleResult{}, fmt.Errorf("digest Texture lifecycle turn: %w", err)
 	}
-	result, err := h.Store.ApplyTextureTurnWithSourceGraph(ctx, req, graph)
-	if err != nil {
-		return types.LifecycleResult{}, err
-	}
-	// A successful replay is durable success but not a new commit. Only packets
-	// first created by this commit are eligible for actor wake.
-	if !result.Replay && h.wakeTextureControl != nil {
-		seenTargets := map[string]bool{}
-		for _, control := range result.Controls {
-			key := control.TrajectoryID + "\x00" + control.TargetAgentID
-			if seenTargets[key] {
-				continue
-			}
-			seenTargets[key] = true
-			h.wakeTextureControl(context.WithoutCancel(ctx), control)
-		}
-	}
-	return result, nil
-}
-
-func textureDecisionTurnOutcome(kind string) types.TextureTurnOutcome {
-	switch strings.TrimSpace(kind) {
-	case "wait_for_evidence", "delegation_deferred":
-		return types.TextureTurnWait
-	case "blocker":
-		return types.TextureTurnBlock
-	default:
-		return types.TextureTurnNoSemanticChange
-	}
-}
-
-func (h *Handler) commitTextureNonRevisionTurn(ctx context.Context, rec *types.RunRecord, in recordTextureDecisionArgs, toolCallID string) (types.LifecycleResult, error) {
-	if h == nil || h.Store == nil || rec == nil {
-		return types.LifecycleResult{}, fmt.Errorf("Texture runtime store unavailable")
-	}
-	h.textureEditMu.Lock()
-	defer h.textureEditMu.Unlock()
-	in.DecisionKind = normalizeTextureDecisionKind(in.DecisionKind)
-	if !validTextureDecisionKind(in.DecisionKind) {
-		return types.LifecycleResult{}, fmt.Errorf("decision_kind must be one of delegation_opened, delegation_skipped, delegation_deferred, wait_for_evidence, blocker, no_worker_needed")
-	}
-	if strings.TrimSpace(in.Reason) == "" {
-		return types.LifecycleResult{}, fmt.Errorf("decision reason must not be empty")
-	}
-	if err := validateTextureControls("texture_cell", in.Controls); err != nil {
-		return types.LifecycleResult{}, err
-	}
-	computerID := strings.TrimSpace(rec.ComputerID)
-	docID := strings.TrimSpace(in.DocID)
-	if docID == "" {
-		docID = strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID))
-	}
-	if docID == "" || docID != strings.TrimSpace(metadataStringValue(rec.Metadata, "doc_id")) || rec.ChannelID != docID {
-		return types.LifecycleResult{}, fmt.Errorf("texture cell decision does not match authenticated Texture document")
-	}
-	mutation, err := h.Store.GetAgentMutationByRun(ctx, rec.OwnerID, computerID, rec.RunID)
-	if err != nil || mutation == nil || mutation.State != "pending" || mutation.DocID != docID {
-		if err != nil {
-			return types.LifecycleResult{}, fmt.Errorf("load Texture mutation: %w", err)
-		}
-		return types.LifecycleResult{}, fmt.Errorf("Texture mutation is not pending for this document")
-	}
-	subject, err := h.Store.GetAgentByScope(ctx, rec.OwnerID, computerID, rec.AgentID)
-	if err != nil || subject.LifecycleVersion <= 0 || rec.AgentID != currentTextureAgentID(docID) {
-		if err != nil {
-			return types.LifecycleResult{}, fmt.Errorf("load scoped lifecycle Texture subject: %w", err)
-		}
-		return types.LifecycleResult{}, fmt.Errorf("texture cell decision requires exact lifecycle Texture caller")
-	}
-	doc, err := h.Store.GetLifecycleDocument(ctx, rec.OwnerID, computerID, docID)
-	if err != nil {
-		return types.LifecycleResult{}, fmt.Errorf("load lifecycle Texture document: %w", err)
-	}
-	if strings.TrimSpace(in.BaseRevisionID) == "" || strings.TrimSpace(in.BaseRevisionID) != doc.CurrentRevisionID {
-		return types.LifecycleResult{}, fmt.Errorf("base_revision_id is required and must equal current revision %q", doc.CurrentRevisionID)
-	}
-	editIn := editTextureArgs{
-		DocID: docID, BaseRevisionID: in.BaseRevisionID, UpdateDispositions: in.UpdateDispositions,
-		Controls: in.Controls, InboxRecords: in.InboxRecords, InboxCursor: in.InboxCursor,
-		WorkDisposition: string(types.WorkItemOpen), ToolCallID: strings.TrimSpace(toolCallID),
-	}
-	result, err := h.applyTextureLifecycleTurn(ctx, rec, doc, editIn, textureDecisionTurnOutcome(in.DecisionKind), types.Revision{}, store.TextureSourceGraphWriteSet{}, in.Reason)
-	if err != nil {
-		return types.LifecycleResult{}, fmt.Errorf("apply atomic Texture non-revision turn: %w", err)
-	}
-	return result, nil
+	return h.Store.ApplyTextureTurnWithSourceGraph(ctx, req, graph)
 }

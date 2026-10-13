@@ -155,8 +155,11 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 	if req.CallerWorkDisposition != types.WorkItemOpen && req.CallerWorkDisposition != types.WorkItemCompleted {
 		return fmt.Errorf("apply Texture turn: caller work disposition must be open or completed")
 	}
-	if req.CallerWorkDisposition == types.WorkItemCompleted && req.Outcome != types.TextureTurnRevision {
-		return fmt.Errorf("apply Texture turn: completed caller work requires revision outcome")
+	// Completed work names its result: a new revision, or (choir.Done with
+	// no Write, Cut 2 2a) the current head with no semantic change. A wait
+	// or block outcome cannot complete work.
+	if req.CallerWorkDisposition == types.WorkItemCompleted && req.Outcome != types.TextureTurnRevision && req.Outcome != types.TextureTurnNoSemanticChange {
+		return fmt.Errorf("apply Texture turn: completed caller work requires a revision or no-semantic-change outcome")
 	}
 	if docRef, ok := req.SubjectRefs["doc_id"]; ok && docRef != req.DocumentID {
 		return fmt.Errorf("apply Texture turn: subject_refs.doc_id cannot change document authority")
@@ -474,7 +477,8 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 
 	// The caller Texture assignment is a separate obligation, never a synthetic
 	// self-addressed update. Its exact open record participates in every turn CAS;
-	// completed is permitted only with a committed revision result.
+	// completed names the resulting head: the new revision, or the unchanged
+	// head of a no-semantic-change turn (choir.Done with no Write).
 	if hasCallerWork && req.CallerWorkDisposition == types.WorkItemCompleted {
 		seq++
 		callerWork.Status = types.WorkItemCompleted

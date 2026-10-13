@@ -11,7 +11,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
-	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -223,12 +222,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}))
 	}
 	if profile == agentprofile.Texture {
-		b.WriteString(textureprompts.RunOverlay())
+		// Texture's prompt is its core (texture.yaml) and the generated verb
+		// list; the frame carries the document and records each turn (Cut 2
+		// 2a). The per-run overlays were deleted with ApplyTexture.
 		if operationID := textureRunSelfDevelopmentOperation(rt, rec); operationID != "" {
-			b.WriteString("\n\nSelf-development supervision:\nThis document supervises self-development operation " + operationID + ". The runtime runs the operation: engineering builds and freezes the change, an independent judgment checks it, the owner approves or rejects it, and the update applies. Do not send controls to verify, approve, apply or re-run it. Keep the document a true account of where the operation stands, from the reports in choir.Updates(): what was built, what the evidence shows, and what is still pending. When a report adds nothing the document needs, record a decision (op \"decide\", decision_kind \"wait_for_evidence\") instead of a revision.")
-		}
-		if strings.TrimSpace(rec.TrajectoryID) != "" && strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) != "" {
-			b.WriteString("\n\nLifecycle Texture dispatch authority:\nTexture is a full-RLM desk: you author the document with choir.ApplyTexture and dispatch with choir.Cast, choir.Ask and choir.Note in the same cell, and the runtime commits them with the turn. The document has one research desk: choir.Cast(\"research\", objective, packet) opens this request's research work, and every later Cast, Ask or Note to research reaches that work. Request execution with choir.Cast(\"management\", objective, packet) carrying a valid execution_request packet, one per cell. A dispatch without an apply or decide ApplyTexture in the same cell is refused. Each owner request (and the document's creation) allows a bounded number of research rounds; the runtime drops further rounds and notes it in the turn, so finish with the evidence in hand. Agent/work/control/update/target identities and direction are runtime-derived; never author them in packet fields.")
+			b.WriteString("\n\nSelf-development supervision:\nThis document supervises self-development operation " + operationID + ". The runtime runs the operation: engineering builds and freezes the change, an independent judgment checks it, the owner approves or rejects it, and the update applies. Do not ask to verify, approve, apply or re-run it. Keep the document a true account of where the operation stands, from the reports in choir.Updates(): what was built, what the evidence shows, and what is still pending. When a report adds nothing the document needs, call choir.Wait(why) instead of writing.")
 		}
 	}
 	if profile == agentprofile.Management {
@@ -350,9 +348,9 @@ func deskCarrierLive(profile string) bool {
 // (R3b): desk_go_eval is the sole tool on every desk registry. Management's
 // lifecycle control surface is in-cell too: bound producer reports ride
 // choir.ReportPacket -> persistentManagementBoundReport; assignment
-// cancellation rides choir.CancelAssignment. For texture (R3d) authoring is
-// the staged choir.ApplyTexture cell intent committed through
-// ApplyTextureTurn, not a registered tool.
+// cancellation rides choir.CancelAssignment. Texture authors with the
+// staged choir.Write turn committed through ApplyTextureTurn, not a
+// registered tool.
 func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchtools.Dependencies) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if err := registry.Register(newDeskGoEvalTool(rt, rt.deskSessionWorkers(), deskRole)); err != nil {

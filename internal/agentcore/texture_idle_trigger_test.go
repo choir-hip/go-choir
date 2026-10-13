@@ -21,8 +21,10 @@ import (
 //   - a read-only Texture cell commits a turn (consuming pending reports);
 //   - an activation whose cells authored nothing never answers its trigger
 //     (defect #5, a08defc0, returns);
-//   - the answer misstates what the activation did (no_worker_needed after a
+//   - the answer misstates what the activation did (nothing staged after a
 //     staged act);
+//   - a cell that dispatched (a Cast, Ask or Note commits as a Wait) is
+//     answered a second time;
 //   - an activation that applied a revision commits a second, idle turn;
 //   - an activation with no completed cell, or a failed one, is answered;
 //   - a non-Texture activation is answered.
@@ -77,34 +79,41 @@ func TestTextureReadOnlyCellCommitsNothing(t *testing.T) {
 
 func TestTextureActivationEndAnswersAnUnansweredTrigger(t *testing.T) {
 	ctx := context.Background()
-	t.Run("nothing staged answers no_worker_needed once", func(t *testing.T) {
+	t.Run("nothing staged answers once, as idle", func(t *testing.T) {
 		rt, auth, rec := idleTriggerTextureRun(t)
 		rt.noteTextureCell(rec.RunID, nil)
 		rt.noteTextureCell(rec.RunID, nil)
 		if err := rt.answerIdleTextureTrigger(ctx, &rec); err != nil {
 			t.Fatal(err)
 		}
-		if len(auth.bodies) != 1 || !strings.Contains(auth.bodies[0], `"decision_kind":"no_worker_needed"`) || !strings.Contains(auth.bodies[0], `"op":"decide"`) {
-			t.Fatalf("answers = %v, want one no_worker_needed decide", auth.bodies)
+		if len(auth.bodies) != 1 || !strings.Contains(auth.bodies[0], `"idle":"desk activation completed with no authoring act`) || !strings.Contains(auth.bodies[0], `"base_revision_id"`) {
+			t.Fatalf("answers = %v, want one idle turn", auth.bodies)
 		}
 		if err := rt.answerIdleTextureTrigger(ctx, &rec); err != nil || len(auth.bodies) != 1 {
 			t.Fatalf("second answer: %v, bodies=%d; want none", err, len(auth.bodies))
 		}
 	})
-	t.Run("a staged act answers delegation_skipped", func(t *testing.T) {
+	t.Run("an act off the document answers that it acted", func(t *testing.T) {
 		rt, auth, rec := idleTriggerTextureRun(t)
 		rt.noteTextureCell(rec.RunID, nil)
-		rt.noteTextureCell(rec.RunID, []yaegikernel.StagedIntent{{Kind: "ask"}})
+		rt.noteTextureCell(rec.RunID, []yaegikernel.StagedIntent{{Kind: "escalate"}})
 		if err := rt.answerIdleTextureTrigger(ctx, &rec); err != nil {
 			t.Fatal(err)
 		}
-		if len(auth.bodies) != 1 || !strings.Contains(auth.bodies[0], `"decision_kind":"delegation_skipped"`) {
-			t.Fatalf("answers = %v, want delegation_skipped", auth.bodies)
+		if len(auth.bodies) != 1 || !strings.Contains(auth.bodies[0], "committed an act off the texture doc") {
+			t.Fatalf("answers = %v, want the act off the doc", auth.bodies)
+		}
+	})
+	t.Run("a dispatch is a turn and is not answered again", func(t *testing.T) {
+		rt, auth, rec := idleTriggerTextureRun(t)
+		rt.noteTextureCell(rec.RunID, []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentAsk}})
+		if err := rt.answerIdleTextureTrigger(ctx, &rec); err != nil || len(auth.bodies) != 0 {
+			t.Fatalf("dispatching activation answered: %v %v", err, auth.bodies)
 		}
 	})
 	t.Run("an applied revision is not answered again", func(t *testing.T) {
 		rt, auth, rec := idleTriggerTextureRun(t)
-		rt.noteTextureCell(rec.RunID, []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentTextureApply}})
+		rt.noteTextureCell(rec.RunID, []yaegikernel.StagedIntent{{Kind: yaegikernel.IntentTextureTurn}})
 		rt.noteTextureCell(rec.RunID, nil)
 		if err := rt.answerIdleTextureTrigger(ctx, &rec); err != nil || len(auth.bodies) != 0 {
 			t.Fatalf("applied activation answered: %v %v", err, auth.bodies)

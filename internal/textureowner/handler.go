@@ -47,7 +47,6 @@ type Handler struct {
 	ModelPolicy *modelpolicy.Manager
 	Provider    provideriface.Provider
 
-	wakeTextureControl func(context.Context, types.CoagentSourcePacket)
 	textureEditMu      sync.Mutex
 	textureWakeLocksMu sync.Mutex
 	textureWakeLocks   map[string]*textureWakeLock
@@ -85,13 +84,12 @@ func NewHandler(core *agentcore.Runtime) *Handler {
 		return &Handler{}
 	}
 	return &Handler{
-		Core:               core,
-		Store:              core.Store(),
-		Bus:                core.EventBus(),
-		Content:            core.TextureContentService(),
-		ModelPolicy:        core.TextureModelPolicy(),
-		Provider:           core.TextureProvider(),
-		wakeTextureControl: core.WakeUpdatedCoagent,
+		Core:        core,
+		Store:       core.Store(),
+		Bus:         core.EventBus(),
+		Content:     core.TextureContentService(),
+		ModelPolicy: core.TextureModelPolicy(),
+		Provider:    core.TextureProvider(),
 	}
 }
 

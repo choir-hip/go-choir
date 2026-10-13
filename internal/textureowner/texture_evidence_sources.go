@@ -509,44 +509,6 @@ func mergeCoagentSourceRejections(existing, incoming []coagentSourceRejection) (
 	return merged, changed
 }
 
-func formatCoagentSourceRejectionsForPrompt(rejections []coagentSourceRejection) string {
-	if len(rejections) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for _, rejection := range rejections {
-		reason := strings.TrimSpace(rejection.Reason)
-		if reason == "" {
-			continue
-		}
-		b.WriteString("- ")
-		if rejection.SourceID != "" {
-			b.WriteString("source_id=")
-			b.WriteString(rejection.SourceID)
-			b.WriteString(" ")
-		}
-		if rejection.UpdateID != "" {
-			b.WriteString("update_id=")
-			b.WriteString(rejection.UpdateID)
-			b.WriteString(" ")
-		}
-		if rejection.Kind != "" {
-			b.WriteString("kind=")
-			b.WriteString(rejection.Kind)
-			b.WriteString(" ")
-		}
-		if rejection.TargetURI != "" {
-			b.WriteString("target_uri=")
-			b.WriteString(rejection.TargetURI)
-			b.WriteString(" ")
-		}
-		b.WriteString("reason=")
-		b.WriteString(reason)
-		b.WriteString("\n")
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
 func splitTypedEvidenceRef(ref string) (string, string) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
