@@ -78,3 +78,35 @@ report: M3 (`degradeBoundDefines` turns a retyping `x :=` into a failing
 assignment), M4 (record fields the prompts never teach), M7 and M2a
 (yaegi compile defects, two of which kill the worker), and the prompts'
 false claim that a failed cell poisons the session.
+
+## B4. A records wake reactivates a parked Texture run and nobody runs it
+
+Found 2026-10-13 by the management scenario c1-l3b-mgmt-1 on 49092e2f
+(bundle ~/.config/choir-qa/traces/c1-l3b-mgmt-1/bundle-a1.json, sha256
+ab0561ed…). Timeline from the trace: Texture cast to management at
+07:45:52; management's final Report at 07:48:36 started Texture run
+258b508d, which read it and committed a decide turn with a Cast to
+research at 07:49:20 (no new revision), then parked
+(`passivated_reason durable_transition_success`, mutation sleeping).
+Research's final Report reached `texture:<doc>` at 07:56:22. At
+07:56:22.9 run 258b508d went to `pending` with
+`actor_reactivated_from_passivated` and `request_source update_coagent`.
+No loop event followed in the four minutes before the tracer stopped the
+computer; Texture's cursor stayed at 1 under head 2.
+
+Cause, from code: the records wake (`handleInboxRecord`,
+internal/actorruntime/handler.go) calls `ReconcileAgentWake` and discards
+its result. When the document head still equals the parked run's
+revision (the turn was a decide, so the head did not move),
+`reactivatePassivatedTextureRun` selects that run, sets it pending and
+returns it, expecting the calling occurrence to execute it ("the current
+coagent_result occurrence is the execution authority"). The coagent path
+does so; the records path does not. A fresh run (head moved) is
+dispatched by `submitTextureAgentRevisionRun`, which is why c1-l3a-story-1
+(every turn an apply) never hit this. Any records wake after a turn that
+left the head unchanged stalls Texture, and the pending run then
+suppresses every later wake as the active run.
+
+Fix: the inbox_record occurrence executes a run that this wake
+reactivated, as the coagent path does. Mutation class orange (Texture
+activation dispatch; no canonical write path changes).
