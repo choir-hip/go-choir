@@ -109,7 +109,8 @@ const STORY = [
 // The management scenario (Cut 1 L3b): a request only management can take
 // up. Its claim is the conversation on records: Texture's Cast reaches
 // management:<owner>, management answers with a final Report that closes the
-// round, and Texture revises after it.
+// round, and a committed Texture turn reads it (Texture's cursor reaches the
+// Report; whether that turn revises or asks for more is the model's call).
 const MANAGEMENT_STORY = [
   'Produce a CSV file with the populations of the five largest cities in Europe and attach it to this document.',
   'This needs execution: Cast the request to management in your first cell, write a short plan revision with it,',
@@ -703,8 +704,8 @@ async function managementScenario(c, out, n, deadline, phase) {
     const r = await c.api(`/api/inboxes/${encodeURIComponent(id)}/records?limit=1000`);
     return r.status === 200 ? r.body : null;
   };
-  const claim = { cast_to_management: null, management_final_report: null, revision_after_report: null };
-  while (Date.now() < deadline && !(claim.management_final_report && claim.revision_after_report)) {
+  const claim = { cast_to_management: null, management_final_report: null, texture_read_report: null };
+  while (Date.now() < deadline && !(claim.management_final_report && claim.texture_read_report)) {
     if (!ownerID) {
       const runs = await c.api(`/api/runs?trajectory_id=${encodeURIComponent(out.trajectory_id)}&limit=50`);
       const list = runs.body?.runs || runs.body?.items || (Array.isArray(runs.body) ? runs.body : []);
@@ -718,12 +719,11 @@ async function managementScenario(c, out, n, deadline, phase) {
     if (claim.cast_to_management && !claim.management_final_report) {
       const t = await inbox(textureInbox);
       const fin = (t?.records || []).find((r) => r.sender_inbox === `management:${ownerID}` && r.final);
-      if (fin) { claim.management_final_report = { record_id: fin.record_id, round: fin.round, at: fin.provenance?.committed_at }; phase('management_final_report', claim.management_final_report); }
+      if (fin) { claim.management_final_report = { record_id: fin.record_id, round: fin.round, seq: fin.inbox_seq, at: fin.provenance?.committed_at }; phase('management_final_report', claim.management_final_report); }
     }
-    if (claim.management_final_report && !claim.revision_after_report) {
-      const after = Date.parse(claim.management_final_report.at);
-      const rev = (await deskRevisions(c, out.doc_id)).find((r) => Date.parse(r.created_at) > after);
-      if (rev) { claim.revision_after_report = { revision_id: rev.revision_id, at: rev.created_at }; phase('revision_after_report', claim.revision_after_report); }
+    if (claim.management_final_report && !claim.texture_read_report) {
+      const t = await inbox(textureInbox);
+      if (t && Number(t.cursor) >= Number(claim.management_final_report.seq)) { claim.texture_read_report = { cursor: t.cursor, head: t.head, at: new Date().toISOString() }; phase('texture_read_report', claim.texture_read_report); }
     }
     await sleep(5_000);
   }
@@ -738,9 +738,9 @@ async function managementScenario(c, out, n, deadline, phase) {
   const mgmtInbox = (bundle.layers?.inboxes?.items || []).find((i) => String(i.inbox || '').startsWith('management:'));
   const roundClosed = mgmtInbox ? !(mgmtInbox.open_rounds || []).some((r) => r.caster_inbox === textureInbox && r.round === claim.cast_to_management?.round) : false;
   out.acceptance = {
-    scenario: 'management', claim: 'Texture and management converse on records: Cast to management:<owner>, management final Report closes the round, Texture revises after it',
+    scenario: 'management', claim: 'Texture and management converse on records: Cast to management:<owner>, management final Report closes the round, a committed Texture turn reads it',
     ...claim, round_closed: roundClosed,
-    pass: Boolean(claim.cast_to_management && claim.management_final_report && claim.revision_after_report && roundClosed),
+    pass: Boolean(claim.cast_to_management && claim.management_final_report && claim.texture_read_report && roundClosed),
   };
   phase('acceptance', out.acceptance);
   delete out.drill;
