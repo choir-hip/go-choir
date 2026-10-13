@@ -46,3 +46,36 @@ be pinned by default at all.
   guest writes a planned-restart marker, and D7's work-state epoch treats a
   jump from 86770ae7 as a crash. Parked runs (295) and open rounds close as
   interrupted by a restart. The owner confirmed this before the refresh.
+
+## Repair (2026-10-13, red; landed locally, not yet staging-proven)
+
+Deploys now refresh active computers through a host-requested planned
+restart:
+
+- The guest serves `POST /internal/runtime/planned-restart {"target"}`
+  (host-peer only). It writes the marker (reason `platform update`, its own
+  work-state epoch) and answers 200 once the marker is durable. It answers
+  409 `outcome busy` while runs are running or a self-development operation
+  is mid-transaction. `DELETE` clears the marker.
+- vmctl serves `/internal/vmctl/deploy-refresh`. GET returns the selection:
+  every active interactive computer, constructed and `premium_always_on`
+  included, with held ones skipped. POST asks the guest for the marker and
+  then refreshes. Busy or unreachable guests get 409 `deferred`. A guest
+  built before the endpoint (404) is refreshed only if its `/health` reports
+  no work, and that boot is a crash boot. A failed refresh clears the marker.
+- CI uses this path on every deploy that sets `deploy_active_vm_refresh`.
+  Deferred computers are listed in the activation receipt
+  (`active_computers.deferred`) and retried at the next such deploy. The
+  manual input `refresh_active_computers=true` also force-refreshes deferred
+  computers through `/internal/vmctl/refresh`, which is still a crash boot.
+- D7 is unchanged. A marker from another work-state epoch is still a crash
+  boot, so a deploy that bumps the epoch closes work instead of resuming it.
+
+Residuals:
+
+- A deferred computer waits for the next deploy that changes the guest. No
+  idle sweep retries it.
+- A run admitted between the guest's busy check and the kill is parked and
+  resumed once by the planned boot, not refused.
+- The first deploy carrying this change reaches guests that predate the
+  endpoint, so those idle computers take a crash boot one last time.
