@@ -108,7 +108,7 @@ type Runtime struct {
 	deskWorkersMu sync.Mutex
 	// researchDeps are the search/HTTP/source clients bound at
 	// tool-install for the desk cell's host-mediated egress verbs
-	// (choir.FetchURL → StreamBrokerEgress → deskEgress; choir.SearchStart →
+	// (choir.Read → StreamBrokerEgress → deskEgress; choir.SearchStart →
 	// startSearch, desk_search.go). nil until
 	// InstallDefaultAgentTools builds them.
 	researchDeps *researchtools.Dependencies

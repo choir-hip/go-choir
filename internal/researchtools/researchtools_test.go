@@ -5,32 +5,22 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
-	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestRegisterInstallsEightResearchToolsWithCanonicalSchemas(t *testing.T) {
+func TestRegisterInstallsResearchToolsWithCanonicalSchemas(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	if err := Register(registry, Dependencies{}); err != nil {
 		t.Fatalf("register research tools: %v", err)
 	}
 
 	wantNames := []string{
-		"fetch_url",
-		"import_document_content",
-		"import_url_content",
-		"list_content_item_selectors",
-		"read_content_item",
-		"read_content_item_selector",
+		"read",
 		"search_wire_corpus",
 		"source_search",
 	}
@@ -46,13 +36,9 @@ func TestRegisterInstallsEightResearchToolsWithCanonicalSchemas(t *testing.T) {
 		t.Fatalf("registered tools = %v, want %v", gotNames, wantNames)
 	}
 
-	readItem, _ := registry.Lookup("read_content_item")
-	readProperties := readItem.Parameters["properties"].(map[string]any)
-	if readProperties["max_text_chars"].(map[string]any)["maximum"] != 100000 {
-		t.Fatalf("read_content_item max_text_chars schema = %#v", readProperties["max_text_chars"])
-	}
-	if readProperties["max_segments"].(map[string]any)["maximum"] != 1000 {
-		t.Fatalf("read_content_item max_segments schema = %#v", readProperties["max_segments"])
+	read, _ := registry.Lookup("read")
+	if !reflect.DeepEqual(read.Parameters["required"], []string{"url"}) {
+		t.Fatalf("read required = %#v", read.Parameters["required"])
 	}
 
 	if err := Register(registry, Dependencies{}); err == nil || !strings.Contains(err.Error(), "already registered") {
@@ -198,129 +184,4 @@ func TestHTTPSourceClientPreservesServiceErrors(t *testing.T) {
 	if NewSourceClient(SourceClientConfig{BaseURL: "://bad"}) != nil {
 		t.Fatal("invalid source URL should not configure a client")
 	}
-}
-
-func TestContentReadsPreserveBoundsSelectorsAndProvenance(t *testing.T) {
-	st := openTestStore(t)
-	metadata, _ := json.Marshal(map[string]any{
-		"segments": []any{map[string]any{"text": "first"}, map[string]any{"text": "second"}},
-		"selectors": []any{
-			map[string]any{"id": "page-1", "kind": "page", "label": "Page 1", "text": "alpha evidence"},
-			map[string]any{"id": "page-2", "kind": "page", "label": "Page 2", "text": "beta evidence"},
-		},
-	})
-	provenance := json.RawMessage(`{"source":"fixture","trusted":false}`)
-	now := time.Now().UTC()
-	item := types.ContentItem{
-		ContentID: "content-1", OwnerID: "owner-1", SourceType: "document",
-		MediaType: "application/pdf", AppHint: "document", Title: "Evidence",
-		SourceURL: "https://example.test/evidence.pdf", CanonicalURL: "https://example.test/evidence.pdf",
-		TextContent: "first segment and second segment", ContentHash: "sha256-content",
-		Metadata: metadata, Provenance: provenance, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := st.CreateContentItem(context.Background(), item); err != nil {
-		t.Fatalf("create content item: %v", err)
-	}
-
-	registry := toolregistry.NewToolRegistry()
-	if err := Register(registry, Dependencies{Store: st}); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
-		RunID: "research-run", OwnerID: item.OwnerID, Profile: agentprofile.Research,
-	})
-	raw, err := registry.Execute(toolCtx, "read_content_item", json.RawMessage(`{"content_id":"content-1","max_text_chars":12,"max_segments":1}`))
-	if err != nil {
-		t.Fatalf("read_content_item: %v", err)
-	}
-	var readResult map[string]any
-	if err := json.Unmarshal([]byte(raw), &readResult); err != nil {
-		t.Fatalf("decode read result: %v", err)
-	}
-	if readResult["text_content"] != "first segmen" || readResult["text_truncated"] != true {
-		t.Fatalf("bounded text = %#v", readResult)
-	}
-	if readResult["segment_count"] != float64(2) || len(readResult["segments"].([]any)) != 1 || readResult["segments_truncated"] != true {
-		t.Fatalf("bounded segments = %#v", readResult)
-	}
-	if readResult["provenance"].(map[string]any)["source"] != "fixture" {
-		t.Fatalf("provenance = %#v", readResult["provenance"])
-	}
-	// update_coagent is gone; research results carry no instruction to
-	// call it.
-	if readResult["next_instruction"] != nil {
-		t.Fatalf("read result carries a stale instruction: %#v", readResult["next_instruction"])
-	}
-
-	raw, err = registry.Execute(toolCtx, "list_content_item_selectors", json.RawMessage(`{"content_id":"content-1"}`))
-	if err != nil {
-		t.Fatalf("list_content_item_selectors: %v", err)
-	}
-	var listResult map[string]any
-	_ = json.Unmarshal([]byte(raw), &listResult)
-	if listResult["selector_count"] != float64(2) || listResult["next_instruction"] != nil {
-		t.Fatalf("selector list/checkpoint = %#v", listResult)
-	}
-
-	raw, err = registry.Execute(toolCtx, "read_content_item_selector", json.RawMessage(`{"content_id":"content-1","selector_id":"page-2","max_text_chars":4}`))
-	if err != nil {
-		t.Fatalf("read_content_item_selector: %v", err)
-	}
-	var selectorResult map[string]any
-	_ = json.Unmarshal([]byte(raw), &selectorResult)
-	if selectorResult["selector_kind"] != "page" || selectorResult["text_content"] != "beta" || selectorResult["text_truncated"] != true {
-		t.Fatalf("selector result = %#v", selectorResult)
-	}
-	if selectorResult["next_instruction"] != nil {
-		t.Fatalf("selector result carries a stale instruction: %#v", selectorResult["next_instruction"])
-	}
-}
-
-func TestFetchURLPreservesHTTPMetadataAndBoundedProjection(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(strings.Repeat("abcdef", 1000)))
-	}))
-	defer server.Close()
-
-	registry := toolregistry.NewToolRegistry()
-	if err := Register(registry, Dependencies{HTTP: server.Client()}); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-	raw, err := registry.Execute(context.Background(), "fetch_url", json.RawMessage(`{"url":"`+server.URL+`","max_chars":5000}`))
-	if err != nil {
-		t.Fatalf("fetch_url: %v", err)
-	}
-	var envelope struct {
-		ModelOutput struct {
-			StatusCode   int    `json:"status_code"`
-			Content      string `json:"content"`
-			VisibleChars int    `json:"visible_chars"`
-			OmittedChars int    `json:"omitted_chars"`
-		} `json:"model_output"`
-		DurableOutput struct {
-			Content       string `json:"content"`
-			ContentLength int    `json:"content_length"`
-		} `json:"durable_output"`
-	}
-	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
-		t.Fatalf("decode fetch projection: %v", err)
-	}
-	if envelope.ModelOutput.StatusCode != http.StatusAccepted || envelope.ModelOutput.VisibleChars != 4003 || envelope.ModelOutput.OmittedChars != 997 {
-		t.Fatalf("fetch model output = %#v", envelope.ModelOutput)
-	}
-	if len(envelope.ModelOutput.Content) != 4003 || !strings.HasSuffix(envelope.ModelOutput.Content, "...") || len(envelope.DurableOutput.Content) != 5000 || envelope.DurableOutput.ContentLength != 6000 {
-		t.Fatalf("fetch durable/model bounds = model %d durable %d length %d", len(envelope.ModelOutput.Content), len(envelope.DurableOutput.Content), envelope.DurableOutput.ContentLength)
-	}
-}
-
-func openTestStore(t *testing.T) *store.Store {
-	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "researchtools.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	return st
 }

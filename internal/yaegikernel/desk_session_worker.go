@@ -50,7 +50,7 @@ type DeskSessionWorkerConfig struct {
 	// receipt that a cell death would silently lose.
 	Emit EmitHandler
 	// Egress services StreamBrokerEgress frames the worker sends mid-cell
-	// for host-mediated network verbs (search_start / fetch_url /
+	// for host-mediated network verbs (search_start / read /
 	// source_search). The host resolves the call against its deps and
 	// returns the bounded result. Nil refuses the verb.
 	Egress func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error)
@@ -325,7 +325,7 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 				w.serviceEmit(ctx, payload)
 				continue
 			}
-			// Mid-cell host-mediated network verbs (search_start / fetch_url /
+			// Mid-cell host-mediated network verbs (search_start / read /
 			// source_search) ride the shared egress stream; the host resolves
 			// them and answers, then keeps waiting for the StreamCell result.
 			if stream == StreamBrokerEgress {

@@ -11,7 +11,7 @@ import (
 // over a real socketpair: the host EvalCell services a StreamBrokerEgress
 // frame via the configured Egress handler, writes StreamBrokerEgressResult,
 // and the cell's StreamCell result still completes the Eval. This is the
-// choir.SourceSearch/FetchURL boundary — the cell never holds a socket.
+// choir.SourceSearch/Read boundary — the cell never holds a socket.
 func TestDeskWorkerEgressRoundTrip(t *testing.T) {
 	host, worker, err := SocketPair()
 	if err != nil {
@@ -103,8 +103,8 @@ func TestDeskWorkerEgressRefused(t *testing.T) {
 	if _, _, err := wfc.ReadFrame(); err != nil {
 		t.Fatalf("worker read cell frame: %v", err)
 	}
-	payload, _ := json.Marshal(FetchURLPayload{URL: "https://x"})
-	req, _ := json.Marshal(BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "e2", Action: ActionFetchURL, Payload: payload})
+	payload, _ := json.Marshal(ReadPayload{URL: "https://x"})
+	req, _ := json.Marshal(BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: "e2", Action: ActionRead, Payload: payload})
 	_ = wfc.WriteFrame(StreamBrokerEgress, req)
 	stream, rraw, err := wfc.ReadFrame()
 	if err != nil {

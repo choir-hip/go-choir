@@ -61,7 +61,7 @@ func TestResearchCellRegistryIsSealed(t *testing.T) {
 	// desk_go_eval. Every former typed tool is gone; its capability is a
 	// choir.* egress verb inside the cell.
 	for _, gone := range []string{
-		"web_search", "fetch_url", "source_search", "import_url_content",
+		"web_search", "fetch_url", "read", "read_capture", "source_search", "import_url_content",
 		"import_document_content", "search_wire_corpus", "read_content_item",
 		"list_content_item_selectors", "read_content_item_selector",
 		"save_evidence", "read_evidence", "list_evidence", "get_run_memory_entry",

@@ -37,7 +37,7 @@ time.Sleep(3 * time.Second)`
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("decode %s: %v", out, err)
 	}
-	for _, want := range []string{"timeout_ms=500", "session was killed", "choir.FetchURL", "choir.SearchWait"} {
+	for _, want := range []string{"timeout_ms=500", "session was killed", "choir.Read", "choir.SearchWait"} {
 		if !strings.Contains(got.Error, want) {
 			t.Fatalf("timeout error %q does not name %q", got.Error, want)
 		}

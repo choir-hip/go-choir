@@ -110,19 +110,15 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit}
 	if role == SessionRoleResearchChild {
 		actions = []BrokerAction{ActionReadFile, ActionListDir,
-			ActionSearchStart, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
-			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
-			ActionReadContentSelector, ActionSearchWireCorpus,
+			ActionSearchStart, ActionRead, ActionReadCapture, ActionSourceSearch, ActionSearchWireCorpus,
 			ActionReadEvidence, ActionListEvidence}
 	} else if readOnly {
 		// Research is read-only on the filesystem but owns the host-mediated
-		// egress verbs (search_start/fetch_url/source_search/import_*/read_*/
-		// list_*/search_wire_corpus + evidence/run-memory) — the handle must
-		// authorize the frame actions the cell verbs dispatch.
+		// egress verbs (search_start/read/read_capture/source_search/
+		// search_wire_corpus/poll_source + evidence/run-memory) — the handle
+		// must authorize the frame actions the cell verbs dispatch.
 		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit,
-			ActionSearchStart, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
-			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
-			ActionReadContentSelector, ActionSearchWireCorpus,
+			ActionSearchStart, ActionRead, ActionSourceSearch, ActionSearchWireCorpus,
 			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
 			ActionPollSource, ActionReadCapture}
 	}
@@ -291,15 +287,13 @@ var deskModuleSets = map[string][]string{
 	// read-only world access is not read-only messaging.
 	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"SearchStart", "Searches", "SearchWait", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
-		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
-		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "ReadCapture"},
+		"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SourceSearch", "SearchWireCorpus",
+		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource"},
 	// A child research activation (choir.Research) reads the world and may
 	// fan out further; it cannot message, report or write. Its findings
 	// return to the parent cell as a value. It runs on the same desk-session
 	// machinery as its parent, so it searches the same async way.
-	SessionRoleResearchChild: {"SearchStart", "Searches", "SearchWait", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
-		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
+	SessionRoleResearchChild: {"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SourceSearch", "SearchWireCorpus",
 		"ReadEvidence", "ListEvidence"},
 	// Texture authors document revisions and escalates; artifact writes are
 	// the staged ApplyTexture intent (committed through ApplyTextureTurn),
@@ -367,46 +361,41 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		exports["Emits"] = reflect.ValueOf(s.Emits)
 	}
 	verbs := map[string]func() reflect.Value{
-		"WriteFile":            func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
-		"Exec":                 func() reflect.Value { return reflect.ValueOf(s.Exec) },
-		"Assign":               func() reflect.Value { return reflect.ValueOf(s.Assign) },
-		"Message":              func() reflect.Value { return reflect.ValueOf(s.Message) },
-		"Emit":                 func() reflect.Value { return reflect.ValueOf(s.Emit) },
-		"Complete":             func() reflect.Value { return reflect.ValueOf(s.Complete) },
-		"Freeze":               func() reflect.Value { return reflect.ValueOf(s.Freeze) },
-		"Cast":                 func() reflect.Value { return reflect.ValueOf(s.Cast) },
-		"Ask":                  func() reflect.Value { return reflect.ValueOf(s.Ask) },
-		"Note":                 func() reflect.Value { return reflect.ValueOf(s.Note) },
-		"Reply":                func() reflect.Value { return reflect.ValueOf(s.Reply) },
-		"CancelAct":            func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
-		"CancelAssignment":     func() reflect.Value { return reflect.ValueOf(s.CancelAssignment) },
-		"Escalate":             func() reflect.Value { return reflect.ValueOf(s.Escalate) },
-		"Precommit":            func() reflect.Value { return reflect.ValueOf(s.Precommit) },
-		"Report":               func() reflect.Value { return reflect.ValueOf(s.Report) },
-		"ReportPacket":         func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
-		"Resolve":              func() reflect.Value { return reflect.ValueOf(s.Resolve) },
-		"Disagreement":         func() reflect.Value { return reflect.ValueOf(s.Disagreement) },
-		"ReadDoc":              func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
-		"ApplyTexture":         func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
-		"SearchStart":          func() reflect.Value { return reflect.ValueOf(s.SearchStart) },
-		"SearchWait":           func() reflect.Value { return reflect.ValueOf(s.SearchWait) },
-		"Searches":             func() reflect.Value { return reflect.ValueOf(s.searches) }, // a value: choir.Searches.Get(id), .List()
-		"Research":             func() reflect.Value { return reflect.ValueOf(s.Research) },
-		"FetchURL":             func() reflect.Value { return reflect.ValueOf(s.FetchURL) },
-		"PollSource":           func() reflect.Value { return reflect.ValueOf(s.PollSource) },
-		"ReadCapture":          func() reflect.Value { return reflect.ValueOf(s.ReadCapture) },
-		"SourceSearch":         func() reflect.Value { return reflect.ValueOf(s.SourceSearch) },
-		"ImportDocument":       func() reflect.Value { return reflect.ValueOf(s.ImportDocument) },
-		"ImportURL":            func() reflect.Value { return reflect.ValueOf(s.ImportURL) },
-		"ReadContentItem":      func() reflect.Value { return reflect.ValueOf(s.ReadContentItem) },
-		"ListContentSelectors": func() reflect.Value { return reflect.ValueOf(s.ListContentSelectors) },
-		"ReadContentSelector":  func() reflect.Value { return reflect.ValueOf(s.ReadContentSelector) },
-		"SearchWireCorpus":     func() reflect.Value { return reflect.ValueOf(s.SearchWireCorpus) },
-		"SaveEvidence":         func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
-		"ReadEvidence":         func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
-		"ListEvidence":         func() reflect.Value { return reflect.ValueOf(s.ListEvidence) },
-		"RunMemoryEntry":       func() reflect.Value { return reflect.ValueOf(s.RunMemoryEntry) },
-		"ProductAPI":           func() reflect.Value { return reflect.ValueOf(s.ProductAPI) },
+		"WriteFile":        func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
+		"Exec":             func() reflect.Value { return reflect.ValueOf(s.Exec) },
+		"Assign":           func() reflect.Value { return reflect.ValueOf(s.Assign) },
+		"Message":          func() reflect.Value { return reflect.ValueOf(s.Message) },
+		"Emit":             func() reflect.Value { return reflect.ValueOf(s.Emit) },
+		"Complete":         func() reflect.Value { return reflect.ValueOf(s.Complete) },
+		"Freeze":           func() reflect.Value { return reflect.ValueOf(s.Freeze) },
+		"Cast":             func() reflect.Value { return reflect.ValueOf(s.Cast) },
+		"Ask":              func() reflect.Value { return reflect.ValueOf(s.Ask) },
+		"Note":             func() reflect.Value { return reflect.ValueOf(s.Note) },
+		"Reply":            func() reflect.Value { return reflect.ValueOf(s.Reply) },
+		"CancelAct":        func() reflect.Value { return reflect.ValueOf(s.CancelAct) },
+		"CancelAssignment": func() reflect.Value { return reflect.ValueOf(s.CancelAssignment) },
+		"Escalate":         func() reflect.Value { return reflect.ValueOf(s.Escalate) },
+		"Precommit":        func() reflect.Value { return reflect.ValueOf(s.Precommit) },
+		"Report":           func() reflect.Value { return reflect.ValueOf(s.Report) },
+		"ReportPacket":     func() reflect.Value { return reflect.ValueOf(s.ReportPacket) },
+		"Resolve":          func() reflect.Value { return reflect.ValueOf(s.Resolve) },
+		"Disagreement":     func() reflect.Value { return reflect.ValueOf(s.Disagreement) },
+		"ReadDoc":          func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
+		"ApplyTexture":     func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
+		"SearchStart":      func() reflect.Value { return reflect.ValueOf(s.SearchStart) },
+		"SearchWait":       func() reflect.Value { return reflect.ValueOf(s.SearchWait) },
+		"Searches":         func() reflect.Value { return reflect.ValueOf(s.searches) }, // a value: choir.Searches.Get(id), .List()
+		"Research":         func() reflect.Value { return reflect.ValueOf(s.Research) },
+		"Read":             func() reflect.Value { return reflect.ValueOf(s.Read) },
+		"PollSource":       func() reflect.Value { return reflect.ValueOf(s.PollSource) },
+		"ReadCapture":      func() reflect.Value { return reflect.ValueOf(s.ReadCapture) },
+		"SourceSearch":     func() reflect.Value { return reflect.ValueOf(s.SourceSearch) },
+		"SearchWireCorpus": func() reflect.Value { return reflect.ValueOf(s.SearchWireCorpus) },
+		"SaveEvidence":     func() reflect.Value { return reflect.ValueOf(s.SaveEvidence) },
+		"ReadEvidence":     func() reflect.Value { return reflect.ValueOf(s.ReadEvidence) },
+		"ListEvidence":     func() reflect.Value { return reflect.ValueOf(s.ListEvidence) },
+		"RunMemoryEntry":   func() reflect.Value { return reflect.ValueOf(s.RunMemoryEntry) },
+		"ProductAPI":       func() reflect.Value { return reflect.ValueOf(s.ProductAPI) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -594,12 +583,14 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 	return kept, nil
 }
 
-// FetchURL resolves a URL fetch through the host's HTTP client —
-// synchronous, bounded, never an open socket.
-// Returns the tool's bounded projection as JSON.
-func (s *ChoirScope) FetchURL(url string) (JSON, error) {
+// Read fetches a web page or PDF through the host's address-guarded client
+// into a shared capture (a block document with its raw bytes) and returns
+// the capture id, URL, title, block count and the first blocks with their
+// ids; a long page also returns next_block and a digest of its headings.
+// An unchanged page re-read returns its existing capture.
+func (s *ChoirScope) Read(url string) (JSON, error) {
 	var out JSON
-	err := s.call(ActionFetchURL, FetchURLPayload{URL: url}, &out)
+	err := s.call(ActionRead, ReadPayload{URL: url}, &out)
 	return out, err
 }
 
@@ -612,54 +603,20 @@ func (s *ChoirScope) PollSource(sourceID string, maxItems int) (JSON, error) {
 	return out, err
 }
 
-// SourceSearch queries the Source Service through the host; returns the
-// bounded source-list projection as JSON.
-// ReadCapture reads one shared capture (from any computer's poll) with its
-// body text, at most maxChars characters (0 means 8000).
-func (s *ChoirScope) ReadCapture(captureID string, maxChars int) (JSON, error) {
+// ReadCapture reads one shared capture (from any computer's poll or Read):
+// its blocks with their ids from block fromBlock, as many as fit in
+// maxChars characters (0 means 8000), and next_block when more remain.
+func (s *ChoirScope) ReadCapture(captureID string, fromBlock, maxChars int) (JSON, error) {
 	var out JSON
-	err := s.call(ActionReadCapture, ReadCapturePayload{CaptureID: captureID, MaxChars: maxChars}, &out)
+	err := s.call(ActionReadCapture, ReadCapturePayload{CaptureID: captureID, FromBlock: fromBlock, MaxChars: maxChars}, &out)
 	return out, err
 }
 
+// SourceSearch queries the Source Service through the host; returns the
+// bounded source-list projection as JSON.
 func (s *ChoirScope) SourceSearch(query string, maxResults int) (JSON, error) {
 	var out JSON
 	err := s.call(ActionSourceSearch, SourceSearchPayload{Query: query, MaxResults: maxResults}, &out)
-	return out, err
-}
-
-// ImportDocument imports a URL or file path into the ContentItem substrate.
-func (s *ChoirScope) ImportDocument(url, filePath, query string) (JSON, error) {
-	var out JSON
-	err := s.call(ActionImportDocument, ImportDocumentPayload{URL: url, FilePath: filePath, Query: query}, &out)
-	return out, err
-}
-
-// ImportURL imports a URL into the ContentItem substrate.
-func (s *ChoirScope) ImportURL(url, query string) (JSON, error) {
-	var out JSON
-	err := s.call(ActionImportURL, ImportURLPayload{URL: url, Query: query}, &out)
-	return out, err
-}
-
-// ReadContentItem reads an owner-scoped ContentItem's bounded text/metadata.
-func (s *ChoirScope) ReadContentItem(contentID string, maxTextChars, maxSegments int) (JSON, error) {
-	var out JSON
-	err := s.call(ActionReadContentItem, ReadContentItemPayload{ContentID: contentID, MaxTextChars: maxTextChars, MaxSegments: maxSegments}, &out)
-	return out, err
-}
-
-// ListContentSelectors lists addressable selectors (pages/slides/chunks).
-func (s *ChoirScope) ListContentSelectors(contentID string) (JSON, error) {
-	var out JSON
-	err := s.call(ActionListContentSelectors, ListContentSelectorsPayload{ContentID: contentID}, &out)
-	return out, err
-}
-
-// ReadContentSelector reads one exact selector's text from a ContentItem.
-func (s *ChoirScope) ReadContentSelector(contentID, selectorID string, maxTextChars int) (JSON, error) {
-	var out JSON
-	err := s.call(ActionReadContentSelector, ReadContentSelectorPayload{ContentID: contentID, SelectorID: selectorID, MaxTextChars: maxTextChars}, &out)
 	return out, err
 }
 

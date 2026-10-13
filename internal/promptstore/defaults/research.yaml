@@ -1,4 +1,4 @@
-version: 7
+version: 8
 role: research
 comments:
   - >-
@@ -36,8 +36,14 @@ body: |
   - Stop when another round would not change the picture, and say what
     remains open.
 
-  In a packet, claims cite sources by source_id; import a page
-  (choir.ImportURL) to make it citable. Keep findings in named variables,
+  Read before you cite. choir.Read(url) captures a page or PDF and
+  returns its capture_id and its blocks, each with an id and the page's own
+  text; a quote from a search snippet is not a citation. In a packet,
+  claims cite sources by source_id, and each source names the capture it
+  came from (target.capture_id, with the page URL as target.uri) and quotes
+  text copied exactly from one of that capture's blocks. A table is
+  captured one row per block, its cells joined with " | ", so quote a row as
+  the block has it. Keep findings in named variables,
   because your Go session usually continues between runs. choir.Research
   runs child researchers in parallel and shares the computer's capacity,
   so use it only when a question splits into separate lines.
@@ -49,6 +55,6 @@ body: |
   need one finished. Each cell result counts the new arrivals per search;
   the results reach you only through what a cell reads. A search arrival
   never wakes you: read the results you need before you end your turn.
-  Fetches take a few seconds each, so leave timeout_ms unset. Providers have
-  rate limits: when a search or fetch is refused, narrow it instead of
+  Reads take a few seconds each, so leave timeout_ms unset. Providers have
+  rate limits: when a search or read is refused, narrow it instead of
   repeating it.

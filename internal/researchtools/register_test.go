@@ -9,12 +9,7 @@ import "github.com/yusefmosiah/go-choir/internal/toolregistry"
 func Register(registry *toolregistry.ToolRegistry, deps Dependencies) error {
 	for _, tool := range []toolregistry.Tool{
 		newSourceSearchTool(deps.Source, deps),
-		newFetchURLTool(deps.HTTP, deps),
-		newImportDocumentContentTool(deps),
-		newImportURLContentTool(deps),
-		newReadContentItemTool(deps),
-		newListContentItemSelectorsTool(deps),
-		newReadContentItemSelectorTool(deps),
+		newReadTool(deps),
 		newSearchWireCorpusTool(deps),
 	} {
 		if err := registry.Register(tool); err != nil {

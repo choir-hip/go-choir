@@ -41,3 +41,17 @@ func TestEnumRejectionsNameAllowedValues(t *testing.T) {
 		t.Fatalf("packet kind rejection should name allowed kinds, got %v", err)
 	}
 }
+
+// Cut 2 amendment A2: research names the capture a source came from
+// (choir.Read's capture_id) beside its URL. Failure mode pinned: the field
+// is dropped when the packet is normalized, so the quote cannot be joined to
+// the capture it was copied from.
+func TestNormalizeKeepsTheSourceCaptureID(t *testing.T) {
+	packet := Normalize(types.CoagentSourcePacketPayload{Sources: []types.CoagentPacketSource{{
+		SourceID: "s1", Kind: "web_source",
+		Target: types.CoagentPacketSourceTarget{URI: "https://example.com/a", CaptureID: "  choir.web_capture:owner:abc  "},
+	}}})
+	if got := packet.Sources[0].Target.CaptureID; got != "choir.web_capture:owner:abc" {
+		t.Fatalf("capture_id = %q", got)
+	}
+}

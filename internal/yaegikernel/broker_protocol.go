@@ -21,17 +21,15 @@ const (
 	ActionEmit      BrokerAction = "emit"
 	// ActionSearchStart starts an async search on the host; its arrivals come
 	// back on StreamSearchArrival frames (search_store.go).
-	ActionSearchStart          BrokerAction = "search_start"
-	ActionFetchURL             BrokerAction = "fetch_url"
-	ActionPollSource           BrokerAction = "poll_source"
-	ActionReadCapture          BrokerAction = "read_capture"
-	ActionSourceSearch         BrokerAction = "source_search"
-	ActionImportDocument       BrokerAction = "import_document_content"
-	ActionImportURL            BrokerAction = "import_url_content"
-	ActionReadContentItem      BrokerAction = "read_content_item"
-	ActionListContentSelectors BrokerAction = "list_content_item_selectors"
-	ActionReadContentSelector  BrokerAction = "read_content_item_selector"
-	ActionSearchWireCorpus     BrokerAction = "search_wire_corpus"
+	ActionSearchStart BrokerAction = "search_start"
+	// ActionRead fetches a page or PDF into a shared capture (Cut 2 unit
+	// 2a); it replaced fetch_url, import_url_content,
+	// import_document_content and the ContentItem selector reads.
+	ActionRead             BrokerAction = "read"
+	ActionPollSource       BrokerAction = "poll_source"
+	ActionReadCapture      BrokerAction = "read_capture"
+	ActionSourceSearch     BrokerAction = "source_search"
+	ActionSearchWireCorpus BrokerAction = "search_wire_corpus"
 	// ActionResearch runs child research activations on the host and
 	// returns their findings to the calling cell (RLM actor recursion).
 	ActionResearch          BrokerAction = "research"
@@ -193,9 +191,10 @@ type ProductAPIPayload struct {
 	Body   json.RawMessage `json:"body,omitempty"`
 }
 
-// FetchURLPayload defines the parameters for ActionFetchURL — a host-
-// resolved fetch; the cell receives bounded content, never a socket.
-type FetchURLPayload struct {
+// ReadPayload defines ActionRead: a host-resolved fetch into a shared
+// capture; the cell receives the capture id and bounded blocks, never a
+// socket.
+type ReadPayload struct {
 	URL string `json:"url"`
 }
 
@@ -206,10 +205,11 @@ type PollSourcePayload struct {
 	MaxItems int    `json:"max_items,omitempty"`
 }
 
-// ReadCapturePayload defines ActionReadCapture: read one shared capture
-// with its body text (Autopaper W1).
+// ReadCapturePayload defines ActionReadCapture: read one shared capture's
+// blocks from FromBlock (Autopaper W1; Cut 2 unit 2a).
 type ReadCapturePayload struct {
 	CaptureID string `json:"capture_id"`
+	FromBlock int    `json:"from_block,omitempty"`
 	MaxChars  int    `json:"max_chars,omitempty"`
 }
 
@@ -220,28 +220,6 @@ type ReadCapturePayload struct {
 type SourceSearchPayload struct {
 	Query      string `json:"query"`
 	MaxResults int    `json:"max_results,omitempty"`
-}
-type ImportDocumentPayload struct {
-	URL      string `json:"url,omitempty"`
-	FilePath string `json:"file_path,omitempty"`
-	Query    string `json:"query,omitempty"`
-}
-type ImportURLPayload struct {
-	URL   string `json:"url"`
-	Query string `json:"query,omitempty"`
-}
-type ReadContentItemPayload struct {
-	ContentID    string `json:"content_id"`
-	MaxTextChars int    `json:"max_text_chars,omitempty"`
-	MaxSegments  int    `json:"max_segments,omitempty"`
-}
-type ListContentSelectorsPayload struct {
-	ContentID string `json:"content_id"`
-}
-type ReadContentSelectorPayload struct {
-	ContentID    string `json:"content_id"`
-	SelectorID   string `json:"selector_id"`
-	MaxTextChars int    `json:"max_text_chars,omitempty"`
 }
 type SearchWireCorpusPayload struct {
 	Query string `json:"query"`
@@ -288,8 +266,7 @@ func (r *BrokerRequest) Validate() error {
 	}
 	switch r.Action {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
-		ActionSearchStart, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
-		ActionReadContentItem, ActionListContentSelectors, ActionReadContentSelector, ActionSearchWireCorpus,
+		ActionSearchStart, ActionRead, ActionSourceSearch, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture:
 		return nil

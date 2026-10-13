@@ -45,6 +45,7 @@ func Normalize(packet types.CoagentSourcePacketPayload) types.CoagentSourcePacke
 				URI:       strings.TrimSpace(source.Target.URI),
 				Title:     strings.TrimSpace(source.Target.Title),
 				MediaType: strings.TrimSpace(source.Target.MediaType),
+				CaptureID: strings.TrimSpace(source.Target.CaptureID),
 			},
 			Evidence: types.CoagentPacketSourceEvidence{
 				State:       strings.TrimSpace(source.Evidence.State),

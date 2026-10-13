@@ -327,7 +327,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 		Description: "Evaluate model-authored Go source for this desk in a killable host subprocess (restricted stdlib, per-role choir verbs). The desk's session continues across its runs, so values from earlier runs stay defined until a restart, a failed or timed-out cell, or " + deskSessionRetention.String() + " idle; the first cell of each run says whether the session is new or continuing.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"source":     map[string]any{"type": "string", "description": "Raw Go source for one REPL cell; stage desk acts with choir.* verbs."},
-			"timeout_ms": map[string]any{"type": "integer", "description": "Optional evaluation timeout in milliseconds; leaving it unset is normal. A cell that reaches it is killed with its session, so values from earlier cells are lost. Host calls such as choir.FetchURL take several seconds each (up to about 10 s), and choir.SearchWait blocks as long as you ask."},
+			"timeout_ms": map[string]any{"type": "integer", "description": "Optional evaluation timeout in milliseconds; leaving it unset is normal. A cell that reaches it is killed with its session, so values from earlier cells are lost. Host calls such as choir.Read take several seconds each (up to about 10 s), and choir.SearchWait blocks as long as you ask."},
 		}, []string{"source"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			execCtx := toolregistry.ExecutionContextFrom(ctx)
@@ -981,7 +981,7 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 // (searches are async since Cut 2; fetches and SearchWait still take time).
 func cellTimeoutError(timeoutMS int, elapsed time.Duration) string {
 	return fmt.Sprintf("cell stopped by its own timeout_ms=%d after %d ms; the session was killed, so values defined in earlier cells are gone. "+
-		"Host calls such as choir.FetchURL take several seconds each (up to about 10 s), and choir.SearchWait blocks as long as you ask: leave timeout_ms unset or allow for them",
+		"Host calls such as choir.Read take several seconds each (up to about 10 s), and choir.SearchWait blocks as long as you ask: leave timeout_ms unset or allow for them",
 		timeoutMS, elapsed.Milliseconds())
 }
 

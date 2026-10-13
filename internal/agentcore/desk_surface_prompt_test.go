@@ -19,7 +19,7 @@ func TestEveryDeskPromptCarriesItsSurface(t *testing.T) {
 	}{
 		{agentprofile.Texture, nil, []string{"choir.ReadDoc()", "choir.ApplyTexture(edit any)", "choir.Cast("}, []string{"choir.Exec("}},
 		{agentprofile.Management, nil, []string{"choir.Cast(", "choir.ProductAPI("}, []string{"choir.ApplyTexture("}},
-		{agentprofile.Research, nil, []string{"choir.SearchStart(", "choir.Searches.Get(", "choir.SearchWait(", "choir.FetchURL("}, []string{"choir.Exec(", "choir.WriteFile(", "choir.WebSearch("}},
+		{agentprofile.Research, nil, []string{"choir.SearchStart(", "choir.Searches.Get(", "choir.SearchWait(", "choir.Read(", "choir.ReadCapture("}, []string{"choir.Exec(", "choir.WriteFile(", "choir.WebSearch("}},
 		{agentprofile.Engineering, map[string]any{runMetadataEngineeringSlot: "verifier"}, []string{"choir.Exec(", "choir.Verify(", "choir.InspectBundle()"}, nil},
 	}
 	for _, tc := range cases {

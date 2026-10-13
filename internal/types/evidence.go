@@ -94,6 +94,9 @@ type CoagentPacketSourceTarget struct {
 	URI       string `json:"uri,omitempty"`
 	Title     string `json:"title,omitempty"`
 	MediaType string `json:"media_type,omitempty"`
+	// CaptureID names the capture the source's quotes were copied from
+	// (choir.Read; Cut 2 unit 2a).
+	CaptureID string `json:"capture_id,omitempty"`
 }
 
 type CoagentPacketSourceSelector struct {

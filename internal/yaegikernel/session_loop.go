@@ -207,7 +207,7 @@ func describeCellValue(source string, value reflect.Value) (shown string) {
 }
 
 // cellValueText renders one value for a cell result. Bytes that are valid
-// UTF-8 (a json.RawMessage from choir.FetchURL) render as text, not as a
+// UTF-8 (a json.RawMessage from choir.Read) render as text, not as a
 // list of byte values.
 func cellValueText(value reflect.Value, max int) (string, bool) {
 	if !value.IsValid() || value.Kind() == reflect.Func {

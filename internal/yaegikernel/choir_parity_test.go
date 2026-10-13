@@ -236,12 +236,29 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	// Emit + the host-mediated egress verbs export: research's signal plane and
 	// world evidence surface ride the broker, not filesystem mutation (M-SUB /
 	// M0a). read-only denies WriteFile/Exec only — messaging stays open.
-	for _, sym := range []string{"SearchStart", "Searches", "SearchWait", "FetchURL", "SourceSearch",
-		"ImportDocument", "ImportURL", "ReadContentItem", "ListContentSelectors",
-		"ReadContentSelector", "SearchWireCorpus", "SaveEvidence", "ReadEvidence",
+	for _, sym := range []string{"SearchStart", "Searches", "SearchWait", "Read", "ReadCapture", "SourceSearch",
+		"SearchWireCorpus", "SaveEvidence", "ReadEvidence",
 		"ListEvidence", "RunMemoryEntry"} {
 		if _, ok := exports[sym]; !ok {
 			t.Fatalf("researcher missing egress/message verb %s", sym)
+		}
+	}
+	// Cut 2 unit 2a: Read (fetch into a capture) replaced the fetch, import
+	// and ContentItem selector verbs on research and its children.
+	child, err := NewChoirScope(broker, issuer, "computer-choir", "activation-choir", 1, SessionRoleResearchChild, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	childExports := child.ChoirExports()["choir/choir"]
+	if _, ok := childExports["Read"]; !ok {
+		t.Fatal("research child missing Read")
+	}
+	for _, sym := range []string{"FetchURL", "ImportDocument", "ImportURL", "ReadContentItem", "ListContentSelectors", "ReadContentSelector"} {
+		if _, ok := exports[sym]; ok {
+			t.Fatalf("researcher still exports replaced verb %s", sym)
+		}
+		if _, ok := childExports[sym]; ok {
+			t.Fatalf("research child still exports replaced verb %s", sym)
 		}
 	}
 	// Method-level: mutation calls still deny even though they never export.
