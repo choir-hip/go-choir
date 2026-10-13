@@ -165,6 +165,21 @@ boundaries:
     fallout after a shape change, probe runs, trace summaries,
     measurement write-ups and code searches; never prompts, Texture
     writes or gateway calls. Only the orchestrator pushes.
+  review_loops: >-
+    Owner 2026-10-12. (1) When the redesign tripwire fires (decisions
+    §12.5): write the structural assessment, then run an agentic-consensus
+    panel on it (skills/agentic-consensus; lateral mode first to break the
+    frame, then convergent on the surviving reframes, --keep-going).
+    Adjudicate the findings, record the chosen redesign in the cut's
+    breakage log, and continue the cut on it. If the same layer trips
+    again after two panel-guided redesigns, stop and leave the
+    assessments for the owner. (2) When every station has landed:
+    run a convergent panel on the landed result and its evidence
+    (deployed acceptance, tracer bundles, autopaper_live). Fix the
+    blocking findings through the Landing Loop and rerun the panel.
+    Iterate until a round raises no new blocking finding; then the
+    metamission is complete. Panel prompts, manifests and adjudications
+    are archived under docs/reports/ as review receipts.
 
 now:
   status: ready_to_execute
