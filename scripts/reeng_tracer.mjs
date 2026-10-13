@@ -38,7 +38,8 @@
 // longer is a finding about the desks, not a reason to wait.
 //
 // Exit: 0 bundle kept with the load present; 3 bundle(s) kept, load absent
-// (I5 unknown); 4 export unavailable (drill kept); 1 attempt failed; 2 usage.
+// (I5 unknown); 4 export unavailable (drill kept); 5 contaminated (the guest
+// build changed during the run; --expect-sha); 1 attempt failed; 2 usage.
 
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -64,6 +65,12 @@ const SKIP_EXPORT = flag('skip-export');
 const OWNER_PUBLISH = flag('owner-publish');
 const QUIESCE_MIN = Number(arg('quiesce-min', '2'));
 const KEEP_COMPUTER = flag('keep-computer');
+// Identity fence (agentic-consensus 2026-10-13): with --expect-sha the tracer
+// waits (at most --fence-min) until staging reports that commit and no CI run
+// on main is queued or deploying, and marks the run contaminated (exit 5) if
+// the guest build changes during it.
+const EXPECT_SHA = arg('expect-sha', '').toLowerCase();
+const FENCE_MIN = Number(arg('fence-min', '30'));
 if (!LABEL || !/^[A-Za-z0-9._-]+$/.test(LABEL)) {
   console.error('usage: node scripts/reeng_tracer.mjs --label <label> [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer]');
   process.exit(2);
@@ -258,6 +265,11 @@ async function attempt(n, out) {
     log(`${name} ${JSON.stringify(extra)}`);
   };
 
+  if (EXPECT_SHA) {
+    const fence = await waitForQuietDeploy();
+    phase('identity_fence', fence);
+    if (!fence.ok) throw new Error(`identity fence: ${fence.reason}`);
+  }
   const mintStarted = Date.now();
   const minted = await runMint(label);
   out.timings.mint_ms = Date.now() - mintStarted;
@@ -265,6 +277,15 @@ async function attempt(n, out) {
   out.computer_id = minted.computer_id;
   out.guest_build_commit = minted.guest_build_commit || null;
   phase('mint', { computer_id: minted.computer_id, mint_ms: out.timings.mint_ms, build: out.guest_build_commit });
+  out.contamination = [];
+  const fenceBuild = (where, commit) => {
+    const got = String(commit?.commit || commit || '').toLowerCase();
+    if (EXPECT_SHA && got && !got.startsWith(EXPECT_SHA)) {
+      out.contamination.push({ where, expected: EXPECT_SHA, got });
+      phase('contaminated', { where, expected: EXPECT_SHA, got });
+    }
+  };
+  fenceBuild('mint', out.guest_build_commit);
   const c = new MintedComputer(minted);
   out.stopComputer = () => stopMinted(c, label);
 
@@ -385,6 +406,7 @@ async function attempt(n, out) {
     if (o.status === 200 && o.body?.computer_id === c.computerID) {
       drill.ready_at = iso();
       drill.ready_build = o.body.build || null;
+      fenceBuild('after_restart', drill.ready_build);
       Object.assign(drill, bootInstant(o.body, drill.restart_requested_at, drill.ready_at));
       break;
     }
@@ -610,6 +632,32 @@ function runLegs(bundle) {
   }));
 }
 
+// waitForQuietDeploy: staging reports EXPECT_SHA and no CI run on main is
+// queued or in progress (a cancelled run's changes can deploy with the next
+// push, so a docs push is not proof the lane is quiet).
+async function waitForQuietDeploy() {
+  const until = Date.now() + FENCE_MIN * 60_000;
+  let last = {};
+  while (Date.now() < until) {
+    let commit = '';
+    try {
+      const r = await fetch(`${HOST}/health`, { signal: AbortSignal.timeout(10_000) });
+      const b = await r.json();
+      commit = String(b?.build?.commit || b?.commit || '').toLowerCase();
+    } catch { commit = ''; }
+    let busy = null;
+    try {
+      const out = await new Promise((resolve, reject) => execFile('gh', ['run', 'list', '--branch', 'main', '--limit', '8', '--json', 'status'],
+        { cwd: REPO, encoding: 'utf8', timeout: 30_000 }, (err, stdout) => (err ? reject(err) : resolve(stdout))));
+      busy = JSON.parse(out).filter((r) => r.status !== 'completed').length;
+    } catch { busy = null; }
+    last = { staging: commit.slice(0, 12), ci_busy: busy };
+    if (commit.startsWith(EXPECT_SHA) && busy === 0) return { ok: true, ...last };
+    await sleep(20_000);
+  }
+  return { ok: false, reason: `staging not quiet at ${EXPECT_SHA} after ${FENCE_MIN} min`, ...last };
+}
+
 // ---- main ------------------------------------------------------------------
 
 mkdirSync(TRACE_DIR, { recursive: true, mode: 0o700 });
@@ -638,6 +686,7 @@ for (let n = 1; n <= ATTEMPTS; n++) {
     break;
   }
   delete result.stopComputer;
+  if (result.contamination?.length) { exitCode = 5; log(`attempt ${n}: contaminated by a build change; the bundle is not acceptance evidence`); break; }
   if (result.export?.failed) { exitCode = 4; break; }
   if (result.export?.skipped) { exitCode = 0; break; }
   if (result.load?.I5_load === 'present') { exitCode = 0; break; }

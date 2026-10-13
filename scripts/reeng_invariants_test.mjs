@@ -393,6 +393,28 @@ test('I2: pending fails, blocked with error passes, passivated without reason fa
   assert.equal(checkI2(live).verdict, 'pass');
 });
 
+test('I3: an observed quiet window after the boot passes; a short one is unknown', () => {
+  // Keep only what happened before the restart: nothing dispatches after boot.
+  const b = buildCleanBundle();
+  const cut = Date.parse(b.drill.restart_requested_at);
+  const before = (x) => {
+    const t = Date.parse(x?.created_at || x?.ts || x?.started_at || '');
+    return !Number.isFinite(t) || t < cut;
+  };
+  for (const name of ['runs', 'run_events', 'lifecycle_events', 'revisions', 'cells', 'egress', 'turn_commits', 'deliveries']) {
+    const l = b.layers[name];
+    if (l?.items) l.items = l.items.filter((x) => before(x.item || x));
+  }
+  const snap = b.layers.trajectory.items[0];
+  for (const k of ['work_items', 'updates', 'co_super_assignments']) if (Array.isArray(snap[k])) snap[k] = snap[k].filter(before);
+  const quiet = checkI3(b);
+  assert.equal(quiet.verdict, 'pass', quiet.reason);
+  assert.match(quiet.reason, /nothing was dispatched/);
+  const short = structuredClone(b);
+  short.exported_at = new Date(Date.parse(short.drill.boot_at || short.drill.ready_at) + 30_000).toISOString();
+  assert.equal(checkI3(short).verdict, 'unknown');
+});
+
 test('I3 catches the documented restart recast of an engineering assignment', () => {
   const b = buildCleanBundle();
   const snap = b.layers.trajectory.items[0];

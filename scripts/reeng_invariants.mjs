@@ -407,6 +407,10 @@ function isOwnerRevision(rev) {
 // when no owner input happened in [boot, t], and ambiguous (unknown) when
 // owner input happened in that window but the record names no link to it.
 // A dispatch with no recorded cause is ambiguous.
+// The quiet span after a markerless boot that makes an observed absence of
+// dispatches an I3 pass.
+export const I3_MIN_QUIET_MS = 120_000;
+
 export function checkI3(bundle) {
   const kind = bootKind(bundle);
   const drill = bundle?.drill;
@@ -639,7 +643,17 @@ export function checkI3(bundle) {
     return result('I3', 'fail', `${violations.length} dispatch(es) after a markerless boot caused by pre-boot work with no owner input since the boot`, [ctx, ...violations.map(show)]);
   }
   if (missing.length) return result('I3', 'unknown', `layers unserved: ${missing.join(', ')}`, [ctx, ...ambiguous.map(show)]);
-  if (nodes.length === 0) return result('I3', 'unknown', 'nothing was dispatched after the boot: the rule read nothing', [ctx]);
+  if (nodes.length === 0) {
+    // An observed absence passes only when every layer I3 reads is served
+    // (checked above) and the bundle covers at least I3_MIN_QUIET_MS after
+    // the boot; a shorter window read too little to tell absence from not
+    // yet (agentic-consensus 2026-10-13, convergent C3).
+    const covered = ts(bundle?.exported_at) - B;
+    if (Number.isFinite(covered) && covered >= I3_MIN_QUIET_MS) {
+      return result('I3', 'pass', `nothing was dispatched in the ${Math.round(covered / 1000)} s between the boot and the export`, [{ ...ctx, observed_quiet_ms: covered }]);
+    }
+    return result('I3', 'unknown', `nothing was dispatched after the boot, but the bundle covers only ${Number.isFinite(covered) ? Math.round(covered / 1000) + ' s' : 'an unknown span'} after it (need ${I3_MIN_QUIET_MS / 1000} s)`, [ctx]);
+  }
   if (ambiguous.length) return result('I3', 'unknown', `${ambiguous.length} post-boot dispatch(es) whose cause is unrecorded, or pre-boot but after owner input with no recorded link to it`, [ctx, ...ambiguous.map(show)]);
   const evidence = [ctx, ...nodes.map(show)];
   if (boot.source.endsWith('(approximate)')) {
