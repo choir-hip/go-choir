@@ -36,6 +36,17 @@ type WebCaptureMetadata struct {
 	Language    string `json:"language,omitempty"`
 	Region      string `json:"region,omitempty"`
 	BodyKind    string `json:"body_kind,omitempty"`
+	// Block document fields (Cut 2 unit 2a). A block capture's
+	// ContentBlobID names the raw bytes as fetched, ExtractedTextBlobID the
+	// block projection, and BlocksBlobID the block JSON; DocHash is its
+	// identity and Extractor the rules that made its blocks. Captures written
+	// before Cut 2 have none of these and one flat-text blob for both.
+	BlocksBlobID string `json:"blocks_blob_id,omitempty"`
+	Extractor    string `json:"extractor,omitempty"`
+	DocHash      string `json:"doc_hash,omitempty"`
+	BlockCount   int    `json:"block_count,omitempty"`
+	MediaType    string `json:"media_type,omitempty"`
+	RawBytes     int    `json:"raw_bytes,omitempty"`
 }
 
 type CreateWebCaptureRequest struct {
@@ -49,6 +60,12 @@ type CreateWebCaptureRequest struct {
 	Language            string
 	Region              string
 	BodyKind            string
+	BlocksBlobID        string
+	Extractor           string
+	DocHash             string
+	BlockCount          int
+	MediaType           string
+	RawBytes            int
 	OwnerID             string
 	ComputerID          string
 	URL                 string
@@ -129,6 +146,12 @@ func BuildWebCaptureMetadata(req CreateWebCaptureRequest) (WebCaptureMetadata, e
 		Language:            strings.TrimSpace(req.Language),
 		Region:              strings.TrimSpace(req.Region),
 		BodyKind:            strings.TrimSpace(req.BodyKind),
+		BlocksBlobID:        strings.TrimSpace(req.BlocksBlobID),
+		Extractor:           strings.TrimSpace(req.Extractor),
+		DocHash:             strings.TrimSpace(req.DocHash),
+		BlockCount:          req.BlockCount,
+		MediaType:           strings.TrimSpace(req.MediaType),
+		RawBytes:            req.RawBytes,
 	}
 	if !req.PublishedAt.IsZero() {
 		metadata.PublishedAt = req.PublishedAt.UTC().Format(time.RFC3339Nano)
@@ -174,6 +197,9 @@ func (m WebCaptureMetadata) Validate() error {
 	}
 	if strings.TrimSpace(m.ExtractedTextBlobID) == "" {
 		return fmt.Errorf("extracted_text_blob_id is required")
+	}
+	if strings.TrimSpace(m.BlocksBlobID) != "" && (strings.TrimSpace(m.Extractor) == "" || strings.TrimSpace(m.DocHash) == "") {
+		return fmt.Errorf("a block capture needs its extractor and doc_hash")
 	}
 	if strings.TrimSpace(m.EmbeddingVersion) != "" && strings.TrimSpace(m.EmbeddingModel) == "" {
 		return fmt.Errorf("embedding_model is required when embedding_version is set")

@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
-	"github.com/yusefmosiah/go-choir/internal/sources"
 )
 
 // Autopaper captures are shared content (W1b2,
@@ -28,31 +28,48 @@ import (
 const (
 	maxCaptureItemsPerRequest = 100
 	maxCaptureBodyBytes       = 1 << 20
-	maxCaptureRequestBytes    = 64 << 20
-	defaultCaptureReadChars   = 8000
+	// maxCaptureRawBytes bounds one item's fetched bytes (a page or a PDF
+	// read by choir.Read); base64 in the request JSON keeps one such item
+	// well under maxCaptureRequestBytes.
+	maxCaptureRawBytes      = 16 << 20
+	maxCaptureRequestBytes  = 64 << 20
+	defaultCaptureReadChars = 8000
 )
 
-// CaptureReadResponse is one shared capture with its body text.
+// CaptureReadResponse is one shared capture. A block capture (Cut 2 unit
+// 2a) returns its blocks from FromBlock, as many as fit in max_chars of
+// text (at least one), with NextBlock naming where the rest start (0 when
+// none remain); its Body is empty, since the blocks are its text. A capture
+// written before Cut 2 has no blocks and returns its flat body text.
 type CaptureReadResponse struct {
-	CaptureID     string `json:"capture_id"`
-	OwnerID       string `json:"owner_id"`
-	ComputerID    string `json:"computer_id,omitempty"`
-	SourceID      string `json:"source_id,omitempty"`
-	Title         string `json:"title,omitempty"`
-	URL           string `json:"url"`
-	PublishedAt   string `json:"published_at,omitempty"`
-	FetchedAt     string `json:"fetched_at,omitempty"`
-	ContentBlobID string `json:"content_blob_id"`
-	Body          string `json:"body"`
-	BodyChars     int    `json:"body_chars"`
-	Truncated     bool   `json:"truncated,omitempty"`
+	CaptureID     string              `json:"capture_id"`
+	OwnerID       string              `json:"owner_id"`
+	ComputerID    string              `json:"computer_id,omitempty"`
+	SourceID      string              `json:"source_id,omitempty"`
+	Title         string              `json:"title,omitempty"`
+	URL           string              `json:"url"`
+	PublishedAt   string              `json:"published_at,omitempty"`
+	FetchedAt     string              `json:"fetched_at,omitempty"`
+	ContentBlobID string              `json:"content_blob_id"`
+	MediaType     string              `json:"media_type,omitempty"`
+	RawBytes      int                 `json:"raw_bytes,omitempty"`
+	Extractor     string              `json:"extractor,omitempty"`
+	DocHash       string              `json:"doc_hash,omitempty"`
+	BlockCount    int                 `json:"block_count,omitempty"`
+	FromBlock     int                 `json:"from_block,omitempty"`
+	Blocks        []sourcefetch.Block `json:"blocks,omitempty"`
+	NextBlock     int                 `json:"next_block,omitempty"`
+	Body          string              `json:"body,omitempty"`
+	BodyChars     int                 `json:"body_chars"`
+	Truncated     bool                `json:"truncated,omitempty"`
 }
 
-// CaptureWriteRequest is one poll's items from the paper's computer.
+// CaptureWriteRequest is one poll's items, or one page read, from a
+// computer.
 type CaptureWriteRequest struct {
-	OwnerID    string         `json:"owner_id"`
-	ComputerID string         `json:"computer_id"`
-	Items      []sources.Item `json:"items"`
+	OwnerID    string                    `json:"owner_id"`
+	ComputerID string                    `json:"computer_id"`
+	Items      []sourcegraph.CaptureItem `json:"items"`
 }
 
 // CaptureWriteResponse counts what the host wrote.
@@ -157,6 +174,10 @@ func (h *ObjectGraphHandler) HandleCaptures(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	for i := range req.Items {
+		if len(req.Items[i].Raw) > maxCaptureRawBytes {
+			writeJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: fmt.Sprintf("an item's raw bytes exceed %d", maxCaptureRawBytes)})
+			return
+		}
 		if len(req.Items[i].Body) > maxCaptureBodyBytes {
 			req.Items[i].Body = req.Items[i].Body[:maxCaptureBodyBytes]
 		}
@@ -238,7 +259,9 @@ func (h *ObjectGraphHandler) HandleCaptureRead(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
 	}
-	body, err := h.captureBodies.Body(strings.TrimPrefix(meta.ContentBlobID, "sha256:"))
+	// ExtractedTextBlobID is the text in both shapes: the block projection,
+	// or the one flat body of a capture written before Cut 2.
+	body, err := h.captureBodies.Body(strings.TrimPrefix(meta.ExtractedTextBlobID, "sha256:"))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, apiError{Error: "capture body: " + err.Error()})
 		return
@@ -252,10 +275,40 @@ func (h *ObjectGraphHandler) HandleCaptureRead(w http.ResponseWriter, r *http.Re
 		CaptureID: obj.CanonicalID, OwnerID: obj.OwnerID, ComputerID: obj.ComputerID,
 		SourceID: meta.SourceID, Title: meta.Title, URL: meta.URL, PublishedAt: meta.PublishedAt,
 		FetchedAt: meta.FetchedAt, ContentBlobID: meta.ContentBlobID, BodyChars: len(text),
+		MediaType: meta.MediaType, RawBytes: meta.RawBytes, Extractor: meta.Extractor, DocHash: meta.DocHash, BlockCount: meta.BlockCount,
 	}
-	if len(text) > maxChars {
-		text, out.Truncated = text[:maxChars], true
+	if meta.BlocksBlobID == "" {
+		if len(text) > maxChars {
+			text, out.Truncated = text[:maxChars], true
+		}
+		out.Body = string(text)
+		writeJSON(w, http.StatusOK, out)
+		return
 	}
-	out.Body = string(text)
+	raw, err := h.captureBodies.Body(strings.TrimPrefix(meta.BlocksBlobID, "sha256:"))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "capture blocks: " + err.Error()})
+		return
+	}
+	var doc sourcegraph.CaptureBlocks
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "capture blocks: " + err.Error()})
+		return
+	}
+	from, _ := strconv.Atoi(r.URL.Query().Get("from_block"))
+	from = max(0, min(from, len(doc.Blocks)))
+	out.FromBlock, out.Blocks = from, []sourcefetch.Block{}
+	chars := 0
+	for i := from; i < len(doc.Blocks); i++ {
+		b := doc.Blocks[i]
+		n := len([]rune(b.Text))
+		if len(out.Blocks) > 0 && chars+n > maxChars {
+			out.NextBlock, out.Truncated = i, true
+			break
+		}
+		chars += n
+		b.Links = nil // the blob keeps them; a reader quotes text
+		out.Blocks = append(out.Blocks, b)
+	}
 	writeJSON(w, http.StatusOK, out)
 }

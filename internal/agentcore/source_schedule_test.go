@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
@@ -34,14 +35,18 @@ type recordingSink struct {
 	items int
 }
 
-func (s *recordingSink) WriteCaptures(_ context.Context, _, _ string, items []sources.Item) (sourcegraph.CaptureWriteResult, error) {
+func (s *recordingSink) WriteCaptures(_ context.Context, _, _ string, items []sourcegraph.CaptureItem) (sourcegraph.CaptureWriteResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.items += len(items)
 	return sourcegraph.CaptureWriteResult{New: len(items)}, nil
 }
 
-func (s *recordingSink) ReadCapture(context.Context, string, int) (json.RawMessage, error) {
+func (s *recordingSink) ReadCapture(context.Context, string, int, int) (json.RawMessage, error) {
+	return nil, fmt.Errorf("not used")
+}
+
+func (s *recordingSink) ListCaptures(context.Context, string, string, int) ([]objectgraph.Object, error) {
 	return nil, fmt.Errorf("not used")
 }
 

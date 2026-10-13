@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -69,8 +70,8 @@ func TestGuestCapturesCrossTheProxyToCorpusd(t *testing.T) {
 		srv.ServeHTTP(rec, req)
 		return rec
 	}
-	items := []sources.Item{{ID: "item-1", SourceID: "rss:example", SourceType: sources.SourceTypeRSS,
-		Title: "One", Body: "Body one", URL: "https://example.com/1", FetchedAt: time.Date(2026, 10, 11, 10, 0, 0, 0, time.UTC)}}
+	items := []sourcegraph.CaptureItem{{Item: sources.Item{ID: "item-1", SourceID: "rss:example", SourceType: sources.SourceTypeRSS,
+		Title: "One", Body: "Body one", URL: "https://example.com/1", FetchedAt: time.Date(2026, 10, 11, 10, 0, 0, 0, time.UTC)}}}
 
 	if rec := send(http.MethodPost, "/internal/platform/captures", "10.200.1.2",
 		platform.CaptureWriteRequest{OwnerID: "reader-owner", ComputerID: "computer-reader", Items: items}); rec.Code != http.StatusForbidden {
@@ -100,7 +101,7 @@ func TestGuestCapturesCrossTheProxyToCorpusd(t *testing.T) {
 	}
 	capture := send(http.MethodGet, "/internal/platform/captures/"+written.Captured[0].CaptureID, "10.200.9.2", nil)
 	var got platform.CaptureReadResponse
-	if capture.Code != http.StatusOK || json.Unmarshal(capture.Body.Bytes(), &got) != nil || got.Body != "Body one" || got.Title != "One" || got.SourceID != "rss:example" {
+	if capture.Code != http.StatusOK || json.Unmarshal(capture.Body.Bytes(), &got) != nil || len(got.Blocks) != 1 || got.Blocks[0].Text != "Body one" || got.Title != "One" || got.SourceID != "rss:example" {
 		t.Fatalf("second computer capture read through the proxy = %d %s", capture.Code, capture.Body)
 	}
 	// A guest cannot reach captures through the generic object route

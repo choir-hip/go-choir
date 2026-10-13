@@ -48,14 +48,14 @@ func TestCaptureSinkSplitsALargePollUnderCorpusdsBound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	var poll []sources.Item
+	var poll []sourcegraph.CaptureItem
 	for i := 0; i < 150; i++ {
-		poll = append(poll, sources.Item{
+		poll = append(poll, sourcegraph.CaptureItem{Item: sources.Item{
 			URL:     fmt.Sprintf("https://example.test/%d", i),
 			Title:   "item",
 			Body:    strings.Repeat("x", 1<<20+512),
 			RawJSON: strings.Repeat("r", 4096),
-		})
+		}})
 	}
 	got, err := NewCorpusdCaptureSink(srv.URL).WriteCaptures(context.Background(), "owner-1", "computer-1", poll)
 	if err != nil {

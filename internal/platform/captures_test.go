@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
+	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -49,11 +51,11 @@ func TestCaptureRouteWritesSharedCapturesWithBodiesOnHostDisk(t *testing.T) {
 	h.ConfigureCaptureBodies(root)
 
 	fetched := time.Date(2026, 10, 11, 10, 0, 0, 0, time.UTC)
-	items := []sources.Item{
-		{ID: "item-1", SourceID: "rss:example", SourceType: sources.SourceTypeRSS, Title: "One", Body: "Body one", URL: "https://example.com/1", FetchedAt: fetched},
-		{ID: "item-2", SourceID: "rss:example", SourceType: sources.SourceTypeRSS, Title: "Two", Body: "Body two", URL: "https://example.com/2", FetchedAt: fetched},
+	items := []sourcegraph.CaptureItem{
+		{Item: sources.Item{ID: "item-1", SourceID: "rss:example", SourceType: sources.SourceTypeRSS, Title: "One", Body: "Body one", URL: "https://example.com/1", FetchedAt: fetched}},
+		{Item: sources.Item{ID: "item-2", SourceID: "rss:example", SourceType: sources.SourceTypeRSS, Title: "Two", Body: "Body two", URL: "https://example.com/2", FetchedAt: fetched}},
 	}
-	post := func(from, owner, computer string, items []sources.Item) *httptest.ResponseRecorder {
+	post := func(from, owner, computer string, items []sourcegraph.CaptureItem) *httptest.ResponseRecorder {
 		t.Helper()
 		raw, _ := json.Marshal(CaptureWriteRequest{OwnerID: owner, ComputerID: computer, Items: items})
 		req := httptest.NewRequest(http.MethodPost, "/internal/platform/captures", bytes.NewReader(raw))
@@ -115,7 +117,7 @@ func TestCaptureRouteWritesSharedCapturesWithBodiesOnHostDisk(t *testing.T) {
 		t.Fatalf("unbound caller read a body: %d", denied.Code)
 	}
 
-	big := make([]sources.Item, maxCaptureItemsPerRequest+1)
+	big := make([]sourcegraph.CaptureItem, maxCaptureItemsPerRequest+1)
 	for i := range big {
 		big[i] = items[0]
 	}
@@ -167,11 +169,13 @@ func TestGenericObjectRoutesRefuseCaptures(t *testing.T) {
 	}
 }
 
-// Two computers of one owner post the same new items at once, with
-// different bodies, against Store B's Dolt adapter. Each capture is created
-// once: it keeps one writer's computer and body, the other writer counts a
-// repeat (or fails), and no request replaces the other's capture
-// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
+// Two computers of one owner post the same new items at once against Store
+// B's Dolt adapter. Each capture is created once: it keeps one writer's
+// computer, the other writer counts a repeat (or fails), and no request
+// replaces the other's capture
+// (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md). The
+// bodies are the same text: a capture's identity is its URL and doc_hash,
+// so different text would be two captures.
 func TestConcurrentSameOwnerCaptureWritesCreateOnce(t *testing.T) {
 	store, _ := openTestPlatformStore(t)
 	og := NewObjectGraphStore(store)
@@ -186,11 +190,11 @@ func TestConcurrentSameOwnerCaptureWritesCreateOnce(t *testing.T) {
 	h.ConfigureCaptureBodies(t.TempDir())
 
 	fetched := time.Date(2026, 10, 11, 10, 0, 0, 0, time.UTC)
-	itemsFor := func(computer string) []sources.Item {
-		var items []sources.Item
+	itemsFor := func(computer string) []sourcegraph.CaptureItem {
+		var items []sourcegraph.CaptureItem
 		for i := 0; i < 8; i++ {
-			items = append(items, sources.Item{ID: fmt.Sprintf("race-%d", i), SourceID: "rss:example", SourceType: sources.SourceTypeRSS,
-				Title: "Race", Body: "body from " + computer, URL: fmt.Sprintf("https://example.com/race/%d", i), FetchedAt: fetched})
+			items = append(items, sourcegraph.CaptureItem{Item: sources.Item{ID: fmt.Sprintf("race-%d", i), SourceID: "rss:example", SourceType: sources.SourceTypeRSS,
+				Title: "Race", Body: fmt.Sprintf("race body %d", i), URL: fmt.Sprintf("https://example.com/race/%d", i), FetchedAt: fetched}})
 		}
 		return items
 	}
@@ -244,5 +248,108 @@ func TestConcurrentSameOwnerCaptureWritesCreateOnce(t *testing.T) {
 	}
 	if got[0].code == http.StatusOK && got[1].code == http.StatusOK && len(created) != 8 {
 		t.Fatalf("both writes succeeded but %d of 8 captures were reported new: %+v", len(created), got)
+	}
+}
+
+// The capture read route serves a block capture (Cut 2 unit 2a). Ways it
+// can fail, written before the code: it serves the raw bytes as body text
+// now that ContentBlobID names them; it returns blocks without their ids,
+// so a reader cannot cite one; a long page is cut with no way to read the
+// rest; a raw request over the bound is accepted; a capture written before
+// Cut 2 (one flat-text blob, no blocks) no longer reads.
+func TestCaptureReadServesBlocksAndKeepsRawBytes(t *testing.T) {
+	mem := objectgraph.NewMemoryStore()
+	svc := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
+	defer svc.Close()
+	h := NewObjectGraphHandler(svc, mem)
+	paper := &vmctl.GuestOwnership{Found: true, UserID: "paper-owner", ComputerID: "computer-paper"}
+	reader := &vmctl.GuestOwnership{Found: true, UserID: "reader-owner", ComputerID: "computer-reader"}
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{"10.200.1.2": paper, "10.200.9.9": reader}); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	h.ConfigureCaptureBodies(root)
+	page, err := os.ReadFile("../sourcefetch/testdata/wiki-table.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetched := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	doc := sourcefetch.ExtractBlocks(page)
+	item := sourcegraph.ReadCaptureItem("https://en.example.org/wiki/Cities", page, "text/html", doc, fetched)
+	raw, _ := json.Marshal(CaptureWriteRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Items: []sourcegraph.CaptureItem{item}})
+	req := httptest.NewRequest(http.MethodPost, "/internal/platform/captures", bytes.NewReader(raw))
+	req.RemoteAddr = "10.200.1.2:40000"
+	rec := httptest.NewRecorder()
+	h.HandleCaptures(rec, req)
+	var wrote CaptureWriteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &wrote); rec.Code != http.StatusOK || err != nil || wrote.New != 1 {
+		t.Fatalf("write = %d %s", rec.Code, rec.Body)
+	}
+	id := wrote.Captured[0].CaptureID
+
+	read := func(query string) CaptureReadResponse {
+		t.Helper()
+		get := httptest.NewRequest(http.MethodGet, "/internal/platform/captures/"+id+query, nil)
+		get.RemoteAddr = "10.200.9.9:40000"
+		rec := httptest.NewRecorder()
+		h.HandleCaptureRead(rec, get)
+		var out CaptureReadResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); rec.Code != http.StatusOK || err != nil {
+			t.Fatalf("read %s = %d %s", query, rec.Code, rec.Body)
+		}
+		return out
+	}
+	first := read("?max_chars=300")
+	if first.BlockCount != len(doc.Blocks) || first.DocHash != doc.DocHash() || first.Extractor != sourcefetch.ExtractorVersion ||
+		first.RawBytes != len(page) || first.MediaType != "text/html" || first.Body != "" {
+		t.Fatalf("read = %+v", first)
+	}
+	if len(first.Blocks) == 0 || len(first.Blocks) >= len(doc.Blocks) || first.NextBlock != len(first.Blocks) || !first.Truncated {
+		t.Fatalf("a 300-char read returned %d of %d blocks, next %d", len(first.Blocks), len(doc.Blocks), first.NextBlock)
+	}
+	for i, b := range first.Blocks {
+		if b.ID != doc.Blocks[i].ID || b.Text != doc.Blocks[i].Text || b.Kind != doc.Blocks[i].Kind {
+			t.Fatalf("block %d = %+v, want %+v", i, b, doc.Blocks[i])
+		}
+	}
+	rest := read(fmt.Sprintf("?from_block=%d&max_chars=100000", first.NextBlock))
+	if rest.FromBlock != first.NextBlock || len(first.Blocks)+len(rest.Blocks) != len(doc.Blocks) || rest.NextBlock != 0 || rest.Truncated {
+		t.Fatalf("rest = from %d, %d blocks, next %d", rest.FromBlock, len(rest.Blocks), rest.NextBlock)
+	}
+	if rest.Blocks[len(rest.Blocks)-1].ID != doc.Blocks[len(doc.Blocks)-1].ID {
+		t.Fatalf("last block = %+v", rest.Blocks[len(rest.Blocks)-1])
+	}
+
+	obj, _ := svc.GetObject(context.Background(), id)
+	meta, _ := objectgraph.WebCaptureMetadataFromObject(obj)
+	sha := strings.TrimPrefix(meta.ContentBlobID, "sha256:")
+	stored, err := os.ReadFile(filepath.Join(root, sha[:2], sha))
+	if err != nil || !bytes.Equal(stored, page) {
+		t.Fatalf("raw bytes on disk = %d bytes, %v", len(stored), err)
+	}
+
+	// A capture written before Cut 2: one flat-text blob, no blocks.
+	ref, err := h.captureBodies.PutBody([]byte("Legacy flat body"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy, _, err := svc.CreateWebCaptureIfAbsent(context.Background(), objectgraph.CreateWebCaptureRequest{OwnerID: "paper-owner", ComputerID: "computer-paper",
+		IdentityKey: "autopaper:capture:legacy", URL: "https://example.com/legacy", FetchedAt: fetched, ContentBlobID: ref, ExtractedTextBlobID: ref, Now: fetched})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id = legacy.CanonicalID
+	if got := read(""); got.Body != "Legacy flat body" || len(got.Blocks) != 0 {
+		t.Fatalf("legacy read = %+v", got)
+	}
+
+	item.Raw = make([]byte, maxCaptureRawBytes+1)
+	raw, _ = json.Marshal(CaptureWriteRequest{OwnerID: "paper-owner", ComputerID: "computer-paper", Items: []sourcegraph.CaptureItem{item}})
+	req = httptest.NewRequest(http.MethodPost, "/internal/platform/captures", bytes.NewReader(raw))
+	req.RemoteAddr = "10.200.1.2:40000"
+	rec = httptest.NewRecorder()
+	h.HandleCaptures(rec, req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized raw bytes = %d %s", rec.Code, rec.Body)
 	}
 }

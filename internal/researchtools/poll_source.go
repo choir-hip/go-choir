@@ -156,7 +156,11 @@ func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID,
 		report.TotalMS = report.PollMS
 		return report, nil
 	}
-	written, err := deps.Captures.WriteCaptures(ctx, ownerID, computerID, polled.Items)
+	items := make([]sourcegraph.CaptureItem, len(polled.Items))
+	for i, item := range polled.Items {
+		items[i] = sourcegraph.CaptureItem{Item: item}
+	}
+	written, err := deps.Captures.WriteCaptures(ctx, ownerID, computerID, items)
 	report.New, report.Repeated, report.Skipped, report.Captured = written.New, written.Repeated, written.Skipped, written.Captured
 	report.TotalMS = time.Since(started).Milliseconds()
 	if err != nil {
@@ -167,18 +171,21 @@ func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID,
 	return report, nil
 }
 
-// newReadCaptureTool reads one shared capture (any computer's poll) with its
-// body text, from Store B and host disk through corpusd. It is a read of the
+// newReadCaptureTool reads one shared capture (any computer's poll or read)
+// from Store B and host disk through corpusd: its blocks with their ids from
+// from_block, as many as fit in max_chars of text. It is a read of the
 // shared store, not world egress.
 func newReadCaptureTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		CaptureID string `json:"capture_id"`
+		FromBlock int    `json:"from_block,omitempty"`
 		MaxChars  int    `json:"max_chars,omitempty"`
 	}
 	return toolregistry.Tool{Name: "read_capture",
-		Description: "Read one shared web_capture with its body text.",
+		Description: "Read one shared web_capture's blocks with their ids.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"capture_id": map[string]any{"type": "string"},
+			"from_block": map[string]any{"type": "integer", "minimum": 0},
 			"max_chars":  map[string]any{"type": "integer", "minimum": 1},
 		}, []string{"capture_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -189,7 +196,7 @@ func newReadCaptureTool(deps Dependencies) toolregistry.Tool {
 			if deps.Captures == nil {
 				return "", fmt.Errorf("read_capture: the shared capture store is not configured")
 			}
-			out, err := deps.Captures.ReadCapture(ctx, in.CaptureID, in.MaxChars)
+			out, err := deps.Captures.ReadCapture(ctx, in.CaptureID, in.FromBlock, in.MaxChars)
 			if err != nil {
 				return "", err
 			}

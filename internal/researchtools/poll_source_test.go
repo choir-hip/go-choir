@@ -138,7 +138,7 @@ type flakySink struct {
 	items int
 }
 
-func (s *flakySink) WriteCaptures(_ context.Context, _, _ string, items []sources.Item) (sourcegraph.CaptureWriteResult, error) {
+func (s *flakySink) WriteCaptures(_ context.Context, _, _ string, items []sourcegraph.CaptureItem) (sourcegraph.CaptureWriteResult, error) {
 	if s.fail {
 		s.fail = false
 		return sourcegraph.CaptureWriteResult{}, fmt.Errorf("corpusd unavailable")
@@ -147,7 +147,11 @@ func (s *flakySink) WriteCaptures(_ context.Context, _, _ string, items []source
 	return sourcegraph.CaptureWriteResult{New: len(items)}, nil
 }
 
-func (s *flakySink) ReadCapture(context.Context, string, int) (json.RawMessage, error) {
+func (s *flakySink) ReadCapture(context.Context, string, int, int) (json.RawMessage, error) {
+	return nil, fmt.Errorf("not used")
+}
+
+func (s *flakySink) ListCaptures(context.Context, string, string, int) ([]objectgraph.Object, error) {
 	return nil, fmt.Errorf("not used")
 }
 
