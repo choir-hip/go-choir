@@ -27,6 +27,12 @@ type CommitInboxRecordsRequest struct {
 	CommandDigest string              `json:"command_digest"`
 	Records       []CommitmentRecord  `json:"records,omitempty"`
 	Cursor        *InboxCursorAdvance `json:"cursor,omitempty"`
+	// Judge and Verdicts are a management cell's support verdicts (Cut 2 2a
+	// (v)): Judge is the judging desk's inbox (management:<owner>). Each
+	// verdict is memoized by its pair key; a failing one reaches the pair's
+	// texture:<doc> as a record from Judge, committed with this command.
+	Judge    string           `json:"judge,omitempty"`
+	Verdicts []SupportVerdict `json:"verdicts,omitempty"`
 }
 
 // InboxRecordReceipt is what the store stamped on one committed record.
@@ -42,7 +48,7 @@ type InboxRecordReceipt struct {
 	// the order the Cast listed them.
 	HypothesisIDs []string `json:"hypothesis_ids,omitempty"`
 	// WakeID is the actor wake outbox row minted for the recipient; empty
-	// for system records, which wake no one.
+	// for system records, which wake no one, except a support pairs list.
 	WakeID string `json:"wake_id,omitempty"`
 }
 
@@ -53,8 +59,11 @@ type InboxCommitReceipt struct {
 	CommandDigest string               `json:"command_digest,omitempty"`
 	Records       []InboxRecordReceipt `json:"records,omitempty"`
 	Cursor        *InboxCursorAdvance  `json:"cursor,omitempty"`
-	CreatedAt     time.Time            `json:"created_at"`
-	Replay        bool                 `json:"replay,omitempty"`
+	// Verdicts are the verdicts this command recorded, each with its pair
+	// and, for a failure, the record it sent; a memo hit is not listed.
+	Verdicts  []SupportVerdict `json:"verdicts,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
+	Replay    bool             `json:"replay,omitempty"`
 }
 
 // InboxHead is the cached last sequence number taken in one inbox.

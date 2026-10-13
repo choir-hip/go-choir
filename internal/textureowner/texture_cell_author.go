@@ -287,6 +287,13 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	if len(result.Dropped) > 0 {
 		meta[texturewrite.DroppedMetadataKey] = result.Dropped
 	}
+	// Each citation's quote check rides the revision, where the reader and
+	// the version overlay read it (Cut 2 2a (v)); the support pairs are
+	// listed to management by the turn's transaction below.
+	checks, _ := texturewrite.Checks(result.Doc, doc.DocID, "")
+	if len(checks) > 0 {
+		meta[texturewrite.ChecksMetadataKey] = checks
+	}
 	if strings.TrimSpace(doc.TrajectoryID) == "" {
 		canonicalPath, err := h.ensureCanonicalTextureProjectionPath(ctx, rec.OwnerID, doc)
 		if err != nil {
@@ -330,6 +337,7 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 		if graph, err = textureToolSourceGraphWriteSet(rev, materializedTextureEdit{BodyDoc: bodyDoc, SourceEntities: entities}, rec); err != nil {
 			return "", fmt.Errorf("build Texture source graph: %w", err)
 		}
+		_, args.Citations = texturewrite.Checks(result.Doc, doc.DocID, rev.RevisionID)
 		applied, applyErr := h.applyTextureLifecycleTurn(ctx, rec, doc, args, types.TextureTurnRevision, rev, graph, reason)
 		if applyErr != nil {
 			if errors.Is(applyErr, store.ErrConcurrentStateChange) || errors.Is(applyErr, store.ErrStaleDocumentHead) {

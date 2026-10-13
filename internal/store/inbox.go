@@ -182,6 +182,19 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 
 func validProbability(p float64) bool { return p >= 0 && p <= 1 }
 
+// inboxRecordWakes reports whether a record mints a wake row for its
+// recipient. A desk's record does. A system record does not (D5): a round
+// closure is minted at boot, and waking its caster there would resume work
+// after a crash. The one exception is a support pairs list (Cut 2 2a (v)):
+// it asks management to judge, nothing else would wake management for it,
+// and it is minted only by a live Texture commit, never at boot.
+func inboxRecordWakes(rec types.CommitmentRecord) bool {
+	if rec.EmitterKind != types.CommitmentEmitterSystem {
+		return true
+	}
+	return rec.Support != nil && len(rec.Support.Pairs) > 0
+}
+
 // stepConversation validates rec against its conversation head, stamps its
 // round and new hypothesis ids, and advances the head. It is the only
 // writer of round and hypothesis state; any error refuses the whole plan.
@@ -431,7 +444,7 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 
 		row := types.InboxRecordReceipt{RecordID: rec.RecordID, Inbox: rec.Inbox, InboxSeq: rec.InboxSeq,
 			ConversationID: rec.ConversationID, Round: rec.Round, OpenedRound: opened, ClosedRound: closed, HypothesisIDs: ids}
-		if rec.EmitterKind != types.CommitmentEmitterSystem {
+		if inboxRecordWakes(rec) {
 			content, err := json.Marshal(inboxWakeContent{Inbox: rec.Inbox, InboxSeq: rec.InboxSeq, RecordID: rec.RecordID,
 				ConversationID: rec.ConversationID, Round: rec.Round})
 			if err != nil {
@@ -528,10 +541,28 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 		return replay, err
 	}
 	now := time.Now().UTC()
-	objects, conditions, receipt, err := s.planInboxRecords(ctx, ownerID, computerID, req.Records, req.Cursor, now)
+	// Support verdicts (Cut 2 2a (v)) commit their memos here, and their
+	// failure records ride the same plan as the cell's own records.
+	verdictObjects, verdictConditions, failures, recorded, err := s.planSupportVerdicts(ctx, ownerID, computerID, req.Judge, req.CommandID, req.Verdicts, now)
 	if err != nil {
 		return types.InboxCommitReceipt{}, err
 	}
+	records := req.Records
+	if len(failures) > 0 {
+		records = append(append([]types.CommitmentRecord(nil), records...), failures...)
+	}
+	var objects []objectgraph.Object
+	var conditions []objectgraph.ObjectCondition
+	receipt := types.InboxCommitReceipt{CreatedAt: now}
+	// A command of verdicts that were all memo hits commits only its receipt.
+	if len(records) > 0 || req.Cursor != nil || len(req.Verdicts) == 0 {
+		objects, conditions, receipt, err = s.planInboxRecords(ctx, ownerID, computerID, records, req.Cursor, now)
+		if err != nil {
+			return types.InboxCommitReceipt{}, err
+		}
+	}
+	objects, conditions = append(objects, verdictObjects...), append(conditions, verdictConditions...)
+	receipt.Verdicts = recorded
 	receipt.CommandID, receipt.CommandDigest = req.CommandID, req.CommandDigest
 	commandObj, err := lifecycleObject(ogKindInboxCommand, ownerID, computerID, req.CommandID, receipt,
 		map[string]any{"command_id": req.CommandID, "computer_id": computerID}, now, now)

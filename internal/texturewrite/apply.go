@@ -713,8 +713,7 @@ func (w *writer) usedEntities(doc texturedoc.StructuredTextureDoc) []texturedoc.
 func blockHash(blocks []quotematch.Block, cid string) string {
 	for _, b := range blocks {
 		if b.ID == cid {
-			sum := sha256.Sum256([]byte(b.Text))
-			return "sha256:" + hex.EncodeToString(sum[:])
+			return TextHash(b.Text)
 		}
 	}
 	return ""

@@ -188,6 +188,9 @@ func validateTextureTurnShape(req types.ApplyTextureTurnRequest, graph TextureSo
 		if !textureTurnRevisionEmpty(req.Revision) {
 			return fmt.Errorf("apply Texture turn: non-revision outcome cannot carry revision")
 		}
+		if len(req.Citations) != 0 {
+			return fmt.Errorf("apply Texture turn: non-revision outcome cannot carry citations")
+		}
 		if len(graph.SourceEntities) != 0 || len(graph.SourceRefs) != 0 {
 			return fmt.Errorf("apply Texture turn: non-revision outcome cannot carry a source graph")
 		}
@@ -652,8 +655,24 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		addCondition(objectgraph.ObjectCondition{CanonicalID: deskObj.CanonicalID})
 		objects = append(objects, deskObj)
 	}
-	if len(req.InboxRecords) > 0 || req.InboxCursor != nil {
-		inboxObjects, inboxConditions, planned, planErr := s.planInboxRecords(ctx, ownerID, computerID, req.InboxRecords, req.InboxCursor, now)
+	// A revision's new citation pairs are listed to management in this
+	// transaction (Cut 2 2a (v)): their check memos and one system record.
+	inboxRecords := req.InboxRecords
+	if req.Outcome == types.TextureTurnRevision {
+		supportObjects, supportConditions, list, supportErr := s.planSupportPairs(ctx, ownerID, computerID, req, now)
+		if supportErr != nil {
+			return types.LifecycleResult{}, supportErr
+		}
+		for _, condition := range supportConditions {
+			addCondition(condition)
+		}
+		objects = append(objects, supportObjects...)
+		if list != nil {
+			inboxRecords = append(append([]types.CommitmentRecord(nil), inboxRecords...), *list)
+		}
+	}
+	if len(inboxRecords) > 0 || req.InboxCursor != nil {
+		inboxObjects, inboxConditions, planned, planErr := s.planInboxRecords(ctx, ownerID, computerID, inboxRecords, req.InboxCursor, now)
 		if planErr != nil {
 			return types.LifecycleResult{}, planErr
 		}

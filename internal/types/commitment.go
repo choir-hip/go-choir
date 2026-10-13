@@ -275,6 +275,10 @@ type CommitmentRecord struct {
 	// until Cut 2's freeze.
 	Cast   *CommitmentCast   `json:"cast,omitempty"`
 	Report *CommitmentReport `json:"report,omitempty"`
+	// Support is the body of the support-judgement records (Cut 2 2a (v)):
+	// a Texture commit's list of pairs to management, or management's
+	// failing verdicts to the Texture.
+	Support *CommitmentSupport `json:"support,omitempty"`
 }
 
 // CastHypothesis is one hypothesis a Cast opens. The store assigns ID

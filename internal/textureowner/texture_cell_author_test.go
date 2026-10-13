@@ -34,8 +34,9 @@ import (
 // seedCellAuthorLifecycle starts a bound Texture document lifecycle (doc +
 // initial owner revision + texture agent + open work item) and projects the
 // texture caller run onto it. It returns the caller run record a cell
-// commits under.
-func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix, content string) types.RunRecord {
+// commits under. shape, when given, edits the initial revision (a body with
+// citations).
+func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix, content string, shape ...func(*types.Revision)) types.RunRecord {
 	t.Helper()
 	ctx := context.Background()
 	computerID := "autoputer-cell-author"
@@ -52,6 +53,9 @@ func seedCellAuthorLifecycle(t *testing.T, s *store.Store, ownerID, suffix, cont
 		InitialDocument: types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, Title: "Cell author " + suffix, CreatedAt: now, UpdatedAt: now},
 		InitialRevision: types.Revision{RevisionID: "revision-cell-author-base-" + suffix, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: ownerID, Content: content, CreatedAt: now},
 		Agent:           types.AgentRecord{AgentID: textureAgentID, OwnerID: ownerID, ComputerID: computerID, Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, edit := range shape {
+		edit(&start.InitialRevision)
 	}
 	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
 	if _, err := s.StartLifecycle(ctx, start); err != nil {

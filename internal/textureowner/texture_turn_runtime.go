@@ -149,13 +149,15 @@ func textureTurnPendingInbound(snapshot types.LifecycleSnapshot, rec *types.RunR
 
 // textureTurnArgs is what a Texture turn commits besides its outcome: the
 // leftover update packets it rejects, the dispatch fold (records and the
-// cursor advance), the caller work disposition, and the per-cell identity.
+// cursor advance), the caller work disposition, the per-cell identity and,
+// for a revision, its citation pairs (listed to management by the turn).
 type textureTurnArgs struct {
 	UpdateDispositions []textureUpdateDisposition
 	InboxRecords       []types.CommitmentRecord
 	InboxCursor        *types.InboxCursorAdvance
 	WorkDisposition    types.WorkItemStatus
 	ToolCallID         string
+	Citations          []types.CitationPair
 }
 
 // applyTextureLifecycleTurn commits one Texture turn through the atomic
@@ -212,7 +214,7 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 		CallerWorkItemID:               callerWorkItemID,
 		CallerWorkDisposition:          callerWorkDisposition,
 		Outcome:                        outcome, Revision: revision, Reason: strings.TrimSpace(reason), Inbound: inbound,
-		InboxRecords: in.InboxRecords, InboxCursor: in.InboxCursor,
+		InboxRecords: in.InboxRecords, InboxCursor: in.InboxCursor, Citations: in.Citations,
 	}
 	req.CommandDigest, err = store.ComputeApplyTextureTurnWithSourceGraphDigest(req, graph)
 	if err != nil {
