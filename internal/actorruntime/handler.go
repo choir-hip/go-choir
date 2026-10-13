@@ -412,8 +412,25 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 		if h.textureOwner == nil {
 			return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: Texture owner is not bound"))
 		}
-		if _, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, agentprofile.Texture+":")); err != nil {
+		rec, err := h.textureOwner.ReconcileAgentWake(ctx, ownerID, strings.TrimPrefix(agentID, agentprofile.Texture+":"))
+		if err != nil {
 			return nil, fmt.Errorf("%w: actorruntime: Texture inbox wake: %v", actor.ErrDeferUnprocessed, err)
+		}
+		// A wake that reactivated a parked run leaves it pending for the
+		// calling occurrence to execute, as the coagent path does; a fresh
+		// run is dispatched by its own submit (Cut 1 breakage B4).
+		if rec != nil && rec.State == types.RunPending {
+			if reactivated, _ := rec.Metadata["actor_reactivated_from_passivated"].(bool); reactivated {
+				if err := h.textureOwner.ValidateActivationAuthority(ctx, ownerID, computerID, agentID, rec.RunID); err != nil {
+					return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: revalidate Texture records wake authority: %w", err))
+				}
+				if err := h.rt.ExecuteActivationSyncChecked(ctx, rec); err != nil {
+					if errors.Is(err, agentcore.ErrActivationOccurrenceMustRemainUnprocessed) {
+						return nil, fmt.Errorf("%w: %v", actor.ErrDeferUnprocessed, err)
+					}
+					return nil, deferTextureOccurrence(fmt.Errorf("actorruntime: execute Texture records wake: %w", err))
+				}
+			}
 		}
 	case strings.HasPrefix(agentID, agentprofile.Research+":"), strings.HasPrefix(agentID, agentprofile.Management+":"):
 		if _, err := h.rt.WakeRecordsInbox(ctx, ownerID, computerID, agentID); err != nil {
