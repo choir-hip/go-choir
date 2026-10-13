@@ -25,6 +25,7 @@
   import Desktop from './lib/Desktop.svelte';
   import LandingIntro from './lib/LandingIntro.svelte';
   import LegalDocument from './lib/LegalDocument.svelte';
+  import { isAutopaperPath } from './lib/autopaper';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
   import { shouldPlayLandingIntro, markIntroSeen } from './lib/landing-intro-preference';
@@ -56,6 +57,14 @@
   let publicRoutePath = '';
   let legalDocumentKind: 'privacy' | 'terms' = 'privacy';
   let isLegalDocumentRoute = false;
+  /**
+   * The public Autopaper reader (/autopaper, /autopaper/<slug>[/v<n>]) is a
+   * reading surface like the legal routes: it renders at once, signed in or
+   * not, and reads only public platform routes.
+   */
+  let isAutopaperRoute = false;
+  let autopaperPath = '';
+  let AutopaperReader = null;
   /**
    * Orientation deck for first-time signed-out visitors. Decided once, after
    * the session check resolves to signed_out, so a returning authenticated
@@ -357,7 +366,7 @@
    * version inside the component instead of a timed sequence.
    */
   function decideLandingIntro() {
-    if (isAuthenticated || isLegalDocumentRoute) {
+    if (isAuthenticated || isLegalDocumentRoute || isAutopaperRoute) {
       showLandingIntro = false;
       return;
     }
@@ -473,6 +482,13 @@
     const legalKind = legalDocumentKindFromPath(window.location.pathname);
     legalDocumentKind = legalKind || 'privacy';
     isLegalDocumentRoute = !!legalKind;
+    isAutopaperRoute = isAutopaperPath(window.location.pathname);
+    autopaperPath = isAutopaperRoute ? window.location.pathname : '';
+    if (isAutopaperRoute) {
+      import('./lib/AutopaperApp.svelte').then((module) => {
+        AutopaperReader = module.default;
+      });
+    }
     publicRoutePath = isPublicTextureRoutePath(window.location.pathname) ? window.location.pathname : '';
     applyTheme(loadThemeBootCache(), false);
     const initialIntent = initialAppIntentFromURL();
@@ -539,6 +555,15 @@
 <div class="app-root" data-theme-id={currentTheme.id} data-auth-state={authState}>
   {#if isLegalDocumentRoute}
     <LegalDocument kind={legalDocumentKind} />
+  {:else if isAutopaperRoute}
+    {#if AutopaperReader}
+      <svelte:component this={AutopaperReader} standalone initialPath={autopaperPath} />
+    {:else}
+      <div class="loading" role="status" aria-live="polite">
+        <span class="loading-orbit" aria-hidden="true"></span>
+        <p>Loading…</p>
+      </div>
+    {/if}
   {:else if authState === 'checking' || authState === 'reconnecting'}
     <div class="loading" role="status" aria-live="polite">
       <span class="loading-orbit" aria-hidden="true"></span>

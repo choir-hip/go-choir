@@ -128,6 +128,22 @@ export const APP_REGISTRY = [
     theme: { surface: 'document', shellDataAttr: 'data-texture-app', contentClass: 'texture-content' },
   },
   {
+    id: 'autopaper',
+    name: 'Autopaper',
+    icon: '📰',
+    description: 'Living stories with checked sources',
+    component: () => import('../AutopaperApp.svelte'),
+    launcher: { desk: true, desktopIcon: true, order: 65 },
+    window: {
+      singleton: true,
+      heavy: false,
+      desktop: { width: 880, height: 760, minWidth: 360, minHeight: 480 },
+      compact: compactDefault,
+    },
+    auth: { preview: 'public-readonly' },
+    theme: { surface: 'document', shellDataAttr: 'data-autopaper-window', contentClass: 'autopaper-content' },
+  },
+  {
     id: 'podcast',
     name: 'Podcast',
     icon: '📡',
