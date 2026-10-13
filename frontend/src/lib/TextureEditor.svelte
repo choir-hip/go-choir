@@ -27,7 +27,6 @@
     restoreTextureRevision,
     submitAgentRevision,
     submitPublicationProposal,
-    WIRE_PLATFORM_READ_OWNER,
   } from './texture.js';
   import { addLiveEventListener, liveEventKind } from './live-events.js';
   import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
@@ -146,7 +145,6 @@
   let relatedOpenPointerHandledAt = 0;
   let relatedOpenPointerHandledDocID = '';
   let removeLiveListener = () => {};
-  let textureReadOwner = '';
 
   const AUTOSAVE_DELAY_MS = 900;
   const TOOLBAR_HIDE_SCROLL_DELTA = 8;
@@ -510,7 +508,6 @@
     streamDocId = streamKey;
     if (!trajectoryId) {
       streamSource = openDocumentStream(docId, {
-        readOwner: textureReadOwner,
         onEvent: (event) => void handleDocumentStreamEvent(event),
         onError: () => {},
       });
@@ -577,7 +574,7 @@
   }
 
   async function refreshRevisions(docId, preferredRevisionId = '') {
-    const listed = await listRevisions(docId, { readOwner: textureReadOwner });
+    const listed = await listRevisions(docId);
     const ordered = sortRevisionsChronologically(listed.revisions || []);
     revisions = ordered;
 
@@ -610,7 +607,7 @@
     const seq = ++revisionLoadSeq;
     const summary = revisions[index];
     try {
-      const revision = await getRevision(summary.revision_id, { readOwner: textureReadOwner });
+      const revision = await getRevision(summary.revision_id);
       if (seq !== revisionLoadSeq) return; // a newer navigation superseded this fetch
       currentRevision = revision;
       activeRevisionIndex = index;
@@ -644,7 +641,7 @@
   }
 
   async function reloadDocument(preferredRevisionId = '') {
-    currentDoc = await getDocument(currentDoc.doc_id, { readOwner: textureReadOwner });
+    currentDoc = await getDocument(currentDoc.doc_id);
     applyDocumentWorkState(currentDoc);
     latestHeadRevisionId = currentDoc.current_revision_id || latestHeadRevisionId;
     await refreshRevisions(currentDoc.doc_id, preferredRevisionId);
@@ -822,18 +819,6 @@
     }
   }
 
-
-  function wantsPlatformReadScope(ctx = appContext) {
-    return !!(ctx?.platformRead || ctx?.createdFrom === 'universal_wire_article');
-  }
-
-  function applyPlatformReadScope(ctx = appContext) {
-    textureReadOwner = wantsPlatformReadScope(ctx) ? WIRE_PLATFORM_READ_OWNER : '';
-  }
-
-  function clearPlatformReadScope() {
-    textureReadOwner = '';
-  }
   async function loadContext() {
     loading = true;
     submitting = false;
@@ -862,7 +847,6 @@
     clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
-    applyPlatformReadScope();
 
     try {
       publishedBundle = null;
@@ -897,7 +881,7 @@
       }
 
       if (appContext.docId) {
-        currentDoc = await getDocument(appContext.docId, { readOwner: textureReadOwner });
+        currentDoc = await getDocument(appContext.docId);
         latestHeadRevisionId = currentDoc.current_revision_id || '';
         await refreshRevisions(currentDoc.doc_id, appContext.initialRevisionId || '');
         applyDocumentWorkState(currentDoc);
@@ -933,10 +917,8 @@
       }
 
       if (currentDoc?.doc_id) {
-        if (!textureReadOwner) {
-          await ensureFileManifest();
-        }
-        if (!textureReadOwner && !agentPending && !isPublishedReadOnly && !appContext.initialRevisionId) {
+        await ensureFileManifest();
+        if (!agentPending && !isPublishedReadOnly && !appContext.initialRevisionId) {
           restoreLocalDraftIfNewer();
         }
         publishCurrentDocumentContext(normalizeTitle(appContext));
@@ -1695,13 +1677,7 @@
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
-  $: isForeignPlatformWireArticle = !!(
-    currentDoc?.owner_id &&
-    currentUser?.id &&
-    currentDoc.owner_id !== currentUser.id &&
-    appContext?.appHint === 'universal-wire'
-  );
-  $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly || isForeignPlatformWireArticle;
+  $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published Texture document' : 'Texture document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
   $: revisionLineLabel = isViewingHistorical ? 'Historical' : 'Latest';
@@ -1748,7 +1724,6 @@
   });
 
   onDestroy(() => {
-    clearPlatformReadScope();
     clearAutosaveTimer();
     cancelSourceDiagnosis();
     closeDocumentStream();

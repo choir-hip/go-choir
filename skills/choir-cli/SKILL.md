@@ -164,13 +164,6 @@ statuses. The key needs `read:runtime` and `read:texture`.
 choir search "query terms"
 ```
 
-### Universal Wire
-
-```sh
-choir wire stories
-choir wire diagnostics
-```
-
 ## Output
 
 All output is JSON to stdout. Diagnostics and errors go to stderr. Exit codes:
@@ -186,12 +179,7 @@ go test ./cmd/choir/ -count=1
 
 ## Known Limits (observed 2026-07-07 against choir.news)
 
-- **Fixed 30s HTTP timeout, no `--timeout` flag.** Fine for every route
-  except the wire feed.
-- **`/api/universal-wire/stories` can hang server-side** — observed taking
-  longer than 120s on production, so `choir wire stories` and
-  `choir wire diagnostics` time out. This is a server issue, not a CLI one;
-  when it happens the CLI reports `context deadline exceeded`.
+- **Default 75s HTTP timeout** (`--timeout` or `CHOIR_TIMEOUT`).
 - **`trajectories` truncates to 50 entries client-side**; there is no paging
   flag yet.
 - **`search` takes no limit/filter flags** — it passes the raw query as `q`.

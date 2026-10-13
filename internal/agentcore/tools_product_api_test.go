@@ -166,8 +166,9 @@ func TestProductAPIRequestWithoutBoundServerFailsClosed(t *testing.T) {
 }
 
 // The guest router serves no /api/trace/, /api/continuations or
-// /api/universal-wire/ route (the last lives only on the host proxy), so the
-// allowlist no longer names them (D0 census desk-config 1.10).
+// /api/universal-wire/ route (the last was deleted with the Universal Wire
+// app in Cut 2), so the allowlist no longer names them (D0 census
+// desk-config 1.10).
 func TestProductAPIAllowlistRefusesRoutesTheGuestDoesNotServe(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{

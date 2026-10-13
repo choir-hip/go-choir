@@ -697,12 +697,6 @@ func deriveTurnCommits(parent *traceLayer) *traceLayer {
 	return b.finish()
 }
 
-// exportPublications resolves every published route of the trajectory's
-// documents. Routes are named by revision metadata (corpusd_route_path and
-// corpusd_publication_ref.route_path, written when a publication is
-// accepted), by lifecycle refs recorded for an accepted publication, and,
-// as a supplement, by Universal Wire stories whose source document is one of
-// the trajectory's documents.
 // exportInboxRecords reads every record of the Texture and research inboxes
 // of the trajectory's documents and of its owners' management inboxes (Cut 1
 // L3a, L3b: their conversations are on records), and each inbox's head,
@@ -771,8 +765,12 @@ func (e *traceExporter) exportInboxRecords(bundle *traceBundle, docIDs map[strin
 	return records.finish(), inboxes.finish()
 }
 
+// exportPublications resolves every published route of the trajectory's
+// documents. Routes are named by revision metadata (corpusd_route_path and
+// corpusd_publication_ref.route_path, written when a publication is
+// accepted) and by lifecycle refs recorded for an accepted publication.
 func (e *traceExporter) exportPublications(bundle *traceBundle, docIDs map[string]bool) *traceLayer {
-	b := newLayer("GET /api/platform/publications/resolve?route=", "GET /api/universal-wire/stories")
+	b := newLayer("GET /api/platform/publications/resolve?route=")
 	routes := map[string]bool{}
 	revisionsLayer := bundle.Layers["revisions"]
 	if revisionsLayer.Status == traceStatusUnserved {
@@ -813,21 +811,6 @@ func (e *traceExporter) exportPublications(bundle *traceBundle, docIDs map[strin
 			}
 		}
 	}
-	var stories struct {
-		Stories []struct {
-			StoryTextureDoc   string `json:"story_texture_doc_id"`
-			PlatformRoutePath string `json:"platform_route_path"`
-		} `json:"stories"`
-	}
-	if err := e.get("/api/universal-wire/stories", &stories); err != nil {
-		b.note("supplementary route source failed: %s", routeFailure("/api/universal-wire/stories", err))
-	} else {
-		for _, story := range stories.Stories {
-			if docIDs[strings.TrimSpace(story.StoryTextureDoc)] && strings.TrimSpace(story.PlatformRoutePath) != "" {
-				routes[strings.TrimSpace(story.PlatformRoutePath)] = true
-			}
-		}
-	}
 	var unresolved []string
 	for _, route := range sortedKeys(routes) {
 		path := "/api/platform/publications/resolve?route=" + url.QueryEscape(route)
@@ -843,7 +826,7 @@ func (e *traceExporter) exportPublications(bundle *traceBundle, docIDs map[strin
 		b.add(pub)
 	}
 	if len(routes) == 0 {
-		b.note("no publication route named by revision metadata, lifecycle refs or Universal Wire stories")
+		b.note("no publication route named by revision metadata or lifecycle refs")
 	}
 	if len(unresolved) > 0 {
 		b.note("routes named but not resolvable (404): %s", strings.Join(unresolved, ", "))

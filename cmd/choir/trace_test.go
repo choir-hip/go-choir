@@ -153,8 +153,6 @@ func (s *traceStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}})
 	case strings.HasPrefix(r.URL.Path, "/api/texture/documents/"):
 		http.Error(w, `{"error":"document not found"}`, http.StatusNotFound)
-	case r.URL.Path == "/api/universal-wire/stories":
-		writeStubJSON(w, map[string]any{"stories": []any{}})
 	case r.URL.Path == "/api/platform/publications/resolve":
 		if q.Get("route") != "/wire/story-1" {
 			http.NotFound(w, r)

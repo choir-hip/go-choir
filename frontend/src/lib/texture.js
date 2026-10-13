@@ -22,25 +22,6 @@
 import { fetchWithRenewal } from './auth.js';
 import { withDesktopSelector } from './desktop-selector.js';
 
-export const WIRE_PLATFORM_READ_OWNER = 'universal-wire-platform';
-
-export function pushTextureReadOwner(ownerId = '') {
-  return String(ownerId || '').trim();
-}
-
-export function popTextureReadOwner() {
-  return '';
-}
-
-function withReadOwnerQuery(path, { method = 'GET', readOwner = '' } = {}) {
-  const owner = String(readOwner || '').trim();
-  if (!owner || (method !== 'GET' && method !== 'HEAD')) {
-    return path;
-  }
-  const join = path.includes('?') ? '&' : '?';
-  return `${path}${join}read_owner=${encodeURIComponent(owner)}`;
-}
-
 function texturePath(path) {
   return `/api/texture${path}`;
 }
@@ -102,8 +83,8 @@ export async function listDocuments() {
   return res.json();
 }
 
-export async function getDocument(docId, { readOwner = '' } = {}) {
-  const res = await fetchWithRenewal(withReadOwnerQuery(texturePath(`/documents/${encodeURIComponent(docId)}`), { readOwner }), {
+export async function getDocument(docId) {
+  const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}`), {
     method: 'GET',
   });
 
@@ -185,13 +166,13 @@ export async function createRevision(docId, { content, bodyDoc, sourceEntities, 
   return res.json();
 }
 
-export async function listRevisions(docId, { limit = 10000, readOwner = '' } = {}) {
+export async function listRevisions(docId, { limit = 10000 } = {}) {
   const params = new URLSearchParams();
   if (limit) {
     params.set('limit', String(limit));
   }
   const query = params.toString();
-  const res = await fetchWithRenewal(withReadOwnerQuery(texturePath(`/documents/${encodeURIComponent(docId)}/revisions${query ? `?${query}` : ''}`), { readOwner }), {
+  const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/revisions${query ? `?${query}` : ''}`), {
     method: 'GET',
   });
 
@@ -202,8 +183,8 @@ export async function listRevisions(docId, { limit = 10000, readOwner = '' } = {
   return res.json();
 }
 
-export async function getRevision(revisionId, { readOwner = '' } = {}) {
-  const res = await fetchWithRenewal(withReadOwnerQuery(texturePath(`/revisions/${encodeURIComponent(revisionId)}`), { readOwner }), {
+export async function getRevision(revisionId) {
+  const res = await fetchWithRenewal(texturePath(`/revisions/${encodeURIComponent(revisionId)}`), {
     method: 'GET',
   });
 
@@ -314,8 +295,8 @@ export async function cancelAgentRevision(docId, options = {}) {
   return res.json();
 }
 
-export function openDocumentStream(docId, { onEvent, onError, readOwner = '' } = {}) {
-  const source = new EventSource(withDesktopSelector(withReadOwnerQuery(texturePath(`/documents/${encodeURIComponent(docId)}/stream`), { readOwner })));
+export function openDocumentStream(docId, { onEvent, onError } = {}) {
+  const source = new EventSource(withDesktopSelector(texturePath(`/documents/${encodeURIComponent(docId)}/stream`)));
 
   source.onmessage = (event) => {
     if (!onEvent) return;

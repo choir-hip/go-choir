@@ -474,8 +474,6 @@ func TestUnboundAdminAPIKeyExcludesNonComputerRouteFamiliesFromGuard(t *testing.
 		path          string
 		authenticated bool
 	}{
-		{name: "universal wire", path: "/api/universal-wire/stories", authenticated: true},
-		{name: "published texture", path: "/api/texture/documents/doc-a?read_owner=" + vmctl.UniversalWirePlatformOwnerID, authenticated: true},
 		{name: "mail", path: "/api/email/status", authenticated: true},
 		{name: "public publication resolve", path: "/api/platform/publications/resolve?route=/article"},
 		{name: "public publication export", path: "/api/platform/publications/export?route=/article&format=json"},

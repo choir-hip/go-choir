@@ -128,17 +128,6 @@ export const APP_REGISTRY = [
     theme: { surface: 'document', shellDataAttr: 'data-texture-app', contentClass: 'texture-content' },
   },
   {
-    id: 'universal-wire',
-    name: 'Universal Wire',
-    icon: '🗞️',
-    description: 'Living Texture newspaper',
-    component: () => import('../UniversalWireApp.svelte'),
-    launcher: { desk: true, desktopIcon: true, order: 65 },
-    window: { singleton: true, heavy: true, desktop: { width: 1180, height: 760, minWidth: 820, minHeight: 560 }, compact: compactDefault },
-    auth: { preview: 'public-preview' },
-    theme: { surface: 'standard', shellDataAttr: 'data-universal-wire-window', contentClass: 'universal-wire-content' },
-  },
-  {
     id: 'podcast',
     name: 'Podcast',
     icon: '📡',

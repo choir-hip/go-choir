@@ -86,7 +86,7 @@ func TestRequestTimeoutCancelsDelayedServer(t *testing.T) {
 
 	started := time.Now()
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories", "--host=" + stub.URL, "--timeout=30ms"}, &out, &errOut)
+	code := run([]string{"trajectories", "--host=" + stub.URL, "--timeout=30ms"}, &out, &errOut)
 	elapsed := time.Since(started)
 	if code != 1 {
 		t.Fatalf("code = %d, want 1; stderr=%s", code, errOut.String())
@@ -104,7 +104,7 @@ func TestRequestTimeoutCancelsDelayedServer(t *testing.T) {
 func TestRunRequiresAPIKey(t *testing.T) {
 	t.Setenv(apiKeyEnvVar, "") // isolate from a developer's real key
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories"}, &out, &errOut)
+	code := run([]string{"trajectories"}, &out, &errOut)
 	if code != 2 {
 		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
 	}
@@ -121,7 +121,7 @@ func TestRunRequiresAPIKey(t *testing.T) {
 func TestRunRejectsBadKeyPrefix(t *testing.T) {
 	t.Setenv(apiKeyEnvVar, "not-a-choir-key")
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories"}, &out, &errOut)
+	code := run([]string{"trajectories"}, &out, &errOut)
 	if code != 2 {
 		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
 	}
@@ -146,7 +146,7 @@ func TestCLIAPIKeyFileRequiresMode0600AndRetiredPlaintextFlagRefuses(t *testing.
 		t.Fatalf("mode-0600 key = %q, %v", key, err)
 	}
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"wire", "stories", "--api-key=choir_sk_plaintext"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "flag provided but not defined") {
+	if code := run([]string{"trajectories", "--api-key=choir_sk_plaintext"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "flag provided but not defined") {
 		t.Fatalf("retired plaintext flag code=%d stderr=%q", code, stderr.String())
 	}
 }
@@ -158,29 +158,6 @@ func TestCLIAPIKeyFileDashReadsStdin(t *testing.T) {
 	}
 }
 
-
-// TestWireDiagnosticsPrintsOnlyDiagnostics asserts the diagnostics subcommand
-// decodes and prints the diagnostics field.
-func TestWireDiagnosticsPrintsOnlyDiagnostics(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"stories":[],"source":"universal-wire-edition-texture","diagnostics":{"texture_edition":"missing","reason":"alias not bootstrapped"}}`)
-	}))
-	defer stub.Close()
-
-	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "diagnostics", "--host=" + stub.URL}, &out, &errOut)
-	if code != 0 {
-		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
-	}
-	var diag map[string]string
-	if err := json.Unmarshal(out.Bytes(), &diag); err != nil {
-		t.Fatalf("decode diagnostics: %v; stdout=%s", err, out.String())
-	}
-	if diag["texture_edition"] != "missing" {
-		t.Fatalf("texture_edition = %q, want missing", diag["texture_edition"])
-	}
-}
 
 func TestIdentityVerifiesJoinedGuestAndPlatformAttestations(t *testing.T) {
 	guestPublic, guestPrivate, err := ed25519.GenerateKey(rand.Reader)
@@ -672,7 +649,7 @@ func TestAPIKeyEnvironmentSecretNeverAppearsInHelp(t *testing.T) {
 	}
 
 	for _, args := range [][]string{
-		{"wire", "stories", "--help"},
+		{"trajectories", "--help"},
 		{"texture", "read", "--help"},
 		{"run", "list", "--help"},
 		{"computer", "status", "--help"},
@@ -696,12 +673,12 @@ func TestAPIKeyFromEnv(t *testing.T) {
 			t.Errorf("Authorization = %q, want Bearer choir_sk_fromenv", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"stories":[],"source":"universal-wire-edition-texture"}`)
+		_, _ = io.WriteString(w, `{"trajectories":[]}`)
 	}))
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"trajectories", "--host=" + stub.URL}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -717,7 +694,7 @@ func TestNon2xxReturnsError(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"trajectories", "--host=" + stub.URL}, &out, &errOut)
 	if code != 1 {
 		t.Fatalf("code = %d, want 1; stderr=%s", code, errOut.String())
 	}

@@ -1,7 +1,7 @@
 // Command choir is the headless control surface for Choir. It wraps the
 // /api/ HTTP surface with API key (Bearer choir_sk_...) auth so agents and
 // scripts can read Texture documents, observe trajectories, search,
-// start runs, and verify the Universal Wire news feed without a browser.
+// and start runs without a browser.
 //
 // Auth: CHOIR_API_KEY env var or --api-key-file. Host: CHOIR_HOST env var
 // or --host flag (defaults to https://choir.news). Request timeout:
@@ -60,8 +60,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	rest := args[1:]
 
 	switch cmd {
-	case "wire":
-		return runWire(rest, stdout, stderr)
 	case "trajectories":
 		return runTrajectories(rest, stdout, stderr)
 	case "trajectory":
@@ -106,8 +104,6 @@ Usage:
   choir <command> [flags]
 
 Commands:
-  wire stories        List Universal Wire stories (real articles on the feed)
-  wire diagnostics    Print wire feed diagnostics (edition substrate state)
   trajectories        List recent trajectories (ingestion/run state)
   trajectory <id>     Show one trajectory's obligations
   trajectory cancel <id>  Cancel an owner-scoped trajectory
@@ -401,81 +397,6 @@ func writeJSON(w io.Writer, v any) int {
 		return 1
 	}
 	return 0
-}
-
-// ---- wire ----
-
-func runWire(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir wire: subcommand required (stories|diagnostics)")
-		return 2
-	}
-	sub := args[0]
-	fs := flag.NewFlagSet("choir wire "+sub, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args[1:], stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir wire: %v\n", err)
-		return 2
-	}
-	switch sub {
-	case "stories":
-		var resp wireStoriesResponse
-		if err := c.do(http.MethodGet, "/api/universal-wire/stories", nil, &resp); err != nil {
-			fmt.Fprintf(stderr, "choir wire stories: %v\n", err)
-			return 1
-		}
-		return writeJSON(stdout, resp)
-	case "diagnostics":
-		var resp wireStoriesResponse
-		if err := c.do(http.MethodGet, "/api/universal-wire/stories", nil, &resp); err != nil {
-			fmt.Fprintf(stderr, "choir wire diagnostics: %v\n", err)
-			return 1
-		}
-		return writeJSON(stdout, resp.Diagnostics)
-	default:
-		fmt.Fprintf(stderr, "choir wire: unknown subcommand %q\n", sub)
-		return 2
-	}
-}
-
-// wireStoriesResponse mirrors the wire API response without importing its
-// Dolt-backed owner package.
-type wireStoriesResponse struct {
-	Stories      []wireStory          `json:"stories"`
-	StyleSources []json.RawMessage    `json:"style_sources"`
-	Source       string               `json:"source"`
-	Edition      *json.RawMessage     `json:"edition,omitempty"`
-	Diagnostics  *wireFeedDiagnostics `json:"diagnostics,omitempty"`
-}
-
-type wireStory struct {
-	ID                string            `json:"id"`
-	Headline          string            `json:"headline"`
-	Dek               string            `json:"dek"`
-	Freshness         string            `json:"freshness"`
-	Prominence        int               `json:"prominence"`
-	StoryTextureDoc   string            `json:"story_texture_doc_id,omitempty"`
-	TextureContent    string            `json:"texture_content,omitempty"`
-	PlatformRoutePath string            `json:"platform_route_path,omitempty"`
-	SourceState       string            `json:"source_state"`
-	CreatedAt         time.Time         `json:"created_at,omitempty"`
-	UpdatedAt         time.Time         `json:"updated_at,omitempty"`
-	Projections       map[string]string `json:"projections"`
-}
-
-// wireFeedDiagnostics mirrors the diagnostics field shape. Kept loose
-// (RawMessage) because the substrate-state schema is owned by the runtime
-// and may evolve; the CLI prints it verbatim.
-type wireFeedDiagnostics json.RawMessage
-
-func (d *wireFeedDiagnostics) UnmarshalJSON(b []byte) error {
-	*d = wireFeedDiagnostics(b)
-	return nil
-}
-
-func (d wireFeedDiagnostics) MarshalJSON() ([]byte, error) {
-	return []byte(d), nil
 }
 
 // ---- trajectories ----

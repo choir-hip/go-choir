@@ -828,9 +828,6 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/super-console/ws":
 		h.HandleManagementConsoleWS(w, r)
 		return
-	case path == "/api/universal-wire/stories":
-		h.HandleUniversalWireStories(w, r)
-		return
 	case path == "/api/platform/texture/publications":
 		h.HandleTexturePublication(w, r)
 		return
@@ -854,9 +851,6 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case strings.HasPrefix(path, "/api/notifications/"):
 		h.HandleNotificationAPI(w, r)
-		return
-	case isPlatformTextureReadRequest(r):
-		h.HandlePlatformTextureRead(w, r)
 		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and
@@ -1644,80 +1638,6 @@ func (h *Handler) HandleVMctlDeny(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// RegisterRoutes registers all proxy routes on the given server.
-// The proxy /health handler is registered via SetHealthHandler to
-// override the default server health handler with one that reports
-// upstream autoputer reachability.
-// HandlePlatformTextureRead serves published Texture document and revision reads
-// from corpusd's DoltDB for Universal Wire articles. Published articles
-// carry their full revision history in corpusd, not the platform autoputer.
-func (h *Handler) HandlePlatformTextureRead(w http.ResponseWriter, r *http.Request) {
-	authResult, err := h.authenticate(r)
-	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
-		return
-	}
-	if !h.authorizeAPIKeyScope(w, r, authResult) {
-		return
-	}
-
-	path := r.URL.Path
-	var corpusdPath string
-	switch {
-	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/revisions"):
-		docID := strings.TrimPrefix(path, "/api/texture/documents/")
-		docID = strings.TrimSuffix(docID, "/revisions")
-		corpusdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID) + "/revisions"
-	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/history"):
-		docID := strings.TrimPrefix(path, "/api/texture/documents/")
-		docID = strings.TrimSuffix(docID, "/history")
-		corpusdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID) + "/revisions"
-	case strings.HasPrefix(path, "/api/texture/documents/") && strings.HasSuffix(path, "/stream"):
-		// Published articles don't need live SSE; return empty event stream
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.WriteHeader(http.StatusOK)
-		return
-	case strings.HasPrefix(path, "/api/texture/documents/"):
-		docID := strings.TrimPrefix(path, "/api/texture/documents/")
-		corpusdPath = "/internal/platform/texture/documents/" + url.PathEscape(docID)
-	case strings.HasPrefix(path, "/api/texture/revisions/"):
-		revisionID := strings.TrimPrefix(path, "/api/texture/revisions/")
-		corpusdPath = "/internal/platform/texture/revisions/" + url.PathEscape(revisionID)
-	default:
-		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
-		return
-	}
-
-	target, err := joinBasePath(h.cfg.CorpusdURL, corpusdPath)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build corpusd URL"})
-		return
-	}
-
-	httpReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build corpusd request"})
-		return
-	}
-	httpReq.Header.Set("X-Internal-Caller", "true")
-
-	resp, err := h.corpusd.Do(httpReq)
-	if err != nil {
-		log.Printf("proxy: corpusd texture read: %v", err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read from corpusd"})
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("proxy: corpusd texture read copy: %v", err)
-	}
-}
-
 // HandlePlatformObjectGraph forwards object graph API requests from the
 // runtime (inside a VM) to corpusd. Guest requests are bound by their tap
 // source address to the owning computer before the proxy becomes corpusd's
@@ -1767,25 +1687,10 @@ func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// isPlatformTextureReadRequest returns true for read-only Texture requests that
-// should be served from corpusd's published store rather than the autoputer.
-func isPlatformTextureReadRequest(r *http.Request) bool {
-	if r == nil || r.URL == nil {
-		return false
-	}
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		return false
-	}
-	if strings.TrimSpace(r.URL.Query().Get("read_owner")) != vmctl.UniversalWirePlatformOwnerID {
-		return false
-	}
-	path := r.URL.Path
-	if strings.HasPrefix(path, "/api/texture/documents/") {
-		return true
-	}
-	return strings.HasPrefix(path, "/api/texture/revisions/")
-}
-
+// RegisterRoutes registers all proxy routes on the given server.
+// The proxy /health handler is registered via SetHealthHandler to
+// override the default server health handler with one that reports
+// upstream autoputer reachability.
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/shell/bootstrap", h.HandleBootstrap)

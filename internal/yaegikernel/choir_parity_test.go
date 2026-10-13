@@ -319,7 +319,7 @@ func TestChoirProductAPIIsManagementOnly(t *testing.T) {
 		}
 		// Even if a cell bypassed the export map, the handle refuses the
 		// broker action — the authority check is the durable gate.
-		if _, err := scope.ProductAPI("GET", "/api/universal-wire/stories", nil); err == nil || !strings.Contains(err.Error(), "product_api") {
+		if _, err := scope.ProductAPI("GET", "/api/trajectories", nil); err == nil || !strings.Contains(err.Error(), "product_api") {
 			t.Fatalf("%s ProductAPI call should fail handle verify, got %v", role, err)
 		}
 	}
