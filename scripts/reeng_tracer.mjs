@@ -17,8 +17,10 @@
 //      and record whether anything publishes without an owner act;
 //   6. export the trajectory (`choir trace export`), insert the drill block,
 //      keep the bundle under ~/.config/choir-qa/traces/<label>/ (0600) and
-//      check it for the load (overlapping egress in one cell, a cell that
-//      waited for another run). If the load never appeared, retry the whole
+//      check it for the load (overlapping egress in one cell; a cell that
+//      waited for another run is reported, not required, since runs of one
+//      desk agent are already serialized). If the load never appeared,
+//      retry the whole
 //      flow on a fresh computer, up to --attempts.
 //
 // No SSH and no /internal/* anywhere (standing question 9). The scoped key is
@@ -26,10 +28,14 @@
 // Per-phase lines go to stderr; the non-secret receipt JSON goes to stdout and
 // to ~/.config/choir-qa/traces/<label>/receipt.json.
 //
-//   node scripts/reeng_tracer.mjs --label c0-tracer-dev-1 [--attempts 3]
-//     [--timeout-min 30] [--exporter "go run ./cmd/choir trace export"]
-//     [--skip-export] [--owner-publish] [--quiesce-min 10]
-//     [--keep-computer]
+//   node scripts/reeng_tracer.mjs --label c0-tracer-dev-1 [--attempts 1]
+//     [--timeout-min 15] [--settle-min 3] [--quiesce-min 2]
+//     [--exporter "go run ./cmd/choir trace export"]
+//     [--skip-export] [--owner-publish] [--keep-computer]
+//
+// Defaults are the fast loop (owner pace ruling 2026-10-13, metamission
+// boundaries.pace): one attempt, short bounded waits. A run that needs
+// longer is a finding about the desks, not a reason to wait.
 //
 // Exit: 0 bundle kept with the load present; 3 bundle(s) kept, load absent
 // (I5 unknown); 4 export unavailable (drill kept); 1 attempt failed; 2 usage.
@@ -50,15 +56,16 @@ const arg = (name, dflt) => {
 };
 const flag = (name) => args.includes(`--${name}`);
 const LABEL = arg('label', '');
-const ATTEMPTS = Math.max(1, Number(arg('attempts', '3')));
-const TIMEOUT_MIN = Number(arg('timeout-min', '30'));
+const ATTEMPTS = Math.max(1, Number(arg('attempts', '1')));
+const TIMEOUT_MIN = Number(arg('timeout-min', '15'));
+const SETTLE_MIN = Number(arg('settle-min', '3'));
 const EXPORTER = arg('exporter', 'go run ./cmd/choir trace export');
 const SKIP_EXPORT = flag('skip-export');
 const OWNER_PUBLISH = flag('owner-publish');
-const QUIESCE_MIN = Number(arg('quiesce-min', '10'));
+const QUIESCE_MIN = Number(arg('quiesce-min', '2'));
 const KEEP_COMPUTER = flag('keep-computer');
 if (!LABEL || !/^[A-Za-z0-9._-]+$/.test(LABEL)) {
-  console.error('usage: node scripts/reeng_tracer.mjs --label <label> [--attempts 3] [--timeout-min 30] [--exporter <cmd>] [--skip-export] [--owner-publish]');
+  console.error('usage: node scripts/reeng_tracer.mjs --label <label> [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer]');
   process.exit(2);
 }
 const TRACE_DIR = join(homedir(), '.config', 'choir-qa', 'traces', LABEL);
@@ -322,9 +329,9 @@ async function attempt(n, out) {
 
   // Let the load land before the drill: a restart mid-cell would kill the
   // parallel cell before its desk.cell and desk.egress events are persisted.
-  // Settled = at least one research run seen and none still running (or the
-  // cap passes).
-  const settleDeadline = Math.min(deadline - 8 * 60_000, Date.now() + 12 * 60_000);
+  // Settled = at least one research run seen and none still running (or
+  // --settle-min passes; the drill then lands on whatever is in flight).
+  const settleDeadline = Math.min(deadline - 5 * 60_000, Date.now() + SETTLE_MIN * 60_000);
   const researchSeen = new Set();
   while (Date.now() < settleDeadline) {
     const { ofTrajectory } = await trajectoryRuns(c, out.trajectory_id, startISO);
@@ -557,7 +564,8 @@ function bootInstant(body, requestedAt, readyAt) {
 }
 
 // The load: two desk.egress events with overlapping [started_at, finished_at]
-// inside one desk.cell, and a desk.cell that waited for another run.
+// inside one desk.cell. A desk.cell that waited for another run is reported
+// only: runs of one desk agent are serialized, so it cannot be provoked.
 function loadCheck(bundle) {
   const items = (layer) => (bundle.layers?.[layer]?.status === 'present' ? bundle.layers[layer].items || [] : []);
   const cells = items('cells');
@@ -581,7 +589,7 @@ function loadCheck(bundle) {
   }
   const waited = cells.filter((cell) => cell.waited_for_run);
   return {
-    present: Boolean(overlapCell) && waited.length > 0,
+    present: Boolean(overlapCell),
     evidence: {
       cells: cells.length, egress: egress.length,
       cells_layer: bundle.layers?.cells?.status || 'missing', egress_layer: bundle.layers?.egress?.status || 'missing',

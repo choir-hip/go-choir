@@ -153,12 +153,14 @@ rows (`tool = desk_go_eval`).
   computer answered after the restart (an upper bound). The checker's I3
   uses it as the boot instant.
 - `quiescent`: the tracer exports only after no run of the computer is
-  `pending` or `running`, waiting at most `--quiesce-min` (default 10).
+  `pending` or `running`, waiting at most `--quiesce-min` (default 2).
   `false` means the bounded wait ran out; `open_at_export` lists the runs
   still open, so an I2 failure on them is read against that.
 - `load.I5_load`: `present` when the bundle shows two overlapping
-  `desk.egress` calls inside one `desk.cell` and a `desk.cell` with
-  `waited_for_run` set; `absent` when the export served those layers and
+  `desk.egress` calls inside one `desk.cell` (a `desk.cell` with
+  `waited_for_run` set is reported, not required: runs of one desk agent
+  are serialized, so the product path cannot provoke a desk wait; the
+  session-pool tests cover it); `absent` when the export served those layers and
   the load never appeared (the checker reports I5 unknown); `unknown` when
   the export failed or was skipped.
 

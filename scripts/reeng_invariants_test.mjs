@@ -470,9 +470,13 @@ test('I4: no quote fails; truncated body without the quote is unknown; absent bo
 
 test('I5: no load is unknown; overlapping cells on one desk fail; egress from another worker fails; clean error passes', () => {
   const b = buildCleanBundle();
+  // A desk wait is reported, not required: runs of one agent are serialized.
   const noWait = structuredClone(b);
   for (const c of noWait.layers.cells.items) c.payload.waited_for_run = '';
-  const r = checkI5(noWait);
+  assert.equal(checkI5(noWait).verdict, 'pass');
+  const noLoad = structuredClone(b);
+  noLoad.layers.egress.items = noLoad.layers.egress.items.slice(0, 1);
+  const r = checkI5(noLoad);
   assert.equal(r.verdict, 'unknown');
   assert.equal(r.halves.request_id.verdict, 'pass');
   const overlap = structuredClone(b);
