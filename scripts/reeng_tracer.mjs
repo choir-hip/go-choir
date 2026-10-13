@@ -820,12 +820,24 @@ async function researchScenario(c, out, n, deadline, phase) {
     total: done.reduce((a, d) => a + Number(d.total || 0), 0),
     cell_results_with_new_arrivals: countLines,
   };
+  // Support judgement (Cut 2 2a v), observed, not gated: a Texture commit
+  // with new citations lists its pairs to management:<owner>, and
+  // management records verdicts; failures come back to texture:<doc>.
+  const allRecords = bundle.layers?.records?.items || [];
+  const pairsRecords = allRecords.filter((r) => String(r.inbox || '').startsWith('management:') && (r.support?.pairs || []).length > 0);
+  const failureRecords = allRecords.filter((r) => r.inbox === textureInbox && (r.support?.failures || []).length > 0);
+  const support = {
+    pairs_records: pairsRecords.length,
+    pairs_listed: pairsRecords.reduce((a, r) => a + (r.support?.pairs || []).length, 0),
+    failure_records_to_texture: failureRecords.length,
+    management_inbox: (bundle.layers?.inboxes?.items || []).filter((i) => String(i.inbox || '').startsWith('management:')).map((i) => ({ cursor: i.cursor, head: i.head })),
+  };
   const textureWork = (bundle.layers?.trajectory?.items?.[0]?.work_items || bundle.layers?.trajectory?.work_items || [])
     .filter((w) => w.assigned_agent_id === textureInbox).map((w) => ({ work_item_id: w.work_item_id, status: w.status }));
   out.acceptance = {
     scenario: 'research',
     claim: 'research searches asynchronously (a search_done with answered providers, and a cell result showing new arrivals) and its final Report reaches texture:<doc>, where a committed Texture turn reads it',
-    ...claim, search, texture_work_items_at_export: textureWork,
+    ...claim, search, support, texture_work_items_at_export: textureWork,
     pass: Boolean(claim.cast_to_research && claim.research_final_report && claim.texture_read_report && search.answered > 0 && search.cell_results_with_new_arrivals > 0),
   };
   phase('acceptance', out.acceptance);
