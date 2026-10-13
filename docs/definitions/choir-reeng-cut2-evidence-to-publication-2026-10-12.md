@@ -473,16 +473,23 @@ boundaries:
 now:
   status: executing
   slice: >-
-    Pre-flight done 2026-10-13 on 76ab40fd (C1 core landed): every cited
-    fact re-verified (docs/reports/reeng-cut2-preflight-2026-10-13.md),
-    the offline quote census run
-    (docs/reports/reeng-c8-quote-census-2026-10-13.md), and a convergent
-    panel accepted the plan with amendments
-    (docs/reports/reeng-cut2-preflight-review-2026-10-13.md; its rulings
-    on A1-A8 amend unit 2a and 2b and bind). Unit 2a item (i), normtext,
-    quotematch and the Ref shape, landed at b5059bd9 (pure code). Items
-    (ii) block captures and Read, and (iii) async search, are building
-    in parallel worktrees.
+    Unit 2a built and integrated: (i) normtext, quotematch and Ref
+    (b5059bd9); (ii) block captures, choir.Read and the trace captures
+    layer; (iii) async search; (iv) Texture's choir.Write against its frame
+    with capture Refs (ApplyTexture, the overlays and Texture merge
+    deleted); (v) support judgement (pairs to management, choir.Judge,
+    failures to Texture's frame); (vi) the translation contract. Deployed
+    proof so far: c2-write-2 on 27b96c90 (docs/evidence/c2-write-acceptance-2026-10-13.json):
+    14 async searches, 8 cell results with new arrivals, research's final
+    Report read by a records-route Texture turn on a closed work item, 8 of
+    8 citations quote inside their cited capture block (checker I4).
+    c2-judge-1 on 49a766fc found B10 (a trajectory settled under an unread
+    Report; docs/problems/reeng-cut2-breakage-2026-10-13.md), fixed in
+    b240d7a5. Unit 2b in progress: per-version permalinks, the Universal
+    Wire path and reader deleted, 21 unused Store B tables' DDL removed
+    (the old platform store still holds their rows, untouched), the public
+    Autopaper reader and front list; living stories, auto-publish and the
+    Store B check overlay building.
   source_ref: b5059bd9
   deploy_identity: staging choir.news 76ab40fd
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
