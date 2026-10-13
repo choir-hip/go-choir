@@ -1,0 +1,247 @@
+{
+ "schema": "choir.c2_close_receipts.v1",
+ "date": "2026-10-13",
+ "computer": "computer-1355b83bced1613eb048ee28d66688a8",
+ "guest_build": "761d94c5",
+ "method": "read-only through product routes with the paper key (/api/inboxes/*/records, /api/texture/documents/*/revisions, /api/runs) and the public /api/platform/publications/front and /resolve; pulled 17:52-17:58 UTC; analysis scripts kept outside the repo",
+ "requested_by": "docs/reports/c2-close-review-adjudication-2026-10-13.md",
+ "E1_freshness": {
+  "verdict": "pass",
+  "stories": 41,
+  "stories_multi_version": 37,
+  "stories_v5plus": 16,
+  "every_multi_version_story_has_a_later_version_citing_a_capture_arrived_after_its_previous_version": false,
+  "later_versions": 89,
+  "later_versions_citing_newer_capture": 51,
+  "later_versions_following_a_support_failure": 31,
+  "later_versions_neither": 12,
+  "committed_revisions_v2plus_minus_published_versions": 0,
+  "arrival_time": "earliest of: the schedule arrival record listing the capture, or the research report naming it in the story inbox",
+  "v5plus": [
+   {
+    "title": "Fatal rollercoaster incident at Six Flags; witnesses recount the scene",
+    "versions": 5,
+    "later_versions_citing_newer_capture": 2
+   },
+   {
+    "title": "Controversial vaccine trial touted by RFK Jr gets go-ahead in Guinea-Bissau",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 1
+   },
+   {
+    "title": "Cyberattack halts construction of the Denmark-Germany tunnel",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 2
+   },
+   {
+    "title": "Consus launches an LLM gateway for sensitive corporate data",
+    "versions": 5,
+    "later_versions_citing_newer_capture": 3
+   },
+   {
+    "title": "Mia Goth says Instagram let an AI image of her spread",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 1
+   },
+   {
+    "title": "Apple unveils HomeView display, new Apple TV 4K and HomePod mini 2",
+    "versions": 8,
+    "later_versions_citing_newer_capture": 3
+   },
+   {
+    "title": "Analysts warn cheap Chinese and open-source LLMs could force a trillion-dollar AI infrastructure reset",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 3
+   },
+   {
+    "title": "Satlyt raises $8M to run AI on satellites",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 1
+   },
+   {
+    "title": "Google releases Gemini 4 Argon, its long-awaited frontier model",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 1
+   },
+   {
+    "title": "Federal agents search Rep. Ilhan Omar's D.C. home",
+    "versions": 6,
+    "later_versions_citing_newer_capture": 2
+   },
+   {
+    "title": "Ukraine war: ex-top general says Russia's offensive ability is broken",
+    "versions": 6,
+    "later_versions_citing_newer_capture": 2
+   },
+   {
+    "title": "Claimed busy beaver result: BB(10) exceeds Graham's Number",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 1
+   },
+   {
+    "title": "Apple launches 'Switch to Safari' campaign urging users to ditch Chrome",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 1
+   },
+   {
+    "title": "No Man\u2019s Sky coming to iPhone and iPad",
+    "versions": 5,
+    "later_versions_citing_newer_capture": 2
+   },
+   {
+    "title": "High-speed video reveals how honey bee stingers pump venom",
+    "versions": 5,
+    "later_versions_citing_newer_capture": 1
+   },
+   {
+    "title": "Black Sea drone attack sinks ship; Bulgaria summons Russian ambassador",
+    "versions": 4,
+    "later_versions_citing_newer_capture": 1
+   }
+  ]
+ },
+ "E2_immutability": {
+  "verdict": "pass",
+  "baseline": "resolve bundles of every story permalink saved 16:40 UTC",
+  "pinned_versions": 30,
+  "identical_now": 30,
+  "with_later_versions_published_since": 8,
+  "compared": "payload (text, manifest, manifest_hash, resolved_blocks, signatures), artifact, version, provenance, citations, retrieval, source_entities, transclusions, policy, proposals, publication; excluded: checks overlay, nav, route (mutable by design)"
+ },
+ "E3_answers": {
+  "verdict": "fail",
+  "problem": "docs/problems/autopaper-arrivals-unanswered-2026-10-13.md",
+  "arrival_records": 34,
+  "items": 120,
+  "items_answered": 68,
+  "answers": {
+   "open_story": 46,
+   "None": 52,
+   "decline": 10,
+   "cast": 1,
+   "note": 11
+  },
+  "records_with_every_item_answered": 22,
+  "records_with_no_item_answered": 11,
+  "latency_s": {
+   "median": 101.0,
+   "p90": 195,
+   "max": 564
+  },
+  "excluded_in_flight_records": [
+   156,
+   157
+  ],
+  "per_15min": [
+   {
+    "interval": "2026-10-13T15:15",
+    "captures": 60,
+    "stories_opened": 15,
+    "revisions": 14,
+    "answers": 15
+   },
+   {
+    "interval": "2026-10-13T15:30",
+    "captures": 7,
+    "revisions": 39,
+    "stories_opened": 5,
+    "answers": 5
+   },
+   {
+    "interval": "2026-10-13T15:45",
+    "captures": 6,
+    "revisions": 18,
+    "stories_opened": 3,
+    "answers": 7
+   },
+   {
+    "interval": "2026-10-13T16:00",
+    "captures": 2,
+    "stories_opened": 2,
+    "revisions": 3,
+    "answers": 6
+   },
+   {
+    "interval": "2026-10-13T16:15",
+    "captures": 5,
+    "revisions": 5,
+    "stories_opened": 1,
+    "answers": 7
+   },
+   {
+    "interval": "2026-10-13T16:30",
+    "captures": 12,
+    "revisions": 10,
+    "stories_opened": 5,
+    "answers": 11
+   },
+   {
+    "interval": "2026-10-13T16:45",
+    "captures": 1,
+    "revisions": 6
+   },
+   {
+    "interval": "2026-10-13T17:00",
+    "captures": 11,
+    "stories_opened": 8,
+    "revisions": 15,
+    "answers": 12
+   },
+   {
+    "interval": "2026-10-13T17:15",
+    "captures": 7,
+    "revisions": 13,
+    "stories_opened": 2,
+    "answers": 2
+   },
+   {
+    "interval": "2026-10-13T17:30",
+    "captures": 3,
+    "stories_opened": 1,
+    "revisions": 6,
+    "answers": 3
+   },
+   {
+    "interval": "2026-10-13T17:45",
+    "captures": 6,
+    "revisions": 1
+   }
+  ]
+ },
+ "E4_correction_loop": {
+  "verdict": "pass with gap",
+  "support_failures": 68,
+  "followed_by_revision_rewriting_the_failing_sentence": 64,
+  "not_followed_by_any_revision": [
+   {
+    "title": "Federal agents search Rep. Ilhan Omar's D.C. home",
+    "at": "2026-10-13T15:52:39.774266443Z"
+   },
+   {
+    "title": "Federal agents search Rep. Ilhan Omar's D.C. home",
+    "at": "2026-10-13T15:52:39.774266443Z"
+   },
+   {
+    "title": "Trump's diesel deal with Putin angers Europe",
+    "at": "2026-10-13T15:29:34.022989359Z"
+   },
+   {
+    "title": "Trump's diesel deal with Putin angers Europe",
+    "at": "2026-10-13T15:29:34.022989359Z"
+   }
+  ],
+  "latest_version_badges": {
+   "exact|exact|supported": 325,
+   "pending|exact|pending": 135,
+   "tolerant|tolerant|supported": 11,
+   "pending|pending|pending": 5,
+   "pending|tolerant|pending": 4,
+   "failed|exact|failed": 4
+  },
+  "failed_badges_by_cause": {
+   "quote_not_found": 0,
+   "unsupported_verdict": 4
+  },
+  "note": "All failed badges on latest versions carry an exact quote match and a failing support judgement; criterion (4) holds. pending|pending|pending (5) are uncaptured citations, the A1 case."
+ }
+}
