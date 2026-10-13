@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -35,6 +36,11 @@ func TestEngineeringPromptIsModelIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The temporal overlay stamps the wall clock to the second, so two
+	// assemblies can straddle a second boundary; mask it before comparing.
+	nowUTC := regexp.MustCompile(`Current UTC date/time: [0-9T:-]+Z`)
+	promptA = nowUTC.ReplaceAllString(promptA, "Current UTC date/time: <now>")
+	promptB = nowUTC.ReplaceAllString(promptB, "Current UTC date/time: <now>")
 	if promptA != promptB {
 		t.Fatal("system prompt differs across model selections; a per-model branch exists in prompt assembly")
 	}
