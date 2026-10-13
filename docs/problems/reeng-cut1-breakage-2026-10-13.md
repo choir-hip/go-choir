@@ -110,3 +110,71 @@ suppresses every later wake as the active run.
 Fix: the inbox_record occurrence executes a run that this wake
 reactivated, as the coagent path does. Mutation class orange (Texture
 activation dispatch; no canonical write path changes).
+
+## B5-B8. Liveness gaps on the records routes (C1-core close review)
+
+Found 2026-10-13 by the C1-core close panel (claude opus,
+gemini-3.8-flash, deepseek-v4.1-flash; devin was refused a tool call;
+`.agentic-consensus/c1-core-close-2026-10-13/`, prompt
+`.agentic-consensus/c1-core-close-prompt-2026-10-13.md`). Two of three
+answers said "holds with follow-ups", one said "reopen". Each staging
+receipt ran while the owner's work item was still open and while every
+research run ended with a final Report, so no receipt crossed these
+boundaries. All four block a long-lived story, the shape Autopaper
+needs.
+
+**B5. Once its work item closes, a Texture is no longer woken by
+records.** (deepseek, confirmed in code and by a throwaway probe.)
+`ValidateActivationAuthority` (internal/textureowner/texture_controller.go:392-400)
+requires the run's `lifecycle_work_item_id` to name an open work item. A
+records-started run on a Texture whose owner work item has completed
+carries no work item (aef01cef permits the submit). Its initial dispatch
+fails "validate Texture activation work: record not found", and the run
+stays pending. Second shape: `agentMutationComputerID`
+(agentcore/runtime_persistence.go:170, textureowner/coagent_injection.go:20)
+scopes a mutation to the computer only when the run has a work item. A
+workless records run's parked mutation is invisible to the controller's
+computer-scoped reads, so a records wake mints a fresh run instead of
+reactivating the parked one. A parked run whose work item has closed fails
+the same authority check. On the records route, work is the records and
+not a work item; this authority check predates that.
+
+**B6. A round stays open when its recipient's run ends without a final
+Report.** (claude, gemini.) Only the recipient's final Report or the
+crash boot (`closeOpenRoundsAfterCrash`) closes a round. If a research
+run fails, is cancelled, or ends without a final Report, nothing is
+addressed to Texture and nothing wakes it. `recheckRecordsInbox`
+re-wakes only the run's own desk, and only for late records. The round
+stays open until the next crash restart.
+
+**B7. Passivation's records re-check is dead code.**
+(gemini.) `passivateIdleToolLoopRun` (runtime.go:3670) calls
+`recheckRecordsInbox`, which returns at once for any non-terminal run,
+and a parked run is not terminal. A record that reaches a Texture while
+its run is active finds the desk busy and wakes nobody (D4). When that
+run parks, the re-check that should start the next turn never runs, so
+the record waits for an unrelated wake.
+
+**B8. The B4 fix can strand a reactivated run on retry.** (claude,
+gemini.) If execution after reactivation defers, the occurrence is
+retried, and `reconcileAgentWakeLocked` finds the pending run with valid
+authority and returns nil. `handleInboxRecord` then acknowledges, and
+the run stays pending with no executor: B4 again, through a narrower
+window.
+
+Fix plan (one landing, then a scenario that crosses the boundaries: an
+owner request whose work item completes, then a second record to the
+same Texture, and a research run that fails without a final Report):
+- B5: the records route is the work authority. A Texture run started or
+  reactivated for unread records is marked `records_route` and, when its
+  work item is closed or absent, carries none; activation authority
+  accepts a records-route run without a work item. Mutations of
+  lifecycle runs are scoped to their computer whether or not they carry a
+  work item.
+- B6: when a records-desk run ends (failed or cancelled, not a crash)
+  while it is the recipient of an open round, the runtime appends a
+  system closure Report, final with reason `run_ended:<state>`, which
+  wakes the caster (unlike the crash closure, which wakes nobody).
+- B7: the re-check treats a parked run like a completed turn.
+- B8: an inbox_record occurrence that finds a pending reactivated
+  Texture run with nobody executing it runs it.
