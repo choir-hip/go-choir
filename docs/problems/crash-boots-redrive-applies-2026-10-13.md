@@ -1,6 +1,6 @@
 # Crash boots re-drive platform updates and self-development applies
 
-Status: open (L1a-3 of docs/definitions/choir-ledger-l1-restart-2026-10-13.md)
+Status: open; L1a-3a (steps 1-2, platform updates) in progress, L1a-3b (step 3, self-development) next (L1a-3 of docs/definitions/choir-ledger-l1-restart-2026-10-13.md)
 Found: 2026-10-13, code reading against restart design v3 §6 item 1 and §9
 findings 5-7. Mutation class: red (platform update, self-development
 materialization, run lifecycle).
@@ -63,6 +63,18 @@ restarting, so the marker stays on disk (up to its 15-minute validity) and
 any crash in that window boots as planned. Same pattern in the materializer's
 apply and rollback calls.
 
+## Found while fixing: a lost apply response reads as a refusal
+
+`ApplyPlatformUpdate` treats an updater error with an empty `Outcome` as
+"refused before any mutation" and records failed with the prior state
+restored (`platform_update.go`, the `result.Outcome == ""` branch). A
+transport error (socket closed, timeout) after the updater finished also
+arrives as an empty result, so a live caller would record a completed apply
+as failed. In production the caller dies with the restart, so this path is
+rare; the crash settler below reads the journal instead of the response and
+does not share the defect. Not fixed in L1a-3a; recorded as a discovered
+heresy for L1c, where planned-ness moves to the host.
+
 ## Planned work (L1a-3)
 
 1. Clear the marker whenever the apply returns without restarting.
@@ -73,8 +85,9 @@ apply and rollback calls.
    and stranded-tail re-drive; crash closure extended to post-decision
    self-development ops, run before the reconcile trigger and the post-commit
    observer; the reconciler skips ops marked interrupted.
-4. A separate pre-boot check for `selfdev_materialization_retry` (adding it
-   to RestartWorkKinds would hold it during applies).
+4. No separate gate for `selfdev_materialization_retry`: its handler only
+   triggers the reconciler, which finds nothing to drive once step 3 settles
+   every post-decision op on a crash boot.
 5. Deferred to L1c: whether a guest-self-marked boot counts as planned. Today
    the post-restart re-push is the second half of every apply, so treating
    self-marked boots as crashes would break every update until the host
