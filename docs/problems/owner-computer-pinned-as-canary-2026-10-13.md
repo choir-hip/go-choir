@@ -28,3 +28,21 @@ tracking the platform (vmctl's apply-platform-follow route, or a planned
 restart onto the current image), which closes or resumes its open work
 under the restart rule; and decide whether a constructed version should
 be pinned by default at all.
+
+## Corrections (2026-10-13 15:10 UTC, from docs/reports/owner-computer-unpin-plan-2026-10-13.md)
+
+- The computer has been a constructed computer version since its route slot
+  was committed on 2026-07-17, not since 2026-10-10; its 2026-10-10 boot
+  was a manual owner-approved stop and resume.
+- The "canary" label is display only (derived in handlers.go:908-915; no
+  code reads divergence_status since a47122de). What keeps the computer
+  off the platform: deploys restart no active computer unless CI is
+  dispatched with refresh_active_computers (ci.yml ~852); that dispatch's
+  selection skips snapshot_kind constructed-computer-version; and
+  premium_always_on is never idle-stopped. A one-off refresh does not
+  change any of these, so the computer falls behind again at the next
+  deploy until CI's selection changes.
+- The refresh onto the current image is a crash boot by design: only the
+  guest writes a planned-restart marker, and D7's work-state epoch treats a
+  jump from 86770ae7 as a crash. Parked runs (295) and open rounds close as
+  interrupted by a restart. The owner confirmed this before the refresh.
