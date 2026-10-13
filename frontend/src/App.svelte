@@ -58,9 +58,10 @@
   let legalDocumentKind: 'privacy' | 'terms' = 'privacy';
   let isLegalDocumentRoute = false;
   /**
-   * The public Autopaper reader (/autopaper, /autopaper/<slug>[/v<n>]) is a
-   * reading surface like the legal routes: it renders at once, signed in or
-   * not, and reads only public platform routes.
+   * The public Autopaper pages (/autopaper, /autopaper/<slug>[/v<n>]) are a
+   * reading surface like the legal routes: they render at once, signed in or
+   * not, and read only public platform routes. A story renders in the
+   * Texture app's published mode, standalone.
    */
   let isAutopaperRoute = false;
   let autopaperPath = '';
@@ -485,7 +486,7 @@
     isAutopaperRoute = isAutopaperPath(window.location.pathname);
     autopaperPath = isAutopaperRoute ? window.location.pathname : '';
     if (isAutopaperRoute) {
-      import('./lib/AutopaperApp.svelte').then((module) => {
+      import('./lib/AutopaperRoute.svelte').then((module) => {
         AutopaperReader = module.default;
       });
     }
@@ -557,7 +558,7 @@
     <LegalDocument kind={legalDocumentKind} />
   {:else if isAutopaperRoute}
     {#if AutopaperReader}
-      <svelte:component this={AutopaperReader} standalone initialPath={autopaperPath} />
+      <svelte:component this={AutopaperReader} initialPath={autopaperPath} />
     {:else}
       <div class="loading" role="status" aria-live="polite">
         <span class="loading-orbit" aria-hidden="true"></span>
