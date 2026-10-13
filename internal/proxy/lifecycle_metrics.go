@@ -3,6 +3,7 @@ package proxy
 import (
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -65,9 +66,19 @@ func (r *lifecycleRecorder) record(stage, status string, duration time.Duration)
 		agg.MaxDurationMs = durationMs
 	}
 	agg.ByStatus[status]++
-	if status != "ok" && status != "http_200" && status != "connected" {
+	if !lifecycleSuccess(status) {
 		agg.Errors++
 	}
+}
+
+// lifecycleSuccess reports a status that is not a failure: ok, connected,
+// published, or any 2xx.
+func lifecycleSuccess(status string) bool {
+	switch status {
+	case "ok", "connected", "published":
+		return true
+	}
+	return len(status) == len("http_200") && strings.HasPrefix(status, "http_2")
 }
 
 func (r *lifecycleRecorder) summary() lifecycleHealthSummary {
