@@ -79,3 +79,14 @@ Residuals:
   resumed once by the planned boot, not refused.
 - The first deploy carrying this change reaches guests that predate the
   endpoint, so those idle computers take a crash boot one last time.
+
+## Decision recorded (2026-10-13)
+
+bcc556de reverses the 627e7420 (2026-07-17) rule that a global deploy never
+refreshes a constructed computer version. Authority: the owner's request
+that their computer stay current ("Is my owner account not getting
+updated?", then "Update it now"). Divergent and held computers are still
+skipped; busy computers are deferred, never killed. The first deploy
+carrying the guest endpoint is a crash boot for idle computers (no running
+guest has the endpoint yet); from the next deploy on, a deploy refresh is a
+planned restart that resumes work once.
