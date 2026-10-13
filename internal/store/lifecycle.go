@@ -2727,6 +2727,32 @@ func (s *Store) lifecycleSettlementReady(ctx context.Context, trajectory types.T
 			return false, nil
 		}
 	}
+	// On the records route the records are the work (Cut 2 B10): a document
+	// trajectory is not ready while its Texture has unread records or one of
+	// its conversations has an open round.
+	if docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"]); docID != "" {
+		inbox := "texture:" + docID
+		head, err := s.InboxHead(ctx, trajectory.OwnerID, trajectory.ComputerID, inbox)
+		if err != nil {
+			return false, err
+		}
+		if head > 0 {
+			cursor, err := s.ReaderCursor(ctx, trajectory.OwnerID, trajectory.ComputerID, inbox, inbox)
+			if err != nil {
+				return false, err
+			}
+			if cursor < head {
+				return false, nil
+			}
+		}
+		rounds, err := s.OpenRounds(ctx, trajectory.OwnerID, trajectory.ComputerID, inbox)
+		if err != nil {
+			return false, err
+		}
+		if len(rounds) > 0 {
+			return false, nil
+		}
+	}
 	workObjs, err := s.lifecycleTransitionObjects(ctx, ogKindWorkItem, trajectory.TrajectoryID, trajectory.OwnerID, trajectory.ComputerID)
 	if err != nil {
 		return false, err
