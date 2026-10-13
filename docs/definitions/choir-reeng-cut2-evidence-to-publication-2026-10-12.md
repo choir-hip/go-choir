@@ -314,7 +314,7 @@ finish:
     feeding an existing story, or a management record declining those
     captures with a reason, and the receipt lays stories opened, revisions
     and captures side by side per poll interval (no story count is set; a
-    six-hour window on real feeds should produce many stories, not a
+    one-hour window on real feeds should produce several stories, not a
     handful; one poll's captures may open several stories at once, and the
     ratio of new stories to revisions starts high and falls as the corpus
     grows, which the receipt plots); (3) every committed revision of a story is published
@@ -561,8 +561,10 @@ acceptance, and commits inside a unit are fine.
 
 - The crash-closure record never wakes management at boot. That would be
   a boot-time resumer (§13.3; Cut 1's D5 and invariant 7).
-- The live window is 6 hours. It is an observation window for the
-  acceptance, not a runtime limit.
+- The acceptance watches the live window for at most an hour (owner
+  pace ruling 2026-10-13, metamission boundaries.pace 6); the schedule
+  keeps running after the receipt. It is an observation window, not a
+  runtime limit.
 - The tracer's controlled page is a file on a dedicated
   `tracer-fixtures` branch of this repository, read through
   raw.githubusercontent.com. The tracer changes it by a commit to that

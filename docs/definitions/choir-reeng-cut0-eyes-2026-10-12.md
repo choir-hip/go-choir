@@ -190,14 +190,16 @@ finish:
     run's cell waits for the session (bounded by its context, without
     holding the pool mutex) and gets the same worker; the existing busy
     test is inverted.
-    (6) Broker handle. If the 70-minute session (acceptance below) shows
-    choir.* verbs refused after the hour, this cut fixes it: the handle is
-    reissued when a cell is bound, with a test, so a desk keeps its verbs
-    for its whole life. Cut 2's six-hour live window depends on it.
+    (6) Broker handle. The handle is issued once per worker for an hour
+    and checked on every verb, so the code already says a desk loses its
+    choir.* verbs after the hour. This cut reissues the handle when a
+    cell is bound, with a test that fails on an expired handle first. No
+    live session confirms it (owner pace ruling 2026-10-13, metamission
+    boundaries.pace: nothing runs live to confirm what the code says).
     (7) Measurements, in docs/reports/reeng-cut0-measurements-2026-10-12.md:
     push to healthy fresh test computer (split into CI, deploy, mint, first
     ready prompt bar); per-turn token and latency figures from the three
-    tracer bundles (Cut 2's baseline); and the run-acceptance level today's
+    tracer bundles kept so far (Cut 2's baseline); and the run-acceptance level today's
     system reaches on the tracer story (Cut 1's baseline).
     Nothing is preserved across the cuts (decisions §13.1): no survival
     register, no owner hold, no Texture export.
@@ -211,12 +213,12 @@ finish:
     - action: the invariant checker run against planted-violation copies of a real bundle (one per rule)
       proves: each rule fails when its fact is broken, before any pass is trusted
       evidence_class: local test over a deployed artifact
-    - action: three tracer runs on choir.news at the landed SHA, each on a fresh test computer, crash drill and the concurrency load included, bundles kept
+    - action: one fast tracer run on choir.news at the landed SHA on a fresh test computer, crash drill and the concurrency load included, bundle kept (owner pace ruling 2026-10-13; a second run only if the first is ambiguous)
       proves: every listed layer is marked present, empty or unserved, all without SSH, and no rule passes on an unserved layer; an export with a key scoped to a different test computer is refused; I5 holds wherever the bundle shows concurrent egress and overlapping cells on one desk (unknown if the load never appeared); the checker's verdict per rule on today's system (an I3 failure on the known restart defect is a finding, not a tracer failure)
       evidence_class: deployed proof
-    - action: one test-computer desk session driven past 70 minutes with cells under 30 minutes apart, exported (repeated after the fix in artifact 6, if one was needed)
-      proves: a desk keeps its choir.* verbs for its whole life
-      evidence_class: deployed proof
+    - action: go test ./internal/agentcore -run TestDeskHandle (a handle issued with a short lifetime, a cell after it expires)
+      proves: a desk keeps its choir.* verbs for its whole life (the 70-minute live session this replaced was stopped by the owner's pace ruling)
+      evidence_class: local test
   rollback: >-
     git revert per commit. No persisted state changes: the transport fix and
     the session pool are process memory, the new read route is read-only,
@@ -242,8 +244,7 @@ value:
 homotopy:
   realism_axis: >-
     focused unit tests (socketpair, pool) -> checker on planted bundles ->
-    one tracer run on a fresh staging computer -> three runs with the crash
-    drill -> the same tracer and checker gating Cut 1 and Cut 2 (rules
+    one fast tracer run with the crash drill on a fresh staging computer -> the same tracer and checker gating Cut 1 and Cut 2 (rules
     added, never a second harness).
 
 boundaries:
@@ -278,7 +279,7 @@ boundaries:
     - the tracer acts only on computers it minted
     - Texture is the sole writer of canonical revisions
     - handle verification on every broker verb (the fix routes frames, it does not bypass checks)
-    - the 60-minute run limit (prototyping safety constraint)
+    - the 60-minute run limit (a guardrail against runaway spend; nothing is tested past it)
   excluded:
     - records, rounds, hypothesis ids, cursors, packets, work items, crash closure, prompts (Cut 1)
     - fixing the restart defect the drill exposes (Cut 1; decisions §12.12)
@@ -363,8 +364,8 @@ measurement: cross-wired parallel egress and a second REPL per desk.
 **Order.** (4) and (5) first, test-first, since every trace after them is
 trusted more. Then the read route and `choir trace export` (1), the
 SSH-free mint and the tracer (2), and the checker proven on planted
-violations (3). Land, deploy, run the tracer three times. Then the TTL
-session (and its fix, 6) and the measurements (7). During the cut window, problems fixed in
+violations (3). Land, deploy, run the tracer. Then the handle reissue
+by test (6) and the measurements (7). During the cut window, problems fixed in
 the same commit go into `docs/problems/reeng-cut0-breakage-2026-10-12.md`
 (decisions §12.4). Others get their own problem doc first.
 
@@ -397,6 +398,5 @@ Ways it can fail, written before the code:
 - the tracer acts on a computer it did not mint (it refuses any such id);
 - the export leaks another owner's run (the route is owner-scoped; a
   wrong-owner key is refused in the acceptance);
-- the TTL session dies for another reason first (30-minute idle reclaim,
-  failed cell), so "no expiry seen" is not a negative (the export must show
-  one worker for the session's full age).
+- the handle test passes because the lifetime it sets never elapses (it
+  must fail on today's code, where the handle is issued once).

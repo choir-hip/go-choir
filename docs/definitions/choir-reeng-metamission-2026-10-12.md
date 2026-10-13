@@ -43,7 +43,7 @@ metamission:
     - id: C0
       path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
       readiness: reviewed
-      status: pending
+      status: executing
       depends_on: [D0]
     - id: C1
       path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
@@ -100,7 +100,7 @@ finish:
     - action: each cut's acceptance on staging (choir.news), read through Cut 0's tracer, trace export and invariant checker
       proves: the cut's claim on the product path
       evidence_class: deployed proof
-    - action: "the end-to-end story: published in public from its first revision, disconfirming evidence arrives, a later version corrects it, the earlier version's link unchanged, logged-out read; and the six-hour live window producing stories at the rhythm of ingestion (Cut 2's autopaper_live)"
+    - action: "the end-to-end story: published in public from its first revision, disconfirming evidence arrives, a later version corrects it, the earlier version's link unchanged, logged-out read; and the live window (watched for at most an hour, boundaries.pace 6) producing stories at the rhythm of ingestion (Cut 2's autopaper_live)"
       proves: Autopaper live
       evidence_class: deployed proof
   rollback: forward-fix after Cut 1, with a tagged last-good commit per cut; no state is snapshotted, since none is valuable before Autopaper is live (decisions §12.3, §13.1)
@@ -180,20 +180,50 @@ boundaries:
     Iterate until a round raises no new blocking finding; then the
     metamission is complete. Panel prompts, manifests and adjudications
     are archived under docs/reports/ as review receipts.
+  pace: >-
+    Owner 2026-10-13, after Cut 0 spent hours on a 70-minute session probe
+    and three back-to-back acceptance runs: "in development, we want to
+    have a rapid feedback loop. So we shouldn't be doing these long runs
+    ... we should be doing things quickly. Watching the traces and
+    iterating." The 60-minute run limit is a guardrail against runaway
+    spend, not part of any spec, and nothing is tested past it. Rules,
+    overriding the cut files where they differ:
+    (1) The loop is push, deploy (about 9 minutes), one tracer run
+    (target 10 minutes or less), read the trace, fix. Aim for three
+    iterations an hour.
+    (2) Nothing runs live to confirm what the code already says: write
+    the failing test and fix it.
+    (3) The tracer runs fast by default: crash drill as soon as a cell is
+    in flight, no waiting for desks to settle, a 2-minute quiescence
+    bound, no load retries. Read run events while it runs and stop as
+    soon as the answer is visible. Stop every test computer after use.
+    (4) A cut's acceptance is one tracer run at the landed SHA that shows
+    the cut's claim, with the checker's verdicts; a second run only when
+    the first is ambiguous. A failure that a later cut owns is a
+    recorded finding, not a blocker.
+    (5) Cut 1 lands commit by commit, each through deploy and a tracer
+    run, ordered so the checker's verdicts move every time; not one
+    acceptance at the end.
+    (6) Cut 2's acceptance watches the live window for at most an hour;
+    the schedule keeps running after the receipt is written.
+    (7) A cut's consensus review runs in the background and does not
+    hold the next cut; the completion loop in review_loops stays.
+    (8) No wait longer than 15 minutes without reading the trace in
+    between.
 
 now:
-  status: ready_to_execute
+  status: executing
   slice: >-
-    Decisions recorded (§2, §12, §13). Cut 0, Cut 1 and Cut 2 authored,
-    repaired after the convergent review, and re-reviewed at deb6f760.
-    The owner then ruled that nothing is preserved before Autopaper is
-    live, that article versions are Texture versions, that crashes are
-    restarted by hand, and that production follows the ingestion rhythm.
-    The protocol metamission's P2d2 and P3 and Autopaper W2, W3a and W3
-    are carried by Cuts 1 and 2. M0 and D0 landed; the D0 leftovers
-    landed at 964bdd25 (acceptance PASS). Next station: C0.
-  source_ref: f91b6e55
-  deploy_identity: staging 964bdd25
+    Decisions recorded (§2, §12, §13). M0 and D0 landed; the D0 leftovers
+    landed at 964bdd25 (acceptance PASS). C0 is executing: units 1-5
+    landed (export, tracer, checker, request-id routing, one REPL per
+    desk) with breakages B1-B2 fixed. The tracer shows I2 and I3 failing
+    on the known restart defect (Cut 1) and I4 failing on quote-less
+    citations (Cut 2). Owner pace ruling 2026-10-13 (boundaries.pace):
+    the 70-minute session probe was stopped and is replaced by a test,
+    and acceptance is one fast tracer run.
+  source_ref: b9f195b1
+  deploy_identity: staging de4ebea2
   candidate: none
   conjecture:
     id: RE-2
@@ -213,10 +243,10 @@ now:
   decision: {what: "three cuts, cutover deploy counts as a crash, forward-fix, one breakage log per cut, redesign tripwire", kind: sequencing, status: settled (owner 2026-10-12, delegated), evidence_ref: docs/re-engineering-decisions-2026-10-12.md §12}
   belief:
     believed_state: the studies' and panels' code claims hold at 03499ef9
-    main_uncertainty: how long push-to-healthy-test-computer takes (bounds the pace of every cut) and how large Cut 1's change set is
-    next_observation: Cut 0's first tracer run and the push-to-healthy-test-computer time
-  blocker_or_risk: Cut 1 is one large red change across store, agentcore, textureowner and yaegikernel; the owner's computer takes every cut (accepted risk, §13.1)
-  next_action: execute C0 from its cut file; then C1, then C2, each landed with deployed acceptance before the next starts
+    main_uncertainty: whether a tracer run fits in 10 minutes (one attempt took 32 minutes, mostly waiting for research to settle and for a run that the restart defect leaves open) and how Cut 1 splits into deployable commits
+    next_observation: a fast-mode tracer run's wall time
+  blocker_or_risk: Cut 1 is a large red change across store, agentcore, textureowner and yaegikernel, now landed commit by commit (boundaries.pace 5); test computers left running hold Node B memory and stall mints (docs/problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md); the owner's computer takes every cut (accepted risk, §13.1)
+  next_action: close C0 (handle reissue by test, tracer fast mode, one acceptance run, measurements); then C1 commit by commit, then C2
 
 receipts:
   - id: panels-2026-10-12

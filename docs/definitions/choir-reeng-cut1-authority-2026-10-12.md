@@ -170,8 +170,11 @@ finish:
     update restart resumes once. Engineering reaches Texture only through
     management. All four desks are told exactly what they can do.
   artifact: >-
-    One coherent cutover, landed as internal commits behind one deployed
-    acceptance (inventory first, then store, then desks, then prompts).
+    One coherent cutover, landed commit by commit, each through deploy
+    and a fast tracer run (owner pace ruling 2026-10-13, metamission
+    boundaries.pace 5; inventory first, then store, then desks, then
+    prompts). A commit may leave a test computer worse at a step the cut
+    has not reached yet; the tracer says which, and nothing is preserved.
     (0) Baseline: the run-acceptance level today's system reaches on the
     tracer story, recorded by Cut 0 (its artifact 7), and an absolute
     target for this cut (the engineering round trip reaches capsule
