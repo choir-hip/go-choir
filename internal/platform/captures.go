@@ -143,6 +143,14 @@ func (h *ObjectGraphHandler) ConfigureCaptureBodies(root string) {
 	h.captureBodies = &CaptureBodyStore{root: filepath.Clean(root)}
 }
 
+// CaptureBodyStore returns the configured capture body store, or nil.
+func (h *ObjectGraphHandler) CaptureBodyStore() *CaptureBodyStore {
+	if h == nil {
+		return nil
+	}
+	return h.captureBodies
+}
+
 // HandleCaptures handles POST /internal/platform/captures: one poll's items
 // from a bound guest (or an internal caller). The guest must own the
 // captures it writes, as for every guest object write.

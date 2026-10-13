@@ -58,6 +58,7 @@ Every layer has the same envelope:
 | `publications` | `PublicationBundle` for each published route of those documents | `GET /api/platform/publications/resolve?route=` (`unserved` with a note if no route can be found from the product API) |
 | `search_arrivals` | async search arrivals | `unserved` until Cut 2 |
 | `research_children` | child activations of `choir.Research` | `unserved` (children run without a run record and emit no events) |
+| `captures` | the computer's captures created from the earliest run or event time (less 2 minutes, for clock skew) to the export, plus every capture a record, event or the snapshot names by `capture_id` (including inside a report's JSON-string packet). Each item: `capture_id`, `url`, `title`, `in_window`, `media_type`, `extractor`, `doc_hash`, `block_count`, `raw_bytes`, `raw_present`, and `blocks[]` of `{id (cid), kind, page, text, normtext}`. Bounded: 200,000 characters of block text per capture (`blocks_truncated` and a `note` say where it stopped), 20 million per layer, 500 listed captures (`window_complete` false and a note when the list was full) — Cut 2 amendment A5 | `GET /api/captures?since=&until=&id=` |
 | `obligations` | one `GET /api/runtime/obligations` body at export time | `GET /api/runtime/obligations` |
 | `boot` | one item: `{computer_id, build, recent_log, restart: {kind, reason}}` from observability and obligations | `GET /api/runtime/observability` |
 

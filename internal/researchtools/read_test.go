@@ -222,8 +222,11 @@ func TestReadFetchesAPageIntoABlockCapture(t *testing.T) {
 		t.Fatal("read ran without an owner")
 	}
 
+	// The guard refuses at dial time; a fresh client has no kept-alive
+	// connection from the reads above.
 	sourcefetch.SetAllowPrivateNetworkForTests(false)
-	if _, err := read("/harbor"); err == nil || !strings.Contains(err.Error(), "forbidden address") {
+	guarded := Dependencies{HTTP: sourcefetch.Client(10 * time.Second), Captures: deps.Captures}
+	if _, err := guarded.HostEgress(ctx, "read", json.RawMessage(`{"url":"`+pages.URL+`/harbor"}`)); err == nil || !strings.Contains(err.Error(), "forbidden address") {
 		t.Fatalf("read reached a loopback server: %v", err)
 	}
 }

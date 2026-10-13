@@ -36,7 +36,10 @@ import (
 //     research_children) are anything but "unserved";
 //   - the file is written world-readable, or the printed summary carries the
 //     API key;
-//   - the printed sha256 is not the digest of the written file.
+//   - the printed sha256 is not the digest of the written file;
+//   - the captures layer (Cut 2 amendment A5) asks for no window, or misses
+//     a capture a report cites inside its JSON-string packet, or is
+//     anything but "unserved" when its route fails.
 
 type traceStub struct {
 	mu       sync.Mutex
@@ -136,8 +139,10 @@ func (s *traceStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(r.URL.Path, "/api/runs/"):
 		runID := strings.TrimPrefix(r.URL.Path, "/api/runs/")
 		switch runID {
-		case "run-direct", "run-control", "run-event-only", "run-assign", "run-wi":
-			writeStubJSON(w, map[string]any{"loop_id": runID, "trajectory_id": "traj-1", "metadata": map[string]any{"doc_id": "doc-1"}})
+		case "run-direct":
+			writeStubJSON(w, map[string]any{"loop_id": runID, "trajectory_id": "traj-1", "created_at": "2026-10-13T09:00:00Z", "metadata": map[string]any{"doc_id": "doc-1"}})
+		case "run-control", "run-event-only", "run-assign", "run-wi":
+			writeStubJSON(w, map[string]any{"loop_id": runID, "trajectory_id": "traj-1", "created_at": "2026-10-13T09:05:00Z", "metadata": map[string]any{"doc_id": "doc-1"}})
 		default:
 			http.Error(w, `{"error":"run not found"}`, http.StatusNotFound)
 		}
@@ -158,12 +163,22 @@ func (s *traceStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeStubJSON(w, map[string]any{"route": map[string]any{"route_path": "/wire/story-1"}})
 	case r.URL.Path == "/api/inboxes/texture:doc-1/records":
 		writeStubJSON(w, map[string]any{"inbox": "texture:doc-1", "head": 1, "cursor": 1, "open_rounds": []any{},
-			"records": []any{map[string]any{"record_id": "r-report", "inbox": "texture:doc-1", "inbox_seq": 1, "final": true}}, "next_after": 0})
+			"records": []any{map[string]any{"record_id": "r-report", "inbox": "texture:doc-1", "inbox_seq": 1, "final": true,
+				"prediction": map[string]any{"hypothesis": `{"sources":[{"source_id":"s1","target":{"uri":"https://example.com/a","capture_id":"cap-cited"}}]}`}}}, "next_after": 0})
 	case r.URL.Path == "/api/inboxes/research:doc-1/records":
 		writeStubJSON(w, map[string]any{"inbox": "research:doc-1", "head": 1, "cursor": 1, "open_rounds": []any{},
 			"records": []any{map[string]any{"record_id": "r-cast", "inbox": "research:doc-1", "inbox_seq": 1}}, "next_after": 0})
 	case strings.HasPrefix(r.URL.Path, "/api/inboxes/"):
 		writeStubJSON(w, map[string]any{"head": 0, "cursor": 0, "records": []any{}, "open_rounds": []any{}, "next_after": 0})
+	case r.URL.Path == "/api/captures":
+		if q.Get("since") == "" || q.Get("until") == "" || len(q["id"]) != 1 || q["id"][0] != "cap-cited" {
+			http.Error(w, "window or cited id missing: "+r.URL.RawQuery, http.StatusBadRequest)
+			return
+		}
+		writeStubJSON(w, map[string]any{"computer_id": "computer-1", "window_complete": true, "captures": []any{
+			map[string]any{"capture_id": "cap-window", "in_window": true, "raw_present": true, "blocks": []any{map[string]any{"id": "c1", "text": "x", "normtext": "x"}}},
+			map[string]any{"capture_id": "cap-cited", "in_window": false, "raw_present": true, "blocks": []any{}},
+		}})
 	case r.URL.Path == "/api/runtime/obligations":
 		writeStubJSON(w, map[string]any{"computer_id": "computer-1", "restart": map[string]any{"kind": "crash", "reason": "no marker"}})
 	case r.URL.Path == "/api/runtime/observability":
@@ -250,6 +265,7 @@ func TestTraceExportHealthyBundleLayers(t *testing.T) {
 		"publications":      "present",
 		"search_arrivals":   "unserved",
 		"research_children": "unserved",
+		"captures":          "present",
 		"obligations":       "present",
 		"boot":              "present",
 	}
@@ -296,6 +312,9 @@ func TestTraceExportHealthyBundleLayers(t *testing.T) {
 	if got := len(layerStatus(t, bundle, "publications").Items); got != 1 {
 		t.Fatalf("publications = %d, want 1", got)
 	}
+	if got := strings.Join(itemIDs(t, layerStatus(t, bundle, "captures"), "capture_id"), ","); got != "cap-window,cap-cited" {
+		t.Fatalf("captures = %s", got)
+	}
 }
 
 func TestTraceExportFailingRoutesAreUnservedNeverEmpty(t *testing.T) {
@@ -303,6 +322,7 @@ func TestTraceExportFailingRoutesAreUnservedNeverEmpty(t *testing.T) {
 	stub.fail("/api/trajectories/traj-1/events", http.StatusInternalServerError)
 	stub.fail("/api/runtime/obligations", http.StatusForbidden)
 	stub.fail("/api/texture/", http.StatusForbidden)
+	stub.fail("/api/captures", http.StatusServiceUnavailable)
 	bundle, _, _ := runTraceExportForTest(t, stub)
 
 	for name, status := range map[string]string{
@@ -310,6 +330,7 @@ func TestTraceExportFailingRoutesAreUnservedNeverEmpty(t *testing.T) {
 		"turn_commits":     "",
 		"obligations":      "403",
 		"revisions":        "403",
+		"captures":         "503",
 	} {
 		layer := layerStatus(t, bundle, name)
 		if layer.Status != "unserved" {

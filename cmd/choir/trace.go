@@ -409,6 +409,7 @@ func (e *traceExporter) export(now time.Time) *traceBundle {
 	bundle.Layers["publications"] = e.exportPublications(bundle, docIDs)
 	bundle.Layers["search_arrivals"] = unservedLayer("async search arrivals have no product route until Cut 2")
 	bundle.Layers["research_children"] = unservedLayer("choir.Research children run without a run record and emit no events")
+	bundle.Layers["captures"] = e.exportCaptures(bundle, now)
 
 	// obligations and boot.
 	obligations := newLayer("GET /api/runtime/obligations")
@@ -454,6 +455,138 @@ func (e *traceExporter) export(now time.Time) *traceBundle {
 	}
 	bundle.Layers["boot"] = boot.finish()
 	return bundle
+}
+
+// traceCaptureWindowMargin opens the captures window before the earliest
+// run or event time: capture times are corpusd's clock, run times the
+// guest's.
+const (
+	traceCaptureWindowMargin = 2 * time.Minute
+	traceCaptureIDCap        = 500
+)
+
+// exportCaptures builds the captures layer (Cut 2 amendment A5): the
+// computer's captures created from the trajectory's earliest run or event
+// time to the export, plus every capture a record, run event, lifecycle
+// event or the snapshot names by capture_id, each with its blocks' cids and
+// normtext, so the quote census can rerun on the bundle.
+func (e *traceExporter) exportCaptures(bundle *traceBundle, now time.Time) *traceLayer {
+	b := newLayer("GET /api/captures?since=&until=&id=")
+	query := url.Values{}
+	if since := earliestTraceTime(bundle); !since.IsZero() {
+		query.Set("since", since.Add(-traceCaptureWindowMargin).UTC().Format(time.RFC3339Nano))
+	} else {
+		b.note("no run or event time found; the window has no lower bound")
+	}
+	query.Set("until", now.UTC().Format(time.RFC3339Nano))
+	ids := map[string]bool{}
+	for _, name := range []string{"trajectory", "lifecycle_events", "run_events", "records"} {
+		if layer := bundle.Layers[name]; layer != nil {
+			for _, item := range layer.Items {
+				collectCaptureIDs(item, ids)
+			}
+		}
+	}
+	named := sortedKeys(ids)
+	if len(named) > traceCaptureIDCap {
+		b.note("%d capture ids named; the first %d are read", len(named), traceCaptureIDCap)
+		named = named[:traceCaptureIDCap]
+	}
+	for _, id := range named {
+		query.Add("id", id)
+	}
+	path := "/api/captures?" + query.Encode()
+	var resp struct {
+		Captures       []json.RawMessage `json:"captures"`
+		WindowComplete bool              `json:"window_complete"`
+		Note           string            `json:"note"`
+	}
+	if err := e.get(path, &resp); err != nil {
+		b.fail("%s", routeFailure("/api/captures", err))
+		return b.finish()
+	}
+	b.add(resp.Captures...)
+	if !resp.WindowComplete {
+		b.note("the capture window is incomplete")
+	}
+	if resp.Note != "" {
+		b.note("%s", resp.Note)
+	}
+	return b.finish()
+}
+
+// earliestTraceTime is the earliest created_at, started_at, ts or
+// timestamp on a run or lifecycle event.
+func earliestTraceTime(bundle *traceBundle) time.Time {
+	var earliest time.Time
+	for _, name := range []string{"runs", "lifecycle_events"} {
+		layer := bundle.Layers[name]
+		if layer == nil {
+			continue
+		}
+		for _, item := range layer.Items {
+			var fields map[string]any
+			if json.Unmarshal(item, &fields) != nil {
+				continue
+			}
+			for _, key := range []string{"created_at", "started_at", "ts", "timestamp"} {
+				raw, _ := fields[key].(string)
+				t, err := time.Parse(time.RFC3339Nano, raw)
+				if err == nil && !t.IsZero() && (earliest.IsZero() || t.Before(earliest)) {
+					earliest = t
+				}
+			}
+		}
+	}
+	return earliest
+}
+
+// collectCaptureIDs records every capture_id (or capture_ids element) in a
+// JSON value, including inside string values that hold JSON (a Cut 1 report
+// record carries its packet as a JSON string).
+func collectCaptureIDs(raw json.RawMessage, into map[string]bool) {
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return
+	}
+	var walk func(any, int)
+	walk = func(node any, depth int) {
+		if depth > 8 {
+			return
+		}
+		switch n := node.(type) {
+		case map[string]any:
+			for key, value := range n {
+				if key == "capture_id" || key == "capture_ids" {
+					switch typed := value.(type) {
+					case string:
+						if id := strings.TrimSpace(typed); id != "" {
+							into[id] = true
+						}
+					case []any:
+						for _, el := range typed {
+							if s, ok := el.(string); ok && strings.TrimSpace(s) != "" {
+								into[strings.TrimSpace(s)] = true
+							}
+						}
+					}
+				}
+				walk(value, depth+1)
+			}
+		case []any:
+			for _, el := range n {
+				walk(el, depth+1)
+			}
+		case string:
+			if s := strings.TrimSpace(n); strings.HasPrefix(s, "{") && strings.Contains(s, "capture_id") {
+				var inner any
+				if json.Unmarshal([]byte(s), &inner) == nil {
+					walk(inner, depth+1)
+				}
+			}
+		}
+	}
+	walk(v, 0)
 }
 
 func sortRunEvents(items []json.RawMessage) {
