@@ -991,7 +991,8 @@ func TestAllAPIRoutesDenySignedOutCallers(t *testing.T) {
 		{"/api/ws", http.MethodGet, http.StatusUnauthorized},
 		{"/api/prompt-bar", http.MethodPost, http.StatusUnauthorized},
 		{"/api/prompt-bar/submissions/run-1", http.MethodGet, http.StatusUnauthorized},
-		{"/api/trace/trajectories", http.MethodGet, http.StatusUnauthorized},
+		{"/api/trajectories/traj-1/events", http.MethodGet, http.StatusUnauthorized},
+		{"/api/runs/run-1/events", http.MethodGet, http.StatusUnauthorized},
 		{"/api/unknown", http.MethodGet, http.StatusUnauthorized},
 		{"/api/shell/some-future-route", http.MethodGet, http.StatusUnauthorized},
 	}

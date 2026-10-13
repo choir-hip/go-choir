@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { test, expect } from './helpers/fixtures.js';
 import { registerPasskey } from './helpers/auth.js';
+import { trajectoryRunEvents } from './helpers/run-trace.js';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://choir.news';
 const EVIDENCE_DIR = path.resolve(
@@ -99,15 +100,17 @@ async function pollTexture(page, docId, samples, timeout = 210_000) {
 }
 
 async function loadTrace(page, trajectoryId) {
-  return fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
+  const snapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(trajectoryId)}`);
+  const events = await trajectoryRunEvents(fetchJSON, page, trajectoryId);
+  return { ...snapshot, run_events: events };
 }
 
 function classify({ finalState, trace }) {
   const revisions = finalState?.revisions || [];
   const appagentRevisions = revisions.filter((revision) => revision.author_kind === 'appagent');
-  const moments = trace?.moments || [];
+  const runEvents = trace?.run_events || [];
   const agents = trace?.agents || [];
-  const summaries = moments.map((moment) => `${moment.kind || ''}:${moment.summary || ''}`);
+  const summaries = runEvents.map((event) => `${event.kind || ''}:${event.payload?.tool || ''}`);
   const sawSearch = summaries.some((summary) => summary.includes('web_search'));
   const sawSubmitUpdate = summaries.some((summary) => summary.includes('submit_coagent_update'));
   const sawSpawn = summaries.some((summary) => summary.includes('spawn_agent'));

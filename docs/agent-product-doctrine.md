@@ -323,7 +323,9 @@ Browser or Playwright acceptance may use public authenticated product APIs such 
 - `/api/prompt-bar`
 - `/api/prompt-bar/submissions/{id}`
 - `/api/texture/*`
-- `/api/trace/*`
+- `/api/trajectories/*` (lifecycle snapshot and events)
+- `/api/runs/*` (run records and `/api/runs/{id}/events`, the owner-scoped
+  run-event read; `choir trace export` assembles them into a trace bundle)
 - `/api/current-computer`
 - `/api/computers/*/self-development/*`
 - `/api/continuations/*` (transitional H007/H008 residue; prefer

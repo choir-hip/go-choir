@@ -337,10 +337,11 @@ User edit: keep the model deterministic, cite the research assumptions, and requ
   await browserApp.locator('[data-browser-go-btn]').click();
   await expect(browserApp.locator('[data-browser-iframe]')).toHaveAttribute('src', /data:text\/html/, { timeout: 10000 });
 
-  const traceSnapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(conductorSubmitted.submission_id)}`);
-  const roles = traceSnapshot.agents.map((agent) => agent.role || agent.profile || agent.label);
+  const traceSnapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(conductorSubmitted.submission_id)}`);
+  const roles = (traceSnapshot.agents || []).map((agent) => agent.role || agent.profile || agent.label);
   expect(roles).toEqual(expect.arrayContaining(['conductor', 'texture', 'researcher', 'super', 'co-super']));
-  expect(traceSnapshot.moments.some((moment) => /Worker update ready|Research findings ready/i.test(moment.summary))).toBe(true);
+  // Worker/research updates are the lifecycle snapshot's delivery packets.
+  expect((traceSnapshot.updates || []).length).toBeGreaterThan(0);
 
   await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
 

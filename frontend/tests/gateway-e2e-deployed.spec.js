@@ -246,7 +246,7 @@ test('VAL-GATEWAY-001: Gateway end-to-end flow', async ({ browser }) => {
     expect(framingRevision?.content || '').toContain(marker);
     expect(framingRevision?.content || '').not.toMatch(/Conductor framing|Use this texture|User request:|Current requirements:|Grounding status:/);
 
-    const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(responseBody.submission_id)}`);
+    const trace = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(responseBody.submission_id)}`);
     expect((trace.agents || []).some((agent) => agent.profile === 'texture' && agent.agent_id === `texture:${decision.doc_id}`)).toBe(true);
 
     testResults.steps[7].observed = `Texture revisions=${revisions.length}, trace agents=${(trace.agents || []).length}`;

@@ -465,7 +465,10 @@ func internalRuntimeRunIDFromPath(path string) string {
 // HandleRunList handles GET /api/runs.
 // It returns recent owner-scoped runs in reverse chronological order so
 // debugging and orchestration surfaces can inspect current work and run
-// families without polling individual IDs one by one.
+// families without polling individual IDs one by one. ?trajectory_id=
+// narrows the list to one trajectory's runs, including Management
+// lifecycle-control runs bound through metadata.assignment_trajectory_id;
+// ?channel_id= narrows it to one channel.
 func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -486,8 +489,11 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	channelID := strings.TrimSpace(r.URL.Query().Get("channel_id"))
+	trajectoryID := strings.TrimSpace(r.URL.Query().Get("trajectory_id"))
 	var runs []types.RunRecord
-	if channelID != "" {
+	if trajectoryID != "" {
+		runs, err = h.rt.ListRunsByTrajectory(r.Context(), ownerID, trajectoryID, limit)
+	} else if channelID != "" {
 		runs, err = h.rt.ListRunsByChannel(r.Context(), ownerID, channelID, limit)
 	} else {
 		runs, err = h.rt.ListRunsByOwner(r.Context(), ownerID, limit)
@@ -527,6 +533,10 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 
 	writeAPIJSON(w, http.StatusOK, resp)
 }
+
+// HandleRunResource handles /api/runs/{id} (GET the run record),
+// /api/runs/{id}/events (GET the run's events, paged by seq) and
+// /api/runs/{id}/cancel (POST).
 func (h *APIHandler) HandleRunResource(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
@@ -547,6 +557,10 @@ func (h *APIHandler) HandleRunResource(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, run)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "events" {
+		h.handleRunEvents(w, r, ownerID, runID)
 		return
 	}
 	if len(parts) == 2 && parts[1] == "cancel" && r.Method == http.MethodPost {

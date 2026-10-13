@@ -1,5 +1,6 @@
 import { test, expect } from './helpers/fixtures.js';
 import { registerPasskey } from './helpers/auth.js';
+import { trajectoryToolResultEvents } from './helpers/run-trace.js';
 
 const BASE_URL = process.env.GO_CHOIR_REAL_DEMO_BASE_URL ||
   process.env.PLAYWRIGHT_BASE_URL ||
@@ -71,14 +72,14 @@ async function fetchJSON(page, path) {
 async function waitForTraceRoles(page, trajectoryId, requiredRoles, timeout = 150_000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const snapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
+    const snapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(trajectoryId)}`);
     const roles = (snapshot.agents || []).map((agent) => agent.role || agent.profile || agent.label);
     if (requiredRoles.every((role) => roles.includes(role))) {
       return { snapshot, roles };
     }
     await page.waitForTimeout(1500);
   }
-  const snapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
+  const snapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(trajectoryId)}`);
   const roles = (snapshot.agents || []).map((agent) => agent.role || agent.profile || agent.label);
   throw new Error(`trajectory ${trajectoryId} did not include product-path roles ${requiredRoles.join(', ')}; saw ${roles.join(', ')}`);
 }
@@ -145,29 +146,20 @@ async function waitForFileText(page, path, timeout = 90_000) {
 }
 
 async function loadToolResults(page, trajectoryId, toolName) {
-  const snapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
-  const toolMoments = (snapshot.moments || []).filter((moment) =>
-    moment.kind === 'tool.result' && moment.summary === `${toolName} returned`
-  );
+  const snapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(trajectoryId)}`);
   const results = [];
-  for (const moment of toolMoments) {
-    const detail = await fetchJSON(
-      page,
-      `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}/moments/${encodeURIComponent(moment.moment_id)}`
-    );
-    for (const event of detail.events || []) {
-      const payload = event.payload || {};
-      if (payload.tool !== toolName || payload.is_error) continue;
-      let output = payload.output;
-      if (typeof output === 'string') {
-        try {
-          output = JSON.parse(output);
-        } catch {
-          output = { raw_output: payload.output };
-        }
+  for (const event of await trajectoryToolResultEvents(fetchJSON, page, trajectoryId, toolName)) {
+    const payload = event.payload || {};
+    if (payload.is_error) continue;
+    let output = payload.output;
+    if (typeof output === 'string') {
+      try {
+        output = JSON.parse(output);
+      } catch {
+        output = { raw_output: payload.output };
       }
-      results.push({ moment, event, output });
     }
+    results.push({ event, output });
   }
   return { snapshot, results };
 }
@@ -252,11 +244,9 @@ test('real texture workflow demo uses live LLM, search, generated artifact, and 
   const roles = (traceSnapshot.agents || []).map((agent) => agent.role || agent.profile || agent.label);
   expect(roles).toEqual(expect.arrayContaining(['conductor', 'texture', 'researcher', 'super']));
   expect(searchResults.length).toBeGreaterThan(0);
-  expect(traceSnapshot.search?.attempts || 0).toBeGreaterThan(0);
-  expect(traceSnapshot.search?.successes || 0).toBeGreaterThan(0);
-  expect((traceSnapshot.search?.providers || []).some((provider) =>
-    provider.provider && provider.endpoint && provider.attempts > 0 && provider.successes > 0
-  )).toBe(true);
+  // No served route aggregates search attempts per provider; the successful
+  // web_search tool results above carry the provider that answered.
+  expect(searchResults.some((result) => result.output?.provider)).toBe(true);
 
   const { results: bashResults } = await loadToolResults(page, conductorSubmitted.submission_id, 'bash');
   expect(bashResults.some((result) =>

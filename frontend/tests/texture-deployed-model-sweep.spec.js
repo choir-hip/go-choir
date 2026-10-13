@@ -2,14 +2,15 @@ import { test, expect } from '@playwright/test';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
 import { registerPasskey } from './helpers/auth.js';
 import { waitForDesktopReady } from './helpers/auth-state.js';
+import { trajectoryToolResultEvents } from './helpers/run-trace.js';
 
 // Deployed model sweep for the prompt-bar -> Texture live-search flow.
 //
 // Each arm pins an owner-visible model-policy overlay onto the whole trajectory
 // (texture + the researchers it spawns) via PUT /api/files, then drives the
 // overlay-pinned eval endpoint POST /api/evals/texture-prompt. Verification
-// reuses the same public product routes as the live-search spec: trace moments
-// for web_search evidence and Texture revisions for grounded output.
+// reuses the same public product routes as the live-search spec: run events
+// (tool.result) for web_search evidence and Texture revisions for grounded output.
 //
 // Arms are run sequentially and per-arm failures are captured (not fail-fast)
 // so the sweep always reports a full comparison table.
@@ -152,25 +153,17 @@ function parseToolOutput(payload) {
   try { return JSON.parse(raw); } catch { return { raw }; }
 }
 
-async function traceMomentDetails(page, trajectoryId, snapshot) {
-  const details = [];
-  for (const moment of snapshot.moments || []) {
-    if (moment.kind !== 'tool.result') continue;
-    const detail = await fetchJSON(
-      page,
-      `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}/moments/${encodeURIComponent(moment.moment_id)}`
-    );
-    details.push(detail);
-  }
-  return details;
+async function traceMomentDetails(page, trajectoryId) {
+  // One detail holding every tool.result run event of the trajectory, read
+  // through /api/runs?trajectory_id= and /api/runs/{id}/events.
+  return [{ events: await trajectoryToolResultEvents(fetchJSON, page, trajectoryId) }];
 }
 
 async function waitForSuccessfulWebSearch(page, trajectoryId, timeout = 300_000) {
   const deadline = Date.now() + timeout;
   let lastSearchErrors = [];
   while (Date.now() < deadline) {
-    const snapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
-    const details = await traceMomentDetails(page, trajectoryId, snapshot);
+    const details = await traceMomentDetails(page, trajectoryId);
     lastSearchErrors = [];
     for (const detail of details) {
       for (const event of detail.events || []) {

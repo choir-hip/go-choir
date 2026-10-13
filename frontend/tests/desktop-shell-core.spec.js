@@ -178,7 +178,7 @@ test('logged-out desktop opens Browser and Trace as read shells before auth', as
   const protectedAppRequests = [];
   page.on('request', (request) => {
     const pathname = new URL(request.url()).pathname;
-    if (pathname.startsWith('/api/browser') || pathname.startsWith('/api/trace')) {
+    if (pathname.startsWith('/api/browser') || pathname.startsWith('/api/trajectories') || pathname.startsWith('/api/runs')) {
       protectedAppRequests.push(pathname);
     }
   });
@@ -459,7 +459,7 @@ test('prompt bar routes normal input through conductor and opens texture', async
   expect(userRevision.metadata.texture_version).toBe('v0');
   await expect(textureWindow.locator('[data-texture-editor]')).toHaveAttribute('data-texture-initial-loop-id', decision.initial_loop_id);
 
-  const trace = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(submitted.submission_id)}`);
+  const trace = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(submitted.submission_id)}`);
   expect((trace.agents || []).some((agent) => agent.profile === 'texture' && agent.agent_id === `texture:${decision.doc_id}`)).toBe(true);
 
   await expect(textureWindow.locator('[data-texture-editor-area]')).toContainText(/Draft a project outline/);

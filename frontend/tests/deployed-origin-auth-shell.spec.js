@@ -144,7 +144,8 @@ test('signed-out render on deployed origin does not fire protected requests', as
       url.pathname === '/api/shell/bootstrap' ||
 	      url.pathname === '/api/ws' ||
 	      url.pathname.startsWith('/api/prompt-bar') ||
-	      url.pathname.startsWith('/api/trace/') ||
+	      url.pathname.startsWith('/api/trajectories') ||
+	      url.pathname.startsWith('/api/runs') ||
 	      url.pathname === '/api/prompts'
 	    ) {
       protectedRequests.push({

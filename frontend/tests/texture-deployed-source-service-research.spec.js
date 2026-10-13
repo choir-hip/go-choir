@@ -1,4 +1,5 @@
 import { test, expect } from './helpers/fixtures.js';
+import { trajectoryToolResultEvents } from './helpers/run-trace.js';
 
 test.use({ trace: 'on', video: 'on', screenshot: 'on' });
 test.setTimeout(360_000);
@@ -68,19 +69,11 @@ function parseToolOutput(payload) {
 }
 
 async function traceToolResults(page, trajectoryId, toolName) {
-  const snapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
+  const snapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(trajectoryId)}`);
   const results = [];
-  for (const moment of snapshot.moments || []) {
-    if (moment.kind !== 'tool.result') continue;
-    const detail = await fetchJSON(
-      page,
-      `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}/moments/${encodeURIComponent(moment.moment_id)}`
-    );
-    for (const event of detail.events || []) {
-      const payload = eventPayload(event);
-      if (payload.tool !== toolName) continue;
-      results.push({ moment, event, payload, output: parseToolOutput(payload) });
-    }
+  for (const event of await trajectoryToolResultEvents(fetchJSON, page, trajectoryId, toolName)) {
+    const payload = eventPayload(event);
+    results.push({ event, payload, output: parseToolOutput(payload) });
   }
   return { snapshot, results };
 }
@@ -110,7 +103,7 @@ async function waitForSuccessfulSourceSearch(page, trajectoryId, timeout = 180_0
     }
     await page.waitForTimeout(2500);
   }
-  throw new Error(`trajectory ${trajectoryId} never produced source_search source_service_item result; lastError=${lastError}; moments=${latestSnapshot?.moments?.length || 0}`);
+  throw new Error(`trajectory ${trajectoryId} never produced source_search source_service_item result; lastError=${lastError}; agents=${latestSnapshot?.agents?.length || 0}`);
 }
 
 async function loadTextureState(page, docId) {

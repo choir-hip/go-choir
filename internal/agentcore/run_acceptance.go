@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -344,10 +345,24 @@ func (b *acceptanceBuilder) addEventEvidence(ev types.EventRecord, summary strin
 		RunID:      ev.RunID,
 		EventID:    ev.EventID,
 		Trajectory: ev.TrajectoryID,
-		URL:        "/api/trace/trajectories/" + ev.TrajectoryID + "/moments/" + ev.EventID,
+		URL:        runEventEvidenceURL(ev),
 		Details:    details,
 	})
 	return refID
+}
+
+// runEventEvidenceURL names the served, owner-scoped read that returns
+// exactly this event: the page of its run's events that starts at its seq.
+// A runtime-level event with no run has no served per-event read.
+func runEventEvidenceURL(ev types.EventRecord) string {
+	if strings.TrimSpace(ev.RunID) == "" {
+		return ""
+	}
+	after := ev.Seq - 1
+	if after < 0 {
+		after = 0
+	}
+	return fmt.Sprintf("/api/runs/%s/events?after=%d&limit=1", url.PathEscape(ev.RunID), after)
 }
 
 func (b *acceptanceBuilder) addEvidence(ref types.RunAcceptanceEvidenceRef) {

@@ -49,7 +49,7 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
 
   page.on('response', (response) => {
     const url = new URL(response.url());
-    if (url.pathname.startsWith('/api/trace/') && response.status() >= 400) {
+    if ((url.pathname.startsWith('/api/trajectories/') || url.pathname.startsWith('/api/runs/')) && response.status() >= 400) {
       failedTraceRequests.push(`${url.pathname}:${response.status()}`);
     }
     if (

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { setupVirtualAuthenticator, removeVirtualAuthenticator } from './helpers/webauthn.js';
 import { registerPasskey } from './helpers/auth.js';
 import { waitForDesktopReady } from './helpers/auth-state.js';
+import { trajectoryToolResultEvents } from './helpers/run-trace.js';
 
 const BASE_URL = process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news';
 
@@ -98,25 +99,18 @@ function parseToolOutput(payload) {
   }
 }
 
-async function traceMomentDetails(page, trajectoryId, snapshot) {
-  const details = [];
-  for (const moment of snapshot.moments || []) {
-    if (moment.kind !== 'tool.result') continue;
-    const detail = await fetchJSON(
-      page,
-      `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}/moments/${encodeURIComponent(moment.moment_id)}`
-    );
-    details.push(detail);
-  }
-  return details;
+async function traceMomentDetails(page, trajectoryId) {
+  // One detail holding every tool.result run event of the trajectory, read
+  // through /api/runs?trajectory_id= and /api/runs/{id}/events.
+  return [{ events: await trajectoryToolResultEvents(fetchJSON, page, trajectoryId) }];
 }
 
 async function waitForSuccessfulWebSearch(page, trajectoryId, timeout = 240_000) {
   const deadline = Date.now() + timeout;
   let lastSearchErrors = [];
   while (Date.now() < deadline) {
-    const snapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(trajectoryId)}`);
-    const details = await traceMomentDetails(page, trajectoryId, snapshot);
+    const snapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(trajectoryId)}`);
+    const details = await traceMomentDetails(page, trajectoryId);
     lastSearchErrors = [];
 
     for (const detail of details) {
@@ -242,7 +236,7 @@ test('deployed prompt-bar Texture flow uses live search for current 2026 evidenc
     expect(forbiddenRuntimeRequests).toHaveLength(0);
 
     await expect(page.locator('[data-desktop-icon-id="trace"]')).toHaveCount(0);
-    const traceSnapshot = await fetchJSON(page, `/api/trace/trajectories/${encodeURIComponent(body.submission_id)}`);
+    const traceSnapshot = await fetchJSON(page, `/api/trajectories/${encodeURIComponent(body.submission_id)}`);
     expect(traceSnapshot.trajectory?.trajectory_id || traceSnapshot.trajectory_id).toBe(body.submission_id);
   } finally {
     await removeVirtualAuthenticator(client, authenticatorId);
