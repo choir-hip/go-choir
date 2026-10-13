@@ -17,6 +17,7 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
+		RevisionNumber:   1,
 		Title:            "Published Draft",
 		Content:          "Visible public content",
 		RequestedBy:      "user-1",

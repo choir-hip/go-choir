@@ -86,6 +86,16 @@ type Document struct {
 	ArchivedAt *time.Time `json:"archived_at,omitempty"`
 }
 
+// RevisionNumber is a revision's number on its document's revision chain,
+// counted from 1: the first revision is 1, its child 2. The store assigns
+// VersionNumber (zero-based) when it commits the revision as the new head
+// (commitTextureHeadAuthority), so the number is fixed at commit and never
+// derived from a paginated list. A published article version is its Texture
+// revision's number: revision n publishes as /v<n> (Cut 2 unit 2b).
+func RevisionNumber(versionNumber int) int {
+	return versionNumber + 1
+}
+
 // Revision represents an immutable snapshot of document content at a point
 // in time. New revisions carry a structured body document plus source entities
 // as canonical state; Content remains the derived text projection used by older
@@ -120,6 +130,7 @@ type Revision struct {
 	// revision. It is assigned by the store when the revision is created and is
 	// not derived from a paginated revision list.
 	VersionNumber int `json:"version_number"`
+	// The revision's number, counted from 1, is RevisionNumber(VersionNumber).
 
 	// Content is the derived text projection at this revision. For structured
 	// TextureRevision v2 writes, the store derives this from BodyDoc and

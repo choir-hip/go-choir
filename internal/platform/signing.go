@@ -11,27 +11,26 @@ import (
 	"path/filepath"
 )
 
-// revisionAttestationSchema identifies the per-revision signed payload. The
-// signature attests the platform published the revision identified by
-// RevisionHash. Because RevisionHash (mission D2) is a content-addressed
-// commitment over canonical(body + citations + provenance + parent_hash), and
-// provenance carries the system-attributed timestamp + authoring model, signing
-// RevisionHash attests exactly "this revision, at this chain position, authored
-// by this model at this time" — tamperproof and attributable. Bump only on a
-// breaking payload shape change.
-const revisionAttestationSchema = "choir.platform.revision_attestation.v0"
+// manifestAttestationSchema identifies the signed payload of a published
+// version (Cut 2 unit 2b). The signature attests that the platform published
+// the version whose manifest hashes to ManifestHash. The manifest commits to
+// the version's text hash, its source revision hash, its pinned
+// resolved_blocks and the previous version's manifest hash, so one signature
+// over the manifest hash attests the version and its place on the chain.
+// Bump only on a breaking payload shape change.
+const manifestAttestationSchema = "choir.platform.version_manifest_attestation.v1"
 
-// revisionAttestation is the canonical, self-describing signed payload for one
-// published revision. It is marshaled to deterministic JSON (struct fields in
-// declaration order, no maps) and then Ed25519-signed.
-type revisionAttestation struct {
+// manifestAttestation is the canonical, self-describing signed payload for
+// one published version. It is marshaled to deterministic JSON (struct
+// fields in declaration order, no maps) and then Ed25519-signed.
+type manifestAttestation struct {
 	Schema       string `json:"schema"`
-	RevisionHash string `json:"revision_hash"`
+	ManifestHash string `json:"manifest_hash"`
 }
 
-// SigningKey is the platform Ed25519 keypair that attests published revisions.
-// The public half is published inside the version_history manifest so any
-// reader/verifier can check per-revision signatures independently. KeyID is a
+// SigningKey is the platform Ed25519 keypair that attests published versions.
+// The public half is published beside each version's signature so any
+// reader/verifier can check it independently. KeyID is a
 // short content-addressed id of the public key so signatures stay verifiable
 // across a future key rotation (rotation is out of scope for this slice).
 type SigningKey struct {
@@ -87,38 +86,37 @@ func newSigningKey(priv ed25519.PrivateKey) *SigningKey {
 }
 
 // PublicKeyBase64 returns the platform public key in base64 (standard encoding)
-// for publication inside the version_history manifest.
+// for publication beside a version's signature.
 func (k *SigningKey) PublicKeyBase64() string {
 	return base64.StdEncoding.EncodeToString(k.Public)
 }
 
-// signRevision returns a base64 Ed25519 signature over the canonical
-// revision-attestation envelope for the given revision hash. Empty revisionHash
-// yields an empty signature (a revision without a hash cannot be attested).
-func (k *SigningKey) signRevision(revisionHash string) (string, error) {
-	if revisionHash == "" {
+// signManifest returns a base64 Ed25519 signature over the canonical
+// manifest attestation for the given manifest hash. An empty hash yields an
+// empty signature (a version without a manifest cannot be attested).
+func (k *SigningKey) signManifest(manifestHash string) (string, error) {
+	if manifestHash == "" {
 		return "", nil
 	}
-	payload, err := attestationBytes(revisionHash)
+	payload, err := attestationBytes(manifestHash)
 	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(ed25519.Sign(k.Private, payload)), nil
 }
 
-// attestationBytes returns the deterministic signed payload for a revision hash.
-// Exported via a function (not a method) so verification reconstructs the exact
-// bytes the signer used.
-func attestationBytes(revisionHash string) ([]byte, error) {
-	return json.Marshal(revisionAttestation{Schema: revisionAttestationSchema, RevisionHash: revisionHash})
+// attestationBytes returns the deterministic signed payload for a manifest
+// hash, so verification reconstructs the exact bytes the signer used.
+func attestationBytes(manifestHash string) ([]byte, error) {
+	return json.Marshal(manifestAttestation{Schema: manifestAttestationSchema, ManifestHash: manifestHash})
 }
 
-// VerifyRevisionSignature checks a per-revision platform signature. It returns
+// VerifyManifestSignature checks a version's platform signature. It returns
 // true only when pub verifies the signature over the canonical attestation of
-// revisionHash. Any malformed input returns false (never an error) so callers
+// manifestHash. Any malformed input returns false (never an error) so callers
 // can treat verification as a pure boolean.
-func VerifyRevisionSignature(pubBase64, revisionHash, signatureBase64 string) bool {
-	if pubBase64 == "" || revisionHash == "" || signatureBase64 == "" {
+func VerifyManifestSignature(pubBase64, manifestHash, signatureBase64 string) bool {
+	if pubBase64 == "" || manifestHash == "" || signatureBase64 == "" {
 		return false
 	}
 	pub, err := base64.StdEncoding.DecodeString(pubBase64)
@@ -129,7 +127,7 @@ func VerifyRevisionSignature(pubBase64, revisionHash, signatureBase64 string) bo
 	if err != nil || len(sig) != ed25519.SignatureSize {
 		return false
 	}
-	payload, err := attestationBytes(revisionHash)
+	payload, err := attestationBytes(manifestHash)
 	if err != nil {
 		return false
 	}

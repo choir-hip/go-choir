@@ -5,16 +5,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
 const (
@@ -37,6 +40,11 @@ type Service struct {
 	// lasts minutes and would block credential issuance and VM boots.
 	artifactGCMu sync.Mutex
 	graphStore   *PublicationGraphStore // graph-native dual-write target
+	// captureBodies reads cited captures' blocks at publish, to pin them.
+	captureBodies *CaptureBodyStore
+	// overlay supplies the live check overlay served beside a version.
+	overlayMu sync.RWMutex
+	overlay   CheckOverlayProvider
 }
 
 type citationInput struct {
@@ -56,6 +64,7 @@ func NewService(store *Store, artifactsRoot, signingKeyPath string) *Service {
 	svc := &Service{
 		store:         store,
 		artifactsRoot: filepath.Clean(artifactsRoot),
+		captureBodies: &CaptureBodyStore{root: CaptureBodiesRoot(artifactsRoot)},
 	}
 	store.SetArtifactsRoot(artifactsRoot)
 	if signingKeyPath != "" {
@@ -149,6 +158,11 @@ func (s *Service) GetPlatformTextureRevision(ctx context.Context, revisionID str
 	return s.store.GetTextureRevision(ctx, revisionID)
 }
 
+// PublishTexture publishes one committed Texture revision as version n of
+// the one publication of (owner, source doc), n = req.RevisionNumber (Cut 2
+// unit 2b). Publishing the same revision again returns the version already
+// published and writes nothing. A revision below the latest published
+// version is refused: a version that failed to publish stays a gap.
 func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest) (*PublishTextureResponse, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
@@ -159,6 +173,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	req.OwnerID = strings.TrimSpace(req.OwnerID)
 	req.SourceDocID = strings.TrimSpace(req.SourceDocID)
 	req.SourceRevisionID = strings.TrimSpace(req.SourceRevisionID)
+	req.RevisionHash = strings.TrimSpace(req.RevisionHash)
 	req.Title = strings.TrimSpace(req.Title)
 	req.RequestedBy = strings.TrimSpace(req.RequestedBy)
 	req.SourceTraceID = strings.TrimSpace(req.SourceTraceID)
@@ -173,6 +188,9 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	}
 	if req.SourceRevisionID == "" {
 		return nil, fmt.Errorf("source_revision_id is required")
+	}
+	if req.RevisionNumber <= 0 {
+		return nil, fmt.Errorf("revision_number is required: the source revision's number on its revision chain, counted from 1")
 	}
 	if req.Title == "" {
 		req.Title = defaultUntitledTextureTitle
@@ -197,11 +215,97 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		return nil, err
 	}
 
+	og := s.ogStore()
+	if og == nil {
+		return nil, fmt.Errorf("platform service: object graph store unavailable")
+	}
+	ident, err := publicationIdentityFor(req.OwnerID, req.SourceDocID)
+	if err != nil {
+		return nil, fmt.Errorf("platform publish: publication id: %w", err)
+	}
+	newPublication := false
+	pubObj, err := og.GetObject(ctx, ident.CanonicalID)
+	switch {
+	case errors.Is(err, objectgraph.ErrNotFound):
+		newPublication = true
+	case err != nil:
+		return nil, fmt.Errorf("platform publish: read publication: %w", err)
+	}
+	versions, err := publishedVersions(ctx, og, ident.CanonicalID)
+	if err != nil {
+		return nil, fmt.Errorf("platform publish: list versions: %w", err)
+	}
+	revision := req.RevisionNumber
+	if prior, ok := findPublishedVersion(versions, revision); ok {
+		return replayedPublication(ctx, og, prior, req)
+	}
+	var previous *versionMetadata
+	previousCanonicalID := ""
+	if len(versions) > 0 {
+		latest := versions[len(versions)-1]
+		if revision < latest.Revision {
+			return nil, fmt.Errorf("revision %d precedes the latest published version v%d; a version that failed to publish stays a gap", revision, latest.Revision)
+		}
+		latestObj, err := og.GetObject(ctx, latest.CanonicalID)
+		if err != nil {
+			return nil, fmt.Errorf("platform publish: read v%d: %w", latest.Revision, err)
+		}
+		meta, err := decodeVersionMetadata(latestObj)
+		if err != nil {
+			return nil, err
+		}
+		previous, previousCanonicalID = &meta, latest.CanonicalID
+	}
+
+	// The bare route is fixed by the first version: a story's link never
+	// changes, whatever later titles or slugs say.
+	routePath := publicTexturePrefix + slugify(firstNonEmpty(req.Slug, req.Title)) + "-" + shortID(ident.PublicationID)
+	if !newPublication {
+		var pubMeta struct {
+			RoutePath string `json:"route_path"`
+		}
+		if err := json.Unmarshal(pubObj.Metadata, &pubMeta); err != nil || strings.TrimSpace(pubMeta.RoutePath) == "" {
+			return nil, fmt.Errorf("platform publish: publication %s has no route", ident.PublicationID)
+		}
+		routePath = pubMeta.RoutePath
+	}
+	versionID := publicationVersionID(ident.PublicationID, revision)
+	versionCanonicalID, err := publicationVersionCanonicalID(req.OwnerID, versionID)
+	if err != nil {
+		return nil, fmt.Errorf("platform publish: version id: %w", err)
+	}
+	permalink := versionPermalink(routePath, revision)
+
+	// Pin every cited and embedded capture block into the version.
+	anchors, err := publicationAnchors(req.BodyDoc)
+	if err != nil {
+		return nil, err
+	}
+	anchors, resolvedBlocks, err := s.resolveAnchors(ctx, anchors)
+	if err != nil {
+		return nil, fmt.Errorf("platform publish: %w", err)
+	}
+	if anchors == nil {
+		anchors = []PublicationAnchor{}
+	}
+	resolvedBlocksJSON, resolvedBlocksHash, err := marshalResolvedBlocks(resolvedBlocks)
+	if err != nil {
+		return nil, fmt.Errorf("platform publish: marshal resolved blocks: %w", err)
+	}
+	anchored := map[string]bool{}
+	for _, a := range anchors {
+		anchored[a.SourceEntityID] = true
+	}
+	legacyTransclusions := make([]publicationTransclusionInput, 0, len(sourceMetadata.Transclusions))
+	for _, tr := range sourceMetadata.Transclusions {
+		if !anchored[tr.SourceEntityID] {
+			legacyTransclusions = append(legacyTransclusions, tr)
+		}
+	}
+
 	now := time.Now().UTC()
-	publicationID := id("pub")
 	proposalID := id("pubprop")
-	versionID := id("pubver")
-	manifestID := id("artman")
+	manifestID := "artman-" + versionID
 	sourceID := id("source")
 	spanID := id("span")
 	retrievalManifestID := id("retman")
@@ -213,50 +317,55 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	contentHash := sha256Hex([]byte(req.Content))
 	projectionHash := contentHash
 	sourceRevisionHash := sha256Hex([]byte(req.SourceDocID + "\n" + req.SourceRevisionID + "\n" + req.Content + "\n" + string(req.BodyDoc) + "\n" + string(req.SourceEntities) + "\n" + string(req.Citations) + "\n" + string(req.Metadata)))
-	routePath := publicTexturePrefix + slugify(firstNonEmpty(req.Slug, req.Title)) + "-" + shortID(publicationID)
 	storageRef := filepath.Join("sha256", contentHash+".txt")
 	if err := s.writeBlob(storageRef, []byte(req.Content)); err != nil {
 		return nil, err
 	}
 
-	versionHistory, _, versionHistoryHash := buildVersionHistoryManifest(req.History, s.signingKey)
-
-	manifest := map[string]any{
-		"schema":                     "choir.platform.artifact_manifest.v0",
-		"subject_kind":               "publication_version",
-		"subject_id":                 versionID,
-		"media_type":                 textMediaType,
-		"content_hash":               contentHash,
-		"source_revision_hash":       sourceRevisionHash,
-		"projection_hash":            projectionHash,
-		"storage_ref":                storageRef,
-		"byte_size":                  len([]byte(req.Content)),
-		"publication_id":             publicationID,
-		"publication_version_id":     versionID,
-		"route_path":                 routePath,
-		"source_metadata_hash":       sourceMetadata.MetadataHash,
-		"body_doc":                   json.RawMessage(req.BodyDoc),
-		"structured_source_entities": json.RawMessage(req.SourceEntities),
-		"source_entities":            sourceMetadata.SourceEntities,
-		"transclusions":              sourceMetadata.Transclusions,
-		"access_policy":              json.RawMessage(sourceMetadata.AccessPolicy),
-		"export_policy":              json.RawMessage(sourceMetadata.ExportPolicy),
+	previousManifestHash, previousRevision, supersedesVersionID := "", 0, ""
+	if previous != nil {
+		previousManifestHash, previousRevision, supersedesVersionID = previous.ManifestHash, previous.Revision, previous.PublicationVersionID
 	}
-	// A Texture is its full versioned history, not just the head projection.
-	// Persist the canonical version-history manifest (chain + per-revision
-	// provenance + transclusions, with the tamper-evident hash chain) inside the
-	// artifact manifest so the published artifact is self-contained and the
-	// reader can serve every revision. Omitted when no chain is supplied so the
-	// head-only path is byte-identical to before.
-	if versionHistoryHash != "" {
-		manifest["version_history"] = versionHistory
-		manifest["version_history_hash"] = versionHistoryHash
-	}
-	manifestJSON, err := json.Marshal(manifest)
+	manifestJSON, err := json.Marshal(publicationManifest{
+		Schema:                   publicationManifestSchema,
+		SubjectKind:              "publication_version",
+		PublicationID:            ident.PublicationID,
+		PublicationVersionID:     versionID,
+		Revision:                 revision,
+		RoutePath:                routePath,
+		PermalinkPath:            permalink,
+		Title:                    req.Title,
+		MediaType:                textMediaType,
+		ContentHash:              contentHash,
+		ProjectionHash:           projectionHash,
+		StorageRef:               storageRef,
+		ByteSize:                 len([]byte(req.Content)),
+		SourceRevisionHash:       sourceRevisionHash,
+		RevisionHash:             req.RevisionHash,
+		PreviousManifestHash:     previousManifestHash,
+		PreviousRevision:         previousRevision,
+		SourceMetadataHash:       sourceMetadata.MetadataHash,
+		BodyDoc:                  req.BodyDoc,
+		StructuredSourceEntities: req.SourceEntities,
+		SourceEntities:           sourceMetadata.SourceEntities,
+		Transclusions:            legacyTransclusions,
+		Anchors:                  anchors,
+		ResolvedBlocksHash:       resolvedBlocksHash,
+		AccessPolicy:             sourceMetadata.AccessPolicy,
+		ExportPolicy:             sourceMetadata.ExportPolicy,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("platform publish: marshal artifact manifest: %w", err)
 	}
 	manifestHash := sha256Hex(manifestJSON)
+	signatures := []PublicationSignature{}
+	if s.signingKey != nil {
+		sig, err := s.signingKey.signManifest(manifestHash)
+		if err != nil {
+			return nil, fmt.Errorf("platform publish: sign manifest: %w", err)
+		}
+		signatures = append(signatures, PublicationSignature{Schema: manifestAttestationSchema, KeyID: s.signingKey.KeyID, PublicKey: s.signingKey.PublicKeyBase64(), Signature: sig})
+	}
 
 	wholeSelector := `{"type":"TextPositionSelector","start":0,"end":` + fmt.Sprintf("%d", len([]rune(req.Content))) + `}`
 	retrievalSelectedRefs := mustJSON([]map[string]string{{
@@ -264,7 +373,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		"span_id":    spanID,
 		"version_id": versionID,
 	}})
-	publicURI := "choir:" + strings.TrimPrefix(routePath, "/")
+	publicURI := "choir:" + strings.TrimPrefix(permalink, "/")
 
 	citationIDs := []string{}
 	sourceCitationID := id("cite")
@@ -272,27 +381,53 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 
 	// Write to the object graph — single path, no relational tables.
 	graphParams := PublishGraphParams{
-		OwnerID:              req.OwnerID,
-		RequestedBy:          req.RequestedBy,
-		SourceDocID:          req.SourceDocID,
-		SourceRevisionID:     req.SourceRevisionID,
-		SourceRevisionHash:   sourceRevisionHash,
-		SourceTraceID:        req.SourceTraceID,
-		Title:                req.Title,
-		Slug:                 strings.TrimPrefix(routePath, publicTexturePrefix),
-		Content:              req.Content,
-		ContentHash:          contentHash,
-		ContentSize:          len([]byte(req.Content)),
-		ProjectionHash:       projectionHash,
-		WholeSelector:        wholeSelector,
-		PublicURI:            publicURI,
-		RoutePath:            routePath,
-		StorageRef:           storageRef,
-		ManifestJSON:         manifestJSON,
-		ManifestHash:         manifestHash,
-		TokenCount:           len(strings.Fields(req.Content)),
-		SelectedRefsJSON:     json.RawMessage(retrievalSelectedRefs),
-		PublicationID:        publicationID,
+		OwnerID:                    req.OwnerID,
+		RequestedBy:                req.RequestedBy,
+		SourceDocID:                req.SourceDocID,
+		SourceRevisionID:           req.SourceRevisionID,
+		SourceRevisionHash:         sourceRevisionHash,
+		SourceTraceID:              req.SourceTraceID,
+		Title:                      req.Title,
+		Slug:                       strings.TrimPrefix(routePath, publicTexturePrefix),
+		Content:                    req.Content,
+		ContentHash:                contentHash,
+		ContentSize:                len([]byte(req.Content)),
+		ProjectionHash:             projectionHash,
+		WholeSelector:              wholeSelector,
+		PublicURI:                  publicURI,
+		RoutePath:                  routePath,
+		StorageRef:                 storageRef,
+		ManifestJSON:               manifestJSON,
+		ManifestHash:               manifestHash,
+		TokenCount:                 len(strings.Fields(req.Content)),
+		SelectedRefsJSON:           json.RawMessage(retrievalSelectedRefs),
+		PublicationCanonicalID:     ident.CanonicalID,
+		VersionCanonicalID:         versionCanonicalID,
+		PreviousVersionCanonicalID: previousCanonicalID,
+		NewPublication:             newPublication,
+		Revision:                   revision,
+		VersionMetadata: versionMetadata{
+			EditionLabel:         "v" + strconv.Itoa(revision),
+			Revision:             revision,
+			PublicationID:        ident.PublicationID,
+			PublicationVersionID: versionID,
+			SourceDocID:          req.SourceDocID,
+			SourceRevisionID:     req.SourceRevisionID,
+			SourceRevisionHash:   sourceRevisionHash,
+			RevisionHash:         req.RevisionHash,
+			ProjectionHash:       projectionHash,
+			ArtifactManifestID:   manifestID,
+			ManifestHash:         manifestHash,
+			PreviousManifestHash: previousManifestHash,
+			SupersedesVersionID:  supersedesVersionID,
+			RoutePath:            routePath,
+			PermalinkPath:        permalink,
+			PublishedAt:          now.Format(time.RFC3339Nano),
+			Signatures:           signatures,
+		},
+		ResolvedBlocksJSON:   resolvedBlocksJSON,
+		ResolvedBlocksHash:   resolvedBlocksHash,
+		PublicationID:        ident.PublicationID,
 		ProposalID:           proposalID,
 		PublicationVersionID: versionID,
 		ArtifactManifestID:   manifestID,
@@ -304,8 +439,9 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		ActivityID:           activityID,
 		AttestationID:        attestationID,
 		AttestationEvidenceJSON: json.RawMessage(mustJSON(map[string]string{
-			"route_path":           routePath,
+			"route_path":           permalink,
 			"source_revision_hash": sourceRevisionHash,
+			"manifest_hash":        manifestHash,
 		})),
 		AccessPolicy: sourceMetadata.AccessPolicy,
 		ExportPolicy: sourceMetadata.ExportPolicy,
@@ -322,7 +458,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 			EntityJSON:     se.EntityJSON,
 		})
 	}
-	for _, tr := range sourceMetadata.Transclusions {
+	for _, tr := range legacyTransclusions {
 		graphParams.Transclusions = append(graphParams.Transclusions, GraphTransclusion{
 			SourceEntityID:     tr.SourceEntityID,
 			HostSelector:       tr.HostSelector,
@@ -332,6 +468,25 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 			SnapshotText:       tr.SnapshotText,
 			ContentHash:        tr.ContentHash,
 			EntityJSON:         tr.EntityJSON,
+		})
+	}
+	for _, a := range anchors {
+		ref := a.Ref
+		text := anchorText(a, resolvedBlocks)
+		display := "collapsed_citation"
+		if a.Relation == anchorRelationEmbeds {
+			display = "expanded"
+		}
+		graphParams.Transclusions = append(graphParams.Transclusions, GraphTransclusion{
+			AnchorID:           a.AnchorID,
+			Ref:                &ref,
+			SourceEntityID:     a.SourceEntityID,
+			HostSelector:       mustJSONRaw(map[string]any{"type": "source_ref", "node_id": a.AnchorID}),
+			SourceSelector:     mustJSONRaw(map[string]any{"selector_kind": "block_ref", "doc": ref.Doc, "version": ref.Version, "cids": a.CIDs}),
+			RelationType:       a.Relation,
+			DefaultDisplayMode: display,
+			SnapshotText:       text,
+			ContentHash:        blockTextHash(text),
 		})
 	}
 	for _, cite := range externalCitations {
@@ -375,7 +530,7 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 	}
 
 	return &PublishTextureResponse{
-		PublicationID:        publicationID,
+		PublicationID:        ident.PublicationID,
 		ProposalID:           proposalID,
 		PublicationVersionID: versionID,
 		ArtifactManifestID:   manifestID,
@@ -390,8 +545,46 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 		ReviewID:             reviewID,
 		RollbackID:           "",
 		State:                "published",
-		VersionHistoryHash:   versionHistoryHash,
-		VersionCount:         versionHistory.RevisionCount,
+		Revision:             revision,
+		PermalinkPath:        permalink,
+		ManifestHash:         manifestHash,
+		PreviousManifestHash: previousManifestHash,
+		SupersedesVersionID:  supersedesVersionID,
+	}, nil
+}
+
+// replayedPublication answers a publish of a revision already published:
+// the same version, nothing written. A different revision under the same
+// number is refused; a revision chain never reuses a number.
+func replayedPublication(ctx context.Context, og *ObjectGraphStore, prior publishedVersion, req PublishTextureRequest) (*PublishTextureResponse, error) {
+	obj, err := og.GetObject(ctx, prior.CanonicalID)
+	if err != nil {
+		return nil, fmt.Errorf("platform publish: read v%d: %w", prior.Revision, err)
+	}
+	meta, err := decodeVersionMetadata(obj)
+	if err != nil {
+		return nil, err
+	}
+	if meta.SourceRevisionID != req.SourceRevisionID {
+		return nil, fmt.Errorf("version v%d was published from revision %s, not %s", prior.Revision, meta.SourceRevisionID, req.SourceRevisionID)
+	}
+	return &PublishTextureResponse{
+		PublicationID:        meta.PublicationID,
+		PublicationVersionID: meta.PublicationVersionID,
+		ArtifactManifestID:   meta.ArtifactManifestID,
+		ContentHash:          obj.ContentHash,
+		SourceRevisionHash:   meta.SourceRevisionHash,
+		ProjectionHash:       meta.ProjectionHash,
+		RoutePath:            meta.RoutePath,
+		RetrievalSpanIDs:     []string{},
+		CitationIDs:          []string{},
+		State:                "published",
+		Revision:             meta.Revision,
+		PermalinkPath:        meta.PermalinkPath,
+		ManifestHash:         meta.ManifestHash,
+		PreviousManifestHash: meta.PreviousManifestHash,
+		SupersedesVersionID:  meta.SupersedesVersionID,
+		Replayed:             true,
 	}, nil
 }
 
@@ -440,7 +633,7 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 		return nil, fmt.Errorf("citations must be valid JSON")
 	}
 
-	var sourceOwnerID, latestVersionID string
+	var sourceOwnerID string
 	// Look up the publication in the object graph by publication_id metadata.
 	og := s.ogStore()
 	if og == nil {
@@ -452,18 +645,27 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 	}
 	pubObj := pubObjs[0]
 	var pubMeta struct {
-		OwnerID         string `json:"owner_id"`
-		State           string `json:"state"`
-		LatestVersionID string `json:"latest_version_id"`
+		State string `json:"state"`
 	}
 	_ = json.Unmarshal(pubObj.Metadata, &pubMeta)
 	sourceOwnerID = pubObj.OwnerID
-	latestVersionID = pubMeta.LatestVersionID
 	if pubMeta.State != "published" {
 		return nil, fmt.Errorf("publication not found")
 	}
 	if req.PublicationVersionID == "" {
-		req.PublicationVersionID = latestVersionID
+		versions, err := publishedVersions(ctx, og, pubObj.CanonicalID)
+		if err != nil || len(versions) == 0 {
+			return nil, fmt.Errorf("publication version not found")
+		}
+		latestObj, err := og.GetObject(ctx, versions[len(versions)-1].CanonicalID)
+		if err != nil {
+			return nil, fmt.Errorf("publication version not found")
+		}
+		latestMeta, err := decodeVersionMetadata(latestObj)
+		if err != nil {
+			return nil, err
+		}
+		req.PublicationVersionID = latestMeta.PublicationVersionID
 	}
 	// Look up the version in the object graph by publication_version_id metadata.
 	versionObjs, err := og.ListObjectsByMetadata(ctx, "choir.publication_version", "$.publication_version_id", req.PublicationVersionID, 1)

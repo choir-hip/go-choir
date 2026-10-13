@@ -10,16 +10,15 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// GetPublicationBundleByRoute resolves a public route path to the full
-// publication bundle using the object graph. The graph path is:
-//  1. Find choir.public_route object by metadata route_path
-//  2. Follow routes_to edge to choir.publication
-//  3. Follow has_version edge to choir.publication_version
-//  4. Follow has_manifest edge to choir.artifact_manifest
-//  5. Follow contains_blob edge to choir.artifact_blob (for storage_ref)
-//  6. Follow edges to retrieval, citations, source entities, transclusions, policy, provenance
+// GetPublicationBundleByRoute resolves a public route to one version of a
+// publication (Cut 2 unit 2b). The bare link /pub/texture/<slug> serves the
+// latest version in place; /pub/texture/<slug>/v<n> serves version n, and a
+// number that was never published (a gap) is not found. The bundle carries
+// the version's immutable payload and, beside it, the live nav and check
+// overlay.
 func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath string) (*PublicationBundle, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
@@ -29,9 +28,13 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		return nil, fmt.Errorf("platform service: object graph store unavailable")
 	}
 	routePath = normalizePublicationRoutePath(routePath)
+	bare, revision, ok := parsePublicationRoute(routePath)
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
 
-	// 1. Find the public_route object by route_path metadata.
-	routeObj, err := og.GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", routePath)
+	// 1. The bare route names the publication.
+	routeObj, err := og.GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", bare)
 	if err != nil {
 		if err == objectgraph.ErrNotFound || err == sql.ErrNoRows {
 			return nil, sql.ErrNoRows
@@ -39,9 +42,8 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		return nil, fmt.Errorf("platform bundle: find route: %w", err)
 	}
 	var routeMeta struct {
-		State           string `json:"state"`
-		TargetID        string `json:"target_id"`
-		TargetVersionID string `json:"target_version_id"`
+		State    string `json:"state"`
+		TargetID string `json:"target_id"`
 	}
 	if err := json.Unmarshal(routeObj.Metadata, &routeMeta); err != nil {
 		return nil, fmt.Errorf("platform bundle: parse route metadata: %w", err)
@@ -49,28 +51,18 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if routeMeta.State != "active" {
 		return nil, sql.ErrNoRows
 	}
-
-	// 2. Get the publication object.
 	pubObj, err := og.GetObject(ctx, routeMeta.TargetID)
 	if err != nil {
-		// The target_id in route metadata is the relational publication_id,
-		// not the canonical_id. We need to find the publication by searching
-		// for it. But since we stored it with the relational ID as the key,
-		// we can look it up by metadata.
-		pubObjs, err2 := og.ListObjectsByMetadata(ctx, "choir.publication", "$.latest_version_id", routeMeta.TargetVersionID, 1)
-		if err2 != nil || len(pubObjs) == 0 {
-			if err == objectgraph.ErrNotFound {
-				return nil, sql.ErrNoRows
-			}
-			return nil, fmt.Errorf("platform bundle: get publication: %w", err)
+		if err == objectgraph.ErrNotFound {
+			return nil, sql.ErrNoRows
 		}
-		pubObj = pubObjs[0]
+		return nil, fmt.Errorf("platform bundle: get publication: %w", err)
 	}
 	var pubMeta struct {
-		Slug            string `json:"slug"`
-		Title           string `json:"title"`
-		State           string `json:"state"`
-		LatestVersionID string `json:"latest_version_id"`
+		PublicationID string `json:"publication_id"`
+		Slug          string `json:"slug"`
+		Title         string `json:"title"`
+		State         string `json:"state"`
 	}
 	if err := json.Unmarshal(pubObj.Metadata, &pubMeta); err != nil {
 		return nil, fmt.Errorf("platform bundle: parse publication metadata: %w", err)
@@ -79,40 +71,32 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		return nil, sql.ErrNoRows
 	}
 
-	// 3. Get the publication_version object.
-	// The route's target_version_id is the relational version ID.
-	// Find the version object by metadata.
-	versionObjs, err := og.ListObjectsByMetadata(ctx, "choir.publication_version", "$.artifact_manifest_id", "", 0)
-	_ = versionObjs
-	// Actually, we should follow the has_version edge from the publication.
-	versionEdges, err := og.ListEdgesByKind(ctx, pubObj.CanonicalID, "has_version")
+	// 2. The version: n, or the latest when the link is bare.
+	versions, err := publishedVersions(ctx, og, pubObj.CanonicalID)
 	if err != nil {
-		return nil, fmt.Errorf("platform bundle: find version edges: %w", err)
+		return nil, fmt.Errorf("platform bundle: list versions: %w", err)
 	}
-	if len(versionEdges) == 0 {
-		return nil, fmt.Errorf("platform bundle: no version edges for publication %s", pubObj.CanonicalID)
+	if len(versions) == 0 {
+		return nil, sql.ErrNoRows
 	}
-	// Use the latest version (last edge, since edges are ordered by created_at).
-	versionEdge := versionEdges[len(versionEdges)-1]
-	versionObj, err := og.GetObject(ctx, versionEdge.ToID)
+	if revision == 0 {
+		revision = versions[len(versions)-1].Revision
+	}
+	ref, ok := findPublishedVersion(versions, revision)
+	if !ok {
+		return nil, sql.ErrNoRows
+	}
+	versionObj, err := og.GetObject(ctx, ref.CanonicalID)
 	if err != nil {
 		return nil, fmt.Errorf("platform bundle: get version: %w", err)
 	}
-	var versionMeta struct {
-		SourceDocID         string `json:"source_doc_id"`
-		SourceRevisionID    string `json:"source_revision_id"`
-		SourceRevisionHash  string `json:"source_revision_hash"`
-		ProjectionHash      string `json:"projection_hash"`
-		ArtifactManifestID  string `json:"artifact_manifest_id"`
-		PublishedAt         string `json:"published_at"`
-		SupersedesVersionID string `json:"supersedes_version_id"`
+	versionMeta, err := decodeVersionMetadata(versionObj)
+	if err != nil {
+		return nil, fmt.Errorf("platform bundle: %w", err)
 	}
-	if err := json.Unmarshal(versionObj.Metadata, &versionMeta); err != nil {
-		return nil, fmt.Errorf("platform bundle: parse version metadata: %w", err)
-	}
-	publishedAt, _ := time.Parse(time.RFC3339, versionMeta.PublishedAt)
+	publishedAt, _ := time.Parse(time.RFC3339Nano, versionMeta.PublishedAt)
 
-	// 4. Get the artifact manifest object.
+	// 3. The payload: manifest, text blob, resolved blocks, signatures.
 	manifestEdges, err := og.ListEdgesByKind(ctx, versionObj.CanonicalID, "has_manifest")
 	if err != nil {
 		return nil, fmt.Errorf("platform bundle: find manifest edges: %w", err)
@@ -124,8 +108,9 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if err != nil {
 		return nil, fmt.Errorf("platform bundle: get manifest: %w", err)
 	}
-
-	// 5. Get the artifact blob object (for storage_ref).
+	if sha256Hex(manifestObj.Body) != versionMeta.ManifestHash {
+		return nil, fmt.Errorf("platform bundle: v%d manifest does not hash to %s", revision, versionMeta.ManifestHash)
+	}
 	blobEdges, err := og.ListEdgesByKind(ctx, manifestObj.CanonicalID, "contains_blob")
 	if err != nil {
 		return nil, fmt.Errorf("platform bundle: find blob edges: %w", err)
@@ -143,41 +128,59 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if err := json.Unmarshal(blobObj.Metadata, &blobMeta); err != nil {
 		return nil, fmt.Errorf("platform bundle: parse blob metadata: %w", err)
 	}
-
-	// Read content from blob storage.
 	content, err := s.readBlob(blobMeta.StorageRef)
 	if err != nil {
 		return nil, err
 	}
+	resolvedBlocks, err := s.graphResolvedBlocks(ctx, og, versionObj.CanonicalID, manifestObj.Body)
+	if err != nil {
+		return nil, err
+	}
+	signatures := versionMeta.Signatures
+	if signatures == nil {
+		signatures = []PublicationSignature{}
+	}
 
-	// 6. Get retrieval spans, citations, source entities, transclusions, policy, provenance.
+	// 4. Retrieval spans, citations, source entities, transclusions, policy, provenance.
 	spans, sourceID := s.graphRetrievalSpans(ctx, og, versionObj.CanonicalID, string(content))
 	citations := s.graphCitationEdges(ctx, og, versionObj.CanonicalID, versionMeta.SourceRevisionHash)
 	policy := s.graphPublicationPolicy(ctx, og, versionObj.CanonicalID)
 	sourceEntities := s.graphSourceEntities(ctx, og, versionObj.CanonicalID)
 	transclusions := s.graphTransclusions(ctx, og, versionObj.CanonicalID)
 	provenance := s.graphProvenanceSummary(ctx, og, versionObj.CanonicalID)
-	versionHistory := graphVersionHistoryFromManifest(manifestObj.Body)
 	bodyDoc, structuredSourceEntities := structuredArtifactFieldsFromManifest(string(manifestObj.Body))
 
 	if !publicationAccessPolicyAllowsPublicRoute(policy.Access) {
 		return nil, sql.ErrNoRows
 	}
 
+	// 5. The live fields: nav among the published versions, and the check
+	// overlay keyed by this version and its citations.
+	overlay := s.checkOverlay(ctx, CheckOverlayVersion{
+		PublicationID:        versionMeta.PublicationID,
+		PublicationVersionID: versionMeta.PublicationVersionID,
+		Revision:             revision,
+		ManifestHash:         versionMeta.ManifestHash,
+	}, manifestAnchors(manifestObj.Body))
+
 	return &PublicationBundle{
-		Route: PublicationRoute{Path: routePath, State: routeMeta.State},
+		Route: PublicationRoute{Path: routePath, State: routeMeta.State, Bare: bare, Permalink: versionPermalink(bare, revision)},
 		Publication: PublicationSummary{
-			ID:    pubMeta.LatestVersionID, // keep relational ID for API compat
+			ID:    pubMeta.PublicationID,
 			Title: pubMeta.Title,
 			Slug:  pubMeta.Slug,
 			State: pubMeta.State,
 		},
 		Version: PublicationVersionSummary{
-			ID:                 versionMeta.ArtifactManifestID, // keep for API compat
-			ContentHash:        versionObj.ContentHash,
-			SourceRevisionHash: versionMeta.SourceRevisionHash,
-			ProjectionHash:     versionMeta.ProjectionHash,
-			PublishedAt:        publishedAt,
+			ID:                   versionMeta.PublicationVersionID,
+			Revision:             revision,
+			ContentHash:          versionObj.ContentHash,
+			SourceRevisionHash:   versionMeta.SourceRevisionHash,
+			ProjectionHash:       versionMeta.ProjectionHash,
+			ManifestHash:         versionMeta.ManifestHash,
+			PreviousManifestHash: versionMeta.PreviousManifestHash,
+			SupersedesVersionID:  versionMeta.SupersedesVersionID,
+			PublishedAt:          publishedAt,
 		},
 		Artifact: PublicationArtifact{
 			ManifestID:     versionMeta.ArtifactManifestID,
@@ -197,11 +200,53 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		Policy:         policy,
 		Proposals: PublicationProposalCapability{
 			CanSubmit:           true,
-			SourcePublicationID: pubMeta.LatestVersionID,
+			SourcePublicationID: pubMeta.PublicationID,
 		},
-		Provenance:     provenance,
-		VersionHistory: versionHistory,
+		Provenance: provenance,
+		Payload: PublicationVersionPayload{
+			Revision:       revision,
+			Text:           string(content),
+			Manifest:       json.RawMessage(manifestObj.Body),
+			ManifestHash:   versionMeta.ManifestHash,
+			Signatures:     signatures,
+			ResolvedBlocks: resolvedBlocks,
+		},
+		Nav:    navFor(versions, revision),
+		Checks: overlay,
 	}, nil
+}
+
+// graphResolvedBlocks reads a version's pinned blocks and checks them
+// against the hash its manifest names.
+func (s *Service) graphResolvedBlocks(ctx context.Context, og *ObjectGraphStore, versionID string, manifest []byte) ([]ResolvedBlock, error) {
+	var envelope struct {
+		ResolvedBlocksHash string `json:"resolved_blocks_hash"`
+	}
+	if err := json.Unmarshal(manifest, &envelope); err != nil {
+		return nil, fmt.Errorf("platform bundle: parse manifest: %w", err)
+	}
+	edges, err := og.ListEdgesByKind(ctx, versionID, "has_resolved_blocks")
+	if err != nil {
+		return nil, fmt.Errorf("platform bundle: find resolved blocks: %w", err)
+	}
+	if len(edges) == 0 {
+		return nil, fmt.Errorf("platform bundle: no resolved blocks for version %s", versionID)
+	}
+	obj, err := og.GetObject(ctx, edges[0].ToID)
+	if err != nil {
+		return nil, fmt.Errorf("platform bundle: get resolved blocks: %w", err)
+	}
+	if sha256Hex(obj.Body) != envelope.ResolvedBlocksHash {
+		return nil, fmt.Errorf("platform bundle: resolved blocks of %s do not hash to the manifest's %s", versionID, envelope.ResolvedBlocksHash)
+	}
+	var doc resolvedBlocksDoc
+	if err := json.Unmarshal(obj.Body, &doc); err != nil {
+		return nil, fmt.Errorf("platform bundle: parse resolved blocks: %w", err)
+	}
+	if doc.Blocks == nil {
+		doc.Blocks = []ResolvedBlock{}
+	}
+	return doc.Blocks, nil
 }
 
 // graphRetrievalSpans reads retrieval spans from the object graph.
@@ -300,7 +345,7 @@ func (s *Service) graphCitationEdges(ctx context.Context, og *ObjectGraphStore, 
 		switch string(edge.Kind) {
 		case "has_version", "has_manifest", "routes_to", "has_policy",
 			"references_entity", "transcludes", "has_retrieval_manifest",
-			"contains_span", "contains_blob":
+			"contains_span", "contains_blob", "has_resolved_blocks", "supersedes":
 			continue
 		}
 		var meta struct {
@@ -410,18 +455,22 @@ func (s *Service) graphTransclusions(ctx context.Context, og *ObjectGraphStore, 
 			continue
 		}
 		var meta struct {
-			SourceEntityID     string `json:"source_entity_id"`
-			HostSelectorJSON   string `json:"host_selector_json"`
-			SourceSelectorJSON string `json:"source_selector_json"`
-			RelationType       string `json:"relation_type"`
-			DefaultDisplayMode string `json:"default_display_mode"`
-			AccessPolicyJSON   string `json:"access_policy_json"`
-			ExportPolicyJSON   string `json:"export_policy_json"`
+			SourceEntityID     string     `json:"source_entity_id"`
+			AnchorID           string     `json:"anchor_id"`
+			Ref                *types.Ref `json:"ref"`
+			HostSelectorJSON   string     `json:"host_selector_json"`
+			SourceSelectorJSON string     `json:"source_selector_json"`
+			RelationType       string     `json:"relation_type"`
+			DefaultDisplayMode string     `json:"default_display_mode"`
+			AccessPolicyJSON   string     `json:"access_policy_json"`
+			ExportPolicyJSON   string     `json:"export_policy_json"`
 		}
 		_ = json.Unmarshal(obj.Metadata, &meta)
 		transclusions = append(transclusions, PublicationTransclusion{
 			ID:                 obj.CanonicalID,
 			SourceEntityID:     meta.SourceEntityID,
+			AnchorID:           meta.AnchorID,
+			Ref:                meta.Ref,
 			HostSelector:       json.RawMessage(firstNonEmpty(meta.HostSelectorJSON, "{}")),
 			SourceSelector:     json.RawMessage(firstNonEmpty(meta.SourceSelectorJSON, "{}")),
 			RelationType:       meta.RelationType,
@@ -464,27 +513,6 @@ func (s *Service) graphProvenanceSummary(ctx context.Context, og *ObjectGraphSto
 		}
 	}
 	return out
-}
-
-// graphVersionHistoryFromManifest extracts version history from the manifest JSON body.
-func graphVersionHistoryFromManifest(manifestBody []byte) *PublicationVersionHistory {
-	if len(manifestBody) == 0 {
-		return nil
-	}
-	var envelope struct {
-		VersionHistory     *PublicationVersionHistory `json:"version_history"`
-		VersionHistoryHash string                     `json:"version_history_hash"`
-	}
-	if err := json.Unmarshal(manifestBody, &envelope); err != nil {
-		return nil
-	}
-	if envelope.VersionHistory == nil || envelope.VersionHistory.RevisionCount == 0 {
-		return nil
-	}
-	if envelope.VersionHistory.ManifestHash == "" {
-		envelope.VersionHistory.ManifestHash = envelope.VersionHistoryHash
-	}
-	return envelope.VersionHistory
 }
 
 func (s *Service) ExportPublicationByRoute(ctx context.Context, routePath, format string) (*PublicationExport, error) {
@@ -546,10 +574,10 @@ func (s *Service) SearchPublished(ctx context.Context, query string) (*Retrieval
 	results := []RetrievalSearchResult{}
 	for _, pubObj := range pubObjs {
 		var pubMeta struct {
-			Title           string `json:"title"`
-			Slug            string `json:"slug"`
-			State           string `json:"state"`
-			LatestVersionID string `json:"latest_version_id"`
+			PublicationID string `json:"publication_id"`
+			Title         string `json:"title"`
+			Slug          string `json:"slug"`
+			State         string `json:"state"`
 		}
 		if err := json.Unmarshal(pubObj.Metadata, &pubMeta); err != nil {
 			continue
@@ -558,20 +586,19 @@ func (s *Service) SearchPublished(ctx context.Context, query string) (*Retrieval
 			continue
 		}
 
-		// Get version via has_version edge.
-		versionEdges, err := og.ListEdgesByKind(ctx, pubObj.CanonicalID, "has_version")
-		if err != nil || len(versionEdges) == 0 {
+		// The latest published version.
+		versions, err := publishedVersions(ctx, og, pubObj.CanonicalID)
+		if err != nil || len(versions) == 0 {
 			continue
 		}
-		versionObj, err := og.GetObject(ctx, versionEdges[len(versionEdges)-1].ToID)
+		versionObj, err := og.GetObject(ctx, versions[len(versions)-1].CanonicalID)
 		if err != nil {
 			continue
 		}
-		var versionMeta struct {
-			SourceRevisionHash string `json:"source_revision_hash"`
-			ArtifactManifestID string `json:"artifact_manifest_id"`
+		versionMeta, err := decodeVersionMetadata(versionObj)
+		if err != nil {
+			continue
 		}
-		_ = json.Unmarshal(versionObj.Metadata, &versionMeta)
 
 		// Get blob via has_manifest -> contains_blob.
 		manifestEdges, err := og.ListEdgesByKind(ctx, versionObj.CanonicalID, "has_manifest")
@@ -652,8 +679,8 @@ func (s *Service) SearchPublished(ctx context.Context, query string) (*Retrieval
 			}
 		}
 		results = append(results, RetrievalSearchResult{
-			PublicationID:        pubMeta.LatestVersionID,
-			PublicationVersionID: versionMeta.ArtifactManifestID,
+			PublicationID:        pubMeta.PublicationID,
+			PublicationVersionID: versionMeta.PublicationVersionID,
 			Title:                pubMeta.Title,
 			RoutePath:            routeMeta.RoutePath,
 			SourceID:             sourceID,

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	embedded "github.com/dolthub/driver/v2"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 )
 
@@ -328,6 +327,7 @@ func TestPublicationPersistedDefaultTitlesUseTextureLabels(t *testing.T) {
 		OwnerID:          "owner-defaults",
 		SourceDocID:      "doc-defaults",
 		SourceRevisionID: "rev-defaults",
+		RevisionNumber:   1,
 		Content:          "A publication that relies on the default Texture title.",
 		RequestedBy:      "owner-defaults",
 	})
@@ -626,6 +626,7 @@ func TestPublicationExportDocxAndPDFUseCanonicalPublicationBytes(t *testing.T) {
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
+		RevisionNumber:   1,
 		Title:            "Export Proof",
 		Content:          "# Export Proof\n\nThis is the published projection with [1].\n\nA private legal cloud survives rich export without Markdown syntax.\n\n" + strings.Repeat("Long document proof line with enough content to require PDF pagination. ", 80) + "\n\nLast line must survive export.",
 		BodyDoc:          bodyDoc,
@@ -772,6 +773,7 @@ func TestPublicationMarkdownExportNormalizesMalformedTableTailRows(t *testing.T)
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
+		RevisionNumber:   1,
 		Title:            "Legal Cloud",
 		Content:          content,
 		RequestedBy:      "user-1",
@@ -997,6 +999,7 @@ func TestPublicationExportPreservesCanonicalEvidenceStateMatrix(t *testing.T) {
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-evidence-matrix",
 		SourceRevisionID: "rev-evidence-matrix",
+		RevisionNumber:   1,
 		Title:            "Evidence State Matrix",
 		BodyDoc:          bodyDoc,
 		SourceEntities:   sourceEntitiesRaw,
@@ -1146,6 +1149,7 @@ func TestPublicationExportPreservesSourceContractMatrix(t *testing.T) {
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-source-contract-matrix",
 		SourceRevisionID: "rev-source-contract-matrix",
+		RevisionNumber:   1,
 		Title:            "Source Contract Matrix",
 		BodyDoc:          bodyDoc,
 		SourceEntities:   sourceEntitiesRaw,
@@ -1312,6 +1316,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-1",
 		SourceRevisionID: "rev-1",
+		RevisionNumber:   1,
 		Title:            "Mission Note",
 		Content:          "# Mission Note\n\nA public note.\n\nThis is the published projection with [1].",
 		BodyDoc:          bodyDoc,
@@ -1496,42 +1501,10 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	if len(search.Results) != 1 || search.Results[0].SpanID == "" {
 		t.Fatalf("search results: %#v", search.Results)
 	}
-	legacyRoutePath := "/pub/texture/legacy-mission-note-" + shortID(resp.PublicationID)
-	now := time.Now().UTC()
-	// Insert legacy route as a graph object.
-	ogStore := NewObjectGraphStore(store)
-	legacyRouteSuffix := objectgraph.StableSuffixFromKey("route-legacy-" + shortID(resp.PublicationVersionID))
-	legacyRouteID, _ := objectgraph.BuildCanonicalID("choir.public_route", "owner-1", legacyRouteSuffix)
-	if err := ogStore.PutObject(context.Background(), objectgraph.Object{
-		CanonicalID: legacyRouteID,
-		ObjectKind:  "choir.public_route",
-		OwnerID:     "owner-1",
-		VersionID:   resp.PublicationVersionID,
-		ContentHash: objectgraph.ContentHash("choir.public_route", nil, mustJSONRaw(map[string]any{
-			"route_path":        legacyRoutePath,
-			"target_kind":       "publication",
-			"target_id":         resp.PublicationID,
-			"target_version_id": resp.PublicationVersionID,
-			"state":             "active",
-		})),
-		Metadata: mustJSONRaw(map[string]any{
-			"route_path":        legacyRoutePath,
-			"target_kind":       "publication",
-			"target_id":         resp.PublicationID,
-			"target_version_id": resp.PublicationVersionID,
-			"state":             "active",
-		}),
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("insert legacy public route: %v", err)
-	}
-	legacyBundle, err := svc.GetPublicationBundleByRoute(context.Background(), legacyRoutePath+"/")
-	if err != nil {
-		t.Fatalf("GetPublicationBundleByRoute legacy texture route: %v", err)
-	}
-	if legacyBundle.Route.Path != legacyRoutePath {
-		t.Fatalf("legacy route normalized to %q, want %q", legacyBundle.Route.Path, legacyRoutePath)
+	// Pre-cut routes are not carried over (decisions §13.1): a route whose
+	// target is not a publication object resolves to nothing.
+	if _, err := svc.GetPublicationBundleByRoute(context.Background(), "/pub/texture/legacy-mission-note-"+shortID(resp.PublicationID)); err != sql.ErrNoRows {
+		t.Fatalf("unknown legacy route = %v, want not found", err)
 	}
 	proposal, err := svc.SubmitPublicationProposal(context.Background(), SubmitPublicationProposalRequest{
 		PublicationID:        resp.PublicationID,
@@ -1579,7 +1552,7 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 	}
 
 	var storageRef string
-	if err := store.db.QueryRow(`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.storage_ref')) FROM og_objects WHERE object_kind = 'choir.artifact_blob' AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.artifact_manifest_id')) = ?`, resp.ArtifactManifestID).Scan(&storageRef); err != nil {
+	if err := store.db.QueryRow(`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.storage_ref')) FROM og_objects WHERE object_kind = 'choir.artifact_blob' AND content_hash = ?`, resp.ContentHash).Scan(&storageRef); err != nil {
 		t.Fatalf("artifact blob query: %v", err)
 	}
 	if filepath.IsAbs(storageRef) || !strings.HasPrefix(storageRef, "sha256/") {
@@ -1591,25 +1564,26 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 
 	// Count objects by kind in the object graph.
 	for kind, want := range map[string]int{
-		"choir.publication":               1,
-		"choir.publication_version":       1,
-		"choir.publication_proposal":      2, // 1 from publish + 1 reader proposal
-		"choir.public_route":              2, // 1 from publish + 1 legacy route inserted by test
-		"choir.artifact_manifest":         2, // 1 publish + 1 proposal
-		"choir.artifact_blob":             2, // 1 publish + 1 proposal
-		"choir.retrieval_source":          1,
-		"choir.retrieval_span":            1,
-		"choir.retrieval_manifest":        1,
-		"choir.publication_source_entity": 1,
-		"choir.publication_transclusion":  1,
-		"choir.publication_policy":        1,
-		"choir.consent_record":            1,
-		"choir.review_record":             1,
-		"choir.verifier_attestation":      2,
-		"choir.provenance_entity":         4,
-		"choir.provenance_agent":          2,
-		"choir.provenance_activity":       2,
-		"choir.subject":                   2, // owner + submitter
+		"choir.publication":                 1,
+		"choir.publication_version":         1,
+		"choir.publication_proposal":        2, // 1 from publish + 1 reader proposal
+		"choir.public_route":                1,
+		"choir.publication_resolved_blocks": 1,
+		"choir.artifact_manifest":           2, // 1 publish + 1 proposal
+		"choir.artifact_blob":               2, // 1 publish + 1 proposal
+		"choir.retrieval_source":            1,
+		"choir.retrieval_span":              1,
+		"choir.retrieval_manifest":          1,
+		"choir.publication_source_entity":   1,
+		"choir.publication_transclusion":    1,
+		"choir.publication_policy":          1,
+		"choir.consent_record":              1,
+		"choir.review_record":               1,
+		"choir.verifier_attestation":        2,
+		"choir.provenance_entity":           4,
+		"choir.provenance_agent":            2,
+		"choir.provenance_activity":         2,
+		"choir.subject":                     2, // owner + submitter
 	} {
 		var got int
 		if err := store.db.QueryRow(`SELECT COUNT(*) FROM og_objects WHERE object_kind = ?`, kind).Scan(&got); err != nil {
@@ -1680,18 +1654,13 @@ func TestPublishTextureStructuredBodyDrivesPublicationSources(t *testing.T) {
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-structured",
 		SourceRevisionID: "rev-structured",
+		RevisionNumber:   1,
 		Title:            "Structured Publication",
 		BodyDoc:          bodyDoc,
 		SourceEntities:   sourceEntities,
 		Metadata:         metadata,
 		RequestedBy:      "user-1",
-		History: []PublishTextureRevision{{
-			RevisionID:     "rev-structured",
-			Content:        "This structured publication cites [1].",
-			BodyDoc:        bodyDoc,
-			SourceEntities: sourceEntities,
-			RevisionHash:   "revhash-structured",
-		}},
+		RevisionHash:     "revhash-structured",
 	})
 	if err != nil {
 		t.Fatalf("PublishTexture: %v", err)
@@ -1723,10 +1692,13 @@ func TestPublishTextureStructuredBodyDrivesPublicationSources(t *testing.T) {
 	if !strings.Contains(htmlExport.Content, `data-source-id="src-structured-fed"`) || strings.Contains(htmlExport.Content, "(source:src-structured-fed)") {
 		t.Fatalf("html export did not use structured source ref rendering: %s", htmlExport.Content)
 	}
-	if bundle.VersionHistory == nil || len(bundle.VersionHistory.Revisions) != 1 ||
-		len(bundle.VersionHistory.Revisions[0].BodyDoc) == 0 ||
-		len(bundle.VersionHistory.Revisions[0].SourceEntities) == 0 {
-		t.Fatalf("version history missing structured fields: %#v", bundle.VersionHistory)
+	var manifest struct {
+		BodyDoc                  json.RawMessage `json:"body_doc"`
+		StructuredSourceEntities json.RawMessage `json:"structured_source_entities"`
+		RevisionHash             string          `json:"revision_hash"`
+	}
+	if err := json.Unmarshal(bundle.Payload.Manifest, &manifest); err != nil || len(manifest.BodyDoc) == 0 || len(manifest.StructuredSourceEntities) == 0 || manifest.RevisionHash != "revhash-structured" {
+		t.Fatalf("version manifest missing structured fields: %s (%v)", bundle.Payload.Manifest, err)
 	}
 }
 
@@ -1785,6 +1757,7 @@ func TestPublishTextureRejectsSourceEntitiesWithoutBodyDoc(t *testing.T) {
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-detached",
 		SourceRevisionID: "rev-detached",
+		RevisionNumber:   1,
 		Title:            "Detached Source",
 		Content:          "This content has no structured source node.",
 		SourceEntities:   sourceEntities,
@@ -1792,39 +1765,6 @@ func TestPublishTextureRejectsSourceEntitiesWithoutBodyDoc(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "source_entities require body_doc") {
 		t.Fatalf("PublishTexture response=%#v error=%v, want source_entities/body_doc rejection", resp, err)
-	}
-}
-
-func TestPublishTextureRejectsHistorySourceEntitiesWithoutBodyDoc(t *testing.T) {
-	store, root := openTestPlatformStore(t)
-	svc := NewService(store, filepath.Join(root, "artifacts"), "")
-	sourceEntities := testTextureSourceEntities(t, testTextureSourceEntity(
-		"src-detached-history",
-		"web_source",
-		"url",
-		"https://example.com/detached-history",
-		"Detached history source",
-		"Detached history source excerpt.",
-		"available",
-		"source",
-	))
-
-	resp, err := svc.PublishTexture(context.Background(), PublishTextureRequest{
-		OwnerID:          "user-1",
-		SourceDocID:      "doc-detached-history",
-		SourceRevisionID: "rev-detached-history-head",
-		Title:            "Detached History Source",
-		Content:          "Head content has no structured source identity.",
-		RequestedBy:      "user-1",
-		History: []PublishTextureRevision{{
-			RevisionID:     "rev-detached-history",
-			VersionNumber:  1,
-			Content:        "History content has detached source identity.",
-			SourceEntities: sourceEntities,
-		}},
-	})
-	if err == nil || !strings.Contains(err.Error(), "history revision rev-detached-history structured fields are invalid") || !strings.Contains(err.Error(), "source_entities require body_doc") {
-		t.Fatalf("PublishTexture response=%#v error=%v, want history source_entities/body_doc rejection", resp, err)
 	}
 }
 
@@ -1857,6 +1797,7 @@ func TestPublishTextureRejectsLegacyMetadataSourceEntities(t *testing.T) {
 		OwnerID:          "user-1",
 		SourceDocID:      "doc-empty-sources",
 		SourceRevisionID: "rev-empty-sources",
+		RevisionNumber:   1,
 		Title:            "Structured Empty Sources",
 		BodyDoc:          bodyDoc,
 		SourceEntities:   json.RawMessage(`[]`),
@@ -1882,6 +1823,7 @@ func TestPublicationPublicSurfacesEnforceVisibilityPolicy(t *testing.T) {
 			OwnerID:          "user-1",
 			SourceDocID:      "doc-" + visibility,
 			SourceRevisionID: "rev-" + visibility,
+			RevisionNumber:   1,
 			Title:            "Visibility " + visibility,
 			Content:          fmt.Sprintf("Visibility policy proof %s unique-token-%s", visibility, visibility),
 			AccessPolicy:     accessPolicy,

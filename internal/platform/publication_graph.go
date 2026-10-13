@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // PublicationGraphStore writes publication data as objects + edges in the
@@ -92,77 +94,88 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		UpdatedAt: now,
 	})
 
-	// --- Publication ---
-	pubSuffix := objectgraph.StableSuffixFromKey(params.PublicationID)
-	publicationID, err := objectgraph.BuildCanonicalID("choir.publication", params.OwnerID, pubSuffix)
-	if err != nil {
-		return fmt.Errorf("publication graph: publication id: %w", err)
+	// --- Publication: one per (owner, source doc). Its metadata is live
+	// (the latest title); which versions exist is its has_version edges. ---
+	publicationID := params.PublicationCanonicalID
+	if publicationID == "" || params.VersionCanonicalID == "" || params.Revision <= 0 {
+		return fmt.Errorf("publication graph: publication, version and revision are required")
 	}
 	batch.Objects = append(batch.Objects, objectgraph.Object{
 		CanonicalID: publicationID,
 		ObjectKind:  "choir.publication",
 		OwnerID:     params.OwnerID,
-		VersionID:   params.PublicationVersionID,
 		ContentHash: objectgraph.ContentHash("choir.publication", nil, mustJSONRaw(map[string]any{
 			"slug":  params.Slug,
 			"title": params.Title,
 			"state": "published",
 		})),
-		Metadata:  mustJSONRaw(map[string]any{"handle": "", "publication_id": params.PublicationID, "slug": params.Slug, "title": params.Title, "state": "published", "latest_version_id": params.PublicationVersionID}),
+		Metadata: mustJSONRaw(map[string]any{
+			"handle":         "",
+			"publication_id": params.PublicationID,
+			"source_doc_id":  params.SourceDocID,
+			"slug":           params.Slug,
+			"title":          params.Title,
+			"state":          "published",
+			"route_path":     params.RoutePath,
+		}),
 		CreatedAt: now,
 		UpdatedAt: now,
 	})
 
-	// --- Publication version ---
-	versionSuffix := objectgraph.StableSuffixFromKey(params.PublicationVersionID)
-	versionID, err := objectgraph.BuildCanonicalID("choir.publication_version", params.OwnerID, versionSuffix)
-	if err != nil {
-		return fmt.Errorf("publication graph: version id: %w", err)
-	}
+	// --- Publication version: written once, never rewritten. ---
+	versionID := params.VersionCanonicalID
 	batch.Objects = append(batch.Objects, objectgraph.Object{
 		CanonicalID: versionID,
 		ObjectKind:  "choir.publication_version",
 		OwnerID:     params.OwnerID,
 		VersionID:   params.PublicationVersionID,
 		ContentHash: params.ContentHash,
-		Metadata: mustJSONRaw(map[string]any{
-			"edition_label":          "v1",
-			"publication_id":         params.PublicationID,
-			"publication_version_id": params.PublicationVersionID,
-			"source_doc_id":          params.SourceDocID,
-			"source_revision_id":     params.SourceRevisionID,
-			"source_revision_hash":   params.SourceRevisionHash,
-			"projection_hash":        params.ProjectionHash,
-			"artifact_manifest_id":   params.ArtifactManifestID,
-			"published_at":           now.Format(time.RFC3339Nano),
-			"supersedes_version_id":  "",
-		}),
-		CreatedAt: now,
-		UpdatedAt: now,
+		Metadata:    mustJSONRaw(params.VersionMetadata),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	})
 
-	// --- Public route ---
+	// --- Public route: the bare link, written with the publication's first
+	// version. Version links are <route>/v<n>, parsed at read. ---
 	routeSuffix := objectgraph.StableSuffixFromKey(params.RoutePath)
 	routeID, err := objectgraph.BuildCanonicalID("choir.public_route", params.OwnerID, routeSuffix)
 	if err != nil {
 		return fmt.Errorf("publication graph: route id: %w", err)
 	}
+	if params.NewPublication {
+		routeMeta := mustJSONRaw(map[string]any{"handle": "", "route_path": params.RoutePath, "target_kind": "publication", "target_id": publicationID, "state": "active"})
+		batch.Objects = append(batch.Objects, objectgraph.Object{
+			CanonicalID: routeID,
+			ObjectKind:  "choir.public_route",
+			OwnerID:     params.OwnerID,
+			ContentHash: objectgraph.ContentHash("choir.public_route", nil, routeMeta),
+			Metadata:    routeMeta,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		})
+	}
+
+	// --- Resolved blocks: the capture blocks this version cites or embeds,
+	// pinned into the version. ---
+	resolvedID, err := objectgraph.BuildCanonicalID("choir.publication_resolved_blocks", params.OwnerID, objectgraph.StableSuffixFromKey(versionID))
+	if err != nil {
+		return fmt.Errorf("publication graph: resolved blocks id: %w", err)
+	}
 	batch.Objects = append(batch.Objects, objectgraph.Object{
-		CanonicalID: routeID,
-		ObjectKind:  "choir.public_route",
+		CanonicalID: resolvedID,
+		ObjectKind:  "choir.publication_resolved_blocks",
 		OwnerID:     params.OwnerID,
 		VersionID:   params.PublicationVersionID,
-		ContentHash: objectgraph.ContentHash("choir.public_route", nil, mustJSONRaw(map[string]any{
-			"route_path":        params.RoutePath,
-			"target_kind":       "publication",
-			"target_id":         params.PublicationID,
-			"target_version_id": params.PublicationVersionID,
-			"state":             "active",
-		})),
-		Metadata:  mustJSONRaw(map[string]any{"handle": "", "route_path": params.RoutePath, "target_kind": "publication", "target_id": params.PublicationID, "target_version_id": params.PublicationVersionID, "state": "active"}),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ContentHash: params.ResolvedBlocksHash,
+		Body:        params.ResolvedBlocksJSON,
+		Metadata:    mustJSONRaw(map[string]any{"publication_version_id": params.PublicationVersionID, "resolved_blocks_hash": params.ResolvedBlocksHash}),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	})
+	batch.Edges = append(batch.Edges, makeEdge(versionID, resolvedID, "has_resolved_blocks", now, mustJSONRaw(map[string]any{})))
+	if params.PreviousVersionCanonicalID != "" {
+		batch.Edges = append(batch.Edges, makeEdge(versionID, params.PreviousVersionCanonicalID, "supersedes", now, mustJSONRaw(map[string]any{})))
+	}
 
 	// --- Artifact manifest ---
 	manifestSuffix := objectgraph.StableSuffixFromKey(params.ArtifactManifestID)
@@ -170,6 +183,8 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 	if err != nil {
 		return fmt.Errorf("publication graph: manifest id: %w", err)
 	}
+	// Blob objects are keyed by content alone and shared by every version
+	// with the same text, so they carry nothing version-specific.
 	batch.Objects = append(batch.Objects, objectgraph.Object{
 		CanonicalID: manifestID,
 		ObjectKind:  "choir.artifact_manifest",
@@ -193,11 +208,10 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		OwnerID:     params.OwnerID,
 		ContentHash: params.ContentHash,
 		Metadata: mustJSONRaw(map[string]any{
-			"hash_algorithm":       "sha256",
-			"media_type":           "text/plain",
-			"byte_size":            params.ContentSize,
-			"storage_ref":          params.StorageRef,
-			"artifact_manifest_id": params.ArtifactManifestID,
+			"hash_algorithm": "sha256",
+			"media_type":     "text/plain",
+			"byte_size":      params.ContentSize,
+			"storage_ref":    params.StorageRef,
 		}),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -337,7 +351,9 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 	})
 
 	// --- Provenance: public entity (publication version) ---
-	publicEntitySuffix := objectgraph.StableSuffixFromContent(params.ContentHash)
+	// Keyed by version: its body is this version's manifest, which a later
+	// version with the same text must not overwrite.
+	publicEntitySuffix := objectgraph.StableSuffixFromKey(versionID + "#provenance")
 	publicEntityID, err := objectgraph.BuildCanonicalID("choir.provenance_entity", params.OwnerID, publicEntitySuffix)
 	if err != nil {
 		return fmt.Errorf("publication graph: public entity id: %w", err)
@@ -438,7 +454,6 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			CanonicalID: policyID,
 			ObjectKind:  "choir.publication_policy",
 			OwnerID:     params.OwnerID,
-			VersionID:   params.PublicationVersionID,
 			ContentHash: objectgraph.SHA256(append(params.AccessPolicy, params.ExportPolicy...)),
 			Metadata: mustJSONRaw(map[string]any{
 				"access_policy_json": string(params.AccessPolicy),
@@ -453,7 +468,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 
 	// --- Source entities ---
 	for _, se := range params.SourceEntities {
-		seSuffix := objectgraph.StableSuffixFromKey(se.SourceEntityID)
+		seSuffix := objectgraph.StableSuffixFromKey(versionID + "#entity:" + se.SourceEntityID)
 		seID, err := objectgraph.BuildCanonicalID("choir.publication_source_entity", params.OwnerID, seSuffix)
 		if err != nil {
 			return fmt.Errorf("publication graph: source entity id: %w", err)
@@ -482,12 +497,30 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		})))
 	}
 
-	// --- Transclusions ---
+	// --- Transclusions: one row per anchor (a Write citation or embed),
+	// plus one per source entity no anchor cites. Keyed by version, so a
+	// later version citing the same block writes its own row. ---
 	for _, tr := range params.Transclusions {
-		trSuffix := objectgraph.StableSuffixFromContent(tr.ContentHash)
-		trID, err := objectgraph.BuildCanonicalID("choir.publication_transclusion", params.OwnerID, trSuffix)
+		rowKey := versionID + "#entity:" + tr.SourceEntityID
+		if tr.AnchorID != "" {
+			rowKey = versionID + "#anchor:" + tr.AnchorID
+		}
+		trID, err := objectgraph.BuildCanonicalID("choir.publication_transclusion", params.OwnerID, objectgraph.StableSuffixFromKey(rowKey))
 		if err != nil {
 			return fmt.Errorf("publication graph: transclusion id: %w", err)
+		}
+		trMeta := map[string]any{
+			"source_entity_id":     tr.SourceEntityID,
+			"host_selector_json":   string(tr.HostSelector),
+			"source_selector_json": string(tr.SourceSelector),
+			"relation_type":        tr.RelationType,
+			"default_display_mode": tr.DefaultDisplayMode,
+			"access_policy_json":   string(params.AccessPolicy),
+			"export_policy_json":   string(params.ExportPolicy),
+		}
+		if tr.AnchorID != "" {
+			trMeta["anchor_id"] = tr.AnchorID
+			trMeta["ref"] = tr.Ref
 		}
 		batch.Objects = append(batch.Objects, objectgraph.Object{
 			CanonicalID: trID,
@@ -496,17 +529,9 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			VersionID:   params.PublicationVersionID,
 			ContentHash: tr.ContentHash,
 			Body:        []byte(tr.SnapshotText),
-			Metadata: mustJSONRaw(map[string]any{
-				"source_entity_id":     tr.SourceEntityID,
-				"host_selector_json":   string(tr.HostSelector),
-				"source_selector_json": string(tr.SourceSelector),
-				"relation_type":        tr.RelationType,
-				"default_display_mode": tr.DefaultDisplayMode,
-				"access_policy_json":   string(params.AccessPolicy),
-				"export_policy_json":   string(params.ExportPolicy),
-			}),
-			CreatedAt: now,
-			UpdatedAt: now,
+			Metadata:    mustJSONRaw(trMeta),
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		})
 		batch.Edges = append(batch.Edges, makeEdge(versionID, trID, "transcludes", now, mustJSONRaw(map[string]any{
 			"host_selector_json":   string(tr.HostSelector),
@@ -515,15 +540,19 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 	}
 
 	// --- Edges: structural ---
+	if params.NewPublication {
+		batch.Edges = append(batch.Edges,
+			// subject -> publication
+			makeEdge(subjectID, publicationID, "owns", now, mustJSONRaw(map[string]any{})),
+			// route -> publication
+			makeEdge(routeID, publicationID, "routes_to", now, mustJSONRaw(map[string]any{"state": "active"})),
+		)
+	}
 	batch.Edges = append(batch.Edges,
-		// subject -> publication
-		makeEdge(subjectID, publicationID, "owns", now, mustJSONRaw(map[string]any{})),
-		// publication -> version
-		makeEdge(publicationID, versionID, "has_version", now, mustJSONRaw(map[string]any{"edition_label": "v1", "published_at": now.Format(time.RFC3339)})),
+		// publication -> version: the one record of which versions exist.
+		makeEdge(publicationID, versionID, "has_version", now, mustJSONRaw(map[string]any{"revision": params.Revision, "edition_label": "v" + strconv.Itoa(params.Revision)})),
 		// version -> proposal
 		makeEdge(versionID, proposalID, "derived_from_proposal", now, mustJSONRaw(map[string]any{})),
-		// route -> publication
-		makeEdge(routeID, publicationID, "routes_to", now, mustJSONRaw(map[string]any{"state": "active"})),
 		// version -> manifest
 		makeEdge(versionID, manifestID, "has_manifest", now, mustJSONRaw(map[string]any{"media_type": "text/plain"})),
 		// manifest -> blob
@@ -600,6 +629,17 @@ type PublishGraphParams struct {
 	TokenCount         int
 	SelectedRefsJSON   json.RawMessage
 
+	// Version identity (Cut 2 unit 2b): the publication of (owner, source
+	// doc), the version n = Revision, and whether this is its first version.
+	PublicationCanonicalID     string
+	VersionCanonicalID         string
+	PreviousVersionCanonicalID string
+	NewPublication             bool
+	Revision                   int
+	VersionMetadata            versionMetadata
+	ResolvedBlocksJSON         []byte
+	ResolvedBlocksHash         string
+
 	// IDs (generated by the caller, same as the relational path)
 	PublicationID        string
 	ProposalID           string
@@ -643,8 +683,11 @@ type GraphSourceEntity struct {
 	EntityJSON     []byte
 }
 
-// GraphTransclusion is a transclusion embedded in a publication.
+// GraphTransclusion is a transclusion embedded in a publication: one anchor
+// (AnchorID and Ref set) or a source entity's legacy transclusion.
 type GraphTransclusion struct {
+	AnchorID           string
+	Ref                *types.Ref
 	SourceEntityID     string
 	HostSelector       json.RawMessage
 	SourceSelector     json.RawMessage

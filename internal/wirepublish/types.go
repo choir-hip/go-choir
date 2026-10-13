@@ -20,6 +20,8 @@ type PublishTextureRequest struct {
 	ExportPolicy     json.RawMessage `json:"export_policy,omitempty"`
 	SourceTraceID    string          `json:"source_trace_id,omitempty"`
 	RequestedBy      string          `json:"requested_by,omitempty"`
+	RevisionNumber   int             `json:"revision_number"`
+	RevisionHash     string          `json:"revision_hash,omitempty"`
 }
 
 // PublishTextureResponse is the corpusd publish response subset persisted on

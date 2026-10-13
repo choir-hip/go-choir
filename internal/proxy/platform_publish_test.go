@@ -100,6 +100,8 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 			PublicationID:        "pub-1",
 			PublicationVersionID: "pubver-1",
 			RoutePath:            "/pub/texture/my-note-pub1",
+			PermalinkPath:        "/pub/texture/my-note-pub1/v3",
+			Revision:             3,
 			ContentHash:          "hash",
 			SourceRevisionHash:   "source-hash",
 			State:                "published",
@@ -107,6 +109,8 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	}))
 	defer corpusd.Close()
 
+	// The proxy publishes one revision as its version: it no longer reads
+	// the doc's revision history (an unknown path fails the test).
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Authenticated-User") != "user-1" {
 			t.Fatalf("autoputer trusted user header: got %q", r.Header.Get("X-Authenticated-User"))
@@ -120,16 +124,13 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 				Title:             "My Note",
 				CurrentRevisionID: "rev-head",
 			})
-		case "/api/texture/documents/doc-1/revisions":
-			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionList{Revisions: []autoputerTextureRevision{
-				{RevisionID: "rev-2", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 2, Content: "public projection content [1]", RevisionHash: "h2", CreatedAt: "2026-01-02T00:00:00.000Z"},
-				{RevisionID: "rev-1", DocID: "doc-1", OwnerID: "user-1", VersionNumber: 1, Content: "older draft", RevisionHash: "h1", CreatedAt: "2026-01-01T00:00:00.000Z"},
-			}})
 		case "/api/texture/revisions/rev-2":
 			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-2",
 				DocID:          "doc-1",
 				OwnerID:        "user-1",
+				VersionNumber:  2,
+				RevisionHash:   "h2",
 				Content:        "public projection content [1]",
 				BodyDoc:        testProxyTextureBodyDoc(t, "doc-1", "src-1", "Public Source"),
 				SourceEntities: testProxySourceEntities(t, testProxySourceEntity("src-1", "content_item", "content-public-1", "Public Source", "Cleaned public source text", "public_source")),
@@ -188,11 +189,9 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	if gotPlatformReq.Content != "public projection content [1]" {
 		t.Fatalf("platform content: got %q", gotPlatformReq.Content)
 	}
-	if len(gotPlatformReq.History) != 2 {
-		t.Fatalf("platform history len: got %d, want 2", len(gotPlatformReq.History))
-	}
-	if gotPlatformReq.History[0].RevisionID != "rev-1" || gotPlatformReq.History[1].RevisionID != "rev-2" {
-		t.Fatalf("platform history not oldest-first: %s, %s", gotPlatformReq.History[0].RevisionID, gotPlatformReq.History[1].RevisionID)
+	// Stored version_number 2 is the chain's third revision: v3.
+	if gotPlatformReq.RevisionNumber != 3 || gotPlatformReq.RevisionHash != "h2" {
+		t.Fatalf("platform revision = (%d, %q), want (3, h2)", gotPlatformReq.RevisionNumber, gotPlatformReq.RevisionHash)
 	}
 	if !strings.Contains(string(gotPlatformReq.SourceEntities), "content-public-1") {
 		t.Fatalf("platform source_entities not forwarded: %s", string(gotPlatformReq.SourceEntities))
@@ -211,8 +210,8 @@ func TestHandleTexturePublicationReadsPrivateRevisionAndPostsProjection(t *testi
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.PublicURL != "https://choir.news/pub/texture/my-note-pub1" {
-		t.Fatalf("public url: got %q", resp.PublicURL)
+	if resp.PublicURL != "https://choir.news/pub/texture/my-note-pub1" || resp.PermalinkURL != "https://choir.news/pub/texture/my-note-pub1/v3" {
+		t.Fatalf("public url: got %q permalink %q", resp.PublicURL, resp.PermalinkURL)
 	}
 }
 
@@ -370,10 +369,6 @@ func TestHandleTexturePublicationPublishesPublicURLSourceSnapshots(t *testing.T)
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
-		case "/api/texture/documents/doc-url/revisions":
-			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionList{Revisions: []autoputerTextureRevision{
-				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1]", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
-			}})
 		case "/api/texture/revisions/rev-url":
 			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-url",
@@ -506,10 +501,6 @@ func TestHandleTexturePublicationRecordsURLSnapshotImportFailureState(t *testing
 				Title:             "URL Note",
 				CurrentRevisionID: "rev-url",
 			})
-		case "/api/texture/documents/doc-url/revisions":
-			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionList{Revisions: []autoputerTextureRevision{
-				{RevisionID: "rev-url", DocID: "doc-url", OwnerID: "user-1", VersionNumber: 1, Content: "public projection content [1]", RevisionHash: "hurl", CreatedAt: "2026-01-01T00:00:00.000Z"},
-			}})
 		case "/api/texture/revisions/rev-url":
 			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-url",
@@ -594,10 +585,6 @@ func TestHandleTexturePublicationDoesNotPublishPrivateSourceSnapshots(t *testing
 				Title:             "Private Note",
 				CurrentRevisionID: "rev-private",
 			})
-		case "/api/texture/documents/doc-private/revisions":
-			_ = json.NewEncoder(w).Encode(autoputerTextureRevisionList{Revisions: []autoputerTextureRevision{
-				{RevisionID: "rev-private", DocID: "doc-private", OwnerID: "user-1", VersionNumber: 1, Content: "public projection with private source excerpt [1]", RevisionHash: "hpriv", CreatedAt: "2026-01-01T00:00:00.000Z"},
-			}})
 		case "/api/texture/revisions/rev-private":
 			_ = json.NewEncoder(w).Encode(autoputerTextureRevision{
 				RevisionID:     "rev-private",

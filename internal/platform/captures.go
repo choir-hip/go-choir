@@ -138,6 +138,13 @@ func (s *CaptureBodyStore) path(hash string) string {
 	return filepath.Join(s.root, hash[:2], hash)
 }
 
+// CaptureBodiesRoot is the host directory of capture bodies under the
+// platform artifacts root: the capture routes write it and publish reads it
+// to pin cited blocks.
+func CaptureBodiesRoot(artifactsRoot string) string {
+	return filepath.Join(filepath.Clean(artifactsRoot), "capture-bodies")
+}
+
 // ConfigureCaptureBodies sets the host directory for capture bodies.
 func (h *ObjectGraphHandler) ConfigureCaptureBodies(root string) {
 	h.captureBodies = &CaptureBodyStore{root: filepath.Clean(root)}

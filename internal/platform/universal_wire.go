@@ -80,9 +80,8 @@ func (s *Service) ListUniversalWireStories(ctx context.Context) (*UniversalWireS
 	publications := make([]universalWirePublication, 0, len(routes))
 	for _, route := range routes {
 		var routeMeta struct {
-			RoutePath       string `json:"route_path"`
-			TargetVersionID string `json:"target_version_id"`
-			State           string `json:"state"`
+			RoutePath string `json:"route_path"`
+			State     string `json:"state"`
 		}
 		if err := json.Unmarshal(route.Metadata, &routeMeta); err != nil {
 			return nil, fmt.Errorf("decode universal wire route %s: %w", route.CanonicalID, err)
@@ -97,21 +96,22 @@ func (s *Service) ListUniversalWireStories(ctx context.Context) (*UniversalWireS
 			}
 			return nil, fmt.Errorf("load universal wire publication %s: %w", routeMeta.RoutePath, err)
 		}
-		versions, err := og.ListObjectsByMetadata(ctx, "choir.publication_version", "$.publication_version_id", routeMeta.TargetVersionID, 1)
+		versionID := bundle.Version.ID
+		versions, err := og.ListObjectsByMetadata(ctx, "choir.publication_version", "$.publication_version_id", versionID, 1)
 		if err != nil {
-			return nil, fmt.Errorf("resolve universal wire publication version %s: %w", routeMeta.TargetVersionID, err)
+			return nil, fmt.Errorf("resolve universal wire publication version %s: %w", versionID, err)
 		}
 		if len(versions) != 1 {
-			return nil, fmt.Errorf("universal wire publication version %s is missing", routeMeta.TargetVersionID)
+			return nil, fmt.Errorf("universal wire publication version %s is missing", versionID)
 		}
 		var versionMeta struct {
 			SourceDocID string `json:"source_doc_id"`
 		}
 		if err := json.Unmarshal(versions[0].Metadata, &versionMeta); err != nil {
-			return nil, fmt.Errorf("decode universal wire publication version %s: %w", routeMeta.TargetVersionID, err)
+			return nil, fmt.Errorf("decode universal wire publication version %s: %w", versionID, err)
 		}
 		if strings.TrimSpace(versionMeta.SourceDocID) == "" {
-			return nil, fmt.Errorf("universal wire publication version %s has no source document", routeMeta.TargetVersionID)
+			return nil, fmt.Errorf("universal wire publication version %s has no source document", versionID)
 		}
 		publications = append(publications, universalWirePublication{
 			route:       route,

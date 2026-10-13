@@ -6,33 +6,33 @@ import (
 	"testing"
 )
 
-func TestSignRevisionRoundTrip(t *testing.T) {
+func TestSignManifestRoundTrip(t *testing.T) {
 	key := loadTestSigningKey(t)
 
-	sig, err := key.signRevision("rev1:abcdef")
+	sig, err := key.signManifest("rev1:abcdef")
 	if err != nil {
-		t.Fatalf("signRevision: %v", err)
+		t.Fatalf("signManifest: %v", err)
 	}
 	if sig == "" {
 		t.Fatal("expected non-empty signature")
 	}
 
-	// The published public key verifies the signature over the revision hash.
-	if !VerifyRevisionSignature(key.PublicKeyBase64(), "rev1:abcdef", sig) {
+	// The published public key verifies the signature over the manifest hash.
+	if !VerifyManifestSignature(key.PublicKeyBase64(), "rev1:abcdef", sig) {
 		t.Fatal("platform public key failed to verify its own signature")
 	}
 
-	// A different revision hash must NOT verify against this signature.
-	if VerifyRevisionSignature(key.PublicKeyBase64(), "rev1:different", sig) {
-		t.Fatal("signature must not verify against a tampered revision hash")
+	// A different manifest hash must NOT verify against this signature.
+	if VerifyManifestSignature(key.PublicKeyBase64(), "rev1:different", sig) {
+		t.Fatal("signature must not verify against a tampered manifest hash")
 	}
 }
 
-func TestVerifyRevisionSignatureRejectsTamperedSignature(t *testing.T) {
+func TestVerifyManifestSignatureRejectsTamperedSignature(t *testing.T) {
 	key := loadTestSigningKey(t)
-	sig, err := key.signRevision("rev1:original")
+	sig, err := key.signManifest("rev1:original")
 	if err != nil {
-		t.Fatalf("signRevision: %v", err)
+		t.Fatalf("signManifest: %v", err)
 	}
 
 	// Flip a byte in the signature: verification must fail.
@@ -42,14 +42,14 @@ func TestVerifyRevisionSignatureRejectsTamperedSignature(t *testing.T) {
 	} else {
 		tampered[0] = 'A'
 	}
-	if VerifyRevisionSignature(key.PublicKeyBase64(), "rev1:original", string(tampered)) {
+	if VerifyManifestSignature(key.PublicKeyBase64(), "rev1:original", string(tampered)) {
 		t.Fatal("tampered signature must not verify")
 	}
 }
 
-func TestVerifyRevisionSignatureMalformed(t *testing.T) {
+func TestVerifyManifestSignatureMalformed(t *testing.T) {
 	key := loadTestSigningKey(t)
-	sig, _ := key.signRevision("rev1:x")
+	sig, _ := key.signManifest("rev1:x")
 
 	cases := []struct {
 		name, pub, hash, sig string
@@ -62,7 +62,7 @@ func TestVerifyRevisionSignatureMalformed(t *testing.T) {
 		{"wrong-size pub", "YWJjZA==", "rev1:x", sig}, // decodes but wrong length
 	}
 	for _, c := range cases {
-		if VerifyRevisionSignature(c.pub, c.hash, c.sig) {
+		if VerifyManifestSignature(c.pub, c.hash, c.sig) {
 			t.Errorf("%s: expected verification to fail", c.name)
 		}
 	}
@@ -88,14 +88,14 @@ func TestLoadOrCreateSigningKeyPersistsAcrossLoads(t *testing.T) {
 	}
 }
 
-func TestSignRevisionEmptyHashYieldsEmpty(t *testing.T) {
+func TestSignManifestEmptyHashYieldsEmpty(t *testing.T) {
 	key := loadTestSigningKey(t)
-	sig, err := key.signRevision("")
+	sig, err := key.signManifest("")
 	if err != nil {
-		t.Fatalf("signRevision empty: %v", err)
+		t.Fatalf("signManifest empty: %v", err)
 	}
 	if sig != "" {
-		t.Fatalf("empty revision hash must yield empty signature, got %q", sig)
+		t.Fatalf("empty manifest hash must yield empty signature, got %q", sig)
 	}
 }
 

@@ -49,6 +49,8 @@ func BuildAutonomousPublishRequest(doc types.Document, rev types.Revision, rec *
 		ExportPolicy:     defaultWireExportPolicy(),
 		SourceTraceID:    traceID,
 		RequestedBy:      RequestedByWirePolicy,
+		RevisionNumber:   types.RevisionNumber(rev.VersionNumber),
+		RevisionHash:     rev.RevisionHash,
 	}
 }
 

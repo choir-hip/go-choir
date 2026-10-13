@@ -12,15 +12,7 @@ func normalizePublishTextureStructuredInput(req *PublishTextureRequest) error {
 	if req == nil {
 		return nil
 	}
-	if err := normalizePublishTextureStructuredFields(&req.Content, &req.BodyDoc, &req.SourceEntities); err != nil {
-		return err
-	}
-	for i := range req.History {
-		if err := normalizePublishTextureStructuredFields(&req.History[i].Content, &req.History[i].BodyDoc, &req.History[i].SourceEntities); err != nil {
-			return fmt.Errorf("history revision %s structured fields are invalid: %w", firstNonEmpty(req.History[i].RevisionID, fmt.Sprintf("%d", i)), err)
-		}
-	}
-	return nil
+	return normalizePublishTextureStructuredFields(&req.Content, &req.BodyDoc, &req.SourceEntities)
 }
 
 func normalizePublishTextureStructuredFields(content *string, bodyDoc *json.RawMessage, sourceEntities *json.RawMessage) error {

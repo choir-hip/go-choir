@@ -3,6 +3,8 @@ package platform
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type PublishTextureRequest struct {
@@ -20,33 +22,13 @@ type PublishTextureRequest struct {
 	ExportPolicy     json.RawMessage `json:"export_policy,omitempty"`
 	SourceTraceID    string          `json:"source_trace_id,omitempty"`
 	RequestedBy      string          `json:"requested_by,omitempty"`
-	// History is the full source revision chain (oldest first) for the
-	// published document. A Texture is its versioned history, not just the head
-	// revision, so publish carries every revision's body, citations,
-	// system-attributed provenance, and per-revision hash. The head revision is
-	// still surfaced prominently via Content/SourceRevisionID; History is the
-	// durable spine persisted alongside it.
-	History []PublishTextureRevision `json:"history,omitempty"`
-}
-
-// PublishTextureRevision is one revision in the published version-history chain.
-// It mirrors the runtime-attributed revision record (never model-authored) and
-// carries the per-revision hash so the published artifact remains independently
-// verifiable end to end.
-type PublishTextureRevision struct {
-	RevisionID       string          `json:"revision_id"`
-	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
-	VersionNumber    int             `json:"version_number,omitempty"`
-	AuthorKind       string          `json:"author_kind,omitempty"`
-	AuthorLabel      string          `json:"author_label,omitempty"`
-	Content          string          `json:"content"`
-	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
-	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
-	Citations        json.RawMessage `json:"citations,omitempty"`
-	Metadata         json.RawMessage `json:"metadata,omitempty"`
-	Provenance       json.RawMessage `json:"provenance,omitempty"`
-	RevisionHash     string          `json:"revision_hash,omitempty"`
-	CreatedAt        string          `json:"created_at,omitempty"`
+	// RevisionNumber is the source revision's number on its Texture's
+	// revision chain, counted from 1 (types.RevisionNumber): the published
+	// version is v<RevisionNumber>. Required.
+	RevisionNumber int `json:"revision_number"`
+	// RevisionHash is the source revision's chain hash
+	// (types.ComputeStructuredRevisionHash), recorded in the manifest.
+	RevisionHash string `json:"revision_hash,omitempty"`
 }
 
 type PublishTextureResponse struct {
@@ -66,13 +48,28 @@ type PublishTextureResponse struct {
 	ReviewID             string   `json:"review_id"`
 	RollbackID           string   `json:"rollback_id"`
 	State                string   `json:"state"`
-	VersionHistoryHash   string   `json:"version_history_hash,omitempty"`
-	VersionCount         int      `json:"version_count,omitempty"`
+	// Revision is the published version number, n in /v<n>.
+	Revision int `json:"revision"`
+	// RoutePath is the bare link, which serves the latest version;
+	// PermalinkPath is this version's permanent link, RoutePath + "/v<n>".
+	PermalinkPath        string `json:"permalink_path"`
+	PermalinkURL         string `json:"permalink_url,omitempty"`
+	ManifestHash         string `json:"manifest_hash"`
+	PreviousManifestHash string `json:"previous_manifest_hash,omitempty"`
+	SupersedesVersionID  string `json:"supersedes_version_id,omitempty"`
+	// Replayed is true when the revision was already published: the
+	// response names the existing version and nothing was written.
+	Replayed bool `json:"replayed,omitempty"`
 }
 
 type PublicationRoute struct {
+	// Path is the route as requested: the bare link or a /v<n> permalink.
 	Path  string `json:"path"`
 	State string `json:"state"`
+	// Bare is the publication's link, which serves the latest version.
+	Bare string `json:"bare"`
+	// Permalink is the served version's permanent link, Bare + "/v<n>".
+	Permalink string `json:"permalink"`
 }
 
 type PublicationSummary struct {
@@ -83,11 +80,15 @@ type PublicationSummary struct {
 }
 
 type PublicationVersionSummary struct {
-	ID                 string    `json:"id"`
-	ContentHash        string    `json:"content_hash"`
-	SourceRevisionHash string    `json:"source_revision_hash"`
-	ProjectionHash     string    `json:"projection_hash"`
-	PublishedAt        time.Time `json:"published_at"`
+	ID                   string    `json:"id"`
+	Revision             int       `json:"revision"`
+	ContentHash          string    `json:"content_hash"`
+	SourceRevisionHash   string    `json:"source_revision_hash"`
+	ProjectionHash       string    `json:"projection_hash"`
+	ManifestHash         string    `json:"manifest_hash"`
+	PreviousManifestHash string    `json:"previous_manifest_hash,omitempty"`
+	SupersedesVersionID  string    `json:"supersedes_version_id,omitempty"`
+	PublishedAt          time.Time `json:"published_at"`
 }
 
 type PublicationArtifact struct {
@@ -111,8 +112,13 @@ type PublicationSourceEntity struct {
 }
 
 type PublicationTransclusion struct {
-	ID                 string          `json:"id"`
-	SourceEntityID     string          `json:"source_entity_id"`
+	ID             string `json:"id"`
+	SourceEntityID string `json:"source_entity_id"`
+	// AnchorID is the source_ref node a Write citation or embed sits on;
+	// Ref is the block it cites. A row with an AnchorID is one anchor of the
+	// version; one without is a source entity's legacy transclusion.
+	AnchorID           string          `json:"anchor_id,omitempty"`
+	Ref                *types.Ref      `json:"ref,omitempty"`
 	HostSelector       json.RawMessage `json:"host_selector"`
 	SourceSelector     json.RawMessage `json:"source_selector"`
 	RelationType       string          `json:"relation_type"`
@@ -194,56 +200,11 @@ type PublicationBundle struct {
 	Policy         PublicationPolicy             `json:"policy"`
 	Proposals      PublicationProposalCapability `json:"proposals"`
 	Provenance     PublicationProvenanceSummary  `json:"provenance"`
-	VersionHistory *PublicationVersionHistory    `json:"version_history,omitempty"`
-}
-
-// PublicationVersionHistory is the published, self-contained version chain for a
-// Texture: the full ordered list of revisions with per-revision provenance and
-// the tamper-evident hash chain. It is read back from the persisted artifact
-// manifest, not recomputed, so a reader/verifier can replay and check the chain.
-type PublicationVersionHistory struct {
-	Schema string `json:"schema"`
-	// RevisionCount is the number of revisions in the chain.
-	RevisionCount int    `json:"revision_count"`
-	ChainHeadHash string `json:"chain_head_hash,omitempty"`
-	ManifestHash  string `json:"manifest_hash,omitempty"`
-	// SigningSchema identifies the per-revision attestation payload shape
-	// (choir.platform.revision_attestation.v0). Present only when the chain is
-	// platform-signed.
-	SigningSchema string `json:"signing_schema,omitempty"`
-	// SigningPublicKey is the platform Ed25519 public key (base64) that
-	// attests every revision in this chain. A verifier checks each entry's
-	// Signature against this key over the attestation of entry.RevisionHash.
-	SigningPublicKey string `json:"signing_public_key,omitempty"`
-	// SigningKeyID is a short content-addressed id of SigningPublicKey so
-	// signatures remain identifiable across a future key rotation.
-	SigningKeyID string                           `json:"signing_key_id,omitempty"`
-	Revisions    []PublicationVersionHistoryEntry `json:"revisions"`
-}
-
-// PublicationVersionHistoryEntry is one revision within a published version
-// history. Content/citations/metadata/provenance are carried verbatim from the
-// source revision so the published artifact is self-contained.
-type PublicationVersionHistoryEntry struct {
-	RevisionID       string          `json:"revision_id"`
-	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
-	VersionNumber    int             `json:"version_number,omitempty"`
-	AuthorKind       string          `json:"author_kind,omitempty"`
-	AuthorLabel      string          `json:"author_label,omitempty"`
-	Content          string          `json:"content"`
-	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
-	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
-	ContentHash      string          `json:"content_hash"`
-	Citations        json.RawMessage `json:"citations,omitempty"`
-	Metadata         json.RawMessage `json:"metadata,omitempty"`
-	Provenance       json.RawMessage `json:"provenance,omitempty"`
-	RevisionHash     string          `json:"revision_hash,omitempty"`
-	CreatedAt        string          `json:"created_at,omitempty"`
-	// Signature is the base64 Ed25519 platform signature over the canonical
-	// attestation of RevisionHash. Present only for platform-signed revisions.
-	Signature string `json:"signature,omitempty"`
-	// SigningKeyID identifies which platform key produced Signature.
-	SigningKeyID string `json:"signing_key_id,omitempty"`
+	// Payload is the version's immutable payload: fixed forever once
+	// published. Nav and Checks are live and served beside it.
+	Payload PublicationVersionPayload `json:"payload"`
+	Nav     PublicationNav            `json:"nav"`
+	Checks  PublicationCheckOverlay   `json:"checks"`
 }
 
 type PublicationExport struct {
