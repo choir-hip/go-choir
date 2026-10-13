@@ -17,10 +17,20 @@ definition_version: 4
 # and the restart design (docs/restart-subsystem-design-2026-10-13.md).
 readiness: drafted
 
+# Review history: the roadmap this file encodes passed a lateral round (8 of
+# 8) and a convergent round (5 ready with changes, 1 not ready) on
+# 2026-10-13, adjudicated at b800c995. A convergent round on this file at
+# 8a1477c3 (claude, opencode, gemini, deepseek, muse, glm) returned 5
+# send_back and 1 accept with repairs; every blocking finding is adopted
+# below (warm filter moved to L1b, an L1 goal file, the C1e gate written
+# into L0, schema enums, a dated start correction, a one-move now card, L5's
+# dependencies). Raw outputs:
+# .agentic-consensus/ledger-metamission-convergent-2026-10-13/ (session
+# diagnostics). Promotion to reviewed needs a round on the repaired file.
 review:
-  reviewer: the roadmap this file encodes passed a lateral round (8 of 8) and a convergent round (5 ready with changes, 1 not ready) on 2026-10-13; this file itself is unreviewed
-  frozen_ref: b800c995 (roadmap adjudication)
-  verdict: none (file); accept with changes (roadmap)
+  reviewer: agentic-consensus convergent panel on 8a1477c3 (send_back, adopted)
+  frozen_ref: none
+  verdict: none
   evidence_ref: docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md
   open_to_additions: >-
     Owner 2026-10-13: this spine stays open while L0 runs. New directions
@@ -39,8 +49,10 @@ metamission:
         E3 rerun on cff54bf5 or later as the cursor invariant (no record
         marked read unless a Records() call returned it; mid-run arrivals
         wake the next turn), the A1 unread-source badge, C1e, the final
-        convergent review. One shared-runtime cutover at a time. In
-        parallel and not gating: the frozen labelled set for L2 (at least
+        convergent review. One shared-runtime cutover at a time: C1e waits
+        for L1a, which touches the same boot re-drivers. In parallel and not
+        gating: an off-host copy of the ledger if C1e allows (L3's entry
+        criterion), the frozen labelled set for L2 (at least
         40 material events, multilingual duplicates, wire copies,
         corrections, contradictions), the Taiwan question set and source
         shortlist with permission checks for L4, L3's smallest version
@@ -48,26 +60,31 @@ metamission:
         clock), app designs for L5, registry repairs (NHK, Korea Herald,
         36kr, WHO, Agriculture Dive), retiring qdrant_dedup.go.
     - id: L1
-      path: docs/restart-subsystem-design-2026-10-13.md
-      readiness: reviewed (v3; lateral round 7 of 7, convergent round 5 ready with changes and 1 not ready, adjudicated in its §9)
-      status: pending
+      path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md
+      readiness: drafted
+      status: working
       depends_on: []
       note: >-
         No crash loops: at most (1 + allowance) spawns times each unit's
-        start-limit burst per external event, then a visible hold. L1a (the
-        self-sustaining loops, small, first): start limits on every
-        restarting unit, crash boots run no re-driver and settle
-        transitions instead, warm sweeps skip wedged and failed computers.
-        L1a touches the shared runtime, so it lands before C1e starts, not
-        beside it. L1b (host only, may run beside C1e): grants at
-        launchFirecracker keyed by spawn sequence, the existing hold with a
-        recovery-ledger class, explicit owner acts only, no auto-refresh
-        on a held page, release by a different build. L1c (after C1e):
-        host-asserted planned boots, crash closure as a barrier. Schedules
-        option B waits for the owner. Acceptance: the design's
-        fault-injection matrix on a minted test computer.
+        start-limit burst per external event, then a visible hold. The
+        specification is the restart design v3
+        (docs/restart-subsystem-design-2026-10-13.md, reviewed; adjudicated
+        in its §9). L1a (the self-sustaining loops, small, first): start
+        limits on every restarting unit and deploys that release units
+        latched by their start limit; crash boots run no re-driver and
+        settle transitions instead. L1a touches the shared runtime, so it
+        lands before C1e starts, not beside it. L1b (host only, may run
+        beside C1e): grants at launchFirecracker keyed by spawn sequence,
+        the existing hold with a recovery-ledger class, a wedged or failed
+        computer gets the one automatic retry and then holds, explicit
+        owner acts only, no auto-refresh on a held page, release by a
+        different build. L1c (after C1e): host-asserted planned boots, crash
+        closure as a barrier, then visibility (the ledger tail in vmctl list
+        and on the owner's page, an alert on any hold). Schedules option B
+        is the design default and waits for the owner. Acceptance: the
+        design's fault-injection matrix on a minted test computer.
     - id: L2
-      path: docs/definitions/choir-ledger-l2-bounded-attention-2026-10-13.md (to author)
+      path: docs/definitions/choir-ledger-l2-bounded-attention-2026-10-13.md
       readiness: intent
       status: pending
       depends_on: [L0]
@@ -80,11 +97,13 @@ metamission:
         (standing questions, exploration share) and records a disposition
         for every capture. Acceptance on a minted test computer through the
         real poller with a fixture feed: the labelled set and a 10x burst;
-        every capture has a disposition; duplicates add no paid calls; at
-        least 95% of labelled material events reach a desk; recall by
-        language and source class; the audit sample reported.
+        the tier-1 burst replayed alongside; every capture has a
+        disposition; duplicates add no paid calls (paid calls per digest
+        against per unique event); replay completion time; at least 95% of
+        labelled material events reach a desk; recall by language and source
+        class; the audit sample reported.
     - id: L3
-      path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md (to author)
+      path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
       readiness: intent
       status: pending
       depends_on: [L0]
@@ -93,15 +112,17 @@ metamission:
         off-host copy of the ledger. Cast hypotheses carry resolves_by (7
         days or less) and a criterion; settlement (outcome and evidence
         refs, by the designated settler) is separate from scoring (a record
-        with scorer identity, from Jev or a model); the commitment's seq
-        precedes the earliest capture its settlement cites; per-source
+        with scorer identity, from Jev or a model; two scorers can
+        disagree); a score uses the committed version and its original
+        probability, never a later edit; the commitment's seq precedes the
+        earliest capture its settlement cites; per-source
         analytics views with denominators (lead time, independent
         corroboration by owner and lineage, corrections). Acceptance: ten or
         more short-horizon hypotheses committed before their resolving
         evidence, at least half settled with evidence refs, Brier per desk
         visible as an analytics view.
     - id: L4
-      path: docs/definitions/choir-ledger-l4-taiwan-2026-10-13.md (to author)
+      path: docs/definitions/choir-ledger-l4-taiwan-2026-10-13.md
       readiness: intent
       status: pending
       depends_on: [L2, L3]
@@ -109,7 +130,7 @@ metamission:
         Taiwan and East Asia as standing questions: 10-20 questions chosen
         with scheduled resolutions (TWSE monthly revenue, CEC, MND figures,
         CISA KEV); about 30 zh-TW and 36 ja/ko/zh feeds (registry only); a
-        JSON-diff connector (TWSE, then KEV, NVD); public-discourse sources
+        JSON-diff connector (TWSE, then KEV); public-discourse sources
         that work today (JOIN open data, the Legislative Yuan API, MAC
         polls), aggregate-only with n of at least 20; a 200-pair
         cross-lingual evaluation before choosing a grouping model;
@@ -119,10 +140,10 @@ metamission:
         not gating. Telegram out pending the owner; CNA and UDN out if
         Autopaper counts as commercial.
     - id: L5
-      path: docs/definitions/choir-ledger-l5-read-models-2026-10-13.md (to author)
+      path: docs/definitions/choir-ledger-l5-read-models-2026-10-13.md
       readiness: intent
       status: pending
-      depends_on: [L3]
+      depends_on: [L2, L3, L4]
       note: >-
         Ledger read models. Reader: one pinned story version opens with PDF
         and media evidence and every chip resolves to a capture block, for
@@ -133,7 +154,8 @@ metamission:
     Further verticals (Global South and India, cybersecurity), the apps
     rebuild beyond the reader, the security hardening pass and agentic red
     teaming (guest-to-corpusd authority containment before any public API),
-    self-development Gate 2 (S4-S6) as precommitted operations, SA density
+    self-development Gate 2 (S4-S6) as precommitted operations, a daily
+    public hash of the ledger (deferred from L3), SA density
     and SP production infrastructure re-measured after C1e, A/B image slots,
     the news API, paid tiers.
 
@@ -143,14 +165,14 @@ start:
     canonical_ref: main 8a0da6b9
     deploy_identity: staging choir.news cff54bf5
   worktrees:
-    - path: /Users/wiz/go-choir
-      status: dirty (untracked `sourcecycled` at the repo root)
-      class: unknown
+    - path: /Users/wiz/go-choir (untracked `sourcecycled` at the repo root)
+      status: dirty
+      class: other_agent_wip
       owner: not this session
       touch: forbidden
       recovery: leave in place
     - path: stash@{0..2}
-      status: present
+      status: unknown
       class: other_agent_wip
       owner: not this session
       touch: forbidden
@@ -173,6 +195,17 @@ start:
       Several boot and re-drive paths are unbounded (resolve, warm sweeps,
       guest systemd units without StartLimit, self-minted planned markers);
       the restart design names them.
+  start_correction:
+    dated: 2026-10-13T20:45:00Z
+    preserves: canonical_ref main 8a0da6b9, deploy cff54bf5, "the rerun is open"
+    correction: >-
+      The capture instant postdates its ref. At 19:15Z main already held
+      e928e3e1 (E3 rerun passed, 18:57Z) and 04a7b0c2 (A1, 19:00Z); this
+      file landed at 8a1477c3 (19:01Z). L1a-1 (dc184db2) and L1a-2
+      (c08ead07) were then committed and pushed with fdc70329; they belong
+      to L1 and are recorded as its receipts.
+    evidence: git log 8a0da6b9..fdc70329; the convergent round on 8a1477c3
+    why: the start receipt is what promotion freezes; it must name one reality
 
 finish:
   deliver: >-
@@ -198,16 +231,19 @@ finish:
 
 value:
   better_means: >-
-    Maximize dated, settled hypotheses with traceable evidence, and
-    captures given a recorded disposition, per dollar and per unit of owner
-    attention, while keeping Texture the sole writer, crash restarts
+    Maximize informative settled hypotheses (resolution-weighted Brier
+    gain against a base rate, with traceable evidence) and captures given a
+    recorded disposition, per dollar and per unit of owner attention, while keeping Texture the sole writer, crash restarts
     terminal and bounded, and every reduction of the world visible.
   goodharting_would_be: >-
     Hypotheses written after the evidence or so vague they cannot fail;
     "filtered" meaning "missed"; counting sources, captures or stories
     instead of settled commitments; corroboration counts that measure wire
-    syndication; a no-crash-loop claim that holds only because nothing
-    restarts automatically.
+    syndication; near-certain or scheduled-fact hypotheses padded for count;
+    the committing desk settling its own hypotheses; a blanket "ignore"
+    disposition; Brier at n of about 10 read as calibration; a
+    no-crash-loop claim that holds only because nothing restarts
+    automatically, or holds that never release.
 
 homotopy:
   realism_axis: >-
@@ -216,7 +252,10 @@ homotopy:
     settlements -> the owner's computer and further verticals
 
 boundaries:
-  mutation_class: red (L1 touches vmctl, boot and run acceptance; L2 and L3 touch the evidence ledger, gateway calls and Texture-facing records)
+  # L1 touches vmctl, boot and run acceptance; L2 and L3 touch the evidence
+  # ledger, gateway calls and Texture-facing records. Red ceremony (heresy
+  # and conjecture deltas, admissible evidence) lives in each station file.
+  mutation_class: red
   authority_sources:
     - owner 2026-10-13 in session (goals 1-11 in the roadmap draft; "we never get into a crash loop"; "the roadmap is going to become a meta mission")
     - docs/choir-doctrine.md, CLAUDE.md
@@ -224,7 +263,7 @@ boundaries:
   must_preserve:
     - Texture is the only writer of a Texture
     - research has read-only authority toward the world
-    - a crash restart never resumes work; a planned restart may, once, and only when the host attests it
+    - a crash restart never resumes work; a planned restart may, once (target invariant, repaired by L1c — only when the host attests it; until then the guest self-marks and L1a-2 bounds its replays)
     - published versions never change
     - sources never precommit; a source's record is a view over settled claims with denominators, never one reputation number
     - the runtime never thresholds a capture out of a model's sight; every reduction is recorded and reversible
@@ -236,7 +275,7 @@ boundaries:
         Owner amendment 2026-10-13 ("cost and performance first") to the
         2026-10-12 "no budgets" boundary: spend is measured, not budgeted,
         by the runtime. Every station's acceptance reports measured cost
-        from trace events as $/capture, $/story and $/settled hypothesis.
+        from trace events (the llmcost aggregator) as $/capture, $/story and $/settled hypothesis.
         Any ceiling is an owner kill switch in provider or host policy,
         never a value the runtime reads to decide. No new recurring spend
         (paid APIs, licences, hosts) without owner sign-off.
@@ -254,35 +293,38 @@ owner_decisions_open:
   - Telegram given its 2026-02 terms; whether Autopaper is commercial (CNA, UDN terms)
   - Taiwan and East Asia as the first vertical (default yes)
   - Autoradio follows L2-L4 unless pulled forward
-  - restart schedules policy (design §3.4 option A or B)
+  - restart schedules policy (design §3.4; option B is the adjudicated default pending ratification)
 
 now:
+  # This spine is drafted and authorizes nothing by itself. L0 executes
+  # under its own reviewed file; L1a executes under the L1 station file over
+  # the reviewed restart design. The spine's card points at the live station.
   status: working
-  slice: L0 (close the re-engineering metamission; E3 rerun passed, A1 committed) then L1a before C1e
-  source_ref: 8a0da6b9
-  deploy_identity: staging cff54bf5
+  slice: L1a-3 (crash boots run no re-driver) on top of landed L1a-1 and L1a-2, before C1e
+  source_ref: fdc70329
+  deploy_identity: staging 8a1477c3 (fdc70329 deploying)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LG-1
     claim: >-
       The defensible asset is dated, unbackfillable history. If management
       commits short-horizon hypotheses before their evidence and a separate
-      scorer settles them against captures, the ledger accumulates value
-      per dollar faster than wider coverage does, and bounded attention
-      keeps that cost flat as sources grow.
-    test: L3's acceptance (commitment precedes settling evidence) and L2's cost lines across a 10x burst
+      scorer settles them against captures, $/settled hypothesis stays flat
+      or falls as sources grow along the realism axis, because bounded
+      attention keeps triage cost per capture flat.
+    test: L3's acceptance (commitment precedes settling evidence); $/settled hypothesis against source count at each realism-axis step; L2's cost lines across a 10x burst
     edge: missing_oracle
     delta_o: scheduled structured settlements (TWSE, KEV) as an oracle independent of the desks
     scope_if_supported: Autopaper on staging, one vertical
     status: proposed
     evidence_refs: [docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md]
-  decision: {what: "stations L0-L5 as listed; L1a before C1e, L1b beside it, L1c after", kind: sequencing, status: proposal, evidence_ref: docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md, owner_ratification_ref: pending (owner asked for the metamission 2026-10-13; the open decisions above remain)}
+  decision: {what: "stations L0-L5 as listed; L1a before C1e, L1b beside it, L1c after", kind: operational, status: proposal, evidence_ref: docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md, owner_ratification_ref: pending (owner asked for the metamission 2026-10-13; the open decisions above remain)}
   belief:
-    believed_state: the cursor fix holds (E3 rerun passed); hypotheses exist as records but never settle; boot and in-guest restart paths are unbounded
+    believed_state: the cursor fix holds (E3 rerun passed); A1 and the Sources button are pushed; hypotheses exist as records but never settle; in-guest restarts are bounded by start limits, but crash boots still re-drive platform-update resume, capsule reconcile and self-development materialization
     main_uncertainty: how much of C1e's deletion the L1a re-driver gating overlaps (both touch boot-time re-drivers)
-    next_observation: A1's deployed reader proof; L1a's fault-injection cells on a minted test computer
-  blocker_or_risk: the owner's computer still runs 761d94c5 and defers every deploy (needs one approved operator refresh); every durable home shares one host until L3's off-host copy
-  next_action: land A1 through the Landing Loop; then L1a (start limits, crash-boot re-driver gating, warm filter) through the Landing Loop; then C1e
+    next_observation: L1a-3's crash-boot cells on a minted test computer
+  blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
+  next_action: land L1a-3 under the L1 station file
 
 receipts: []
 ---

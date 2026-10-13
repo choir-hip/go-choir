@@ -1659,3 +1659,18 @@ nodes:
       roadmap becomes a metamission that stays open to additions. Roadmap
       reviewed in docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md;
       restart design (station L1) in docs/restart-subsystem-design-2026-10-13.md.
+      Convergent round on the spine (8a1477c3): send_back, findings adopted.
+  - id: choir-ledger-l1-restart-2026-10-13
+    title: L1 — no crash loops (start limits, crash boots never re-drive, boot ledger and holds)
+    path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md
+    ledger: ''
+    status: working  # L1a-1 dc184db2 and L1a-2 c08ead07 landed; L1a-3 next, before C1e
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: [choir-ledger-metamission-2026-10-13]
+    note: >-
+      Executes the reviewed restart design v3
+      (docs/restart-subsystem-design-2026-10-13.md §6, §9). Owner 2026-10-13:
+      "we never get into a crash loop".

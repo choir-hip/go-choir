@@ -11,12 +11,15 @@ The [ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md)
 turns the roadmap the owner asked for into stations: L0 closes the
 re-engineering metamission below (E3 rerun passed, A1 badge, C1e, final
 review); L1 ends crash loops
-([restart design v3](restart-subsystem-design-2026-10-13.md)); L2 bounded
+([station file](definitions/choir-ledger-l1-restart-2026-10-13.md) over the
+[restart design v3](restart-subsystem-design-2026-10-13.md); L1a-1 and
+L1a-2 landed, L1a-3 next, before C1e); L2 bounded
 attention; L3 hypotheses settled and scored; L4 Taiwan and East Asia as
 standing questions; L5 the evidence reader and an Autoradio prototype. It
 stays open to additions. Owner decisions open: the cost amendment,
 Telegram and commercial status, Taiwan first, Autoradio's slot, and
-schedules option B.
+schedules option B. A convergent round on the spine sent it back;
+the findings are adopted and a round on the repaired file is next.
 
 ## Current (2026-10-13): re-engineering metamission
 

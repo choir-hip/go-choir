@@ -55,7 +55,7 @@ metamission:
       readiness: reviewed (scope split panel 2026-10-13)
       status: pending
       depends_on: [C2]
-      note: engineering and self-development on records, path B deleted, L5, L7, wholesale packet and work-item deletion; runs after C2's autopaper_live and before the completion review
+      note: engineering and self-development on records, path B deleted, L5, L7, wholesale packet and work-item deletion; runs after C2's autopaper_live and before the completion review; waits for the ledger metamission's L1a (docs/definitions/choir-ledger-l1-restart-2026-10-13.md), which changes the same boot re-drivers (one shared-runtime cutover at a time, 2026-10-13)
     - id: C2
       path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
       readiness: reviewed (pre-flight panel 2026-10-13 running)
@@ -239,7 +239,7 @@ now:
     accepted by the management and crash scenarios
     (docs/evidence/c1-core-*-acceptance-2026-10-13.json); breakages B1-B4
     fixed. C1e (engineering on records and the wholesale deletions) runs
-    after C2's live window. C2 executing: pre-flight done, review panel
+    after C2's live window and after the ledger metamission's L1a. C2 executing: pre-flight done, review panel
     running, quotematch building. The owner's pace ruling and the plan
     review of 2026-10-13 reshaped the loop: claim-directed tracer
     scenarios, identity fence, batched pushes; a tracer attempt now takes
