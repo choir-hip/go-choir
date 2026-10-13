@@ -421,6 +421,18 @@ func (e *traceExporter) export(now time.Time) *traceBundle {
 	}
 	bundle.Layers["obligations"] = obligations.finish()
 
+	// census: the computer's retired work-state objects (work items and
+	// delivery packets) with their routes, the checker's authority for I7
+	// once the trajectory snapshot no longer carries them (C1e B0).
+	census := newLayer("GET /api/runtime/census")
+	var censusBody json.RawMessage
+	if err := e.get("/api/runtime/census", &censusBody); err != nil {
+		census.fail("%s", routeFailure("/api/runtime/census", err))
+	} else {
+		census.add(censusBody)
+	}
+	bundle.Layers["census"] = census.finish()
+
 	boot := newLayer("GET /api/runtime/observability", "GET /api/runtime/obligations")
 	var observability struct {
 		ComputerID string          `json:"computer_id"`

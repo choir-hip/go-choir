@@ -253,7 +253,9 @@ export function buildCleanBundle() {
       cells: L('present', deskEvents('desk.cell'), ['derived:run_events']),
       egress: L('present', deskEvents('desk.egress').map((e) => ({ ...e.payload, event_id: e.event_id })), ['derived:run_events']),
       deliveries: L('present', [...packets, ...workItems], ['derived:trajectory']),
-      records: L('unserved', [], [], 'no route in Cut 0'),
+      records: L('empty', [], ['GET /api/inboxes/{inbox}/records']),
+      inboxes: L('empty', [], ['GET /api/inboxes/{inbox}/records']),
+      census: L('empty', [{ kinds: ['choir.work_item', 'choir.worker_update'], counts: {}, objects: [] }], ['GET /api/runtime/census']),
       turn_commits: L('present', lifecycleEvents.filter((e) => e.kind === 'texture_turn_committed'), ['derived:lifecycle_events']),
       revisions: L('present', revisions, [`GET /api/texture/documents/${DOC}/revisions`]),
       publications: L('unserved', [], [], 'no publication route resolvable'),
@@ -273,13 +275,13 @@ const unserve = (b, ...names) => {
   return c;
 };
 
-test('clean bundle passes I1-I5; I6 and I7 read nothing without the records layer', () => {
+test('clean bundle passes I1-I5 and I7; I6 reads nothing from an empty records layer', () => {
   const b = buildCleanBundle();
   const rules = checkBundle(b);
   const v = Object.fromEntries(rules.map((r) => [r.rule, r]));
   for (const r of RULES) assert.equal(v[r].verdict, 'pass', `${r}: ${v[r].reason}`);
   assert.equal(v.I6.verdict, 'unknown');
-  assert.equal(v.I7.verdict, 'unknown');
+  assert.equal(v.I7.verdict, 'pass', v.I7.reason);
   assert.equal(exitCode(rules), 0);
   // the passes read real items
   assert.match(v.I3.reason, /post-boot dispatches all trace to owner input/);
@@ -388,10 +390,35 @@ test('I2: pending fails, blocked with error passes, passivated without reason fa
   assert.equal(checkI2(pas).verdict, 'fail');
   const live = structuredClone(b);
   live.layers.trajectory.items[0].trajectory.status = 'live';
+  delete live.layers.records;
+  delete live.layers.inboxes;
+  assert.equal(checkI2(live).verdict, 'unknown', 'nothing owed by work items and no records layer: missing evidence, not a pass or a fail');
+  live.layers.records = { status: 'empty', sources: ['GET /api/inboxes/{inbox}/records'], note: '', items: [] };
+  live.layers.inboxes = { status: 'empty', sources: ['same'], note: '', items: [] };
   assert.equal(checkI2(live).verdict, 'fail');
   live.layers.trajectory.items[0].work_items[0].status = 'open';
   live.layers.trajectory.items[0].work_items[0].reason = 'awaiting owner review';
   assert.equal(checkI2(live).verdict, 'pass');
+});
+
+test('I2 on records: an open round or a system closure with a fate names why a live trajectory is open', () => {
+  const b = buildCleanBundle();
+  b.layers.trajectory.items[0].trajectory.status = 'live';
+  b.layers.trajectory.items[0].work_items = [];
+  const conv = `conv:research:${DOC}|texture:${DOC}`;
+  const cast = { record_id: 'c1', inbox: `research:${DOC}`, sender_inbox: `texture:${DOC}`, inbox_seq: 1, conversation_id: conv, round: 1, directive: { subtype: 'cast' }, provenance: { committed_at: at(10) } };
+  b.layers.records = { status: 'present', sources: ['GET /api/inboxes/{inbox}/records'], note: '', items: [cast] };
+  b.layers.inboxes = { status: 'present', sources: ['same'], note: '', items: [
+    { inbox: `research:${DOC}`, head: 1, cursor: 1, open_rounds: [{ conversation_id: conv, round: 1, open: true, caster_inbox: `texture:${DOC}`, recipient_inbox: `research:${DOC}` }] },
+  ] };
+  assert.equal(checkI2(b).verdict, 'pass', checkI2(b).reason);
+  const closed = structuredClone(b);
+  closed.layers.inboxes.items[0].open_rounds = [];
+  closed.layers.records.items.push({ record_id: `${conv}:r1:restart`, inbox: `texture:${DOC}`, sender_inbox: `research:${DOC}`, inbox_seq: 1, conversation_id: conv, round: 1, final: true, emitter_kind: 'system', report: { stop_reason: 'interrupted_by_restart' }, provenance: { committed_at: at(20) } });
+  assert.equal(checkI2(closed).verdict, 'pass', checkI2(closed).reason);
+  const answered = structuredClone(closed);
+  Object.assign(answered.layers.records.items[1], { emitter_kind: 'agent', report: {} });
+  assert.equal(checkI2(answered).verdict, 'fail', 'a live trajectory whose rounds were all answered owes nothing and names no reason');
 });
 
 test('I3: an observed quiet window after the boot passes; a short one is unknown', () => {
@@ -445,11 +472,74 @@ test('I6 and I7 on records: a gap, a cursor past head, a foreign closer and a pa
   const foreign = structuredClone(b);
   foreign.layers.records.items[1].sender_inbox = `management:${OWNER}`;
   assert.equal(checkI6(foreign).verdict, 'fail');
-  assert.equal(checkI7(b).verdict, 'fail', 'the clean fixture carries Cut 0 packets between Texture and research');
-  const clean = structuredClone(b);
-  clean.layers.trajectory.items[0].updates = [];
-  clean.layers.trajectory.items[0].work_items = [];
-  assert.equal(checkI7(clean).verdict, 'pass', checkI7(clean).reason);
+  const noCensus = structuredClone(b);
+  delete noCensus.layers.census;
+  assert.equal(checkI7(noCensus).verdict, 'unknown', 'without the census the rule has no work-state evidence, whatever the trajectory carries');
+});
+
+test('I7 reads the census: missing is unknown, a work item or packet on a records route fails, engineering is allowed', () => {
+  const b = buildCleanBundle();
+  b.layers.records = { status: 'present', sources: ['GET /api/inboxes/{inbox}/records'], note: '', items: [] };
+  const census = (objects, extra = {}) => ({ status: 'present', sources: ['GET /api/runtime/census'], note: '', items: [{ kinds: ['choir.work_item', 'choir.worker_update'], counts: {}, objects, ...extra }] });
+  const obj = (kind, from, to, id = 'o1') => ({ kind, canonical_id: id, from, to, created_at: at(5) });
+  delete b.layers.census;
+  assert.equal(checkI7(b).verdict, 'unknown', 'census layer absent');
+  const unserved = structuredClone(b);
+  unserved.layers.census = { status: 'unserved', sources: ['GET /api/runtime/census'], note: 'GET /api/runtime/census: 404', items: [] };
+  assert.equal(checkI7(unserved).verdict, 'unknown');
+  const empty = structuredClone(b);
+  empty.layers.census = census([]);
+  assert.equal(checkI7(empty).verdict, 'pass', checkI7(empty).reason);
+  const wi = structuredClone(b);
+  wi.layers.census = census([obj('choir.work_item', 'loop-1', `research:${DOC}`)]);
+  assert.equal(checkI7(wi).verdict, 'fail');
+  const pkt = structuredClone(b);
+  pkt.layers.census = census([obj('choir.worker_update', `research:${DOC}`, `texture:${DOC}`)]);
+  assert.equal(checkI7(pkt).verdict, 'fail');
+  const eng = structuredClone(b);
+  eng.layers.census = census([obj('choir.work_item', 'loop-1', 'engineering:e1'), obj('choir.worker_update', 'engineering:e1', `management:${OWNER}`, 'o2')]);
+  assert.equal(checkI7(eng).verdict, 'pass', 'engineering work state stays route-scoped legal until B4');
+  const trunc = structuredClone(eng);
+  trunc.layers.census.items[0].truncated = true;
+  assert.equal(checkI7(trunc).verdict, 'unknown');
+  const engToTexture = structuredClone(empty);
+  engToTexture.layers.records.items = [{ record_id: 'r9', inbox: `texture:${DOC}`, sender_inbox: 'engineering:e1', inbox_seq: 1 }];
+  assert.equal(checkI7(engToTexture).verdict, 'fail');
+});
+
+test('required rules: a missing mandatory input fails I2, I3 and I7 once each on a planted snapshot', () => {
+  const b = buildCleanBundle();
+  const required = ['I2', 'I3', 'I7'];
+  assert.equal(exitCode(checkBundle(b), required), 0, 'the clean bundle passes every required rule');
+  // I2: a live trajectory owing nothing on work items, records unserved
+  const i2 = structuredClone(b);
+  i2.layers.trajectory.items[0].trajectory.status = 'live';
+  i2.layers.records = { status: 'unserved', sources: [], note: 'test: unserved', items: [] };
+  const r2 = Object.fromEntries(checkBundle(i2).map((r) => [r.rule, r.verdict]));
+  assert.equal(r2.I2, 'unknown');
+  assert.equal(exitCode(checkBundle(i2)), 0, 'without --require an unknown is not a failure');
+  assert.equal(exitCode(checkBundle(i2), ['I2']), 1);
+  // I3: records unserved
+  const i3 = structuredClone(b);
+  delete i3.layers.records;
+  assert.equal(checkI3(i3).verdict, 'unknown');
+  assert.match(checkI3(i3).reason, /records/);
+  assert.equal(exitCode(checkBundle(i3), ['I3']), 1);
+  // I7: census unserved
+  const i7 = structuredClone(b);
+  i7.layers.census = { status: 'unserved', sources: ['GET /api/runtime/census'], note: '404', items: [] };
+  assert.equal(checkI7(i7).verdict, 'unknown');
+  assert.equal(exitCode(checkBundle(i7), ['I7']), 1);
+});
+
+test('I3 counts a census object minted after the boot that the snapshot does not explain as ambiguous', () => {
+  const b = buildCleanBundle();
+  const late = Date.parse(b.exported_at) - 1000;
+  assert.ok(late > Date.parse(b.drill.restart_requested_at));
+  b.layers.census.items[0].objects = [{ kind: 'choir.worker_update', canonical_id: 'u-orphan', from: `research:${DOC}`, to: `texture:${DOC}`, created_at: new Date(late).toISOString() }];
+  const r = checkI3(b);
+  assert.notEqual(r.verdict, 'pass', r.reason);
+  assert.ok(r.evidence.some((e) => e.dispatch === 'census_object_minted' && e.canonical_id === 'u-orphan'), JSON.stringify(r.evidence.slice(0, 2)));
 });
 
 test('exit code: 3 when no rule passed', () => {

@@ -239,8 +239,45 @@ export function checkI1(bundle) {
 // open with a named reason only when a cancellation was requested with a
 // reason (lifecycle kind trajectory_cancellation_requested, lifecycle.go:60,
 // LifecycleEvent.reason :669), or every open work item names its reason
-// (WorkItemRecord.reason trajectory.go:91, status :96). A live trajectory
-// with nothing owed and no reason fails.
+// (WorkItemRecord.reason trajectory.go:91, status :96), or (C1e, records)
+// the inboxes owe an open round (ConversationHead, types/inbox.go:113, the
+// round and its recipient are the named reason) or the last round of a
+// conversation was closed by the system with a stop reason
+// (NewRoundClosureRecord, types/commitment.go:437, e.g.
+// interrupted_by_restart). A live trajectory with nothing owed and no
+// reason fails; one whose only possible evidence is an unserved records
+// layer is unknown.
+// recordsOwed reads what the records owe: open rounds from the inboxes
+// layer, and conversations whose latest round was closed by a system
+// closure naming a stop reason.
+function recordsOwed(bundle) {
+  const recL = layer(bundle, 'records');
+  const inL = layer(bundle, 'inboxes');
+  if (!recL.usable || !inL.usable) {
+    return { usable: false, note: [recL, inL].filter((l) => !l.usable).map((l) => `${l.name}: ${l.note}`).join('; '), openRounds: [], closures: [] };
+  }
+  const openRounds = [];
+  for (const state of inL.items) {
+    for (const round of state.open_rounds || []) {
+      if (round.open === false) continue;
+      openRounds.push({ inbox: str(state.inbox), conversation_id: str(round.conversation_id), round: Number(round.round) || 0, recipient: str(round.recipient_inbox) });
+    }
+  }
+  const latest = new Map();
+  for (const r of recL.items) {
+    const k = str(r.conversation_id);
+    if (!k) continue;
+    const prev = latest.get(k);
+    if (!prev || ts(r.provenance?.committed_at) >= ts(prev.provenance?.committed_at)) latest.set(k, r);
+  }
+  const closures = [];
+  for (const [conv, r] of latest) {
+    const fate = str(r.report?.stop_reason);
+    if (r.final && str(r.emitter_kind) === 'system' && fate) closures.push({ conversation_id: conv, round: Number(r.round) || 0, record_id: str(r.record_id), fate });
+  }
+  return { usable: true, note: '', openRounds, closures };
+}
+
 export function checkI2(bundle) {
   const runsL = layer(bundle, 'runs');
   const trajL = layer(bundle, 'trajectory');
@@ -291,12 +328,21 @@ export function checkI2(bundle) {
       const cancelReq = [...events].reverse().find((x) => str(x.kind) === 'trajectory_cancellation_requested' && str(x.reason));
       const open = (snap.work_items || []).filter((w) => str(w.status) === 'open');
       const unnamed = open.filter((w) => !str(w.reason));
+      const owed = recordsOwed(bundle);
       if (cancelReq) {
         evidence.push({ ...e, open_reason: str(cancelReq.reason), event_id: str(cancelReq.event_id) });
         parts.trajectory = { verdict: 'pass', reason: 'trajectory live with a requested cancellation' };
       } else if (open.length > 0 && unnamed.length === 0) {
         evidence.push({ ...e, open_work_items: open.map((w) => ({ work_item_id: str(w.work_item_id), reason: str(w.reason) })) });
         parts.trajectory = { verdict: 'pass', reason: `trajectory live with ${open.length} open work items, each naming a reason` };
+      } else if (open.length === 0 && owed.openRounds.length > 0) {
+        evidence.push({ ...e, open_rounds: owed.openRounds });
+        parts.trajectory = { verdict: 'pass', reason: `trajectory live with ${owed.openRounds.length} open round(s) on records, each owed by its recipient` };
+      } else if (open.length === 0 && owed.closures.length > 0) {
+        evidence.push({ ...e, closed_rounds: owed.closures });
+        parts.trajectory = { verdict: 'pass', reason: `trajectory live; its last round(s) closed by the system with a named fate (${[...new Set(owed.closures.map((c) => c.fate))].join(', ')})` };
+      } else if (open.length === 0 && !owed.usable) {
+        parts.trajectory = { verdict: 'unknown', reason: `trajectory live with no open work items and no cancellation; the records evidence is unserved (${owed.note})` };
       } else {
         fails.push({ ...e, open_work_items: open.length, unnamed_work_items: unnamed.map((w) => str(w.work_item_id)), why: open.length ? 'open work items name no reason' : 'live trajectory with nothing owed and no named reason' });
         parts.trajectory = { verdict: 'fail', reason: open.length ? `trajectory live; ${unnamed.length} open work items name no reason` : 'trajectory live with no open work and no named reason' };
@@ -436,8 +482,12 @@ export function checkI3(bundle) {
   const reL = layer(bundle, 'run_events');
   const trajL = layer(bundle, 'trajectory');
   const revL = layer(bundle, 'revisions');
+  // Records are the dispatch authority for the conversations on records
+  // (C1e): an unserved records layer leaves those dispatches unread, so it
+  // is a missing input, never an observed absence.
+  const recordsL = layer(bundle, 'records');
   const missing = [];
-  for (const l of [runsL, levL, reL, trajL, revL]) if (!l.usable) missing.push(l.name);
+  for (const l of [runsL, levL, reL, trajL, revL, recordsL]) if (!l.usable) missing.push(l.name);
 
   const snap = snapshotOf(bundle) || {};
   const runs = runsL.items;
@@ -583,6 +633,19 @@ export function checkI3(bundle) {
       c.push({ kind: 'run', id: runID(r) });
     }
     nodes.push({ kind: 'record_committed', id: str(rec.record_id), t, causes: c, ev: { record_id: str(rec.record_id), inbox: str(rec.inbox), sender: sender, committed_at: rec.provenance?.committed_at } });
+  }
+  // census: retired work-state objects minted after the boot that the
+  // trajectory snapshot does not carry (computer-scoped, or after C1e drops
+  // them from the snapshot). The census names no cause, so each is
+  // ambiguous unless the snapshot explains it.
+  const censusL = layer(bundle, 'census');
+  if (censusL.usable) {
+    for (const o of Array.isArray(censusL.items[0]?.objects) ? censusL.items[0].objects : []) {
+      const id = str(o.canonical_id);
+      const t = ts(o.created_at);
+      if (!(t >= B) || packetByID.has(id) || workByID.has(id)) continue;
+      nodes.push({ kind: 'census_object_minted', id, t, causes: [], ev: { kind: str(o.kind), canonical_id: id, from: str(o.from), to: str(o.to), created_at: o.created_at } });
+    }
   }
   // e
   for (const w of workItems) {
@@ -1055,32 +1118,40 @@ export function checkI6(bundle) {
 
 // I7: one authority per route. The conversations on records (Texture with
 // research and with management) mint no packet and no work item, and no
-// engineering record is addressed to texture:* (Cut 1 routing).
+// engineering record is addressed to texture:* (Cut 1 routing). The census
+// layer (GET /api/runtime/census) is the authority for the retired
+// work-state objects: an unserved census is missing evidence, so the rule
+// is unknown rather than read off the trajectory snapshot, which stops
+// carrying them in C1e. Route-scoped until C1e B4, when any census object
+// fails.
 const RECORDS_ROUTE = (a, b) => {
   const da = str(a).split(':')[0];
   const db = str(b).split(':')[0];
   const pair = [da, db].sort().join('|');
   return pair === 'research|texture' || pair === 'management|texture';
 };
+const CENSUS_WORK_ITEM = 'choir.work_item';
+const CENSUS_PACKET = 'choir.worker_update';
 export function checkI7(bundle) {
-  const trajL = layer(bundle, 'trajectory');
+  const censusL = layer(bundle, 'census');
   const recL = layer(bundle, 'records');
-  if (!trajL.usable || !recL.usable) return result('I7', 'unknown', `layers unserved: ${[trajL, recL].filter((l) => !l.usable).map((l) => l.name).join(', ')}`);
-  const snap = trajL.items[0] || {};
+  if (!censusL.usable || !recL.usable) return result('I7', 'unknown', `layers unserved: ${[censusL, recL].filter((l) => !l.usable).map((l) => l.name).join(', ')}`);
+  const census = censusL.items[0] || {};
+  const objects = Array.isArray(census.objects) ? census.objects : [];
   const fails = [];
-  for (const p of Array.isArray(snap.updates) ? snap.updates : []) {
-    const producer = str(p.agent_id) || str(p.producer_agent_id);
-    if (RECORDS_ROUTE(producer, p.target_agent_id)) fails.push({ update_id: str(p.update_id), from: producer, to: str(p.target_agent_id), why: 'packet on a records route' });
-  }
-  for (const w of Array.isArray(snap.work_items) ? snap.work_items : []) {
-    const assignee = str(w.assigned_agent_id);
-    if (assignee.startsWith('research:') || assignee.startsWith('management:')) fails.push({ work_item_id: str(w.work_item_id), assignee, why: 'work item on a records route' });
+  for (const o of objects) {
+    const kind = str(o.kind);
+    const from = str(o.from);
+    const to = str(o.to);
+    if (kind === CENSUS_PACKET && RECORDS_ROUTE(from, to)) fails.push({ canonical_id: str(o.canonical_id), kind, from, to, why: 'packet on a records route' });
+    if (kind === CENSUS_WORK_ITEM && (to.startsWith('research:') || to.startsWith('management:'))) fails.push({ canonical_id: str(o.canonical_id), kind, to, why: 'work item on a records route' });
   }
   for (const r of recL.items) {
     if (str(r.sender_inbox).startsWith('engineering') && str(r.inbox).startsWith('texture:')) fails.push({ record_id: str(r.record_id), why: 'engineering record addressed to texture:*' });
   }
   if (fails.length) return result('I7', 'fail', `${fails.length} route authority violation(s)`, fails);
-  return result('I7', 'pass', 'no packet or work item on a records route; no engineering record to texture:*');
+  if (census.truncated) return result('I7', 'unknown', `census truncated at ${objects.length} objects; no violation among those listed`);
+  return result('I7', 'pass', `census lists ${objects.length} retired work-state object(s), none on a records route; no engineering record to texture:*`);
 }
 
 export function checkBundle(bundle) {
@@ -1103,11 +1174,18 @@ export function readBundle(path) {
   return { bundle, sha256: createHash('sha256').update(text).digest('hex') };
 }
 
-// Exit 1 on any fail; 3 when no rule passed (every verdict unknown or not
-// defined: the bundle proved nothing, e.g. an export whose layers are all
-// unserved); 0 otherwise.
-export function exitCode(rules) {
+// Exit 1 on any fail, or when a required rule (--require) did not pass: an
+// acceptance run names the rules it rests on, and a required rule that is
+// unknown or not defined is missing evidence, which must not read as a pass
+// (C1e B0). 3 when no rule passed (every verdict unknown or not defined:
+// the bundle proved nothing, e.g. an export whose layers are all unserved);
+// 0 otherwise.
+export function exitCode(rules, required = []) {
   if (rules.some((r) => r.verdict === 'fail')) return 1;
+  for (const name of required) {
+    const r = rules.find((x) => x.rule === name);
+    if (!r || r.verdict !== 'pass') return 1;
+  }
   if (!rules.some((r) => r.verdict === 'pass')) return 3;
   return 0;
 }
@@ -1115,13 +1193,16 @@ export function exitCode(rules) {
 function main(argv) {
   const args = argv.slice(2);
   let jsonOut = '';
+  let required = [];
   const pos = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--json') jsonOut = args[++i] || '';
+    else if (args[i] === '--require') required = String(args[++i] || '').split(',').map((x) => x.trim()).filter(Boolean);
     else pos.push(args[i]);
   }
-  if (pos.length !== 1) {
-    process.stderr.write('usage: node scripts/reeng_invariants.mjs <bundle.json> [--json <out>]\n');
+  const known = new Set(['I1', 'I2', 'I3', 'I4', 'I5', 'I6', 'I7']);
+  if (pos.length !== 1 || required.some((r) => !known.has(r))) {
+    process.stderr.write('usage: node scripts/reeng_invariants.mjs <bundle.json> [--json <out>] [--require I2,I3,I7]\n');
     return 2;
   }
   let loaded;
@@ -1133,8 +1214,9 @@ function main(argv) {
   }
   const rules = checkBundle(loaded.bundle);
   for (const r of rules) {
-    if (r.verdict === 'not_defined') process.stdout.write(`${r.rule} not yet defined (${r.reason})\n`);
-    else process.stdout.write(`${r.rule} ${r.verdict.padEnd(7)} ${r.reason}\n`);
+    const req = required.includes(r.rule) && r.verdict !== 'pass' ? ' [required]' : '';
+    if (r.verdict === 'not_defined') process.stdout.write(`${r.rule} not yet defined (${r.reason})${req}\n`);
+    else process.stdout.write(`${r.rule} ${r.verdict.padEnd(7)} ${r.reason}${req}\n`);
   }
   if (jsonOut) {
     const report = {
@@ -1143,11 +1225,12 @@ function main(argv) {
       bundle_sha256: loaded.sha256,
       trajectory_id: loaded.bundle.trajectory_id || '',
       checked_at: new Date().toISOString(),
+      required,
       rules,
     };
     writeFileSync(jsonOut, JSON.stringify(report, null, 2) + '\n');
   }
-  return exitCode(rules);
+  return exitCode(rules, required);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {

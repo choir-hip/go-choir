@@ -179,6 +179,8 @@ func (s *traceStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}})
 	case r.URL.Path == "/api/runtime/obligations":
 		writeStubJSON(w, map[string]any{"computer_id": "computer-1", "restart": map[string]any{"kind": "crash", "reason": "no marker"}})
+	case r.URL.Path == "/api/runtime/census":
+		writeStubJSON(w, map[string]any{"computer_id": "computer-1", "kinds": []string{"k1", "k2"}, "counts": map[string]int{"k1": 0, "k2": 0}, "objects": []any{}})
 	case r.URL.Path == "/api/runtime/observability":
 		writeStubJSON(w, map[string]any{"computer_id": "computer-1", "build": map[string]any{"commit": "abc", "deployed_commit": "abc", "built_at": "t"}, "recent_log": []string{"boot"}})
 	default:
@@ -265,6 +267,7 @@ func TestTraceExportHealthyBundleLayers(t *testing.T) {
 		"research_children": "unserved",
 		"captures":          "present",
 		"obligations":       "present",
+		"census":            "present",
 		"boot":              "present",
 	}
 	for name, status := range want {
@@ -319,6 +322,7 @@ func TestTraceExportFailingRoutesAreUnservedNeverEmpty(t *testing.T) {
 	stub := &traceStub{}
 	stub.fail("/api/trajectories/traj-1/events", http.StatusInternalServerError)
 	stub.fail("/api/runtime/obligations", http.StatusForbidden)
+	stub.fail("/api/runtime/census", http.StatusNotFound)
 	stub.fail("/api/texture/", http.StatusForbidden)
 	stub.fail("/api/captures", http.StatusServiceUnavailable)
 	bundle, _, _ := runTraceExportForTest(t, stub)
@@ -327,6 +331,7 @@ func TestTraceExportFailingRoutesAreUnservedNeverEmpty(t *testing.T) {
 		"lifecycle_events": "500",
 		"turn_commits":     "",
 		"obligations":      "403",
+		"census":           "404",
 		"revisions":        "403",
 		"captures":         "503",
 	} {

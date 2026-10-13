@@ -838,12 +838,20 @@ async function researchScenario(c, out, n, deadline, phase) {
     failure_records_to_texture: failureRecords.length,
     management_inbox: (bundle.layers?.inboxes?.items || []).filter((i) => String(i.inbox || '').startsWith('management:')).map((i) => ({ cursor: i.cursor, head: i.head })),
   };
-  const textureWork = (bundle.layers?.trajectory?.items?.[0]?.work_items || bundle.layers?.trajectory?.work_items || [])
-    .filter((w) => w.assigned_agent_id === textureInbox).map((w) => ({ work_item_id: w.work_item_id, status: w.status }));
+  // What Texture still owes at export, read from records (open rounds whose
+  // recipient is texture:<doc>) and from the census of retired work-state
+  // objects addressed to it, not from the trajectory's work items (C1e B0).
+  const textureOwed = {
+    open_rounds: (bundle.layers?.inboxes?.items || []).flatMap((i) => i.open_rounds || [])
+      .filter((r) => r.recipient_inbox === textureInbox).map((r) => ({ conversation_id: r.conversation_id, round: r.round })),
+    census_objects: (bundle.layers?.census?.items?.[0]?.objects || [])
+      .filter((o) => o.to === textureInbox).map((o) => ({ kind: o.kind, canonical_id: o.canonical_id })),
+    census_status: bundle.layers?.census?.status || 'absent',
+  };
   out.acceptance = {
     scenario: 'research',
     claim: 'research searches asynchronously (a search_done with answered providers, and a cell result showing new arrivals) and its final Report reaches texture:<doc>, where a committed Texture turn reads it',
-    ...claim, search, support, texture_work_items_at_export: textureWork,
+    ...claim, search, support, texture_owed_at_export: textureOwed,
     pass: Boolean(claim.cast_to_research && claim.research_final_report && claim.texture_read_report && search.answered > 0 && search.cell_results_with_new_arrivals > 0),
   };
   phase('acceptance', out.acceptance);
