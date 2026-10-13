@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"io"
+	"path"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -121,7 +124,64 @@ func NewSession(allowlist *Allowlist, extraSymbols interp.Exports) (*Session, er
 			return nil, fmt.Errorf("yaegi: predeclare choir binding: %w", err)
 		}
 	}
+	// yaegi v0.16.1 predates Go 1.21's min and max builtins; models reach
+	// for them (s[:min(n, len(s))], cluster G of
+	// docs/reports/cross-model-cell-errors-2026-10-13.md).
+	if _, err := s.Eval(context.Background(), minMaxPrelude); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("yaegi: predeclare min and max: %w", err)
+	}
 	return s, nil
+}
+
+const minMaxPrelude = `min := func(x int, rest ...int) int {
+	for _, v := range rest {
+		if v < x {
+			x = v
+		}
+	}
+	return x
+}
+max := func(x int, rest ...int) int {
+	for _, v := range rest {
+		if v > x {
+			x = v
+		}
+	}
+	return x
+}`
+
+// aliasChoirImports rewrites an import of the choir package by a
+// module-style path ("go-choir/choir", "github.com/.../choir") to the
+// predeclared "choir": models write the repo's path for it, and the
+// allowlist refused every such cell (cluster E of
+// docs/reports/cross-model-cell-errors-2026-10-13.md). Only a path whose
+// last element is exactly "choir" is rewritten.
+func aliasChoirImports(src string) string {
+	prefix := ""
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "src.go", src, parser.ImportsOnly)
+	if err != nil {
+		prefix = "package main\n"
+		fset = token.NewFileSet()
+		if file, err = parser.ParseFile(fset, "src.go", prefix+src, parser.ImportsOnly); err != nil {
+			return src
+		}
+	}
+	out := src
+	for i := len(file.Imports) - 1; i >= 0; i-- {
+		lit := file.Imports[i].Path
+		p, err := strconv.Unquote(lit.Value)
+		if err != nil || p == "choir" || path.Base(p) != "choir" {
+			continue
+		}
+		off := fset.Position(lit.Pos()).Offset - len(prefix)
+		if off < 0 || off+len(lit.Value) > len(out) {
+			continue
+		}
+		out = out[:off] + `"choir"` + out[off+len(lit.Value):]
+	}
+	return out
 }
 
 // predeclaredCellPackages are imported into every session at start.
@@ -158,6 +218,9 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 	if s.poisoned != nil {
 		return res, fmt.Errorf("yaegi: session poisoned, respawn required: %w", s.poisoned)
 	}
+	if s.importedPaths["choir"] {
+		src = aliasChoirImports(src)
+	}
 	if err := s.checkImports(src); err != nil {
 		res.Duration = time.Since(start)
 		return res, &EvalError{err: err, Reuse: ReusePreserve, Kind: DiagImportPreflight}
@@ -168,9 +231,9 @@ func (s *Session) Eval(ctx context.Context, src string) (EvalResult, error) {
 		// nothing, so a failure here leaves the session as it was.
 		prog, err, compilePanic := s.compileCell(s.normalizeCellSource(head))
 		if compilePanic != nil {
+			// Nothing executed: a compile error, as below.
 			res.Duration = time.Since(start)
-			s.poisoned = compilePanic
-			return res, &EvalError{err: compilePanic, Reuse: ReuseUnsafeToReuse, Kind: DiagPanic}
+			return res, &EvalError{err: compilePanic, Reuse: ReusePreserve, Kind: DiagCompile}
 		}
 		if err != nil {
 			res.Duration = time.Since(start)

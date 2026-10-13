@@ -82,6 +82,8 @@ type Search struct {
 	Arrivals []SearchArrival `json:"arrivals"`
 	// Answered counts arrivals that answered (an empty answer counts).
 	Answered int `json:"answered"`
+	// Total is how many providers the search started: Answered of Total.
+	Total int `json:"total"`
 	// Results are every arrival's hits, each URL once, in arrival order.
 	Results []SearchHit `json:"results"`
 	Done    bool        `json:"done"`
@@ -281,6 +283,7 @@ func countOf(s *Search) SearchCount {
 func copySearch(s *Search) Search {
 	out := *s
 	out.Providers = append([]string{}, s.Providers...)
+	out.Total = len(out.Providers)
 	out.Cooling = append([]string(nil), s.Cooling...)
 	out.Pending = append([]string(nil), s.Pending...)
 	out.Arrivals = make([]SearchArrival, len(s.Arrivals))

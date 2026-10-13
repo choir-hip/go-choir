@@ -286,3 +286,46 @@ func TestBoundNameRedefinedWithNewTypeRuns(t *testing.T) {
 		t.Fatalf("self-referencing rebind = %q, want 8", out.Stdout)
 	}
 }
+
+// Clusters E, F and G (docs/reports/cross-model-cell-errors-2026-10-13.md).
+// Failure modes pinned: an import of the choir package by a module-style
+// path ("go-choir/choir", "github.com/.../choir") is refused instead of
+// naming the predeclared package; a path that only ends in "choir" as part
+// of a longer element is treated as choir; min and max are undefined; a
+// Search has no Total.
+func TestChoirImportPathsMinMaxAndSearchTotal(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
+	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sess.Close()
+	hooks := scope.BindCell()
+	cell := func(source string) SessionResult {
+		t.Helper()
+		out, err := serveCell(sess, SessionFrame{ID: "cell", Source: source}, nil, &hooks)
+		if err != nil || out.Error != "" || out.Reuse == ReuseUnsafeToReuse {
+			t.Fatalf("cell failed: %v %q reuse=%q\n%s", err, out.Error, out.Reuse, source)
+		}
+		return out
+	}
+	for _, src := range []string{
+		"import \"go-choir/choir\"\nfmt.Println(choir.Help != nil)",
+		"import (\n\t\"fmt\"\n\t\"github.com/yusefmosiah/go-choir/choir\"\n)\nfmt.Println(choir.Help != nil)",
+		"package main\n\nimport \"choir.com/choir\"\n\nfunc main() { fmt.Println(choir.Help != nil) }",
+	} {
+		if out := cell(src); !strings.Contains(out.Stdout, "true") {
+			t.Fatalf("module-path choir import: stdout %q\n%s", out.Stdout, src)
+		}
+	}
+	if out, err := serveCell(sess, SessionFrame{ID: "cell", Source: "import \"example.com/notchoir\"\nx := 1"}, nil, &hooks); err == nil && out.Error == "" {
+		t.Fatalf("a path ending in notchoir was treated as choir")
+	}
+	if out := cell("s := \"abcdef\"\nfmt.Println(s[:min(3, len(s))], max(2, 7, 4), min(5))"); out.Stdout != "abc 7 5\n" {
+		t.Fatalf("min/max stdout = %q", out.Stdout)
+	}
+	got := copySearch(&Search{ID: "s1", Providers: []string{"a", "b", "c"}, Answered: 2})
+	if got.Total != 3 {
+		t.Fatalf("Search.Total = %d, want 3", got.Total)
+	}
+}
