@@ -1,7 +1,7 @@
 # Autopaper: capture arrivals that management never answered (2026-10-13)
 
-Status: documented; cause a hypothesis until the management turn cells are
-read. Found by the C2 close receipts (E3) requested by the close review panel
+Status: cause confirmed from the run trace (H2); fix follows in a separate
+commit. Found by the C2 close receipts (E3) requested by the close review panel
 (docs/reports/c2-close-review-adjudication-2026-10-13.md).
 
 ## Contract
@@ -68,3 +68,32 @@ compare with the cursor each committed.
 
 C2 acceptance stays open on E3. Tier 2 and 3 expansion is blocked behind
 this, because a 14-source burst already overflows one turn's answers.
+
+## Trace (confirmed 18:05 UTC)
+
+Run 7bc9230b (management, 15:29:44-15:30:03):
+
+- 15:29:47 cell 1 `choir.Records()` returned seq 8 only (the burst had not
+  landed).
+- 15:29:50 cell 2 listed documents.
+- 15:30:00 cell 3 cast five stories from seq 8's captures, using ids held
+  from cell 1. It did not call `choir.Records()`.
+- Seq 9-16 committed 15:29:53-55, between cells 2 and 3.
+
+Run ced3f93a (next turn, 15:30:22) first `choir.Records()` returned seq 17.
+No turn was ever shown seq 9-16.
+
+Cause, in code: `loadCellRecords` (`internal/agentcore/inbox_records.go`)
+loads every cell's view as (cursor, head] with `head` read when the cell
+starts, and the cell's commit advances the cursor to that head through
+`cellRecords.cursorAdvance()`, whether or not the cell's code called
+`choir.Records()`. Cell 3 started at 15:30:00 with head 16, so its commit
+marked seq 9-16 read. "Read" means "was in the cell's environment", not
+"was shown to the desk". H1 (model under-answering) is not needed to
+explain the burst; it may still explain the 9 covered-but-unnamed items.
+
+Fix direction: advance the cursor only through the highest seq a
+`choir.Records()` call in this run actually returned (the yaegi scope
+records it), so records arriving mid-run wake the next turn instead of
+being consumed. Texture's frame path (`texture_frame.go`) shows records in
+its frame, so its read is real; the fix is scoped to cell reads.
