@@ -150,6 +150,39 @@ func syncParentDir(path string) error {
 	return nil
 }
 
+// RestartWorkKinds start or resume work: after a crash boot, an occurrence
+// of one of these kinds recorded before the boot is interrupted_by_restart,
+// never run. Cancels and fail-closed deadlines are absent: they close work
+// and still apply across a restart, as does selfdev_materialization_retry,
+// which finishes a planned apply (bounded by guestApplyAttemptLimit).
+var RestartWorkKinds = map[string]bool{
+	"initial_dispatch": true, "coagent_result": true, "channel_message": true,
+	"owner_revision": true, "lifecycle_work_assigned": true,
+	"delegated_assignment_spawn_deadline":   true,
+	"fresh_mint_management_resume_deadline": true,
+	// Autopaper's source schedule (W1c): a crash never resumes polling.
+	"source_poll_due": true,
+	// Cut 1 L3a: a record's wake starts a turn; unread records wait for the
+	// next post-boot commit.
+	"inbox_record": true,
+}
+
+// RestartWorkKind reports whether an occurrence of kind starts or resumes
+// work.
+func RestartWorkKind(kind string) bool { return RestartWorkKinds[kind] }
+
+// preBootWorkWake reports whether a crash boot must interrupt this wake
+// rather than deliver it. The projector re-drives a consumed wake under a
+// fresh occurrence stamped now, which the actor handler's pre-boot gate
+// cannot recognise, so the gate is applied here, on the wake's own
+// CreatedAt (restart design v3 §9, finding 7).
+func (rt *Runtime) preBootWorkWake(kind string, createdAt time.Time) bool {
+	if rt == nil || rt.bootRestartPlanned || rt.bootedAt.IsZero() || createdAt.IsZero() {
+		return false
+	}
+	return createdAt.Before(rt.bootedAt) && RestartWorkKind(kind)
+}
+
 // WithBootRestart records how this boot began (consumed by the boot path
 // before any actor runs).
 func WithBootRestart(marker PlannedRestart, planned bool) RuntimeOption {
@@ -167,19 +200,100 @@ func (rt *Runtime) BootWasPlannedRestart() (PlannedRestart, bool) {
 	return rt.bootRestart, rt.bootRestartPlanned
 }
 
-// markPlannedRestart announces that the apply about to run restarts this
-// guest on purpose. The returned func clears the marker when the apply
-// returned without restarting.
-func (rt *Runtime) markPlannedRestart(reason, target string) func(applyErr error) {
+// guestApplyAttemptLimit bounds how many times this guest starts one apply
+// (a reason and target, such as a platform update id or a self-development
+// operation id), across every boot. An apply that crashes the guest leaves
+// the marker it wrote, so the next boot reads planned and the resume applies
+// again; without a durable count that is a crash loop no host gate sees
+// (restart design v3 §9, finding 5). Three covers the first attempt, the
+// planned resume that finishes it, and one replay.
+const guestApplyAttemptLimit = 3
+
+// ErrGuestApplyAttemptsSpent refuses an apply this guest has already started
+// guestApplyAttemptLimit times. The obligation stays where it is, visible,
+// for an owner act; nothing retries it automatically.
+var ErrGuestApplyAttemptsSpent = errors.New("guest apply attempts spent: this apply has already started the limit of times; an owner act is needed")
+
+// GuestApplyAttemptsPath is the durable attempt count beside the runtime
+// store.
+func GuestApplyAttemptsPath(storePath string) string {
+	storePath = strings.TrimSpace(storePath)
+	if storePath == "" {
+		return ""
+	}
+	return filepath.Clean(storePath) + ".apply-attempts"
+}
+
+// spendGuestApplyAttempt durably counts one start of the apply named by
+// reason and target, and refuses once the limit is spent. It fails closed:
+// an unreadable or unwritable count refuses the apply. A runtime without a
+// store path (no durable volume, so no marker either) has nothing to count
+// across boots.
+func spendGuestApplyAttempt(storePath, reason, target string) error {
+	path := GuestApplyAttemptsPath(storePath)
+	if path == "" {
+		return nil
+	}
+	counts := map[string]int{}
+	raw, err := os.ReadFile(path)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+	case err != nil:
+		return fmt.Errorf("guest apply attempts: read: %w", err)
+	default:
+		if err := json.Unmarshal(raw, &counts); err != nil {
+			return fmt.Errorf("guest apply attempts: decode: %w", err)
+		}
+	}
+	key := reason + " " + target
+	if counts[key] >= guestApplyAttemptLimit {
+		return fmt.Errorf("%w (%s %s, %d starts)", ErrGuestApplyAttemptsSpent, reason, target, counts[key])
+	}
+	counts[key]++
+	raw, err = json.Marshal(counts)
+	if err != nil {
+		return fmt.Errorf("guest apply attempts: encode: %w", err)
+	}
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("guest apply attempts: create: %w", err)
+	}
+	if _, err := f.Write(raw); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("guest apply attempts: write: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("guest apply attempts: sync: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("guest apply attempts: close: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("guest apply attempts: install: %w", err)
+	}
+	return syncParentDir(path)
+}
+
+// markPlannedRestart spends one of the apply's attempts and announces that
+// the apply about to run restarts this guest on purpose. It refuses the apply
+// (and writes no marker) once the attempts are spent. The returned func
+// clears the marker when the apply returned without restarting.
+func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr error), error) {
 	storePath := ""
 	if rt != nil {
 		storePath = rt.cfg.StorePath
+	}
+	if err := spendGuestApplyAttempt(storePath, reason, target); err != nil {
+		log.Printf("runtime: refuse %s %s: %v", reason, target, err)
+		return func(error) {}, err
 	}
 	if err := WritePlannedRestartMarker(storePath, PlannedRestart{Reason: reason, Target: target}); err != nil {
 		// Without the marker the restart reads as a crash and pending work is
 		// interrupted, which is safe; the apply itself proceeds.
 		log.Printf("runtime: %v (restart will be treated as a crash)", err)
-		return func(error) {}
+		return func(error) {}, nil
 	}
 	return func(applyErr error) {
 		if applyErr == nil {
@@ -188,7 +302,7 @@ func (rt *Runtime) markPlannedRestart(reason, target string) func(applyErr error
 		if err := ClearPlannedRestartMarker(storePath); err != nil {
 			log.Printf("runtime: clear planned restart marker after failed apply: %v", err)
 		}
-	}
+	}, nil
 }
 
 // PlannedRestartPlatformRefresh is the reason the host records when it

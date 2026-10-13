@@ -59,7 +59,7 @@ func TestMarkPlannedRestartClearsAfterFailedApply(t *testing.T) {
 	store := filepath.Join(t.TempDir(), "state")
 	rt := &Runtime{}
 	rt.cfg.StorePath = store
-	done := rt.markPlannedRestart("self_development_apply", "op-1")
+	done, _ := rt.markPlannedRestart("self_development_apply", "op-1")
 	if _, err := os.Stat(PlannedRestartMarkerPath(store)); err != nil {
 		t.Fatalf("marker not written before apply: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestMarkPlannedRestartClearsAfterFailedApply(t *testing.T) {
 	if _, err := os.Stat(PlannedRestartMarkerPath(store)); !os.IsNotExist(err) {
 		t.Fatalf("failed apply left a marker: %v", err)
 	}
-	done = rt.markPlannedRestart("self_development_apply", "op-2")
+	done, _ = rt.markPlannedRestart("self_development_apply", "op-2")
 	done(nil)
 	if _, err := os.Stat(PlannedRestartMarkerPath(store)); err != nil {
 		t.Fatalf("successful apply lost its marker: %v", err)

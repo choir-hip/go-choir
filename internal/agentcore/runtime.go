@@ -2550,6 +2550,14 @@ func (rt *Runtime) sweepActorWakeOutbox(ctx context.Context) actorWakeSweep {
 	const sweepPerTargetLimit = 4
 	const sweepDispatchBudget = 64
 	for _, wake := range wakes {
+		if rt.preBootWorkWake(wake.Kind, wake.CreatedAt) {
+			if err := rt.store.MarkActorWakeInterrupted(ctx, wake.CanonicalID); err != nil {
+				log.Printf("runtime: actor wake outbox interrupt pre-boot wake %s: %v", wake.SourceUpdateID, err)
+			} else {
+				log.Printf("runtime: actor wake outbox: pre-boot wake %s (%s) interrupted_by_restart", wake.SourceUpdateID, wake.Kind)
+			}
+			continue
+		}
 		if !rt.wakeRetries.due(wake.CanonicalID) {
 			continue // backing off after a failed dispatch
 		}

@@ -52,12 +52,35 @@ type ExhaustedActorWake struct {
 	ExhaustedAt       time.Time `json:"exhausted_at"`
 }
 
-const actorWakeFateDispatchExhausted = "dispatch_exhausted"
+const (
+	actorWakeFateDispatchExhausted    = "dispatch_exhausted"
+	actorWakeFateInterruptedByRestart = "interrupted_by_restart"
+)
+
+// MarkActorWakeInterrupted takes a pre-boot work wake out of the drain after
+// a crash boot, with the durable fate interrupted_by_restart: a crash restart
+// never resumes work.
+func (s *Store) MarkActorWakeInterrupted(ctx context.Context, canonicalID string) error {
+	return s.markActorWakeFate(ctx, canonicalID, actorWakeFateInterruptedByRestart, func(metadata map[string]any) {
+		metadata["interrupted_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	})
+}
 
 // MarkActorWakeExhausted takes a wake out of the drain with a durable fate.
 func (s *Store) MarkActorWakeExhausted(ctx context.Context, canonicalID string, attempts int, lastErr string) error {
+	if len(lastErr) > 500 {
+		lastErr = lastErr[:500]
+	}
+	return s.markActorWakeFate(ctx, canonicalID, actorWakeFateDispatchExhausted, func(metadata map[string]any) {
+		metadata["dispatch_attempts"] = attempts
+		metadata["last_dispatch_error"] = lastErr
+		metadata["exhausted_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	})
+}
+
+func (s *Store) markActorWakeFate(ctx context.Context, canonicalID, fate string, annotate func(map[string]any)) error {
 	if s.ogStore == nil {
-		return fmt.Errorf("mark actor wake exhausted: object graph not initialized")
+		return fmt.Errorf("mark actor wake %s: object graph not initialized", fate)
 	}
 	obj, err := s.ogStore.GetObject(ctx, strings.TrimSpace(canonicalID))
 	if err != nil {
@@ -73,14 +96,9 @@ func (s *Store) MarkActorWakeExhausted(ctx context.Context, canonicalID string, 
 	if projected, _ := metadata["projected"].(bool); projected {
 		return nil
 	}
-	if len(lastErr) > 500 {
-		lastErr = lastErr[:500]
-	}
 	metadata["projected"] = true
-	metadata["fate"] = actorWakeFateDispatchExhausted
-	metadata["dispatch_attempts"] = attempts
-	metadata["last_dispatch_error"] = lastErr
-	metadata["exhausted_at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	metadata["fate"] = fate
+	annotate(metadata)
 	rawMetadata, err := objectgraph.NormalizeMetadata(metadata)
 	if err != nil {
 		return fmt.Errorf("mark actor wake exhausted: normalize metadata: %w", err)

@@ -102,20 +102,9 @@ func newActorHandler(rt *agentcore.Runtime, textureOwner *textureowner.Handler) 
 // action.
 var errInterruptedByRestart = fmt.Errorf("%w: interrupted_by_restart: work occurrence recorded before this boot", actor.ErrDurableInvalid)
 
-// restartWorkKinds start or resume work. Cancels and fail-closed deadlines
-// are absent: they close work and still apply across a restart, as does
-// selfdev_materialization_retry, which finishes a planned apply.
-var restartWorkKinds = map[string]bool{
-	"initial_dispatch": true, "coagent_result": true, "channel_message": true,
-	"owner_revision": true, "lifecycle_work_assigned": true,
-	"delegated_assignment_spawn_deadline":   true,
-	"fresh_mint_management_resume_deadline": true,
-	// Autopaper's source schedule (W1c): a crash never resumes polling.
-	"source_poll_due": true,
-	// Cut 1 L3a: a record's wake starts a turn; unread records wait for the
-	// next post-boot commit.
-	"inbox_record": true,
-}
+// restartWorkKinds start or resume work (agentcore.RestartWorkKind, shared
+// with the wake projector's crash-boot gate).
+var restartWorkKinds = agentcore.RestartWorkKinds
 
 func (h *actorHandler) preBootWorkOccurrence(mailboxID string, u actor.Update) bool {
 	if h.plannedBoot || h.bootAt.IsZero() || u.CreatedAt.IsZero() || !u.CreatedAt.Before(h.bootAt) || !restartWorkKinds[u.Kind] {

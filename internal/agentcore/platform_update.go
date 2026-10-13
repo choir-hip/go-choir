@@ -260,7 +260,10 @@ func (rt *Runtime) ApplyPlatformUpdate(ctx context.Context, offer selfdevprotoco
 	if err != nil {
 		return report, err
 	}
-	restartPlanned := rt.markPlannedRestart("platform_update", offer.UpdateID)
+	restartPlanned, spentErr := rt.markPlannedRestart("platform_update", offer.UpdateID)
+	if spentErr != nil {
+		return report, spentErr
+	}
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
 	restartPlanned(applyErr)
 	ref, publicKey, keyErr := rt.selfdevUpdater.PublicKey(ctx)

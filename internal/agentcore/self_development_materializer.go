@@ -162,6 +162,14 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 		} else {
 			operationErr = rt.materializeSelfDevelopmentOperation(ctx, operation)
 		}
+		if errors.Is(operationErr, ErrGuestApplyAttemptsSpent) {
+			// The apply crashed this guest every time it ran; retrying it
+			// is the loop the attempt bound exists to stop. The operation
+			// stays in its state, visible, for an owner act.
+			log.Printf("selfdev materializer: operation %s in %s held: %v",
+				operation.OperationID, operation.State, operationErr)
+			continue
+		}
 		if operationErr != nil {
 			// The durable operation and updater journal retain the recovery
 			// point, but nothing else re-fires this reconciler unless another
@@ -312,7 +320,10 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	if err != nil {
 		return err
 	}
-	restartPlanned := rt.markPlannedRestart(PlannedRestartSelfDevelopmentApply, operation.OperationID)
+	restartPlanned, spentErr := rt.markPlannedRestart(PlannedRestartSelfDevelopmentApply, operation.OperationID)
+	if spentErr != nil {
+		return spentErr
+	}
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
 	restartPlanned(applyErr)
 	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
@@ -387,7 +398,10 @@ func (rt *Runtime) rollbackSelfDevelopmentOperation(ctx context.Context, operati
 	if err != nil {
 		return err
 	}
-	restartPlanned := rt.markPlannedRestart("self_development_rollback", operation.OperationID)
+	restartPlanned, spentErr := rt.markPlannedRestart("self_development_rollback", operation.OperationID)
+	if spentErr != nil {
+		return spentErr
+	}
 	result, applyErr := rt.selfdevUpdater.Apply(ctx, applyRequest)
 	restartPlanned(applyErr)
 	if journaled, found, journalErr := updater.ReadJournalOutcome(rt.selfdevUpdaterRoot, applyRequest.IdempotencyKey); journalErr == nil && found && journaled.Terminal {
