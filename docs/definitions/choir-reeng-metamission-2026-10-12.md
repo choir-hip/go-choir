@@ -147,16 +147,18 @@ boundaries:
   protected_surfaces: [see each cut]
 
 now:
-  status: drafted
+  status: ready_to_execute
   slice: >-
-    Decisions recorded (§2, §12, §13). Cut 0, Cut 1 and Cut 2 authored
-    and repaired after the convergent review; the owner then ruled that
-    nothing is preserved before Autopaper is live, that article versions
-    are Texture versions, that crashes are restarted by hand, and that
-    production follows the ingestion rhythm. The protocol metamission's
-    P2d2 and P3 and Autopaper W2, W3a and W3 are carried by Cuts 1 and 2.
-  source_ref: 2d2b864e
-  deploy_identity: staging b172895b
+    Decisions recorded (§2, §12, §13). Cut 0, Cut 1 and Cut 2 authored,
+    repaired after the convergent review, and re-reviewed at deb6f760.
+    The owner then ruled that nothing is preserved before Autopaper is
+    live, that article versions are Texture versions, that crashes are
+    restarted by hand, and that production follows the ingestion rhythm.
+    The protocol metamission's P2d2 and P3 and Autopaper W2, W3a and W3
+    are carried by Cuts 1 and 2. M0 and D0 landed; the D0 leftovers
+    landed at 964bdd25 (acceptance PASS). Next station: C0.
+  source_ref: f91b6e55
+  deploy_identity: staging 964bdd25
   candidate: none
   conjecture:
     id: RE-2
@@ -177,9 +179,9 @@ now:
   belief:
     believed_state: the studies' and panels' code claims hold at 03499ef9
     main_uncertainty: how long push-to-healthy-test-computer takes (bounds the pace of every cut) and how large Cut 1's change set is
-    next_observation: a short re-review of the repaired cuts, then Cut 0's first tracer run
+    next_observation: Cut 0's first tracer run and the push-to-healthy-test-computer time
   blocker_or_risk: Cut 1 is one large red change across store, agentcore, textureowner and yaegikernel; the owner's computer takes every cut (accepted risk, §13.1)
-  next_action: re-review the repaired Cut 0 and Cut 1 with two reviewers, then execute Cut 0
+  next_action: execute C0 from its cut file; then C1, then C2, each landed with deployed acceptance before the next starts
 
 receipts:
   - id: panels-2026-10-12
