@@ -6,11 +6,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// R3r — the research desk is live on the cell carrier with the D2 cap
-// boundary resolved: a research cell's staged choir.Report/ReportPacket
-// mints a commitment_record under the activation's cap accounting (the
-// plan's acceptance proof), and every host-mediated network tool charges
-// the shared per-activation egress ledger.
+// R3r — the research desk is live on the cell carrier: a research cell's
+// staged choir.Report/ReportPacket mints a commitment_record (the plan's
+// acceptance proof).
 
 func TestR3rResearchCellReportMintsCommitmentUnderCap(t *testing.T) {
 	rt, s := testRuntime(t)
@@ -47,17 +45,3 @@ func TestR3rResearchCellReportMintsCommitmentUnderCap(t *testing.T) {
 		t.Fatal("research cell ReportPacket absent from the commitment ledger")
 	}
 }
-
-func TestR3rEgressLedgerInstalledOnRuntime(t *testing.T) {
-	rt, _ := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(); err != nil {
-		t.Fatalf("install tools: %v", err)
-	}
-	if rt.researchEgress == nil {
-		t.Fatal("research egress ledger must be installed — D2 cap boundary is not optional")
-	}
-	if rt.researchEgress.MaxCalls <= 0 || rt.researchEgress.MaxFetchedBytes <= 0 {
-		t.Fatalf("egress ledger installed without limits: %+v", rt.researchEgress)
-	}
-}
-

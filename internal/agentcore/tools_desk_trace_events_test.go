@@ -25,7 +25,7 @@ import (
 func TestDeskCellAndEgressRecordRunEvents(t *testing.T) {
 	deskTestWorkerBin(t)
 	rt, s := testRuntime(t)
-	rt.researchDeps = &researchtools.Dependencies{Search: &stubSearchClient{}, Egress: researchtools.NewEgressBudgetLedger(10, 32<<20)}
+	rt.researchDeps = &researchtools.Dependencies{Search: &stubSearchClient{}}
 	workers := newDeskSessionWorkers()
 	t.Cleanup(workers.closeAll)
 	tool := newDeskGoEvalTool(rt, workers, agentprofile.Research)

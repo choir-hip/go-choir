@@ -357,8 +357,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				// resolve through rt-bound tools; the management desk's
 				// product_api action serves through the canonical route
 				// table; network/content actions go to researchDeps.HostEgress
-				// under the shared egress ledger — one deps surface, never an
-				// open socket.
+				// — one deps surface, never an open socket.
 				// Like Emit, the acting run comes from the evaluating cell's
 				// ctx: the session outlives the run that spawned it (PD2).
 				Egress: func(egrCtx context.Context, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
@@ -951,8 +950,8 @@ func cellTimeoutError(timeoutMS int, elapsed time.Duration) string {
 // deskEgress resolves one host-mediated choir.* call from a desk cell.
 // Evidence/run-memory actions resolve through rt-bound tools; the management
 // desk's product_api action serves through the canonical route table;
-// network/content actions go to researchDeps.HostEgress under the shared
-// egress ledger — one deps surface, never an open socket.
+// network/content actions go to researchDeps.HostEgress — one deps surface,
+// never an open socket.
 func (rt *Runtime) deskEgress(egrCtx context.Context, cellExec toolregistry.ExecutionContext, action yaegikernel.BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
 	if action == yaegikernel.ActionProductAPI {
 		return rt.productAPIEgress(egrCtx, cellExec.OwnerID, cellExec.OwnerEmail, payload)

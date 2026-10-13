@@ -288,7 +288,7 @@ func TestWebSearchPreservesBreadthProjectionAndGatewayOutage(t *testing.T) {
 	if outage.ModelOutput["search_outage"] != true || outage.ModelOutput["code"] != "search_outage" {
 		t.Fatalf("outage model output = %#v", outage.ModelOutput)
 	}
-	if !strings.Contains(outage.ModelOutput["next_instruction"].(string), "precise blocker") || outage.Projection["search_outage"] != true {
+	if outage.ModelOutput["next_instruction"] != nil || outage.Projection["search_outage"] != true {
 		t.Fatalf("outage guidance/projection = %#v / %#v", outage.ModelOutput, outage.Projection)
 	}
 

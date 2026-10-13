@@ -106,11 +106,7 @@ type Runtime struct {
 	// in-cell carrier (R3b). Lazy; nil until the first desk_go_eval call.
 	deskWorkers   *deskSessionWorkers
 	deskWorkersMu sync.Mutex
-	// researchEgress is the shared per-activation network-call budget ledger
-	// for desk-carrier research (R3r/D2). Lazy; installed by
-	// InstallDefaultAgentTools, charged by every host-mediated network tool.
-	researchEgress *researchtools.EgressBudgetLedger
-	// researchDeps are the search/HTTP/source clients + ledger bound at
+	// researchDeps are the search/HTTP/source clients bound at
 	// tool-install for the desk cell's host-mediated egress verbs
 	// (choir.WebSearch/FetchURL → StreamBrokerEgress → deskEgress). nil until
 	// InstallDefaultAgentTools builds them.
@@ -3461,11 +3457,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
-	if runHasProfile(rec, agentprofile.Engineering) {
-		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolLoopBudget(engineeringToolLoopBudget(rec)))
-	}
 	if runHasProfile(rec, agentprofile.Texture) {
-		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolLoopBudget(textureActorToolLoopBudget(rec)))
 		// R3d: texture's durable transition is a committed texture_apply cell
 		// intent (choir.ApplyTexture), committed by the bound authorizer inside
 		// ApplyTextureTurn. desk_go_eval receipts carry it as rlm:texture_apply.
@@ -4006,88 +3998,6 @@ func engineeringOverlayTerminalFateCommitted(messages []json.RawMessage) bool {
 		}
 	}
 	return false
-}
-
-// Desk budgets are 100x their first values by owner direction
-// (2026-10-10): make the system work before constraining it. Loops are
-// watched in the traces instead; the elapsed bounds stay.
-const (
-	defaultTextureActorMaxProviderCalls = 8000
-	defaultTextureActorMaxTotalTokens   = 120000000
-	defaultTextureActorMaxElapsed       = 45 * time.Minute
-)
-
-func textureActorToolLoopBudget(rec *types.RunRecord) toolregistry.ToolLoopBudget {
-	docID := ""
-	if rec != nil {
-		docID = strings.TrimSpace(firstNonEmpty(
-			metadataStringValue(rec.Metadata, "doc_id"),
-			rec.ChannelID,
-		))
-	}
-	label := "texture"
-	if docID != "" {
-		label = "texture:" + docID
-	}
-	return actorToolLoopBudgetFromMetadata(rec, toolregistry.ToolLoopBudget{
-		Label:            label,
-		MaxProviderCalls: defaultTextureActorMaxProviderCalls,
-		MaxTotalTokens:   defaultTextureActorMaxTotalTokens,
-		MaxElapsed:       defaultTextureActorMaxElapsed,
-	})
-}
-
-const (
-	defaultEngineeringMaxProviderCalls = 20000
-	defaultEngineeringMaxElapsed       = 60 * time.Minute
-)
-
-// engineeringToolLoopBudget bounds one engineering activation. Without it a
-// run whose capsule worker never starts retried ~400 times, held open by the
-// completion guard (capsule-session-worker-dies-at-start-2026-10-09).
-func engineeringToolLoopBudget(rec *types.RunRecord) toolregistry.ToolLoopBudget {
-	label := "engineering"
-	if rec != nil && strings.TrimSpace(rec.AgentID) != "" {
-		label = strings.TrimSpace(rec.AgentID)
-	}
-	return actorToolLoopBudgetFromMetadata(rec, toolregistry.ToolLoopBudget{
-		Label:            label,
-		MaxProviderCalls: defaultEngineeringMaxProviderCalls,
-		MaxElapsed:       defaultEngineeringMaxElapsed,
-	})
-}
-
-// actorToolLoopBudgetFromMetadata applies run-metadata limit overrides and
-// carried spend to a desk's default budget.
-func actorToolLoopBudgetFromMetadata(rec *types.RunRecord, budget toolregistry.ToolLoopBudget) toolregistry.ToolLoopBudget {
-	if rec == nil {
-		return budget
-	}
-	if value := metadataIntValue(rec.Metadata, "actor_budget_max_provider_calls"); value > 0 {
-		budget.MaxProviderCalls = value
-	}
-	if value := metadataIntValue(rec.Metadata, "actor_budget_max_input_tokens"); value > 0 {
-		budget.MaxInputTokens = value
-	}
-	if value := metadataIntValue(rec.Metadata, "actor_budget_max_output_tokens"); value > 0 {
-		budget.MaxOutputTokens = value
-	}
-	if value := metadataIntValue(rec.Metadata, "actor_budget_max_total_tokens"); value > 0 {
-		budget.MaxTotalTokens = value
-	}
-	if value := metadataIntValue(rec.Metadata, "actor_budget_max_elapsed_seconds"); value > 0 {
-		budget.MaxElapsed = time.Duration(value) * time.Second
-	}
-	if value := metadataIntValue(rec.Metadata, "actor_budget_spent_provider_calls"); value > 0 {
-		budget.SpentProviderCalls = value
-	}
-	if value := metadataIntValue(rec.Metadata, "actor_budget_spent_input_tokens"); value > 0 {
-		budget.SpentInputTokens = value
-	}
-	if value := metadataIntValue(rec.Metadata, "actor_budget_spent_output_tokens"); value > 0 {
-		budget.SpentOutputTokens = value
-	}
-	return budget
 }
 
 // handleRunCompletion processes feature-specific side effects after a run

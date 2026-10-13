@@ -131,8 +131,8 @@ func researchLineageFrom(ctx context.Context, execCtx toolregistry.ExecutionCont
 // docs/definitions/choir-research-fanout-2026-10-10.md). Each child is a
 // research-child desk on its own model loop: read-only world verbs and
 // further choir.Research, no messaging, reporting or writes, and an inert
-// ledger reduction (no run record, no channel). The whole tree charges the
-// root activation's egress budget and ends with the calling cell's deadline.
+// ledger reduction (no run record, no channel). The whole tree ends with the
+// calling cell's deadline.
 func (rt *Runtime) runResearchChildren(ctx context.Context, parent toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
 	var req yaegikernel.ResearchPayload
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -189,7 +189,6 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	childExec.ToolCallID = ""
 	childExec.Profile = agentprofile.Research
 	childExec.Role = yaegikernel.SessionRoleResearchChild
-	childExec.RunID = researchBudgetKey(parent)
 	share := researchChildDeadline(ctx)
 	ctx, cancel := context.WithDeadline(ctx, share)
 	defer cancel()
@@ -245,17 +244,6 @@ func researchChildDeadline(ctx context.Context) time.Time {
 // researchChildTime tells the child how long it has.
 func researchChildTime(deadline time.Time) string {
 	return fmt.Sprintf(" You have about %s for this objective; findings you have not returned by then are lost.", time.Until(deadline).Round(time.Second))
-}
-
-// researchBudgetKey is the egress budget key of the root research
-// activation: children charge their root's budget, not one of their own.
-func researchBudgetKey(execCtx toolregistry.ExecutionContext) string {
-	if execCtx.RunRecord != nil {
-		if id := strings.TrimSpace(execCtx.RunRecord.RunID); id != "" {
-			return id
-		}
-	}
-	return strings.TrimSpace(execCtx.RunID)
 }
 
 // researchChildSelection resolves a child's model: the caller's own when

@@ -50,8 +50,7 @@ var (
 
 // egressToolTable lazily builds the deps-bound network/content/evidence tool
 // funcs once per Dependencies, keyed by tool name. Reusing the real tool
-// constructors keeps the egress budget, service resolution, and output
-// projection identical between the tool and cell-verb surfaces.
+// constructors keeps the service resolution and output projection identical between the tool and cell-verb surfaces.
 func (d *Dependencies) egressToolTable() map[string]toolregistry.ToolFunc {
 	egressTableMu.Lock()
 	defer egressTableMu.Unlock()

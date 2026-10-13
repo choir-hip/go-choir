@@ -56,9 +56,7 @@ func newPollSourceTool(deps Dependencies) toolregistry.Tool {
 			if exec.OwnerID == "" {
 				return "", fmt.Errorf("poll_source missing owner context")
 			}
-			report, err := PollSourceOnce(ctx, deps, exec.OwnerID, exec.ComputerID, in.SourceID, in.MaxItems, func() error {
-				return deps.chargeEgressCall(ctx, "poll_source")
-			})
+			report, err := PollSourceOnce(ctx, deps, exec.OwnerID, exec.ComputerID, in.SourceID, in.MaxItems)
 			if err != nil {
 				return "", err
 			}
@@ -86,11 +84,9 @@ type PollReport struct {
 
 // PollSourceOnce polls one registry source and writes its new items as
 // shared captures through deps.Captures. research's choir.PollSource and the
-// source schedule (Autopaper W1c) both call it. admit, when set, runs once
-// before the network fetch (the activation egress ledger); the schedule
-// passes nil and records usage on the schedule instead. The returned error
-// is for a poll that could not start (unknown source, no capture store).
-func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID, sourceID string, maxItems int, admit func() error) (PollReport, error) {
+// source schedule (Autopaper W1c) both call it. The returned error is for a
+// poll that could not start (unknown source, no capture store).
+func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID, sourceID string, maxItems int) (PollReport, error) {
 	if strings.TrimSpace(ownerID) == "" {
 		return PollReport{}, fmt.Errorf("poll_source missing owner context")
 	}
@@ -117,11 +113,6 @@ func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID,
 	p, err := pollerFor(source, reg.UserAgent)
 	if err != nil {
 		return PollReport{}, err
-	}
-	if admit != nil {
-		if err := admit(); err != nil {
-			return PollReport{}, err
-		}
 	}
 
 	pollState.Lock()
@@ -178,7 +169,7 @@ func PollSourceOnce(ctx context.Context, deps Dependencies, ownerID, computerID,
 
 // newReadCaptureTool reads one shared capture (any computer's poll) with its
 // body text, from Store B and host disk through corpusd. It is a read of the
-// shared store, not world egress, so it is not charged to the egress ledger.
+// shared store, not world egress.
 func newReadCaptureTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		CaptureID string `json:"capture_id"`

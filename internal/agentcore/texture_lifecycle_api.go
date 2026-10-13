@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -16,16 +15,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-// TextureActorToolLoopBudgetSpend is the persisted spend carried across
-// activations of one resident Texture actor.
-type TextureActorToolLoopBudgetSpend struct {
-	SourceRunID        string
-	ProviderCalls      int
-	InputTokens        int
-	OutputTokens       int
-	ObservedUsageEvent bool
-}
 
 type checkedActorDispatchState struct {
 	mu     sync.Mutex
@@ -187,59 +176,25 @@ func (rt *Runtime) TextureChannelHasGroundedHistory(ctx context.Context, ownerID
 	return false, nil
 }
 
-// LatestTextureActorToolLoopBudgetSpend loads durable provider/tool-loop spend
-// from the previous activation of the same actor.
-func (rt *Runtime) LatestTextureActorToolLoopBudgetSpend(ctx context.Context, ownerID, agentID string) (TextureActorToolLoopBudgetSpend, bool, error) {
-	var spend TextureActorToolLoopBudgetSpend
+// LatestTextureActorMemorySourceRun names the previous activation of the same
+// resident actor: the run whose durable run memory a rewarm or resume reads.
+func (rt *Runtime) LatestTextureActorMemorySourceRun(ctx context.Context, ownerID, agentID string) (string, bool, error) {
 	if rt == nil || rt.store == nil {
-		return spend, false, nil
+		return "", false, nil
 	}
 	ownerID = strings.TrimSpace(ownerID)
 	agentID = strings.TrimSpace(agentID)
 	if ownerID == "" || agentID == "" {
-		return spend, false, nil
+		return "", false, nil
 	}
 	sourceRunID, _, err := rt.store.LatestActorRunMemoryEntries(ctx, ownerID, rt.TextureComputerID(), agentID, "")
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return spend, false, nil
+			return "", false, nil
 		}
-		return spend, false, err
+		return "", false, err
 	}
-	spend.SourceRunID = sourceRunID
-	eventsForRun, err := rt.store.ListEvents(ctx, sourceRunID, 5000)
-	if err != nil {
-		return spend, false, err
-	}
-	providerCallsFromPreflight := 0
-	for _, event := range eventsForRun {
-		if event.Kind != types.EventRunProgress {
-			continue
-		}
-		switch event.Phase {
-		case "provider_call":
-			providerCallsFromPreflight++
-		case "tool_loop_budget_usage", "tool_loop_budget":
-			var payload map[string]any
-			if err := json.Unmarshal(event.Payload, &payload); err != nil {
-				continue
-			}
-			spend.ObservedUsageEvent = true
-			if value := metadataIntValue(payload, "provider_calls"); value > spend.ProviderCalls {
-				spend.ProviderCalls = value
-			}
-			if value := metadataIntValue(payload, "input_tokens"); value > spend.InputTokens {
-				spend.InputTokens = value
-			}
-			if value := metadataIntValue(payload, "output_tokens"); value > spend.OutputTokens {
-				spend.OutputTokens = value
-			}
-		}
-	}
-	if spend.ProviderCalls == 0 && providerCallsFromPreflight > 0 {
-		spend.ProviderCalls = providerCallsFromPreflight
-	}
-	return spend, true, nil
+	return sourceRunID, true, nil
 }
 
 // TextureActorOccurrenceVersion is the canonical mailbox identity format for

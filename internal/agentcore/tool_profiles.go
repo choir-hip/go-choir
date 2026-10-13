@@ -372,8 +372,7 @@ func buildDeskCellRegistry(rt *Runtime, deskRole string, researchDeps researchto
 		// exactly one tool, desk_go_eval. The typed research surface
 		// (researchtools.Register: 9 network/content tools) and the typed
 		// evidence/run-memory registrations are deleted, not dual-listed:
-		// every capability is a choir.* egress verb inside the cell. The
-		// shared egress ledger still meters the verbs through the worker.
+		// every capability is a choir.* egress verb inside the cell.
 	}
 	return registry, nil
 }
@@ -394,22 +393,12 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 	// (research-fetch-url-has-no-address-guard-2026-10-10.md, D1/D2).
 	httpClient := sourcefetch.Client(30 * time.Second)
 
-	// The D2 cap boundary charges every cell-carrier research request against
-	// the same activation-scoped egress ledger.
-	if rt.researchEgress == nil {
-		rt.researchEgress = researchtools.NewEgressBudgetLedger(
-			researchtools.DefaultResearchEgressMaxCalls,
-			researchtools.DefaultResearchEgressMaxFetchedBytes,
-		)
-	}
 	// InCellCarrier fan: a non-capsule desk runs on the cell carrier when
 	// deskCarrierLive(profile) promotes it — management (R3c), texture
-	// (R3d), and research (R3r) are live unconditionally. The research desk
-	// carries the D2 cap boundary: every host-mediated network tool charges
-	// the shared activation-scoped egress ledger.
+	// (R3d), and research (R3r) are live unconditionally.
 	researchDeps := researchtools.Dependencies{
 		Store: rt.store, Content: rt.content, Search: searchClient,
-		Source: sourceClient, HTTP: httpClient, Egress: rt.researchEgress,
+		Source: sourceClient, HTTP: httpClient,
 		// Autopaper captures are shared content: written to Store B through
 		// corpusd, never this computer's embedded graph (W1b2).
 		Captures: researchtools.NewCorpusdCaptureSink(rt.cfg.CorpusdURL),

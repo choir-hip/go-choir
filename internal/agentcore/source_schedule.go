@@ -158,7 +158,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 	if rt.researchDeps == nil {
 		usage.Status, usage.Error = "error", "research dependencies are not configured"
 	} else {
-		report, pollErr := researchtools.PollSourceOnce(ctx, *rt.researchDeps, ownerID, computerID, sched.SourceID, sched.MaxItems, nil)
+		report, pollErr := researchtools.PollSourceOnce(ctx, *rt.researchDeps, ownerID, computerID, sched.SourceID, sched.MaxItems)
 		usage = store.SourcePollUsage{
 			At: started, Status: report.Status, StatusCode: report.StatusCode, Fetched: report.Fetched,
 			NotModified: report.NotModified, ItemBytes: report.ItemBytes, New: report.New,

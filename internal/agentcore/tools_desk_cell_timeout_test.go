@@ -34,7 +34,6 @@ func TestDeskGoEvalOwnTimeoutNamesItself(t *testing.T) {
 	rt := &Runtime{
 		researchDeps: &researchtools.Dependencies{
 			Search: slowSearchClient{delay: 3 * time.Second},
-			Egress: researchtools.NewEgressBudgetLedger(64, 32<<20),
 		},
 	}
 	workers := newDeskSessionWorkers()

@@ -173,15 +173,15 @@ func TestPollSourceKeepsValidatorsOnlyAfterTheWrite(t *testing.T) {
 	sink := &flakySink{fail: true}
 	deps := Dependencies{Sources: reg, Captures: sink}
 
-	first, err := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5, nil)
+	first, err := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5)
 	if err != nil || first.Error == "" || first.Fetched != 1 {
 		t.Fatalf("first poll = %+v, %v; want a fetched item and a write error", first, err)
 	}
-	second, err := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5, nil)
+	second, err := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5)
 	if err != nil || second.NotModified || second.New != 1 || sink.items != 1 || conditional.Load() != 0 {
 		t.Fatalf("second poll = %+v (conditional %d, written %d); want the item fetched again and written", second, conditional.Load(), sink.items)
 	}
-	third, _ := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5, nil)
+	third, _ := PollSourceOnce(context.Background(), deps, "owner-1", "computer-1", "rss:flaky", 5)
 	if !third.NotModified || conditional.Load() != 1 {
 		t.Fatalf("third poll = %+v; want a 304 once the items are written", third)
 	}

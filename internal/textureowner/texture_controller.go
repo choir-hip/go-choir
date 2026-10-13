@@ -1047,15 +1047,10 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	rec.Metadata["actor_reactivated_from_passivated"] = true
 	rec.Metadata["actor_resume_source_loop_id"] = rec.RunID
 	rec.Metadata["current_revision_id"] = strings.TrimSpace(doc.CurrentRevisionID)
-	if spend, ok, err := rt.Core.LatestTextureActorToolLoopBudgetSpend(ctx, ownerID, textureAgentID); err != nil {
-		return nil, false, fmt.Errorf("load passivated Texture budget spend: %w", err)
-	} else if ok {
-		rec.Metadata["actor_budget_spent_provider_calls"] = spend.ProviderCalls
-		rec.Metadata["actor_budget_spent_input_tokens"] = spend.InputTokens
-		rec.Metadata["actor_budget_spent_output_tokens"] = spend.OutputTokens
-		if spend.SourceRunID != "" {
-			rec.Metadata["actor_resume_source_loop_id"] = spend.SourceRunID
-		}
+	if sourceRunID, ok, err := rt.Core.LatestTextureActorMemorySourceRun(ctx, ownerID, textureAgentID); err != nil {
+		return nil, false, fmt.Errorf("load passivated Texture memory source: %w", err)
+	} else if ok && sourceRunID != "" {
+		rec.Metadata["actor_resume_source_loop_id"] = sourceRunID
 	}
 	rec.State = types.RunPending
 	rec.Error = ""

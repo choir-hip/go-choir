@@ -33,14 +33,13 @@ func (c *stubSearchClient) Search(ctx context.Context, query string, maxResults 
 // researchDeps.HostEgress -> the deps-bound web_search ToolFunc -> the stubbed
 // search client, and the bounded JSON result returns into the cell. This is
 // the one-tool cutover's load-bearing path: capability reachable as a verb,
-// egress budget charged, never an open socket.
+// never an open socket.
 func TestDeskGoEvalWebSearchEgressRoundTrip(t *testing.T) {
 	deskTestWorkerBin(t)
 	stub := &stubSearchClient{}
 	rt := &Runtime{
 		researchDeps: &researchtools.Dependencies{
 			Search: stub,
-			Egress: researchtools.NewEgressBudgetLedger(64, 32<<20),
 		},
 	}
 	workers := newDeskSessionWorkers()
