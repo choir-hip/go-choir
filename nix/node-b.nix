@@ -551,6 +551,10 @@ in
         "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
         "CORPUSD_VMCTL_URL=http://127.0.0.1:8083"
+        # The public Autopaper front list shows only the designated paper
+        # computer's owner (Cut 2 2b; docs/reports/reeng-autopaper-paper-computer-2026-10-13.md),
+        # so tracer test computers' stories stay off choir.news's front page.
+        "CORPUSD_AUTOPAPER_OWNERS=e5962310-8767-4624-87e5-a9b93a4e1db1"
         # Platform-artifacts reachability GC: dry-run reporting by default so
         # the live set can be observed before the storage lifecycle deletes.
         # Active collection stays an explicit operation via the internal

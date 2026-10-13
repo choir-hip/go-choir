@@ -1,16 +1,23 @@
-# Cut 2 freeze receipt (DRAFT)
+# Cut 2 freeze receipt
 
-**Status: DRAFT.** The orchestrator finalizes this receipt before the paper
-computer's first publish. Until then the schema, cids and refs below may
-still change; after it, only compatible changes (decisions §12.1, Cut 2
-definition `rollback`). Compatibility begins at the first Autopaper
-permalink.
+**Status: FINAL, 2026-10-13.** Written before the designated paper
+computer's first publish (computer-1355b83bced1613eb048ee28d66688a8, owner
+e5962310-8767-4624-87e5-a9b93a4e1db1;
+docs/reports/reeng-autopaper-paper-computer-2026-10-13.md). Compatibility
+begins at the paper's first Autopaper permalink: from then on the record
+schema, normtext, the cid formula, the extractor versions, the Ref shape,
+the /v<n> route shape and the manifest schema change only compatibly
+(decisions §12.1). Tracer test computers published versions before this
+receipt; those are pre-freeze and carry no compatibility promise.
 
-Drafted 2026-10-13 on source b104f274 (Cut 2 unit 2b, living stories,
-automatic publishing and the Store B check overlay, rebased on main
-afb9c7f1). Definition:
-`docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md`,
-unit 2b "Freeze receipt".
+Drafted on source b104f274 and finalized on main at the commit that adds
+this file. The digests below were computed at b104f274 and verified
+unchanged at finalization: `git diff b104f274 HEAD` over every file they
+name (internal/normtext, internal/quotematch, internal/types/{commitment,
+inbox,ref,story,support,texture}.go, internal/store/inbox.go,
+internal/platform/{publication_versions,signing}.go,
+internal/sourcefetch/blocks.go) is empty, so each declaration's text, and
+its digest, is the same.
 
 ## How the digests are computed
 
@@ -200,10 +207,23 @@ beside the payload; it may change after the freeze without touching any
 version. The guest routes (`/internal/platform/texture/publications`,
 `/internal/platform/support-verdicts`) are internal and may change.
 
-## Open items for the finalizer
+## Extractor bodies (added at finalization)
 
-- Recompute every digest at the live commit and record it.
-- Add body digests (or a tree hash) for the three extractors.
-- Confirm the seed-revision numbering (first public version v2) is what
-  the owner wants frozen; changing it later renumbers nothing published
-  but changes where new stories start.
+Whole-file sha256 at finalization; a change to any of these files is an
+extractor change and bumps its version constant (section 4), so frozen
+citations are never re-addressed by tuning.
+
+| file | sha256 |
+|---|---|
+| internal/sourcefetch/blocks.go | 2eeede97a44f08719d05a2546b97bbd9b429e0d4be3e8972bc1d85fe5c35254e |
+| internal/sourcefetch/readability.go | aa49d420a6b4d09aa20b5c200a0636bf2481b10270764a5e751b6ab05b9ad4c1 |
+| internal/content/pdf_blocks.go | b8148737dae316d63e02a0fb2353d5abbcad5b3dc21582f4420c14980983743b |
+
+## Decisions at finalization
+
+- Digests: verified unchanged since b104f274 (above).
+- Extractor bodies: whole-file digests (above).
+- Seed numbering: kept. A story's empty seed is revision 1 and never
+  publishes, so a story's first public version is v2; version n is always
+  Texture revision n, and nothing renumbers. Orchestrator decision under
+  the owner's delegation (§12), recorded here.
