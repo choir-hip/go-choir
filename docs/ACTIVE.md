@@ -21,13 +21,18 @@ Telegram and commercial status, Taiwan first, Autoradio's slot, and
 schedules option B. Convergent round 1 sent the spine back; round 2
 accepted the repaired spine and the L1 station file (2026-10-13). L1a-3
 (crash boots settle from the updater journal, never re-apply) landed at
-18d01cc0. Open tasks: the cross-model cell-error analysis (owner
-2026-10-13: errors every model makes point at the tool and prompt
-surface; report at docs/reports/cross-model-cell-errors-2026-10-13.md),
-the paper tracer's blind spot for test-computer publications
-(docs/problems/tracer-paper-blind-to-test-publications-2026-10-13.md),
-L1's fault-injection harness, then C1e from
-docs/reports/c1e-deletion-inventory-2026-10-13.md.
+18d01cc0. Cross-model cell errors (owner 2026-10-13: errors every model
+makes point at the tool and prompt surface): report at
+docs/reports/cross-model-cell-errors-2026-10-13.md; fixes for clusters
+A (stopgap), B, D, E, F, G, the hint scanner and the Texture and
+management prompts pushed at d2324a55; cluster C's decode hint at
+cdffb40d (unpushed until the paper run); the typed Read result and the
+yaegi substrate fix for cluster A are residuals. The paper tracer's blind
+spot is fixed at 29bbab97 (owner-scoped publication read). Next: the
+paper run on d2324a55 to measure the cell-error change, L1's
+fault-injection harness, and C1e: its station file
+(docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md)
+is in convergent round 3 after two send_backs.
 
 ## Current (2026-10-13): re-engineering metamission
 
