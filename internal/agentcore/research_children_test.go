@@ -46,7 +46,7 @@ func (p *researchChildProvider) CallWithTools(ctx context.Context, req provideri
 		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "findings for gamma via " + req.Provider + "/" + req.Model, Model: req.Model}, nil
 	}
 	if !strings.Contains(raw, "call-child-cell") {
-		source := fmt.Sprintf("r, err := choir.WebSearch(%q, 2)\nfmt.Println(string(r), err)", objective)
+		source := fmt.Sprintf("s, err := choir.SearchStart(%q)\nif err == nil { _, err = choir.SearchWait(s.ID, 5000) }\nr, _ := choir.Searches.Get(s.ID)\nb, _ := json.Marshal(r.Results)\nfmt.Println(string(b), err)", objective)
 		if objective == "report-attempt" {
 			source = `x, err := choir.Report("texture", "leak", nil, "")` + "\nfmt.Println(x, err)"
 		}
@@ -81,7 +81,7 @@ func TestResearchCellFansOutToChildActivations(t *testing.T) {
 		provider:    provider,
 		modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
 		researchDeps: &researchtools.Dependencies{
-			Search: &stubSearchClient{},
+			Search: stubSearchClient{},
 		},
 	}
 	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
@@ -174,7 +174,7 @@ func TestResearchChildModelCallsShareOneComputerGate(t *testing.T) {
 		modelPolicy:        modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
 		researchChildCalls: &callSpacer{interval: interval},
 		researchDeps: &researchtools.Dependencies{
-			Search: &stubSearchClient{},
+			Search: stubSearchClient{},
 		},
 	}
 	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
@@ -243,7 +243,7 @@ func TestResearchTreeReturnsWithinItsTime(t *testing.T) {
 		provider:           provider,
 		modelPolicy:        modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
 		researchChildCalls: &callSpacer{},
-		researchDeps:       &researchtools.Dependencies{Search: &stubSearchClient{}},
+		researchDeps:       &researchtools.Dependencies{Search: stubSearchClient{}},
 	}
 	tool := newDeskGoEvalTool(rt, newDeskSessionWorkers(), agentprofile.Research)
 	execCtx := deskEvalExecCtx(t)

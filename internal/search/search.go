@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/hostlink"
 
@@ -18,54 +18,134 @@ import (
 
 // Client searches through the canonical runtime gateway.
 type Client interface {
-	Search(ctx context.Context, query string, maxResults int) (*Response, error)
+	// Stream starts a search and returns once the gateway has named the
+	// providers it started; each provider's answer is read with Next.
+	Stream(ctx context.Context, query string, maxResults int) (*Stream, error)
 }
 
-// Response is the gateway's merged web-search response.
-type Response struct {
-	Query          string           `json:"query"`
-	Provider       string           `json:"provider"`
-	Providers      []string         `json:"providers,omitempty"`
-	Attempts       []map[string]any `json:"attempts,omitempty"`
-	Results        []map[string]any `json:"results"`
-	MergedCount    int              `json:"merged_count,omitempty"`
-	Waves          int              `json:"waves,omitempty"`
-	Degraded       bool             `json:"degraded,omitempty"`
-	ProviderHealth map[string]any   `json:"provider_health,omitempty"`
-	Outage         bool             `json:"outage,omitempty"`
-	Code           string           `json:"code,omitempty"`
-	Error          string           `json:"error,omitempty"`
+// Start is a search stream's first line: the providers the search started
+// (the N of "M of N answered") and the ones it skipped.
+type Start struct {
+	Query     string    `json:"query"`
+	Providers []string  `json:"providers"`
+	Cooling   []Cooling `json:"cooling"`
+}
+
+// Cooling is a provider a search skipped because it was cooling down or
+// disabled. It is not a failure of that search.
+type Cooling struct {
+	Provider string `json:"provider"`
+	State    string `json:"state"`
+	Until    string `json:"until,omitempty"`
+}
+
+// Arrival is one provider's completed call.
+type Arrival struct {
+	Provider  string   `json:"provider"`
+	Status    string   `json:"status"`
+	LatencyMs int64    `json:"latency_ms"`
+	Results   []Result `json:"results"`
+	Error     string   `json:"error,omitempty"`
+}
+
+// Answered reports whether the provider returned an answer, possibly empty.
+func (a Arrival) Answered() bool {
+	return a.Status == "success" || a.Status == "success_empty"
+}
+
+// Result is one search hit.
+type Result struct {
+	Title       string  `json:"title"`
+	URL         string  `json:"url"`
+	Snippet     string  `json:"snippet"`
+	PublishedAt string  `json:"published_at,omitempty"`
+	Score       float64 `json:"score,omitempty"`
+	Provider    string  `json:"provider,omitempty"`
+}
+
+// Done is a search stream's final line. Pending names the providers still
+// out when the gateway's bound ended the stream.
+type Done struct {
+	Answered int       `json:"answered"`
+	Total    int       `json:"total"`
+	Pending  []string  `json:"pending,omitempty"`
+	Cooling  []Cooling `json:"cooling"`
+}
+
+// readLine decodes the next NDJSON line and returns its type with the raw
+// line for the caller to decode into that type's shape.
+func readLine(dec *json.Decoder) (string, json.RawMessage, error) {
+	var raw json.RawMessage
+	if err := dec.Decode(&raw); err != nil {
+		return "", nil, err
+	}
+	var head struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &head); err != nil {
+		return "", nil, err
+	}
+	return head.Type, raw, nil
+}
+
+// Stream reads one search's lines as the gateway writes them.
+type Stream struct {
+	Start Start
+	body  io.ReadCloser
+	dec   *json.Decoder
+	done  *Done
+}
+
+// Next returns the next provider's arrival. After the final line it returns
+// io.EOF and Done reports that line; a stream cut before its final line is
+// an error.
+func (s *Stream) Next() (Arrival, error) {
+	if s.done != nil {
+		return Arrival{}, io.EOF
+	}
+	kind, raw, err := readLine(s.dec)
+	if err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return Arrival{}, fmt.Errorf("gateway search: stream ended before its final line")
+		}
+		return Arrival{}, fmt.Errorf("gateway search: read line: %w", err)
+	}
+	switch kind {
+	case "provider":
+		var arrival Arrival
+		if err := json.Unmarshal(raw, &arrival); err != nil {
+			return Arrival{}, fmt.Errorf("gateway search: decode provider line: %w", err)
+		}
+		return arrival, nil
+	case "done":
+		var done Done
+		if err := json.Unmarshal(raw, &done); err != nil {
+			return Arrival{}, fmt.Errorf("gateway search: decode final line: %w", err)
+		}
+		s.done = &done
+		return Arrival{}, io.EOF
+	default:
+		return Arrival{}, fmt.Errorf("gateway search: unexpected line %q", kind)
+	}
+}
+
+// Done returns the final line once Next has read it.
+func (s *Stream) Done() (Done, bool) {
+	if s.done == nil {
+		return Done{}, false
+	}
+	return *s.done, true
+}
+
+// Close ends the stream; the gateway's provider calls for it are cancelled.
+func (s *Stream) Close() error {
+	return s.body.Close()
 }
 
 type gatewaySearchClient struct {
 	baseURL    string
 	token      string
 	httpClient *http.Client
-}
-
-type gatewaySearchAttempt struct {
-	Provider  string `json:"provider"`
-	Endpoint  string `json:"endpoint,omitempty"`
-	Status    string `json:"status"`
-	LatencyMs int64  `json:"latency_ms"`
-	Results   int    `json:"results"`
-	Error     string `json:"error,omitempty"`
-}
-
-type gatewaySearchOutageBody struct {
-	Error          string                           `json:"error"`
-	Code           string                           `json:"code"`
-	Query          string                           `json:"query,omitempty"`
-	ProviderHealth map[string]gatewayProviderHealth `json:"provider_health,omitempty"`
-	Attempts       []gatewaySearchAttempt           `json:"attempts,omitempty"`
-}
-
-type gatewayProviderHealth struct {
-	State            string `json:"state"`
-	CooldownUntil    string `json:"cooldown_until,omitempty"`
-	StrikeCount      int    `json:"strike_count"`
-	LastFailureClass string `json:"last_failure_class,omitempty"`
-	LastErrorSummary string `json:"last_error_summary,omitempty"`
 }
 
 // NewGatewayClientFromEnv returns the configured gateway client, or nil when
@@ -80,13 +160,17 @@ func NewGatewayClientFromEnv() Client {
 		return nil
 	}
 	return &gatewaySearchClient{
-		baseURL:    baseURL,
-		token:      token,
-		httpClient: hostlink.NewClient(30 * time.Second),
+		baseURL: baseURL,
+		token:   token,
+		// No per-attempt bound: the gateway keeps a stream open for the
+		// provider timeout plus a margin and ends it itself, and a bound
+		// here would cut the body it is still writing. The caller's context
+		// ends a stream early; hostlink keeps resending a refused dial.
+		httpClient: hostlink.NewClient(0),
 	}
 }
 
-func (c *gatewaySearchClient) Search(ctx context.Context, query string, maxResults int) (*Response, error) {
+func (c *gatewaySearchClient) Stream(ctx context.Context, query string, maxResults int) (*Stream, error) {
 	payload := map[string]any{
 		"query": query,
 	}
@@ -109,16 +193,9 @@ func (c *gatewaySearchClient) Search(ctx context.Context, query string, maxResul
 	if err != nil {
 		return nil, fmt.Errorf("gateway search: http call: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("gateway search: read response: %w", err)
-	}
 	if resp.StatusCode != http.StatusOK {
-		if outage, ok := parseGatewaySearchOutage(body, query); ok {
-			return outage, nil
-		}
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		var errResp struct {
 			Error string `json:"error"`
 		}
@@ -128,75 +205,26 @@ func (c *gatewaySearchClient) Search(ctx context.Context, query string, maxResul
 		return nil, fmt.Errorf("gateway search: status %s", resp.Status)
 	}
 
-	var result Response
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("gateway search: decode response: %w", err)
-	}
-	return &result, nil
+	return ReadStream(resp.Body)
 }
 
-func parseGatewaySearchOutage(body []byte, fallbackQuery string) (*Response, bool) {
-	var outage gatewaySearchOutageBody
-	if err := json.Unmarshal(body, &outage); err != nil {
-		return nil, false
+// ReadStream reads a search stream's start line from body and returns the
+// stream; the caller reads the provider lines with Next and closes it. On
+// error body is closed.
+func ReadStream(body io.ReadCloser) (*Stream, error) {
+	stream := &Stream{body: body, dec: json.NewDecoder(body)}
+	kind, raw, err := readLine(stream.dec)
+	switch {
+	case err != nil:
+		err = fmt.Errorf("read start line: %w", err)
+	case kind != "start":
+		err = fmt.Errorf("first line is %q, want start", kind)
+	default:
+		err = json.Unmarshal(raw, &stream.Start)
 	}
-	if strings.TrimSpace(outage.Code) != "search_outage" && strings.TrimSpace(outage.Error) != "search_outage" {
-		return nil, false
+	if err != nil {
+		_ = body.Close()
+		return nil, fmt.Errorf("gateway search: %w", err)
 	}
-	query := strings.TrimSpace(outage.Query)
-	if query == "" {
-		query = strings.TrimSpace(fallbackQuery)
-	}
-	attempts := make([]map[string]any, 0, len(outage.Attempts))
-	for _, attempt := range outage.Attempts {
-		entry := map[string]any{
-			"provider":   attempt.Provider,
-			"status":     attempt.Status,
-			"latency_ms": attempt.LatencyMs,
-			"results":    attempt.Results,
-		}
-		if attempt.Endpoint != "" {
-			entry["endpoint"] = attempt.Endpoint
-		}
-		if attempt.Error != "" {
-			entry["error"] = attempt.Error
-		}
-		attempts = append(attempts, entry)
-	}
-	providerHealth := make(map[string]any, len(outage.ProviderHealth))
-	for name, health := range outage.ProviderHealth {
-		entry := map[string]any{
-			"state":        health.State,
-			"strike_count": health.StrikeCount,
-		}
-		if health.CooldownUntil != "" {
-			entry["cooldown_until"] = health.CooldownUntil
-		}
-		if health.LastFailureClass != "" {
-			entry["last_failure_class"] = health.LastFailureClass
-		}
-		if health.LastErrorSummary != "" {
-			entry["last_error_summary"] = health.LastErrorSummary
-		}
-		providerHealth[name] = entry
-	}
-	return &Response{
-		Query:          query,
-		Results:        []map[string]any{},
-		Attempts:       attempts,
-		ProviderHealth: providerHealth,
-		Outage:         true,
-		Code:           firstNonEmptyString(outage.Code, "search_outage"),
-		Error:          firstNonEmptyString(outage.Error, "search_outage"),
-		Degraded:       true,
-	}, true
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
+	return stream, nil
 }

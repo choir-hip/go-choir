@@ -65,6 +65,15 @@ type deskSession struct {
 	// freed is closed when the busy cell ends, waking runs that wait for
 	// this session.
 	freed chan struct{}
+	// searches is the session's async search table (desk_search.go); its
+	// streams end with the session.
+	searches *deskSearches
+}
+
+// close ends the session: its searches' streams, then its worker.
+func (s *deskSession) close() {
+	s.searches.close()
+	s.worker.Close()
 }
 
 type deskSessionWorkers struct {
@@ -172,7 +181,7 @@ func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent
 	m.reclaimLocked(now)
 	s := m.sessions[key]
 	if s != nil && (s.worker.Dead() || !sameDeskSessionConfig(s.cfg, cfg.Session)) {
-		s.worker.Close()
+		s.close()
 		delete(m.sessions, key)
 		s = nil
 	}
@@ -181,7 +190,7 @@ func (m *deskSessionWorkers) acquire(ctx context.Context, key string, persistent
 		if err != nil {
 			return deskSessionLease{}, err
 		}
-		s = &deskSession{worker: w, cfg: cfg.Session, started: now, lastUsed: now}
+		s = &deskSession{worker: w, cfg: cfg.Session, started: now, lastUsed: now, searches: newDeskSearches()}
 		m.sessions[key] = s
 	}
 	lease := deskSessionLease{key: key, worker: s.worker}
@@ -228,7 +237,8 @@ func (m *deskSessionWorkers) done(key string) {
 }
 
 // reclaimLocked closes idle sessions past retention, then the least recently
-// used idle sessions beyond maxIdle. A busy session is never reclaimed.
+// used idle sessions beyond maxIdle, cancelling their searches. A busy
+// session is never reclaimed.
 func (m *deskSessionWorkers) reclaimLocked(now time.Time) {
 	idle := make([]string, 0, len(m.sessions))
 	for key, s := range m.sessions {
@@ -236,7 +246,7 @@ func (m *deskSessionWorkers) reclaimLocked(now time.Time) {
 			continue
 		}
 		if s.worker.Dead() || now.Sub(s.lastUsed) > m.retentionLocked() {
-			s.worker.Close()
+			s.close()
 			delete(m.sessions, key)
 			continue
 		}
@@ -251,7 +261,7 @@ func (m *deskSessionWorkers) reclaimLocked(now time.Time) {
 	}
 	sort.Slice(idle, func(i, j int) bool { return m.sessions[idle[i]].lastUsed.Before(m.sessions[idle[j]].lastUsed) })
 	for _, key := range idle[:len(idle)-limit] {
-		m.sessions[key].worker.Close()
+		m.sessions[key].close()
 		delete(m.sessions, key)
 	}
 }
@@ -277,12 +287,13 @@ func (m *deskSessionWorkers) count() int {
 	return len(m.sessions)
 }
 
-// release terminates and forgets the session's worker.
+// release terminates and forgets the session's worker and cancels its
+// searches.
 func (m *deskSessionWorkers) release(key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s := m.sessions[key]; s != nil {
-		s.worker.Close()
+		s.close()
 		delete(m.sessions, key)
 	}
 }
@@ -292,7 +303,7 @@ func (m *deskSessionWorkers) closeAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for key, s := range m.sessions {
-		s.worker.Close()
+		s.close()
 		delete(m.sessions, key)
 	}
 }
@@ -316,7 +327,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 		Description: "Evaluate model-authored Go source for this desk in a killable host subprocess (restricted stdlib, per-role choir verbs). The desk's session continues across its runs, so values from earlier runs stay defined until a restart, a failed or timed-out cell, or " + deskSessionRetention.String() + " idle; the first cell of each run says whether the session is new or continuing.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"source":     map[string]any{"type": "string", "description": "Raw Go source for one REPL cell; stage desk acts with choir.* verbs."},
-			"timeout_ms": map[string]any{"type": "integer", "description": "Optional evaluation timeout in milliseconds; leaving it unset is normal. A cell that reaches it is killed with its session, so values from earlier cells are lost. Host calls such as choir.WebSearch and choir.FetchURL take several seconds each (up to about 10 s)."},
+			"timeout_ms": map[string]any{"type": "integer", "description": "Optional evaluation timeout in milliseconds; leaving it unset is normal. A cell that reaches it is killed with its session, so values from earlier cells are lost. Host calls such as choir.FetchURL take several seconds each (up to about 10 s), and choir.SearchWait blocks as long as you ask."},
 		}, []string{"source"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			execCtx := toolregistry.ExecutionContextFrom(ctx)
@@ -366,8 +377,29 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 						cellExec = execCtx
 					}
 					started := time.Now().UTC()
-					out, err := rt.deskEgress(egrCtx, cellExec, action, payload)
 					requestID, pid := yaegikernel.EgressFrameFromContext(egrCtx)
+					var out json.RawMessage
+					var err error
+					if action == yaegikernel.ActionSearchStart {
+						// An async search belongs to this desk session: its
+						// stream outlives the cell and ends with the session.
+						out, err = workers.startSearch(egrCtx, sessionKey, yaegikernel.EgressWorkerFromContext(egrCtx), rt.searchClient(), payload, func(done searchDone) {
+							ev := map[string]any{
+								"verb": "search_done", "search_id": done.id, "desk_session": workers.sessionLabel(sessionKey), "worker_pid": pid,
+								"run_id": cellExec.RunID, "started_at": done.started.UTC(), "finished_at": time.Now().UTC(),
+								"answered": done.answered, "arrived": done.arrived, "total": done.total,
+							}
+							if len(done.pending) > 0 {
+								ev["pending"] = done.pending
+							}
+							if done.err != "" {
+								ev["error"] = done.err
+							}
+							rt.recordDeskEvent(context.WithoutCancel(egrCtx), cellExec, types.EventDeskEgress, ev)
+						})
+					} else {
+						out, err = rt.deskEgress(egrCtx, cellExec, action, payload)
+					}
 					ev := map[string]any{
 						"request_id": requestID, "response_request_id": requestID,
 						"verb": string(action), "desk_session": workers.sessionLabel(sessionKey), "worker_pid": pid,
@@ -473,6 +505,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				"diag":     result.DiagKind,
 				"receipts": result.Receipts,
 				"intents":  len(result.Intents),
+			}
+			// One count line per async search with new arrivals: the only
+			// push of search arrivals to the model.
+			if len(result.Searches) > 0 {
+				cell["searches"] = result.Searches
 			}
 			if lease.notice != "" {
 				cell["session"] = lease.notice
@@ -940,10 +977,11 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 
 // cellTimeoutError explains a cell stopped by the timeout_ms its desk chose.
 // A bare "context deadline exceeded" left research shortening the limit or
-// retrying the same cell, while its web searches needed 3-10 s each.
+// retrying the same cell, while its web searches needed 3-10 s each
+// (searches are async since Cut 2; fetches and SearchWait still take time).
 func cellTimeoutError(timeoutMS int, elapsed time.Duration) string {
 	return fmt.Sprintf("cell stopped by its own timeout_ms=%d after %d ms; the session was killed, so values defined in earlier cells are gone. "+
-		"Host calls such as choir.WebSearch and choir.FetchURL take several seconds each (up to about 10 s): leave timeout_ms unset or allow for them",
+		"Host calls such as choir.FetchURL take several seconds each (up to about 10 s), and choir.SearchWait blocks as long as you ask: leave timeout_ms unset or allow for them",
 		timeoutMS, elapsed.Milliseconds())
 }
 

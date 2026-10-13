@@ -71,6 +71,12 @@ type ChoirScope struct {
 	// a bare call (problems/desk-verb-error-vanishes-as-final-expression-2026-10-11.md).
 	refusalMu sync.Mutex
 	refusals  []verbRefusal
+	// searches is this session's async search store (search_store.go): the
+	// worker's reader loop writes it, cells read it through choir.Searches,
+	// and a cell's end does not clear it. searchTold is how many of each
+	// search's arrivals the desk has been told about in a cell result.
+	searches   *SearchStore
+	searchTold map[string]int
 }
 
 type verbRefusal struct {
@@ -104,17 +110,17 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit}
 	if role == SessionRoleResearchChild {
 		actions = []BrokerAction{ActionReadFile, ActionListDir,
-			ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
+			ActionSearchStart, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
 			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
 			ActionReadContentSelector, ActionSearchWireCorpus,
 			ActionReadEvidence, ActionListEvidence}
 	} else if readOnly {
 		// Research is read-only on the filesystem but owns the host-mediated
-		// egress verbs (web_search/fetch_url/source_search/import_*/read_*/
+		// egress verbs (search_start/fetch_url/source_search/import_*/read_*/
 		// list_*/search_wire_corpus + evidence/run-memory) — the handle must
 		// authorize the frame actions the cell verbs dispatch.
 		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionEmit,
-			ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
+			ActionSearchStart, ActionFetchURL, ActionSourceSearch, ActionImportDocument,
 			ActionImportURL, ActionReadContentItem, ActionListContentSelectors,
 			ActionReadContentSelector, ActionSearchWireCorpus,
 			ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry, ActionResearch,
@@ -129,7 +135,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	if err != nil {
 		return nil, fmt.Errorf("choir: issue session handle: %w", err)
 	}
-	scope := &ChoirScope{broker: broker, issuer: issuer, actions: actions, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: normalizeDeskRole(role), slot: slot}
+	scope := &ChoirScope{broker: broker, issuer: issuer, actions: actions, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: normalizeDeskRole(role), slot: slot, searches: newSearchStore()}
 	scope.handleRef.Store(&handleRef)
 	return scope, nil
 }
@@ -194,7 +200,8 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.records = nil
 			return out
 		},
-		Refusals: s.takeRefusals,
+		Refusals:     s.takeRefusals,
+		SearchCounts: s.searchCountLines,
 	}
 }
 
@@ -284,13 +291,14 @@ var deskModuleSets = map[string][]string{
 	// read-only world access is not read-only messaging.
 	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
 		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
+		"SearchStart", "Searches", "SearchWait", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
 		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
 		"SaveEvidence", "ReadEvidence", "ListEvidence", "RunMemoryEntry", "Research", "PollSource", "ReadCapture"},
 	// A child research activation (choir.Research) reads the world and may
 	// fan out further; it cannot message, report or write. Its findings
-	// return to the parent cell as a value.
-	SessionRoleResearchChild: {"WebSearch", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
+	// return to the parent cell as a value. It runs on the same desk-session
+	// machinery as its parent, so it searches the same async way.
+	SessionRoleResearchChild: {"SearchStart", "Searches", "SearchWait", "FetchURL", "SourceSearch", "ImportDocument", "ImportURL",
 		"ReadContentItem", "ListContentSelectors", "ReadContentSelector", "SearchWireCorpus",
 		"ReadEvidence", "ListEvidence"},
 	// Texture authors document revisions and escalates; artifact writes are
@@ -380,7 +388,9 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Disagreement":         func() reflect.Value { return reflect.ValueOf(s.Disagreement) },
 		"ReadDoc":              func() reflect.Value { return reflect.ValueOf(s.ReadDoc) },
 		"ApplyTexture":         func() reflect.Value { return reflect.ValueOf(s.ApplyTexture) },
-		"WebSearch":            func() reflect.Value { return reflect.ValueOf(s.WebSearch) },
+		"SearchStart":          func() reflect.Value { return reflect.ValueOf(s.SearchStart) },
+		"SearchWait":           func() reflect.Value { return reflect.ValueOf(s.SearchWait) },
+		"Searches":             func() reflect.Value { return reflect.ValueOf(s.searches) }, // a value: choir.Searches.Get(id), .List()
 		"Research":             func() reflect.Value { return reflect.ValueOf(s.Research) },
 		"FetchURL":             func() reflect.Value { return reflect.ValueOf(s.FetchURL) },
 		"PollSource":           func() reflect.Value { return reflect.ValueOf(s.PollSource) },
@@ -507,15 +517,6 @@ func (s *ChoirScope) Emit(toDesk, kind, body string) (EmitResult, error) {
 	return EmitResult{}, fmt.Errorf("choir.Emit is retired: %s", retiredMessageVerbs)
 }
 
-// WebSearch resolves a web search through the host's search client under the
-// per-activation egress budget — a synchronous broker call, never an open
-// socket. Returns the tool's bounded projection as JSON.
-func (s *ChoirScope) WebSearch(query string, maxResults int) (JSON, error) {
-	var out JSON
-	err := s.call(ActionWebSearch, WebSearchPayload{Query: query, MaxResults: maxResults}, &out)
-	return out, err
-}
-
 // JSON is the raw JSON a world verb returns. It is a byte slice, so
 // string(r), json.Unmarshal(r, &v) and []byte parameters take it, and it
 // prints as text: println(r), fmt.Println(r) and %v show the JSON, not a
@@ -540,8 +541,8 @@ func (j *JSON) UnmarshalJSON(data []byte) error {
 // Research runs child research activations on the host, in parallel, and
 // returns each child's findings to this cell. children is one objective (a
 // string), a list of objectives, or a list of {"objective", "model"} maps;
-// an empty model means this desk's own. The children share this
-// activation's egress budget and this cell's deadline.
+// an empty model means this desk's own. The children share this cell's
+// deadline.
 func (s *ChoirScope) Research(children any) ([]ResearchChildResult, error) {
 	specs, err := researchChildSpecs(children)
 	if err != nil {
@@ -593,8 +594,8 @@ func researchChildSpecs(children any) ([]ResearchChild, error) {
 	return kept, nil
 }
 
-// FetchURL resolves a URL fetch through the host's HTTP client under the
-// per-activation egress budget — synchronous, bounded, never an open socket.
+// FetchURL resolves a URL fetch through the host's HTTP client —
+// synchronous, bounded, never an open socket.
 // Returns the tool's bounded projection as JSON.
 func (s *ChoirScope) FetchURL(url string) (JSON, error) {
 	var out JSON
@@ -602,9 +603,9 @@ func (s *ChoirScope) FetchURL(url string) (JSON, error) {
 	return out, err
 }
 
-// PollSource polls one registry source through the host under the egress
-// budget and writes its items as shared choir.web_capture objects in the
-// global store behind corpusd; returns counts and the new captures as JSON.
+// PollSource polls one registry source through the host and writes its
+// items as shared choir.web_capture objects in the global store behind
+// corpusd; returns counts and the new captures as JSON.
 func (s *ChoirScope) PollSource(sourceID string, maxItems int) (JSON, error) {
 	var out JSON
 	err := s.call(ActionPollSource, PollSourcePayload{SourceID: sourceID, MaxItems: maxItems}, &out)

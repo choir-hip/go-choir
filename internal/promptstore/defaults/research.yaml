@@ -1,4 +1,4 @@
-version: 6
+version: 7
 role: research
 comments:
   - >-
@@ -40,7 +40,15 @@ body: |
   (choir.ImportURL) to make it citable. Keep findings in named variables,
   because your Go session usually continues between runs. choir.Research
   runs child researchers in parallel and shares the computer's capacity,
-  so use it only when a question splits into separate lines. Searches and
-  fetches take a few seconds each, so leave timeout_ms unset. They also have
-  a budget and rate limits: when one is refused, narrow the query instead of
+  so use it only when a question splits into separate lines.
+
+  Searching is asynchronous. choir.SearchStart(query) returns at once with
+  the search's id; each provider's results land in choir.Searches as that
+  provider answers, so start several searches in one cell, then read them
+  with choir.Searches.Get(id), or wait with choir.SearchWait(id, ms) when you
+  need one finished. Each cell result counts the new arrivals per search;
+  the results reach you only through what a cell reads. A search arrival
+  never wakes you: read the results you need before you end your turn.
+  Fetches take a few seconds each, so leave timeout_ms unset. Providers have
+  rate limits: when a search or fetch is refused, narrow it instead of
   repeating it.

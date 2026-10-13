@@ -25,7 +25,7 @@ import (
 func TestDeskCellAndEgressRecordRunEvents(t *testing.T) {
 	deskTestWorkerBin(t)
 	rt, s := testRuntime(t)
-	rt.researchDeps = &researchtools.Dependencies{Search: &stubSearchClient{}}
+	rt.researchDeps = &researchtools.Dependencies{Search: stubSearchClient{}}
 	workers := newDeskSessionWorkers()
 	t.Cleanup(workers.closeAll)
 	tool := newDeskGoEvalTool(rt, workers, agentprofile.Research)
@@ -39,7 +39,13 @@ func TestDeskCellAndEgressRecordRunEvents(t *testing.T) {
 	src, _ := json.Marshal(`done := make(chan error, 3)
 for _, q := range []string{"q1", "q2", "q3"} {
 	q := q
-	go func() { _, err := choir.WebSearch(q, 1); done <- err }()
+	go func() {
+		s, err := choir.SearchStart(q)
+		if err == nil {
+			_, err = choir.SearchWait(s.ID, 5000)
+		}
+		done <- err
+	}()
 }
 for i := 0; i < 3; i++ {
 	if err := <-done; err != nil {
@@ -79,19 +85,35 @@ for i := 0; i < 3; i++ {
 	if cells[0]["desk_session"] == "" || cells[0]["worker_pid"] == float64(0) || cells[0]["started_at"] == nil {
 		t.Fatalf("desk.cell lacks session, worker or timing: %v", cells[0])
 	}
-	if len(egress) != 3 {
-		t.Fatalf("want three desk.egress events, got %d", len(egress))
+	var starts, dones []map[string]any
+	for _, e := range egress {
+		switch e["verb"] {
+		case "search_start":
+			starts = append(starts, e)
+		case "search_done":
+			dones = append(dones, e)
+		}
+	}
+	if len(starts) != 3 || len(dones) != 3 || len(egress) != 6 {
+		t.Fatalf("want three search_start and three search_done desk.egress events, got %d and %d of %d", len(starts), len(dones), len(egress))
 	}
 	seen := map[any]bool{}
-	for _, e := range egress {
+	for _, e := range starts {
 		id := e["request_id"]
 		if id == "" || id == nil || id != e["response_request_id"] || seen[id] {
 			t.Fatalf("egress event needs a distinct request id echoed on its result: %v", e)
 		}
 		seen[id] = true
-		if e["verb"] != "web_search" || e["worker_pid"] != cells[0]["worker_pid"] {
-			t.Fatalf("egress event verb/worker mismatch: %v", e)
+		if e["worker_pid"] != cells[0]["worker_pid"] {
+			t.Fatalf("egress event worker mismatch: %v", e)
 		}
+	}
+	searchIDs := map[any]bool{}
+	for _, e := range dones {
+		if e["answered"] != float64(1) || e["total"] != float64(1) || searchIDs[e["search_id"]] {
+			t.Fatalf("search_done event needs its own search id and counts: %v", e)
+		}
+		searchIDs[e["search_id"]] = true
 	}
 }
 

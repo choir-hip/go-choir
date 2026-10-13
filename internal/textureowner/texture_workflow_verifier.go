@@ -19,7 +19,6 @@ type TextureWorkflowVerificationOptions struct {
 	RequireWorkerUpdates        bool
 	RequirePersistentManagement bool
 	RequireEngineering          bool
-	RequireSearchToolEvent      bool
 	RequireArtifactWriteEvent   bool
 	RequireVerificationCmdEvent bool
 	RequireWorkerConsumption    bool
@@ -125,12 +124,6 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		guarantee("co-super execution was spawned only by super")
 	}
 
-	if opts.RequireSearchToolEvent && !eventsContainSuccessfulWebSearch(events) {
-		return report, fmt.Errorf("missing successful web_search tool result with provider/results")
-	}
-	if opts.RequireSearchToolEvent {
-		guarantee("live search requirement has a successful web_search tool result")
-	}
 	if opts.RequireArtifactWriteEvent && !eventsContainAnySuccessfulTool(events, "write_file", "edit_file") {
 		return report, fmt.Errorf("missing successful artifact write tool result")
 	}
@@ -329,20 +322,6 @@ func eventsContainAnySuccessfulTool(events []types.EventRecord, tools ...string)
 		tool, _ := payload["tool"].(string)
 		isError, _ := payload["is_error"].(bool)
 		if want[tool] && !isError {
-			return true
-		}
-	}
-	return false
-}
-
-func eventsContainSuccessfulWebSearch(events []types.EventRecord) bool {
-	for _, payload := range successfulToolResultPayloads(events, "web_search") {
-		var output struct {
-			Provider string           `json:"provider"`
-			Results  []map[string]any `json:"results"`
-		}
-		if err := json.Unmarshal([]byte(toolPayloadOutput(payload)), &output); err == nil &&
-			strings.TrimSpace(output.Provider) != "" && len(output.Results) > 0 {
 			return true
 		}
 	}

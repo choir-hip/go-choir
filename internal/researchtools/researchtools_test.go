@@ -3,7 +3,6 @@ package researchtools
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,14 +12,13 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func TestRegisterInstallsNineResearchToolsWithCanonicalSchemas(t *testing.T) {
+func TestRegisterInstallsEightResearchToolsWithCanonicalSchemas(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	if err := Register(registry, Dependencies{}); err != nil {
 		t.Fatalf("register research tools: %v", err)
@@ -35,7 +33,6 @@ func TestRegisterInstallsNineResearchToolsWithCanonicalSchemas(t *testing.T) {
 		"read_content_item_selector",
 		"search_wire_corpus",
 		"source_search",
-		"web_search",
 	}
 	tools := registry.Tools()
 	gotNames := make([]string, 0, len(tools))
@@ -47,16 +44,6 @@ func TestRegisterInstallsNineResearchToolsWithCanonicalSchemas(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotNames, wantNames) {
 		t.Fatalf("registered tools = %v, want %v", gotNames, wantNames)
-	}
-
-	web, _ := registry.Lookup("web_search")
-	webProperties := web.Parameters["properties"].(map[string]any)
-	maxResults := webProperties["max_results"].(map[string]any)
-	if maxResults["minimum"] != 1 || maxResults["maximum"] != 50 {
-		t.Fatalf("web_search max_results schema = %#v", maxResults)
-	}
-	if !reflect.DeepEqual(web.Parameters["required"], []string{"query"}) {
-		t.Fatalf("web_search required = %#v", web.Parameters["required"])
 	}
 
 	readItem, _ := registry.Lookup("read_content_item")
@@ -210,92 +197,6 @@ func TestHTTPSourceClientPreservesServiceErrors(t *testing.T) {
 	}
 	if NewSourceClient(SourceClientConfig{BaseURL: "://bad"}) != nil {
 		t.Fatal("invalid source URL should not configure a client")
-	}
-}
-
-type recordingSearchClient struct {
-	query      string
-	maxResults int
-	response   *search.Response
-	err        error
-}
-
-func (c *recordingSearchClient) Search(_ context.Context, query string, maxResults int) (*search.Response, error) {
-	c.query = query
-	c.maxResults = maxResults
-	return c.response, c.err
-}
-
-func TestWebSearchPreservesBreadthProjectionAndGatewayOutage(t *testing.T) {
-	client := &recordingSearchClient{response: &search.Response{
-		Query: "current releases", Provider: "gateway", Providers: []string{"brave"},
-		Results: []map[string]any{{
-			"title": "Release", "url": "https://example.test/release",
-			"snippet": strings.Repeat("evidence ", 100), "provider": "brave",
-		}},
-	}}
-	registry := toolregistry.NewToolRegistry()
-	if err := Register(registry, Dependencies{Search: client}); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-	raw, err := registry.Execute(context.Background(), "web_search", json.RawMessage(`{"query":" current releases ","max_results":5}`))
-	if err != nil {
-		t.Fatalf("web_search: %v", err)
-	}
-	if client.query != "current releases" || client.maxResults != webSearchAgentResultFloor {
-		t.Fatalf("search call = query %q max %d", client.query, client.maxResults)
-	}
-	var envelope struct {
-		ModelOutput struct {
-			Results []struct {
-				Snippet string `json:"snippet"`
-			} `json:"results"`
-		} `json:"model_output"`
-		DurableOutput struct {
-			Results []map[string]any `json:"results"`
-		} `json:"durable_output"`
-		Projection struct {
-			Type string `json:"type"`
-		} `json:"projection"`
-	}
-	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
-		t.Fatalf("decode web projection: %v", err)
-	}
-	if len(envelope.ModelOutput.Results) != 1 || len(envelope.ModelOutput.Results[0].Snippet) != 403 || !strings.HasSuffix(envelope.ModelOutput.Results[0].Snippet, "...") {
-		t.Fatalf("model projection = %#v", envelope.ModelOutput)
-	}
-	if len(envelope.DurableOutput.Results) != 1 || envelope.Projection.Type != "web_search" {
-		t.Fatalf("durable projection = %#v / %#v", envelope.DurableOutput, envelope.Projection)
-	}
-
-	client.response = &search.Response{
-		Query: "outage", Outage: true, Code: "search_outage", Error: "search_outage",
-		Degraded:       true,
-		ProviderHealth: map[string]any{"brave": map[string]any{"state": "cooling_down"}},
-		Attempts:       []map[string]any{{"provider": "brave", "status": "rate_limited", "error": "429"}},
-	}
-	raw, err = registry.Execute(context.Background(), "web_search", json.RawMessage(`{"query":"outage"}`))
-	if err != nil {
-		t.Fatalf("outage web_search: %v", err)
-	}
-	var outage struct {
-		ModelOutput map[string]any `json:"model_output"`
-		Projection  map[string]any `json:"projection"`
-	}
-	if err := json.Unmarshal([]byte(raw), &outage); err != nil {
-		t.Fatalf("decode outage projection: %v", err)
-	}
-	if outage.ModelOutput["search_outage"] != true || outage.ModelOutput["code"] != "search_outage" {
-		t.Fatalf("outage model output = %#v", outage.ModelOutput)
-	}
-	if outage.ModelOutput["next_instruction"] != nil || outage.Projection["search_outage"] != true {
-		t.Fatalf("outage guidance/projection = %#v / %#v", outage.ModelOutput, outage.Projection)
-	}
-
-	client.err = errors.New("gateway transport failed")
-	client.response = nil
-	if _, err := registry.Execute(context.Background(), "web_search", json.RawMessage(`{"query":"failure"}`)); err == nil || err.Error() != "gateway transport failed" {
-		t.Fatalf("gateway error = %v", err)
 	}
 }
 

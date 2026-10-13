@@ -26,9 +26,10 @@ func deskRunCtx(t *testing.T, root, agentID, runID string) context.Context {
 }
 
 type deskCellOut struct {
-	Stdout  string `json:"stdout"`
-	Error   string `json:"error"`
-	Session string `json:"session"`
+	Stdout   string   `json:"stdout"`
+	Error    string   `json:"error"`
+	Session  string   `json:"session"`
+	Searches []string `json:"searches"`
 }
 
 func evalDeskCell(t *testing.T, tool toolregistry.Tool, ctx context.Context, source string) deskCellOut {

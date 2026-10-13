@@ -18,10 +18,19 @@ import (
 
 // FunctionDoc documents one choir function. Args are the Go parameter names
 // in order; types and return values are read from the method by reflection.
+// A namespace export (a value whose methods are called, choir.Searches.Get)
+// names each method's parameters in Methods instead.
 type FunctionDoc struct {
 	Args    []string
+	Methods map[string][]string
 	Summary string
 	Example string
+}
+
+// choirNamespaces are the choir exports that are values with methods rather
+// than functions.
+var choirNamespaces = map[string]reflect.Type{
+	"Searches": reflect.TypeOf((*SearchStore)(nil)),
 }
 
 var choirFunctionDocs = map[string]FunctionDoc{
@@ -57,11 +66,13 @@ var choirFunctionDocs = map[string]FunctionDoc{
 	"Freeze":               {Args: []string{"buildRecipeRef", "testReceipts", "dependencyToolchainRefs"}, Summary: "Freezes your capsule diff as a verifier-ready bundle after the cell; each argument is a capsule-go-eval receipt ref (or list of them). One per cell."},
 	"Verify":               {Args: []string{"decision", "verifierRefs", "bundleDigest"}, Summary: "Records your independent verdict (\"pass\" or \"fail\") on the mounted frozen bundle. Verifier slot only."},
 	"InspectBundle":        {Summary: "Verifies the mounted frozen bundle's draft and file digests and returns its receipt fields. Verifier slot only."},
-	"WebSearch":            {Args: []string{"query", "maxResults"}, Summary: "Web search through the host; returns JSON."},
+	"SearchStart":          {Args: []string{"query"}, Summary: "Starts a web search on every search provider at once and returns at once with its id and how many providers it started; it never waits for an answer. Each provider's results land in choir.Searches as that provider answers, while this cell runs or later. Each cell result ends with one count line per search with new arrivals (\"s3: 3/4 answered, +2 new\"). An arrival never wakes you: read the results you need before ending your turn.", Example: "s, err := choir.SearchStart(\"query\")\nfmt.Println(s) // s1 started: 4 providers"},
+	"Searches":             {Methods: map[string][]string{"Get": {"id"}, "List": nil}, Summary: "This session's searches, as copies: Get(id) returns one search with each provider's arrival (provider, status, latency, results, error), the results of all arrivals with each URL once, how many answered of how many started, and whether it is done; List() returns every search. Cooling providers are listed apart and are not failures.", Example: "r, err := choir.Searches.Get(s.ID)\nfor _, hit := range r.Results { fmt.Println(hit.Title, hit.URL) }"},
+	"SearchWait":           {Args: []string{"id", "ms"}, Summary: "Blocks until the search is done or ms milliseconds pass (at most two minutes), and returns its counts (answered, arrived, total, done). Read the results with choir.Searches.Get.", Example: "c, err := choir.SearchWait(s.ID, 15000)"},
 	"FetchURL":             {Args: []string{"url"}, Summary: "Fetches a URL through the host; returns JSON."},
 	"ReadCapture":          {Args: []string{"captureID", "maxChars"}, Summary: "Reads one shared web_capture (an id from PollSource, from any computer's poll) with its title, URL, source, dates and body text. maxChars 0 means 8000."},
 	"PollSource":           {Args: []string{"sourceID", "maxItems"}, Summary: "Polls one registry source (for example \"arxiv:cs_ai\") into shared web_capture objects in the global store, readable by every computer; returns counts and each new capture's id, title and URL, not bodies. maxItems 0 means 20."},
-	"Research":             {Args: []string{"children"}, Summary: "Runs child research activations in parallel and returns each one's findings (objective, model, findings, error). children: an objective, a list of objectives, or a list of {\"objective\", \"model\"} maps; model is empty (your own), a role name such as \"engineering\", or a model ID from this computer's model policy, and an unknown one returns an error naming the configured models. Children take minutes, share your egress budget and the computer's model capacity, and cannot fan out further; a call returns within 10 minutes. Leave timeout_ms unset."},
+	"Research":             {Args: []string{"children"}, Summary: "Runs child research activations in parallel and returns each one's findings (objective, model, findings, error). children: an objective, a list of objectives, or a list of {\"objective\", \"model\"} maps; model is empty (your own), a role name such as \"engineering\", or a model ID from this computer's model policy, and an unknown one returns an error naming the configured models. Children take minutes, share the computer's model capacity, and cannot fan out further; a call returns within 10 minutes. Leave timeout_ms unset."},
 	"SourceSearch":         {Args: []string{"query", "maxResults"}, Summary: "Searches the Source Service; returns JSON."},
 	"ImportDocument":       {Args: []string{"url", "filePath", "query"}, Summary: "Imports a URL or file into a ContentItem."},
 	"ImportURL":            {Args: []string{"url", "query"}, Summary: "Imports a URL into a ContentItem."},
@@ -79,14 +90,27 @@ var choirFunctionDocs = map[string]FunctionDoc{
 var choirScopeType = reflect.TypeOf((*ChoirScope)(nil))
 
 // choirSignature renders "choir.Name(arg type, ...) results" from the Go
-// method and the documented parameter names.
+// method and the documented parameter names. A namespace export renders each
+// of its methods, "choir.Searches.Get(id string) (Search, error)".
 func choirSignature(name string) string {
+	doc := choirFunctionDocs[name]
+	if ns, ok := choirNamespaces[name]; ok {
+		sigs := make([]string, 0, ns.NumMethod())
+		for i := 0; i < ns.NumMethod(); i++ {
+			m := ns.Method(i)
+			sigs = append(sigs, methodSignature("choir."+name+"."+m.Name, m.Type, doc.Methods[m.Name]))
+		}
+		return strings.Join(sigs, ", ")
+	}
 	method, ok := choirScopeType.MethodByName(name)
 	if !ok {
 		return "choir." + name + "(...)"
 	}
-	doc := choirFunctionDocs[name]
-	fn := method.Type // In(0) is the receiver
+	return methodSignature("choir."+name, method.Type, doc.Args)
+}
+
+// methodSignature renders one method; fn.In(0) is the receiver.
+func methodSignature(label string, fn reflect.Type, args []string) string {
 	params := make([]string, 0, fn.NumIn()-1)
 	for i := 1; i < fn.NumIn(); i++ {
 		typ := typeName(fn.In(i))
@@ -94,8 +118,8 @@ func choirSignature(name string) string {
 			typ = "..." + typeName(fn.In(i).Elem())
 		}
 		argName := fmt.Sprintf("arg%d", i)
-		if i-1 < len(doc.Args) {
-			argName = doc.Args[i-1]
+		if i-1 < len(args) {
+			argName = args[i-1]
 		}
 		params = append(params, argName+" "+typ)
 	}
@@ -103,7 +127,7 @@ func choirSignature(name string) string {
 	for i := 0; i < fn.NumOut(); i++ {
 		results = append(results, typeName(fn.Out(i)))
 	}
-	sig := "choir." + name + "(" + strings.Join(params, ", ") + ")"
+	sig := label + "(" + strings.Join(params, ", ") + ")"
 	switch len(results) {
 	case 0:
 	case 1:
@@ -125,11 +149,43 @@ func typeName(t reflect.Type) string {
 // returnFields lists the JSON field names of a struct result (or of the
 // element of a slice result), so a desk knows what it gets back.
 func returnFields(name string) string {
+	if ns, ok := choirNamespaces[name]; ok {
+		// Methods that return the same struct (Get, and List's slice of
+		// it) list its fields once.
+		seen := map[reflect.Type]bool{}
+		var out []string
+		for i := 0; i < ns.NumMethod(); i++ {
+			fn := ns.Method(i).Type
+			if fn.NumOut() == 0 {
+				continue
+			}
+			elem := fn.Out(0)
+			if elem.Kind() == reflect.Slice {
+				elem = elem.Elem()
+			}
+			if seen[elem] {
+				continue
+			}
+			seen[elem] = true
+			if fields := resultFields(fn); fields != "" {
+				out = append(out, fields)
+			}
+		}
+		return strings.Join(out, "\n")
+	}
 	method, ok := choirScopeType.MethodByName(name)
-	if !ok || method.Type.NumOut() == 0 {
+	if !ok {
 		return ""
 	}
-	t := method.Type.Out(0)
+	return resultFields(method.Type)
+}
+
+// resultFields lists the fields of a method's first result.
+func resultFields(fn reflect.Type) string {
+	if fn.NumOut() == 0 {
+		return ""
+	}
+	t := fn.Out(0)
 	label := typeName(t)
 	if t.Kind() == reflect.Slice {
 		t = t.Elem()

@@ -611,68 +611,6 @@ func boundedContentSegments(value any, maxSegments int) ([]any, int, bool) {
 	return raw[:maxSegments], len(raw), true
 }
 
-// webSearchAgentResultFloor is the minimum number of results every web_search
-// requests, so agent retrieval gets a broad candidate set even when the model
-// self-caps max_results at a human-page size. It matches the search-plane merge
-// target and gateway default; the gateway clamps the ceiling at 50.
-const webSearchAgentResultFloor = 40
-
-func newWebSearchTool(searchClient search.Client, deps Dependencies) toolregistry.Tool {
-	type args struct {
-		Query      string `json:"query"`
-		MaxResults int    `json:"max_results,omitempty"`
-	}
-	return toolregistry.Tool{Name: "web_search",
-		Description: "Search the web using the configured multi-provider search client.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"query":       map[string]any{"type": "string"},
-			"max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 50},
-		}, []string{"query"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode web_search args: %w", err)
-			}
-			if searchClient == nil {
-				return "", fmt.Errorf("search client not configured")
-			}
-			if strings.TrimSpace(in.Query) == "" {
-				return "", fmt.Errorf("query must not be empty")
-			}
-			// Agent retrieval breadth floor: models routinely self-cap max_results
-			// at ~10 (a human result page), which collapses the router's merge
-			// target back down. Floor every search to the broad agent default so a
-			// broad first pass yields a wide candidate set; the model may still ask
-			// for more (up to the gateway cap).
-			maxResults := in.MaxResults
-			if maxResults < webSearchAgentResultFloor {
-				maxResults = webSearchAgentResultFloor
-			}
-			resp, err := searchClient.Search(ctx, strings.TrimSpace(in.Query), maxResults)
-			if err != nil {
-				return "", err
-			}
-			full := map[string]any{
-				"query":           resp.Query,
-				"provider":        resp.Provider,
-				"providers":       resp.Providers,
-				"attempts":        resp.Attempts,
-				"results":         resp.Results,
-				"merged_count":    resp.MergedCount,
-				"waves":           resp.Waves,
-				"degraded":        resp.Degraded,
-				"provider_health": resp.ProviderHealth,
-			}
-			if resp.Outage {
-				full["outage"] = true
-				full["code"] = resp.Code
-				full["error"] = resp.Error
-			}
-			model, metadata := compactWebSearchProjection(full, resp)
-			return toolregistry.ProjectionResultJSON(model, full, metadata)
-		}}
-}
-
 func newFetchURLTool(httpClient *http.Client, deps Dependencies) toolregistry.Tool {
 	type args struct {
 		URL      string `json:"url"`
@@ -729,91 +667,6 @@ func newFetchURLTool(httpClient *http.Client, deps Dependencies) toolregistry.To
 			model, metadata := compactFetchURLProjection(full, content)
 			return toolregistry.ProjectionResultJSON(model, full, metadata)
 		}}
-}
-
-func compactWebSearchProjection(full map[string]any, resp *search.Response) (map[string]any, map[string]any) {
-	// Agent retrieval, not a human result page: show the model a broad candidate
-	// set so a single broad first-pass search yields enough to ground and rerank.
-	// The router already accumulates up to ~40 merged hits (search plane defaults);
-	// surface them to the model instead of an 8-result human page. Snippets are
-	// trimmed so breadth does not blow up context. Full results remain in Trace.
-	const maxVisibleResults = 40
-	const maxSnippetChars = 400
-	visibleResults := make([]map[string]any, 0, researchMinInt(len(resp.Results), maxVisibleResults))
-	for idx, result := range resp.Results {
-		if idx >= maxVisibleResults {
-			break
-		}
-		visible := map[string]any{
-			"rank":     idx + 1,
-			"title":    stringValue(result["title"]),
-			"url":      stringValue(result["url"]),
-			"snippet":  contentowner.TruncateString(stringValue(result["snippet"]), maxSnippetChars),
-			"provider": stringValue(result["provider"]),
-		}
-		if published := stringValue(result["published_at"]); published != "" {
-			visible["published_at"] = published
-		}
-		if score, ok := result["score"]; ok {
-			visible["score"] = score
-		}
-		visibleResults = append(visibleResults, visible)
-	}
-	attempts := make([]map[string]any, 0, len(resp.Attempts))
-	degraded := resp.Degraded || resp.Outage
-	for _, attempt := range resp.Attempts {
-		compact := map[string]any{
-			"provider":   attempt["provider"],
-			"status":     attempt["status"],
-			"latency_ms": attempt["latency_ms"],
-			"results":    attempt["results"],
-		}
-		if status := stringValue(attempt["status"]); status != "" && status != "success" {
-			degraded = true
-			if errText := stringValue(attempt["error"]); errText != "" {
-				compact["error"] = contentowner.TruncateString(errText, 160)
-			}
-		}
-		attempts = append(attempts, compact)
-	}
-	model := map[string]any{
-		"query":                 resp.Query,
-		"provider":              resp.Provider,
-		"providers":             resp.Providers,
-		"result_count":          len(resp.Results),
-		"visible_result_count":  len(visibleResults),
-		"omitted_result_count":  researchMaxInt(0, len(resp.Results)-len(visibleResults)),
-		"results":               visibleResults,
-		"attempts":              attempts,
-		"full_evidence":         "stored in Trace tool.result full_output/full_output_sha256",
-		"projection_policy":     "top bounded result cards with compact snippets",
-		"provider_health_owner": "gateway",
-	}
-	if resp.Outage {
-		model["search_outage"] = true
-		model["code"] = firstNonEmptyString(resp.Code, "search_outage")
-		if strings.TrimSpace(resp.Error) != "" {
-			model["error"] = resp.Error
-		}
-		if len(resp.ProviderHealth) > 0 {
-			model["provider_health"] = resp.ProviderHealth
-		}
-		model["gateway_status"] = "search_outage: gateway returned no merged results; use provider_health and attempts for the precise blocker"
-	}
-	if degraded && !resp.Outage {
-		model["gateway_status"] = "one or more providers failed or were unavailable; gateway returned available evidence and preserved provider details in Trace"
-	}
-	metadata := map[string]any{
-		"type":                 "web_search",
-		"full_result_count":    len(resp.Results),
-		"visible_result_count": len(visibleResults),
-		"full_output_bytes":    len(researchMustJSON(full)),
-		"model_output_bytes":   len(researchMustJSON(model)),
-	}
-	if resp.Outage {
-		metadata["search_outage"] = true
-	}
-	return model, metadata
 }
 
 func compactSourceSearchProjection(full map[string]any, resp *SourceSearchResponse) (map[string]any, map[string]any) {
@@ -1018,7 +871,7 @@ func universalWirePlatformOwnerID() string {
 // docs/problems/desk-cell-ergonomics-from-demo-traces-2026-10-10.md).
 func sourceServiceCallError(op string, err error) error {
 	if errors.Is(err, syscall.ECONNREFUSED) {
-		return fmt.Errorf("source service %s: the source service is not running on this host; use choir.WebSearch to find sources and choir.FetchURL to read them: %w", op, err)
+		return fmt.Errorf("source service %s: the source service is not running on this host; use choir.SearchStart to find sources and choir.FetchURL to read them: %w", op, err)
 	}
 	return fmt.Errorf("call source service %s: %w", op, err)
 }

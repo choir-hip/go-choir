@@ -117,7 +117,7 @@ func (s *traceStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			events = []map[string]any{
 				{"event_id": "e1", "seq": 1, "loop_id": runID, "kind": "tool.invoked", "payload": map[string]any{"tool": "desk_go_eval"}},
 				{"event_id": "e2", "seq": 2, "loop_id": runID, "kind": "desk.cell", "payload": map[string]any{"desk_session": "agent:a", "worker_pid": 7, "run_id": runID, "duration_ms": 5}},
-				{"event_id": "e3", "seq": 3, "loop_id": runID, "kind": "desk.egress", "payload": map[string]any{"request_id": "r1", "response_request_id": "r1", "verb": "web_search", "run_id": runID}},
+				{"event_id": "e3", "seq": 3, "loop_id": runID, "kind": "desk.egress", "payload": map[string]any{"request_id": "r1", "response_request_id": "r1", "verb": "search_start", "run_id": runID}},
 			}
 		}
 		// One event per page.

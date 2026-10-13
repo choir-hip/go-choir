@@ -32,7 +32,7 @@ func (d *Dependencies) HostEgress(ctx context.Context, action string, payload js
 }
 
 // hostEgressTool resolves the deps-bound ToolFunc for one broker action. The
-// action string is the tool name (web_search, source_search, fetch_url,
+// action string is the tool name (source_search, fetch_url,
 // import_*, read_*, list_*, search_wire_corpus, evidence/run-memory verbs).
 func (d *Dependencies) hostEgressTool(action string) (toolregistry.ToolFunc, error) {
 	table := d.egressToolTable()
@@ -62,9 +62,9 @@ func (d *Dependencies) egressToolTable() map[string]toolregistry.ToolFunc {
 		return t
 	}
 	t := map[string]toolregistry.ToolFunc{}
-	// Network verbs (egress-metered): search + fetch + source.
+	// Network and content verbs. Web search is not here: it is async and
+	// streams to the desk worker (agentcore desk_search.go).
 	for _, tool := range []toolregistry.Tool{
-		newWebSearchTool(d.Search, *d),
 		newFetchURLTool(d.HTTP, *d),
 		newSourceSearchTool(d.Source, *d),
 		newImportDocumentContentTool(*d),

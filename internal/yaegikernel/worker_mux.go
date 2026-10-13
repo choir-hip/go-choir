@@ -22,6 +22,9 @@ var errCallAfterCell = errors.New("this call came after its cell returned; host 
 type workerMux struct {
 	fc     *FramedConn
 	frames chan muxFrame
+	// searches receives StreamSearchArrival frames. The reader loop is its
+	// only writer, so an arrival lands whether or not a cell is running.
+	searches *SearchStore
 
 	mu      sync.Mutex
 	waiters map[string]muxWaiter
@@ -46,8 +49,8 @@ type muxWaiter struct {
 	ch     chan []byte
 }
 
-func newWorkerMux(fc *FramedConn) *workerMux {
-	m := &workerMux{fc: fc, frames: make(chan muxFrame, 8), waiters: map[string]muxWaiter{}}
+func newWorkerMux(fc *FramedConn, searches *SearchStore) *workerMux {
+	m := &workerMux{fc: fc, frames: make(chan muxFrame, 8), waiters: map[string]muxWaiter{}, searches: searches}
 	go m.readLoop()
 	return m
 }
@@ -70,6 +73,8 @@ func (m *workerMux) readLoop() {
 		switch stream {
 		case StreamCell, StreamCancel:
 			m.frames <- muxFrame{stream: stream, payload: payload}
+		case StreamSearchArrival:
+			m.searches.applyFrame(payload)
 		case StreamBrokerEgressResult, StreamBrokerEmitResult:
 			var head struct {
 				RequestID string `json:"request_id"`

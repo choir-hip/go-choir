@@ -50,8 +50,8 @@ type DeskSessionWorkerConfig struct {
 	// receipt that a cell death would silently lose.
 	Emit EmitHandler
 	// Egress services StreamBrokerEgress frames the worker sends mid-cell
-	// for host-mediated network verbs (web_search / fetch_url / source_search).
-	// The host resolves the call against its deps under the egress budget and
+	// for host-mediated network verbs (search_start / fetch_url /
+	// source_search). The host resolves the call against its deps and
 	// returns the bounded result. Nil refuses the verb.
 	Egress func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error)
 }
@@ -325,7 +325,7 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 				w.serviceEmit(ctx, payload)
 				continue
 			}
-			// Mid-cell host-mediated network verbs (web_search / fetch_url /
+			// Mid-cell host-mediated network verbs (search_start / fetch_url /
 			// source_search) ride the shared egress stream; the host resolves
 			// them and answers, then keeps waiting for the StreamCell result.
 			if stream == StreamBrokerEgress {
@@ -422,7 +422,7 @@ func (w *DeskSessionWorker) serviceEgress(ctx context.Context, payload []byte) {
 		w.writeEgressResult(req.RequestID, nil, fmt.Errorf("%s host unavailable", req.Action))
 		return
 	}
-	res, err := handler(withEgressFrame(ctx, req.RequestID, w.pid), req.Action, req.Payload)
+	res, err := handler(withEgressFrame(ctx, req.RequestID, w), req.Action, req.Payload)
 	w.writeEgressResult(req.RequestID, res, err)
 }
 
@@ -430,11 +430,11 @@ type egressFrameKey struct{}
 
 type egressFrame struct {
 	requestID string
-	workerPID int
+	worker    *DeskSessionWorker
 }
 
-func withEgressFrame(ctx context.Context, requestID string, pid int) context.Context {
-	return context.WithValue(ctx, egressFrameKey{}, egressFrame{requestID: requestID, workerPID: pid})
+func withEgressFrame(ctx context.Context, requestID string, w *DeskSessionWorker) context.Context {
+	return context.WithValue(ctx, egressFrameKey{}, egressFrame{requestID: requestID, worker: w})
 }
 
 // EgressFrameFromContext returns the request id of the broker frame an Egress
@@ -442,7 +442,31 @@ func withEgressFrame(ctx context.Context, requestID string, pid int) context.Con
 // on a result frame carrying the same request id (writeEgressResult).
 func EgressFrameFromContext(ctx context.Context) (requestID string, workerPID int) {
 	f, _ := ctx.Value(egressFrameKey{}).(egressFrame)
-	return f.requestID, f.workerPID
+	if f.worker != nil {
+		workerPID = f.worker.pid
+	}
+	return f.requestID, workerPID
+}
+
+// EgressWorkerFromContext returns the worker whose cell sent the egress
+// frame an Egress handler is serving, so the handler can push search
+// arrivals to that worker after it answers.
+func EgressWorkerFromContext(ctx context.Context) *DeskSessionWorker {
+	f, _ := ctx.Value(egressFrameKey{}).(egressFrame)
+	return f.worker
+}
+
+// PushSearch writes one search frame to the worker. It may be called at any
+// time, from any goroutine, during a cell or between cells: the worker's
+// reader loop applies it to the session's search store. It does not take
+// the Eval lock, which a running cell holds; frame writes serialize on the
+// socket. A dead worker's socket is closed and the write fails.
+func (w *DeskSessionWorker) PushSearch(f SearchFrame) error {
+	raw, err := json.Marshal(f)
+	if err != nil {
+		return fmt.Errorf("search frame marshal: %w", err)
+	}
+	return w.framed.WriteFrame(StreamSearchArrival, raw)
 }
 
 func (w *DeskSessionWorker) writeEgressResult(requestID string, res json.RawMessage, cause error) {

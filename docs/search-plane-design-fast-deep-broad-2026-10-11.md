@@ -1,6 +1,8 @@
 # Search that is fast, broad, deep, iterative, recursive and comprehensive
 
 > **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): Search becomes asynchronous: the call returns a stub, each provider's results land in REPL state as they arrive, and the RLM reads them when it chooses. The deadline-ladder station is deleted. Say "M of N search providers active", not "degraded".
+>
+> **Built 2026-10-13** (Cut 2 unit 2a): the gateway streams NDJSON, one line per provider as it answers; the waves, merge target and wave grace below are deleted. choir.SearchStart, choir.Searches and choir.SearchWait replace choir.WebSearch.
 
 Research and design for the owner, 2026-10-11. Read-only: no code, config or
 Node B state was changed. Owner's words: "Search deadline I don't quite

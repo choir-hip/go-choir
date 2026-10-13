@@ -220,6 +220,8 @@ const (
 	// EventDeskEgress records one host-mediated choir.* call a cell made: the
 	// request id the worker minted, the id on the result frame, the verb and
 	// the worker process, so a bundle shows which caller got which answer.
+	// An async search's stream ending records one more, verb search_done,
+	// with its search id and how many providers answered of how many.
 	EventDeskEgress EventKind = "desk.egress"
 
 	// EventChannelMessage is emitted when a message is posted to an agent

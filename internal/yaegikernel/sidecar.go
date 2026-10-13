@@ -104,7 +104,7 @@ func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope
 // prebind, then serves until a close frame, EOF, or a poisoned cell. One
 // reader loop owns the socket (workerMux): emit and egress calls wait for
 // the result carrying their own request id, so goroutines in one cell may
-// call them in parallel.
+// call them in parallel, and search arrivals land in the scope's store.
 func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 	fc := NewFramedConn(conn)
 	sess, broker, scope := buildSessionWorker(cfg)
@@ -115,7 +115,7 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 	if err := fc.WriteFrame(StreamCell, ready); err != nil {
 		os.Exit(2)
 	}
-	mux := newWorkerMux(fc)
+	mux := newWorkerMux(fc, scope.searches)
 	// Emit crosses the socket so the host performs the durable channel write
 	// and recipient wake.
 	broker.SetEmit(func(ctx context.Context, payload EmitPayload) (EmitResult, error) {
@@ -137,7 +137,7 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 		return out, nil
 	})
 	// Egress verbs ride one generic frame round trip; the host resolves the
-	// action against its search/HTTP/content deps under the egress budget.
+	// action against its search/HTTP/content deps.
 	broker.SetEgress(func(ctx context.Context, action BrokerAction, payload json.RawMessage) (json.RawMessage, error) {
 		req := BrokerRequest{ProtocolVersion: ProtocolVersion, RequestID: newReceiptID(),
 			HandleRef: scope.HandleRef(), Epoch: cfg.Epoch, Action: action, Payload: payload}

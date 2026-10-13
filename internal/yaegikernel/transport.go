@@ -41,12 +41,17 @@ const (
 	StreamBrokerEmit       = 4
 	StreamBrokerEmitResult = 5
 	// StreamBrokerEgress carries one synchronous host-mediated network call
-	// (web_search / fetch_url / source_search) from the cell worker to its
+	// (search_start / fetch_url / source_search) from the cell worker to its
 	// host; StreamBrokerEgressResult returns the bounded result. One generic
 	// egress stream for all host-resolved network verbs — the payload's
 	// BrokerAction names which.
 	StreamBrokerEgress       = 6
 	StreamBrokerEgressResult = 7
+	// StreamSearchArrival carries one SearchFrame host to worker: a search's
+	// start, one provider's answer, or its end. The host writes it whenever
+	// the provider answers, during a cell or between cells; the worker's
+	// reader loop writes it into the session's SearchStore.
+	StreamSearchArrival = 8
 )
 
 // MaxFramePayload bounds one frame. Cells exceeding it are rejected before

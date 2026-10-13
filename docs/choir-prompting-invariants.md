@@ -139,7 +139,7 @@ semantic follow-up questions or delegated `choir.Cast` probes — until depth no
 longer materially improves the artifact.
 
 Research should prefer **parallel saturation**: in the same yaegi-cell work,
-combine a `choir.Report` with the next `web_search`, `source_search`,
+combine a `choir.Report` with the next `choir.SearchStart`, `source_search`,
 `fetch_url`, or import probe; repeat for multiple rounds in one run until
 further searches mostly repeat prior findings and no longer add marginal
 grounded material.

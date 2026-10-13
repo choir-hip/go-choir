@@ -12,14 +12,16 @@ const ProtocolVersion = 1
 type BrokerAction string
 
 const (
-	ActionExec                 BrokerAction = "exec"
-	ActionReadFile             BrokerAction = "read_file"
-	ActionWriteFile            BrokerAction = "write_file"
-	ActionListDir              BrokerAction = "list_dir"
-	ActionAssign               BrokerAction = "assign"
-	ActionMessage              BrokerAction = "message"
-	ActionEmit                 BrokerAction = "emit"
-	ActionWebSearch            BrokerAction = "web_search"
+	ActionExec      BrokerAction = "exec"
+	ActionReadFile  BrokerAction = "read_file"
+	ActionWriteFile BrokerAction = "write_file"
+	ActionListDir   BrokerAction = "list_dir"
+	ActionAssign    BrokerAction = "assign"
+	ActionMessage   BrokerAction = "message"
+	ActionEmit      BrokerAction = "emit"
+	// ActionSearchStart starts an async search on the host; its arrivals come
+	// back on StreamSearchArrival frames (search_store.go).
+	ActionSearchStart          BrokerAction = "search_start"
 	ActionFetchURL             BrokerAction = "fetch_url"
 	ActionPollSource           BrokerAction = "poll_source"
 	ActionReadCapture          BrokerAction = "read_capture"
@@ -158,13 +160,6 @@ type EmitResult struct {
 	AdvisorySeq uint64 `json:"advisory_seq,omitempty"`
 }
 
-// WebSearchPayload defines the parameters for ActionWebSearch — a host-
-// resolved web search so the cell sees a result, not an open egress socket.
-type WebSearchPayload struct {
-	Query      string `json:"query"`
-	MaxResults int    `json:"max_results,omitempty"`
-}
-
 // ResearchPayload defines the parameters for ActionResearch: the child
 // research activations to run, each with its objective and an optional
 // model from the catalog (empty means the caller's own model).
@@ -293,7 +288,7 @@ func (r *BrokerRequest) Validate() error {
 	}
 	switch r.Action {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
-		ActionWebSearch, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
+		ActionSearchStart, ActionFetchURL, ActionSourceSearch, ActionImportDocument, ActionImportURL,
 		ActionReadContentItem, ActionListContentSelectors, ActionReadContentSelector, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture:

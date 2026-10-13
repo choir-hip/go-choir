@@ -24,7 +24,7 @@ func TestSourceServiceRefusalNamesTheAlternatives(t *testing.T) {
 	if err == nil {
 		t.Fatal("search against a closed port succeeded")
 	}
-	for _, want := range []string{"not running", "choir.WebSearch", "choir.FetchURL"} {
+	for _, want := range []string{"not running", "choir.SearchStart", "choir.FetchURL"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error %q lacks %q", err, want)
 		}

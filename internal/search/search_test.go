@@ -14,6 +14,16 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/hostlink"
 )
 
+// The guest reads the gateway's NDJSON search stream (Cut 2 unit 2a,
+// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md).
+// Ways it can fail:
+//  1. The client reads the whole body before returning a line, so a slow
+//     provider delays every earlier provider's results.
+//  2. A per-attempt bound (the old 30 s client) cuts a stream the gateway
+//     is still writing; the refused-dial retry across a host restart is lost.
+//  3. A stream that ends without its final line reads as a clean finish.
+//  4. A gateway refusal (status and error body) is lost or misread as lines.
+
 func TestNewGatewayClientFromEnvRequiresURLAndToken(t *testing.T) {
 	t.Setenv("RUNTIME_GATEWAY_URL", "")
 	t.Setenv("PROXY_VMCTL_URL", "")
@@ -34,7 +44,7 @@ func TestNewGatewayClientFromEnvRequiresURLAndToken(t *testing.T) {
 	}
 }
 
-func TestNewGatewayClientFromEnvPreservesURLPrecedenceAndTimeout(t *testing.T) {
+func TestNewGatewayClientFromEnvHasNoAttemptBoundAndKeepsTheRetry(t *testing.T) {
 	t.Setenv("RUNTIME_GATEWAY_URL", "  https://runtime-gateway.example  ")
 	t.Setenv("PROXY_VMCTL_URL", "https://proxy-gateway.example")
 	t.Setenv("RUNTIME_GATEWAY_TOKEN", "  secret-token  ")
@@ -49,8 +59,9 @@ func TestNewGatewayClientFromEnvPreservesURLPrecedenceAndTimeout(t *testing.T) {
 	if client.token != "secret-token" {
 		t.Fatalf("token = %q, want trimmed token", client.token)
 	}
-	if transport, ok := client.httpClient.Transport.(*hostlink.Transport); !ok || transport.AttemptTimeout != 30*time.Second {
-		t.Fatalf("http client = %#v, want a hostlink transport with a 30s attempt timeout", client.httpClient)
+	transport, ok := client.httpClient.Transport.(*hostlink.Transport)
+	if !ok || transport.AttemptTimeout != 0 || client.httpClient.Timeout != 0 {
+		t.Fatalf("http client = %#v, want a hostlink transport (refused-dial retry) with no attempt or client bound", client.httpClient)
 	}
 
 	t.Setenv("RUNTIME_GATEWAY_URL", "")
@@ -63,151 +74,127 @@ func TestNewGatewayClientFromEnvPreservesURLPrecedenceAndTimeout(t *testing.T) {
 	}
 }
 
-func TestGatewaySearchClientPreservesRequestAndCompleteResponse(t *testing.T) {
+func TestStreamSendsTheRequestAndReadsLinesAsTheyArrive(t *testing.T) {
+	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("method = %q, want POST", r.Method)
-		}
-		if r.URL.Path != "/provider/v1/search" {
-			t.Errorf("path = %q, want /provider/v1/search", r.URL.Path)
+		if r.Method != http.MethodPost || r.URL.Path != "/provider/v1/search" {
+			t.Errorf("request = %s %s, want POST /provider/v1/search", r.Method, r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer gateway-token" {
 			t.Errorf("Authorization = %q, want bearer token", got)
-		}
-		if got := r.Header.Get("Content-Type"); got != "application/json" {
-			t.Errorf("Content-Type = %q, want application/json", got)
 		}
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
-		if payload["query"] != "agentic systems" {
-			t.Errorf("query = %#v, want agentic systems", payload["query"])
+		if payload["query"] != "agentic systems" || payload["max_results"] != float64(40) {
+			t.Errorf("payload = %#v", payload)
 		}
-		if payload["max_results"] != float64(40) {
-			t.Errorf("max_results = %#v, want 40", payload["max_results"])
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		flush := func(line string) {
+			_, _ = io.WriteString(w, line+"\n")
+			w.(http.Flusher).Flush()
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"query":     "agentic systems",
-			"provider":  "gateway-merge",
-			"providers": []string{"tavily", "brave"},
-			"attempts": []map[string]any{{
-				"provider": "tavily", "status": "success", "latency_ms": 17, "results": 1,
-			}},
-			"results": []map[string]any{{
-				"title": "Result", "url": "https://example.test/result", "snippet": "Evidence", "provider": "tavily", "score": 0.75,
-			}},
-			"merged_count": 1,
-			"waves":        2,
-			"degraded":     true,
-			"provider_health": map[string]any{
-				"brave": map[string]any{"state": "cooling_down"},
-			},
-			"outage": false,
-			"code":   "partial_results",
-			"error":  "brave unavailable",
-		})
+		flush(`{"type":"start","query":"agentic systems","providers":["tavily","brave"],"cooling":[{"provider":"exa","state":"cooling_down","until":"2026-10-13T05:00:00Z"}]}`)
+		flush(`{"type":"provider","provider":"tavily","status":"success","latency_ms":17,"results":[{"title":"Result","url":"https://example.test/result","snippet":"Evidence","provider":"tavily","score":0.75}]}`)
+		<-release
+		flush(`{"type":"provider","provider":"brave","status":"rate_limited","latency_ms":40,"results":[],"error":"status 429"}`)
+		flush(`{"type":"done","answered":1,"total":2,"cooling":[{"provider":"exa","state":"cooling_down","until":"2026-10-13T05:00:00Z"}]}`)
 	}))
 	defer server.Close()
+	defer func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	}()
 
 	client := &gatewaySearchClient{baseURL: server.URL, token: "gateway-token", httpClient: server.Client()}
-	resp, err := client.Search(context.Background(), "agentic systems", 40)
+	stream, err := client.Stream(context.Background(), "agentic systems", 40)
 	if err != nil {
-		t.Fatalf("Search() error = %v", err)
+		t.Fatalf("Stream() error = %v", err)
 	}
-	if resp.Query != "agentic systems" || resp.Provider != "gateway-merge" {
-		t.Fatalf("identity = query %q provider %q", resp.Query, resp.Provider)
+	defer stream.Close()
+	if stream.Start.Query != "agentic systems" || strings.Join(stream.Start.Providers, ",") != "tavily,brave" {
+		t.Fatalf("start = %+v", stream.Start)
 	}
-	if len(resp.Providers) != 2 || resp.Providers[0] != "tavily" || resp.Providers[1] != "brave" {
-		t.Fatalf("providers = %#v", resp.Providers)
+	if len(stream.Start.Cooling) != 1 || stream.Start.Cooling[0].Provider != "exa" {
+		t.Fatalf("start cooling = %+v", stream.Start.Cooling)
 	}
-	if len(resp.Attempts) != 1 || resp.Attempts[0]["status"] != "success" {
-		t.Fatalf("attempts = %#v", resp.Attempts)
+
+	first := make(chan Arrival, 1)
+	go func() {
+		a, err := stream.Next()
+		if err != nil {
+			t.Errorf("first Next() error = %v", err)
+		}
+		first <- a
+	}()
+	select {
+	case a := <-first:
+		if a.Provider != "tavily" || !a.Answered() || len(a.Results) != 1 || a.Results[0].URL != "https://example.test/result" || a.Results[0].Score != 0.75 {
+			t.Fatalf("first arrival = %+v", a)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the first provider's line waited for the rest of the stream")
 	}
-	if len(resp.Results) != 1 || resp.Results[0]["url"] != "https://example.test/result" {
-		t.Fatalf("results = %#v", resp.Results)
+	close(release)
+	second, err := stream.Next()
+	if err != nil || second.Provider != "brave" || second.Answered() || second.Error != "status 429" {
+		t.Fatalf("second arrival = %+v, %v", second, err)
 	}
-	if resp.MergedCount != 1 || resp.Waves != 2 || !resp.Degraded || resp.Outage {
-		t.Fatalf("aggregate fields = %+v", resp)
+	if _, err := stream.Next(); !errors.Is(err, io.EOF) {
+		t.Fatalf("Next() after the final line = %v, want io.EOF", err)
 	}
-	if resp.Code != "partial_results" || resp.Error != "brave unavailable" {
-		t.Fatalf("status fields = code %q error %q", resp.Code, resp.Error)
-	}
-	health, ok := resp.ProviderHealth["brave"].(map[string]any)
-	if !ok || health["state"] != "cooling_down" {
-		t.Fatalf("provider health = %#v", resp.ProviderHealth)
+	done, ok := stream.Done()
+	if !ok || done.Answered != 1 || done.Total != 2 || len(done.Cooling) != 1 {
+		t.Fatalf("done = %+v (%v), want 1 of 2 with exa cooling", done, ok)
 	}
 }
 
-func TestGatewaySearchClientOmitsNonPositiveMaxResults(t *testing.T) {
+func TestStreamOmitsNonPositiveMaxResults(t *testing.T) {
 	for _, maxResults := range []int{0, -1} {
-		t.Run(strings.ReplaceAll(time.Duration(maxResults).String(), "-", "negative-"), func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var payload map[string]any
-				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-					t.Fatalf("decode request: %v", err)
-				}
-				if _, ok := payload["max_results"]; ok {
-					t.Fatalf("payload = %#v, want max_results omitted", payload)
-				}
-				_, _ = io.WriteString(w, `{"query":"q","provider":"gateway","results":[]}`)
-			}))
-			defer server.Close()
-			client := &gatewaySearchClient{baseURL: server.URL, token: "token", httpClient: server.Client()}
-			if _, err := client.Search(context.Background(), "q", maxResults); err != nil {
-				t.Fatalf("Search() error = %v", err)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Errorf("decode request: %v", err)
 			}
-		})
+			if _, ok := payload["max_results"]; ok {
+				t.Errorf("payload = %#v, want max_results omitted", payload)
+			}
+			_, _ = io.WriteString(w, `{"type":"start","query":"q","providers":[],"cooling":[]}`+"\n")
+		}))
+		client := &gatewaySearchClient{baseURL: server.URL, token: "token", httpClient: server.Client()}
+		stream, err := client.Stream(context.Background(), "q", maxResults)
+		if err != nil {
+			t.Fatalf("Stream() error = %v", err)
+		}
+		stream.Close()
+		server.Close()
 	}
 }
 
-func TestGatewaySearchClientPreservesStructuredOutage(t *testing.T) {
+func TestStreamEndingWithoutItsFinalLineIsAnError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = io.WriteString(w, `{
-			"error":"  search_outage  ",
-			"query":"  ",
-			"provider_health":{
-				"tavily":{"state":"cooling_down","cooldown_until":"2026-06-18T05:00:00Z","strike_count":2,"last_failure_class":"rate_limited","last_error_summary":"429 too many requests"},
-				"brave":{"state":"active","strike_count":0}
-			},
-			"attempts":[
-				{"provider":"tavily","endpoint":"https://api.tavily.test","status":"cooling_down","latency_ms":0,"results":0,"error":"cooldown active"},
-				{"provider":"brave","status":"failed","latency_ms":15,"results":0}
-			]
-		}`)
+		_, _ = io.WriteString(w, `{"type":"start","query":"q","providers":["a"],"cooling":[]}`+"\n")
 	}))
 	defer server.Close()
-
 	client := &gatewaySearchClient{baseURL: server.URL, token: "token", httpClient: server.Client()}
-	resp, err := client.Search(context.Background(), "  fallback query  ", 5)
+	stream, err := client.Stream(context.Background(), "q", 1)
 	if err != nil {
-		t.Fatalf("Search() error = %v, want structured outage", err)
+		t.Fatal(err)
 	}
-	if !resp.Outage || !resp.Degraded || resp.Query != "fallback query" {
-		t.Fatalf("outage identity = %+v", resp)
+	defer stream.Close()
+	if _, err := stream.Next(); err == nil || errors.Is(err, io.EOF) || !strings.Contains(err.Error(), "before its final line") {
+		t.Fatalf("Next() on a cut stream = %v, want an error naming the missing final line", err)
 	}
-	if resp.Code != "search_outage" || resp.Error != "search_outage" {
-		t.Fatalf("outage code/error = %q/%q", resp.Code, resp.Error)
-	}
-	if resp.Results == nil || len(resp.Results) != 0 {
-		t.Fatalf("results = %#v, want empty non-nil", resp.Results)
-	}
-	if len(resp.Attempts) != 2 || resp.Attempts[0]["endpoint"] != "https://api.tavily.test" || resp.Attempts[0]["error"] != "cooldown active" {
-		t.Fatalf("attempts = %#v", resp.Attempts)
-	}
-	health, ok := resp.ProviderHealth["tavily"].(map[string]any)
-	if !ok || health["state"] != "cooling_down" || health["strike_count"] != 2 || health["last_failure_class"] != "rate_limited" {
-		t.Fatalf("tavily health = %#v", resp.ProviderHealth["tavily"])
-	}
-	brave, ok := resp.ProviderHealth["brave"].(map[string]any)
-	if !ok || len(brave) != 2 || brave["state"] != "active" {
-		t.Fatalf("brave health = %#v", resp.ProviderHealth["brave"])
+	if _, ok := stream.Done(); ok {
+		t.Fatal("a cut stream reports a final line")
 	}
 }
 
-func TestGatewaySearchClientPreservesHTTPAndDecodeErrors(t *testing.T) {
+func TestStreamRefusalsAndBadStarts(t *testing.T) {
 	tests := []struct {
 		name       string
 		statusCode int
@@ -216,7 +203,9 @@ func TestGatewaySearchClientPreservesHTTPAndDecodeErrors(t *testing.T) {
 	}{
 		{name: "gateway error", statusCode: http.StatusUnauthorized, body: `{"error":"credential rejected"}`, want: "gateway search: credential rejected"},
 		{name: "generic status", statusCode: http.StatusTeapot, body: "not json", want: "gateway search: status 418 I'm a teapot"},
-		{name: "malformed success", statusCode: http.StatusOK, body: "{", want: "gateway search: decode response:"},
+		{name: "malformed start", statusCode: http.StatusOK, body: "{\n", want: "gateway search: read start line:"},
+		{name: "wrong first line", statusCode: http.StatusOK, body: `{"type":"done","answered":0,"total":0}` + "\n", want: `gateway search: first line is "done", want start`},
+		{name: "empty body", statusCode: http.StatusOK, body: "", want: "gateway search: read start line:"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -226,50 +215,29 @@ func TestGatewaySearchClientPreservesHTTPAndDecodeErrors(t *testing.T) {
 			}))
 			defer server.Close()
 			client := &gatewaySearchClient{baseURL: server.URL, token: "token", httpClient: server.Client()}
-			_, err := client.Search(context.Background(), "q", 1)
+			_, err := client.Stream(context.Background(), "q", 1)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("Search() error = %v, want containing %q", err, tt.want)
+				t.Fatalf("Stream() error = %v, want containing %q", err, tt.want)
 			}
 		})
 	}
 }
 
-func TestGatewaySearchClientPreservesRequestTransportAndReadErrors(t *testing.T) {
-	t.Run("request", func(t *testing.T) {
-		client := &gatewaySearchClient{baseURL: ":", token: "token", httpClient: http.DefaultClient}
-		_, err := client.Search(context.Background(), "q", 1)
-		if err == nil || !strings.Contains(err.Error(), "gateway search: create request:") {
-			t.Fatalf("Search() error = %v, want request creation error", err)
-		}
-	})
-
-	t.Run("transport", func(t *testing.T) {
-		client := &gatewaySearchClient{
-			baseURL: "https://gateway.example",
-			token:   "token",
-			httpClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-				return nil, errors.New("dial failed")
-			})},
-		}
-		_, err := client.Search(context.Background(), "q", 1)
-		if err == nil || !strings.Contains(err.Error(), "gateway search: http call:") || !strings.Contains(err.Error(), "dial failed") {
-			t.Fatalf("Search() error = %v, want transport error", err)
-		}
-	})
-
-	t.Run("read", func(t *testing.T) {
-		client := &gatewaySearchClient{
-			baseURL: "https://gateway.example",
-			token:   "token",
-			httpClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: errorReadCloser{}}, nil
-			})},
-		}
-		_, err := client.Search(context.Background(), "q", 1)
-		if err == nil || !strings.Contains(err.Error(), "gateway search: read response: read failed") {
-			t.Fatalf("Search() error = %v, want body read error", err)
-		}
-	})
+func TestStreamRequestAndTransportErrors(t *testing.T) {
+	client := &gatewaySearchClient{baseURL: ":", token: "token", httpClient: http.DefaultClient}
+	if _, err := client.Stream(context.Background(), "q", 1); err == nil || !strings.Contains(err.Error(), "gateway search: create request:") {
+		t.Fatalf("Stream() error = %v, want request creation error", err)
+	}
+	client = &gatewaySearchClient{
+		baseURL: "https://gateway.example",
+		token:   "token",
+		httpClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("dial failed")
+		})},
+	}
+	if _, err := client.Stream(context.Background(), "q", 1); err == nil || !strings.Contains(err.Error(), "gateway search: http call:") || !strings.Contains(err.Error(), "dial failed") {
+		t.Fatalf("Stream() error = %v, want transport error", err)
+	}
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -277,8 +245,3 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
-
-type errorReadCloser struct{}
-
-func (errorReadCloser) Read([]byte) (int, error) { return 0, errors.New("read failed") }
-func (errorReadCloser) Close() error             { return nil }

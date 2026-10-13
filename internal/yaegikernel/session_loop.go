@@ -82,6 +82,10 @@ type SessionResult struct {
 	// DiagKind carries the diagnostic kind with the message verbatim.
 	Reuse    ReuseDisposition `json:"reuse,omitempty"`
 	DiagKind DiagnosticKind   `json:"diag_kind,omitempty"`
+	// Searches carries one count line per async search with arrivals since
+	// the last cell result ("s3: 3/4 answered, +2 new"): the only push of
+	// search arrivals to the model, counts and never results.
+	Searches []string `json:"searches,omitempty"`
 }
 
 // RunSessionLoopWithDrainAndHooks serves newline-delimited SessionFrames from
@@ -140,6 +144,9 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 	var staged []StagedIntent
 	if hooks != nil && hooks.End != nil {
 		staged = hooks.End()
+	}
+	if hooks != nil && hooks.SearchCounts != nil {
+		out.Searches = hooks.SearchCounts()
 	}
 	if evalErr != nil {
 		out.Error = evalErr.Error()
@@ -200,7 +207,7 @@ func describeCellValue(source string, value reflect.Value) (shown string) {
 }
 
 // cellValueText renders one value for a cell result. Bytes that are valid
-// UTF-8 (a json.RawMessage from choir.WebSearch) render as text, not as a
+// UTF-8 (a json.RawMessage from choir.FetchURL) render as text, not as a
 // list of byte values.
 func cellValueText(value reflect.Value, max int) (string, bool) {
 	if !value.IsValid() || value.Kind() == reflect.Func {

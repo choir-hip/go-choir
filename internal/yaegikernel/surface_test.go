@@ -33,7 +33,7 @@ func allSurfaceScopes() []*ChoirScope {
 	return scopes
 }
 
-func sourceMethodParams(t *testing.T) map[string][]string {
+func sourceMethodParams(t *testing.T, receiver string) map[string][]string {
 	t.Helper()
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -58,7 +58,7 @@ func sourceMethodParams(t *testing.T) map[string][]string {
 			if !ok {
 				continue
 			}
-			if ident, ok := star.X.(*ast.Ident); !ok || ident.Name != "ChoirScope" {
+			if ident, ok := star.X.(*ast.Ident); !ok || ident.Name != receiver {
 				continue
 			}
 			var names []string
@@ -80,7 +80,7 @@ func TestSurfaceDocsMatchExportsAndSource(t *testing.T) {
 			exported[name] = true
 		}
 	}
-	params := sourceMethodParams(t)
+	params := sourceMethodParams(t, "ChoirScope")
 	for name := range exported {
 		doc, ok := choirFunctionDocs[name]
 		if !ok {
@@ -89,6 +89,25 @@ func TestSurfaceDocsMatchExportsAndSource(t *testing.T) {
 		}
 		if strings.TrimSpace(doc.Summary) == "" {
 			t.Errorf("choir.%s doc has no summary", name)
+		}
+		if ns, ok := choirNamespaces[name]; ok {
+			// A namespace documents each exported method's parameters.
+			nsParams := sourceMethodParams(t, ns.Elem().Name())
+			for i := 0; i < ns.NumMethod(); i++ {
+				m := ns.Method(i).Name
+				if _, documented := doc.Methods[m]; !documented {
+					t.Errorf("choir.%s.%s is callable but has no surface doc", name, m)
+				}
+				if got, want := strings.Join(doc.Methods[m], ","), strings.Join(nsParams[m], ","); got != want {
+					t.Errorf("choir.%s.%s doc args = %q, source params = %q", name, m, got, want)
+				}
+			}
+			for m := range doc.Methods {
+				if _, ok := ns.MethodByName(m); !ok {
+					t.Errorf("surface doc names choir.%s.%s, which is not callable", name, m)
+				}
+			}
+			continue
 		}
 		if got, want := strings.Join(doc.Args, ","), strings.Join(params[name], ","); got != want {
 			t.Errorf("choir.%s doc args = %q, source params = %q", name, got, want)
@@ -225,5 +244,39 @@ func TestApplyTextureHelpGivesTheWholeEditShape(t *testing.T) {
 	}
 	if !strings.Contains(doc, "real write") {
 		t.Errorf("ApplyTexture help must say every staged turn is a real write")
+	}
+}
+
+// Async search (Cut 2 unit 2a). Ways the surface can fail: a desk still
+// exports the blocking choir.WebSearch; research or a research child lacks
+// the async verbs; choir.Searches renders as a call instead of its methods;
+// the surface does not say an arrival never wakes the desk.
+func TestSearchSurfaceIsAsyncOnResearchOnly(t *testing.T) {
+	for desk := range deskModuleSets {
+		exports := (&ChoirScope{desk: desk, searches: newSearchStore()}).ChoirExports()["choir/choir"]
+		if _, ok := exports["WebSearch"]; ok {
+			t.Errorf("%s still exports choir.WebSearch", desk)
+		}
+		_, has := exports["SearchStart"]
+		if want := desk == "research" || desk == SessionRoleResearchChild; has != want {
+			t.Errorf("%s exports SearchStart = %v, want %v", desk, has, want)
+		}
+	}
+	block := DeskSurface("research", "", true)
+	for _, want := range []string{
+		"choir.SearchStart(query string) (SearchStub, error)",
+		"choir.Searches.Get(id string) (Search, error), choir.Searches.List() []Search",
+		"choir.SearchWait(id string, ms int) (SearchCount, error)",
+		"never wakes you",
+	} {
+		if !strings.Contains(block, want) {
+			t.Errorf("research surface missing %q:\n%s", want, block)
+		}
+	}
+	detail := (&ChoirScope{desk: "research", searches: newSearchStore()}).Help("Searches")
+	for _, want := range []string{"arrivals", "answered", "results", "done"} {
+		if !strings.Contains(detail, `json "`+want+`"`) {
+			t.Errorf("Help(\"Searches\") missing field %q:\n%s", want, detail)
+		}
 	}
 }
