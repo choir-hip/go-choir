@@ -52,3 +52,35 @@ Not fixed here. The management prompt shows the loop pattern for
 collecting capture ids, and the living-stories test uses it. A model that
 writes the slice literal gets a panic it can read and a fresh session.
 The fix belongs in the cell normalizer or upstream yaegi.
+
+## B12. Stories never publish; guest writes to corpusd 403 intermittently
+
+Found by the paper scenario c2-paper-3 on 244e97b1 (test computer
+computer-2da6… for c2-paper-2, and the c2-paper-3 computer; guest log
+read through /api/runtime/observability). One owner act started
+schedules for rss:bbc_world, rss:guardian_world and rss:npr_world at
+12:35:08. The first BBC poll wrote 5 captures and its arrival record
+reached management, which opened 5 stories by Casts to texture:new
+(publish auto, 12:35:46). Texture wrote each story (one reached revision
+5, 8,448 characters) and read every record. Two failures:
+
+1. No story published. The front list stayed empty for 30 minutes, and
+   the guest log has no "story publish:" line at all: not published, not
+   a gap, not "no platform to publish to". The auto-publish path
+   (internal/agentcore/story_publish.go, AutoPublishRevision from
+   commitTextureWrite) never reached its logging, so it either is not
+   called or returns before deciding.
+2. Guest writes through the proxy to corpusd get 403 "internal caller
+   required", intermittently: rss:npr_world's first poll (12:35:08) failed
+   while rss:bbc_world's succeeded in the same second; later polls of all
+   three feeds failed; every support-verdict push (/internal/platform/
+   support-verdicts) failed (1, 1, 14 and 10 verdicts). The proxy
+   (internal/proxy/guest_authority.go trustedInternalProxyTransport)
+   treats a caller at 127.0.0.1, ::1 or 192.0.2.* as trusted internal
+   transport and then requires X-Internal-Caller; corpusd
+   (internal/platform/authority.go trustedInternalCaller) requires both
+   too. Which side refused is not yet known (the services do not log
+   per-request).
+
+Both block autopaper_live: (1) means nothing reaches readers; (2) loses
+captures and leaves every citation pending in the public overlay.
