@@ -243,5 +243,33 @@
    "unsupported_verdict": 4
   },
   "note": "All failed badges on latest versions carry an exact quote match and a failing support judgement; criterion (4) holds. pending|pending|pending (5) are uncaptured citations, the A1 case."
+ },
+ "E3_rerun": {
+  "verdict": "pass",
+  "criterion": "cursor invariant (roadmap convergent adjudication, change 7): no management record is marked read unless a choir.Records() call returned it, and a record arriving mid-turn wakes the next turn; plus every capture in the burst answered",
+  "build": "cff54bf5 (staging and guest, identity fence ok, ci_busy 0)",
+  "computer": "minted test computer computer-39f345e25cb623a75e59c881f7ee7656 (tracer label e3-burst-1), not the paper computer",
+  "command": "node scripts/reeng_tracer.mjs --label e3-burst-1 --scenario paper --sources rss:hn_best,rss:hn_frontpage,rss:openai_news,rss:techcrunch,rss:technologyreview,rss:theregister,rss:theverge,rss:wired --interval-min 15 --max-items 5 --expect-sha cff54bf5 --fence-min 10 --timeout-min 30 --keep-computer",
+  "burst": {
+   "records": "seq 1-8, 18:43:29-18:43:36",
+   "captures": 40
+  },
+  "records_shown": {
+   "0359789a 18:43:33": "seq 1-7 (seq 8 committed 3 s later)",
+   "fac70bb1 18:44:51": "3 records (seq 8-10; head was 10, previous max shown 7)",
+   "455c888c 18:48:25-18:51:24": "seq 11-14",
+   "ae00e430 18:51:52": "seq 15",
+   "df55e792 18:54:02": "seq 16",
+   "4384a816 (running at read)": "seq 17 pending, cursor 16, head 17"
+  },
+  "late_arrival_wake": "seq 8 arrived during run 0359789a after its Records() call; run fac70bb1 started at 18:44:47 as 0359789a ended and returned it",
+  "captures_answered": "40 of 40 burst captures referenced by a successful choir.Cast or choir.Note cell (28 intents: 24 in 0359789a, 4 in fac70bb1); one failing cell (undefined variable) was retried successfully 10 s later",
+  "support_pairs": "seq 12-16 judged with choir.Judge in the turn that read them",
+  "latency_s": {
+   "seq_1_7": "35-75",
+   "seq_8": 263
+  },
+  "compared_to_first_run": "the first run left 40 of the tier-1 burst's items unanswered because the cell that cast advanced the cursor to head without a Records() call (docs/problems/autopaper-arrivals-unanswered-2026-10-13.md); fixed at cff54bf5",
+  "not_claimed": "the per-capture duty at scale (station L2 of docs/definitions/choir-ledger-metamission-2026-10-13.md retires it); one burst of 8 records only"
  }
 }

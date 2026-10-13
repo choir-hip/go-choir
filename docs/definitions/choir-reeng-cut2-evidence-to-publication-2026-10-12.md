@@ -513,7 +513,10 @@ now:
     predate the planned-restart route, and an all-deferred refresh failed
     the deploy job (fixed b4ead3e0); the paper was refreshed by operator
     onto cff54bf5 at 18:28 (crash boot closed its 14 schedules) and the
-    owner act restarted them at 18:28:30. E3 rerun pending.
+    owner act restarted them at 18:28:30. E3 rerun passed on a minted test
+    computer at cff54bf5 (an 8-record, 40-capture burst: every record
+    marked read was returned by a Records() call, a mid-turn arrival woke
+    the next turn, 40 of 40 captures answered; receipts E3_rerun).
   source_ref: cff54bf5
   deploy_identity: staging choir.news cff54bf5
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}

@@ -1,7 +1,8 @@
 # Autopaper: capture arrivals that management never answered (2026-10-13)
 
-Status: cause confirmed from the run trace (H2); fix follows in a separate
-commit. Found by the C2 close receipts (E3) requested by the close review panel
+Status: fixed at cff54bf5; the rerun passed on a minted test computer
+(docs/evidence/c2-close-receipts-2026-10-13.json, E3_rerun). Cause confirmed
+from the run trace (H2). Found by the C2 close receipts (E3) requested by the close review panel
 (docs/reports/c2-close-review-adjudication-2026-10-13.md).
 
 ## Contract
