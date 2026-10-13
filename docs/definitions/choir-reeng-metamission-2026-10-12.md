@@ -30,8 +30,8 @@ metamission:
       note: model pools (owner 2026-10-12, "do this configuration setup first"); red; its acceptance is in the design doc
     - id: D0
       path: docs/reports/dead-code-census-2026-10-12.md
-      readiness: draft
-      status: pending
+      readiness: reviewed
+      status: landed (6505fa33; about 50,000 lines deleted; staging acceptance PASS, docs/evidence/d0-dead-code-acceptance-2026-10-12.json)
       depends_on: [M0]
       note: >-
         dead-code census, then removal (owner 2026-10-12: "identify all the

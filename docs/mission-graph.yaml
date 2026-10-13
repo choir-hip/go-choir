@@ -1599,7 +1599,7 @@ nodes:
     title: "D0 — dead-code census and removal before the cuts"
     path: docs/reports/dead-code-census-2026-10-12.md
     ledger: ''
-    status: planned
+    status: settled  # landed 2026-10-12 at 6505fa33; receipt in the census Result section
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12

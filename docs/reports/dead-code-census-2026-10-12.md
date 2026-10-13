@@ -49,6 +49,55 @@ the owner the questions that a grep cannot answer.
   recovery and maild spool, B9 to B16; Part C). Mission probes (A11) still
   wait for Cut 0's tracer.
 
+## Result (2026-10-12): landed
+
+- **What landed.** 33 D0 commits, febe1df8..6505fa33. In that range, 383
+  files changed: +702, -50,103 lines. The 32.8 MB binary is not counted in
+  those lines.
+- **How it ran.** Four removal batches, each written in its own worktree:
+  - R1: hygiene, scripts and CI;
+  - R2: frontend;
+  - R3: Go outside the desk runtime;
+  - R4: the desk runtime and prompts.
+
+  Each batch was rebuilt and tested on main, then pushed and passed CI.
+- **Final state.** CI run 38324849111 passed. Staging health and the
+  acceptance computer's guest build are both 6505fa33.
+- **Acceptance PASS.** `scripts/m0_pools_acceptance.mjs` ran on a fresh
+  test computer (computer-695920eae4e77b5324166e20d3bc510b); artifact
+  [docs/evidence/d0-dead-code-acceptance-2026-10-12.json](../evidence/d0-dead-code-acceptance-2026-10-12.json).
+  - Four documents authored in 24 to 45 s.
+  - Both pool members used, 4 threads each.
+  - Every thread kept one model, and nothing was refused.
+- **Defects repaired:**
+  - D1: compaction now names `choir.RunMemoryEntry` to research only.
+  - D5: a run with an unknown profile gets no tool registry.
+  - D6: no comprehensive-tagged tests remain; they were revived into CI or
+    deleted.
+  - Texture PUT and DELETE no longer write outside the Texture desk.
+- **Defects discovered:**
+  - D4 had already been repaired by b445fd21.
+  - The live yaegi Session could report an output overflow as a timeout.
+    Recorded and fixed: 86630cf3, then 5f135d8e.
+  - The nix Go module hash went stale when imports were removed; fixed in
+    f96ead40.
+- **Introduced:** none known.
+- **Moved into the cuts:**
+  - Cut 0: the mission probes and the trace store decision.
+  - Cut 1: the 17 legacy tables, management-open, control-records, the
+    processor metadata keys, D3, and the spawn_agent flags.
+  - Cut 2: the Universal Wire and texture merge frontend, the sourcecycled
+    daemon, the 24 Store B tables, and D2.
+- **Residuals:**
+  - `go.mod` still requires gonso and go-keyring. A tidy changes the vendor
+    tree and the nix hash, so it waits for a deliberate dependency commit.
+  - `capsule.Executor.ListOwned`, `DestroyOwned` and `ControlHandle` may
+    have lost their last callers.
+  - `SupervisionInterval` is still set by actorruntime tests.
+  - The decision-policy JSON still names the solitaire tables in
+    `blast_radius`; that JSON is hash-pinned, so it was left alone.
+  - Node B's gateway env lists retired models (M0 residual).
+
 ## Size
 
 - Go: 667 functions (about 11,200 lines) unreachable from any `main` on the
