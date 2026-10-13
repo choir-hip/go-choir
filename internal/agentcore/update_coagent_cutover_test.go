@@ -119,7 +119,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	}
 }
 
-func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
+func TestCrashStartClosesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
@@ -220,12 +220,12 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 
 	rt.Start(ctx)
 
-	passivated, err := s2.GetRun(ctx, interrupted.RunID)
+	closed, err := s2.GetRun(ctx, interrupted.RunID)
 	if err != nil {
 		t.Fatalf("get interrupted run: %v", err)
 	}
-	if passivated.State != types.RunPassivated {
-		t.Fatalf("interrupted state = %q, want %q", passivated.State, types.RunPassivated)
+	if closed.State != types.RunCancelled || closed.Error != runFateInterruptedByRestart {
+		t.Fatalf("interrupted run after a crash boot: state=%q error=%q, want cancelled with %q", closed.State, closed.Error, runFateInterruptedByRestart)
 	}
 
 	time.Sleep(500 * time.Millisecond)

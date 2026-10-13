@@ -721,7 +721,14 @@ func (rt *Runtime) Start(ctx context.Context) {
 		fn()
 		log.Printf("runtime: boot phase end %s dur=%s", name, time.Since(started).Round(time.Millisecond))
 	}
-	bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
+	// A crash restart never resumes work: a markerless boot closes every
+	// pre-boot run with the fate interrupted_by_restart. A planned restart
+	// (marker consumed before Start) parks them for its one resume.
+	if _, planned := rt.BootWasPlannedRestart(); planned {
+		bootPhase("passivate_interrupted_activations", func() { rt.passivateInterruptedActivations(ctx) })
+	} else {
+		bootPhase("close_pre_boot_runs_after_crash", func() { rt.closePreBootRunsAfterCrash(ctx) })
+	}
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
 	bootPhase("platform_update_resume", func() {
 		// Spawn only — the sweep itself must not run inside Start: the resumed
@@ -730,8 +737,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 		// AfterReady waits out boot before re-driving the pending transition.
 		go rt.resumePendingPlatformUpdateAfterReady(ctx)
 	})
-	bootPhase("recover_wire_publication_claims", func() { rt.recoverOpenWirePublicationClaims(ctx) })
-	bootPhase("reconcile_terminal_run_outcomes", func() { rt.reconcileTerminalRunOutcomes(ctx) })
 	bootPhase("selfdev_close_after_crash", func() { rt.closeSelfDevelopmentOperationsAfterCrash(ctx) })
 	bootPhase("source_schedules_close_after_crash", func() { rt.closeSourceSchedulesAfterCrash(ctx) })
 	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })
@@ -2345,198 +2350,128 @@ func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.
 	return true
 }
 
-// passivateInterruptedActivations releases runs that were active in a previous
-// process. Lifecycle-bound runs are excluded from the generic ListRunsByState
-// scan (lifecycleRunProjection); they are handled by the lifecycle rewarm pass
-// (rewarmInterruptedLifecycleActivations) wired in Start.
-func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
-	states := []types.RunState{types.RunPending, types.RunRunning}
+// runFateInterruptedByRestart is the fate a crash boot gives every pre-boot
+// run (CLAUDE.md, restarts end work): the run is cancelled with this error
+// and the same metadata fate, and nothing re-dispatches it.
+const runFateInterruptedByRestart = "interrupted_by_restart"
+
+// forEachPreBootRun visits the runs of this computer in the given states, as
+// boot sees them before any actor runs. Production computers list by owner;
+// a computer without an owner id scans by state. fn reports whether it
+// changed the run (a by-state scan stops when a page changes nothing).
+func (rt *Runtime) forEachPreBootRun(ctx context.Context, phase string, states []types.RunState, fn func(rec *types.RunRecord, was types.RunState) bool) {
 	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
 	if ownerID == "" {
 		ownerID = strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
 	}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	productionComputer := rt.cfg.ComputerID != "" && strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
-	passivateBatch := func(runs []types.RunRecord, state types.RunState) bool {
-		progressed := false
-		for i := range runs {
-			rec := &runs[i]
-			was := rec.State
-			if state != "" {
-				was = state
-			}
-			now := time.Now().UTC()
-			rec.State = types.RunPassivated
-			rec.Error = ""
-			rec.UpdatedAt = now
-			rec.FinishedAt = nil
-			rec.Metadata = cloneMetadata(rec.Metadata)
-			rec.Metadata["passivated_reason"] = "runtime_restarted"
-			if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
-				log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
-			} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
-				skippedProfile := agentProfileForRun(rec)
-				log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
-					rec.RunID, skippedProfile, trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
-			}
-			if err := rt.store.UpdateRun(ctx, *rec); err != nil {
-				log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
-				continue
-			}
-			progressed = true
-			if runHasProfile(rec, agentprofile.Texture) {
-				if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
-					log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
-				}
-			}
-			rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseSupervisorRecovery,
-				json.RawMessage(`{"recovery":"passivated_on_restart"}`))
-			log.Printf("runtime: passivated run %s (was %s) after restart", rec.RunID, was)
-		}
-		return progressed
-	}
 	if ownerID != "" {
-		log.Printf("runtime: boot passivation owner-scoped owner=%s computer=%s", ownerID, computerID)
 		runs, err := rt.store.ListRunsByOwnerStates(ctx, ownerID, computerID, states, 1024)
 		if err != nil {
-			log.Printf("runtime: boot passivation owner-scoped list: %v", err)
+			log.Printf("runtime: %s owner-scoped list: %v", phase, err)
 			return
 		}
-		log.Printf("runtime: boot passivation owner-scoped candidates=%d", len(runs))
-		passivateBatch(runs, "")
+		log.Printf("runtime: %s owner-scoped owner=%s computer=%s candidates=%d", phase, ownerID, computerID, len(runs))
+		for i := range runs {
+			fn(&runs[i], runs[i].State)
+		}
 		return
 	}
 	if productionComputer {
-		log.Printf("runtime: boot passivation skipped: owner_id required on production computer %s", rt.cfg.ComputerID)
+		log.Printf("runtime: %s skipped: owner_id required on production computer %s", phase, rt.cfg.ComputerID)
 		return
 	}
 	for _, state := range states {
 		for {
 			runs, err := rt.store.ListRunsByState(ctx, state, 100)
 			if err != nil {
-				log.Printf("runtime: boot passivation: query %s runs: %v", state, err)
+				log.Printf("runtime: %s: query %s runs: %v", phase, state, err)
 				break
 			}
-			if len(runs) == 0 {
-				break
+			progressed := false
+			for i := range runs {
+				if fn(&runs[i], state) {
+					progressed = true
+				}
 			}
-			if !passivateBatch(runs, state) {
+			if len(runs) == 0 || !progressed {
 				break
 			}
 		}
 	}
 }
 
-// bootTerminalRepairRecentLimit caps the owner-indexed header window used on
-// production computers. The previous full-state JSON_EXTRACT walk loaded every
-// completed/failed/cancelled choir.run body and killed the 4 GiB guest before
-// the first scanned=256 log.
-const bootTerminalRepairRecentLimit = 256
+// closePreBootRunsAfterCrash ends every run a markerless boot finds pending,
+// running, parked or blocked: cancelled, error and metadata fate
+// interrupted_by_restart, finished now. It creates no work and wakes no
+// one; the owner's next act starts fresh work.
+func (rt *Runtime) closePreBootRunsAfterCrash(ctx context.Context) {
+	states := []types.RunState{types.RunPending, types.RunRunning, types.RunPassivated, types.RunBlocked}
+	rt.forEachPreBootRun(ctx, "crash boot close", states, func(rec *types.RunRecord, was types.RunState) bool {
+		now := time.Now().UTC()
+		rec.State = types.RunCancelled
+		rec.Error = runFateInterruptedByRestart
+		rec.UpdatedAt = now
+		rec.FinishedAt = &now
+		rec.Metadata = cloneMetadata(rec.Metadata)
+		rec.Metadata["fate"] = runFateInterruptedByRestart
+		if err := rt.terminalizeRunCanonical(ctx, rec, runFateInterruptedByRestart); err != nil {
+			log.Printf("runtime: crash boot close: run %s: %v", rec.RunID, err)
+			return false
+		}
+		if runHasProfile(rec, agentprofile.Texture) {
+			if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
+				log.Printf("runtime: crash boot close: stale mutation %s: %v", rec.RunID, err)
+			}
+		}
+		rt.emitEvent(ctx, rec, types.EventRunCancelled, events.CauseSupervisorRecovery,
+			json.RawMessage(`{"fate":"interrupted_by_restart"}`))
+		log.Printf("runtime: closed run %s (was %s) after a crash restart", rec.RunID, was)
+		return true
+	})
+}
+
+// passivateInterruptedActivations parks the runs that were active before a
+// planned restart, for the one resume a planned restart allows.
+func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
+	states := []types.RunState{types.RunPending, types.RunRunning}
+	rt.forEachPreBootRun(ctx, "boot passivation", states, func(rec *types.RunRecord, was types.RunState) bool {
+		now := time.Now().UTC()
+		rec.State = types.RunPassivated
+		rec.Error = ""
+		rec.UpdatedAt = now
+		rec.FinishedAt = nil
+		rec.Metadata = cloneMetadata(rec.Metadata)
+		rec.Metadata["passivated_reason"] = "runtime_restarted"
+		if item, err := rt.ensureSpawnedCoagentWorkItem(ctx, rec, nil, "passivated_spawned_work_item_id"); err != nil {
+			log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
+		} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
+			skippedProfile := agentProfileForRun(rec)
+			log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
+				rec.RunID, skippedProfile, trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
+		}
+		if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+			log.Printf("runtime: boot passivation: update run %s: %v", rec.RunID, err)
+			return false
+		}
+		if runHasProfile(rec, agentprofile.Texture) {
+			if err := rt.store.MarkAgentMutationStale(context.WithoutCancel(ctx), rec.OwnerID, agentMutationComputerID(rec), rec.RunID); err != nil {
+				log.Printf("runtime: boot passivation: stale mutation %s: %v", rec.RunID, err)
+			}
+		}
+		rt.emitEvent(ctx, rec, types.EventRunPassivated, events.CauseSupervisorRecovery,
+			json.RawMessage(`{"recovery":"passivated_on_restart"}`))
+		log.Printf("runtime: passivated run %s (was %s) after restart", rec.RunID, was)
+		return true
+	})
+}
 
 // bootPersistentManagementRewarmLimit caps the owner-indexed header window used
 // to find passivated Management control runs. ListAllRunsByState(passivated)
 // JSON_EXTRACT-scans every choir.run body and is what kills the 4 GiB guest
 // before Management dispatch.
 const bootPersistentManagementRewarmLimit = 1024
-
-// reconcileTerminalRunOutcomes repairs missing terminal-outcome bindings.
-// Production computers (computer-* or CHOIR_OWNER_ID) use an owner-scoped
-// recent window. Tests without an owner keep the exhaustive keyset walk.
-// It may append a missing terminal packet, but it never directly dispatches
-// one: the packet's durable actor-wake outbox projection is its sole delivery
-// authority after boot.
-func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) {
-	if rt == nil || rt.store == nil {
-		return
-	}
-	computerID := rt.TextureComputerID()
-	ownerID := strings.TrimSpace(rt.selfdevRouteOwnerID)
-	if ownerID == "" {
-		ownerID = strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
-	}
-	productionComputer := strings.HasPrefix(strings.TrimSpace(rt.cfg.ComputerID), "computer-")
-	collect := func(rec types.RunRecord) {
-		rt.collectTerminalRunOutcome(ctx, rec)
-	}
-	if ownerID != "" {
-		log.Printf("runtime: boot terminal outcome owner-scoped owner=%s computer=%s limit=%d", ownerID, computerID, bootTerminalRepairRecentLimit)
-		runs, err := rt.store.ListRecentRunsByOwner(ctx, ownerID, computerID, bootTerminalRepairRecentLimit)
-		if err != nil {
-			return
-		}
-		log.Printf("runtime: boot terminal outcome owner-scoped candidates=%d", len(runs))
-		for _, rec := range runs {
-			collect(rec)
-		}
-	} else if productionComputer {
-		log.Printf("runtime: boot terminal outcome skipped: owner_id required on production computer %s", rt.cfg.ComputerID)
-	} else {
-		for _, state := range []types.RunState{types.RunCompleted, types.RunFailed, types.RunCancelled} {
-			log.Printf("runtime: boot terminal outcome foreach begin state=%s", state)
-			lifecycleScanned := 0
-			lifecycleRequested := 0
-			lifecycleErr := rt.store.ForEachLifecycleRunsByState(ctx, "", computerID, state, func(rec types.RunRecord) error {
-				lifecycleScanned++
-				if !store.LifecycleTerminalSettlementRequested(rec) {
-					return nil
-				}
-				lifecycleRequested++
-				if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); err != nil {
-					log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", rec.RunID, err)
-				}
-				return nil
-			})
-			if lifecycleErr != nil {
-				log.Printf("runtime: boot lifecycle settlement reconciliation: query %s runs: %v", state, lifecycleErr)
-			} else {
-				log.Printf("runtime: boot lifecycle settlement scanned=%d requested=%d state=%s", lifecycleScanned, lifecycleRequested, state)
-			}
-			genericScanned := 0
-			requesterChildren := 0
-			err := rt.store.ForEachRunsByState(ctx, state, func(rec types.RunRecord) error {
-				genericScanned++
-				if genericScanned%256 == 0 {
-					log.Printf("runtime: boot terminal outcome progress scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
-				}
-				if !terminalOutcomeCapableProfile(agentProfileForRun(&rec)) {
-					return nil
-				}
-				if strings.TrimSpace(rec.RequestedByRunID) == "" {
-					return nil
-				}
-				requesterChildren++
-				rt.reconcilePersistedTerminalRunOutcome(ctx, &rec)
-				return nil
-			})
-			if err != nil {
-				log.Printf("runtime: boot terminal outcome reconciliation: query %s runs: %v", state, err)
-				continue
-			}
-			log.Printf("runtime: boot terminal outcome scanned=%d requester_children=%d state=%s", genericScanned, requesterChildren, state)
-		}
-	}
-}
-
-func (rt *Runtime) collectTerminalRunOutcome(ctx context.Context, rec types.RunRecord) {
-	if store.LifecycleTerminalSettlementRequested(rec) {
-		if err := rt.store.ReconcileLifecycleSettlementForTerminalRun(ctx, rec); err != nil {
-			log.Printf("runtime: boot lifecycle settlement reconciliation for run %s: %v", rec.RunID, err)
-		}
-	}
-	if !terminalOutcomeCapableProfile(agentProfileForRun(&rec)) {
-		return
-	}
-	if strings.TrimSpace(rec.RequestedByRunID) == "" {
-		return
-	}
-	rt.reconcilePersistedTerminalRunOutcome(ctx, &rec)
-}
-
-func (rt *Runtime) reconcilePersistedTerminalRunOutcome(ctx context.Context, rec *types.RunRecord) {
-	if _, err := rt.ensurePersistedTerminalRunOutcome(ctx, rec); err != nil {
-		log.Printf("runtime: boot terminal outcome reconciliation for run %s: %v", rec.RunID, err)
-	}
-}
 
 // actorWakeSweep reports what one outbox pass did, so the projector can
 // decide when to look again.

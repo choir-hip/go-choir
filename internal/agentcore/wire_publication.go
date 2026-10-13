@@ -15,30 +15,6 @@ func wireCanonicalRevisionEligibleForPublication(doc types.Document, rev types.R
 	return wirepublish.EligibleForAutonomousPublish(doc, rev, rec, universalWirePlatformOwnerID())
 }
 
-func (rt *Runtime) recoverOpenWirePublicationClaims(ctx context.Context) {
-	if rt == nil || rt.store == nil {
-		return
-	}
-	items, err := rt.store.ListOpenWorkItemsByKind(ctx, "wire_publication", 0)
-	if err != nil {
-		log.Printf("runtime: recover open wire publication claims: %v", err)
-		return
-	}
-	recovered := make(map[[2]string]struct{}, len(items))
-	for _, item := range items {
-		ownerID := strings.TrimSpace(item.OwnerID)
-		trajectoryID := strings.TrimSpace(item.TrajectoryID)
-		key := [2]string{ownerID, trajectoryID}
-		if _, ok := recovered[key]; ok {
-			continue
-		}
-		recovered[key] = struct{}{}
-		if _, err := rt.cancelTrajectoryAuthority(ctx, ownerID, trajectoryID); err != nil {
-			log.Printf("runtime: recover wire publication claim work_item=%s trajectory=%s: %v", item.WorkItemID, trajectoryID, err)
-		}
-	}
-}
-
 func (rt *Runtime) MaybeAutonomousPublishWireArticle(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) {
 	if rt == nil || !wireCanonicalRevisionEligibleForPublication(doc, rev, rec) {
 		return

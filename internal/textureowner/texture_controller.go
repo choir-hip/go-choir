@@ -90,11 +90,9 @@ func (rt *Handler) lifecycleDocDeskProfile(ctx context.Context, ownerID string, 
 	return ""
 }
 
-// Start reconciles durable Texture documents after the generic core has
-// recovered interrupted activations and before the actor mailbox boot sweep.
-// Exact pending trigger occurrences are durably dispatched before any run is
-// projected pending, preventing an already-used initial_dispatch from becoming
-// reactivation authority.
+// Start runs at boot after the generic core has closed (crash) or parked
+// (planned restart) the interrupted runs. Only a planned restart reconciles
+// Engineering desks (their one re-provision); Texture subjects get nothing.
 func (rt *Handler) Start(ctx context.Context) error {
 	if rt.Core != nil && rt.Core.MaintenanceHeld() {
 		// The computer is under a maintenance hold: no run admission or Texture
@@ -112,6 +110,11 @@ func (rt *Handler) Start(ctx context.Context) error {
 	for _, subject := range subjects {
 		subjectProfile, _ := agentprofile.Canonical(subject.Profile)
 		if subjectProfile == agentprofile.Engineering && subject.LifecycleVersion > 0 && subject.ChannelID != subject.AgentID {
+			if _, planned := rt.Core.BootWasPlannedRestart(); !planned {
+				// A crash boot recasts nothing: its assignments were
+				// cancelled and the work waits for the owner.
+				continue
+			}
 			// Engineering desk: the desk agent's channel is the bound document,
 			// not its own mailbox — that discriminates it from assigned agents
 			// (engineering:{assignmentID}, channel = own mailbox). Reconcile

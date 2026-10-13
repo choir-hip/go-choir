@@ -1063,6 +1063,9 @@ func (h *Handler) textureTurnInterruptedByRestart(ctx context.Context, doc types
 		if run.State == types.RunPassivated && metadataStringValue(run.Metadata, "passivated_reason") == "runtime_restarted" {
 			return run.RunID
 		}
+		if run.State == types.RunCancelled && run.Error == "interrupted_by_restart" {
+			return run.RunID
+		}
 		return ""
 	}
 	return ""

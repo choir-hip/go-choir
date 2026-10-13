@@ -3223,6 +3223,12 @@ func (rt *Runtime) wakeUpdatedCoagent(ctx context.Context, update types.CoagentS
 	if rt == nil || rt.store == nil {
 		return
 	}
+	if _, planned := rt.BootWasPlannedRestart(); rt.bootInProgress.Load() && !planned {
+		// A crash boot closes work and wakes no one (CLAUDE.md, restarts
+		// end work); the packet stays durable for the owner's next act.
+		log.Printf("runtime: crash boot: no wake for %s", update.TargetAgentID)
+		return
+	}
 	target := strings.TrimSpace(update.TargetAgentID)
 	if target == "" {
 		return
