@@ -28,7 +28,7 @@
 //
 //   node scripts/reeng_tracer.mjs --label c0-tracer-dev-1 [--attempts 3]
 //     [--timeout-min 30] [--exporter "go run ./cmd/choir trace export"]
-//     [--skip-export] [--owner-publish]
+//     [--skip-export] [--owner-publish] [--quiesce-min 10]
 //
 // Exit: 0 bundle kept with the load present; 3 bundle(s) kept, load absent
 // (I5 unknown); 4 export unavailable (drill kept); 1 attempt failed; 2 usage.
@@ -54,6 +54,7 @@ const TIMEOUT_MIN = Number(arg('timeout-min', '30'));
 const EXPORTER = arg('exporter', 'go run ./cmd/choir trace export');
 const SKIP_EXPORT = flag('skip-export');
 const OWNER_PUBLISH = flag('owner-publish');
+const QUIESCE_MIN = Number(arg('quiesce-min', '10'));
 if (!LABEL || !/^[A-Za-z0-9._-]+$/.test(LABEL)) {
   console.error('usage: node scripts/reeng_tracer.mjs --label <label> [--attempts 3] [--timeout-min 30] [--exporter <cmd>] [--skip-export] [--owner-publish]');
   process.exit(2);
@@ -178,16 +179,21 @@ async function trajectoryRuns(c, traj, sinceISO) {
 // Run events are served by GET /api/runs/{id}/events once Cut 0's read route
 // lands; until then the tracer falls back to run state alone.
 async function cellInFlight(c, rid) {
-  const res = await c.api(`/api/runs/${encodeURIComponent(rid)}/events?after=0&limit=1000`);
-  if (res.status !== 200 || !Array.isArray(res.body?.events)) return { served: false, inFlight: null };
+  let after = 0;
   let open = 0;
-  for (const e of res.body.events) {
-    let payload = e.payload;
-    if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { payload = {}; } }
-    const tool = payload?.tool || payload?.tool_name || payload?.name || '';
-    if (tool !== 'desk_go_eval') continue;
-    if (e.kind === 'tool.invoked') open++;
-    if (e.kind === 'tool.result') open = Math.max(0, open - 1);
+  for (let page = 0; page < 20; page++) {
+    const res = await c.api(`/api/runs/${encodeURIComponent(rid)}/events?after=${after}&limit=1000`);
+    if (res.status !== 200 || !Array.isArray(res.body?.events)) return page === 0 ? { served: false, inFlight: null } : { served: true, inFlight: open > 0 };
+    for (const e of res.body.events) {
+      let payload = e.payload;
+      if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch { payload = {}; } }
+      if (payload?.tool !== 'desk_go_eval') continue;
+      if (e.kind === 'tool.invoked') open++;
+      if (e.kind === 'tool.result') open = Math.max(0, open - 1);
+    }
+    const next = Number(res.body.next_after || 0);
+    if (res.body.events.length === 0 || !(next > after)) break;
+    after = next;
   }
   return { served: true, inFlight: open > 0 };
 }
@@ -362,12 +368,17 @@ async function attempt(n, out) {
   const readyDeadline = Math.max(deadline, Date.now() + 10 * 60_000);
   while (Date.now() < readyDeadline) {
     const o = await c.observability();
-    if (o.status === 200 && o.body?.computer_id === c.computerID) { drill.ready_at = iso(); drill.ready_build = o.body.build || null; break; }
+    if (o.status === 200 && o.body?.computer_id === c.computerID) {
+      drill.ready_at = iso();
+      drill.ready_build = o.body.build || null;
+      Object.assign(drill, bootInstant(o.body, drill.restart_requested_at, drill.ready_at));
+      break;
+    }
     await sleep(3_000);
   }
   if (!drill.ready_at) throw new Error('computer did not answer after the restart');
   out.timings.restart_to_ready_ms = Date.parse(drill.ready_at) - restartStarted;
-  phase('ready', { restart_to_ready_ms: out.timings.restart_to_ready_ms });
+  phase('ready', { restart_to_ready_ms: out.timings.restart_to_ready_ms, boot_at: drill.boot_at, boot_at_source: drill.boot_at_source });
   drill.obligations_after = await obligations(c);
 
   // Fate of the in-flight run: closed (crash rule) or resumed.
@@ -421,6 +432,23 @@ async function attempt(n, out) {
   } else {
     drill.note.push('nothing publishes a prompt-bar story without an owner act; owner publish not requested (--owner-publish)');
   }
+  // Export only after quiescence (no run of this computer pending or
+  // running), bounded; an open run at export reads as an I2 failure.
+  const quiesceDeadline = Date.now() + QUIESCE_MIN * 60_000;
+  drill.quiescent = false;
+  let open = [];
+  while (Date.now() < quiesceDeadline) {
+    const { ofTrajectory, sinceStart } = await trajectoryRuns(c, out.trajectory_id, startISO);
+    const seen = new Map([...sinceStart, ...ofTrajectory].map((r) => [runID(r), r]));
+    open = [...seen.values()].filter((r) => r.state === 'running' || r.state === 'pending');
+    if (open.length === 0) { drill.quiescent = true; drill.quiescent_at = iso(); break; }
+    await sleep(10_000);
+  }
+  if (!drill.quiescent) {
+    drill.open_at_export = open.map((r) => ({ run_id: runID(r), profile: r.agent_profile || null, state: r.state }));
+    drill.note.push(`not quiescent after ${QUIESCE_MIN} min; exported with ${open.length} run(s) open`);
+  }
+  phase('quiescence', { quiescent: drill.quiescent, open: open.length });
   drill.note = drill.note.join('; ');
 
   // Export, insert the drill block, keep the bundle.
@@ -480,6 +508,23 @@ function runExporter(c, traj, outPath) {
       resolve({ code, stderr: stderr.split(c.apiKey).join('<redacted>'), ms: Date.now() - started });
     });
   });
+}
+
+// bootInstant: when the restarted guest booted. The guest's recent_log is a
+// 512-line ring of standard-logger lines ("YYYY/MM/DD HH:MM:SS ...", UTC on
+// the guest); while the ring has not wrapped, its first line is the boot. The
+// stamp must fall between the restart request and the first answer, else the
+// first answer after the restart stands in (an upper bound).
+function bootInstant(body, requestedAt, readyAt) {
+  const lines = Array.isArray(body?.recent_log) ? body.recent_log : [];
+  const m = lines.length > 0 && lines.length < 512 ? String(lines[0]).match(/^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})/) : null;
+  if (m) {
+    const at = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    if (at >= Date.parse(requestedAt) - 2_000 && at <= Date.parse(readyAt) + 2_000) {
+      return { boot_at: new Date(at).toISOString(), boot_at_source: 'observability.recent_log[0]' };
+    }
+  }
+  return { boot_at: readyAt, boot_at_source: 'first answer after restart (upper bound)' };
 }
 
 // The load: two desk.egress events with overlapping [started_at, finished_at]

@@ -136,11 +136,35 @@ rows (`tool = desk_go_eval`).
   "restart_requested_at": "RFC3339",
   "in_flight_run_id": "run observed running when the restart was sent",
   "ready_at": "RFC3339",
+  "boot_at": "RFC3339",
+  "boot_at_source": "observability.recent_log[0] | first answer after restart (upper bound)",
   "obligations_before": {}, "obligations_after": {},
-  "load": { "parallel_cell_requested": true, "second_run_submitted_at": "RFC3339" },
+  "quiescent": true,
+  "quiescent_at": "RFC3339",
+  "load": { "parallel_cell_requested": true, "second_run_submitted_at": "RFC3339", "I5_load": "present | absent | unknown" },
   "attempts": 1
 }
 ```
+
+- `boot_at`: when the restarted guest booted. Taken from the first line of
+  `GET /api/runtime/observability` `recent_log` (standard-logger timestamp,
+  UTC) when the 512-line ring has not wrapped and the stamp falls between
+  `restart_requested_at` and `ready_at`; otherwise the first time the
+  computer answered after the restart (an upper bound). The checker's I3
+  uses it as the boot instant.
+- `quiescent`: the tracer exports only after no run of the computer is
+  `pending` or `running`, waiting at most `--quiesce-min` (default 10).
+  `false` means the bounded wait ran out; `open_at_export` lists the runs
+  still open, so an I2 failure on them is read against that.
+- `load.I5_load`: `present` when the bundle shows two overlapping
+  `desk.egress` calls inside one `desk.cell` and a `desk.cell` with
+  `waited_for_run` set; `absent` when the export served those layers and
+  the load never appeared (the checker reports I5 unknown); `unknown` when
+  the export failed or was skipped.
+
+The tracer also records extra non-contract fields (`in_flight_run_after`,
+`restart_response`, `continued_after_restart`, `publication`, `note`); the
+checker must not depend on them.
 
 ## Checker verdicts
 
