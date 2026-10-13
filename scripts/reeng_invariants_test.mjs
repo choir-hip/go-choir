@@ -415,6 +415,20 @@ test('I3: an observed quiet window after the boot passes; a short one is unknown
   assert.equal(checkI3(short).verdict, 'unknown');
 });
 
+test('I3 treats an upper-bound boot_at as approximate and reads from the restart request', () => {
+  const b = buildCleanBundle();
+  b.drill.boot_at_source = 'first answer after restart (upper bound)';
+  b.drill.boot_at = new Date(Date.parse(b.drill.restart_requested_at) + 60_000).toISOString();
+  const r = checkI3(b);
+  assert.match(r.evidence[0].boot_at_source, /approximate/);
+  assert.equal(Date.parse(r.evidence[0].boot_at), Date.parse(b.drill.restart_requested_at));
+});
+
+test('exit code: 3 when no rule passed', () => {
+  assert.equal(exitCode([{ rule: 'I1', verdict: 'unknown' }, { rule: 'I6', verdict: 'not_defined' }]), 3);
+  assert.equal(exitCode([{ rule: 'I1', verdict: 'unknown' }, { rule: 'I2', verdict: 'fail' }]), 1);
+});
+
 test('I3 catches the documented restart recast of an engineering assignment', () => {
   const b = buildCleanBundle();
   const snap = b.layers.trajectory.items[0];
@@ -470,7 +484,7 @@ test('I3 is unknown when a pre-boot-caused dispatch follows owner input but name
 test('I3 ignores the boot passivation of the in-flight run (a closure, not a dispatch)', () => {
   const r = checkI3(buildCleanBundle());
   assert.equal(r.verdict, 'pass');
-  assert.equal(r.evidence[0].boot_at_source, 'first passivated_on_restart run event');
+  assert.equal(r.evidence[0].boot_at_source, 'first restart closure run event');
   assert.ok(!r.evidence.some((e) => e.loop_id === 'run-mgmt-2'));
 });
 

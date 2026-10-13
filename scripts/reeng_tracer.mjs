@@ -39,7 +39,8 @@
 //
 // Exit: 0 bundle kept with the load present; 3 bundle(s) kept, load absent
 // (I5 unknown); 4 export unavailable (drill kept); 5 contaminated (the guest
-// build changed during the run; --expect-sha); 1 attempt failed; 2 usage.
+// build changed during the run; --expect-sha); 6 the scenario's claim failed
+// (--scenario crash); 1 attempt failed; 2 usage.
 
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -71,6 +72,18 @@ const KEEP_COMPUTER = flag('keep-computer');
 // the guest build changes during it.
 const EXPECT_SHA = arg('expect-sha', '').toLowerCase();
 const FENCE_MIN = Number(arg('fence-min', '30'));
+// Scenarios (agentic-consensus 2026-10-13, convergent C1): "story" is the
+// full flow (load, crash, owner re-entry, publication) for cut boundaries;
+// "crash" proves restart closure only: crash at the first run in flight,
+// then a quiet window with no owner act, then export. Its acceptance is the
+// claim, not the I5 load.
+const SCENARIO = arg('scenario', 'story');
+if (!['story', 'crash'].includes(SCENARIO)) {
+  console.error(`unknown --scenario ${SCENARIO} (story | crash)`);
+  process.exit(2);
+}
+const CRASH_QUIET_MS = Number(arg('quiet-s', '150')) * 1000;
+const OPEN_RUN_STATES = new Set(['pending', 'running', 'passivated', 'blocked']);
 if (!LABEL || !/^[A-Za-z0-9._-]+$/.test(LABEL)) {
   console.error('usage: node scripts/reeng_tracer.mjs --label <label> [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer]');
   process.exit(2);
@@ -307,7 +320,7 @@ async function attempt(n, out) {
   const load = { parallel_cell_requested: true, double_cast_requested: true, second_run_submitted_at: null, observed_run_id: null, observed_by: null };
   const runningSince = new Map();
   let firstRevisionAt = null;
-  const loadDeadline = Math.min(deadline, submittedAt + 12 * 60_000);
+  const loadDeadline = SCENARIO === 'crash' ? submittedAt : Math.min(deadline, submittedAt + 12 * 60_000);
   while (Date.now() < loadDeadline && !load.second_run_submitted_at) {
     const { ofTrajectory } = await trajectoryRuns(c, out.trajectory_id, startISO);
     for (const r of ofTrajectory) {
@@ -337,7 +350,7 @@ async function attempt(n, out) {
   if (!load.observed_run_id) phase('second_run_not_sent', { reason: 'no run of the trajectory observed mid-cell before the load window closed' });
 
   // First desk revision of the story.
-  while (!firstRevisionAt && Date.now() < deadline) {
+  while (SCENARIO === 'story' && !firstRevisionAt && Date.now() < deadline) {
     if ((await deskRevisions(c, out.doc_id)).length > 0) firstRevisionAt = Date.now();
     else await sleep(5_000);
   }
@@ -352,7 +365,7 @@ async function attempt(n, out) {
   // parallel cell before its desk.cell and desk.egress events are persisted.
   // Settled = at least one research run seen and none still running (or
   // --settle-min passes; the drill then lands on whatever is in flight).
-  const settleDeadline = Math.min(deadline - 5 * 60_000, Date.now() + SETTLE_MIN * 60_000);
+  const settleDeadline = SCENARIO === 'crash' ? Date.now() : Math.min(deadline - 5 * 60_000, Date.now() + SETTLE_MIN * 60_000);
   const researchSeen = new Set();
   while (Date.now() < settleDeadline) {
     const { ofTrajectory } = await trajectoryRuns(c, out.trajectory_id, startISO);
@@ -377,7 +390,15 @@ async function attempt(n, out) {
       // nothing slow sits between observing the run in flight and the POST.
       drill.obligations_before = await obligations(c);
       const again = await c.api(`/api/runs/${encodeURIComponent(runID(candidate))}`);
-      if (again.status === 200 && again.body?.state === 'running') { inFlight = { ...candidate, run_id: runID(candidate) }; break; }
+      if (again.status === 200 && again.body?.state === 'running') {
+        inFlight = { ...candidate, run_id: runID(candidate) };
+        // Every run of the trajectory still open at the crash: the crash
+        // scenario's claim is about all of them.
+        const seen = new Map();
+        for (const r of [...ofTrajectory, ...sinceStart]) if (OPEN_RUN_STATES.has(r.state)) seen.set(runID(r), { run_id: runID(r), profile: r.agent_profile || null, state: r.state });
+        drill.pre_crash_open = [...seen.values()];
+        break;
+      }
     }
     if (!provoked && Date.now() - quietSince > 90_000) {
       const res = await revise(c, out.doc_id, FOLLOW_UP.replace('Follow-up on this story', 'Drill follow-up'), 'drill', Math.min(deadline, Date.now() + 120_000));
@@ -429,8 +450,23 @@ async function attempt(n, out) {
   drill.restart_kind = drill.obligations_after?.restart?.kind || null;
   phase('in_flight_fate', { ...fate, restart_kind: drill.restart_kind });
 
+  if (SCENARIO === 'crash') {
+    // No owner act: watch the quiet window, then read every run that was
+    // open at the crash.
+    const quietUntil = Date.parse(drill.ready_at) + CRASH_QUIET_MS;
+    while (Date.now() < quietUntil) await sleep(5_000);
+    drill.closure = [];
+    for (const r of drill.pre_crash_open || []) {
+      const got = await c.api(`/api/runs/${encodeURIComponent(r.run_id)}`);
+      drill.closure.push({ ...r, after: got.status === 200 ? { state: got.body?.state, error: got.body?.error || null } : { status: got.status } });
+    }
+    drill.quiet_window_ms = CRASH_QUIET_MS;
+    phase('closure', { open_at_crash: drill.closure.length, closed_with_fate: drill.closure.filter((x) => x.after?.state === 'cancelled' && x.after?.error === 'interrupted_by_restart').length });
+  }
+
   // Continue the story. If the restart closed the work and nothing moves,
   // the owner asks again (an owner act, recorded).
+  if (SCENARIO === 'story') {
   const revsBefore = new Set((await deskRevisions(c, out.doc_id)).map((r) => r.revision_id));
   let continued = null;
   let askedAgain = false;
@@ -468,9 +504,10 @@ async function attempt(n, out) {
   } else {
     drill.note.push('nothing publishes a prompt-bar story without an owner act; owner publish not requested (--owner-publish)');
   }
+  }
   // Export only after quiescence (no run of this computer pending or
   // running), bounded; an open run at export reads as an I2 failure.
-  const quiesceDeadline = Date.now() + QUIESCE_MIN * 60_000;
+  const quiesceDeadline = SCENARIO === 'crash' ? Date.now() : Date.now() + QUIESCE_MIN * 60_000;
   drill.quiescent = false;
   let open = [];
   while (Date.now() < quiesceDeadline) {
@@ -530,6 +567,19 @@ async function attempt(n, out) {
     });
     if (existsSync(reportPath)) chmodSync(reportPath, 0o600);
     out.invariants = { report: reportPath, exit: verdicts.exit, lines: verdicts.lines };
+    if (SCENARIO === 'crash') {
+      let rules = [];
+      try { rules = JSON.parse(readFileSync(reportPath, 'utf8')).rules || []; } catch { rules = []; }
+      const verdict = (id) => rules.find((r) => r.rule === id)?.verdict || 'missing';
+      const closure = drill.closure || [];
+      const allClosed = closure.length > 0 && closure.every((x) => x.after?.state === 'cancelled' && x.after?.error === 'interrupted_by_restart');
+      out.acceptance = {
+        scenario: 'crash', claim: 'a markerless boot closes every run open at the crash with fate interrupted_by_restart and dispatches nothing',
+        runs_open_at_crash: closure.length, all_closed_with_fate: allClosed, I3: verdict('I3'), quiet_window_ms: drill.quiet_window_ms,
+        pass: allClosed && verdict('I3') === 'pass',
+      };
+      phase('acceptance', out.acceptance);
+    }
     phase('invariants', { exit: verdicts.exit, verdicts: verdicts.lines.map((l) => l.split(/\s+/).slice(0, 2).join(' ')) });
   }
   return out;
@@ -689,6 +739,7 @@ for (let n = 1; n <= ATTEMPTS; n++) {
   if (result.contamination?.length) { exitCode = 5; log(`attempt ${n}: contaminated by a build change; the bundle is not acceptance evidence`); break; }
   if (result.export?.failed) { exitCode = 4; break; }
   if (result.export?.skipped) { exitCode = 0; break; }
+  if (result.acceptance) { exitCode = result.acceptance.pass ? 0 : 6; break; }
   if (result.load?.I5_load === 'present') { exitCode = 0; break; }
   exitCode = 3;
   if (n < ATTEMPTS) log(`attempt ${n}: load absent in the bundle; retrying on a fresh computer`);

@@ -340,6 +340,12 @@ export function bootAt(bundle) {
   const requested = ts(drill?.restart_requested_at);
   if (!Number.isFinite(requested)) return { at: NaN, source: '' };
   const explicit = ts(drill?.boot_at);
+  // The tracer falls back to the first answer after the restart, an upper
+  // bound: a dispatch between the real boot and that answer would read as
+  // pre-boot. Use the restart request instead, marked approximate.
+  if (Number.isFinite(explicit) && /upper bound/.test(str(drill?.boot_at_source))) {
+    return { at: requested, source: 'drill.restart_requested_at (approximate; boot_at is an upper bound)' };
+  }
   if (Number.isFinite(explicit)) return { at: explicit, source: 'drill.boot_at' };
   const boot = layer(bundle, 'boot');
   const booted = boot.usable && boot.items.length ? ts(boot.items[0]?.booted_at) : NaN;
@@ -347,12 +353,14 @@ export function bootAt(bundle) {
   const re = layer(bundle, 'run_events');
   let first = NaN;
   for (const e of re.items) {
-    if (str(e.kind) !== 'activation.passivated') continue;
-    if (str(eventPayload(e).recovery) !== 'passivated_on_restart') continue;
+    const p = eventPayload(e);
+    const restartClose = (str(e.kind) === 'activation.passivated' && str(p.recovery) === 'passivated_on_restart') ||
+      (str(e.kind) === 'loop.cancelled' && str(p.fate) === 'interrupted_by_restart');
+    if (!restartClose) continue;
     const t = ts(e.ts);
     if (t >= requested && !(first <= t)) first = t;
   }
-  if (Number.isFinite(first)) return { at: first, source: 'first passivated_on_restart run event' };
+  if (Number.isFinite(first)) return { at: first, source: 'first restart closure run event' };
   return { at: requested, source: 'drill.restart_requested_at (approximate)' };
 }
 
@@ -934,8 +942,13 @@ export function readBundle(path) {
   return { bundle, sha256: createHash('sha256').update(text).digest('hex') };
 }
 
+// Exit 1 on any fail; 3 when no rule passed (every verdict unknown or not
+// defined: the bundle proved nothing, e.g. an export whose layers are all
+// unserved); 0 otherwise.
 export function exitCode(rules) {
-  return rules.some((r) => r.verdict === 'fail') ? 1 : 0;
+  if (rules.some((r) => r.verdict === 'fail')) return 1;
+  if (!rules.some((r) => r.verdict === 'pass')) return 3;
+  return 0;
 }
 
 function main(argv) {
