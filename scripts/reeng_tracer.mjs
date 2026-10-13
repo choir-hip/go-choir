@@ -78,11 +78,16 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
 const SCENARIO = arg('scenario', 'story');
-if (!['story', 'crash', 'management', 'research'].includes(SCENARIO)) {
-  console.error(`unknown --scenario ${SCENARIO} (story | crash | management | research)`);
+if (!['story', 'crash', 'management', 'research', 'paper'].includes(SCENARIO)) {
+  console.error(`unknown --scenario ${SCENARIO} (story | crash | management | research | paper)`);
   process.exit(2);
 }
 const CRASH_QUIET_MS = Number(arg('quiet-s', '150')) * 1000;
+// The paper scenario's sources and schedule (Cut 2 2b): the owner act that
+// starts Autopaper on a computer is POST /api/autopaper/sources/schedules.
+const PAPER_SOURCES = String(arg('sources', 'arxiv:cs_ai')).split(',').map((x) => x.trim()).filter(Boolean);
+const PAPER_INTERVAL_MIN = Number(arg('interval-min', '10'));
+const PAPER_MAX_ITEMS = Number(arg('max-items', '6'));
 const OPEN_RUN_STATES = new Set(['pending', 'running', 'passivated', 'blocked']);
 if (!LABEL || !/^[A-Za-z0-9._-]+$/.test(LABEL)) {
   console.error('usage: node scripts/reeng_tracer.mjs --label <label> [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer]');
@@ -335,6 +340,7 @@ async function attempt(n, out) {
   const obs = await c.observability();
   out.build = obs.body?.build || null;
 
+  if (SCENARIO === 'paper') return paperScenario(c, out, n, deadline, phase);
   // Story submit; the first accepted submit is the "first ready prompt bar".
   const story = await submitPrompt(c, SCENARIO === 'management' ? MANAGEMENT_STORY : SCENARIO === 'research' ? RESEARCH_STORY : STORY, 'story', deadline);
   out.timings.first_prompt_accepted_ms = Date.now() - t0;
@@ -842,6 +848,95 @@ async function researchScenario(c, out, n, deadline, phase) {
   };
   phase('acceptance', out.acceptance);
   delete out.drill;
+  return out;
+}
+
+// paperScenario is Autopaper on a fresh computer (Cut 2 2b, living stories
+// and automatic publishing): one owner act starts the source schedules,
+// then nothing else. Its claim: a poll's captures reach management as a
+// record, management opens a story by a Cast to texture:new, Texture writes
+// it, and the story's versions appear on the public front list and render
+// publicly with their citations. The schedules are stopped at the end.
+async function paperScenario(c, out, n, deadline, phase) {
+  const claim = { schedules_started: [], capture_arrivals: 0, stories: [], published: [] };
+  for (const source of PAPER_SOURCES) {
+    const r = await c.api('/api/autopaper/sources/schedules', 'POST', { source_id: source, interval_minutes: PAPER_INTERVAL_MIN, max_items: PAPER_MAX_ITEMS, reason: `tracer ${out.label}` });
+    claim.schedules_started.push({ source_id: source, status: r.status });
+    phase('schedule_started', { source_id: source, status: r.status });
+  }
+  let ownerID = null;
+  const front = async () => {
+    try {
+      const r = await fetch(`${HOST}/api/platform/publications/front?limit=100`, { signal: AbortSignal.timeout(20_000) });
+      return r.ok ? await r.json() : null;
+    } catch { return null; }
+  };
+  const seen = new Set();
+  while (Date.now() < deadline) {
+    if (!ownerID) {
+      const me = await c.api('/api/autopaper/sources/schedules');
+      ownerID = (me.body?.schedules || []).find((x) => x.owner_id)?.owner_id || null;
+    }
+    if (ownerID) {
+      const m = await c.api(`/api/inboxes/${encodeURIComponent(`management:${ownerID}`)}/records?limit=1000`);
+      const arrivals = (m.body?.records || []).filter((r) => String(r.sender_inbox || '').startsWith('source:'));
+      if (arrivals.length !== claim.capture_arrivals) { claim.capture_arrivals = arrivals.length; phase('capture_arrivals', { records: arrivals.length, captures: arrivals.reduce((a, r) => a + (r.captures?.items || []).length, 0) }); }
+    }
+    const docs = await c.api('/api/texture/documents?limit=100');
+    for (const d of docs.body?.documents || docs.body?.items || (Array.isArray(docs.body) ? docs.body : [])) {
+      const id = d.doc_id || d.id;
+      if (!id || seen.has(id)) continue;
+      const inbox = await c.api(`/api/inboxes/${encodeURIComponent(`texture:${id}`)}/records?limit=50`);
+      const opening = (inbox.body?.records || []).find((r) => String(r.sender_inbox || '').startsWith('management:') && r.directive?.subtype === 'cast');
+      if (!opening) continue;
+      seen.add(id);
+      claim.stories.push({ doc_id: id, title: d.title || '', publish: opening.cast?.publish || null, captures: (opening.cast?.captures || []).length, opened_at: opening.provenance?.committed_at });
+      phase('story_opened', claim.stories[claim.stories.length - 1]);
+      if (!out.trajectory_id && d.trajectory_id) out.trajectory_id = d.trajectory_id;
+    }
+    const f = await front();
+    for (const row of f?.stories || []) {
+      const story = claim.stories.find((st) => st.title && row.title && (row.title === st.title || row.title.includes(st.title) || st.title.includes(row.title)));
+      if (!story) continue;
+      const known = claim.published.find((p) => p.doc_id === story.doc_id);
+      if (known && known.version_count === row.version_count) continue;
+      const entry = { doc_id: story.doc_id, title: row.title, version_count: row.version_count, latest_revision: row.latest_revision, bare: row.route?.bare || null };
+      if (known) Object.assign(known, entry); else claim.published.push(entry);
+      phase('story_published', entry);
+    }
+    if (claim.published.some((p) => p.version_count >= 2)) break;
+    await sleep(20_000);
+  }
+  // Read one published story through the public bundle route, logged out.
+  let bundleCheck = null;
+  const first = claim.published[0];
+  if (first?.bare) {
+    try {
+      const r = await fetch(`${HOST}/api/platform/publications/resolve?route=${encodeURIComponent(first.bare)}`, { signal: AbortSignal.timeout(20_000) });
+      const b = r.ok ? await r.json() : null;
+      bundleCheck = { status: r.status, citations: (b?.checks?.citations || []).length, states: (b?.checks?.citations || []).map((x) => x.state || x.judgement || 'pending'), nav: b?.nav || null };
+    } catch (err) { bundleCheck = { error: String(err).slice(0, 200) }; }
+  }
+  for (const source of PAPER_SOURCES) {
+    const r = await c.api(`/api/autopaper/sources/schedules?source_id=${encodeURIComponent(source)}`, 'DELETE');
+    phase('schedule_stopped', { source_id: source, status: r.status });
+  }
+  out.acceptance = {
+    scenario: 'paper',
+    claim: 'one owner act starts the schedules; a poll\'s captures reach management; management opens a story by a Cast to texture:new; the story publishes automatically and is listed on the public front list',
+    ...claim, public_bundle: bundleCheck,
+    pass: claim.capture_arrivals > 0 && claim.stories.length > 0 && claim.published.length > 0,
+  };
+  phase('acceptance', out.acceptance);
+  if (out.trajectory_id) {
+    const bundlePath = join(TRACE_DIR, `bundle-a${n}.json`);
+    const exported = await runExporter(c, out.trajectory_id, bundlePath);
+    out.export = { command: EXPORTER, exit: exported.code, ms: exported.ms, stderr_tail: exported.stderr.slice(-600) };
+    if (exported.code === 0 && existsSync(bundlePath)) {
+      out.bundle_path = bundlePath;
+      out.sha256 = createHash('sha256').update(readFileSync(bundlePath)).digest('hex');
+    }
+  }
   return out;
 }
 
