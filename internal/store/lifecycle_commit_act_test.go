@@ -51,7 +51,7 @@ func commitActRequestForTest(t *testing.T, s *Store, start types.StartLifecycleR
 		if err != nil {
 			t.Fatalf("load target agent: %v", err)
 		}
-		packet := types.CoagentSourcePacketPayload{
+		packet := types.SourcePacket{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "directive", Summary: "note: directive", Notes: []string{"directive:note", rec.Directive.Body},
 		}
@@ -217,7 +217,7 @@ func commitActProducerReportRequest(t *testing.T, s *Store, start types.StartLif
 	if err != nil {
 		t.Fatalf("load trajectory: %v", err)
 	}
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "research finding",
 		Claims: []types.CoagentPacketClaim{{Text: "the evidence supports the finding"}},
 	}

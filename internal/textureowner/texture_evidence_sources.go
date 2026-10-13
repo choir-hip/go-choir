@@ -731,7 +731,7 @@ func (rt *Handler) evidenceSourceEntitiesFromCommitmentRecords(ctx context.Conte
 			}
 		}
 		// Packet-bodied report: decode the preserved packet for its sources.
-		var packet types.CoagentSourcePacketPayload
+		var packet types.SourcePacket
 		if hypothesis := strings.TrimSpace(rec.Prediction.Hypothesis); hypothesis != "" && strings.HasPrefix(hypothesis, "{") {
 			if err := json.Unmarshal([]byte(hypothesis), &packet); err == nil {
 				for _, source := range packet.Sources {

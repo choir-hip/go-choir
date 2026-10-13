@@ -29,7 +29,7 @@ func TestActorWakeOutboxProjectorDispatchesOnceAndMarksProjected(t *testing.T) {
 			t.Fatalf("mark setup wake projected: %v", err)
 		}
 	}
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "durable actor wake"}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "durable actor wake"}
 	req := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "queue-actor-wake-outbox",
 		TrajectoryID: trajectoryID, TargetAgentID: targetAgentID, ProducerAgentID: producerAgentID,

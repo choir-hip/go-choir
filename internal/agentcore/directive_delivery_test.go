@@ -13,7 +13,7 @@ func TestPersistentManagementDirectiveAdmissionAndUnboundInjection(t *testing.T)
 		AgentID: "research:desk", TargetAgentID: "management:owner",
 		SourceRecordID: "directive:1", Direction: types.LifecyclePacketDirectionDirective,
 		Disposition: types.UpdatePending, LifecycleVersion: 1,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "directive", Summary: "note",
 			Notes: []string{"directive:note"},
 		},

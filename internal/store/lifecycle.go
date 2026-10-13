@@ -217,7 +217,7 @@ func normalizeApplyLifecycleDigestRequest(req types.ApplyLifecycleUpdateRequest)
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
 	req.UpdateID, req.ChannelID, req.Role, req.SourceRunID, req.Content = "", "", "", "", ""
 	req.MessageSeq = 0
-	req.Packet = types.CoagentSourcePacketPayload{}
+	req.Packet = types.SourcePacket{}
 	if err := normalizeApplyLifecycleRevisionDigest(&req.Revision); err != nil {
 		return req, err
 	}
@@ -422,10 +422,10 @@ func ComputeArchiveLifecycleArtifactDigest(req types.ArchiveLifecycleArtifactReq
 	return lifecycleDigest(req)
 }
 
-func ComputeLifecycleUpdatePayloadDigest(packet types.CoagentSourcePacketPayload, content string) (string, error) {
+func ComputeLifecycleUpdatePayloadDigest(packet types.SourcePacket, content string) (string, error) {
 	return lifecycleDigest(struct {
-		Packet  types.CoagentSourcePacketPayload `json:"packet"`
-		Content string                           `json:"content"`
+		Packet  types.SourcePacket `json:"packet"`
+		Content string             `json:"content"`
 	}{Packet: packet, Content: content})
 }
 

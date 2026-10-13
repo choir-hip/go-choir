@@ -68,7 +68,7 @@ func seedTextureLifecycleControl(t *testing.T, s *store.Store, ownerID, suffix, 
 		}
 	}
 	workID := "target-work-" + suffix
-	controlPacket := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "typed payload " + suffix}
+	controlPacket := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "typed payload " + suffix}
 	if targetProfile == agentprofile.Management {
 		controlPacket.Kind = "execution_request"
 		controlPacket.Actions = []types.CoagentPacketAction{{Type: "run_command", Objective: "inspect " + suffix, Safety: types.CoagentPacketActionSafety{MutationClass: "green", Network: "forbidden", FileMutation: "forbidden"}}}
@@ -223,7 +223,7 @@ func TestExactRunLifecycleInjectionIncludesOccurrence101AndPreservesPriorBinding
 	}
 	controls := make([]types.TextureTurnControl, 0, 100)
 	for i := 2; i <= 101; i++ {
-		packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: fmt.Sprintf("direction %03d", i)}
+		packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: fmt.Sprintf("direction %03d", i)}
 		content := fmt.Sprintf("durable direction occurrence %03d", i)
 		digest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 		if err != nil {
@@ -680,7 +680,7 @@ func TestRuntimeInjectionAppendFailurePassivatesExactResearchRun(t *testing.T) {
 // choir.ReportPacket. The raw JSON decodes into the packet the reducer
 // would have decoded.
 func persistentMgmtReportForTest(rt *Runtime, ctx context.Context, parent *types.RunRecord, raw json.RawMessage) (types.LifecycleResult, error) {
-	var pkt types.CoagentSourcePacketPayload
+	var pkt types.SourcePacket
 	if err := json.Unmarshal(raw, &pkt); err != nil {
 		return types.LifecycleResult{}, err
 	}
@@ -734,7 +734,7 @@ func TestPersistentManagementReportToTextureCanonicalReplayWakeAndInjection(t *t
 	// (DisallowUnknownFields in the reducer's packet decode); the forged
 	// nested authority key is rejected inside the carrier.
 	unknown := json.RawMessage(`{"kind":"execution_result","summary":"bad","claims":[],"sources":[],"actions":[],"questions":[],"notes":["x"],"work_disposition":"open","target_agent_id":"texture:forged"}`)
-	var unknownPkt types.CoagentSourcePacketPayload
+	var unknownPkt types.SourcePacket
 	dec := json.NewDecoder(strings.NewReader(string(unknown)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&unknownPkt); err == nil || !strings.Contains(err.Error(), "unknown field") {
@@ -795,7 +795,7 @@ func TestPersistentManagementReportRequiresCompleteAuthenticated101DeliveryAndDi
 	}
 	controls := make([]types.TextureTurnControl, 0, 100)
 	for i := 2; i <= 101; i++ {
-		packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: fmt.Sprintf("execute direction %03d", i), Actions: []types.CoagentPacketAction{{Type: "run_command", Objective: fmt.Sprintf("inspect %03d", i), Safety: types.CoagentPacketActionSafety{MutationClass: "green", Network: "forbidden", FileMutation: "forbidden"}}}}
+		packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: fmt.Sprintf("execute direction %03d", i), Actions: []types.CoagentPacketAction{{Type: "run_command", Objective: fmt.Sprintf("inspect %03d", i), Safety: types.CoagentPacketActionSafety{MutationClass: "green", Network: "forbidden", FileMutation: "forbidden"}}}}
 		content := fmt.Sprintf("super direction occurrence %03d", i)
 		digest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 		if err != nil {
@@ -1014,7 +1014,7 @@ func seedAtomicResearchControl(t *testing.T, s *store.Store, suffix string) atom
 		t.Fatal(err)
 	}
 	agentID, workID := "research:atomic-"+suffix, "research-work-atomic-"+suffix
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}}
 	content := "research exact gap"
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	snapshot, _ := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
@@ -1520,7 +1520,7 @@ func TestFingerprintBoundResearchRunAcceptsLaterControlWithoutSecondRun(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later exact question", Questions: []string{"What changed later?"}}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later exact question", Questions: []string{"What changed later?"}}
 	content := "later control B exact content"
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	turn := types.ApplyTextureTurnRequest{
@@ -1593,7 +1593,7 @@ func commitLaterControlForResidentTest(t *testing.T, s *store.Store, fixture ato
 	if err != nil {
 		t.Fatal(err)
 	}
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later crash-safe question", Questions: []string{"Was this recovered?"}}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later crash-safe question", Questions: []string{"Was this recovered?"}}
 	content := "later crash-safe control " + controlID
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	turn := types.ApplyTextureTurnRequest{OwnerID: fixture.ownerID, ComputerID: fixture.computerID, CommandID: "turn-" + controlID, DocumentID: fixture.docID, TrajectoryID: fixture.trajectoryID,
@@ -2065,7 +2065,7 @@ func TestPersistentManagementRewakeReceivesPendingEngineeringCancellationReports
 	}
 
 	// Commit a second control in the same trajectory to rewake Management
-	controlPacket, err := normalizedControlPacket(types.CoagentSourcePacketPayload{
+	controlPacket, err := normalizedControlPacket(types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request",
 		Summary: "Author, freeze, and propose the bound self-development operation.",
 		Sources: []types.CoagentPacketSource{{SourceID: "src-op", Kind: "capsule_bundle", Target: types.CoagentPacketSourceTarget{URI: "operation:selfdev-test"}}},
@@ -2448,7 +2448,7 @@ func TestBootWorkItemSweepSkipsPersistentManagement(t *testing.T) {
 
 // normalizedControlPacket is the normalization and validation a control
 // packet gets before the store queues it.
-func normalizedControlPacket(packet types.CoagentSourcePacketPayload) (types.CoagentSourcePacketPayload, error) {
+func normalizedControlPacket(packet types.SourcePacket) (types.SourcePacket, error) {
 	packet.SchemaVersion = types.CoagentSourcePacketSchemaV1
 	packet = coagentpacket.Normalize(packet)
 	return packet, coagentpacket.Validate(packet)

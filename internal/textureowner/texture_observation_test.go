@@ -47,7 +47,7 @@ func startObservationLifecycle(t *testing.T, s *store.Store) types.StartLifecycl
 
 func applyObservationSourceVersion(t *testing.T, s *store.Store, start types.StartLifecycleRequest) (types.Revision, store.TextureSourceGraphWriteSet) {
 	t.Helper()
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: "v1", Kind: "result", Summary: "durable source update"}
+	packet := types.SourcePacket{SchemaVersion: "v1", Kind: "result", Summary: "durable source update"}
 	payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, "durable source update")
 	if err != nil {
 		t.Fatalf("payload digest: %v", err)
@@ -186,7 +186,7 @@ func applyObservationTextureTurnWithInbound(t *testing.T, s *store.Store, start 
 	inbound := make([]types.TextureTurnInboundDisposition, 0, inboundCount)
 	for i := 1; i <= inboundCount; i++ {
 		id := strconv.Itoa(i)
-		packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "turn report " + id}
+		packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "turn report " + id}
 		content := "private turn report " + id
 		payloadDigest, err := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 		if err != nil {

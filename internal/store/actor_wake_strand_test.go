@@ -43,7 +43,7 @@ func TestMigrateActorWakeOutboxReArmsDeliveredToPassivatedRun(t *testing.T) {
 		AgentID: "texture:ch", TargetAgentID: "research:cfa90b87-x", ChannelID: "ch",
 		TrajectoryID: "traj-wake", Role: "texture", LifecycleVersion: 1,
 		Disposition: types.UpdatePending, Direction: types.LifecyclePacketDirectionControl,
-		Packet:  types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
+		Packet:  types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
 		Content: "bound question", CreatedAt: deliveredAt,
 		DeliveredToRunID: boundRunID, DeliveredAt: &deliveredAt,
 	}
@@ -109,7 +109,7 @@ func TestMigrateActorWakeOutboxSuppressesDeliveredToActiveRun(t *testing.T) {
 		AgentID: "texture:ch", TargetAgentID: "research:live-x", ChannelID: "ch",
 		TrajectoryID: "traj-wake2", Role: "texture", LifecycleVersion: 1,
 		Disposition: types.UpdatePending, Direction: types.LifecyclePacketDirectionControl,
-		Packet:  types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
+		Packet:  types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
 		Content: "bound question", CreatedAt: deliveredAt,
 		DeliveredToRunID: boundRunID, DeliveredAt: &deliveredAt,
 	}

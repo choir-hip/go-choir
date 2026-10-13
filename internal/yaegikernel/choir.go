@@ -1160,7 +1160,7 @@ func (s *ChoirScope) Report(toDesk, claim string, evidenceRefs []string, resolve
 
 // ReportPacket asserts a report whose body is the full coagent source-packet
 // schema — the update_coagent packet contract surviving as Report's body
-// (mission R2). packet is a JSON-encoded types.CoagentSourcePacketPayload or
+// (mission R2). packet is a JSON-encoded types.SourcePacket or
 // its equivalent Go value (the map literal a cell writes directly); the
 // reducer validates kind/claims/sources/actions/questions before commit.
 func (s *ChoirScope) ReportPacket(toDesk string, packet any, resolverID string) (string, error) {

@@ -82,7 +82,7 @@ func TestCommitMessageIntentLifecycleResearchQueuesProducerReport(t *testing.T) 
 	})
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &run}
 
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "evidence_update",
 		Summary:       "grounded finding for msg-queue",
@@ -194,7 +194,7 @@ func TestCommitTrayLifecycleProducerMessageRoutesToQueue(t *testing.T) {
 	})
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &run}
 
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "evidence_update",
 		Summary:       "dispatch-path finding",
@@ -259,7 +259,7 @@ func TestCommitTrayLifecycleProducerReportMintsRecordNativePacket(t *testing.T) 
 	})
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &run}
 
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "evidence_update",
 		Summary:       "report-path finding",
@@ -342,7 +342,7 @@ func TestCommitTrayLifecycleProducerReportResolvesDeskName(t *testing.T) {
 	})
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &run}
 
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "evidence_update",
 		Summary:       "desk-name report finding",

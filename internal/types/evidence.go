@@ -53,11 +53,11 @@ func writeTerminalRunOutcomeDigestField(digest hash.Hash, value string) {
 	_, _ = io.WriteString(digest, value)
 }
 
-// CoagentSourcePacketPayload is the canonical update_coagent payload. It is a
+// SourcePacket is the canonical update_coagent payload. It is a
 // source packet, not a chat message: readable prose is a projection of this
 // payload, while Texture may cite only Sources and Management may execute only
 // execution_request Actions.
-type CoagentSourcePacketPayload struct {
+type SourcePacket struct {
 	SchemaVersion string                `json:"schema_version"`
 	Kind          string                `json:"kind"`
 	Summary       string                `json:"summary,omitempty"`
@@ -229,12 +229,12 @@ type CoagentSourcePacket struct {
 	// ArrivalOrdinal is the durable computer-scoped FIFO position assigned when
 	// this control entered the scheduling mailbox. Zero means unassigned
 	// (pre-ordinal legacy row); the scheduler treats those as oldest-first.
-	ArrivalOrdinal   int64                      `json:"arrival_ordinal,omitempty"`
-	Packet           CoagentSourcePacketPayload `json:"packet"`
-	Content          string                     `json:"content"`
-	CreatedAt        time.Time                  `json:"created_at"`
-	DeliveredToRunID string                     `json:"delivered_to_loop_id,omitempty"`
-	DeliveredAt      *time.Time                 `json:"delivered_at,omitempty"`
+	ArrivalOrdinal   int64        `json:"arrival_ordinal,omitempty"`
+	Packet           SourcePacket `json:"packet"`
+	Content          string       `json:"content"`
+	CreatedAt        time.Time    `json:"created_at"`
+	DeliveredToRunID string       `json:"delivered_to_loop_id,omitempty"`
+	DeliveredAt      *time.Time   `json:"delivered_at,omitempty"`
 	// DeliveryAttempts counts activation bindings under consume-at-commit
 	// redelivery. Each stranded bind retry increments it; at the cap the packet
 	// terminalizes as delivered with reason delivery_attempts_exhausted so a

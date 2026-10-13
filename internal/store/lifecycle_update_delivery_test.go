@@ -35,7 +35,7 @@ func seedBoundProducerReport(t *testing.T, s *Store, start types.StartLifecycleR
 		DeliveryAttempts:   attempts,
 		LifecycleVersion:   1,
 		ProducerWorkItemID: "work-producer-1",
-		Packet:             types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "findings", Summary: "result"},
+		Packet:             types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "findings", Summary: "result"},
 		Content:            "findings",
 		CreatedAt:          time.Now().UTC(),
 	}
@@ -269,7 +269,7 @@ func seedBoundControlPacket(t *testing.T, s *Store, start types.StartLifecycleRe
 		DeliveredAt:      deliveredAt,
 		DeliveryAttempts: attempts,
 		LifecycleVersion: 3,
-		Packet:           types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "ask"},
+		Packet:           types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "ask"},
 		Content:          "control ask",
 		CreatedAt:        now,
 	}

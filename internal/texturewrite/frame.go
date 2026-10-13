@@ -262,7 +262,7 @@ func RecordsFrom(in []RecordInput) []FrameRecord {
 	for i, r := range in {
 		alias := "r" + strconv.Itoa(i+1)
 		fr := FrameRecord{Alias: alias, Seq: r.Seq, RecordID: r.RecordID, Kind: r.Kind, From: r.From, Round: r.Round, Final: r.Final, Objective: r.Objective}
-		var packet types.CoagentSourcePacketPayload
+		var packet types.SourcePacket
 		body := strings.TrimSpace(r.Body)
 		isPacket := strings.HasPrefix(body, "{") && json.Unmarshal([]byte(body), &packet) == nil && (packet.Kind != "" || packet.Summary != "" || len(packet.Claims) > 0 || len(packet.Sources) > 0)
 		bySourceID := map[string]string{}

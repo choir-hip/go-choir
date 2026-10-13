@@ -111,7 +111,7 @@ func rejectReportAuthorityInputs(actions []types.CoagentPacketAction) error {
 // trajectory, all delivered controls scoped to one trajectory/work/Texture
 // source, an authenticated (run-memory-seen) control binding, and exactly
 // one bound work item on the Texture source run.
-func (rt *Runtime) persistentManagementBoundReport(ctx context.Context, parent types.RunRecord, packet types.CoagentSourcePacketPayload, workDisposition types.WorkItemStatus) (types.LifecycleResult, error) {
+func (rt *Runtime) persistentManagementBoundReport(ctx context.Context, parent types.RunRecord, packet types.SourcePacket, workDisposition types.WorkItemStatus) (types.LifecycleResult, error) {
 	if err := requirePersistentManagementRunRecord(&parent); err != nil {
 		return types.LifecycleResult{}, err
 	}

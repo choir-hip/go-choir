@@ -44,7 +44,7 @@ func queueOneActorWake(t *testing.T, s *store.Store, suffix string, keep ...stri
 	case <-s.ActorWakeSignal():
 	default:
 	}
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "wake " + suffix}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "wake " + suffix}
 	req := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: "autoputer-test", CommandID: "queue-wake-" + suffix,
 		TrajectoryID: trajectoryID, TargetAgentID: target, ProducerAgentID: producerAgentID,

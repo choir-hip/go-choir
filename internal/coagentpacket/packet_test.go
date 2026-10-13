@@ -37,7 +37,7 @@ func TestEnumRejectionsNameAllowedValues(t *testing.T) {
 			}
 		})
 	}
-	if err := Validate(types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "repair"}); err == nil || !strings.Contains(err.Error(), "execution_request") {
+	if err := Validate(types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "repair"}); err == nil || !strings.Contains(err.Error(), "execution_request") {
 		t.Fatalf("packet kind rejection should name allowed kinds, got %v", err)
 	}
 }
@@ -47,7 +47,7 @@ func TestEnumRejectionsNameAllowedValues(t *testing.T) {
 // is dropped when the packet is normalized, so the quote cannot be joined to
 // the capture it was copied from.
 func TestNormalizeKeepsTheSourceCaptureID(t *testing.T) {
-	packet := Normalize(types.CoagentSourcePacketPayload{Sources: []types.CoagentPacketSource{{
+	packet := Normalize(types.SourcePacket{Sources: []types.CoagentPacketSource{{
 		SourceID: "s1", Kind: "web_source",
 		Target: types.CoagentPacketSourceTarget{URI: "https://example.com/a", CaptureID: "  choir.web_capture:owner:abc  "},
 	}}})

@@ -18,11 +18,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func testCoagentUpdatePacket(kind, summary string) types.CoagentSourcePacketPayload {
+func testCoagentUpdatePacket(kind, summary string) types.SourcePacket {
 	return newCoagentPacket(kind, summary, []types.CoagentPacketClaim{coagentClaim(summary)}, nil, nil, nil, nil)
 }
 
-func testEffectfulExecutionRequestPacket(summary string) types.CoagentSourcePacketPayload {
+func testEffectfulExecutionRequestPacket(summary string) types.SourcePacket {
 	return newCoagentPacket("execution_request", summary, nil, nil, []types.CoagentPacketAction{
 		coagentAction("run_command", summary, nil, nil, types.CoagentPacketActionSafety{
 			MutationClass: "red",

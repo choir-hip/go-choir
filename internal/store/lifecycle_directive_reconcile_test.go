@@ -29,7 +29,7 @@ func TestReconcileUpdateDeliveryBindsComputerScopedDirective(t *testing.T) {
 		Direction:      types.LifecyclePacketDirectionDirective,
 		SourceRecordID: "cell:directive:1",
 		Disposition:    types.UpdatePending,
-		Packet:         types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "directive", Summary: "cast"},
+		Packet:         types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "directive", Summary: "cast"},
 		Content:        "cast this", CreatedAt: time.Now().UTC(),
 	}
 	key := "\x00" + target + "\x00" + directive.AgentID + "\x00" + directive.ProducerUpdateID

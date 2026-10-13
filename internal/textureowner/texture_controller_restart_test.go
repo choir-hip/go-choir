@@ -92,7 +92,7 @@ func TestTextureOwnerStartDoesNotWakeTextureAfterRestart(t *testing.T) {
 		t.Fatalf("start durable lifecycle: %v", err)
 	}
 	producerAgentID, producerWorkID, producerRunID := projectTextureOwnerTestProducer(t, s1, start, "texture-restart")
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "durable finding",
 	}
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, "Durable finding")
@@ -204,7 +204,7 @@ func TestTextureOwnerRestartLeavesOtherComputerMutationAlone(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create computer A pending mutation: %v", err)
 	}
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "computer B update",
 	}
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, "computer B update")

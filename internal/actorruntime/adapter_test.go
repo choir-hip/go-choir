@@ -148,7 +148,7 @@ func seedDurableTextureUpdate(t *testing.T, s *store.Store, ctx context.Context,
 	if _, err := s.ReplaceLifecycleActivation(ctx, projectProducer); err != nil {
 		t.Fatalf("project lifecycle producer: %v", err)
 	}
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: content}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: content}
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	queue := types.QueueLifecycleUpdateRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "queue:" + updateID, TrajectoryID: start.TrajectoryID,
@@ -204,7 +204,7 @@ func seedActorLifecycleControl(t *testing.T, s *store.Store, suffix string) acto
 		t.Fatalf("project actor Texture run: %v", err)
 	}
 	agentID, workID := "research:actor-"+suffix, "research-work-actor-"+suffix
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What evidence resolves it?"}}
 	content := "research exact gap"
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	snapshot, _ := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
@@ -240,7 +240,7 @@ func commitActorLaterControl(t *testing.T, s *store.Store, fixture actorLifecycl
 	if err != nil {
 		t.Fatal(err)
 	}
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later parked question", Questions: []string{"Was this recovered?"}}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "later parked question", Questions: []string{"Was this recovered?"}}
 	content := "later parked control " + controlID
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	turn := types.ApplyTextureTurnRequest{
@@ -1092,7 +1092,7 @@ func TestTextureWakeAcceptsExactResearchReportWithImplicitTargetWorkBinding(t *t
 	docID := "doc-adapter-admission-" + suffix
 	textureAgentID := "texture:" + docID
 	workID := "researcher-work-adapter-admission-" + suffix
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "exact report with implicit target work"}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "exact report with implicit target work"}
 	content := "exact report with implicit target work"
 	digest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	queue := types.QueueLifecycleUpdateRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: "queue-exact-report-empty-target-work", TrajectoryID: researchRun.TrajectoryID, TargetAgentID: textureAgentID, ProducerAgentID: researchRun.AgentID, ProducerUpdateID: "exact-report-empty-target-work", UpdateID: "exact-report-empty-target-work", ChannelID: docID, Role: agentprofile.Research, SourceRunID: researchRun.RunID, WorkItemID: workID, WorkDisposition: types.WorkItemOpen, Packet: packet, Content: content, PayloadDigest: digest}
@@ -1593,7 +1593,7 @@ func TestScopedActorMailboxDoesNotCrossOwner(t *testing.T) {
 	packet := types.CoagentSourcePacket{
 		UpdateID: "scoped-update-a", OwnerID: "owner-scope-a", ComputerID: "autoputer-test",
 		AgentID: "producer-a", TargetAgentID: agentID, ChannelID: "channel-owner-scope-a", Role: "research",
-		Packet:  types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "scoped update"},
+		Packet:  types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "scoped update"},
 		Content: "scoped wake", CreatedAt: now,
 	}
 	message := types.ChannelMessage{
@@ -2350,7 +2350,7 @@ func seedAdapterLifecycleResearchControl(t *testing.T, s *store.Store, rt *agent
 	if _, err := s.ReplaceLifecycleActivation(ctx, clearTarget); err != nil {
 		t.Fatalf("clear researcher bootstrap: %v", err)
 	}
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "exact adapter control"}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "exact adapter control"}
 	content := "exact adapter control content"
 	digest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, content)
 	snapshot, _ := s.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
@@ -2437,7 +2437,7 @@ func seedAdapterLifecycleManagementControl(t *testing.T, s *store.Store, rt *age
 		t.Fatalf("ensure Management: %v", err)
 	}
 	workID := "super-work-adapter-" + suffix
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "exact Management recovery control",
 		Actions: []types.CoagentPacketAction{{Type: "run_command", Objective: "inspect " + suffix, Safety: types.CoagentPacketActionSafety{MutationClass: "green", Network: "forbidden", FileMutation: "forbidden"}}},
 	}
@@ -2593,7 +2593,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureDocumentRevisionOccurrenc
 	if _, err := s.ReplaceLifecycleActivation(ctx, projectProducer); err != nil {
 		t.Fatalf("project producer run: %v", err)
 	}
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "valid report cancelled before Texture boot"}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: "valid report cancelled before Texture boot"}
 	producerContent := "valid producer report retained as cancelled history"
 	payloadDigest, _ := store.ComputeLifecycleUpdatePayloadDigest(packet, producerContent)
 	producerQueue := types.QueueLifecycleUpdateRequest{

@@ -79,7 +79,7 @@ func TestCoagentPacketHTTPSourceStaysURLBackedNotSyntheticContentItem(t *testing
 		OwnerID: "owner-url-source",
 		AgentID: "research:url-source",
 		Role:    agentprofile.Research,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-http",
 				Kind:     "web_url",
@@ -110,7 +110,7 @@ func TestCoagentPacketHTTPSourcePreservesSourceTextForTransclusion(t *testing.T)
 		OwnerID: "owner-url-source-text",
 		AgentID: "research:url-source-text",
 		Role:    agentprofile.Research,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-whitehouse",
 				Kind:     "web_url",
@@ -188,7 +188,7 @@ func TestCoagentPacketContentIDSourceHydratesImportedText(t *testing.T) {
 		OwnerID: ownerID,
 		AgentID: "research:content-id-source-text",
 		Role:    agentprofile.Research,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-content-id",
 				Kind:     "content_item",

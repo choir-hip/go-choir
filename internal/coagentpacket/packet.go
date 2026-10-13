@@ -14,7 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func Normalize(packet types.CoagentSourcePacketPayload) types.CoagentSourcePacketPayload {
+func Normalize(packet types.SourcePacket) types.SourcePacket {
 	packet.SchemaVersion = strings.TrimSpace(packet.SchemaVersion)
 	packet.Kind = strings.TrimSpace(packet.Kind)
 	packet.Summary = strings.TrimSpace(packet.Summary)
@@ -116,7 +116,7 @@ func Normalize(packet types.CoagentSourcePacketPayload) types.CoagentSourcePacke
 	return packet
 }
 
-func Validate(packet types.CoagentSourcePacketPayload) error {
+func Validate(packet types.SourcePacket) error {
 	if packet.SchemaVersion != types.CoagentSourcePacketSchemaV1 {
 		return fmt.Errorf("update_coagent schema_version must be %q", types.CoagentSourcePacketSchemaV1)
 	}
@@ -308,7 +308,7 @@ func validCoagentActionSafetyMode(mode string) bool {
 	return slices.Contains(coagentActionSafetyModes, strings.TrimSpace(mode))
 }
 
-func Empty(packet types.CoagentSourcePacketPayload) bool {
+func Empty(packet types.SourcePacket) bool {
 	return len(packet.Claims) == 0 &&
 		len(packet.Sources) == 0 &&
 		len(packet.Actions) == 0 &&

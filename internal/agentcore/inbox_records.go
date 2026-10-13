@@ -311,7 +311,7 @@ func reportBodyFromPacket(rawPacket, claim string) (*types.CommitmentReport, boo
 		return report, false
 	}
 	var packet struct {
-		types.CoagentSourcePacketPayload
+		types.SourcePacket
 		Settled []types.HypothesisSettlement `json:"settled"`
 		Dropped []types.HypothesisDrop       `json:"dropped"`
 		Final   bool                         `json:"final"`

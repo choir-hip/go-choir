@@ -1082,7 +1082,7 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 		return r.commitAddressedPacketIntent(ctx, in, in.Packet, "", "report")
 	}
 	if in.Kind == yaegikernel.IntentReport && strings.TrimSpace(in.Packet) != "" {
-		var packet types.CoagentSourcePacketPayload
+		var packet types.SourcePacket
 		if err := json.Unmarshal([]byte(in.Packet), &packet); err != nil {
 			return 0, fmt.Errorf("reduce: report packet is not a valid packet body: %w", err)
 		}
@@ -1218,7 +1218,7 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 			// A packet-bodied report also lifts each source's target URI into
 			// the typed EvidenceRefs so the ledger evidence resolver can
 			// materialize entities without decoding the opaque packet body.
-			var packet types.CoagentSourcePacketPayload
+			var packet types.SourcePacket
 			if err := json.Unmarshal([]byte(in.Packet), &packet); err == nil {
 				for _, src := range packet.Sources {
 					if uri := strings.TrimSpace(src.Target.URI); uri != "" {
@@ -1475,7 +1475,7 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 
 // commitMessageIntent reduces one staged Message intent on an assigned desk
 // or lifecycle producer run through the update_coagent authority path: the
-// intent body is the CoagentSourcePacketPayload JSON, the desk is the
+// intent body is the SourcePacket JSON, the desk is the
 // explicit target agent, and the same durable update + wake sequence the
 // retired tool ran executes here. It returns the channel sequence of the
 // emitted message event.
@@ -1492,7 +1492,7 @@ func (r *rlmCallReduction) commitAddressedPacketIntent(ctx context.Context, in y
 	if rt == nil || rt.store == nil {
 		return 0, fmt.Errorf("reduce: %s intent without update authority", label)
 	}
-	var payload types.CoagentSourcePacketPayload
+	var payload types.SourcePacket
 	decoder := json.NewDecoder(strings.NewReader(packetJSON))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&payload); err != nil {
@@ -1711,7 +1711,7 @@ func isLifecycleActNonLifecycleCaller(err error) bool {
 // the authored act (RN3); Notes carry the subtype and body, and Actions carry
 // the typed payload a bound desk needs without loading the ledger row
 // (cast objective, retract target).
-func directivePacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePacketPayload {
+func directivePacketForRecord(rec types.CommitmentRecord) types.SourcePacket {
 	subtype := ""
 	body := ""
 	if rec.Directive != nil {
@@ -1729,7 +1729,7 @@ func directivePacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePac
 	if body != "" {
 		notes = append(notes, body)
 	}
-	payload := types.CoagentSourcePacketPayload{
+	payload := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "directive",
 		Summary:       summary,
@@ -1755,7 +1755,7 @@ func directivePacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePac
 // other addressed act minted through CommitLifecycleAct; Kind=question marks
 // it as a resolution-bound stake so the woken desk answers via choir.Reply
 // (record-native report) rather than closing the position itself.
-func precommitPacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePacketPayload {
+func precommitPacketForRecord(rec types.CommitmentRecord) types.SourcePacket {
 	question := ""
 	var distribution map[string]float64
 	resolver := ""
@@ -1778,7 +1778,7 @@ func precommitPacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePac
 	if resolver != "" {
 		notes = append(notes, "resolver:"+resolver)
 	}
-	payload := types.CoagentSourcePacketPayload{
+	payload := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "question",
 		Summary:       summary,
@@ -1798,7 +1798,7 @@ func precommitPacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePac
 // arm — not the producer-report arm — because the target is whichever desk
 // asked, not authority-bound; the answering desk never closes the issuer's
 // stake (the mechanical resolve stays the issuer's ledger event).
-func replyPacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePacketPayload {
+func replyPacketForRecord(rec types.CommitmentRecord) types.SourcePacket {
 	answer := strings.TrimSpace(rec.Prediction.Hypothesis)
 	summary := answer
 	if len(summary) > 160 {
@@ -1807,7 +1807,7 @@ func replyPacketForRecord(rec types.CommitmentRecord) types.CoagentSourcePacketP
 	if summary == "" {
 		summary = "reply"
 	}
-	payload := types.CoagentSourcePacketPayload{
+	payload := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          "evidence_update",
 		Summary:       summary,
@@ -1940,7 +1940,7 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 				return 0, fmt.Errorf("commit lifecycle act: %s cannot direct %s", callerProfile, targetProfile)
 			}
 		}
-		var packet types.CoagentSourcePacketPayload
+		var packet types.SourcePacket
 		switch {
 		case in.Kind == yaegikernel.IntentReply:
 			packet = replyPacketForRecord(rec)
@@ -2032,7 +2032,7 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 	// control, authenticated delivery, single bound work item — via
 	// QueueLifecycleUpdate. The packet's work_disposition settles the work.
 	if r.rec != nil && r.rec.AgentID == persistentManagementAgentID(r.scope.OwnerID) && strings.TrimSpace(r.rec.TrajectoryID) == "" {
-		var pkt types.CoagentSourcePacketPayload
+		var pkt types.SourcePacket
 		if raw := strings.TrimSpace(in.Packet); raw != "" {
 			dec := json.NewDecoder(strings.NewReader(raw))
 			dec.DisallowUnknownFields()
@@ -2044,7 +2044,7 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 			}
 		} else {
 			claim := strings.TrimSpace(in.Claim)
-			pkt = types.CoagentSourcePacketPayload{
+			pkt = types.SourcePacket{
 				SchemaVersion: types.CoagentSourcePacketSchemaV1,
 				Kind:          "evidence_update",
 				Summary:       claim,
@@ -2109,7 +2109,7 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 	if !authority.lifecycle {
 		return 0, errLifecycleActLegacyCaller
 	}
-	var payload types.CoagentSourcePacketPayload
+	var payload types.SourcePacket
 	if packetJSON := strings.TrimSpace(in.Packet); packetJSON != "" {
 		decoder := json.NewDecoder(strings.NewReader(packetJSON))
 		decoder.DisallowUnknownFields()
@@ -2122,7 +2122,7 @@ func (r *rlmCallReduction) commitLifecycleReportActIntent(ctx context.Context, i
 		payload = coagentpacket.Normalize(payload)
 	} else {
 		claim := strings.TrimSpace(in.Claim)
-		payload = types.CoagentSourcePacketPayload{
+		payload = types.SourcePacket{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
 			Summary:       claim,

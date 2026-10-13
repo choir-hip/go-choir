@@ -21,7 +21,7 @@ const reportPacketShape = `packet shape: {"kind":"evidence_update","summary":"..
 // schema_version. A malformed packet fails in the cell that wrote it instead
 // of after it (docs/problems/research-report-packets-rejected-by-schema-2026-10-09.md).
 func checkReportPacket(packetJSON string) (string, error) {
-	var packet types.CoagentSourcePacketPayload
+	var packet types.SourcePacket
 	decoder := json.NewDecoder(strings.NewReader(packetJSON))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&packet); err != nil {

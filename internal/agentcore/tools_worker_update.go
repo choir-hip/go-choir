@@ -780,13 +780,13 @@ func deriveLifecycleWorkerUpdateID(update types.CoagentSourcePacket, producerUpd
 
 func deriveWorkerUpdateID(update types.CoagentSourcePacket) string {
 	payload := struct {
-		OwnerID       string                           `json:"owner_id"`
-		AgentID       string                           `json:"agent_id"`
-		TargetAgentID string                           `json:"target_agent_id"`
-		ChannelID     string                           `json:"channel_id"`
-		TrajectoryID  string                           `json:"trajectory_id,omitempty"`
-		Role          string                           `json:"role,omitempty"`
-		Packet        types.CoagentSourcePacketPayload `json:"packet"`
+		OwnerID       string             `json:"owner_id"`
+		AgentID       string             `json:"agent_id"`
+		TargetAgentID string             `json:"target_agent_id"`
+		ChannelID     string             `json:"channel_id"`
+		TrajectoryID  string             `json:"trajectory_id,omitempty"`
+		Role          string             `json:"role,omitempty"`
+		Packet        types.SourcePacket `json:"packet"`
 	}{
 		OwnerID:       strings.TrimSpace(update.OwnerID),
 		AgentID:       strings.TrimSpace(update.AgentID),
@@ -813,8 +813,8 @@ func validateExistingWorkerUpdate(existing, want types.CoagentSourcePacket) erro
 	return nil
 }
 
-func newCoagentPacket(kind, summary string, claims []types.CoagentPacketClaim, sources []types.CoagentPacketSource, actions []types.CoagentPacketAction, questions, notes []string) types.CoagentSourcePacketPayload {
-	return coagentpacket.Normalize(types.CoagentSourcePacketPayload{
+func newCoagentPacket(kind, summary string, claims []types.CoagentPacketClaim, sources []types.CoagentPacketSource, actions []types.CoagentPacketAction, questions, notes []string) types.SourcePacket {
+	return coagentpacket.Normalize(types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          strings.TrimSpace(kind),
 		Summary:       strings.TrimSpace(summary),

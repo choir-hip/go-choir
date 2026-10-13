@@ -135,7 +135,7 @@ type ApplyLifecycleUpdateRequest struct {
 	ChannelID                 string                        `json:"channel_id,omitempty"`
 	Role                      string                        `json:"role,omitempty"`
 	SourceRunID               string                        `json:"source_run_id,omitempty"`
-	Packet                    CoagentSourcePacketPayload    `json:"packet"`
+	Packet                    SourcePacket                  `json:"packet"`
 	Content                   string                        `json:"content"`
 	Disposition               UpdateDisposition             `json:"disposition"`
 	Revision                  Revision                      `json:"revision,omitempty"`
@@ -182,14 +182,14 @@ type TextureTurnInboundDisposition struct {
 // is populated only for the exact persistent-Management opener. The work and first
 // execution_request are committed by the same conditional turn batch.
 type TextureTurnControl struct {
-	ControlID        string                     `json:"control_id"`
-	TargetAgentID    string                     `json:"target_agent_id"`
-	TargetWorkItemID string                     `json:"target_work_item_id"`
-	OpenAgent        *AgentRecord               `json:"open_agent,omitempty"`
-	OpenWork         *WorkItemRecord            `json:"open_work,omitempty"`
-	Packet           CoagentSourcePacketPayload `json:"packet"`
-	Content          string                     `json:"content"`
-	PayloadDigest    string                     `json:"payload_digest"`
+	ControlID        string          `json:"control_id"`
+	TargetAgentID    string          `json:"target_agent_id"`
+	TargetWorkItemID string          `json:"target_work_item_id"`
+	OpenAgent        *AgentRecord    `json:"open_agent,omitempty"`
+	OpenWork         *WorkItemRecord `json:"open_work,omitempty"`
+	Packet           SourcePacket    `json:"packet"`
+	Content          string          `json:"content"`
+	PayloadDigest    string          `json:"payload_digest"`
 	// StagedAct names the desk act the control came from (cast, ask or
 	// note; protocol P2a). Empty for the owner's management-open route.
 	StagedAct string `json:"staged_act,omitempty"`
@@ -255,12 +255,12 @@ type LifecycleActPacketSpec struct {
 	TargetAgentID string `json:"target_agent_id"`
 	// TrajectoryID binds delivery to the addressee's trajectory scope; may be
 	// empty for computer-scoped targets (persistent Management).
-	TrajectoryID  string                     `json:"trajectory_id,omitempty"`
-	ChannelID     string                     `json:"channel_id,omitempty"`
-	Direction     LifecyclePacketDirection   `json:"direction,omitempty"`
-	Packet        CoagentSourcePacketPayload `json:"packet"`
-	Content       string                     `json:"content,omitempty"`
-	PayloadDigest string                     `json:"payload_digest"`
+	TrajectoryID  string                   `json:"trajectory_id,omitempty"`
+	ChannelID     string                   `json:"channel_id,omitempty"`
+	Direction     LifecyclePacketDirection `json:"direction,omitempty"`
+	Packet        SourcePacket             `json:"packet"`
+	Content       string                   `json:"content,omitempty"`
+	PayloadDigest string                   `json:"payload_digest"`
 	// WorkItemID and WorkDisposition are required for a producer_report and
 	// identify the producer obligation whose bound run authored the report.
 	WorkItemID      string         `json:"work_item_id,omitempty"`

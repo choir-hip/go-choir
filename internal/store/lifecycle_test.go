@@ -341,7 +341,7 @@ func TestMigrateActorWakeOutboxMintsPendingWakes(t *testing.T) {
 		AgentID: "producer-1", TargetAgentID: start.Agent.AgentID,
 		ChannelID: start.Agent.ChannelID, TrajectoryID: start.TrajectoryID,
 		Role: "research", LifecycleVersion: 1, Disposition: types.UpdatePending,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "findings", Summary: "result",
 		},
 		Content: "findings", CreatedAt: time.Now().UTC(),
@@ -3800,7 +3800,7 @@ func TestDispatchWorkerUpdateAllowsAssignedEngineeringPersistentManagementReport
 		TrajectoryID:  start.TrajectoryID,
 		Role:          "engineering",
 		Direction:     types.LifecyclePacketDirectionProducerReport,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
 			Summary:       "assigned Engineering report through worker mailbox",
@@ -3856,7 +3856,7 @@ func TestListPendingLifecycleUpdatesArrivalOrdinalSort(t *testing.T) {
 		ReducerSeq:       50,
 		ArrivalOrdinal:   10,
 		Disposition:      types.UpdatePending,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
 			Summary:       "first arrival",
@@ -3880,7 +3880,7 @@ func TestListPendingLifecycleUpdatesArrivalOrdinalSort(t *testing.T) {
 		ReducerSeq:       10,
 		ArrivalOrdinal:   20,
 		Disposition:      types.UpdatePending,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
 			Summary:       "second arrival",

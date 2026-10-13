@@ -183,7 +183,7 @@ func commitmentWeight(rec CommitmentRecord) float64 {
 func commitmentClaimText(rec CommitmentRecord) string {
 	h := strings.TrimSpace(rec.Prediction.Hypothesis)
 	if strings.HasPrefix(h, "{") {
-		var packet CoagentSourcePacketPayload
+		var packet SourcePacket
 		if err := json.Unmarshal([]byte(h), &packet); err == nil {
 			if s := strings.TrimSpace(packet.Summary); s != "" {
 				return s

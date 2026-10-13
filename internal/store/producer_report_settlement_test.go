@@ -44,7 +44,7 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 			LifecycleVersion: 1,
 			ReducerSeq:       int64(10 + i),
 			Disposition:      types.UpdatePending,
-			Packet: types.CoagentSourcePacketPayload{
+			Packet: types.SourcePacket{
 				SchemaVersion: types.CoagentSourcePacketSchemaV1,
 				Kind:          "evidence_update",
 				Summary:       "cancel report",
@@ -81,7 +81,7 @@ func TestSettleLifecycleProducerReports(t *testing.T) {
 		LifecycleVersion: 1,
 		ReducerSeq:       20,
 		Disposition:      types.UpdatePending,
-		Packet: types.CoagentSourcePacketPayload{
+		Packet: types.SourcePacket{
 			SchemaVersion: types.CoagentSourcePacketSchemaV1,
 			Kind:          "evidence_update",
 			Summary:       "other report",

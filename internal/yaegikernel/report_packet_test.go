@@ -45,7 +45,7 @@ func TestReportPacketAcceptsMinimalPacketAndDefaultsSchemaVersion(t *testing.T) 
 	if err != nil {
 		t.Fatalf("well-formed packet refused: %v", err)
 	}
-	var p types.CoagentSourcePacketPayload
+	var p types.SourcePacket
 	if err := json.Unmarshal([]byte(out), &p); err != nil {
 		t.Fatal(err)
 	}

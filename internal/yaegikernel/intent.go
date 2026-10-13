@@ -197,14 +197,14 @@ func (r InboxRecord) String() string {
 type PendingUpdate struct {
 	UpdateID string `json:"update_id"`
 	// ID is UpdateID under the name models reach for.
-	ID              string                           `json:"-"`
-	FromAgentID     string                           `json:"from_agent_id"`
-	FromRole        string                           `json:"from_role,omitempty"`
-	ChannelID       string                           `json:"channel_id,omitempty"`
-	MessageSeq      int64                            `json:"message_seq,omitempty"`
-	WorkItemID      string                           `json:"work_item_id,omitempty"`
-	Packet          types.CoagentSourcePacketPayload `json:"packet"`
-	HumanProjection string                           `json:"human_projection,omitempty"`
+	ID              string             `json:"-"`
+	FromAgentID     string             `json:"from_agent_id"`
+	FromRole        string             `json:"from_role,omitempty"`
+	ChannelID       string             `json:"channel_id,omitempty"`
+	MessageSeq      int64              `json:"message_seq,omitempty"`
+	WorkItemID      string             `json:"work_item_id,omitempty"`
+	Packet          types.SourcePacket `json:"packet"`
+	HumanProjection string             `json:"human_projection,omitempty"`
 }
 
 // PendingEmit is one emitted signal body bound into a desk cell as a REPL
@@ -264,7 +264,7 @@ type StagedIntent struct {
 	Disagreement string `json:"disagreement,omitempty"`
 	// Packet carries a Report's full coagent source-packet body (the
 	// update_coagent packet schema surviving on the carrier) — JSON-encoded
-	// types.CoagentSourcePacketPayload. Set by ReportPacket; empty for a thin
+	// types.SourcePacket. Set by ReportPacket; empty for a thin
 	// claim-only Report.
 	Packet string `json:"packet,omitempty"`
 }
@@ -440,7 +440,7 @@ func (t *Tray) Report(toDesk, claim string, evidenceRefs []string, resolverID st
 
 // ReportPacket stages a report whose body is the full coagent source-packet
 // schema — the update_coagent packet contract surviving as Report's body
-// (mission R2). packetJSON is a JSON-encoded types.CoagentSourcePacketPayload;
+// (mission R2). packetJSON is a JSON-encoded types.SourcePacket;
 // the reducer validates it (schema_version, kind, claims/sources/actions/
 // questions) before the act commits, preserving the packet's safety contract.
 func (t *Tray) ReportPacket(toDesk, packetJSON, resolverID string) (string, error) {

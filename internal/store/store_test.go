@@ -18,8 +18,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func testStoreCoagentPacket(kind, summary string) types.CoagentSourcePacketPayload {
-	return types.CoagentSourcePacketPayload{
+func testStoreCoagentPacket(kind, summary string) types.SourcePacket {
+	return types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          kind,
 		Summary:       summary,

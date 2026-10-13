@@ -1699,14 +1699,14 @@ func reducerAssignmentOutcome(report types.EngineeringAssignmentReport, assignme
 	return assignment.Disposition
 }
 
-func engineeringReportPacketPayload(report types.EngineeringAssignmentReport, cancellation bool) (types.CoagentSourcePacketPayload, string) {
+func engineeringReportPacketPayload(report types.EngineeringAssignmentReport, cancellation bool) (types.SourcePacket, string) {
 	kind := "execution_result"
 	if report.Result == types.EngineeringResultFailed || report.Result == types.EngineeringResultBlocked || cancellation {
 		kind = "blocker"
 	}
 	notes := append([]string(nil), report.EvidenceRefs...)
 	notes = append(notes, fmt.Sprintf("assignment_id=%s attempt=%d report_id=%s late=%t", report.AssignmentID, report.Attempt, report.ReportID, report.Late))
-	packet := types.CoagentSourcePacketPayload{
+	packet := types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1,
 		Kind:          kind,
 		Summary:       report.Summary,

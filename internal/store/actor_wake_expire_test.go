@@ -45,7 +45,7 @@ func TestMigrateActorWakeOutboxRunsOncePerMarkerVersion(t *testing.T) {
 		ChannelID: start.Agent.ChannelID, TrajectoryID: start.TrajectoryID,
 		Role: "texture", LifecycleVersion: 1, ReducerSeq: 1, Disposition: types.UpdatePending,
 		Direction: types.LifecyclePacketDirectionControl,
-		Packet:    types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
+		Packet:    types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
 		Content:   "wake me", CreatedAt: time.Now().UTC(),
 	}
 	writePendingWorkerUpdate(t, s, update)
@@ -103,7 +103,7 @@ func TestMigrateActorWakeOutboxExpiresStalePendingPacket(t *testing.T) {
 		ChannelID: start.Agent.ChannelID, TrajectoryID: start.TrajectoryID,
 		Role: "texture", LifecycleVersion: 1, ReducerSeq: 1, Disposition: types.UpdatePending,
 		Direction: types.LifecyclePacketDirectionControl, TargetWorkItemID: "work-stale-1",
-		Packet:  types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
+		Packet:  types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
 		Content: "stale", CreatedAt: time.Now().UTC(),
 	}
 	writePendingWorkerUpdate(t, s, update)
@@ -152,7 +152,7 @@ func TestExpireStaleLifecyclePacketReplayAndConflict(t *testing.T) {
 		ChannelID: start.Agent.ChannelID, TrajectoryID: start.TrajectoryID,
 		Role: "texture", LifecycleVersion: 1, ReducerSeq: 1, Disposition: types.UpdatePending,
 		Direction: types.LifecyclePacketDirectionControl,
-		Packet:    types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
+		Packet:    types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: "q"},
 		Content:   "expire me", CreatedAt: time.Now().UTC(),
 	}
 	writePendingWorkerUpdate(t, s, update)

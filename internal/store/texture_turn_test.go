@@ -12,8 +12,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func textureTurnControlPacket(summary string) types.CoagentSourcePacketPayload {
-	return types.CoagentSourcePacketPayload{
+func textureTurnControlPacket(summary string) types.SourcePacket {
+	return types.SourcePacket{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request", Summary: summary,
 		Actions: []types.CoagentPacketAction{{
 			ActionID: "action-" + summary, Type: "research", Objective: summary,
@@ -49,7 +49,7 @@ func textureTurnBaseRequest(t *testing.T, s *Store, start types.StartLifecycleRe
 
 func textureTurnQueueResearchReport(t *testing.T, s *Store, start types.StartLifecycleRequest, work types.WorkItemRecord, id string) types.QueueLifecycleUpdateRequest {
 	t.Helper()
-	packet := types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: id}
+	packet := types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "evidence_update", Summary: id}
 	content := "report " + id
 	payloadDigest, err := ComputeLifecycleUpdatePayloadDigest(packet, content)
 	if err != nil {
@@ -202,7 +202,7 @@ func TestApplyTextureTurnResearchOpenerAgentWorkAndFirstControlAreAtomic(t *test
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID = "texture-turn-researcher-opener"
 	control := textureTurnControl(t, "control-researcher-first", targetAgentID, targetWorkID)
-	control.Packet = types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What exact evidence resolves the gap?"}}
+	control.Packet = types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "research exact gap", Questions: []string{"What exact evidence resolves the gap?"}}
 	control.Content = "research exact gap"
 	control.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
 	control.OpenAgent = &types.AgentRecord{AgentID: targetAgentID, Profile: "research", Role: "research", ChannelID: start.InitialDocument.DocID}
@@ -717,7 +717,7 @@ func TestApplyTextureTurnOpensWorkOnTheBusyResearchDesk(t *testing.T) {
 	req := textureTurnBaseRequest(t, s, start, caller, types.TextureTurnWait)
 	req.CommandID = "texture-turn-desk-second-work"
 	control := textureTurnControl(t, "control-desk-second", desk, "work-desk-second")
-	control.Packet = types.CoagentSourcePacketPayload{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "a new request", Questions: []string{"What changed this week?"}}
+	control.Packet = types.SourcePacket{SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "question", Summary: "a new request", Questions: []string{"What changed this week?"}}
 	control.Content = "a new request"
 	control.PayloadDigest, _ = ComputeLifecycleUpdatePayloadDigest(control.Packet, control.Content)
 	control.OpenWork = &types.WorkItemRecord{WorkItemID: "work-desk-second", Objective: "a new request", AuthorityProfile: "research", AssignedAgentID: desk}
