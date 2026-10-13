@@ -147,6 +147,7 @@
   let cancelPending = false;
   let restorePending = false;
   let sourcePanelOpen = false;
+  let publishedSourcesOpen = false;
   let sourceDiagnosis = null;
   let sourceDiagnosisPending = false;
   let sourceDiagnosisAbortController = null;
@@ -217,7 +218,9 @@
     const entities = revisionSourceEntities();
     if (bodyDoc) {
       const structuredHTML = renderStructuredTextureDocHTML(bodyDoc, entities, { citations });
-      if (structuredHTML) return structuredHTML + renderPublishedSourcesHTML(citations);
+      // The numbered sources open above the text from the toolbar's
+      // Sources button; the text itself carries only the citation markers.
+      if (structuredHTML) return structuredHTML;
     }
     return renderMarkdownBlocks(value, entities, {
       emptyHTML: '<p class="empty-doc">Blank document.</p>',
@@ -856,6 +859,7 @@
     lastDocumentScrollTop = 0;
     toolbarHideSettleUntil = 0;
     sourcePanelOpen = false;
+    publishedSourcesOpen = false;
     sourceDiagnosis = null;
     sourceDiagnosisPending = false;
     cancelSourceDiagnosis();
@@ -1276,6 +1280,10 @@
   }
 
   async function handleOpenSourcePanel() {
+    if (isPublishedMode) {
+      publishedSourcesOpen = !publishedSourcesOpen;
+      return;
+    }
     sourcePanelOpen = !sourcePanelOpen;
     sourcePanelError = '';
     if (!sourcePanelOpen) {
@@ -1896,6 +1904,8 @@
       {publishMenuOpen}
       {promptLabel}
       sourceCandidateCount={sourceEntities.length}
+      publishedSourceCount={publishedCitations?.sources?.length || 0}
+      {publishedSourcesOpen}
       hasCurrentDoc={!!currentDoc}
       hasCurrentRevision={!!currentRevision}
       on:prev={handlePrevVersion}
@@ -1948,6 +1958,12 @@
           on:diagnosis={handleSourceDiagnosisButton}
           on:source-entity-open={(event) => handleSourceEntityOpen(event.detail.entity)}
         />
+      {/if}
+
+      {#if isPublishedMode && publishedSourcesOpen && publishedCitations?.sources?.length}
+        <div class="rendered-doc published-sources-panel" data-texture-published-sources-panel>
+          {@html renderPublishedSourcesHTML(publishedCitations)}
+        </div>
       {/if}
 
       <TexturePublicationResult

@@ -24,6 +24,9 @@
   export let publishMenuOpen = false;
   export let promptLabel = 'Revise';
   export let sourceCandidateCount = 0;
+  // A published Texture's numbered sources, shown above its text when open.
+  export let publishedSourceCount = 0;
+  export let publishedSourcesOpen = false;
   export let hasCurrentDoc = false;
   export let hasCurrentRevision = false;
 
@@ -72,6 +75,20 @@
 
   <div class="doc-actions">
     {#if isPublishedReader}
+      {#if publishedSourceCount}
+        <button
+          class="secondary-action"
+          class:active={publishedSourcesOpen}
+          data-texture-published-sources-toggle
+          aria-pressed={publishedSourcesOpen}
+          on:click={() => dispatch('sources')}
+          disabled={loading}
+        >
+          <span class="label-full">Sources {publishedSourceCount}</span>
+          <span class="label-compact">Sources</span>
+          <span class="label-tiny">Sources</span>
+        </button>
+      {/if}
       <button
         class="secondary-action"
         data-texture-copy-full-text
@@ -114,6 +131,20 @@
         </button>
       {/if}
       {#if isPublishedMode}
+        {#if publishedSourceCount}
+          <button
+            class="secondary-action"
+            class:active={publishedSourcesOpen}
+            data-texture-published-sources-toggle
+            aria-pressed={publishedSourcesOpen}
+            on:click={() => dispatch('sources')}
+            disabled={loading}
+          >
+            <span class="label-full">Sources {publishedSourceCount}</span>
+            <span class="label-compact">Sources</span>
+            <span class="label-tiny">Sources</span>
+          </button>
+        {/if}
         <button
           class="secondary-action"
           data-texture-submit-proposal
@@ -396,6 +427,11 @@
 
   .publish-action {
     min-width: 7.4rem;
+  }
+
+  .secondary-action.active {
+    border-color: var(--choir-border-strong);
+    background: var(--choir-surface-control);
   }
 
   .secondary-action.danger {

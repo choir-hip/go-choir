@@ -125,10 +125,18 @@
   font-weight: 820;
 }
 
+/* Opened from the toolbar's Sources button, above the text. */
+.published-sources-panel {
+  margin: 0 auto 1.25rem;
+}
+
 .rendered-doc .texture-published-sources {
-  margin-top: 2rem;
-  border-top: 1px solid var(--choir-border-strong);
-  padding-top: 1rem;
+  border-bottom: 1px solid var(--choir-border-strong);
+  padding-bottom: 1rem;
+}
+
+.rendered-doc .texture-published-sources h2 {
+  margin-top: 0;
 }
 
 .rendered-doc .texture-published-sources h2 {

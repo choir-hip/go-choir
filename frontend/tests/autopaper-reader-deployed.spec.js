@@ -12,6 +12,9 @@
  *   - /autopaper lists each story once, newest first, marked "Updated" when a
  *     story has more than one version, and a story clicked there opens at
  *     /autopaper/<slug> as the standalone Texture published view;
+ *   - the text carries only numbered citation markers; the numbered source
+ *     list stays closed until the toolbar's Sources button opens it above the
+ *     text;
  *   - every citation renders as a numbered source whose quote sits inside its
  *     pinned source block (inline popover and the source list) with a check
  *     badge (exact, tolerant, pending, unread, failed); every transclusion renders as
@@ -191,8 +194,16 @@ test('Autopaper front list and stories as Texture published views, logged out at
 
     const cites = anchors.filter((a) => a.relation !== 'embeds' || a.ref?.quote);
     const embeds = anchors.filter((a) => a.relation === 'embeds');
+    const sourcesPanel = page.locator('[data-texture-published-sources-panel]');
     if (anchors.length) {
-      const numbers = await reader.locator('[data-source-block]').evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-source-number'))));
+      await expect(reader.locator('[data-source-block]'), `${slug}: no source list inside the text`).toHaveCount(0);
+      await expect(sourcesPanel, `${slug}: sources closed by default`).toHaveCount(0);
+      await page.locator('[data-texture-published-sources-toggle]').first().click();
+      await expect(sourcesPanel, `${slug}: Sources opens the list`).toBeVisible();
+      const panelBox = await sourcesPanel.boundingBox();
+      const readerBox = await reader.boundingBox();
+      expect(panelBox.y, `${slug}: sources open above the text`).toBeLessThan(readerBox.y);
+      const numbers = await sourcesPanel.locator('[data-source-block]').evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-source-number'))));
       expect(numbers.length, `${slug}: numbered sources`).toBeGreaterThan(0);
       expect(numbers, `${slug}: sources numbered 1..n`).toEqual(numbers.map((_, i) => i + 1));
     }
@@ -203,7 +214,7 @@ test('Autopaper front list and stories as Texture published views, logged out at
       const state = await marker.getAttribute('data-check');
       expect(CHECK_STATES.has(state), `${slug}: marker check state ${state}`).toBe(true);
 
-      const item = reader.locator(`[data-source-block] [data-citation-anchor="${anchor.anchor_id}"]`);
+      const item = sourcesPanel.locator(`[data-source-block] [data-citation-anchor="${anchor.anchor_id}"]`);
       await expect(item, `${slug}: citation ${anchor.anchor_id} in a source block`).toHaveCount(1);
       await expect(item.locator('[data-citation-quote]').first(), `${slug}: quote of ${anchor.anchor_id}`).toBeVisible();
       const badge = item.locator('[data-check-badge]');
