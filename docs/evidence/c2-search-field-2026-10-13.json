@@ -1,0 +1,20 @@
+{
+  "cut": "C2 unit 2a item (iii) async search, with Cut 1 B5-B8 fixes; field run that found B9",
+  "commit": "6e9c469e",
+  "staging_identity": "6e9c469edca15edd961fe82012f4dfbc03d8c862",
+  "scenario": "node scripts/reeng_tracer.mjs --label c2-search-1 --scenario research --expect-sha 6e9c469e --fence-min 45 --timeout-min 15",
+  "tracer_exit": 6,
+  "bundle_sha256": "46b02a1f085201c3d6c398b72534f29fa88f9c8bd5a0b615bc901ead8ce62c34",
+  "computer": "computer-71fcae3441f23803ca8b1c4a7ea8e67d (stopped after)",
+  "async_search": {
+    "result": "pass",
+    "search_start": 10,
+    "search_done": 10,
+    "providers_answered_of_started": "22 of 31 (each search 2-3 of 2-4 answered; none pending at its end)",
+    "cell_results_with_new_arrivals": 2,
+    "note": "research also used the old fetch verbs (import_url_content, read_content_item); choir.Read was not on this build"
+  },
+  "b5_records_route": "pass for the wake: research's final Report (09:43:14) reached a Texture whose work item had completed, and a fresh records-route run (records_route true, no work item) started at once and ran",
+  "texture_read_report": "fail: every revision write failed 'create Texture revision: lifecycle work identity missing' (B9, the ApplyTexture materializer); the run parked after about eight attempts with the cursor at 0",
+  "next": "rerun the research scenario on the build carrying Texture's Write verb, which removes the ApplyTexture path"
+}

@@ -126,7 +126,7 @@ const MANAGEMENT_STORY = [
 // Texture whose work item has closed (B5).
 const RESEARCH_STORY = [
   'Write a short news brief (about 200 words, every claim cited) on the most significant open-weight AI model release of the past two weeks.',
-  'In your first cell, write a one-paragraph plan as your first revision with work_disposition "completed" (that revision completes this request),',
+  'In your first cell, write a one-paragraph plan as your first revision with choir.Write and complete this request with choir.Done in the same cell,',
   'and in the same cell Cast research to find the release, its benchmark claims and one independent evaluation.',
   'Research instructions, pass them to research verbatim: start four searches at once with choir.SearchStart, one per query,',
   'read them with choir.Searches.Get as providers answer, Read the pages you will cite, and send one final Report.',
