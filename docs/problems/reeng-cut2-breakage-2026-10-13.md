@@ -139,3 +139,29 @@ internal-or-bound-guest rule; the guest publishes versions to a new
 never carried forward; every early return of the publish path logs.
 Mutation class red (vmctl guest binding, corpusd authority, VM boot
 args).
+
+## B13. A desk's first look at its records consumes them
+
+Found by c2-paper-4 and c2-paper-5 on 3e8e8417, after B12's fix (captures
+now arrive from every feed: three arrival records, 15 captures). No story
+opened in 35 minutes. Trace of c2-paper-5's management run (2dcd2533):
+cell 1 was a bare `choir.Records()`; it staged no act, yet the cell's
+commit advanced management's cursor over the range it read (cursor 2 =
+head 2). The printed records showed `Captures:0x1daabebf`, a pointer, not
+the capture items. Cells 2 and 4 ranged over `choir.Records()` and printed
+nothing; cell 6 marshalled it to `null`. Management then sent Notes to the
+two sources declining, "the capture-item payload was not retained in this
+turn", and the run completed. Every capture of the window was lost to the
+paper.
+
+Cause: (1) choir.Records() shows records past the cursor, and any
+committed cell advances the cursor to the head it read, so a read-only
+cell consumes the records for the rest of the turn (the C1 close review's
+deepseek F4, "the read-batch contract"); (2) InboxRecord.Captures is a
+pointer, so the default print shows an address. c2-paper-3 passed only
+because its model opened stories in its first cell.
+
+Fix: choir.Records() shows every record past the cursor the run started
+at, for the whole run, so a desk can read its records in as many cells as
+it likes; the cursor still advances with each committed cell, and the
+next run starts past it. Capture and other bodies print as values.
