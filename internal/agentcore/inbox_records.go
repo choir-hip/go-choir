@@ -445,26 +445,44 @@ func (rt *Runtime) InboxUnread(ctx context.Context, ownerID, computerID, deskAge
 	return rt.inboxUnread(ctx, ownerID, computerID, deskAgentID)
 }
 
-// recheckRecordsInbox is the post-turn re-check (decision D4): a record that
+// recheckRecordsInbox is the post-turn re-check (decision D4). A record that
 // arrived while the desk's run was active found the desk busy and woke
-// nobody, so after a turn completes, unread records start one more turn. A
-// failed or cancelled run re-arms nothing: a record that breaks the desk is
-// read again only when a new record arrives, never in a loop.
+// nobody. After a completed turn, any unread record starts one more turn.
+// After a failed or cancelled turn, only records committed after that turn
+// began do: the records it already had stay unread and re-arm nothing, so a
+// record that breaks the desk is read again only when a new record arrives,
+// never in a loop. A crash closure re-arms nothing at all.
 func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord) {
-	if rt == nil || rt.store == nil || rec == nil || rec.State != types.RunCompleted {
+	if rt == nil || rt.store == nil || rec == nil || !rec.State.Terminal() || rec.Error == runFateInterruptedByRestart {
 		return
 	}
-	profile := agentProfileForRun(rec)
-	if !recordsDesk(profile) {
+	if !recordsDesk(agentProfileForRun(rec)) {
 		return
 	}
-	unread, err := rt.inboxUnread(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
+	cursor, err := rt.store.ReaderCursor(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, rec.AgentID)
 	if err != nil {
 		log.Printf("runtime: records re-check after %s: %v", rec.RunID, err)
 		return
 	}
-	if !unread {
+	head, err := rt.store.InboxHead(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID)
+	if err != nil || head <= cursor {
 		return
+	}
+	if rec.State != types.RunCompleted {
+		unread, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, cursor, head)
+		if err != nil {
+			return
+		}
+		late := false
+		for _, r := range unread {
+			if committed, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt); perr == nil && committed.After(rec.CreatedAt) {
+				late = true
+				break
+			}
+		}
+		if !late {
+			return
+		}
 	}
 	content, _ := json.Marshal(map[string]string{"inbox": rec.AgentID, "recheck_after_run": rec.RunID})
 	if err := rt.DispatchActor(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, "inbox_record", string(content), "", ""); err != nil {

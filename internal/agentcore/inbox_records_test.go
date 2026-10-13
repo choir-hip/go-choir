@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -196,5 +197,63 @@ choir.ReportPacket(rs[0].From, map[string]interface{}{"kind":"blocker","summary"
 	}
 	if rounds, _ := s.OpenRounds(ctx, owner, computer, management); len(rounds) != 0 {
 		t.Fatalf("round still open: %+v", rounds)
+	}
+}
+
+// Late arrival (Cut 1 acceptance, decision D4): after a completed turn any
+// unread record starts one more turn; after a failed turn only a record
+// that arrived after the turn began does (its own records stay unread and
+// re-arm nothing); a crash closure re-arms nothing. Ways this could fail,
+// written first: a failed turn re-arms its own poison record and loops; a
+// record that arrived mid-turn is stranded because its wake found the desk
+// busy; a crash-closed run wakes its desk at boot.
+func TestRecordsRecheckAfterTurn(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	owner, computer := "owner-late", rt.cfg.ComputerID
+	research, texture := "research:doc-late", "texture:doc-late"
+	var woke []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, to, kind, _, _, _ string) error {
+		if kind == "inbox_record" {
+			woke = append(woke, to)
+		}
+		return nil
+	})
+	commit := func(id string, at time.Time) {
+		t.Helper()
+		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "late-" + id, Records: []types.CommitmentRecord{{
+			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
+			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: id},
+			Inbox: research, SenderInbox: texture, Addressee: research, EmitterKind: types.CommitmentEmitterAgent,
+			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture, CommittedAt: at.Format(time.RFC3339Nano)},
+		}}}
+		req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
+		if _, err := s.CommitInboxRecords(ctx, req); err != nil {
+			t.Fatalf("commit %s: %v", id, err)
+		}
+	}
+	start := time.Now().UTC()
+	commit("before-turn", start.Add(-time.Minute))
+	run := func(state types.RunState, errText string) *types.RunRecord {
+		return &types.RunRecord{RunID: "run-" + string(state), AgentID: research, OwnerID: owner, ComputerID: computer,
+			AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, State: state, Error: errText, CreatedAt: start}
+	}
+
+	rt.recheckRecordsInbox(ctx, run(types.RunFailed, "boom"))
+	if len(woke) != 0 {
+		t.Fatalf("a failed turn re-armed the record it already had: %v", woke)
+	}
+	commit("mid-turn", start.Add(time.Second))
+	rt.recheckRecordsInbox(ctx, run(types.RunFailed, "boom"))
+	if len(woke) != 1 || woke[0] != research {
+		t.Fatalf("a record that arrived after the failed turn began did not start a turn: %v", woke)
+	}
+	rt.recheckRecordsInbox(ctx, run(types.RunCancelled, runFateInterruptedByRestart))
+	if len(woke) != 1 {
+		t.Fatalf("a crash-closed run woke its desk: %v", woke)
+	}
+	rt.recheckRecordsInbox(ctx, run(types.RunCompleted, ""))
+	if len(woke) != 2 {
+		t.Fatalf("a completed turn with unread records did not start one more turn: %v", woke)
 	}
 }
