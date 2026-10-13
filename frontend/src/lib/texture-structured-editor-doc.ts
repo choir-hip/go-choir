@@ -1,4 +1,9 @@
 import { escapeHTML, renderInlineSourceRef, sourceEntityID } from './texture-source-renderer';
+import {
+  renderPublishedCitationRef,
+  renderPublishedEmbedBlock,
+  type PublishedCitationContext,
+} from './texture-published-citations';
 
 export const TEXTURE_DOC_SCHEMA = 'choir.texture_doc.v1';
 
@@ -176,7 +181,12 @@ function sourceEntityLabel(entity: any, fallback = 'source'): string {
   return String(entity?.display?.label || entity?.display?.title || entity?.label || entity?.source_entity_id || fallback || 'source').trim();
 }
 
-function renderInlineNode(node: StructuredNode, sourceEntities: any[] = []): string {
+type RenderContext = {
+  sourceEntities: any[];
+  citations: PublishedCitationContext | null;
+};
+
+function renderInlineNode(node: StructuredNode, rc: RenderContext): string {
   if (node.type === 'text') {
     let html = escapeHTML(node.text || '');
     for (const mark of node.marks || []) {
@@ -188,36 +198,79 @@ function renderInlineNode(node: StructuredNode, sourceEntities: any[] = []): str
   }
   if (node.type === 'hard_break') return '<br>';
   if (node.type === 'source_ref') {
+    const nodeID = String(node.attrs?.id || '').trim();
+    // A published citation renders from its anchor: numbered source, quote
+    // in its pinned block, live check badge.
+    if (rc.citations && nodeID) {
+      const cited = renderPublishedCitationRef(rc.citations, nodeID);
+      if (cited !== null) return cited;
+    }
+    const sourceEntities = rc.sourceEntities;
     const entityID = String(node.attrs?.source_entity_id || '').trim();
     const entity = sourceEntities.find((item) => sourceEntityID(item) === entityID);
     const displayMode = String(node.attrs?.display_mode || 'numbered_ref').trim();
     const html = renderInlineSourceRef(sourceEntityLabel(entity, entityID || 'source'), entityID, sourceEntities, displayMode);
-    const nodeID = String(node.attrs?.id || '').trim();
     return nodeID ? html.replace(' data-texture-source-ref', ` data-texture-source-ref data-texture-source-node-id="${escapeHTML(nodeID)}"`) : html;
   }
   return '';
 }
 
-function renderInlineContent(nodes: StructuredNode[] = [], sourceEntities: any[] = []): string {
-  return nodes.map((node) => renderInlineNode(node, sourceEntities)).join('');
+function renderInlineContent(nodes: StructuredNode[] = [], rc: RenderContext): string {
+  return nodes.map((node) => renderInlineNode(node, rc)).join('');
 }
 
-function renderBlockNode(node: StructuredNode, sourceEntities: any[] = []): string {
+function isPublishedEmbed(node: StructuredNode, rc: RenderContext): boolean {
+  return !!rc.citations &&
+    node.type === 'source_ref' &&
+    node.attrs?.display_mode === 'expanded_ref' &&
+    rc.citations.byAnchor.has(String(node.attrs?.id || ''));
+}
+
+/**
+ * A paragraph. With published citations, a transcluded embed is a block, so
+ * the paragraph splits around it: text runs, then the embed, then the rest.
+ */
+function renderParagraph(node: StructuredNode, rc: RenderContext): string {
+  const content = node.content || [];
+  if (!content.some((child) => isPublishedEmbed(child, rc))) {
+    return `<p>${renderInlineContent(content, rc)}</p>`;
+  }
+  const out: string[] = [];
+  let run: StructuredNode[] = [];
+  const flush = () => {
+    const html = renderInlineContent(run, rc).trim();
+    if (html && html !== '<br>') out.push(`<p>${html}</p>`);
+    run = [];
+  };
+  for (const child of content) {
+    if (!isPublishedEmbed(child, rc)) {
+      run.push(child);
+      continue;
+    }
+    flush();
+    const embed = renderPublishedEmbedBlock(rc.citations as PublishedCitationContext, String(child.attrs?.id || ''));
+    if (embed) out.push(embed);
+  }
+  flush();
+  return out.join('\n');
+}
+
+function renderBlockNode(node: StructuredNode, rc: RenderContext): string {
   switch (node.type) {
     case 'paragraph':
-      return `<p>${renderInlineContent(node.content || [], sourceEntities)}</p>`;
+      return renderParagraph(node, rc);
     case 'heading': {
       const level = Math.min(6, Math.max(1, Number(node.attrs?.level) || 1));
-      return `<h${level}>${renderInlineContent(node.content || [], sourceEntities)}</h${level}>`;
+      return `<h${level}>${renderInlineContent(node.content || [], rc)}</h${level}>`;
     }
     case 'bullet_list':
-      return `<ul>${(node.content || []).map((item) => renderBlockNode(item, sourceEntities)).join('')}</ul>`;
+      return `<ul>${(node.content || []).map((item) => renderBlockNode(item, rc)).join('')}</ul>`;
     case 'ordered_list':
-      return `<ol>${(node.content || []).map((item) => renderBlockNode(item, sourceEntities)).join('')}</ol>`;
+      return `<ol>${(node.content || []).map((item) => renderBlockNode(item, rc)).join('')}</ol>`;
     case 'list_item':
-      return `<li>${(node.content || []).map((item) => item.type === 'paragraph' ? renderInlineContent(item.content || [], sourceEntities) : renderBlockNode(item, sourceEntities)).join('')}</li>`;
+      return `<li>${(node.content || []).map((item) => item.type === 'paragraph' ? renderInlineContent(item.content || [], rc) : renderBlockNode(item, rc)).join('')}</li>`;
     case 'blockquote':
-      return `<blockquote>${(node.content || []).map((item) => renderBlockNode(item, sourceEntities)).join('')}</blockquote>`;
+      return `<blockquote>${(node.content || []).map((item) => renderBlockNode(item, rc)).join('')}</blockquote>`;
     case 'code_block':
       return `<pre><code>${escapeHTML((node.content || []).map((item) => item.text || '').join('\n'))}</code></pre>`;
     case 'horizontal_rule':
@@ -227,10 +280,15 @@ function renderBlockNode(node: StructuredNode, sourceEntities: any[] = []): stri
   }
 }
 
-export function renderStructuredTextureDocHTML(bodyDoc: any, sourceEntities: any[] = []): string {
+export function renderStructuredTextureDocHTML(
+  bodyDoc: any,
+  sourceEntities: any[] = [],
+  options: { citations?: PublishedCitationContext | null } = {},
+): string {
   if (!bodyDoc || bodyDoc.schema !== TEXTURE_DOC_SCHEMA || bodyDoc.doc?.type !== 'doc') return '';
   const blocks = Array.isArray(bodyDoc.doc?.content) ? bodyDoc.doc.content : [];
-  return blocks.map((node: StructuredNode) => renderBlockNode(node, sourceEntities)).join('\n');
+  const rc: RenderContext = { sourceEntities, citations: options.citations || null };
+  return blocks.map((node: StructuredNode) => renderBlockNode(node, rc)).join('\n');
 }
 
 function projectInlineNode(node: StructuredNode, sourceNumbers: Map<string, number>): string {

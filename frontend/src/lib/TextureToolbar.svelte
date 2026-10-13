@@ -10,6 +10,8 @@
   export let revisionLineLabel = '';
   export let stateLabel = '';
   export let isPublishedReader = false;
+  /** False for a read-only published story: the reader offers no write action. */
+  export let allowPublishedEdit = true;
   export let isPublishedMode = false;
   export let isViewingHistorical = false;
   export let currentUser = null;
@@ -86,16 +88,18 @@
         <button type="button" data-texture-download-docx on:click={() => dispatch('download', 'docx')} disabled={loading || publishedActionPending}>DOCX</button>
         <button type="button" data-texture-download-pdf on:click={() => dispatch('download', 'pdf')} disabled={loading || publishedActionPending}>PDF</button>
       </details>
-      <button
-        class="prompt-btn"
-        data-texture-edit-published
-        on:click={() => dispatch('edit-published')}
-        disabled={loading || publishedActionPending}
-      >
-        <span class="label-full">{publishedActionPending ? 'Opening…' : currentUser ? 'Edit my version' : 'Edit'}</span>
-        <span class="label-compact">{publishedActionPending ? 'Opening…' : 'Edit'}</span>
-        <span class="label-tiny">{publishedActionPending ? '…' : 'E'}</span>
-      </button>
+      {#if allowPublishedEdit}
+        <button
+          class="prompt-btn"
+          data-texture-edit-published
+          on:click={() => dispatch('edit-published')}
+          disabled={loading || publishedActionPending}
+        >
+          <span class="label-full">{publishedActionPending ? 'Opening…' : currentUser ? 'Edit my version' : 'Edit'}</span>
+          <span class="label-compact">{publishedActionPending ? 'Opening…' : 'Edit'}</span>
+          <span class="label-tiny">{publishedActionPending ? '…' : 'E'}</span>
+        </button>
+      {/if}
     {:else}
       {#if agentPending}
         <button

@@ -32,15 +32,16 @@
   import { getLifecycleSnapshot, observeLifecycle } from './lifecycle.js';
   import { previewTextureDocument } from './public-preview-data';
   import TexturePublicationResult from './TexturePublicationResult.svelte';
-  import TextureVersionHistory from './TextureVersionHistory.svelte';
   import TextureSourcePanel from './TextureSourcePanel.svelte';
   import TextureToolbar from './TextureToolbar.svelte';
   import { sourceEntityLaunchPayload } from './texture-source-launcher';
   import {
     parseTextureRelatedRef,
     sourceEntityID,
+    sourceEntityTargetURL,
     textureEntityPinnedRevisionID,
   } from './texture-source-renderer';
+  import { buildPublishedCitationContext, renderPublishedSourcesHTML } from './texture-published-citations';
   import { renderMarkdownBlocks } from './texture-markdown-renderer';
   import {
     projectStructuredTextureDocText,
@@ -78,11 +79,19 @@
     titleForPublishedBundle,
   } from './texture-publication-context';
   import './texture-source-flow.css';
+  import './texture-published-citations.css';
 
   export let currentUser = null;
   export let authenticated = false;
   export let appContext = {};
   export let windowId = '';
+  /**
+   * True when the Texture renders outside the desktop (the public
+   * /autopaper/<slug> story route): there is no window manager, so sources
+   * open as links and version moves are reported to the page, which owns
+   * the URL.
+   */
+  export let standalone = false;
 
   const dispatch = createEventDispatcher();
 
@@ -123,6 +132,12 @@
   let lastAutosavedContent = '';
   let publishedBundle = null;
   let publishedRoutePath = '';
+  // Published mode: the citation view of the bundle (null when the bundle
+  // has no citation anchors), the newest version seen by polling the bare
+  // route, and that poll.
+  let publishedCitations = null;
+  let publishedLatestSeen = 0;
+  let publishedPollTimer = null;
   let publishedDerivativeActive = false;
   let publishedTransclusions = [];
   let publishedProposal = null;
@@ -155,6 +170,7 @@
   const SOURCE_FLOW_LINE_HEIGHT = 29;
   const SOURCE_DIAGNOSIS_TIMEOUT_MS = 12000;
   const SOURCE_PANEL_MODEL_ROLES = ['conductor', 'texture', 'research', 'management'];
+  const PUBLISHED_POLL_MS = 60_000;
 
   function revisionSourceEntities(revision = currentRevision, bundle = publishedBundle) {
     return deriveRevisionSourceEntities({
@@ -197,11 +213,11 @@
     return revisionRelatedTextures().find((entity) => relatedTextureDocID(entity) === normalized) || null;
   }
 
-  function renderDocumentHTML(value = editorValue, bodyDoc = editorBodyDoc) {
+  function renderDocumentHTML(value = editorValue, bodyDoc = editorBodyDoc, citations = publishedCitations) {
     const entities = revisionSourceEntities();
     if (bodyDoc) {
-      const structuredHTML = renderStructuredTextureDocHTML(bodyDoc, entities);
-      if (structuredHTML) return structuredHTML;
+      const structuredHTML = renderStructuredTextureDocHTML(bodyDoc, entities, { citations });
+      if (structuredHTML) return structuredHTML + renderPublishedSourcesHTML(citations);
     }
     return renderMarkdownBlocks(value, entities, {
       emptyHTML: '<p class="empty-doc">Blank document.</p>',
@@ -847,10 +863,13 @@
     clearAutosaveTimer();
     clearNewVersionIndicator();
     closeDocumentStream();
+    stopPublishedPoll();
 
     try {
       publishedBundle = null;
       publishedRoutePath = '';
+      publishedCitations = null;
+      publishedLatestSeen = 0;
       publishedDerivativeActive = false;
       publishedTransclusions = [];
       publishedProposal = null;
@@ -962,20 +981,64 @@
     tick().then(() => syncEditorSurface(renderDocumentHTML(editorValue), { force: true }));
   }
 
+  // Published mode reads one version from the public resolve route (served
+  // from the platform store, logged out); it never calls the publishing
+  // computer or this computer's /api/texture routes.
   async function loadPublishedContext(routePath) {
     const bundle = await resolvePublication(routePath);
     publishedBundle = bundle;
     publishedRoutePath = bundle.route?.path || routePath;
+    publishedCitations = buildPublishedCitationContext(bundle, revisionSourceEntities(null, bundle));
+    publishedLatestSeen = Number(bundle.nav?.latest || 0);
     editorBodyDoc = bundle.artifact?.body_doc || null;
     editorValue = bundle.artifact?.content || '';
     lastAutosavedContent = editorValue;
     const ref = buildPublishedTransclusionRef(bundle);
     publishedTransclusions = ref ? [ref] : [];
     saveStatus = currentUser ? 'Published Texture loaded' : 'Guest published Texture';
+    const title = titleForPublishedBundle(bundle);
+    if (title !== appContext.windowTitle) publishWindowContext({ windowTitle: title }, title);
+    startPublishedPoll();
 
-    if (appContext.startPublishedDerivative && currentUser) {
+    if (appContext.startPublishedDerivative && currentUser && !appContext.publishedReadOnly) {
       await createPublishedDerivative({ auto: true });
     }
+  }
+
+  function publishedBareRoute(bundle = publishedBundle) {
+    return String(bundle?.route?.bare || publishedRoutePath || '').replace(/\/v[1-9][0-9]*$/, '');
+  }
+
+  /** Move this window to another published version (0 = the bare latest link). */
+  async function openPublishedRevision(revision = 0) {
+    const bare = publishedBareRoute();
+    if (!bare) return;
+    const route = revision > 0 ? `${bare}/v${revision}` : bare;
+    publishWindowContext({ publishedRoutePath: route }, appContext.windowTitle || titleForPublishedBundle(publishedBundle));
+    await loadContext();
+  }
+
+  // The latest may move while a version is open: poll the bare link and offer
+  // the newer version instead of swapping the text under the reader.
+  function startPublishedPoll() {
+    stopPublishedPoll();
+    const bare = publishedBareRoute();
+    if (!bare) return;
+    publishedPollTimer = setInterval(async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      try {
+        const latest = await resolvePublication(bare);
+        const n = Number(latest?.nav?.latest || latest?.payload?.revision || 0);
+        if (publishedBareRoute() === bare && n > publishedLatestSeen) publishedLatestSeen = n;
+      } catch (_err) {
+        // A failed poll changes nothing on the page.
+      }
+    }, PUBLISHED_POLL_MS);
+  }
+
+  function stopPublishedPoll() {
+    if (publishedPollTimer) clearInterval(publishedPollTimer);
+    publishedPollTimer = null;
   }
 
   async function loadRecentDocuments() {
@@ -1421,6 +1484,10 @@
   }
 
   async function handlePrevVersion() {
+    if (isPublishedReadOnly) {
+      if (publishedNav.prev) await openPublishedRevision(publishedNav.prev);
+      return;
+    }
     if (activeRevisionIndex <= 0 || submitting) return;
     error = '';
     saveStatus = '';
@@ -1429,6 +1496,10 @@
   }
 
   async function handleNextVersion() {
+    if (isPublishedReadOnly) {
+      if (publishedNav.next) await openPublishedRevision(publishedNav.next);
+      return;
+    }
     if (activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1 || submitting) return;
     error = '';
     saveStatus = '';
@@ -1441,6 +1512,10 @@
   }
 
   async function handleShowLatestVersion() {
+    if (isPublishedReadOnly) {
+      await openPublishedRevision(0);
+      return;
+    }
     if (!currentDoc || !pendingHeadRevisionId) return;
     error = '';
     await reloadDocument(pendingHeadRevisionId);
@@ -1464,6 +1539,12 @@
   }
 
   function handleSourceEntityOpen(entity) {
+    if (standalone) {
+      // No desktop to open a source window in: open the original instead.
+      const url = sourceEntityTargetURL(entity);
+      if (/^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
     const payload = sourceEntityLaunchPayload(entity);
     if (payload) dispatch('launchapp', payload);
   }
@@ -1673,16 +1754,33 @@
 
   $: isViewingHistorical = revisions.length > 0 && activeRevisionIndex !== revisions.length - 1;
   $: isDirty = !!currentDoc && !isViewingHistorical && editorValue !== (currentRevision?.content || '');
-  $: versionLabel = currentRevision ? versionLabelForRevision(currentRevision, activeRevisionIndex) : `v${documentCurrentVersionNumber()}`;
+  $: publishedNav = {
+    revision: Number(publishedBundle?.nav?.revision || publishedBundle?.payload?.revision || 0),
+    prev: Number(publishedBundle?.nav?.prev || 0),
+    next: Number(publishedBundle?.nav?.next || 0),
+    latest: Math.max(Number(publishedBundle?.nav?.latest || 0), publishedLatestSeen),
+  };
+  $: publishedNewerAvailable = isPublishedReadOnly && publishedNav.revision > 0 && publishedNav.latest > publishedNav.revision;
+  $: versionLabel = isPublishedReadOnly && publishedNav.revision > 0
+    ? `v${publishedNav.revision}`
+    : currentRevision ? versionLabelForRevision(currentRevision, activeRevisionIndex) : `v${documentCurrentVersionNumber()}`;
   $: promptLabel = submitting ? 'Submitting…' : agentPending ? 'Revising…' : 'Revise';
   $: isPublishedMode = !!publishedBundle || !!appContext?.publishedRoutePath;
   $: isPublishedReadOnly = isPublishedMode && !publishedDerivativeActive;
   $: isEditorReadOnly = isViewingHistorical || loading || isPublishedReadOnly;
   $: editorSurfaceAriaLabel = isPublishedReadOnly ? 'Published Texture document' : 'Texture document';
   $: editorSurfaceAriaMultiline = isPublishedReadOnly ? undefined : 'true';
-  $: revisionLineLabel = isViewingHistorical ? 'Historical' : 'Latest';
-  $: previousVersionLabel = activeRevisionIndex > 0 ? versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1) : '';
-  $: nextRevisionLabel = activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? versionLabelForRevision(revisions[activeRevisionIndex + 1], activeRevisionIndex + 1) : '';
+  $: revisionLineLabel = isPublishedReadOnly
+    ? (publishedNewerAvailable ? 'Historical' : 'Latest')
+    : isViewingHistorical ? 'Historical' : 'Latest';
+  $: previousVersionLabel = isPublishedReadOnly
+    ? (publishedNav.prev ? `v${publishedNav.prev}` : '')
+    : activeRevisionIndex > 0 ? versionLabelForRevision(revisions[activeRevisionIndex - 1], activeRevisionIndex - 1) : '';
+  $: nextRevisionLabel = isPublishedReadOnly
+    ? (publishedNav.next ? `v${publishedNav.next}` : '')
+    : activeRevisionIndex >= 0 && activeRevisionIndex < revisions.length - 1 ? versionLabelForRevision(revisions[activeRevisionIndex + 1], activeRevisionIndex + 1) : '';
+  $: previousDisabled = isPublishedReadOnly ? !publishedNav.prev : activeRevisionIndex <= 0;
+  $: nextDisabled = isPublishedReadOnly ? !publishedNav.next : activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1;
   $: toolbarStateLabel = isPublishedMode && !publishedDerivativeActive
     ? (currentUser ? 'Published reader' : 'Guest reader')
     : isPublishedMode && publishedDerivativeActive
@@ -1702,7 +1800,7 @@
   $: sourceStructures = sourceStructureEvidence(sourceDiagnosis);
   $: sourceDecisions = sourceDecisionEvidence(sourceDiagnosis);
   $: editEvidence = sourceEditEvidence(currentRevision, sourceDiagnosis);
-  $: renderedMarkdown = renderDocumentHTML(editorValue);
+  $: renderedMarkdown = renderDocumentHTML(editorValue, editorBodyDoc, publishedCitations);
   $: syncEditorSurface(renderedMarkdown);
 
   onMount(() => {
@@ -1724,6 +1822,7 @@
   });
 
   onDestroy(() => {
+    stopPublishedPoll();
     clearAutosaveTimer();
     cancelSourceDiagnosis();
     closeDocumentStream();
@@ -1779,11 +1878,12 @@
       {versionLabel}
       {previousVersionLabel}
       {nextRevisionLabel}
-      previousDisabled={activeRevisionIndex <= 0}
-      nextDisabled={activeRevisionIndex < 0 || activeRevisionIndex >= revisions.length - 1}
+      {previousDisabled}
+      {nextDisabled}
       {revisionLineLabel}
       stateLabel={toolbarStateLabel}
       isPublishedReader={isPublishedMode && !publishedDerivativeActive}
+      allowPublishedEdit={!standalone && !appContext?.publishedReadOnly}
       {isPublishedMode}
       {isViewingHistorical}
       {currentUser}
@@ -1867,6 +1967,10 @@
           data-texture-rendered
           data-texture-published-reader={publishedBundle ? '' : undefined}
           data-publication-id={publishedBundle?.publication?.id || undefined}
+          data-publication-route={publishedRoutePath || undefined}
+          data-publication-revision={publishedNav.revision || undefined}
+          data-publication-latest={publishedNav.latest || undefined}
+          data-manifest-hash={publishedBundle?.payload?.manifest_hash || publishedBundle?.version?.manifest_hash || undefined}
           data-publication-version-id={publishedBundle?.version?.id || undefined}
           data-content-hash={publishedBundle?.version?.content_hash || undefined}
           data-source-revision-hash={publishedBundle?.version?.source_revision_hash || undefined}
@@ -1879,7 +1983,6 @@
           on:keydown={handleEditorKeydown}
           on:scroll={handleDocumentScroll}
         ></article>
-        <TextureVersionHistory nav={publishedBundle?.nav} route={publishedBundle?.route} manifestHash={publishedBundle?.payload?.manifest_hash || publishedBundle?.version?.manifest_hash || ''} />
       {:else}
         <div
           class="rendered-doc editable-doc"
@@ -1909,14 +2012,15 @@
     </div>
   {/if}
 
-  {#if newVersionAvailable}
+  {#if newVersionAvailable || publishedNewerAvailable}
     <button
       class="update-pill"
       data-texture-new-version
+      data-new-version-revision={publishedNewerAvailable ? publishedNav.latest : undefined}
       on:click={handleShowLatestVersion}
       disabled={loading}
     >
-      New version available
+      {publishedNewerAvailable ? `New version available: v${publishedNav.latest}` : 'New version available'}
     </button>
   {/if}
 
@@ -2022,6 +2126,8 @@
     line-height: 1.72;
     color: var(--choir-text-accent);
     user-select: text;
+    /* Long URLs in prose wrap instead of scrolling a phone sideways. */
+    overflow-wrap: anywhere;
   }
 
   .editable-doc {

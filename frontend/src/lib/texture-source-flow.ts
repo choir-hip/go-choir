@@ -256,8 +256,15 @@ function buildSourceJournalNoteContent(note: HTMLElement, sourceRef: Element, po
   title.textContent = sourceRefTitle(sourceRef, popover);
   note.append(title);
 
-  const excerpt = sourceRefExcerpt(popover);
-  if (excerpt) {
+  // A published citation carries its quote marked inside its pinned source
+  // block plus its check badge; the note shows that body as is.
+  const citationBody = popover.querySelector('[data-texture-citation-body]');
+  const excerpt = citationBody ? '' : sourceRefExcerpt(popover);
+  if (citationBody) {
+    const body = citationBody.cloneNode(true) as HTMLElement;
+    body.setAttribute('data-texture-source-flow-note-body', '');
+    note.append(body);
+  } else if (excerpt) {
     const body = document.createElement('p');
     body.classList.add('texture-source-journal-body');
     body.setAttribute('data-texture-source-flow-note-body', '');
