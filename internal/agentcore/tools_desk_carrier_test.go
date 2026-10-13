@@ -102,14 +102,13 @@ func TestResearchOverlaySwitchesToCellCarrier(t *testing.T) {
 	if !deskCarrierLive(agentprofile.Research) {
 		t.Skip("research not on carrier")
 	}
-	// A carrier-live research desk's overlay must name the cell doorway and
-	// the budgeted typed surface — desk_go_eval plus the typed research
-	// tools, never the generic host catalog.
+	// A carrier-live research desk's overlay must name the cell doorway, the
+	// records it reads and how it reports — never the generic host catalog.
 	overlay := runtimeprompts.RLMResearchOverlay()
 	if overlay == "" {
 		t.Fatal("expected the RLM research overlay for the carrier-live desk")
 	}
-	for _, want := range []string{"desk_go_eval", "egress", "choir.Report"} {
+	for _, want := range []string{"desk_go_eval", "choir.Records", "choir.Report"} {
 		if !strings.Contains(overlay, want) {
 			t.Fatalf("RLM research overlay missing %q: %q", want, overlay)
 		}
