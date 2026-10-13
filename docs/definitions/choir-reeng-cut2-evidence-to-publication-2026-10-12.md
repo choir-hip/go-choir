@@ -503,9 +503,19 @@ now:
     story-prose defects
     (docs/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md,
     fixed for new revisions at d75cb193), and tier 2 and 3 sources gated on
-    E3's latency table.
-  source_ref: f124766f
-  deploy_identity: staging choir.news cf91e617
+    E3's latency table. Receipts (docs/evidence/c2-close-receipts-2026-10-13.json):
+    E1 pass, E2 pass, E4 pass with a gap (4 of 68 unsupported verdicts
+    never repaired), E3 fail: 46 of 118 arrival items unanswered, traced
+    to a cursor bug (a cell's commit marked read every record up to the
+    head at cell start, shown or not;
+    docs/problems/autopaper-arrivals-unanswered-2026-10-13.md), fixed at
+    cff54bf5 (deployed 18:25). Deploys defer busy computers whose guests
+    predate the planned-restart route, and an all-deferred refresh failed
+    the deploy job (fixed b4ead3e0); the paper was refreshed by operator
+    onto cff54bf5 at 18:28 (crash boot closed its 14 schedules) and the
+    owner act restarted them at 18:28:30. E3 rerun pending.
+  source_ref: cff54bf5
+  deploy_identity: staging choir.news cff54bf5
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: C2-1
