@@ -5,7 +5,7 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Current (2026-10-12): re-engineering metamission
+## Current (2026-10-13): re-engineering metamission
 
 The live spine is the
 [re-engineering metamission](definitions/choir-reeng-metamission-2026-10-12.md):
@@ -18,9 +18,21 @@ three cuts to Autopaper live, with decisions in
 - **D0, dead-code census and removal: landed.** About 50,000 lines
   deleted, all owner-approved
   ([census and rulings](reports/dead-code-census-2026-10-12.md)).
-- **Next: C0 (eyes), then C1 (authority), then C2 (evidence to
-  publication, ending with Autopaper live).** All three are reviewed and
-  wait for the owner's go.
+- **C0, eyes: landed 2026-10-13.** Trace export without SSH, a tracer
+  with a crash drill, an invariant checker, request-id routing, one REPL
+  per desk, broker handle reissue
+  ([receipts](evidence/c0-eyes-acceptance-2026-10-13.json),
+  [measurements](reports/reeng-cut0-measurements-2026-10-12.md)).
+- **C1, authority: executing.** L1 (a crash boot closes pre-boot runs
+  with fate interrupted_by_restart) landed; next L2+L3 (records, cursors,
+  packets and work items deleted). Landing order and the plan review of
+  2026-10-13 are in the
+  [cut file](definitions/choir-reeng-cut1-authority-2026-10-12.md) and
+  [review](reports/reeng-plan-review-2026-10-13.md).
+- **Then C2 (evidence to publication, ending with Autopaper live).**
+- **Pace (owner 2026-10-13):** fast loop, no long runs; one
+  claim-directed tracer scenario per landing (metamission
+  `boundaries.pace`).
 
 The roadmap below is the 2026-10-09 gate view; the cuts replace its Gate 3
 plan.

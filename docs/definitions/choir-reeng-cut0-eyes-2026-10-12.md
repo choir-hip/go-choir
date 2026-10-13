@@ -294,10 +294,21 @@ metamission:
   feeds: [C1 authority, C2 evidence to publication]
 
 now:
-  status: drafted
-  slice: authored for file review; nothing built
-  source_ref: 03499ef9
-  deploy_identity: staging choir.news b172895b
+  status: landed
+  slice: >-
+    All seven artifacts landed (receipts docs/evidence/c0-eyes-acceptance-2026-10-13.json;
+    measurements docs/reports/reeng-cut0-measurements-2026-10-12.md). The
+    70-minute session was replaced by a handle test (owner pace ruling);
+    the second-run desk wait was dropped from the I5 load because runs of
+    one desk agent are serialized. Acceptance read on c0-fast-1 (287734c5):
+    every layer present, empty or unserved without SSH; I1 pass; I2 and I3
+    fail on the restart defect (Cut 1, which L1 then fixed); I4 fail
+    (Cut 2); I5's request-id and one-worker halves hold; a key for another
+    test computer reads nothing. Plan review 2026-10-13 added tracer
+    scenarios, the identity fence and the I3 quiet window
+    (docs/reports/reeng-plan-review-2026-10-13.md).
+  source_ref: af92cb94
+  deploy_identity: staging 6d676094
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: C0-1
@@ -314,8 +325,8 @@ now:
     edge: missing_oracle
     delta_o: run progress events and the causal chain reachable through one owner-scoped API read
     scope_if_supported: staging test computers, the fixed AI-news script, one owner restart per run
-    status: proposed
-    evidence_refs: [docs/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md, docs/reports/re-engineering-studies-2026-10-12/A-async-search-yaegi.md]
+    status: supported (the drill found the restart defect and Cut 1 breakage B1 within one run each, without SSH; the race test failed before the request-id fix)
+    evidence_refs: [docs/evidence/c0-eyes-acceptance-2026-10-13.json, docs/problems/parallel-choir-calls-cross-wire-results-2026-10-12.md, docs/reports/re-engineering-studies-2026-10-12/A-async-search-yaegi.md]
   decision:
     what: >-
       Export in the choir CLI (agent-operable under a scoped key), tracer
@@ -329,17 +340,17 @@ now:
     owner_ratification_ref: not_applicable
   belief:
     believed_state: both defects exist as cited at 03499ef9; run events and the causal chain are not reachable through /api today
-    main_uncertainty: how long push-to-healthy-test-computer takes; whether the hour-old handle expires in a live session
-    next_observation: the first tracer run's per-phase timings
-  blocker_or_risk: none beyond the red ceremony; no owner act is needed
-  next_action: re-review of the repaired file, then build (4) and (5) test-first
+    main_uncertainty: none for this cut; push to healthy test computer is 8-9 min plus a 12 s mint with Node B memory free
+    next_observation: Cut 1's tracer scenarios
+  blocker_or_risk: none
+  next_action: none (landed); Cut 1 executes
 
 receipts: []
 
 weak_measures:
   - name: push_to_healthy_test_computer
     kind: telemetry
-    baseline: unknown
+    baseline: 8-9 min push to deployed; mint 12 s with memory free, 574 s when finished test computers hold Node B memory
     desired: known, split by CI, deploy, mint, ready
     decision_use: sets the pace and batch size of every cut
     cannot_prove: that a cut works

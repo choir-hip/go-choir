@@ -43,12 +43,12 @@ metamission:
     - id: C0
       path: docs/definitions/choir-reeng-cut0-eyes-2026-10-12.md
       readiness: reviewed
-      status: executing
+      status: landed (2026-10-13; receipts docs/evidence/c0-eyes-acceptance-2026-10-13.json)
       depends_on: [D0]
     - id: C1
       path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md
       readiness: reviewed
-      status: pending
+      status: executing (L1 landed 6d676094)
       depends_on: [C0]
     - id: C2
       path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
@@ -210,20 +210,32 @@ boundaries:
     hold the next cut; the completion loop in review_loops stays.
     (8) No wait longer than 15 minutes without reading the trace in
     between.
+    Amended by the plan review of 2026-10-13
+    (docs/reports/reeng-plan-review-2026-10-13.md, owner-requested
+    lateral and convergent panels): (9) a landing is read by a
+    claim-directed tracer scenario (scripts/reeng_tracer.mjs --scenario),
+    the full story scenario only at cut boundaries; (10) every tracer run
+    is identity-fenced (--expect-sha: staging at the landed commit, no CI
+    run on main queued or deploying, the guest build unchanged during the
+    run), and nothing is pushed while a run is in flight; (11) pushes are
+    batched by dependency as separate commits, and every push that changes
+    behavior still gets its scenario run (rule 5's letter relaxed, its
+    purpose kept); (12) deterministic claims are proven by tests before the
+    push, and the deployed scenario proves the product path.
 
 now:
   status: executing
   slice: >-
-    Decisions recorded (§2, §12, §13). M0 and D0 landed; the D0 leftovers
-    landed at 964bdd25 (acceptance PASS). C0 is executing: units 1-5
-    landed (export, tracer, checker, request-id routing, one REPL per
-    desk) with breakages B1-B2 fixed. The tracer shows I2 and I3 failing
-    on the known restart defect (Cut 1) and I4 failing on quote-less
-    citations (Cut 2). Owner pace ruling 2026-10-13 (boundaries.pace):
-    the 70-minute session probe was stopped and is replaced by a test,
-    and acceptance is one fast tracer run.
-  source_ref: b9f195b1
-  deploy_identity: staging de4ebea2
+    M0, D0 and C0 landed. C1 executing: L1 (a crash boot closes every
+    pre-boot run with fate interrupted_by_restart, opens no work, wakes no
+    one) landed at 6d676094 and its field run showed the fate and no
+    violation; breakages B1-B3 fixed. The owner's pace ruling and the plan
+    review of 2026-10-13 reshaped the loop: claim-directed tracer
+    scenarios, identity fence, batched pushes; a tracer attempt now takes
+    7 to 12 minutes instead of 22 to 42. The cell-error analysis found 52%
+    of failed desk cells kernel-fixable; the largest class is fixed.
+  source_ref: af92cb94
+  deploy_identity: staging 6d676094
   candidate: none
   conjecture:
     id: RE-2
@@ -243,10 +255,10 @@ now:
   decision: {what: "three cuts, cutover deploy counts as a crash, forward-fix, one breakage log per cut, redesign tripwire", kind: sequencing, status: settled (owner 2026-10-12, delegated), evidence_ref: docs/re-engineering-decisions-2026-10-12.md §12}
   belief:
     believed_state: the studies' and panels' code claims hold at 03499ef9
-    main_uncertainty: whether a tracer run fits in 10 minutes (one attempt took 32 minutes, mostly waiting for research to settle and for a run that the restart defect leaves open) and how Cut 1 splits into deployable commits
-    next_observation: a fast-mode tracer run's wall time
+    main_uncertainty: how many fix loops L3 (records, cursors, packets and work items deleted) needs; whether Cut 2 starts tonight
+    next_observation: L1's crash-scenario receipt, then L3's
   blocker_or_risk: Cut 1 is a large red change across store, agentcore, textureowner and yaegikernel, now landed commit by commit (boundaries.pace 5); test computers left running hold Node B memory and stall mints (docs/problems/new-owner-waits-while-qa-computers-hold-node-b-memory-2026-10-13.md); the owner's computer takes every cut (accepted risk, §13.1)
-  next_action: close C0 (handle reissue by test, tracer fast mode, one acceptance run, measurements); then C1 commit by commit, then C2
+  next_action: push the batch (B2, B3, tracer scenarios, docs), read L1's crash scenario, then L2+L3 per Cut 1's landing order; then C2
 
 receipts:
   - id: panels-2026-10-12

@@ -417,10 +417,10 @@ boundaries:
     repaired: none yet; the documented list is the target
 
 now:
-  status: drafted
-  slice: authored from decisions §2, §9, §10, §12 and the R1-R4 drafts' findings; nothing built
-  source_ref: 03499ef9
-  deploy_identity: staging b172895b
+  status: executing
+  slice: L1 (crash boot closes pre-boot runs) landed and field-traced; breakage B1-B3 fixed (docs/problems/reeng-cut1-breakage-2026-10-13.md); next L1's crash-scenario receipt, then L2+L3
+  source_ref: af92cb94
+  deploy_identity: staging 6d676094
   candidate:
     id: none
     state: none
@@ -479,7 +479,7 @@ now:
     evidence_ref: docs/re-engineering-decisions-2026-10-12.md §2, §12
     owner_ratification_ref: decisions §2 and §12 ratify the direction and delegate the mechanism (§12, "I trust your judgement"); D1-D9 are this file's proposal
   belief:
-    believed_state: every code claim above holds at 2d2b864e (Go unchanged since 03499ef9); Cut 0 not yet landed
+    believed_state: the code claims above hold except where L1 changed boot (runtime.go Start, closePreBootRunsAfterCrash); Cut 0 landed (docs/evidence/c0-eyes-acceptance-2026-10-13.json)
     main_uncertainty: whether one cutover this size converges inside the redesign tripwire
     next_observation: Cut 0's measurements (push-to-healthy-computer time, baselines), then the deletion inventory re-grepped on Cut 0's landed commit
   blocker_or_risk: >-
@@ -487,23 +487,38 @@ now:
     request-id fix, one REPL owner per desk, broker-handle fix). Red
     throughout.
   next_action: >-
-    after Cut 0 closes, land in this order, each commit through deploy
-    and one fast tracer run (metamission boundaries.pace 5), so the
-    checker's verdicts move every time. L1 restart: a markerless boot
-    makes pre-boot runs terminal with interrupted_by_restart and cancels
-    engineering assignments; passivation, passivated-run resume,
-    spawned-work replay, terminal settlement repair, Texture wake re-arm,
-    wire-publication claim recovery and the engineering recast are
-    deleted (the tracer's drill shows I2's run half and I3 turn green;
-    closure records per round follow in L3). L2 deletions that need no
-    new authority: 6b, 6c, research caps and budgets (6). L3 records,
-    inbox sequence, conversations, rounds, hypothesis ids, cursors and
-    wakes (1, 2), with packets and work items deleted (3) in the same
-    landing, closure records added to L1's boot phase, and I6 plus the
-    Cut 1 invariants in the checker. L4 routing (5). L5 sub-researchers
-    as runs on records (6). L6 prompts and the reverse parity test (7).
-    L7 run acceptance on the fold (8) and the self-development round
-    trip.
+    Landing order, revised by the plan review of 2026-10-13
+    (docs/reports/reeng-plan-review-2026-10-13.md). Each push that changes
+    behavior goes through deploy and one claim-directed tracer scenario
+    under the identity fence (scripts/reeng_tracer.mjs --scenario,
+    --expect-sha). Pushes are batched by dependency, as separate commits.
+    L1 restart (landed 6d676094, B1; B2 fixed in 877689e1): a markerless
+    boot cancels every pre-boot pending, running, parked or blocked run with
+    fate interrupted_by_restart, opens no work and wakes no one;
+    Engineering cancel wakes and the boot recast are suppressed on a crash
+    boot; the terminal-outcome repair and wire-publication claim recovery
+    phases are deleted. Planned boots keep park-and-resume (the one resume
+    a planned restart allows) until L3 re-derives it from records and
+    wakes (D8); passivation itself stays for that path.
+    Acceptance: --scenario crash (every run open at the crash closed with
+    the fate, I3 pass on an observed quiet window). Field run c1-l1-1
+    (6d676094): the in-flight run closed with the fate, nothing moved until
+    the owner asked again, I3 had no violation (two pre-boot packets
+    redelivered after owner input, the residual L3 removes).
+    L2 deletions (6b, 6c, research caps and budgets) ride L3's push as
+    separate commits.
+    L3 records, inbox sequence, conversations, rounds, hypothesis ids,
+    cursors and wakes (1, 2); packets and work items deleted (3); closure
+    records added to L1's boot phase; the planned-restart marker gains
+    work_state_epoch (D7) in the same landing; the checker re-expressed on
+    records (I2, I3 and deliveries read work items and packets today) with
+    I6 and the Cut 1 invariants; generated verb lists and any instruction
+    the landing makes false change with it (plan review C6).
+    L4 routing (5), with a management turn in the story scenario (C12).
+    L5 sub-researchers as runs on records (6). L6 the full prompt rewrite
+    and the reverse parity test (7). L7 run acceptance on the fold (8) and
+    the self-development round trip. The story scenario runs at the Cut 1
+    boundary.
 
 receipts: []
 ---

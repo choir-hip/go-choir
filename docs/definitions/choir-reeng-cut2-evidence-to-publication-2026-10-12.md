@@ -305,8 +305,9 @@ finish:
   autopaper_live: >-
     On staging, read through the product API and a logged-out browser, all
     of: (1) a designated paper computer (not a test computer) runs its
-    source schedule for 6 continuous hours after one owner act starts it,
-    with no further human step; (2) production follows the ingestion
+    source schedule after one owner act starts it, with no further human
+    step, watched for at most one hour (owner pace ruling 2026-10-13,
+    metamission boundaries.pace 6) and left running; (2) production follows the ingestion
     rhythm (decisions §13.4): every poll that writes new captures is
     answered by management's next committed turn after its record (the
     latency from record to answer is reported per interval, never gated),
@@ -351,8 +352,8 @@ finish:
     - action: "2b: logged-out Playwright on choir.news at phone width"
       proves: front page and story page render with numbered sources, quotes in source blocks, check badges and a transcluded block; screenshot artifact; no served route still renders the fixed claims
       evidence_class: deployed proof
-    - action: "2b: the autopaper_live window, then a crash restart of the paper computer (no planned marker) through the product API"
-      proves: Autopaper live as defined; after the crash every open round and schedule closed "interrupted by a restart", no poll ran and no desk woke until the owner restarted the schedule by hand; reads stayed up throughout
+    - action: "2b: the autopaper_live window (at most one hour watched), then a crash restart of the paper computer (no planned marker) through the product API, then the owner act that restarts the schedule (taken by the run, metamission authority_sources), then one poll observed"
+      proves: Autopaper live as defined; after the crash every open round and schedule closed "interrupted by a restart", no poll ran and no desk woke until the schedule was restarted by the owner act; reads stayed up throughout; the paper is running when the receipt is written (plan review 2026-10-13, C13)
       evidence_class: deployed proof
     - action: "after live: model comparison on the tracer script; deepseek-v4.1-flash, gpt-6-luna, glm-5.3-flash, muse-spark-1.3-contributor and the other opencode-go models, 3 runs each; then high, medium, low effort on the leading models"
       proves: a receipt table judged blind by a model panel on grounding (claims supported by their cited blocks, quote accuracy, omissions), with latency and cost beside it; never runtime scoring. The default switch is the owner's routing decision, outside this station
