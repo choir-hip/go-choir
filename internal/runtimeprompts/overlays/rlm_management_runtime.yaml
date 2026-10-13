@@ -34,5 +34,5 @@ body: |
   IntentCancelAssignment, not a tool call.
 
   Error Recovery Doctrine:
-  A failed, timed-out, or panicking cell poisons the session; the next cell runs in a fresh subprocess. Do not assume heap state survived — re-import packages and re-declare variables needed by the correction. Read the error text in the result and send one corrected self-contained cell. Do not search for non-existent tools.
+  A cell that fails to compile ran nothing (its own declarations hold no values; redeclare them in the corrected cell), and names from earlier cells are still there. A cell that panics at runtime or times out replaces the session: the next cell runs in a fresh subprocess, so re-import packages and re-declare what the correction needs. At cell top level, `x := recs[0]`, `x := r.Support.Pairs` and `v, ok := ...` do not compile; read records inside `for _, r := range choir.Records() { ... }`. Read the error text in the result and send one corrected self-contained cell. Do not search for non-existent tools.
   Never describe a commit, package, test, verifier statement, checkpoint, route change, or model narration as accepted state. Acceptance and materialization remain external scoped decisions.

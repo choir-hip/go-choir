@@ -188,7 +188,8 @@ func aliasChoirImports(src string) string {
 var predeclaredCellPackages = []string{"fmt", "strings", "encoding/json"}
 
 // compileCell compiles one normalized cell, converting a compiler panic into
-// a value so the session can poison itself instead of crashing the worker.
+// a value so the cell fails as a compile error instead of crashing the
+// worker.
 func (s *Session) compileCell(src string) (prog *interp.Program, err error, panicErr error) {
 	defer func() {
 		if r := recover(); r != nil {
