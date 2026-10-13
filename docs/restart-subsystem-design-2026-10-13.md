@@ -1,38 +1,58 @@
 # Restart subsystem: bounded recovery, no crash loops (design draft, 2026-10-13)
 
-Status: draft for an agentic-consensus review requested by the owner
+Status: **v2** after a lateral review (seven panelists, 2026-10-13; §8). Draft for the convergent round; requested by the owner requested by the owner
 ("Another thing we have to build is the restarting subsystem ... is there a
 way we can guarantee we never get into a crash loop?"; "design, verify this
 with other agents, and then slot it into the roadmap"). Mutation class when
 built: **red** (vmctl, VM lifecycle, run acceptance, deploy routing).
 
-## 1. The claim
+## 1. The claim (v2)
 
 We cannot guarantee a computer never crashes. We can guarantee it never
-**loops**: the number of automatic restarts, resumes or re-dispatches caused
-by failures is bounded between two demonstrations of health, and the bound
-is enforced by durable write ordering, not by a heuristic.
+**loops**: between two **external events** (an owner act, or a deploy that
+brings a different build), the number of automatic boots and automatic
+re-drives of work is bounded by a small fixed number, and after that the
+computer is **held** (latched) and visible until an external event releases
+it.
 
-**Invariant R.** Every automatic action taken because of a failure
-(reboot, image retry, resume of work, re-dispatch of a wake) first spends a
-token from a durable ledger for its scope, with the spend committed before
-the action starts. Tokens are minted only by a recorded **health proof** for
-that scope. With a cap of one token, the worst case between health proofs
-is: failure, one automatic attempt, failure, stop with an owner-visible
-reason.
+**Invariant R (v2).** Every Firecracker spawn requires a **grant** recorded
+durably (fsync) in the computer's recovery ledger before the spawn. Grants
+come from two sources only:
 
-Why it holds whatever the cause (bad build, poisoned record, model-written
-code, a bug in the recovery path itself): an attempt that crashes has
-already spent its token, and a computer that never proves health never
-mints another. The only way to exceed the bound is an action that skips
-the ledger, so the review question for every recovery path is "does it
-spend a token first?"
+1. an **external event** (owner act, owner opening the computer, a deploy
+   refresh carrying a new build, a planned transition the host initiated):
+   each opens a new episode with a fresh allowance;
+2. the episode's **automatic allowance** (proposed: one automatic retry,
+   plus one fallback boot when the failure follows an image change).
 
-This generalises the owner's 2026-10-09 rule (CLAUDE.md, "Restarts End Work
-(Crash) Or Resume It (Planned Update)"): the planned-restart marker is
-already a one-token ledger (written by the host before the restart, consumed
-before the resume, so a crashing resume leads to a markerless boot that
-closes work).
+Health does **not** refill the allowance (v1 did, and the panel showed the
+result is a rate bound: a crash every `T_healthy + 1` minutes loops forever).
+Running the same code on the same state without an external change is not
+recovery, it is a loop waiting to happen. A long-healthy computer that
+crashes again simply opens a new episode only if an external event occurred
+in between; otherwise it spends the remaining allowance and then holds.
+
+Why it is a guarantee: the gate sits at the single actuator every boot path
+already funnels through (vmmanager `bootVM`, whose `ReserveBootEpoch` is the
+sole epoch authority), so no caller can skip it; the ledger is written
+before the spawn and fails closed (missing, corrupt or unwritable means
+hold); and the allowance is only replenished by events that change the
+inputs. Any number of callers (resolve, warm sweeps, proxy retries, a
+browser's auto-refresh) can only ask; they cannot add boots.
+
+**Invariant W (work).** A crash boot is side-effect free: it loads state,
+closes every open obligation as `interrupted_by_restart` (as a completion
+barrier: if closure fails, the runtime stays quiescent rather than
+continuing), and starts **no** re-driver of pre-boot work. Re-drivers (the
+wake projector's pre-boot wakes, self-development reconcile and retry,
+platform-update resume, engineering recast, settlement repair) run only on a
+boot whose planned-ness the **host** attests (below).
+
+**Invariant P (planned).** A boot is planned only when the guest's marker
+and the initiator's transition record agree on a nonce. The guest can ask
+for a planned restart; it cannot declare one. A marker without a matching
+host record is ignored (the boot is a crash boot), so a crash inside an
+apply cannot masquerade as planned.
 
 ## 2. What exists today (code map, 2026-10-13)
 
@@ -59,174 +79,190 @@ crash count), the epoch file (a boot counter), `boot-timeline.json` (last
 boot only), `receipts/destructive.jsonl` (append-only kill causes),
 `recovery-conditions.json` (typed refusals).
 
-## 3. Design
+## 3. Design (v2)
 
-### 3.1 Scopes and their single authority
+### 3.1 The recovery ledger (host, single authority for boots)
 
-Each scope has exactly one ledger and one writer. No second counter in
-memory or in another service that could disagree.
+- One append-only ledger per **ComputerID** (not per VM directory, so
+  realization replacement, restore or reconstruction cannot reset it):
+  `VM_STATE_DIR/recovery/<computer_id>.jsonl`, fsync per entry and on the
+  directory. Entries: `episode_open {cause: external event ref}`,
+  `grant {kind: external|automatic|fallback, boot_epoch, caller}`,
+  `boot_result {epoch, outcome}`, `hold {reason, cause_chain}`,
+  `release {owner act or deploy ref}`.
+- Gate: `bootVM` refuses to spawn without a grant written for that epoch.
+  Grants are idempotent by epoch, so a retried request cannot spend twice
+  and a crash after the grant but before the spawn loses that grant
+  (conservative: the computer may hold one boot early).
+- Allowance per episode: 1 automatic + 1 fallback (only if the episode
+  began with an image change). Exhausted: `hold`, typed refusal on resolve
+  ("stopped after repeated failures", cause chain, Retry-After none), the
+  starting page stops auto-refreshing, the proxy never retries into a boot.
+- Warm sweeps (always-on, platform computer) may request a grant only for a
+  computer whose last stop was a clean, host-attested planned stop (idle
+  hibernation with marker). They never warm `failed`, `wedged`,
+  `recovery_failed` or held computers.
 
-| Scope | Covers | Ledger (single authority) | Writer |
-| --- | --- | --- | --- |
-| **S-host**: computer boot | reboots by vmctl after a guest fails, wedges or dies; always-on warm after a failure | `VM_STATE_DIR/<vm_id>/recovery-ledger.jsonl`, append-only, fsync per entry | vmctl |
-| **S-image**: build trial | first boots of a new guest image or layered release | same ledger, entries of kind `image_trial`; extends the layering boot guard to the base image | vmctl (host), boot guard (guest) reports |
-| **S-runtime**: in-guest process | systemd restarts of the guest runtime | guest-local `bootguard` counter (exists for layered releases), generalised to every boot | guest boot guard |
-| **S-work**: resumption of work | anything reopened or re-dispatched because of a restart: schedules, runs, rounds, platform-update resume, wakes | commitment records on the tape (one `restart_tokens` fold per computer) | the guest runtime, from management's acts |
+### 3.2 Process supervision (host and guest)
 
-### 3.2 Health proof (mints tokens)
+- Every systemd unit that can restart (guest runtime, updater, the
+  updater's restart bridges; host vmctl, proxy, corpusd, gateway, auth,
+  maild, checkpointd) gets `StartLimitIntervalSec`/`StartLimitBurst` (for
+  example 3 in 10 minutes) and an `OnFailure=` that records the failure; a
+  failed guest runtime makes `/health` report `runtime_failed`, which the
+  host treats as a failed boot (spends the allowance; it does not route
+  around it via the wedge path).
+- The guest boot guard is rewritten durable (fsync, monotonic window,
+  write errors fail closed).
 
-A scope's health proof is a ledger entry written only when:
+### 3.3 Planned transitions (host-attested)
 
-- S-host and S-image: the guest answered `/health` ok continuously for
-  `T_healthy` (proposed 10 minutes) since its boot, with `runtime_health`
-  ok and no boot-guard trip.
-- S-runtime: the runtime stayed up `T_healthy` and committed at least one
-  durable write (any record, turn or capture) after boot.
-- S-work: a turn of the desk that reopened work committed after the
-  reopen, and `T_healthy` passed without a crash boot.
+- The initiator (vmctl for deploy refresh, operator refresh and idle
+  hibernation; the updater for in-guest applies) writes a transition record
+  with a nonce before asking the guest to write its marker with the same
+  nonce; the boot consumes the marker only if the nonce matches the host
+  record, and the host consumes its record once.
+- Admission fence: from the moment the guest accepts a planned restart it
+  refuses new run admission until the restart or the record expires; to
+  avoid starving never-idle computers, the host requests the restart only
+  at a turn boundary (the guest answers 409 while a turn is open, and the
+  host retries within a bounded window).
+- Hibernation markers carry no short TTL (the host record bounds them), so
+  an overnight wake is planned.
+- An apply that crashes: the boot sees no host-attested record (the updater
+  records `restart_requested` only after the apply returns), so it is a
+  crash boot; platform-update and self-development re-drive spend the
+  episode allowance and record `update_failed_after_restart` when it is
+  gone.
 
-A health proof mints one token (cap 1 per scope; S-host may use cap 2 for
-transient host faults, decided by review). Tokens never accumulate beyond
-the cap, so a long healthy period cannot fund a later loop.
+### 3.4 Work after a crash (owner-owned for now)
 
-### 3.3 Policies per scope
+- Crash boots close everything (owner rule) and write one
+  `restart_report {epoch, closed refs, in-flight suspects}` record. Nothing
+  reopens automatically. The owner (or, later, management under a ratified
+  policy) reopens.
+- **Standing intents versus occurrences** (owner decision needed for the
+  paper): a source schedule is a standing owner intent; a poll is an
+  occurrence. Option A (today): a crash closes the schedule, the owner act
+  restarts it. Option B: a crash closes the in-flight occurrence only; the
+  schedule's next tick is new work, on a computer that booted under a
+  grant, and a schedule whose tick crashes the computer twice is closed
+  with that cause. B keeps the paper publishing unattended without any
+  resume path.
+- Management-owned reopen waits until crash attribution is trustworthy
+  (suspects today cannot always be named: a poisoned durable input can be
+  reread by fresh work).
 
-**S-host (vmctl).**
+### 3.5 Host-wide faults
 
-- Every reboot vmctl starts because of a failure (resolve recovery,
-  always-on warm after a non-idle stop, wedge recovery) appends
-  `{kind: recovery_attempt, cause, epoch, at}` and spends the token
-  **before** booting. No token: the ownership moves to
-  `held_after_failures` with the cause chain, and resolve returns a typed
-  refusal ("this computer stopped after repeated failures") instead of a
-  boot. The "starting" page shows that state and stops auto-refreshing.
-- Owner act (or operator) `POST /internal/vmctl/recover` with a reason
-  re-arms one token; the act is itself recorded.
-- Deliberate boots (owner opens a hibernated computer, deploy refresh,
-  operator refresh) do not spend tokens: they are not failure-caused. They
-  do count for S-image when the image is new.
+- A mass-hold detector: M computers held within T minutes is a host
+  incident, not M computer failures. It records the incident, pages the
+  owner, and suppresses image blacklisting; per-computer holds stay, so
+  nothing loops, and a deploy carrying a fix is an external event that
+  releases them (deploy refresh may boot held computers when the build
+  changed).
 
-**S-image (build trial).**
+### 3.6 Images (later)
 
-- A computer's first boot on a new image is a trial. If the guest does not
-  reach the health proof within `T_trial` (proposed 5 minutes) or crashes
-  before it, vmctl boots the computer's last-good image and records
-  `image_trial_failed` for that build. Further deploys skip that build for
-  every computer until a newer build arrives.
-- This needs per-computer image paths (today one global set of paths at
-  `/var/lib/go-choir/guest/*`): keep the previous image beside the current
-  one, as A/B slots.
+- A/B slots with a trial boot are kept as a later step. A failed trial
+  blacklists a build only for guest-attributable failures (boot timeline
+  reached userspace, guest refusal), never host provisioning faults, and a
+  fallback must be state-compatible (a persistent computer's data may have
+  changed under the new image).
 
-**S-runtime (guest systemd).**
+### 3.7 Owner visibility
 
-- Add a StartLimit to `go-choir-autoputer` matching the boot guard (for
-  example 3 starts in 10 minutes), after which the unit stays failed, guest
-  `/health` reports `runtime_failed`, and S-host sees a failed guest
-  (which then spends an S-host token, not a fresh loop).
-
-**S-work (management-owned resumption).**
-
-- A crash boot keeps closing every obligation (runs, rounds, schedules,
-  wakes, work items) with the visible fate `interrupted_by_restart`. The
-  runtime never resumes work (owner rule).
-- The crash boot writes **one** system record to management:
-  `restart_report {boot_epoch, cause: crash|wedge|refresh|hibernate_wake,
-  closed: [obligation refs], suspect: [refs in flight at the crash],
-  tokens_left}`. It wakes management only if an S-work token is available;
-  otherwise it is recorded and the owner sees "stopped after a crash".
-- Management decides what to reopen with ordinary acts (for example
-  `choir.Reopen(ref, reason)` or a fresh schedule start). A reopen spends
-  the S-work token first and carries `reopened_from` lineage. The decision
-  stays in a model, not in a runtime resumer (doctrine: intelligence in
-  models).
-- **Suspects** (obligations, cells or records in flight at the crash) cannot
-  be reopened by management; only an owner act reopens them. A poisoned
-  capture cannot cause a loop and does not block the healthy schedules.
-- An obligation already reopened once and then closed by another crash
-  needs an owner act.
-
-**Planned restarts and updates.**
-
-- The marker write also sets an **admission fence**: the guest refuses new
-  run admission (typed 409 to the caller, retried later) from the moment it
-  answers 200 until the restart or marker expiry. This closes the
-  busy-check race.
-- Platform-update resume spends an S-work token before re-driving an
-  accepted update; a resume whose boot crashes finds no token and records
-  `update_failed_after_restart` instead of re-arming the marker.
-
-**Hibernate and wake.**
-
-- An idle hibernation is planned, not a crash: vmctl asks the guest for a
-  marker with reason `hibernate` before the stop (same route as deploy
-  refresh). A wake with that marker resumes (schedules keep their state); a
-  wake without one is a crash boot as today. Real memory snapshots stay
-  later work.
-
-### 3.4 Owner visibility
-
-- vmctl ownership gains `recovery {tokens, last_attempt, held_reason,
-  history (last N ledger entries)}` in `/internal/vmctl/list`, and the
-  product shows a computer "stopped after repeated failures" with the cause
-  chain and a "try again" owner act.
-- Guest `/health` gains `boot {epoch, kind: crash|planned|hibernate_wake,
-  restart_tokens}`.
-- Autopaper gets its "paper stopped" signal from the S-work state.
+- vmctl list and the product show `recovery {episode, allowance left,
+  held_reason, cause_chain, last N entries}`; guest `/health` shows
+  `boot {epoch, kind: crash|planned, nonce}`; Autopaper gets its "paper
+  stopped" signal from the hold.
 
 ## 4. What this does not do
 
-- It does not prevent crashes or make them cheap; it bounds their repetition.
-- It does not resume model state mid-turn; reopened work starts a new turn.
-- It does not add runtime budgets, scoring or round caps on model work
-  (2026-10-12 decisions): tokens bound failure-caused automation only.
+- It does not prevent crashes; it bounds their repetition to a fixed number
+  per external event and makes the stop visible.
+- It does not keep a computer available through repeated faults: a fault
+  that recurs on the same build holds it until an owner act or a new build.
+  The owner's 2026-10-10 ruling ("users shouldn't ever have to do this")
+  is honoured by making holds rare (one automatic retry absorbs transient
+  faults) and by deploys releasing holds, not by unbounded retry.
+- It adds no runtime budgets, scoring or round caps on model work.
 
-## 5. Acceptance (tracer scenarios that try to loop)
+## 5. Acceptance (fault-injection matrix on a minted test computer)
 
-Each runs on a minted test computer through product and internal routes the
-tracer already uses; each must be able to fail.
+Faults: crash at boot; crash 30 s after ready; crash just after a long
+healthy window; crash inside an apply after the marker; a poisoned record
+that crashes management's cell; vmctl crash-looping; a host-wide tap fault
+on two test computers. Drivers for each: resolve, browser auto-refresh,
+proxy retries, always-on warm, platform warm, wedge, idle hibernate and
+wake, deploy refresh (same build and new build), operator refresh, vmctl
+restart, updater recovery restart. Crash points: before and after the grant
+write, the spawn, the boot result and the closure write; plus a corrupt or
+missing ledger and a clock jump.
 
-1. **Poisoned record.** Plant a record that makes management's cell crash
-   the guest runtime (a test-only crash hook behind a build flag).
-   Pass: at most one automatic reopen; the second crash ends with
-   `held`/"stopped after a crash"; zero further failure-caused boots over
-   30 minutes; the suspect record is named in the restart report.
-2. **Post-ready crash.** A test hook that kills the runtime 30 s after
-   readiness, on every boot. Pass: S-runtime StartLimit trips, S-host spends
-   its token(s) and holds; the "starting" page stops refreshing; total boots
-   ≤ cap + 1 over 30 minutes.
-3. **Bad image.** Deploy a guest build that crashes at boot to one test
-   computer. Pass: one trial boot, fallback to last-good, `image_trial_failed`
-   recorded, the next deploy skips that build.
-4. **Planned restart race.** Request a planned restart and submit a prompt
-   in the same second. Pass: the prompt is refused with a typed retry, never
-   killed mid-run.
-5. **Hibernate wake.** An idle paper-like computer with schedules is
-   hibernated and woken. Pass: schedules resume (not closed).
-6. **Health re-arm.** After a held computer is recovered by owner act and
-   stays healthy `T_healthy`, a later single crash is again recovered once.
+Pass, per cell: Firecracker spawns per episode ≤ the allowance (counted from
+the ledger and `receipts/destructive.jsonl`); the final state is `held`
+with the cause chain; no spawn for 60 minutes after the hold under all
+drivers; a crash boot starts no re-driver (no pre-boot wake dispatched, no
+reconcile, no update resume); an apply crash is a crash boot; an owner act
+or a new-build deploy releases exactly one new episode; the mass-hold
+detector fires once for the host fault.
 
-## 6. Order of work (proposed)
+## 6. Order of work
 
-1. S-host ledger and hold (closes the unbounded resolve and always-on loops;
-   host only, no guest change).
-2. S-runtime StartLimit and boot guard generalised (guest image change).
-3. Admission fence and platform-update token (guest).
-4. S-work restart report and management reopen (after C1e moves
-   engineering and work items onto records; the reopen act is a records
-   act).
-5. Hibernate marker.
-6. S-image A/B slots (host image layout change; largest).
+1. Host gate and ledger at `bootVM`, holds, warm-sweep and resolve rules,
+   proxy and starting-page behaviour (host only; closes the unbounded
+   resolve, warm and platform loops).
+2. StartLimits on every unit, the durable boot guard (host and guest
+   images).
+3. Side-effect-free crash boot and host-attested planned transitions (guest
+   and host; closes the self-minted-marker loop and the re-driver edges).
+4. Mass-hold detector and owner visibility.
+5. Owner decision on schedules (option A or B), then the paper's path.
+6. A/B image slots (later).
 
-## 7. Open questions for review
+## 7. Open questions for the convergent round
 
-- Is one token per scope the right cap, or does S-host need two for
-  transient host faults (OOM under pressure, a host reboot)?
-- Is `T_healthy` a duration, a committed write, or both, per scope?
-- Should S-work reopen be management's decision at all, or should crash
-  reopen always need the owner until self-development is trusted?
-- Where exactly does a poisoned *capture* (not a cell) get attributed as a
-  suspect?
-- Does the admission fence risk a deploy starving a computer that is never
-  idle (the paper), and should a planned restart instead wait for a turn
-  boundary?
-- Is there any recovery path in the map above that this design misses?
+- One automatic retry per episode, or two?
+- Should a deploy of the *same* build release a hold (it is an owner-
+  initiated transition, but the inputs did not change)?
+- Is "turn boundary" restart feasible for the paper, or does it need a
+  bounded wait-then-force policy?
+- Option A or B for schedules (an owner decision; what should the default
+  be?).
+
+## 8. Lateral review (2026-10-13), adopted
+
+Seven panelists (claude opus, codex, gpt-6.1-sol, gemini-3.8-flash,
+deepseek-v4.1-flash, muse-spark, opencode); outputs under
+`.agentic-consensus/restart-lateral-2026-10-13/`. Findings adopted into v2:
+
+- v1's token refill on health was a rate bound, not a loop bound (claude,
+  gpt-6.1-sol, deepseek); health is self-reported by the judged party
+  (muse).
+- Enforce at the actuator, not per caller; boot-cause classification is
+  lossy (vmctl load rewrites states to `vmctl-restart`) (claude, deepseek,
+  codex).
+- The guest self-mints planned markers before applies
+  (`platform_update.go:263`, `self_development_materializer.go:315,390`),
+  so an apply crash boots as planned and re-drives (deepseek, codex).
+- Missed paths: vmctl and every Node B unit restart without StartLimit
+  (`node-b.nix`); the updater's restart bridges and recovery restart
+  (`autoputer-vm.nix:474-510`, `updater.go:338-365,958-975`); post-decision
+  self-development reconcile and retry wakes; the wake projector's redrive
+  with fresh occurrence ids and process-local retry counts
+  (`actor_wake_projector.go:17-34`, `adapter.go:373-386`); the platform
+  warmer calling `ResumeVM` directly (`platform_computer.go:75`); proxy
+  retries and the starting page's meta-refresh; hibernate and warm
+  oscillation; repeated deploy refreshes.
+- Persistence: ownership and recovery-condition writes lack fsync and log
+  errors; the boot guard truncates and resets on wall-clock windows
+  (gpt-6.1-sol, codex, claude).
+- Crash closure is best-effort, not a barrier (`runtime.go:2399-2450`)
+  (gpt-6.1-sol, codex).
+- A host-wide fault would hold everything and block the fix's deploy
+  (deepseek).
+- A/B fallback needs state compatibility (gpt-6.1-sol, codex); image
+  blacklisting must not follow host faults (deepseek).
+- Reopen: owner-only for now (all seven); the paper needs an explicit
+  standing policy (codex, claude, muse).
