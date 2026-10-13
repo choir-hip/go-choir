@@ -62,6 +62,36 @@ Every layer has the same envelope:
 
 A derived layer takes `unserved` if its parent layer is `unserved`.
 
+### As built (`choir trace export`, cmd/choir/trace.go)
+
+- `GET /api/runs/{id}/events` answers `{events, next_after}`; `next_after`
+  is 0 on the last page. `limit` defaults to 200 and is clamped to 1000. A
+  run of another owner answers 404 exactly like a missing run.
+- `runs`: ids come from `GET /api/runs?trajectory_id=&limit=500` plus every
+  string under a `run_id` / `loop_id` / `*_run_id` / `*_loop_id` key (or the
+  `*_ids` array forms; `ci_run_id` and `deploy_run_id` excluded) anywhere in
+  the snapshot and the lifecycle events. Each item is the full `RunRecord`
+  from `GET /api/runs/{id}` (the list answers a projection). An id that
+  answers 404 is named in `note`, not a failure.
+- `cells` / `egress` items are the event payload with `event_id`, `loop_id`,
+  `seq` and `ts` added where the payload lacks them. `deliveries` items are
+  `{kind: "update" | "work_item", item}`. Derived layers list
+  `derived from <parent> ...` in `sources`.
+- `revisions`: documents are every string under a `doc_id` / `document_id` /
+  `*_doc_id` key (or `*_doc_ids`) in the snapshot, lifecycle events and run
+  records; run-event payloads are not searched. A 404 document is noted.
+- `publications`: routes come from revision metadata (`corpusd_route_path`,
+  `corpusd_publication_ref.route_path`), from lifecycle events with reason
+  `platform publication accepted` (their `artifact_refs`), and from
+  `/api/universal-wire/stories` entries whose `story_texture_doc_id` is one
+  of the trajectory's documents. The first two are written when a
+  publication is accepted, so the layer is `unserved` only when `revisions`
+  is; a failing stories read is named in `note` without changing status.
+  No route found is `empty`.
+- Any failing route (non-2xx other than the 404s above, or a cursor that
+  does not advance) marks its layer `unserved`, with the HTTP status in
+  `note`. Items read before the failure stay in the layer.
+
 ## Run event kinds added in Cut 0
 
 Both are persisted on the acting desk run (not published on the live bus).

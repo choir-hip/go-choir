@@ -84,6 +84,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runAPIKey(rest, stdout, stderr)
 	case "self-dev":
 		return runSelfDevelopment(rest, stdout, stderr)
+	case "trace":
+		return runTrace(rest, stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, "choir v0 (Phase 1: existing /api/ routes)")
 		return 0
@@ -148,6 +150,8 @@ Commands:
   self-dev approve     Owner's single approval: arm accept_once for exactly the frozen candidate, then decide
   self-dev reject      Reject a candidate awaiting approval (--reason)
   self-dev mode get|set  Read or generation-CAS the explicit computer mode
+  trace export <trajectory> [--out file]  Write a trace bundle (product routes only;
+                      default ~/.config/choir-qa/traces/<trajectory>.json, mode 0600)
   version             Print CLI version
   help                Print this usage
 
