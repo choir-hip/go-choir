@@ -5,7 +5,6 @@ go 1.26.2
 require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/containerd/cgroups/v3 v3.1.3
-	github.com/cpuguy83/gonso v0.2.4
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dolthub/driver/v2 v2.2.0
 	github.com/elastic/go-seccomp-bpf v1.6.0
@@ -19,13 +18,11 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/sergi/go-diff v1.3.1
 	github.com/traefik/yaegi v0.16.1
-	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.52.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0
 	gopkg.in/yaml.v2 v2.4.0
-	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.48.2
 )
 
@@ -81,7 +78,6 @@ require (
 	github.com/cockroachdb/apd/v3 v3.2.3 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
-	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/denisbrodbeck/machineid v1.0.1 // indirect
 	github.com/dolthub/aws-sdk-go-ini-parser v0.0.0-20250305001723-2821c37f6c12 // indirect
 	github.com/dolthub/dolt/go v0.40.5-0.20260716231223-6bea93f2f665 // indirect
@@ -150,6 +146,7 @@ require (
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/sony/gobreaker v0.5.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/tealeg/xlsx v1.0.5 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect

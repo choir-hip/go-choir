@@ -7,7 +7,6 @@ import (
 )
 
 func TestLoadConfigReadsRuntimeEnv(t *testing.T) {
-	t.Setenv("RUNTIME_SUPERVISION_INTERVAL", "7s")
 	t.Setenv("RUNTIME_PROVIDER_TIMEOUT", "3s")
 	t.Setenv("RUNTIME_ACTIVATION_BUDGET", "90s")
 	t.Setenv("RUNTIME_SKILLS_ROOT", "/tmp/choir-skills")
@@ -16,9 +15,6 @@ func TestLoadConfigReadsRuntimeEnv(t *testing.T) {
 	cfg := LoadConfig()
 	if cfg.TextureActorParkIdle != 45*time.Second {
 		t.Fatalf("texture_actor_park_idle = %s, want 45s", cfg.TextureActorParkIdle)
-	}
-	if cfg.SupervisionInterval != 7*time.Second {
-		t.Fatalf("supervision interval = %s, want 7s", cfg.SupervisionInterval)
 	}
 	if cfg.ProviderTimeout != 3*time.Second {
 		t.Fatalf("provider timeout = %s, want 3s", cfg.ProviderTimeout)

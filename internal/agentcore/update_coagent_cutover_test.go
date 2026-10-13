@@ -207,10 +207,9 @@ func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 		t.Fatalf("open store 2: %v", err)
 	}
 	rt := New(provideriface.Config{
-		ComputerID:          "autoputer-test",
-		StorePath:           dbPath,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
+		ComputerID:      "autoputer-test",
+		StorePath:       dbPath,
+		ProviderTimeout: time.Second,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(2*time.Second))
 	setTestDispatch(rt, s2)
 	t.Cleanup(func() {

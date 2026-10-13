@@ -91,7 +91,6 @@ func (p *capturingToolChoiceProvider) CallWithTools(ctx context.Context, req pro
 	return p.responses[idx], nil
 }
 
-
 // --- Integration: Runtime with Tool Registry ---
 
 func TestRuntimeWithToolRegistryUsesToolLoop(t *testing.T) {
@@ -241,10 +240,9 @@ func testRuntimeWithProviderAndRegistry(t *testing.T, provider provideriface.Pro
 
 	bus := events.NewEventBus()
 	cfg := provideriface.Config{
-		ComputerID:          "autoputer-test",
-		StorePath:           dbPath,
-		ProviderTimeout:     5 * time.Second,
-		SupervisionInterval: 1 * time.Hour,
+		ComputerID:      "autoputer-test",
+		StorePath:       dbPath,
+		ProviderTimeout: 5 * time.Second,
 	}
 
 	rt := New(cfg, s, bus, provider)

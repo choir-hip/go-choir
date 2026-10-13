@@ -96,13 +96,12 @@ func DefaultModelPolicyPath(filesRoot string) string {
 func LoadConfig() Config {
 	storePath := envOr("RUNTIME_STORE_PATH", DefaultStorePath)
 	return NormalizeConfig(Config{
-		ComputerID:          envOr("AUTOPUTER_ID", "autoputer-dev"),
-		StorePath:           storePath,
-		PromptRoot:          envOr("RUNTIME_PROMPT_ROOT", defaultPromptRoot(storePath)),
-		SkillsRoot:          envOr("RUNTIME_SKILLS_ROOT", defaultSkillsRoot()),
-		ProviderTimeout:     durationOr("RUNTIME_PROVIDER_TIMEOUT", DefaultProviderTimeout),
-		ActivationBudget:    durationOr("RUNTIME_ACTIVATION_BUDGET", DefaultActivationBudget),
-		SupervisionInterval: durationOr("RUNTIME_SUPERVISION_INTERVAL", 5*time.Second),
+		ComputerID:       envOr("AUTOPUTER_ID", "autoputer-dev"),
+		StorePath:        storePath,
+		PromptRoot:       envOr("RUNTIME_PROMPT_ROOT", defaultPromptRoot(storePath)),
+		SkillsRoot:       envOr("RUNTIME_SKILLS_ROOT", defaultSkillsRoot()),
+		ProviderTimeout:  durationOr("RUNTIME_PROVIDER_TIMEOUT", DefaultProviderTimeout),
+		ActivationBudget: durationOr("RUNTIME_ACTIVATION_BUDGET", DefaultActivationBudget),
 		TextureActorParkIdle: durationOr(
 			"RUNTIME_TEXTURE_ACTOR_PARK_IDLE",
 			DefaultTextureActorParkIdle,

@@ -63,12 +63,11 @@ func testAPISetupWithOptions(t *testing.T, optionsForStore func(*store.Store, st
 		options = append(options, optionsForStore(s, dir)...)
 	}
 	core := agentcore.New(provideriface.Config{
-		ComputerID:          "autoputer-test",
-		StorePath:           dbPath,
-		PromptRoot:          filepath.Join(dir, "prompts"),
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
-		MaildURL:            maildURL,
+		ComputerID:      "autoputer-test",
+		StorePath:       dbPath,
+		PromptRoot:      filepath.Join(dir, "prompts"),
+		ProviderTimeout: time.Second,
+		MaildURL:        maildURL,
 	}, s, bus, provider.NewStubProvider(0), options...)
 	core.SetDispatchActor(func(ctx context.Context, ownerID, computerID, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
 		switch kind {

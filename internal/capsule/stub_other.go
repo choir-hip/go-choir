@@ -39,18 +39,11 @@ func (e *Executor) PreflightSourceSnapshot(context.Context, string) (SourcePrefl
 func (e *Executor) Spawn(context.Context, SpawnSpec) (*Capsule, error) { return nil, stubErr("spawn") }
 func (e *Executor) Destroy(context.Context, string) error              { return stubErr("destroy") }
 func (e *Executor) ForceDestroy(context.Context, string) error         { return stubErr("destroy") }
-func (e *Executor) ControlHandle(string, string) (string, error)       { return "", stubErr("control") }
 func (e *Executor) GrantEngineering(string, string, string, time.Duration) (string, error) {
 	return "", stubErr("grant")
 }
 func (e *Executor) ThawGranted(context.Context, string, string) error {
 	return stubErr("thaw")
-}
-func (e *Executor) DestroyOwned(context.Context, string, string, bool) error {
-	return stubErr("destroy")
-}
-func (e *Executor) InspectOwned(string, string) (CapsuleControlSummary, error) {
-	return CapsuleControlSummary{}, stubErr("inspect")
 }
 func (e *Executor) ExtractOwned(string, string) ([]FileChange, error) { return nil, stubErr("diff") }
 func (e *Executor) ResolveOwnedCapsuleID(string, string) (string, error) {
@@ -77,7 +70,6 @@ func (e *Executor) ResolveGrantedFreezeBindings(string, string) (string, string,
 func (e *Executor) StageGrantedRelease(context.Context, string, string, string) (*StagedRelease, error) {
 	return nil, stubErr("stage")
 }
-func (e *Executor) ListOwned(string) []CapsuleControlSummary { return nil }
 func (e *Executor) MintCapability(string, AgentRole, string, time.Duration) (*Capability, error) {
 	return nil, stubErr("mint")
 }

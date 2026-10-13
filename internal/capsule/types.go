@@ -280,16 +280,6 @@ type CapsuleSummary struct {
 	OwnerRunID string
 }
 
-// CapsuleControlSummary is the agent-safe lifecycle projection. It exposes no
-// raw capsule identity, host path, namespace PID, socket, key, or credential.
-type CapsuleControlSummary struct {
-	Handle               string        `json:"handle"`
-	State                CapsuleState  `json:"state"`
-	MemoryMax            int64         `json:"memory_max"`
-	SourceSnapshotDigest string        `json:"source_snapshot_digest"`
-	Uptime               time.Duration `json:"uptime"`
-}
-
 // CapsuleDiagnostics is the result of a host-side diagnostic inspection.
 type CapsuleDiagnostics struct {
 	ID          string

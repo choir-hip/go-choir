@@ -85,11 +85,10 @@ func newTraceWiringRuntime(t *testing.T, traceStore trace.Store) (*Runtime, func
 
 	opts := []RuntimeOption{WithTraceStore(traceStore)}
 	rt := New(provideriface.Config{
-		ComputerID:          "autoputer-trace-test",
-		StorePath:           dbPath,
-		PromptRoot:          promptRoot,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
+		ComputerID:      "autoputer-trace-test",
+		StorePath:       dbPath,
+		PromptRoot:      promptRoot,
+		ProviderTimeout: time.Second,
 	}, s, events.NewEventBus(), provider.NewStubProvider(0), opts...)
 	setTestDispatch(rt, s)
 

@@ -860,7 +860,6 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		PromptRoot:                      rtRuntimeCfg.PromptRoot,
 		SkillsRoot:                      rtRuntimeCfg.SkillsRoot,
 		ProviderTimeout:                 rtRuntimeCfg.ProviderTimeout,
-		SupervisionInterval:             rtRuntimeCfg.SupervisionInterval,
 		TextureActorParkIdle:            rtRuntimeCfg.TextureActorParkIdle,
 		VmctlURL:                        rtRuntimeCfg.VmctlURL,
 		MaildURL:                        rtRuntimeCfg.MaildURL,

@@ -130,11 +130,10 @@ func TestTextureOwnerStartDoesNotWakeTextureAfterRestart(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = s2.Close() })
 	rt := agentcore.New(provideriface.Config{
-		ComputerID:          "autoputer-texture-restart",
-		StorePath:           dbPath,
-		PromptRoot:          filepath.Join(t.TempDir(), "prompts"),
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
+		ComputerID:      "autoputer-texture-restart",
+		StorePath:       dbPath,
+		PromptRoot:      filepath.Join(t.TempDir(), "prompts"),
+		ProviderTimeout: time.Second,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	t.Cleanup(rt.Stop)
@@ -231,7 +230,7 @@ func TestTextureOwnerRestartLeavesOtherComputerMutationAlone(t *testing.T) {
 	t.Cleanup(func() { _ = s2.Close() })
 	rt := agentcore.New(provideriface.Config{
 		ComputerID: "computer-b", StorePath: dbPath, PromptRoot: filepath.Join(t.TempDir(), "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		ProviderTimeout: time.Second,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	t.Cleanup(rt.Stop)
@@ -351,8 +350,8 @@ func TestTextureOwnerStartLeavesRuntimeRestartedPassivatedRun(t *testing.T) {
 	t.Cleanup(func() { _ = s2.Close() })
 	rt := agentcore.New(provideriface.Config{
 		ComputerID: computerID, StorePath: dbPath,
-		PromptRoot: filepath.Join(t.TempDir(), "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		PromptRoot:      filepath.Join(t.TempDir(), "prompts"),
+		ProviderTimeout: time.Second,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 	t.Cleanup(rt.Stop)
@@ -480,8 +479,8 @@ func TestTextureOwnerStartLeavesOpenWorkPassivatedRunWithoutExecutor(t *testing.
 	t.Cleanup(func() { _ = s2.Close() })
 	rt := agentcore.New(provideriface.Config{
 		ComputerID: computerID, StorePath: dbPath,
-		PromptRoot: filepath.Join(t.TempDir(), "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		PromptRoot:      filepath.Join(t.TempDir(), "prompts"),
+		ProviderTimeout: time.Second,
 	}, s2, events.NewEventBus(), provider.NewStubProvider(0))
 	dispatches := 0
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error {

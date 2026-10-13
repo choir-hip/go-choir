@@ -84,10 +84,9 @@ func testStreamingRuntime(t *testing.T, provider provideriface.Provider) (*Runti
 
 	bus := events.NewEventBus()
 	cfg := provideriface.Config{
-		ComputerID:          "autoputer-streaming-test",
-		StorePath:           dbPath,
-		ProviderTimeout:     5 * time.Second,
-		SupervisionInterval: 1 * time.Hour,
+		ComputerID:      "autoputer-streaming-test",
+		StorePath:       dbPath,
+		ProviderTimeout: 5 * time.Second,
 	}
 
 	rt := New(cfg, s, bus, provider)

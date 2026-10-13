@@ -25,7 +25,7 @@ func TestActivationBudgetDeadlineIsDurableAndIdempotent(t *testing.T) {
 
 	adapter := New(provideriface.Config{
 		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		ProviderTimeout: time.Second,
 	}, s, events.NewEventBus(), provider.NewStubProvider(0), nil, WithKernelMode())
 	t.Cleanup(adapter.cleanupLog)
 

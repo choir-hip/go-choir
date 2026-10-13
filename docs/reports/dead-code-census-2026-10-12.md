@@ -88,15 +88,19 @@ the owner the questions that a grep cannot answer.
     processor metadata keys, D3, and the spawn_agent flags.
   - Cut 2: the Universal Wire and texture merge frontend, the sourcecycled
     daemon, the 24 Store B tables, and D2.
-- **Residuals:**
-  - `go.mod` still requires gonso and go-keyring. A tidy changes the vendor
-    tree and the nix hash, so it waits for a deliberate dependency commit.
-  - `capsule.Executor.ListOwned`, `DestroyOwned` and `ControlHandle` may
-    have lost their last callers.
-  - `SupervisionInterval` is still set by actorruntime tests.
-  - The decision-policy JSON still names the solitaire tables in
-    `blast_radius`; that JSON is hash-pinned, so it was left alone.
-  - Node B's gateway env lists retired models (M0 residual).
+- **Residuals (closed in the leftovers commit):**
+  - `go.mod` tidied: gonso, go-keyring, wincred and the explicit yaml.v3
+    dropped; the nix vendorHash was recomputed on Node B (x86_64).
+  - `capsule.Executor.ListOwned`, `DestroyOwned`, `ControlHandle` and
+    `InspectOwned` had no callers; deleted with their stubs and
+    `CapsuleControlSummary`.
+  - `SupervisionInterval` and `RUNTIME_SUPERVISION_INTERVAL` deleted from
+    the config and every test.
+  - Node B's gateway env now sets `GATEWAY_CHATGPT_MODELS=gpt-6-luna`
+    (M0 residual closed).
+  - Kept on purpose: the decision-policy JSON still names the solitaire
+    tables in `blast_radius`. That JSON is hash-pinned and stored self-dev
+    receipts cite its digests, so editing it would orphan those receipts.
 
 ## Size
 

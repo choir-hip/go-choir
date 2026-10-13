@@ -271,11 +271,10 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 	t.Cleanup(func() { _ = s.Close() })
 
 	cfg := provideriface.Config{
-		ComputerID:          "autoputer-test",
-		StorePath:           dbPath,
-		PromptRoot:          promptRoot,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
+		ComputerID:      "autoputer-test",
+		StorePath:       dbPath,
+		PromptRoot:      promptRoot,
+		ProviderTimeout: time.Second,
 	}
 
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
@@ -459,7 +458,7 @@ func TestAdapterRestartInterruptsRunningTextureActivationFromDurableBacklog(t *t
 
 	cfg := provideriface.Config{
 		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		ProviderTimeout: time.Second,
 	}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	if err := adapter.BindTextureOwner(textureowner.NewHandler(adapter.Runtime)); err != nil {
@@ -517,7 +516,7 @@ func TestAdapterStartDeliversDurableLifecycleOccurrenceAfterPlannedRestart(t *te
 	t.Cleanup(func() { _ = s.Close() })
 	cfg := provideriface.Config{
 		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		ProviderTimeout: time.Second,
 	}
 
 	seed := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
@@ -666,11 +665,10 @@ func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testin
 		release: make(chan struct{}),
 	}
 	cfg := provideriface.Config{
-		ComputerID:          "autoputer-startup",
-		StorePath:           dbPath,
-		PromptRoot:          filepath.Join(dir, "prompts"),
-		ProviderTimeout:     10 * time.Second,
-		SupervisionInterval: time.Hour,
+		ComputerID:      "autoputer-startup",
+		StorePath:       dbPath,
+		PromptRoot:      filepath.Join(dir, "prompts"),
+		ProviderTimeout: 10 * time.Second,
 	}
 	adapter := New(cfg, s, events.NewEventBus(), blocking, nil)
 	t.Cleanup(func() {
@@ -866,7 +864,7 @@ func TestHandlerParkedLifecycleControlReconcilesBeforeRetryAcknowledgement(t *te
 	provider := &countingLifecycleProvider{}
 	cfg := provideriface.Config{
 		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		ProviderTimeout: time.Second,
 	}
 	// Bare runtime, never started: no dispatcher loop, so no deferred-producer
 	// activation retries race the synchronous handler boundary below (the
@@ -988,7 +986,7 @@ func TestHandlerCoagentResultRecoversBoundRunFromDeliveredToRunID(t *testing.T) 
 	provider := &countingLifecycleProvider{}
 	cfg := provideriface.Config{
 		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		ProviderTimeout: time.Second,
 	}
 	// Bare runtime, never started: same determinism fix as the parked-handler
 	// test above — the unbound texture owner's deferred activation retries must
@@ -2143,7 +2141,7 @@ func TestAdapterSQLitePersistsExactTextureReportAndDocumentRevisionOccurrencesBe
 		t.Fatal(err)
 	}
 
-	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 	owner := textureowner.NewHandler(adapter.Runtime)
@@ -2247,7 +2245,7 @@ func TestAdapterSQLiteBootDispatchesNoTextureRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 	owner := textureowner.NewHandler(adapter.Runtime)
@@ -2486,7 +2484,7 @@ func TestAdapterSQLitePreBindResearchRecoveryBindsAndExecutesWithoutSnapshot(t *
 	t.Cleanup(func() { _ = s.Close() })
 	counting := &admissionRecoveryCountingProvider{stub: provider.NewStubProvider(0)}
 	const ownerID, computerID = "owner-adapter-prebind-recovery", "computer-adapter-prebind-recovery"
-	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second}
 	adapter := New(cfg, s, events.NewEventBus(), counting, nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 	rec := seedAdapterLifecycleResearchControl(t, s, adapter.Runtime, ownerID, computerID, "prebind-missing-snapshot", true)
@@ -2646,7 +2644,7 @@ func TestAdapterSQLiteStartAcknowledgesCancelledTextureDocumentRevisionOccurrenc
 	}
 
 	providerCalls := &countingLifecycleProvider{targetAgentID: textureAgentID}
-	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: computerID, StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second}
 	adapter := New(cfg, s, events.NewEventBus(), providerCalls, nil)
 	t.Cleanup(adapter.Stop)
 	if err := adapter.BindTextureOwner(textureowner.NewHandler(adapter.Runtime)); err != nil {
@@ -2811,7 +2809,7 @@ func TestKernelOutboxProjectorMintsOneSQLiteActorWake(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 	adapter := New(provideriface.Config{
 		ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"),
-		ProviderTimeout: time.Second, SupervisionInterval: time.Hour,
+		ProviderTimeout: time.Second,
 	}, s, events.NewEventBus(), provider.NewStubProvider(0), nil, WithKernelMode())
 	t.Cleanup(func() {
 		adapter.Stop()
@@ -2870,7 +2868,7 @@ func TestDispatchAtRedrivesConsumedCoagentResultWithSaltedGeneration(t *testing.
 	}
 	t.Cleanup(func() { _ = s.Close() })
 
-	cfg := provideriface.Config{ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second, SupervisionInterval: time.Hour}
+	cfg := provideriface.Config{ComputerID: "autoputer-test", StorePath: dbPath, PromptRoot: filepath.Join(dir, "prompts"), ProviderTimeout: time.Second}
 	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() { adapter.Stop(); adapter.cleanupLog() })
 

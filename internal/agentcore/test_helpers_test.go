@@ -122,7 +122,6 @@ func toolContextForTestCall(run *types.RunRecord, callID string) context.Context
 	return toolregistry.WithExecutionContext(context.Background(), execution)
 }
 
-
 func startBoundLegacyEngineeringResultRun(t *testing.T, s *store.Store, target types.AgentRecord, suffix string) *types.RunRecord {
 	t.Helper()
 	ctx := context.Background()
@@ -212,11 +211,10 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 
 	bus := events.NewEventBus()
 	rt := New(provideriface.Config{
-		ComputerID:          "autoputer-test",
-		StorePath:           dbPath,
-		PromptRoot:          promptRoot,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
+		ComputerID:      "autoputer-test",
+		StorePath:       dbPath,
+		PromptRoot:      promptRoot,
+		ProviderTimeout: time.Second,
 	}, s, bus, provider.NewStubProvider(0), WithContentService(contentowner.NewService(s, bus)))
 	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
@@ -336,11 +334,10 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 
 	bus := events.NewEventBus()
 	rt := New(provideriface.Config{
-		ComputerID:          "autoputer-test",
-		StorePath:           dbPath,
-		PromptRoot:          promptRoot,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
+		ComputerID:      "autoputer-test",
+		StorePath:       dbPath,
+		PromptRoot:      promptRoot,
+		ProviderTimeout: time.Second,
 	}, s, bus, provider.NewStubProvider(0), WithContentService(contentowner.NewService(s, bus)))
 
 	setTestDispatch(rt, s)
@@ -442,9 +439,8 @@ func testPromptRuntime(t *testing.T) *Runtime {
 	promptRoot := filepath.Join(t.TempDir(), "prompts")
 	return &Runtime{
 		cfg: provideriface.Config{
-			ComputerID:          "autoputer-prompt-test",
-			PromptRoot:          promptRoot,
-			SupervisionInterval: time.Hour,
+			ComputerID: "autoputer-prompt-test",
+			PromptRoot: promptRoot,
 		},
 		promptStore: promptstore.New(promptRoot),
 		modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}),

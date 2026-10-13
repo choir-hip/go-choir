@@ -133,12 +133,11 @@ func promptEvalTestSetup(t *testing.T, policyPath string) (*agentcore.Runtime, *
 	}
 	bus := events.NewEventBus()
 	core := agentcore.New(provideriface.Config{
-		ComputerID:          "autoputer-test",
-		StorePath:           dbPath,
-		PromptRoot:          filepath.Join(dir, "prompts"),
-		ModelPolicyPath:     policyPath,
-		ProviderTimeout:     time.Second,
-		SupervisionInterval: time.Hour,
+		ComputerID:      "autoputer-test",
+		StorePath:       dbPath,
+		PromptRoot:      filepath.Join(dir, "prompts"),
+		ModelPolicyPath: policyPath,
+		ProviderTimeout: time.Second,
 	}, s, bus, provider.NewStubProvider(0), agentcore.WithContentService(contentowner.NewService(s, bus)))
 	core.SetDispatchActor(func(ctx context.Context, ownerID, computerID, _ string, kind, content, _, _ string) error {
 		if kind != "initial_dispatch" || strings.TrimSpace(content) == "" {

@@ -176,10 +176,6 @@ type Config struct {
 	// The runtime persists a terminal progress-deadline outcome when it expires.
 	ActivationBudget time.Duration
 
-	// SupervisionInterval is legacy reserved configuration. The old polling
-	// supervisor has been deleted and this value is currently unused.
-	SupervisionInterval time.Duration
-
 	// TextureActorParkIdle enables default park-on-idle for Texture revision
 	// actors when positive. Hand-constructed test configs leave this zero unless
 	// they opt into parked lifecycle behavior explicitly.

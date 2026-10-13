@@ -1182,17 +1182,6 @@ func (e *Executor) resolveOne(agentRunID, handle, verb string) (*Capability, *Ca
 	return capability, caps, nil
 }
 
-func (e *Executor) ControlHandle(agentRunID, capsuleID string) (string, error) {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	for key, id := range e.controlHandles {
-		if key.AgentRunID == agentRunID && id == capsuleID {
-			return key.Handle, nil
-		}
-	}
-	return "", fmt.Errorf("capsule control handle unavailable")
-}
-
 func (e *Executor) GrantEngineering(managementRunID, controlHandle, engineeringRunID string, ttl time.Duration) (string, error) {
 	capsuleID, err := e.resolveControl(managementRunID, controlHandle)
 	if err != nil {
@@ -1203,31 +1192,6 @@ func (e *Executor) GrantEngineering(managementRunID, controlHandle, engineeringR
 		return "", err
 	}
 	return capability.Handle, nil
-}
-
-func (e *Executor) DestroyOwned(ctx context.Context, agentRunID, handle string, force bool) error {
-	capsuleID, err := e.resolveControl(agentRunID, handle)
-	if err != nil {
-		return err
-	}
-	if force {
-		return e.ForceDestroy(ctx, capsuleID)
-	}
-	return e.Destroy(ctx, capsuleID)
-}
-
-func (e *Executor) InspectOwned(agentRunID, handle string) (CapsuleControlSummary, error) {
-	capsuleID, err := e.resolveControl(agentRunID, handle)
-	if err != nil {
-		return CapsuleControlSummary{}, err
-	}
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	caps := e.capsules[capsuleID]
-	if caps == nil {
-		return CapsuleControlSummary{}, fmt.Errorf("capsule control handle unavailable")
-	}
-	return CapsuleControlSummary{Handle: handle, State: caps.State, MemoryMax: caps.MemoryMax, Uptime: time.Since(caps.StartedAt), SourceSnapshotDigest: caps.SourceSnapshotDigest}, nil
 }
 
 func (e *Executor) ExtractOwned(agentRunID, handle string) ([]FileChange, error) {
@@ -1737,22 +1701,6 @@ func (e *Executor) emitSourcePatch(caps *Capsule, changes []FileChange, temporar
 // results.
 func (e *Executor) ResolveOwnedCapsuleID(agentRunID, handle string) (string, error) {
 	return e.resolveControl(agentRunID, handle)
-}
-
-func (e *Executor) ListOwned(agentRunID string) []CapsuleControlSummary {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	out := make([]CapsuleControlSummary, 0)
-	for key, capsuleID := range e.controlHandles {
-		if key.AgentRunID != agentRunID {
-			continue
-		}
-		if caps := e.capsules[capsuleID]; caps != nil {
-			out = append(out, CapsuleControlSummary{Handle: key.Handle, State: caps.State, MemoryMax: caps.MemoryMax, Uptime: time.Since(caps.StartedAt)})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Handle < out[j].Handle })
-	return out
 }
 
 func (e *Executor) resolveControl(agentRunID, handle string) (string, error) {
