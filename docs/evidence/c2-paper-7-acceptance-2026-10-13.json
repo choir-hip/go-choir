@@ -1,0 +1,21 @@
+{
+  "cut": "C2 unit 2b: living stories and automatic publishing, after B12, B12b and B13",
+  "commit": "761d94c5",
+  "staging_identity": "761d94c51b6c57040e375023f0b10b7fcf0c2346",
+  "scenario": "node scripts/reeng_tracer.mjs --label c2-paper-7 --scenario paper --sources rss:bbc_world,rss:guardian_world,rss:npr_world --interval-min 10 --max-items 4 --expect-sha 761d94c5",
+  "tracer_exit": 0,
+  "contamination": [],
+  "result": {
+    "owner_act": "POST /api/autopaper/sources/schedules for three feeds; nothing else",
+    "capture_arrival_records": 3,
+    "stories_opened_by_management": 12,
+    "stories_published_automatically": 9,
+    "public_bundle": "HTTP 200 logged out; 2 citations; checks pending; nav {revision 3, prev 2, latest 3}",
+    "front_list": "9 stories listed publicly"
+  },
+  "open": [
+    "check overlay showed pending only; exact/failed badges not yet seen on staging",
+    "test-computer stories are on the public front list until CORPUSD_AUTOPAPER_OWNERS names the paper computer's owner",
+    "first public version is v2 (the empty seed is revision 1), as the freeze receipt draft records"
+  ]
+}
