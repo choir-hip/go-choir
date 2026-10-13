@@ -1276,6 +1276,8 @@ jobs:
                   echo "    Checkpoint worker pointer installed; timer remains authoritative"
                   continue
                 fi
+                # A deploy releases a unit latched by its start limit (L1a).
+                systemctl reset-failed "go-choir-${service}.service" 2>/dev/null || true
                 systemctl restart "go-choir-${service}.service"
                 systemctl is-active --quiet "go-choir-${service}.service"
                 echo "    Restarted go-choir-${service}.service"
@@ -1294,6 +1296,8 @@ jobs:
             echo "==> Ensuring edge config and host services are live"
             if [ "${DEPLOY_HOST}" = "true" ] && [ "${service_pointer_deploy}" != "true" ]; then
               systemctl daemon-reload || true
+              # A deploy releases a unit latched by its start limit (L1a).
+              systemctl reset-failed go-choir-auth go-choir-maild go-choir-corpusd go-choir-gateway go-choir-proxy 2>/dev/null || true
               systemctl restart \
                 go-choir-auth \
                 go-choir-maild \
@@ -1334,6 +1338,7 @@ jobs:
               if [ -n "$vmctl_started_at_deploy_start" ] && [ -n "$vmctl_started_now" ] && [ "$vmctl_started_now" != "$vmctl_started_at_deploy_start" ] && systemctl is-active --quiet go-choir-vmctl; then
                 echo "    vmctl already restarted by this deploy; not restarting it again"
               else
+                systemctl reset-failed go-choir-vmctl 2>/dev/null || true
                 systemctl restart go-choir-vmctl
               fi
               # vmctl answers health only after its reattach pass, which

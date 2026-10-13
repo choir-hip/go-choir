@@ -576,6 +576,9 @@ EOF
   };
 
   systemd.services.go-choir-guest-receipt-signer = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 5 starts in 10 minutes the unit stays failed until the computer is restarted from outside.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 5;
     description = "Isolated guest-core receipt signer";
     wantedBy = [ "multi-user.target" ];
     after = [ "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer-state-migration.service" ];
@@ -613,6 +616,9 @@ EOF
   };
 
   systemd.services.go-choir-verifier-signer = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 5 starts in 10 minutes the unit stays failed until the computer is restarted from outside.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 5;
     description = "Isolated verifier receipt signer";
     wantedBy = [ "multi-user.target" ];
     after = [ "go-choir-extract-cmdline.service" ];
@@ -683,6 +689,9 @@ EOF
   };
 
   systemd.services.go-choir-updater = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 5 starts in 10 minutes the unit stays failed until the computer is restarted from outside.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 5;
     description = "Choir guest release updater";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer.service" ];
@@ -728,6 +737,9 @@ EOF
   # inside the VM. Provider credentials are never in the guest (VAL-VM-011).
   # LLM calls route through the host-side gateway using the extracted token.
   systemd.services.go-choir-autoputer = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 5 starts in 10 minutes the unit stays failed until the computer is restarted from outside.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 5;
     description = "go-choir Autoputer Runtime (VM guest)";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" "go-choir-updater.service" ];

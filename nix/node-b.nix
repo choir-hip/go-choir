@@ -360,6 +360,9 @@ in
   #   sd_notify causes the service to be killed every 30 seconds.
 
   systemd.services.go-choir-auth = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
     description = "go-choir Auth Service";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" ];
@@ -386,6 +389,9 @@ in
   };
 
   systemd.services.go-choir-proxy = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
     description = "go-choir Proxy Service";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-auth.service" "go-choir-corpusd.service" "go-choir-maild.service" ];
@@ -432,6 +438,9 @@ in
   };
 
   systemd.services.go-choir-maild = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
     description = "go-choir Mail Service";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" ];
@@ -462,6 +471,9 @@ in
   };
 
   systemd.services.go-choir-platform-dolt = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
     description = "go-choir Platform Dolt SQL Server";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" ];
@@ -492,6 +504,9 @@ in
   # is the point of the split (docs/designs/
   # platform-dolt-storage-normalization-2026-09-18.md).
   systemd.services.go-choir-corpus-dolt = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
     description = "go-choir Corpus Dolt SQL Server (Store B)";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" ];
@@ -522,6 +537,9 @@ in
   };
 
   systemd.services.go-choir-corpusd = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
     description = "go-choir Platform Service";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ];
@@ -609,6 +627,9 @@ in
   };
 
   systemd.services.go-choir-vmctl = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
     description = "go-choir VMCtl Service (Firecracker VM lifecycle)";
     wantedBy = [ "multi-user.target" ];
     # The deploy restarts vmctl once, after the service pointer holds the new
@@ -813,6 +834,9 @@ in
   };
 
   systemd.services.go-choir-gateway = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
     description = "go-choir Gateway Service";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" "searx.service" ];

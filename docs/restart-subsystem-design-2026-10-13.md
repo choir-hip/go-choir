@@ -223,11 +223,13 @@ detector fires once for the host fault.
    engineering capsule reconcile, self-development reconcile and
    post-commit, the wake projector's pre-boot sweep, the
    `selfdev_materialization_retry` exemption), and crash closure settles
-   those transitions to terminal fates instead; warm sweeps never warm a
-   computer stopped as wedged, failed or `recovery_failed`.
+   those transitions to terminal fates instead; deploys release units
+   latched by their start limit (`systemctl reset-failed` before each
+   restart).
 2. **L1b, the boot ledger**: grants at `launchFirecracker` keyed by spawn
    sequence, no ungranted epoch auto-increment, exhaustion sets the existing
-   hold with a `recovery-ledger` class, owner acts are explicit mutations
+   hold with a `recovery-ledger` class, a wedged or failed computer gets
+   the one automatic retry and then holds, owner acts are explicit mutations
    only, the held page does not refresh, the proxy treats the hold refusal
    as final, deploy refresh releases a recovery hold only for a different
    build.
@@ -349,8 +351,12 @@ Raw outputs: `.agentic-consensus/restart-convergent-2026-10-13/` and
    (`internal/actorruntime/handler.go:98-113`).
 8. **Warm sweeps warm wedged computers** (muse, deepseek):
    `WarmAlwaysOnDesktops` filters state but not `stopped_by=wedged`
-   (`ownership.go:3051-3053`). Filter it in L1a; it closes the wedge-warm
-   cycle on its own.
+   (`ownership.go:3051-3053`). Correction at build time: a bare filter
+   contradicts the owner's ruling of 2026-10-10 (`internal/vmctl/wedge.go`:
+   "the always-on policy or the next page load boots it again. The owner
+   never has to"). The wedge-warm cycle is slow (at least five minutes
+   wedged per cycle), so the filter moves to L1b, where a wedged computer
+   gets the episode's one automatic retry from the ledger and is then held.
 
 ### Non-blocking, adopted
 
