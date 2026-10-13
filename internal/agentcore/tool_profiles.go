@@ -402,6 +402,12 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 		Captures: researchtools.NewCorpusdCaptureSink(rt.cfg.CorpusdURL),
 	}
 	rt.researchDeps = &researchDeps
+	// Texture cites from the same captures research reads into (Cut 2 2a,
+	// A2). With no corpusd configured nothing is captured, so every new
+	// citation is refused as not captured.
+	if strings.TrimSpace(rt.cfg.CorpusdURL) != "" {
+		rt.SetTextureCaptures(researchtools.NewTextureCaptures(researchDeps.Captures, rt.cfg.ComputerID))
+	}
 	var deskCellRegistries = map[string]*toolregistry.ToolRegistry{}
 	for _, deskProfile := range []string{agentprofile.Management, agentprofile.Texture, agentprofile.Research} {
 		if !deskCarrierLive(deskProfile) {

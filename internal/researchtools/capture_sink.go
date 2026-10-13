@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -190,8 +191,14 @@ func (c *CorpusdCaptureSink) get(ctx context.Context, target string, limit int64
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("%w: %s", ErrCaptureNotFound, strings.TrimSpace(string(raw)))
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("corpusd returned %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
 	}
 	return raw, nil
 }
+
+// ErrCaptureNotFound is corpusd's answer for a capture id it does not hold.
+var ErrCaptureNotFound = errors.New("capture not found")

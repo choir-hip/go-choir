@@ -123,17 +123,6 @@ var (
 	fenceRE     = regexp.MustCompile("^```\\s*([A-Za-z0-9_+-]*)\\s*$")
 )
 
-// Parse reads a Write script into ops. It checks the grammar only; Check
-// adds the aliases and frame handles, Apply everything else.
-func Parse(script string) ([]Op, error) {
-	var errs Errors
-	ops := parse(script, &errs)
-	if len(errs) > 0 {
-		return nil, errs.sorted()
-	}
-	return ops, nil
-}
-
 func parse(script string, errs *Errors) []Op {
 	script = strings.ReplaceAll(script, "\r\n", "\n")
 	script = strings.ReplaceAll(script, "\r", "\n")

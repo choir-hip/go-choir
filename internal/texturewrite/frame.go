@@ -240,7 +240,7 @@ func RecordsFrom(in []RecordInput) []FrameRecord {
 			fr.Summary = packet.Summary
 			for j, s := range packet.Sources {
 				handle := alias + ".c" + strconv.Itoa(j+1)
-				fr.Sources = append(fr.Sources, Source{Handle: handle, URL: strings.TrimSpace(s.Target.URI), Title: strings.TrimSpace(s.Target.Title), Excerpt: strings.TrimSpace(s.Excerpt)})
+				fr.Sources = append(fr.Sources, Source{Handle: handle, URL: strings.TrimSpace(s.Target.URI), CaptureID: strings.TrimSpace(s.Target.CaptureID), Title: strings.TrimSpace(s.Target.Title), Excerpt: strings.TrimSpace(s.Excerpt)})
 				if id := strings.TrimSpace(s.SourceID); id != "" {
 					bySourceID[id] = handle
 				}

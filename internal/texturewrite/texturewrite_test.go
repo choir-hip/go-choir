@@ -348,6 +348,11 @@ func TestFrameRendersAliasesRecordsAndSources(t *testing.T) {
 	if handles["r1.c1"].URL != "https://example.org/court" {
 		t.Fatalf("handles = %+v", handles)
 	}
+	// A source research Read names its capture; the handle resolves by it.
+	captured := RecordsFrom([]RecordInput{{Seq: 8, Kind: "report", From: "research:doc", Body: `{"kind":"evidence_update","summary":"s","sources":[{"source_id":"s1","target":{"uri":"https://example.org/court","capture_id":"cap-1"}}]}`}})
+	if src := Handles(captured)["r1.c1"]; src.CaptureID != "cap-1" || src.Key() != "cap-1" {
+		t.Fatalf("captured source = %+v, want it keyed by its capture id", src)
+	}
 }
 
 // A long document's frame carries a section digest with the recently edited

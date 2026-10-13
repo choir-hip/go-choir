@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -2064,7 +2065,7 @@ func TestPersistentManagementRewakeReceivesPendingEngineeringCancellationReports
 	}
 
 	// Commit a second control in the same trajectory to rewake Management
-	controlPacket, err := PrepareTextureControlPacket(types.CoagentSourcePacketPayload{
+	controlPacket, err := normalizedControlPacket(types.CoagentSourcePacketPayload{
 		SchemaVersion: types.CoagentSourcePacketSchemaV1, Kind: "execution_request",
 		Summary: "Author, freeze, and propose the bound self-development operation.",
 		Sources: []types.CoagentPacketSource{{SourceID: "src-op", Kind: "capsule_bundle", Target: types.CoagentPacketSourceTarget{URI: "operation:selfdev-test"}}},
@@ -2443,4 +2444,12 @@ func TestBootWorkItemSweepSkipsPersistentManagement(t *testing.T) {
 	if _, err := rt.latestActiveRunByAgent(ctx, ownerID, managementAgent.AgentID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("boot work-item sweep minted unexpected Management run: err=%v", err)
 	}
+}
+
+// normalizedControlPacket is the normalization and validation a control
+// packet gets before the store queues it.
+func normalizedControlPacket(packet types.CoagentSourcePacketPayload) (types.CoagentSourcePacketPayload, error) {
+	packet.SchemaVersion = types.CoagentSourcePacketSchemaV1
+	packet = coagentpacket.Normalize(packet)
+	return packet, coagentpacket.Validate(packet)
 }

@@ -239,6 +239,19 @@ func TestDoneAloneCompletesTheWorkAtTheCurrentRevision(t *testing.T) {
 	if head := headOf(t, s, rec); head.RevisionID != base.RevisionID {
 		t.Fatalf("Done minted a revision")
 	}
+
+	// B5: a records-route run settles its work item only while it is open.
+	// A later Done (or a Write with Done) on the completed item commits its
+	// turn instead of failing on the closed work.
+	rec.Metadata[textureRecordsRouteMetadata] = true
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Done: "still answered"}), "done-2"); err != nil {
+		t.Fatalf("Done on a records-route run with closed work: %v", err)
+	}
+	write := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Done: "answered with a fix",
+		Write: &yaegikernel.TextureWrite{Edits: "@replace b3\nA corrected closing line.", Why: "correct the close"}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, write, "done-3"); err != nil {
+		t.Fatalf("Write and Done on a records-route run with closed work: %v", err)
+	}
 }
 
 func TestWaitAndRejectCarryTheDispatchFoldAndTheCursor(t *testing.T) {
