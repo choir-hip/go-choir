@@ -162,3 +162,104 @@ tiers.
 3. Confirm Taiwan/East Asia as the first vertical.
 4. Whether C1e lands before the intake redesign (synthesis default) or in
    parallel.
+
+## Convergent round (2026-10-13, same day)
+
+Panel: convergent, seven selected; six answered (claude, codex,
+gpt-6.1-sol, deepseek, gemini: **ready with changes**; opencode: **not
+ready**); devin produced no review (its non-interactive tool call was
+rejected). Prompt: `.agentic-consensus/roadmap-convergent-prompt-2026-10-13.md`.
+The blocking findings overlap; adopted as follows.
+
+### Corrections to the synthesis above
+
+- **Cast hypotheses are not dropped.** `castBodyFromPacket`
+  (`internal/agentcore/inbox_records.go`) lifts them into the typed Cast,
+  and the inbox fold gives them stable H-ids with open, settled and dropped
+  states (`internal/store/inbox.go`). What is missing is a resolution
+  criterion, a horizon, a settler that acts, and scoring (claude,
+  gpt-6.1-sol). Station 2 is smaller than written.
+- **The unwired near-duplicate path is not a candidate.** `qdrant_dedup.go`
+  needs Qdrant and Ollama, neither provisioned, and it drops items with only
+  a log line, which breaks "every capture has a recorded disposition"
+  (claude, gemini, deepseek). Retire it as dead code; do not wire it.
+
+### Adopted changes (blocking)
+
+1. **Admission shape** (claude, opencode, gpt-6.1-sol). The runtime does
+   only lossless, identity-preserving reductions: exact duplicates by URL or
+   content hash (already in `sourcegraph/captures.go`), per-item language
+   as metadata, and grouping proposed as an observation a desk can split or
+   merge. Captures reach management as **one digest record per poll
+   window**. Dispositions are authored by a model: a cheap triage call per
+   digest, not per capture, applies management's written policy (standing
+   questions, exploration share) and records a disposition for every
+   capture, escalating candidates. The runtime never thresholds a capture
+   out of a model's sight, and a near-duplicate is a recorded, reversible
+   disposition, never a drop.
+2. **Station 1 acceptance must be runnable and safe** (claude, gemini,
+   gpt-6.1-sol, deepseek). The replay runs on a minted test computer, never
+   the paper computer (published versions are permanent). Bursts enter
+   through the real poller: a test source schedule pointing at a
+   deterministic fixture feed. A frozen labelled set (model-proposed,
+   owner-sampled, at least 40 material events, multilingual duplicates,
+   wire copies, corrections and contradictions) is built during station 0.
+   Acceptance adds paid calls per digest versus per unique event, replay
+   completion time, recall by language and source class, and the audit
+   sample.
+3. **Station 3 splits into a deterministic gate and a live soak**
+   (deepseek, gemini, gpt-6.1-sol). Gate: a seeded zh-TW/en/ja fixture
+   proves question match, cross-lingual grouping and a structured
+   resolution end to end within a tracer run. The 14-day live window is an
+   observation that does not hold the station. Questions are chosen with
+   scheduled resolutions (TWSE monthly revenue by the 10th, CISA KEV). A
+   200-pair cross-lingual evaluation precedes choosing a grouping model.
+   Telegram stays out pending the owner's ruling; CNA and UDN stay out if
+   Autopaper counts as commercial.
+4. **Station 4 gets a test and loses its hidden prerequisite** (all).
+   Reader: one pinned story version opens with PDF and media evidence and
+   every chip resolves to a capture block, for a logged-out reader.
+   Autoradio: an audio artifact names the exact version it narrates, and a
+   later correction produces a new edition citing the change. Self-
+   development authoring is optional, not a gate (Gate 2 stays deferred).
+   The full apps rebuild moves to a later metamission; the owner is told
+   Autoradio slips past "about a month" unless it is pulled forward.
+5. **Cost boundary, written as a named amendment** (all). Proposed text:
+   "Owner amendment 2026-10-13 ('cost and performance first') to the
+   2026-10-12 'no budgets' boundary: spend is measured, not budgeted, by the
+   runtime. Every station's acceptance reports measured cost from trace
+   events (the llmcost aggregator) as $/capture, $/story and $/settled
+   hypothesis. Any ceiling is an owner kill switch in provider or host
+   policy, never a value the runtime reads to decide. No new recurring
+   spend (paid APIs, licences, hosts) without owner sign-off. No runtime
+   reasoning budgets, round caps or runtime scoring."
+6. **Station 2 smallest version** (claude, gpt-6.1-sol, opencode). Add
+   `resolves_by` (7 days or less) and `criterion` to Cast hypotheses;
+   settlement (outcome plus evidence refs, by the designated settler) stays
+   separate from scoring (a separate record with scorer identity, from Jev
+   or a model). Score the committed hypothesis version with its original
+   probability; require that the commitment's seq precedes the earliest
+   capture its settlement cites. Brier is an analytics view with
+   denominators, not calibration evidence at n≈10. The public daily hash is
+   deferred. This is prompt plus an existing record type, so it may start
+   inside station 0 to start the clock. A recoverable off-host copy of the
+   ledger is station 2's entry criterion.
+7. **E3 rerun criterion** (claude): first confirm the paper runs cff54bf5
+   or later (deploys defer busy computers); then the pass is the cursor
+   invariant (no record marked read unless a `choir.Records()` call returned
+   it, with mid-run arrivals waking the next turn). "Every item answered"
+   is the contract station 1 retires.
+
+### Station 0 (unanimous among respondents)
+
+Close first, time-boxed to about a week: E3 rerun, A1 badge, C1e, final
+convergent review. One shared-runtime cutover at a time. In parallel:
+labelled set, Taiwan question set, source shortlist and permission checks,
+station 2's smallest version, app designs.
+
+### Owner decisions still open
+
+1. Approve the cost amendment text (change 5), and any kill-switch level.
+2. Telegram given its 2026-02 terms; whether Autopaper is commercial.
+3. Taiwan/East Asia as the first vertical (default: yes).
+4. Accept that Autoradio follows stations 1-3 unless pulled forward.
