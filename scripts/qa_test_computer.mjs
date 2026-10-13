@@ -84,13 +84,23 @@ try {
   const t0 = Date.now();
   const timings = { started_at: new Date(t0).toISOString() };
   const mark = (name) => { timings[`${name}_ms`] = Date.now() - t0; };
-  await registerPasskey(page, email, BASE_URL);
+  const registration = await registerPasskey(page, email, BASE_URL);
   mark('registered');
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
 
-  const session = await page.evaluate(async () => (await fetch('/auth/session', { credentials: 'same-origin' })).json());
-  const userID = session?.user?.id;
-  if (!userID) throw new Error('no owner id from /auth/session');
+  // The session read can briefly miss right after registration; the
+  // registration response names the same owner.
+  let userID = '';
+  for (let i = 0; i < 10 && !userID; i++) {
+    const session = await page.evaluate(async () => {
+      try { return await (await fetch('/auth/session', { credentials: 'same-origin' })).json(); } catch { return null; }
+    });
+    userID = session?.user?.id || '';
+    if (!userID) await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  if (registration?.user?.id && userID && registration.user.id !== userID) throw new Error('session owner differs from the registered owner');
+  userID = userID || registration?.user?.id || '';
+  if (!userID) throw new Error('no owner id from /auth/session or registration');
   // A fresh computer can take minutes to boot when no warm one is free. Wait
   // for both the guest's answer (the computer id) and the prompt bar, up to
   // MINT_READY_TIMEOUT_MIN; the page's own bootstrap retries forever, so a

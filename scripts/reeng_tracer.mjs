@@ -29,6 +29,7 @@
 //   node scripts/reeng_tracer.mjs --label c0-tracer-dev-1 [--attempts 3]
 //     [--timeout-min 30] [--exporter "go run ./cmd/choir trace export"]
 //     [--skip-export] [--owner-publish] [--quiesce-min 10]
+//     [--keep-computer]
 //
 // Exit: 0 bundle kept with the load present; 3 bundle(s) kept, load absent
 // (I5 unknown); 4 export unavailable (drill kept); 1 attempt failed; 2 usage.
@@ -55,6 +56,7 @@ const EXPORTER = arg('exporter', 'go run ./cmd/choir trace export');
 const SKIP_EXPORT = flag('skip-export');
 const OWNER_PUBLISH = flag('owner-publish');
 const QUIESCE_MIN = Number(arg('quiesce-min', '10'));
+const KEEP_COMPUTER = flag('keep-computer');
 if (!LABEL || !/^[A-Za-z0-9._-]+$/.test(LABEL)) {
   console.error('usage: node scripts/reeng_tracer.mjs --label <label> [--attempts 3] [--timeout-min 30] [--exporter <cmd>] [--skip-export] [--owner-publish]');
   process.exit(2);
@@ -105,7 +107,11 @@ function runMint(label) {
     execFile(process.execPath, [join(REPO, 'scripts', 'qa_test_computer.mjs'), '--label', label],
       { cwd: REPO, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, timeout: 30 * 60_000 },
       (err, stdout, stderr) => {
-        if (err) return reject(new Error(`mint failed: ${String(stderr || err.message).slice(-800)}`));
+        if (err) {
+          const text = String(stderr || err.message);
+          const cause = text.split('\n').filter((l) => /^\s*(\w*Error|Error):/.test(l)).pop() || text.slice(-400);
+          return reject(new Error(`mint failed: ${cause.trim()}`));
+        }
         const line = String(stdout).trim().split('\n').filter(Boolean).pop() || '';
         try { resolve(JSON.parse(line)); } catch { reject(new Error(`mint printed no JSON line: ${line.slice(0, 200)}`)); }
       });
@@ -253,6 +259,7 @@ async function attempt(n, out) {
   out.guest_build_commit = minted.guest_build_commit || null;
   phase('mint', { computer_id: minted.computer_id, mint_ms: out.timings.mint_ms, build: out.guest_build_commit });
   const c = new MintedComputer(minted);
+  out.stopComputer = () => stopMinted(c, label);
 
   const t0 = Date.now();
   const deadline = t0 + TIMEOUT_MIN * 60_000;
@@ -485,7 +492,29 @@ async function attempt(n, out) {
   out.load = { I5_load: load.I5_load, ...check.evidence };
   phase('bundle_kept', { path: bundlePath, sha256: out.sha256, I5_load: load.I5_load });
   out.runs = runLegs(bundle);
+  const checkerPath = join(REPO, 'scripts', 'reeng_invariants.mjs');
+  if (existsSync(checkerPath)) {
+    const reportPath = join(TRACE_DIR, `invariants-a${n}.json`);
+    const verdicts = await new Promise((resolve) => {
+      execFile(process.execPath, [checkerPath, bundlePath, '--json', reportPath], { cwd: REPO, encoding: 'utf8', timeout: 120_000 },
+        (err, stdout) => resolve({ exit: err ? err.code ?? -1 : 0, lines: String(stdout || '').trim().split('\n').filter(Boolean) }));
+    });
+    if (existsSync(reportPath)) chmodSync(reportPath, 0o600);
+    out.invariants = { report: reportPath, exit: verdicts.exit, lines: verdicts.lines };
+    phase('invariants', { exit: verdicts.exit, verdicts: verdicts.lines.map((l) => l.split(/\s+/).slice(0, 2).join(' ')) });
+  }
   return out;
+}
+
+// Staging holds few live computers; a fresh owner's computer stays
+// not_started while capacity is full. The tracer stops what it minted once
+// the bundle is kept (or the attempt ends), unless --keep-computer.
+async function stopMinted(c, label) {
+  if (!c || KEEP_COMPUTER) return null;
+  const res = await c.api(`/api/computers/${encodeURIComponent(c.computerID)}/lifecycle/stop`, 'POST',
+    { idempotency_key: `${label}-stop-${randomUUID()}` }, 10 * 60_000);
+  log(`stopped ${c.computerID}: ${res.status} ${res.body?.resulting_lifecycle_state || res.body?.error || res.error || ''}`);
+  return { status: res.status, state: res.body?.resulting_lifecycle_state || null };
 }
 
 function runExporter(c, traj, outPath) {
@@ -584,7 +613,9 @@ for (let n = 1; n <= ATTEMPTS; n++) {
   receipt.attempts.push(result);
   try {
     await attempt(n, result);
+    if (result.stopComputer) result.computer_stop = await result.stopComputer();
   } catch (err) {
+    if (result.stopComputer) result.computer_stop = await result.stopComputer().catch(() => null);
     result.error = String(err?.message || err).slice(0, 600);
     log(`attempt ${n} failed: ${result.error}`);
     if (result.drill) {
@@ -595,8 +626,10 @@ for (let n = 1; n <= ATTEMPTS; n++) {
       delete result.drill;
     }
     exitCode = 1;
+    delete result.stopComputer;
     break;
   }
+  delete result.stopComputer;
   if (result.export?.failed) { exitCode = 4; break; }
   if (result.export?.skipped) { exitCode = 0; break; }
   if (result.load?.I5_load === 'present') { exitCode = 0; break; }
