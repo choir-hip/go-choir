@@ -9,10 +9,11 @@ test('a failed app module offers a reload that recovers', async ({ page }) => {
     body: JSON.stringify({ authenticated: false }),
   }));
 
-  let textureModuleRequests = 0;
-  await page.route(/\/src\/lib\/TextureEditor\.svelte(?:\?.*)?$/, async (route) => {
-    textureModuleRequests += 1;
-    if (textureModuleRequests === 1) {
+  // The logged-out home opens the Autopaper window first.
+  let autopaperModuleRequests = 0;
+  await page.route(/\/src\/lib\/AutopaperApp\.svelte(?:\?.*)?$/, async (route) => {
+    autopaperModuleRequests += 1;
+    if (autopaperModuleRequests === 1) {
       await route.fulfill({ status: 503, body: 'transient module failure' });
       return;
     }
@@ -20,10 +21,10 @@ test('a failed app module offers a reload that recovers', async ({ page }) => {
   });
 
   await page.goto(BASE_URL);
-  await expect(page.getByRole('alert')).toContainText('Could not open Texture');
+  await expect(page.getByRole('alert')).toContainText('Could not open Autopaper');
 
   await page.getByRole('button', { name: 'Reload app' }).click();
 
-  await expect(page.locator('[data-texture-editor]')).toBeVisible();
-  expect(textureModuleRequests).toBeGreaterThanOrEqual(2);
+  await expect(page.locator('[data-autopaper]')).toBeVisible();
+  expect(autopaperModuleRequests).toBeGreaterThanOrEqual(2);
 });

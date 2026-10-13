@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('the command prompt receives focus once desktop startup finishes', async ({ page }) => {
-  await expect(page.locator('[data-texture-editor]')).toBeVisible();
+  await expect(page.locator('[data-autopaper]')).toBeVisible();
   await expect(page.locator('[data-prompt-input]')).toBeFocused();
 });
 

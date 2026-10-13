@@ -25,8 +25,10 @@ test('logged-out shell uses PromptSurface, DeskSheet, and local previews', async
   await page.goto(BASE_URL);
   await expect(page.locator('[data-prompt-surface]')).toBeVisible();
   await expect(page.locator('[data-desk-menu-button]')).toBeVisible();
-  await expect(page.locator('[data-window-tray-item]')).toHaveCount(3);
-  await expect(page.locator('[data-texture-editor]')).toContainText('A note before sign-in');
+  // The logged-out home opens Autopaper; Texture opens from the Desk.
+  await expect(page.locator('[data-window][data-window-app-id="autopaper"] [data-autopaper-front]')).toBeVisible();
+  await openDeskApp(page, 'texture');
+  await expect(page.locator('[data-texture-editor]')).toBeVisible();
   await expect(page.locator('[data-trace-app]')).toHaveCount(0);
   const favicon = await page.locator('link[rel="icon"][data-tetramark-favicon]').getAttribute('href');
   expect(decodeURIComponent(favicon || '')).toContain('M 269.72 36.86');

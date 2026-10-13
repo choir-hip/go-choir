@@ -76,6 +76,8 @@ async function toolbarMetrics(page) {
 
 test('Texture toolbar stays one row with invariant height across window widths', async ({ page }) => {
   await page.goto(BASE_URL);
+  // The logged-out home opens Autopaper; Texture opens from its desktop icon.
+  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
   await expect(page.locator('[data-texture-toolbar]')).toBeVisible();
 
   const widths = [1600, 1200, 900, 640, 560, 460, 390, 340];

@@ -162,14 +162,15 @@ test('logged-out desktop can open read-only Podcast without the auth wall', asyn
   await expect(page.locator('[data-auth-entry]')).toHaveCount(0);
 });
 
-test('logged-out desktop starts with one explanatory Texture window', async ({ page }) => {
+test('logged-out desktop starts with one Autopaper window', async ({ page }) => {
   await page.goto(BASE_URL);
   await page.locator('[data-desktop]').waitFor({ state: 'visible', timeout: 10000 });
   await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false');
 
   await expect(page.locator('[data-window]')).toHaveCount(1);
-  await expect(page.locator('[data-window]').first()).toHaveAttribute('data-window-id', 'public-preview-texture');
-  await expect(page.locator('[data-texture-editor]').first()).toBeVisible();
+  await expect(page.locator('[data-window]').first()).toHaveAttribute('data-window-id', 'public-preview-autopaper');
+  await expect(page.locator('[data-autopaper-front]').first()).toBeVisible();
+  await expect(page.locator('[data-texture-editor]')).toHaveCount(0);
   await expect(page.locator('[data-trace-app]')).toHaveCount(0);
   await expect(page.locator('[data-files-app]')).toHaveCount(0);
 });

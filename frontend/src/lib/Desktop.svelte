@@ -244,7 +244,7 @@
     setIconPositions(getDefaultIconPositions());
   }
 
-  function largePublicTextureGeometry() {
+  function largePublicWindowGeometry() {
     const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
     const compact = viewportWidth < 768;
@@ -264,14 +264,16 @@
     };
   }
 
+  // The logged-out home opens Autopaper: the front list of living stories.
+  // A story opens from it as a read-only published Texture window.
   function seedPublicPreviewWindows() {
-    const geometry = largePublicTextureGeometry();
+    const geometry = largePublicWindowGeometry();
     const previewWindows = [
       {
-        windowId: 'public-preview-texture',
-        appId: 'texture',
-        title: 'Choir Preview',
-        icon: getAppIcon('texture'),
+        windowId: 'public-preview-autopaper',
+        appId: 'autopaper',
+        title: 'Autopaper',
+        icon: getAppIcon('autopaper'),
         x: geometry.x,
         y: geometry.y,
         width: geometry.width,
@@ -279,10 +281,10 @@
         mode: 'normal',
         zIndex: 1,
         restoredGeometry: null,
-        appContext: { preview: true, windowTitle: 'Choir Preview' },
+        appContext: { preview: true, windowTitle: 'Autopaper' },
       },
     ];
-    setWindows(previewWindows, 'public-preview-texture');
+    setWindows(previewWindows, 'public-preview-autopaper');
   }
 
   async function startAuthenticatedDesktop() {
@@ -1104,12 +1106,10 @@
     return current;
   }
 
-  function openPublishedTexture(routePath, guest = false) {
+  // A published Texture opens read-only in a Texture window; one window per
+  // route, so opening the same story again raises its window.
+  function openPublishedTexture(routePath, guest = false, appContext = {}) {
     const normalizedRoutePath = normalizePublicRoutePath(routePath);
-    if (guest) {
-      const preview = windowsSnapshot().find((win) => win.windowId === 'public-preview-texture');
-      if (preview) closeWindow(preview.windowId);
-    }
     const matchingWindows = windowsSnapshot().filter((win) =>
       normalizeAppId(win.appId) === 'texture' &&
       win.mode !== 'closed' &&
@@ -1136,10 +1136,11 @@
 
     openApp('texture', 'Texture', '📝', {
       windowTitle: 'Published Texture',
+      ...appContext,
       publishedRoutePath: normalizedRoutePath,
       publishedGuest: guest,
       allowMultiple: true,
-      windowGeometry: largePublicTextureGeometry(),
+      windowGeometry: largePublicWindowGeometry(),
     });
   }
 
@@ -1152,6 +1153,11 @@
     }
     if (!desktopReady) {
       showToast('Desktop is still connecting');
+      return;
+    }
+    const launchContext = event.detail.appContext || {};
+    if (appId === 'texture' && launchContext.publishedRoutePath) {
+      openPublishedTexture(launchContext.publishedRoutePath, !authenticated, launchContext);
       return;
     }
     openApp(appId, event.detail.appName || appDef.name, event.detail.icon || appDef.icon, {

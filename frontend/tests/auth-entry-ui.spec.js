@@ -203,6 +203,8 @@ test('signed-out Texture publish intent uses Texture-named auth intent', async (
   page,
 }) => {
   await page.goto(BASE_URL);
+  // The logged-out home opens Autopaper; Texture opens from its desktop icon.
+  await page.locator('[data-desktop-icon-id="texture"]').dblclick();
   const texture = page.locator('[data-texture-editor]').first();
   await expect(texture).toBeVisible({ timeout: 15000 });
 
