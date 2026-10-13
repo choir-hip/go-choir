@@ -1636,7 +1636,7 @@ nodes:
     title: "Cut 2 — evidence to publication: async search, research, Texture write, one document model, permalinks, Autopaper live"
     path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
     ledger: ''
-    status: working  # executing since 2026-10-13 (pre-flight)
+    status: working  # Autopaper live 2026-10-13 (docs/evidence/c2-autopaper-live-2026-10-13.json); residual acceptance items open
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12

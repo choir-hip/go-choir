@@ -59,7 +59,7 @@ metamission:
     - id: C2
       path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
       readiness: reviewed (pre-flight panel 2026-10-13 running)
-      status: executing (pre-flight 2026-10-13: docs/reports/reeng-cut2-preflight-2026-10-13.md, docs/reports/reeng-c8-quote-census-2026-10-13.md)
+      status: autopaper live 2026-10-13 (docs/evidence/c2-autopaper-live-2026-10-13.json); residual acceptance items open (cut now card)
       note: ends with Autopaper live, then the model comparison
       depends_on: [C1]
 

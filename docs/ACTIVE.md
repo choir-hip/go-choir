@@ -31,7 +31,12 @@ three cuts to Autopaper live, with decisions in
   [management](evidence/c1-core-mgmt-acceptance-2026-10-13.json) receipts).
   C1e (engineering on records, wholesale deletions) runs after C2's live
   window.
-- **C2, evidence to publication: executing.** Pre-flight
+- **C2, evidence to publication: Autopaper live 2026-10-13.** The
+  designated paper computer publishes in public from its schedules
+  ([receipt](evidence/c2-autopaper-live-2026-10-13.json)); stories open in
+  the Texture app. Residual items in the cut's now card. Next: C1e, the
+  owner computer's update path, then the completion review.
+- **C2 pre-flight (done).** Pre-flight
   ([drift](reports/reeng-cut2-preflight-2026-10-13.md),
   [quote census](reports/reeng-c8-quote-census-2026-10-13.md)); unit 2a
   next, ending with Autopaper live.

@@ -471,27 +471,31 @@ boundaries:
     proof through the product API and C0's export.
 
 now:
-  status: executing
+  status: autopaper live; residual acceptance items open
   slice: >-
-    Unit 2a built and integrated: (i) normtext, quotematch and Ref
-    (b5059bd9); (ii) block captures, choir.Read and the trace captures
-    layer; (iii) async search; (iv) Texture's choir.Write against its frame
-    with capture Refs (ApplyTexture, the overlays and Texture merge
-    deleted); (v) support judgement (pairs to management, choir.Judge,
-    failures to Texture's frame); (vi) the translation contract. Deployed
-    proof so far: c2-write-2 on 27b96c90 (docs/evidence/c2-write-acceptance-2026-10-13.json):
-    14 async searches, 8 cell results with new arrivals, research's final
-    Report read by a records-route Texture turn on a closed work item, 8 of
-    8 citations quote inside their cited capture block (checker I4).
-    c2-judge-1 on 49a766fc found B10 (a trajectory settled under an unread
-    Report; docs/problems/reeng-cut2-breakage-2026-10-13.md), fixed in
-    b240d7a5. Unit 2b in progress: per-version permalinks, the Universal
-    Wire path and reader deleted, 21 unused Store B tables' DDL removed
-    (the old platform store still holds their rows, untouched), the public
-    Autopaper reader and front list; living stories, auto-publish and the
-    Store B check overlay building.
-  source_ref: b5059bd9
-  deploy_identity: staging choir.news 76ab40fd
+    Autopaper is live on choir.news (docs/evidence/c2-autopaper-live-2026-10-13.json).
+    The designated paper computer ran its schedules from one owner act
+    (15:22 UTC, 4 sources, then 14 on the owner's tiered-rollout ruling):
+    in the watched hour 54 polls brought 80 captures, management read every
+    record, 26 stories published 76 versions (4 at v5+), the front list
+    lists each once, and citations show 194 exact, 9 tolerant, 14 failed
+    and 84 pending badges. Crash proof: a markerless restart closed all 14
+    schedules, both in-flight runs and every open round; nothing polled or
+    ran for 13 minutes; public reads stayed up; the owner act restarted the
+    schedules and they polled at once. Unit 2a and 2b receipts:
+    c2-write-acceptance, c2-judge-2, c2-paper-7. The Cut 2 freeze receipt is
+    final (docs/reports/reeng-cut2-freeze-receipt-2026-10-13.md). The owner
+    redirected the reader during the window: stories open in the Texture app
+    (read-only published view) and the logged-out home opens Autopaper
+    (cf91e617, staging spec 2 of 2). Breakages B10-B13 and B12b fixed
+    (docs/problems/reeng-cut2-breakage-2026-10-13.md). Open: the 2a
+    correction scenario (an unsupporting quote corrected after a failing
+    verdict), the check that v5+ stories cite captures newer than their
+    previous version, the model comparison, the story-prose defects
+    (docs/problems/autopaper-story-prose-markdown-and-meta-2026-10-13.md),
+    and tier 2 and 3 sources (all RSS, then GDELT and Telegram).
+  source_ref: f124766f
+  deploy_identity: staging choir.news cf91e617
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: C2-1
