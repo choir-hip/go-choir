@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/traefik/yaegi/interp"
@@ -21,8 +22,13 @@ import (
 // single-dispatch Broker API shape (no second trust root, no host key
 // material in model reach).
 type ChoirScope struct {
-	broker       *Broker
-	handleRef    string
+	broker *Broker
+	// handleRef is reissued when a cell binds (the handle expires, the desk
+	// session does not); a goroutine left from an earlier cell may read it
+	// meanwhile, hence atomic.
+	handleRef    atomic.Pointer[string]
+	issuer       *HandleIssuer
+	actions      []BrokerAction
 	computerID   string
 	epoch        uint64
 	activationID string
@@ -116,15 +122,33 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	if normalizeDeskRole(role) == "management" {
 		actions = append(actions, ActionProductAPI)
 	}
-	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, time.Hour)
+	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, sessionHandleTTL)
 	if err != nil {
 		return nil, fmt.Errorf("choir: issue session handle: %w", err)
 	}
-	return &ChoirScope{broker: broker, handleRef: handleRef, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: normalizeDeskRole(role), slot: slot}, nil
+	scope := &ChoirScope{broker: broker, issuer: issuer, actions: actions, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: normalizeDeskRole(role), slot: slot}
+	scope.handleRef.Store(&handleRef)
+	return scope, nil
 }
 
+// reissueHandle gives the scope a fresh session handle with the same
+// computer, epoch and actions. On failure the old handle stays and its
+// verbs report expiry.
+func (s *ChoirScope) reissueHandle() {
+	if s.issuer == nil {
+		return
+	}
+	if ref, err := s.issuer.Issue(s.computerID, "choir-session", s.epoch, s.actions, sessionHandleTTL); err == nil {
+		s.handleRef.Store(&ref)
+	}
+}
+
+// sessionHandleTTL is how long one issued session handle verifies. A var so
+// a test can shorten it.
+var sessionHandleTTL = time.Hour
+
 // HandleRef returns the bound session handle for host-bound frame requests.
-func (s *ChoirScope) HandleRef() string { return s.handleRef }
+func (s *ChoirScope) HandleRef() string { return *s.handleRef.Load() }
 
 // normalizeDeskRole maps a session role to the desk profile whose module set
 // applies. The four desks are management, engineering, research, texture;
@@ -143,6 +167,7 @@ func normalizeDeskRole(role string) string {
 func (s *ChoirScope) BindCell() CellHooks {
 	return CellHooks{
 		Begin: func(frame SessionFrame) {
+			s.reissueHandle()
 			s.tray = &Tray{}
 			s.inbox = append([]IncomingMessage(nil), frame.Inbox...)
 			s.doc = frame.Doc
@@ -216,7 +241,7 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 	resp := s.broker.HandleRequest(context.Background(), &BrokerRequest{
 		ProtocolVersion: ProtocolVersion,
 		RequestID:       newReceiptID(),
-		HandleRef:       s.handleRef,
+		HandleRef:       s.HandleRef(),
 		Epoch:           s.epoch,
 		Action:          action,
 		Payload:         raw,

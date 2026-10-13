@@ -216,7 +216,7 @@ finish:
     - action: one fast tracer run on choir.news at the landed SHA on a fresh test computer, crash drill and the concurrency load included, bundle kept (owner pace ruling 2026-10-13; a second run only if the first is ambiguous)
       proves: every listed layer is marked present, empty or unserved, all without SSH, and no rule passes on an unserved layer; an export with a key scoped to a different test computer is refused; I5 holds wherever the bundle shows concurrent egress and overlapping cells on one desk (unknown if the load never appeared); the checker's verdict per rule on today's system (an I3 failure on the known restart defect is a finding, not a tracer failure)
       evidence_class: deployed proof
-    - action: go test ./internal/agentcore -run TestDeskHandle (a handle issued with a short lifetime, a cell after it expires)
+    - action: go test ./internal/yaegikernel -race -run TestDeskHandleOutlivesItsFirstIssue (a handle issued with a short lifetime, a cell after it expires; fails before the fix)
       proves: a desk keeps its choir.* verbs for its whole life (the 70-minute live session this replaced was stopped by the owner's pace ruling)
       evidence_class: local test
   rollback: >-

@@ -122,7 +122,8 @@ func TestChoirSymbolsEnforceScopes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	narrow := &ChoirScope{broker: broker, handleRef: readOnlyRef, computerID: "computer-choir", epoch: 1, activationID: "activation-narrow"}
+	narrow := &ChoirScope{broker: broker, computerID: "computer-choir", epoch: 1, activationID: "activation-narrow"}
+	narrow.handleRef.Store(&readOnlyRef)
 	if _, err := narrow.WriteFile("x.txt", "x"); err == nil {
 		t.Fatal("write with read-only handle must fail")
 	}
