@@ -155,15 +155,22 @@ func (s *Session) normalizeCellSource(src string) string {
 // docs/problems/prompt-bar-minesweeper-demo-2026-10-10.md). A leading empty
 // statement makes the first token a semicolon, so yaegi takes its ordinary
 // statement path and evaluates the fragment exactly once.
+//
+// The same holds for a leading type, var or const declaration followed by
+// statements (only such cells reach here; a cell of declarations alone
+// parses as a file): yaegi would parse in declaration mode and fail
+// "expected declaration" at the first statement. In statement mode the
+// declarations still bind at the top level and persist into later cells.
 func guardLeadingFuncStatement(src string) string {
 	fset := token.NewFileSet()
 	file := fset.AddFile("cell.go", fset.Base(), len(src))
 	var scan scanner.Scanner
 	scan.Init(file, []byte(src), nil, 0)
-	if _, tok, _ := scan.Scan(); tok != token.FUNC {
-		return src
+	switch _, tok, _ := scan.Scan(); tok {
+	case token.FUNC, token.TYPE, token.VAR, token.CONST:
+		return ";\n" + src
 	}
-	return ";\n" + src
+	return src
 }
 
 var (

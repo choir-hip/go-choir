@@ -55,3 +55,21 @@ Fix (same commit): boot's owner-scoped list scans every run header
 are loaded). Test: `TestCrashBootClosesOpenRunBehindManyFinishedRuns`
 (one old running run behind 1,030 finished runs; failed with the run
 still running before the fix).
+
+## B3. A cell that starts with a type, var or const declaration fails
+
+Found 2026-10-13 by the desk cell-error analysis of the Cut 0 bundles
+(docs/reports/reeng-desk-cell-errors-2026-10-13.md, mechanism M1): 22 of
+67 failed cells, the largest class, and it repeats (the model's next cell
+often has the same shape). yaegi picks file or statement parsing from a
+cell's first token, so `type T ...` followed by statements fails
+"expected declaration"; the normalizer guarded only a leading `func`.
+
+Fix (same commit): `guardLeadingFuncStatement` also prefixes `;` for a
+leading `type`, `var` or `const` (only cells that do not parse as a file
+reach it). Test: `TestCellStartingWithDeclarationRunsAndPersists` (failed
+"expected declaration, found ps" before the fix). Open from the same
+report: M3 (`degradeBoundDefines` turns a retyping `x :=` into a failing
+assignment), M4 (record fields the prompts never teach), M7 and M2a
+(yaegi compile defects, two of which kill the worker), and the prompts'
+false claim that a failed cell poisons the session.
