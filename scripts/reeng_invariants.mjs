@@ -745,13 +745,16 @@ const normText = (s) =>
     .trim();
 const isTextQuoteKind = (k) => ['text_quote', 'textquote', 'text_quote_selector', 'textquoteselector'].includes(String(k ?? '').toLowerCase().replace(/[^a-z_]/g, ''));
 
-function walkSourceRefs(node, out) {
+function walkSourceRefs(node, out, refs) {
   if (!node || typeof node !== 'object') return;
   if (node.type === 'source_ref') {
-    const id = str(node.attrs?.source_entity_id);
-    out.push(id);
+    // Cut 2: a citation written by choir.Write carries a Ref {doc, version,
+    // cid, hash, quote} naming a capture block; older ones name a source
+    // entity.
+    if (refs && node.attrs?.ref && typeof node.attrs.ref === 'object') refs.push({ anchor: str(node.attrs.id), ...node.attrs.ref });
+    else out.push(str(node.attrs?.source_entity_id));
   }
-  if (Array.isArray(node.content)) for (const c of node.content) walkSourceRefs(c, out);
+  if (Array.isArray(node.content)) for (const c of node.content) walkSourceRefs(c, out, refs);
 }
 
 function entityQuote(entity) {
@@ -790,13 +793,34 @@ export function checkI4(bundle) {
   const unknowns = [];
   const passes = [];
   let total = 0;
+  // Capture blocks by capture id (the bundle's captures layer, Cut 2 A5).
+  const caps = layer(bundle, 'captures');
+  const captureBlocks = new Map();
+  for (const c of caps.usable ? caps.items : []) captureBlocks.set(str(c.capture_id), new Map((c.blocks || []).map((b) => [str(b.id), b])));
   for (const rev of revs.items) {
     const rid = str(rev.revision_id);
     const body = parseMaybeJSON(rev.body_doc) || (typeof rev.body_doc === 'object' ? rev.body_doc : null);
     const entities = parseMaybeJSON(rev.source_entities) || (Array.isArray(rev.source_entities) ? rev.source_entities : []);
     const byID = new Map((Array.isArray(entities) ? entities : []).map((e) => [str(e.source_entity_id), e]));
     const refs = [];
-    if (body) walkSourceRefs(body.doc || body, refs);
+    const blockRefs = [];
+    if (body) walkSourceRefs(body.doc || body, refs, blockRefs);
+    for (const r of blockRefs) {
+      total++;
+      const ev = { revision_id: rid, anchor: r.anchor, doc: str(r.doc), cid: str(r.cid) };
+      if (!str(r.doc) || !str(r.cid)) { fails.push({ ...ev, why: 'Ref names no capture or block' }); continue; }
+      if (!str(r.quote)) { fails.push({ ...ev, why: 'Ref carries no quote' }); continue; }
+      const blocks = captureBlocks.get(str(r.doc));
+      if (!blocks) { unknowns.push({ ...ev, why: caps.usable ? 'cited capture absent from the captures layer' : 'captures layer unserved' }); continue; }
+      const block = blocks.get(str(r.cid));
+      if (!block) { fails.push({ ...ev, why: 'cited block id not in the capture' }); continue; }
+      const segments = String(r.quote).split(/\.\.\.|…/).map(normText).filter(Boolean);
+      const text = normText(block.text);
+      let at = 0;
+      const inBlock = segments.every((seg) => { const i = text.indexOf(seg, at); if (i < 0) return false; at = i + seg.length; return true; });
+      if (inBlock) passes.push({ ...ev, found_in: 'capture block' });
+      else fails.push({ ...ev, quote: r.quote, why: 'quote not found in the cited capture block' });
+    }
     for (const sid of [...new Set(refs)]) {
       total++;
       const ev = { revision_id: rid, source_entity_id: sid };
@@ -861,6 +885,8 @@ export function checkI5(bundle) {
   else {
     let bad = 0;
     for (const e of egress.items) {
+      // An async search's end (Cut 2) is a host event, not a call.
+      if (str(e.verb) === 'search_done') continue;
       const req = str(e.request_id);
       const resp = str(e.response_request_id);
       const ev = { event_id: str(e.event_id) || undefined, run_id: str(e.run_id), desk_session: str(e.desk_session), request_id: req, response_request_id: resp, verb: str(e.verb) };

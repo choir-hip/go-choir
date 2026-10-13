@@ -1,0 +1,15 @@
+{
+  "cut": "C2 unit 2a items (i)-(iv): normtext and quotematch, block captures and choir.Read, async search, Texture's choir.Write; with Cut 1 B5-B9",
+  "commit": "27b96c90",
+  "staging_identity": "27b96c909c9f8a10d99754c6e5afd8a9448cdf08",
+  "scenario": "node scripts/reeng_tracer.mjs --label c2-write-2 --scenario research --expect-sha 27b96c90 --fence-min 50 --timeout-min 15",
+  "tracer_exit": 0,
+  "bundle_sha256": "2e10a42be604280ad6b1d47015ff4e84a120affa358acacafb1386a772a32d26",
+  "computer": "computer-e196a32c9004c5c4ed1c08e17c1a605d (stopped after)",
+  "end_to_end": "about 5.5 minutes (story 10:32:10, research final Report 10:36:56, Texture read it 10:37:22)",
+  "async_search": {"search_start": 14, "search_done": 14, "providers_answered_of_started": "33 of 45", "cell_results_with_new_arrivals": 8},
+  "records_route": "research's final Report reached a Texture whose owner work item had completed (Texture's first cell wrote and called Done), and a committed records-route Texture turn read it 26 s later (B5 crossed, B9 resolved by Write)",
+  "write_citations": "Texture's revision carries 8 citations as capture Refs {doc, cid, hash, quote}; the bundle's captures layer holds 8 captures of real outlet pages",
+  "quote_in_one_block": "8 of 8 citations quote text inside the cited capture block (checker I4 re-expressed for Refs; C2-1 delta_o first deployed measure, small sample)",
+  "checker": {"I1": "pass", "I2": "fail (trajectory live with no open work and no named reason: the story's work completed and the trajectory stays live, by design of the records route; I2 needs re-expression)", "I3": "unknown", "I4": "pass (8 of 8)", "I5": "pass (58 egress results carry their request ids; 6 concurrent egress pairs)", "I6": "pass", "I7": "pass"}
+}
