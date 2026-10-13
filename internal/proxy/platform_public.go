@@ -93,6 +93,51 @@ func (h *Handler) HandlePlatformPublicationResolve(w http.ResponseWriter, r *htt
 	h.lifecycle.record("platform_publication.resolve", lifecycleHTTPStatus(status), time.Since(started))
 }
 
+// HandlePlatformFrontStories serves the Autopaper front list to anyone,
+// signed in or not. It forwards to corpusd, which reads Store B alone: no
+// computer is resolved or called, so the front page stays up while the
+// paper computer is stopped (Cut 2 unit 2b, Reader W3a).
+func (h *Handler) HandlePlatformFrontStories(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
+	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/publications/front")
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platform request"})
+		return
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build platform request"})
+		return
+	}
+	q := u.Query()
+	if limit := strings.TrimSpace(r.URL.Query().Get("limit")); limit != "" {
+		q.Set("limit", limit)
+	}
+	if cursor := strings.TrimSpace(r.URL.Query().Get("cursor")); cursor != "" {
+		q.Set("cursor", cursor)
+	}
+	u.RawQuery = q.Encode()
+	var out platform.FrontPage
+	status, err := h.getPlatformJSON(r, u.String(), &out)
+	if err != nil {
+		if platformErr, ok := err.(*platformStatusError); ok && platformErr.status == http.StatusBadRequest {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid front list request"})
+			h.lifecycle.record("platform_front.list", lifecycleHTTPStatus(http.StatusBadRequest), time.Since(started))
+			return
+		}
+		log.Printf("proxy: platform front stories: %v", err)
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to list stories"})
+		h.lifecycle.record("platform_front.list", "platform_error", time.Since(started))
+		return
+	}
+	writeJSON(w, status, out)
+	h.lifecycle.record("platform_front.list", lifecycleHTTPStatus(status), time.Since(started))
+}
+
 func (h *Handler) HandlePlatformPublicationExport(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	if r.Method != http.MethodGet {

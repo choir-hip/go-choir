@@ -478,6 +478,7 @@ func TestUnboundAdminAPIKeyExcludesNonComputerRouteFamiliesFromGuard(t *testing.
 		{name: "public publication resolve", path: "/api/platform/publications/resolve?route=/article"},
 		{name: "public publication export", path: "/api/platform/publications/export?route=/article&format=json"},
 		{name: "public retrieval search", path: "/api/platform/retrieval/search?q=article"},
+		{name: "public front list", path: "/api/platform/publications/front"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

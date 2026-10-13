@@ -123,6 +123,84 @@ func TestPlatformPublicationResolveAndExportPropagateNotFound(t *testing.T) {
 	}
 }
 
+// The Autopaper front list is public (no session) and reads corpusd alone:
+// the proxy never resolves or calls a computer for it, so the front page
+// stays up while the paper computer is stopped (Cut 2 unit 2b).
+func TestPlatformFrontStoriesIsPublicAndNeverCallsAComputer(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("front list reached a computer: %s %s", r.Method, r.URL.Path)
+		http.Error(w, "computer stopped", http.StatusServiceUnavailable)
+	}))
+	defer guest.Close()
+	var gotInternal, gotQuery string
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/platform/publications/front" {
+			t.Fatalf("corpusd path: got %s", r.URL.Path)
+		}
+		gotInternal = r.Header.Get("X-Internal-Caller")
+		gotQuery = r.URL.RawQuery
+		if r.URL.Query().Get("cursor") == "bad" {
+			http.Error(w, `{"error":"invalid cursor"}`, http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(platform.FrontPage{
+			Stories: []platform.FrontStory{{
+				PublicationID:  "pub-1",
+				Title:          "Harbor reopens",
+				Dek:            "The harbor reopened at dawn.",
+				VersionCount:   3,
+				LatestRevision: 3,
+				Route:          platform.FrontRoute{Bare: "/pub/texture/harbor-abc", Permalink: "/pub/texture/harbor-abc/v3"},
+			}},
+			NextCursor: "next",
+		})
+	}))
+	defer corpusd.Close()
+
+	h, err := NewHandler(&Config{AllowDirectAutoputerForTests: true, Port: "0",
+		ComputerURL:       guest.URL,
+		AuthPublicKeyPath: "/unused/in/test",
+		CorpusdURL:        corpusd.URL}, pub)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/platform/publications/front?limit=5&cursor=abc", nil)
+	w := httptest.NewRecorder()
+	h.HandleAPI(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("front status: got %d body %s", w.Code, w.Body.String())
+	}
+	if gotInternal != "true" {
+		t.Fatalf("missing internal caller header")
+	}
+	if gotQuery != "cursor=abc&limit=5" {
+		t.Fatalf("corpusd query = %q", gotQuery)
+	}
+	var page platform.FrontPage
+	if err := json.NewDecoder(w.Body).Decode(&page); err != nil {
+		t.Fatalf("decode front: %v", err)
+	}
+	if len(page.Stories) != 1 || page.Stories[0].VersionCount != 3 || page.NextCursor != "next" {
+		t.Fatalf("front page = %+v", page)
+	}
+
+	badW := httptest.NewRecorder()
+	h.HandleAPI(badW, httptest.NewRequest(http.MethodGet, "/api/platform/publications/front?cursor=bad", nil))
+	if badW.Code != http.StatusBadRequest {
+		t.Fatalf("bad cursor status: got %d", badW.Code)
+	}
+	postW := httptest.NewRecorder()
+	h.HandleAPI(postW, httptest.NewRequest(http.MethodPost, "/api/platform/publications/front", nil))
+	if postW.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST status: got %d", postW.Code)
+	}
+}
+
 func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {

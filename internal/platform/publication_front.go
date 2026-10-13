@@ -1,0 +1,376 @@
+package platform
+
+// The Autopaper front list (Cut 2 unit 2b, Reader W3a,
+// docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md):
+// one row per story publication, newest first, read from Store B alone.
+// Building a row reads the publication, its has_version edges, its latest
+// version and that version's manifest, all object-graph rows behind corpusd;
+// nothing here calls a computer, so the front page keeps working while the
+// paper computer is stopped.
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
+)
+
+const (
+	frontDefaultLimit = 20
+	frontMaxLimit     = 100
+	// frontDekRunes bounds a row's dek: the story's first paragraph, cut at
+	// a word.
+	frontDekRunes = 240
+)
+
+// FrontStory is one row of the front list: one story publication, shown by
+// its latest version.
+type FrontStory struct {
+	PublicationID  string     `json:"publication_id"`
+	Title          string     `json:"title"`
+	Dek            string     `json:"dek"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	VersionCount   int        `json:"version_count"`
+	LatestRevision int        `json:"latest_revision"`
+	Route          FrontRoute `json:"route"`
+}
+
+// FrontRoute is a story's bare link (serves the latest version in place)
+// and its latest version's permanent link.
+type FrontRoute struct {
+	Bare      string `json:"bare"`
+	Permalink string `json:"permalink"`
+}
+
+// FrontPage is one page of the front list. NextCursor is empty on the last
+// page.
+type FrontPage struct {
+	Stories    []FrontStory `json:"stories"`
+	NextCursor string       `json:"next_cursor,omitempty"`
+}
+
+// frontCursor is the keyset position after the last publication a page
+// read: publications are ordered by (updated_at, canonical_id) descending.
+type frontCursor struct {
+	UpdatedAt   int64  `json:"u"`
+	CanonicalID string `json:"id"`
+}
+
+func encodeFrontCursor(c frontCursor) string {
+	raw, _ := json.Marshal(c)
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+func decodeFrontCursor(s string) (*frontCursor, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+	var c frontCursor
+	if err := json.Unmarshal(raw, &c); err != nil || c.CanonicalID == "" {
+		return nil, fmt.Errorf("invalid cursor")
+	}
+	return &c, nil
+}
+
+// ErrInvalidFrontCursor marks a cursor the front list did not mint.
+var ErrInvalidFrontCursor = errors.New("invalid cursor")
+
+// frontPublicationMeta is the part of a choir.publication's metadata the
+// front list reads.
+type frontPublicationMeta struct {
+	PublicationID string `json:"publication_id"`
+	Title         string `json:"title"`
+	State         string `json:"state"`
+	RoutePath     string `json:"route_path"`
+	PublishMode   string `json:"publish_mode"`
+}
+
+// isAutopaperStory decides whether a publication is an Autopaper story.
+// Stories are the documents opened with publish: auto; until the publish
+// path records publish_mode on every publication, a publication with no
+// mode is listed, and one with another mode (a hand-published Texture) is
+// not.
+// SEAM: once publish_mode is recorded on every publication, this is
+// `return meta.PublishMode == "auto"`.
+func isAutopaperStory(meta frontPublicationMeta) bool {
+	return meta.PublishMode == "" || meta.PublishMode == "auto"
+}
+
+// ListFrontStories returns one page of the front list, newest first. limit
+// is clamped to [1, 100] (20 when zero); cursor is the previous page's
+// NextCursor, or empty for the first page.
+//
+// Publications are paged by their updated_at, which each version's publish
+// rewrites; rows within a page are ordered by their latest version's
+// published_at (DATETIME holds seconds, published_at holds nanoseconds).
+func (s *Service) ListFrontStories(ctx context.Context, limit int, cursor string) (*FrontPage, error) {
+	if s == nil || s.store == nil || s.store.db == nil {
+		return nil, fmt.Errorf("platform service unavailable")
+	}
+	og := s.ogStore()
+	if og == nil {
+		return nil, fmt.Errorf("platform service: object graph store unavailable")
+	}
+	if limit <= 0 {
+		limit = frontDefaultLimit
+	}
+	if limit > frontMaxLimit {
+		limit = frontMaxLimit
+	}
+	after, err := decodeFrontCursor(cursor)
+	if err != nil {
+		return nil, ErrInvalidFrontCursor
+	}
+
+	page := &FrontPage{Stories: []FrontStory{}}
+	// Publications that are not listable (not a story, no public version)
+	// are skipped, so keep reading batches until the page is full or the
+	// publications run out.
+	for len(page.Stories) < limit {
+		batch, err := s.frontPublicationBatch(ctx, after, limit+1)
+		if err != nil {
+			return nil, err
+		}
+		more := len(batch) > limit
+		if more {
+			batch = batch[:limit]
+		}
+		for _, pub := range batch {
+			after = &frontCursor{UpdatedAt: pub.UpdatedAt.Unix(), CanonicalID: pub.CanonicalID}
+			row, ok, err := s.frontStory(ctx, og, pub)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				page.Stories = append(page.Stories, row)
+				if len(page.Stories) == limit {
+					break
+				}
+			}
+		}
+		if len(page.Stories) == limit {
+			// A next page exists only if publications remain past the
+			// last one read.
+			rest, err := s.frontPublicationBatch(ctx, after, 1)
+			if err != nil {
+				return nil, err
+			}
+			if len(rest) > 0 {
+				page.NextCursor = encodeFrontCursor(*after)
+			}
+			break
+		}
+		if !more {
+			break
+		}
+	}
+	sort.SliceStable(page.Stories, func(i, j int) bool {
+		return page.Stories[i].UpdatedAt.After(page.Stories[j].UpdatedAt)
+	})
+	return page, nil
+}
+
+// frontPublicationRow is the part of a choir.publication row the front
+// list pages over.
+type frontPublicationRow struct {
+	CanonicalID string
+	Metadata    json.RawMessage
+	UpdatedAt   time.Time
+}
+
+// frontPublicationBatch reads up to n publications after the cursor,
+// newest updated first.
+func (s *Service) frontPublicationBatch(ctx context.Context, after *frontCursor, n int) ([]frontPublicationRow, error) {
+	query := `SELECT canonical_id, metadata, updated_at FROM og_objects
+		WHERE object_kind = 'choir.publication' AND tombstone = FALSE`
+	var args []any
+	if after != nil {
+		at := time.Unix(after.UpdatedAt, 0).UTC()
+		query += ` AND (updated_at < ? OR (updated_at = ? AND canonical_id < ?))`
+		args = append(args, at, at, after.CanonicalID)
+	}
+	query += ` ORDER BY updated_at DESC, canonical_id DESC LIMIT ?`
+	args = append(args, n)
+	rows, err := s.store.corpus().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("platform front: list publications: %w", err)
+	}
+	defer rows.Close()
+	var out []frontPublicationRow
+	for rows.Next() {
+		var row frontPublicationRow
+		var metadata string
+		if err := rows.Scan(&row.CanonicalID, &metadata, &row.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("platform front: scan publication: %w", err)
+		}
+		row.Metadata = json.RawMessage(metadata)
+		row.UpdatedAt = row.UpdatedAt.UTC()
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("platform front: iterate publications: %w", err)
+	}
+	return out, nil
+}
+
+// frontStory builds a publication's row from its latest version. ok is
+// false for a publication the front list does not show: not a story, not
+// published, no version, or a latest version whose access policy keeps it
+// off public routes.
+func (s *Service) frontStory(ctx context.Context, og *ObjectGraphStore, pub frontPublicationRow) (FrontStory, bool, error) {
+	var meta frontPublicationMeta
+	if err := json.Unmarshal(pub.Metadata, &meta); err != nil {
+		return FrontStory{}, false, nil
+	}
+	if meta.State != "published" || strings.TrimSpace(meta.RoutePath) == "" || !isAutopaperStory(meta) {
+		return FrontStory{}, false, nil
+	}
+	versions, err := publishedVersions(ctx, og, pub.CanonicalID)
+	if err != nil {
+		return FrontStory{}, false, fmt.Errorf("platform front: list versions of %s: %w", pub.CanonicalID, err)
+	}
+	if len(versions) == 0 {
+		return FrontStory{}, false, nil
+	}
+	latest := versions[len(versions)-1]
+	versionObj, err := og.GetObject(ctx, latest.CanonicalID)
+	if err != nil {
+		if errors.Is(err, objectgraph.ErrNotFound) {
+			return FrontStory{}, false, nil
+		}
+		return FrontStory{}, false, fmt.Errorf("platform front: get v%d of %s: %w", latest.Revision, pub.CanonicalID, err)
+	}
+	versionMeta, err := decodeVersionMetadata(versionObj)
+	if err != nil {
+		return FrontStory{}, false, fmt.Errorf("platform front: %w", err)
+	}
+	manifest, err := s.frontManifest(ctx, og, versionObj.CanonicalID)
+	if err != nil {
+		return FrontStory{}, false, err
+	}
+	if !publicationAccessPolicyAllowsPublicRoute(manifest.AccessPolicy) {
+		return FrontStory{}, false, nil
+	}
+	updatedAt, err := time.Parse(time.RFC3339Nano, versionMeta.PublishedAt)
+	if err != nil {
+		updatedAt = pub.UpdatedAt
+	}
+	title := strings.TrimSpace(meta.Title)
+	if title == "" {
+		title = strings.TrimSpace(manifest.Title)
+	}
+	dek := dekFromBodyDoc(manifest.BodyDoc)
+	if dek == "" && manifest.StorageRef != "" {
+		if content, err := s.readBlob(manifest.StorageRef); err == nil {
+			dek = dekFromText(string(content))
+		}
+	}
+	bare := normalizePublicationRoutePath(meta.RoutePath)
+	return FrontStory{
+		PublicationID:  firstNonEmpty(meta.PublicationID, versionMeta.PublicationID),
+		Title:          title,
+		Dek:            dek,
+		UpdatedAt:      updatedAt.UTC(),
+		VersionCount:   len(versions),
+		LatestRevision: latest.Revision,
+		Route:          FrontRoute{Bare: bare, Permalink: versionPermalink(bare, latest.Revision)},
+	}, true, nil
+}
+
+// frontManifestFields is the part of a version manifest a front row reads.
+type frontManifestFields struct {
+	Title        string          `json:"title"`
+	StorageRef   string          `json:"storage_ref"`
+	BodyDoc      json.RawMessage `json:"body_doc"`
+	AccessPolicy json.RawMessage `json:"access_policy"`
+}
+
+func (s *Service) frontManifest(ctx context.Context, og *ObjectGraphStore, versionCanonicalID string) (frontManifestFields, error) {
+	var out frontManifestFields
+	edges, err := og.ListEdgesByKind(ctx, versionCanonicalID, "has_manifest")
+	if err != nil {
+		return out, fmt.Errorf("platform front: manifest edges of %s: %w", versionCanonicalID, err)
+	}
+	if len(edges) == 0 {
+		return out, fmt.Errorf("platform front: no manifest for %s", versionCanonicalID)
+	}
+	obj, err := og.GetObject(ctx, edges[0].ToID)
+	if err != nil {
+		return out, fmt.Errorf("platform front: get manifest of %s: %w", versionCanonicalID, err)
+	}
+	if err := json.Unmarshal(obj.Body, &out); err != nil {
+		return out, fmt.Errorf("platform front: parse manifest of %s: %w", versionCanonicalID, err)
+	}
+	return out, nil
+}
+
+// dekFromBodyDoc is a story's first paragraph, its citations left out.
+func dekFromBodyDoc(raw json.RawMessage) string {
+	if len(strings.TrimSpace(string(raw))) == 0 || strings.TrimSpace(string(raw)) == "null" {
+		return ""
+	}
+	var doc texturedoc.StructuredTextureDoc
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return ""
+	}
+	for _, block := range doc.Doc.Content {
+		if block.Type != "paragraph" {
+			continue
+		}
+		var b strings.Builder
+		for _, n := range block.Content {
+			switch n.Type {
+			case "text":
+				b.WriteString(n.Text)
+			case "hard_break":
+				b.WriteByte(' ')
+			}
+		}
+		if text := truncateDek(b.String()); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+// dekFromText is the first paragraph of a projected body that is not a
+// heading, a list, a quote or a code fence.
+func dekFromText(content string) string {
+	for _, para := range strings.Split(content, "\n\n") {
+		para = strings.TrimSpace(para)
+		if para == "" || strings.HasPrefix(para, "#") || strings.HasPrefix(para, ">") || strings.HasPrefix(para, "```") || strings.HasPrefix(para, "- ") || para == "---" {
+			continue
+		}
+		if text := truncateDek(para); text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+// truncateDek collapses whitespace and cuts at a word within frontDekRunes.
+func truncateDek(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if utf8.RuneCountInString(text) <= frontDekRunes {
+		return text
+	}
+	runes := []rune(text)
+	cut := string(runes[:frontDekRunes])
+	if i := strings.LastIndex(cut, " "); i > frontDekRunes/2 {
+		cut = cut[:i]
+	}
+	return strings.TrimRight(cut, " ,;:.-") + "…"
+}

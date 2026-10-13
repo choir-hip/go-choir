@@ -3,9 +3,11 @@ package platform
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
@@ -117,7 +119,6 @@ func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusCreated, resp)
 }
 
-
 func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -143,6 +144,40 @@ func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *htt
 		return
 	}
 	writeJSON(w, http.StatusOK, bundle)
+}
+
+// HandleInternalFrontStories serves the Autopaper front list: one row per
+// story publication, newest first, paged by ?limit=&cursor=. It reads Store
+// B alone (Cut 2 unit 2b, Reader W3a).
+func (h *Handler) HandleInternalFrontStories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if !trustedInternalCaller(r) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	limit := 0
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "limit must be a non-negative integer"})
+			return
+		}
+		limit = n
+	}
+	page, err := h.service.ListFrontStories(r.Context(), limit, r.URL.Query().Get("cursor"))
+	if err != nil {
+		if errors.Is(err, ErrInvalidFrontCursor) {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid cursor"})
+			return
+		}
+		log.Printf("corpusd: front stories: %v", err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list stories"})
+		return
+	}
+	writeJSON(w, http.StatusOK, page)
 }
 
 func (h *Handler) HandleInternalExportPublication(w http.ResponseWriter, r *http.Request) {
@@ -421,6 +456,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/publications/texture", h.HandleInternalPublishTexture)
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)
+	s.HandleFunc("/internal/platform/publications/front", h.HandleInternalFrontStories)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)
