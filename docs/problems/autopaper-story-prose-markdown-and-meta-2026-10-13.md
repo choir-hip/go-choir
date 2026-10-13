@@ -19,3 +19,44 @@ computer-1355b83b…) and the texturewrite inline parser. Fix candidates:
 inline emphasis marks in texturewrite and the renderer, and the
 no-narration rule restored in the prompt core if the trace shows it is
 missing.
+
+## Evidence, 2026-10-13 (front page and published versions)
+
+Public payloads: `GET /api/platform/publications/front?limit=100` (30
+stories) and `/resolve?route=<bare>` for each, scanning the published
+`body_doc` text nodes.
+
+- Literal `**` in published text: 5 of 30 stories (Ukraine war v7: 18
+  occurrences; Federal agents/Omar v7: 24; Epic Games v4: 14; Thunderbird
+  v3: 4; Switch to Safari v5: 2). No text node in any story carries a
+  mark: Write's inline parser (`internal/texturewrite/inline.go`) splits
+  only `{{tokens}}`, so `**` stays characters. The schema already allows
+  strong, emphasis and code marks, and both renderers (frontend
+  `renderStructuredTextureDocHTML`, `internal/platform/publication_document.go`)
+  already draw them.
+- Process narration in reader prose, 4 of 30 stories:
+  - Ukraine war, every published version v2..v7 opens with a
+    `**Status.**` block that Texture carries forward and re-numbers:
+    v2 "Status. Opening revision. Management delivered one captured report
+    and one hypothesis: ... (H1, p=0.60)", v3/v4 "Status. Revision 2.",
+    v5 "Revision 3.", v6/v7 "Revision 4.". The block is born in the first
+    revision and kept by each later Write.
+  - Epic Games v4: "**Status.** Epic Games has publicly confirmed ...".
+  - Thunderbird v3: a section "What the management desk reports", items
+    "H1, management's probability 0.85", "Management's stated stakes", and
+    "A research round is opened to confirm or refute both".
+  - Breaking Bad v3: "The item that first reached us, forwarded by
+    management ..."; AI-infrastructure v2: "As of this revision nothing is
+    confirmed."
+- Prompt: the core (`internal/textureprompts/texture.yaml`) kept "Every
+  later revision rewrites the ideas, not a log. Never narrate actions." but
+  Cut 2 (f93fdcb9) dropped the retired run_system overlay's rules that
+  covered this shape: "do not turn coordination metadata into reader-facing
+  prose", "do not explain the document's evidence standards to the reader",
+  "Keep those reasons outside canonical document prose". Nothing in the
+  core names status lines, revision numbers, desks or hypothesis labels,
+  and the frame shows management's hypotheses with their labels and
+  probabilities, which Texture copies. The Write turns of the paper
+  computer were not read (owner-authenticated trace); the claim that the
+  model copies frame vocabulary for want of a rule is a hypothesis from the
+  published series and the prompt diff.
