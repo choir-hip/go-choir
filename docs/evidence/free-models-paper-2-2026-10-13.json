@@ -1,0 +1,118 @@
+{
+ "schema": "choir.evidence.v1",
+ "id": "free-models-paper-2",
+ "date": "2026-10-13",
+ "claim": "the free opencode-go models (cat-jam-free, longcat-2.5-preview-free) carry a measured share of a real Autopaper run, with per-desk cell error rates and latency",
+ "build": "18d01cc0 (pool from fdc70329: deepseek-v4.1-flash, cat-jam-free, longcat-2.5-preview-free, gpt-6-luna; each thread hashed onto one member, the rest are failovers)",
+ "run": {
+  "command": "node scripts/reeng_tracer.mjs --scenario paper --label freemodels-paper-2 --sources rss:bbc_world,rss:guardian_world,rss:npr_world --interval-min 10 --max-items 4 --expect-sha 18d01cc0 --timeout-min 25 --keep-computer",
+  "computer_id": "computer-a5a9b305b1696238bca8980d971c66d7",
+  "window": "2026-10-13T20:41Z..21:07Z",
+  "runs": 71,
+  "stories_opened": 11,
+  "revisions_committed": "33 Texture revisions across 11 documents (2 to 8 each)",
+  "tracer_exit": 6,
+  "tracer_exit_reason": "the paper scenario reads publication from the public front list, which since 07af852a lists only the paper owner; see docs/problems/tracer-paper-blind-to-test-publications-2026-10-13.md",
+  "computer_stopped": "2026-10-13T21:2xZ (201)"
+ },
+ "per_model": {
+  "longcat-2.5-preview-free": {
+   "calls": 81,
+   "in_tok": 2529181,
+   "out_tok": 67849,
+   "completions": 80
+  },
+  "cat-jam-free": {
+   "calls": 176,
+   "in_tok": 3907251,
+   "out_tok": 169171,
+   "completions": 176
+  },
+  "deepseek-v4.1-flash": {
+   "calls": 383,
+   "in_tok": 18856171,
+   "out_tok": 728259,
+   "completions": 378
+  },
+  "gpt-6-luna": {
+   "calls": 124,
+   "in_tok": 4926071,
+   "out_tok": 35207,
+   "completions": 124
+  }
+ },
+ "latency_s": {
+  "cat-jam-free": {
+   "n": 176,
+   "p50": 1.605571985244751,
+   "max": 35.01803398132324
+  },
+  "longcat-2.5-preview-free": {
+   "n": 80,
+   "p50": 11.14032506942749,
+   "max": 267.089910030365
+  },
+  "deepseek-v4.1-flash": {
+   "n": 378,
+   "p50": 6.112990856170654,
+   "max": 253.38848090171814
+  },
+  "gpt-6-luna": {
+   "n": 124,
+   "p50": 2.195241928100586,
+   "max": 21.52493715286255
+  }
+ },
+ "by_desk_calls": {
+  "research": {
+   "longcat-2.5-preview-free": 38,
+   "deepseek-v4.1-flash": 266,
+   "gpt-6-luna": 101,
+   "cat-jam-free": 50
+  },
+  "texture": {
+   "cat-jam-free": 92,
+   "deepseek-v4.1-flash": 105,
+   "gpt-6-luna": 8,
+   "longcat-2.5-preview-free": 1
+  },
+  "management": {
+   "longcat-2.5-preview-free": 42,
+   "cat-jam-free": 34,
+   "gpt-6-luna": 15,
+   "deepseek-v4.1-flash": 12
+  }
+ },
+ "cells_by_model_and_desk": {
+  "management": {
+   "cat-jam-free": "41 cells, 32% errors",
+   "longcat-2.5-preview-free": "55 cells, 47% errors",
+   "deepseek-v4.1-flash": "10 cells, 10%",
+   "gpt-6-luna": "11 cells, 18%"
+  },
+  "research": {
+   "cat-jam-free": "47 cells, 28%",
+   "longcat-2.5-preview-free": "57 cells, 33%",
+   "deepseek-v4.1-flash": "279 cells, 9%",
+   "gpt-6-luna": "96 cells, 18%"
+  },
+  "texture": {
+   "cat-jam-free": "91 cells, 23%, 21 Write calls",
+   "deepseek-v4.1-flash": "122 cells, 20%, 30 Write calls",
+   "gpt-6-luna": "8 cells, 12%",
+   "longcat-2.5-preview-free": "1 cell"
+  }
+ },
+ "share": {
+  "free_calls": "257 of 764 provider calls (34%)",
+  "free_input_tokens": "6.4M of 37.7M (17%)",
+  "free_output_tokens": "237K of 1.0M (24%)"
+ },
+ "error_classes": "largest unclassified classes are interpreter faults hitting every model (yaegi compile panic nil pointer; constant definition loop across cells), then wrong API names and forbidden imports",
+ "method": "per-run events from /api/runs and /api/runs/<id>/events; the model of a cell is the model of the last provider call before it; latency is provider_call_started to the token-count progress event",
+ "limits": [
+  "one 25-minute run; thread-to-model hashing makes desk coverage lumpy (longcat drew 1 Texture cell)",
+  "no failover or 429 events were found in loop.progress; provider-level failover is not visible in run events",
+  "publication of these stories is not observable on the public front list by design"
+ ]
+}
