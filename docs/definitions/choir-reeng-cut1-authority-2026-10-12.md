@@ -494,6 +494,37 @@ now:
     Depends on Cut 0 (tracer, checker, crash drill, fresh computers,
     request-id fix, one REPL owner per desk, broker-handle fix). Red
     throughout.
+  scope_split: >-
+    Orchestrator decision 2026-10-13 under No Blocking Asks, reviewed by a
+    convergent panel (claude opus and deepseek-v4.1-flash answered; codex
+    and the two GPT anchors hit usage limits;
+    .agentic-consensus/c1-scope-2026-10-13, receipt in
+    docs/reports/reeng-plan-review-2026-10-13.md). C1 closes on its core,
+    the conversations Autopaper uses, and the engineering and
+    self-development items move to station C1e, run after C2's
+    autopaper_live and before the completion review. Reason: engineering
+    assignments are bound to work items throughout
+    store/engineering_assignments.go, Autopaper never casts engineering,
+    and moving them first would hold C2 most of a night. C1-core
+    acceptance: records as the only work state on Texture-research and
+    Texture-management (deployed, L3a, L3b); a Texture turn that starts and
+    commits from records with zero open work items; cursors, wakes and the
+    post-turn re-check; crash closure of runs and rounds with a no-op second
+    boot; the planned-restart marker's work_state_epoch (D7); the routing
+    refusal of engineering acts to texture:* (reducer test); the checker on
+    records (I6 as cursor never past head and heads equal their rebuild,
+    at most one open round per conversation, only a final Report or system
+    closure closes, and no packet or work item minted on a records route);
+    late arrival; prompts and generated verb lists with the reverse parity
+    test for Texture, research and management. C1e: engineering on records
+    (capsule Records, records-authorized assignments, engineering prompt),
+    path B deleted, management Verify, the self-development round trip on
+    records, sub-researchers as runs (L5; the all-children barrier stays on
+    C2's research path meanwhile, a named risk), run acceptance on the fold
+    (L7), and the wholesale deletion of packets and work items with its
+    grep gate. Cost until C1e: management refuses engineering casts on
+    records turns with an explanation, so execution requests come back
+    blocked on staging and on the owner's computer.
   next_action: >-
     Landing order, revised by the plan review of 2026-10-13
     (docs/reports/reeng-plan-review-2026-10-13.md). Each push that changes

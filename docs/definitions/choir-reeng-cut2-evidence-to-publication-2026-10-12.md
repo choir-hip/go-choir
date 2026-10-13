@@ -343,7 +343,7 @@ finish:
     - action: "2a, tracer: the owner edits in a sentence citing a real quote that does not support it"
       proves: the quote check passes, management records a failing support judgement, the failure reaches texture:<doc>, and Texture writes the correcting revision; the next unrelated revision shows memo hits for every unchanged pair
       evidence_class: deployed proof
-    - action: "2a, tracer: an engineering-backed request"
+    - action: "2a, tracer: an engineering-backed request (moved to station C1e by the Cut 1 scope split of 2026-10-13; C2 is accepted without it, and C1e runs it)"
       proves: the owner-facing revision has no code, diff, command or log in its prose, and the change is reachable from a citation chip (Playwright screenshot)
       evidence_class: deployed proof
     - action: "2b, tracer: a story publishes each revision automatically; at version n the tracer page changes to disconfirm it; research or management brings the re-capture; a later version m publishes the correction"

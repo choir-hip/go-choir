@@ -50,6 +50,12 @@ metamission:
       readiness: reviewed
       status: executing (L1 landed 6d676094)
       depends_on: [C0]
+    - id: C1e
+      path: docs/definitions/choir-reeng-cut1-authority-2026-10-12.md (scope_split, C1e items)
+      readiness: reviewed (scope split panel 2026-10-13)
+      status: pending
+      depends_on: [C2]
+      note: engineering and self-development on records, path B deleted, L5, L7, wholesale packet and work-item deletion; runs after C2's autopaper_live and before the completion review
     - id: C2
       path: docs/definitions/choir-reeng-cut2-evidence-to-publication-2026-10-12.md
       readiness: reviewed

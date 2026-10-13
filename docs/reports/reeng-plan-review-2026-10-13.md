@@ -72,3 +72,26 @@ claim-directed scenario per landing, and the full story at cut boundaries.
 - **A per-bundle novelty diff** (devin). It would report records by kind,
   runs by fate and cells by error class between consecutive bundles, and flag
   behaviour that changed where no rule looks.
+
+## Follow-up panel: Cut 1 scope split (07:40Z)
+
+Prompt `.agentic-consensus/c1-scope-prompt-2026-10-13.md`, manifest
+`.agentic-consensus/c1-scope-2026-10-13/`. Panel: claude, codex, gpt-6.1-sol,
+gpt-6-luna, deepseek-v4.1-flash; codex and the two GPT anchors hit usage
+limits, claude and deepseek answered. Both: **adopt with changes**. Adopted
+changes:
+
+- C1-core keeps a Texture turn that starts and commits from records with
+  zero open work items, the planned-restart work_state_epoch (D7), round
+  closure with a no-op second boot, late arrival, the reverse parity test
+  and generated verb lists with the prompts of Texture, research and
+  management, and a checker invariant that a records route mints no packet
+  or work item.
+- Sub-researchers (L5) are named: moved to C1e, with the all-children
+  barrier on C2's research path recorded as a risk.
+- Cut 2's engineering-backed 2a acceptance moves to C1e in the same commit.
+
+Not adopted now: a typed Report verb replacing the packet adapter (claude).
+The adapter already carries final, settled, dropped and stop_reason into
+the typed body; the verb change rides the prompt work in C1-core if the
+traces show the packet shape getting in the way.
