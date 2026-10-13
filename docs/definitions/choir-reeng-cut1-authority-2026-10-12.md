@@ -436,7 +436,7 @@ now:
       the work-closure bug class and crash re-dispatch cannot recur,
       management can feed any Texture, and Cut 2 builds Autopaper without
       touching work state.
-    test: the acceptance list, then five consecutive clean tracer runs and no new work-state entry in the breakage log after its last fix
+    test: the acceptance list, a clean tracer run after the last landing, and no new work-state entry in the breakage log after its last fix (owner pace ruling 2026-10-13: one fast run per landing, not a series)
     edge: frame_lock
     delta_o: >-
       the checker states failures only in rounds and cursors; a desk that
@@ -486,7 +486,24 @@ now:
     Depends on Cut 0 (tracer, checker, crash drill, fresh computers,
     request-id fix, one REPL owner per desk, broker-handle fix). Red
     throughout.
-  next_action: re-review of the repaired file; then Cut 0
+  next_action: >-
+    after Cut 0 closes, land in this order, each commit through deploy
+    and one fast tracer run (metamission boundaries.pace 5), so the
+    checker's verdicts move every time. L1 restart: a markerless boot
+    makes pre-boot runs terminal with interrupted_by_restart and cancels
+    engineering assignments; passivation, passivated-run resume,
+    spawned-work replay, terminal settlement repair, Texture wake re-arm,
+    wire-publication claim recovery and the engineering recast are
+    deleted (the tracer's drill shows I2's run half and I3 turn green;
+    closure records per round follow in L3). L2 deletions that need no
+    new authority: 6b, 6c, research caps and budgets (6). L3 records,
+    inbox sequence, conversations, rounds, hypothesis ids, cursors and
+    wakes (1, 2), with packets and work items deleted (3) in the same
+    landing, closure records added to L1's boot phase, and I6 plus the
+    Cut 1 invariants in the checker. L4 routing (5). L5 sub-researchers
+    as runs on records (6). L6 prompts and the reverse parity test (7).
+    L7 run acceptance on the fold (8) and the self-development round
+    trip.
 
 receipts: []
 ---
