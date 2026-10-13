@@ -389,14 +389,18 @@ func (rt *Handler) ValidateActivationAuthority(ctx context.Context, ownerID, com
 		}
 		return fmt.Errorf("validate Texture activation: subject authority mismatch")
 	}
-	workID := strings.TrimSpace(metadataStringValue(run.Metadata, "lifecycle_work_item_id"))
-	work, err := rt.Store.GetLifecycleWorkItem(ctx, ownerID, computerID, workID)
-	workAuthorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)
-	if err != nil || work.Status != types.WorkItemOpen || work.TrajectoryID != doc.TrajectoryID || work.AssignedAgentID != agentID || workAuthorityProfile != agentprofile.Texture {
-		if err != nil {
-			return fmt.Errorf("validate Texture activation work: %w", err)
+	// On the records route the records are the work (Cut 1, B5): a run
+	// started or reactivated for unread records needs no open work item.
+	if workID := strings.TrimSpace(metadataStringValue(run.Metadata, "lifecycle_work_item_id")); workID != "" || !metadataBoolValue(run.Metadata, textureRecordsRouteMetadata) {
+		work, err := rt.Store.GetLifecycleWorkItem(ctx, ownerID, computerID, workID)
+		workAuthorityProfile, _ := agentprofile.Canonical(work.AuthorityProfile)
+		workOpen := err == nil && work.Status == types.WorkItemOpen && work.TrajectoryID == doc.TrajectoryID && work.AssignedAgentID == agentID && workAuthorityProfile == agentprofile.Texture
+		if !workOpen && !(err == nil && metadataBoolValue(run.Metadata, textureRecordsRouteMetadata)) {
+			if err != nil {
+				return fmt.Errorf("validate Texture activation work: %w", err)
+			}
+			return fmt.Errorf("validate Texture activation: open work authority mismatch")
 		}
-		return fmt.Errorf("validate Texture activation: open work authority mismatch")
 	}
 	mutation, err := rt.Store.GetAgentMutationByRun(ctx, ownerID, computerID, runID)
 	if err != nil {
@@ -701,7 +705,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 		}
 		return nil, nil
 	}
-	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake || recordsPending); err != nil {
+	if rec, reactivated, err := rt.reactivatePassivatedTextureRun(ctx, doc, textureAgentID, scheduledSeq, ownerHeadPending || initialWorkWake || recordsPending, recordsPending); err != nil {
 		return nil, err
 	} else if reactivated {
 		if bindErr := rt.reconcileTextureUpdateDelivery(ctx, doc, textureAgentID, rec.RunID, armedUpdates, exhausted, false, 0, "", ""); bindErr != nil {
@@ -953,7 +957,7 @@ func textureDeliveryContentKey(req types.ReconcileUpdateDeliveryRequest) string 
 // independent of unbound packet coverage: an unconsumed owner head or open
 // desk work. It keeps a sleeping mutation reactivatable after consume-at-commit
 // bound its packets to a run that died before consuming them.
-func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types.Document, textureAgentID string, scheduledSeq int64, docWakeArmed bool) (*types.RunRecord, bool, error) {
+func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types.Document, textureAgentID string, scheduledSeq int64, docWakeArmed, recordsPending bool) (*types.RunRecord, bool, error) {
 	if rt == nil || rt.Store == nil {
 		return nil, false, nil
 	}
@@ -1040,6 +1044,17 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	rec.Metadata = cloneMetadata(rec.Metadata)
 	rec.Metadata["request_source"] = "update_coagent"
 	rec.Metadata["request_intent"] = "integrate_execution_findings"
+	if recordsPending {
+		// The records are this turn's work (B5). A work item the run carried
+		// that has since closed no longer authorizes it, and a turn must not
+		// try to settle it again.
+		rec.Metadata[textureRecordsRouteMetadata] = true
+		if workID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")); workID != "" {
+			if work, workErr := rt.Store.GetLifecycleWorkItem(ctx, ownerID, doc.ComputerID, workID); workErr != nil || work.Status != types.WorkItemOpen {
+				delete(rec.Metadata, "lifecycle_work_item_id")
+			}
+		}
+	}
 	// The coverage watermark never shrinks: a sleeping mutation reactivated on
 	// bound-but-pending packets or owner-head pressure keeps the watermark that
 	// already claims them.

@@ -168,7 +168,10 @@ func persistSubmittedRunEvent(ctx context.Context, st runSubmissionStore, bus *e
 }
 
 func agentMutationComputerID(rec *types.RunRecord) string {
-	if rec == nil || strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) == "" {
+	if rec == nil {
+		return ""
+	}
+	if strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) == "" && !metadataBoolValue(rec.Metadata, textureRecordsRouteMetadata) {
 		return ""
 	}
 	return strings.TrimSpace(rec.ComputerID)
@@ -203,3 +206,7 @@ func agentMutationForRun(rec *types.RunRecord) *store.AgentMutation {
 		CreatedAt:           rec.CreatedAt,
 	}
 }
+
+// textureRecordsRouteMetadata mirrors textureowner's marker for a Texture
+// run on the records route (Cut 1, B5).
+const textureRecordsRouteMetadata = "records_route"

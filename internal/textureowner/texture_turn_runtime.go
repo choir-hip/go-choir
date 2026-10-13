@@ -446,6 +446,20 @@ func (h *Handler) applyTextureLifecycleTurn(ctx context.Context, rec *types.RunR
 		return types.LifecycleResult{}, err
 	}
 	callerWorkItemID := strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id"))
+	if callerWorkItemID != "" && metadataBoolValue(rec.Metadata, textureRecordsRouteMetadata) {
+		// A records-route turn settles its work item only while it is open
+		// (B5); an earlier turn may have completed it.
+		open := false
+		for _, work := range snapshot.WorkItems {
+			if work.WorkItemID == callerWorkItemID && work.Status == types.WorkItemOpen {
+				open = true
+				break
+			}
+		}
+		if !open {
+			callerWorkItemID = ""
+		}
+	}
 	callerWorkDisposition := types.WorkItemStatus(strings.TrimSpace(in.WorkDisposition))
 	if callerWorkDisposition == "" || callerWorkItemID == "" {
 		// A turn on records has no work item to settle (Cut 1).

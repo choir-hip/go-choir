@@ -18,7 +18,10 @@ func (h *Handler) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.I
 }
 
 func agentMutationComputerID(rec *types.RunRecord) string {
-	if rec == nil || strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) == "" {
+	if rec == nil {
+		return ""
+	}
+	if strings.TrimSpace(metadataStringValue(rec.Metadata, "lifecycle_work_item_id")) == "" && !metadataBoolValue(rec.Metadata, textureRecordsRouteMetadata) {
 		return ""
 	}
 	return strings.TrimSpace(rec.ComputerID)
@@ -37,3 +40,8 @@ func (h *Handler) createAgentMutationForRun(ctx context.Context, rec *types.RunR
 		ScheduledMessageSeq: int64(metadataIntValue(rec.Metadata, "scheduled_message_seq")), CreatedAt: time.Now().UTC(),
 	})
 }
+
+// textureRecordsRouteMetadata marks a Texture run started or reactivated
+// for unread records (Cut 1, B5): the records are its work, so it needs no
+// open work item.
+const textureRecordsRouteMetadata = "records_route"

@@ -257,6 +257,23 @@ func TestRecordsRecheckAfterTurn(t *testing.T) {
 	if len(woke) != 2 {
 		t.Fatalf("a completed turn with unread records did not start one more turn: %v", woke)
 	}
+	// B7: a parked run's turn has ended too. A park after a committed turn
+	// is a completed turn; a park that committed nothing re-arms only for
+	// records that arrived after it began.
+	parked := func(reason string, created time.Time) *types.RunRecord {
+		r := run(types.RunPassivated, "")
+		r.CreatedAt = created
+		r.Metadata = map[string]any{"passivated_reason": reason}
+		return r
+	}
+	rt.recheckRecordsInbox(ctx, parked("durable_transition_success", start))
+	if len(woke) != 3 {
+		t.Fatalf("a run parked after a committed turn did not start one more turn for its unread records: %v", woke)
+	}
+	rt.recheckRecordsInbox(ctx, parked("idle_deadline", start.Add(time.Hour)))
+	if len(woke) != 3 {
+		t.Fatalf("a park that committed nothing re-armed records it already had: %v", woke)
+	}
 }
 
 // Cut 1 routing, invariant 6: engineering reaches Texture only through
@@ -278,5 +295,76 @@ func TestReducerRefusesEngineeringActsToTexture(t *testing.T) {
 		if err := validateCellIntents(ReductionScope{FromRole: from}, []yaegikernel.StagedIntent{report}); err != nil && strings.Contains(err.Error(), "only through management") {
 			t.Errorf("%s report to a Texture inbox refused by the engineering rule: %v", from, err)
 		}
+	}
+}
+
+// Cut 1 breakage B6: a round stays open when its recipient's run ends
+// without a final Report, and nothing wakes the caster. When a research or
+// management run ends its turn (terminal, or parked) with no run of that
+// desk still active, the runtime closes each round it is the recipient of
+// with a final system Report and wakes the caster.
+//
+// Ways this could fail, written first: the round stays open; the closure
+// wakes nobody, so Texture still waits; a crash-closed run closes rounds a
+// second time (the boot already did, and must wake no one); a run that ends
+// while a newer run of the same desk is active closes a round that run is
+// answering; a closure is committed twice for one round.
+func TestRecipientRunEndClosesItsOpenRounds(t *testing.T) {
+	rt, s := testRuntime(t)
+	ctx := context.Background()
+	owner, computer := "owner-ended", rt.cfg.ComputerID
+	research, texture := "research:doc-ended", "texture:doc-ended"
+	var woke []string
+	rt.SetDispatchActor(func(_ context.Context, _, _, to, kind, _, _, _ string) error {
+		if kind == "inbox_record" {
+			woke = append(woke, to)
+		}
+		return nil
+	})
+	req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "cast-ended", Records: []types.CommitmentRecord{{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cast-1", Kind: types.CommitmentKindDirective,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Body: "find X"}, Cast: &types.CommitmentCast{},
+		Inbox: research, SenderInbox: texture, Addressee: research, EmitterKind: types.CommitmentEmitterAgent,
+		Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture, CommittedAt: time.Now().UTC().Format(time.RFC3339Nano)},
+	}}}
+	req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
+	if _, err := s.CommitInboxRecords(ctx, req); err != nil {
+		t.Fatalf("commit cast: %v", err)
+	}
+	conversation := types.InboxConversationID(texture, research)
+	open := func() bool {
+		t.Helper()
+		head, err := s.ConversationState(ctx, owner, computer, conversation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return head.Open
+	}
+	if !open() {
+		t.Fatal("the Cast did not open a round")
+	}
+	ended := func(state types.RunState, errText string) *types.RunRecord {
+		return &types.RunRecord{RunID: "run-" + string(state), AgentID: research, OwnerID: owner, ComputerID: computer,
+			AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research, State: state, Error: errText, CreatedAt: time.Now().UTC()}
+	}
+
+	rt.closeRoundsOfEndedRun(ctx, ended(types.RunCancelled, runFateInterruptedByRestart))
+	if !open() || len(woke) != 0 {
+		t.Fatalf("a crash-closed run closed its round or woke someone (open=%v woke=%v)", open(), woke)
+	}
+	rt.closeRoundsOfEndedRun(ctx, ended(types.RunFailed, "provider error"))
+	if open() {
+		t.Fatal("the round stayed open after its recipient's run failed without a final Report")
+	}
+	if len(woke) != 1 || woke[0] != texture {
+		t.Fatalf("the closure did not wake the caster: %v", woke)
+	}
+	records, err := s.ListInboxRecords(ctx, owner, computer, texture, 0, 10)
+	if err != nil || len(records) != 1 || !records[0].Final || records[0].EmitterKind != types.CommitmentEmitterSystem {
+		t.Fatalf("Texture's inbox after the closure: %+v err=%v", records, err)
+	}
+	rt.closeRoundsOfEndedRun(ctx, ended(types.RunFailed, "provider error"))
+	if records, _ := s.ListInboxRecords(ctx, owner, computer, texture, 0, 10); len(records) != 1 || len(woke) != 1 {
+		t.Fatalf("a second end closed the closed round again: records=%d woke=%v", len(records), woke)
 	}
 }

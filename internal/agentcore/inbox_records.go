@@ -453,9 +453,16 @@ func (rt *Runtime) InboxUnread(ctx context.Context, ownerID, computerID, deskAge
 // record that breaks the desk is read again only when a new record arrives,
 // never in a loop. A crash closure re-arms nothing at all.
 func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord) {
-	if rt == nil || rt.store == nil || rec == nil || !rec.State.Terminal() || rec.Error == runFateInterruptedByRestart {
+	rt.closeRoundsOfEndedRun(ctx, rec)
+	// A parked run counts too (B7): its turn ended though the run did not.
+	// A park after a committed turn is a completed turn; any other park is
+	// a turn that committed nothing.
+	parked := rec != nil && rec.State == types.RunPassivated
+	if rt == nil || rt.store == nil || rec == nil || !(rec.State.Terminal() || parked) || rec.Error == runFateInterruptedByRestart {
 		return
 	}
+	completed := rec.State == types.RunCompleted ||
+		(parked && metadataStringValue(rec.Metadata, "passivated_reason") == "durable_transition_success")
 	if !recordsDesk(agentProfileForRun(rec)) {
 		return
 	}
@@ -468,7 +475,7 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	if err != nil || head <= cursor {
 		return
 	}
-	if rec.State != types.RunCompleted {
+	if !completed {
 		unread, err := rt.store.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, cursor, head)
 		if err != nil {
 			return
@@ -527,5 +534,59 @@ func (rt *Runtime) closeOpenRoundsAfterCrash(ctx context.Context) {
 			continue
 		}
 		log.Printf("runtime: closed round %d of %s after a crash restart", conversation.Round, conversation.ConversationID)
+	}
+}
+
+// closeRoundsOfEndedRun closes the rounds a research or management run
+// leaves open when its turn ends without a final Report (B6). Only the
+// recipient's final Report or a system closure closes a round, and nothing
+// else would wake the caster, so it would wait until the next restart.
+// When the run ends (terminal, or parked) and no run of the desk is still
+// active, each round the desk is the recipient of gets a final system
+// Report, reason run_<state>, and the caster is woken: unlike the crash
+// closure, this closure is news the caster must act on. A crash-closed run
+// closes nothing; the boot already did.
+func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunRecord) {
+	if rt == nil || rt.store == nil || rec == nil || rec.Error == runFateInterruptedByRestart {
+		return
+	}
+	if !rec.State.Terminal() && rec.State != types.RunPassivated {
+		return
+	}
+	switch agentProfileForRun(rec) {
+	case agentprofile.Research, agentprofile.Management:
+	default:
+		return
+	}
+	inbox := strings.TrimSpace(rec.AgentID)
+	if active, found, err := rt.activeRunByAgent(ctx, rec.OwnerID, inbox); err != nil || (found && active.RunID != rec.RunID) {
+		return
+	}
+	rounds, err := rt.store.OpenRounds(ctx, rec.OwnerID, rec.ComputerID, inbox)
+	if err != nil {
+		log.Printf("runtime: round closure after %s: %v", rec.RunID, err)
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, round := range rounds {
+		if round.RecipientInbox != inbox || strings.TrimSpace(round.CasterInbox) == "" {
+			continue
+		}
+		closure := types.NewRoundClosureRecord(round.CasterInbox, inbox, round.Round, "run_"+string(rec.State), now)
+		closure.ComputerID = rec.ComputerID
+		req := types.CommitInboxRecordsRequest{OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: "run-end-closure:" + closure.RecordID, Records: []types.CommitmentRecord{closure}}
+		if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
+			log.Printf("runtime: round closure %s: %v", closure.RecordID, err)
+			continue
+		}
+		if _, err := rt.store.CommitInboxRecords(ctx, req); err != nil {
+			log.Printf("runtime: round closure %s: %v", closure.RecordID, err)
+			continue
+		}
+		log.Printf("runtime: closed round %d of %s: %s ended without a final Report", round.Round, round.ConversationID, rec.RunID)
+		content, _ := json.Marshal(map[string]string{"inbox": round.CasterInbox, "closure": closure.RecordID})
+		if err := rt.DispatchActor(ctx, rec.OwnerID, rec.ComputerID, round.CasterInbox, "inbox_record", string(content), "", ""); err != nil {
+			log.Printf("runtime: round closure wake for %s: %v", round.CasterInbox, err)
+		}
 	}
 }

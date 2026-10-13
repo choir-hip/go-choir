@@ -418,7 +418,19 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 		}
 		// A wake that reactivated a parked run leaves it pending for the
 		// calling occurrence to execute, as the coagent path does; a fresh
-		// run is dispatched by its own submit (Cut 1 breakage B4).
+		// run is dispatched by its own submit (Cut 1 breakage B4). A retry
+		// after that execution deferred finds the run still pending and
+		// reactivated, with nobody running it, and runs it (B8): this
+		// mailbox runs one occurrence at a time, so nothing else is.
+		if rec == nil {
+			active, found, activeErr := h.rt.TextureActiveRunByAgent(ctx, ownerID, computerID, agentID)
+			if activeErr != nil {
+				return nil, fmt.Errorf("%w: actorruntime: Texture inbox wake active run: %v", actor.ErrDeferUnprocessed, activeErr)
+			}
+			if found {
+				rec = &active
+			}
+		}
 		if rec != nil && rec.State == types.RunPending {
 			if reactivated, _ := rec.Metadata["actor_reactivated_from_passivated"].(bool); reactivated {
 				if err := h.textureOwner.ValidateActivationAuthority(ctx, ownerID, computerID, agentID, rec.RunID); err != nil {
