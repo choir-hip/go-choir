@@ -143,11 +143,23 @@ func TestOpeningCastCreatesOneStoryWithNoOwnerRevisionOrWork(t *testing.T) {
 		t.Fatalf("retries minted wakes: %+v", wakes)
 	}
 
-	// A story never settles because its work drained.
+	// A story never settles because its work drained, even once Texture
+	// has read every record and closed the opening round (B10 alone would
+	// let it settle then, and management's next Cast would wake nothing).
+	final := inboxReport("texture-final", row.Inbox, storyManagement(), true, types.CommitmentReport{StopReason: "written"})
+	mustCommitInbox(t, s, "texture-reads-all", &types.InboxCursorAdvance{ReaderAgentID: row.Inbox, Inbox: row.Inbox, ExpectedSeq: 0, Seq: 1}, final)
+	if rounds, _ := s.OpenRounds(ctx, storyOwner, storyComputer, row.Inbox); len(rounds) != 0 {
+		t.Fatalf("fixture: rounds still open: %+v", rounds)
+	}
 	prospective := snapshot.Trajectory
 	prospective.TerminalArtifactHeadRef = doc.CurrentRevisionID
 	if ready, err := s.lifecycleSettlementReady(ctx, prospective, nil, nil); err != nil || ready {
 		t.Fatalf("story settlement ready = %v, %v; want never", ready, err)
+	}
+	asTask := prospective
+	asTask.Kind = types.TrajectoryKindTask
+	if ready, err := s.lifecycleSettlementReady(ctx, asTask, nil, nil); err != nil || !ready {
+		t.Fatalf("fixture: the same trajectory as a task settles = %v, %v; want ready, so the story kind is what holds it live", ready, err)
 	}
 }
 
