@@ -7,7 +7,7 @@
 //      only on that computer id;
 //   2. submit a fixed AI-news story through the prompt bar route; the story
 //      asks Texture to cast research twice in one turn, each cast running
-//      eight tagged choir.WebSearch calls in one cell (goroutines + channel);
+//      eight tagged searches started at once in one cell (choir.SearchStart);
 //   3. while a run of the story is mid-cell, submit a follow-up to the same
 //      document (the second run on a busy desk);
 //   4. crash drill: only after observing an in-flight run, restart the
@@ -78,8 +78,8 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
 const SCENARIO = arg('scenario', 'story');
-if (!['story', 'crash', 'management'].includes(SCENARIO)) {
-  console.error(`unknown --scenario ${SCENARIO} (story | crash | management)`);
+if (!['story', 'crash', 'management', 'research'].includes(SCENARIO)) {
+  console.error(`unknown --scenario ${SCENARIO} (story | crash | management | research)`);
   process.exit(2);
 }
 const CRASH_QUIET_MS = Number(arg('quiet-s', '150')) * 1000;
@@ -95,13 +95,13 @@ const TRACE_DIR = join(homedir(), '.config', 'choir-qa', 'traces', LABEL);
 const STORY = [
   'Write a short news story (about 300 words, every claim cited) on the most significant AI model release of the past two weeks.',
   'Research instructions, pass them to research verbatim. Cast research TWICE in this same turn, as two separate casts:',
-  '(A) In ONE desk_go_eval cell, start eight goroutines, each calling choir.WebSearch with its own query, tagged q1..q8:',
+  '(A) In ONE desk_go_eval cell, start eight searches with choir.SearchStart, one per query, tagged q1..q8:',
   'q1 "new AI model release October 2026", q2 "open-weight language model release this week", q3 "frontier AI lab model announcement",',
   'q4 "new AI model benchmark results", q5 "AI model release safety evaluation", q6 "AI model API pricing announcement",',
   'q7 "AI accelerator chip news this week", q8 "AI regulation news this week".',
-  'Send each result over one channel as a {tag, result} pair, collect all eight, and report which result came back for which tag',
+  'Read each search with choir.Searches.Get as its providers answer, and report which result came back for which tag',
   '(tag, query, first result title and URL), flagging any result that does not match its query.',
-  '(B) The same cell shape (eight goroutines, one channel) with tags r1..r8 on reactions to and criticism of that release:',
+  '(B) The same cell shape (eight searches started at once) with tags r1..r8 on reactions to and criticism of that release:',
   'r1 "AI model release criticism", r2 "AI model release independent evaluation", r3 "AI model release developer reaction",',
   'r4 "AI model release hallucination tests", r5 "AI model release open source community", r6 "AI model release enterprise adoption",',
   'r7 "AI model release compute cost", r8 "AI model release policy response". Report the tag-to-result mapping the same way.',
@@ -117,14 +117,30 @@ const MANAGEMENT_STORY = [
   'and incorporate management\'s answer when it arrives.',
 ].join(' ');
 
+// The research scenario (Cut 2 2a, with Cut 1 B5 and B6): research starts
+// several searches at once and reads providers as they answer; its claim is
+// the async search (a search_done egress event with answered providers, and
+// a cell result showing new arrivals) and the conversation (research's final
+// Report reaches texture:<doc> and a committed Texture turn reads it). The
+// first revision completes the owner's request, so the Report arrives on a
+// Texture whose work item has closed (B5).
+const RESEARCH_STORY = [
+  'Write a short news brief (about 200 words, every claim cited) on the most significant open-weight AI model release of the past two weeks.',
+  'In your first cell, write a one-paragraph plan as your first revision with work_disposition "completed" (that revision completes this request),',
+  'and in the same cell Cast research to find the release, its benchmark claims and one independent evaluation.',
+  'Research instructions, pass them to research verbatim: start four searches at once with choir.SearchStart, one per query,',
+  'read them with choir.Searches.Get as providers answer, Read the pages you will cite, and send one final Report.',
+  'When research reports, incorporate its findings in a later revision.',
+].join(' ');
+
 const FOLLOW_UP = [
   'Follow-up on this story: add a short section on what independent evaluators said about this release.',
-  'Ask research for one more desk_go_eval cell that runs eight tagged choir.WebSearch calls in parallel',
-  '(tags f1..f8, one goroutine each, results collected over one channel) and report which result came back for which tag.',
+  'Ask research for one more desk_go_eval cell that starts eight tagged searches at once with choir.SearchStart',
+  '(tags f1..f8) and report which result came back for which tag.',
 ].join(' ');
 const AFTER_RESTART = [
   'The computer restarted while this story was in progress. Finish the story from what is already on the page;',
-  'if research results were lost, ask research again with the same eight tagged parallel choir.WebSearch calls in one cell.',
+  'if research results were lost, ask research again with the same eight tagged searches started at once in one cell.',
 ].join(' ');
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -320,13 +336,14 @@ async function attempt(n, out) {
   out.build = obs.body?.build || null;
 
   // Story submit; the first accepted submit is the "first ready prompt bar".
-  const story = await submitPrompt(c, SCENARIO === 'management' ? MANAGEMENT_STORY : STORY, 'story', deadline);
+  const story = await submitPrompt(c, SCENARIO === 'management' ? MANAGEMENT_STORY : SCENARIO === 'research' ? RESEARCH_STORY : STORY, 'story', deadline);
   out.timings.first_prompt_accepted_ms = Date.now() - t0;
   out.trajectory_id = story.body.trajectory_id;
   out.doc_id = story.body.doc_id;
   const submittedAt = Date.now();
   phase('story_submitted', { trajectory_id: out.trajectory_id, doc_id: out.doc_id, after_mint_ms: out.timings.first_prompt_accepted_ms });
   if (SCENARIO === 'management') return managementScenario(c, out, n, deadline, phase);
+  if (SCENARIO === 'research') return researchScenario(c, out, n, deadline, phase);
 
   // Load: second run on a busy desk, sent while a run is observed mid-cell.
   const load = { parallel_cell_requested: true, double_cast_requested: true, second_run_submitted_at: null, observed_run_id: null, observed_by: null };
@@ -741,6 +758,75 @@ async function managementScenario(c, out, n, deadline, phase) {
     scenario: 'management', claim: 'Texture and management converse on records: Cast to management:<owner>, management final Report closes the round, a committed Texture turn reads it',
     ...claim, round_closed: roundClosed,
     pass: Boolean(claim.cast_to_management && claim.management_final_report && claim.texture_read_report && roundClosed),
+  };
+  phase('acceptance', out.acceptance);
+  delete out.drill;
+  return out;
+}
+
+// researchScenario watches the Texture-research conversation until
+// research's final Report and a committed Texture turn reading it, then
+// exports and reads the async-search claim from the bundle's egress and
+// cell results. No crash, no owner act after the request.
+async function researchScenario(c, out, n, deadline, phase) {
+  const textureInbox = `texture:${out.doc_id}`;
+  const researchInbox = `research:${out.doc_id}`;
+  const inbox = async (id) => {
+    const r = await c.api(`/api/inboxes/${encodeURIComponent(id)}/records?limit=1000`);
+    return r.status === 200 ? r.body : null;
+  };
+  const claim = { cast_to_research: null, research_final_report: null, texture_read_report: null };
+  while (Date.now() < deadline && !(claim.research_final_report && claim.texture_read_report)) {
+    if (!claim.cast_to_research) {
+      const r = await inbox(researchInbox);
+      const cast = (r?.records || []).find((x) => x.sender_inbox === textureInbox && x.directive?.subtype === 'cast');
+      if (cast) { claim.cast_to_research = { record_id: cast.record_id, round: cast.round, at: cast.provenance?.committed_at }; phase('cast_to_research', claim.cast_to_research); }
+    }
+    if (claim.cast_to_research && !claim.research_final_report) {
+      const t = await inbox(textureInbox);
+      const fin = (t?.records || []).find((x) => x.sender_inbox === researchInbox && x.final);
+      if (fin) {
+        claim.research_final_report = { record_id: fin.record_id, round: fin.round, seq: fin.inbox_seq, system: fin.emitter_kind === 'system', stop: fin.report?.stop_reason || null, at: fin.provenance?.committed_at };
+        phase('research_final_report', claim.research_final_report);
+      }
+    }
+    if (claim.research_final_report && !claim.texture_read_report) {
+      const t = await inbox(textureInbox);
+      if (t && Number(t.cursor) >= Number(claim.research_final_report.seq)) { claim.texture_read_report = { cursor: t.cursor, head: t.head, at: new Date().toISOString() }; phase('texture_read_report', claim.texture_read_report); }
+    }
+    await sleep(5_000);
+  }
+  out.drill = { label: out.label, scenario: 'research', claim, note: [] };
+  const bundlePath = join(TRACE_DIR, `bundle-a${n}.json`);
+  const exported = await runExporter(c, out.trajectory_id, bundlePath);
+  out.export = { command: EXPORTER, exit: exported.code, ms: exported.ms, stderr_tail: exported.stderr.slice(-600) };
+  if (exported.code !== 0 || !existsSync(bundlePath)) { out.export.failed = true; phase('export_failed', { exit: exported.code }); return out; }
+  out.bundle_path = bundlePath;
+  out.sha256 = createHash('sha256').update(readFileSync(bundlePath)).digest('hex');
+  const bundle = JSON.parse(readFileSync(bundlePath, 'utf8'));
+  const events = bundle.layers?.run_events?.items || [];
+  const payload = (e) => e.payload || e.data || {};
+  const done = events.filter((e) => (e.kind || e.type) === 'desk.egress' && payload(e).verb === 'search_done').map(payload);
+  const started = events.filter((e) => (e.kind || e.type) === 'desk.egress' && /search_?start/i.test(String(payload(e).verb || ''))).length;
+  const countLines = events.filter((e) => {
+    if ((e.kind || e.type) !== 'tool.result') return false;
+    let result = null;
+    try { result = JSON.parse(String(payload(e).output || '')); } catch { return false; }
+    return Array.isArray(result?.searches) && result.searches.some((line) => /\+\d+ new/.test(String(line)));
+  }).length;
+  const search = {
+    started, done: done.length,
+    answered: done.reduce((a, d) => a + Number(d.answered || 0), 0),
+    total: done.reduce((a, d) => a + Number(d.total || 0), 0),
+    cell_results_with_new_arrivals: countLines,
+  };
+  const textureWork = (bundle.layers?.trajectory?.items?.[0]?.work_items || bundle.layers?.trajectory?.work_items || [])
+    .filter((w) => w.assigned_agent_id === textureInbox).map((w) => ({ work_item_id: w.work_item_id, status: w.status }));
+  out.acceptance = {
+    scenario: 'research',
+    claim: 'research searches asynchronously (a search_done with answered providers, and a cell result showing new arrivals) and its final Report reaches texture:<doc>, where a committed Texture turn reads it',
+    ...claim, search, texture_work_items_at_export: textureWork,
+    pass: Boolean(claim.cast_to_research && claim.research_final_report && claim.texture_read_report && search.answered > 0 && search.cell_results_with_new_arrivals > 0),
   };
   phase('acceptance', out.acceptance);
   delete out.drill;
