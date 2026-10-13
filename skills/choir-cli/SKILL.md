@@ -143,6 +143,21 @@ choir trajectories
 choir trajectory <id>
 ```
 
+### Trace export
+
+```sh
+choir trace export <trajectory-id> [--out file]
+```
+
+Writes one trace bundle (`docs/reports/reeng-trace-bundle-format-2026-10-12.md`)
+from product routes only: lifecycle snapshot and events, the trajectory's
+runs and their run events (`GET /api/runs/{id}/events`), desk cells and
+egress, revisions, publications, obligations and boot. Each layer is
+`present`, `empty` or `unserved` (with the failing route's HTTP status in
+`note`). Default output `~/.config/choir-qa/traces/<trajectory>.json`, mode
+0600, unredacted owner data; stdout prints the path, sha256 and per-layer
+statuses. The key needs `read:runtime` and `read:texture`.
+
 ### Search
 
 ```sh
