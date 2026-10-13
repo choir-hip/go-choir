@@ -65,7 +65,7 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 | Choir Base / File Provider | **Substantial tested substrate, product wiring incomplete** | Append-only journal, tree/blob, sync, and API helpers exist. No deployed product service currently owns the API, and Base is not canonical app-state authority. |
 | Autopaper | **Tabled** | No active Definition or canonical implementation. Revival requires a fresh Definition; issue residue is not authority. |
 | `corpusd` | **Code-present and deployment-wired** | Service/store writer and sanitized public API boundary for publication/World Wire; platform-computer agents remain semantic owners. |
-| `sourcecycled` | **Code-present, deployment-wired experimental adapter** | Poll cycles and queue state are in memory and lost on restart. It hands off/projects durable artifacts; it does not own canonical article meaning. |
+| `sourcecycled` | **Deleted 2026-10-13 (Cut 2 unit 2b)** | Captures and source schedules are the only ingestion path; see item 6 below. |
 | Capsules | **Live accepted construction substrate; later self-development candidate rejected** | Audited ComputerVersion construction proved guest-local isolation and lifecycle. Additional namespaces/cgroup/seccomp/Landlock/capability/updater work on the rejected branch remains source evidence only; no self-development effect is authorized. |
 | Features/package adoption | **Forbidden as authority; exact residue remains historical** | AppChangePackage/AppAdoption cannot authorize self-development. Rejected-branch deletion is not silently claimed as canonical-main state and no successor may revive it as fallback authority. |
 
@@ -222,7 +222,6 @@ host services
   -> gateway owns provider credentials and provider request mediation
   -> corpusd owns platform/public publication ledger writes
   -> maild owns email ingress/drafts/notifications where configured
-  -> sourcecycled owns the current experimental source-service daemon
 
 platform computer runtime
   -> cloud-level desks and source/publication agents where present
@@ -243,7 +242,7 @@ Important boundary rules:
 - Caddy is edge/static routing infrastructure, not semantic authority.
 - The browser talks to product APIs, not raw agent, prompt, event, vmctl, Dolt,
   provider, or platform-internal mutation endpoints.
-- `auth`, `proxy`, `gateway`, `vmctl`, `corpusd`, `maild`, and `sourcecycled`
+- `auth`, `proxy`, `gateway`, `vmctl`, `corpusd`, and `maild`
   are host/platform or sidecar services in the current codebase. They should
   stay narrow and should not become private document, appagent, or user-computer
   semantic owners.

@@ -3121,7 +3121,8 @@ func (s *Store) GetTextureSourceEntityOG(ctx context.Context, canonicalID, versi
 }
 
 // ListTextureSourceEntitiesByOwnerOG lists all source entities for an owner.
-// The choir.source_entity kind is shared with sourcecycled web captures, so
+// The choir.source_entity kind is shared with the source entities the deleted
+// sourcecycled daemon projected, so
 // we filter to only texture source entities by checking for the
 // entity_version_key metadata field that texture source entities carry.
 func (s *Store) ListTextureSourceEntitiesByOwnerOG(ctx context.Context, ownerID string, limit int) ([]TextureSourceEntityGraphRecord, error) {
@@ -3136,7 +3137,7 @@ func (s *Store) ListTextureSourceEntitiesByScopeOG(ctx context.Context, ownerID,
 	// Indexed path: (object_kind, owner_id) index + the computer_id column
 	// filter — replaces the unfiltered all-objects-of-kind scan. Texture
 	// source entities are distinguished by the entity_version_key metadata
-	// field (the kind is shared with sourcecycled web captures).
+	// field (the kind is shared with older sourcecycled projections).
 	store := s.ogReadStore
 	if store == nil {
 		store = s.ogStore

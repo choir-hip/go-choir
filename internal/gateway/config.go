@@ -46,8 +46,8 @@ type Config struct {
 	// retiring its station-owned credentials and rate-limit buckets.
 	JevJudgmentsEnabled bool
 
-	// ServiceHealthURLs maps a dependency service name (e.g. "sourcecycled",
-	// "runtime", "qdrant", "dolt", "ollama") to the URL the gateway should
+	// ServiceHealthURLs maps a dependency service name (e.g. "runtime",
+	// "qdrant", "dolt", "ollama") to the URL the gateway should
 	// probe for GET /health/{service}. Empty entries fall back to defaults
 	// (see DefaultServiceHealthURLs). These are used by the per-service
 	// health endpoint and /health/ready aggregator so operators can observe
@@ -70,11 +70,10 @@ const (
 // owned by the runtime, not a standalone TCP service. Operators can override
 // any entry via GATEWAY_HEALTH_<SERVICE>_URL.
 var DefaultServiceHealthURLs = map[string]string{
-	"sourcecycled": "http://127.0.0.1:8787/health",
-	"runtime":      "http://127.0.0.1:8085/health",
-	"qdrant":       "http://127.0.0.1:6333/healthz",
-	"dolt":         "http://127.0.0.1:8085/health/ready",
-	"ollama":       "http://127.0.0.1:11434/api/tags",
+	"runtime": "http://127.0.0.1:8085/health",
+	"qdrant":  "http://127.0.0.1:6333/healthz",
+	"dolt":    "http://127.0.0.1:8085/health/ready",
+	"ollama":  "http://127.0.0.1:11434/api/tags",
 }
 
 // LoadConfig resolves gateway configuration from environment variables.

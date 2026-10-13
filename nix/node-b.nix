@@ -24,7 +24,6 @@ let
   frontendCurrent = "/var/www/go-choir/frontend-current";
   autoputerFilesDir = "/var/lib/go-choir/files";
   autoputerRuntimeDir = "/var/lib/go-choir/runtime";
-  sourceServiceDir = "/var/lib/go-choir/source-service";
   mailDir = "/var/lib/go-choir/mail";
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
@@ -334,8 +333,8 @@ in
   };
 
   # ── Systemd services ──────────────────────────────────────────────────
-  # Host services: auth, proxy, vmctl, gateway, autoputer, maild, corpusd,
-  # and sourcecycled.
+  # Host services: auth, proxy, vmctl, gateway, autoputer, maild and
+  # corpusd.
   # Autoputer workloads for authenticated traffic are expected to run inside
   # Firecracker microVMs managed by vmctl. Node B disables vmctl's
   # host-process fallback so deployed routing fails closed instead of silently
@@ -602,41 +601,6 @@ in
       OnBootSec = "1min";
       OnUnitInactiveSec = "1min";
       Unit = "go-choir-checkpointd.service";
-    };
-  };
-
-  # go-choir-sourcecycled.service is deliberately NOT in the boot set: it was
-  # pure fetch-debt burning corpus-dolt (WW corpus burn, docs(s0)
-  # ee013c9a, 2026-10-05). Interim-stopped ~01:15Z; a switch restarted it via
-  # wantedBy. Durable default-off: the unit stays defined for an explicit
-  # operator `systemctl start`, but nothing pulls it in.
-  systemd.services.go-choir-sourcecycled = {
-    description = "go-choir Source Service Ingestion Daemon (opt-in; not in boot set)";
-    after = [ "network-online.target" "go-choir-proxy.service" "go-choir-vmctl.service" ];
-    wants = [ "network-online.target" "go-choir-proxy.service" "go-choir-vmctl.service" ];
-    path = with pkgs; [ bash coreutils ];
-    serviceConfig = commonServiceHardening // {
-      ExecStart = "${serviceExec "sourcecycled" goChoirPackages.sourcecycled}";
-      Restart = "on-failure";
-      RestartSec = 10;
-      StateDirectory = "go-choir/source-service";
-      ReadWritePaths = [ sourceServiceDir ];
-      EnvironmentFile = [
-        "-/var/lib/go-choir/deploy.env"
-        # Store B DSN flip (same file corpusd reads): the cutover runbook
-        # writes SOURCECYCLED_DOLT_DSN here once the corpus store is live.
-        "-/var/lib/go-choir/corpus-dsn.env"
-      ];
-      # Shared captures publish through the host proxy to corpusd; user VMs are never the durable target.
-      Environment = [
-        "SOURCE_SERVICE_ADDR=0.0.0.0:8787"
-        "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/internal/sources/registry.json"
-        "SOURCE_SERVICE_OBJECTGRAPH_BASE_URL=http://127.0.0.1:8082"
-        "SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID=universal-wire-platform"
-        "SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform"
-        "SOURCE_SERVICE_VMCTL_URL=http://127.0.0.1:8083"
-        "VMCTL_AUTOPUTER_PROXY_SOCK=/run/go-choir/vmctl.sock"
-      ];
     };
   };
 

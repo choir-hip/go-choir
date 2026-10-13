@@ -80,7 +80,7 @@ func main() {
 	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
 
-	// Object graph API: allows sourcecycled and VMs to project and query
+	// Object graph API: allows VMs to project and query
 	// object graph data stored in the platform Dolt SQL server (corpusd).
 	ogStore := platform.NewObjectGraphStore(store)
 	ogService := objectgraph.NewService(objectgraph.Config{

@@ -107,8 +107,8 @@ authority.
 
 **Restore-set boundary (normative for the self-development gate):**
 a user-computer restore addresses an event head and restores the release pointer
-plus VM-local embedded state. Shared platform/world-wire Dolt and cycle/
-sourcecycled state are OUT (restoring them would rewind other computers or
+plus VM-local embedded state. Shared platform/world-wire Dolt (Store B:
+captures, publications) is OUT (restoring them would rewind other computers or
 shared services). Computer-surface frontend (Desktop, Texture, apps, Settings
 computer panes, served asset graph) is IN by doctrine `C15`/`I25`. The
 host-served SPA (`nix/node-b.nix` → `/var/www/go-choir/frontend-current`) is

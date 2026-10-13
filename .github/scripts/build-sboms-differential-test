@@ -7,7 +7,7 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
 mkdir -p "$tmpdir/bin" "$tmpdir/fake-outputs" "$tmpdir/fake-store" "$tmpdir/fake-tool/bin"
-packages=(auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend obscura zot)
+packages=(auth proxy gateway maild maildctl corpusd autoputer vmctl frontend obscura zot)
 for package in "${packages[@]}"; do
   mkdir -p "$tmpdir/fake-outputs/$package" "$tmpdir/fake-store"
   jq -n --arg package "$package" \
@@ -19,7 +19,7 @@ cat > "$tmpdir/bin/nix" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer sourcecycled vmctl frontend "
+semantic_packages=" auth proxy gateway maild maildctl corpusd autoputer vmctl frontend "
 revision="${FAKE_REVISION:-one}"
 suffix=""
 command="$1"
@@ -140,11 +140,11 @@ export FAKE_REVISION=one
 : > "$FAKE_BUILD_LOG"
 : > "$FAKE_SBOMNIX_LOG"
 "$builder" "$tmpdir/first" "" first-commit >/dev/null
-[[ "$(grep -c '^\.#' "$FAKE_BUILD_LOG")" == "12" ]]
+[[ "$(grep -c '^\.#' "$FAKE_BUILD_LOG")" == "11" ]]
 [[ "$(grep -c '^github:tiiuae/sbomnix/30c95eb2fc0c402300ee05354c5cf84c7e5f74e2#sbomnix$' "$FAKE_BUILD_LOG")" == "1" ]]
 ! grep -q '^\.#sbom\.' "$FAKE_BUILD_LOG"
-[[ "$(wc -l < "$FAKE_SBOMNIX_LOG" | tr -d ' ')" == "12" ]]
-[[ "$(jq -s 'map(select(.status == "built")) | length' "$tmpdir/first/manifest.jsonl")" == "12" ]]
+[[ "$(wc -l < "$FAKE_SBOMNIX_LOG" | tr -d ' ')" == "11" ]]
+[[ "$(jq -s 'map(select(.status == "built")) | length' "$tmpdir/first/manifest.jsonl")" == "11" ]]
 
 export FAKE_REVISION=two
 : > "$FAKE_BUILD_LOG"
@@ -152,7 +152,7 @@ export FAKE_REVISION=two
 "$builder" "$tmpdir/second" "$tmpdir/first" second-commit >/dev/null
 [[ ! -s "$FAKE_BUILD_LOG" ]]
 [[ ! -s "$FAKE_SBOMNIX_LOG" ]]
-[[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/second/manifest.jsonl")" == "10" ]]
+[[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/second/manifest.jsonl")" == "9" ]]
 [[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/second/manifest.jsonl")" == "2" ]]
 jq -se 'map(select(.status == "rebound")) | all(.reason == "identical_semantic_fingerprint" and .artifact_derivation != .previous_derivation)' \
   "$tmpdir/second/manifest.jsonl" >/dev/null
@@ -170,7 +170,7 @@ export FAKE_REVISION=legacy
 "$builder" "$tmpdir/legacy-rebound" "$tmpdir/legacy-baseline" legacy-current >/dev/null
 [[ ! -s "$FAKE_BUILD_LOG" ]]
 [[ ! -s "$FAKE_SBOMNIX_LOG" ]]
-[[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/legacy-rebound/manifest.jsonl")" == "10" ]]
+[[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/legacy-rebound/manifest.jsonl")" == "9" ]]
 [[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/legacy-rebound/manifest.jsonl")" == "2" ]]
 ! grep -Fq '/nix/store/fake-artifact-auth-one.drv' "$tmpdir/second/auth/sbom.json"
 
@@ -185,7 +185,7 @@ export FAKE_REVISION=two
 "$builder" "$tmpdir/failure-reuse" "$tmpdir/failure-baseline" failure-reuse-commit >/dev/null
 [[ ! -s "$FAKE_BUILD_LOG" ]]
 [[ ! -s "$FAKE_SBOMNIX_LOG" ]]
-[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/failure-reuse/manifest.jsonl")" == "11" ]]
+[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/failure-reuse/manifest.jsonl")" == "10" ]]
 jq -se 'map(select(.package == "obscura"))[0] | .status == "skipped" and .reason == "unchanged_previous_failure" and .previous_reason == "package_build_failed"' \
   "$tmpdir/failure-reuse/manifest.jsonl" >/dev/null
 : > "$FAKE_BUILD_LOG"
@@ -208,7 +208,7 @@ FAKE_CHANGED_PACKAGE=auth "$builder" "$tmpdir/third" "$tmpdir/second" third-comm
 ! grep -q '^\.#sbom\.' "$FAKE_BUILD_LOG"
 [[ "$(cat "$FAKE_SBOMNIX_LOG")" == "auth" ]]
 [[ "$(jq -s 'map(select(.status == "built")) | length' "$tmpdir/third/manifest.jsonl")" == "1" ]]
-[[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/third/manifest.jsonl")" == "9" ]]
+[[ "$(jq -s 'map(select(.status == "rebound")) | length' "$tmpdir/third/manifest.jsonl")" == "8" ]]
 [[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/third/manifest.jsonl")" == "2" ]]
 jq -e '.packages[] | select(.package == "auth") | (.added == ["pkg:generic/auth@2"] and .removed == ["pkg:generic/auth@1"])' \
   "$tmpdir/third/diff.json" >/dev/null

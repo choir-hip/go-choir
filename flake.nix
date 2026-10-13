@@ -183,7 +183,7 @@
         "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/vmctl"
         "cmd/gateway" "cmd/corpusd" "cmd/checkpointd" "cmd/projection-compact"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
-        "cmd/sourcecycled" "cmd/autoputer" "cmd/choir-builder"
+        "cmd/autoputer" "cmd/choir-builder"
       ];
       # Keep source selection structural. Go owns the package dependency graph;
       # repeating it here as per-service internalDirs caused fallback builds to
@@ -294,10 +294,6 @@
         capsuleBroker = mkGoService {
           pname = "capsule-broker";
           subPackage = "cmd/capsule-broker";
-        };
-        sourcecycled = mkGoService {
-          pname = "sourcecycled";
-          subPackage = "cmd/sourcecycled";
         };
         autoputer = mkGoService {
           pname = "autoputer";

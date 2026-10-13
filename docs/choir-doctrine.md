@@ -298,7 +298,7 @@ metadata into a required semantic next step.
 `I2a` Exogenous user and source input enters Choir through Texture-owned artifact
 state by default. The deferred world-wire/system-one conductor may classify, open,
 or create the target Texture/context, but ordinary prompt-bar requests,
-sourcecycled/news ingestion, article creation, mission work, and most user prompts
+source/news ingestion, article creation, mission work, and most user prompts
 must not route directly to the management desk. Management is downstream
 coherence and admission authority: when an artifact needs coding, privileged
 execution, candidate work, generation, verification, or other supervision,

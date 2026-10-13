@@ -156,7 +156,7 @@ documents:
     is_root: []
     is_evidence: false
     annotations: {doc_role: current_state, authority: domain_invariant, lifecycle: living}
-    witnesses: [docs/source-external-data-publication.md, cmd/sourcecycled, internal/platform]
+    witnesses: [docs/source-external-data-publication.md, internal/sourcegraph, internal/platform]
     refresh_triggers: [source_system_change, publication_contract_change]
 
   - path: docs/conjecture-assertion-ledger-2026-06.md

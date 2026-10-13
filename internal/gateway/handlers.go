@@ -117,7 +117,7 @@ type Handler struct {
 	jevTransport *JevTransport            // OpenRouter Decisions transport (may be nil)
 	// serviceCheckers maps a dependency service name to its health probe.
 	// Used by GET /health/{service} so operators can observe backend
-	// dependency health (sourcecycled, runtime, qdrant, dolt, ollama) from
+	// dependency health (runtime, qdrant, dolt, ollama) from
 	// outside the gateway without auth (M22b / C20). May be nil; in that
 	// case /health/{service} reports "not configured".
 	serviceCheckers map[string]health.Checker
@@ -229,7 +229,7 @@ type serviceHealthResponse struct {
 }
 
 // HandleServiceHealth handles GET /health/{service} for the gateway. It probes
-// a single named backend dependency (sourcecycled, runtime, qdrant, dolt, or
+// a single named backend dependency (runtime, qdrant, dolt, or
 // ollama) and reports its coarse status. The endpoint is public (no auth) and
 // exposes no secrets: the response contains only the service name, a status of
 // "ok"/"unhealthy"/"not configured", a generic error message, and — when a

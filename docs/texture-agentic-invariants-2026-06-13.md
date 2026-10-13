@@ -36,7 +36,7 @@ must not force a semantic delegation merely because text or metadata mentions
 another desk.
 
 Deferred world-wire ingress routes exogenous input into Texture-owned artifact
-state. Prompt-bar requests, sourcecycled/news ingestion, article creation,
+state. Prompt-bar requests, source/news ingestion, article creation,
 mission work, and most user prompts should open or create Texture/context first.
 Texture then decides whether to write/revise, attach or transclude sources, ask
 research, send a semantic act to management, wait, or record an off-document
@@ -79,7 +79,7 @@ interventions.
 
 2. **Texture is the control plane for document and artifact work.** Deferred
    world-wire ingress may classify exogenous input and create or open the target
-   Texture/context, but it must not send ordinary prompt-bar, sourcecycled/news,
+   Texture/context, but it must not send ordinary prompt-bar, source/news,
    article, mission, or document/artifact work directly to management based on
    prompt text. Product-path proof should show ingress, then Texture artifact
    materialization. Management before Texture is a route invariant failure;

@@ -14,7 +14,7 @@ import (
 )
 
 // RegisterObjectGraphRoutes adds object graph API endpoints to the platform
-// server. These endpoints allow sourcecycled and VMs to project and query
+// server. These endpoints allow VMs to project and query
 // object graph data stored in corpusd (the platform Dolt SQL server).
 func RegisterObjectGraphRoutes(s *server.Server, h *ObjectGraphHandler) {
 	s.HandleFunc("/internal/platform/objects", h.HandleObjects)
@@ -34,7 +34,7 @@ type ObjectGraphHandler struct {
 }
 
 // NewObjectGraphHandler builds a handler that exposes both Service-level
-// methods (CreateObject/GET, used by sourcecycled and VMs that want the
+// methods (CreateObject/GET, used by VMs that want the
 // platform to derive object identity) and Store-level PUT methods (used by
 // runtimes that derive identity locally and only need durable persistence).
 func NewObjectGraphHandler(svc *objectgraph.Service, store objectgraph.Store) *ObjectGraphHandler {

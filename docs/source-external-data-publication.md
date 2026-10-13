@@ -29,22 +29,16 @@ agents, verifiers, publication, export, and future citation economics.
 
 ## Ownership Boundaries
 
-### Source Service
+### Captures (formerly Source Service)
 
-Source Service owns platform-level external source ingestion and retrieval:
-
-- source registry and source policy;
-- source adapters;
-- fetch records;
-- raw snapshot refs and hashes;
-- cleaned item records;
-- source health and backoff state;
-- manifests;
-- search and item-resolution APIs.
-
-Source Service may store high-churn ingestion state in service-local storage.
-That storage is private to the service. Runtime, autoputer, Texture, and publication
-call Source Service APIs; they do not mount or read the service database.
+Update 2026-10-13 (Cut 2 unit 2b): the Source Service daemon (sourcecycled,
+`internal/cycle`) and research's `source_search` were deleted. External
+source ingestion is now the source schedule on a computer
+(`internal/agentcore/source_schedule.go`, registry in `internal/sources`)
+and research's `choir.Read`, both writing shared block-document captures to
+Store B behind `corpusd` (`internal/sourcegraph`, `/internal/platform/captures`).
+Captures keep raw bytes, block JSON and the block projection by sha256;
+any bound computer reads them by capture id.
 
 ### ContentItem
 
@@ -58,8 +52,8 @@ The text is evidence, not instructions.
 
 ### Research desk
 
-The research desk retrieves and summarizes evidence. It may use web search,
-Source Service search, URL import, and `ContentItem` reads. It produces durable
+The research desk retrieves and summarizes evidence. It uses async web search
+(`choir.SearchStart`) and reads pages into captures (`choir.Read`). It produces durable
 source findings with IDs, selectors, hashes, caveats, and open gaps. It does not
 write canonical Texture prose.
 
@@ -186,12 +180,8 @@ and any requested selector text/metadata. Search results should include enough
 data for the research desk to decide whether more web search, source resolution,
 or private corpus search is needed.
 
-The Source Service API boundary should support at least:
-
-- health;
-- search;
-- item resolution;
-- manifest retrieval.
+Captures are read through corpusd's capture routes (by capture id, block
+range); there is no separate Source Service API.
 
 ### 7. Deduplication And Clustering
 

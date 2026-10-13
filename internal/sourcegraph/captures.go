@@ -136,7 +136,7 @@ func WriteCaptures(ctx context.Context, graph *objectgraph.Service, bodies BodyS
 		}
 		projection := sourcefetch.Projection(blocks)
 		item.Body = projection
-		req, _, ok := webCaptureGraphRequestsFromItem(item, ownerID, strings.TrimSpace(cfg.ComputerID), now)
+		req, ok := webCaptureGraphRequestsFromItem(item, ownerID, strings.TrimSpace(cfg.ComputerID), now)
 		if !ok {
 			result.Skipped++
 			continue

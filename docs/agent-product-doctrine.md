@@ -259,7 +259,7 @@ marked-unused (`mark_source_unused` with a rationale). The former
 Texture is also Choir's artifact control plane and the delegated controller for
 long-running artifact trajectories. Deferred world-wire ingress routes exogenous
 user/app/source input into Texture-owned artifact state: prompt-bar requests,
-sourcecycled/news ingestion, article creation, mission work, and most user
+source/news ingestion, article creation, mission work, and most user
 prompts should open or create Texture/context first. Management is not the direct
 ingress target for ordinary user or source prompts. Texture may later send the
 management desk a semantic act when the artifact needs execution, coding-agent

@@ -1021,7 +1021,7 @@ jobs:
                 journalctl -u "$service" -n 80 --no-pager >&2 || true
               done
               echo "-- local health probes" >&2
-              for port in 8081 8082 8083 8084 8086 8087 8787; do
+              for port in 8081 8082 8083 8084 8086 8087; do
                 echo "port ${port}" >&2
                 curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" >&2 || true
               done
@@ -1282,8 +1282,6 @@ jobs:
               done
             elif [ "${DEPLOY_HOST}" = "true" ]; then
               echo "==> Synchronizing host service pointers from activated NixOS closure"
-              # sourcecycled intentionally absent: durable default-off (fetch-debt
-              # against corpus-dolt; unit stays defined but deploy does not manage it).
               scripts/node-b-sync-service-pointers auth gateway maild corpusd proxy vmctl checkpointd
               # A vmctl restart before this sync ran the old pointer; only a
               # restart from here on counts as loading the new binary.
@@ -1491,8 +1489,6 @@ jobs:
             note_phase "active computer refresh"
 
             echo "==> Smoke test: health endpoints"
-            # 8787 (sourcecycled) intentionally absent — the unit is durable
-            # default-off; probing it would fail every deploy.
             for port in 8081 8082 8083 8084 8086 8087; do
               curl -fsS --retry 5 --retry-delay 2 --retry-all-errors http://127.0.0.1:$port/health
               echo "    Port $port: OK"
@@ -1505,8 +1501,6 @@ jobs:
                 gateway) echo 8084 ;;
                 corpusd) echo 8086 ;;
                 maild) echo 8087 ;;
-                # sourcecycled (8787) intentionally has no identity probe —
-                # durable default-off; deploy does not manage it.
                 *) return 1 ;;
               esac
             }

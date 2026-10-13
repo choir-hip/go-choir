@@ -1595,9 +1595,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
 			fmt.Sprintf("choir.platform_url=http://%s:8086", hostIP),
-			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
-			fmt.Sprintf("choir.source_service_runtime_url=http://127.0.0.1:%d", cfg.GuestPort),
-			fmt.Sprintf("choir.source_service_runtime_owner_id=%s", kernelParamValue(sourceServiceRuntimeOwnerID(cfg))),
 			fmt.Sprintf("ip=%s::%s:255.255.255.252::eth0:off", guestIP, hostIP),
 		}
 		runtimeArgs = append(runtimeArgs, guestIdentityKernelParams(cfg)...)
@@ -1611,7 +1608,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
 		// URLs as the microvm.nix path so guest env extraction can configure
-		// gateway, vmctl, maild, and source service uniformly.
+		// gateway, vmctl, maild, and platform uniformly.
 		bootArgs = fmt.Sprintf(
 			"console=ttyS0 reboot=k panic=1 pci=off "+
 				"root=/dev/vda rw init=/bin/init "+
@@ -1626,9 +1623,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
 			fmt.Sprintf("choir.platform_url=http://%s:8086", hostIP),
-			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
-			fmt.Sprintf("choir.source_service_runtime_url=http://127.0.0.1:%d", cfg.GuestPort),
-			fmt.Sprintf("choir.source_service_runtime_owner_id=%s", kernelParamValue(sourceServiceRuntimeOwnerID(cfg))),
 		}
 		for _, arg := range append(legacyRuntimeArgs, guestIdentityKernelParams(cfg)...) {
 			bootArgs += " " + arg
@@ -1665,13 +1659,6 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	}
 
 	return fcConfig
-}
-
-func sourceServiceRuntimeOwnerID(cfg VMConfig) string {
-	if ownerID := strings.TrimSpace(cfg.OwnerID); ownerID != "" {
-		return ownerID
-	}
-	return "universal-wire-platform"
 }
 
 func guestIdentityKernelParams(cfg VMConfig) []string {
@@ -3356,7 +3343,6 @@ func tapReachableHostServicePorts() []string {
 		// it; the rule only let guests reach a dead port.
 		"8086", // corpusd durable Texture verification
 		"8087", // maild draft persistence
-		"8787", // source service retrieval
 	}
 }
 
