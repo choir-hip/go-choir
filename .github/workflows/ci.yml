@@ -9,7 +9,7 @@ on:
         required: false
         default: true
       refresh_active_computers:
-        description: Also restart running computers onto the new guest code (interrupts their work)
+        description: Also force-restart busy computers that the planned deploy refresh defers (interrupts their work)
         type: boolean
         required: false
         default: false
@@ -1382,48 +1382,44 @@ jobs:
             fi
             if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
               autoputer_runtime_commit=$autoputer_commit
-              echo "==> Refreshing active interactive computers onto deployed VM boot contract"
-              ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list)
-              mapfile -t immutable_active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
-                .ownerships[]
-                | select(.state == "active")
-                | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
-                | select((.snapshot_kind // "") == "constructed-computer-version")
-                | [.user_id, (.desktop_id // "primary"), .vm_id, .computer_url, .construction_version.code_ref, .construction_version.artifact_program_ref, .construction_disk_receipt_id]
-                | @tsv
-              ')
-              for record in "${immutable_active_interactive[@]}"; do
-                IFS=$'\t' read -r immutable_user_id immutable_desktop_id immutable_vm_id immutable_computer_url immutable_code_ref immutable_program_ref immutable_disk_receipt_id <<< "$record"
-                echo "    Preserving immutable constructed computer ${immutable_vm_id} for user ${immutable_user_id} desktop ${immutable_desktop_id}: code=${immutable_code_ref} artifact_program=${immutable_program_ref} disk_receipt=${immutable_disk_receipt_id} endpoint=${immutable_computer_url}"
-              done
-              mapfile -t active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
-                .ownerships[]
-                | select(.state == "active")
-                | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
-                | select((.snapshot_kind // "") != "constructed-computer-version")
-                | select((.held // false) == false)
-                | [.user_id, (.desktop_id // "primary"), .vm_id, .computer_url]
-                | @tsv
-              ')
-              if [ "${#active_interactive[@]}" -eq 0 ]; then
-                echo "    No mutable active interactive computers need refresh"
-              elif [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then
-                # Deploys never restart a running computer (owner 2026-10-09,
-                # docs/problems/deploy-restarts-busy-computers-2026-10-09.md).
-                # The base is rebuilt above, so a computer picks up this code
-                # at its next boot (idle stop, wake, or owner update).
-                for record in "${active_interactive[@]}"; do
-                  IFS=$'\t' read -r pending_user_id pending_desktop_id pending_vm_id pending_computer_url <<< "$record"
-                  echo "    Update pending, not restarted: ${pending_vm_id} (user ${pending_user_id} desktop ${pending_desktop_id})"
-                done
+              # Deploys keep active computers current without crash-closing
+              # their work (owner rule "Restarts End Work (Crash) Or Resume It
+              # (Planned Update)"; docs/problems/owner-computer-pinned-as-canary-2026-10-13.md).
+              # vmctl selects every active interactive computer — constructed
+              # computer versions and premium_always_on ones included — except
+              # held ones, then per computer asks the guest to write its
+              # planned-restart marker. A busy guest (running runs or a
+              # self-development operation in flight) refuses and is deferred
+              # to the next deploy; an idle one restarts as a planned boot that
+              # resumes its parked work once. The manual dispatch input
+              # refresh_active_computers=true additionally force-restarts the
+              # deferred ones through the operator refresh (crash boot).
+              echo "==> Refreshing active interactive computers onto deployed VM boot contract (planned restart)"
+              deploy_refresh_plan=""
+              if ! deploy_refresh_plan=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/deploy-refresh); then
+                deploy_refresh_plan=""
+              fi
+              if [ -z "$deploy_refresh_plan" ]; then
+                echo "    vmctl did not answer the deploy refresh selection; every active computer stays update-pending" >&2
+                record_receipt_artifact active_computers "$DEPLOY_COMMIT" pending
               else
+                mapfile -t skipped_interactive < <(printf '%s' "$deploy_refresh_plan" | jq -r '.skipped[] | [.vm_id, .user_id, .desktop_id, .reason] | @tsv')
+                for record in "${skipped_interactive[@]}"; do
+                  IFS=$'\t' read -r skipped_vm_id skipped_user_id skipped_desktop_id skipped_reason <<< "$record"
+                  echo "    Skipped ${skipped_vm_id} (user ${skipped_user_id} desktop ${skipped_desktop_id}): ${skipped_reason}"
+                done
+                mapfile -t active_interactive < <(printf '%s' "$deploy_refresh_plan" | jq -r '.candidates[] | [.user_id, .desktop_id, .vm_id, .computer_url, (.snapshot_kind // ""), (.warmness_class // "")] | @tsv')
+                refresh_outcomes_dir=$(mktemp -d /tmp/go-choir-deploy-refresh.XXXXXX)
+                if [ "${#active_interactive[@]}" -eq 0 ]; then
+                  echo "    No active interactive computers need refresh"
+                fi
                 refresh_pids=()
                 refresh_status=0
                 max_parallel_refresh=1
                 for record in "${active_interactive[@]}"; do
-                  IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url <<< "$record"
+                  IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_computer_url refresh_snapshot_kind refresh_warmness <<< "$record"
                   (
-                    echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
+                    echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id} (snapshot=${refresh_snapshot_kind:-mutable} warmness=${refresh_warmness:-default})"
                     # A refreshed layered computer keeps serving its retained
                     # app-layer release — that is the point of layering — so
                     # its /health reports the release commit, never the host
@@ -1435,16 +1431,54 @@ jobs:
                     if [ -z "$refresh_expected_commit" ]; then
                       refresh_expected_commit="$autoputer_runtime_commit"
                     fi
-                    echo "    ${refresh_vm_id}: expecting served commit ${refresh_expected_commit} after refresh"
-                    payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id,desktop_id:$desktop_id}')
+                    if [ "$refresh_expected_commit" = "$autoputer_runtime_commit" ]; then
+                      echo "    ${refresh_vm_id}: already serves ${autoputer_runtime_commit}; nothing to refresh"
+                      echo "current" > "${refresh_outcomes_dir}/${refresh_vm_id}"
+                      exit 0
+                    fi
+                    echo "    ${refresh_vm_id}: expecting served commit ${refresh_expected_commit} or ${autoputer_runtime_commit} after refresh"
+                    payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" --arg target "$autoputer_runtime_commit" '{user_id:$user_id,desktop_id:$desktop_id,target:$target}')
                     refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
-                    refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
+                    refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' \
                       -H "X-Internal-Caller: true" \
                       -H "X-Choir-Lifecycle-Caller: ci.deploy-refresh" \
                       -H "Content-Type: application/json" \
                       -d "$payload" \
-                      http://127.0.0.1:8083/internal/vmctl/refresh || printf 'curl_error_%s' "$?")
-                    if [[ ! "$refresh_http_status" =~ ^2[0-9][0-9]$ ]]; then
+                      http://127.0.0.1:8083/internal/vmctl/deploy-refresh || printf 'curl_error_%s' "$?")
+                    refresh_outcome=$(jq -r '.outcome // empty' "$refresh_body" 2>/dev/null || true)
+                    refresh_reason=$(jq -r '.reason // empty' "$refresh_body" 2>/dev/null || true)
+                    if [[ "$refresh_http_status" =~ ^2[0-9][0-9]$ ]] && [ "$refresh_outcome" = "refreshed" ]; then
+                      refresh_planned=$(jq -r '.planned_restart // false' "$refresh_body")
+                      echo "    Refreshed ${refresh_vm_id} (planned_restart=${refresh_planned}${refresh_reason:+; ${refresh_reason}})"
+                    elif [ "$refresh_outcome" = "skipped" ]; then
+                      echo "    Skipped ${refresh_vm_id}: ${refresh_reason}"
+                      echo "skipped" > "${refresh_outcomes_dir}/${refresh_vm_id}"
+                      exit 0
+                    elif [ "$refresh_outcome" = "deferred" ] && [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then
+                      echo "    Deferred ${refresh_vm_id} to the next deploy: ${refresh_reason}"
+                      echo "deferred" > "${refresh_outcomes_dir}/${refresh_vm_id}"
+                      exit 0
+                    elif [ "$refresh_outcome" = "deferred" ]; then
+                      # Manual dispatch: the operator asked to restart busy
+                      # computers too. This is the forced operator refresh — a
+                      # crash boot that closes their work.
+                      echo "    ${refresh_vm_id} deferred (${refresh_reason}); refresh_active_computers=true, forcing an operator refresh (crash boot)"
+                      forced_payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id,desktop_id:$desktop_id}')
+                      refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
+                        -H "X-Internal-Caller: true" \
+                        -H "X-Choir-Lifecycle-Caller: ci.deploy-refresh-forced" \
+                        -H "Content-Type: application/json" \
+                        -d "$forced_payload" \
+                        http://127.0.0.1:8083/internal/vmctl/refresh || printf 'curl_error_%s' "$?")
+                      if [[ ! "$refresh_http_status" =~ ^2[0-9][0-9]$ ]]; then
+                        echo "    Forced refresh failed for ${refresh_vm_id} user ${refresh_user_id} desktop ${refresh_desktop_id}: ${refresh_http_status}" >&2
+                        if [ -s "$refresh_body" ]; then
+                          sed 's/^/      response: /' "$refresh_body" >&2
+                        fi
+                        exit 1
+                      fi
+                      echo "    Force-refreshed ${refresh_vm_id}"
+                    else
                       echo "    Refresh failed for ${refresh_vm_id} user ${refresh_user_id} desktop ${refresh_desktop_id}: ${refresh_http_status}" >&2
                       if [ -s "$refresh_body" ]; then
                         sed 's/^/      response: /' "$refresh_body" >&2
@@ -1455,8 +1489,8 @@ jobs:
                     if [ -n "$refreshed_computer_url" ]; then
                       refresh_computer_url="$refreshed_computer_url"
                     fi
-                    echo "    Refreshed ${refresh_vm_id}"
                     wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit" "$autoputer_runtime_commit"
+                    echo "refreshed" > "${refresh_outcomes_dir}/${refresh_vm_id}"
                   ) &
                   refresh_pids+=("$!")
                   if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
@@ -1473,15 +1507,30 @@ jobs:
                   dump_deploy_service_diagnostics "active computer refresh or identity verification failed"
                   exit "$refresh_status"
                 fi
-              fi
-              if [ "${#active_interactive[@]}" -gt 0 ] && [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then
-                record_receipt_artifact active_computers "$DEPLOY_COMMIT" pending
-              elif [ "${#active_interactive[@]}" -gt 0 ]; then
-                record_receipt_artifact autoputer "$DEPLOY_COMMIT" active
-                record_receipt_artifact active_computers "$DEPLOY_COMMIT" active
-              else
-                echo "    No mutable active interactive computers were refreshed; immutable realizations remain untouched"
-                record_receipt_artifact active_computers "$DEPLOY_COMMIT" empty
+                refreshed_count=$(grep -lx 'refreshed' "${refresh_outcomes_dir}"/* 2>/dev/null | wc -l | tr -d ' ')
+                current_count=$(grep -lx 'current' "${refresh_outcomes_dir}"/* 2>/dev/null | wc -l | tr -d ' ')
+                mapfile -t deferred_vms < <(grep -lx 'deferred' "${refresh_outcomes_dir}"/* 2>/dev/null | xargs -r -n1 basename)
+                rm -rf "$refresh_outcomes_dir"
+                deferred_json=$(printf '%s\n' "${deferred_vms[@]}" | jq -R . | jq -sc 'map(select(length > 0))')
+                echo "    Deploy refresh summary: refreshed=${refreshed_count} already_current=${current_count} deferred=${#deferred_vms[@]} skipped=${#skipped_interactive[@]}"
+                if [ "${#deferred_vms[@]}" -gt 0 ]; then
+                  echo "    Deferred (busy) computers are retried at the next deploy: ${deferred_vms[*]}"
+                fi
+                if [ "$refreshed_count" -gt 0 ]; then
+                  record_receipt_artifact autoputer "$DEPLOY_COMMIT" active
+                fi
+                if [ "${#deferred_vms[@]}" -gt 0 ] && [ "$refreshed_count" -gt 0 ]; then
+                  active_computers_status=partial
+                elif [ "${#deferred_vms[@]}" -gt 0 ]; then
+                  active_computers_status=pending
+                elif [ "$refreshed_count" -gt 0 ] || [ "$current_count" -gt 0 ]; then
+                  active_computers_status=active
+                else
+                  active_computers_status=empty
+                fi
+                receipt_artifacts=$(printf '%s' "$receipt_artifacts" |
+                  jq --arg commit "$DEPLOY_COMMIT" --arg status "$active_computers_status" --argjson deferred "$deferred_json" \
+                    '. + {active_computers: {commit: $commit, status: $status, deferred: $deferred}}')
               fi
             else
               echo "==> Skipping active computer refresh; ordinary guest image and autoputer runtime package unchanged"

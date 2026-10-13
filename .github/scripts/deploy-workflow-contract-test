@@ -48,24 +48,31 @@ reject 'service_commit=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/health
 reject 'package_path=$(readlink -f "/var/lib/go-choir/services/${service}")'
 require 'wait_for_autoputer_commit "$refresh_computer_url" "$refresh_vm_id" "$refresh_expected_commit"'
 require 'refresh_expected_commit=$(curl -fsS --max-time 10 "${refresh_computer_url}/health"'
-require 'expecting served commit ${refresh_expected_commit} after refresh'
+require 'expecting served commit ${refresh_expected_commit} or ${autoputer_runtime_commit} after refresh'
 require 'Autoputer runtime selected without canonical guest boot refresh; refusing an undeployable service-pointer-only artifact'
 reject 'DEPLOY_APP_LAYER'
 reject 'App-layer release push'
 require 'echo "host_services=autoputer"'
-require 'record_receipt_artifact active_computers "$DEPLOY_COMMIT" empty'
-require 'No mutable active interactive computers were refreshed; immutable realizations remain untouched'
 reject '/internal/runtime/refresh'
-require 'select((.snapshot_kind // "") == "constructed-computer-version")'
-require 'select((.snapshot_kind // "") != "constructed-computer-version")'
-require 'Preserving immutable constructed computer ${immutable_vm_id}'
-require 'No mutable active interactive computers need refresh'
-# Deploys never restart a running computer unless explicitly opted in
-# (docs/problems/deploy-restarts-busy-computers-2026-10-09.md).
-require 'elif [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then'
-require 'Update pending, not restarted: ${pending_vm_id}'
+# Deploys keep active computers current through the guest's planned-restart
+# marker and never restart a busy one: vmctl selects (constructed and
+# always-on computers included, held ones skipped), the guest refuses while
+# busy, and the deferred computer waits for the next deploy
+# (docs/problems/deploy-restarts-busy-computers-2026-10-09.md,
+# docs/problems/owner-computer-pinned-as-canary-2026-10-13.md).
+require 'http://127.0.0.1:8083/internal/vmctl/deploy-refresh)'
+require 'http://127.0.0.1:8083/internal/vmctl/deploy-refresh || printf'
+require '{user_id:$user_id,desktop_id:$desktop_id,target:$target}'
+require 'elif [ "$refresh_outcome" = "deferred" ] && [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then'
+require 'Deferred ${refresh_vm_id} to the next deploy: ${refresh_reason}'
 require 'record_receipt_artifact active_computers "$DEPLOY_COMMIT" pending'
+require 'active_computers: {commit: $commit, status: $status, deferred: $deferred}'
+require 'No active interactive computers need refresh'
+# The operator refresh (crash boot) runs only for an explicit manual dispatch.
 require "REFRESH_ACTIVE_COMPUTERS: \${{ github.event_name == 'workflow_dispatch' && inputs.refresh_active_computers && 'true' || 'false' }}"
+require 'X-Choir-Lifecycle-Caller: ci.deploy-refresh-forced'
+reject 'Preserving immutable constructed computer'
+reject 'select((.snapshot_kind // "") != "constructed-computer-version")'
 reject 'git reset --hard origin/main'
 reject 'fast_build_host_service'
 reject 'active computer refresh failed; continuing'
@@ -95,12 +102,9 @@ artifacts_json="${receipt_artifacts:-"{}"}"
 jq -n --argjson artifacts "$artifacts_json" '{observed_artifacts: $artifacts}' |
   jq -e '.observed_artifacts == {}' >/dev/null
 
-# Constructed ComputerVersion realizations are immutable function results. Global
-# deploy refresh may update ordinary active primaries, never these frozen rows.
-mixed_inventory='{"ownerships":[{"user_id":"mutable-owner","desktop_id":"primary","vm_id":"vm-mutable","computer_url":"http://10.0.0.2:8085","state":"active","kind":"interactive"},{"user_id":"frozen-owner","desktop_id":"primary","vm_id":"vm-frozen","computer_url":"http://10.0.0.3:8085","state":"active","kind":"interactive","snapshot_kind":"constructed-computer-version","construction_version":{"code_ref":"code:sha256:frozen","artifact_program_ref":"artifact-program:sha256:frozen"},"construction_disk_receipt_id":"disk-instantiation:sha256:frozen"},{"user_id":"sleeping-owner","desktop_id":"primary","vm_id":"vm-sleeping","state":"hibernated","kind":"interactive"}]}'
-mutable_ids=$(printf '%s' "$mixed_inventory" | jq -r '.ownerships[] | select(.state == "active") | select((.kind == null) or (.kind == "") or (.kind == "interactive")) | select((.snapshot_kind // "") != "constructed-computer-version") | .vm_id')
-immutable_ids=$(printf '%s' "$mixed_inventory" | jq -r '.ownerships[] | select(.state == "active") | select((.kind == null) or (.kind == "") or (.kind == "interactive")) | select((.snapshot_kind // "") == "constructed-computer-version") | .vm_id')
-[ "$mutable_ids" = "vm-mutable" ]
-[ "$immutable_ids" = "vm-frozen" ]
+# The deploy refresh selection (constructed computers included, held ones
+# skipped) is vmctl's selectDeployRefresh, pinned by
+# internal/vmctl/deploy_refresh_test.go; the workflow reads it from vmctl.
+reject "select(.state == \"active\") | select((.kind == null)"
 
 echo "deploy workflow contract tests passed"

@@ -51,6 +51,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/evals/texture-prompt", texture.HandleTexturePromptEval)
 	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
 	s.HandleFunc("/internal/runtime/platform-update", h.HandleInternalPlatformUpdate)
+	s.HandleFunc("/internal/runtime/planned-restart", h.HandleInternalPlannedRestart)
 	s.HandleFunc("/internal/self-development/restart-handoff", h.HandleSelfDevelopmentRestartHandoff)
 	s.HandleFunc("/internal/texture/documents/", texture.HandleInternalTextureDocument)
 	s.HandleFunc("/internal/texture/revisions/", texture.HandleInternalTextureRevision)

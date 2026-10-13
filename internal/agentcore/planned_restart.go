@@ -1,14 +1,18 @@
 package agentcore
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
 // Owner rule (AGENTS.md "Restarts End Work (Crash) Or Resume It"): a crash
@@ -185,4 +189,109 @@ func (rt *Runtime) markPlannedRestart(reason, target string) func(applyErr error
 			log.Printf("runtime: clear planned restart marker after failed apply: %v", err)
 		}
 	}
+}
+
+// PlannedRestartPlatformRefresh is the reason the host records when it
+// refreshes this guest onto a new platform build for a deploy.
+const PlannedRestartPlatformRefresh = "platform update"
+
+// plannedRestartBusy counts the work a restart must not cut: running runs
+// and self-development operations mid-transaction (the states the idle sweep
+// also treats as busy). It fails closed: an unreadable operation list is an
+// error, not idle.
+func (rt *Runtime) plannedRestartBusy(ctx context.Context) (running, selfdevActive int, err error) {
+	running = rt.RunningCount()
+	if rt.selfdevOperations == nil {
+		return running, 0, nil
+	}
+	computerID := strings.TrimSpace(rt.TextureComputerID())
+	if computerID == "" {
+		return running, 0, nil
+	}
+	ops, err := rt.selfdevOperations.ListByStates(ctx, computerID,
+		selfdev.StateExecuting, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
+	if err != nil {
+		return running, 0, err
+	}
+	return running, len(ops), nil
+}
+
+type plannedRestartRequest struct {
+	Target string `json:"target"`
+}
+
+type plannedRestartBusyResponse struct {
+	Error            string `json:"error"`
+	Outcome          string `json:"outcome"`
+	RunningRuns      int    `json:"running_runs"`
+	SelfdevActiveOps int    `json:"selfdev_active_operations"`
+}
+
+// HandleInternalPlannedRestart serves /internal/runtime/planned-restart, the
+// host's request to restart this guest onto a new platform build.
+//
+//   - POST {"target": "<build>"} writes the planned-restart marker (reason
+//     "platform update") and answers 200 only once it is durable. A busy
+//     guest answers 409 with outcome "busy" and writes nothing, so the host
+//     leaves it for its next idle moment.
+//   - DELETE clears the marker when the host did not restart after all.
+//
+// Host-peer only, like the other /internal/runtime routes. The marker carries
+// this binary's work-state epoch, so a boot onto a binary of another epoch is
+// still a crash boot (D7).
+func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if err := requireInternalRuntimeCaller(r); err != nil {
+		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "internal runtime endpoints are not publicly accessible"})
+		return
+	}
+	if h == nil || h.rt == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "planned restart surface unavailable"})
+		return
+	}
+	storePath := h.rt.cfg.StorePath
+	if r.Method == http.MethodDelete {
+		if err := ClearPlannedRestartMarker(storePath); err != nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
+		return
+	}
+	var request plannedRestartRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid planned restart request"})
+		return
+	}
+	target := strings.TrimSpace(request.Target)
+	if target == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "target is required"})
+		return
+	}
+	running, selfdevActive, err := h.rt.plannedRestartBusy(r.Context())
+	if err != nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "planned restart: cannot read self-development operations: " + err.Error()})
+		return
+	}
+	if running > 0 || selfdevActive > 0 {
+		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
+			Error:       "guest is busy; restart deferred to its next idle moment",
+			Outcome:     "busy",
+			RunningRuns: running, SelfdevActiveOps: selfdevActive,
+		})
+		return
+	}
+	marker := PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: target, RequestedAt: time.Now().UTC()}
+	if err := WritePlannedRestartMarker(storePath, marker); err != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
+	marker.WorkStateEpoch = CurrentWorkStateEpoch
+	log.Printf("runtime: host requested a planned restart (%s %s)", marker.Reason, marker.Target)
+	writeAPIJSON(w, http.StatusOK, marker)
 }

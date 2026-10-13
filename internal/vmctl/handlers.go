@@ -128,6 +128,9 @@ type Handler struct {
 	routeAuthorityRequired bool
 	coldRecoveryMu         sync.Mutex
 	coldRecoveryState      *coldRecoveryState
+	// guestMarker asks a guest to write its planned-restart marker before a
+	// deploy refresh (nil: the HTTP client).
+	guestMarker guestPlannedRestartMarker
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
@@ -676,9 +679,10 @@ func (h *Handler) HandleMaintenanceServe(w http.ResponseWriter, r *http.Request)
 
 // HandleRefresh handles POST /internal/vmctl/refresh.
 // It force-reboots an active computer onto the current guest image while
-// preserving persistent state. This endpoint is internal deploy machinery.
-// Global deploy still excludes constructed-computer-version realizations;
-// owner-scoped refresh of a named computer is a distinct authority.
+// preserving persistent state. It is the explicit operator/owner refresh: it
+// asks the guest for no planned-restart marker, so the boot is a crash boot.
+// Deploys use /internal/vmctl/deploy-refresh, which goes through the marker
+// and defers busy computers.
 func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
@@ -884,9 +888,23 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.routeAuthorityRequired && h.routeAuthority == nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "classify immutable ownerships: route/evidence authority is unavailable"})
+	result, err := h.listOwnershipResponses(r.Context())
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: err.Error()})
 		return
+	}
+
+	writeVMCTLJSON(w, http.StatusOK, map[string]interface{}{
+		"ownerships": result,
+		"count":      len(result),
+	})
+}
+
+// listOwnershipResponses classifies every ownership for operator listing and
+// the deploy refresh selection (one classification, two readers).
+func (h *Handler) listOwnershipResponses(ctx context.Context) ([]ownershipResponse, error) {
+	if h.routeAuthorityRequired && h.routeAuthority == nil {
+		return nil, fmt.Errorf("classify immutable ownerships: route/evidence authority is unavailable")
 	}
 
 	ownerships := h.registry.ListOwnerships()
@@ -897,10 +915,9 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		var constructed bool
 		if h.routeAuthority != nil && own.State == VMStateActive && (own.Kind == "" || own.Kind == VMKindInteractive) {
 			var err error
-			constructionVersion, diskReceiptID, constructed, err = h.routeAuthority.constructedOwnershipIdentity(r.Context(), own.UserID, own.DesktopID, own.VMID)
+			constructionVersion, diskReceiptID, constructed, err = h.routeAuthority.constructedOwnershipIdentity(ctx, own.UserID, own.DesktopID, own.VMID)
 			if err != nil {
-				writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: fmt.Sprintf("classify immutable active ownership %s: %v", own.VMID, err)})
-				return
+				return nil, fmt.Errorf("classify immutable active ownership %s: %v", own.VMID, err)
 			}
 		}
 		snapshotKind := ""
@@ -936,11 +953,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 			PlatformBaseRef:           own.PlatformBaseRef,
 		})
 	}
-
-	writeVMCTLJSON(w, http.StatusOK, map[string]interface{}{
-		"ownerships": result,
-		"count":      len(result),
-	})
+	return result, nil
 }
 
 // bootTimelineReader is the optional capability the real vmmanager adapter
@@ -1175,6 +1188,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/list", h.HandleList)
 	s.HandleFunc("/internal/vmctl/maintenance-serve", attributedLifecycle(h.HandleMaintenanceServe))
 	s.HandleFunc("/internal/vmctl/refresh", attributedLifecycle(h.HandleRefresh))
+	s.HandleFunc("/internal/vmctl/deploy-refresh", attributedLifecycle(h.HandleDeployRefresh))
 	s.HandleFunc("/internal/vmctl/idle-check", h.HandleIdleCheck)
 	s.HandleFunc("/internal/vmctl/reclaim", attributedLifecycle(h.HandleReclaim))
 	s.HandleFunc("/internal/vmctl/hold", h.HandleHold)

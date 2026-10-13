@@ -140,7 +140,8 @@ type VMOwnership struct {
 	// DivergenceStatus classifies the computer's divergence from platform baseline:
 	// "tracking" (clean baseline, can auto-fast-forward non-breaking platform updates)
 	// "divergent" (has diverged ledgers/packages; updates require rebase/proposal)
-	// "canary" (pinned constructed verification canary; never touched by automatic refresh)
+	// "canary" (derived display label for a constructed computer; it does not
+	// gate deploy refresh — docs/problems/owner-computer-pinned-as-canary-2026-10-13.md)
 	DivergenceStatus string `json:"divergence_status,omitempty"`
 
 	// PlatformBaseRef is the base platform release commit or version this computer
