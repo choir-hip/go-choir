@@ -133,6 +133,15 @@ boundaries:
   mutation_class: red (Cuts 1 and 2 touch run lifecycle, the evidence ledger, gateway calls, Texture canonical writes, publication)
   authority_sources:
     - owner 2026-10-12 decisions (docs/re-engineering-decisions-2026-10-12.md), including the delegation in §12
+    - >-
+      owner 2026-10-12, at launch: the whole metamission runs autonomously
+      overnight, through C2's autopaper_live. The run itself takes the
+      "one owner act" that starts the paper computer's schedule, and the
+      first public permalink needs no owner gate ("the first public link
+      doesn't really matter"). This stage proves the architecture (the
+      concept was validated earlier); a non-functional requirements phase
+      and deferred missions come before anyone is told it is stable in
+      production. Published versions still never change once public.
   must_preserve:
     - Texture is the only writer of a Texture
     - research has read-only authority toward the world
@@ -145,6 +154,17 @@ boundaries:
     - circuit breakers before a pathological loop is observed
     - signing keys per computer, desk or sub-RLM (deferred)
   protected_surfaces: [see each cut]
+  delegation: >-
+    The orchestrator (Opus) does red-surface code, integration, trace
+    debugging, the four desk prompts, tripwire judgment and every push.
+    Opus subagents in worktrees take independent units that need design
+    judgment: C0's trace export, tracer and invariant checker in parallel
+    once the orchestrator has fixed the bundle format; C2's units 2a and
+    2b. C1 stays mostly with the orchestrator (one tightly coupled
+    change). Sonnet subagents take mechanical deletion sweeps, test
+    fallout after a shape change, probe runs, trace summaries,
+    measurement write-ups and code searches; never prompts, Texture
+    writes or gateway calls. Only the orchestrator pushes.
 
 now:
   status: ready_to_execute
