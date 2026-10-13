@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -47,6 +48,42 @@ func TestCrashBootClosesPreBootRunsWithFate(t *testing.T) {
 	}
 	if after := countWorkItems(t, rt, ownerID); after != before {
 		t.Fatalf("a crash boot created work: %d work items before, %d after", before, after)
+	}
+}
+
+// An old open run behind more than one header page of newer finished runs is
+// still closed: the owner-scoped list filters states after its limit, so a
+// limited scan misses it (agentic-consensus 2026-10-13, codex).
+func TestCrashBootClosesOpenRunBehindManyFinishedRuns(t *testing.T) {
+	rt, s := testRuntime(t)
+	ownerID := "user-crash-boot-deep"
+	t.Setenv("CHOIR_OWNER_ID", ownerID)
+	ctx := context.Background()
+	base := time.Now().UTC().Add(-time.Hour)
+	old := types.RunRecord{RunID: "crash-boot-deep-open", AgentID: "research:deep", AgentProfile: agentprofile.Research,
+		AgentRole: agentprofile.Research, OwnerID: ownerID, ComputerID: rt.cfg.ComputerID, State: types.RunRunning,
+		Prompt: "old open work", CreatedAt: base, UpdatedAt: base}
+	if err := s.CreateRun(ctx, old); err != nil {
+		t.Fatalf("create old run: %v", err)
+	}
+	for i := 0; i < 1030; i++ {
+		at := base.Add(time.Duration(i+1) * time.Second)
+		done := types.RunRecord{RunID: fmt.Sprintf("crash-boot-deep-done-%04d", i), AgentID: "research:deep", AgentProfile: agentprofile.Research,
+			AgentRole: agentprofile.Research, OwnerID: ownerID, ComputerID: rt.cfg.ComputerID, State: types.RunCompleted,
+			Prompt: "finished", CreatedAt: at, UpdatedAt: at, FinishedAt: &at}
+		if err := s.CreateRun(ctx, done); err != nil {
+			t.Fatalf("create finished run %d: %v", i, err)
+		}
+	}
+
+	rt.Start(ctx)
+
+	got, err := s.GetRun(ctx, old.RunID)
+	if err != nil {
+		t.Fatalf("get old run: %v", err)
+	}
+	if got.State != types.RunCancelled || got.Error != runFateInterruptedByRestart {
+		t.Fatalf("old open run behind 1030 finished runs: state=%q error=%q, want cancelled with %q", got.State, got.Error, runFateInterruptedByRestart)
 	}
 }
 

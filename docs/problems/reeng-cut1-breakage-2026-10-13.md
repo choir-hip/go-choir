@@ -39,3 +39,19 @@ park-and-resume path. Pre-boot pending control packets stay pending until
 the owner's next act; Cut 1 landing L3 deletes packets.
 Test: `TestCrashBootClosesPreBootRunsWithFate` (fails on the old boot:
 runs passivated, parked and blocked runs left open).
+
+## B2. A crash boot misses an open run behind 1,024 newer runs
+
+Found 2026-10-13 by the convergent plan review (codex), confirmed by test.
+Boot lists the owner's runs with `ListRunsByOwnerStates(..., 1024)`, and
+that list applies its limit to run headers before it filters states
+(internal/store/graph_store.go:1039, :1057). An old pending, running,
+parked or blocked run behind more than 1,024 newer finished runs is never
+seen, so L1's claim "every pre-boot run is closed" fails on any computer
+with a long history (the owner's computer takes every cut).
+
+Fix (same commit): boot's owner-scoped list scans every run header
+(`preBootRunHeaderScan`; headers carry no bodies and only matching runs
+are loaded). Test: `TestCrashBootClosesOpenRunBehindManyFinishedRuns`
+(one old running run behind 1,030 finished runs; failed with the run
+still running before the fix).
