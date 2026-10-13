@@ -354,32 +354,51 @@ const jsonResultHint = "choir.Read, choir.ReadCapture and choir.PollSource retur
 
 var undefinedFieldRE = regexp.MustCompile(`undefined (?:method|field): (\w+)`)
 
-// resultFieldHint names the choir result field closest to a missing one,
-// with that type's fields: models guess fields from prompt prose and JSON
-// names (cluster D, docs/reports/cross-model-cell-errors-2026-10-13.md).
+// resultFieldHint names the choir result field closest to a missing one
+// (cluster D, docs/reports/cross-model-cell-errors-2026-10-13.md). yaegi
+// does not say which type the value had, so a name several result types
+// share lists them with a %T probe, a case slip names the exact spelling,
+// and anything else names the closest field and its type's fields.
 func resultFieldHint(missing string) string {
-	best, bestType := "", reflect.Type(nil)
-	for _, t := range choirResultTypes() {
-		fields := make([]string, 0, t.NumField())
+	types := choirResultTypes()
+	fieldsOf := func(t reflect.Type) []string {
+		out := make([]string, 0, t.NumField())
 		for i := 0; i < t.NumField(); i++ {
 			if f := t.Field(i); f.IsExported() {
-				fields = append(fields, f.Name)
+				out = append(out, f.Name)
 			}
 		}
-		if c := closestName(missing, fields); c != "" && (best == "" || strings.EqualFold(c, missing) && !strings.EqualFold(best, missing)) {
+		return out
+	}
+	var exact, folded []string
+	foldedName := ""
+	for _, t := range types {
+		for _, f := range fieldsOf(t) {
+			switch {
+			case f == missing:
+				exact = append(exact, t.Name())
+			case strings.EqualFold(f, missing):
+				folded = append(folded, t.Name())
+				foldedName = f
+			}
+		}
+	}
+	if len(exact) > 0 {
+		return fmt.Sprintf("%s is a field of %s, but not of this value's type; fmt.Printf(\"%%T %%+v\\n\", v, v) shows its type and fields.", missing, strings.Join(exact, ", "))
+	}
+	if len(folded) > 0 {
+		return fmt.Sprintf("Go field names are case-sensitive: write .%s (a field of %s).", foldedName, strings.Join(folded, ", "))
+	}
+	best, bestType := "", reflect.Type(nil)
+	for _, t := range types {
+		if c := closestName(missing, fieldsOf(t)); c != "" && best == "" {
 			best, bestType = c, t
 		}
 	}
 	if bestType == nil {
 		return ""
 	}
-	fields := make([]string, 0, bestType.NumField())
-	for i := 0; i < bestType.NumField(); i++ {
-		if f := bestType.Field(i); f.IsExported() {
-			fields = append(fields, f.Name)
-		}
-	}
-	return fmt.Sprintf("No field %s. Closest: %s.%s. %s fields: %s.", missing, bestType.Name(), best, bestType.Name(), strings.Join(fields, ", "))
+	return fmt.Sprintf("No field %s. Closest: %s.%s. %s fields: %s.", missing, bestType.Name(), best, bestType.Name(), strings.Join(fieldsOf(bestType), ", "))
 }
 
 // choirResultTypes lists the struct types choir functions return, sorted

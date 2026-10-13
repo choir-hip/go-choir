@@ -355,4 +355,15 @@ func TestRecordAndUpdateIDAndFieldHint(t *testing.T) {
 	if !strings.Contains(hint, ".Title") {
 		t.Fatalf("unknown-field hint names no real field: %q", hint)
 	}
+	// A field several result types have (ID) on a value of another type:
+	// name the types and how to see the value's own (paper-3, s.ID on a
+	// source); a case slip (Id, ConversationId) names the exact spelling.
+	hint = sess.ErrorHint("for _, s := range srcs { fmt.Println(s.ID) }", "1:40: undefined method: ID")
+	if !strings.Contains(hint, "InboxRecord") || !strings.Contains(hint, "%T") {
+		t.Fatalf("shared-field hint = %q, want the types with ID and a %%T probe", hint)
+	}
+	hint = sess.ErrorHint("for _, r := range choir.Records() { fmt.Println(r.ConversationId) }", "1:51: undefined method: ConversationId")
+	if !strings.Contains(hint, ".ConversationID") || !strings.Contains(hint, "case") {
+		t.Fatalf("case-slip hint = %q, want .ConversationID", hint)
+	}
 }
