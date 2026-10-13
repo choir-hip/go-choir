@@ -196,7 +196,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	childCtx := context.WithValue(ctx, researchLineageKey{}, researchLineage{ownerID: lineage.ownerID, selection: selection, fallbacks: fallbacks})
 	childCtx = toolregistry.WithExecutionContext(childCtx, childExec)
 
-	workers := newDeskSessionWorkers()
+	workers := newResearchChildDeskWorkers(childKey)
 	defer workers.release(deskWorkerActivationID(childExec))
 	registry, err := toolregistry.NewToolRegistryWithTools(newDeskGoEvalTool(rt, workers, yaegikernel.SessionRoleResearchChild))
 	if err != nil {

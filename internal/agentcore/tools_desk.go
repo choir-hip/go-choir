@@ -73,6 +73,23 @@ type deskSessionWorkers struct {
 	retention time.Duration
 	maxIdle   int
 	now       func() time.Time
+	// label prefixes the desk_session a trace event names. A choir.Research
+	// child's pool is keyed on its root run like its siblings', so without a
+	// label two sibling children read as two workers on one desk session.
+	label string
+}
+
+// newResearchChildDeskWorkers returns the pool one choir.Research child runs
+// in, labelled with the child's key for the trace.
+func newResearchChildDeskWorkers(childKey string) *deskSessionWorkers {
+	w := newDeskSessionWorkers()
+	w.label = "research_child:" + childKey + "/"
+	return w
+}
+
+// sessionLabel is the desk_session a trace event names for key.
+func (m *deskSessionWorkers) sessionLabel(key string) string {
+	return m.label + key
 }
 
 func newDeskSessionWorkers() *deskSessionWorkers {
@@ -354,7 +371,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					requestID, pid := yaegikernel.EgressFrameFromContext(egrCtx)
 					ev := map[string]any{
 						"request_id": requestID, "response_request_id": requestID,
-						"verb": string(action), "desk_session": sessionKey, "worker_pid": pid,
+						"verb": string(action), "desk_session": workers.sessionLabel(sessionKey), "worker_pid": pid,
 						"run_id": cellExec.RunID, "started_at": started, "finished_at": time.Now().UTC(),
 						"is_error": err != nil,
 					}
@@ -400,7 +417,7 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			evalStart := time.Now()
 			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits)
 			cellEvent := map[string]any{
-				"desk_session": lease.key, "worker_pid": w.PID(), "run_id": execCtx.RunID,
+				"desk_session": workers.sessionLabel(lease.key), "worker_pid": w.PID(), "run_id": execCtx.RunID,
 				"started_at": evalStart.UTC(), "finished_at": time.Now().UTC(),
 				"duration_ms":    time.Since(evalStart).Milliseconds(),
 				"waited_for_run": lease.waitedFor, "waited_ms": lease.waited.Milliseconds(),

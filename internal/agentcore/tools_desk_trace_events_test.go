@@ -94,3 +94,45 @@ for i := 0; i < 3; i++ {
 		}
 	}
 }
+
+// A choir.Research child runs in a pool of its own, keyed on the root run.
+// Its desk.cell events must name the child's own session, or two sibling
+// children read as two workers on one desk session in the trace (C0
+// breakage B2; one REPL per desk does not cover sub-RLMs).
+func TestResearchChildCellsNameTheirOwnSession(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt, s := testRuntime(t)
+	execCtx := deskEvalExecCtx(t)
+	execCtx.Profile = agentprofile.Research
+	execCtx.Role = agentprofile.Research
+	execCtx.RunID = "run-root"
+	parent := types.RunRecord{RunID: "run-root", AgentID: "research:doc", OwnerID: execCtx.OwnerID, ComputerID: execCtx.ComputerID}
+	if err := s.CreateRun(context.Background(), parent); err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	for _, child := range []string{"child-a", "child-b"} {
+		workers := newResearchChildDeskWorkers(child)
+		t.Cleanup(workers.closeAll)
+		tool := newDeskGoEvalTool(rt, workers, agentprofile.Research)
+		ctx := toolregistry.WithExecutionContext(context.Background(), execCtx)
+		if out, err := tool.Func(ctx, json.RawMessage(`{"source":"x := 1; _ = x","timeout_ms":15000}`)); err != nil {
+			t.Fatalf("child cell: %v (%s)", err, out)
+		}
+	}
+	evs, err := s.ListEvents(context.Background(), "run-root", 100)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	sessions := map[any]bool{}
+	for _, ev := range evs {
+		if ev.Kind != types.EventDeskCell {
+			continue
+		}
+		var p map[string]any
+		_ = json.Unmarshal(ev.Payload, &p)
+		sessions[p["desk_session"]] = true
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("two children must name two sessions, got %v", sessions)
+	}
+}
