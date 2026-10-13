@@ -178,3 +178,22 @@ same Texture, and a research run that fails without a final Report):
 - B7: the re-check treats a parked run like a completed turn.
 - B8: an inbox_record occurrence that finds a pending reactivated
   Texture run with nobody executing it runs it.
+
+## B9. A records-route Texture cannot write a revision through ApplyTexture
+
+Found 2026-10-13 by the research scenario c2-search-1 on 6e9c469e (B5's
+deployed check). The B5 fix worked: when research's final Report reached
+a Texture whose work item had closed, a fresh records-route run started
+(records_route true, no work item). Every revision it staged then failed
+"create Texture revision: lifecycle work identity missing"
+(internal/textureowner/tools_texture.go:386-389, the ApplyTexture
+materializer), and after about eight attempts the run parked
+(idle_actor_passivate) with Texture's cursor at 0. A decide turn would
+have committed; an apply could not.
+
+Disposition: the ApplyTexture materializer is deleted by Cut 2 item (iv),
+Texture's Write verb, which settles work only through the turn runtime
+(open work item or none, B5). Its test covers Done, then Write with Done,
+on a records-route run whose work is already completed. No separate fix
+on the ApplyTexture path; the research scenario reruns on the build that
+carries Write.
