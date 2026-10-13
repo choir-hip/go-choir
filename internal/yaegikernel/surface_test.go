@@ -215,6 +215,16 @@ func TestCellErrorHintNamesWhatExists(t *testing.T) {
 	if hint := cellErrorHint(surface, "r := choir.Inbox() // choir.Ledger\nid := \"obj:choir.web_capture:abc\"\n_ = r.ID", "3:7: undefined method: ID"); strings.Contains(hint, "web_capture") || strings.Contains(hint, "Ledger") {
 		t.Errorf("hint read a string literal or comment as code: %q", hint)
 	}
+	// Cluster C: Read's JSON bytes used as a map or a struct.
+	for _, tc := range [][2]string{
+		{"r, _ := choir.Read(u)\nfmt.Println(r[\"capture_id\"])", `6:25: cannot convert "capture_id" to int`},
+		{"r, _ := choir.Read(u)\nm := r.(map[string]any)", "6:13: invalid type assertion: non-interface type yaegikernel.JSON on left"},
+		{"r, _ := choir.ReadCapture(id, 0, 0)\nfmt.Println(r.Blocks)", "5:22: undefined method: Blocks"},
+	} {
+		if hint := cellErrorHint(map[string]bool{"Read": true, "ReadCapture": true, "Report": true}, tc[0], tc[1]); !strings.Contains(hint, "json.Unmarshal(r, &c)") || !strings.Contains(hint, "capture_id") {
+			t.Errorf("Read misuse %q got no decode hint: %q", tc[1], hint)
+		}
+	}
 	if hint := cellErrorHint(surface, "x := 1 +", "1:9: expected operand"); hint != "" {
 		t.Errorf("an unrelated compile error got a choir hint: %q", hint)
 	}

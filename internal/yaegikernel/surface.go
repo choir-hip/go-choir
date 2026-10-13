@@ -322,6 +322,9 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 	if len(bare) > 0 {
 		return "Call choir functions with the choir. prefix: did you mean " + strings.Join(bare, ", ") + "?"
 	}
+	if jsonResultMisuse(src, msg) {
+		return jsonResultHint
+	}
 	if m := undefinedFieldRE.FindStringSubmatch(msg); m != nil {
 		return resultFieldHint(m[1])
 	}
@@ -330,6 +333,24 @@ func cellErrorHint(surface map[string]bool, src, msg string) string {
 	}
 	return ""
 }
+
+var (
+	jsonVerbCallRE  = regexp.MustCompile(`\bchoir\.(?:Read|ReadCapture|PollSource)\(`)
+	stringIndexRE   = regexp.MustCompile(`cannot convert "\w+" to int`)
+	captureFieldsRE = regexp.MustCompile(`undefined (?:method|field|selector):? (?:CaptureID|Blocks|BlockCount|NextBlock|Headings|Captures|Title|URL)\b`)
+)
+
+// jsonResultMisuse reports a cell that used a world verb's JSON bytes as a
+// map or a struct (cluster C, docs/reports/cross-model-cell-errors-2026-10-13.md).
+func jsonResultMisuse(src, msg string) bool {
+	if strings.Contains(msg, "yaegikernel.JSON") {
+		return true
+	}
+	return jsonVerbCallRE.MatchString(src) && (stringIndexRE.MatchString(msg) || captureFieldsRE.MatchString(msg))
+}
+
+const jsonResultHint = "choir.Read, choir.ReadCapture and choir.PollSource return JSON bytes, not a map or a struct: fmt.Println(r) shows them, " +
+	"or decode them: var c struct { CaptureID string `json:\"capture_id\"`; URL, Title string; Blocks []struct{ ID, Kind, Text string; Page int }; NextBlock int `json:\"next_block\"` }; err = json.Unmarshal(r, &c)."
 
 var undefinedFieldRE = regexp.MustCompile(`undefined (?:method|field): (\w+)`)
 
