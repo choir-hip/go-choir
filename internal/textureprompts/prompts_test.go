@@ -40,6 +40,28 @@ func TestPromptCoreKeepsTheOwnerRevisionShape(t *testing.T) {
 	}
 }
 
+// Published stories narrated Texture's process to the reader (docs/problems/
+// autopaper-story-prose-markdown-and-meta-2026-10-13.md): a "**Status.**
+// Revision 4." block carried and re-numbered across every version, "the
+// management desk reports", "H1, management's probability 0.85", "As of
+// this revision". Cut 2 dropped the overlay rule that kept coordination
+// metadata out of reader prose. Ways it can fail: the core names no
+// concrete anti-pattern, so the model copies frame vocabulary (desks,
+// hypothesis labels, probabilities, revision numbers) into the story; the
+// rule is restated so long the core blows its budget.
+func TestPromptCoreKeepsProcessOutOfReaderProse(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	for _, want := range []string{
+		"news story at its current state",
+		`"Status"`, `"Revision N"`, `"Update:"`, `"In this revision"`,
+		"desks", "hypothesis labels",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt core does not name the process-narration anti-pattern %q", want)
+		}
+	}
+}
+
 func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	prompt := DefaultSystemPrompt()
 	for _, retired := range []string{
