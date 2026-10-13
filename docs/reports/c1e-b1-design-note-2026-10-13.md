@@ -132,9 +132,18 @@ crash closes every round anyway (no resume). This replaces the
   live runtime, never at boot. `inboxRecordWakes` gains them as an
   exception, like support pairs and captures. The crash closure
   (`interrupted_by_restart`) stays silent.
-- Cancellation reaches the engineering run through the existing
-  assignment cancel, which stops its run. The `cancelled` final Report
-  of D3 is engineering-sent and wakes management like any Report.
+- Cancellation authority moves from the exact parent run
+  (`cancelAssignedEngineering` requires "the exact recorded parent",
+  `engineering_assignment_fate.go:166-180`) to the management desk that
+  is the engineering conversation's caster. Under D5 the canceller is a
+  fresh turn, never the casting run. The `cancelled` final Report of D3
+  is sent as engineering and wakes management like any Report.
+- Whether the store cancel (`CancelEngineeringAssignment`,
+  `store/engineering_assignments.go:2300`) stops the engineering run is
+  not settled by reading. Step 1 checks it first, with a test. If it does
+  not, the cancel also cancels the run through the runtime's run cancel.
+  The cancelled run then ends in a closure that its final Report already
+  made moot: the round is closed, so the closure is skipped.
 - The progress-overdue packet (`:2715`) is deleted. A capsule that
   overruns its deadline ends, and its run-end closure wakes management.
 
