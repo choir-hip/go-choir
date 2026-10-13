@@ -28,11 +28,19 @@ A (stopgap), B, D, E, F, G, the hint scanner and the Texture and
 management prompts pushed at d2324a55; cluster C's decode hint at
 cdffb40d (unpushed until the paper run); the typed Read result and the
 yaegi substrate fix for cluster A are residuals. The paper tracer's blind
-spot is fixed at 29bbab97 (owner-scoped publication read). Next: the
-paper run on d2324a55 to measure the cell-error change, L1's
-fault-injection harness, and C1e: its station file
+spot is fixed at 29bbab97 (owner-scoped publication read). The paper run
+on d2324a55 measured the cell-error change (37/283 failing cells against
+165/828; clusters A-G down to 6 cells). C1e
 (docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md)
-is in convergent round 3 after two send_backs.
+is reviewed and B0 is landed at 19e56c54: the runtime census of work
+items and packets, I7 read from it, I2 and I3 on records, the checker's
+--require for missing evidence, and the tracer off work_items. The paper
+run passed and the deployed checker read I7 pass. The step-7 uncertainty,
+answered on the code read
+(docs/reports/c1e-management-packet-reads-2026-10-13.md), moves into B1:
+the Report lacks the assignment identity and a typed outcome, and the
+records wake cannot resume a parked caster. Next: the B1 design note,
+then L1's fault-injection harness.
 
 ## Current (2026-10-13): re-engineering metamission
 

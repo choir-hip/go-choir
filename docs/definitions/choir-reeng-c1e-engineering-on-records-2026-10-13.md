@@ -231,20 +231,25 @@ boundaries:
     repaired: []
 
 now:
-  status: blocked_incomplete
+  status: working
   slice: >-
-    Reviewed (round 3 accept). Drafted from the inventory. Round 1 sent it back 7 of 7; round 2
-    confirmed those repairs and sent it back on what remained, all adopted:
-    cut 1's full self-development drill and L5 discriminators restored,
-    commit order separated from five deploy batches, forward-fix rollback
-    and untyped history per cut 1, a checker that fails on missing
-    evidence, the gate's full cut-1 name list with a parser-safe exclude
-    list, engineering's Cast removed. Round 3 accepted; gpt-6.1-sol's
-    findings adopted (self-development work-state deletions named, the
-    story baseline for L7, forward-only recovery for live computers).
-    Next: B0
-  source_ref: 29bbab97
-  deploy_identity: staging 18d01cc0
+    B0 landed and deployed at 19e56c54 (CI 38481001401). Contents:
+    - the wire-neutral rename CoagentSourcePacketPayload -> SourcePacket
+      (5766c87c);
+    - the C1E gate row in report mode (90f8b94e), baseline 2,011, now 2,004;
+    - GET /api/runtime/census (291ad648);
+    - the trace bundle's census layer, I7 read from the census, I2 and I3
+      on records, and --require so a required rule that does not pass
+      exits 1 (86e7ea0f);
+    - the tracer off work_items (86e7ea0f).
+    The first B0 CI (86e7ea0f) failed on a data race in L1a's crash-settle
+    test, not caused by B0. It was documented (bce3d7bd) and fixed: the
+    post-commit observer is now an atomic pointer (19e56c54). The step-7
+    uncertainty is answered on the code read
+    (docs/reports/c1e-management-packet-reads-2026-10-13.md); see belief.
+    Next: B1
+  source_ref: 19e56c54
+  deploy_identity: staging 19e56c54
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: C1e-1
@@ -258,24 +263,70 @@ now:
     edge: missing_oracle
     delta_o: the I7 checker route-scoped to the engineering pairs from B1, reading zero minted work items and packets on the deployed engineering drill; zero everywhere from B4
     scope_if_supported: engineering and self-development on staging
-    status: proposed
-    evidence_refs: [docs/reports/c1e-deletion-inventory-2026-10-13.md]
+    status: weakened  # contradicted on the code read (packet-reads report); deployed test is B1's round trip
+    evidence_refs: [docs/reports/c1e-deletion-inventory-2026-10-13.md, docs/reports/c1e-management-packet-reads-2026-10-13.md]
   decision: {what: "run steps 0-8 in order, each its own commit, deployed as batches B0-B5", kind: operational, status: proposal, evidence_ref: docs/reports/c1e-deletion-inventory-2026-10-13.md, owner_ratification_ref: not_applicable}
   belief:
     believed_state: >-
-      Nothing of C1e is landed. L1a is landed, so the boot re-drivers C1e
-      shares are settled. The gate is a literal-substring row, so the live
-      CoagentSourcePacketPayload is renamed in step 0 before the row lands.
-    main_uncertainty: whether management_controller.go's packet activation can be removed in step 7 without a records-side replacement for terminal outcomes reaching management
-    next_observation: what management reads today from a terminal-outcome packet that a records Report does not carry; answered in writing, with records-side delivery, cursor and wake evidence for succeeded, failed and cancelled outcomes, before step 7 starts
+      B0 is landed and its instrument is proven deployed. The census
+      serves on 19e56c54 (0 work items, 0 packets on a fresh paper
+      computer), and the checker reads I7 pass from it on the B0 paper
+      bundle. I7 was unknown on the pre-B0 bundle (freemodels-paper-3).
+      The packet that reaches management is engineering's
+      assignment-report producer_report, not the synthetic run-outcome
+      packet. A records Report lacks the assignment identity, a typed
+      outcome (completed, partial, failed, blocked; verdict; cancelled),
+      the trajectory, work and control join, and a per-run read mark.
+      The records wake starts a fresh management run where the packet
+      path resumes the parked caster.
+    main_uncertainty: >-
+      Whether B1 carries the assignment identity and typed outcome on the
+      Report body, or has management read them from the assignment row
+      (no new record kind either way). Also whether the records wake can
+      resume a parked casting run without a second wake mechanism. The
+      uncertainty moved from step 7 to B1.
+    next_observation: >-
+      B1's design note answers both before step 1's code, and is
+      reviewed. The evidence half (records-side delivery, cursor and wake
+      evidence for succeeded, failed and cancelled outcomes) comes from
+      B1's deployed engineering round trip.
   blocker_or_risk: >-
-    Not reviewed yet. Riskiest coupling: store/lifecycle.go and
-    management_controller.go on the live Autopaper path. Second: deleting
-    I2/I3's inputs before re-expressing them on records would blind C1e's
-    own acceptance instrument
-  next_action: B0 — the wire-neutral payload rename, the gate row in report mode with the exact cap and budget literals, the forbidden-object census and the checker's missing-evidence failures, I2/I3 on records, the tracer off work_items; then B1
+    Riskiest coupling: store/lifecycle.go and management_controller.go on
+    the live Autopaper path. Second: acceptance (ConsumedDeliveryUpdateIDs
+    and the unseen-packet refusal of a terminal WorkDisposition) has no
+    records counterpart; it must be redefined against the cursor or gain
+    a per-run read mark. Observed on the B0 paper bundle, and also on
+    freemodels-paper-3, so not B0's: I1 fails on a version-0 revision
+    authored by system:story-open (the story seed revision, not written
+    through the Texture desk cell path). This is a discovered heresy or a
+    checker classification gap, and a residual for Cut 2's owner. I2's
+    run half fails because a research run is still running at the
+    paper scenario's export, which is expected mid-flight.
+  next_action: B1 design note (the Report body or assignment-row choice and the parked-caster resume), reviewed, then steps 1-4; tag reeng-c1e-pre-b1 at 19e56c54 before the B1 push; record the paper computer's publications before B1
 
-receipts: []
+receipts:
+  - id: c1e-b0
+    batch: B0
+    pushed_commit: 19e56c54
+    commits: [5766c87c, 90f8b94e, 291ad648, 86e7ea0f, bce3d7bd, 19e56c54]
+    ci: "38481001401 success (38476951550 on 86e7ea0f failed: crash-settle test race, fixed in 19e56c54)"
+    deploy: staging deployed_commit 19e56c54, deployed_at 2026-10-13T23:04:18Z
+    rollback_ref: reeng-c1e-pre-b0 (d2324a55)
+    deployed_acceptance: >-
+      node scripts/reeng_tracer.mjs --scenario paper --label c1e-b0-paper
+      --expect-sha 19e56c54: pass. Computer
+      computer-fc0f063d27cf207b30b977c4334e1773 (stopped, 201); 12 stories
+      opened, 8 published in auto mode (one at v2); public bundle 200 with
+      0 citations. Bundle sha256 f5bdd1f2... in
+      ~/.config/choir-qa/traces/c1e-b0-paper/
+    checker_run: >-
+      node scripts/reeng_invariants.mjs bundle-a1.json --require I7: I7
+      pass (census present, 0 objects), I6 pass. I1 and I2 fail as on
+      freemodels-paper-3 (see blocker_or_risk). The I2, I3 and I7
+      missing-input failures are shown on planted snapshots in
+      scripts/reeng_invariants_test.mjs (44 tests pass)
+    mutation_class: orange (census route, checker, tracer); red-adjacent observer change in computerevent (sync only)
+    heresy_delta: {discovered: [I1 system:story-open seed revision], introduced: [], repaired: []}
 ---
 
 # C1e: engineering on records, then the deletions

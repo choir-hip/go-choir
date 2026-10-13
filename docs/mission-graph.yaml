@@ -1647,7 +1647,7 @@ nodes:
     title: "C1e — engineering and self-development on records, path B deleted, L5, L7, packets and work items deleted"
     path: docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md
     ledger: ''
-    status: working  # reviewed 2026-10-13 (convergent round 3 accept); next B0, the instruments
+    status: working  # B0 landed at 19e56c54 (census, I7 on census, I2/I3 on records, --require; paper pass); next B1 design note (Report body vs assignment row, parked-caster resume)
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12
