@@ -83,6 +83,10 @@ type Validator struct {
 	entities map[string]SourceEntity
 	refs     map[string]bool
 	unused   map[string]bool
+	// world validates a world document (a capture's blocks): the page's own
+	// words, so the Texture authoring rules on text do not apply and links
+	// are kept as marks (see ValidateWorld).
+	world bool
 }
 
 // Validate checks that the structured Texture document is well-formed and that
@@ -245,7 +249,7 @@ func (v *Validator) validateBlock(node Node, path string) error {
 			if len(child.Marks) > 0 {
 				return fmt.Errorf("%s.code_block.content[%d] must not carry marks", path, i)
 			}
-			if err := validateTextPayload(child.Text, fmt.Sprintf("%s.code_block.content[%d]", path, i)); err != nil {
+			if err := v.validateText(child.Text, fmt.Sprintf("%s.code_block.content[%d]", path, i)); err != nil {
 				return err
 			}
 		}
@@ -268,15 +272,18 @@ func (v *Validator) validateInline(node Node, path string) error {
 		if node.Text == "" {
 			return fmt.Errorf("%s.text must not be empty", path)
 		}
-		if err := validateMarks(node.Marks, path); err != nil {
+		if err := v.validateMarks(node.Marks, path); err != nil {
 			return err
 		}
-		return validateTextPayload(node.Text, path)
+		return v.validateText(node.Text, path)
 	case "hard_break":
 		if len(node.Content) != 0 || node.Text != "" || len(node.Marks) != 0 {
 			return fmt.Errorf("%s.hard_break must be a leaf without marks", path)
 		}
 	case "source_ref":
+		if v.world {
+			return fmt.Errorf("%s.source_ref is not allowed in a world document", path)
+		}
 		if err := requireNodeID(node, path); err != nil {
 			return err
 		}
@@ -304,10 +311,19 @@ func (v *Validator) validateInline(node Node, path string) error {
 	return nil
 }
 
-func validateMarks(marks []Mark, path string) error {
+// validateMarks allows strong, emphasis and code everywhere, and link (with
+// an href) only in world documents: Texture cites through source_ref nodes.
+func (v *Validator) validateMarks(marks []Mark, path string) error {
 	for i, mark := range marks {
 		switch mark.Type {
 		case "strong", "emphasis", "code":
+		case "link":
+			if !v.world {
+				return fmt.Errorf("%s.marks[%d] unsupported mark type %q", path, i, mark.Type)
+			}
+			if href, _ := mark.Attrs["href"].(string); strings.TrimSpace(href) == "" {
+				return fmt.Errorf("%s.marks[%d] link attrs.href is required", path, i)
+			}
 		default:
 			return fmt.Errorf("%s.marks[%d] unsupported mark type %q", path, i, mark.Type)
 		}
@@ -324,6 +340,16 @@ var legacySourceSyntaxes = []struct {
 	{name: "bracket source citation", re: regexp.MustCompile(`(?i)\[\s*source\s*:[^\]]+\]`)},
 	{name: "prose source handle", re: regexp.MustCompile(`(?im)(^|\n)\s*source\s*:`)},
 	{name: "unresolved numbered citation", re: regexp.MustCompile(`\[\d+\]`)},
+}
+
+// validateText applies the Texture authoring rules to text Texture writes.
+// A world document's text is the page's own words: footnote markers such
+// as "[12]" and "Source:" lines are real page text there.
+func (v *Validator) validateText(text, path string) error {
+	if v.world {
+		return nil
+	}
+	return validateTextPayload(text, path)
 }
 
 func validateTextPayload(text, path string) error {
