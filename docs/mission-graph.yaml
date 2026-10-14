@@ -1647,7 +1647,7 @@ nodes:
     title: "C1e — engineering and self-development on records, path B deleted, L5, L7, packets and work items deleted"
     path: docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md
     ledger: ''
-    status: working  # B0 landed at 19e56c54 (census, I7 on census, I2/I3 on records, --require; paper pass); next B1 design note (Report body vs assignment row, parked-caster resume)
+    status: working  # B0 landed at 19e56c54; B1 design note in convergent round 3 (rounds 1-2 send_back, repairs adopted)
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-reeng-metamission-2026-10-12
@@ -1676,7 +1676,7 @@ nodes:
     title: L1 — no crash loops (start limits, crash boots never re-drive, boot ledger and holds)
     path: docs/definitions/choir-ledger-l1-restart-2026-10-13.md
     ledger: ''
-    status: working  # L1a landed (L1a-3 at 18d01cc0); next the fault-injection harness, then L1b
+    status: working  # L1a landed (L1a-3 at 18d01cc0); L1b-0 (warm-sweep retry bound) pushed at 6c6bc1aa; next the fault-injection harness, then L1b
     kind: station
     entrypoint: false
     execution_mode: mission_orchestrator
@@ -1686,3 +1686,17 @@ nodes:
       Executes the reviewed restart design v3
       (docs/restart-subsystem-design-2026-10-13.md §6, §9). Owner 2026-10-13:
       "we never get into a crash loop".
+  - id: choir-ledger-lr-resource-2026-10-13
+    title: LR — resource efficiency and model cost (signal-specific reclaim, test tier, priced models, cell output out of the transcript, balloon, store compaction)
+    path: docs/definitions/choir-ledger-lr-resource-2026-10-13.md
+    ledger: ''
+    status: working  # lever 1 landed d3f7d9b2; lever 2 pushed 6c6bc1aa; next lever-6 design
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: [choir-ledger-metamission-2026-10-13]
+    note: >-
+      Owner 2026-10-13: "we should really do our resource efficiency and
+      cost mission tonight", after the paper computer was reclaimed.
+      Specification: docs/reports/resource-efficiency-memory-assessment-2026-10-13.md.

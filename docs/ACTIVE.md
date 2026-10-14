@@ -39,8 +39,21 @@ run passed and the deployed checker read I7 pass. The step-7 uncertainty,
 answered on the code read
 (docs/reports/c1e-management-packet-reads-2026-10-13.md), moves into B1:
 the Report lacks the assignment identity and a typed outcome, and the
-records wake cannot resume a parked caster. Next: the B1 design note,
-then L1's fault-injection harness.
+records wake cannot resume a parked caster. The B1 design note
+(docs/reports/c1e-b1-design-note-2026-10-13.md) is in convergent round 3
+after two send_backs.
+
+2026-10-14: the paper computer was hibernated under host pressure at
+21:00 UTC. The owner ruled computer tiers (paid always on; Autopaper a
+platform tier above every user tier), landed at 188f98c3; Autopaper is
+live again since 23:53 UTC. The owner then asked for the resource and
+cost mission tonight: station LR
+([file](definitions/choir-ledger-lr-resource-2026-10-13.md), over the
+[assessment](reports/resource-efficiency-memory-assessment-2026-10-13.md)).
+Lever 1 (signal-specific reclaim) is live at d3f7d9b2; lever 2 (test
+tier) and L1's L1b-0 (the always-on sweep warms a failed computer once
+per 24 h) are pushed at 6c6bc1aa. Next: verify them, adjudicate B1 round
+3, then the lever-6 design (cell output out of the transcript).
 
 ## Current (2026-10-13): re-engineering metamission
 

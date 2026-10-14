@@ -304,9 +304,16 @@ now:
   # under its own reviewed file; L1a executes under the L1 station file over
   # the reviewed restart design. The spine's card points at the live station.
   status: working
-  slice: L1a-3 (crash boots run no re-driver) on top of landed L1a-1 and L1a-2, before C1e
-  source_ref: fdc70329
-  deploy_identity: staging 8a1477c3 (fdc70329 deploying)
+  slice: >-
+    Three stations live (2026-10-14 00:25 UTC). L0: C1e B0 landed
+    (19e56c54); the B1 design note is in convergent round 3. L1: L1a
+    landed; L1b-0 (the warm-sweep retry bound) pushed at 6c6bc1aa. LR, a
+    new station the owner asked for after the paper computer was
+    reclaimed: computer tiers landed (188f98c3, owner ruling; the paper
+    computer is platform tier and live again since 23:53 UTC), lever 1
+    landed (d3f7d9b2), lever 2 pushed at 6c6bc1aa
+  source_ref: 6c6bc1aa
+  deploy_identity: staging d3f7d9b2 (6c6bc1aa deploying)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LG-1
@@ -324,11 +331,17 @@ now:
     evidence_refs: [docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md]
   decision: {what: "stations L0-L5 as listed; L1a before C1e, L1b beside it, L1c after", kind: operational, status: proposal, evidence_ref: docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md, owner_ratification_ref: pending (owner asked for the metamission 2026-10-13; the open decisions above remain)}
   belief:
-    believed_state: the cursor fix holds (E3 rerun passed); A1 and the Sources button are pushed; hypotheses exist as records but never settle; in-guest restarts are bounded by start limits, but crash boots still re-drive platform-update resume, capsule reconcile and self-development materialization
-    main_uncertainty: how much of C1e's deletion the L1a re-driver gating overlaps (both touch boot-time re-drivers)
-    next_observation: L1a-3's crash-boot cells on a minted test computer
+    believed_state: >-
+      Autopaper is live on the platform-tier paper computer, which the
+      always-on sweep keeps warm. Crash boots re-drive nothing (L1a). The
+      boot ledger (L1b) does not exist yet; L1b-0 bounds the sweep at one
+      automatic warm per failure stop per 24 h. Hypotheses exist as records
+      but never settle. Model cost is unpriced, and research input is
+      dominated by re-sent cell output (LR, R5).
+    main_uncertainty: whether B1's round-3 panel accepts the revised design or finds another lifecycle gap
+    next_observation: the test tier and L1b-0 on staging; B1 round 3
   blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
-  next_action: land L1a-3 under the L1 station file
+  next_action: verify 6c6bc1aa on staging; adjudicate B1 round 3; then build B1 (C1e), the L1 harness and L1b, and LR's lever-6 design
 
 receipts: []
 ---
