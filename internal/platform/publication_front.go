@@ -45,6 +45,13 @@ type FrontStory struct {
 	// scores file when it scores this story; absent otherwise.
 	Importance int  `json:"importance,omitempty"`
 	Promo      bool `json:"promo,omitempty"`
+	// SourceCount and Words are the depth of the latest version: distinct
+	// cited sources, counted as the reader's "Sources N" counts them, and
+	// the body's length in words. Both are absent when the version has no
+	// structured body (a projected-text publish), so absent means unknown,
+	// and zero means a body with no citations.
+	SourceCount *int `json:"source_count,omitempty"`
+	Words       *int `json:"words,omitempty"`
 }
 
 // FrontRoute is a story's bare link (serves the latest version in place)
@@ -316,6 +323,7 @@ func (s *Service) frontStory(ctx context.Context, og *ObjectGraphStore, pub fron
 		}
 	}
 	bare := normalizePublicationRoutePath(meta.RoutePath)
+	sourceCount, words := frontDepth(manifest.BodyDoc, manifest.Anchors)
 	return FrontStory{
 		PublicationID:  firstNonEmpty(meta.PublicationID, versionMeta.PublicationID),
 		Title:          title,
@@ -324,6 +332,8 @@ func (s *Service) frontStory(ctx context.Context, og *ObjectGraphStore, pub fron
 		VersionCount:   len(versions),
 		LatestRevision: latest.Revision,
 		Route:          FrontRoute{Bare: bare, Permalink: versionPermalink(bare, latest.Revision)},
+		SourceCount:    sourceCount,
+		Words:          words,
 	}, true, nil
 }
 
@@ -333,6 +343,7 @@ type frontManifestFields struct {
 	StorageRef   string          `json:"storage_ref"`
 	BodyDoc      json.RawMessage `json:"body_doc"`
 	AccessPolicy json.RawMessage `json:"access_policy"`
+	Anchors      []PublicationAnchor `json:"anchors"`
 }
 
 func (s *Service) frontManifest(ctx context.Context, og *ObjectGraphStore, versionCanonicalID string) (frontManifestFields, error) {
