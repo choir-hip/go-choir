@@ -31,7 +31,14 @@ type frontImportanceRow struct {
 	Revision   int  `json:"revision"`
 	Importance int  `json:"importance"`
 	Promo      bool `json:"promo"`
+	// Section is one of frontSections; absent in rows scored before
+	// sections existed (LF1).
+	Section string `json:"section,omitempty"`
 }
+
+// frontSections are the Autopaper front-page sections a scores row may
+// name; any other value is ignored.
+var frontSections = map[string]bool{"world": true, "us_politics": true, "business": true, "tech_ai": true}
 
 // frontImportanceCache holds the parsed scores file, reparsed only when its
 // modification time or size changes.
@@ -99,8 +106,8 @@ func (frontImportanceVersionError) Error() string { return "unsupported scores f
 
 var errUnsupportedFrontImportanceVersion error = frontImportanceVersionError{}
 
-// attachFrontImportance sets Importance and Promo on rows the scores file
-// scores. A row scored at an older revision keeps that score until the
+// attachFrontImportance sets Importance, Promo and Section on rows the
+// scores file scores. A row scored at an older revision keeps that score until the
 // scorer rescores it.
 func (s *Service) attachFrontImportance(stories []FrontStory) {
 	if s == nil || len(stories) == 0 {
@@ -114,6 +121,9 @@ func (s *Service) attachFrontImportance(stories []FrontStory) {
 		if row, ok := scores[stories[i].PublicationID]; ok {
 			stories[i].Importance = row.Importance
 			stories[i].Promo = row.Promo
+			if frontSections[row.Section] {
+				stories[i].Section = row.Section
+			}
 		}
 	}
 }

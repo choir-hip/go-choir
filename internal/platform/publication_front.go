@@ -45,6 +45,9 @@ type FrontStory struct {
 	// scores file when it scores this story; absent otherwise.
 	Importance int  `json:"importance,omitempty"`
 	Promo      bool `json:"promo,omitempty"`
+	// Section (world, us_politics, business, tech_ai) also comes from the
+	// scores file; absent when unscored or scored before sections existed.
+	Section string `json:"section,omitempty"`
 	// SourceCount and Words are the depth of the latest version: distinct
 	// cited sources, counted as the reader's "Sources N" counts them, and
 	// the body's length in words. Both are absent when the version has no
@@ -339,10 +342,10 @@ func (s *Service) frontStory(ctx context.Context, og *ObjectGraphStore, pub fron
 
 // frontManifestFields is the part of a version manifest a front row reads.
 type frontManifestFields struct {
-	Title        string          `json:"title"`
-	StorageRef   string          `json:"storage_ref"`
-	BodyDoc      json.RawMessage `json:"body_doc"`
-	AccessPolicy json.RawMessage `json:"access_policy"`
+	Title        string              `json:"title"`
+	StorageRef   string              `json:"storage_ref"`
+	BodyDoc      json.RawMessage     `json:"body_doc"`
+	AccessPolicy json.RawMessage     `json:"access_policy"`
 	Anchors      []PublicationAnchor `json:"anchors"`
 }
 

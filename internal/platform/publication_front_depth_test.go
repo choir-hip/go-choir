@@ -50,7 +50,7 @@ func TestFrontRowCarriesDepthCountedLikeTheReader(t *testing.T) {
 		OwnerID: "paper-owner", DocID: "doc-mauritius", Seed: "rev-a",
 		Base: texturewrite.PlainDoc("doc-mauritius", "rev-0", "# Mauritius"),
 		// AFP cited twice (one source), BBC embedded (a source).
-		Script: "@insert end\nPolice shot a woman {{cite " + afp + " \"Police shot a woman\"}}; a curfew followed {{cite " + afp + " \"A curfew covers ten regions\"}}.\n\n{{embed " + bbc + " \"Water shortages drove the protests\"}}",
+		Script:   "@insert end\nPolice shot a woman {{cite " + afp + " \"Police shot a woman\"}}; a curfew followed {{cite " + afp + " \"A curfew covers ten regions\"}}.\n\n{{embed " + bbc + " \"Water shortages drove the protests\"}}",
 		Resolver: captures,
 	})
 	if err != nil {

@@ -11,6 +11,10 @@ package frontimportance
 //  5. The call bound is not honoured.
 //  6. The request is not the gateway's Jev shape (choice questions with
 //     the importance choices "1".."10").
+//  7. Sections (LF1): the section question's choices are not exactly the
+//     four sections; an answer outside them is written; rows scored before
+//     sections existed are never rescored (the section switcher stays
+//     hidden forever), or are rescored past the per-run call bound.
 
 import (
 	"context"
@@ -33,6 +37,7 @@ type fakeJev struct {
 	calls   []string
 	answers map[string]string // title -> importance choice ("" = fail)
 	promo   map[string]string
+	section map[string]string // title -> section choice (default "world")
 }
 
 func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentRequest) ([]byte, error) {
@@ -53,6 +58,14 @@ func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentReques
 	if _, ok := req.Questions["promo"]; !ok {
 		return nil, errors.New("missing promo question")
 	}
+	var sq struct {
+		Type    string   `json:"type"`
+		Choices []string `json:"choices"`
+	}
+	_ = json.Unmarshal(req.Questions["section"], &sq)
+	if sq.Type != "choice" || strings.Join(sq.Choices, ",") != "world,us_politics,business,tech_ai" {
+		return nil, errors.New("bad section question shape")
+	}
 	f.mu.Lock()
 	f.calls = append(f.calls, state.Story.Title)
 	f.mu.Unlock()
@@ -60,11 +73,16 @@ func (f *fakeJev) Decide(_ context.Context, _ string, req gateway.JudgmentReques
 	if choice == "" {
 		return nil, errors.New("jev unavailable")
 	}
+	section, ok := f.section[state.Story.Title]
+	if !ok {
+		section = "world"
+	}
 	body, _ := json.Marshal(map[string]any{
 		"model": "typesafe/jev-1.13",
 		"answers": map[string]any{
 			"importance": map[string]any{"choice": choice},
 			"promo":      map[string]any{"choice": f.promo[state.Story.Title]},
+			"section":    map[string]any{"choice": section},
 		},
 	})
 	return body, nil
@@ -92,10 +110,10 @@ func TestScorerScoresKeepsAndPrunes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "scores.json")
 	writePrev := scoresFile{Version: 1, Scores: map[string]scoreRow{
-		"pub-a":    {Revision: 2, Importance: 7}, // current: kept, no call
-		"pub-b":    {Revision: 1, Importance: 6}, // revised: rescored
-		"pub-c":    {Revision: 1, Importance: 5}, // revised, Jev fails: old kept
-		"pub-gone": {Revision: 1, Importance: 9}, // off the front: pruned
+		"pub-a":    {Revision: 2, Importance: 7, Section: "world"}, // current: kept, no call
+		"pub-b":    {Revision: 1, Importance: 6},                   // revised: rescored
+		"pub-c":    {Revision: 1, Importance: 5},                   // revised, Jev fails: old kept
+		"pub-gone": {Revision: 1, Importance: 9},                   // off the front: pruned
 	}}
 	if err := writeScores(path, writePrev); err != nil {
 		t.Fatal(err)
@@ -197,5 +215,55 @@ func TestScorerHonoursCallBound(t *testing.T) {
 	}
 	if stats.Kept != 3 || stats.Scored != 3 {
 		t.Fatalf("second run stats = %+v", stats)
+	}
+}
+
+func TestScorerFillsSectionsWithinTheCallBound(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "scores.json")
+	prev := scoresFile{Version: 1, Scores: map[string]scoreRow{}}
+	var stories []frontStory
+	answers := map[string]string{}
+	for i := 0; i < 5; i++ {
+		title := string(rune('a' + i))
+		id := "pub-" + title
+		stories = append(stories, frontStory{PublicationID: id, Title: title, LatestRevision: 1})
+		answers[title] = "6"
+		// Scored before sections existed: current revision, no section.
+		prev.Scores[id] = scoreRow{Revision: 1, Importance: 3}
+	}
+	if err := writeScores(path, prev); err != nil {
+		t.Fatal(err)
+	}
+	jev := &fakeJev{answers: answers, section: map[string]string{"a": "tech_ai", "b": "sports"}}
+	srv := frontServer(t, http.StatusOK, stories)
+	cfg := testConfig(srv.URL, path)
+	cfg.MaxCalls = 3
+	stats, err := run(context.Background(), cfg, srv.Client(), jev, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jev.calls) != 3 || stats.Deferred != 2 {
+		t.Fatalf("first run: calls = %d, stats = %+v", len(jev.calls), stats)
+	}
+	got := readScores(path).Scores
+	if got["pub-a"].Section != "tech_ai" || got["pub-a"].Importance != 6 {
+		t.Fatalf("pub-a = %+v, want rescored with section tech_ai", got["pub-a"])
+	}
+	if got["pub-b"].Section != "" {
+		t.Fatalf("pub-b section = %q, want unset for an answer outside the four", got["pub-b"].Section)
+	}
+	if got["pub-d"].Importance != 3 || got["pub-d"].Section != "" {
+		t.Fatalf("deferred pub-d = %+v, want its old score kept", got["pub-d"])
+	}
+	// The next run reaches the deferred rows.
+	jev.calls = nil
+	if _, err := run(context.Background(), cfg, srv.Client(), jev, time.Now); err != nil {
+		t.Fatal(err)
+	}
+	got = readScores(path).Scores
+	for _, id := range []string{"pub-c", "pub-d", "pub-e"} {
+		if got[id].Section != "world" {
+			t.Fatalf("%s = %+v, want a section after the second run", id, got[id])
+		}
 	}
 }

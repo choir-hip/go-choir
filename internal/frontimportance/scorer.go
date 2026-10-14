@@ -43,10 +43,13 @@ type scoresFile struct {
 }
 
 type scoreRow struct {
-	Revision   int    `json:"revision"`
-	Importance int    `json:"importance"`
-	Promo      bool   `json:"promo"`
-	ScoredAt   string `json:"scored_at"`
+	Revision   int  `json:"revision"`
+	Importance int  `json:"importance"`
+	Promo      bool `json:"promo"`
+	// Section is the front-page section (one of sectionChoices); absent in
+	// rows scored before sections existed, which the next runs rescore.
+	Section  string `json:"section,omitempty"`
+	ScoredAt string `json:"scored_at"`
 }
 
 // frontStory is the part of a front row the scorer reads.
@@ -125,7 +128,7 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 			continue
 		}
 		old, had := previous.Scores[id]
-		if had && old.Revision == story.LatestRevision {
+		if had && old.Revision == story.LatestRevision && old.Section != "" {
 			next.Scores[id] = old
 			stats.Kept++
 			continue
@@ -248,6 +251,10 @@ func writeScores(path string, file scoresFile) error {
 
 var importanceChoices = []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"}
 
+// sectionChoices are the Autopaper front-page sections (owner, 2026-10-14,
+// LF1): world news, U.S. politics, business and finance, tech and AI.
+var sectionChoices = []string{"world", "us_politics", "business", "tech_ai"}
+
 // scoreStory asks Jev for one story's importance (1..10) and whether it is
 // promotional.
 func scoreStory(ctx context.Context, jev decider, story frontStory) (scoreRow, error) {
@@ -290,9 +297,24 @@ func scoreStory(ctx context.Context, jev decider, story frontStory) (scoreRow, e
 		},
 		"choices": []string{"yes", "no"},
 	})
+	section, _ := json.Marshal(map[string]any{
+		"type": "choice",
+		"instructions": "Which one section of the paper does state.story belong in? Pick exactly one. A story about a technology or AI " +
+			"company, product, research or policy is tech_ai, even when it is business news about that company. Markets, companies " +
+			"outside technology, trade and the economy are business. The U.S. federal or state government, U.S. elections and parties, " +
+			"and U.S. courts ruling on political questions are us_politics. Everything else, including politics, conflict and " +
+			"society outside the United States, is world.",
+		"criteria": map[string]string{
+			"world":       "World news: politics, conflict, disasters, society and culture outside the U.S., and anything not in another section.",
+			"us_politics": "U.S. politics: the U.S. government, Congress, the White House, U.S. elections and parties, U.S. courts on political questions.",
+			"business":    "Business and finance: markets, companies outside tech, banks, trade, jobs and the economy.",
+			"tech_ai":     "Tech and AI: technology and AI companies, products, research, security, and tech or AI policy, including their business news.",
+		},
+		"choices": sectionChoices,
+	})
 	raw, err := jev.Decide(ctx, scorerComputerID, gateway.JudgmentRequest{
 		State:     state,
-		Questions: map[string]json.RawMessage{"importance": importance, "promo": promo},
+		Questions: map[string]json.RawMessage{"importance": importance, "promo": promo, "section": section},
 	})
 	if err != nil {
 		return scoreRow{}, err
@@ -317,7 +339,21 @@ func scoreStory(ctx context.Context, jev decider, story frontStory) (scoreRow, e
 	default:
 		row.Promo = n <= 2
 	}
+	// A section outside the four is left unset (the story shows only on the
+	// front page) rather than failing the importance score.
+	if choice := strings.TrimSpace(decision.Answers["section"].Choice); validSection(choice) {
+		row.Section = choice
+	}
 	return row, nil
+}
+
+func validSection(s string) bool {
+	for _, c := range sectionChoices {
+		if s == c {
+			return true
+		}
+	}
+	return false
 }
 
 func clip(s string, n int) string {

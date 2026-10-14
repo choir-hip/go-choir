@@ -10,6 +10,8 @@ package platform
 //  3. A story revised after it was scored loses its score before the
 //     scorer rescores it.
 //  4. A rewritten file is not reread (the mtime cache serves old scores).
+//  5. A section outside the four is attached, or a row with no section
+//     (scored before sections existed) gains one.
 
 import (
 	"context"
@@ -61,8 +63,8 @@ func TestFrontImportanceAttachesScoresAndFallsBack(t *testing.T) {
 	// Present file: harbor scored at an older revision (failure mode 3),
 	// bridge scored promo, canal unscored.
 	writeScores(t, path, fmt.Sprintf(`{"version":1,"scored_at":"2026-10-14T00:00:00Z","scores":{
-		%q:{"revision":1,"importance":8,"promo":false,"scored_at":"2026-10-14T00:00:00Z"},
-		%q:{"revision":1,"importance":2,"promo":true,"scored_at":"2026-10-14T00:00:00Z"},
+		%q:{"revision":1,"importance":8,"promo":false,"section":"world","scored_at":"2026-10-14T00:00:00Z"},
+		%q:{"revision":1,"importance":2,"promo":true,"section":"sports","scored_at":"2026-10-14T00:00:00Z"},
 		"pub-not-on-front":{"revision":1,"importance":9}}}`, ids["Harbor reopens"], ids["Bridge closes"]))
 	page, _ = frontPageJSON(t, f.svc)
 	got := map[string]FrontStory{}
@@ -74,6 +76,10 @@ func TestFrontImportanceAttachesScoresAndFallsBack(t *testing.T) {
 	}
 	if got["Bridge closes"].Importance != 2 || !got["Bridge closes"].Promo {
 		t.Fatalf("bridge = %+v, want importance 2 promo", got["Bridge closes"])
+	}
+	if got["Harbor reopens"].Section != "world" || got["Bridge closes"].Section != "" || got["Canal dredged"].Section != "" {
+		t.Fatalf("sections = %q/%q/%q, want world, none (not a section), none (unscored)",
+			got["Harbor reopens"].Section, got["Bridge closes"].Section, got["Canal dredged"].Section)
 	}
 	if got["Canal dredged"].Importance != 0 || got["Canal dredged"].Promo {
 		t.Fatalf("canal = %+v, want no score", got["Canal dredged"])
@@ -88,7 +94,7 @@ func TestFrontImportanceAttachesScoresAndFallsBack(t *testing.T) {
 	_ = os.Chtimes(path, future, future)
 	page, _ = frontPageJSON(t, f.svc)
 	for _, s := range page.Stories {
-		if s.Title == "Harbor reopens" && s.Importance != 5 {
+		if s.Title == "Harbor reopens" && (s.Importance != 5 || s.Section != "") {
 			t.Fatalf("rewritten file not reread: harbor = %+v", s)
 		}
 		if s.Title == "Bridge closes" && (s.Importance != 0 || s.Promo) {
