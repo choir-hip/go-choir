@@ -95,6 +95,35 @@ capture arrivals, so during the 38-minute run what waited was mostly
 Texture requests. Details and the design:
 [management-delegation-design-2026-10-14](../reports/management-delegation-design-2026-10-14.md) §2.
 
+## S0 baseline (09:12 UTC read, exact join)
+
+`scripts/management_latency_probe.py` (delegation slice S0) over the live
+paper, product routes only, window 10-14 06:51:00-09:12:07 UTC
+(intake.labels on since 06:50:57). Output:
+`~/.config/choir-qa/traces/management/s0-paper-20261014T091207Z.json`.
+
+- 52 arrival records naming 239 captures. First dispositions: 87 opens,
+  38 feeds, 69 declines, 45 none by 09:12.
+- Arrival to first open or feed (125 captures): p50 225 s, p95 906 s, max
+  926 s. Declines: p50 265 s, p95 922 s. AC1's bound (p95 at most 300 s,
+  max at most 900 s) fails on the baseline, as expected.
+- Parent turns (22 started, all finished): p50 106 s, p95 436 s, max
+  1,680 s (305a582d); 1 over 600 s; 5 failed. Management was in a run
+  53% of the window; 44 of 52 arrival records found it busy.
+- Management cells: 295, p50 1 ms, p95 482 ms, p99 4.6 s, max 860.6 s
+  (the one cell over 60 s, the dead worker above). Over the longer window
+  10-13 15:00 to 10-14 09:12 (1,582 cells): p99 983 ms, and the same one
+  cell over 60 s. So S1's default, max(300 s, 2 × p99), is 300 s.
+
+**New observation, hypothesis only:** 45 captures have no disposition,
+33 of them more than 15 minutes after arrival; 28 arrived in the 08:22
+UTC burst, when two management runs failed (opencode-go circuit open:
+e20d19a2 with no cells, a8081845 after 9 cells), and management's cursor
+is now at its head. If a cell that shows records commits the cursor
+advance and the run then fails before disposing of them, those captures
+are never shown again. Not yet confirmed from the cursor trace; the
+probe's join may also miss a disposition named only in free text.
+
 ## Related
 
 - LR lever 6 (bulk cell output out of the transcript) cuts the input
