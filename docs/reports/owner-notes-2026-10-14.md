@@ -274,3 +274,46 @@ record attach to.
 Sent to the principal-identity design
 (`docs/reports/principal-identity-and-signed-acts-2026-10-15.md`, in
 progress).
+
+## 17. What is an agent's identity? The security boundary that can keep a key
+
+Owner: an agent's identity could be the model, the model family, a session
+trajectory, a pattern, or a document, filesystem or database. Maybe the
+answer is the security boundary that can maintain a cryptographic identity.
+
+Lead: this is the accountable identity, the one precommitments and a track
+record attach to.
+- **Descriptive attributes, not identities:** model, trajectory and pattern.
+  They are signed over inside records.
+- **Track records survive model swaps:** a desk's calibration survives a
+  change of model, and the model is a slice dimension.
+- **Boundaries nest, so certification nests:** a passkey in the secure
+  enclave; the computer in its VM; the desk, certified by the computer.
+- **Desk-cell confinement earns desks their keys:** it is what makes a desk a
+  real boundary. Without it, a desk key is only a label.
+
+Sent to the principal-identity design
+(`docs/reports/principal-identity-and-signed-acts-2026-10-15.md`, in
+progress).
+
+## 18. Red teaming becomes capture the flag: sign with a key you shouldn't have
+
+Owner: once identity is a key held by a boundary, agentic red teaming is
+literally capture the flag: sign a message with a key you are not supposed
+to hold. Over time, hill-climb toward making that impossible, or at least
+publish a clear disclosure of which boundaries can't be strongly secured.
+
+The owner's ladder, a hypothesis: Go cells are weak; capsules are stronger
+(container escapes are a thing); microVMs are stronger still, though microVM
+escapes were demonstrated as recently as the past week.
+
+Lead:
+- **The flags:** each boundary's key is a flag. The red-team score is which
+  keys an attacker starting at a given boundary can sign with.
+- **The disclosure:** a published boundary ladder. Each rung states its
+  isolation mechanism, its known escape classes (with dated evidence) and
+  which keys it may hold.
+- **Research:** recent microVM, container and sandbox escapes. Report:
+  `docs/reports/boundary-strength-ladder-2026-10-15.md`.
+- **When:** red teaming itself stays with the security stream scheduled
+  just before production, alongside the secrets vault.
