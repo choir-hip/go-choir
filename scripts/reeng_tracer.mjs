@@ -37,10 +37,17 @@
 // boundaries.pace): one attempt, short bounded waits. A run that needs
 // longer is a finding about the desks, not a reason to wait.
 //
-// Exit: 0 bundle kept with the load present; 3 bundle(s) kept, load absent
-// (I5 unknown); 4 export unavailable (drill kept); 5 contaminated (the guest
-// build changed during the run; --expect-sha); 6 the scenario's claim failed
-// (--scenario crash); 1 attempt failed; 2 usage.
+// Scenarios: story (default) | crash | management | research | paper |
+// engineering. The engineering scenario is C1e's cut-1 self-development
+// drill (see engineeringScenario); its flags:
+//   --scenario engineering [--timeout-min 15] [--apply-min 10]
+//     [--restore-min 12] [--require-served] [--skip-export] [--keep-computer]
+//
+// Exit: 0 bundle kept with the load present (or the scenario's claim held);
+// 3 bundle(s) kept, load absent (I5 unknown); 4 export unavailable (drill
+// kept); 5 contaminated (the guest build changed during the run;
+// --expect-sha); 6 the scenario's claim failed (crash, management, research,
+// paper, engineering); 1 attempt failed; 2 usage.
 
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -77,11 +84,26 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // "crash" proves restart closure only: crash at the first run in flight,
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
+const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served]';
+if (flag('help')) {
+  console.log(USAGE);
+  process.exit(0);
+}
 const SCENARIO = arg('scenario', 'story');
-if (!['story', 'crash', 'management', 'research', 'paper'].includes(SCENARIO)) {
-  console.error(`unknown --scenario ${SCENARIO} (story | crash | management | research | paper)`);
+if (!['story', 'crash', 'management', 'research', 'paper', 'engineering'].includes(SCENARIO)) {
+  console.error(`unknown --scenario ${SCENARIO} (story | crash | management | research | paper | engineering)`);
   process.exit(2);
 }
+// The engineering scenario's bounded waits (fast-loop defaults): the
+// conversation through the owner-decision boundary is bounded by
+// --timeout-min; the apply (approval to applied, with its planned restart)
+// by --apply-min; the restore request by --restore-min. --require-served
+// makes the served-file check (the change visible on the computer's surface
+// after apply and gone after restore) part of the claim; without it, it is
+// observed only.
+const APPLY_MIN = Number(arg('apply-min', '10'));
+const RESTORE_MIN = Number(arg('restore-min', '12'));
+const REQUIRE_SERVED = flag('require-served');
 const CRASH_QUIET_MS = Number(arg('quiet-s', '150')) * 1000;
 // The paper scenario's sources and schedule (Cut 2 2b): the owner act that
 // starts Autopaper on a computer is POST /api/autopaper/sources/schedules.
@@ -90,7 +112,7 @@ const PAPER_INTERVAL_MIN = Number(arg('interval-min', '10'));
 const PAPER_MAX_ITEMS = Number(arg('max-items', '6'));
 const OPEN_RUN_STATES = new Set(['pending', 'running', 'passivated', 'blocked']);
 if (!LABEL || !/^[A-Za-z0-9._-]+$/.test(LABEL)) {
-  console.error('usage: node scripts/reeng_tracer.mjs --label <label> [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer]');
+  console.error(USAGE);
   process.exit(2);
 }
 const TRACE_DIR = join(homedir(), '.config', 'choir-qa', 'traces', LABEL);
@@ -186,6 +208,7 @@ class MintedComputer {
     if (cred.computer_id !== this.computerID) throw new Error('credential file names a different computer than the mint printed');
     this.apiKey = cred.api_key; // never printed, logged or written
     if (!this.apiKey) throw new Error('credential file has no key');
+    this.ownerID = minted.user_id || cred.user_id || '';
   }
 
   guard(computerID) {
@@ -213,6 +236,21 @@ class MintedComputer {
       return { status: res.status, body: json, ms: Date.now() - started };
     } catch (err) {
       return { status: 0, body: null, error: String(err?.message || err).slice(0, 300), ms: Date.now() - started };
+    }
+  }
+
+  // surface reads a page of the computer's own surface (the guest frontend the
+  // proxy serves to its owner), as text. Not an API route.
+  async surface(path, timeoutMs = 20_000) {
+    if (path.startsWith('/internal/') || path.startsWith('/api/')) throw new Error('surface reads are not API routes');
+    try {
+      const res = await fetch(`${HOST}${path}`, {
+        headers: { Authorization: `Bearer ${this.apiKey}`, 'X-Choir-Computer': this.computerID },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      return { status: res.status, text: (await res.text()).slice(0, 400) };
+    } catch (err) {
+      return { status: 0, text: '', error: String(err?.message || err).slice(0, 300) };
     }
   }
 
@@ -341,6 +379,7 @@ async function attempt(n, out) {
   out.build = obs.body?.build || null;
 
   if (SCENARIO === 'paper') return paperScenario(c, out, n, deadline, phase);
+  if (SCENARIO === 'engineering') return engineeringScenario(c, out, n, deadline, phase, fenceBuild);
   // Story submit; the first accepted submit is the "first ready prompt bar".
   const story = await submitPrompt(c, SCENARIO === 'management' ? MANAGEMENT_STORY : SCENARIO === 'research' ? RESEARCH_STORY : STORY, 'story', deadline);
   out.timings.first_prompt_accepted_ms = Date.now() - t0;
@@ -942,6 +981,530 @@ async function paperScenario(c, out, n, deadline, phase) {
       out.sha256 = createHash('sha256').update(readFileSync(bundlePath)).digest('hex');
     }
   }
+  return out;
+}
+
+// ---- engineering scenario ----------------------------------------------------
+//
+// engineeringScenario is the cut-1 self-development drill on records (C1e
+// step 4, acceptance 3; docs/definitions/choir-reeng-c1e-engineering-on-records-2026-10-13.md,
+// design docs/reports/c1e-b1-design-note-2026-10-13.md). On a fresh test
+// computer: the owner arms propose_only (Freeze opens a candidate only under
+// a proposing mode; a fresh computer's mode is off), then asks for one small
+// change only engineering can make (a static file on the computer's frontend
+// whose content is a per-run token, checked in the capsule before Freeze).
+// The drill watches, through product routes only:
+//   1. Texture's Cast to management:<owner> (records);
+//   2. management's Cast to engineering:<assignment> on records, its parent
+//      naming Texture's Cast;
+//   3. the operation Freeze opened (the candidate bundle's effect journal),
+//      reaching frozen with a bundle digest;
+//   4. engineering's final Report into management:<owner> (stop_reason
+//      completed), its evidence refs naming selfdev-operation:<id> and
+//      bundle:<digest> equal to the operation's;
+//   5. management's Verify (verifier_refs on the operation) and the owner
+//      decision boundary (awaiting_approval);
+//   6. the owner's approval act: pin a pre-apply checkpoint, read the head,
+//      arm accept_once bound to this operation and head, POST the decision;
+//   7. the apply: exactly one new boot after the approval, served by
+//      /api/runtime/obligations as restart kind planned, reason
+//      self_development_apply, and the operation reaching applied with its
+//      materialization, checkpoint and route receipts;
+//   8. a restore to the pinned pre-apply checkpoint, whose report must name
+//      that checkpoint with the witness matched and the frontend restaged.
+// Every phase is a timestamped row in the receipt; event heads are read at
+// each boundary. No SSH and no /internal/* (standing question 9). Run
+// acceptance from the fold is B3's, not this drill's.
+//
+// Ways this drill could falsely pass, and what closes each:
+//   P1. A stale or foreign operation satisfies the polls. The computer is
+//       fresh, and the operation is the one engineering's final Report names
+//       (selfdev-operation:<id>); its trajectory must be the request's.
+//   P2. The operation reaches applied with no restart, or through a crash
+//       restart. Exactly one new boot must be observed after the approval and
+//       the obligations route must serve it as kind planned, reason
+//       self_development_apply. Residual: the route does not serve the
+//       marker's target (the operation id), and two boots inside one poll
+//       interval (3 s) look like one.
+//   P3. Verify recorded against a different bundle. The reducer refuses a
+//       digest mismatch; the drill also requires the digest in the final
+//       Report to equal the operation's bundle digest, and verifier_refs to
+//       be present when the operation reaches awaiting_approval. Verify
+//       cannot precede the Report: it refuses a non-completed assignment,
+//       and the row turns completed in the Report's own transaction (D3).
+//   P4. The approval reached around the owner (harness ballots, an SSH mode
+//       arm). The only arm is accept_once through PUT
+//       /api/computers/{id}/self-development/mode, and the decision is the
+//       owner's POST .../operations/{id}/decision with the same binding.
+//   P5. A restore that lands somewhere else (a post-apply checkpoint), or
+//       whose witness did not match. The restore report must name the pinned
+//       checkpoint's digest, with witness_matched and frontend_restaged, and
+//       the pinned checkpoint's effective head must be the head the approval
+//       was bound to (the pre-apply head), unequal to the post-apply one.
+//   P6. The final Report is a cancel or run-end closure (stop_reason
+//       cancelled or run_<state>) after an earlier Freeze. stop_reason must
+//       be completed.
+//   P7. The served-file check passes on the SPA fallback (200 with
+//       index.html). The body must equal the per-run token exactly.
+//   P8. A platform deploy refreshes the computer mid-run and its restart is
+//       taken for the apply's. The guest build is fenced at the decision
+//       boundary (--expect-sha), and a boot's reason must be
+//       self_development_apply.
+//
+// Ways it could falsely fail, and what avoids each:
+//   F1. Engineering builds the release tree (bin/autoputer and the frontend)
+//       in the capsule before Freeze, which can outlast the fast-loop
+//       --timeout-min. The receipt names the last phase reached; a slow desk
+//       is a finding, and the lead may raise --timeout-min.
+//   F2. A fresh computer's self-development mode is off, so Freeze would be
+//       refused. The drill arms propose_only before the request.
+//   F3. The guest is unreachable while the apply restarts it (status 0 or
+//       502). Reads during the apply and the restore retry; an unreachable
+//       window is recorded, not failed.
+//   F4. The event head moves between the binding read and the decision
+//       (409). The binding is re-read and the decision retried, at most three
+//       times, each with its own idempotency key.
+//   F5. accept_once refuses a non-canonical expiry. expires_at is whole
+//       seconds, UTC, with no fractional part.
+//   F6. A self-development apply changes the guest's build identity on
+//       purpose (CLAUDE.md "Product restore vs platform deploy"). The build
+//       is fenced only up to the decision boundary; after it, the build is
+//       recorded, never counted as contamination.
+//   F7. The checkpoint bind or the restore is slow (Dolt reconstruction is
+//       minutes on staging). The checkpoint and restore requests get the
+//       proxy's replay budget (--restore-min), retried on transport errors.
+//   F8. A model declines a step (Texture answers without casting, management
+//       never casts engineering, engineering completes without Freeze). That
+//       is a desk finding; the receipt carries the records it saw.
+//   F9. The served-file path depends on how the release frontend is built
+//       and served, which this drill does not control; without
+//       --require-served it is observed, not claimed.
+//
+// Named gaps (recorded in the receipt's drill.gaps, never worked around
+// through /internal/*): the restart marker's target is not served (only its
+// kind and reason are); the computer's own projection head after a restore
+// has no product route (corpusd's head is append-only, so a restore is a
+// forward event on the chain); and any route this drill needs that answers
+// 404 or 405 is recorded as a gap at the step that needed it.
+
+// The drill's phases in order; the receipt names the last one reached.
+const REACHED = ['mint', 'mode', 'story_submitted', 'texture_cast_to_management', 'management_cast_engineering', 'operation_frozen',
+  'engineering_final_report', 'decision_boundary', 'owner_approval', 'applied', 'restore'];
+const OP_SETTLED = new Set(['applied', 'rejected', 'rolled_back', 'failed', 'degraded']);
+const OP_ORDER = ['requested', 'executing', 'frozen', 'verified', 'awaiting_approval', 'accepted', 'materializing', 'applied'];
+const opAtLeast = (state, floor) => OP_ORDER.indexOf(state) >= OP_ORDER.indexOf(floor);
+
+function engineeringStory(token) {
+  return [
+    `Change this computer itself: add one static file to its web frontend so that it is served at /choir-drill/${token}.txt.`,
+    `The file is frontend/public/choir-drill/${token}.txt in the platform workspace and contains exactly one line: ${token}`,
+    'Change nothing else. Deterministic check, to run in the capsule before freezing:',
+    `test "$(cat frontend/public/choir-drill/${token}.txt)" = "${token}".`,
+    'Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision,',
+    'and incorporate management\'s answer when it arrives.',
+    'Management: Cast it to engineering; engineering makes the change, runs the check, builds the release tree, freezes the candidate with choir.Freeze and completes;',
+    'then Verify the frozen bundle that engineering\'s final Report names, and answer this request.',
+  ].join(' ');
+}
+
+// pickHead keeps the event-head fields a drill compares.
+function pickHead(h) {
+  if (!h || typeof h !== 'object') return null;
+  return {
+    sequence: h.sequence ?? null, canonical_event_head: h.canonical_event_head || null,
+    desired_event_head: h.desired_event_head || null, effective_event_head: h.effective_event_head || null,
+    pending_transition_ref: h.pending_transition_ref ?? null,
+    desired_state_commitment: h.desired_state_commitment || null, effective_state_commitment: h.effective_state_commitment || null,
+  };
+}
+
+// The boot a guest is in, from its observability log ring: a new process
+// starts a new ring, so its first line changes and (unless the old ring had
+// not wrapped) the ring gets shorter.
+const bootSig = (obs) => (obs?.status === 200 && Array.isArray(obs.body?.recent_log)
+  ? { first: String(obs.body.recent_log[0] || ''), len: obs.body.recent_log.length } : null);
+const isNewBoot = (prev, cur) => Boolean(prev && cur && cur.first !== prev.first && (cur.len < 512 || cur.len < prev.len));
+const CRASH_LINE = /crash boot|treating boot as a crash/;
+
+// canonicalExpiry is a whole-second UTC instant in Go's RFC3339Nano form,
+// which accept_once requires (no fractional part, Z).
+const canonicalExpiry = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.000Z$/, 'Z');
+
+async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
+  const cid = encodeURIComponent(c.computerID);
+  const sd = (rest) => `/api/computers/${cid}/self-development/${rest}`;
+  const lc = (rest) => `/api/computers/${cid}/lifecycle/${rest}`;
+  const token = `choir-drill-${randomUUID().slice(0, 8)}`;
+  const markerPath = `/choir-drill/${token}.txt`;
+  const gaps = [];
+  const gap = (step, route, detail) => {
+    if (gaps.some((g) => g.step === step && g.route === route && g.detail === detail)) return;
+    gaps.push({ step, route, detail });
+    phase('gap', { step, route, detail });
+  };
+  const claim = {
+    mode_propose_only: null, texture_cast_to_management: null, engineering_casts: [], engineering_final_reports: [],
+    operation: null, operation_states: [], verify: null, decision_boundary: null,
+    pre_apply_checkpoint: null, owner_approval: null, boots: [], unreachable: [], applied: null, route_receipt: null,
+    restore: null, served: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
+  };
+  out.drill = { label: out.label, scenario: 'engineering', token, claim, gaps, note: [] };
+  let reached = 'mint';
+  const at = (name) => { if (REACHED.indexOf(name) > REACHED.indexOf(reached)) reached = name; };
+  const readHead = async (tag) => {
+    const r = await c.api(sd('head'), 'GET', undefined, 30_000);
+    claim.heads[tag] = r.status === 200 ? { at: iso(), ...pickHead(r.body) } : { at: iso(), status: r.status, error: r.body?.error || r.error || null };
+    return r.status === 200 ? r.body : null;
+  };
+  const readObligations = async (tag) => {
+    const o = await obligations(c);
+    claim.obligations[tag] = o?.unavailable ? o : { at: iso(), restart: o?.restart || null, runs: o?.runs || null, wakes_unprojected: o?.wakes?.unprojected ?? null };
+    return o;
+  };
+  const served = async (tag) => {
+    const r = await c.surface(markerPath);
+    claim.served[tag] = { at: iso(), status: r.status, served: r.status === 200 && r.text.trim() === token, error: r.error || null };
+    phase('served_check', { tag, ...claim.served[tag] });
+  };
+  const inbox = async (id) => {
+    const r = await c.api(`/api/inboxes/${encodeURIComponent(id)}/records?limit=1000`);
+    return r.status === 200 ? r.body : null;
+  };
+  const getOp = async (id) => {
+    const r = await c.api(sd(`operations/${encodeURIComponent(id)}`), 'GET', undefined, 30_000);
+    return r.status === 200 ? r.body : null;
+  };
+  const seenStates = new Set();
+  const noteOpState = (op) => {
+    if (!op?.state || seenStates.has(op.state)) return;
+    seenStates.add(op.state);
+    const row = { state: op.state, at: iso(), updated_at: op.updated_at || null, bundle_digest: op.bundle_digest || null, verifier_refs: op.verifier_refs || [], last_intent_error: op.last_intent_error || null, error: op.error || null };
+    claim.operation_states.push(row);
+    phase('operation_state', { operation_id: op.operation_id, ...row });
+  };
+  const finish = () => acceptEngineering(out, claim, gaps, reached, phase);
+
+  // Event head before anything; a pre-genesis chain is bootstrapped through
+  // the owner's lifecycle route.
+  if (!(await readHead('start'))) {
+    const boot = await c.api(lc('bootstrap-chain'), 'POST', {}, 120_000);
+    phase('bootstrap_chain', { status: boot.status, error: boot.body?.error || boot.error || null });
+    if (!(await readHead('start'))) gap('start', 'GET /api/computers/{id}/self-development/head', `no event head (${claim.heads.start?.status})`);
+  }
+  await readObligations('start');
+
+  // F2: arm propose_only, the owner's act that lets Freeze open a candidate.
+  const mode = await c.api(sd('mode'));
+  if (mode.status !== 200) {
+    gap('mode', 'GET /api/computers/{id}/self-development/mode', `status ${mode.status}`);
+    return finish();
+  }
+  if (['propose_only', 'accept_once', 'qualified_consensus'].includes(mode.body?.mode)) {
+    claim.mode_propose_only = { at: iso(), mode: mode.body.mode, generation: mode.body.generation, armed_by_drill: false };
+  } else {
+    const armed = await c.api(sd('mode'), 'PUT', { mode: 'propose_only', expected_generation: mode.body?.generation ?? 0, idempotency_key: `${out.label}-propose-only-${randomUUID()}` });
+    claim.mode_propose_only = { at: iso(), status: armed.status, from: mode.body?.mode || null, mode: armed.body?.mode || null, generation: armed.body?.generation ?? null, armed_by_drill: true, error: armed.body?.error || armed.error || null };
+    if (armed.status !== 200 || armed.body?.mode !== 'propose_only') {
+      phase('mode_propose_only_refused', claim.mode_propose_only);
+      return finish();
+    }
+  }
+  phase('mode_propose_only', claim.mode_propose_only);
+  at('mode');
+  await served('pre_apply');
+
+  const story = await submitPrompt(c, engineeringStory(token), 'engineering', deadline);
+  out.trajectory_id = story.body.trajectory_id;
+  out.doc_id = story.body.doc_id;
+  phase('story_submitted', { trajectory_id: out.trajectory_id, doc_id: out.doc_id, token });
+  at('story_submitted');
+  const textureInbox = `texture:${out.doc_id}`;
+  let ownerID = c.ownerID;
+  const mgmtInbox = () => `management:${ownerID}`;
+
+  // Through the owner-decision boundary, bounded by --timeout-min.
+  const knownAssignments = new Set();
+  let opID = null;
+  let op = null;
+  while (Date.now() < deadline) {
+    if (!ownerID) {
+      const runs = await c.api('/api/runs?limit=50');
+      ownerID = (runs.body?.runs || []).find((r) => r.owner_id)?.owner_id || '';
+      if (!ownerID) { await sleep(5_000); continue; }
+    }
+    const m = await inbox(mgmtInbox());
+    if (!claim.texture_cast_to_management) {
+      const cast = (m?.records || []).find((r) => r.sender_inbox === textureInbox && r.directive?.subtype === 'cast');
+      if (cast) {
+        claim.texture_cast_to_management = { record_id: cast.record_id, round: cast.round, seq: cast.inbox_seq, at: cast.provenance?.committed_at || null };
+        phase('texture_cast_to_management', claim.texture_cast_to_management);
+        at('texture_cast_to_management');
+      }
+    }
+    // Engineering runs are named engineering:<assignment> (D1); the Cast that
+    // opened each is in that inbox, from management:<owner>.
+    const runs = await c.api('/api/runs?limit=200');
+    for (const r of runs.body?.runs || []) {
+      const agent = String(r.agent_id || '');
+      if (!agent.startsWith('engineering:') || knownAssignments.has(agent)) continue;
+      const e = await inbox(agent);
+      const cast = (e?.records || []).find((x) => x.sender_inbox === mgmtInbox() && x.directive?.subtype === 'cast');
+      if (!cast) continue;
+      knownAssignments.add(agent);
+      const row = {
+        assignment_id: agent.slice('engineering:'.length), inbox: agent, record_id: cast.record_id, round: cast.round,
+        parent_id: cast.parent_id || null, run_id: runID(r), run_state: r.state || null, at: cast.provenance?.committed_at || null,
+      };
+      claim.engineering_casts.push(row);
+      phase('management_cast_engineering', row);
+      at('management_cast_engineering');
+    }
+    for (const rec of m?.records || []) {
+      if (!String(rec.sender_inbox || '').startsWith('engineering:') || !rec.final) continue;
+      if (claim.engineering_final_reports.some((x) => x.record_id === rec.record_id)) continue;
+      const refs = rec.evidence_refs || [];
+      const row = {
+        record_id: rec.record_id, sender: rec.sender_inbox, seq: rec.inbox_seq, round: rec.round, stop_reason: rec.report?.stop_reason || null,
+        operation_id: (refs.find((x) => x.startsWith('selfdev-operation:')) || '').slice('selfdev-operation:'.length) || null,
+        bundle_digest: (refs.find((x) => x.startsWith('bundle:')) || '').slice('bundle:'.length) || null,
+        evidence_refs: refs, at: rec.provenance?.committed_at || null,
+      };
+      claim.engineering_final_reports.push(row);
+      phase('engineering_final_report', row);
+      at('engineering_final_report');
+    }
+    // P1: the operation is the one the final Report names; until a Report
+    // names one, the newest on this request's trajectory is watched.
+    const named = claim.engineering_final_reports.find((x) => x.stop_reason === 'completed' && x.operation_id);
+    if (named) opID = named.operation_id;
+    if (!opID) {
+      const list = await c.api(sd('operations'));
+      if (list.status === 404 || list.status === 405) gap('operations', 'GET /api/computers/{id}/self-development/operations', `status ${list.status}`);
+      const ours = (list.body?.operations || []).find((x) => x.trajectory_id === out.trajectory_id);
+      if (ours) op = ours;
+    } else {
+      op = (await getOp(opID)) || op;
+    }
+    if (op) {
+      noteOpState(op);
+      if (!claim.operation) phase('operation_opened', { operation_id: op.operation_id, trajectory_id: op.trajectory_id });
+      claim.operation = { operation_id: op.operation_id, trajectory_id: op.trajectory_id, trajectory_matches: op.trajectory_id === out.trajectory_id, capsule_id: op.capsule_id || null, base_head: op.base_head || null, bundle_digest: op.bundle_digest || null, state: op.state };
+      if (opAtLeast(op.state, 'frozen')) at('operation_frozen');
+      if (OP_SETTLED.has(op.state)) break;
+      // Verify needs a completed assignment, whose final Report commits with
+      // the row (D3), so a Report exists by now; acceptance checks it names
+      // this operation.
+      if (op.state === 'awaiting_approval' && claim.engineering_final_reports.length > 0) break;
+    }
+    await sleep(5_000);
+  }
+  // Management's answer to Texture (observed; it may come after the decision).
+  const t = await inbox(textureInbox);
+  const answer = (t?.records || []).find((r) => r.sender_inbox === mgmtInbox() && r.final);
+  if (answer) claim.management_final_report_to_texture = { record_id: answer.record_id, stop_reason: answer.report?.stop_reason || null, at: answer.provenance?.committed_at || null };
+  if (!op || op.state !== 'awaiting_approval') {
+    phase('decision_boundary_not_reached', { state: op?.state || null, last_intent_error: op?.last_intent_error || null });
+    return finish();
+  }
+  claim.verify = { verifier_refs: op.verifier_refs || [], bundle_digest: op.bundle_digest, last_intent_error: op.last_intent_error || null };
+  claim.decision_boundary = { at: iso(), operation_id: op.operation_id };
+  phase('decision_boundary', { operation_id: op.operation_id, bundle_digest: op.bundle_digest, verifier_refs: op.verifier_refs });
+  at('decision_boundary');
+  await readHead('decision_boundary');
+
+  // P8 / F6: the guest build is fenced up to here and only recorded after.
+  const preObs = await c.observability();
+  claim.build_pre_apply = preObs.body?.build?.commit || null;
+  fenceBuild('decision_boundary', preObs.body?.build);
+  await readObligations('pre_apply');
+
+  // The restore target: a checkpoint pinned at the pre-apply head.
+  const ck = await c.api(lc('checkpoint'), 'POST', {}, RESTORE_MIN * 60_000);
+  const pinned = ck.body?.published_checkpoint?.checkpoint || ck.body?.checkpoint || null;
+  claim.pre_apply_checkpoint = {
+    at: iso(), status: ck.status, checkpoint_digest: pinned?.checkpoint_digest || null,
+    accepted_event_head: pinned?.request?.accepted_event_head || null, effective_event_head: pinned?.request?.effective_event_head || null,
+    error: ck.body?.error || ck.error || null,
+  };
+  phase('pre_apply_checkpoint', claim.pre_apply_checkpoint);
+  if (!pinned) gap('pre_apply_checkpoint', 'POST /api/computers/{id}/lifecycle/checkpoint', `no published checkpoint (status ${ck.status}: ${claim.pre_apply_checkpoint.error || 'no body'})`);
+
+  // The owner's approval act (P4, F4, F5), as `choir self-dev approve` does it.
+  let bootPrev = bootSig(await c.observability());
+  let decided = null;
+  for (let tryN = 1; tryN <= 3 && !decided; tryN++) {
+    const cur = await getOp(op.operation_id);
+    if (cur && cur.state !== 'awaiting_approval') { if (['accepted', 'materializing', 'applied'].includes(cur.state)) decided = { status: 200, recovered: true, state: cur.state }; break; }
+    const head = await readHead(`binding_${tryN}`);
+    if (!head) break;
+    const binding = {
+      bundle_digest: op.bundle_digest,
+      expected_desired_event_head: head.desired_event_head, expected_effective_event_head: head.effective_event_head,
+      expected_pending_transition_ref: head.pending_transition_ref || '',
+      expected_desired_state_commitment: head.desired_state_commitment, expected_effective_state_commitment: head.effective_state_commitment,
+    };
+    const m0 = await c.api(sd('mode'));
+    const arm = await c.api(sd('mode'), 'PUT', {
+      mode: 'accept_once', expected_generation: m0.body?.generation ?? 0, idempotency_key: `${out.label}-accept-once-${tryN}-${op.operation_id}`,
+      operation_id: op.operation_id, expires_at: canonicalExpiry(Date.now() + 15 * 60_000), ...binding,
+    });
+    const row = { try: tryN, at: iso(), head: pickHead(head), arm_status: arm.status, arm_generation: arm.body?.generation ?? null, arm_error: arm.body?.error || arm.error || null };
+    if (arm.status !== 200 || arm.body?.mode !== 'accept_once') { claim.owner_approval = row; phase('owner_approval_arm_refused', row); break; }
+    const d = await c.api(sd(`operations/${encodeURIComponent(op.operation_id)}/decision`), 'POST', {
+      decision: 'approve', idempotency_key: `${out.label}-approve-${tryN}-${op.operation_id}`, verifier_ref: (op.verifier_refs || [])[0] || '', ...binding,
+    }, 120_000);
+    Object.assign(row, { decision_status: d.status, decision_error: d.body?.error || d.error || null, decision_state: d.body?.state || null, decision_actor: d.body?.decision_actor || null, decision_event: d.body?.decision_event || null });
+    claim.owner_approval = row;
+    phase('owner_approval', row);
+    if (d.status === 200) { decided = d; claim.heads.pre_apply = claim.heads[`binding_${tryN}`]; break; }
+    const after = await getOp(op.operation_id);
+    if (after && ['accepted', 'materializing', 'applied'].includes(after.state)) { decided = { status: 200, recovered: true, state: after.state }; claim.heads.pre_apply = claim.heads[`binding_${tryN}`]; break; }
+    if (d.status !== 409) break;
+  }
+  if (!decided) return finish();
+  at('owner_approval');
+
+  // The apply (P2, F3): poll the operation and the guest's boot every 3 s
+  // until applied or settled, then 30 s more for a second boot.
+  const applyDeadline = Date.now() + APPLY_MIN * 60_000;
+  let appliedAt = 0;
+  let down = null;
+  while (Date.now() < applyDeadline && (!appliedAt || Date.now() - appliedAt < 30_000)) {
+    const obs = await c.api('/api/runtime/observability', 'GET', undefined, 15_000);
+    if (obs.status !== 200) {
+      if (!down) down = { from: iso(), status: obs.status };
+    } else {
+      if (down) { claim.unreachable.push({ ...down, to: iso() }); down = null; }
+      if (obs.body?.computer_id && obs.body.computer_id !== c.computerID) throw new Error(`guest answered as ${obs.body.computer_id}, not the minted ${c.computerID}`);
+      const sig = bootSig(obs);
+      if (isNewBoot(bootPrev, sig)) {
+        const o = await obligations(c);
+        const lines = obs.body.recent_log || [];
+        const row = {
+          observed_at: iso(), ...bootInstant(obs.body, claim.owner_approval.at, iso()), restart_kind: o?.restart?.kind || null, restart_reason: o?.restart?.reason || null,
+          crash_lines: lines.filter((l) => CRASH_LINE.test(l)).slice(0, 5), operation_state_before: op.state, build: obs.body?.build?.commit || null,
+        };
+        claim.boots.push(row);
+        phase('boot_observed', row);
+      }
+      if (sig) bootPrev = sig;
+    }
+    const cur = await getOp(op.operation_id);
+    if (cur) {
+      op = cur;
+      noteOpState(op);
+      if (op.state === 'applied' && !appliedAt) { appliedAt = Date.now(); at('applied'); }
+      if (OP_SETTLED.has(op.state) && op.state !== 'applied') break;
+    }
+    await sleep(3_000);
+  }
+  if (down) claim.unreachable.push({ ...down, to: null });
+  claim.applied = { state: op.state, at: appliedAt ? iso(appliedAt) : null, error: op.error || null, effective_head: op.effective_head || null, desired_head: op.desired_head || null };
+  phase('apply_settled', claim.applied);
+  if (op.state === 'applied') {
+    const rr = await c.api(sd(`operations/${encodeURIComponent(op.operation_id)}/receipts`));
+    claim.route_receipt = rr.status === 200 ? {
+      status: 200, materialization_receipt: rr.body.materialization_receipt || null, checkpoint_ref: rr.body.checkpoint_ref || null,
+      route_certificate: rr.body.route_certificate || null, route_generation: rr.body.route_generation ?? null,
+      decision_event: rr.body.decision_event || null, lifecycle_receipt: rr.body.lifecycle_receipt || null, terminal_state: rr.body.terminal_state || null,
+    } : { status: rr.status, error: rr.body?.error || rr.error || null };
+    phase('route_receipt', claim.route_receipt);
+    if (rr.status === 404 || rr.status === 405) gap('route_receipt', 'GET /api/computers/{id}/self-development/operations/{op}/receipts', `status ${rr.status}`);
+  }
+  await readHead('post_apply');
+  await readObligations('post_apply');
+  claim.build_post_apply = (await c.api('/api/runtime/observability', 'GET', undefined, 15_000)).body?.build?.commit || null;
+  await served('post_apply');
+  const census = await c.api('/api/runtime/census', 'GET', undefined, 30_000);
+  claim.census = census.status === 200 ? { counts: census.body?.counts || {}, objects: (census.body?.objects || []).length, truncated: Boolean(census.body?.truncated) } : { status: census.status };
+
+  // The round trip's trajectory bundle, before the restore rewinds the guest.
+  if (!SKIP_EXPORT && out.trajectory_id) {
+    const bundlePath = join(TRACE_DIR, `bundle-a${n}.json`);
+    const exported = await runExporter(c, out.trajectory_id, bundlePath);
+    out.export = { command: EXPORTER, exit: exported.code, ms: exported.ms, stderr_tail: exported.stderr.slice(-600) };
+    if (exported.code === 0 && existsSync(bundlePath)) {
+      out.bundle_path = bundlePath;
+      out.sha256 = createHash('sha256').update(readFileSync(bundlePath)).digest('hex');
+    } else {
+      out.export.unavailable = true; // observed only: the drill's claim decides the exit
+    }
+    phase('export', { exit: exported.code, ms: exported.ms });
+  }
+
+  // The restore to the pinned pre-apply checkpoint (P5, F7).
+  if (op.state === 'applied' && pinned) {
+    const restoreDeadline = Date.now() + RESTORE_MIN * 60_000;
+    let r = null;
+    let tries = 0;
+    while (Date.now() < restoreDeadline) {
+      tries++;
+      r = await c.api(lc('restore'), 'POST', { checkpoint: pinned, operand_scopes: ['vm_local', 'computer_surface_frontend'] }, Math.max(60_000, restoreDeadline - Date.now()));
+      if (![0, 502, 503, 504].includes(r.status)) break;
+      await sleep(10_000);
+    }
+    claim.restore = {
+      at: iso(), tries, status: r?.status ?? null, checkpoint_digest: r?.body?.checkpoint_digest || null, method: r?.body?.method || null,
+      witness_matched: r?.body?.witness_matched === true, frontend_restaged: r?.body?.frontend_restaged === true,
+      tail_target_sequence: r?.body?.tail_target_sequence ?? null, tail_events_applied: r?.body?.tail_events_applied ?? null,
+      error: r?.body?.error || r?.error || null,
+    };
+    phase('restore', claim.restore);
+    if (r?.status === 404 || r?.status === 405) gap('restore', 'POST /api/computers/{id}/lifecycle/restore', `status ${r.status}`);
+    if (r?.status === 200) at('restore');
+    await readHead('post_restore');
+    const after = await getOp(op.operation_id);
+    claim.restore.operation_state_after = after?.state || null;
+    claim.build_post_restore = (await c.api('/api/runtime/observability', 'GET', undefined, 15_000)).body?.build?.commit || null;
+    await served('post_restore');
+    gap('restore', 'none', 'no product route serves the computer\'s projection head after a restore; corpusd\'s head is append-only (a restore is a forward event), so the landing is read from the restore report\'s checkpoint binding');
+  } else if (op.state === 'applied') {
+    gap('restore', 'POST /api/computers/{id}/lifecycle/restore', 'not attempted: no pre-apply checkpoint to restore to');
+  }
+  if (claim.boots.length) gap('apply_restart', 'GET /api/runtime/obligations', 'the restart marker\'s target (the operation id) is not served; only its kind and reason are');
+  return finish();
+}
+
+// acceptEngineering turns what the drill saw into the claim and its verdict.
+function acceptEngineering(out, claim, gaps, reached, phase) {
+  const report = claim.engineering_final_reports.find((x) => x.stop_reason === 'completed' && x.operation_id) || null;
+  const op = claim.operation;
+  const cast = claim.engineering_casts.find((x) => report && x.inbox === report.sender) || claim.engineering_casts[0] || null;
+  const boot = claim.boots.length === 1 ? claim.boots[0] : null;
+  const preHead = claim.heads.pre_apply || null;
+  const rr = claim.route_receipt || {};
+  const checks = {
+    texture_cast_to_management: Boolean(claim.texture_cast_to_management),
+    management_cast_engineering_on_records: Boolean(cast?.record_id && claim.texture_cast_to_management && cast.parent_id === claim.texture_cast_to_management.record_id),
+    frozen: claim.operation_states.some((s) => opAtLeast(s.state, 'frozen') && s.bundle_digest),
+    final_report_names_bundle: Boolean(report && op && report.operation_id === op.operation_id && report.bundle_digest && report.bundle_digest === op.bundle_digest),
+    operation_on_request_trajectory: Boolean(op?.trajectory_matches),
+    verified_against_named_bundle: Boolean(claim.verify && (claim.verify.verifier_refs || []).length > 0 && report && claim.verify.bundle_digest === report.bundle_digest),
+    owner_approved: Boolean(claim.owner_approval && (claim.owner_approval.decision_status === 200 || ['accepted', 'materializing', 'applied'].includes(claim.applied?.state))),
+    applied: claim.applied?.state === 'applied',
+    one_planned_restart: Boolean(boot && boot.restart_kind === 'planned' && boot.restart_reason === 'self_development_apply' && boot.crash_lines.length === 0),
+    route_receipt: Boolean(rr.materialization_receipt && rr.checkpoint_ref && rr.route_certificate),
+    restore_to_pre_apply_head: Boolean(claim.restore?.status === 200 && claim.restore.witness_matched && claim.restore.frontend_restaged
+      && claim.pre_apply_checkpoint?.checkpoint_digest && claim.restore.checkpoint_digest === claim.pre_apply_checkpoint.checkpoint_digest
+      && preHead?.effective_event_head && claim.pre_apply_checkpoint.effective_event_head === preHead.effective_event_head
+      && claim.applied?.effective_head !== preHead.effective_event_head),
+  };
+  const servedOK = claim.served.pre_apply?.served === false && claim.served.post_apply?.served === true && claim.served.post_restore?.served === false;
+  if (REQUIRE_SERVED) checks.served_change_then_restored = servedOK;
+  out.acceptance = {
+    scenario: 'engineering',
+    claim: 'management Casts engineering on records; engineering Freezes; management Verifies the bundle digest engineering\'s final Report names; the owner approves; the materializer applies through one planned restart that resumes once; a restore lands on the pre-apply checkpoint',
+    reached, checks, failed: Object.keys(checks).filter((k) => !checks[k]),
+    served_change_then_restored: servedOK, served_required: REQUIRE_SERVED,
+    operation_id: op?.operation_id || null, bundle_digest: op?.bundle_digest || null, assignment_id: cast?.assignment_id || null,
+    build: { pre_apply: claim.build_pre_apply || null, post_apply: claim.build_post_apply || null, post_restore: claim.build_post_restore || null },
+    census_forbidden_objects: claim.census?.objects ?? null,
+    gaps,
+    pass: Object.values(checks).every(Boolean),
+  };
+  phase('acceptance', { pass: out.acceptance.pass, reached, failed: out.acceptance.failed, gaps: gaps.length });
+  out.drill_claim = claim;
+  delete out.drill;
   return out;
 }
 
