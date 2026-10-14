@@ -13,6 +13,9 @@ Product names are never camel case: Autopaper (or autopaper),
 Autoputer, Autoradio (owner, 2026-10-09). "World Wire", "Universal Wire"
 and "sourcecycled" are retired names for Autopaper; the code rename is a
 TODO in [docs/autopaper-sw-design-2026-10-09.md](docs/autopaper-sw-design-2026-10-09.md) §9.
+The shared graph of published objects that computers adopt onto their own
+tapes is **the Autopaper object graph** (owner, 2026-10-14), never "the
+World Wire object graph".
 The README is the open-source front door; this file is the operating contract,
 and [docs/choir-doctrine.md](docs/choir-doctrine.md) is the normative
 architecture. Do not let this file drift into doctrine.
