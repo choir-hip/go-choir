@@ -1470,3 +1470,12 @@ the staging proofs from section 7.
     [MDS](https://docs.kernel.org/admin-guide/hw-vuln/mds.html) and
     [speculation control](https://docs.kernel.org/userspace-api/spec_ctrl.html).
   - The sources listed in section 6.
+
+## Action log
+
+- 2026-10-14 ~17:45 UTC (lead, owner-consented Node B access): stopped the
+  stray `python3 -m http.server 19090 --bind 0.0.0.0` (root, cwd /tmp,
+  started 2026-09-30 06:04 UTC, parent pid 1). Not reachable from outside
+  (nixos-fw admits only 22, 80, 443; external HEAD to :19090 got no
+  connection); it was reachable from host-local processes, including the
+  VMMs. Port 19090 is no longer listening.
