@@ -358,6 +358,11 @@ type Manager struct {
 	// firecrackerStarter replaces the process start in tests; nil runs the
 	// real binary.
 	firecrackerStarter func(vmID string, args []string) error
+
+	// hostNet runs ip/iptables for guest taps (hostfirewall.go); tests
+	// replace it. Reached through m.net().
+	hostNetOnce sync.Once
+	hostNet     *hostNet
 }
 
 func (m *Manager) StateDir() string {
@@ -537,6 +542,9 @@ func (m *Manager) Start() {
 	m.healthDone = make(chan struct{})
 	m.mu.Unlock()
 
+	// Before any VM is reattached: drop rules of vanished taps and install
+	// the guest forward default-deny (hostfirewall.go).
+	m.net().reconcileAtStart()
 	m.loadSnapshotReservations()
 	go m.healthCheckLoop()
 	log.Printf("vmmanager: started with state_dir=%s base_port=%d hibernate_mode=%s", m.cfg.StateDir, m.cfg.HostBasePort, m.hibernateMode())
@@ -1241,7 +1249,6 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	m.reserveHostURLLocked(hostURL)
 	m.mu.Unlock()
 
-	m.ensureTapHostServiceInputRules(tapNameForVMID(vmID))
 	m.reconcileTapIsolation(vmID, hostURL)
 	m.adoptConsole(vmID, pid)
 	log.Printf("vmmanager: reattached VM %s (host=%s pid=%d epoch=%d)", vmID, hostURL, pid, epoch)
@@ -1370,6 +1377,22 @@ func (m *Manager) CheckHealth(vmID string) (bool, error) {
 	m.mu.Unlock()
 
 	return healthy, nil
+}
+
+// releaseExitedVMNetwork removes the tap and its firewall rules after a
+// Firecracker exit that vmctl did not cause (crash, guest poweroff). It acts
+// only while the exited process is still the instance's current one: a vmctl
+// kill clears inst.cmd and tears down itself, and a relaunch or replacement
+// instance owns the tap now.
+func (m *Manager) releaseExitedVMNetwork(vmID string, expected *VMInstance, cmd *exec.Cmd) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, ok := m.vms[vmID]
+	if !ok || current != expected || current.cmd != cmd || cmd == nil {
+		return
+	}
+	log.Printf("vmmanager: Firecracker for VM %s exited; removing its tap network", vmID)
+	m.deleteTapDevice(tapNameForVMID(vmID))
 }
 
 func (m *Manager) markInstanceFailed(vmID string, expected *VMInstance) {
@@ -1885,7 +1908,7 @@ func consoleLogPath(stateDir, vmID string) string {
 // launchFirecracker starts a Firecracker process for the given VM.
 // hostPort is the host port assigned for this VM, used for setting up
 // networking. guestPort is the port the guest autoputer listens on.
-func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}, hostPort int, guestPort int) error {
+func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}, hostPort int, guestPort int) (err error) {
 	// Write the config to a temp file.
 	configData, err := json.Marshal(fcConfig)
 	if err != nil {
@@ -1903,6 +1926,12 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 	}
 
 	m.prepareVMNetwork(vmID, hostPort, guestPort)
+	defer func() {
+		if err != nil {
+			// The network was prepared for a process that never started.
+			m.deleteTapDevice(tapNameForVMID(vmID))
+		}
+	}()
 
 	// Build the Firecracker command.
 	// --no-api disables the Firecracker API socket (kill hibernate mode);
@@ -1912,7 +1941,8 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 	// expected Firecracker device model.
 	// --id sets the VM identifier.
 	// --config-file provides the VM configuration.
-	return m.startFirecrackerProcess(vmID, m.firecrackerLaunchArgs(vmID, configPath))
+	err = m.startFirecrackerProcess(vmID, m.firecrackerLaunchArgs(vmID, configPath))
+	return err
 }
 
 // prepareVMNetwork creates the VM's tap and host-side routing for its /30
@@ -1999,6 +2029,9 @@ func (m *Manager) startFirecrackerProcess(vmID string, args []string) error {
 			if expected != nil {
 				m.markInstanceFailed(vmID, expected)
 			}
+		}
+		if expected != nil {
+			m.releaseExitedVMNetwork(vmID, expected, cmd)
 		}
 	}()
 
@@ -3087,23 +3120,20 @@ func syncDirectory(path string) error {
 // masquerading is set up so the guest can reach the host's localhost
 // services (gateway, etc.).
 func (m *Manager) createTapDevice(name string) error {
-	ipBin := findBinary("ip", "/run/current-system/sw/bin/ip")
+	h := m.net()
 
 	// Check if the tap device already exists.
-	checkCmd := exec.Command(ipBin, "link", "show", name)
-	if err := checkCmd.Run(); err == nil {
+	if _, err := h.ip("link", "show", name); err == nil {
 		return nil // already exists
 	}
 
 	// Create the tap device.
-	createCmd := exec.Command(ipBin, "tuntap", "add", "dev", name, "mode", "tap")
-	if err := createCmd.Run(); err != nil {
+	if _, err := h.ip("tuntap", "add", "dev", name, "mode", "tap"); err != nil {
 		return fmt.Errorf("create tap device %s: %w", name, err)
 	}
 
 	// Bring the interface up.
-	upCmd := exec.Command(ipBin, "link", "set", name, "up")
-	if err := upCmd.Run(); err != nil {
+	if _, err := h.ip("link", "set", name, "up"); err != nil {
 		return fmt.Errorf("bring up tap device %s: %w", name, err)
 	}
 
@@ -3111,57 +3141,18 @@ func (m *Manager) createTapDevice(name string) error {
 	return nil
 }
 
-// deleteTapDevice removes a TAP network device and its associated
-// iptables rules after a VM stops.
+// deleteTapDevice removes every firewall rule the tap owns (filter and nat,
+// by its go-choir-vm-<tap> comment or, for untagged older rules, its
+// interface name) and then the TAP device itself. Every VM teardown path ends
+// here: stop, kill, crash exit, failed launch, orphan and stale-tap cleanup.
 func (m *Manager) deleteTapDevice(name string) {
-	ipBin := findBinary("ip", "/run/current-system/sw/bin/ip")
-	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
-
-	deleteIPTablesRulesForTap(iptBin, name)
-
-	cmd := exec.Command(ipBin, "link", "del", name)
-	if err := cmd.Run(); err != nil {
+	h := m.net()
+	h.removeTap(name)
+	if _, err := h.ip("link", "show", name); err != nil {
+		return // already gone
+	}
+	if _, err := h.ip("link", "del", name); err != nil {
 		log.Printf("vmmanager: warning: could not delete tap device %s: %v", name, err)
-	}
-}
-
-func deleteIPTablesRulesForTap(iptBin, name string) {
-	comment := fmt.Sprintf("go-choir-vm-%s", name)
-
-	// Remove rules by comment first, then by tap device name for older FORWARD
-	// rules that predate comment tagging.
-	for _, chain := range []string{"PREROUTING", "OUTPUT", "POSTROUTING"} {
-		deleteMatchingIPTablesRules(iptBin, "nat", chain, comment)
-		deleteMatchingIPTablesRules(iptBin, "nat", chain, name)
-	}
-	for _, chain := range []string{"FORWARD", "INPUT"} {
-		deleteMatchingIPTablesRules(iptBin, "", chain, comment)
-		deleteMatchingIPTablesRules(iptBin, "", chain, name)
-	}
-}
-
-func deleteMatchingIPTablesRules(iptBin, table, chain, match string) {
-	if strings.TrimSpace(match) == "" {
-		return
-	}
-	listArgs := make([]string, 0, 4)
-	if table != "" {
-		listArgs = append(listArgs, "-t", table)
-	}
-	listArgs = append(listArgs, "-S", chain)
-	output, err := exec.Command(iptBin, listArgs...).Output()
-	if err != nil {
-		log.Printf("vmmanager: warning: could not list iptables rules for %s/%s: %v", table, chain, err)
-		return
-	}
-	for _, line := range strings.Split(string(output), "\n") {
-		deleteArgs, ok := iptablesDeleteArgsForListedRule(table, chain, line, match)
-		if !ok {
-			continue
-		}
-		if deleteOutput, err := exec.Command(iptBin, deleteArgs...).CombinedOutput(); err != nil {
-			log.Printf("vmmanager: warning: could not delete iptables rule %q with args %v: %v (%s)", line, deleteArgs, err, strings.TrimSpace(string(deleteOutput)))
-		}
 	}
 }
 
@@ -3228,27 +3219,27 @@ func iptablesRuleFields(line string) []string {
 
 // setupHostNetworking configures the host-side networking for a VM's
 // tap device. It assigns the host IP address to the tap interface and
-// sets up iptables rules to:
-//   - Forward traffic from the assigned host port to the guest (DNAT)
-//   - Masquerade guest traffic so the guest can reach host services
-//     like the gateway at 127.0.0.1:8084 (SNAT/MASQUERADE)
-//   - Allow forwarding between the tap device and the host
+// installs (hostfirewall.go):
+//   - the guest's isolation: egress ACCEPT bound to its own address inside
+//     the default-deny guest forward chain, which drops every destination in
+//     the guest pool; INPUT anti-spoofing; source-bound host service ACCEPTs
+//   - DNAT from 127.0.0.1:<hostPort> to the guest, and from the tap's host
+//     IP to the intended host-local services
+//   - MASQUERADE so host replies route back through the tap
 //
 // Without masquerading, the guest can send packets to the host but the
 // host's reply packets don't route back to the guest's /30 subnet.
 // The MASQUERADE rule makes host replies go back through the tap device.
 func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, guestIP string, guestPort int) error {
-	ipBin := findBinary("ip", "/run/current-system/sw/bin/ip")
-	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
+	h := m.net()
 
 	// Assign the host IP to the tap device.
-	addrCmd := exec.Command(ipBin, "addr", "add", hostIP+"/30", "dev", tapName)
-	if err := addrCmd.Run(); err != nil {
+	if _, err := h.ip("addr", "add", hostIP+"/30", "dev", tapName); err != nil {
 		log.Printf("vmmanager: note: ip addr add %s/30 on %s: %v (may already be set)", hostIP, tapName, err)
 	}
 
 	// Enable IP forwarding globally.
-	_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0o644)
+	_ = h.writeProc("/proc/sys/net/ipv4/ip_forward", "1")
 
 	// Enable route_localnet on the tap device. This allows the host to
 	// route packets between the guest's subnet and 127.0.0.1 (localhost).
@@ -3257,160 +3248,52 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	// the kernel treats 127.0.0.0/8 as a martian source on non-loopback
 	// interfaces. This is critical for the guest to reach the gateway.
 	routeLocalnet := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/route_localnet", tapName)
-	if err := os.WriteFile(routeLocalnet, []byte("1"), 0o644); err != nil {
+	if err := h.writeProc(routeLocalnet, "1"); err != nil {
 		log.Printf("vmmanager: warning: could not enable route_localnet on %s: %v", tapName, err)
 	}
 
 	// Also enable accept_local so the host accepts packets from local
 	// subnets on the tap interface.
-	acceptLocal := fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/accept_local", tapName)
-	_ = os.WriteFile(acceptLocal, []byte("1"), 0o644)
+	_ = h.writeProc(fmt.Sprintf("/proc/sys/net/ipv4/conf/%s/accept_local", tapName), "1")
 
-	// S1a: tap isolation + anti-spoofing, placed before the broad ACCEPTs.
-	// 1. Anti-spoof: only the guest's own /30 source may enter this tap.
-	//    Covers INPUT (guest->host service) and FORWARD (guest->guest, egress)
-	//    alike — without it a root guest can emit SRC=10.200.x.1 (the host
-	//    peer IP) or another guest's address and defeat IP-bound authority.
-	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
-	m.ensureTapIsolationRules(tapName, guestIP, comment)
-
-	// Allow forwarding to/from the tap device.
-	// These ACCEPT rules ensure packets can flow between the tap device
-	// and the rest of the host networking stack.
-	_ = exec.Command(iptBin, "-A", "FORWARD",
-		"-i", tapName, "-j", "ACCEPT").Run()
-	_ = exec.Command(iptBin, "-A", "FORWARD",
-		"-o", tapName, "-j", "ACCEPT").Run()
-
-	m.ensureTapHostServiceInputRules(tapName)
-
-	// S1a: the "-o lo" MASQUERADE rule was removed — the guest-originated
-	// packets it claimed to catch do not exist (post-DNAT they carry the
-	// real tap IP, not 127.0.0.1; 0-packet counters observed live). What
-	// remains is the outbound masquerade that carries host replies back.
-
-	// Masquerade traffic going out through the default interface
-	// (in case the guest needs internet access for any reason).
-	_ = exec.Command(iptBin, "-t", "nat", "-A", "POSTROUTING",
-		"-s", guestIP+"/30",
-		"!", "-d", guestIP+"/30",
-		"-j", "MASQUERADE",
-		"-m", "comment", "--comment", comment).Run()
-
-	// Set up DNAT: traffic to 127.0.0.1:hostPort → guestIP:guestPort.
-	// This lets vmctl and other host processes reach the guest autoputer
-	// via localhost on the assigned host port.
-	_ = exec.Command(iptBin, "-t", "nat", "-A", "OUTPUT",
-		"-p", "tcp", "--dport", fmt.Sprintf("%d", hostPort),
-		"-d", "127.0.0.1",
-		"-j", "DNAT", "--to-destination", fmt.Sprintf("%s:%d", guestIP, guestPort),
-		"-m", "comment", "--comment", comment).Run()
-
-	// Set up DNAT: guest→host traffic for internal host service ports.
-	// The guest sends packets to hostIP:<port>, while host services normally
-	// listen on 127.0.0.1. These PREROUTING rules rewrite the destination so
-	// the guest can reach only the intended host-local services through its tap
-	// subnet.
-	for _, port := range tapReachableHostServicePorts() {
-		_ = exec.Command(iptBin, "-t", "nat", "-A", "PREROUTING",
-			"-p", "tcp", "--dport", port,
-			"-d", hostIP,
-			"-j", "DNAT", "--to-destination", "127.0.0.1:"+port,
-			"-m", "comment", "--comment", comment).Run()
+	// S1a: isolation, anti-spoofing and host-service access. The "-o lo"
+	// MASQUERADE rule was removed — the guest-originated packets it claimed
+	// to catch do not exist (post-DNAT they carry the real tap IP, not
+	// 127.0.0.1; 0-packet counters observed live).
+	if err := h.ensureTap(tapName, guestIP); err != nil {
+		log.Printf("vmmanager: warning: tap firewall for %s incomplete: %v", tapName, err)
 	}
-
+	if err := h.ensureNAT(tapName, hostIP, guestIP, hostPort, guestPort); err != nil {
+		log.Printf("vmmanager: warning: tap nat for %s incomplete: %v", tapName, err)
+	}
 	return nil
 }
 
-func (m *Manager) ensureTapHostServiceInputRules(tapName string) {
-	if strings.TrimSpace(tapName) == "" {
-		return
-	}
-	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
-	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
-	for _, port := range tapReachableHostServicePorts() {
-		spec := tapHostServiceInputRuleSpec(tapName, port, comment)
-		checkArgs := append([]string{"-C", "INPUT"}, spec...)
-		if err := exec.Command(iptBin, checkArgs...).Run(); err == nil {
-			continue
-		}
-		insertArgs := append([]string{"-I", "INPUT", "1"}, spec...)
-		if err := exec.Command(iptBin, insertArgs...).Run(); err != nil {
-			log.Printf("vmmanager: warning: could not allow tap %s to reach host service port %s: %v", tapName, port, err)
-		}
-	}
-}
-
-// ensureTapIsolationRules enforces the S1a tap boundary on a tap that is
-// already being (re)configured: anti-spoofing (only the guest's own /30
-// source may enter its tap) and tap->tap denial (no FORWARD path into
-// the shared 10.200.0.0/16 guest space). Rules are inserted with -I so
-// they precede the broad per-tap ACCEPTs appended by setupHostNetworking
-// — order is load-bearing, so each rule is checked then inserted at the
-// head of its chain. Idempotent: a reconcile pass or reattach reuses the
-// same spec and no-ops when the rule already exists.
-func (m *Manager) ensureTapIsolationRules(tapName, guestIP, comment string) {
-	if strings.TrimSpace(tapName) == "" || strings.TrimSpace(guestIP) == "" {
-		return
-	}
-	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
-	ensure := func(chain string, spec ...string) {
-		full := append([]string{"-C", chain}, spec...)
-		if err := exec.Command(iptBin, full...).Run(); err == nil {
-			return
-		}
-		ins := append([]string{"-I", chain, "1"}, spec...)
-		if err := exec.Command(iptBin, ins...).Run(); err != nil {
-			log.Printf("vmmanager: warning: could not install tap isolation rule on %s/%s: %v", tapName, chain, err)
-		}
-	}
-	withComment := func(spec ...string) []string {
-		return append(append([]string{}, spec...), "-m", "comment", "--comment", comment)
-	}
-	// Anti-spoof: packets entering this tap must carry the guest's own
-	// /30 address. Applies to INPUT (guest->host services) and FORWARD
-	// (guest->guest / guest->egress) so a root guest cannot forge the host
-	// peer IP or a neighbour's address.
-	ensure("INPUT", withComment("-i", tapName, "!", "-s", guestIP+"/32", "-j", "DROP")...)
-	ensure("FORWARD", withComment("-i", tapName, "!", "-s", guestIP+"/32", "-j", "DROP")...)
-	// Tap->tap deny: no guest may forward into the shared guest space.
-	// Inserted before the per-tap ACCEPTs so the deny wins for cross-tap
-	// traffic while ordinary egress (non-10.200 destinations) still passes.
-	ensure("FORWARD", withComment("-i", tapName, "-d", "10.200.0.0/16", "-j", "DROP")...)
-}
-
-// reconcileTapIsolation brings already-live taps under the S1a boundary
-// without requiring a VM restart: for each managed VM it derives the
-// guest subnet from the bound host port and installs the same isolation
-// set that setupHostNetworking now writes on fresh boots. Called from
-// ReattachVMWithConfig after the input rules so a reattached computer
-// gains the boundary immediately.
+// reconcileTapIsolation brings an already-live tap under the current rule
+// set without a VM restart: for a reattached VM it derives the guest subnet
+// from the bound host port and installs what setupHostNetworking installs on
+// a fresh boot, removing the tap's older rule shapes (per-tap FORWARD DROPs
+// and untagged ACCEPTs, service ACCEPTs without a source match) once the new
+// rules are in. Called from ReattachVMWithConfig.
 func (m *Manager) reconcileTapIsolation(vmID, hostURL string) {
 	hostPort, ok := m.hostPortFromHostURL(hostURL)
 	if !ok {
+		log.Printf("vmmanager: warning: cannot derive guest subnet for VM %s from %q; tap firewall not reconciled", vmID, hostURL)
 		return
 	}
 	guestIP, _ := m.guestAndHostIP(hostPort)
 	tapName := tapNameForVMID(vmID)
-	comment := fmt.Sprintf("go-choir-vm-%s", tapName)
-	m.ensureTapIsolationRules(tapName, guestIP, comment)
-	// S1a: remove the retired guest->8085 DNAT rule from this tap. The port
-	// no longer exists, but a stale DNAT widens the tap surface until boot;
-	// clean it on the same reconcile pass that installs the DROP set.
-	iptBin := findBinary("iptables", "/run/current-system/sw/bin/iptables")
-	// Match the rendered substring including the quoted comment value:
-	// iptables -S emits `--dport 8085 -m comment --comment "go-choir-vm-X"`.
-	deleteMatchingIPTablesRules(iptBin, "nat", "PREROUTING",
-		fmt.Sprintf("--dport 8085 -m comment --comment %q", comment))
-}
-
-func tapHostServiceInputRuleSpec(tapName, port, comment string) []string {
-	return []string{
-		"-i", tapName,
-		"-p", "tcp", "--dport", port,
-		"-m", "comment", "--comment", comment,
-		"-j", "ACCEPT",
+	h := m.net()
+	if err := h.ensureTap(tapName, guestIP); err != nil {
+		log.Printf("vmmanager: warning: tap firewall for %s incomplete: %v", tapName, err)
 	}
+	// S1a: remove the retired guest->8085 DNAT rule from this tap. The port
+	// no longer exists, but a stale DNAT widens the tap surface until boot.
+	// Match the rendered text with the comment value unquoted (as iptables
+	// -S prints it) or quoted.
+	comment := tapComment(tapName)
+	h.deleteMatching("nat", "PREROUTING", fmt.Sprintf("--dport 8085 -m comment --comment %s ", comment))
+	h.deleteMatching("nat", "PREROUTING", fmt.Sprintf("--dport 8085 -m comment --comment %q", comment))
 }
 
 func tapReachableHostServicePorts() []string {

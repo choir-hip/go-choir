@@ -1,0 +1,243 @@
+# Node B (choir.news host) iptables -S, captured read-only 2026-10-14 15:53 UTC.
+# Live taps: vm-dhdbzl4tzqi3, vm-vh3spxieztky, vm-lackej5pmie2. Every vm-vm-*-tap is gone.
+*filter
+-P INPUT ACCEPT
+-P FORWARD ACCEPT
+-P OUTPUT ACCEPT
+-N nixos-drop
+-N nixos-fw
+-N nixos-fw-accept
+-N nixos-fw-log-refuse
+-N nixos-fw-refuse
+-A INPUT -i vm-lackej5pmie2 -p tcp -m tcp --dport 8088 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j ACCEPT
+-A INPUT -i vm-lackej5pmie2 -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j ACCEPT
+-A INPUT -i vm-lackej5pmie2 -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j ACCEPT
+-A INPUT -i vm-lackej5pmie2 -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j ACCEPT
+-A INPUT -i vm-lackej5pmie2 -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j ACCEPT
+-A INPUT -i vm-lackej5pmie2 -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j ACCEPT
+-A INPUT ! -s 10.200.114.2/32 -i vm-lackej5pmie2 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DROP
+-A INPUT -i vm-vh3spxieztky -p tcp -m tcp --dport 8088 -m comment --comment go-choir-vm-vm-vh3spxieztky -j ACCEPT
+-A INPUT -i vm-vh3spxieztky -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-vh3spxieztky -j ACCEPT
+-A INPUT -i vm-vh3spxieztky -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-vh3spxieztky -j ACCEPT
+-A INPUT -i vm-vh3spxieztky -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-vh3spxieztky -j ACCEPT
+-A INPUT -i vm-vh3spxieztky -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-vh3spxieztky -j ACCEPT
+-A INPUT -i vm-vh3spxieztky -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-vh3spxieztky -j ACCEPT
+-A INPUT ! -s 10.200.113.2/32 -i vm-vh3spxieztky -m comment --comment go-choir-vm-vm-vh3spxieztky -j DROP
+-A INPUT -i vm-dhdbzl4tzqi3 -p tcp -m tcp --dport 8088 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j ACCEPT
+-A INPUT -i vm-dhdbzl4tzqi3 -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j ACCEPT
+-A INPUT -i vm-dhdbzl4tzqi3 -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j ACCEPT
+-A INPUT -i vm-dhdbzl4tzqi3 -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j ACCEPT
+-A INPUT -i vm-dhdbzl4tzqi3 -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j ACCEPT
+-A INPUT -i vm-dhdbzl4tzqi3 -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j ACCEPT
+-A INPUT ! -s 10.200.112.2/32 -i vm-dhdbzl4tzqi3 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DROP
+-A INPUT -i vm-vm-unive-tap -p tcp -m tcp --dport 8787 -m comment --comment go-choir-vm-vm-vm-unive-tap -j ACCEPT
+-A INPUT -i vm-vm-unive-tap -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-vm-unive-tap -j ACCEPT
+-A INPUT -i vm-vm-unive-tap -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-vm-unive-tap -j ACCEPT
+-A INPUT -i vm-vm-unive-tap -p tcp -m tcp --dport 8085 -m comment --comment go-choir-vm-vm-vm-unive-tap -j ACCEPT
+-A INPUT -i vm-vm-unive-tap -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-vm-unive-tap -j ACCEPT
+-A INPUT -i vm-vm-unive-tap -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-vm-unive-tap -j ACCEPT
+-A INPUT -i vm-vm-unive-tap -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-vm-unive-tap -j ACCEPT
+-A INPUT -i vm-vm-5b0c1-tap -p tcp -m tcp --dport 8787 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j ACCEPT
+-A INPUT -i vm-vm-5b0c1-tap -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j ACCEPT
+-A INPUT -i vm-vm-5b0c1-tap -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j ACCEPT
+-A INPUT -i vm-vm-5b0c1-tap -p tcp -m tcp --dport 8085 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j ACCEPT
+-A INPUT -i vm-vm-5b0c1-tap -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j ACCEPT
+-A INPUT -i vm-vm-5b0c1-tap -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j ACCEPT
+-A INPUT -i vm-vm-5b0c1-tap -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j ACCEPT
+-A INPUT -i vm-vm-eefb4-tap -p tcp -m tcp --dport 8084 -j ACCEPT
+-A INPUT -j nixos-fw
+-A FORWARD -d 10.200.0.0/16 -i vm-lackej5pmie2 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DROP
+-A FORWARD ! -s 10.200.114.2/32 -i vm-lackej5pmie2 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DROP
+-A FORWARD -d 10.200.0.0/16 -i vm-vh3spxieztky -m comment --comment go-choir-vm-vm-vh3spxieztky -j DROP
+-A FORWARD ! -s 10.200.113.2/32 -i vm-vh3spxieztky -m comment --comment go-choir-vm-vm-vh3spxieztky -j DROP
+-A FORWARD -d 10.200.0.0/16 -i vm-dhdbzl4tzqi3 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DROP
+-A FORWARD ! -s 10.200.112.2/32 -i vm-dhdbzl4tzqi3 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DROP
+-A FORWARD -i vm-vm-37e40-tap -j ACCEPT
+-A FORWARD -o vm-vm-37e40-tap -j ACCEPT
+-A FORWARD -i vm-vm-5b517-tap -j ACCEPT
+-A FORWARD -o vm-vm-5b517-tap -j ACCEPT
+-A FORWARD -i vm-vm-14b06-tap -j ACCEPT
+-A FORWARD -o vm-vm-14b06-tap -j ACCEPT
+-A FORWARD -i vm-vm-1a60f-tap -j ACCEPT
+-A FORWARD -o vm-vm-1a60f-tap -j ACCEPT
+-A FORWARD -i vm-vm-fb85e-tap -j ACCEPT
+-A FORWARD -o vm-vm-fb85e-tap -j ACCEPT
+-A FORWARD -i vm-vm-beccb-tap -j ACCEPT
+-A FORWARD -o vm-vm-beccb-tap -j ACCEPT
+-A FORWARD -i vm-vm-15968-tap -j ACCEPT
+-A FORWARD -o vm-vm-15968-tap -j ACCEPT
+-A FORWARD -i vm-vm-ee9cd-tap -j ACCEPT
+-A FORWARD -o vm-vm-ee9cd-tap -j ACCEPT
+-A FORWARD -i vm-vm-1eac4-tap -j ACCEPT
+-A FORWARD -o vm-vm-1eac4-tap -j ACCEPT
+-A FORWARD -i vm-vm-7acad-tap -j ACCEPT
+-A FORWARD -o vm-vm-7acad-tap -j ACCEPT
+-A FORWARD -i vm-vm-68c10-tap -j ACCEPT
+-A FORWARD -o vm-vm-68c10-tap -j ACCEPT
+-A FORWARD -i vm-vm-99543-tap -j ACCEPT
+-A FORWARD -o vm-vm-99543-tap -j ACCEPT
+-A FORWARD -i vm-vm-883e1-tap -j ACCEPT
+-A FORWARD -o vm-vm-883e1-tap -j ACCEPT
+-A FORWARD -i vm-vm-d2bf5-tap -j ACCEPT
+-A FORWARD -o vm-vm-d2bf5-tap -j ACCEPT
+-A FORWARD -i vm-vm-864b7-tap -j ACCEPT
+-A FORWARD -o vm-vm-864b7-tap -j ACCEPT
+-A FORWARD -i vm-vm-64243-tap -j ACCEPT
+-A FORWARD -o vm-vm-64243-tap -j ACCEPT
+-A FORWARD -i vm-vm-2c328-tap -j ACCEPT
+-A FORWARD -o vm-vm-2c328-tap -j ACCEPT
+-A FORWARD -i vm-vm-7340a-tap -j ACCEPT
+-A FORWARD -o vm-vm-7340a-tap -j ACCEPT
+-A FORWARD -i vm-vm-05f73-tap -j ACCEPT
+-A FORWARD -o vm-vm-05f73-tap -j ACCEPT
+-A FORWARD -i vm-vm-93354-tap -j ACCEPT
+-A FORWARD -o vm-vm-93354-tap -j ACCEPT
+-A FORWARD -i vm-vm-d7b77-tap -j ACCEPT
+-A FORWARD -o vm-vm-d7b77-tap -j ACCEPT
+-A FORWARD -i vm-vm-12944-tap -j ACCEPT
+-A FORWARD -o vm-vm-12944-tap -j ACCEPT
+-A FORWARD -i vm-vm-7d117-tap -j ACCEPT
+-A FORWARD -o vm-vm-7d117-tap -j ACCEPT
+-A FORWARD -i vm-vm-8e5f3-tap -j ACCEPT
+-A FORWARD -o vm-vm-8e5f3-tap -j ACCEPT
+-A FORWARD -i vm-vm-4bc32-tap -j ACCEPT
+-A FORWARD -o vm-vm-4bc32-tap -j ACCEPT
+-A FORWARD -i vm-vm-4035b-tap -j ACCEPT
+-A FORWARD -o vm-vm-4035b-tap -j ACCEPT
+-A FORWARD -i vm-vm-9f8c9-tap -j ACCEPT
+-A FORWARD -o vm-vm-9f8c9-tap -j ACCEPT
+-A FORWARD -i vm-vm-c4a1e-tap -j ACCEPT
+-A FORWARD -o vm-vm-c4a1e-tap -j ACCEPT
+-A FORWARD -i vm-vm-bcf16-tap -j ACCEPT
+-A FORWARD -o vm-vm-bcf16-tap -j ACCEPT
+-A FORWARD -i vm-vm-df0fc-tap -j ACCEPT
+-A FORWARD -o vm-vm-df0fc-tap -j ACCEPT
+-A FORWARD -i vm-vm-06753-tap -j ACCEPT
+-A FORWARD -o vm-vm-06753-tap -j ACCEPT
+-A FORWARD -i vm-vm-144ac-tap -j ACCEPT
+-A FORWARD -o vm-vm-144ac-tap -j ACCEPT
+-A FORWARD -i vm-vm-6a11b-tap -j ACCEPT
+-A FORWARD -o vm-vm-6a11b-tap -j ACCEPT
+-A FORWARD -i vm-vm-4edde-tap -j ACCEPT
+-A FORWARD -o vm-vm-4edde-tap -j ACCEPT
+-A FORWARD -i vm-vm-726a9-tap -j ACCEPT
+-A FORWARD -o vm-vm-726a9-tap -j ACCEPT
+-A FORWARD -i vm-vm-251a7-tap -j ACCEPT
+-A FORWARD -o vm-vm-251a7-tap -j ACCEPT
+-A FORWARD -i vm-vm-32faa-tap -j ACCEPT
+-A FORWARD -o vm-vm-32faa-tap -j ACCEPT
+-A FORWARD -i vm-vm-c5d54-tap -j ACCEPT
+-A FORWARD -o vm-vm-c5d54-tap -j ACCEPT
+-A FORWARD -i vm-vm-db5cf-tap -j ACCEPT
+-A FORWARD -o vm-vm-db5cf-tap -j ACCEPT
+-A FORWARD -i vm-vm-5249d-tap -j ACCEPT
+-A FORWARD -o vm-vm-5249d-tap -j ACCEPT
+-A FORWARD -i vm-vm-3e559-tap -j ACCEPT
+-A FORWARD -o vm-vm-3e559-tap -j ACCEPT
+-A FORWARD -i vm-vm-8dcb8-tap -j ACCEPT
+-A FORWARD -o vm-vm-8dcb8-tap -j ACCEPT
+-A FORWARD -i vm-vm-67c7a-tap -j ACCEPT
+-A FORWARD -o vm-vm-67c7a-tap -j ACCEPT
+-A FORWARD -i vm-vm-0a2f3-tap -j ACCEPT
+-A FORWARD -o vm-vm-0a2f3-tap -j ACCEPT
+-A FORWARD -i vm-vm-ace6f-tap -j ACCEPT
+-A FORWARD -o vm-vm-ace6f-tap -j ACCEPT
+-A FORWARD -i vm-vm-33bbb-tap -j ACCEPT
+-A FORWARD -o vm-vm-33bbb-tap -j ACCEPT
+-A FORWARD -i vm-vm-90f20-tap -j ACCEPT
+-A FORWARD -o vm-vm-90f20-tap -j ACCEPT
+-A FORWARD -i vm-vm-8a004-tap -j ACCEPT
+-A FORWARD -o vm-vm-8a004-tap -j ACCEPT
+-A FORWARD -i vm-vm-fb8d0-tap -j ACCEPT
+-A FORWARD -o vm-vm-fb8d0-tap -j ACCEPT
+-A FORWARD -i vm-vm-31e2c-tap -j ACCEPT
+-A FORWARD -o vm-vm-31e2c-tap -j ACCEPT
+-A FORWARD -i vm-vm-0c509-tap -j ACCEPT
+-A FORWARD -o vm-vm-0c509-tap -j ACCEPT
+-A FORWARD -i vm-vm-1d128-tap -j ACCEPT
+-A FORWARD -o vm-vm-1d128-tap -j ACCEPT
+-A FORWARD -i vm-vm-d0b3f-tap -j ACCEPT
+-A FORWARD -o vm-vm-d0b3f-tap -j ACCEPT
+-A FORWARD -i vm-vm-0e2f0-tap -j ACCEPT
+-A FORWARD -o vm-vm-0e2f0-tap -j ACCEPT
+-A FORWARD -i vm-vm-2cd48-tap -j ACCEPT
+-A FORWARD -o vm-vm-2cd48-tap -j ACCEPT
+-A FORWARD -i vm-vm-d199e-tap -j ACCEPT
+-A FORWARD -o vm-vm-d199e-tap -j ACCEPT
+-A FORWARD -i vm-vm-9ff08-tap -j ACCEPT
+-A FORWARD -o vm-vm-9ff08-tap -j ACCEPT
+-A FORWARD -i vm-vm-7fea5-tap -j ACCEPT
+-A FORWARD -o vm-vm-7fea5-tap -j ACCEPT
+-A FORWARD -i vm-vm-eefb4-tap -j ACCEPT
+-A FORWARD -o vm-vm-eefb4-tap -j ACCEPT
+-A FORWARD -i vm-vm-5b0c1-tap -j ACCEPT
+-A FORWARD -o vm-vm-5b0c1-tap -j ACCEPT
+-A FORWARD -i vm-vm-unive-tap -j ACCEPT
+-A FORWARD -o vm-vm-unive-tap -j ACCEPT
+-A FORWARD -i vm-dhdbzl4tzqi3 -j ACCEPT
+-A FORWARD -o vm-dhdbzl4tzqi3 -j ACCEPT
+-A FORWARD -i vm-vh3spxieztky -j ACCEPT
+-A FORWARD -o vm-vh3spxieztky -j ACCEPT
+-A FORWARD -i vm-lackej5pmie2 -j ACCEPT
+-A FORWARD -o vm-lackej5pmie2 -j ACCEPT
+-A nixos-drop -j DROP
+-A nixos-fw -i lo -j nixos-fw-accept
+-A nixos-fw -m conntrack --ctstate RELATED,ESTABLISHED -j nixos-fw-accept
+-A nixos-fw -p tcp -m tcp --dport 22 -j nixos-fw-accept
+-A nixos-fw -p tcp -m tcp --dport 80 -j nixos-fw-accept
+-A nixos-fw -p tcp -m tcp --dport 443 -j nixos-fw-accept
+-A nixos-fw -p icmp -m icmp --icmp-type 8 -j nixos-fw-accept
+-A nixos-fw -j nixos-fw-log-refuse
+-A nixos-fw-accept -j ACCEPT
+-A nixos-fw-log-refuse -m pkttype ! --pkt-type unicast -j nixos-fw-refuse
+-A nixos-fw-log-refuse -j nixos-fw-refuse
+-A nixos-fw-refuse -j DROP
+*nat
+-P PREROUTING ACCEPT
+-P INPUT ACCEPT
+-P OUTPUT ACCEPT
+-P POSTROUTING ACCEPT
+-A PREROUTING -d 10.202.16.1/32 -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j DNAT --to-destination 127.0.0.1:8082
+-A PREROUTING -d 10.202.16.1/32 -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j DNAT --to-destination 127.0.0.1:8083
+-A PREROUTING -d 10.202.16.1/32 -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j DNAT --to-destination 127.0.0.1:8084
+-A PREROUTING -d 10.202.16.1/32 -p tcp -m tcp --dport 8085 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j DNAT --to-destination 127.0.0.1:8085
+-A PREROUTING -d 10.202.16.1/32 -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j DNAT --to-destination 127.0.0.1:8086
+-A PREROUTING -d 10.202.16.1/32 -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j DNAT --to-destination 127.0.0.1:8087
+-A PREROUTING -d 10.202.16.1/32 -p tcp -m tcp --dport 8787 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j DNAT --to-destination 127.0.0.1:8787
+-A PREROUTING -d 10.202.17.1/32 -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-vm-unive-tap -j DNAT --to-destination 127.0.0.1:8082
+-A PREROUTING -d 10.202.17.1/32 -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-vm-unive-tap -j DNAT --to-destination 127.0.0.1:8083
+-A PREROUTING -d 10.202.17.1/32 -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-vm-unive-tap -j DNAT --to-destination 127.0.0.1:8084
+-A PREROUTING -d 10.202.17.1/32 -p tcp -m tcp --dport 8085 -m comment --comment go-choir-vm-vm-vm-unive-tap -j DNAT --to-destination 127.0.0.1:8085
+-A PREROUTING -d 10.202.17.1/32 -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-vm-unive-tap -j DNAT --to-destination 127.0.0.1:8086
+-A PREROUTING -d 10.202.17.1/32 -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-vm-unive-tap -j DNAT --to-destination 127.0.0.1:8087
+-A PREROUTING -d 10.202.17.1/32 -p tcp -m tcp --dport 8787 -m comment --comment go-choir-vm-vm-vm-unive-tap -j DNAT --to-destination 127.0.0.1:8787
+-A PREROUTING -d 10.200.112.1/32 -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DNAT --to-destination 127.0.0.1:8082
+-A PREROUTING -d 10.200.112.1/32 -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DNAT --to-destination 127.0.0.1:8083
+-A PREROUTING -d 10.200.112.1/32 -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DNAT --to-destination 127.0.0.1:8084
+-A PREROUTING -d 10.200.112.1/32 -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DNAT --to-destination 127.0.0.1:8086
+-A PREROUTING -d 10.200.112.1/32 -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DNAT --to-destination 127.0.0.1:8087
+-A PREROUTING -d 10.200.112.1/32 -p tcp -m tcp --dport 8088 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DNAT --to-destination 127.0.0.1:8088
+-A PREROUTING -d 10.200.113.1/32 -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-vh3spxieztky -j DNAT --to-destination 127.0.0.1:8082
+-A PREROUTING -d 10.200.113.1/32 -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-vh3spxieztky -j DNAT --to-destination 127.0.0.1:8083
+-A PREROUTING -d 10.200.113.1/32 -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-vh3spxieztky -j DNAT --to-destination 127.0.0.1:8084
+-A PREROUTING -d 10.200.113.1/32 -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-vh3spxieztky -j DNAT --to-destination 127.0.0.1:8086
+-A PREROUTING -d 10.200.113.1/32 -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-vh3spxieztky -j DNAT --to-destination 127.0.0.1:8087
+-A PREROUTING -d 10.200.113.1/32 -p tcp -m tcp --dport 8088 -m comment --comment go-choir-vm-vm-vh3spxieztky -j DNAT --to-destination 127.0.0.1:8088
+-A PREROUTING -d 10.200.114.1/32 -p tcp -m tcp --dport 8082 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DNAT --to-destination 127.0.0.1:8082
+-A PREROUTING -d 10.200.114.1/32 -p tcp -m tcp --dport 8083 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DNAT --to-destination 127.0.0.1:8083
+-A PREROUTING -d 10.200.114.1/32 -p tcp -m tcp --dport 8084 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DNAT --to-destination 127.0.0.1:8084
+-A PREROUTING -d 10.200.114.1/32 -p tcp -m tcp --dport 8086 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DNAT --to-destination 127.0.0.1:8086
+-A PREROUTING -d 10.200.114.1/32 -p tcp -m tcp --dport 8087 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DNAT --to-destination 127.0.0.1:8087
+-A PREROUTING -d 10.200.114.1/32 -p tcp -m tcp --dport 8088 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DNAT --to-destination 127.0.0.1:8088
+-A OUTPUT -d 127.0.0.1/32 -p tcp -m tcp --dport 9528 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j DNAT --to-destination 10.202.16.2:8085
+-A OUTPUT -d 127.0.0.1/32 -p tcp -m tcp --dport 9529 -m comment --comment go-choir-vm-vm-vm-unive-tap -j DNAT --to-destination 10.202.17.2:8085
+-A OUTPUT -d 127.0.0.1/32 -p tcp -m tcp --dport 9112 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j DNAT --to-destination 10.200.112.2:8085
+-A OUTPUT -d 127.0.0.1/32 -p tcp -m tcp --dport 9113 -m comment --comment go-choir-vm-vm-vh3spxieztky -j DNAT --to-destination 10.200.113.2:8085
+-A OUTPUT -d 127.0.0.1/32 -p tcp -m tcp --dport 9114 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j DNAT --to-destination 10.200.114.2:8085
+-A POSTROUTING -s 10.202.16.0/30 -o lo -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j MASQUERADE
+-A POSTROUTING -s 10.202.16.0/30 ! -d 10.202.16.0/30 -m comment --comment go-choir-vm-vm-vm-5b0c1-tap -j MASQUERADE
+-A POSTROUTING -s 10.202.17.0/30 -o lo -m comment --comment go-choir-vm-vm-vm-unive-tap -j MASQUERADE
+-A POSTROUTING -s 10.202.17.0/30 ! -d 10.202.17.0/30 -m comment --comment go-choir-vm-vm-vm-unive-tap -j MASQUERADE
+-A POSTROUTING -s 10.200.112.0/30 ! -d 10.200.112.0/30 -m comment --comment go-choir-vm-vm-dhdbzl4tzqi3 -j MASQUERADE
+-A POSTROUTING -s 10.200.113.0/30 ! -d 10.200.113.0/30 -m comment --comment go-choir-vm-vm-vh3spxieztky -j MASQUERADE
+-A POSTROUTING -s 10.200.114.0/30 ! -d 10.200.114.0/30 -m comment --comment go-choir-vm-vm-lackej5pmie2 -j MASQUERADE

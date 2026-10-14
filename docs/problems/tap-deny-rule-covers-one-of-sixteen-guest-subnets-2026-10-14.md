@@ -1,6 +1,7 @@
 # The tap-to-tap deny rule covers 1 of the 16 guest subnets (2026-10-14)
 
-Status: open; found by reading code. **Not confirmed on Node B**: no host
+Status: fix committed on branch `fix/tap-deny-guest-range`; not pushed and
+not deployed (see "Fix" at the end). Found by reading code. **Not confirmed on Node B**: no host
 state was read. Found while researching
 [reports/self-hosting-and-desktop-2026-10-14.md](../reports/self-hosting-and-desktop-2026-10-14.md).
 Mutation class of the fix: red (vmctl, guest isolation; the S1a security
@@ -152,3 +153,36 @@ mirrored in ip6tables.
 forwarding is allowed unless a per-tap DROP happens to match. A tap whose
 rules were never installed, or were lost, can forward anywhere, including
 into other guests.
+
+## Fix (branch `fix/tap-deny-guest-range`, not deployed)
+
+`internal/vmmanager/hostfirewall.go`:
+
+- **Guest forwarding is default-deny.** FORWARD gets one jump, at position
+  1: `-i vm-+ -j CHOIR-GUEST-FWD`. That chain:
+  - drops every destination in the guest pool (`10.200.0.0/13` and
+    `10.208.0.0/13`, computed from `vmSubnetSecondOctetBase` and
+    `vmSubnetSecondOctetCount`);
+  - jumps to `CHOIR-GUEST-TAPS`, which holds one ACCEPT per live tap,
+    `-s <guest>/32 -i <tap>`;
+  - ends in DROP.
+
+  A guest interface without its per-tap rule therefore fails closed, and
+  so does a packet with a forged source. The host's FORWARD policy is not
+  changed.
+- **INPUT service ACCEPTs now match `-s <guest>/32`.** A forged source can
+  no longer match them, wherever they sit relative to the DROP.
+- **Teardown.** Every teardown path removes all of a tap's rules, matched
+  by `go-choir-vm-<tap>` comment or by exact owned interface name. Teardown
+  now also runs on a Firecracker exit that vmctl did not cause, and on a
+  spawn failure after the network was prepared.
+- **Start-up.** vmctl's `Manager.Start` sweeps rules of vanished taps in
+  both naming schemes. It then seeds live taps' egress ACCEPTs from their
+  addresses, and only then installs the base chain. Reattach migrates a
+  live tap's older rule shapes, adding the new rules before deleting the
+  old ones.
+- **Not done.** There is no ip6tables counterpart (guests have no routable
+  v6). A crashed *reattached* guest (adopted by PID, so it has no wait
+  goroutine) keeps its tap until its next lifecycle action, or until the
+  next vmctl start if the tap is gone by then; under default-deny, that
+  leftover state cannot forward.
