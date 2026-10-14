@@ -39,11 +39,15 @@ func TestContentHashNormalizesMetadataOrder(t *testing.T) {
 
 func TestDefaultRegistryIncludesNewsAndAutoradioKinds(t *testing.T) {
 	registry := DefaultRegistry()
+	// The retired Universal Wire (now Autopaper) cluster kind has no writer
+	// since 4b5c665bb and is not registered (H-OG2).
+	if _, err := registry.LookupKind("choir.universal_wire_story_cluster"); err == nil {
+		t.Fatal("choir.universal_wire_story_cluster is retired and must not be registered")
+	}
 	for _, kind := range []ObjectKind{
 		"choir.source_entity",
 		"choir.source_ref",
 		"choir.web_capture",
-		"choir.universal_wire_story_cluster",
 		"choir.media_item",
 		"choir.audio_recording",
 		"choir.transcript",

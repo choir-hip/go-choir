@@ -189,7 +189,7 @@ var frozenOGObjectKinds = map[string]bool{
 	"choir.texture_revision":             true,
 	"choir.trajectory":                   true,
 	"choir.transcript":                   true,
-	"choir.universal_wire_story_cluster": true,
+	"choir.universal_wire_story_cluster": true, // retired: no writer since 4b5c665bb, unregistered (H-OG2); historic rows may exist
 	"choir.verifier_attestation":         true,
 	"choir.web_capture":                  true,
 	"choir.work_item":                    true,
