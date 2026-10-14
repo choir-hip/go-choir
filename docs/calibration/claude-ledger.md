@@ -51,3 +51,4 @@ was checked under production conditions.
 | 16 | lead | guest store indexes cut the paper's CPU below 0.5 core | 0.6 | scripts/cpu_host_sample.py after deploy |
 | 17 | lead | prompt-cache fix raises the paper's cached-input share above 50% within a day | 0.5 | /api/costs |
 | 18 | lead | the capsule-build fix lets the drill reach Freeze for a frontend-only change | 0.6 | reeng tracer rerun |
+| 19 | subagent (ICRL build) | the calibration digest gives evidence *for* H-ICRL on management: all three conditions of the precommitment hold at 500 settled hypotheses per arm (ECE gain ≥ 0.03, interval excluding 0; Brier not worse by > 0.005; resolution not down by > 0.01) | 0.45 | docs/reports/icrl-calibration-experiment-2026-10-14.md §3, `scripts/icrl_calibration.py measure` |
