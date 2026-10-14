@@ -979,10 +979,23 @@ func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, e
 
 // ListAPIKeys returns all API keys for the given user, newest first.
 func (s *Store) ListAPIKeys(ctx context.Context, userID string) ([]APIKey, error) {
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, user_id, label, scopes, COALESCE(computer_id, ''), created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC",
-		userID,
-	)
+	return s.listAPIKeys(ctx, userID, 0)
+}
+
+// ListAPIKeysLimit returns at most limit API keys for the given user, newest
+// first. A limit of zero or less means no limit.
+func (s *Store) ListAPIKeysLimit(ctx context.Context, userID string, limit int) ([]APIKey, error) {
+	return s.listAPIKeys(ctx, userID, limit)
+}
+
+func (s *Store) listAPIKeys(ctx context.Context, userID string, limit int) ([]APIKey, error) {
+	query := "SELECT id, user_id, label, scopes, COALESCE(computer_id, ''), created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC"
+	args := []any{userID}
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

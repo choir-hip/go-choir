@@ -19,6 +19,7 @@ import (
 	"log"
 	"net/http"
 	"net/mail"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1552,7 +1553,21 @@ var validScopes = map[string]bool{
 	"computer:self_development:rollback": true,
 	"computer:self_development:mode":     true,
 	"computer:lifecycle":                 true,
+	// OwnerActsScope lets a key perform owner acts (arm, approve, restore,
+	// rematerialize, bootstrap-chain). Only the owner's signed-in session may
+	// grant it; no key, `admin` included, can mint or delegate it.
+	"owner:acts": true, // OwnerActsScope; a literal so cmd/choir's registry test can read it
 }
+
+// OwnerActsScope is the proxy's owner-act gate scope
+// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F4).
+const OwnerActsScope = "owner:acts"
+
+// Listing bounds for GET /auth/api-keys.
+const (
+	defaultAPIKeyListLimit = 100
+	maxAPIKeyListLimit     = 500
+)
 
 // createAPIKeyRequest is the JSON body for POST /auth/api-keys.
 type createAPIKeyRequest struct {
@@ -1735,6 +1750,18 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
+	// A key with no scope can do nothing but read its siblings' metadata;
+	// refuse it rather than mint a credential with no purpose.
+	if len(req.Scopes) == 0 {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "at least one scope is required"})
+		return
+	}
+	// owner:acts comes only from the owner's session, never from a key:
+	// otherwise an admin agent key could mint itself owner authority.
+	if callerKey != nil && apiKeyHasScope(req.Scopes, OwnerActsScope) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "owner:acts can be granted only from the owner's signed-in session"})
+		return
+	}
 	if !apiKeyMayManageKeys(callerKey) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key requires manage:keys or admin to create keys"})
 		return
@@ -1796,12 +1823,30 @@ func (h *Handler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, _ := h.requireAuthUserAny(w, r)
+	user, callerKey := h.requireAuthUserAny(w, r)
 	if user == nil {
 		return
 	}
 
-	keys, err := h.store.ListAPIKeys(r.Context(), user.ID)
+	// A key that cannot manage keys sees only itself: its siblings' labels,
+	// scopes and bindings are the owner's business, not an agent's
+	// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F3).
+	if callerKey != nil && !apiKeyMayManageKeys(callerKey) {
+		writeJSON(w, http.StatusOK, listAPIKeysResponse{Keys: []apiKeyResponse{apiKeyToResponse(callerKey)}})
+		return
+	}
+
+	limit := defaultAPIKeyListLimit
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 || parsed > maxAPIKeyListLimit {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: fmt.Sprintf("limit must be an integer from 1 to %d", maxAPIKeyListLimit)})
+			return
+		}
+		limit = parsed
+	}
+
+	keys, err := h.store.ListAPIKeysLimit(r.Context(), user.ID, limit)
 	if err != nil {
 		log.Printf("[auth] operation=list_api_keys user_id=%s result=error error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to list api keys"})
