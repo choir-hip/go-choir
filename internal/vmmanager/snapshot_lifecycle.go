@@ -206,11 +206,11 @@ func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, host
 			return nil, err
 		}
 	}
-	disks := make([]SnapshotDiskIdentity, 0, 3)
-	for _, path := range m.writableDiskPaths(vmID, cfg) {
+	disks := make([]SnapshotDiskIdentity, 0, 6)
+	for _, path := range m.snapshotBoundPaths(vmID, cfg) {
 		id, err := diskIdentity(path)
 		if err != nil {
-			return nil, fmt.Errorf("writable disk %s: %w", path, err)
+			return nil, fmt.Errorf("snapshot-bound file %s: %w", path, err)
 		}
 		disks = append(disks, id)
 	}

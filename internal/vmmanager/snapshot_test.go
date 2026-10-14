@@ -180,9 +180,20 @@ func newSnapshotFixture(t *testing.T) *snapshotFixture {
 	cfg := DefaultManagerConfig()
 	cfg.StateDir = stateDir
 	cfg.HostBasePort = 1
-	cfg.KernelImagePath = "/nix/store/kernel-a/bzImage"
-	cfg.InitrdPath = "/nix/store/initrd-a/initrd"
-	cfg.StoreDiskPath = "/nix/store/store-a.erofs"
+	// Guest artifacts live at stable paths, as on Node B; the snapshot binds
+	// their identities.
+	artifacts := filepath.Join(stateDir, "guest")
+	if err := os.MkdirAll(artifacts, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"vmlinux", "initrd", "storedisk.erofs"} {
+		if err := os.WriteFile(filepath.Join(artifacts, name), []byte(name+"-a"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg.KernelImagePath = filepath.Join(artifacts, "vmlinux")
+	cfg.InitrdPath = filepath.Join(artifacts, "initrd")
+	cfg.StoreDiskPath = filepath.Join(artifacts, "storedisk.erofs")
 	cfg.KernelParams = "root=fstab init=/nix/store/init-a"
 	cfg.FirecrackerBinPath = fakeFirecrackerBin(t, stateDir)
 	cfg.HibernateMode = HibernateModeSnapshot
@@ -458,7 +469,7 @@ func TestHibernateAndResumeFromSnapshotRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("committed snapshot: %v", err)
 	}
-	if meta.Consumed || meta.Epoch != 7 || meta.FirecrackerVersion != testFCVersion || meta.LaunchConfigSHA256 == "" || len(meta.Disks) != 2 {
+	if meta.Consumed || meta.Epoch != 7 || meta.FirecrackerVersion != testFCVersion || meta.LaunchConfigSHA256 == "" || len(meta.Disks) != 5 {
 		t.Fatalf("meta = %+v", meta)
 	}
 	if meta.Config.GatewayToken != "" || meta.Config.ComputerCredentialEnvelope != "" {
@@ -580,6 +591,9 @@ func TestValidateSnapshotRefusesEveryMismatch(t *testing.T) {
 		{"other computer", func(_ *testing.T, _ *snapshotFixture, _ *SnapshotMeta, v *snapshotValidation) {
 			v.Expect.ComputerID = "computer-other"
 		}, snapshotReasonIdentity},
+		{"other realization", func(_ *testing.T, _ *snapshotFixture, meta *SnapshotMeta, v *snapshotValidation) {
+			v.Expect.Epoch = meta.Epoch + 1
+		}, snapshotReasonIdentity},
 		{"firecracker upgraded", func(_ *testing.T, _ *snapshotFixture, _ *SnapshotMeta, v *snapshotValidation) {
 			v.FirecrackerVersion = "Firecracker v1.16.0"
 		}, snapshotReasonFirecracker},
@@ -616,6 +630,24 @@ func TestValidateSnapshotRefusesEveryMismatch(t *testing.T) {
 			}
 			_ = os.Chtimes(tmp, info.ModTime(), info.ModTime())
 			if err := os.Rename(tmp, path); err != nil {
+				t.Fatal(err)
+			}
+		}, snapshotReasonDisk},
+		{"deploy replaced store image in place", func(t *testing.T, f *snapshotFixture, _ *SnapshotMeta, _ *snapshotValidation) {
+			// Same path, so the launch config hash is unchanged; the bytes
+			// under it are another build's.
+			path := f.mgr.cfg.StoreDiskPath
+			tmp := path + ".new"
+			if err := os.WriteFile(tmp, []byte("storedisk.erofs-b"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(tmp, path); err != nil {
+				t.Fatal(err)
+			}
+		}, snapshotReasonDisk},
+		{"deploy replaced kernel in place", func(t *testing.T, f *snapshotFixture, _ *SnapshotMeta, _ *snapshotValidation) {
+			later := time.Now().Add(time.Minute)
+			if err := os.Chtimes(f.mgr.cfg.KernelImagePath, later, later); err != nil {
 				t.Fatal(err)
 			}
 		}, snapshotReasonDisk},

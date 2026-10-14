@@ -359,15 +359,22 @@ func diskIdentity(path string) (SnapshotDiskIdentity, error) {
 	return id, nil
 }
 
-// writableDiskPaths lists the drives the guest can write, whose bytes must
-// still be the ones the memory snapshot was taken against.
-func (m *Manager) writableDiskPaths(vmID string, cfg VMConfig) []string {
+// snapshotBoundPaths lists the files whose bytes must still be the ones the
+// memory snapshot was taken against: the drives the guest can write, and the
+// boot artifacts and read-only drives. Node B deploys guest artifacts to
+// stable paths (/var/lib/go-choir/guest/...), so an unchanged launch config
+// hash does not prove unchanged software; the resumed guest's page cache and
+// filesystem state describe the old read-only store image, so a store image
+// replaced under the same path must refuse the resume.
+func (m *Manager) snapshotBoundPaths(vmID string, cfg VMConfig) []string {
 	paths := []string{filepath.Join(m.vmStateDir(vmID), "data.img")}
-	if cfg.credentialDiskPath != "" {
-		paths = append(paths, cfg.credentialDiskPath)
-	}
-	if cfg.StoreDiskPath == "" && cfg.RootfsPath != "" {
-		paths = append(paths, cfg.RootfsPath)
+	seen := map[string]bool{paths[0]: true}
+	for _, path := range []string{cfg.credentialDiskPath, cfg.RootfsPath, cfg.StoreDiskPath, cfg.KernelImagePath, cfg.InitrdPath} {
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		paths = append(paths, path)
 	}
 	return paths
 }
@@ -419,6 +426,11 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 		return snapshotReasonIdentity
 	}
 	if v.Expect.ComputerID != "" && meta.ComputerID != "" && v.Expect.ComputerID != meta.ComputerID {
+		return snapshotReasonIdentity
+	}
+	// The snapshot belongs to one realization: a caller expecting another
+	// epoch has moved past it.
+	if v.Expect.Epoch > 0 && meta.Epoch != v.Expect.Epoch {
 		return snapshotReasonIdentity
 	}
 	if !v.Now.Before(meta.CreatedAt.Add(m.snapshotMaxAge())) {

@@ -68,13 +68,16 @@ Each item names how the design answers it.
 
 1. **Work frozen mid-flight.** A run, a cell, or a model call is in progress
    when memory is captured; its outbound connections die. Answer: the guest
-   fence closes run activation and checks running runs and mid-transaction
-   self-development operations atomically under the same lock that admits
-   runs; busy answers 409 and reopens admission; vmmanager then uses the kill
-   path (today's behavior).
+   fence closes work admission at the actor handler boundary
+   (`actorHandler.HandleUpdate`, every update kind, including source polls
+   that call models without a run) only when no occurrence is inside, then
+   checks running runs and mid-transaction self-development operations;
+   busy answers 409 and reopens admission; vmmanager then uses the kill path
+   (today's behavior).
 2. **Race: new work admitted between the check and the pause.** Answer: the
-   gate stays closed from the check until `resumed` or `abort` (or a
-   2-minute monotonic TTL, which a paused guest does not advance). A run
+   gate stays closed from the check until `resumed` (or a 2-minute
+   monotonic TTL, which a paused guest does not advance). There is no abort
+   call: every host failure after the fence is a kill. A run
    that tries to start waits on the gate; it never starts and is never
    frozen mid-run.
 3. **Old guest without the endpoint (404), unreachable guest, timeout.**
@@ -94,8 +97,14 @@ Each item names how the design answers it.
 7. **Disk changed after capture** (a cold boot, recover, refresh, cold
    recovery quarantine, manual repair). Answer: identities (path, size,
    mtime_ns, inode, dev) of every writable drive (`data.img`,
-   `credential.img`) are taken after Firecracker stops and checked before
-   load; any cold boot also discards the snapshot first.
+   `credential.img`) and of the boot artifacts and read-only store image
+   (kernel, initrd, `storedisk.erofs`, rootfs) are taken after Firecracker
+   stops and checked before load; any cold boot also discards the snapshot
+   first. The artifacts are bound because Node B deploys them to stable
+   paths (`/var/lib/go-choir/guest/...`): an unchanged config hash does not
+   prove unchanged bytes, and a resumed guest's page cache describes the old
+   store image. A deploy that rewrites those files therefore invalidates
+   every snapshot (conservative).
 8. **Platform changed after capture** (deploy: kernel, initrd, store disk,
    kernel params, machine shape, balloon config). Answer: the manager
    rebuilds the Firecracker config a cold boot of the same realization would
@@ -166,6 +175,29 @@ Each item names how the design answers it.
 25. **Guest frozen with admission closed forever** (host dies after
     prepare, before snapshot). Answer: the host kills the guest in that case
     (kill path), and if the host process itself died the TTL reopens the gate.
+
+## Implementation map
+
+- Host, vmmanager: `internal/vmmanager/fcapi.go` (Firecracker API client),
+  `snapshot.go` (modes, metadata, validation, budget, guest client),
+  `snapshot_lifecycle.go` (`hibernateVMSnapshot`, `ResumeVMFromSnapshot`,
+  `HibernateTimelineForVM`). Env: `VM_HIBERNATE_MODE` (default `kill`),
+  `VM_SNAPSHOT_BUDGET_GIB` (48), `VM_SNAPSHOT_MAX_AGE` (12h).
+- Host, vmctl: hibernate calls the manager outside the registry lock under
+  the per-computer in-progress guard; `startExistingVM` offers a hibernated,
+  unheld computer to `ResumeVMFromSnapshot` before RecoverVM/BootVM, passing
+  its current shape, hold, computer id and epoch; a snapshot belongs to one
+  epoch. Operator surface: `POST /internal/vmctl/hibernate`
+  (`{"computer_id"}` or `{"user_id","desktop_id"}`, stop reason
+  `operator`, response carries the hibernate receipt) and
+  `GET /internal/vmctl/boot-timeline?computer_id=...&kind=hibernate`.
+- Guest: `internal/agentcore/hibernate.go`.
+  `POST /internal/runtime/hibernate/prepare` answers 200
+  `{"status":"prepared","capability_expires_at","guest_build"}` or 409
+  `{"outcome":"busy",...}`; `POST /internal/runtime/hibernate/resumed`
+  `{"host_unix_nano"}` answers 200 `{"status":"resumed","clock_step_ms"}`.
+  Both are host-peer only. `GuestCredentials.RenewNow` forces a renewal.
+- `nix/node-b.nix`: `VM_HIBERNATE_MODE=snapshot`, `VM_SNAPSHOT_BUDGET_GIB=48`.
 
 ## Restart rule
 
@@ -240,8 +272,9 @@ their computer.
 1. Deploy; confirm `VM_HIBERNATE_MODE=snapshot` in the vmctl unit and the
    deploy SHA in health.
 2. Mint a test computer; wait healthy; refresh it once so it launches with
-   the API socket (boot timeline `firecracker_spawned` detail shows
-   `api_sock=true`).
+   the API socket (read-only: `ls -la <vm-state>/<vm>/api/` shows `fc.sock`;
+   a computer launched before the switch hibernates by kill with reason
+   `no_api_socket`).
 3. Create a file and open a Texture document; note the guest's
    `/api/runtime/obligations` and source schedules (if any).
 4. `POST /internal/vmctl/hibernate {"computer_id": ...}`; read
