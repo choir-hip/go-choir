@@ -93,6 +93,10 @@ type RLMEngineeringOverlayOptions struct {
 	// CanProposeChange: no operation is bound yet, but the computer's signed
 	// mode authorizes proposals, so a freeze opens the candidate (Gate 2 D).
 	CanProposeChange bool
+	// ClaudeDelegate: this assignment's capsule is in the claude mode, so the
+	// Claude delegate is available to it
+	// (docs/design/claude-delegate-slice1-2026-10-14.md).
+	ClaudeDelegate bool
 }
 
 func RLMEngineeringOverlay(opts RLMEngineeringOverlayOptions) string {

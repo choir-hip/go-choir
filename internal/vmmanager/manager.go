@@ -37,6 +37,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -318,6 +319,10 @@ type ManagerConfig struct {
 	// Jailer runs each Firecracker under the Firecracker jailer (VMCTL_JAILER;
 	// off by default). See confinement.go.
 	Jailer JailerConfig
+
+	// ClaudeDelegate is the Claude delegate allowlist and window
+	// (CHOIR_CLAUDE_DELEGATE_*; empty by default). See claude_delegate.go.
+	ClaudeDelegate ClaudeDelegateConfig
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -872,7 +877,13 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	}
 
 	if cfg.ComputerCredentialEnvelope != "" || strings.TrimSpace(cfg.GatewayToken) != "" {
-		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope, cfg.GatewayToken)
+		// Claude delegate: an allowlisted computer's disk also carries the
+		// grant, and the owner's token while the window is open.
+		delegateFiles, delegateStatus := m.cfg.ClaudeDelegate.claudeDelegateMaterial(cfg.ComputerID, time.Now())
+		if delegateStatus != "" {
+			log.Printf("vmmanager: claude delegate for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, delegateStatus)
+		}
+		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope, cfg.GatewayToken, delegateFiles)
 		if err != nil {
 			return nil, fmt.Errorf("prepare appender credential disk for VM %s: %w", cfg.VMID, err)
 		}
@@ -2744,7 +2755,7 @@ func (m *Manager) copyFile(src, dst string) error {
 	return nil
 }
 
-func (m *Manager) createCredentialDisk(vmStateDir, encodedEnvelope, gatewayToken string) (string, error) {
+func (m *Manager) createCredentialDisk(vmStateDir, encodedEnvelope, gatewayToken string, extraFiles map[string][]byte) (string, error) {
 	if strings.TrimSpace(encodedEnvelope) == "" && strings.TrimSpace(gatewayToken) == "" {
 		return "", fmt.Errorf("credential disk requires an envelope or gateway token")
 	}
@@ -2769,7 +2780,19 @@ func (m *Manager) createCredentialDisk(vmStateDir, encodedEnvelope, gatewayToken
 			return "", err
 		}
 	}
-	for _, name := range []string{"computer-event-envelope", "gateway-token"} {
+	// Extra root-only files (the Claude delegate grant and token) ride the
+	// same disk under the same mode and owner checks.
+	names := []string{"computer-event-envelope", "gateway-token"}
+	for name, content := range extraFiles {
+		if name == "" || strings.ContainsAny(name, `/\`) || name == "." || name == ".." || slices.Contains(names, name) {
+			return "", fmt.Errorf("credential disk extra file name %q is invalid", name)
+		}
+		if err := os.WriteFile(filepath.Join(stagingRoot, name), content, 0o400); err != nil {
+			return "", err
+		}
+		names = append(names, name)
+	}
+	for _, name := range names {
 		path := filepath.Join(stagingRoot, name)
 		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {

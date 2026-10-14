@@ -24,9 +24,13 @@ The path of the token, end to end:
 
 1. The owner writes `/var/lib/go-choir/secrets/claude-oauth-token`
    (root, 0400) on Node B. No agent ever touches it.
-2. vmctl sees it through a read-only bind
-   (`/run/go-choir-claude-delegate/claude-oauth-token`; the secrets
-   directory itself stays hidden from vmctl and its VMMs).
+2. At each vmctl start, a privileged `ExecStartPre` (`+`, outside the
+   sandbox) copies that one file, mode and owner preserved, into vmctl's
+   private runtime directory (`/run/go-choir/claude-oauth-token`, which
+   systemd removes when vmctl stops). The secrets directory itself stays
+   hidden from vmctl and its VMMs. The copy never echoes the token and
+   never fails the unit. A token installed or rotated after vmctl started
+   is seen at the next vmctl restart (every deploy restarts vmctl).
 3. When vmctl cold-boots a computer on `CHOIR_CLAUDE_DELEGATE_COMPUTERS`
    before `CHOIR_CLAUDE_DELEGATE_EXPIRES`, it writes the token and a
    grant record (`claude-delegate.json`: computer, expiry, status,
@@ -60,7 +64,9 @@ All on vmctl, in `nix/node-b.nix` (`go-choir-vmctl` `Environment`):
 - `CHOIR_CLAUDE_DELEGATE_EXPIRES`: RFC 3339 time or `YYYY-MM-DD` (UTC
   midnight). Missing or unparseable means off. Past means off.
 - `CHOIR_CLAUDE_DELEGATE_TOKEN_FILE`: where vmctl reads the token (the
-  bind target above). Fixed by the nix config.
+  runtime copy above). Fixed by the nix config. vmctl refuses a token
+  file that is not regular, not owner-only, not owned by root, over
+  8 KiB, or not token-shaped, and says which in the grant.
 
 The guest re-checks the same expiry from the grant record, so a computer
 resumed from a memory snapshot (which keeps its old credential disk)
@@ -112,8 +118,7 @@ makes Claude Code exit at once, so the list is pinned by a test:
 claude -p --model claude-opus-5-5 --output-format stream-json --verbose
   --max-turns N --max-budget-usd B
   --tools Read,Edit,Write,Glob,Grep,Bash
-  --allowedTools Read,Edit,Write,Glob,Grep,Bash(go:*),Bash(gofmt:*),Bash(make:*),
-                 Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git show:*)
+  --allowedTools Read,Edit,Write,Glob,Grep,Bash(go:*),Bash(gofmt:*),Bash(make:*)
   --disallowedTools WebSearch,WebFetch
   --strict-mcp-config --mcp-config {"mcpServers":{}}
   --setting-sources user --settings {"disableAllHooks":true}
@@ -151,7 +156,7 @@ need the guest kernel; "staging" ones are the probe.
 | F3 | Window expired (host, or a snapshot resumed with an old disk) | vmctl refuses; guest re-checks the grant's expiry at every spawn | unit |
 | F4 | Token in a desk cell's environment or a `choir.Exec` child | broker unsets it on read; session worker and direct exec envs are built from allowlists that never carry it | unit (env builders), staging (probe status) |
 | F5 | Token in logs, records, traces, egress ledger, delegate files | vmctl and guest log status only; the supervisor redacts every events and stderr line; status/result built from redacted lines; `choir-delegate` prints only those files | unit (fake `claude` that prints its env and the token) |
-| F6 | Token in a frozen candidate | Freeze scans every changed file of a `claude`-mode capsule and refuses on a match | unit (scanner), Linux path |
+| F6 | Token in a frozen or persisted candidate | Freeze and the persisted candidate subject scan every changed file of a `claude`-mode capsule (with the token the capsule was spawned with) and refuse on a match | unit (scanner), Linux test |
 | F7 | `ANTHROPIC_API_KEY` (or base URL, auth token, Bedrock/Vertex switches) present | environment built from an allowlist; those keys removed even when the base carries them | unit |
 | F8 | `--bare` or WebSearch/WebFetch | args pinned: no `--bare`; `--tools` excludes them and `--disallowedTools` names them | unit |
 | F9 | Run outlives its window | wall clock: SIGTERM to the process group, SIGKILL after 10 s, state `timeout`, result recorded | unit (fake `claude` that sleeps) |
@@ -186,9 +191,14 @@ revocation as the hard stop.
 - `total_cost_usd` is reported for OAuth sessions.
 - The upload volume of a 40-turn session fits 512 MiB.
 - Claude Code's resident memory beside `go test` in 3 GiB.
-- systemd orders the token's read-only bind before the secrets
-  directory's `InaccessiblePaths` mask (if not, the bind is skipped and
-  the grant reads "token file absent": safe, but the delegate is off).
+- The `+` `ExecStartPre` copy runs with the secrets directory visible on
+  Node B's systemd (documented behaviour of `+`; not exercised here). If
+  it does not, the grant reads "token file absent": safe, delegate off.
+- Landlock's ptrace scoping (F13) could not be probed locally: Docker
+  Desktop's linuxkit 6.10 kernel has no Landlock. The same probe without
+  Landlock shows a same-uid sibling can read another process's
+  `/proc/<pid>/environ`, so the guarantee rests on Landlock alone (which
+  the capsule requires, V5, fail-closed).
 - nixpkgs patches the binary's ELF interpreter (`autoPatchelfHook`);
   whether that counts as "modified" under the Commercial Terms
   condition is a policy question for the owner, not a code one.
@@ -238,7 +248,12 @@ section, the nix lines marked "claude delegate", the probe, this note.
 - Discovered: the 16 MiB L2 upload budget is too small for any LLM
   client; a guest-root process (the owner's terminal, Zot) can read every
   file on the credential disk, the gateway token included; vmctl's
-  secret hiding makes any vmctl-read host secret need an explicit bind.
+  secret hiding makes any vmctl-read host secret need an explicit,
+  privileged hand-off; the capsule broker is PID 1 of its namespace and
+  reaps no orphans, so a killed run's grandchildren stay zombies (counted
+  against `pids.max`) until the capsule ends; the capsule's
+  `/workspace/platform` has no `.git`, so neither engineering nor the
+  delegate can use `git diff` there.
 - Introduced, ratified by the owner on 2026-10-14 for Option T: a
   credential inside a capsule process (an `I19` exception for one
   ComputerID and a bounded window); the delegate's own tool calls are not
@@ -247,3 +262,54 @@ section, the nix lines marked "claude delegate", the probe, this note.
   engineering overlay's "never start another agent" gains a carve-out
   for this delegate only.
 - Repaired: none.
+
+## 8. What was built and checked (2026-10-14, branch `claude-delegate-slice1`)
+
+Local evidence only; none of it is staging proof.
+
+- `go build ./...`; `go vet` on the changed packages (darwin, and
+  `GOOS=linux CGO_ENABLED=0` for the broker, capsule, delegate packages).
+- Unit tests (darwin): `internal/claudedelegate` (args pinned to the
+  2.1.197 flag set, environment allowlist, redaction of every run file
+  against a fake `claude` that prints its environment and the token,
+  wall-clock kill of the whole process group, one run at a time, failed
+  run, secret scanner across chunk edges), `cmd/choir-delegate`,
+  `internal/capsule` (grant reader, claude egress through the proxy
+  harness, env builders, capsule size), `internal/vmmanager` (default
+  off, every grant outcome, journal line), `internal/runtimeprompts`,
+  `internal/types`, `internal/yaegikernel`, `internal/store -run
+  Engineering`, `internal/agentcore -run` on the network choice, the
+  claude binding, the prompt, and the assignment/cast/capsule/freeze
+  tests.
+- Linux tests in a `golang:1.26` container (aarch64, no privileges):
+  `internal/claudedelegate`, `cmd/choir-delegate`, the Freeze leak scan,
+  the grant reader, the claude egress test, and the broker's token
+  hand-off and child environment tests.
+- `nix eval` (no build): the guest's `CHOIR_CLAUDE_CODE_BIN` resolves to
+  `claude-code-2.1.197`; `claude-code` is not in `systemPackages`,
+  `choir-delegate` is; the guest image and the Node B system evaluate;
+  vmctl's `ExecStartPre` carries the copy and its secrets stay hidden.
+- Image size: the 2.1.197 linux-x64 binary is 245,517,112 bytes; lz4 -1
+  compresses it to 110,114,770 bytes, so the erofs store disk grows by
+  roughly 110-120 MB (plus ripgrep, bubblewrap, socat and alsa-lib from
+  the wrapper's closure, a few MB). Not measured on a built image.
+
+## 9. Owner steps after the deploy
+
+1. In a plain terminal on the Mac (not inside any agent session):
+   `claude setup-token`, copy the printed token.
+2. `pbpaste | ssh node-b 'sudo sh -c "umask 077; mkdir -p /var/lib/go-choir/secrets; cat > /var/lib/go-choir/secrets/claude-oauth-token; chmod 0400 /var/lib/go-choir/secrets/claude-oauth-token"'`,
+   then clear the clipboard. Check without reading it:
+   `ssh node-b 'sudo stat -c "%a %U %s" /var/lib/go-choir/secrets/claude-oauth-token'`
+   (want `400 root <size>`).
+3. Everything after that is the lead's: put the test ComputerID in
+   `CHOIR_CLAUDE_DELEGATE_COMPUTERS` (and the expiry if needed) in
+   `nix/node-b.nix`, land and deploy; make sure vmctl started after the
+   token was installed (`sudo systemctl restart go-choir-vmctl` keeps
+   running VMs: `KillMode=process`); stop and start the test computer so
+   it cold-boots with the new credential disk (a snapshot resume keeps
+   the old disk); then run
+   `scripts/claude_delegate_probe.py --cred <computer cred> --ssh node-b --out <receipt>`.
+   The vmctl journal line `claude delegate for computer <id> ...: available until ...`
+   (or the reason it is not) confirms step 2 without showing the token.
+

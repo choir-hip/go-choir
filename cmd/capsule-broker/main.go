@@ -95,6 +95,8 @@ func main() {
 		sessionHarden      bool
 		sessionInet        bool
 		egress             bool
+		delegateRunDir     string
+		delegateClaudeBin  string
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
@@ -114,7 +116,16 @@ func main() {
 	flag.BoolVar(&sessionHarden, "session-harden", false, "apply the S1 kernel floor (Landlock, capability drop, seccomp) to the session worker; set only by a privileged in-namespace broker spawn")
 	flag.BoolVar(&sessionInet, "session-inet", false, "load the L2 workload filter that admits inet sockets (ecosystem_proxy capsules only)")
 	flag.BoolVar(&egress, "egress", false, "this capsule is ecosystem_proxy (L2): bring up lo and forward 127.0.0.1:3128 to the executor's egress socket")
+	flag.StringVar(&delegateRunDir, "delegate-run-dir", "", "Claude delegate run directory (delegate-claude stage only)")
+	flag.StringVar(&delegateClaudeBin, "delegate-claude-bin", "", "Claude Code binary (delegate-claude stage only)")
 	flag.Parse()
+	if isolationStage == delegateStage {
+		// Becomes the claude process (delegate.go); returns only on failure.
+		if err := runDelegateStage(delegateRunDir, delegateClaudeBin); err != nil {
+			log.Fatalf("claude delegate stage: %v", err)
+		}
+		return
+	}
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
 	}
@@ -177,6 +188,9 @@ func main() {
 	if isolationStage != "broker" {
 		log.Fatal("invalid capsule broker isolation stage")
 	}
+	// Claude delegate (claude-mode capsules only): take the token out of the
+	// environment before anything else can inherit it.
+	delegateToken, delegateBin := takeDelegateEnv()
 
 	if pubKeyHex == "" {
 		log.Fatal("--pubkey is required (Ed25519 public key in hex)")
@@ -259,6 +273,8 @@ func main() {
 		egress:             egress,
 	}
 	log.Printf("capsule-broker: session worker ready=%v", broker.sessionWorkerReady)
+	startDelegate(delegateToken, delegateBin, egress)
+	delegateToken = ""
 
 	// Handle signals for clean shutdown.
 	sigCh := make(chan os.Signal, 1)

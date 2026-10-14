@@ -214,6 +214,8 @@
         "cmd/gateway" "cmd/corpusd" "cmd/checkpointd" "cmd/projection-compact"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
         "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
+        # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md)
+        "cmd/choir-delegate"
       ];
       # Keep source selection structural. Go owns the package dependency graph;
       # repeating it here as per-service internalDirs caused fallback builds to
@@ -327,6 +329,12 @@
         capsuleBroker = mkGoService {
           pname = "capsule-broker";
           subPackage = "cmd/capsule-broker";
+        };
+        # claude delegate: the cell-side client of a claude-mode capsule's
+        # broker (docs/design/claude-delegate-slice1-2026-10-14.md).
+        choirDelegate = mkGoService {
+          pname = "choir-delegate";
+          subPackage = "cmd/choir-delegate";
         };
         autoputer = mkGoService {
           pname = "autoputer";

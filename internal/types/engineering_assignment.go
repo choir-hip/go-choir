@@ -25,6 +25,12 @@ const (
 // (docs/design/engineering-network-grants-2026-10-10.md §4.0b).
 const EngineeringCapsuleNetworkEcosystemProxy = "ecosystem_proxy"
 
+// EngineeringCapsuleNetworkClaude is the Claude delegate's mode: an
+// implementation capsule on the one allowlisted computer reaches only the
+// model API and the Go module proxy, and its broker holds the owner's token
+// for headless Claude Code (docs/design/claude-delegate-slice1-2026-10-14.md).
+const EngineeringCapsuleNetworkClaude = "claude"
+
 type EngineeringAssignmentKind string
 
 // EngineeringCastAuthority names which admission authority admitted the
@@ -214,14 +220,14 @@ func (b EngineeringAssignmentBinding) Validate() error {
 	}
 	switch b.NetworkMode {
 	case EngineeringCapsuleNetworkForbidden, EngineeringCapsuleNetworkNone:
-	case EngineeringCapsuleNetworkEcosystemProxy:
+	case EngineeringCapsuleNetworkEcosystemProxy, EngineeringCapsuleNetworkClaude:
 		// The verifier rebuilds offline from the frozen bundle; only
-		// implementation work reaches the ecosystems.
+		// implementation work reaches the ecosystems or the model API.
 		if b.Kind != EngineeringAssignmentImplementation {
-			return fmt.Errorf("co-super assignment: ecosystem_proxy network is for implementation assignments only")
+			return fmt.Errorf("co-super assignment: %s network is for implementation assignments only", b.NetworkMode)
 		}
 	default:
-		return fmt.Errorf("co-super assignment: capsule network_mode must be forbidden, none or ecosystem_proxy")
+		return fmt.Errorf("co-super assignment: capsule network_mode must be forbidden, none, ecosystem_proxy or claude")
 	}
 	if b.FilesystemMode != EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay {
 		return fmt.Errorf("co-super assignment: capsule filesystem_mode must be assignment-local writable overlay")

@@ -242,6 +242,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString(runtimeprompts.RLMEngineeringOverlay(runtimeprompts.RLMEngineeringOverlayOptions{
 			HasSelfDevelopmentOperation: hasSelfDevelopmentOperation,
 			CanProposeChange:            canProposeChange,
+			// The run's capsule mode, fixed at assignment open.
+			ClaudeDelegate: rec != nil && metadataStringValue(rec.Metadata, "capsule_network_mode") == types.EngineeringCapsuleNetworkClaude,
 		}))
 	}
 	if profile == agentprofile.Research {

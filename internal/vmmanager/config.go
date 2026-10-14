@@ -129,6 +129,7 @@ func LoadConfigFromEnv() ManagerConfig {
 	}
 
 	cfg.Jailer = loadJailerConfigFromEnv(cfg.FirecrackerBinPath)
+	cfg.ClaudeDelegate = loadClaudeDelegateConfig(os.Getenv)
 
 	if v := os.Getenv("VM_SOURCE_SEED_REPO"); v != "" {
 		cfg.SourceSeedRepoPath = strings.TrimSpace(v)

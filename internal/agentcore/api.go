@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -682,6 +683,10 @@ type guestObservabilityResponse struct {
 	// EngineMutex is the engine lock's cumulative wait and hold per call
 	// path since boot (H3: lock waits at K = 4).
 	EngineMutex map[string]objectgraph.EngineMutexOpStats `json:"engine_mutex,omitempty"`
+	// ClaudeDelegate is the Claude delegate's availability on this computer
+	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
+	// the token.
+	ClaudeDelegate *capsule.ClaudeDelegateStatus `json:"claude_delegate,omitempty"`
 }
 
 // HandleGuestObservability handles GET /api/runtime/observability: the guest's
@@ -706,6 +711,10 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	if h.rt.store != nil {
 		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
 		resp.EngineMutex = h.rt.store.EngineMutexStats()
+	}
+	if h.rt.capsuleExecutor != nil {
+		status := h.rt.capsuleExecutor.ClaudeDelegateStatus()
+		resp.ClaudeDelegate = &status
 	}
 	writeAPIJSON(w, http.StatusOK, resp)
 }

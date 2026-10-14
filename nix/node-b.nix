@@ -321,6 +321,25 @@ let
     mail = "-${mailDir}";
   };
   hiddenSecretsExcept = keep: lib.attrValues (removeAttrs hostSecretPaths keep);
+  # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md): the
+  # owner's setup-token token, root 0400, written by the owner only. Every
+  # unit, vmctl included, keeps the secrets dir hidden; vmctl's start copies
+  # this one file (mode and owner preserved, so vmctl's owner-only check
+  # still sees the original's) into its private runtime dir, which systemd
+  # removes when vmctl stops. A token installed or rotated after vmctl
+  # started is seen at the next vmctl restart (every deploy restarts it).
+  # The copy never echoes the token and never fails the unit.
+  claudeDelegateTokenFile = "/var/lib/go-choir/secrets/claude-oauth-token";
+  claudeDelegateTokenCopy = "/run/go-choir/claude-oauth-token";
+  claudeDelegateTokenStage = pkgs.writeShellScript "go-choir-claude-delegate-token-stage" ''
+    src=${claudeDelegateTokenFile}
+    dst=${claudeDelegateTokenCopy}
+    ${pkgs.coreutils}/bin/rm -f "$dst"
+    if [ -f "$src" ] && [ ! -L "$src" ]; then
+      ${pkgs.coreutils}/bin/cp -p "$src" "$dst" 2>/dev/null || ${pkgs.coreutils}/bin/rm -f "$dst"
+    fi
+    exit 0
+  '';
 in
 {
 
@@ -950,6 +969,9 @@ in
       ExecStartPre = [
         ""  # Reset the ExecStartPre list
         "${pkgs.bash}/bin/bash -c '${pkgs.procps}/bin/sysctl -w net.ipv4.ip_forward=1 2>/dev/null || true'"
+        # claude delegate: "+" runs outside the sandbox, so it can read the
+        # hidden secrets dir; it never fails the unit.
+        "+${claudeDelegateTokenStage}"
       ];
       # VM state directory for Firecracker VM persistence and epoch tracking.
       # Persistent user data in VMs is stored here and survives stop/resume
@@ -1042,6 +1064,17 @@ in
         # and the 16 GiB free-space floor still bound disk.
         "VM_SNAPSHOT_MAX_AGE=36h"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
+        # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md;
+        # Option T, owner-ratified 2026-10-14). OFF while the list is empty.
+        # To turn it on for one test computer: put its ComputerID in
+        # CHOIR_CLAUDE_DELEGATE_COMPUTERS, keep the expiry within the
+        # experiment window, deploy, then cold-boot that computer (stop and
+        # start; a snapshot resume keeps its old credential disk). The owner
+        # puts the token at ${claudeDelegateTokenFile} (root, 0400).
+        # Rollback: empty the list and deploy; revoke the token.
+        "CHOIR_CLAUDE_DELEGATE_COMPUTERS="
+        "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-10-22T00:00:00Z"
+        "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
         # Keep personal computers resident while the host is under capacity.
         "VMCTL_IDLE_TIMEOUT=30m"
         "VMCTL_IDLE_SWEEP_INTERVAL=2m"

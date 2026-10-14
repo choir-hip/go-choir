@@ -192,3 +192,34 @@ func TestRLMResearchOverlaySearchesTheCorpusFirst(t *testing.T) {
 		t.Fatalf("evidence doctrine does not say a corpus capture is citable by its capture_id: %q", doctrine)
 	}
 }
+
+// docs/design/claude-delegate-slice1-2026-10-14.md F18: the Claude delegate
+// section, and the carve-out to "never start another agent", appear only in
+// a claude-mode capsule's overlay; everywhere else the overlay keeps the
+// ecosystem network text and the unqualified rule.
+func TestRLMEngineeringOverlayShowsTheClaudeDelegateOnlyInClaudeMode(t *testing.T) {
+	const rule = "Never start another agent or create an alternate candidate world."
+	const carveOut = "Never start another agent besides the Claude delegate"
+	plain := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
+	if strings.Contains(plain, "choir-delegate") || strings.Contains(plain, carveOut) || !strings.Contains(plain, rule) {
+		t.Fatalf("plain overlay mentions the delegate or lost the rule: %q", plain)
+	}
+	if !strings.Contains(plain, "PyPI, npm, Go, crates") {
+		t.Fatal("plain overlay lost the L2 network text")
+	}
+	claude := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true, ClaudeDelegate: true})
+	for _, want := range []string{
+		carveOut, `choir.Exec("choir-delegate", []string{"start", "--spec-json"`, `"wait", "--id"`,
+		"re-run the test in your own cell", "resume_session", "only the model API", "Precommit in your first cell", `"-newer", dir + "/spec.json"`,
+	} {
+		if !strings.Contains(claude, want) {
+			t.Errorf("claude overlay lacks %q", want)
+		}
+	}
+	if strings.Contains(claude, rule) || strings.Contains(claude, "PyPI, npm, Go, crates") {
+		t.Fatal("claude overlay keeps the unqualified rule or the L2 network text")
+	}
+	if strings.Contains(claude, "{{") {
+		t.Fatal("unrendered template in the claude overlay")
+	}
+}

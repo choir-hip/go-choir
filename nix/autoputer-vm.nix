@@ -33,12 +33,20 @@ let
     pypdf
     python-docx
   ]);
+  # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md):
+  # pinned, unmodified Claude Code from nixpkgs (unfree; the only unfree
+  # package admitted below). In the store of every guest but on no PATH: only
+  # a claude-mode capsule's broker runs it, and only on the allowlisted
+  # computer. Upgrading it is a reviewed image change (flags are pinned to
+  # this version in internal/claudedelegate).
+  claudeCode = pkgs.claude-code;
   guestImageManifest = pkgs.writeText "choir-immutable-guest-image-manifest" ''
     contract=choir-guest-image-v1
     build_commit=${buildCommit}
     autoputer=${goChoirPackages.autoputer}
     updater=${goChoirPackages.updater}
     capsule_broker=${goChoirPackages.capsuleBroker}
+    claude_code=${claudeCode}
     kernel=${config.boot.kernelPackages.kernel}
     kernel_config=${config.boot.kernelPackages.kernel.configfile}
   '';
@@ -817,6 +825,11 @@ EOF
       # credential disk, never inherited via env by children.
       RUNTIME_GATEWAY_TOKEN_FILE = "/run/choir-bootstrap/gateway-token";
       CHOIR_CAPSULE_BROKER_PATH = "${goChoirPackages.capsuleBroker}/bin/capsule-broker";
+      # claude delegate: the binary a claude-mode capsule's broker starts.
+      # The token is not here; it is on the credential disk of the one
+      # allowlisted computer only.
+      CHOIR_CLAUDE_CODE_BIN = "${claudeCode}/bin/claude";
+      CHOIR_CLAUDE_DELEGATE_CREDENTIAL_DIR = "/run/choir-bootstrap";
       # Capsule overlay uppers and /tmp live on the data volume: package
       # installs do not fit in guest RAM. The executor scopes it per boot.
       CHOIR_CAPSULE_STATE_DIR = "/mnt/persistent/capsule-state";
@@ -895,7 +908,13 @@ EOF
     # L2 ecosystem egress (engineering-network-grants-2026-10-10.md §4.0b):
     # implementation capsules install Python packages with pip or uv.
     uv
+    # claude delegate: the cell-side client (it holds no credential; in a
+    # capsule without the delegate it reports "unavailable").
+    goChoirPackages.choirDelegate
   ];
+
+  # claude delegate: admit exactly one unfree package.
+  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (lib.getName pkg) [ "claude-code" ];
 
   system.stateVersion = "25.11";
 }

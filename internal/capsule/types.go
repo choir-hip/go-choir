@@ -45,6 +45,13 @@ type SpawnSpec struct {
 	// assignment binding, never from the capsule
 	// (docs/design/engineering-network-grants-2026-10-10.md §4.0b).
 	Egress bool
+
+	// ClaudeDelegate makes this a claude-mode capsule (requires Egress): the
+	// model-API-only egress policy, and the Claude delegate token handed to
+	// the broker. Trusted-runtime input from the durable binding; the spawn
+	// fails closed when the delegate is unavailable
+	// (docs/design/claude-delegate-slice1-2026-10-14.md).
+	ClaudeDelegate bool
 }
 
 type SourcePreflight struct {

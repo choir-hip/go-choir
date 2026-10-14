@@ -253,7 +253,7 @@ func (rt *Runtime) planEngineeringCast(ctx context.Context, scope ReductionScope
 		ExecutionHandleDigest: objectgraph.SHA256([]byte(opaque)), SubjectDigest: subjectDigest,
 		SourceArtifactRef: preflight.ArtifactRef,
 		Writable:          true, CapsuleID: "capsule-" + strings.TrimPrefix(uuid.NewSHA1(uuid.NameSpaceOID, []byte(assignmentID+"\x00"+fmt.Sprint(attempt))).String(), "-"),
-		NetworkMode:          engineeringCapsuleNetwork(types.EngineeringAssignmentImplementation, castWithholdsNetwork(in.Statement)),
+		NetworkMode:          engineeringCastNetwork(in.Statement, rt.capsuleExecutor.ClaudeDelegateStatus().Available),
 		FilesystemMode:       types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
 		CastAuthority:        types.EngineeringCastAuthorityRecords,
 		ParentConversationID: parent.ConversationID, ParentRound: parent.Round,
@@ -350,7 +350,7 @@ func buildAssignedEngineeringRun(assignment types.EngineeringAssignment, runID, 
 			"assignment_id": assignmentID, "assignment_attempt": attempt, "assignment_kind": string(binding.Kind),
 			runMetadataEngineeringSlot: "implementation",
 			"assigned_conversation_id": binding.AssignedConversationID, "parent_conversation_id": binding.ParentConversationID,
-			"parent_round": binding.ParentRound, "capsule_id": capsuleID,
+			"parent_round": binding.ParentRound, "capsule_id": capsuleID, "capsule_network_mode": binding.NetworkMode,
 			"parent_decision_id": binding.ParentDecisionID, "parent_control_id": binding.ParentControlID,
 			"scope_digest": binding.ScopeDigest, "request_digest": binding.RequestDigest,
 			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest, "subject_digest": binding.SubjectDigest,
@@ -369,6 +369,34 @@ func engineeringCapsuleNetwork(kind types.EngineeringAssignmentKind, withheld bo
 		return types.EngineeringCapsuleNetworkEcosystemProxy
 	}
 	return types.EngineeringCapsuleNetworkForbidden
+}
+
+// engineeringCastNetwork is an implementation Cast's network mode. On the
+// computer whose Claude delegate is available it is the claude mode (model
+// API and Go module proxy only, docs/design/claude-delegate-slice1-2026-10-14.md)
+// unless the Cast withholds the network or asks for "ecosystem_proxy"
+// explicitly; everywhere else it is engineeringCapsuleNetwork's choice.
+func engineeringCastNetwork(spec string, delegateAvailable bool) string {
+	mode := engineeringCapsuleNetwork(types.EngineeringAssignmentImplementation, castWithholdsNetwork(spec))
+	if mode == types.EngineeringCapsuleNetworkEcosystemProxy && delegateAvailable && !castAsksForEcosystem(spec) {
+		return types.EngineeringCapsuleNetworkClaude
+	}
+	return mode
+}
+
+// castAsksForEcosystem reads an explicit "network": "ecosystem_proxy" (or
+// "l2"): the Cast wants npm, GitHub or PyPI, which the claude mode lacks.
+func castAsksForEcosystem(spec string) bool {
+	var fields map[string]any
+	if json.Unmarshal([]byte(spec), &fields) != nil {
+		return false
+	}
+	value, _ := fields["network"].(string)
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case types.EngineeringCapsuleNetworkEcosystemProxy, "l2":
+		return true
+	}
+	return false
 }
 
 // castWithholdsNetwork reads a Cast spec's "network" field. Only an explicit
@@ -419,11 +447,18 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 	}
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, 90*time.Second)
 	defer cancelSpawn()
+	memory, cpu, pids := engineeringAssignmentMemoryMax, engineeringAssignmentCPUQuota, engineeringAssignmentPidsMax
+	claude := binding.NetworkMode == types.EngineeringCapsuleNetworkClaude
+	if claude {
+		// Claude Code beside go test (docs/design/claude-delegate-slice1-2026-10-14.md §3).
+		memory, cpu, pids = capsule.ClaudeCapsuleSize(rt.capsuleExecutor.MemoryBudget(), memory)
+	}
 	spec := capsule.SpawnSpec{CapsuleID: capsuleID, OwnerRunID: runID,
-		MemoryMax: engineeringAssignmentMemoryMax, CpuQuota: engineeringAssignmentCPUQuota, CpuPeriod: 100000, PidsMax: engineeringAssignmentPidsMax,
+		MemoryMax: memory, CpuQuota: cpu, CpuPeriod: 100000, PidsMax: pids,
 		WorkingDir: "/workspace/platform", Tier: capsule.TierMedium,
 		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest,
-		Egress: binding.NetworkMode == types.EngineeringCapsuleNetworkEcosystemProxy}
+		Egress:         binding.NetworkMode == types.EngineeringCapsuleNetworkEcosystemProxy || claude,
+		ClaudeDelegate: claude}
 	// One live assignment capsule at a time: prior capsules are reclaimed
 	// here, in the saga, so the open itself writes nothing but its own
 	// transaction (C1e D4).

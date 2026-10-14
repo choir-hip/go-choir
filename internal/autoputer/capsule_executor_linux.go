@@ -76,5 +76,16 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	} else if ok {
 		executor.SetGoModuleProxy(goProxy)
 	}
+	// Claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md):
+	// the grant and token are on the credential disk only for the
+	// allowlisted computer; elsewhere the status reads "not allowlisted".
+	delegateDir := strings.TrimSpace(os.Getenv("CHOIR_CLAUDE_DELEGATE_CREDENTIAL_DIR"))
+	if delegateDir == "" {
+		delegateDir = capsule.DefaultClaudeDelegateCredentialDir
+	}
+	executor.SetClaudeDelegateSource(delegateDir, os.Getenv(capsule.ClaudeDelegateBrokerBinEnv))
+	if status := executor.ClaudeDelegateStatus(); status.Available {
+		log.Printf("capsule executor: claude delegate %s", status.Reason)
+	}
 	return executor, true, nil
 }

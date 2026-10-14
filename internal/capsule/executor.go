@@ -61,6 +61,42 @@ type Executor struct {
 	// runningBinary identifies the executable Freeze may reuse as a
 	// release's bin/autoputer; nil means CurrentRunningBinary.
 	runningBinary func() (RunningBinary, error)
+	// claudeDelegateDir and claudeBinary locate the Claude delegate's grant,
+	// token and binary (claude_delegate.go); empty dir means no delegate.
+	claudeDelegateDir string
+	claudeBinary      string
+}
+
+// SetClaudeDelegateSource names the credential directory holding the Claude
+// delegate grant and token, and the claude binary. It applies to capsules
+// spawned afterwards.
+func (e *Executor) SetClaudeDelegateSource(dir, binary string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.claudeDelegateDir, e.claudeBinary = strings.TrimSpace(dir), strings.TrimSpace(binary)
+}
+
+// ClaudeDelegateStatus reports whether a claude-mode capsule could be
+// spawned now, and why not. It never returns the token.
+func (e *Executor) ClaudeDelegateStatus() ClaudeDelegateStatus {
+	e.mu.RLock()
+	dir, binary := e.claudeDelegateDir, e.claudeBinary
+	e.mu.RUnlock()
+	_, status := ReadClaudeDelegate(dir, binary, time.Now())
+	return status
+}
+
+// claudeDelegateTokenLocked reads the token for a claude-mode spawn or a
+// Freeze scan. Callers hold e.mu (read or write).
+func (e *Executor) claudeDelegateTokenLocked() (string, ClaudeDelegateStatus) {
+	return ReadClaudeDelegate(e.claudeDelegateDir, e.claudeBinary, time.Now())
+}
+
+// MemoryBudget is the guest's capsule memory admission budget in bytes.
+func (e *Executor) MemoryBudget() int64 {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.vmMemoryTotal
 }
 
 func (e *Executor) currentRunningBinary() (RunningBinary, error) {
@@ -78,9 +114,13 @@ func (e *Executor) SetGoModuleProxy(addr netip.AddrPort) {
 	e.goModuleProxy = addr
 }
 
-// egressPolicyLocked is the L2 policy for a new capsule.
-func (e *Executor) egressPolicyLocked() EgressPolicy {
+// egressPolicyLocked is the policy for a new capsule: L2, or the claude
+// mode's model-API-only policy. Both keep the Go module proxy route.
+func (e *Executor) egressPolicyLocked(claude bool) EgressPolicy {
 	policy := EcosystemEgressPolicy()
+	if claude {
+		policy = ClaudeEgressPolicy()
+	}
 	if e.goModuleProxy.IsValid() {
 		policy.Routes = map[string]netip.AddrPort{GoProxyRouteHost: e.goModuleProxy}
 	}
@@ -253,6 +293,18 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if free, err := stateFreeBytes(e.stateDir); err == nil && free < StateFloorBytes {
 		return nil, fmt.Errorf("capsule state volume has %d MiB free, below the %d MiB floor", free>>20, StateFloorBytes>>20)
 	}
+	// A claude-mode capsule takes the delegate token now, or not at all.
+	var claudeToken string
+	if spec.ClaudeDelegate {
+		if !spec.Egress {
+			return nil, fmt.Errorf("claude-mode capsule requires egress")
+		}
+		token, status := e.claudeDelegateTokenLocked()
+		if !status.Available {
+			return nil, fmt.Errorf("%w: %s", ErrClaudeDelegateUnavailable, status.Reason)
+		}
+		claudeToken = token
+	}
 
 	controlHandle, err := randomOpaque("c-")
 	if err != nil {
@@ -412,11 +464,14 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 			return nil, err
 		}
 	}
-	if err := e.startBrokerLocked(ctx, caps); err != nil {
+	if err := e.startBrokerLocked(ctx, caps, claudeToken); err != nil {
 		return nil, err
 	}
 
 	caps.State = StateActive
+	if claudeToken != "" {
+		caps.claudeToken = []byte(claudeToken)
+	}
 	e.capsules[caps.ID] = caps
 	e.controlHandles[capKey{AgentRunID: spec.OwnerRunID, Handle: controlHandle}] = caps.ID
 	e.vmMemoryUsed += caps.MemoryMax
@@ -446,7 +501,7 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 	_ = os.MkdirAll(ledgerDir, 0o700)
 	ledgerPath := filepath.Join(ledgerDir, caps.ID+".jsonl")
 	var ledgerMu sync.Mutex
-	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(), func(record EgressRecord) {
+	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(caps.Spec.ClaudeDelegate), func(record EgressRecord) {
 		line, _ := json.Marshal(record)
 		log.Printf("capsule-egress: %s", line)
 		ledgerMu.Lock()
@@ -476,7 +531,7 @@ func BrokerAmbientCaps(egress bool) []uintptr {
 	return ambient
 }
 
-func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
+func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeToken string) error {
 	hostSocket := filepath.Join(caps.MergedDir, "run", "capsule", "broker.sock")
 	_ = os.Remove(hostSocket)
 	listener, err := listenUnixAt(hostSocket)
@@ -506,6 +561,12 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	cmd := exec.Command("/run/capsule/broker", args...)
 	cmd.ExtraFiles = []*os.File{inheritedListener}
 	cmd.Env = BrokerProcessEnv(os.LookupEnv)
+	if claudeToken != "" {
+		// Claude delegate (claude mode only): the broker reads the token
+		// once, removes it from its environment and hands it to the claude
+		// process alone (cmd/capsule-broker/delegate_linux.go).
+		cmd.Env = append(cmd.Env, ClaudeDelegateBrokerTokenEnv+"="+claudeToken, ClaudeDelegateBrokerBinEnv+"="+e.claudeBinary)
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -1335,6 +1396,16 @@ func (e *Executor) PersistGrantedCandidate(ctx context.Context, agentRunID, hand
 	if state != StateFrozen {
 		return SourcePreflight{}, fmt.Errorf("capsule candidate requires frozen capsule")
 	}
+	if caps.Spec.ClaudeDelegate {
+		// Claude delegate (F6): no candidate carrying the token persists.
+		changes, err := caps.Diff(ctx)
+		if err != nil {
+			return SourcePreflight{}, err
+		}
+		if err := e.refuseClaudeTokenInChanges(ctx, caps, changes); err != nil {
+			return SourcePreflight{}, err
+		}
+	}
 	subjectRoot := filepath.Join(caps.MergedDir, "workspace", "platform")
 	digest, err := digestCanonicalSubjectTree(ctx, subjectRoot)
 	if err != nil {
@@ -1437,6 +1508,11 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	changes, err := caps.Diff(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if caps.Spec.ClaudeDelegate {
+		if err := e.refuseClaudeTokenInChanges(ctx, caps, changes); err != nil {
+			return nil, err
+		}
 	}
 	const releasePrefix = ReleaseTreePrefix
 	temporary, err := os.MkdirTemp(incomingRoot, ".freeze-")

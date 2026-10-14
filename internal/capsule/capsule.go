@@ -49,6 +49,10 @@ type Capsule struct {
 	inflightOps          int
 	inflightMu           sync.Mutex
 
+	// claudeToken is the Claude delegate token a claude-mode capsule was
+	// spawned with, kept in guest-core memory only for Freeze's leak scan.
+	claudeToken []byte
+
 	// broker is the client for communicating with this capsule's broker.
 	broker *BrokerClient
 

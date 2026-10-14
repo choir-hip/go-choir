@@ -1622,13 +1622,13 @@ func TestComputerCredentialUsesDedicatedDiskNotKernelArguments(t *testing.T) {
 		t.Fatal(err)
 	}
 	if os.Geteuid() != 0 || os.Getegid() != 0 {
-		if _, err := mgr.createCredentialDisk(vmStateDir, "signed-envelope-secret", ""); err == nil || !strings.Contains(err.Error(), "requires root") {
+		if _, err := mgr.createCredentialDisk(vmStateDir, "signed-envelope-secret", "", nil); err == nil || !strings.Contains(err.Error(), "requires root") {
 			t.Fatalf("non-root credential construction error = %v", err)
 		}
 		return
 	}
 	secret := "signed-envelope-secret"
-	credentialDisk, err := mgr.createCredentialDisk(vmStateDir, secret, "gw-token-for-disk")
+	credentialDisk, err := mgr.createCredentialDisk(vmStateDir, secret, "gw-token-for-disk", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
