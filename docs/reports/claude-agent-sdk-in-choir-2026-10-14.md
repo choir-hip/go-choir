@@ -1,5 +1,21 @@
 # Claude Code as the Engineering Desk's Coding Delegate
 
+
+**Owner ruling (2026-10-14, late):** T now, own harness later.
+
+- **Short term: T.** The owner's own subscription token runs inside one
+  test capsule as an explicit, owner-only exception to the rule that
+  credentials never enter a capsule. It is limited to one computer and a
+  bounded time, and it is revoked when the experiment ends.
+- **Long term: the API through Choir's own harness, not `claude -p` or
+  the Agent SDK.** Once Choir pays API prices, Anthropic models are called
+  through the gateway like any other provider, from Choir's own
+  multi-agent harness. The harness uses far less memory, and it already
+  has precommitment records, multi-agent messaging and RLM desks built
+  in. Slice 1 is therefore an experiment, not a long-term architecture.
+- **The installation path in step 3 below needs `sudo`.** The secrets
+  directory is root-only, so use
+  `pbpaste | ssh node-b 'sudo sh -c "umask 077; cat > /var/lib/go-choir/secrets/claude-oauth-token; chmod 0400 /var/lib/go-choir/secrets/claude-oauth-token"'`.
 Date: 2026-10-14. Author: Claude (research subagent of the lead), for the
 owner. Status: research and design only. No code, secrets or deploys.
 Mutation class of this document: **green**. Every build step it proposes

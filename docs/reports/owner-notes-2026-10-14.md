@@ -208,3 +208,16 @@ Lead:
   `docs/reports/selfdev-update-architecture-2026-10-15.md`.
 - The capsule build fixes still land tonight: every path needs a capsule
   that can build the binary.
+
+## 14. Claude in Choir: T now, own harness on the API later
+
+- **Now: option T.** The owner's own subscription token runs in one test
+  capsule. This is an owner-only, time-bounded exception to the rule that
+  credentials never enter a capsule.
+- **Later: the Anthropic API through Choir's own multi-agent harness**,
+  not `claude -p` or the Agent SDK. The harness uses far less memory and
+  already has precommitment records, multi-agent messaging and RLM built
+  in.
+
+Ruling recorded at the top of
+`docs/reports/claude-agent-sdk-in-choir-2026-10-14.md`.
