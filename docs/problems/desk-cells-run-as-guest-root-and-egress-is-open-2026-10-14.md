@@ -4,7 +4,8 @@ Date: 2026-10-14. Found by the computer isolation security review
 ([docs/reports/computer-isolation-security-review-2026-10-14.md](../reports/computer-isolation-security-review-2026-10-14.md),
 findings F4 and F6). This record re-reads the code on `origin/main`
 (980ffaf4e) and adds the guest egress inventory the fix needs. Status:
-documented; fix in progress on branch `fix/desk-cell-confinement`.
+documented; repaired on branch `fix/desk-cell-confinement` (see
+Repair), not deployed.
 Mutation class of the fix: **red** (guest runtime child spawn boundary,
 guest image users, host firewall for guest taps).
 
@@ -151,6 +152,84 @@ Egress:
     (LOCAL): admit TCP 80/443 to local addresses (the public front door).
 16. `ip6tables` missing: log, do not fail VM boot.
 
+## Repair (branch `fix/desk-cell-confinement`, not deployed)
+
+**Cells.** `internal/yaegikernel/desk_cell_confinement*.go`:
+- Spawner: a root runtime (always) or required mode runs the worker as
+  `choir-cell-management` / `-texture` / `-research` (management tasks
+  share management's, research children research's; an unknown role is
+  refused), no supplementary groups, in new network and IPC namespaces,
+  with a private 0700 tmp dir as cwd and `TMPDIR`, removed at reap. A
+  missing user, an unknown role, or required mode on a non-root spawner
+  refuses the spawn.
+- Worker (`autoputer desk-session`, after memory limits, before the
+  first cell): refuses uid 0 in required mode or when its uid differs
+  from the planned one; Landlock (read on the allowed root if the cell
+  user can open it, read-write on its tmp dir, `/dev/null`,
+  `/dev/urandom`, time zones; no TCP bind/connect; V6 scoping best
+  effort); a deny-by-default seccomp filter: no `socket`, `connect`,
+  `bind`, `exec*`, `fork`, `ptrace`, `set*id`, `unshare`, `mount`,
+  `bpf`, `memfd_create`; `clone` only with `CLONE_THREAD`; `clone3`
+  answers `ENOSYS`; `kill`/`tgkill` only to its own pid. Names the
+  architecture lacks are dropped, so it assembles on amd64 and arm64.
+- Guest image: the three users and `CHOIR_DESK_CELL_CONFINEMENT=required`
+  (mandatory Landlock V5, as capsules have).
+- Non-root dev and CI spawners load no_new_privs and seccomp, Landlock
+  best effort: every existing desk test now runs through the filter.
+
+**Egress.** `internal/vmmanager/guest_egress.go`: mangle
+`PREROUTING -i vm-+ -j CHOIR-GUEST-EGRESS`, ensured at vmctl start, on
+every tap setup and every reattach; IPv6 from `vm-+` dropped. The chain: established
+first; host addresses only on the tap service ports (one list with
+`tapReachableHostServicePorts`) and 80/443; the ranges above dropped;
+SMTP dropped; TCP, UDP 53/123 and ICMP returned; everything else
+dropped.
+
+**Evidence (local Linux, Docker Desktop kernel 6.10 arm64, no Landlock
+in that kernel).**
+- `internal/yaegikernel` `TestDeskCell*` as root with the cell users: worker
+  Uid = choir-cell-research on all four ids, no groups, CapInh/Prm/Eff/Amb
+  0, NoNewPrivs 1, Seccomp 2, own network namespace; plain, ReadFile,
+  ListDir, 64 busy goroutines, time/json/rand/regexp cells and an egress
+  frame all work; an escaped worker cannot write outside its tmp dir,
+  read `/proc/1/environ`, open packet, raw, inet, inet6, unix or netlink
+  sockets (EPERM), dial a host listener, fork or exec (EPERM), signal or
+  `ptrace` its parent, `setresuid(0)` or `unshare(CLONE_NEWUSER)`; the tmp
+  dir is 0700 cell-owned and gone after close. Required mode without
+  Landlock refuses to start the worker. As non-root: NoNewPrivs 1,
+  Seccomp 2, same probes refused. Mutation check: with the filter and
+  netns removed the same tests fail (Seccomp 0, sockets open, dial
+  succeeds, exec reaches ENOENT).
+- `internal/agentcore` desk tests with the real `autoputer desk-session`
+  binary (cgo, ICU), root and non-root: management, Texture, research
+  (including research children, searches, deadlines, kill and respawn)
+  pass; `TestDeskGoEvalWorkerIsConfined` reads the production worker's
+  status.
+- `internal/vmmanager` `TestGuestEgressPolicyOnRealNetfilter` (iptables
+  1.8.11 nf_tables, netns guest and "world"): before the policy every
+  probe connects; after it, gateway and corpusd on the tap peer, the
+  host's 443, internet 443 and 8443, and DNS pass; host sshd, host Dolt,
+  internet SMTP, a private address, 169.254.169.254 and arbitrary UDP
+  are dropped; a host-initiated connection to the guest still gets its
+  reply.
+
+Staging proof still owed: Landlock V5 enforcement on the guest kernel
+(the Docker kernel has none), and a deployed guest's desk worker status
+plus a guest-side dial to host :22 and a private address.
+
+**Overlap with `fix/tap-deny-guest-range`.** That fix landed on `main`
+(efbd69e27) while this branch was in progress; the branch is rebased on
+it. It moved the tap rules into `hostfirewall.go` (`hostNet`,
+`CHOIR-GUEST-FWD`/`CHOIR-GUEST-TAPS`, filter table). The egress
+installer hangs off `hostNet` (`egress`, nil in the fake-backed tests so
+they never touch the host's netfilter) and is ensured in
+`reconcileAtStart` (vmctl start, before any reattach), in
+`setupHostNetworking` and on reattach. The two compose: mangle runs
+first and only drops; the filter chains then decide forwarding between
+guests and taps. Guest-to-guest is dropped by both (here as
+`10.0.0.0/8`), on purpose. The review's other network item, inbound
+forwarding to a tap only for established flows, is not in either change.
+
 ## Remaining after the fix (named residuals)
 
 - Internet egress is still any public TCP destination: the recording
@@ -161,3 +240,13 @@ Egress:
   guard; the host policy now blocks the private and host targets they
   could reach, but not guest loopback.
 - maild :8087 is admitted with no guest caller.
+- Cell workers have no cgroup of their own (RLIMIT_AS bounds memory;
+  threads are not counted per desk). The capsule's cgroup code could be
+  reused.
+- The default allowed root for desks without a working dir is the
+  guest's `/tmp`; it should become the worker's own scratch dir.
+- `ioctl` stays in the cell filter (the capsule list has it); with no
+  device files reachable under Landlock its surface is sockets, pipes
+  and regular files.
+- `ip6tables` absent on the host logs a warning and leaves guest IPv6
+  open (Node B has it).
