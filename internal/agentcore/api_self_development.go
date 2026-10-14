@@ -188,6 +188,12 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, operationReceiptProjection(operation))
+	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "source-patch":
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		h.exportSelfDevelopmentSourcePatch(w, r, computerID, strings.TrimSpace(parts[3]))
 	case len(parts) == 4 && parts[1] == "self-development" && parts[2] == "operations":
 		if r.Method != http.MethodGet {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
