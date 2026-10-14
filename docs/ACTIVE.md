@@ -5,6 +5,18 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
+## Now (2026-10-14): L2a synthesis intake
+
+Owner 2026-10-14: "intake redesign, very important. until then we are
+just copying." The live paper opens one story per capture (47 of 50).
+[L2a](definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md) makes
+one story per real-world event across languages, written from the
+convergence and conflicts of its sources. Owner rulings on the roadmap:
+[owner-roadmap-rulings-2026-10-14.md](reports/owner-roadmap-rulings-2026-10-14.md).
+Mission order: L2a; C1e B1; LR lever 6; L1 (schedules survive crashes,
+harness, L1b); C1e B2-B5; L2b; LR memory levers; sources; L3-L5. Levers 1
+and 2 and L1b-0 are live at 6c6bc1aa.
+
 ## Next (2026-10-13): ledger metamission (reviewed)
 
 The [ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md)

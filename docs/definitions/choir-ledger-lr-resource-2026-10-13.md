@@ -96,9 +96,9 @@ boundaries:
 
 now:
   status: working
-  slice: lever 2 (test tier) and L1b-0 deploying at 6c6bc1aa; lever 1 verified
+  slice: levers 1 and 2 landed and verified; next the lever-6 design note
   source_ref: 6c6bc1aa
-  deploy_identity: staging d3f7d9b2 (6c6bc1aa deploying)
+  deploy_identity: staging 6c6bc1aa
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LR-1
@@ -124,6 +124,10 @@ now:
   next_action: verify the test tier on staging; then the lever-6 design note
 
 receipts:
+  - id: LR-lever-2
+    boundary: implement
+    commit: 6c6bc1aa (1cd32a21 in that push)
+    landing: {ci: 38488951037 success, deploy: staging 6c6bc1aa at 2026-10-14T00:24:27Z, acceptance: "vmctl list classifies 35 test-owned computers as warmness_class test; the active one is reclaim-eligible (eligible=1 protected=3)"}
   - id: LR-lever-1
     boundary: implement
     commit: d3f7d9b2

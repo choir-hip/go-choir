@@ -1686,11 +1686,21 @@ nodes:
       Executes the reviewed restart design v3
       (docs/restart-subsystem-design-2026-10-13.md §6, §9). Owner 2026-10-13:
       "we never get into a crash loop".
+  - id: choir-ledger-l2a-synthesis-intake-2026-10-14
+    title: L2a — synthesis intake (one story per event across languages, written from convergence and conflict)
+    path: docs/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md
+    ledger: ''
+    status: working  # drafted; panel review of the file first; owner 2026-10-14 "intake redesign, very important"
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: []
+    enables: [choir-ledger-metamission-2026-10-13]
   - id: choir-ledger-lr-resource-2026-10-13
     title: LR — resource efficiency and model cost (signal-specific reclaim, test tier, priced models, cell output out of the transcript, balloon, store compaction)
     path: docs/definitions/choir-ledger-lr-resource-2026-10-13.md
     ledger: ''
-    status: working  # lever 1 landed d3f7d9b2; lever 2 pushed 6c6bc1aa; next lever-6 design
+    status: working  # levers 1-2 landed (d3f7d9b2, 6c6bc1aa verified 00:24 UTC); next lever-6 design
     kind: station
     entrypoint: false
     execution_mode: mission_orchestrator

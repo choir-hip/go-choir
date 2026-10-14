@@ -105,6 +105,29 @@ metamission:
         against per unique event); replay completion time; at least 95% of
         labelled material events reach a desk; recall by language and source
         class; the audit sample reported.
+    - id: L2a
+      path: docs/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md
+      readiness: drafted
+      status: working
+      depends_on: []
+      note: >-
+        Synthesis intake, pulled ahead of C1e B1-B5 by the owner 2026-10-14
+        ("intake redesign, very important. until then we are just copying").
+        One story per real-world event across languages, written from the
+        convergence and conflicts of its sources; a new capture updates the
+        story it bears on. First slice of L2; L2b keeps the digest, triage
+        and burst bounds.
+    - id: LR
+      path: docs/definitions/choir-ledger-lr-resource-2026-10-13.md
+      readiness: drafted
+      status: working
+      depends_on: []
+      note: >-
+        Resource efficiency and model cost (owner 2026-10-13/14): RAM,
+        storage, CPU and tokens per task; agents per computer; spend
+        tracked, never capped. Levers 1-2 landed; lever 6 (cell output out
+        of the transcript) next; then the balloon probe, store compaction,
+        and the deferred SA, S3 and SP0 work.
     - id: L3
       path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
       readiness: intent
@@ -305,7 +328,8 @@ now:
   # the reviewed restart design. The spine's card points at the live station.
   status: working
   slice: >-
-    Three stations live (2026-10-14 00:25 UTC). L0: C1e B0 landed
+    L2a (synthesis intake) is the live station from 2026-10-14 00:40 UTC.
+    Before it: three stations live (2026-10-14 00:25 UTC). L0: C1e B0 landed
     (19e56c54); the B1 design note is in convergent round 3. L1: L1a
     landed; L1b-0 (the warm-sweep retry bound) pushed at 6c6bc1aa. LR, a
     new station the owner asked for after the paper computer was
@@ -341,7 +365,17 @@ now:
     main_uncertainty: whether B1's round-3 panel accepts the revised design or finds another lifecycle gap
     next_observation: the test tier and L1b-0 on staging; B1 round 3
   blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
-  next_action: verify 6c6bc1aa on staging; adjudicate B1 round 3; then build B1 (C1e), the L1 harness and L1b, and LR's lever-6 design
+  next_action: >-
+    Mission order from 2026-10-14 (owner: architecture first, intake
+    redesign very important): (1) L2a synthesis intake to deployed proof;
+    (2) C1e B1 build (its design rounds continue as docs meanwhile); (3) LR
+    lever 6, cell output out of the transcript; (4) L1: schedules survive
+    crashes (ruling 6), the fault-injection harness, L1b; (5) C1e B2-B5
+    and the re-engineering final round (closes L0); (6) L2b digest, triage
+    and burst; (7) LR memory levers and the deferred SA, S3 and SP0; (8)
+    sources: long tail, Telegram over MTProto, RSSHub; L3; L4 Taiwan; (9)
+    L5 reader and an Autoradio demo. Standing: the owner's computer gets
+    one operator refresh when idle.
 
 receipts: []
 ---
