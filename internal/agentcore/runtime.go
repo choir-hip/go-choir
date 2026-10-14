@@ -122,6 +122,10 @@ type Runtime struct {
 	// startSearch, desk_search.go). nil until
 	// InstallDefaultAgentTools builds them.
 	researchDeps *researchtools.Dependencies
+	// commitCaptureArrival commits a source poll's arrival record; nil
+	// commits it through the store. Tests bind a failing commit to pin the
+	// pending-arrival list (L2a A5, defect 2).
+	commitCaptureArrival func(ctx context.Context, req types.CommitInboxRecordsRequest) error
 
 	modelPolicy *modelpolicy.Manager
 	// researchChildCalls spaces every research child's model calls on

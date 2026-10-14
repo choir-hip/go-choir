@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // ogKindSourceSchedule is one Autopaper source's poll schedule on the
@@ -72,6 +73,15 @@ type SourceSchedule struct {
 	Totals              SourcePollTotals  `json:"totals"`
 	Recent              []SourcePollUsage `json:"recent,omitempty"`
 	UpdatedAt           time.Time         `json:"updated_at"`
+	// PendingArrivals are new captures whose arrival record failed to
+	// append, oldest first (L2a A5, defect 2). They are data, not an
+	// obligation: the next poll's arrival names them first. A crash boot
+	// closes them; ArrivalsClosed counts captures closed unannounced (by a
+	// crash boot or the pending bound) and ArrivalsClosedReason says why
+	// the last were.
+	PendingArrivals      []types.CaptureArrival `json:"pending_arrivals,omitempty"`
+	ArrivalsClosed       int                    `json:"arrivals_closed,omitempty"`
+	ArrivalsClosedReason string                 `json:"arrivals_closed_reason,omitempty"`
 }
 
 // sourcePollErrorLimit bounds a poll's saved error text: the schedule keeps

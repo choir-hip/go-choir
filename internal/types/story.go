@@ -58,6 +58,12 @@ type CaptureArrival struct {
 	Title       string `json:"title,omitempty"`
 	URL         string `json:"url"`
 	PublishedAt string `json:"published_at,omitempty"`
+	// Language is the source's first language; Script is a guess from the
+	// item's own title and summary (han, kana, hangul, arabic, cyrillic,
+	// latin, other), so a mixed-language feed is not mislabelled (L2a A5,
+	// defect 5).
+	Language string `json:"language,omitempty"`
+	Script   string `json:"script,omitempty"`
 }
 
 // CaptureArrivalSystemAgentID is the provenance of a capture arrival

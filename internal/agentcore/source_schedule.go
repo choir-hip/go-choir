@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // The Autopaper source schedule (W1c,
@@ -155,6 +156,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 
 	started := time.Now().UTC()
 	usage := store.SourcePollUsage{At: started}
+	pendingAfter := sched.PendingArrivals
 	if rt.researchDeps == nil {
 		usage.Status, usage.Error = "error", "research dependencies are not configured"
 	} else {
@@ -169,10 +171,17 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 			usage.Status, usage.Error = "error", pollErr.Error()
 		}
 		// The poll's new captures reach management as one record (Cut 2
-		// 2b). A failed append loses only the announcement: the captures
-		// are in Store B, and the next poll's record carries its own.
-		if err := rt.appendCaptureArrival(ctx, ownerID, computerID, sched.SourceID, report.Captured); err != nil {
-			log.Printf("source schedule: %s: %v", sched.SourceID, err)
+		// 2b), after any the source still has pending, at most the poll's
+		// limit. Captures a failed append could not announce stay pending
+		// on the schedule for the next poll (L2a A5, defect 2).
+		limit := report.Limit
+		if limit <= 0 {
+			limit = researchtools.EffectivePollMaxItems(sched.MaxItems)
+		}
+		var arrivalErr error
+		pendingAfter, arrivalErr = rt.announceCaptures(ctx, ownerID, computerID, sched.SourceID, sched.PendingArrivals, report.Captured, limit)
+		if arrivalErr != nil {
+			log.Printf("source schedule: %s: %v; %d captures pending for the next poll", sched.SourceID, arrivalErr, len(pendingAfter))
 		}
 	}
 
@@ -184,6 +193,16 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 	}
 	live = live && sched.NextDue.Unix() == due.Due
 	sched.RecordPoll(usage)
+	// The pending list rides the schedule write below; if that write fails,
+	// the error is logged and returned as before, and the list is lost with
+	// it only when the store itself is down.
+	var dropped int
+	sched.PendingArrivals, dropped = boundPendingArrivals(pendingAfter)
+	if dropped > 0 {
+		sched.ArrivalsClosed += dropped
+		sched.ArrivalsClosedReason = "pending arrivals over the bound"
+		log.Printf("source schedule: %s: %d oldest pending captures closed unannounced (pending bound %d)", sched.SourceID, dropped, sourceArrivalPendingLimit)
+	}
 	now := time.Now().UTC()
 	interval := time.Duration(sched.IntervalSeconds) * time.Second
 	if interval < minSourcePollInterval {
@@ -202,12 +221,20 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		sched.ConsecutiveFailures = 0
 	}
 	sched.UpdatedAt = now
+	put := func() error {
+		err := rt.store.PutSourceSchedule(ctx, sched)
+		if err != nil && len(sched.PendingArrivals) > 0 {
+			log.Printf("source schedule: %s: %d pending captures not saved: %v", sched.SourceID, len(sched.PendingArrivals), err)
+		}
+		return err
+	}
 	if !live {
-		// Stopped or restarted while this poll ran: keep the usage, arm nothing.
-		return rt.store.PutSourceSchedule(ctx, sched)
+		// Stopped or restarted while this poll ran: keep the usage and the
+		// pending list, arm nothing.
+		return put()
 	}
 	sched.NextDue = now.Add(interval)
-	if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
+	if err := put(); err != nil {
 		return err
 	}
 	return rt.armSourcePoll(ctx, sched)
@@ -216,7 +243,11 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 // closeSourceSchedulesAfterCrash closes every active schedule at a crash
 // boot (owner rule, CLAUDE.md "Restarts End Work (Crash) Or Resume It").
 // The pre-boot wake is refused by the actor handler; this makes the closed
-// state visible. A planned boot closes nothing and its pending wake fires.
+// state visible. It also closes every schedule's pending arrivals (L2a A5,
+// defect 2) with the fate "interrupted by a restart": they are counted in
+// ArrivalsClosed and their ids logged, never announced after the crash. A
+// planned boot closes nothing; its pending wake fires and its pending
+// arrivals are named by that poll.
 func (rt *Runtime) closeSourceSchedulesAfterCrash(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
@@ -232,18 +263,41 @@ func (rt *Runtime) closeSourceSchedulesAfterCrash(ctx context.Context) {
 		return
 	}
 	for _, sched := range schedules {
-		if sched.State != store.SourceScheduleActive {
+		active, pending := sched.State == store.SourceScheduleActive, sched.PendingArrivals
+		if !active && len(pending) == 0 {
 			continue
 		}
-		sched.State, sched.StateReason = store.SourceScheduleInterruptedByRestart, sourceScheduleInterruptedWhy
-		sched.Generation++
-		sched.NextDue, sched.UpdatedAt = time.Time{}, time.Now().UTC()
+		if active {
+			sched.State, sched.StateReason = store.SourceScheduleInterruptedByRestart, sourceScheduleInterruptedWhy
+			sched.Generation++
+			sched.NextDue = time.Time{}
+		}
+		if len(pending) > 0 {
+			sched.PendingArrivals = nil
+			sched.ArrivalsClosed += len(pending)
+			sched.ArrivalsClosedReason = sourceScheduleInterruptedWhy
+		}
+		sched.UpdatedAt = time.Now().UTC()
 		if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
 			log.Printf("source schedule: crash boot: close %s: %v", sched.SourceID, err)
 			continue
 		}
-		log.Printf("source schedule: crash boot: %s closed: %s", sched.SourceID, sourceScheduleInterruptedWhy)
+		if active {
+			log.Printf("source schedule: crash boot: %s closed: %s", sched.SourceID, sourceScheduleInterruptedWhy)
+		}
+		if len(pending) > 0 {
+			log.Printf("source schedule: crash boot: %s: %d pending captures closed unannounced: %s: %v",
+				sched.SourceID, len(pending), sourceScheduleInterruptedWhy, arrivalIDs(pending))
+		}
 	}
+}
+
+func arrivalIDs(items []types.CaptureArrival) []string {
+	ids := make([]string, len(items))
+	for i, item := range items {
+		ids[i] = item.CaptureID
+	}
+	return ids
 }
 
 // sourceScheduleOverdueGrace is how long past its next poll an active
