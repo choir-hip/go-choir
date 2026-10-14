@@ -297,6 +297,63 @@ type snapshotResumer interface {
 	ResumeVMFromSnapshot(vmID string, cfg VMManagerConfig, issueCredential func() (string, error)) (*VMInstanceInfo, error)
 }
 
+// snapshotDiscarder is the optional S3 capability that drops memory
+// snapshots a computer can no longer use (design note items 44-47). A
+// stopped computer cold boots, so its snapshot is dead weight that also
+// holds a host-port reservation. Neither call blocks on a VM mid-operation.
+type snapshotDiscarder interface {
+	// DiscardSnapshot removes vmID's snapshot; true when files were removed.
+	DiscardSnapshot(vmID, reason string) bool
+	// SweepOrphanSnapshots removes every snapshot whose VM keep reports not
+	// hibernated, plus interrupted captures, and returns the removed paths.
+	SweepOrphanSnapshots(keep func(vmID string) bool) []string
+}
+
+// discardStoppedSnapshotLocked drops the memory snapshot of a computer that
+// is now stopped. It must not rely on the manager's StopVM: that is not
+// called for a hibernated computer the manager no longer tracks (after a
+// vmctl restart) and returns early for one it does. Callers hold r.mu; the
+// discard never waits on the manager's per-VM operation lock.
+func (r *OwnershipRegistry) discardStoppedSnapshotLocked(own *VMOwnership, reason string) {
+	if own == nil || r.vmManager == nil {
+		return
+	}
+	if discarder, ok := r.vmManager.(snapshotDiscarder); ok && discarder != nil {
+		if discarder.DiscardSnapshot(own.VMID, reason) {
+			log.Printf("vmctl: discarded memory snapshot of stopped computer %s (VM %s, %s)", own.ComputerID, own.VMID, reason)
+		}
+	}
+}
+
+// SweepOrphanSnapshots runs once at vmctl start, after the ownership
+// registry is loaded and the manager is wired: it removes the memory
+// snapshot of every VM whose ownership is not hibernated (held or not), and
+// interrupted captures. It refuses to run unless ownerships were read from
+// the durable file (design note item 46).
+func (r *OwnershipRegistry) SweepOrphanSnapshots() []string {
+	r.mu.RLock()
+	mgr := r.vmManager
+	loaded := r.persistenceLoaded
+	hibernated := make(map[string]bool, len(r.ownerships))
+	for _, own := range r.ownerships {
+		if own != nil && own.State == VMStateHibernated {
+			hibernated[own.VMID] = true
+		}
+	}
+	r.mu.RUnlock()
+	discarder, ok := mgr.(snapshotDiscarder)
+	if !ok || discarder == nil {
+		return nil
+	}
+	if !loaded {
+		log.Printf("vmctl: snapshot sweep skipped: ownerships were not loaded from a durable registry file")
+		return nil
+	}
+	removed := discarder.SweepOrphanSnapshots(func(vmID string) bool { return hibernated[vmID] })
+	log.Printf("vmctl: snapshot sweep removed %d orphaned snapshot path(s); kept %d hibernated computer(s)", len(removed), len(hibernated))
+	return removed
+}
+
 type vmGatewayTokenReader interface {
 	ReadGatewayToken(vmID string) (string, error)
 }
@@ -456,6 +513,10 @@ type OwnershipRegistry struct {
 	// Firecracker data disks live under the VM manager state dir; this file is
 	// the durable routing index that lets vmctl reattach to those disks.
 	persistencePath string
+	// persistenceLoaded records that ownerships were read from the durable
+	// file. The snapshot start sweep runs only then: an empty in-memory
+	// registry would make every hibernated computer's snapshot look orphaned.
+	persistenceLoaded bool
 
 	// recoveryAdmission is the durable typed recovery breaker. It is separate
 	// from lifecycle state: conditions survive restarts and gate every
@@ -575,6 +636,7 @@ func (r *OwnershipRegistry) loadLocked() error {
 		maxEpoch = state.EpochCounter
 	}
 	r.epochCounter = maxEpoch
+	r.persistenceLoaded = true
 	log.Printf("vmctl: loaded %d persisted ownership(s) from %s", len(r.vmByID), r.persistencePath)
 	return nil
 }
@@ -1832,6 +1894,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				log.Printf("vmctl: computer %s is under maintenance hold; refusing auto-start on resolve", pending.ComputerID)
 				if own.State != VMStateStopped {
 					own.State = VMStateStopped
+					r.discardStoppedSnapshotLocked(own, "held_stopped")
 				}
 				r.pendingWaiters[key] = nil
 				r.saveLocked()
@@ -2475,6 +2538,7 @@ func (r *OwnershipRegistry) StopVMForDesktop(userID, desktopID string) error {
 
 	own.State = VMStateStopped
 	own.LastActiveAt = time.Now()
+	r.discardStoppedSnapshotLocked(own, "stopped")
 	r.saveLocked()
 	log.Printf("vmctl: stopped VM %s for user %s desktop %s", own.VMID, userID, own.DesktopID)
 	return nil
@@ -2524,6 +2588,7 @@ func (r *OwnershipRegistry) RemoveOwnershipForDesktop(userID, desktopID string) 
 	}
 
 	own.State = VMStateStopped
+	r.discardStoppedSnapshotLocked(own, "ownership_removed")
 	delete(r.ownerships, key)
 	delete(r.vmByID, own.VMID)
 	r.saveLocked()
@@ -2980,6 +3045,7 @@ func (r *OwnershipRegistry) LogoutVMForDesktop(userID, desktopID string) error {
 	own.State = VMStateStopped
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = "logout"
+	r.discardStoppedSnapshotLocked(own, "logout")
 	r.saveLocked()
 	log.Printf("vmctl: stopped VM %s for user %s desktop %s (reason=logout)", own.VMID, userID, own.DesktopID)
 	return nil

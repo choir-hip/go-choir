@@ -103,6 +103,7 @@ func (r *OwnershipRegistry) markWedgedStopped(vmID string) {
 	if cur, ok := r.vmByID[vmID]; ok {
 		cur.State = VMStateStopped
 		cur.StoppedBy = stoppedByWedged
+		r.discardStoppedSnapshotLocked(cur, stoppedByWedged)
 		r.saveLocked()
 	}
 }

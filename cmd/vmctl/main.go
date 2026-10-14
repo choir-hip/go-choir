@@ -199,6 +199,10 @@ func main() {
 	} else {
 		log.Printf("vmctl: ComputerVersion route authority unavailable (VMCTL_ROUTE_DSN is not configured)")
 	}
+	// S3: drop memory snapshots of computers that are not hibernated (a
+	// stopped computer cold boots) and interrupted captures, before any
+	// computer is started or woken.
+	registry.SweepOrphanSnapshots()
 	if reattached := registry.ReattachManagedVMs(context.Background(), handler.AuthorizeComputerVersionRoute); reattached > 0 {
 		log.Printf("vmctl: route-authorized reattach adopted %d managed VM(s)", reattached)
 	}
@@ -386,6 +390,16 @@ func (a *vmManagerAdapter) ResumeVMFromSnapshot(vmID string, cfg vmctl.VMManager
 		return nil, err
 	}
 	return toVMInstanceInfo(inst), nil
+}
+
+// DiscardSnapshot implements the vmctl snapshotDiscarder capability.
+func (a *vmManagerAdapter) DiscardSnapshot(vmID, reason string) bool {
+	return a.mgr.DiscardSnapshot(vmID, reason)
+}
+
+// SweepOrphanSnapshots implements the vmctl snapshotDiscarder capability.
+func (a *vmManagerAdapter) SweepOrphanSnapshots(keep func(vmID string) bool) []string {
+	return a.mgr.SweepOrphanSnapshots(keep)
 }
 
 // HibernateTimeline implements the vmctl hibernateTimelineReader capability.
