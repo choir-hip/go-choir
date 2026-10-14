@@ -250,6 +250,7 @@ func TestPressureReclaimNeverTakesABusyComputer(t *testing.T) {
 	reg, now := hostCapacityRegistry(t, newProcessControlVMManager())
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{
 		Mode:                    PressureReclaimModeActive,
+		Signal:                  PressureReclaimSignalInstant,
 		MinIdle:                 time.Minute,
 		MinMemoryAvailableBytes: 4 << 30,
 		MaxCandidates:           5,

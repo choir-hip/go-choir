@@ -104,8 +104,12 @@ func main() {
 	if cfg, ok := pressureReclaimConfigFromEnv(); ok {
 		registry.SetPressureReclaimConfig(cfg)
 		idleSweeperEnabled = true
-		log.Printf("vmctl: pressure reclaim mode=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.MinIdle, cfg.MaxCandidates)
+		log.Printf("vmctl: pressure reclaim mode=%s signal=%s min_idle=%s max_candidates=%d", cfg.Mode, cfg.Signal, cfg.MinIdle, cfg.MaxCandidates)
 	}
+	admission := hostAdmissionConfigFromEnv()
+	registry.SetHostAdmissionConfig(admission)
+	log.Printf("vmctl: host admission mode=%s default_need_mib=%d min_need_mib=%d headroom_mib=%d settle=%s",
+		registry.HostAdmissionSummary().Mode, admission.DefaultNeedBytes>>20, admission.MinNeedBytes>>20, admission.HeadroomBytes>>20, admission.Settle)
 	if cfg, ok := retentionPruneConfigFromEnv(); ok {
 		registry.SetRetentionPruneConfig(cfg)
 		idleSweeperEnabled = true
@@ -210,6 +214,9 @@ func main() {
 		registry.StartIdleSweeper(context.Background(), idleSweepInterval, handler.AuthorizeComputerVersionRoute)
 		log.Printf("vmctl: route-gated idle sweeper interval set to %s", idleSweepInterval)
 	}
+	// The pressure monitor samples host pressure and VM memory; under the
+	// sustained signal it also runs the gated reclaim. Off with reclaim off.
+	registry.StartPressureMonitor(context.Background(), handler.AuthorizeComputerVersionRoute)
 	startUniversalWirePlatformComputer(registry, handler.AuthorizeComputerVersionRoute)
 
 	s := server.NewServer("vmctl", port)
@@ -361,6 +368,9 @@ func (a *vmManagerAdapter) SetVMOOMScoreAdj(vmID string, adj int) error {
 	return a.mgr.SetVMOOMScoreAdj(vmID, adj)
 }
 
+// VMResidentBytes implements vmctl's VM memory reader (measured admission).
+func (a *vmManagerAdapter) VMResidentBytes() map[string]uint64 { return a.mgr.VMResidentBytes() }
+
 func (a *vmManagerAdapter) CheckHealth(vmID string) (bool, error) {
 	return a.mgr.CheckHealth(vmID)
 }
@@ -483,7 +493,63 @@ func pressureReclaimConfigFromEnv() (vmctl.PressureReclaimConfig, bool) {
 	if v := os.Getenv("VM_STATE_DIR"); v != "" {
 		cfg.StateDir = v
 	}
+	// Sustained signal (default) or instant (rollback: today's single
+	// avg10 sample decides, up to MaxCandidates per pass).
+	if v := os.Getenv("VMCTL_PRESSURE_RECLAIM_SIGNAL"); v != "" {
+		cfg.Signal = v
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_MAX_MEMORY_SOME_AVG60"); v != "" {
+		if avg, err := strconv.ParseFloat(v, 64); err == nil && avg > 0 {
+			cfg.MaxMemorySomeAvg60 = avg
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_SUSTAINED_SAMPLES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.SustainedSamples = n
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_SAMPLE_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.SampleInterval = d
+		}
+	}
+	if v := os.Getenv("VMCTL_PRESSURE_RECLAIM_COOLDOWN"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.Cooldown = d
+		}
+	}
 	return cfg, true
+}
+
+// hostAdmissionConfigFromEnv reads start admission. Measured (default)
+// admits by each computer's last measured memory with reservations for
+// starts in flight; guest-size is the rollback (floor + the full guest).
+func hostAdmissionConfigFromEnv() vmctl.HostAdmissionConfig {
+	cfg := vmctl.DefaultHostAdmissionConfig()
+	if v := os.Getenv("VMCTL_ADMISSION_MODE"); v != "" {
+		cfg.Mode = v
+	}
+	mib := func(key string, dst *uint64) {
+		if v := os.Getenv(key); v != "" {
+			if n, err := strconv.ParseUint(v, 10, 64); err == nil {
+				*dst = n * 1024 * 1024
+			}
+		}
+	}
+	mib("VMCTL_ADMISSION_DEFAULT_NEED_MIB", &cfg.DefaultNeedBytes)
+	mib("VMCTL_ADMISSION_MIN_NEED_MIB", &cfg.MinNeedBytes)
+	mib("VMCTL_ADMISSION_HEADROOM_MIB", &cfg.HeadroomBytes)
+	if v := os.Getenv("VMCTL_ADMISSION_SETTLE"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.Settle = d
+		}
+	}
+	if v := os.Getenv("VMCTL_ADMISSION_INFLIGHT_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			cfg.InFlightTTL = d
+		}
+	}
+	return cfg
 }
 
 func retentionPruneConfigFromEnv() (vmctl.RetentionPruneConfig, bool) {

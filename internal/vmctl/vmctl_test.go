@@ -530,6 +530,7 @@ func TestOwnershipRegistry_StateDirPressureTriggersReclaimPlan(t *testing.T) {
 	reg.setGuestBusyProbeForTest(func(*VMOwnership) bool { return false })
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{
 		Mode:                      PressureReclaimModeDryRun,
+		Signal:                    PressureReclaimSignalInstant,
 		MinIdle:                   10 * time.Minute,
 		MinStateDirAvailableBytes: 10 * 1024 * 1024 * 1024,
 		MaxCandidates:             5,

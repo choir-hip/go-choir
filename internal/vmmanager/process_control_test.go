@@ -1,6 +1,7 @@
 package vmmanager
 
 import (
+	"os"
 	"testing"
 )
 
@@ -28,5 +29,41 @@ func TestReapUnmanagedVMRefusesTrackedRunningVM(t *testing.T) {
 	m.vms["vm-tracked"] = &VMInstance{Config: VMConfig{VMID: "vm-tracked"}, State: StateRunning}
 	if err := m.ReapUnmanagedVM("vm-tracked"); err == nil {
 		t.Fatal("reap of a tracked running VM succeeded")
+	}
+}
+
+// VMResidentBytes feeds vmctl's measured admission
+// (docs/reports/vm-density-limits-2026-10-14.md, lever L1). Ways it could
+// fail, written before the code: VmRSS is read in the wrong unit (kB, not
+// bytes); a status without VmRSS (a kernel thread, a zombie) reports a
+// bogus value instead of nothing; a process that exited between listing and
+// reading fails the whole reading; a VM with two Firecracker pids reports
+// one of them.
+func TestVMResidentBytesFromStatus(t *testing.T) {
+	status := map[int]string{
+		10: "Name:\tfirecracker\nVmPeak:\t 9000000 kB\nVmRSS:\t 1236992 kB\nRssAnon:\t 1200000 kB\n",
+		11: "Name:\tfirecracker\nVmRSS:\t    1024 kB\n",
+		12: "Name:\tfirecracker\nState:\tZ (zombie)\n",
+	}
+	read := func(pid int) (string, error) {
+		s, ok := status[pid]
+		if !ok {
+			return "", os.ErrNotExist
+		}
+		return s, nil
+	}
+	got := vmResidentBytesFrom(map[string][]int{
+		"vm-a":    {10, 11},
+		"vm-z":    {12},
+		"vm-gone": {13},
+	}, read)
+	if got["vm-a"] != (1236992+1024)*1024 {
+		t.Fatalf("vm-a = %d, want the sum of both pids in bytes", got["vm-a"])
+	}
+	if _, ok := got["vm-z"]; ok {
+		t.Fatalf("a status without VmRSS reported %d", got["vm-z"])
+	}
+	if _, ok := got["vm-gone"]; ok {
+		t.Fatalf("an exited process reported %d", got["vm-gone"])
 	}
 }

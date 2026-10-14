@@ -15,6 +15,23 @@ const (
 	PressureReclaimModeOff    = "off"
 	PressureReclaimModeDryRun = "dry-run"
 	PressureReclaimModeActive = "active"
+
+	// PressureReclaimSignalSustained reclaims only when memory is short and
+	// stalling for several consecutive samples: PSI memory some avg60 over
+	// MaxMemorySomeAvg60 AND MemAvailable under the floor, SustainedSamples
+	// in a row, none of them during or just after a hibernate's snapshot
+	// write. One reclaim in flight, one computer per reclaim, then a
+	// cool-down (docs/problems/pressure-reclaim-wedged-a-user-computer-2026-10-14.md).
+	PressureReclaimSignalSustained = "sustained"
+	// PressureReclaimSignalInstant is the rollback: one sample decides
+	// (avg10 over MaxMemorySomeAvg10 OR MemAvailable under the floor), up to
+	// MaxCandidates per pass, no cool-down. The behaviour before 2026-10-14.
+	PressureReclaimSignalInstant = "instant"
+
+	defaultMaxMemorySomeAvg60 = 5.0
+	defaultSustainedSamples   = 4
+	defaultPressureSample     = 15 * time.Second
+	defaultReclaimCooldown    = 3 * time.Minute
 )
 
 // PressureReclaimConfig controls pressure-aware reclaim. Dry-run mode samples
@@ -36,16 +53,37 @@ type PressureReclaimConfig struct {
 	MaxCandidates               int
 	StaleStateMinAge            time.Duration
 	MaxStateDeletes             int
+
+	// Signal selects how pressure becomes a reclaim: sustained (the
+	// default, also for an empty value) or instant (the rollback). See the
+	// PressureReclaimSignal constants.
+	Signal string
+	// MaxMemorySomeAvg60 is the sustained signal's PSI threshold.
+	MaxMemorySomeAvg60 float64
+	// SustainedSamples is how many consecutive qualifying samples the
+	// sustained signal needs.
+	SustainedSamples int
+	// SampleInterval is the pressure monitor's period. A streak whose newest
+	// sample is older than twice this is stale.
+	SampleInterval time.Duration
+	// Cooldown follows every hibernate (any reason): samples inside it do
+	// not count, and no reclaim starts. It covers the snapshot write and the
+	// PSI decay after it.
+	Cooldown time.Duration
 }
 
 // HostPressureSample is a single host resource-pressure observation.
 type HostPressureSample struct {
-	SampledAt                string  `json:"sampled_at"`
-	MemoryTotalBytes         uint64  `json:"memory_total_bytes,omitempty"`
-	MemoryAvailableBytes     uint64  `json:"memory_available_bytes,omitempty"`
-	MemoryAvailablePercent   float64 `json:"memory_available_percent,omitempty"`
-	MemorySomeAvg10          float64 `json:"memory_some_avg10,omitempty"`
-	MemoryFullAvg10          float64 `json:"memory_full_avg10,omitempty"`
+	SampledAt              string  `json:"sampled_at"`
+	MemoryTotalBytes       uint64  `json:"memory_total_bytes,omitempty"`
+	MemoryAvailableBytes   uint64  `json:"memory_available_bytes,omitempty"`
+	MemoryAvailablePercent float64 `json:"memory_available_percent,omitempty"`
+	MemorySomeAvg10        float64 `json:"memory_some_avg10,omitempty"`
+	MemoryFullAvg10        float64 `json:"memory_full_avg10,omitempty"`
+	MemorySomeAvg60        float64 `json:"memory_some_avg60,omitempty"`
+	// MemoryFloorBytes is the host memory floor this sample was judged
+	// against: max(MinMemoryAvailableBytes, MinMemoryAvailablePercent).
+	MemoryFloorBytes         uint64  `json:"memory_floor_bytes,omitempty"`
 	CPUSomeAvg10             float64 `json:"cpu_some_avg10,omitempty"`
 	CPUFullAvg10             float64 `json:"cpu_full_avg10,omitempty"`
 	IOSomeAvg10              float64 `json:"io_some_avg10,omitempty"`
@@ -64,12 +102,18 @@ type HostPressureSample struct {
 	// is the subset a hibernation can relieve (memory, state-dir disk): a
 	// CPU or IO stall is reported, never answered by killing a guest
 	// (docs/reports/resource-efficiency-memory-assessment-2026-10-13.md, R3).
+	//
+	// Under the sustained signal ReclaimPressure means this one sample
+	// qualifies (avg60 over threshold and memory under the floor, or the
+	// state dir under its floor); a reclaim still needs the streak.
 	Pressure                       bool     `json:"pressure"`
 	ReclaimPressure                bool     `json:"reclaim_pressure"`
+	ReclaimSignal                  string   `json:"reclaim_signal,omitempty"`
 	Signals                        []string `json:"signals,omitempty"`
 	MemoryAvailableThresholdText   string   `json:"memory_available_threshold,omitempty"`
 	StateDirAvailableThresholdText string   `json:"state_dir_available_threshold,omitempty"`
 	MemoryPSIThresholdText         string   `json:"memory_psi_threshold,omitempty"`
+	MemoryPSI60ThresholdText       string   `json:"memory_psi60_threshold,omitempty"`
 	CPUPSIThresholdText            string   `json:"cpu_psi_threshold,omitempty"`
 	IOPSIThresholdText             string   `json:"io_psi_threshold,omitempty"`
 }
@@ -101,6 +145,7 @@ type PressureReclaimPlan struct {
 	Decision   string                       `json:"decision"`
 	Reason     string                       `json:"reason"`
 	Pressure   HostPressureSample           `json:"pressure"`
+	Sustained  *SustainedPressureState      `json:"sustained,omitempty"`
 	Inventory  PressureReclaimInventory     `json:"inventory"`
 	Candidates []PressureReclaimCandidate   `json:"candidates,omitempty"`
 	Config     PressureReclaimConfigSummary `json:"config"`
@@ -119,6 +164,11 @@ type PressureReclaimConfigSummary struct {
 	StaleStateMinAgeSeconds     int64   `json:"stale_state_min_age_seconds,omitempty"`
 	MaxStateDeletes             int     `json:"max_state_deletes,omitempty"`
 	StateDir                    string  `json:"state_dir,omitempty"`
+	Signal                      string  `json:"signal,omitempty"`
+	MaxMemorySomeAvg60          float64 `json:"max_memory_some_avg60,omitempty"`
+	SustainedSamples            int     `json:"sustained_samples,omitempty"`
+	SampleIntervalSeconds       int64   `json:"sample_interval_seconds,omitempty"`
+	CooldownSeconds             int64   `json:"cooldown_seconds,omitempty"`
 }
 
 type hostPressureSampler func(PressureReclaimConfig) HostPressureSample
@@ -138,6 +188,11 @@ func DefaultPressureReclaimConfig() PressureReclaimConfig {
 		MaxCandidates:               5,
 		StaleStateMinAge:            6 * time.Hour,
 		MaxStateDeletes:             5,
+		Signal:                      PressureReclaimSignalSustained,
+		MaxMemorySomeAvg60:          defaultMaxMemorySomeAvg60,
+		SustainedSamples:            defaultSustainedSamples,
+		SampleInterval:              defaultPressureSample,
+		Cooldown:                    defaultReclaimCooldown,
 	}
 }
 
@@ -168,7 +223,38 @@ func normalizePressureReclaimConfig(cfg PressureReclaimConfig) PressureReclaimCo
 	if strings.TrimSpace(cfg.StateDir) == "" {
 		cfg.StateDir = "/var/lib/go-choir/vm-state"
 	}
+	cfg.Signal = strings.TrimSpace(strings.ToLower(cfg.Signal))
+	switch cfg.Signal {
+	case PressureReclaimSignalInstant, "legacy", "avg10":
+		cfg.Signal = PressureReclaimSignalInstant
+	default:
+		cfg.Signal = PressureReclaimSignalSustained
+	}
+	if cfg.MaxMemorySomeAvg60 <= 0 {
+		cfg.MaxMemorySomeAvg60 = defaultMaxMemorySomeAvg60
+	}
+	if cfg.SustainedSamples <= 0 {
+		cfg.SustainedSamples = defaultSustainedSamples
+	}
+	if cfg.SampleInterval <= 0 {
+		cfg.SampleInterval = defaultPressureSample
+	}
+	if cfg.Cooldown <= 0 {
+		cfg.Cooldown = defaultReclaimCooldown
+	}
 	return cfg
+}
+
+// memoryFloorBytes is the host memory floor: the larger of the byte and
+// percent thresholds. Reclaim and admission share it.
+func memoryFloorBytes(cfg PressureReclaimConfig, totalBytes uint64) uint64 {
+	floor := cfg.MinMemoryAvailableBytes
+	if cfg.MinMemoryAvailablePercent > 0 && totalBytes > 0 {
+		if pct := uint64(float64(totalBytes) * cfg.MinMemoryAvailablePercent / 100); pct > floor {
+			floor = pct
+		}
+	}
+	return floor
 }
 
 func pressureConfigSummary(cfg PressureReclaimConfig) PressureReclaimConfigSummary {
@@ -185,6 +271,11 @@ func pressureConfigSummary(cfg PressureReclaimConfig) PressureReclaimConfigSumma
 		StaleStateMinAgeSeconds:     int64(cfg.StaleStateMinAge.Seconds()),
 		MaxStateDeletes:             cfg.MaxStateDeletes,
 		StateDir:                    cfg.StateDir,
+		Signal:                      cfg.Signal,
+		MaxMemorySomeAvg60:          cfg.MaxMemorySomeAvg60,
+		SustainedSamples:            cfg.SustainedSamples,
+		SampleIntervalSeconds:       int64(cfg.SampleInterval.Seconds()),
+		CooldownSeconds:             int64(cfg.Cooldown.Seconds()),
 	}
 }
 
@@ -201,11 +292,12 @@ func sampleHostPressure(cfg PressureReclaimConfig) HostPressureSample {
 			sample.MemoryAvailablePercent = (float64(available) / float64(total)) * 100
 		}
 	}
-	if some, full, err := readPressureAvg10("/proc/pressure/memory"); err != nil {
+	if avg, err := readPressureAverages("/proc/pressure/memory"); err != nil {
 		errs = append(errs, err.Error())
 	} else {
-		sample.MemorySomeAvg10 = some
-		sample.MemoryFullAvg10 = full
+		sample.MemorySomeAvg10 = avg.some10
+		sample.MemoryFullAvg10 = avg.full10
+		sample.MemorySomeAvg60 = avg.some60
 	}
 	if some, full, err := readPressureAvg10("/proc/pressure/cpu"); err != nil {
 		errs = append(errs, err.Error())
@@ -256,6 +348,9 @@ func annotatePressure(sample *HostPressureSample, cfg PressureReclaimConfig) {
 	sample.MemoryAvailableThresholdText = ""
 	sample.StateDirAvailableThresholdText = ""
 	sample.MemoryPSIThresholdText = ""
+	sample.MemoryPSI60ThresholdText = ""
+	sample.ReclaimSignal = ""
+	sample.MemoryFloorBytes = memoryFloorBytes(cfg, sample.MemoryTotalBytes)
 	sample.CPUPSIThresholdText = ""
 	sample.IOPSIThresholdText = ""
 	if cfg.MinMemoryAvailableBytes > 0 {
@@ -320,6 +415,19 @@ func annotatePressure(sample *HostPressureSample, cfg PressureReclaimConfig) {
 	}
 	sample.Pressure = len(sample.Signals) > 0
 	sample.ReclaimPressure = sample.MemoryPressure || sample.StateDirPressure
+	switch cfg.Signal {
+	case PressureReclaimSignalSustained:
+		// Only a shortage that stalls counts: memory under the floor AND
+		// avg60 over its threshold. An avg10 burst with memory to spare
+		// (a du, a nix build, our own snapshot write) never does.
+		sample.ReclaimSignal = PressureReclaimSignalSustained
+		sample.MemoryPSI60ThresholdText = fmt.Sprintf("memory_some_avg60>%.2f&&available_bytes<%d", cfg.MaxMemorySomeAvg60, sample.MemoryFloorBytes)
+		belowFloor := sample.MemoryAvailableBytes > 0 && sample.MemoryAvailableBytes < sample.MemoryFloorBytes
+		memoryQualifies := belowFloor && sample.MemorySomeAvg60 > cfg.MaxMemorySomeAvg60
+		sample.ReclaimPressure = memoryQualifies || sample.StateDirPressure
+	case PressureReclaimSignalInstant:
+		sample.ReclaimSignal = PressureReclaimSignalInstant
+	}
 }
 
 func readMemInfo() (totalBytes uint64, availableBytes uint64, err error) {
@@ -356,9 +464,19 @@ func readMemInfo() (totalBytes uint64, availableBytes uint64, err error) {
 }
 
 func readPressureAvg10(path string) (some float64, full float64, err error) {
+	avg, err := readPressureAverages(path)
+	return avg.some10, avg.full10, err
+}
+
+type pressureAverages struct {
+	some10, full10, some60 float64
+}
+
+func readPressureAverages(path string) (pressureAverages, error) {
+	var avg pressureAverages
 	file, err := os.Open(path)
 	if err != nil {
-		return 0, 0, fmt.Errorf("read %s: %w", path, err)
+		return avg, fmt.Errorf("read %s: %w", path, err)
 	}
 	defer func() { _ = file.Close() }()
 
@@ -368,24 +486,26 @@ func readPressureAvg10(path string) (some float64, full float64, err error) {
 		if len(fields) == 0 {
 			continue
 		}
-		value := parseAvg10(fields[1:])
 		switch fields[0] {
 		case "some":
-			some = value
+			avg.some10 = parseAvg(fields[1:], "avg10")
+			avg.some60 = parseAvg(fields[1:], "avg60")
 		case "full":
-			full = value
+			avg.full10 = parseAvg(fields[1:], "avg10")
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return 0, 0, fmt.Errorf("scan %s: %w", path, err)
+		return avg, fmt.Errorf("scan %s: %w", path, err)
 	}
-	return some, full, nil
+	return avg, nil
 }
 
-func parseAvg10(fields []string) float64 {
+func parseAvg10(fields []string) float64 { return parseAvg(fields, "avg10") }
+
+func parseAvg(fields []string, name string) float64 {
 	for _, field := range fields {
 		key, value, ok := strings.Cut(field, "=")
-		if !ok || key != "avg10" {
+		if !ok || key != name {
 			continue
 		}
 		parsed, err := strconv.ParseFloat(value, 64)
@@ -502,12 +622,24 @@ func (r *OwnershipRegistry) pressureReclaimPlan(busy func(*VMOwnership) bool) Pr
 		plan.Reason = "no unprotected active ownerships are eligible for pressure reclaim"
 		return plan
 	}
-	if sample.ReclaimPressure && cfg.Mode == PressureReclaimModeActive {
+	reclaimNow := sample.ReclaimPressure
+	if cfg.Signal == PressureReclaimSignalSustained {
+		// The decision is the monitor's window, not this one sample.
+		st := r.SustainedPressureState()
+		plan.Sustained = &st
+		reclaimNow = st.Sustained
+	}
+	if reclaimNow && cfg.Mode == PressureReclaimModeActive {
+		if plan.Sustained != nil && plan.Sustained.Hold != "" {
+			plan.Decision = "hold"
+			plan.Reason = "sustained host pressure; reclaim waits: " + plan.Sustained.Hold
+			return plan
+		}
 		plan.Decision = "reclaim"
 		plan.Reason = "host pressure crossed active threshold; eligible VMs may be hibernated"
 		return plan
 	}
-	if sample.ReclaimPressure {
+	if reclaimNow {
 		plan.Decision = "would_reclaim"
 		plan.Reason = "host pressure crossed dry-run threshold; no VM hibernated"
 		return plan
@@ -516,6 +648,9 @@ func (r *OwnershipRegistry) pressureReclaimPlan(busy func(*VMOwnership) bool) Pr
 	plan.Reason = "host pressure below reclaim threshold"
 	if sample.Pressure {
 		plan.Reason = "cpu or io stall reported; reclaim answers memory and disk pressure only"
+	}
+	if plan.Sustained != nil && plan.Sustained.Streak > 0 {
+		plan.Reason = fmt.Sprintf("memory short and stalling, not yet sustained (streak %d/%d)", plan.Sustained.Streak, plan.Sustained.RequiredSamples)
 	}
 	return plan
 }
@@ -535,17 +670,25 @@ func (r *OwnershipRegistry) pressureReclaimActionCandidates() []pressureCandidat
 	if cfg.Mode != PressureReclaimModeActive {
 		return nil
 	}
-	if sampler == nil {
-		sampler = sampleHostPressure
-	}
-	sample := sampler(cfg)
-	annotatePressure(&sample, cfg)
-	if !sample.ReclaimPressure {
-		return nil
+	limit := cfg.MaxCandidates
+	if cfg.Signal == PressureReclaimSignalSustained {
+		// The monitor's window decides, and one computer per reclaim.
+		if !r.SustainedPressureState().Sustained {
+			return nil
+		}
+		limit = 1
+	} else {
+		if sampler == nil {
+			sampler = sampleHostPressure
+		}
+		sample := sampler(cfg)
+		annotatePressure(&sample, cfg)
+		if !sample.ReclaimPressure {
+			return nil
+		}
 	}
 
 	ranked := rankPressureCandidates(ownerships, cfg, warmnessPolicy, r.now(), r.guestBusy())
-	limit := cfg.MaxCandidates
 	if limit > len(ranked) {
 		limit = len(ranked)
 	}

@@ -121,6 +121,59 @@ func setOOMScoreAdj(pid, adj int) error {
 	return os.WriteFile(fmt.Sprintf("/proc/%d/oom_score_adj", pid), []byte(strconv.Itoa(adj)), 0o644)
 }
 
+// VMResidentBytes maps each live VM to the resident memory (VmRSS) of its
+// Firecracker processes, in bytes. vmctl measures each computer's use with
+// it, for admission by measured use (internal/vmctl/host_admission.go).
+func (m *Manager) VMResidentBytes() map[string]uint64 {
+	return vmResidentBytesFrom(m.LiveFirecrackerVMs(), func(pid int) (string, error) {
+		data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "status"))
+		return string(data), err
+	})
+}
+
+// vmResidentBytesFrom sums VmRSS over each VM's pids. A pid that exited or
+// reports no VmRSS contributes nothing; a VM with no reading is left out.
+func vmResidentBytesFrom(live map[string][]int, readStatus func(pid int) (string, error)) map[string]uint64 {
+	out := make(map[string]uint64, len(live))
+	for vmID, pids := range live {
+		var total uint64
+		found := false
+		for _, pid := range pids {
+			status, err := readStatus(pid)
+			if err != nil {
+				continue
+			}
+			if kib, ok := statusVmRSSKiB(status); ok {
+				total += kib * 1024
+				found = true
+			}
+		}
+		if found {
+			out[vmID] = total
+		}
+	}
+	return out
+}
+
+func statusVmRSSKiB(status string) (uint64, bool) {
+	for _, line := range strings.Split(status, "\n") {
+		rest, ok := strings.CutPrefix(line, "VmRSS:")
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(rest)
+		if len(fields) == 0 {
+			return 0, false
+		}
+		kib, err := strconv.ParseUint(fields[0], 10, 64)
+		if err != nil {
+			return 0, false
+		}
+		return kib, true
+	}
+	return 0, false
+}
+
 func applyLaunchOOMScoreAdj(vmID string, pid int) {
 	if err := setOOMScoreAdj(pid, launchOOMScoreAdj); err != nil {
 		log.Printf("vmmanager: set launch oom_score_adj for VM %s pid %d: %v", vmID, pid, err)

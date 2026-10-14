@@ -152,6 +152,13 @@ type VMOwnership struct {
 	// PlatformBaseRef is the base platform release commit or version this computer
 	// was provisioned from or last cleanly rebased against.
 	PlatformBaseRef string `json:"platform_base_ref,omitempty"`
+
+	// MemoryPeakRSSBytes is the highest Firecracker resident memory vmctl
+	// measured during this computer's most recent start (boot or wake).
+	// Admission estimates the next start from it (host_admission.go).
+	MemoryPeakRSSBytes uint64 `json:"memory_peak_rss_bytes,omitempty"`
+	// MemoryMeasuredAt is when MemoryPeakRSSBytes was last sampled.
+	MemoryMeasuredAt string `json:"memory_measured_at,omitempty"`
 }
 
 // IsReady returns true if the VM is in a state that can serve routed requests.
@@ -482,6 +489,14 @@ type OwnershipRegistry struct {
 	// VM state until a later mission explicitly enables active reclaim.
 	pressureReclaim PressureReclaimConfig
 	pressureSampler hostPressureSampler
+	// pressureWin is the pressure monitor's sustained-signal window and
+	// the hibernate in-flight/cool-down bookkeeping (pressure_sustained.go).
+	pressureWin pressureWindow
+
+	// hostAdmission and admissionLedger admit starts by measured use, with
+	// reservations for starts in flight (host_admission.go).
+	hostAdmission   HostAdmissionConfig
+	admissionLedger hostMemoryLedger
 
 	// retentionPrune controls durable VM-state deletion for explicitly
 	// disposable computers such as staging Playwright accounts.
@@ -551,6 +566,7 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 		idleTimeout:                0, // no idle timeout by default
 		pressureReclaim:            DefaultPressureReclaimConfig(),
 		pressureSampler:            sampleHostPressure,
+		hostAdmission:              DefaultHostAdmissionConfig(),
 		retentionPrune:             DefaultRetentionPruneConfig(),
 		retentionUserEmails:        make(map[string]string),
 		warmnessPolicy:             DefaultWarmnessPolicyConfig(),
@@ -1345,15 +1361,27 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 			RetryAfterSeconds: guestReattachRetryAfterSeconds,
 		}
 	}
+	var ticket *admissionTicket
 	if mgr.GetVM(own.VMID) == nil {
 		// Booting adds a VM; recovering a tracked one replaces it in place.
 		r.mu.RLock()
 		class := warmnessClassForOwnership(own, r.warmnessPolicy)
 		r.mu.RUnlock()
-		if err := r.admitHostMemory(class); err != nil {
+		admitted, err := r.admitHostMemory(own, class)
+		if err != nil {
 			return nil, err
 		}
+		ticket = admitted
 	}
+	info, err := r.startAdmittedVM(own, mgr)
+	// The reservation ends with the start: released on failure, settling
+	// against measured memory on success (host_admission.go).
+	ticket.finish(err == nil && info != nil)
+	return info, err
+}
+
+// startAdmittedVM is startExistingVM after host memory admission.
+func (r *OwnershipRegistry) startAdmittedVM(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if err := r.admitRecoveryStart(own, false); err != nil {
 		return nil, err
 	}
@@ -2002,21 +2030,27 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
 	}
 
-	// A new computer adds a VM: refuse it before minting anything when the
-	// host is below its memory floor (host_capacity.go).
-	if r.vmManager != nil {
-		class := warmnessClassForOwnership(&VMOwnership{UserID: userID, DesktopID: desktopID, Kind: VMKindInteractive}, r.warmnessPolicy)
-		if err := r.admitHostMemoryLocked(class); err != nil {
-			r.mu.Unlock()
-			return nil, err
-		}
-	}
-
 	// We are the first caller for this user/desktop pair. Create a new VM.
 	// The boot-epoch reservation is deliberately deferred past the recovery
 	// admission gate below: a deterministically refused start must not allocate
 	// any realization resource, epoch included.
 	vmID := generateVMID()
+
+	// A new computer adds a VM: refuse it before minting anything when the
+	// host would fall below its memory floor, counting the starts already in
+	// flight (host_admission.go). The reservation ends with this boot.
+	booted := false
+	if r.vmManager != nil {
+		candidate := &VMOwnership{VMID: vmID, UserID: userID, DesktopID: desktopID, Kind: VMKindInteractive,
+			ComputerID: stableComputerID(userID, desktopID, "")}
+		class := warmnessClassForOwnership(candidate, r.warmnessPolicy)
+		ticket, err := r.admitHostMemoryLocked(candidate, class)
+		if err != nil {
+			r.mu.Unlock()
+			return nil, err
+		}
+		defer func() { ticket.finish(booted) }()
+	}
 	mgr := r.vmManager
 	epoch := r.nextEpoch()
 
@@ -2138,6 +2172,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 		own.ComputerURL = info.HostURL
 		own.Epoch = info.Epoch
 		r.mu.Unlock()
+		booted = true
 		r.clearRecoveryCondition(own)
 		log.Printf("vmctl: booted Firecracker VM %s for user %s at %s (epoch=%d)", vmID, userID, info.HostURL, info.Epoch)
 	}
@@ -2695,11 +2730,13 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 	if mgr := r.vmManager; mgr != nil {
 		vmID, epoch := own.VMID, own.Epoch
 		r.refreshing[key] = struct{}{}
+		r.noteHibernateStartLocked()
 		r.mu.Unlock()
 		if err := mgr.HibernateVM(vmID); err != nil {
 			log.Printf("vmctl: manager hibernate of VM %s: %v", vmID, err)
 		}
 		r.mu.Lock()
+		r.noteHibernateEndLocked()
 		delete(r.refreshing, key)
 		own, ok = r.ownerships[key]
 		if !ok || own.VMID != vmID || own.Epoch != epoch {
@@ -2726,8 +2763,18 @@ func normalizeStopReason(reason string) string {
 }
 
 // ReclaimPressureVMs hibernates bounded eligible computers when active
-// pressure reclaim is enabled and the host is currently under pressure.
+// pressure reclaim is enabled and the host is under pressure. Under the
+// sustained signal (pressure_sustained.go) that is one computer, one reclaim
+// at a time, after a sustained shortage and outside the hibernate
+// cool-down; under the instant signal (the rollback) one sample decides and
+// up to MaxCandidates go per pass.
 func (r *OwnershipRegistry) ReclaimPressureVMs(ctx context.Context, guard ComputerVersionRouteGuard) int {
+	r.mu.RLock()
+	cfg := normalizePressureReclaimConfig(r.pressureReclaim)
+	r.mu.RUnlock()
+	if cfg.Signal == PressureReclaimSignalSustained {
+		return r.reclaimSustained(ctx, guard, cfg)
+	}
 	candidates := r.pressureReclaimActionCandidates()
 	reclaimed := 0
 	for _, candidate := range candidates {
@@ -3134,6 +3181,11 @@ func (r *OwnershipRegistry) checkIdleOwnerships(busy func(*VMOwnership) bool) []
 		}
 		pressure = sampler(pressureCfg)
 		annotatePressure(&pressure, pressureCfg)
+		if pressureCfg.Signal == PressureReclaimSignalSustained {
+			// The keepalive drops only on a sustained shortage, never on
+			// one burst during a sweep.
+			pressure.ReclaimPressure = r.SustainedPressureState().Sustained
+		}
 	}
 
 	now := time.Now()

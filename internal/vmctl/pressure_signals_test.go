@@ -19,7 +19,10 @@ func signalRegistry(t *testing.T, sample HostPressureSample) *OwnershipRegistry 
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.setGuestBusyProbeForTest(func(*VMOwnership) bool { return false })
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{
-		Mode:                      PressureReclaimModeActive,
+		Mode: PressureReclaimModeActive,
+		// These pin how one sample is classified; the sustained window over
+		// samples is pinned in pressure_sustained_test.go.
+		Signal:                    PressureReclaimSignalInstant,
 		MinIdle:                   10 * time.Minute,
 		MinMemoryAvailableBytes:   1024,
 		MinMemoryAvailablePercent: 10,

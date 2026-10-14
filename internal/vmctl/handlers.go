@@ -66,6 +66,9 @@ type vmctlHealthResponse struct {
 	// Processes is the latest reconcile pass: live guests outside the
 	// registry (waiting to reattach), wedged stops, orphan reaps.
 	Processes VMProcessReconcileResult `json:"processes"`
+	// Admission is the start admission ledger: reservations for starts in
+	// flight and the recent decisions with their inputs.
+	Admission HostAdmissionSummary `json:"admission"`
 }
 
 // resolveRequest is the JSON payload for POST /internal/vmctl/resolve.
@@ -109,6 +112,10 @@ type ownershipResponse struct {
 	ConstructionDiskReceiptID string                           `json:"construction_disk_receipt_id,omitempty"`
 	DivergenceStatus          string                           `json:"divergence_status,omitempty"`
 	PlatformBaseRef           string                           `json:"platform_base_ref,omitempty"`
+	// MemoryPeakRSSBytes is the peak measured memory of the last start;
+	// admission estimates the next start from it.
+	MemoryPeakRSSBytes uint64 `json:"memory_peak_rss_bytes,omitempty"`
+	MemoryMeasuredAt   string `json:"memory_measured_at,omitempty"`
 }
 
 type reclaimResponse struct {
@@ -176,6 +183,7 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		Reclaim:         h.registry.PressureReclaimPlanSeen(),
 		Warmness:        h.registry.WarmnessSummary(idleEligible),
 		Processes:       h.registry.LastProcessReconcile(),
+		Admission:       h.registry.HostAdmissionSummary(),
 	})
 }
 
@@ -439,19 +447,21 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		dataImage = dataImageResponseFromStats(stats)
 	}
 	writeVMCTLJSON(w, http.StatusOK, ownershipResponse{
-		VMID:          own.VMID,
-		ComputerID:    stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
-		UserID:        own.UserID,
-		DesktopID:     own.DesktopID,
-		Kind:          own.Kind,
-		WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
-		ComputerURL:   own.ComputerURL,
-		State:         string(own.State),
-		CreatedAt:     own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		LastActiveAt:  own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
-		Epoch:         own.Epoch,
-		StoppedBy:     own.StoppedBy,
-		DataImage:     dataImage,
+		VMID:               own.VMID,
+		ComputerID:         stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
+		UserID:             own.UserID,
+		DesktopID:          own.DesktopID,
+		Kind:               own.Kind,
+		WarmnessClass:      string(h.registry.WarmnessClassForOwnership(own)),
+		ComputerURL:        own.ComputerURL,
+		State:              string(own.State),
+		CreatedAt:          own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		LastActiveAt:       own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
+		Epoch:              own.Epoch,
+		StoppedBy:          own.StoppedBy,
+		DataImage:          dataImage,
+		MemoryPeakRSSBytes: own.MemoryPeakRSSBytes,
+		MemoryMeasuredAt:   own.MemoryMeasuredAt,
 	})
 }
 
@@ -952,6 +962,8 @@ func (h *Handler) listOwnershipResponses(ctx context.Context) ([]ownershipRespon
 			ConstructionDiskReceiptID: diskReceiptID,
 			DivergenceStatus:          divergenceStatus,
 			PlatformBaseRef:           own.PlatformBaseRef,
+			MemoryPeakRSSBytes:        own.MemoryPeakRSSBytes,
+			MemoryMeasuredAt:          own.MemoryMeasuredAt,
 		})
 	}
 	return result, nil

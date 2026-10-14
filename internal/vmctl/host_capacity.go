@@ -243,50 +243,8 @@ func (r *OwnershipRegistry) reapUnmanagedLocked(own *VMOwnership) error {
 	return nil
 }
 
-// admitHostMemory refuses a start that would add a VM to a host whose
-// available memory would fall below the pressure floor. Protected computers
-// are always admitted. Only active pressure reclaim enables it.
-func (r *OwnershipRegistry) admitHostMemory(class WarmnessClass) error {
-	r.mu.RLock()
-	err := r.admitHostMemoryLocked(class)
-	r.mu.RUnlock()
-	return err
-}
-
-func (r *OwnershipRegistry) admitHostMemoryLocked(class WarmnessClass) error {
-	if protectedWarmnessClass(class) {
-		return nil
-	}
-	cfg := normalizePressureReclaimConfig(r.pressureReclaim)
-	if cfg.Mode != PressureReclaimModeActive {
-		return nil
-	}
-	sampler := r.pressureSampler
-	if sampler == nil {
-		sampler = sampleHostPressure
-	}
-	sample := sampler(cfg)
-	if sample.MemoryAvailableBytes == 0 {
-		return nil // unknown; never refuse on a missing sample
-	}
-	floor := cfg.MinMemoryAvailableBytes
-	if cfg.MinMemoryAvailablePercent > 0 && sample.MemoryTotalBytes > 0 {
-		if pct := uint64(float64(sample.MemoryTotalBytes) * cfg.MinMemoryAvailablePercent / 100); pct > floor {
-			floor = pct
-		}
-	}
-	_, memMib := interactiveMachineShape()
-	need := uint64(memMib) * 1024 * 1024
-	if sample.MemoryAvailableBytes >= floor+need {
-		return nil
-	}
-	return &RecoveryRefusal{
-		Kind: RecoveryRefusalHostMemoryPressure,
-		Reason: fmt.Sprintf("host memory available %d MiB; a new computer needs %d MiB above the %d MiB floor",
-			sample.MemoryAvailableBytes>>20, need>>20, floor>>20),
-		RetryAfterSeconds: hostMemoryRetryAfterSeconds,
-	}
-}
+// admitHostMemory (start admission by measured use) lives in
+// host_admission.go.
 
 const guestReattachRetryAfterSeconds = 15
 

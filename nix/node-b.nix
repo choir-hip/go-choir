@@ -863,6 +863,16 @@ in
         "VMCTL_PRESSURE_MAX_CPU_SOME_AVG10=90.0"
         "VMCTL_PRESSURE_MAX_IO_SOME_AVG10=5.0"
         "VMCTL_PRESSURE_RECLAIM_MAX_CANDIDATES=5"
+        # Density quick tier (docs/problems/pressure-reclaim-wedged-a-user-
+        # computer-2026-10-14.md): reclaim only on a sustained shortage
+        # (memory some avg60 > 5 AND MemAvailable under the floor, 4 samples
+        # 15 s apart), one computer at a time, 3 min cool-down after any
+        # hibernate; avg10 and MAX_CANDIDATES above then only report. Admit
+        # starts by measured memory with reservations for starts in flight.
+        # Rollback: SIGNAL=instant and ADMISSION_MODE=guest-size restore the
+        # single-sample reclaim and the floor + 8 GiB admission.
+        "VMCTL_PRESSURE_RECLAIM_SIGNAL=sustained"
+        "VMCTL_ADMISSION_MODE=measured"
         # A proof-account computer busy longer than this (e.g. stuck
         # mid-apply) loses busy protection under host pressure.
         "VMCTL_STALE_STATE_MIN_AGE=6h"
