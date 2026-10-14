@@ -233,14 +233,24 @@ boundaries:
 now:
   status: working
   slice: >-
-    S1a build. S0 is done: the design note
-    (docs/reports/l2a-synthesis-intake-design-2026-10-14.md) was accepted
-    in round 2 with amendments R2-1 to R2-9 (e8c8fe57). A5, the intake
-    fixes, is building in a worktree (branch l2a-s1a-a5). Labels,
-    dispositions, Stories, the synthesis contract and the enable build on
-    top of A5 after it lands.
-  source_ref: e8c8fe57
-  deploy_identity: staging 6c6bc1aa
+    S2, prove. S1a is deployed (66fe0917, CI 38499660090, deployed
+    02:25:30 UTC 10-14): A5 (lossless per-poll limit, pending arrivals,
+    script and language on arrivals), the intake.labels setting, Jev
+    labels on arrival, the label view, choir.Stories, choir.Feed and
+    choir.Decline, the synthesis contract, the fixture registry entry,
+    search_wire_corpus fixed and the dead Qdrant dedup deleted. Intake is
+    off by default. The fixture run (acceptance action 1) started at
+    02:27:33 UTC on minted test computer
+    computer-00b7886133ccd87d0cecc7079b9d78ba (guest build 66fe0917),
+    intake.labels on, one fixture schedule, 10-minute interval, 90-minute
+    wait, scored by scripts/l2a_fixture_score.py against labels kept
+    outside the repo. Deviation from the design note, recorded here:
+    max_items is 9, not 27 or more, so the 27 fixture items span three
+    polls. That is stricter: it also tests lossless deferral and labels
+    across polls. Early read (02:41 UTC): 2 polls, 0 errors, 18 new
+    arrivals, 0 pending, 12 story documents opened.
+  source_ref: 4814f21f
+  deploy_identity: staging 66fe0917
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: L2a-1
@@ -296,10 +306,13 @@ now:
     lossless: items left over are taken on the next poll and recorded as
     skipped, never dropped; check this in S0.
   next_action: >-
-    Write the S0 design note (arrival labels, topic versus story
-    and the learned boundaries, addressing and spawn, dormancy, the
-    synthesis contract, the per-computer enable); panel round 2 on this
-    file and the note together
+    Read the fixture score (about 04:00 UTC). If it passes the bar
+    (exactly one story per event citing two or more languages and
+    outlets, merge recall at least 0.8, at most one false merge, no
+    undisposed captures, all 27 captured), enable intake.labels on the
+    paper after an idle refresh and measure the after-window against
+    baseline A with scripts/l2a_window_pairs.py. If it fails, record it
+    as incomplete; the bar is not lowered.
 
 receipts: []
 ---
