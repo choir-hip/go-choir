@@ -328,16 +328,17 @@ now:
   # the reviewed restart design. The spine's card points at the live station.
   status: working
   slice: >-
-    L2a (synthesis intake) is the live station from 2026-10-14 00:40 UTC.
-    Before it: three stations live (2026-10-14 00:25 UTC). L0: C1e B0 landed
-    (19e56c54); the B1 design note is in convergent round 3. L1: L1a
-    landed; L1b-0 (the warm-sweep retry bound) pushed at 6c6bc1aa. LR, a
-    new station the owner asked for after the paper computer was
-    reclaimed: computer tiers landed (188f98c3, owner ruling; the paper
-    computer is platform tier and live again since 23:53 UTC), lever 1
-    landed (d3f7d9b2), lever 2 pushed at 6c6bc1aa
-  source_ref: 6c6bc1aa
-  deploy_identity: staging d3f7d9b2 (6c6bc1aa deploying)
+    2026-10-14 01:25 UTC. Lane 2 designs are done: the L2a S0 design note
+    was accepted in round 2 with amendments (e8c8fe57; 4 of 4 named the
+    same defect-1 order bug, now fixed in the design); lever 6 was
+    accepted 4 of 4 (c0a1e413); B1 was accepted in round 4. Three builds
+    are running in separate worktrees: C1e B1, L2a S1a A5 (intake fixes),
+    and lever 6. The provisional scaling-cost read is at bfc1bdd5. New
+    problem: every deploy takes staging down while the gateway drains
+    (20b56680; 11 min tonight, set off by a docs commit with a script).
+    It joins L1 (24/7 paper).
+  source_ref: c0a1e413
+  deploy_identity: staging 6c6bc1aa (verified 00:24 UTC; the 00:43 deploy of 809755a7 changed no service code)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LG-1
@@ -362,8 +363,8 @@ now:
       automatic warm per failure stop per 24 h. Hypotheses exist as records
       but never settle. Model cost is unpriced, and research input is
       dominated by re-sent cell output (LR, R5).
-    main_uncertainty: whether B1's round-3 panel accepts the revised design or finds another lifecycle gap
-    next_observation: the test tier and L1b-0 on staging; B1 round 3
+    main_uncertainty: whether Jev labels plus an uncapped library make one story per event across languages (L2a fixture), and whether the three builds merge cleanly onto the shared runtime
+    next_observation: the A5 build, then S1a labels on top of it; the fixture run on a minted test computer
   blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
   next_action: >-
     Overnight 2026-10-14 (owner: "we should do this redesign then optimize
@@ -371,7 +372,9 @@ now:
     panels, measurement and code in separate worktrees run concurrently;
     deploys to the shared guest runtime go one at a time, each verified on
     staging before the next, and never while a tracer run is in flight.
-    Lane 1 (deploys, in order): L2a, then B1, then LR lever 6. Lane 2
+    Lane 1 (deploys, in order): L2a, then B1, then LR lever 6. Each deploy
+    is a staging outage until the drain problem is fixed, so deploys are
+    batched and never set off by docs-side files. Lane 2
     (concurrent): B1 design round 4 and the B1 build in its own worktree;
     the L2a design note and panel; the lever-6 design note and panel; an
     LR baseline (RAM and tokens per research thread, threads per

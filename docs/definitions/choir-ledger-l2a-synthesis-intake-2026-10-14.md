@@ -232,8 +232,14 @@ boundaries:
 
 now:
   status: working
-  slice: S0, design
-  source_ref: e5744c51
+  slice: >-
+    S1a build. S0 is done: the design note
+    (docs/reports/l2a-synthesis-intake-design-2026-10-14.md) was accepted
+    in round 2 with amendments R2-1 to R2-9 (e8c8fe57). A5, the intake
+    fixes, is building in a worktree (branch l2a-s1a-a5). Labels,
+    dispositions, Stories, the synthesis contract and the enable build on
+    top of A5 after it lands.
+  source_ref: e8c8fe57
   deploy_identity: staging 6c6bc1aa
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
