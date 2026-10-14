@@ -185,6 +185,38 @@ metamission:
         Autopaper scaling work (owner priority); data model work on the
         object graph and Dolt continues alongside. S6:
         docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md.
+    - id: LA
+      path: unauthored (docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md, phase 2)
+      readiness: intent
+      status: pending
+      depends_on: []
+      note: >-
+        Auth and account (owner 2026-10-14: "we need to make a better auth
+        system ... I don't even think we even have passkey recovery").
+        Recovery today creates a token and never sends it, and there is no
+        recovery screen. Slices: real recovery through maild; emailed
+        one-time-code sign-in; several passkeys and visible sessions;
+        optional OAuth and TOTP; the account as the login for app windows.
+    - id: SP
+      path: docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
+      readiness: intent
+      status: deferred
+      depends_on: [LP]
+      note: >-
+        Second host, off-host copies, log/metric sink, zero-downtime
+        deploys, failover. Owner 2026-10-14: needed before agentic red
+        teaming; the platform keys are copied to the owner's iMac
+        (docs/evidence/platform-key-backup-2026-10-14.md).
+    - id: LT
+      path: unauthored (docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md, phase 5)
+      readiness: intent
+      status: pending
+      depends_on: [LP, SP]
+      note: >-
+        Agentic red teaming (owner 2026-10-14), after supervised
+        self-development (Gate 2) and SP failover, against disposable
+        isolated forks (S9 re-keying first): capsule boundary, egress, auth,
+        gateway, publication and adoption.
     - id: L5
       path: docs/definitions/choir-ledger-l5-read-models-2026-10-13.md
       readiness: intent
