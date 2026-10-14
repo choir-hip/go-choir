@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -107,6 +108,13 @@ func computeEngineeringCommandDigest(value any) (string, error) {
 
 func ComputeOpenEngineeringAssignmentDigest(req types.OpenEngineeringAssignmentRequest) (string, error) {
 	req.CommandDigest = ""
+	// The composed inbox command is identified by its own replay digest,
+	// which leaves commit times out.
+	inboxDigest, err := ComputeCommitInboxRecordsDigest(req.Records)
+	if err != nil {
+		return "", err
+	}
+	req.Records = types.CommitInboxRecordsRequest{CommandID: strings.TrimSpace(req.Records.CommandID), CommandDigest: inboxDigest}
 	return computeEngineeringCommandDigest(req)
 }
 
@@ -301,14 +309,6 @@ func ComputeCancelEngineeringAssignmentDigest(req types.CancelEngineeringAssignm
 	// Optimistic lifecycle version is a transition precondition, not command
 	// identity; exact retry after the terminal commit must reach its receipt.
 	req.ExpectedLifecycleVersion = 0
-	return computeEngineeringCommandDigest(req)
-}
-
-// ComputeEmitEngineeringProgressObservationDigest binds the observation to the
-// exact silence window it reports: the assignment + silence-since timestamp.
-// Re-delivery of the same arming replays; a later arming mints a new command.
-func ComputeEmitEngineeringProgressObservationDigest(req types.EmitEngineeringProgressObservationRequest) (string, error) {
-	req.CommandDigest = ""
 	return computeEngineeringCommandDigest(req)
 }
 
@@ -644,136 +644,34 @@ func persistentManagementHistoricalReportRunStateAllowed(state types.RunState) b
 	return state.Terminal() || state == types.RunPassivated
 }
 
-// requireEngineeringAssignmentAuthority proves the join between the lifecycle work
-// graph and the exact non-lifecycle persistent Management control run. It never
-// promotes that Management run or agent into lifecycle state.
+// requireEngineeringParentAuthority authenticates the parent scope of a live
+// transition (bind, timely report, cancel before revoke). Records bindings
+// (C1e D4) rest on the live trajectory the Texture's document names; the
+// conversation round is checked at admission, inside the open's lock. A
+// binding minted before C1e (work-item parents) has no live authority: it
+// may only be cancelled or receive late evidence.
 func (s *Store) requireEngineeringParentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding) (engineeringAuthorityObjects, error) {
 	if err := binding.Validate(); err != nil {
 		return engineeringAuthorityObjects{}, fmt.Errorf("%w: %v", ErrEngineeringAssignmentInvalid, err)
 	}
-	if binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
-		return s.requireEngineeringDelegatedParentAuthority(ctx, binding, delegatedAuthorityLive)
+	if !binding.Records() {
+		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: a pre-records binding has no live authority: %w", ErrEngineeringAssignmentInvalid)
 	}
-	if binding.ParentRunID == "" {
-		return s.requireEngineeringDocumentParentAuthority(ctx, binding, false)
-	}
-	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if trajectory.OwnerID != binding.OwnerID || trajectory.ComputerID != binding.ComputerID ||
-		trajectory.TrajectoryID != binding.TrajectoryID || trajectory.Status != types.TrajectoryLive {
-		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
-	}
-	parentAgentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, binding.OwnerID, binding.ComputerID, binding.ParentAgentID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	parentAgent, err := decodeLifecycleObject[types.AgentRecord](parentAgentObj)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID ||
-		parentAgent.AgentID != binding.ParentAgentID || parentAgent.Profile != agentprofile.Management || parentAgent.Role != agentprofile.Management ||
-		parentAgent.ChannelID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 ||
-		(parentAgent.ActiveRunID != "" && parentAgent.ActiveRunID != binding.ParentRunID) {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: exact non-lifecycle persistent Management unavailable: %w", ErrEngineeringAssignmentInvalid)
-	}
-	parentRunObj, err := s.getRunObjectByOwnerOG(ctx, binding.OwnerID, binding.ParentRunID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	parentRun, err := decodeLifecycleObject[types.RunRecord](parentRunObj)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
-		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
-		parentRun.AgentProfile != agentprofile.Management || parentRun.AgentRole != agentprofile.Management || !persistentManagementRunStateAllowed(parentRun.State) ||
-		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
-		!persistentManagementControlBinding(parentRun.Metadata, binding.TrajectoryID, binding.ParentWorkItemID, binding.ParentControlID) {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: parent decision/control run binding mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	parentWorkObj, parentWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.ParentWorkItemID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID ||
-		parentWork.TrajectoryID != binding.TrajectoryID || parentWork.AssignedAgentID != binding.ParentAgentID ||
-		parentWork.AuthorityProfile != agentprofile.Management || parentWork.Status != types.WorkItemOpen {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: parent Management target work mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	return engineeringAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
-		parentRun: parentRunObj, parentWork: parentWorkObj}, nil
+	return s.requireEngineeringRecordsAuthority(ctx, binding, false)
 }
 
-// requireEngineeringHistoricalParentAuthority authenticates a delayed report
-// against the immutable authority binding after the live parent scope has
-// terminalized. State may advance, but identities and the delivered control
-// binding embedded in the exact parent run may not change.
+// requireEngineeringHistoricalParentAuthority authenticates a late report or
+// a system cancellation after the live scope ended: the trajectory may be
+// settled or cancelled, and a pre-records binding is accepted on its
+// trajectory alone so its row can still turn terminal.
 func (s *Store) requireEngineeringHistoricalParentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding) (engineeringAuthorityObjects, error) {
 	if err := binding.Validate(); err != nil {
 		return engineeringAuthorityObjects{}, fmt.Errorf("%w: %v", ErrEngineeringAssignmentInvalid, err)
 	}
-	if binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
-		return s.requireEngineeringDelegatedParentAuthority(ctx, binding, delegatedAuthorityHistorical)
-	}
-	if binding.ParentRunID == "" {
-		return s.requireEngineeringDocumentParentAuthority(ctx, binding, true)
-	}
-	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if trajectory.OwnerID != binding.OwnerID || trajectory.ComputerID != binding.ComputerID || trajectory.TrajectoryID != binding.TrajectoryID ||
-		(trajectory.Status != types.TrajectoryLive && trajectory.Status != types.TrajectorySettled && trajectory.Status != types.TrajectoryCancelled) {
-		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
-	}
-	parentAgentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, binding.OwnerID, binding.ComputerID, binding.ParentAgentID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	parentAgent, err := decodeLifecycleObject[types.AgentRecord](parentAgentObj)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID || parentAgent.AgentID != binding.ParentAgentID ||
-		parentAgent.Profile != agentprofile.Management || parentAgent.Role != agentprofile.Management || parentAgent.ChannelID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: historical persistent Management identity mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	parentRunObj, err := s.getRunObjectByOwnerOG(ctx, binding.OwnerID, binding.ParentRunID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	parentRun, err := decodeLifecycleObject[types.RunRecord](parentRunObj)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
-		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID || parentRun.TrajectoryID != "" ||
-		parentRun.AgentProfile != agentprofile.Management || parentRun.AgentRole != agentprofile.Management || !parentRun.State.Valid() ||
-		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID ||
-		!persistentManagementControlBinding(parentRun.Metadata, binding.TrajectoryID, binding.ParentWorkItemID, binding.ParentControlID) {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: historical parent control binding mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	parentWorkObj, parentWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.ParentWorkItemID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID || parentWork.TrajectoryID != binding.TrajectoryID ||
-		parentWork.AssignedAgentID != binding.ParentAgentID || parentWork.AuthorityProfile != agentprofile.Management ||
-		(parentWork.Status != types.WorkItemOpen && parentWork.Status != types.WorkItemCompleted && parentWork.Status != types.WorkItemCancelled && parentWork.Status != types.WorkItemRefused) {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: historical parent work binding mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	return engineeringAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj, parentRun: parentRunObj, parentWork: parentWorkObj}, nil
+	return s.requireEngineeringRecordsAuthority(ctx, binding, true)
 }
 
-// requireEngineeringDocumentParentAuthority authenticates a document-driven
-// assignment open: the parent authority is the engineering desk agent bound to
-// the lifecycle document plus the owner-authored revision that carried the
-// cast. There is no parent run; binding.ParentControlID names the revision.
-// historical=true relaxes trajectory/work state for late reports.
-func (s *Store) requireEngineeringDocumentParentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding, historical bool) (engineeringAuthorityObjects, error) {
+func (s *Store) requireEngineeringRecordsAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding, historical bool) (engineeringAuthorityObjects, error) {
 	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
 	if err != nil {
 		return engineeringAuthorityObjects{}, err
@@ -787,180 +685,11 @@ func (s *Store) requireEngineeringDocumentParentAuthority(ctx context.Context, b
 	if historical && trajectory.Status != types.TrajectoryLive && trajectory.Status != types.TrajectorySettled && trajectory.Status != types.TrajectoryCancelled {
 		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
 	}
-	parentAgentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, binding.OwnerID, binding.ComputerID, binding.ParentAgentID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	parentAgent, err := decodeLifecycleObject[types.AgentRecord](parentAgentObj)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	docID := strings.TrimSpace(trajectory.SubjectRefs["doc_id"])
-	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID ||
-		parentAgent.AgentID != binding.ParentAgentID || parentAgent.Profile != agentprofile.Engineering ||
-		parentAgent.Role != agentprofile.Engineering || parentAgent.LifecycleVersion <= 0 ||
-		docID == "" || parentAgent.AgentID != agentprofile.Engineering+":"+docID || parentAgent.ChannelID != docID {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: exact engineering desk parent unavailable: %w", ErrEngineeringAssignmentInvalid)
-	}
-	var parentControlObj objectgraph.Object
-	if binding.SourceCandidateID != "" {
-		// Verification assignment: the parent control is the candidate record —
-		// the durable receipt of the completed implementation it verifies.
-		candidateObj, candErr := s.lifecycleGraph().GetObject(ctx, binding.ParentControlID)
-		if candErr != nil {
-			return engineeringAuthorityObjects{}, candErr
-		}
-		candidate, decodeErr := decodeLifecycleObject[types.EngineeringSubjectCandidate](candidateObj)
-		if decodeErr != nil {
-			return engineeringAuthorityObjects{}, decodeErr
-		}
-		if candidate.CandidateID != binding.ParentControlID || candidate.CandidateID != binding.SourceCandidateID ||
-			candidate.OwnerID != binding.OwnerID || candidate.ComputerID != binding.ComputerID ||
-			candidate.TrajectoryID != binding.TrajectoryID {
-			return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: parent candidate is outside exact trajectory authority: %w", ErrEngineeringAssignmentInvalid)
-		}
-		parentControlObj = candidateObj
-	} else {
-		revisionObj, revErr := s.lifecycleGetObject(ctx, ogKindTexRev, binding.OwnerID, binding.ComputerID, binding.ParentControlID)
-		if revErr != nil {
-			return engineeringAuthorityObjects{}, revErr
-		}
-		revision, decodeErr := decodeLifecycleObject[types.Revision](revisionObj)
-		if decodeErr != nil {
-			return engineeringAuthorityObjects{}, decodeErr
-		}
-		if revision.RevisionID != binding.ParentControlID || revision.OwnerID != binding.OwnerID ||
-			revision.ComputerID != binding.ComputerID || revision.TrajectoryID != binding.TrajectoryID ||
-			revision.DocID != docID || revision.AuthorKind != types.AuthorUser {
-			return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: parent revision is not an owner-authored revision on the bound document: %w", ErrEngineeringAssignmentInvalid)
-		}
-		parentControlObj = revisionObj
-	}
-	parentWorkObj, parentWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.ParentWorkItemID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID ||
-		parentWork.TrajectoryID != binding.TrajectoryID || parentWork.AssignedAgentID != binding.ParentAgentID ||
-		parentWork.AuthorityProfile != agentprofile.Engineering {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: parent engineering desk work mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	if !historical && parentWork.Status != types.WorkItemOpen {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: parent engineering desk work mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	if historical && parentWork.Status != types.WorkItemOpen && parentWork.Status != types.WorkItemCompleted &&
-		parentWork.Status != types.WorkItemCancelled && parentWork.Status != types.WorkItemRefused {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: historical parent work binding mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	return engineeringAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
-		parentRevision: parentControlObj, parentWork: parentWorkObj}, nil
+	return engineeringAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory}, nil
 }
 
-// requireEngineeringDelegatedParentAuthority authenticates a desk-staged
-// choir.Cast (mission R2). Unlike the document/run parents, there is no
-// owner revision and no delivered lifecycle_control_bindings update: the
-// cast's authority is the caster's own live assignment. The parent control is
-// the commitment record the cast minted (ParentControlID is its canonical
-// ID), which self-authenticates by carrying the caster as Provenance.AgentID.
-// The caster's run is a persistent Management (or desk) run bound to the same
-// trajectory; its parent work is the caster's open work item.
-// delegatedAuthorityMode separates the one moment that needs the casting turn
-// from everything after it (delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md).
-// Admission is the cast itself: the caster's run is the live turn staging it.
-// Every later live transition (bind, activation, progress, report) rests on
-// the durable anchors that outlive a turn: the live trajectory, the persistent
-// caster agent, the commitment control it authored, and the open parent work
-// item. A management turn ending, or a newer turn starting, is not a
-// revocation; revocation is CancelAssignment, the parent work item closing,
-// or the trajectory ending.
-type delegatedAuthorityMode int
-
-const (
-	delegatedAuthorityAdmission delegatedAuthorityMode = iota
-	delegatedAuthorityLive
-	delegatedAuthorityHistorical
-)
-
-func (s *Store) requireEngineeringDelegatedParentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding, mode delegatedAuthorityMode) (engineeringAuthorityObjects, error) {
-	historical := mode == delegatedAuthorityHistorical
-	trajectoryObj, trajectory, err := s.lifecycleTrajectoryObject(ctx, binding.OwnerID, binding.ComputerID, binding.TrajectoryID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if trajectory.OwnerID != binding.OwnerID || trajectory.ComputerID != binding.ComputerID ||
-		trajectory.TrajectoryID != binding.TrajectoryID {
-		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
-	}
-	if !historical && trajectory.Status != types.TrajectoryLive {
-		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
-	}
-	if historical && trajectory.Status != types.TrajectoryLive && trajectory.Status != types.TrajectorySettled && trajectory.Status != types.TrajectoryCancelled {
-		return engineeringAuthorityObjects{}, ErrEngineeringAssignmentInvalid
-	}
-	// Parent agent = the caster desk agent. It must be a persistent
-	// (non-lifecycle-versioned) management agent bound to the trajectory.
-	parentAgentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, binding.OwnerID, binding.ComputerID, binding.ParentAgentID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	parentAgent, err := decodeLifecycleObject[types.AgentRecord](parentAgentObj)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentAgent.OwnerID != binding.OwnerID || parentAgent.ComputerID != binding.ComputerID ||
-		parentAgent.AgentID != binding.ParentAgentID || parentAgent.LifecycleVersion != 0 ||
-		(mode == delegatedAuthorityAdmission && parentAgent.ActiveRunID != "" && parentAgent.ActiveRunID != binding.ParentRunID) {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: parent desk agent unavailable: %w", ErrEngineeringAssignmentInvalid)
-	}
-	// The caster's run is a live persistent run on the same trajectory.
-	parentRunObj, err := s.getRunObjectByOwnerOG(ctx, binding.OwnerID, binding.ParentRunID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	parentRun, err := decodeLifecycleObject[types.RunRecord](parentRunObj)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentRunObj.ComputerID != "" || parentRun.OwnerID != binding.OwnerID || parentRun.ComputerID != binding.ComputerID ||
-		parentRun.RunID != binding.ParentRunID || parentRun.AgentID != binding.ParentAgentID ||
-		metadataExactString(parentRun.Metadata, "assignment_trajectory_id") != binding.TrajectoryID {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not bound to this trajectory: %w", ErrEngineeringAssignmentInvalid)
-	}
-	if mode == delegatedAuthorityAdmission && !persistentManagementRunStateAllowed(parentRun.State) {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not live: %w", ErrEngineeringAssignmentInvalid)
-	}
-	if mode != delegatedAuthorityAdmission && !parentRun.State.Valid() {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster run is not valid: %w", ErrEngineeringAssignmentInvalid)
-	}
-	// Parent control = the commitment record the cast minted. It must exist
-	// and be authored by the caster agent; it binds the cast's identity.
-	controlObj, ctrlErr := s.lifecycleGraph().GetObject(ctx, binding.ParentControlID)
-	if ctrlErr != nil {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: commitment control unavailable: %w", ctrlErr)
-	}
-	controlRec, decErr := decodeLifecycleObject[types.CommitmentRecord](controlObj)
-	if decErr != nil {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: parent control is not a commitment record: %w", decErr)
-	}
-	if strings.TrimSpace(controlRec.Provenance.AgentID) != binding.ParentAgentID {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: commitment control is not authored by the caster: %w", ErrEngineeringAssignmentInvalid)
-	}
-	// Parent work = the caster's open work item on this trajectory.
-	parentWorkObj, parentWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.ParentWorkItemID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if parentWork.OwnerID != binding.OwnerID || parentWork.ComputerID != binding.ComputerID ||
-		parentWork.TrajectoryID != binding.TrajectoryID || parentWork.AssignedAgentID != binding.ParentAgentID {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster work item mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	if !historical && parentWork.Status != types.WorkItemOpen {
-		return engineeringAuthorityObjects{}, fmt.Errorf("delegated cast: caster work item is not open: %w", ErrEngineeringAssignmentInvalid)
-	}
-	return engineeringAuthorityObjects{trajectory: trajectoryObj, trajectoryRec: trajectory, parentAgent: parentAgentObj,
-		parentRun: parentRunObj, parentRevision: controlObj, parentWork: parentWorkObj}, nil
-}
-
+// requireEngineeringAssignmentAuthority adds the assigned lifecycle
+// Engineering agent to the live parent authority (bind).
 func (s *Store) requireEngineeringAssignmentAuthority(ctx context.Context, binding types.EngineeringAssignmentBinding) (engineeringAuthorityObjects, error) {
 	authority, err := s.requireEngineeringParentAuthority(ctx, binding)
 	if err != nil {
@@ -978,40 +707,182 @@ func (s *Store) requireEngineeringAssignmentAuthority(ctx context.Context, bindi
 		assignedAgent.AgentID != binding.AssignedAgentID || assignedAgent.Profile != agentprofile.Engineering || assignedAgent.Role != agentprofile.Engineering || assignedAgent.LifecycleVersion <= 0 {
 		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: assigned lifecycle Engineering agent mismatch: %w", ErrEngineeringAssignmentInvalid)
 	}
-	assignedWorkObj, assignedWork, err := s.lifecycleWorkObject(ctx, binding.OwnerID, binding.ComputerID, binding.AssignedWorkItemID)
-	if err != nil {
-		return engineeringAuthorityObjects{}, err
-	}
-	if assignedWork.OwnerID != binding.OwnerID || assignedWork.ComputerID != binding.ComputerID ||
-		assignedWork.TrajectoryID != binding.TrajectoryID || assignedWork.AssignedAgentID != binding.AssignedAgentID ||
-		assignedWork.AuthorityProfile != agentprofile.Engineering || assignedWork.Status != types.WorkItemOpen ||
-		metadataExactString(assignedWork.Details, "parent_loop_id") != binding.ParentRunID ||
-		metadataExactString(assignedWork.Details, "parent_decision_id") != binding.ParentDecisionID ||
-		metadataExactString(assignedWork.Details, "parent_control_id") != binding.ParentControlID ||
-		metadataExactString(assignedWork.Details, "parent_work_item_id") != binding.ParentWorkItemID {
-		return engineeringAuthorityObjects{}, fmt.Errorf("co-super assignment: assigned Engineering work mismatch: %w", ErrEngineeringAssignmentInvalid)
-	}
-	authority.assignedAgent, authority.assignedWork = assignedAgentObj, assignedWorkObj
+	authority.assignedAgent = assignedAgentObj
 	return authority, nil
 }
 
+// requireEngineeringRecordsAdmission is D4's admission check, run inside the
+// open's lock against the request it will commit: the request carries
+// exactly one Cast, from management to the assignment's engineering inbox,
+// whose ParentID names a Cast record in management's inbox from a Texture;
+// that record's round is the binding's parent round and is still open; the
+// Texture's document names the binding's trajectory; and the engineering
+// conversation has never opened. It returns the parent conversation head
+// object so the open can compare-and-set on it.
+func (s *Store) requireEngineeringRecordsAdmission(ctx context.Context, assignmentID string, binding types.EngineeringAssignmentBinding, records types.CommitInboxRecordsRequest) (objectgraph.Object, error) {
+	refuse := func(format string, args ...any) error {
+		return fmt.Errorf("co-super assignment: records admission: "+format+": %w", append(args, ErrEngineeringAssignmentInvalid)...)
+	}
+	if binding.AssignedAgentID != agentprofile.Engineering+":"+assignmentID {
+		return objectgraph.Object{}, refuse("assigned inbox %s is not engineering:%s", binding.AssignedAgentID, assignmentID)
+	}
+	if records.OwnerID != binding.OwnerID || records.ComputerID != binding.ComputerID {
+		return objectgraph.Object{}, refuse("records command is outside the binding's scope")
+	}
+	var cast *types.CommitmentRecord
+	for i := range records.Records {
+		rec := records.Records[i]
+		if strings.TrimSpace(rec.Inbox) != binding.AssignedAgentID {
+			continue
+		}
+		if cast != nil {
+			return objectgraph.Object{}, refuse("more than one record addressed to %s", binding.AssignedAgentID)
+		}
+		cast = &records.Records[i]
+	}
+	if cast == nil || !cast.IsCast() || strings.TrimSpace(cast.RecordID) != binding.ParentControlID ||
+		strings.TrimSpace(cast.SenderInbox) != binding.ParentAgentID || strings.TrimSpace(cast.Provenance.AgentID) != binding.ParentAgentID {
+		return objectgraph.Object{}, refuse("the command carries no Cast %s from %s to %s", binding.ParentControlID, binding.ParentAgentID, binding.AssignedAgentID)
+	}
+	parent, err := s.GetCommitmentRecord(ctx, binding.OwnerID, binding.ComputerID, strings.TrimSpace(cast.ParentID))
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	if parent == nil || parent.InboxSeq <= 0 || parent.Inbox != binding.ParentAgentID || !parent.IsCast() ||
+		!strings.HasPrefix(parent.SenderInbox, agentprofile.Texture+":") || parent.ConversationID != binding.ParentConversationID || parent.Round != binding.ParentRound {
+		return objectgraph.Object{}, refuse("parent %q is not a Texture's Cast into %s round %d of %s", cast.ParentID, binding.ParentAgentID, binding.ParentRound, binding.ParentConversationID)
+	}
+	headObj, err := s.lifecycleGetObject(ctx, ogKindConversationHead, binding.OwnerID, binding.ComputerID, binding.ParentConversationID)
+	if err != nil {
+		return objectgraph.Object{}, refuse("parent conversation %s has no head: %v", binding.ParentConversationID, err)
+	}
+	head, err := decodeLifecycleObject[types.ConversationHead](headObj)
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	if !head.Open || head.Round != binding.ParentRound || head.CasterInbox != parent.SenderInbox || head.RecipientInbox != binding.ParentAgentID {
+		return objectgraph.Object{}, refuse("round %d of %s is not open", binding.ParentRound, binding.ParentConversationID)
+	}
+	docID := strings.TrimPrefix(parent.SenderInbox, agentprofile.Texture+":")
+	document, err := s.GetLifecycleDocument(ctx, binding.OwnerID, binding.ComputerID, docID)
+	if err != nil {
+		return objectgraph.Object{}, refuse("document %s: %v", docID, err)
+	}
+	if strings.TrimSpace(document.TrajectoryID) == "" || document.TrajectoryID != binding.TrajectoryID {
+		return objectgraph.Object{}, refuse("document %s names trajectory %q, the binding %q", docID, document.TrajectoryID, binding.TrajectoryID)
+	}
+	if exists, err := s.lifecycleObjectExists(ctx, ogKindConversationHead, binding.OwnerID, binding.ComputerID, binding.AssignedConversationID); err != nil {
+		return objectgraph.Object{}, err
+	} else if exists {
+		return objectgraph.Object{}, refuse("engineering conversation %s already exists; a retry is a new Cast", binding.AssignedConversationID)
+	}
+	return headObj, nil
+}
+
+func (s *Store) lifecycleObjectExists(ctx context.Context, kind objectgraph.ObjectKind, ownerID, computerID, key string) (bool, error) {
+	_, err := s.lifecycleGetObject(ctx, kind, ownerID, computerID, key)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 func engineeringParentAuthorityConditions(authority engineeringAuthorityObjects) []objectgraph.ObjectCondition {
-	conditions := []objectgraph.ObjectCondition{
-		engineeringObjectCondition(authority.parentAgent),
-		engineeringObjectCondition(authority.parentWork),
-	}
-	if authority.parentRun.CanonicalID != "" {
-		conditions = append(conditions, engineeringObjectCondition(authority.parentRun))
-	}
-	if authority.parentRevision.CanonicalID != "" {
-		conditions = append(conditions, engineeringObjectCondition(authority.parentRevision))
-	}
-	return conditions
+	return nil
 }
 
 func engineeringAuthorityConditions(authority engineeringAuthorityObjects) []objectgraph.ObjectCondition {
-	conditions := engineeringParentAuthorityConditions(authority)
-	return append(conditions, engineeringObjectCondition(authority.assignedAgent), engineeringObjectCondition(authority.assignedWork))
+	if authority.assignedAgent.CanonicalID == "" {
+		return nil
+	}
+	return []objectgraph.ObjectCondition{engineeringObjectCondition(authority.assignedAgent)}
+}
+
+// ListEngineeringAssignmentsByParentRound returns the assignments whose
+// parent is one round of management's conversation with a Texture (C1e D5,
+// D6): a scan of the owner's assignment objects filtered on the binding's
+// parent fields. There is no new table.
+func (s *Store) ListEngineeringAssignmentsByParentRound(ctx context.Context, ownerID, computerID, conversationID string, round int) ([]types.EngineeringAssignment, error) {
+	ownerID, computerID, conversationID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(conversationID)
+	all, err := s.ListEngineeringAssignmentsForComputer(ctx, computerID)
+	if err != nil {
+		return nil, err
+	}
+	var out []types.EngineeringAssignment
+	for _, assignment := range all {
+		if assignment.Binding.OwnerID == ownerID && assignment.Binding.Records() &&
+			assignment.Binding.ParentConversationID == conversationID && assignment.Binding.ParentRound == round {
+			out = append(out, assignment)
+		}
+	}
+	return out, nil
+}
+
+// EngineeringAssignmentForInbox returns the records assignment whose
+// engineering inbox is engineering:<assignmentID> (C1e D1).
+func (s *Store) EngineeringAssignmentForInbox(ctx context.Context, ownerID, computerID, inbox string) (types.EngineeringAssignment, error) {
+	assignmentID, ok := strings.CutPrefix(strings.TrimSpace(inbox), agentprofile.Engineering+":")
+	if !ok || assignmentID == "" {
+		return types.EngineeringAssignment{}, ErrNotFound
+	}
+	assignment, err := s.GetEngineeringAssignment(ctx, ownerID, computerID, assignmentID, 1)
+	if err != nil {
+		return types.EngineeringAssignment{}, err
+	}
+	if !assignment.Binding.Records() || assignment.Binding.AssignedAgentID != strings.TrimSpace(inbox) {
+		return types.EngineeringAssignment{}, ErrNotFound
+	}
+	return assignment, nil
+}
+
+// EngineeringOutcomeRecordID is the id of the final Report record an
+// assignment report closes the engineering round with (C1e D3, D6): derived
+// from the assignment report's id, so the row's ReportRefs lead to it.
+func EngineeringOutcomeRecordID(reportID string) string {
+	return "assignment-report:" + strings.TrimSpace(reportID)
+}
+
+// EngineeringClosingRecord returns the record that closed an assignment's
+// engineering round, found by id from the row's ReportRefs (C1e D6). found
+// is false when none exists: the row is not terminal, or a crash boot
+// terminalized it after closing the round silently.
+func (s *Store) EngineeringClosingRecord(ctx context.Context, assignment types.EngineeringAssignment) (types.CommitmentRecord, bool, error) {
+	ownerID, computerID := assignment.Binding.OwnerID, assignment.Binding.ComputerID
+	for i := len(assignment.ReportRefs) - 1; i >= 0; i-- {
+		obj, err := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(assignment.ReportRefs[i]))
+		if err != nil {
+			if errors.Is(err, objectgraph.ErrNotFound) {
+				continue
+			}
+			return types.CommitmentRecord{}, false, err
+		}
+		report, err := decodeLifecycleObject[types.EngineeringAssignmentReport](obj)
+		if err != nil {
+			continue
+		}
+		records, err := s.listInboxRecordsBy(ctx, ownerID, computerID, "record_id", EngineeringOutcomeRecordID(report.ReportID))
+		if err != nil {
+			return types.CommitmentRecord{}, false, err
+		}
+		for _, rec := range records {
+			if rec.Final && rec.ConversationID == assignment.Binding.AssignedConversationID {
+				return rec, true, nil
+			}
+		}
+	}
+	return types.CommitmentRecord{}, false, nil
+}
+
+// EngineeringFreezeOperationID and EngineeringFreezeIdempotencyKey name the
+// one self-development operation an assignment's Freeze opens (C1e D2):
+// every assignment-scoped caller resolves its operation by the key, never by
+// the trajectory.
+func EngineeringFreezeOperationID(computerID, assignmentID string) string {
+	return "selfdev-" + computerevent.DigestBytes([]byte(strings.TrimSpace(computerID) + "\x00" + strings.TrimSpace(assignmentID)))[:32]
+}
+
+func EngineeringFreezeIdempotencyKey(assignmentID string) string {
+	return "freeze-open:" + strings.TrimSpace(assignmentID)
 }
 
 func (s *Store) prepareEngineeringLifecycleTransition(ctx context.Context, trajectoryObj objectgraph.Object, trajectory types.TrajectoryRecord, now time.Time) (engineeringLifecycleTransition, error) {
@@ -1072,12 +943,6 @@ func (s *Store) replayEngineeringAssignmentCommand(ctx context.Context, ownerID,
 			return types.EngineeringAssignmentCommandResult{}, true, reportErr
 		}
 		result.Report = &report
-		if update, updateErr := s.GetLifecycleUpdate(ctx, ownerID, computerID, assignment.Binding.TrajectoryID,
-			assignment.Binding.ParentAgentID, assignment.Binding.AssignedAgentID, report.ReportID); updateErr == nil {
-			result.Update = &update
-		} else if !errors.Is(updateErr, ErrNotFound) {
-			return types.EngineeringAssignmentCommandResult{}, true, updateErr
-		}
 		if report.CandidateID != "" {
 			obj, getErr := s.lifecycleGraph().GetObject(ctx, report.CandidateID)
 			if getErr != nil {
@@ -1126,12 +991,6 @@ func (s *Store) ReplayRecordedEngineeringAssignmentReport(ctx context.Context, o
 		return types.EngineeringAssignmentCommandResult{}, ErrEngineeringAssignmentInvalid
 	}
 	result := types.EngineeringAssignmentCommandResult{Receipt: receipt, Assignment: assignment, Report: &report, Replay: true}
-	if update, updateErr := s.GetLifecycleUpdate(ctx, ownerID, computerID, assignment.Binding.TrajectoryID,
-		assignment.Binding.ParentAgentID, assignment.Binding.AssignedAgentID, report.ReportID); updateErr == nil {
-		result.Update = &update
-	} else if !errors.Is(updateErr, ErrNotFound) {
-		return types.EngineeringAssignmentCommandResult{}, updateErr
-	}
 	if report.CandidateID != "" {
 		candidateObj, getErr := s.lifecycleGraph().GetObject(ctx, report.CandidateID)
 		if getErr != nil {
@@ -1146,7 +1005,12 @@ func (s *Store) ReplayRecordedEngineeringAssignmentReport(ctx context.Context, o
 	return result, nil
 }
 
-func (s *Store) commitEngineeringLifecycleCommand(ctx context.Context, transition engineeringLifecycleTransition, commandKind types.LifecycleCommandKind, eventKind types.LifecycleEventKind, commandID, digest string, assignment types.EngineeringAssignment, report *types.EngineeringAssignmentReport, candidate *types.EngineeringSubjectCandidate, reportID, reason string, artifactObjects []objectgraph.Object, conditions []objectgraph.ObjectCondition, edges []objectgraph.Edge, update *types.CoagentSourcePacket, evidenceRefs []string) (types.EngineeringAssignmentCommandResult, error) {
+// commitEngineeringLifecycleCommand commits one assignment transition.
+// artifactObjects are the transition's own objects, named on its event;
+// inboxObjects are the records (and their heads, wakes and cursor) the
+// transition composes into the same batch (C1e D3, D4), committed but not
+// listed as artifacts.
+func (s *Store) commitEngineeringLifecycleCommand(ctx context.Context, transition engineeringLifecycleTransition, commandKind types.LifecycleCommandKind, eventKind types.LifecycleEventKind, commandID, digest string, assignment types.EngineeringAssignment, report *types.EngineeringAssignmentReport, candidate *types.EngineeringSubjectCandidate, reportID, reason string, artifactObjects []objectgraph.Object, conditions []objectgraph.ObjectCondition, edges []objectgraph.Edge, evidenceRefs []string, inboxObjects ...objectgraph.Object) (types.EngineeringAssignmentCommandResult, error) {
 	now := assignment.UpdatedAt
 	artifactRefs := make([]string, 0, len(artifactObjects))
 	for _, obj := range artifactObjects {
@@ -1164,9 +1028,10 @@ func (s *Store) commitEngineeringLifecycleCommand(ctx context.Context, transitio
 	conditions = append(transition.conditions, conditions...)
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: eventObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: receiptObj.CanonicalID})
 	objects := append(append([]objectgraph.Object{}, transition.objects...), artifactObjects...)
+	objects = append(objects, inboxObjects...)
 	objects = append(objects, eventObj, receiptObj)
 	lifecycleResult, err := s.commitLifecycleTransition(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID,
-		commandID, digest, conditions, objects, types.LifecycleResult{Receipt: receipt, Trajectory: transition.trajectory, Update: update, Events: []types.LifecycleEvent{event}}, edges...)
+		commandID, digest, conditions, objects, types.LifecycleResult{Receipt: receipt, Trajectory: transition.trajectory, Events: []types.LifecycleEvent{event}}, edges...)
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
@@ -1175,9 +1040,15 @@ func (s *Store) commitEngineeringLifecycleCommand(ctx context.Context, transitio
 			commandID, digest, assignment.AssignmentID, assignment.Binding.Attempt, reportID)
 		return replayed, replayErr
 	}
-	return types.EngineeringAssignmentCommandResult{Receipt: receipt, Assignment: assignment, Report: report, Candidate: candidate, Update: update}, nil
+	return types.EngineeringAssignmentCommandResult{Receipt: receipt, Assignment: assignment, Report: report, Candidate: candidate}, nil
 }
 
+// OpenEngineeringAssignment admits one records assignment (C1e D4): the
+// casting management cell's whole inbox command (its records, the
+// engineering Cast among them, its cursor advance and verdicts) is planned
+// inside this lock and commits in the same batch as the assignment row, the
+// assigned agent and the spawn obligation. A failed admission writes
+// nothing: no Cast, no round, no row.
 func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEngineeringAssignmentRequest) (types.EngineeringAssignmentCommandResult, error) {
 	req.CommandID, req.CommandDigest, req.AssignmentID = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest), strings.TrimSpace(req.AssignmentID)
 	if err := validateEngineeringCommand(req.CommandID, req.CommandDigest, req.AssignmentID, req.Binding.Attempt); err != nil {
@@ -1186,32 +1057,47 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 	if err := req.Binding.Validate(); err != nil {
 		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("%w: %v", ErrEngineeringAssignmentInvalid, err)
 	}
-	if strings.TrimSpace(req.AssignedAgent.AgentID) != req.Binding.AssignedAgentID ||
-		strings.TrimSpace(req.AssignedWork.WorkItemID) != req.Binding.AssignedWorkItemID ||
-		strings.TrimSpace(req.AssignedWork.AssignedAgentID) != req.Binding.AssignedAgentID ||
-		strings.TrimSpace(req.AssignedWork.Objective) == "" {
-		return types.EngineeringAssignmentCommandResult{}, ErrEngineeringAssignmentInvalid
+	if !req.Binding.Records() || strings.TrimSpace(req.AssignedAgent.AgentID) != req.Binding.AssignedAgentID {
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("co-super assignment: only a records cast opens an assignment: %w", ErrEngineeringAssignmentInvalid)
 	}
 	computedDigest, digestErr := ComputeOpenEngineeringAssignmentDigest(req)
 	if err := requireEngineeringCommandDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
+	records, err := normalizeInboxCommand(req.Records)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	if s.ogStore == nil {
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("open engineering assignment: object graph not initialized")
+	}
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 	if replay, found, err := s.replayEngineeringAssignmentCommand(ctx, req.Binding.OwnerID, req.Binding.ComputerID, req.CommandID, req.CommandDigest, req.AssignmentID, req.Binding.Attempt, ""); found || err != nil {
+		if err == nil {
+			// The cell's records committed in the open's batch: their receipt
+			// sequence numbers come from the stored inbox command.
+			inbox, inboxFound, inboxErr := s.replayInboxCommand(ctx, records.OwnerID, records.ComputerID, records.CommandID, records.CommandDigest)
+			if inboxErr != nil {
+				return types.EngineeringAssignmentCommandResult{}, inboxErr
+			}
+			if inboxFound {
+				replay.Records = &inbox
+			}
+		}
 		return replay, err
 	}
-	if err := s.validateEngineeringSupersedeTuple(ctx, req); err != nil {
+	if _, found, err := s.replayInboxCommand(ctx, records.OwnerID, records.ComputerID, records.CommandID, records.CommandDigest); found || err != nil {
+		if err == nil {
+			err = fmt.Errorf("co-super assignment: inbox command %s committed without its assignment: %w", records.CommandID, ErrEngineeringAssignmentInvalid)
+		}
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	// Opening a delegated cast is its admission: the casting turn must be live.
-	var authority engineeringAuthorityObjects
-	var err error
-	if req.Binding.CastAuthority == types.EngineeringCastAuthorityDelegated {
-		authority, err = s.requireEngineeringDelegatedParentAuthority(ctx, req.Binding, delegatedAuthorityAdmission)
-	} else {
-		authority, err = s.requireEngineeringParentAuthority(ctx, req.Binding)
+	parentHead, err := s.requireEngineeringRecordsAdmission(ctx, req.AssignmentID, req.Binding, records)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
 	}
+	authority, err := s.requireEngineeringParentAuthority(ctx, req.Binding)
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
@@ -1220,28 +1106,26 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
+	inboxObjects, inboxConditions, inboxEdges, inboxReceipt, err := s.planInboxCommand(ctx, records, now)
+	if err != nil {
+		return types.EngineeringAssignmentCommandResult{}, err
+	}
+	openedOne := false
+	for _, row := range inboxReceipt.Records {
+		if row.RecordID == req.Binding.ParentControlID {
+			openedOne = row.OpenedRound && row.Round == 1 && row.ConversationID == req.Binding.AssignedConversationID
+		}
+	}
+	if !openedOne {
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("co-super assignment: the Cast did not open round 1 of %s: %w", req.Binding.AssignedConversationID, ErrEngineeringAssignmentInvalid)
+	}
 
 	assignedAgent := req.AssignedAgent
 	assignedAgent.AgentID, assignedAgent.OwnerID, assignedAgent.ComputerID = req.Binding.AssignedAgentID, req.Binding.OwnerID, req.Binding.ComputerID
-	assignedAgent.ComputerID, assignedAgent.Profile, assignedAgent.Role = req.Binding.ComputerID, agentprofile.Engineering, agentprofile.Engineering
+	assignedAgent.Profile, assignedAgent.Role = agentprofile.Engineering, agentprofile.Engineering
 	assignedAgent.ChannelID, assignedAgent.ActiveRunID = req.Binding.AssignedAgentID, ""
 	assignedAgent.LifecycleVersion, assignedAgent.LastReducerSeq = 1, transition.seq
 	assignedAgent.CreatedAt, assignedAgent.UpdatedAt = now, now
-	assignedWork := req.AssignedWork
-	assignedWork.WorkItemID, assignedWork.OwnerID, assignedWork.ComputerID = req.Binding.AssignedWorkItemID, req.Binding.OwnerID, req.Binding.ComputerID
-	assignedWork.TrajectoryID, assignedWork.AssignedAgentID = req.Binding.TrajectoryID, req.Binding.AssignedAgentID
-	assignedWork.Objective = strings.TrimSpace(assignedWork.Objective)
-	assignedWork.AuthorityProfile, assignedWork.Status, assignedWork.ResultRef = agentprofile.Engineering, types.WorkItemOpen, ""
-	assignedWork.ObjectiveFingerprint = objectgraph.SHA256([]byte(assignedWork.Objective))
-	assignedWork.CreatedByRunID = req.Binding.ParentRunID
-	assignedWork.Details = map[string]any{
-		"assignment_id": req.AssignmentID, "attempt": req.Binding.Attempt, "assignment_kind": string(req.Binding.Kind),
-		"parent_loop_id": req.Binding.ParentRunID, "parent_decision_id": req.Binding.ParentDecisionID,
-		"parent_control_id": req.Binding.ParentControlID, "parent_work_item_id": req.Binding.ParentWorkItemID,
-		"scope_digest": req.Binding.ScopeDigest, "subject_digest": req.Binding.SubjectDigest,
-	}
-	assignedWork.LifecycleVersion, assignedWork.LastReducerSeq = 1, transition.seq
-	assignedWork.CreatedAt, assignedWork.UpdatedAt = now, now
 
 	assignment := types.EngineeringAssignment{
 		Schema: types.EngineeringAssignmentSchemaV1, AssignmentID: req.AssignmentID, Binding: req.Binding,
@@ -1261,98 +1145,41 @@ func (s *Store) OpenEngineeringAssignment(ctx context.Context, req types.OpenEng
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	workObj, err := lifecycleObject(ogKindWorkItem, req.Binding.OwnerID, req.Binding.ComputerID, assignedWork.WorkItemID, assignedWork,
-		lifecycleMetadata("work_item_id", assignedWork.WorkItemID, req.Binding.ComputerID, req.Binding.TrajectoryID, transition.seq), now, now)
-	if err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
-	}
-	targets := []struct {
+	edges := append([]objectgraph.Edge(nil), inboxEdges...)
+	for _, target := range []struct {
 		obj  objectgraph.Object
 		kind objectgraph.EdgeKind
-	}{
-		{authority.trajectory, ogEdgeAssignmentTrajectory}, {authority.parentAgent, ogEdgeAssignmentParent},
-		{authority.parentWork, ogEdgeAssignmentParentWork},
-		{agentObj, ogEdgeAssignmentAgent}, {workObj, ogEdgeAssignmentWork},
-	}
-	if authority.parentRun.CanonicalID != "" {
-		targets = append(targets, struct {
-			obj  objectgraph.Object
-			kind objectgraph.EdgeKind
-		}{authority.parentRun, ogEdgeAssignmentParentRun})
-	}
-	if authority.parentRevision.CanonicalID != "" {
-		targets = append(targets, struct {
-			obj  objectgraph.Object
-			kind objectgraph.EdgeKind
-		}{authority.parentRevision, ogEdgeAssignmentParentRun})
-	}
-	edges := make([]objectgraph.Edge, 0, len(targets))
-	for _, target := range targets {
+	}{{authority.trajectory, ogEdgeAssignmentTrajectory}, {agentObj, ogEdgeAssignmentAgent}} {
 		edge, edgeErr := engineeringEdge(assignmentObj.CanonicalID, target.obj.CanonicalID, target.kind, now)
 		if edgeErr != nil {
 			return types.EngineeringAssignmentCommandResult{}, edgeErr
 		}
 		edges = append(edges, edge)
 	}
-	conditions := engineeringParentAuthorityConditions(authority)
+	conditions := append([]objectgraph.ObjectCondition(nil), inboxConditions...)
+	if !slices.ContainsFunc(conditions, func(c objectgraph.ObjectCondition) bool { return c.CanonicalID == parentHead.CanonicalID }) {
+		// The parent round must still be open when the batch lands.
+		conditions = append(conditions, engineeringObjectCondition(parentHead))
+	}
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: assignmentObj.CanonicalID},
-		objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: workObj.CanonicalID})
-	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleOpenEngineeringAssignment, types.LifecycleEngineeringAssignmentOpened,
-		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "", []objectgraph.Object{assignmentObj, agentObj, workObj}, conditions, edges, nil, nil)
-}
-
-// validateEngineeringSupersedeTuple enforces the frozen correction rule
-// (settlement gate item 3, v1): attempt 1 never carries a tuple; attempt > 1
-// always carries one naming a recorded prior report of the same assignment's
-// earlier attempt with a valid kind, a non-empty reason, and a well-formed
-// structured-fields delta digest. The tuple rides the open command digest, so
-// a correction cannot be re-targeted without invalidating the command.
-func (s *Store) validateEngineeringSupersedeTuple(ctx context.Context, req types.OpenEngineeringAssignmentRequest) error {
-	tuple := req.Supersedes
-	if tuple == nil {
-		if req.Binding.Attempt > 1 {
-			return fmt.Errorf("co-super assignment: attempt %d requires the superseding tuple: %w", req.Binding.Attempt, ErrEngineeringAssignmentInvalid)
-		}
-		return nil
-	}
-	if req.Binding.Attempt <= 1 {
-		return fmt.Errorf("co-super assignment: attempt 1 cannot carry a superseding tuple: %w", ErrEngineeringAssignmentInvalid)
-	}
-	if strings.TrimSpace(tuple.SupersedesAssignmentID) != strings.TrimSpace(req.AssignmentID) {
-		return fmt.Errorf("co-super assignment: supersede targets its own assignment: %w", ErrEngineeringAssignmentInvalid)
-	}
-	if tuple.SupersedesAttempt == 0 || tuple.SupersedesAttempt >= req.Binding.Attempt {
-		return fmt.Errorf("co-super assignment: supersede names a strictly earlier attempt: %w", ErrEngineeringAssignmentInvalid)
-	}
-	switch tuple.SupersedeKind {
-	case types.EngineeringSupersedeCorrection, types.EngineeringSupersedeRetryAfterBlock, types.EngineeringSupersedeOwnerReopen:
-	default:
-		return fmt.Errorf("co-super assignment: invalid supersede kind %q: %w", tuple.SupersedeKind, ErrEngineeringAssignmentInvalid)
-	}
-	if strings.TrimSpace(tuple.ReasonEnum) == "" || strings.TrimSpace(tuple.PriorReceiptRef) == "" {
-		return fmt.Errorf("co-super assignment: supersede requires reason and prior receipt: %w", ErrEngineeringAssignmentInvalid)
-	}
-	if !types.ValidSHA256Digest(strings.TrimSpace(tuple.DeltaDigest)) {
-		return fmt.Errorf("co-super assignment: supersede delta digest must be exact sha256: %w", ErrEngineeringAssignmentInvalid)
-	}
-	_, prior, err := s.getEngineeringAssignmentObject(ctx, req.Binding.OwnerID, req.Binding.ComputerID, req.AssignmentID, tuple.SupersedesAttempt)
+		objectgraph.ObjectCondition{CanonicalID: agentObj.CanonicalID})
+	result, err := s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleOpenEngineeringAssignment, types.LifecycleEngineeringAssignmentOpened,
+		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "", []objectgraph.Object{assignmentObj, agentObj}, conditions, edges, nil, inboxObjects...)
 	if err != nil {
-		return fmt.Errorf("co-super assignment: superseded attempt unavailable: %w", ErrEngineeringAssignmentInvalid)
+		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	for _, ref := range prior.ReportRefs {
-		obj, getErr := s.lifecycleGraph().GetObject(ctx, strings.TrimSpace(ref))
-		if getErr != nil {
-			continue
+	if result.Replay {
+		inbox, found, inboxErr := s.replayInboxCommand(ctx, records.OwnerID, records.ComputerID, records.CommandID, records.CommandDigest)
+		if inboxErr != nil {
+			return types.EngineeringAssignmentCommandResult{}, inboxErr
 		}
-		stored, decodeErr := decodeLifecycleObject[types.EngineeringAssignmentReport](obj)
-		if decodeErr != nil {
-			continue
+		if found {
+			result.Records = &inbox
 		}
-		if strings.TrimSpace(stored.ReportID) == strings.TrimSpace(tuple.PriorReceiptRef) {
-			return nil
-		}
+		return result, nil
 	}
-	return fmt.Errorf("co-super assignment: prior receipt is not a recorded report of the superseded attempt: %w", ErrEngineeringAssignmentInvalid)
+	result.Records = &inboxReceipt
+	return result, nil
 }
 
 func (s *Store) getEngineeringAssignmentObject(ctx context.Context, ownerID, computerID, assignmentID string, attempt uint64) (objectgraph.Object, types.EngineeringAssignment, error) {
@@ -1499,11 +1326,19 @@ func metadataExactUint64(metadata map[string]any, key string) uint64 {
 }
 
 func validateEngineeringAssignmentRun(assignment types.EngineeringAssignment, assignedAgent types.AgentRecord, run types.RunRecord) error {
+	if !assignment.Binding.Records() {
+		return fmt.Errorf("co-super assignment: a pre-records binding binds no new run: %w", ErrEngineeringAssignmentInvalid)
+	}
+	// C1e: a records run carries no work items; it names its conversation
+	// and the parent round it serves instead.
 	workIDs, bindingErr := lifecycleActivationWorkItemIDs(run.Metadata)
 	coordinationID := metadataExactString(run.Metadata, "coordination_contract_id")
 	coordinationDigest := metadataExactString(run.Metadata, "coordination_contract_digest")
-	if bindingErr != nil || len(workIDs) != 1 || workIDs[0] != assignment.Binding.AssignedWorkItemID ||
-		metadataExactString(run.Metadata, "lifecycle_work_item_id") != assignment.Binding.AssignedWorkItemID ||
+	if bindingErr != nil || len(workIDs) != 0 ||
+		metadataExactString(run.Metadata, "lifecycle_work_item_id") != "" ||
+		metadataExactString(run.Metadata, "assigned_conversation_id") != assignment.Binding.AssignedConversationID ||
+		metadataExactString(run.Metadata, "parent_conversation_id") != assignment.Binding.ParentConversationID ||
+		metadataExactUint64(run.Metadata, "parent_round") != uint64(assignment.Binding.ParentRound) ||
 		strings.TrimSpace(run.RunID) == "" || run.OwnerID != assignment.Binding.OwnerID || run.ComputerID != assignment.Binding.ComputerID ||
 		run.TrajectoryID != assignment.Binding.TrajectoryID || run.AgentID != assignment.Binding.AssignedAgentID ||
 		run.ChannelID != assignedAgent.ChannelID || run.AgentProfile != agentprofile.Engineering || run.AgentRole != agentprofile.Engineering || run.State != types.RunPending ||
@@ -1514,8 +1349,6 @@ func validateEngineeringAssignmentRun(assignment types.EngineeringAssignment, as
 		metadataExactString(run.Metadata, "assignment_id") != assignment.AssignmentID ||
 		metadataExactUint64(run.Metadata, "assignment_attempt") != assignment.Binding.Attempt ||
 		metadataExactString(run.Metadata, "assignment_kind") != string(assignment.Binding.Kind) ||
-		metadataExactString(run.Metadata, "assigned_work_item_id") != assignment.Binding.AssignedWorkItemID ||
-		metadataExactString(run.Metadata, "parent_work_item_id") != assignment.Binding.ParentWorkItemID ||
 		metadataExactString(run.Metadata, "parent_decision_id") != assignment.Binding.ParentDecisionID ||
 		metadataExactString(run.Metadata, "parent_control_id") != assignment.Binding.ParentControlID ||
 		metadataExactString(run.Metadata, "capsule_id") != assignment.Binding.CapsuleID ||
@@ -1667,7 +1500,7 @@ func (s *Store) BindEngineeringAssignment(ctx context.Context, req types.BindEng
 	}
 	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleBindEngineeringAssignment, types.LifecycleEngineeringAssignmentBound,
 		req.CommandID, req.CommandDigest, assignment, nil, nil, "", "",
-		[]objectgraph.Object{updatedObj, assignedAgentObj, runObj, runClaimObj, capabilityObj, capsuleObj}, conditions, []objectgraph.Edge{runEdge}, nil, nil)
+		[]objectgraph.Object{updatedObj, assignedAgentObj, runObj, runClaimObj, capabilityObj, capsuleObj}, conditions, []objectgraph.Edge{runEdge}, nil)
 }
 
 func engineeringReportChangedSubject(report types.EngineeringAssignmentReport, originalDigest string) bool {
@@ -1697,149 +1530,6 @@ func reducerAssignmentOutcome(report types.EngineeringAssignmentReport, assignme
 		return types.EngineeringAssignmentCompleted
 	}
 	return assignment.Disposition
-}
-
-func engineeringReportPacketPayload(report types.EngineeringAssignmentReport, cancellation bool) (types.SourcePacket, string) {
-	kind := "execution_result"
-	if report.Result == types.EngineeringResultFailed || report.Result == types.EngineeringResultBlocked || cancellation {
-		kind = "blocker"
-	}
-	notes := append([]string(nil), report.EvidenceRefs...)
-	notes = append(notes, fmt.Sprintf("assignment_id=%s attempt=%d report_id=%s late=%t", report.AssignmentID, report.Attempt, report.ReportID, report.Late))
-	packet := types.SourcePacket{
-		SchemaVersion: types.CoagentSourcePacketSchemaV1,
-		Kind:          kind,
-		Summary:       report.Summary,
-		Claims:        []types.CoagentPacketClaim{{ClaimID: report.ReportID, Text: report.Summary, Stance: "supports"}},
-		Notes:         notes,
-	}
-	return packet, report.Summary
-}
-
-func buildEngineeringReturnPacket(now time.Time, seq int64, assignment types.EngineeringAssignment, report types.EngineeringAssignmentReport, parentRun types.RunRecord, parentChannelID string, cancellation bool) (types.CoagentSourcePacket, objectgraph.Object, error) {
-	packetPayload, content := engineeringReportPacketPayload(report, cancellation)
-	payloadDigest, err := ComputeLifecycleUpdatePayloadDigest(packetPayload, content)
-	if err != nil {
-		return types.CoagentSourcePacket{}, objectgraph.Object{}, err
-	}
-	updateID := "assignment-report:" + report.ReportID
-	deliveredRunID := ""
-	var deliveredAt *time.Time
-	// Delivery marks only a live parent run receiving the packet. Document
-	// casts have no parent run: the packet stays undelivered and reaches
-	// Texture through the pending-update fallback scan + occurrence resolver.
-	if assignment.Binding.ParentRunID != "" && !parentRun.State.Terminal() {
-		deliveredRunID = assignment.Binding.ParentRunID
-		deliveredAt = &now
-	}
-	update := types.CoagentSourcePacket{
-		UpdateID: updateID, ProducerUpdateID: report.ReportID,
-		OwnerID: assignment.Binding.OwnerID, ComputerID: assignment.Binding.ComputerID,
-		AgentID: assignment.Binding.AssignedAgentID, TargetAgentID: assignment.Binding.ParentAgentID,
-		ChannelID: strings.TrimSpace(parentChannelID), MessageSeq: seq, TrajectoryID: assignment.Binding.TrajectoryID,
-		Direction: types.LifecyclePacketDirectionProducerReport, ControlBindingID: assignment.Binding.ParentControlID,
-		ProducerWorkItemID: assignment.Binding.AssignedWorkItemID, TargetWorkItemID: assignment.Binding.ParentWorkItemID,
-		WorkItemID: assignment.Binding.AssignedWorkItemID, Role: agentprofile.Engineering, SourceRunID: assignment.BoundRunID,
-		PayloadDigest: payloadDigest, Disposition: types.UpdatePending, LifecycleVersion: 1, ReducerSeq: seq,
-		Packet: packetPayload, Content: content, CreatedAt: now,
-		DeliveredToRunID: deliveredRunID, DeliveredAt: deliveredAt,
-	}
-	// Document casts (ParentRunID == "") target the durable Engineering desk
-	// agent, which never runs — the report would die in its mailbox. Retarget
-	// to the document's owning Texture agent so the existing producer-report
-	// occurrence path wakes Texture on the assignment's progress.
-	if strings.TrimSpace(assignment.Binding.ParentRunID) == "" && strings.HasPrefix(assignment.Binding.ParentAgentID, agentprofile.Engineering+":") {
-		docID := strings.TrimPrefix(assignment.Binding.ParentAgentID, agentprofile.Engineering+":")
-		if docID != "" {
-			update.TargetAgentID = agentprofile.Texture + ":" + docID
-			update.TargetWorkItemID = TextureSupervisionWorkItemPrefix + docID
-		}
-	}
-	key := update.TrajectoryID + "\x00" + update.TargetAgentID + "\x00" + update.AgentID + "\x00" + update.ProducerUpdateID
-	meta := lifecycleMetadata("update_id", update.UpdateID, update.ComputerID, update.TrajectoryID, seq)
-	meta["producer_update_id"], meta["target_agent_id"] = update.ProducerUpdateID, update.TargetAgentID
-	obj, err := lifecycleObject(ogKindWorkerUpdate, update.OwnerID, update.ComputerID, key, update, meta, now, now)
-	return update, obj, err
-}
-
-// TextureSupervisionWorkItemPrefix prefixes the durable supervision work item
-// minted beside every document-cast engineering assignment
-// (textureSupervisionSubject below). The item is the return surface for the
-// desk's producer-report packets — a standing report target, never a revision
-// consumer — so revision-target selection must exclude it by this prefix.
-const TextureSupervisionWorkItemPrefix = "work:texture-supervision:"
-
-// IsTextureSupervisionWorkItem reports whether workItemID names the durable
-// supervision surface minted for a document-cast assignment.
-func IsTextureSupervisionWorkItem(workItemID string) bool {
-	return strings.HasPrefix(strings.TrimSpace(workItemID), TextureSupervisionWorkItemPrefix)
-}
-
-// textureSupervisionSubject derives the durable texture:<docID> subject and
-// its open supervision work item for a document-cast assignment. Both are
-// minted inside the report/cancel commit so the retargeted producer-report
-// packet resolves an existing Texture occurrence authority; the commit uses
-// not-exists conditions so the objects never overwrite an existing subject.
-func (s *Store) textureSupervisionSubject(ctx context.Context, ownerID, computerID string, binding types.EngineeringAssignmentBinding, seq int64, now time.Time) (agentObj, workObj objectgraph.Object, err error) {
-	if strings.TrimSpace(binding.ParentRunID) != "" || !strings.HasPrefix(binding.ParentAgentID, agentprofile.Engineering+":") {
-		return agentObj, workObj, nil
-	}
-	docID := strings.TrimSpace(strings.TrimPrefix(binding.ParentAgentID, agentprofile.Engineering+":"))
-	if docID == "" {
-		return agentObj, workObj, nil
-	}
-	agentID := agentprofile.Texture + ":" + docID
-	if existing, getErr := s.GetAgentByScope(ctx, ownerID, computerID, agentID); getErr == nil && existing.AgentID == agentID {
-		return agentObj, workObj, nil
-	} else if getErr != nil && !errors.Is(getErr, ErrNotFound) {
-		return agentObj, workObj, getErr
-	}
-	agent := types.AgentRecord{
-		AgentID: agentID, OwnerID: ownerID, ComputerID: computerID,
-		Profile: agentprofile.Texture, Role: agentprofile.Texture, ChannelID: docID,
-		LifecycleVersion: 1, LastReducerSeq: seq, CreatedAt: now, UpdatedAt: now,
-	}
-	agentMeta := lifecycleMetadata("agent_id", agent.AgentID, computerID, binding.TrajectoryID, seq)
-	agentMeta["channel_id"] = agent.ChannelID
-	agentObj, err = lifecycleObject(ogKindAgent, ownerID, computerID, agent.AgentID, agent, agentMeta, agent.CreatedAt, now)
-	if err != nil {
-		return objectgraph.Object{}, objectgraph.Object{}, err
-	}
-	work := types.WorkItemRecord{
-		WorkItemID: TextureSupervisionWorkItemPrefix + docID, OwnerID: ownerID, ComputerID: computerID,
-		TrajectoryID: binding.TrajectoryID, AssignedAgentID: agent.AgentID,
-		Objective: "Supervise the engineering desk's assignment reports for this document",
-		Reason:    "document-cast engineering supervision surface", AuthorityProfile: agentprofile.Texture,
-		Status: types.WorkItemOpen, CreatedByRunID: binding.ParentRunID,
-		LifecycleVersion: 1, LastReducerSeq: seq, CreatedAt: now, UpdatedAt: now,
-	}
-	workObj, err = lifecycleObject(ogKindWorkItem, ownerID, computerID, work.WorkItemID, work,
-		lifecycleMetadata("work_item_id", work.WorkItemID, computerID, binding.TrajectoryID, seq), now, now)
-	if err != nil {
-		return objectgraph.Object{}, objectgraph.Object{}, err
-	}
-	return agentObj, workObj, nil
-}
-
-// coManagementParentReturnTarget resolves the return-packet parent run and channel
-// for one assignment binding. Run-parented bindings decode the bound parent
-// run; document-parented bindings (ParentRunID == "") have no parent run —
-// the engineering desk agent's channel (the bound document) is the return
-// target, and the packet stays undelivered until a desk activation consumes
-// it.
-func engineeringParentReturnTarget(parentAuthority engineeringAuthorityObjects, binding types.EngineeringAssignmentBinding) (types.RunRecord, string, error) {
-	if strings.TrimSpace(binding.ParentRunID) != "" {
-		parentRun, err := decodeLifecycleObject[types.RunRecord](parentAuthority.parentRun)
-		if err != nil {
-			return types.RunRecord{}, "", err
-		}
-		return parentRun, parentRun.ChannelID, nil
-	}
-	parentAgent, err := decodeLifecycleObject[types.AgentRecord](parentAuthority.parentAgent)
-	if err != nil {
-		return types.RunRecord{}, "", err
-	}
-	return types.RunRecord{}, parentAgent.ChannelID, nil
 }
 
 func engineeringTerminalRunState(disposition types.EngineeringAssignmentDisposition) types.RunState {
@@ -1879,6 +1569,28 @@ func (s *Store) projectEngineeringTerminal(ctx context.Context, assignment types
 	if err != nil {
 		return nil, nil, err
 	}
+	objects := []objectgraph.Object{}
+	conditions := []objectgraph.ObjectCondition{}
+	if assignment.Binding.Records() {
+		// C1e: a records assignment has no work item; the row is the
+		// outcome authority, and only the agent and the run project.
+		if agent.ActiveRunID != "" && agent.ActiveRunID != assignment.BoundRunID {
+			return nil, nil, ErrEngineeringAssignmentInvalid
+		}
+		if agent.ActiveRunID != "" {
+			agent.ActiveRunID = ""
+			agent.LifecycleVersion++
+			agent.LastReducerSeq, agent.UpdatedAt = seq, now
+			agentUpdated, buildErr := lifecycleObject(ogKindAgent, assignment.Binding.OwnerID, assignment.Binding.ComputerID, agent.AgentID, agent,
+				lifecycleMetadata("agent_id", agent.AgentID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, seq), agentObj.CreatedAt, now)
+			if buildErr != nil {
+				return nil, nil, buildErr
+			}
+			objects = append(objects, agentUpdated)
+			conditions = append(conditions, engineeringObjectCondition(agentObj))
+		}
+		return s.projectEngineeringTerminalRun(ctx, assignment, seq, now, resultRef, reason, objects, conditions)
+	}
 	workObj, work, err := s.lifecycleWorkObject(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.AssignedWorkItemID)
 	if err != nil {
 		return nil, nil, err
@@ -1886,8 +1598,6 @@ func (s *Store) projectEngineeringTerminal(ctx context.Context, assignment types
 	if work.AssignedAgentID != assignment.Binding.AssignedAgentID {
 		return nil, nil, ErrEngineeringAssignmentInvalid
 	}
-	objects := []objectgraph.Object{}
-	conditions := []objectgraph.ObjectCondition{}
 	// Trajectory cancellation may already have projected the exact work and
 	// agent terminal state after durable capsule revoke intent/ack. Treat that
 	// projection as authenticated system cancellation rather than requiring a
@@ -1935,6 +1645,12 @@ func (s *Store) projectEngineeringTerminal(ctx context.Context, assignment types
 			conditions = append(conditions, engineeringObjectCondition(agentObj))
 		}
 	}
+	return s.projectEngineeringTerminalRun(ctx, assignment, seq, now, resultRef, reason, objects, conditions)
+}
+
+// projectEngineeringTerminalRun projects the assignment's terminal fate onto
+// its bound run, after the agent (and, before C1e, the work item).
+func (s *Store) projectEngineeringTerminalRun(ctx context.Context, assignment types.EngineeringAssignment, seq int64, now time.Time, resultRef, reason string, objects []objectgraph.Object, conditions []objectgraph.ObjectCondition) ([]objectgraph.Object, []objectgraph.ObjectCondition, error) {
 	if assignment.BoundRunID == "" {
 		return objects, conditions, nil
 	}
@@ -2242,29 +1958,17 @@ func (s *Store) RecordEngineeringAssignmentReport(ctx context.Context, req types
 		conditions = append(conditions, engineeringObjectCondition(parentAuthority.trajectory))
 	}
 	objects := []objectgraph.Object{updatedAssignmentObj, reportObj}
-	var update *types.CoagentSourcePacket
-	if !report.Late {
-		parentRun, parentChannelID, decodeErr := engineeringParentReturnTarget(parentAuthority, assignment.Binding)
-		if decodeErr != nil {
-			return types.EngineeringAssignmentCommandResult{}, decodeErr
+	var inboxObjects []objectgraph.Object
+	if !report.Late && assignment.Binding.Records() {
+		// C1e D3: engineering's Report to management commits with the row.
+		// It is final only when the row turns terminal in this batch.
+		final := assignment.Disposition != previousDisposition && assignment.Disposition.Terminal()
+		recordObjects, recordConditions, recordErr := s.planEngineeringReportRecord(ctx, assignment, report, final, req.OutcomeRefs, now)
+		if recordErr != nil {
+			return types.EngineeringAssignmentCommandResult{}, recordErr
 		}
-		created, updateObj, updateErr := buildEngineeringReturnPacket(now, transition.seq, assignment, report, parentRun, parentChannelID, false)
-		if updateErr != nil {
-			return types.EngineeringAssignmentCommandResult{}, updateErr
-		}
-		update = &created
-		objects = append(objects, updateObj)
-		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID})
-		supervisionAgentObj, supervisionWorkObj, mintErr := s.textureSupervisionSubject(ctx, req.OwnerID, req.ComputerID, assignment.Binding, transition.seq, now)
-		if mintErr != nil {
-			return types.EngineeringAssignmentCommandResult{}, mintErr
-		}
-		if supervisionAgentObj.CanonicalID != "" {
-			objects = append(objects, supervisionAgentObj, supervisionWorkObj)
-			conditions = append(conditions,
-				objectgraph.ObjectCondition{CanonicalID: supervisionAgentObj.CanonicalID},
-				objectgraph.ObjectCondition{CanonicalID: supervisionWorkObj.CanonicalID})
-		}
+		inboxObjects = recordObjects
+		conditions = append(conditions, recordConditions...)
 	}
 	if assignment.Disposition.Terminal() && !report.Late {
 		projectionObjects, projectionConditions, projectionErr := s.projectEngineeringTerminal(ctx, assignment, transition.seq, now, report.ReportID, assignment.DispositionReason)
@@ -2294,7 +1998,7 @@ func (s *Store) RecordEngineeringAssignmentReport(ctx context.Context, req types
 	}
 	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleRecordEngineeringAssignment, types.LifecycleEngineeringAssignmentReported,
 		req.CommandID, req.CommandDigest, assignment, &report, candidate, report.ReportID, assignment.DispositionReason,
-		objects, conditions, edges, update, report.EvidenceRefs)
+		objects, conditions, edges, report.EvidenceRefs, inboxObjects...)
 }
 
 func (s *Store) CancelEngineeringAssignment(ctx context.Context, req types.CancelEngineeringAssignmentRequest) (types.EngineeringAssignmentCommandResult, error) {
@@ -2376,38 +2080,30 @@ func (s *Store) CancelEngineeringAssignment(ctx context.Context, req types.Cance
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	parentRun, parentChannelID, decodeErr := engineeringParentReturnTarget(parentAuthority, assignment.Binding)
-	if decodeErr != nil {
-		return types.EngineeringAssignmentCommandResult{}, decodeErr
-	}
-	update, updateObj, err := buildEngineeringReturnPacket(now, transition.seq, assignment, report, parentRun, parentChannelID, true)
-	if err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
-	}
 	projectionObjects, projectionConditions, err := s.projectEngineeringTerminal(ctx, assignment, transition.seq, now, report.ReportID, req.Reason)
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	objects := []objectgraph.Object{updatedObj, reportObj, updateObj}
+	objects := []objectgraph.Object{updatedObj, reportObj}
 	objects = append(objects, projectionObjects...)
-	supervisionAgentObj, supervisionWorkObj, mintErr := s.textureSupervisionSubject(ctx, req.OwnerID, req.ComputerID, assignment.Binding, transition.seq, now)
-	if mintErr != nil {
-		return types.EngineeringAssignmentCommandResult{}, mintErr
-	}
-	if supervisionAgentObj.CanonicalID != "" {
-		objects = append(objects, supervisionAgentObj, supervisionWorkObj)
-	}
 	conditions := append(engineeringParentAuthorityConditions(parentAuthority), engineeringObjectCondition(assignmentObj),
-		objectgraph.ObjectCondition{CanonicalID: reportObj.CanonicalID}, objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID})
-	if supervisionAgentObj.CanonicalID != "" {
-		conditions = append(conditions,
-			objectgraph.ObjectCondition{CanonicalID: supervisionAgentObj.CanonicalID},
-			objectgraph.ObjectCondition{CanonicalID: supervisionWorkObj.CanonicalID})
-	}
+		objectgraph.ObjectCondition{CanonicalID: reportObj.CanonicalID})
 	conditions = append(conditions, projectionConditions...)
+	var inboxObjects []objectgraph.Object
+	if assignment.Binding.Records() && !req.Silent {
+		// C1e D3/D7: the cancellation's final Report closes the engineering
+		// round and wakes management, atomic with the row, but only while
+		// the round is open; a crash boot's cancellation is silent.
+		recordObjects, recordConditions, recordErr := s.planEngineeringReportRecord(ctx, assignment, report, true, nil, now)
+		if recordErr != nil {
+			return types.EngineeringAssignmentCommandResult{}, recordErr
+		}
+		inboxObjects = recordObjects
+		conditions = append(conditions, recordConditions...)
+	}
 	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleCancelEngineeringAssignment, types.LifecycleEngineeringAssignmentCancelled,
 		req.CommandID, req.CommandDigest, assignment, &report, nil, report.ReportID, req.Reason, objects,
-		conditions, nil, &update, nil)
+		conditions, nil, nil, inboxObjects...)
 }
 
 func validEngineeringCapsuleTransition(current, next types.EngineeringCapsuleDisposition, intentRef, ackRef string) bool {
@@ -2519,7 +2215,7 @@ func (s *Store) SetEngineeringCapsuleDisposition(ctx context.Context, req types.
 	}
 	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleSetEngineeringCapsuleDisposition, types.LifecycleEngineeringCapsuleDispositionSet,
 		req.CommandID, req.CommandDigest, assignment, nil, nil, "", string(req.Disposition), []objectgraph.Object{updatedObj},
-		[]objectgraph.ObjectCondition{engineeringObjectCondition(assignmentObj)}, nil, nil, evidenceRefs)
+		[]objectgraph.ObjectCondition{engineeringObjectCondition(assignmentObj)}, nil, evidenceRefs)
 }
 
 func (s *Store) GetEngineeringAssignmentReport(ctx context.Context, ownerID, computerID, reportID string) (types.EngineeringAssignmentReport, error) {
@@ -2646,90 +2342,43 @@ func (s *Store) RecordEngineeringOrphanObservation(ctx context.Context, obs type
 	return s.RecordEngineeringAssignmentReport(ctx, req)
 }
 
-// EmitEngineeringProgressObservation commits one deduplicated
-// progress-overdue observation packet for a bound assignment that has stayed
-// silent past its arming window. The command is the reducer-side predicate:
-// it refuses a terminal or unbound assignment and a stale silence anchor,
-// mints the ProducerReport-shaped packet through the same return-packet path
-// real reports use (including the document-cast retarget to the document's
-// Texture subject and the supervision-subject mint), and deduplicates by
-// CommandID so replayed deadline deliveries emit one packet.
-func (s *Store) EmitEngineeringProgressObservation(ctx context.Context, req types.EmitEngineeringProgressObservationRequest) (types.EngineeringAssignmentCommandResult, error) {
-	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
-	req.OwnerID, req.ComputerID, req.AssignmentID = strings.TrimSpace(req.OwnerID), strings.TrimSpace(req.ComputerID), strings.TrimSpace(req.AssignmentID)
-	if err := validateEngineeringCommand(req.CommandID, req.CommandDigest, req.AssignmentID, req.Attempt); err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
-	}
-	if req.SilenceSinceUnixNano <= 0 {
-		return types.EngineeringAssignmentCommandResult{}, ErrEngineeringAssignmentInvalid
-	}
-	computedDigest, digestErr := ComputeEmitEngineeringProgressObservationDigest(req)
-	if err := requireEngineeringCommandDigest(req.CommandDigest, computedDigest, digestErr); err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
-	}
-	s.trajectoryMu.Lock()
-	defer s.trajectoryMu.Unlock()
-	if replay, found, err := s.replayEngineeringAssignmentCommand(ctx, req.OwnerID, req.ComputerID, req.CommandID, req.CommandDigest, req.AssignmentID, req.Attempt, ""); found || err != nil {
-		return replay, err
-	}
-	_, assignment, err := s.getEngineeringAssignmentObject(ctx, req.OwnerID, req.ComputerID, req.AssignmentID, req.Attempt)
+// planEngineeringReportRecord composes engineering's Report to management
+// into an assignment transition's batch (C1e D3). It is sent by
+// engineering:<assignment> to management:<owner>; final (stop reason = the
+// disposition) only when the row turns terminal in the batch, a progress
+// Report otherwise. Nothing is minted when the engineering round is not
+// open: a crash boot closed it, and a late outcome mints no record. Its
+// evidence refs name the assignment, the assignment report and the
+// candidate the run froze (D2), which management's Verify names.
+func (s *Store) planEngineeringReportRecord(ctx context.Context, assignment types.EngineeringAssignment, report types.EngineeringAssignmentReport, final bool, outcomeRefs []string, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, error) {
+	binding := assignment.Binding
+	head, err := loadInboxCached[types.ConversationHead](ctx, s, ogKindConversationHead, binding.OwnerID, binding.ComputerID, binding.AssignedConversationID)
 	if err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
+		return nil, nil, err
 	}
-	// The observation is only meaningful while the assignment is live and
-	// bound; terminal or never-bound assignments resolve silently.
-	if assignment.Disposition != types.EngineeringAssignmentBound || strings.TrimSpace(assignment.BoundRunID) == "" {
-		return types.EngineeringAssignmentCommandResult{}, nil
+	if !head.exists || !head.value.Open || head.value.RecipientInbox != binding.AssignedAgentID {
+		return nil, nil, nil
 	}
-	silenceSince := time.Unix(0, req.SilenceSinceUnixNano).UTC()
-	if assignment.UpdatedAt.After(silenceSince) {
-		// A report or disposition change after the arming superseded this
-		// window; the fresher arming owns the observation.
-		return types.EngineeringAssignmentCommandResult{}, nil
+	stamp := now.UTC().Format(time.RFC3339Nano)
+	body := &types.CommitmentReport{Claims: []types.ReportClaim{{Text: report.Summary}}}
+	if final {
+		body.StopReason = string(assignment.Disposition)
 	}
-	parentAuthority, err := s.requireEngineeringParentAuthority(ctx, assignment.Binding)
-	if err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
+	refs := []string{"assignment:" + assignment.AssignmentID, "assignment-report:" + report.ReportID}
+	for _, ref := range outcomeRefs {
+		if ref = strings.TrimSpace(ref); ref != "" && !slices.Contains(refs, ref) {
+			refs = append(refs, ref)
+		}
 	}
-	if parentAuthority.trajectoryRec.Status != types.TrajectoryLive {
-		return types.EngineeringAssignmentCommandResult{}, nil
+	rec := types.CommitmentRecord{
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: EngineeringOutcomeRecordID(report.ReportID),
+		Kind: types.CommitmentKindReport, Discrepancy: types.DiscrepancyUnresolved,
+		Prediction: types.CommitmentPrediction{Hypothesis: report.Summary, CommittedAt: stamp},
+		Provenance: types.CommitmentProvenance{AgentID: binding.AssignedAgentID, CommittedAt: stamp},
+		Inbox:      binding.ParentAgentID, SenderInbox: binding.AssignedAgentID, Addressee: binding.ParentAgentID,
+		EmitterKind: types.CommitmentEmitterAgent, ComputerID: binding.ComputerID,
+		Report: body, Final: final, EvidenceRefs: refs,
 	}
-	now := time.Now().UTC()
-	transition, err := s.prepareEngineeringLifecycleTransition(ctx, parentAuthority.trajectory, parentAuthority.trajectoryRec, now)
-	if err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
-	}
-	parentRun, parentChannelID, decodeErr := engineeringParentReturnTarget(parentAuthority, assignment.Binding)
-	if decodeErr != nil {
-		return types.EngineeringAssignmentCommandResult{}, decodeErr
-	}
-	observationReport := types.EngineeringAssignmentReport{
-		ReportID:     fmt.Sprintf("progress-overdue:%s:%d:%d", assignment.AssignmentID, assignment.Binding.Attempt, req.SilenceSinceUnixNano),
-		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
-		Result: types.EngineeringResultBlocked, Verdict: types.EngineeringVerdictNone,
-		ObservedSubjectDigest: assignment.Binding.SubjectDigest,
-		Summary: fmt.Sprintf("progress overdue: bound assignment %s attempt %d silent since %s (last durable progress %s)",
-			assignment.AssignmentID, assignment.Binding.Attempt, silenceSince.Format(time.RFC3339), assignment.UpdatedAt.Format(time.RFC3339)),
-		CreatedAt: now,
-	}
-	update, updateObj, err := buildEngineeringReturnPacket(now, transition.seq, assignment, observationReport, parentRun, parentChannelID, false)
-	if err != nil {
-		return types.EngineeringAssignmentCommandResult{}, err
-	}
-	objects := []objectgraph.Object{updateObj}
-	conditions := append(engineeringParentAuthorityConditions(parentAuthority),
-		objectgraph.ObjectCondition{CanonicalID: updateObj.CanonicalID})
-	supervisionAgentObj, supervisionWorkObj, mintErr := s.textureSupervisionSubject(ctx, req.OwnerID, req.ComputerID, assignment.Binding, transition.seq, now)
-	if mintErr != nil {
-		return types.EngineeringAssignmentCommandResult{}, mintErr
-	}
-	if supervisionAgentObj.CanonicalID != "" {
-		objects = append(objects, supervisionAgentObj, supervisionWorkObj)
-		conditions = append(conditions,
-			objectgraph.ObjectCondition{CanonicalID: supervisionAgentObj.CanonicalID},
-			objectgraph.ObjectCondition{CanonicalID: supervisionWorkObj.CanonicalID})
-	}
-	return s.commitEngineeringLifecycleCommand(ctx, transition, types.LifecycleQueueUpdate, types.LifecycleUpdateQueued,
-		req.CommandID, req.CommandDigest, assignment, nil, nil, observationReport.ReportID, "progress_overdue", objects,
-		conditions, nil, &update, nil)
+	objects, conditions, _, err := s.planInboxRecords(ctx, binding.OwnerID, binding.ComputerID, []types.CommitmentRecord{rec}, nil, now)
+	return objects, conditions, err
 }

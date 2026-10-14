@@ -3,9 +3,7 @@ package agentcore
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -20,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -139,10 +138,19 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if toolCtx.OperationStore == nil || toolCtx.EventProjection == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" || trajectoryID == "" {
 		return nil, fmt.Errorf("self-development freeze authority unavailable")
 	}
-	operation, err := toolCtx.OperationStore.GetByTrajectory(ctx, toolCtx.ComputerID, trajectoryID)
-	if errors.Is(err, sql.ErrNoRows) && toolCtx.OpenFreezeCandidate != nil {
-		// Self-development is not a special operation: an ordinary assignment
-		// whose change would land on this computer opens its own candidate.
+	// The operation is the assignment's own (C1e D2): resolved by its freeze
+	// key, never by the trajectory. Self-development is not a special
+	// operation: an assignment whose change would land on this computer
+	// opens its own candidate at its first freeze.
+	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+	if assignmentID == "" {
+		return nil, fmt.Errorf("self-development freeze requires an assignment")
+	}
+	operation, found, err := toolCtx.OperationStore.GetByIdempotency(ctx, toolCtx.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	if err == nil && !found {
+		if toolCtx.OpenFreezeCandidate == nil {
+			return nil, fmt.Errorf("resolve self-development operation: assignment %s has none and cannot open one", assignmentID)
+		}
 		operation, err = toolCtx.OpenFreezeCandidate(ctx, trajectoryID)
 	}
 	if err != nil {
@@ -281,18 +289,6 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		"content_digest": record.ContentDigest, "bundle_digest": record.ContentDigest,
 		"operation_id": operation.OperationID, "state": operation.State,
 	}, nil
-}
-
-// recordSelfDevelopmentVerification records an independent verifier decision
-// for the exact frozen self-development bundle. It is the shared body of the
-// record_self_development_verification JSON tool and the reducer's staged
-// Verify intent; rec is the bound run record whose co_super_slot must be the
-// verifier slot.
-func recordSelfDevelopmentVerification(ctx context.Context, toolCtx *CapsuleToolCtx, rec *types.RunRecord, operationID, bundleDigest, decision string, verifierRefs []string) (map[string]any, error) {
-	if rec == nil || normalizeEngineeringSlot(metadataStringValue(rec.Metadata, runMetadataEngineeringSlot)) != "verifier" {
-		return nil, fmt.Errorf("verification recording is restricted to the co-super verifier slot")
-	}
-	return recordSelfDevelopmentVerdict(ctx, toolCtx, trajectoryIDForRun(rec), operationID, bundleDigest, decision, verifierRefs, nil)
 }
 
 // recordSelfDevelopmentVerdict records one verdict on a frozen operation: the
@@ -569,6 +565,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 			req := capsule.GoEvalRequest{Source: input.Source, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS}
 			reduction := rlmReductionForCall(ctx, rt, toolCtx)
 			if reduction.active {
+				req.Records = reduction.records.view
 				req.Inbox = reduction.inbox
 				// RLM prompt-as-variable: pending update_coagent records ride
 				// the request so choir.Updates() exposes them in the cell.
@@ -598,6 +595,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				}
 			}
 			if reduction.active && result.Error == "" {
+				reduction.records = reduction.records.capToShown(rt.noteRecordsShown(reduction.scope.RunID, result.RecordsShown))
 				if rerr := reduction.commit(ctx, result.Intents); rerr != nil {
 					return "", rerr
 				}

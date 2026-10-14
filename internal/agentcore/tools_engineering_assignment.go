@@ -44,11 +44,7 @@ func (rt *Runtime) cancelAssignedEngineeringForRun(ctx context.Context, parent t
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, types.EngineeringAssignment{}, err
 	}
-	assignment := result.Assignment
-	if !result.Replay && result.Update != nil {
-		rt.wakeUpdatedCoagent(ctx, *result.Update)
-	}
-	return result, assignment, nil
+	return result, result.Assignment, nil
 }
 
 // cancel_co_super_assignment's typed-tool registration is deleted (SMG); the

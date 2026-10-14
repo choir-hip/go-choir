@@ -243,6 +243,12 @@ func stepConversation(head *types.ConversationHead, rec *types.CommitmentRecord)
 		}
 	case head.Open:
 		round = head.Round
+	case strings.HasPrefix(sender, "engineering:"):
+		// C1e D3: an engineering conversation is one assignment's one round.
+		// Other desks send round-0 notes; engineering never speaks outside
+		// its open round, so a late progress Report cannot land after the
+		// round closed.
+		return false, false, nil, inboxRefused("record %s: engineering sender %s has no open round in %s", rec.RecordID, sender, head.ConversationID)
 	}
 	if rec.Round != 0 && rec.Round != round {
 		return false, false, nil, inboxRefused("record %s names round %d; the conversation is at round %d", rec.RecordID, rec.Round, round)
@@ -536,23 +542,34 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 	return objects, conditions, receipt, nil
 }
 
-// CommitInboxRecords commits addressed records and an optional cursor
-// advance as one idempotent command: the same command id and digest
-// replays the stored receipt, a different digest is a conflict.
-func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRecordsRequest) (types.InboxCommitReceipt, error) {
+// normalizeInboxCommand trims an inbox command's scope and identity and
+// checks its digest.
+func normalizeInboxCommand(req types.CommitInboxRecordsRequest) (types.CommitInboxRecordsRequest, error) {
 	ownerID, computerID, err := normalizeLifecycleScope(req.OwnerID, req.ComputerID)
 	if err != nil {
-		return types.InboxCommitReceipt{}, err
+		return req, err
 	}
 	req.OwnerID, req.ComputerID = ownerID, computerID
 	req.CommandID, req.CommandDigest = strings.TrimSpace(req.CommandID), strings.TrimSpace(req.CommandDigest)
 	if req.CommandID == "" {
-		return types.InboxCommitReceipt{}, fmt.Errorf("commit inbox records: command_id is required")
+		return req, fmt.Errorf("commit inbox records: command_id is required")
 	}
 	computed, digestErr := ComputeCommitInboxRecordsDigest(req)
 	if err := requireLifecycleDigest(req.CommandDigest, computed, digestErr); err != nil {
+		return req, err
+	}
+	return req, nil
+}
+
+// CommitInboxRecords commits addressed records and an optional cursor
+// advance as one idempotent command: the same command id and digest
+// replays the stored receipt, a different digest is a conflict.
+func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRecordsRequest) (types.InboxCommitReceipt, error) {
+	req, err := normalizeInboxCommand(req)
+	if err != nil {
 		return types.InboxCommitReceipt{}, err
 	}
+	ownerID, computerID := req.OwnerID, req.ComputerID
 	if s.ogStore == nil {
 		return types.InboxCommitReceipt{}, fmt.Errorf("commit inbox records: object graph not initialized")
 	}
@@ -562,19 +579,44 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 	if replay, found, err := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || err != nil {
 		return replay, err
 	}
-	now := time.Now().UTC()
+	objects, conditions, storyEdges, receipt, err := s.planInboxCommand(ctx, req, time.Now().UTC())
+	if err != nil {
+		return types.InboxCommitReceipt{}, err
+	}
+	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: storyEdges}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			if replay, found, replayErr := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
+				return replay, replayErr
+			}
+			return types.InboxCommitReceipt{}, ErrConcurrentStateChange
+		}
+		return types.InboxCommitReceipt{}, err
+	}
+	s.signalActorWakesIfAny(objects)
+	return receipt, nil
+}
+
+// planInboxCommand plans one inbox command's whole batch: support verdicts,
+// story openings, the records and cursor advance, and the inbox_command
+// object that makes the command replayable. It takes no lock; the caller
+// holds trajectoryMu and has already checked replay. CommitInboxRecords
+// commits the plan alone; OpenEngineeringAssignment composes it into the
+// assignment's transaction (C1e D4), so a cell's records, cursor, the
+// assignment row and its binding commit together.
+func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecordsRequest, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, []objectgraph.Edge, types.InboxCommitReceipt, error) {
+	ownerID, computerID := req.OwnerID, req.ComputerID
 	// Support verdicts (Cut 2 2a (v)) commit their memos here, and their
 	// failure records ride the same plan as the cell's own records.
 	verdictObjects, verdictConditions, failures, recorded, err := s.planSupportVerdicts(ctx, ownerID, computerID, req.Judge, req.CommandID, req.Verdicts, now)
 	if err != nil {
-		return types.InboxCommitReceipt{}, err
+		return nil, nil, nil, types.InboxCommitReceipt{}, err
 	}
 	// A management Cast to texture:new opens its story in this commit (Cut 2
 	// 2b): the story's objects join the batch and the Cast is delivered to
 	// the new texture:<doc>.
 	records, storyObjects, storyConditions, storyEdges, opened, err := s.planStoryOpenings(ctx, ownerID, computerID, req.CommandID, req.Records, now)
 	if err != nil {
-		return types.InboxCommitReceipt{}, err
+		return nil, nil, nil, types.InboxCommitReceipt{}, err
 	}
 	if len(failures) > 0 {
 		records = append(append([]types.CommitmentRecord(nil), records...), failures...)
@@ -586,7 +628,7 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 	if len(records) > 0 || req.Cursor != nil || len(req.Verdicts) == 0 {
 		objects, conditions, receipt, err = s.planInboxRecords(ctx, ownerID, computerID, records, req.Cursor, now)
 		if err != nil {
-			return types.InboxCommitReceipt{}, err
+			return nil, nil, nil, types.InboxCommitReceipt{}, err
 		}
 	}
 	for i := range receipt.Records {
@@ -599,21 +641,11 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 	commandObj, err := lifecycleObject(ogKindInboxCommand, ownerID, computerID, req.CommandID, receipt,
 		map[string]any{"command_id": req.CommandID, "computer_id": computerID}, now, now)
 	if err != nil {
-		return types.InboxCommitReceipt{}, err
+		return nil, nil, nil, types.InboxCommitReceipt{}, err
 	}
 	objects = append(objects, commandObj)
 	conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: commandObj.CanonicalID})
-	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: storyEdges}); err != nil {
-		if errors.Is(err, objectgraph.ErrConflict) {
-			if replay, found, replayErr := s.replayInboxCommand(ctx, ownerID, computerID, req.CommandID, req.CommandDigest); found || replayErr != nil {
-				return replay, replayErr
-			}
-			return types.InboxCommitReceipt{}, ErrConcurrentStateChange
-		}
-		return types.InboxCommitReceipt{}, err
-	}
-	s.signalActorWakesIfAny(objects)
-	return receipt, nil
+	return objects, conditions, storyEdges, receipt, nil
 }
 
 func (s *Store) replayInboxCommand(ctx context.Context, ownerID, computerID, commandID, digest string) (types.InboxCommitReceipt, bool, error) {

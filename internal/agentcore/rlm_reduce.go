@@ -7,6 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
+	"time"
+
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -14,9 +18,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
-	"log"
-	"strings"
-	"time"
 )
 
 // commits a successful cell's staged tray into durable state and wakes
@@ -101,8 +102,16 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		return fmt.Errorf("reduce: %d intents exceed cell quota %d", len(intents), yaegikernel.MaxIntentsPerCell)
 	}
 	complete := 0
+	engineeringCasts := 0
 	fromDesk, _, _ := strings.Cut(strings.TrimSpace(scope.FromRole), ":")
 	for i, in := range intents {
+		// One engineering Cast per cell (C1e D4): each opens its own
+		// assignment in the cell's one records transaction.
+		if engineeringCastIntent(in) {
+			if engineeringCasts++; engineeringCasts > 1 {
+				return fmt.Errorf("reduce: cast %s: one engineering Cast per cell", in.LocalID)
+			}
+		}
 		// Engineering reaches Texture only through management (Cut 1
 		// routing, invariant 6).
 		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); fromDesk == agentprofile.Engineering && toDesk == agentprofile.Texture {
@@ -643,7 +652,16 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 	if execCtx.RunRecord != nil {
 		requester = metadataStringValue(execCtx.RunRecord.Metadata, "requested_by_agent_id")
 	}
+	// Engineering converses with management on records (C1e B1): the cell
+	// reads its inbox (engineering:<assignment>) in (cursor, head].
+	var records cellRecords
+	if string(toolCtx.Role) == agentprofile.Engineering {
+		if records, err = rt.loadCellRecords(ctx, execCtx.OwnerID, execCtx.ComputerID, deskAgentForCursor(execCtx), execCtx.RunID); err != nil {
+			return inert
+		}
+	}
 	return &rlmCallReduction{
+		records: records,
 		active:  true,
 		mb:      rt,
 		st:      rt.store,
@@ -875,7 +893,8 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 	// Research's and management's conversations with Texture are on records
 	// (Cut 1 L3a, L3b): their acts to Texture and their cursor advance commit
 	// as one transaction.
-	if r.rec != nil && (strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Research || strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management) {
+	if r.rec != nil && (strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Research || strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management ||
+		strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Engineering) {
 		var err error
 		if intents, err = r.commitRecordsRoute(ctx, intents, &receipt); err != nil {
 			return err
@@ -999,6 +1018,12 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 		_ = assignment
 		return uint64(result.Receipt.ReducerSeq), nil
 	}
+	// An engineering Cast opens an assignment only on management's records
+	// route (C1e D4), where it commits with the assignment row; on any other
+	// path it would be a message no assignment answers.
+	if engineeringCastIntent(in) {
+		return 0, fmt.Errorf("reduce: cast %s: an engineering Cast opens an assignment only from management, naming the Texture request it serves", in.LocalID)
+	}
 	// Record-native cutover (S0m RN3): every staged semantic act from a
 	// lifecycle-bound caller mints record (+ packet when addressed)
 	// atomically via CommitLifecycleAct — the record IS the delivery act;
@@ -1022,51 +1047,9 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 		}
 		// Non-lifecycle caller (legacy run): fall through to record+envelope.
 	}
-	var controlID string
-	var err error
 	if r.ledger != nil {
-		controlID, err = r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec)
-		if err != nil {
+		if _, err := r.ledger.AppendCommitmentRecord(ctx, r.scope.OwnerID, r.scope.ComputerID, rec); err != nil {
 			return 0, err
-		}
-	}
-	// A cast is admission, not just a message: durably OPEN the engineering
-	// assignment under the delegated-cast authority (the caster's own live
-	// run/work), with the commitment record minted above as the parent control.
-	// The spawn/bind/activate saga is deliberately NOT run inside the cell
-	// reducer (consensus precondition) — it resumes from the deferred
-	// delegated_assignment_spawn_deadline wake, or synchronously when kernel
-	// mode is off (test runtimes without the durable wake outbox).
-	if in.Kind == yaegikernel.IntentCast && castOpensEngineeringAssignment(in.ToDesk) {
-		if rt := r.rt(); rt != nil && r.rec != nil && controlID != "" {
-			opened, openErr := rt.openDelegatedCastAssignment(ctx, DelegatedCastRequest{
-				Objective:           in.Objective,
-				Kind:                types.EngineeringAssignmentImplementation,
-				CommitmentControlID: controlID,
-				CasterRun:           *r.rec,
-				CasterAgentID:       r.scope.FromAgentID,
-				TargetDocID:         in.ToDesk,
-				ScopeDigestSeed:     r.scope.CellID + ":" + in.LocalID,
-				WithholdNetwork:     castWithholdsNetwork(in.Statement),
-			})
-			if openErr != nil {
-				return 0, fmt.Errorf("reduce: delegated cast admission: %w", openErr)
-			}
-			// The spawn obligation is atomic with the open commit — the
-			// lifecycle outbox mints delegated_assignment_spawn_deadline in
-			// the same transaction — so kernel mode needs no post-commit arm.
-			// Non-kernel runtimes (tests without the wake outbox) resume
-			// inline under the saga mutex.
-			if !(rt.kernelMode && rt.scheduleActor != nil) {
-				rt.engineeringAssignmentOpenMu.Lock()
-				_, resumeErr := rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, DelegatedCastRequest{
-					Objective: in.Objective, Kind: opened.Assignment.Binding.Kind,
-				})
-				rt.engineeringAssignmentOpenMu.Unlock()
-				if resumeErr != nil {
-					return 0, fmt.Errorf("reduce: delegated cast spawn (non-kernel): %w", resumeErr)
-				}
-			}
 		}
 	}
 	// A packet-bodied report carries the coagent packet schema as its body
@@ -1092,6 +1075,7 @@ func (r *rlmCallReduction) commitActIntent(ctx context.Context, in yaegikernel.S
 	}
 	// Addressed acts mail their envelope so the target desk observes the act.
 	var seq uint64
+	var err error
 	switch in.Kind {
 	case yaegikernel.IntentCast, yaegikernel.IntentAsk, yaegikernel.IntentNote,
 		yaegikernel.IntentReply, yaegikernel.IntentEscalate, yaegikernel.IntentReport:
@@ -1395,16 +1379,21 @@ func (r *rlmCallReduction) commitFreezeIntent(ctx context.Context, in yaegikerne
 	if r.toolCtx.OperationStore == nil {
 		return nil, fmt.Errorf("reduce: freeze intent without self-development operation authority")
 	}
-	trajectoryID := trajectoryIDForRun(r.rec)
-	if trajectoryID == "" {
-		return nil, fmt.Errorf("reduce: freeze intent without trajectory binding")
-	}
-	operation, err := r.toolCtx.OperationStore.GetByTrajectory(ctx, r.toolCtx.ComputerID, trajectoryID)
-	if err != nil {
-		return nil, fmt.Errorf("reduce: resolve self-development operation: %w", err)
+	assignmentID := metadataStringValue(r.rec.Metadata, "assignment_id")
+	if trajectoryIDForRun(r.rec) == "" || assignmentID == "" {
+		return nil, fmt.Errorf("reduce: freeze intent without assignment binding")
 	}
 	out, err := freezeCapsuleEffectBundle(ctx, r.toolCtx, r.rec, r.toolCtx.CapsuleHandle,
 		in.BuildRecipeRef, in.TestReceipts, in.DependencyToolchainRefs)
+	// The assignment's own operation (C1e D2), opened by the freeze when it
+	// had none; a freeze refused before it opened leaves nothing to stamp.
+	operation, found, lookupErr := r.toolCtx.OperationStore.GetByIdempotency(ctx, r.toolCtx.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	if lookupErr != nil || !found {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("reduce: resolve the assignment's self-development operation: %v", lookupErr)
+	}
 	// Surface the refusal on the operation record either way: a rejected
 	// freeze was invisible to the owner (S0 wedge finding), and a
 	// successful freeze clears a prior refusal stamp.
@@ -1439,36 +1428,64 @@ func (r *rlmCallReduction) recordOperationIntentError(operationID, reason string
 	}
 }
 
-// commitVerifyIntent reduces a staged Verify intent through the same
-// verification body the record_self_development_verification tool runs. The
-// operation binding resolves from the run's trajectory — the mounted bundle
-// the cell inspected is the operation's frozen bundle by construction — and
-// the intent's bundle digest must equal the operation's durable digest, so a
-// decision can never land on a bundle other than the one the cell examined.
+// commitVerifyIntent reduces management's staged Verify (C1e step 4): its
+// verdict on the candidate an assignment it cast froze. The assignment names
+// its own operation by the freeze key (D2), never the trajectory; the
+// intent's bundle digest must equal the operation's durable digest, so a
+// decision can never land on a bundle other than the one named. The verdict
+// writes through recordSelfDevelopmentVerdict with a host-side authority
+// context, as the decision-model judgment did.
 func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikernel.StagedIntent) (map[string]any, error) {
-	if r.rec == nil || r.toolCtx == nil || r.toolCtx.OperationStore == nil {
+	rt := r.rt()
+	if r.rec == nil || rt == nil || rt.store == nil || rt.selfdevOperations == nil {
 		return nil, fmt.Errorf("reduce: verify intent without verification authority")
 	}
-	trajectoryID := trajectoryIDForRun(r.rec)
-	if trajectoryID == "" {
-		return nil, fmt.Errorf("reduce: verify intent without trajectory binding")
+	if strings.TrimSpace(r.rec.AgentProfile) != agentprofile.Management {
+		return nil, fmt.Errorf("reduce: verify %s: verification is management's", in.LocalID)
 	}
-	operation, err := r.toolCtx.OperationStore.GetByTrajectory(ctx, r.toolCtx.ComputerID, trajectoryID)
+	assignmentID := strings.TrimSpace(in.TargetRef)
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, r.scope.OwnerID, r.scope.ComputerID, assignmentID, 1)
 	if err != nil {
-		return nil, fmt.Errorf("reduce: resolve self-development operation: %w", err)
+		return nil, fmt.Errorf("reduce: verify %s: assignment %s: %w", in.LocalID, assignmentID, err)
+	}
+	if assignment.Binding.ParentAgentID != strings.TrimSpace(r.scope.DeskAgentID) {
+		return nil, fmt.Errorf("reduce: verify %s: assignment %s was not cast by this desk", in.LocalID, assignmentID)
+	}
+	if assignment.Disposition != types.EngineeringAssignmentCompleted {
+		return nil, fmt.Errorf("reduce: verify %s: assignment %s is %s; only a completed assignment's candidate is verified", in.LocalID, assignmentID, assignment.Disposition)
+	}
+	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, r.scope.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	if err != nil {
+		return nil, fmt.Errorf("reduce: verify %s: resolve the assignment's operation: %w", in.LocalID, err)
+	}
+	if !found {
+		return nil, fmt.Errorf("reduce: verify %s: assignment %s froze no candidate", in.LocalID, assignmentID)
+	}
+	stamp := func(reason string) {
+		writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := rt.selfdevOperations.RecordIntentError(writeCtx, r.scope.ComputerID, operation.OperationID, reason); err != nil {
+			log.Printf("agentcore: record verify intent error on %s failed (run %s): %v", operation.OperationID, r.scope.RunID, err)
+		}
 	}
 	if in.BundleDigest != operation.BundleDigest {
 		reason := fmt.Sprintf("verify %s bundle digest does not match the operation's frozen bundle", in.LocalID)
-		r.recordOperationIntentError(operation.OperationID, reason)
+		stamp(reason)
 		return nil, fmt.Errorf("reduce: %s", reason)
 	}
-	out, verifyErr := recordSelfDevelopmentVerification(ctx, r.toolCtx, r.rec, operation.OperationID, operation.BundleDigest, in.Decision, in.VerifierRefs)
+	toolCtx := &CapsuleToolCtx{
+		AgentRunID: r.scope.RunID, ComputerID: r.scope.ComputerID, OwnerID: r.scope.OwnerID,
+		EventAppender: rt.eventAppender, OperationStore: rt.selfdevOperations, UpdaterRoot: rt.selfdevUpdaterRoot,
+		EventProjection: rt.store, Ledger: rt.store,
+	}
+	out, verifyErr := recordSelfDevelopmentVerdict(ctx, toolCtx, assignment.Binding.TrajectoryID, operation.OperationID, operation.BundleDigest, in.Decision, in.VerifierRefs,
+		map[string]any{"assignment_id": assignmentID, "verifier_desk": r.scope.DeskAgentID})
 	if verifyErr != nil {
-		r.recordOperationIntentError(operation.OperationID, "verify: "+verifyErr.Error())
+		stamp("verify: " + verifyErr.Error())
 		return nil, verifyErr
 	}
 	if operation.LastIntentError != "" {
-		r.recordOperationIntentError(operation.OperationID, "")
+		stamp("")
 	}
 	return out, nil
 }
@@ -1651,22 +1668,11 @@ func (r *rlmCallReduction) commitCompleteIntent(ctx context.Context, in yaegiker
 	if rt == nil {
 		return false, fmt.Errorf("reduce: complete intent without runtime")
 	}
-	cmdResult, err := rt.recordAssignedEngineeringReport(ctx, r.rec, intentIdentity, report)
-	if err != nil {
+	// The report's outcome (row, final Report to management) commits in one
+	// transaction (C1e D3); management's Verify, not a host chain, judges a
+	// frozen candidate (C1e step 4).
+	if _, err := rt.recordAssignedEngineeringReport(ctx, r.rec, intentIdentity, report); err != nil {
 		return false, err
-	}
-	if !cmdResult.Replay && cmdResult.Update != nil {
-		rt.wakeUpdatedCoagent(ctx, *cmdResult.Update)
-	}
-	if result != types.EngineeringResultPartial && cmdResult.Assignment.Disposition == types.EngineeringAssignmentCompleted &&
-		cmdResult.Assignment.Binding.Kind == types.EngineeringAssignmentImplementation {
-		// Verification chaining is host-side: a completed implementation on a
-		// document-bound trajectory opens the verification assignment when the
-		// bound self-development operation is frozen.
-		if _, recErr := rt.ReconcileEngineeringDeskForTrajectory(ctx, cmdResult.Assignment.Binding.OwnerID,
-			cmdResult.Assignment.Binding.TrajectoryID); recErr != nil {
-			log.Printf("runtime: engineering desk verification reconcile after %s: %v", cmdResult.Assignment.AssignmentID, recErr)
-		}
 	}
 	return result != types.EngineeringResultPartial, nil
 }
@@ -1981,36 +1987,6 @@ func (r *rlmCallReduction) commitLifecycleActIntent(ctx context.Context, in yaeg
 		// live trigger so a resident desk binds immediately instead of waiting
 		// for the outbox sweep.
 		rt.wakeUpdatedCoagent(ctx, *result.Update)
-	}
-	// A cast is admission, not just a message: durably OPEN the engineering
-	// assignment under the delegated-cast authority, with the commitment
-	// record minted in the act transaction as the parent control. The
-	// spawn/bind/activate saga resumes from the deferred
-	// delegated_assignment_spawn_deadline wake (or synchronously off-kernel).
-	if in.Kind == yaegikernel.IntentCast && castOpensEngineeringAssignment(in.ToDesk) && !result.Replay && result.RecordCanonicalID != "" && r.rec != nil {
-		opened, openErr := rt.openDelegatedCastAssignment(ctx, DelegatedCastRequest{
-			Objective:           in.Objective,
-			Kind:                types.EngineeringAssignmentImplementation,
-			CommitmentControlID: result.RecordCanonicalID,
-			CasterRun:           *r.rec,
-			CasterAgentID:       r.scope.FromAgentID,
-			TargetDocID:         in.ToDesk,
-			ScopeDigestSeed:     r.scope.CellID + ":" + in.LocalID,
-			WithholdNetwork:     castWithholdsNetwork(in.Statement),
-		})
-		if openErr != nil {
-			return 0, fmt.Errorf("reduce: delegated cast admission: %w", openErr)
-		}
-		if !(rt.kernelMode && rt.scheduleActor != nil) {
-			rt.engineeringAssignmentOpenMu.Lock()
-			_, resumeErr := rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, DelegatedCastRequest{
-				Objective: in.Objective, Kind: opened.Assignment.Binding.Kind,
-			})
-			rt.engineeringAssignmentOpenMu.Unlock()
-			if resumeErr != nil {
-				return 0, fmt.Errorf("reduce: delegated cast spawn (non-kernel): %w", resumeErr)
-			}
-		}
 	}
 	return uint64(result.Receipt.ReducerSeq), nil
 }

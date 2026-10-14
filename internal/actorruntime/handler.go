@@ -182,7 +182,10 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 	case "delegated_assignment_spawn_deadline":
 		return h.handleDelegatedAssignmentSpawnDeadline(ctx, u, memory)
 	case "engineering_progress_overdue_deadline":
-		return h.handleEngineeringProgressDeadline(ctx, u, memory)
+		// Frozen historical continuation (C1e D7 deleted the progress-overdue
+		// packet): a capsule that overruns its deadline ends, and its run-end
+		// cancellation's Report wakes management.
+		return memory, nil
 	case "fresh_mint_management_resume_deadline":
 		return h.handleFreshMintManagementResumeDeadline(ctx, u, memory)
 	case "reactivated_management_resume_deadline":
@@ -275,20 +278,6 @@ func (h *actorHandler) handleDelegatedAssignmentSpawnDeadline(ctx context.Contex
 	}
 	if err := h.rt.HandleDelegatedAssignmentSpawnDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
 		return nil, fmt.Errorf("actorruntime: delegated assignment spawn deadline: %w", err)
-	}
-	return memory, nil
-}
-
-// handleEngineeringProgressDeadline resolves the scoped supervisor mailbox and
-// evaluates the derivable progress-overdue wake. The handler re-reads durable
-// state, so replayed or superseded wakes are no-ops.
-func (h *actorHandler) handleEngineeringProgressDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {
-	ownerID, computerID, agentID, err := parseScopedActorMailboxID(u.ToAgentID)
-	if err != nil {
-		return nil, fmt.Errorf("actorruntime: resolve engineering progress deadline scope: %w", err)
-	}
-	if err := h.rt.HandleEngineeringProgressOverdueDeadline(ctx, ownerID, computerID, agentID, u.Content); err != nil {
-		return nil, fmt.Errorf("actorruntime: engineering progress deadline: %w", err)
 	}
 	return memory, nil
 }
@@ -648,32 +637,13 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		return nil, nil
 	}
 	if strings.HasPrefix(agentID, agentprofile.Engineering+":") {
-		// Engineering desk occurrence: the document-channel cast. The desk
-		// agent never runs; the occurrence's revision opens the assignment
-		// directly and the assignment's own activation executes the work.
-		// Non-occurrence content (worker updates to assigned engineering
-		// agents) falls through to the generic resume path.
-		occurrence, occurrenceErr := agentcore.DecodeTextureActorOccurrence(u.Content)
-		if occurrenceErr == nil && occurrence.Kind == agentcore.TextureActorOccurrenceDocumentRevision {
-			if occurrence.TargetAgentID != agentID || occurrence.OwnerID != ownerID || occurrence.ComputerID != computerID {
-				return nil, nil // durable malformed/foreign engineering occurrence
-			}
-			if strings.TrimSpace(u.TrajectoryID) != "" && strings.TrimSpace(u.TrajectoryID) != occurrence.TrajectoryID {
-				return nil, nil // durable foreign trajectory envelope
-			}
-			if strings.TrimSpace(u.FromAgentID) != "" && strings.TrimSpace(u.FromAgentID) != "owner:"+occurrence.OwnerID {
-				return nil, nil // durable foreign source envelope
-			}
-			docID := strings.TrimSpace(strings.TrimPrefix(agentID, agentprofile.Engineering+":"))
-			if docID == "" || docID != occurrence.DocumentID {
-				return nil, nil
-			}
-			if _, reconcileErr := h.rt.ReconcileEngineeringRevisionCast(ctx, ownerID, docID, occurrence.HeadRevisionID); reconcileErr != nil {
-				if errors.Is(reconcileErr, store.ErrNotFound) {
-					return nil, nil // durable foreign document/revision envelope
-				}
-				return nil, fmt.Errorf("%w: actorruntime: reconcile engineering revision cast: %v", actor.ErrDeferUnprocessed, reconcileErr)
-			}
+		// The engineering desk of an engineering-bound document (path B) is
+		// deleted (C1e step 3): an assignment opens only from management's
+		// Cast. A document-revision occurrence still addressed to such a desk
+		// is historical and is consumed with no effect. Updates to assigned
+		// engineering agents fall through to the generic resume path.
+		if occurrence, occurrenceErr := agentcore.DecodeTextureActorOccurrence(u.Content); occurrenceErr == nil && occurrence.Kind == agentcore.TextureActorOccurrenceDocumentRevision {
+			log.Printf("actorruntime: consumed historical engineering-desk revision occurrence for %s", agentID)
 			return nil, nil
 		}
 	}

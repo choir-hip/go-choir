@@ -28,8 +28,11 @@ const plannedRestartMaxAge = 15 * time.Minute
 // CurrentWorkStateEpoch is the work-state schema this binary reads (decision
 // D7 of Cut 1). Cut 1 made records the work state and bumped it to 1: a
 // marker written before the cut has no epoch, so the cutover boot is a
-// crash boot and nothing resumes into the new schema.
-const CurrentWorkStateEpoch = 1
+// crash boot and nothing resumes into the new schema. C1e B1 bumped it to 2:
+// engineering assignments moved onto records (bindings name conversations,
+// not work items), so the first B1 boot is a crash boot and every
+// assignment opened under the packet schema ends interrupted_by_restart.
+const CurrentWorkStateEpoch = 2
 
 // PlannedRestart describes an intentional restart.
 type PlannedRestart struct {

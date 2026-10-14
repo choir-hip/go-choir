@@ -230,12 +230,8 @@ type Runtime struct {
 	selfdevStartupReleaseDigest string
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
-	selfdevStartMu              sync.Mutex
-	// superReconcileMu serializes persistent-Management creation across every
-	// reconcile entry path (API start, inbox continuation, boot rewarm). It is
-	// distinct from selfdevStartMu, which only guards ensureSelfDevelopmentRun;
-	// a blocking Lock here would self-deadlock that path (sync.Mutex is not
-	// re-entrant).
+	// managementReconcileMu serializes persistent-Management creation
+	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex
 	selfdevMaterializeMu  sync.Mutex
 	// selfdevCrashInterrupted names the self-development operations a crash
@@ -1766,24 +1762,31 @@ func (rt *Runtime) persistActivationStateWithEvent(ctx context.Context, rec *typ
 	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDeliveredWithEvent(ctx, rec, event); err != nil {
 		return false, err
 	}
-	// A bound Engineering run leaving pending/running (completed, failed,
-	// cancelled, blocked, passivated) strands its capsule and trajectory-bound
-	// operation unless the assignment fate reconcile + desk reconcile re-run.
-	// Kick both here — at the single persistence point every run-state
-	// transition shares — so dead drivers never wait for a restart or an
-	// unrelated wake. Best-effort: the kick never masks the persisted
-	// transition. Receipt:
+	// A bound Engineering run that ends (completed, failed, cancelled, or
+	// blocked, which is never resumed) strands its capsule unless the
+	// assignment fate reconcile re-runs. Kick it here, at the single
+	// persistence point every run-state transition shares. A passivated run
+	// is parked, not ended: it keeps its capsule and round (C1e D7), so the
+	// kick does not fire on passivation. Best-effort: the kick never masks
+	// the persisted transition. Receipt:
 	// docs/problems/engineering-run-death-leaves-bound-assignment-2026-09-29.md
-	if assignedEngineeringRun(rec) && rec.State != types.RunPending && rec.State != types.RunRunning {
+	if assignedEngineeringRun(rec) && engineeringRunEnded(rec.State) {
 		rt.kickEngineeringReconcileAfterPersist(rec)
 	}
 	return true, nil
 }
 
-// kickEngineeringReconcileAfterPersist re-drives the assignment and desk
-// reconciles for a trajectory whose bound run just left pending/running. The
-// assignment reconcile repairs capsule fate; the desk reconcile is the
-// op-coupling authority (recast, fail-op, verification chain).
+// engineeringRunEnded reports whether an engineering run state ends the run
+// for its assignment: terminal, or blocked (blocked runs are replaced, never
+// resumed). Pending, running and passivated runs keep their assignment.
+func engineeringRunEnded(state types.RunState) bool {
+	return state.Terminal() || state == types.RunBlocked
+}
+
+// kickEngineeringReconcileAfterPersist re-drives the assignment reconcile for
+// a trajectory whose bound run just ended. Path B's desk reconcile is
+// deleted (C1e step 3): the assignment's own cancel and Report carry its
+// outcome to management.
 func (rt *Runtime) kickEngineeringReconcileAfterPersist(rec *types.RunRecord) {
 	trajID := strings.TrimSpace(trajectoryIDForRun(rec))
 	if trajID == "" {
@@ -1794,9 +1797,6 @@ func (rt *Runtime) kickEngineeringReconcileAfterPersist(rec *types.RunRecord) {
 		kickCtx := context.Background()
 		if reconErr := rt.ReconcileEngineeringAssignmentsForTrajectory(kickCtx, ownerID, computerID, trajID); reconErr != nil {
 			log.Printf("runtime: engineering reconcile after assignment run %s left %s: %v", runID, state, reconErr)
-		}
-		if _, deskErr := rt.ReconcileEngineeringDeskForTrajectory(kickCtx, ownerID, trajID); deskErr != nil {
-			log.Printf("runtime: engineering desk reconcile after assignment run %s left %s: %v", runID, state, deskErr)
 		}
 	}()
 }

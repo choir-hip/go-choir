@@ -93,7 +93,11 @@ func (rt *Runtime) assignedEngineeringCapsuleUsable(ctx context.Context, assignm
 	// driver is dead and the capsule must not read usable forever.
 	if rt.store != nil {
 		run, runErr := rt.store.GetLifecycleRun(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.BoundRunID)
-		if runErr != nil || (run.State != types.RunPending && run.State != types.RunRunning) {
+		// C1e D7: a passivated run is parked, not dead. It keeps its
+		// capsule and round on a live runtime and on a planned boot (where it
+		// takes the planned restart's one resume); a crash boot terminalizes
+		// it before this check is reached.
+		if runErr != nil || (run.State != types.RunPending && run.State != types.RunRunning && run.State != types.RunPassivated) {
 			return false
 		}
 		if run.State == types.RunPending && !run.CreatedAt.IsZero() &&
@@ -168,11 +172,11 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
-	if assignment.Binding.ParentRunID != parent.RunID || assignment.Binding.ParentAgentID != parent.AgentID {
-		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires the exact recorded parent")
-	}
-	if parent.RunID != "" && parent.AgentID != persistentManagementAgentID(parent.OwnerID) {
-		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires exact persistent Management parent")
+	// C1e D7: cancellation authority is the management desk that is the
+	// engineering conversation's caster, not the exact casting run. Under D5
+	// the canceller is a fresh management turn, never the run that cast.
+	if assignment.Binding.ParentAgentID != parent.AgentID || parent.AgentID != persistentManagementAgentID(parent.OwnerID) {
+		return types.EngineeringAssignmentCommandResult{}, fmt.Errorf("assignment cancellation requires the casting management desk")
 	}
 	cancel := types.CancelEngineeringAssignmentRequest{
 		CommandID: fmt.Sprintf("engineering-cancel:%s:%d", assignment.AssignmentID, assignment.Binding.Attempt),
@@ -205,10 +209,47 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 	if err != nil {
 		return types.EngineeringAssignmentCommandResult{}, err
 	}
+	if !cancelled.Replay {
+		rt.failBoundSelfdevOperation(ctx, assignment.Binding.ComputerID, assignment.AssignmentID, cancel.Reason)
+		rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
+	}
 	return cancelled, nil
 }
 
-func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, assignment types.EngineeringAssignment, reason string) (types.EngineeringAssignmentCommandResult, error) {
+// stopCancelledAssignmentRun ends the bound engineering run of an assignment
+// whose row a cancel just turned terminal (C1e D7). The store cancel
+// projects the run's durable state terminal in the same transaction
+// (projectEngineeringTerminalRun) but cannot reach the live loop, so the
+// loop's in-memory cancel follows here. A run the projection did not reach
+// is cancelled through the runtime's run cancel. Either way the run then
+// ends with its row already terminal, and the run-end branch finds nothing
+// to settle.
+func (rt *Runtime) stopCancelledAssignmentRun(ctx context.Context, assignment types.EngineeringAssignment, reason string) {
+	runID := strings.TrimSpace(assignment.BoundRunID)
+	if rt == nil || rt.store == nil || runID == "" {
+		return
+	}
+	run, err := rt.store.GetLifecycleRun(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, runID)
+	if err == nil && !run.State.Terminal() {
+		if err := rt.terminalizeRun(context.WithoutCancel(ctx), runID, assignment.Binding.OwnerID, reason); err != nil {
+			log.Printf("runtime: stop cancelled assignment %s run %s: %v", assignment.AssignmentID, runID, err)
+		}
+		return
+	}
+	rt.runningMu.Lock()
+	cancel := rt.running[runID]
+	delete(rt.running, runID)
+	rt.runningMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// persistSystemEngineeringCancellation turns an assignment whose capsule is
+// revoked terminal. Unless silent, a records assignment's cancellation mints
+// its final Report into the engineering round while that round is open (D3);
+// a crash boot's cancellation is silent (D7), so nothing wakes.
+func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, assignment types.EngineeringAssignment, reason string, silent bool) (types.EngineeringAssignmentCommandResult, error) {
 	for attempt := 0; attempt < 4; attempt++ {
 		current, err := rt.store.GetEngineeringAssignment(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.AssignmentID, assignment.Binding.Attempt)
 		if err != nil {
@@ -222,7 +263,7 @@ func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, ass
 		}
 		cancel := types.CancelEngineeringAssignmentRequest{CommandID: fmt.Sprintf("engineering-system-cancel:%s:%d", current.AssignmentID, current.Binding.Attempt),
 			OwnerID: current.Binding.OwnerID, ComputerID: current.Binding.ComputerID, AssignmentID: current.AssignmentID, Attempt: current.Binding.Attempt,
-			ExpectedLifecycleVersion: current.LifecycleVersion, Reason: strings.TrimSpace(reason)}
+			ExpectedLifecycleVersion: current.LifecycleVersion, Reason: strings.TrimSpace(reason), Silent: silent}
 		if cancel.Reason == "" {
 			cancel.Reason = "system cancelled assignment fate"
 		}
@@ -230,15 +271,11 @@ func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, ass
 		result, cancelErr := rt.store.CancelEngineeringAssignment(ctx, cancel)
 		if cancelErr == nil {
 			if !result.Replay {
-				if result.Update != nil {
-					rt.wakeUpdatedCoagent(ctx, *result.Update)
-				}
 				// Every assignment-level cancellation funnels through this
-				// choke point; the bound self-development op must fail here,
-				// not only in the trajectory wrapper — reconcile, deadline,
-				// and direct-cancel callers each used to leave the op
-				// executing. Best-effort: terminal/missing op converges.
-				rt.failBoundSelfdevOperation(ctx, current.Binding.ComputerID, current.Binding.TrajectoryID, cancel.Reason)
+				// choke point; the assignment's own self-development op
+				// (resolved by its freeze key, D2) fails here. Best-effort:
+				// a terminal or missing op converges.
+				rt.failBoundSelfdevOperation(ctx, current.Binding.ComputerID, current.AssignmentID, cancel.Reason)
 			}
 			return result, nil
 		}
@@ -296,15 +333,14 @@ func (rt *Runtime) finishEngineeringTrajectoryCancellation(ctx context.Context, 
 		if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 			return fmt.Errorf("assignment %s cancellation missing durable executor revoke acknowledgement", assignment.AssignmentID)
 		}
-		if _, err := rt.persistSystemEngineeringCancellation(ctx, assignment, reason); err != nil {
+		if _, err := rt.persistSystemEngineeringCancellation(ctx, assignment, reason, false); err != nil {
 			return err
 		}
 	}
-	// A cancelled trajectory's bound self-development operation cannot reach
-	// acceptance — the desk reconcile short-circuits on non-live trajectories,
-	// so the op-close edge lives here: the one path every trajectory
-	// cancellation funnels through.
-	rt.failBoundSelfdevOperation(ctx, computerID, trajectoryID, reason)
+	// A cancelled trajectory's self-development operations cannot reach
+	// acceptance; this is the one path every trajectory cancellation funnels
+	// through, so the trajectory-wide close lives here.
+	rt.failTrajectorySelfdevOperations(ctx, computerID, trajectoryID, reason)
 	return nil
 }
 
@@ -331,28 +367,49 @@ func (rt *Runtime) cancelBoundEngineeringRun(ctx context.Context, rec types.RunR
 	if err != nil {
 		return true, err
 	}
-	_, err = rt.persistSystemEngineeringCancellation(ctx, assignment, reason)
+	_, err = rt.persistSystemEngineeringCancellation(ctx, assignment, reason, false)
 	// persistSystemEngineeringCancellation closes the bound self-development
 	// op at the choke point; a second fail call here would be duplicate.
 	return true, err
 }
 
-// failBoundSelfdevOperation transitions the trajectory-bound self-development
-// operation to `failed` when a bound desk run dies mid-executing. It loops
-// over the lawful pre-terminal states because the desk can die anywhere in
-// executing->frozen->verified->awaiting_approval; an already-terminal op or a
-// trajectory with no bound op is a no-op.
-func (rt *Runtime) failBoundSelfdevOperation(ctx context.Context, computerID, trajectoryID, reason string) {
+// failBoundSelfdevOperation transitions an assignment's self-development
+// operation (resolved by its freeze key, C1e D2) to `failed` when the
+// assignment ends without acceptance. It loops over the lawful pre-terminal
+// states because the run can die anywhere in
+// executing->frozen->verified->awaiting_approval; an already-terminal op or
+// an assignment that never froze is a no-op.
+func (rt *Runtime) failBoundSelfdevOperation(ctx context.Context, computerID, assignmentID, reason string) {
+	if rt == nil || rt.selfdevOperations == nil || strings.TrimSpace(computerID) == "" || strings.TrimSpace(assignmentID) == "" {
+		return
+	}
+	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, computerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+	if err != nil || !found {
+		return
+	}
+	rt.failSelfdevOperation(ctx, operation, reason)
+}
+
+// failTrajectorySelfdevOperations fails every non-terminal operation on a
+// trajectory that ended (cancelled or settled without acceptance). It is a
+// trajectory-wide caller in D2's sense: it lists and acts on each.
+func (rt *Runtime) failTrajectorySelfdevOperations(ctx context.Context, computerID, trajectoryID, reason string) {
 	if rt == nil || rt.selfdevOperations == nil || strings.TrimSpace(computerID) == "" || strings.TrimSpace(trajectoryID) == "" {
 		return
 	}
-	operation, err := rt.selfdevOperations.GetByTrajectory(ctx, computerID, trajectoryID)
+	operations, err := rt.selfdevOperations.ListByTrajectory(ctx, computerID, trajectoryID)
 	if err != nil {
 		return
 	}
+	for _, operation := range operations {
+		rt.failSelfdevOperation(ctx, operation, reason)
+	}
+}
+
+func (rt *Runtime) failSelfdevOperation(ctx context.Context, operation selfdev.Operation, reason string) {
 	trimmedReason := strings.TrimSpace(reason)
 	for _, from := range []string{selfdev.StateExecuting, selfdev.StateFrozen, selfdev.StateVerified, selfdev.StateAwaitingApproval, selfdev.StateRequested} {
-		_, transErr := rt.selfdevOperations.Transition(ctx, computerID, operation.OperationID, from, selfdev.StateFailed, func(next *selfdev.Operation) error {
+		_, transErr := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, from, selfdev.StateFailed, func(next *selfdev.Operation) error {
 			next.TerminalError = trimmedReason
 			return nil
 		})
@@ -371,6 +428,19 @@ func (rt *Runtime) failBoundSelfdevOperation(ctx context.Context, computerID, tr
 // durable revoke intent, then acknowledged absent, then cancelled. No wake or
 // attempt reopen follows.
 func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string) error {
+	return rt.reconcileEngineeringAssignmentsForTrajectory(ctx, ownerID, computerID, trajectoryID, false)
+}
+
+// engineeringInterruptedByRestart is the cancellation reason a crash boot
+// gives every open assignment (C1e D7).
+const engineeringInterruptedByRestart = "interrupted_by_restart"
+
+// reconcileEngineeringAssignmentsForTrajectory is the reconcile body. On a
+// crash boot (C1e D7) every open assignment turns terminal
+// `interrupted_by_restart`, silently: its round was already closed by the
+// boot's crash closure, nothing resumes, and the pending-proposal resume is
+// skipped.
+func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Context, ownerID, computerID, trajectoryID string, crashBoot bool) error {
 	if rt == nil || rt.store == nil || rt.assignedCapsule() == nil {
 		return nil
 	}
@@ -425,8 +495,16 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 					return err
 				}
 			}
-			if _, cancelErr := rt.persistSystemEngineeringCancellation(ctx, assignment, "restart completed terminal trajectory assignment fate"); cancelErr != nil {
+			cancelled, cancelErr := rt.persistSystemEngineeringCancellation(ctx, assignment, "restart completed terminal trajectory assignment fate", crashBoot)
+			if cancelErr != nil {
 				return cancelErr
+			}
+			rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, "restart completed terminal trajectory assignment fate")
+			continue
+		}
+		if crashBoot {
+			if interruptErr := rt.interruptAssignmentAtCrashBoot(ctx, assignment); interruptErr != nil {
+				return interruptErr
 			}
 			continue
 		}
@@ -509,8 +587,8 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			if cancelErr != nil {
 				return cancelErr
 			}
-			if !cancelled.Replay && cancelled.Update != nil {
-				rt.wakeUpdatedCoagent(ctx, *cancelled.Update)
+			if !cancelled.Replay {
+				rt.failBoundSelfdevOperation(ctx, computerID, assignment.AssignmentID, cancel.Reason)
 			}
 			continue
 		}
@@ -551,17 +629,38 @@ func (rt *Runtime) ReconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 		if cancelErr != nil {
 			return cancelErr
 		}
-		if !cancelled.Replay && cancelled.Update != nil {
-			rt.wakeUpdatedCoagent(ctx, *cancelled.Update)
+		if !cancelled.Replay {
+			rt.failBoundSelfdevOperation(ctx, computerID, assignment.AssignmentID, cancel.Reason)
+			rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
 		}
 	}
 	// Terminal trajectories close their bound self-development operation here:
 	// the desk reconcile early-returns on non-live trajectories, so without
 	// this edge a cancelled/settled trajectory strands the op at executing.
 	if trajectory.Status != types.TrajectoryLive {
-		rt.failBoundSelfdevOperation(ctx, computerID, trajectoryID,
+		rt.failTrajectorySelfdevOperations(ctx, computerID, trajectoryID,
 			"trajectory "+string(trajectory.Status))
 	}
+	return nil
+}
+
+// interruptAssignmentAtCrashBoot revokes an open assignment's capsule (bound
+// or not) and cancels it silently with reason `interrupted_by_restart`
+// (C1e D7). The crash closure already closed its rounds, so the cancel mints
+// no Report and wakes no one; a staged pending proposal is not resumed.
+func (rt *Runtime) interruptAssignmentAtCrashBoot(ctx context.Context, assignment types.EngineeringAssignment) error {
+	var err error
+	if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+		assignment, err = rt.revokeAssignedCapsule(ctx, assignment, engineeringInterruptedByRestart)
+		if err != nil {
+			return err
+		}
+	}
+	cancelled, err := rt.persistSystemEngineeringCancellation(ctx, assignment, engineeringInterruptedByRestart, true)
+	if err != nil {
+		return err
+	}
+	rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, engineeringInterruptedByRestart)
 	return nil
 }
 
@@ -593,7 +692,8 @@ func (rt *Runtime) reconcileEngineeringAssignmentCapsulesAfterRestart(ctx contex
 			continue
 		}
 		seen[key] = struct{}{}
-		if err := rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID); err != nil {
+		_, planned := rt.BootWasPlannedRestart()
+		if err := rt.reconcileEngineeringAssignmentsForTrajectory(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignment.Binding.TrajectoryID, !planned); err != nil {
 			log.Printf("runtime: boot Engineering assignment capsule sweep trajectory %s: %v", assignment.Binding.TrajectoryID, err)
 		}
 	}
@@ -1173,7 +1273,31 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 		AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
 		ExpectedLifecycleVersion: assignment.LifecycleVersion, Report: report,
 		ExecutionAttestations: append([]types.EngineeringExecutionAttestation(nil), report.ExecutionAttestations...),
+		OutcomeRefs:           rt.assignmentOutcomeRefs(ctx, assignment, report),
 	}
 	req.CommandDigest, _ = store.ComputeRecordEngineeringAssignmentReportDigest(req)
 	return rt.store.RecordEngineeringAssignmentReport(ctx, req)
+}
+
+// assignmentOutcomeRefs names, on a terminal report, the candidate the
+// assignment froze: its own operation (C1e D2) and that operation's bundle
+// digest, so management's Verify can name both from the final Report's
+// evidence refs (D9).
+func (rt *Runtime) assignmentOutcomeRefs(ctx context.Context, assignment types.EngineeringAssignment, report types.EngineeringAssignmentReport) []string {
+	var refs []string
+	if ref := strings.TrimSpace(report.CandidateArtifactRef); ref != "" {
+		refs = append(refs, ref)
+	}
+	if report.Result == types.EngineeringResultPartial || rt == nil || rt.selfdevOperations == nil {
+		return refs
+	}
+	operation, found, err := rt.selfdevOperations.GetByIdempotency(ctx, assignment.Binding.ComputerID, store.EngineeringFreezeIdempotencyKey(assignment.AssignmentID))
+	if err != nil || !found {
+		return refs
+	}
+	refs = append(refs, "selfdev-operation:"+operation.OperationID)
+	if digest := strings.TrimSpace(operation.BundleDigest); digest != "" {
+		refs = append(refs, "bundle:"+digest)
+	}
+	return refs
 }

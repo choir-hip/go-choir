@@ -367,9 +367,6 @@ func (rt *Runtime) reconcilePersistentManagementActorLocked(ctx context.Context,
 	if first.TrajectoryID != "" {
 		metadata["assignment_trajectory_id"] = first.TrajectoryID
 	}
-	if operationID := selfDevelopmentOperationIDFromPacketSources(first.Packet.Sources); operationID != "" {
-		metadata["self_development_operation_id"] = operationID
-	}
 	targetWorkItemID := firstNonEmpty(first.TargetWorkItemID, first.WorkItemID)
 	if targetWorkItemID != "" {
 		metadata["lifecycle_work_item_id"] = targetWorkItemID

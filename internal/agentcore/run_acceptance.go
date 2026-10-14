@@ -159,22 +159,9 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		builder.addCheckpoint("super_direction_opened", "passed", item.event.Timestamp, item.event.StreamSeq, []string{ref}, map[string]any{
 			"command_id": payloadString(item.output, "command_id"), "receipt_kind": "apply_texture_turn",
 		})
-	} else if rt != nil && rt.store != nil {
-		// Document-channel cast: the engineering desk's direction opener is
-		// the committed assignment the owner revision admitted, not an
-		// apply_texture_turn tool result.
-		if assignments, listErr := rt.store.ListEngineeringAssignments(ctx, root.OwnerID, runsComputerID(trajectoryRuns), trajectoryIDFromRuns(trajectoryRuns)); listErr == nil {
-			for _, assignment := range assignments {
-				if assignment.Disposition == types.EngineeringAssignmentBound || assignment.Disposition.Terminal() {
-					builder.addCheckpoint("super_direction_opened", "passed", assignment.CreatedAt, 0, nil, map[string]any{
-						"assignment_id": assignment.AssignmentID, "receipt_kind": "cosuper_assignment",
-						"disposition": assignment.Disposition,
-					})
-					break
-				}
-			}
-		}
 	}
+	// The document-channel cast's opener (path B's engineering desk) is
+	// deleted (C1e step 3): an assignment opens from management's Cast.
 
 	addAcceptanceDurableAgentCapsuleCheckpoints(ctx, rt, &builder, trajectoryRuns, events)
 
@@ -424,8 +411,11 @@ func addAcceptanceDurableAgentCapsuleCheckpoints(ctx context.Context, rt *Runtim
 	// reads the operation row.
 	var operation *selfdev.Operation
 	if rt != nil && rt.selfdevOperations != nil {
-		if op, err := rt.selfdevOperations.GetByTrajectory(ctx, runsComputerID(runs), trajectoryIDFromRuns(runs)); err == nil {
-			operation = &op
+		// A trajectory-wide caller (C1e D2): list and pick explicitly.
+		if ops, err := rt.selfdevOperations.ListByTrajectory(ctx, runsComputerID(runs), trajectoryIDFromRuns(runs)); err == nil {
+			if op, ok := pickTrajectoryOperation(ops); ok {
+				operation = &op
+			}
 		}
 	}
 	// Freeze evidence is the durable bundle digest on the operation row, not

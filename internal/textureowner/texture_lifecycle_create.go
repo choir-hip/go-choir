@@ -31,8 +31,9 @@ type textureLifecycleCreateRequest struct {
 	ClientRequestID string `json:"client_request_id"`
 	Title           string `json:"title"`
 	InitialContent  string `json:"initial_content"`
-	// Desk selects the bound desk: "texture" (default) or "engineering". An
-	// engineering-bound document's owner revisions are sub-RLM casts.
+	// Desk selects the bound desk; "texture" (the default) is the only one.
+	// The engineering-bound document (path B) is deleted (C1e step 3):
+	// engineering work opens from management's Cast.
 	Desk string `json:"desk,omitempty"`
 }
 
@@ -85,8 +86,8 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 	if deskProfile == "" {
 		deskProfile = agentprofile.Texture
 	}
-	if deskProfile != agentprofile.Texture && deskProfile != agentprofile.Engineering {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "desk must be texture or engineering"})
+	if deskProfile != agentprofile.Texture {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "desk must be texture"})
 		return
 	}
 	agentID := deskProfile + ":" + docID
@@ -112,14 +113,7 @@ func (h *Handler) HandleTextureLifecycleCreate(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if !result.Replay {
-		if deskProfile == agentprofile.Engineering {
-			// Engineering desk: dispatch the revision occurrence; the mailbox
-			// consumer opens the assignment asynchronously. A synchronous
-			// reconcile here would hold the HTTP request across a 90s spawn.
-			if result.Revision != nil {
-				h.dispatchTextureRevisionWake(ownerID, computerID, trajectoryID, *result.Revision, requestID, result.Events, deskProfile)
-			}
-		} else if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, docID); wakeErr != nil { /* durable start remains pending */
+		if _, wakeErr := h.ReconcileAgentWake(r.Context(), ownerID, docID); wakeErr != nil { /* durable start remains pending */
 		}
 	}
 	writeAPIJSON(w, http.StatusCreated, textureLifecycleCreateResponse{Schema: "choir.texture_create.v1", RequestID: requestID, DocID: docID, RevisionID: revisionID, TrajectoryID: trajectoryID, TargetAgentID: agentID, TargetWorkItemID: workID, Cursor: result.Trajectory.ReducerSeq, Replay: result.Replay})

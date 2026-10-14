@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -238,9 +239,10 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == agentprofile.Engineering {
 		hasSelfDevelopmentOperation := false
 		if rt != nil && rt.selfdevOperations != nil && rec != nil && strings.TrimSpace(rec.ComputerID) != "" {
-			if trajectoryID := trajectoryIDForRun(rec); trajectoryID != "" {
-				_, err := rt.selfdevOperations.GetByTrajectory(context.Background(), rec.ComputerID, trajectoryID)
-				hasSelfDevelopmentOperation = err == nil
+			// The assignment's own operation (C1e D2), not the trajectory's.
+			if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
+				_, found, err := rt.selfdevOperations.GetByIdempotency(context.Background(), rec.ComputerID, store.EngineeringFreezeIdempotencyKey(assignmentID))
+				hasSelfDevelopmentOperation = err == nil && found
 			}
 		}
 		canProposeChange := !hasSelfDevelopmentOperation && rt != nil && rt.selfdevOperations != nil &&
@@ -496,8 +498,14 @@ func textureRunSelfDevelopmentOperation(rt *Runtime, rec *types.RunRecord) strin
 	if trajectoryID == "" {
 		return ""
 	}
-	operation, err := rt.selfdevOperations.GetByTrajectory(context.Background(), rec.ComputerID, trajectoryID)
+	// Texture has no assignment: it is a trajectory-wide caller (C1e D2) and
+	// picks explicitly among the trajectory's operations.
+	operations, err := rt.selfdevOperations.ListByTrajectory(context.Background(), rec.ComputerID, trajectoryID)
 	if err != nil {
+		return ""
+	}
+	operation, ok := pickTrajectoryOperation(operations)
+	if !ok {
 		return ""
 	}
 	return operation.OperationID

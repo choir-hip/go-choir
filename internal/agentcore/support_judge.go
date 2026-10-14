@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -13,6 +14,22 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
+
+// CandidateJudge asks the decision model (Jev) typed questions about one
+// state and returns its full answer distribution. Support judgement is its
+// one caller since C1e B1 deleted the frozen-candidate judgment (management's
+// Verify judges candidates now).
+type CandidateJudge interface {
+	Judge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error)
+}
+
+// SetCandidateJudge binds the decision model.
+func (rt *Runtime) SetCandidateJudge(judge CandidateJudge) {
+	rt.candidateJudge = judge
+}
+
+// candidateJudgmentModel names the model the gateway pins for judgments.
+const candidateJudgmentModel = "typesafe/jev-1.13"
 
 // Support judgement, the host half of management's choir.Judge (Cut 2 2a
 // (v)). A Texture commit lists its new citation pairs to management; a
@@ -179,7 +196,7 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner string, verdicts 
 			}
 		}
 		v := &verdicts[i]
-		v.Judge, v.PSupportedBP = judge, basisPoints(yes)
+		v.Judge, v.PSupportedBP = judge, int64(math.Round(yes*10000))
 		if answer.Choice == "yes" && yes >= 0.5 {
 			v.Verdict = types.SupportSupported
 		} else {

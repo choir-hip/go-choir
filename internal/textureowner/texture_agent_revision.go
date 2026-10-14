@@ -214,21 +214,15 @@ func (h *Handler) handleLifecycleOwnerRevision(w http.ResponseWriter, r *http.Re
 }
 
 // ownerRevisionTarget finds the one open desk work item an owner revise
-// feeds: Texture or Engineering, assigned to this document's desk agent.
+// feeds: Texture's, assigned to this document's desk agent (the
+// engineering-bound document, path B, is deleted: C1e step 3).
 func ownerRevisionTarget(snapshot types.LifecycleSnapshot, docID string) (profile, workItemID string, multiple bool) {
 	for _, work := range snapshot.WorkItems {
 		if work.Status != types.WorkItemOpen {
 			continue
 		}
-		// The durable supervision surface minted beside a document cast
-		// (store.TextureSupervisionWorkItemPrefix) is a report target, never a
-		// revision consumer — an engineering-bound document legitimately shows
-		// it alongside the engineering cast item, so it must not count.
-		if store.IsTextureSupervisionWorkItem(work.WorkItemID) {
-			continue
-		}
 		p := strings.TrimSpace(work.AuthorityProfile)
-		if p != agentprofile.Texture && p != agentprofile.Engineering {
+		if p != agentprofile.Texture {
 			continue
 		}
 		if work.AssignedAgentID != p+":"+docID {
@@ -266,7 +260,7 @@ func textureWorkSettledByDesk(snapshot types.LifecycleSnapshot, docID string) bo
 	var latest *types.WorkItemRecord
 	for i := range snapshot.WorkItems {
 		work := &snapshot.WorkItems[i]
-		if work.AssignedAgentID != textureAgentID || strings.TrimSpace(work.AuthorityProfile) != agentprofile.Texture || store.IsTextureSupervisionWorkItem(work.WorkItemID) {
+		if work.AssignedAgentID != textureAgentID || strings.TrimSpace(work.AuthorityProfile) != agentprofile.Texture {
 			continue
 		}
 		if latest == nil || work.UpdatedAt.After(latest.UpdatedAt) {

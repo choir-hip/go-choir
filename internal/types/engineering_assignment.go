@@ -28,15 +28,14 @@ const EngineeringCapsuleNetworkEcosystemProxy = "ecosystem_proxy"
 type EngineeringAssignmentKind string
 
 // EngineeringCastAuthority names which admission authority admitted the
-// assignment: an owner-authored document revision (owner cast, the M1 path)
-// or a desk-staged choir.Cast whose authority is the caster's own live
-// assignment (delegated cast, R2). Empty means owner cast for backward
-// compatibility with bindings minted before the field existed.
+// assignment. Records (C1e B1) is the only one minted: management's Cast to
+// engineering on its records route, serving the open round a Texture's Cast
+// opened with management. Bindings minted before C1e carry "", "owner" or
+// "delegated" and work-item parents; they decode for history only.
 type EngineeringCastAuthority string
 
 const (
-	EngineeringCastAuthorityOwner     EngineeringCastAuthority = "owner"
-	EngineeringCastAuthorityDelegated EngineeringCastAuthority = "delegated"
+	EngineeringCastAuthorityRecords EngineeringCastAuthority = "records"
 )
 
 const (
@@ -95,21 +94,44 @@ type EngineeringAssignmentBinding struct {
 	FilesystemMode             string                    `json:"filesystem_mode"`
 	CoordinationContractID     string                    `json:"coordination_contract_id,omitempty"`
 	CoordinationContractDigest string                    `json:"coordination_contract_digest,omitempty"`
-	// CastAuthority distinguishes owner-cast admission (a document revision
-	// is the parent authority) from delegated-cast admission (the caster's
-	// own live assignment/run is the parent authority). Empty or "owner" is
-	// the owner-cast path; "delegated" is the R2 desk-authored cast.
+	// CastAuthority is "records" for every assignment C1e mints; see
+	// EngineeringCastAuthority.
 	CastAuthority EngineeringCastAuthority `json:"cast_authority,omitempty"`
+	// ParentConversationID and ParentRound name the round of management's
+	// conversation with a Texture that the engineering Cast serves (C1e D4):
+	// the round the Cast's ParentID record opened. They replace
+	// ParentWorkItemID on records bindings.
+	ParentConversationID string `json:"parent_conversation_id,omitempty"`
+	ParentRound          int    `json:"parent_round,omitempty"`
+	// AssignedConversationID is the engineering conversation
+	// management:<owner>|engineering:<assignmentID>; its round 1 is the
+	// assignment (C1e D1). It replaces AssignedWorkItemID on records
+	// bindings.
+	AssignedConversationID string `json:"assigned_conversation_id,omitempty"`
+}
+
+// Records reports whether the binding was admitted on management's records
+// route (C1e B1).
+func (b EngineeringAssignmentBinding) Records() bool {
+	return b.CastAuthority == EngineeringCastAuthorityRecords
 }
 
 func (b EngineeringAssignmentBinding) Validate() error {
-	for name, value := range map[string]string{
+	required := map[string]string{
 		"owner_id": b.OwnerID, "computer_id": b.ComputerID, "trajectory_id": b.TrajectoryID,
 		"parent_agent_id":    b.ParentAgentID,
 		"parent_decision_id": b.ParentDecisionID, "parent_control_id": b.ParentControlID,
-		"parent_work_item_id": b.ParentWorkItemID, "assigned_work_item_id": b.AssignedWorkItemID,
 		"assigned_agent_id": b.AssignedAgentID,
-	} {
+	}
+	if b.Records() {
+		required["parent_loop_id"] = b.ParentRunID
+		required["parent_conversation_id"] = b.ParentConversationID
+		required["assigned_conversation_id"] = b.AssignedConversationID
+	} else {
+		required["parent_work_item_id"] = b.ParentWorkItemID
+		required["assigned_work_item_id"] = b.AssignedWorkItemID
+	}
+	for name, value := range required {
 		if strings.TrimSpace(value) == "" || value != strings.TrimSpace(value) {
 			return fmt.Errorf("co-super assignment: %s is required and must be canonical", name)
 		}
@@ -117,7 +139,31 @@ func (b EngineeringAssignmentBinding) Validate() error {
 	if !strings.HasPrefix(b.ParentDecisionID, "decision:sha256:") || !ValidSHA256Digest(strings.TrimPrefix(b.ParentDecisionID, "decision:")) {
 		return fmt.Errorf("co-super assignment: parent_decision_id must be runtime-derived")
 	}
-	if b.ParentRunID == "" {
+	if b.Records() {
+		// C1e D1/D4: one conversation per assignment, serving one open round
+		// of management's conversation with a Texture. Attempts above 1 and
+		// verification assignments do not exist on records.
+		management := agentprofile.Management + ":" + b.OwnerID
+		if b.ParentAgentID != management {
+			return fmt.Errorf("co-super assignment: records parent_agent_id must be exact management:<owner>")
+		}
+		if !strings.HasPrefix(b.AssignedAgentID, agentprofile.Engineering+":") {
+			return fmt.Errorf("co-super assignment: records assigned agent must be engineering:<assignment>")
+		}
+		if b.AssignedConversationID != InboxConversationID(b.ParentAgentID, b.AssignedAgentID) {
+			return fmt.Errorf("co-super assignment: assigned conversation must be management:<owner>|engineering:<assignment>")
+		}
+		other, ok := conversationCounterpart(b.ParentConversationID, management)
+		if !ok || !strings.HasPrefix(other, agentprofile.Texture+":") || b.ParentRound <= 0 {
+			return fmt.Errorf("co-super assignment: records parent must be an open round of management's conversation with a Texture")
+		}
+		if b.ParentWorkItemID != "" || b.AssignedWorkItemID != "" {
+			return fmt.Errorf("co-super assignment: records bindings carry no work items")
+		}
+		if b.Kind != EngineeringAssignmentImplementation || b.Attempt != 1 {
+			return fmt.Errorf("co-super assignment: records assignments are implementation attempt 1")
+		}
+	} else if b.ParentRunID == "" {
 		// Document-parent binding: the owner-authored revision on the bound
 		// document is the parent authority; there is no parent run. The parent
 		// agent is the engineering desk agent bound to that document.
@@ -127,7 +173,7 @@ func (b EngineeringAssignmentBinding) Validate() error {
 	} else if b.ParentAgentID != agentprofile.Management+":"+b.OwnerID {
 		return fmt.Errorf("co-super assignment: parent_agent_id must be exact persistent management:<owner>")
 	}
-	if b.AssignedAgentID == b.ParentAgentID || b.AssignedWorkItemID == b.ParentWorkItemID {
+	if b.AssignedAgentID == b.ParentAgentID || (!b.Records() && b.AssignedWorkItemID == b.ParentWorkItemID) {
 		return fmt.Errorf("co-super assignment: parent and assigned identities must be distinct")
 	}
 	if b.Kind != EngineeringAssignmentImplementation && b.Kind != EngineeringAssignmentVerification {
@@ -187,6 +233,26 @@ func (b EngineeringAssignmentBinding) Validate() error {
 		return fmt.Errorf("co-super assignment: coordination contract id and digest must be supplied together")
 	}
 	return nil
+}
+
+// conversationCounterpart returns the inbox other than self in a
+// conversation id (types.InboxConversationID).
+func conversationCounterpart(conversationID, self string) (string, bool) {
+	raw, ok := strings.CutPrefix(conversationID, "conv:")
+	if !ok {
+		return "", false
+	}
+	a, b, ok := strings.Cut(raw, "|")
+	if !ok || InboxConversationID(a, b) != conversationID {
+		return "", false
+	}
+	switch self {
+	case a:
+		return b, true
+	case b:
+		return a, true
+	}
+	return "", false
 }
 
 func ValidSHA256Digest(value string) bool {
@@ -567,8 +633,10 @@ type EngineeringAssignmentCommandResult struct {
 	Assignment EngineeringAssignment        `json:"assignment"`
 	Report     *EngineeringAssignmentReport `json:"report,omitempty"`
 	Candidate  *EngineeringSubjectCandidate `json:"candidate,omitempty"`
-	Update     *CoagentSourcePacket         `json:"update,omitempty"`
-	Replay     bool                         `json:"replay"`
+	// Records is the receipt of the inbox command an Open composed (C1e D4):
+	// the casting cell's records and cursor commit in the open's batch.
+	Records *InboxCommitReceipt `json:"records,omitempty"`
+	Replay  bool                `json:"replay"`
 }
 
 // EngineeringOrphanReason names why a child run is observed as orphaned (settlement gate item 6).
@@ -611,33 +679,13 @@ type OpenEngineeringAssignmentRequest struct {
 	AssignmentID  string                       `json:"assignment_id"`
 	Binding       EngineeringAssignmentBinding `json:"binding"`
 	AssignedAgent AgentRecord                  `json:"assigned_agent"`
-	AssignedWork  WorkItemRecord               `json:"assigned_work"`
-	// Supersedes carries the frozen correction tuple (settlement gate item 3):
-	// a correction lands only as a new attempt carrying it. Attempt 1 never
-	// carries it; attempt > 1 always does.
-	Supersedes *EngineeringSupersedeTuple `json:"supersedes,omitempty"`
+	// Records is the casting cell's whole inbox command (C1e D4): its records
+	// (the engineering Cast among them), cursor advance and verdicts. The
+	// store plans it inside the open's lock and commits it in the open's
+	// batch, so no round exists without its assignment.
+	Records CommitInboxRecordsRequest `json:"records"`
 }
 
-// EngineeringSupersedeKind names why a new attempt supersedes a prior one.
-type EngineeringSupersedeKind string
-
-const (
-	EngineeringSupersedeCorrection      EngineeringSupersedeKind = "correction"
-	EngineeringSupersedeRetryAfterBlock EngineeringSupersedeKind = "retry_after_block"
-	EngineeringSupersedeOwnerReopen     EngineeringSupersedeKind = "owner_reopen"
-)
-
-// EngineeringSupersedeTuple is the frozen correction tuple: who is superseded,
-// which receipt it corrects, why, and a digest over structured fields only
-// (never summary or prose).
-type EngineeringSupersedeTuple struct {
-	SupersedesAssignmentID string                   `json:"supersedes_assignment_id"`
-	SupersedesAttempt      uint64                   `json:"supersedes_attempt"`
-	PriorReceiptRef        string                   `json:"prior_receipt_ref"`
-	SupersedeKind          EngineeringSupersedeKind `json:"supersede_kind"`
-	ReasonEnum             string                   `json:"reason_enum"`
-	DeltaDigest            string                   `json:"delta_digest"`
-}
 type BindEngineeringAssignmentRequest struct {
 	CommandID                string                             `json:"command_id"`
 	CommandDigest            string                             `json:"command_digest"`
@@ -663,6 +711,11 @@ type RecordEngineeringAssignmentReportRequest struct {
 	ExpectedLifecycleVersion int64                             `json:"expected_lifecycle_version"`
 	Report                   EngineeringAssignmentReport       `json:"report"`
 	ExecutionAttestations    []EngineeringExecutionAttestation `json:"execution_attestations,omitempty"`
+	// OutcomeRefs name the candidate the run froze (selfdev operation and
+	// bundle digest refs, C1e D2). They ride the Report record the store
+	// mints into management's inbox, never the assignment report's
+	// proposition.
+	OutcomeRefs []string `json:"outcome_refs,omitempty"`
 }
 
 type CancelEngineeringAssignmentRequest struct {
@@ -674,6 +727,10 @@ type CancelEngineeringAssignmentRequest struct {
 	Attempt                  uint64 `json:"attempt"`
 	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
 	Reason                   string `json:"reason"`
+	// Silent marks a crash boot's cancellation (C1e D7): it mints no Report
+	// even if the engineering round is somehow still open, so a boot never
+	// wakes management.
+	Silent bool `json:"silent,omitempty"`
 }
 
 type SetEngineeringCapsuleDispositionRequest struct {
@@ -689,20 +746,4 @@ type SetEngineeringCapsuleDispositionRequest struct {
 	AckRef                   string                        `json:"ack_ref,omitempty"`
 	FateStep                 *EngineeringCapsuleFateStep   `json:"fate_step,omitempty"`
 	PendingProposal          *EngineeringPendingProposal   `json:"pending_proposal,omitempty"`
-}
-
-// EmitEngineeringProgressObservationRequest commits one deduplicated
-// progress-overdue observation packet to the assignment's supervision target.
-// SilenceSinceUnixNano pins the exact silence window: re-arming on each
-// accepted report changes the value, so an older deadline replay or a window
-// that a fresher report already superseded resolves to the same command id
-// only when it is an exact retry.
-type EmitEngineeringProgressObservationRequest struct {
-	CommandID            string `json:"command_id"`
-	CommandDigest        string `json:"command_digest"`
-	OwnerID              string `json:"owner_id"`
-	ComputerID           string `json:"computer_id"`
-	AssignmentID         string `json:"assignment_id"`
-	Attempt              uint64 `json:"attempt"`
-	SilenceSinceUnixNano int64  `json:"silence_since_unix_nano"`
 }

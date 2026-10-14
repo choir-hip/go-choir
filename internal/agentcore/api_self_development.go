@@ -26,16 +26,9 @@ import (
 )
 
 const (
-	selfDevelopmentPromptMediaType    = "text/markdown; charset=utf-8"
 	replayCompletenessGuestTimeout    = 10 * time.Minute
 	replayCompletenessGuestWriteGrace = time.Second
 )
-
-type selfDevelopmentStartRequest struct {
-	IdempotencyKey string                 `json:"idempotency_key"`
-	Prompt         string                 `json:"prompt"`
-	ModeReceipt    *computerevent.Receipt `json:"mode_receipt,omitempty"`
-}
 
 type selfDevelopmentDecisionRequest struct {
 	Decision                         string                          `json:"decision"`
@@ -167,9 +160,9 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 		switch r.Method {
 		case http.MethodGet:
 			h.listSelfDevelopmentOperations(w, r, computerID)
-		case http.MethodPost:
-			h.startSelfDevelopmentOperation(w, r, ownerID, computerID)
 		default:
+			// C1e B1: the public start-operation API is gone. A candidate
+			// opens only when an engineering assignment's Freeze opens it.
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		}
 	case len(parts) == 3 && parts[1] == "self-development" && parts[2] == "rollbacks":
@@ -245,166 +238,6 @@ func (h *APIHandler) listSelfDevelopmentOperations(w http.ResponseWriter, r *htt
 	}
 	slices.Reverse(operations)
 	writeAPIJSON(w, http.StatusOK, map[string]any{"operations": operations})
-}
-
-func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {
-	var request selfDevelopmentStartRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || strings.TrimSpace(request.IdempotencyKey) == "" || strings.TrimSpace(request.Prompt) == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "idempotency_key and prompt are required"})
-		return
-	}
-	request.IdempotencyKey = strings.TrimSpace(request.IdempotencyKey)
-	prompt := []byte(request.Prompt)
-	promptDigest := computerevent.DigestBytes(prompt)
-	requestCommitment := computerevent.DigestBytes([]byte(computerID + "\x00" + request.IdempotencyKey + "\x00" + promptDigest))
-	if existing, found, err := h.rt.selfdevOperations.GetByIdempotency(r.Context(), computerID, request.IdempotencyKey); err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read self-development operation"})
-		return
-	} else if found {
-		if existing.RequestCommitment != requestCommitment {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "idempotency key reused with different prompt"})
-			return
-		}
-		existing, err = h.ensureSelfDevelopmentRun(r, existing, ownerID, request.Prompt)
-		if err != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, existing)
-		return
-	}
-	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + request.IdempotencyKey))
-	operationID := "selfdev-" + identityDigest[:32]
-	trajectoryID := "trajectory-" + identityDigest[32:]
-	eventIdempotency := "selfdev-start-" + identityDigest
-	event, found, err := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency)
-	if err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	}
-	if found {
-		promptArtifactRef, recoveryErr := recoveredStartPromptRef(event, computerID, trajectoryID, eventIdempotency, ownerID, requestCommitment)
-		if recoveryErr != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
-			return
-		}
-		if recoveryErr = h.rt.selfdevOperations.BindStartIntent(r.Context(), computerID, request.IdempotencyKey, requestCommitment); recoveryErr != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
-			return
-		}
-		operation, recoveryErr := h.rt.selfdevOperations.Start(r.Context(), selfdev.StartRequest{
-			ComputerID: computerID, IdempotencyKey: request.IdempotencyKey, PromptArtifactRef: promptArtifactRef,
-			OperationID: operationID, TrajectoryID: trajectoryID, BaseHead: event.PreviousHead, RequestCommitment: requestCommitment,
-		})
-		if recoveryErr != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
-			return
-		}
-		operation, recoveryErr = h.ensureSelfDevelopmentRun(r, operation, ownerID, request.Prompt)
-		if recoveryErr != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, operation)
-		return
-	}
-	if h.rt.selfdevControl == nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development mode authority unavailable"})
-		return
-	}
-	currentMode, modeErr := h.rt.selfdevControl.SelfDevelopmentMode(r.Context())
-	if modeErr != nil || h.verifyStartModeReceipt(computerID, currentMode.Mode, currentMode.Receipt, request.ModeReceipt) != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current signed mode does not authorize proposal"})
-		return
-	}
-	// Refuse before the trajectory event lands, so a refused start leaves
-	// nothing on the tape. Store.Start enforces the same limit.
-	if open, found, openErr := h.rt.selfdevOperations.OpenOperation(r.Context(), computerID); openErr != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "self-development operations unavailable"})
-		return
-	} else if found {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: fmt.Sprintf("%v: %s is %s", selfdev.ErrOperationOpen, open.OperationID, open.State)})
-		return
-	}
-	if err := h.rt.selfdevOperations.BindStartIntent(r.Context(), computerID, request.IdempotencyKey, requestCommitment); err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	}
-	if h.rt.eventAppender == nil || h.rt.privateArtifactCipher == nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer event authority unavailable"})
-		return
-	}
-
-	if !found {
-		eventID, eventErr := computerevent.NewEventID()
-		if eventErr != nil {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create trajectory event"})
-			return
-		}
-		event = computerevent.Event{
-			SchemaVersion: computerevent.SchemaVersionV1,
-			EventID:       eventID, ComputerID: computerID, EventKind: computerevent.EventTrajectoryStarted,
-			OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: eventIdempotency,
-			RequestCommitment: computerevent.ZeroHead, TrajectoryID: trajectoryID,
-			ActorProfile: agentprofile.Management, AuthorityRef: "public-self-development-api:" + ownerID,
-			PrivacyClass: "private", ReducerVersion: computerevent.ReducerVersionV1,
-			DecisionRef: requestCommitment,
-		}
-		if _, pinnedDigest, appendErr := h.rt.eventAppender.AppendNewPrivatePayload(r.Context(), event, computerevent.TransitionInput{}, prompt, selfDevelopmentPromptMediaType, h.rt.privateArtifactCipher); appendErr != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: fmt.Sprintf("append self-development trajectory: %v", appendErr)})
-			return
-		} else if pinnedDigest != promptDigest {
-			// The durable reference names the authenticated encrypted envelope. The
-			// plaintext digest is never exposed as an artifact reference.
-			promptDigest = pinnedDigest
-		}
-		event, found, err = h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency)
-		if err != nil || !found {
-			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "trajectory event projection unavailable"})
-			return
-		}
-	}
-	promptDigest, err = recoveredStartPromptRef(event, computerID, trajectoryID, eventIdempotency, ownerID, requestCommitment)
-	if err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	}
-
-	operation, err := h.rt.selfdevOperations.Start(r.Context(), selfdev.StartRequest{
-		ComputerID: computerID, IdempotencyKey: request.IdempotencyKey, PromptArtifactRef: promptDigest,
-		OperationID: operationID, TrajectoryID: trajectoryID, BaseHead: event.PreviousHead, RequestCommitment: requestCommitment,
-	})
-	if err != nil {
-		status := http.StatusConflict
-		if errors.Is(err, selfdev.ErrInvalidTransition) {
-			status = http.StatusBadRequest
-		}
-		writeAPIJSON(w, status, apiError{Error: err.Error()})
-		return
-	}
-	operation, err = h.ensureSelfDevelopmentRun(r, operation, ownerID, request.Prompt)
-	if err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	}
-	writeAPIJSON(w, http.StatusCreated, operation)
-}
-
-func recoveredStartPromptRef(event computerevent.Event, computerID, trajectoryID, eventIdempotency, ownerID, requestCommitment string) (string, error) {
-	if event.SchemaVersion != computerevent.SchemaVersionV1 || event.ComputerID != computerID ||
-		event.EventKind != computerevent.EventTrajectoryStarted || event.TrajectoryID != trajectoryID ||
-		event.IdempotencyKey != eventIdempotency || event.DecisionRef != requestCommitment ||
-		event.AuthorityRef != "public-self-development-api:"+ownerID || event.PrivacyClass != "private" ||
-		len(event.OutputArtifactRefs) != 1 {
-		return "", fmt.Errorf("durable trajectory event binding mismatch")
-	}
-	ref, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])
-	if err != nil {
-		return "", fmt.Errorf("durable trajectory event artifact binding mismatch")
-	}
-	return ref.String(), nil
 }
 
 func operationReceiptProjection(operation selfdev.Operation) map[string]any {
@@ -800,22 +633,6 @@ func exactSelfDevelopmentDecisionRequestMatches(event computerevent.Event, compu
 		event.ExpectedEffectiveStateCommitment == request.ExpectedEffectiveStateCommitment
 }
 
-func (h *APIHandler) verifyStartModeReceipt(computerID, mode string, current, request *computerevent.Receipt) error {
-	if h == nil || h.rt == nil || h.rt.selfdevControl == nil || current == nil || request == nil ||
-		current.ReceiptKind != "ModeReceipt" || current.Verify(h.rt.selfdevControl.KeyResolver()) != nil {
-		return fmt.Errorf("signed current mode receipt is required")
-	}
-	currentBytes, currentErr := current.CanonicalBytes()
-	requestBytes, requestErr := request.CanonicalBytes()
-	computer, _ := current.KindFields["computer_id"].(string)
-	newMode, _ := current.KindFields["new_mode"].(string)
-	if currentErr != nil || requestErr != nil || !bytes.Equal(currentBytes, requestBytes) ||
-		computer != computerID || newMode != mode || mode != "propose_only" {
-		return fmt.Errorf("mode receipt does not match current proposal authority")
-	}
-	return nil
-}
-
 func (h *APIHandler) verifyDecisionModeReceipt(computerID, operationID, mode string, current *computerevent.Receipt, request selfDevelopmentDecisionRequest) error {
 	if current == nil || request.ModeReceipt == nil || current.ReceiptKind != "ModeReceipt" ||
 		current.Verify(h.rt.selfdevControl.KeyResolver()) != nil {
@@ -881,42 +698,6 @@ func selfDevelopmentDecisionBinding(operationID string, request selfDevelopmentD
 		ExpectedPendingTransitionRef:     request.ExpectedPendingTransitionRef,
 		ExpectedDesiredStateCommitment:   request.ExpectedDesiredStateCommitment,
 		ExpectedEffectiveStateCommitment: request.ExpectedEffectiveStateCommitment,
-	}
-}
-
-func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev.Operation, ownerID, prompt string) (selfdev.Operation, error) {
-	h.rt.selfdevStartMu.Lock()
-	defer h.rt.selfdevStartMu.Unlock()
-	if h.rt.maintenanceHeld() {
-		return operation, fmt.Errorf("computer is under maintenance hold: self-development run refused")
-	}
-	current, err := h.rt.selfdevOperations.Get(r.Context(), operation.ComputerID, operation.OperationID)
-	if err != nil {
-		return operation, fmt.Errorf("refresh self-development operation: %w", err)
-	}
-	if current.RequestCommitment != operation.RequestCommitment {
-		return operation, fmt.Errorf("self-development operation commitment changed")
-	}
-	operation = current
-	switch operation.State {
-	case selfdev.StateRequested:
-		if err := h.rt.ensureSelfDevelopmentEngineeringDoc(r.Context(), operation, ownerID, prompt); err != nil {
-			return operation, err
-		}
-		return h.rt.selfdevOperations.Transition(r.Context(), operation.ComputerID, operation.OperationID, selfdev.StateRequested, selfdev.StateExecuting, nil)
-	case selfdev.StateExecuting:
-		if strings.TrimSpace(operation.BundleDigest) != "" {
-			return operation, nil
-		}
-		// The engineering document is the operation's cast surface; the join is
-		// idempotent (deterministic IDs + command replay), so re-ensuring after
-		// a stranded start is safe.
-		if err := h.rt.ensureSelfDevelopmentEngineeringDoc(r.Context(), operation, ownerID, prompt); err != nil {
-			return operation, err
-		}
-		return operation, nil
-	default:
-		return operation, nil
 	}
 }
 

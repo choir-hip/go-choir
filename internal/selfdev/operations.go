@@ -100,9 +100,9 @@ type Operation struct {
 	// informational, never a state: a later successful intent does not
 	// imply the field is stale, and terminal failure lands in
 	// TerminalError instead.
-	LastIntentError        string   `json:"last_intent_error,omitempty"`
-	CreatedAt              string   `json:"created_at"`
-	UpdatedAt              string   `json:"updated_at"`
+	LastIntentError string `json:"last_intent_error,omitempty"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
 }
 
 type StartRequest struct {
@@ -281,8 +281,24 @@ func (s *Store) Get(ctx context.Context, computerID, operationID string) (Operat
 	return scanOperation(s.db.QueryRowContext(ctx, operationSelect+` WHERE computer_id=? AND operation_id=?`, strings.TrimSpace(computerID), strings.TrimSpace(operationID)))
 }
 
-func (s *Store) GetByTrajectory(ctx context.Context, computerID, trajectoryID string) (Operation, error) {
-	return scanOperation(s.db.QueryRowContext(ctx, operationSelect+` WHERE computer_id=? AND trajectory_id=?`, strings.TrimSpace(computerID), strings.TrimSpace(trajectoryID)))
+// ListByTrajectory returns every operation on one trajectory, oldest first.
+// A trajectory can carry several (one per assignment that froze, C1e D2), so
+// a trajectory-wide caller lists them and picks explicitly.
+func (s *Store) ListByTrajectory(ctx context.Context, computerID, trajectoryID string) ([]Operation, error) {
+	rows, err := s.db.QueryContext(ctx, operationSelect+` WHERE computer_id=? AND trajectory_id=? ORDER BY created_at, operation_id`, strings.TrimSpace(computerID), strings.TrimSpace(trajectoryID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	operations := make([]Operation, 0)
+	for rows.Next() {
+		operation, err := scanOperation(rows)
+		if err != nil {
+			return nil, err
+		}
+		operations = append(operations, operation)
+	}
+	return operations, rows.Err()
 }
 
 func (s *Store) GetByEffectiveHead(ctx context.Context, computerID, effectiveHead string) (Operation, error) {
@@ -514,7 +530,6 @@ func (s *Store) RecordIntentError(ctx context.Context, computerID, operationID, 
 	}
 	return nil
 }
-
 
 func (s *Store) byIdempotency(ctx context.Context, computerID, idempotencyKey string) (Operation, bool, error) {
 	operation, err := scanOperation(s.db.QueryRowContext(ctx, operationSelect+` WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey))

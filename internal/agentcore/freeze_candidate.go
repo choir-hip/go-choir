@@ -2,14 +2,13 @@ package agentcore
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 // openFreezeCandidate opens the promotion candidate for an engineering
@@ -25,15 +24,15 @@ func openFreezeCandidate(ctx context.Context, operations *selfdev.Store, authori
 	if operations == nil || authorizeProposal == nil || computerID == "" || trajectoryID == "" || assignmentID == "" {
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: incomplete freeze identity")
 	}
-	identity := computerevent.DigestBytes([]byte(computerID + "\x00" + assignmentID))
-	idempotencyKey := "freeze-open:" + assignmentID
-	if existing, err := operations.GetByTrajectory(ctx, computerID, trajectoryID); err == nil {
-		if existing.IdempotencyKey != idempotencyKey {
-			return selfdev.Operation{}, fmt.Errorf("self-development candidate: trajectory %s already carries candidate %s", trajectoryID, existing.OperationID)
-		}
-		return advanceFreezeCandidate(ctx, operations, existing)
-	} else if !errors.Is(err, sql.ErrNoRows) {
+	// C1e D2: the operation is the assignment's, resolved by its idempotency
+	// key. An existing one is returned before the mode is consulted, so a
+	// re-freeze after the mode is switched off still reaches its own
+	// operation; a retry on the same trajectory opens its own.
+	idempotencyKey := store.EngineeringFreezeIdempotencyKey(assignmentID)
+	if existing, found, err := operations.GetByIdempotency(ctx, computerID, idempotencyKey); err != nil {
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: %w", err)
+	} else if found {
+		return advanceFreezeCandidate(ctx, operations, existing)
 	}
 	if err := authorizeProposal(ctx); err != nil {
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: the computer's mode does not authorize a proposal: %w", err)
@@ -44,12 +43,30 @@ func openFreezeCandidate(ctx context.Context, operations *selfdev.Store, authori
 	}
 	operation, err := operations.Start(ctx, selfdev.StartRequest{
 		ComputerID: computerID, IdempotencyKey: idempotencyKey, PromptArtifactRef: promptRef.String(),
-		OperationID: "selfdev-" + identity[:32], TrajectoryID: trajectoryID,
+		OperationID: store.EngineeringFreezeOperationID(computerID, assignmentID), TrajectoryID: trajectoryID,
 	})
 	if err != nil {
 		return selfdev.Operation{}, fmt.Errorf("self-development candidate: open: %w", err)
 	}
 	return advanceFreezeCandidate(ctx, operations, operation)
+}
+
+// pickTrajectoryOperation is the explicit pick a trajectory-wide caller makes
+// among a trajectory's operations (C1e D2: each assignment opens its own, so
+// a trajectory can carry several). It names the newest operation still in
+// flight, or else the newest. ops is in creation order (ListByTrajectory).
+func pickTrajectoryOperation(ops []selfdev.Operation) (selfdev.Operation, bool) {
+	for i := len(ops) - 1; i >= 0; i-- {
+		switch ops[i].State {
+		case selfdev.StateFailed, selfdev.StateRejected, selfdev.StateRolledBack, selfdev.StateApplied:
+			continue
+		}
+		return ops[i], true
+	}
+	if len(ops) == 0 {
+		return selfdev.Operation{}, false
+	}
+	return ops[len(ops)-1], true
 }
 
 func advanceFreezeCandidate(ctx context.Context, operations *selfdev.Store, operation selfdev.Operation) (selfdev.Operation, error) {

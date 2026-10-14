@@ -60,39 +60,24 @@ func (rt *Handler) lifecycleDocDeskProfile(ctx context.Context, ownerID string, 
 	if err != nil {
 		return ""
 	}
-	textureWorkItemID := ""
+	// Texture is the only document desk: the engineering-bound document
+	// (path B) is deleted (C1e step 3).
 	for _, work := range snapshot.WorkItems {
-		if work.Status != types.WorkItemOpen {
-			continue
+		if work.Status == types.WorkItemOpen && strings.TrimSpace(work.AuthorityProfile) == agentprofile.Texture &&
+			work.AssignedAgentID == agentprofile.Texture+":"+doc.DocID {
+			return agentprofile.Texture
 		}
-		// The supervision surface minted beside a document cast is a report
-		// target, never a revision consumer — exclude it so a bound document's
-		// executor desk resolves deterministically.
-		if store.IsTextureSupervisionWorkItem(work.WorkItemID) {
-			continue
-		}
-		profile := strings.TrimSpace(work.AuthorityProfile)
-		if (profile != agentprofile.Texture && profile != agentprofile.Engineering) ||
-			work.AssignedAgentID != profile+":"+doc.DocID {
-			continue
-		}
-		if profile == agentprofile.Engineering {
-			// The engineering desk is the document's executor when bound; an
-			// owner revision occurrence must name it, never the supervision
-			// subject that shares the document channel.
-			return profile
-		}
-		textureWorkItemID = work.WorkItemID
-	}
-	if textureWorkItemID != "" {
-		return agentprofile.Texture
 	}
 	return ""
 }
 
 // Start runs at boot after the generic core has closed (crash) or parked
-// (planned restart) the interrupted runs. Only a planned restart reconciles
-// Engineering desks (their one re-provision); Texture subjects get nothing.
+// (planned restart) the interrupted runs. Texture subjects get nothing: a
+// restart is a system failure, not a wake. Interrupted runs stay passivated
+// (runtime_restarted), pending reports and owner revisions wait for the
+// owner's next action, and no turn starts or resumes on its own (owner rule,
+// docs/problems/texture-zombie-activations-revising-forever-2026-10-09.md).
+// The engineering desk's boot re-provision (path B) is deleted (C1e step 3).
 func (rt *Handler) Start(ctx context.Context) error {
 	if rt.Core != nil && rt.Core.MaintenanceHeld() {
 		// The computer is under a maintenance hold: no run admission or Texture
@@ -102,37 +87,6 @@ func (rt *Handler) Start(ctx context.Context) error {
 		// fatal startup failure into a benign held state.
 		log.Printf("textureowner: maintenance hold active; deferring Texture reconcile until unhold")
 		return nil
-	}
-	subjects, err := rt.Store.ListLifecycleSubjects(ctx, rt.Core.TextureComputerID())
-	if err != nil {
-		return fmt.Errorf("reconcile lifecycle Texture subjects: %w", err)
-	}
-	for _, subject := range subjects {
-		subjectProfile, _ := agentprofile.Canonical(subject.Profile)
-		if subjectProfile == agentprofile.Engineering && subject.LifecycleVersion > 0 && subject.ChannelID != subject.AgentID {
-			if _, planned := rt.Core.BootWasPlannedRestart(); !planned {
-				// A crash boot recasts nothing: its assignments were
-				// cancelled and the work waits for the owner.
-				continue
-			}
-			// Engineering desk: the desk agent's channel is the bound document,
-			// not its own mailbox — that discriminates it from assigned agents
-			// (engineering:{assignmentID}, channel = own mailbox). Reconcile
-			// the pending cast directly; the desk agent never runs.
-			docID := strings.TrimSpace(strings.TrimPrefix(subject.AgentID, agentprofile.Engineering+":"))
-			if docID == "" || docID != strings.TrimSpace(subject.ChannelID) {
-				continue
-			}
-			if _, reconcileErr := rt.Core.ReconcileEngineeringDesk(ctx, subject.OwnerID, docID); reconcileErr != nil {
-				log.Printf("textureowner: boot engineering desk reconcile %s: %v", subject.AgentID, reconcileErr)
-			}
-			continue
-		}
-		// Texture subjects: nothing at boot. A restart is a system failure, not
-		// a wake: interrupted runs stay passivated (runtime_restarted), pending
-		// reports and owner revisions wait for the owner's next action, and no
-		// turn starts or resumes on its own (owner rule, docs/problems/texture-
-		// zombie-activations-revising-forever-2026-10-09.md).
 	}
 	return nil
 }
@@ -652,8 +606,7 @@ func (rt *Handler) reconcileAgentWakeLocked(ctx context.Context, doc types.Docum
 	initialWorkWake := false
 	if len(armedUpdates) == 0 && !ownerHeadPending && !recordsPending {
 		for _, work := range snapshot.WorkItems {
-			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID &&
-				!store.IsTextureSupervisionWorkItem(work.WorkItemID) {
+			if work.Status == types.WorkItemOpen && work.AssignedAgentID == textureAgentID {
 				initialWorkWake = true
 				break
 			}

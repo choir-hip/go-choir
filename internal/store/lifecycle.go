@@ -517,22 +517,6 @@ type actorWakeEngineeringDeadlineContent struct {
 	Attempt      uint64 `json:"attempt"`
 }
 
-// actorWakeEngineeringProgressContent carries the silence anchor the
-// progress-overdue deadline reports: the assignment's UpdatedAt at the commit
-// that armed this wake. A fresher commit re-arms a newer anchor; the fired
-// deadline no-ops when durable state is newer than the anchor.
-type actorWakeEngineeringProgressContent struct {
-	AssignmentID         string `json:"assignment_id"`
-	Attempt              uint64 `json:"attempt"`
-	SilenceSinceUnixNano int64  `json:"silence_since_unix_nano"`
-}
-
-// EngineeringProgressReviewWindow is the bound-assignment silence window after
-// which a progress-overdue observation is owed to the supervisor. The outbox
-// derives not-before as UpdatedAt + window; the handler predicate applies the
-// same window so arm-time and fire-time agree.
-const EngineeringProgressReviewWindow = 30 * time.Minute
-
 func actorWakeOutboxFromWorkerUpdate(worker objectgraph.Object, resolver []objectgraph.Object) (ActorWakeOutbox, objectgraph.Object, error) {
 	update, err := decodeLifecycleObject[types.CoagentSourcePacket](worker)
 	if err != nil {
@@ -696,26 +680,6 @@ func actorWakeOutboxFromObject(obj objectgraph.Object, objects []objectgraph.Obj
 			if assignment.LifecycleVersion == 2 && strings.TrimSpace(assignment.BoundRunID) != "" &&
 				strings.TrimSpace(assignment.Binding.AssignedAgentID) != "" {
 				if err := appendWake(":dispatch", assignment.Binding.AssignedAgentID, "initial_dispatch", assignment.BoundRunID, time.Time{}); err != nil {
-					return nil, err
-				}
-			}
-			// M11 edge 3: a bound assignment with no fate proposal owes the
-			// progress-overdue wake. Every commit re-emits the wake with this
-			// object's UpdatedAt as the silence anchor, so accepted reports
-			// re-arm the review window; the fired deadline is a no-op while
-			// fresher progress exists. Silence is supervision signal, not
-			// auto-cancel.
-			if !assignment.UpdatedAt.IsZero() {
-				progressContent, progressErr := json.Marshal(actorWakeEngineeringProgressContent{
-					AssignmentID: assignment.AssignmentID, Attempt: assignment.Binding.Attempt,
-					SilenceSinceUnixNano: assignment.UpdatedAt.UnixNano(),
-				})
-				if progressErr != nil {
-					return nil, progressErr
-				}
-				if err := appendWake(fmt.Sprintf(":progress:%d", assignment.UpdatedAt.UnixNano()), assignment.Binding.ParentAgentID,
-					"engineering_progress_overdue_deadline", string(progressContent),
-					assignment.UpdatedAt.Add(EngineeringProgressReviewWindow)); err != nil {
 					return nil, err
 				}
 			}

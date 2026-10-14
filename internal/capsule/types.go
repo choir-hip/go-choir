@@ -151,6 +151,9 @@ type GoEvalResult struct {
 	// FateTerminal is set by guest core when this cell's reduction committed a
 	// terminal assignment fate; the run loop ends on it.
 	FateTerminal bool `json:"fate_terminal,omitempty"`
+	// RecordsShown is the highest record seq a choir.Records() call in the
+	// cell showed (C1e B1): the cell marks read only what it was shown.
+	RecordsShown int64 `json:"records_shown,omitempty"`
 	// FreezeResult/VerifyResult carry the committed freeze/verify receipts for
 	// this cell so the model sees the same result the retired JSON tools
 	// returned.

@@ -22,15 +22,16 @@ import (
 // alone. A desk's inbox id is its desk agent id (texture:<doc>,
 // research:<doc>); each cell shows the records in (cursor, head] and
 // advances the cursor to that head in the same transaction as its acts.
-// Management and engineering routes stay on packets until L3b.
+// Management's conversations moved in L3b; engineering's in C1e B1: one
+// conversation per assignment, management:<owner> with engineering:<id>.
 
 // recordsDesk reports whether a desk's conversations are on records:
 // Texture with research (L3a) and with management (L3b), research with
-// Texture, management with Texture. Engineering stays on packets until its
-// landing.
+// Texture, management with Texture and with engineering, engineering with
+// management (C1e B1).
 func recordsDesk(profile string) bool {
 	switch strings.TrimSpace(profile) {
-	case agentprofile.Texture, agentprofile.Research, agentprofile.Management:
+	case agentprofile.Texture, agentprofile.Research, agentprofile.Management, agentprofile.Engineering:
 		return true
 	}
 	return false
@@ -40,7 +41,10 @@ func recordsDesk(profile string) bool {
 // agent id it staged. ok is false for a route that stays on its packet
 // path. Texture talks to research:<doc> and management:<owner>; research to
 // texture:<doc>; management to texture:<doc>, which it must name (it holds
-// conversations with every Texture of its owner).
+// conversations with every Texture of its owner), and to
+// engineering:<assignment> for an assignment it opened (a Cast to bare
+// "engineering" opens a new one and is planned by planEngineeringCast);
+// engineering:<assignment> to management:<owner>.
 func recordsRoute(fromAgentID, ownerID, toDesk string) (string, bool, error) {
 	fromDesk, fromSubject, _ := strings.Cut(strings.TrimSpace(fromAgentID), ":")
 	to := strings.TrimSpace(toDesk)
@@ -81,8 +85,25 @@ func recordsRoute(fromAgentID, ownerID, toDesk string) (string, bool, error) {
 			}
 			return agentprofile.Texture + ":" + strings.TrimSpace(toSubject), true, nil
 		}
+		if toName == agentprofile.Engineering {
+			if !hasSubject || strings.TrimSpace(toSubject) == "" {
+				return "", false, fmt.Errorf("management speaks into an open assignment by its inbox (engineering:<assignment>, the record's from); a Cast to \"engineering\" opens a new one")
+			}
+			return agentprofile.Engineering + ":" + strings.TrimSpace(toSubject), true, nil
+		}
+	case agentprofile.Engineering:
+		if fromSubject != "" && toName == agentprofile.Management && strings.TrimSpace(ownerID) != "" && (!hasSubject || toSubject == ownerID) {
+			return agentprofile.Management + ":" + ownerID, true, nil
+		}
 	}
 	return "", false, nil
+}
+
+// engineeringCastIntent reports whether a staged act is a Cast to the
+// engineering desk: from management it opens a new assignment (C1e D4).
+func engineeringCastIntent(in yaegikernel.StagedIntent) bool {
+	desk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":")
+	return in.Kind == yaegikernel.IntentCast && desk == agentprofile.Engineering
 }
 
 // cellRecords is the range of a desk's inbox one cell reads.
@@ -133,6 +154,7 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 	// Jev's labels join a captures record's view here, where the store is,
 	// and only when intake labels are on (L2a A2 / R2-6).
 	labelsOn, labelsRead := false, false
+	parents := map[string]types.EngineeringAssignmentBinding{}
 	for _, rec := range recs {
 		view := inboxRecordView(rec)
 		if rec.Captures != nil && len(rec.Captures.Items) > 0 {
@@ -143,9 +165,32 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 				view.Labels = rt.captureLabelViews(ctx, ownerID, computerID, rec.Captures.Items)
 			}
 		}
+		if sender := strings.TrimSpace(rec.SenderInbox); strings.HasPrefix(sender, agentprofile.Engineering+":") {
+			// An engineering record names the Texture request its
+			// assignment serves (C1e D9), from the binding.
+			binding, seen := parents[sender]
+			if !seen {
+				if assignment, err := rt.store.EngineeringAssignmentForInbox(ctx, ownerID, computerID, sender); err == nil {
+					binding = assignment.Binding
+				}
+				parents[sender] = binding
+			}
+			view.ParentConversationID, view.ParentRound = binding.ParentConversationID, binding.ParentRound
+		}
 		out.view = append(out.view, view)
 	}
 	return out, nil
+}
+
+// recordsShownMark is the highest record seq the run's choir.Records()
+// calls showed it, or 0.
+func (rt *Runtime) recordsShownMark(runID string) int64 {
+	if v, ok := rt.recordsRunShown.Load(strings.TrimSpace(runID)); ok {
+		if shown, ok := v.(int64); ok {
+			return shown
+		}
+	}
+	return 0
 }
 
 // noteRecordsShown folds a cell's shown mark into its run's and returns
@@ -199,6 +244,7 @@ func inboxRecordView(rec types.CommitmentRecord) yaegikernel.InboxRecord {
 		Seq: rec.InboxSeq, RecordID: rec.RecordID, Kind: inboxRecordKind(rec), From: rec.SenderInbox,
 		ConversationID: rec.ConversationID, Round: rec.Round, Final: rec.Final,
 		Cast: rec.Cast, Report: rec.Report, Support: rec.Support, Captures: rec.Captures,
+		ParentID: rec.ParentID, RelatedIDs: rec.RelatedIDs, EvidenceRefs: rec.EvidenceRefs,
 	}
 	if t, err := time.Parse(time.RFC3339Nano, rec.Provenance.CommittedAt); err == nil {
 		view.CreatedAt = t
@@ -267,6 +313,13 @@ func inboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent, toI
 		rec.Cast = cast
 	case yaegikernel.IntentReport:
 		report, final := reportBodyFromPacket(in.Packet, in.Claim)
+		if strings.HasPrefix(rec.SenderInbox, agentprofile.Engineering+":") {
+			// Engineering's staged Reports are progress (C1e D3): only its
+			// Complete, or its cancellation, mints the final Report, in the
+			// same transaction as the assignment row.
+			final = false
+			report.StopReason = ""
+		}
 		rec.Report = report
 		rec.Final = final && hasOpenRound
 	case yaegikernel.IntentNote:
@@ -368,17 +421,6 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	}
 	var rest []yaegikernel.StagedIntent
 	var records []types.CommitmentRecord
-	if strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management && metadataStringValue(r.rec.Metadata, "request_source") == inboxRecordRequestSource {
-		for _, in := range intents {
-			if in.Kind == yaegikernel.IntentCast && strings.HasPrefix(strings.TrimSpace(in.ToDesk), agentprofile.Engineering) {
-				// Cut 1 L3b moves management's conversations with Texture onto
-				// records; its conversation with engineering moves in the
-				// next landing, and until then an engineering assignment
-				// needs the control path this run did not come from.
-				return nil, fmt.Errorf("reduce: %s: engineering casts from a records turn are not available on this build (Cut 1 landing L3b-2 moves them onto records); report the execution request back to the Texture as blocked", in.LocalID)
-			}
-		}
-	}
 	// choir.Feed and choir.Decline are refused while the computer's
 	// intake.labels setting is off (L2a A6): the whole cell commits
 	// nothing, and choir.Note does the same work.
@@ -387,6 +429,12 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			return nil, fmt.Errorf("reduce: %s: choir.Feed and choir.Decline are off on this computer (the owner's intake.labels setting); feed or decline with choir.Note, naming the capture ids", in.LocalID)
 		}
 	}
+	deskProfile := strings.TrimSpace(r.rec.AgentProfile)
+	// A management Cast to engineering opens an assignment (C1e D4): it is
+	// planned and admitted here, before anything commits, and its record
+	// commits with the cell's other records, the cursor and the assignment
+	// row as one transaction.
+	var castPlan *engineeringCastPlan
 	var localIDs []yaegikernel.StagedIntent
 	// Management's support verdicts (Cut 2 2a (v)) commit in the same
 	// transaction as its records and cursor.
@@ -401,6 +449,19 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			}
 			verdicts = append(verdicts, staged...)
 			judged = append(judged, in)
+			continue
+		}
+		if deskProfile == agentprofile.Management && engineeringCastIntent(in) {
+			if castPlan != nil {
+				return nil, fmt.Errorf("reduce: %s: one engineering Cast per cell", in.LocalID)
+			}
+			plan, err := rt.planEngineeringCast(ctx, r.scope, r.rec, in)
+			if err != nil {
+				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
+			}
+			castPlan = &plan
+			records = append(records, plan.Cast)
+			localIDs = append(localIDs, in)
 			continue
 		}
 		toInbox, onRoute, routeErr := recordsRoute(r.scope.DeskAgentID, r.scope.OwnerID, in.ToDesk)
@@ -428,6 +489,11 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		if err != nil {
 			return nil, err
 		}
+		if rec.Final && deskProfile == agentprofile.Management && strings.HasPrefix(toInbox, agentprofile.Texture+":") {
+			if err := r.requireChildOutcomesRead(ctx, conversation); err != nil {
+				return nil, fmt.Errorf("reduce: %s: %w", in.LocalID, err)
+			}
+		}
 		if rec.Final {
 			openRound[conversation] = false
 		}
@@ -450,9 +516,33 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		return nil, err
 	}
 	req.CommandDigest = digest
-	committed, err := r.ledger.CommitInboxRecords(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("reduce: commit records: %w", err)
+	var committed types.InboxCommitReceipt
+	if castPlan != nil {
+		opened, err := rt.openDelegatedCastAssignment(ctx, *castPlan, req)
+		if err != nil {
+			return nil, fmt.Errorf("reduce: engineering cast admission: %w", err)
+		}
+		if opened.Records == nil {
+			return nil, fmt.Errorf("reduce: engineering cast admission returned no records receipt")
+		}
+		committed = *opened.Records
+		// The spawn obligation is atomic with the open commit (the
+		// lifecycle outbox mints delegated_assignment_spawn_deadline), so
+		// kernel mode needs no post-commit arm. Runtimes without the wake
+		// outbox resume inline under the saga mutex.
+		if !opened.Replay && !(rt.kernelMode && rt.scheduleActor != nil) {
+			rt.engineeringAssignmentOpenMu.Lock()
+			_, resumeErr := rt.resumeDelegatedCastAssignment(ctx, opened.Assignment, assignmentSpawnRequest{Objective: castPlan.Objective})
+			rt.engineeringAssignmentOpenMu.Unlock()
+			if resumeErr != nil {
+				return nil, fmt.Errorf("reduce: engineering cast spawn (non-kernel): %w", resumeErr)
+			}
+		}
+	} else {
+		committed, err = r.ledger.CommitInboxRecords(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("reduce: commit records: %w", err)
+		}
 	}
 	for i, in := range localIDs {
 		seq, opened := int64(0), ""
@@ -481,6 +571,37 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Kind: in.Kind})
 	}
 	return rest, nil
+}
+
+// requireChildOutcomesRead is D6 (C1e): management's final Report into a
+// Texture's round is refused unless every assignment opened for that round
+// is terminal and the record that closed its engineering round is one this
+// run was shown. A row a crash boot terminalized has no such record; its
+// Texture round was closed by the same crash.
+func (r *rlmCallReduction) requireChildOutcomesRead(ctx context.Context, conversation string) error {
+	rt := r.rt()
+	state, err := rt.store.ConversationState(ctx, r.scope.OwnerID, r.scope.ComputerID, conversation)
+	if err != nil {
+		return fmt.Errorf("conversation %s: %w", conversation, err)
+	}
+	children, err := rt.store.ListEngineeringAssignmentsByParentRound(ctx, r.scope.OwnerID, r.scope.ComputerID, conversation, state.Round)
+	if err != nil {
+		return fmt.Errorf("assignments of round %d of %s: %w", state.Round, conversation, err)
+	}
+	shown := rt.recordsShownMark(r.scope.RunID)
+	for _, child := range children {
+		if !child.Disposition.Terminal() {
+			return fmt.Errorf("assignment %s for this request is still %s; its engineering Report will wake you: answer the Texture after reading it", child.AssignmentID, child.Disposition)
+		}
+		closing, found, err := rt.store.EngineeringClosingRecord(ctx, child)
+		if err != nil {
+			return fmt.Errorf("closing record of %s: %w", child.AssignmentID, err)
+		}
+		if found && closing.InboxSeq > shown {
+			return fmt.Errorf("assignment %s ended with record seq %d, which you have not read: read choir.Records() and answer the Texture from its outcome", child.AssignmentID, closing.InboxSeq)
+		}
+	}
+	return nil
 }
 
 // stagedVerdicts decodes a Judge intent's verdicts.
@@ -708,11 +829,25 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 	if rt == nil || rt.store == nil || rec == nil || rec.Error == runFateInterruptedByRestart {
 		return
 	}
-	if !rec.State.Terminal() && rec.State != types.RunPassivated {
-		return
-	}
-	switch agentProfileForRun(rec) {
+	profile := agentProfileForRun(rec)
+	switch profile {
 	case agentprofile.Research, agentprofile.Management:
+		if !rec.State.Terminal() && rec.State != types.RunPassivated {
+			return
+		}
+	case agentprofile.Engineering:
+		// C1e D7: only an ended run settles; a parked (passivated) one
+		// keeps its round. A live engineering run that ends without
+		// Complete settles its assignment: the cancel turns the row
+		// terminal and mints the final Report that closes the round and
+		// wakes management. A bare closure follows only when no
+		// non-terminal assignment matches the conversation.
+		if !engineeringRunEnded(rec.State) {
+			return
+		}
+		if rt.settleAssignmentOfEndedEngineeringRun(ctx, rec) {
+			return
+		}
 	default:
 		return
 	}
@@ -728,6 +863,10 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, round := range rounds {
 		if round.RecipientInbox != inbox || strings.TrimSpace(round.CasterInbox) == "" {
+			continue
+		}
+		if profile == agentprofile.Management && strings.HasPrefix(round.CasterInbox, agentprofile.Texture+":") && rt.childAssignmentsHoldRound(ctx, rec, round) {
+			log.Printf("runtime: round %d of %s stays open after %s: an assignment it opened has an outcome management has not read", round.Round, round.ConversationID, rec.RunID)
 			continue
 		}
 		closure := types.NewRoundClosureRecord(round.CasterInbox, inbox, round.Round, "run_"+string(rec.State), now)
@@ -747,4 +886,82 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 			log.Printf("runtime: round closure wake for %s: %v", round.CasterInbox, err)
 		}
 	}
+}
+
+// childAssignmentsHoldRound is D5 (C1e): a Texture's round survives the end
+// of a management turn while an assignment opened for it is non-terminal,
+// or is terminal but the record that closed its engineering round is above
+// management's cursor and was committed after the ending turn began. The
+// second clause is the re-check's own wake predicate (same field,
+// rec.CreatedAt), so a skipped round always has a reader coming.
+func (rt *Runtime) childAssignmentsHoldRound(ctx context.Context, rec *types.RunRecord, round types.ConversationHead) bool {
+	children, err := rt.store.ListEngineeringAssignmentsByParentRound(ctx, rec.OwnerID, rec.ComputerID, round.ConversationID, round.Round)
+	if err != nil {
+		log.Printf("runtime: assignments of round %d of %s: %v", round.Round, round.ConversationID, err)
+		return false
+	}
+	if len(children) == 0 {
+		return false
+	}
+	cursor, err := rt.store.ReaderCursor(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, rec.AgentID)
+	if err != nil {
+		log.Printf("runtime: cursor of %s: %v", rec.AgentID, err)
+		return false
+	}
+	for _, child := range children {
+		if !child.Disposition.Terminal() {
+			return true
+		}
+		closing, found, err := rt.store.EngineeringClosingRecord(ctx, child)
+		if err != nil || !found {
+			continue
+		}
+		committed, perr := time.Parse(time.RFC3339Nano, closing.Provenance.CommittedAt)
+		if closing.InboxSeq > cursor && perr == nil && committed.After(rec.CreatedAt) {
+			return true
+		}
+	}
+	return false
+}
+
+// settleAssignmentOfEndedEngineeringRun is D7's run-end branch: it revokes
+// the capsule of the run's non-terminal assignment and cancels it
+// synchronously with reason run_<state>, which mints the final Report. It
+// reports whether a non-terminal assignment matched (so no bare closure is
+// written); a failed revoke leaves the round to the asynchronous reconcile
+// or the next restart.
+func (rt *Runtime) settleAssignmentOfEndedEngineeringRun(ctx context.Context, rec *types.RunRecord) bool {
+	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+	if assignmentID == "" {
+		return false
+	}
+	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+	if attempt == 0 {
+		attempt = 1
+	}
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+	if errors.Is(err, store.ErrNotFound) {
+		return false
+	}
+	if err != nil {
+		log.Printf("runtime: run-end settle of %s: %v", assignmentID, err)
+		return true
+	}
+	if assignment.Disposition.Terminal() {
+		return false
+	}
+	reason := "run_" + string(rec.State)
+	if assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+		if rt.assignedCapsule() == nil {
+			return true
+		}
+		if assignment, err = rt.revokeAssignedCapsule(context.WithoutCancel(ctx), assignment, reason); err != nil {
+			log.Printf("runtime: run-end settle of %s: revoke: %v", assignmentID, err)
+			return true
+		}
+	}
+	if _, err := rt.persistSystemEngineeringCancellation(context.WithoutCancel(ctx), assignment, reason, false); err != nil {
+		log.Printf("runtime: run-end settle of %s: cancel: %v", assignmentID, err)
+	}
+	return true
 }

@@ -459,6 +459,7 @@ func (b *Broker) handleGoEvalSession(ctx context.Context, cap *capsule.Capabilit
 		Error:           res.Error,
 		Duration:        time.Since(start),
 		StagedIntentIDs: res.Receipts,
+		RecordsShown:    res.RecordsShown,
 		Reuse:           res.Reuse,
 		DiagKind:        res.DiagKind,
 	}
