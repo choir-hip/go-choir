@@ -1,6 +1,9 @@
 # The desktop app is killed at launch once signed, and ships a frozen UI (2026-10-14)
 
-Status: documented before any fix. Evidence from building and launching
+Status: findings 1-4 and 6 fixed in 4df9fd321 (branch
+`desktop-revive-and-sync-plan`, not pushed); finding 5 (WebSocket) open, see
+[reports/desktop-sync-and-local-vms-2026-10-14.md](../reports/desktop-sync-and-local-vms-2026-10-14.md) §1.4.
+Documented before any fix. Evidence from building and launching
 `cmd/desktop` on this Mac (darwin/arm64, macOS 27.2, go1.26.4, Wails
 `v3.0.0-alpha2.104`) at `main` 6415505e3. Nothing here touches Node B or
 staging; `cmd/desktop` is not deployed. Follows the survey in
