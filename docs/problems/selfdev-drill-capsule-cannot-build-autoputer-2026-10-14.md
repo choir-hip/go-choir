@@ -122,3 +122,113 @@ first Go-changing drill runs.
   18:17. The drill kept running; the spike is not attributed to it.
 - The goproxy's size accounting reads 24 bytes; separate doc,
   [goproxy-cache-root-is-a-symlink-2026-10-14.md](goproxy-cache-root-is-a-symlink-2026-10-14.md).
+
+## Decision (lead, 2026-10-14, No Blocking Asks): A, then B
+
+C and D are follow-ups unless trivially contained. Mutation class: red
+(capsule workload environment, self-development Freeze and verification).
+Protected surfaces: capsule exec environment (three hops: executor ->
+broker -> session worker / direct exec -> cell `choir.Exec`), the Freeze
+release assembly (`StageGrantedRelease`), the capsule effect bundle schema
+and the in-cell inspection mirror, the management Verify pass path.
+Admissible evidence: unit tests on the pure classification, staging and
+env builders (any OS); Linux-gated executor tests where they exist; the
+deployed drill after a deploy (not run here). Rollback: revert the commits;
+bundles frozen with the new `release_binary` field are omitempty-additive,
+and a revert only loses the reuse path (Freeze goes back to refusing a tree
+without `bin/autoputer`).
+
+### What the release does with bin/autoputer (verified in code)
+
+The self-development materializer mints a plain file release from the
+bundle's `runtime_files` (`self_development_materializer.go`). A plain
+release carries no `layering-entrypoint`, and the guest's exec wrapper
+(`nix/autoputer-vm.nix`, `autoputerRuntimeExec`) runs the base image's
+`${autoputer}/bin/autoputer` for it; the release's `frontend/` is what the
+computer surface serves. So the `bin/autoputer` in a self-development
+release is a frozen, hashed artifact, not the process that runs after the
+apply. The frontend is not embedded in the autoputer binary (only
+`cmd/desktop` embeds a frontend). The binary's inputs are exactly what the
+flake's `goServicesSrc` filter admits: `go.mod`, `go.sum`, and non-test
+files under `cmd/` and `internal/` (every `//go:embed` in the autoputer
+closure is under `internal/`).
+
+### A: reuse the running binary when the change touches no Go input
+
+At Freeze, if the capsule's release tree has no `bin/autoputer`, the
+executor may stage the computer's running binary (`/proc/self/exe`) as
+`bin/autoputer`, only when all of these hold:
+
+1. No changed `workspace/platform` path is a binary input: top-level
+   `go.mod`, `go.sum`, `go.work`, `go.work.sum`, `flake.nix`,
+   `flake.lock`; anything under `cmd/`, `internal/`, `vendor/`, `nix/`;
+   any `.go` file anywhere else (a new Go package needs one, so cgo
+   sources outside these trees cannot enter the binary without a `.go`
+   change). `*_test.go` files are not inputs (the flake excludes them;
+   `go build` ignores them).
+2. The capsule's source is a git pin (`capsule-source-git:<commit>`) and
+   that commit equals the running binary's linked commit
+   (`buildinfo.Commit`, full 40 hex). A dev build (`local`) or a source
+   pinned elsewhere refuses reuse, and Freeze says why.
+
+The bundle records `release_binary` = {origin `reused_running` or
+`capsule_built`, sha256, running commit, source base commit}. The
+verification pass (management's Verify) re-hashes the running executable
+and refuses a pass when a reused binary no longer matches it.
+
+Ways A could fail, and what guards each:
+
+- A1. The classification misses a Go input, so the reused binary does not
+  reflect the source. Guard: mirror the flake filter and add conservative
+  extras (rule 1); a test pins each input class.
+- A2. The source pin and the running binary are different commits (a
+  persistent computer's `Source/platform` was seeded at creation and the
+  guest image moved since; or the source is a prior candidate artifact).
+  Guard: rule 2, refuse with both commits named.
+- A3. The running executable is unreadable or changes during the copy.
+  Guard: the staged file's hash comes from the same read that writes it and
+  must equal the cached identity hash; refuse otherwise.
+- A4. The desk staged its own binary for a non-Go change. Guard: the
+  desk's binary is kept and recorded `capsule_built`; no silent swap.
+- A5. A platform deploy restarts the computer between Freeze and Verify.
+  Guard: the Verify pass check fails with a named reason (the bundle's
+  binary is not this computer's running build).
+- A6. The new bundle field breaks the in-cell inspection's strict decode.
+  Guard: the mirror gains the field; the drift test sets every field.
+- A7. Old bundles lack the field. Guard: omitempty; absent means legacy and
+  no check.
+- A8. The release-size accounting skips the reused file. Guard: it counts
+  toward the same total.
+- A9. (Residual, pre-existing) a computer running a layered release that
+  applies a plain self-development release execs the base binary after the
+  swap, so "running binary" and "binary that runs after apply" differ
+  there. Not introduced by A; recorded.
+
+### B: the dev shell's toolchain in engineering capsules
+
+The autoputer service already has the toolchain in its PATH (`gcc`,
+`binutils`, `pkg-config`) and the ICU cgo flags (`CGO_CFLAGS`,
+`CGO_CXXFLAGS`, `CGO_LDFLAGS`, `PKG_CONFIG_PATH`). The guest gains one
+variable, `CHOIR_CAPSULE_BUILD_PATH` (the bin dirs of `gcc`, `binutils`,
+`pkg-config` from the guest's own store, read-only through the capsule's
+lower root). The executor hands the build path and the four cgo variables
+to the broker; the broker adds them, with `CGO_ENABLED=1`, to the
+environment of direct exec, of the session worker, and of every
+`choir.Exec` a cell runs. The build path is appended after the existing
+PATH, so `sh` and every tool that resolved before still resolves to the
+same file.
+
+Ways B could fail:
+
+- B1. One hop drops the variables (each hop is an allowlist). Guard: one
+  shared builder in `yaegikernel` used at every hop; unit tests per hop.
+- B2. A new key carries a credential. Guard: fixed key names, values are
+  store paths; the credential filters are unchanged.
+- B3. PATH order changes `/bin/sh` (busybox ash vs bash, see
+  capsule-workload-cannot-run-a-shell-or-install-packages-2026-10-10.md).
+  Guard: append, never prepend; a test pins the order.
+- B4. A desk session outside a capsule gains the toolchain. Guard: the env
+  is added only when the process env carries the build path.
+- B5. Memory: zstd's C compile plus the Go compiler, or two builds at once,
+  exceed the capsule's 1 GiB; the link's RSS was 400-465 MB. See the
+  measurement below for the sizing.
