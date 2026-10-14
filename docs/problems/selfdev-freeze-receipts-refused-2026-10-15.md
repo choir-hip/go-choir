@@ -278,3 +278,44 @@ message only. Rollback: revert the fix commit. Admissible evidence:
   2026-10-04 contract.
 - introduced: none.
 - repaired: none in this commit.
+
+## Fix (A + B, branch `fix/selfdev-freeze-receipts`, not deployed)
+
+- **A, overlay** (`internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml`):
+  - says where `choir.Exec` runs (`/`), that it is killed after 30
+    seconds with exit code -1, and that argv is not shell-expanded;
+  - asks the Go-input question first;
+  - for a change with no Go input, says "do not run go build at all" and
+    gives the frontend build cell (`npm ci`, `npm run build`, copy `dist/`
+    into the release tree, remove `node_modules` and `dist`);
+  - for a Go change, gives the detached build form;
+  - says Freeze's three arguments come from three different cells,
+    names each, quotes the refusal, and gives the cell order (toolchain,
+    build, test);
+  - adds the retry rule ("A refused Freeze is not a blocker");
+  - fixes the worked example to `go -C /workspace/platform test`.
+
+  The in-cell surface summary for `Freeze` says "from three different
+  cells". `yaegikernel.DefaultExecTimeout` names the broker's 30 s bound,
+  so the overlay test pins the number to the code.
+- **B, refusal text** (`internal/agentcore/tools_capsule.go`,
+  `freezeReceiptSlotsError`): keeps the original sentence and appends
+  which slots cite the same receipt (for this drill: "build_recipe_ref and
+  test_receipts[0] cite the same receipt capsule-go-eval:sha256:ae4ae002…")
+  and what each slot should cite. The decision is unchanged and happens at
+  the same point.
+- Tests (written before the change):
+  - `internal/agentcore/freeze_receipt_slots_test.go`: failure modes F2,
+    F3, F4;
+  - `TestRLMEngineeringOverlayTeachesFreezeReceiptsAndExecLimits` in
+    `internal/runtimeprompts/prompts_test.go`: F1, F2, F5-F9.
+- Proof is the deployed drill:
+  `node scripts/reeng_tracer.mjs --label <label> --scenario engineering --expect-sha <sha> --timeout-min 30`.
+
+Residuals:
+- C: a failed or timed-out receipt can still fill the build or toolchain
+  slot.
+- D: no long-running exec primitive for Go changes.
+- E: `choir.Exec` still defaults to `/`.
+- The management Cast and the drill request still say "build the release
+  tree". The overlay now says what that means for each path.

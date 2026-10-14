@@ -20,6 +20,11 @@ import (
 // EmitHandler performs the host-side durable write for ActionEmit.
 type EmitHandler func(context.Context, EmitPayload) (EmitResult, error)
 
+// DefaultExecTimeout bounds one choir.Exec when the broker is given no
+// timeout; a command still running then is killed and reports exit code -1.
+// The engineering overlay states it (runtimeprompts tests pin the number).
+const DefaultExecTimeout = 30 * time.Second
+
 // BrokerConfig configures the trusted guest broker.
 type BrokerConfig struct {
 	ComputerID     string
@@ -62,7 +67,7 @@ func NewBroker(cfg BrokerConfig, handles *HandleIssuer) (*Broker, error) {
 		cfg.MaxOutputBytes = 2 * 1024 * 1024 // 2 MiB
 	}
 	if cfg.DefaultTimeout <= 0 {
-		cfg.DefaultTimeout = 30 * time.Second
+		cfg.DefaultTimeout = DefaultExecTimeout
 	}
 	if cfg.AllowedRoot == "" {
 		cfg.AllowedRoot = "/tmp"

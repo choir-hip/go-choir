@@ -1,10 +1,13 @@
 package runtimeprompts
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 func TestRLMEngineeringOverlayGatesFreezeMandate(t *testing.T) {
@@ -99,6 +102,74 @@ func TestRLMEngineeringOverlayTeachesBinaryReuseForNonGoChanges(t *testing.T) {
 	}
 	if !capsule.BinaryInputPath("frontend/tools/gen.go") || capsule.BinaryInputPath("internal/x/y_test.go") {
 		t.Fatalf("executor classification drifted from the overlay's .go and _test.go rules")
+	}
+}
+
+// Drill selfdev-ab-2239 (docs/problems/selfdev-freeze-receipts-refused-2026-10-15.md):
+// for a frontend-only change the desk built Go seven times under the 30 s
+// exec bound, never built the frontend, cited one receipt as both build and
+// test, read Freeze's refusal as "build Go", and finished blocked without
+// retrying. Failure modes the overlay must close:
+//
+//   - F1: the Go-input decision comes after "build bin/autoputer", so the
+//     desk builds Go for a non-Go change; and the no-Go path has no build
+//     recipe (the frontend build).
+//   - F2: the three Freeze slots are not said to be three different cells.
+//   - F5: the build cell leaves node_modules/dist in the workspace, or the
+//     cited cells run before the last write.
+//   - F6: commands assume /workspace/platform while choir.Exec runs at /;
+//     the worked example's relative `go test` fails there.
+//   - F7: no retry rule for a refused Freeze.
+//   - F8: the background-build form waits on choir.Exec's pipes and dies
+//     with the 30 s kill.
+//   - F9: the overlay's exec bound drifts from the broker's.
+func TestRLMEngineeringOverlayTeachesFreezeReceiptsAndExecLimits(t *testing.T) {
+	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
+
+	decide, goBuild := strings.Index(overlay, "touches no Go input"), strings.Index(overlay, "go build -o ")
+	if decide < 0 || goBuild < 0 || decide > goBuild {
+		t.Errorf("F1: the Go-input decision does not come before the Go build instruction")
+	}
+	for _, want := range []string{
+		"do not run go build",
+		"npm ci", "npm run build", "cp -a dist/. /" + capsule.ReleaseTreePrefix + "frontend/", "rm -rf node_modules dist",
+	} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("F1/F5: the no-Go build recipe does not say %q", want)
+		}
+	}
+
+	for _, want := range []string{"three different cells", "buildRecipeRef", "testReceipts", "dependencyToolchainRefs",
+		"distinct build, test, and dependency/toolchain execution receipts are required"} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("F2: the Freeze evidence rule does not say %q", want)
+		}
+	}
+	if !strings.Contains(overlay, "after your last write") {
+		t.Errorf("F5: the overlay does not order the cited cells after the last write")
+	}
+
+	if !strings.Contains(overlay, "choir.Exec runs at the capsule root, /,") {
+		t.Errorf("F6: the overlay does not say where choir.Exec runs")
+	}
+	if strings.Contains(overlay, `choir.Exec("go", []string{"test", "./`) {
+		t.Errorf("F6: the worked example runs a relative go test from /")
+	}
+	if !strings.Contains(overlay, `choir.Exec("go", []string{"-C", "/workspace/platform", "test"`) {
+		t.Errorf("F6: the worked example does not name the module directory")
+	}
+
+	if !strings.Contains(overlay, "A refused Freeze is not a blocker") || !strings.Contains(overlay, "call choir.Freeze again") {
+		t.Errorf("F7: the overlay has no retry rule for a refused Freeze")
+	}
+
+	if !strings.Contains(overlay, "</dev/null >/dev/null 2>&1 &") {
+		t.Errorf("F8: the overlay does not give the detached build form")
+	}
+
+	bound := fmt.Sprintf("killed after %d seconds", int(yaegikernel.DefaultExecTimeout/time.Second))
+	if !strings.Contains(overlay, bound) || !strings.Contains(overlay, "exit code -1") {
+		t.Errorf("F9: the overlay does not state the broker's exec bound (%q) and its exit code", bound)
 	}
 }
 

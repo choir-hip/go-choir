@@ -232,7 +232,12 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		return nil, err
 	}
 	if len(executionReceipts) < 3 {
-		return nil, fmt.Errorf("distinct build, test, and dependency/toolchain execution receipts are required")
+		// Every cited ref resolved and bound (the resolver refuses any that
+		// does not), so fewer than three means the slots share receipts.
+		if slotsErr := freezeReceiptSlotsError(buildRecipeRef, testReceipts, dependencyToolchainRefs); slotsErr != nil {
+			return nil, slotsErr
+		}
+		return nil, fmt.Errorf("%s", freezeDistinctReceiptsRequired)
 	}
 	record, err := toolCtx.TransactionBuilder.BuildBundleFromDiff(capsuleID, changes)
 	if err != nil {
@@ -695,6 +700,45 @@ func trimNonEmptyStrings(values []string) []string {
 		}
 	}
 	return out
+}
+
+const freezeDistinctReceiptsRequired = "distinct build, test, and dependency/toolchain execution receipts are required"
+
+// freezeReceiptSlotsError diagnoses a Freeze whose three receipt slots name
+// fewer than three distinct receipts: which slots share which receipt, and
+// what each slot should cite (docs/problems/selfdev-freeze-receipts-refused-2026-10-15.md).
+// It decides nothing new: nil exactly when the slots hold three or more
+// distinct refs, the count the executor's resolver dedupes to.
+func freezeReceiptSlotsError(buildRecipeRef string, testReceipts, dependencyToolchainRefs []string) error {
+	var order []string
+	slots := map[string][]string{}
+	cite := func(ref, slot string) {
+		if _, seen := slots[ref]; !seen {
+			order = append(order, ref)
+		}
+		slots[ref] = append(slots[ref], slot)
+	}
+	cite(buildRecipeRef, "build_recipe_ref")
+	for i, ref := range testReceipts {
+		cite(ref, fmt.Sprintf("test_receipts[%d]", i))
+	}
+	for i, ref := range dependencyToolchainRefs {
+		cite(ref, fmt.Sprintf("dependency_toolchain_refs[%d]", i))
+	}
+	if len(order) >= 3 {
+		return nil
+	}
+	var shared []string
+	for _, ref := range order {
+		names := slots[ref]
+		if len(names) < 2 {
+			continue
+		}
+		joined := strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+		shared = append(shared, joined+" cite the same receipt "+ref)
+	}
+	return fmt.Errorf("%s: %s; cite three different cells — build_recipe_ref: the cell that built the release tree; test_receipts: the cell that ran the tests or checks, after your last write; dependency_toolchain_refs: a cell that recorded the toolchain (go version, node --version, npm --version)",
+		freezeDistinctReceiptsRequired, strings.Join(shared, "; "))
 }
 
 func firstString(values []string) string {
