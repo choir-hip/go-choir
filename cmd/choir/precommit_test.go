@@ -170,7 +170,8 @@ func TestImportLedgerDryRunParsesTheLevelOneLedger(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &plan); err != nil {
 		t.Fatalf("decode plan: %v\n%s", err, stdout.String())
 	}
-	if plan.Apply || len(plan.Rows) != 18 || len(plan.Skipped) != 0 {
+	// The ledger only grows; rows 1-18 are pinned below.
+	if plan.Apply || len(plan.Rows) < 18 || len(plan.Skipped) != 0 {
 		t.Fatalf("plan: apply=%v rows=%d skipped=%+v", plan.Apply, len(plan.Rows), plan.Skipped)
 	}
 	settledRows := 0
@@ -179,8 +180,8 @@ func TestImportLedgerDryRunParsesTheLevelOneLedger(t *testing.T) {
 			settledRows++
 		}
 	}
-	if settledRows != 12 {
-		t.Fatalf("settled rows = %d", settledRows)
+	if settledRows < 12 {
+		t.Fatalf("settled rows = %d, want at least 12", settledRows)
 	}
 	row := func(n int) importRow { return plan.Rows[n-1] }
 	r1 := row(1)
@@ -267,6 +268,9 @@ func TestPrecommitEndToEndAgainstALocalStore(t *testing.T) {
 	}
 
 	// Import the level-1 ledger, twice: the second run writes nothing new.
+	// The ledger is a living document, so the expected counts come from the
+	// plan of its current rows, plus the one claim and settlement above.
+	ledgerClaims, ledgerSettled, ledgerLeadOpen := 0, 0, 0
 	for i := 0; i < 2; i++ {
 		var applied importPlan
 		if err := json.Unmarshal(runOK(t, "precommit", "import-ledger", "--file", ledgerPath(t), "--model", "claude-opus-5-5", "--apply"), &applied); err != nil {
@@ -277,6 +281,19 @@ func TestPrecommitEndToEndAgainstALocalStore(t *testing.T) {
 				t.Fatalf("run %d row %d: %s", i, row.N, row.Error)
 			}
 		}
+		if i == 0 {
+			ledgerClaims = len(applied.Rows)
+			for _, row := range applied.Rows {
+				if row.Settlement != nil {
+					ledgerSettled++
+				} else if row.Claim.Agent.Name == "claude-code/lead" {
+					ledgerLeadOpen++
+				}
+			}
+		}
+	}
+	if ledgerClaims < 18 || ledgerSettled < 12 {
+		t.Fatalf("ledger import planned %d claims and %d settlements; the ledger had 18 and 12 when this test was written", ledgerClaims, ledgerSettled)
 	}
 	records, err := s.ListCalibrationRecords(ctx, "owner-e2e", "computer-e2e", "", 1000)
 	if err != nil {
@@ -290,8 +307,8 @@ func TestPrecommitEndToEndAgainstALocalStore(t *testing.T) {
 			settlements++
 		}
 	}
-	if claims != 19 || settlements != 13 {
-		t.Fatalf("store holds %d claims and %d settlements; want 19 and 13 (18+1, 12+1)", claims, settlements)
+	if claims != ledgerClaims+1 || settlements != ledgerSettled+1 {
+		t.Fatalf("store holds %d claims and %d settlements; want %d and %d (ledger plus one)", claims, settlements, ledgerClaims+1, ledgerSettled+1)
 	}
 
 	// The lead's pasteable track record: the imported rows are reconstructed,
@@ -303,13 +320,14 @@ func TestPrecommitEndToEndAgainstALocalStore(t *testing.T) {
 	t.Logf("lead's pasteable track record:\n%s", text)
 	var sum calibration.Summary
 	_ = json.Unmarshal(runOK(t, "precommit", "calibration", "--all", "--include-reconstructed", "--group-by", "agent"), &sum)
-	if sum.Overall.Settled != 13 || len(sum.Groups) != 2 || sum.Overall.Open != 6 {
+	ledgerOpen := ledgerClaims - ledgerSettled
+	if sum.Overall.Settled != ledgerSettled+1 || len(sum.Groups) != 2 || sum.Overall.Open != ledgerOpen {
 		t.Fatalf("summary overall = %+v groups = %d", sum.Overall, len(sum.Groups))
 	}
 	var open calibration.ListResponse
 	_ = json.Unmarshal(runOK(t, "precommit", "list", "--status", "open"), &open)
-	if len(open.Claims) != 6 {
-		t.Fatalf("lead open claims = %d", len(open.Claims))
+	if len(open.Claims) != ledgerLeadOpen {
+		t.Fatalf("lead open claims = %d, want %d", len(open.Claims), ledgerLeadOpen)
 	}
 
 	// The same store through the MCP server.
