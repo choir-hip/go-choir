@@ -1,0 +1,93 @@
+# L1: Deploy Without Taking The Site Down
+
+Date: 2026-10-14. Station: L1 (24/7 paper, owner ruling 6). Problem:
+`docs/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md`.
+Mutation class of the change: red (deployment routing). This note is
+green.
+
+## What the code does today
+
+A host deploy (`.github/workflows/ci.yml`, Deploy to Staging) runs in
+this order:
+1. `switch-to-configuration switch`. Every go-choir unit whose unit file
+   changed is stopped in the stop phase and started in the start phase.
+   The unit files change on every closure, because `ExecStart` names a
+   wrapper script in the store (`serviceExec`, `nix/node-b.nix:56-67`).
+2. `node-b-sync-service-pointers auth gateway maild corpusd proxy vmctl
+   checkpointd`. Each service's binary pointer under
+   `/var/lib/go-choir/services/<name>` moves to the new build.
+3. `systemctl restart go-choir-auth go-choir-maild go-choir-corpusd
+   go-choir-gateway go-choir-proxy`.
+
+The wrapper execs the pointer when it exists (`serviceExec`), so the
+restart in step 1 starts the old binaries. Only step 3 loads the new
+ones. Step 1 is therefore a restart that does nothing useful, and it is
+the one that takes the site down: the stop phase waits on the gateway's
+graceful drain (`TimeoutStopSec = "11min"`) before the start phase brings
+the proxy back. Tonight that was 3, 4 and 11 minutes.
+
+## Decision
+
+**D1. The switch leaves the five services running.** Set
+`restartIfChanged = false` on go-choir-auth, -maild, -corpusd, -gateway
+and -proxy. The switch then installs their new unit files and does not
+stop them. Step 3, after `daemon-reload`, is the one restart, and it
+loads both the new unit files and the new binaries.
+- A first boot or a unit that is not running is still started by the
+  switch (`restartIfChanged` governs only restarts of running units).
+- vmctl and checkpointd keep their current handling, which is outside
+  this change.
+- Precedent: vmctl got exactly this change for the same cause in
+  `2f755bb3` ("a deploy restarts vmctl once, on the new binary"): its
+  switch-time restart ran the old pointer and doubled every deploy's
+  restarts. D1 extends that to the other five services. Because the
+  pattern is settled and proven on vmctl, this change goes without a
+  panel.
+
+**D2. Step 3 restarts the gateway last, on its own.**
+- First `systemctl restart` auth, maild, corpusd and proxy together.
+  Their ordering (`after`, `requires`) is unchanged, and none of them
+  waits on the gateway.
+- Then `systemctl restart go-choir-gateway`. While it drains, the site,
+  the API and auth are up. Only new model calls from computers are
+  refused until the new gateway starts, as today.
+- The deploy's health check then waits for the gateway as it does now.
+
+**D3 (not in this change).** Keeping the gateway accepting during its
+own drain means two processes overlapping on one listener (socket
+handover or `SO_REUSEPORT` with two unit instances). That is a separate
+design. Its problem is model calls refused during a drain, which this
+change neither causes nor fixes.
+
+## Rollback
+
+Revert the commit. The next deploy runs the old order. No state changes.
+
+## Ways this could fail (written before the code)
+
+1. A unit-file change that needs a restart does not get one. Step 3
+   restarts all five after `daemon-reload`, on every host deploy.
+   Checked: the deploy's final service checks read the new unit's
+   `ExecStart` (systemctl show) for each of the five.
+2. A deploy path that switches but skips step 3. Read: the service-pointer
+   path restarts per service; the host path runs step 3; the frontend-only
+   path does not switch. Any new path must restart. A test in the deploy
+   script's own checks: after a host switch, each of the five units'
+   `ActiveEnterTimestamp` is later than the switch.
+3. A dependency now restarts out of order (the proxy requires auth). The
+   proxy, auth, maild and corpusd restart in one `systemctl` call, so
+   systemd orders the jobs.
+4. The gateway restart fails. The deploy fails, as today, and its
+   diagnostics dump runs. The site stays up.
+5. The first deploy after this change may still restart the units at
+   the switch, depending on whether the switch reads the option from the
+   old or the new unit file. The proof therefore uses the second deploy.
+
+## Proof on staging
+
+Two deploys after the change lands. During the second, a probe polls
+`/health` every 2 seconds from before the switch to the end of the
+deploy, and the journal timestamps of each unit's stop and start are
+recorded. Pass: no gap over 10 seconds in `/health` while the gateway
+drains, and each of the five units runs its new binary (the deployed
+commit in `/health`, and each pointer's target).
