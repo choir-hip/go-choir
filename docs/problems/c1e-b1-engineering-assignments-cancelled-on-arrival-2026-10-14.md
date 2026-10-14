@@ -4,8 +4,9 @@ Date: 2026-10-14, 05:20 UTC. Found by the B1 engineering drill
 (`node scripts/reeng_tracer.mjs --scenario engineering`, authored tonight
 as C1e step 4, commit 6ae126b9 on branch worktree-agent-ab80b7882f2ad21aa,
 staged for the next push). Deploy: staging e9d727a7 (C1e B1 + the
-homepage change). Status: documented; cause not yet established from the
-trace.
+homepage change). Status: first cause (the capsule gate) fixed in
+bc09dcc1, deployed as 11a94193; the drill after it found three more (see
+the last section).
 
 ## What the drill saw
 
@@ -148,3 +149,118 @@ Open, to be read from the trace before any claim:
   given that a refused Freeze is recoverable (build, then Freeze again);
 - whether this freeze precondition predates B1 (the cut-1 drill's earlier
   passes, if any, ran on the packet path).
+
+## Trace findings after the gate fix (2026-10-14, 06:00 UTC)
+
+Read from the kept computer through product routes only: `/api/runs`,
+`/api/runs/run:assignment-c05fd947.../events` (118 events), the
+management and engineering inboxes, and the operation and its receipts.
+
+**What engineering ran.** All in `capsule_go_eval` cells (model
+gpt-6-luna, effort low):
+
+| seq | cell | result |
+|---|---|---|
+| 11-16 | write `frontend/public/choir-drill/<token>.txt`, run the check | check exit 0 |
+| 19-24 | `go build -o bin/autoputer ./cmd/autoputer` in `/workspace/platform` | exit 1: every module zip `Get https://storage.googleapis.com/proxy-golang-org-prod/...: Forbidden` |
+| 43-48 | `npm ci && npm run build` in `frontend/` | exit 0 (`frontend/node_modules`, `frontend/dist` now in the workspace) |
+| 51-64 | `mkdir -p var/lib/artifact/release/...` **after `cd /workspace/platform`**; copy `frontend/dist`; write a two-line shell stub as `bin/autoputer` | exit 0 |
+| 67-68 | Freeze #1 | refused: `capsule execution evidence does not bind the final frozen subject` (the latest cited receipt was the frontend build at seq 48, before the release-tree writes) |
+| 75-76 | Freeze #2, latest cited receipt a read-only check after the writes | refused: `capsule release contains no frozen runtime artifacts`; the operation opens here (05:52:15) and records this as `last_intent_error` |
+| 79-80 | `go build -o var/lib/artifact/release/bin/autoputer` | same Forbidden module downloads |
+| 83-85 | `choir.Complete("partial", ...)`: "could not build the Go runtime; no stub substituted" | accepted: non-final Report at management seq 2 |
+| 87-88 | end_turn | guard retry 1 (partial keeps the assignment open, by design) |
+| 99-100 | `choir.Complete("failed", ...)` | refused at reduction: `persist reconstructable content-addressed candidate: subject copy refuses escaping symlink "frontend/node_modules/.bin/acorn"` |
+| 103-115 | three more cells | each refused: `assignment fate is not active and bound` |
+| 107, 118 | guard retry 2, then `loop.cancelled`; cancel Report at management seq 3; the operation fails with the guard's text |
+
+**Q1: did it build runtime artifacts, and what did its surface say?**
+It built the frontend bundle and could not build `bin/autoputer`; it
+wrote a shell stub, then declined to rely on it. The engineering overlay
+(`internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml`, since
+89970ebd9, 2026-09-27) tells it: "before calling Freeze, the cell must
+have produced var/lib/artifact/release/ **inside /workspace/platform**
+with (1) an executable bin/autoputer and (2) frontend/ artifacts — build
+them in-capsule (go build ./cmd/autoputer -> bin/autoputer ...)". The desk
+followed that sentence exactly, and the sentence is wrong.
+
+**Q2: what Freeze requires.** `StageGrantedRelease`
+(`internal/capsule/executor.go:1385-1600`) takes only capsule diff paths
+under `var/lib/artifact/release/` relative to the capsule upperdir, i.e.
+`/var/lib/artifact/release/` at the capsule root (`walkUpperdir` paths
+are upperdir-relative; `release_secret_test.go` builds the tree at
+`<merged>/var/lib/artifact/release`). Files the desk wrote under
+`/workspace/platform/var/lib/artifact/release/` have diff paths starting
+`workspace/platform/` and are not release files, so the list is empty and
+line 1585 refuses with "no frozen runtime artifacts". Had the tree been at
+the root, the gate would then require an executable `bin/autoputer` and a
+`frontend/` file (1588-1602). A frontend-only change still needs
+`bin/autoputer` today: the materializer mints a plain file release from
+the frozen runtime files and the updater's `current` swap moves the exec
+and the served frontend together (S2-f residual: patch-carrying bundles
+are not yet rebuilt by the host builder). For a frontend-only change the
+right binary is the unchanged one. The gate accepts any executable file
+as `bin/autoputer`, the stub included.
+
+**Q3: the guard.** The refused Freeze was recoverable and was recovered
+from: a Freeze refusal is a tool error inside the turn, the capsule
+stays thawed, and the desk ran four more cells. The completion guard
+(`runtime.go:3496-3511`, `maxCompletionGuardRetries = 2`,
+`toolloop.go:103`) counts only end_turns without a terminal fate, and is
+unchanged between `reeng-c1e-pre-b1` and HEAD (the B1 diff to
+runtime.go touches the reconcile kick, not the guard). Its two retries
+went to (1) the desk ending its turn after a `partial` Complete, which
+the overlay documents as non-terminal, and (2) a stranded assignment: the
+terminal `Complete("failed")` first moved the capsule to freeze-requested
+and froze it (`engineering_assignment_fate.go:865-930`), then
+`PersistGrantedCandidate` failed on the symlink, so the assignment sat
+`frozen` with no Report and every later cell was refused by the capsule
+gate. No retry count recovers that; the guard's cancel is what closed
+the assignment with a Report. The guard is not the cause.
+
+**Q4: does the precondition predate B1?** Yes. The release-root contract
+is recorded in
+`docs/problems/m11-freeze-secret-gate-refuses-genuine-binary-2026-09-27.md`
+(supporting finding 1: "staging under the subject path yields capsule
+release contains no frozen runtime artifacts") and in
+`docs/problems/s0-selfdev-executing-wedge-2026-10-04.md` (probe 8 hit
+this exact error; probe 9 froze with the tree at `/var/lib/artifact/release/`).
+M11 reruns 7-13 (2026-10-10, packet path) froze with "52 files at
+var/lib/artifact/release, executable bin/autoputer"
+(`docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json`). So the code
+contract was met before B1 by desks that found the root path themselves;
+the overlay has carried the wrong path since the day the contract was
+found. No cut-1 or C1e drill had reached Freeze before this one (cut-1
+and cut-2 breakage docs record no freeze).
+
+**Three causes, one of them new to this drill:**
+
+1. *Prompt (the Freeze refusal).* The overlay names the release root as
+   inside `/workspace/platform`; the code reads it at the capsule root.
+   Green/yellow fix: correct the sentence.
+2. *Capsule subject copy (the stranding).* `copyCanonicalSubjectTree`
+   (`internal/capsule/source_snapshot.go:143-153`) treats a symlink as
+   escaping when its link text starts with `..`, without resolving it
+   against the link's directory. `frontend/node_modules/.bin/acorn ->
+   ../acorn/bin/acorn` stays inside the tree and is refused. Any desk
+   that runs `npm ci` in the workspace cannot commit a terminal fate, and
+   the refusal arrives after the terminal freeze, which strands the
+   assignment. The two source-snapshot checks (lines 296-300, 360-364)
+   use the same lexical test.
+3. *L2 egress (the build).* `ecosystemHosts`
+   (`internal/capsule/egress.go:61`) allows `proxy.golang.org` and
+   `sum.golang.org`, but proxy.golang.org answers module zip requests
+   with a redirect to `storage.googleapis.com`, which the proxy refuses
+   (403, "not on the L2 ecosystem allowlist"). No Go module that is not
+   already cached can be downloaded in an implementation capsule, so
+   `go build ./cmd/autoputer` cannot succeed there, whatever the prompt
+   says. Widening the list is a reviewed red-class change (allowing all of
+   `storage.googleapis.com` admits every GCS bucket); the design's own
+   route is a deps cache (`GOPROXY=file:///deps/goproxy`,
+   `docs/design/engineering-network-grants-2026-10-10.md`). Not fixed
+   here; named as the next blocker for the drill.
+
+Also seen, not on the failure path: build outputs (`frontend/node_modules`,
+`frontend/dist`) left in `/workspace/platform` become part of the frozen
+subject and the source patch, because the subject is the whole tree and
+does not read `.gitignore`.
