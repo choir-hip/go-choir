@@ -5,30 +5,30 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Today after the demo (2026-10-14, queue as of 15:05 UTC)
+## Foundations push (2026-10-14 evening → 10-15 15:00; owner: deepen foundations)
 
-Live on staging (bdc996432): LF0/LF1 front page (importance x depth x
-recency, sections remembered per device, general editorial criteria), S2a
-delegation (vocab fix 6f8e36ceb), artifact GC active, Nix store retention,
-search benching fix + result cache, Jev peer re-pin (L2a labels can flow),
-28 sources on the paper (U.S. politics and business feeds added).
+Live today: LF0/LF1 front page, S2a+S2b management tasks, artifact GC,
+search benching fix + cache + free-first routing, Jev peer re-pin (L2a
+labels flowing), headline titles, snapshot FIEMAP measure, 28 sources;
+deploying: object-graph write gate, dead kind, matched quote spans.
 
-Queued for one deploy right after the owner's 15:50 demo (each tested on
-its branch, not pushed):
-- instruction titles: Texture's headline titles the story, headline-less
-  story revisions held (branch fix/instruction-titles, ec5a2c35a; problem
-  doc bcaa1b61a);
-- free-first search routing with daily caps (branch search-budget-routing:
-  1915aa9d0, fa69be74b, ab0f82bc6, 0ccba92ae); rollback by env
-  (CHOIR_SEARCH_ROUTING=fanout);
-then: confirm Jev labels on the paper, start L2a window 2 with the fixed
-scorer (f9a513482).
-
-In progress: object-graph gaps (registration on every write path, dead
-kind, matched quote spans); VM density limits design. Designed, awaiting
-owner decisions: claims/events/entities ontology (da9de233f, D1-D13),
-search efficiency (b3e73e110 design), deepen (dd47dd84b), media and rights
-research (148e83e36), EmbeddingGemma 2 (475e781f0).
+Landing order (one deploy at a time, each verified on staging before the
+next; branches built in parallel, landed in dependency order):
+1. tap firewall (fix/tap-deny-guest-range) + established-only inbound;
+2. internal-route authentication in observe mode, Dolt password, unit
+   hardening (then enforce);
+3. guest store indexes (CPU C1-C3, C5) + kvm.halt_poll_ns=0;
+4. Firecracker jailer slice 1 (flag off → one test computer → all);
+5. admission by measured use + sustained-pressure reclaim;
+6. desk cells confined + guest egress policy;
+7. prompt-cache stability;
+8. Store B retrieval (timing, indexes, SQL corpus search);
+9. account recovery (LA slice 1);
+10. VM backend interface + Cloud Hypervisor slice — design now, code after
+    4 and 5 land (same files).
+Alongside, no deploy: self-development drill rerun, claims E0 + E6a,
+Autoradio prototype (branch), teaching series (docs/learn/).
+Owner decisions list expected tonight.
 
 ## Now (2026-10-14, 07:00 UTC): what landed overnight, what is next
 
