@@ -299,3 +299,13 @@ to storage.googleapis.com and return 403. Engineering correctly did not
 Freeze. The engineering-on-records path works up to the release build;
 the build needs the owner's decision
 (docs/reports/capsule-go-modules-decision-2026-10-14.md).
+
+## After the Go module proxy (865dc152, drill 18:02 UTC)
+
+Label `selfdev-goproxy-1802`. Cause 3 is repaired on the product path:
+the capsule fetched all 171 modules for `go build ./cmd/autoputer` from
+the host proxy (513 hits, 0 misses). Freeze still not reached: the
+capsule has no C compiler or ICU cgo environment on its PATH, and with
+1 CPU and 1 GiB the build was still linking when the 30 min drill ended.
+Recorded in
+[selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md](selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md).
