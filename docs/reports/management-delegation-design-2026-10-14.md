@@ -1070,3 +1070,90 @@ Standing questions, briefly (numbered as in
   delegation design (R2-22).
 - **Snapshot hibernation resumes overnight:** at least 24 h (set to 36 h,
   `VM_SNAPSHOT_MAX_AGE`).
+
+## 17. S2a build record (branch `management-delegation-s2a`, not pushed)
+
+Built 2026-10-14 on `origin/main` `e3437f1cd` (S0, S1 and the failed-turn
+records fix landed). Nothing is pushed or deployed. Commits, in order:
+`4a7590209` (role vocabulary), `aa9aa1234` (store), `ad1435543` (problem
+doc), `16a64bae0` (runtime), `452c1961c` (prompts), `e9bd9bc15` (probe).
+
+### 17.1 What each amendment became in code
+
+| amendment | code |
+|---|---|
+| R2-1 identity | Task run: profile `management`, role `management_task`, agent and reader inbox `management-task:<id>`. `outwardSender` sends as `management:<owner>`; `recordsRoute` has a task case (stories, `texture:new`, sources; engineering and management refused); `commitRecordsRoute` accepts the task reader inbox; `loadCellRecords` shows the opening Cast and the delegated captures records cut to the lease; `WakeRecordsInbox` on a task inbox is the slot starter; `closeRoundsOfEndedRun` and `terminalizeRun` close a task run's task; `recheckRecordsInbox` re-arms nothing for a task. The parent run is provenance only (`management_task_parent_run_id`, not `requested_by_run_id`, whose terminal-outcome machinery would hang a task on its parent). |
+| R2-2 role in one commit | `agentprofile.ManagementTask` (Canonical; not IsLive, so nothing addresses it), `yaegikernel.SessionRoleManagementTask` with module set Cast, Note, ReadCapture, Stories, Feed, Decline, Done and handle ReadFile, ListDir, ReadCapture, Stories. `normalizeDeskRole` fails closed: an unknown or empty role gets observation exports and a ReadFile/ListDir handle. Reverse-parity tests on exports, denied verbs and handle actions. |
+| R2-3 one wake predicate | `store.RecordWakesReader`; `inboxRecordWakes` calls it and the re-check skips late records it rejects. A clean task Report and a crash closure wake no one; a Report with residuals, an error or a deadline wakes the parent. |
+| R2-4 store lease, disposition objects | `planManagementTasks` in `planInboxCommand` under `trajectoryMu`: task-scope records need `acting_task`, the row's run, a running row and an open round; `choir.capture_disposition` (per capture) refuses a task's second disposition, a disposition outside the lease, and anyone else's disposition of a leased capture; a parent re-disposition of a free capture is kept as an override. Task conversation heads read are conditioned in the batch. |
+| R2-5 library head | `choir.story_library_head` advanced by each open; a management or task cell that opens a story carries the head its run last read with `choir.Stories()` (first page), and a stale head refuses the cell naming up to 20 stories opened since; the refusal itself counts as having seen the head. Applies to the parent too (with intake labels on; with them off `choir.Stories()` is off and nothing is checked). |
+| R2-6 durable slot starter | A queued task is an open task round with no run. Its start is the `inbox_record` wake of its opening Cast; a task's closure mints, in its own commit, an `inbox_record` wake to the oldest queued task (not at a crash boot). `startQueuedManagementTasks` claims under one mutex, starts the run, binds it. K = 1 (`managementTaskSlots`). |
+| R2-7 own row | `types.ManagementTask` (`choir.management_task`) with its own `Validate`, committed with its opening Cast; no trajectory, capsule or verifier fields. |
+| R2-8 host-minted Report | `types.NewTaskClosingReport` (system, from the task inbox, final); the store fills `task_outcome` (dispositions, residuals = leased minus disposed, clean) from the index; Done's note is each residual's reason. Tokens are not in the outcome (they are on the run's events). |
+| R2-9 pinned model | `modelpolicy`: role `management_task` resolves to opencode-go/deepseek-v4.1-flash with no failover; a pool, free or preview model named for it is not honoured; an explicit provider and model is (O5). Per model call: `WithToolLoopProviderCallTimeout(3 min)`. |
+| R2-12 planned boot | `passivateInterruptedActivations` ends a task run (cancelled, not parked) and closes its task `run_passivated` with residuals (one parent wake); the queued task's start wake is minted by that closure. The drain itself (O6) is not built. |
+| R2-14 batch Delegate | `choir.Delegate(kind, objective, refs, grouping)`: refs are captures record ids or a task Report's id (its residuals again); `per_record` or explicit groups, at most 12 captures a task; disposed or leased captures are left out. One parent cell commits every row and Cast with its cursor. |
+| R2-17 crash budget | A crash closure of a task round adds one to each undisposed leased capture's crash count; at two the capture's fate is `closed_after_two_crashes` and delegation refuses it. |
+| R2-20 CancelTask | Running: `CancelRun`, and `terminalizeRun` closes the task `run_cancelled`. Queued: the round closes `cancelled`. Both Reports list the residuals. |
+| R2-19 (S1), R2-15 (AC3), R2-16, R2-24 | S1 landed before. Task cells get management's host cell deadline. AC3 needs the minted drill (below). R2-16: a task feeds any story, naming only its leased captures. R2-24 coalescing is S4. |
+
+Choices made without the owner (No Blocking Asks):
+- **K = 1 and the library head both in S2a.** §13 puts K = 1 in S2a and the
+  library head in S2b, while its S2a test list includes failure mode 3; the
+  head was built here, K stays 1.
+- **Re-delegation by Report id.** §5 says the parent re-delegates residuals;
+  Delegate takes a task Report's id for that, since the arrival records
+  are already read.
+- **Parent re-disposition is implicit.** Any parent disposition of a free,
+  already-disposed capture is an override; there is no separate verb.
+- **Task Report kind** reads `task_report` in `choir.Records()`, with
+  `r.TaskOutcome` on the view.
+
+### 17.2 Tests (all through the real reduce and commit paths)
+
+- `internal/yaegikernel/management_task_role_test.go`: reverse parity,
+  unknown roles fail closed, task prompt teaches only task verbs.
+- `internal/modelpolicy/management_task_model_test.go`: the pin (FM27).
+- `internal/store/management_tasks_test.go`: FM2, FM3, FM4, FM5, FM6,
+  FM12, FM22, FM26, R2-3 predicate, R2-6 next-task start.
+- `internal/agentcore/management_tasks_test.go`, real desk workers: FM1,
+  FM2, FM6, FM9, FM11, FM19, FM21, FM23, FM24, FM27, AC6, N5, R2-20 and
+  re-delegation, FM3 from a task cell.
+Not tested in S2a: FM7/FM8 at K > 1 and FM14 (shared spacer) are S2b;
+FM10's drain is O6; FM13 and FM25 are S3; FM15 is S5.
+
+### 17.3 What remains for S2b
+
+- K = 4, with the shared sub-RLM call spacer for task model calls (FM14).
+- A per-run token count in the task Report (AC7 reads run events now).
+- R-CANCEL: research and management runs ended through `terminalizeRun`
+  still skip `closeRoundsOfEndedRun`
+  (`docs/problems/cancelled-run-skips-round-closure-2026-10-14.md`).
+- The drain before a planned restart (O6, the owner's deploy shape).
+- Per-capture residual reasons (Done's note is shared by all residuals).
+
+### 17.4 Staging acceptance for S2a (after push, CI and deploy)
+
+1. Verify the deployed commit on `choir.news` health; the paper computer
+   is on the build after its next idle moment.
+2. Confirm intake.labels is on for the paper (N13); without it Delegate
+   is refused.
+3. Watch one burst: `/api/runs?channel_id=management:<owner>` shows
+   parent turns ending after a Delegate cell; task runs appear under
+   `channel_id=management-task:<id>` on deepseek-v4.1-flash, one at a
+   time (K = 1).
+4. After a window of at least 6 hours, run
+   `scripts/management_latency_probe.py --cred <paper cred> --start <deploy+idle> --counts-only`
+   and read: AC2 `intake_only_estimate` (p95 at most 120 s, max at most
+   600 s; gates S2 together with S2b), AC8 mix within ±10 points of the S0
+   baseline, AC9 `tasks.ac9_clean_share` at least 0.9 and
+   `ac9_deadline_share` at most 0.1, AC10
+   `ac10_parent_starts_by_clean_reports_only` = 0, `tasks.queue_depth_now`
+   and `oldest_queued_age_s`, AC1 reported (not gating in S2), and AC5 via
+   `ac1_latency_s.undisposed` plus task residuals.
+5. AC4: `scripts/l2a_paper_window.py` pairs over the window; no two
+   stories for one judge-scored event except recorded overrides.
+6. Drills on a minted test computer with the paper fixture (AC3, AC6):
+   a stalled task model to its deadline (residual Report, re-delegation),
+   and a guest kill with one task running and one queued (rounds and runs
+   `interrupted_by_restart`, no wake, the next poll delegates anew).
