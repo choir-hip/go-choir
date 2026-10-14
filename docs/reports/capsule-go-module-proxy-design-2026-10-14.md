@@ -53,7 +53,10 @@ workload) gains three keys:
 
 `yaegikernel.EgressProxyKeys` (what the session worker passes to the
 commands a cell runs) gains the same three keys; the existing test pins the
-two lists together.
+two lists together. Both exec paths append the L2 environment after the
+cell's own, so a cell cannot point the go command elsewhere (and cannot
+replace `GOFLAGS` through the environment; flags on the command line still
+work).
 
 ### 1.2 The allowlist change
 
@@ -128,14 +131,15 @@ entry is never overwritten (append-only). Concurrent misses for one entry
 share one upstream fetch.
 
 **Size bound.** Measured from this commit's `go.sum` (1,617 lines: 275
-module zips, 1,342 `go.mod` files): `go mod download` for the main module
-fetches 185 zips totalling **319 MiB**; `go build ./cmd/autoputer` needs 161
-modules; the `go.mod` files total under 0.1 MiB. So the deployed set is
-about a third of a GiB, and the cache grows only by modules engineering
-adds. The cap is **8 GiB** (flag `-max-bytes`); past it, the oldest files
-by modification time are deleted down to 90% of the cap. The pre-warm
-touches every file it verifies, so the deployed set is always the youngest
-and is evicted last.
+module zips, 1,342 `go.mod` files): the full warm of every line caches
+**453 MB** (`.info`, `.mod` and `.zip` files) and took 28 s from this Mac
+against the real proxy.golang.org; `go build ./cmd/autoputer` needs 161
+modules (483 requests: one `.info`, `.mod` and `.zip` each). So the
+deployed set is under half a GiB, and the cache grows only by modules
+engineering adds. The cap is **8 GiB** (flag `-max-bytes`); past it, the
+oldest files by modification time are deleted down to 90% of the cap. The
+pre-warm touches every file it verifies, so the deployed set is always the
+youngest and is evicted last.
 
 **Per-source limits.** Hits are unlimited. Upstream fetches (misses) are
 limited to 4 at a time per source address (one source address is one
@@ -330,7 +334,7 @@ Host proxy side:
    commit.
 2. Host: `systemctl status go-choir-goproxy` active; journal shows the warm
    summary (`"event":"warm_done"`, `failed: 0`, `mismatch: 0`);
-   `curl -s 127.0.0.1:8088/healthz` shows about 0.3 GiB.
+   `curl -s 127.0.0.1:8088/healthz` shows about 453 MB.
 3. Drill: `node scripts/reeng_tracer.mjs --scenario engineering`. Expect
    engineering's `go -C /workspace/platform build -o
    /var/lib/artifact/release/bin/autoputer ./cmd/autoputer` to exit 0 and
@@ -341,6 +345,34 @@ Host proxy side:
    guest) has `host: goproxy.choir.internal` lines with outcome `ok` and no
    `storage.googleapis.com` refusals; the host journal has `hit` lines
    carrying that capsule id.
+
+## 6a. Local evidence (this Mac, 2026-10-14; not capsule-path proof)
+
+- `go test ./internal/goproxy` (14 tests, F8-F17, including the real go
+  command running `go mod download` through the proxy against a fake
+  upstream that redirects zips to a second host) and
+  `go test ./internal/capsule/...` (route tests F1-F7) pass, with `-race`.
+- The built `cmd/goproxy` against the real proxy.golang.org, warming this
+  commit's `go.sum`: `warm_done` with 1,617 entries, 1,617 fetched, 0
+  failed, 0 mismatched, 453 MB, 27.6 s.
+- Then `go build ./cmd/autoputer` with an empty `GOMODCACHE`,
+  `GOPROXY=http://127.0.0.1:18088,off`, `GOSUMDB=sum.golang.org`,
+  `GOFLAGS=-mod=mod`: exit 0, 178 MB binary, 483 requests, all cache hits,
+  `go.sum` unchanged.
+- The sumdb path, with a module outside this `go.sum`
+  (`go get rsc.io/quote@v1.5.2`, empty `GOMODCACHE`): the go command took
+  `/sumdb/sum.golang.org/supported`, then lookups and tiles through the
+  proxy (full tiles cached, partial tiles and lookups passed through),
+  verified real signed tree heads, and wrote correct `go.sum` lines.
+- `nix derivation show` evaluates the `goproxy` package (binary plus
+  `share/go-choir/go.sum`) and renders the `go-choir-goproxy.service` unit
+  for `go-choir-b`. Nothing was built for Linux here.
+
+Seen while measuring: `go mod download` with `-mod=mod` added 436 lines to
+`go.sum` (sums for test-only dependencies of dependencies); `go build`
+added none. A desk that runs `go mod download` in the workspace therefore
+changes `go.sum`, and that change becomes part of its frozen subject
+(residual R8).
 
 ## 7. Residuals
 
@@ -363,3 +395,10 @@ Host proxy side:
   so that this needs no migration.
 - R7. Busy computers that defer the landing deploy keep the old guest code
   (no route) until their next refresh.
+- R8. `GOFLAGS=-mod=mod` lets a capsule's go command edit `go.mod`/`go.sum`
+  instead of refusing; `go mod download` adds hundreds of `go.sum` lines.
+  Such edits become part of the desk's frozen change. The engineering
+  overlay could say "build, do not `go mod download`".
+- R9. The guest-side file `internal/autoputer/capsule_executor_linux.go`
+  (reads the address) was not compiled here: its package needs cgo for
+  Linux, which this Mac cannot cross-compile. CI compiles it.

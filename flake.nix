@@ -183,7 +183,7 @@
         "cmd/auth" "cmd/proxy" "cmd/maild" "cmd/maildctl" "cmd/vmctl"
         "cmd/gateway" "cmd/corpusd" "cmd/checkpointd" "cmd/projection-compact"
         "cmd/choir-updater" "cmd/choir-receipt-signer" "cmd/capsule-broker"
-        "cmd/autoputer" "cmd/choir-builder"
+        "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
       ];
       # Keep source selection structural. Go owns the package dependency graph;
       # repeating it here as per-service internalDirs caused fallback builds to
@@ -221,7 +221,7 @@
       };
 
       # A service package: its binary from the shared build plus identity.
-      mkGoService = { pname, subPackage, includeSkills ? false, includeFrontend ? false }:
+      mkGoService = { pname, subPackage, includeSkills ? false, includeFrontend ? false, includeGoSum ? false }:
         assert pkgs.lib.elem subPackage goServiceSubPackages;
         pkgs.stdenvNoCC.mkDerivation {
           inherit pname;
@@ -241,6 +241,9 @@
             ${pkgs.lib.optionalString includeFrontend ''
               mkdir -p $out/frontend
               cp -R ${frontendPkg}/. $out/frontend/
+            ''}
+            ${pkgs.lib.optionalString includeGoSum ''
+              cp ${./go.sum} $out/share/go-choir/go.sum
             ''}
           '';
         };
@@ -304,6 +307,14 @@
         frontend = frontendPkg;
         obscura = obscuraPkg;
         zot = zotPkg;
+        # Host Go module proxy for engineering capsules; carries the deployed
+        # go.sum it pre-warms and verifies on start
+        # (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
+        goproxy = mkGoService {
+          pname = "goproxy";
+          subPackage = "cmd/goproxy";
+          includeGoSum = true;
+        };
       };
 
     in

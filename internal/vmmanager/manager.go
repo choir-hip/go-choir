@@ -3422,6 +3422,9 @@ func tapReachableHostServicePorts() []string {
 		// it; the rule only let guests reach a dead port.
 		"8086", // corpusd durable Texture verification
 		"8087", // maild draft persistence
+		// Go module proxy for L2 capsules' goproxy.choir.internal route
+		// (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
+		"8088",
 	}
 }
 

@@ -953,6 +953,49 @@ in
     fi
   '';
 
+  # Go module proxy for engineering capsules
+  # (docs/reports/capsule-go-module-proxy-design-2026-10-14.md). Capsules
+  # reach it only through their egress route goproxy.choir.internal, which
+  # the guest executor sends to the tap peer on 8088; vmmanager DNATs that to
+  # this loopback listener. It serves only GOPROXY and sum.golang.org proxy
+  # paths, fetches misses from proxy.golang.org (following its redirect to
+  # storage.googleapis.com here, on the host), and caches append-only.
+  # On every start it pre-warms and re-verifies the deployed go.sum in the
+  # background, so a deploy leaves the platform's own module set cached.
+  # ExecStart names the Nix store path (no service pointer), so the default
+  # restartIfChanged runs the new binary at switch time; the pointer reason
+  # behind 2db4bc02's restartIfChanged = false does not apply. Holds no
+  # secrets; runs as a dynamic user.
+  systemd.services.go-choir-goproxy = {
+    # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
+    startLimitIntervalSec = 600;
+    startLimitBurst = 10;
+    description = "go-choir Go module proxy for engineering capsules";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = commonServiceHardening // {
+      ExecStart = lib.concatStringsSep " " [
+        "${goChoirPackages.goproxy}/bin/goproxy"
+        "-listen 127.0.0.1:8088"
+        "-cache-dir /var/lib/go-choir/goproxy"
+        "-max-bytes 8589934592"
+        "-warm-go-sum ${goChoirPackages.goproxy}/share/go-choir/go.sum"
+      ];
+      Restart = "on-failure";
+      RestartSec = 3;
+      # SIGTERM drains in-flight module downloads for up to 45 s.
+      TimeoutStopSec = "60s";
+      DynamicUser = true;
+      StateDirectory = "go-choir/goproxy";
+      StateDirectoryMode = "0750";
+      RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+      MemoryMax = "1G";
+      # Under host memory pressure the kernel kills this cache before a guest.
+      OOMScoreAdjust = 500;
+    };
+  };
+
   # The host system closure owns the exact immutable guest image. Point vmctl
   # at that store output atomically; never let current host binaries boot an
   # unrelated mutable directory. Preserve the one pre-managed image directory
