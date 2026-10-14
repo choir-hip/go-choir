@@ -39,13 +39,31 @@ definition_version: 4
 # binary); the final call commits at the marker write and the host
 # resolves by reachability; LU1a boots the image it resolved and narrows
 # its claim; drains keep their image.
-readiness: drafted
+# Round 5 (per-slice status): the round-4 panel on b158b954 judged each
+# slice (V1-V25). Reviewed with repairs adopted after the round: LU1a, LU2,
+# LU3a, LU3b (gated), LU4 (conditional). Drafted: LU1b (sent back by all
+# five; after four rounds a structural assessment is escalated instead of
+# a fifth patch) and LU5 (needs its own design round).
+#
+# Readiness is per slice (`slices` below). The file-level `readiness:
+# reviewed` covers only the slices marked reviewed; LU1b and LU5 must not
+# be built until a panel accepts them.
+readiness: reviewed
+
+slices:
+  LU1a: {status: reviewed, can_start: yes}
+  LU2: {status: reviewed, can_start: "yes; lands before C1e's next work-state epoch bump"}
+  LU3a: {status: reviewed, can_start: "after LU1a is on ring 0 and LU2's build.json fields ship; ring 2 waits for O2"}
+  LU3b: {status: reviewed, can_start: "no: needs L1c, L1b and LU1b's admission gate"}
+  LU4: {status: reviewed, can_start: "only if O5 rules it in"}
+  LU1b: {status: drafted, can_start: "no: structural decision escalated (adjudication, round 4, 'LU1b: structural assessment')"}
+  LU5: {status: drafted, can_start: "no: own design round after C1e Freeze and Verify"}
 
 review:
-  reviewer: agentic-consensus convergent round 3 on 7ccc5ded (claude, omp-gemini38, omp-glm53-flash accept with repairs; omp-deepseek-v41-flash, omp-gpt6-luna send_back; omp-muse-spark timed out); round 2 on cca944f7 (4 accept with repairs, 2 send_back); round 1 on 346d968c (5 accept with repairs, 1 send_back)
-  frozen_ref: commit 7ccc5ded (round 3); round 4 (this file) not yet reviewed
-  verdict: send_back
-  evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md, sections "Round 3" and earlier (raw outputs in the session scratchpad panel-lu/, panel-lu/round2/, panel-lu/round3/)
+  reviewer: agentic-consensus convergent round 4 on b158b954, per slice (claude, omp-gemini38, omp-glm53-flash, omp-deepseek-v41-flash, omp-gpt6-luna; omp-muse-spark timed out at 1800 s). LU1a 3 accept, 2 accept with repairs; LU2 2 accept, 2 accept with repairs, 1 send_back (its blocker, V7, adopted); LU3a 2 accept, 3 with repairs; LU3b 3 accept, 2 with repairs; LU4 5 accept; LU1b 5 send_back; LU5 3 accept, 1 with repairs, 1 send_back. Earlier rounds 3 (7ccc5ded), 2 (cca944f7) and 1 (346d968c) were each send_back
+  frozen_ref: commit b158b954 (round 4); round-5 repairs (V1-V19) adopted after the round, as for L1 (docs/definitions/choir-ledger-l1-restart-2026-10-13.md review)
+  verdict: accept (scoped to LU1a, LU2, LU3a, LU3b, LU4); send_back for LU1b and LU5
+  evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md, section "Round 4 (per slice)" (raw outputs in the session scratchpad panel-lu/round4/)
 
 start:
   captured_at: 2026-10-14T10:47:00Z
@@ -181,15 +199,15 @@ finish:
     - action: >-
         LU3a. A deliberately bad build (fixture: /health never reaches
         ready) with ring 0 = one minted test computer; then a good build.
-      proves: the bad build stops at ring 0, is refused for that computer (a refusal record on its chain), halts fleet-wide and alerts, and never reaches the paper, including when the target moves to it mid-drain; the good build passes ring 0, then the paper, then the owner's computer in order, each with a lifecycle_observed update record on its chain
+      proves: the bad build stops at ring 0, is refused for that computer (a refusal record on its chain), halts fleet-wide and alerts, and never reaches the paper (the mid-drain variant runs once LU1b exists); the owner un-halts and un-refuses through the product API with a durable record and no SSH; a ring timeout with no validated member pauses and alerts without refusing; the good build passes ring 0, then the paper, then (after O2 is ratified) the owner's computer in order, each with a lifecycle_observed update record on its chain
       evidence_class: deployed proof
     - action: >-
         LU3b. A deliberately bad same-epoch, same-store-schema build on a
         minted test computer.
-      proves: the computer boots its previous image automatically within T_ready plus one boot, exactly once, as a planned boot; the image is refused; held wakes are delivered after the rollback boot; a bad build that changed the epoch or store schema is not rolled back but held (U7)
+      proves: the computer boots its previous image automatically within T_ready plus one boot, exactly once, as a planned boot; the image is refused; held wakes are delivered after the rollback boot; a bad build that changed the epoch or store schema is not rolled back but held (U7); an owner message sent during probation shows a visible "updating" state and is delivered after both a passing probation and a rollback; a probation that expires does not roll back after admission resumed
       evidence_class: deployed proof
     - action: >-
-        LU5. On one test computer, an approved self-development apply and a
+        LU5 (drafted; restated after its design round). On one test computer, an approved self-development apply and a
         platform update, then a restore to the pinned prior head.
       proves: both use one ReleaseApply record with the same admission, health and rollback; the restore joins event head, content witness, VM-local projection and route
       evidence_class: deployed proof
@@ -234,10 +252,10 @@ boundaries:
     - CLAUDE.md "Restarts End Work (Crash) Or Resume It (Planned Update)", "Deploys never restart a busy computer", Landing Loop "Product restore vs platform deploy"
     - docs/restart-subsystem-design-2026-10-13.md v3 (Invariants R, W, P; §9 "wait, then defer")
     - docs/computer-ontology.md (self-development contract, restore-set boundary)
-    - docs/reports/lu-guest-updates-design-2026-10-14.md (round 3)
+    - docs/reports/lu-guest-updates-design-2026-10-14.md (round 5)
   must_preserve:
     - a crash restart never resumes work; a planned restart resumes once
-    - no automatic path restarts a guest before its final call succeeded; busy is never forced
+    - no automatic path forces a busy guest; from LU1b on, no automatic path restarts a guest before the final call's commit
     - held work is deferred and delivered later, never blocked into a slot, dropped or poisoned; update holds do not spend the poison budget
     - an unreadable or newer work-state epoch, or a failed migration, holds the runtime; nothing runs on state it cannot read
     - a host final-call record exists before every final call and is never cleared while the guest is unreachable, so neither a vmctl restart nor a lost response strands a computer
@@ -278,7 +296,7 @@ boundaries:
   dependencies:
     - the station as a whole does not depend on L1 (only LU3b does); LU1a and LU2 need nothing new and are built in parallel; LU2 reaches computers through LU1a's sweep; LU2 lands before C1e's next work-state epoch bump, which does not land until it does (recorded for C1e's own file when C1e next updates)
     - LU1b and LU2 are shared-runtime changes and land between C1e slices, one cutover at a time
-    - LU3b needs L1c (host-asserted planned boots) and L1b (grants and the recovery ledger)
+    - LU3b needs L1c (host-asserted planned boots), L1b (grants and the recovery ledger) and LU1b's admission gate with reasons
     - LU5 needs C1e's Freeze and Verify working on staging and the self-development effects gate
     - the paper's drains finish reliably only once management's work is bounded (delegation design S1 and S2); until then a drain may time out, visibly
   heresy_delta:
@@ -375,12 +393,12 @@ standing_questions:
 now:
   status: working
   slice: >-
-    Definition, round 4: the design note and this file are amended from the
-    round-3 panel (adjudication T1-T26; earlier S1-S31, R1-R39). A round-4
-    convergent panel on this digest decides `reviewed`. The first build
-    slices are LU1a (host-only retry with one driver) and LU2 (persisted
-    epoch and migrations).
-  source_ref: branch docs/lu-guest-updates-2026-10-14 (round-4 commit) on main 7ccc5ded
+    LU1a and LU2 are reviewed and may be built now, in separate worktrees
+    (LU1a host-only behind VM_UPDATE_SWEEP=ring0; LU2 guest-side, before
+    C1e's next epoch bump); LU3a follows them. LU1b waits on the escalated
+    structural decision (guest-initiated reboot or a fifth patch of the
+    host-kill protocol); LU5 waits on its own design round.
+  source_ref: branch docs/lu-guest-updates-2026-10-14 (round-5 commit) on main b158b954
   deploy_identity: staging 97d7a573
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
@@ -403,7 +421,7 @@ now:
     status: proposed
     evidence_refs: [docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md, docs/evidence/owner-approved-refreshes-2026-10-14.json, docs/reports/lu-guest-updates-adjudication-2026-10-14.md]
   decision:
-    what: "slices LU1a and LU2, then LU1b, LU3a, LU3b, LU5; LU4 only if O5 rules it in; defaults of design §6 until the owner rules"
+    what: "LU1a and LU2 now; LU3a after them; LU1b after the structural decision; LU3b after L1c, L1b and LU1b; LU5 after its design round; LU4 only if O5 rules it in; defaults of design §6 until the owner rules"
     kind: operational
     status: proposal
     evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md
@@ -420,11 +438,11 @@ now:
     next_observation: the paper's quiet-gap and activation-duration sample
   blocker_or_risk: >-
     LU2 must land before C1e's next epoch bump. LU3b waits on L1c and L1b.
-    LU1b's final call is new distributed protocol; its round-3 text is the
-    part most likely to draw further findings.
+    LU1b's host-kill final call failed four panels; the structural
+    decision (guest-initiated reboot recommended) is escalated.
     Until management's work is bounded (delegation S1, S2), paper drains
     may time out; the stuck signal makes that visible rather than forced.
-  next_action: run the round-4 convergent panel on this file and the design note at the round-4 commit
+  next_action: start LU1a and LU2 in separate worktrees (reconcile the other worktrees first, per worktree_edge); LU1b's structural decision goes to the coordinator
 
 receipts: []
 ---

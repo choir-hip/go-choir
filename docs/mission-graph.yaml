@@ -1714,7 +1714,7 @@ nodes:
     title: LU — guest updates (pull with a bounded drain, planned boots across epochs, health and rollback, rings, one apply path with self-development)
     path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
     ledger: ''
-    status: working  # drafted 2026-10-14; rounds 1-3 send_back, repairs adopted; round 4 written; round-4 panel next; LU1a and LU2 are the first build slices
+    status: working  # drafted 2026-10-14; reviewed per slice 2026-10-14 (round 4): LU1a, LU2, LU3a, LU3b, LU4 reviewed; LU1b, LU5 drafted; LU1a and LU2 may start; LU1b structural decision escalated
     kind: station
     entrypoint: false
     execution_mode: mission_orchestrator

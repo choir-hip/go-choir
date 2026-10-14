@@ -1,4 +1,4 @@
-# LU: Guest Updates (design note, round 4)
+# LU: Guest Updates (design note, round 5: per-slice status)
 
 Date: 2026-10-14. Station: LU of the ledger metamission
 ([station file](../definitions/choir-ledger-lu-guest-updates-2026-10-14.md)).
@@ -46,7 +46,7 @@ a trace.
   downgrade (S10-S14); LU1a names its interfaces and uses vmctl's idle
   test (S16, S17, S20); rings pin the image and treat stuck as not failed
   (S15, S19, S24); LU no longer depends on L1 as a whole (S21).
-- **Round 4** (this file): the round-3 panel (claude, gemini, glm: accept
+- **Round 4** (b158b954): the round-3 panel (claude, gemini, glm: accept
   with repairs; deepseek, gpt-6-luna: send_back; muse timed out),
   adjudicated as T1-T26. Changes: LU2 seeds an absent epoch from the
   marker or from 1, never from the binary, and keeps the epoch as a Dolt
@@ -61,6 +61,22 @@ a trace.
   starts no apply under a hold, deferrals use a fixed backoff and
   re-check run state (T8-T11); drains keep their image so deploys cannot
   starve a busy computer (T12); later-slice gates T13, T14, T20, T25.
+- **Round 5** (this file): the round-4 panel judged each slice (V1-V25 in
+  the adjudication). **Reviewed:** LU1a, LU2, LU3a, LU3b (gated on L1c,
+  L1b and LU1b's gate), LU4 (conditional on O5), each with its adopted
+  repairs. **Drafted:** LU1b (all five panelists sent it back; after four
+  rounds a structural assessment replaces a fifth patch and is escalated)
+  and LU5 (needs its own design round). Slice status:
+
+  | Slice | Status | Can start |
+  | --- | --- | --- |
+  | LU1a | reviewed | yes |
+  | LU2 | reviewed | yes (before C1e's next epoch bump) |
+  | LU3a | reviewed | after LU1a is on ring 0 and LU2's `build.json` fields ship |
+  | LU3b | reviewed | no: needs L1c, L1b and LU1b's gate |
+  | LU4 | reviewed (conditional) | only if O5 rules it in |
+  | LU1b | drafted | no: structural decision pending |
+  | LU5 | drafted | no: own design round after C1e Freeze and Verify |
 
 ## 0. The short version
 
@@ -300,8 +316,9 @@ about 29.5 minutes of deferral.
 
 ## 3. Invariants
 
-- **U1 (pull).** A deploy changes only the target. vmctl's sweep is the
-  only update driver: one computer at a time per host, under a
+- **U1 (pull).** A deploy changes only the target. For platform image
+  updates, vmctl's sweep is the only update driver (LU5 decides how guest
+  applies relate to it, V18): one computer at a time per host, under a
   per-computer claim. CI sets the target, kicks one sweep, and reports.
 - **U2 (no work cut).** The host kills a guest for an update only after
   the guest's final call succeeded: new work held, nothing executing,
@@ -312,7 +329,8 @@ about 29.5 minutes of deferral.
   named residual, S4). Busy is never forced by an automatic path
   (CLAUDE.md "Deploys never restart a busy computer").
 - **U3 (planned stays planned).** An update boot is planned unless a real
-  crash happened. An epoch change is a migration, not a crash.
+  crash happened. An epoch change is a migration, not a crash, unless the
+  registry declares that step a `crash` entry (V8).
 - **U4 (bounded).** Per computer and target image: at most one apply, one
   automatic rollback, and K drain attempts before a visible "update stuck"
   signal. A refused image is never re-applied automatically; un-refusing
@@ -341,10 +359,18 @@ about 29.5 minutes of deferral.
   (`manager.go:1462-1500`) into `launchFirecracker`
   (`manager.go:866,1093,1888`), so the image recorded is the image booted
   even if a host activation moves the symlink mid-launch. vmctl writes the
-  identity on the ownership. A launch that cannot resolve an identity
+  identity on the ownership. Resolved paths are per boot only: the
+  computer's configured paths stay the stable paths, because `bootVM`
+  keeps its config as `inst.Config` and `ResumeVM` launches from it
+  (`manager.go:840-846,1086-1093`); otherwise one resolved boot would pin
+  every later resume to the old image. An explicit image root from a
+  caller (a final-call record, a rollback) takes precedence over
+  resolving; `ResumeVM` gains the overrides parameter (V1). A launch that cannot resolve an identity
   boots from the stable paths as today, records `booted: unknown` and
   alerts; it does not fail the boot (a missing `build.json` must not
-  become a fleet-wide boot outage). An `unknown` computer is pending.
+  become a fleet-wide boot outage). An `unknown` computer is pending, but
+  a computer that booted `unknown` from an attempt for target X is not
+  attempted again for X; it alerts once (V2).
   Store-schema version and work-state epoch join the identity once the
   guest image's `build.json` carries them (produced by the guest image
   build in `flake.nix`; consumed by LU3b's U7 check).
@@ -365,12 +391,14 @@ about 29.5 minutes of deferral.
   the claim, off `sweepMu` (S20).
 - **The claim excludes everyone else (T7).** Process reconcile, the
   always-on and platform warmers, idle stop, pressure reclaim and the
-  operator refresh check the claim and skip a claimed computer
-  (`ownership.go:965-990`). Claims live in memory; nothing durable depends
+  operator refresh and retention pruning check the claim and skip a
+  claimed computer (`ownership.go:965-990`; V5). Claims live in memory; nothing durable depends
   on them in LU1a.
-- **CI (T18).** CI stops calling deploy-refresh per computer. It calls
-  `POST /internal/vmctl/update-sweep` once (a kick, 202) and reports the
-  update state. Pending computers are not a deploy failure; the receipt's
+- **CI (T18, V3).** While `VM_UPDATE_SWEEP` is not `all`, CI keeps its
+  per-computer loop for computers outside the sweep's scope, so they still
+  update as today. At `all`, CI stops calling deploy-refresh per computer:
+  it calls `POST /internal/vmctl/update-sweep` once (a kick, 202) and
+  reports the update state. Pending computers are not a deploy failure; the receipt's
   `active_computers` status maps them to `pending`, as the deferred case
   does today (`docs/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md`).
   An owner's forced refresh goes through vmctl; it may interrupt a drain
@@ -397,8 +425,12 @@ about 29.5 minutes of deferral.
   rather than collects (S30).
 - **Guest verdict (F6).** After each update boot the sweep reads the
   guest's `restart.kind` from `/api/runtime/obligations` and records it.
-- **Flag.** `VM_UPDATE_SWEEP=off|ring0|all`. Lands as `ring0`; `all` after
-  LU1a's acceptance on ring 0.
+- **Flag.** `VM_UPDATE_SWEEP=off|ring0|all`. Lands as `ring0`, which
+  before LU3a means `WarmnessClassTest` computers
+  (`warmness_policy.go:16-19`; V4); `all` after LU1a's acceptance on ring
+  0. `all` does not wait for LU1b: each pending computer is refreshed once
+  per target, as CI does today, so LU1a adds no exposure to the F4 race,
+  only a different moment (a quiet one) for the same single refresh (V6).
 
 Ways it could fail: a computer whose identity cannot be resolved is
 pending and refreshed each pass (bounded: one refresh per pass, alerted);
@@ -411,6 +443,12 @@ revert away.
 
 ### LU2: persisted epoch and migrations (guest)
 
+- **Preflight before anything mutates (V7).** `Store.Open` runs DDL, drops
+  retired tables, backfills and rewrites the store-schema receipt before it
+  returns (`store.go:627-693,711-770`). So the boot first reads the
+  persisted work-state epoch with a non-mutating preflight; an absent
+  epoch is the seed case below; a newer or unreadable epoch holds before
+  any schema write.
 - **Persisted, never stamped at open (S10, T17).** The work-state epoch
   is a row in the Dolt store (not a workspace file like the store-schema
   epoch, which `storeschema.Write` rewrites at every open,
@@ -425,8 +463,18 @@ revert away.
   hibernated computer's markerless cold wake, or one deferred across the
   LU2 and bump releases). A `crash` step on a markerless boot is
   satisfied by the crash closure that boot runs anyway (today's D7
-  behavior); the epoch advances past it after the closure. The release
-  that ships LU2 does not itself bump the epoch.
+  behavior); the epoch advances past it after the closure. A fresh store
+  (`freshStore`, `store.go:684`) seeds at the binary's epoch (V9). The
+  release that ships LU2 does not itself bump the epoch.
+- **`crash` steps (V8).** A `crash` step advances the epoch in its own
+  transaction and makes the boot a crash boot, even when a marker was
+  consumed. All steps run first, then the crash closure every crash boot
+  runs; `work_state_migrated` names the step; the boot is recorded
+  crash-kind with an alert. A guest that dies between the steps and the
+  closure boots markerless next time and runs the closure again.
+- **`build.json` fields (V10).** LU2's release adds `work_state_epoch` and
+  `store_schema` to the guest image's `build.json` (`flake.nix`); LU1a's
+  identity and LU3b's U7 check read them.
 - A registry: for each step `n → n+1`, a migration function or an
   explicit `crash` entry. A unit test fails when `CurrentWorkStateEpoch`
   changes without an entry, so every bump forces the author to choose.
@@ -461,10 +509,21 @@ revert away.
   does. LU2 is built in parallel with LU1a but reaches computers through
   LU1a's sweep (S28).
 
-Rollback: revert only before any migration has run; after that, fix
-forward. Epoch steps without migrations fall back to D7.
+Rollback: revert only before any non-`crash` step has run; after that,
+fix forward. Epoch steps without migrations fall back to D7.
 
 ### LU1b: the drain (guest and host)
+
+**Status: drafted, not to be built.** All five round-4 panelists sent the
+final call back again (V20-V25 in the adjudication). After four rounds,
+the adjudication's "LU1b: structural assessment" replaces a fifth patch:
+the failures share one cause (two processes agreeing, over a call that can
+be lost, on when a guest may be killed), and a guest-initiated reboot
+after the marker would remove the class. That decision is escalated. The
+text below is the round-4 design, kept as the requirements record; the
+parts V20-V25 invalidate (the abort after closing, the host-kill
+resolution, the journal-only updater check) are superseded by whichever
+route is chosen.
 
 - **One gate with reasons (F23, S6).** The hibernate fence becomes an
   admission gate with a set of reasons, each with its own deadline:
@@ -619,7 +678,10 @@ flag is `ring0` without drains.
   reached the target, booted planned and passed the health wait CI uses
   today, then stayed up through a soak S (default 10 min), and no ring-k
   computer failed. A ring timeout (default 2 h) without a validated member
-  halts and alerts. A ring-k member that updates late takes the build
+  pauses advancement and alerts; it refuses nothing and resumes when a
+  member validates. Only a failure halts (V11). The health wait is run by
+  the sweep after each update boot, since CI no longer refreshes per
+  computer (V13). A ring-k member that updates late takes the build
   under the same health wait; it no longer gates. "Update stuck" (drain
   timeouts) is not a failure and does not halt anything (S19).
 - **Pinned image (F39, S15, T12).** Rings and attempts are keyed by image
@@ -633,16 +695,20 @@ flag is `ring0` without drains.
   layer's commit).
 - **Failure.** A failed update halts the rollout of that image
   fleet-wide, refuses it for that computer, and alerts the owner. Un-halt
-  and un-refuse are owner acts.
+  and un-refuse are owner acts through the product API (no SSH). Halt
+  state is derived from refusal records and un-halt is an owner record;
+  both survive a vmctl restart (V12, V14). Ring 2 (the owner's computer)
+  opens only after the owner ratifies O2 (V14).
 - **Record (U5, F29, S24).** The guest change that acknowledges and skips
   unknown lifecycle actions ships first, with LU2. Then vmctl issues a
   platform-signed lifecycle receipt with action `update` and
   `{from_image, to_image, outcome, reason}` for every applied, refused or
-  rolled-back update, only to images that declare the action; the guest
+  rolled-back update, only to images whose `build.json` declares the
+  action (V15); the guest
   appends it as `lifecycle_observed`. A refusal is recorded on the
   computer's own chain, not only as an alert.
 
-Rollback: ring gating off returns to LU1 behavior.
+Rollback: ring gating off returns to LU1a behavior.
 
 ### LU3b: probation and rollback (needs L1c and L1b)
 
@@ -661,6 +727,8 @@ Rollback: ring gating off returns to LU1 behavior.
   and store-schema version equal the new image's (U7). One rollback per
   computer and image; a failed rollback becomes an L1 hold (F19). Held
   wakes are delivered after the rollback boot.
+- **Dependencies (V17).** L1c, L1b, and LU1b's admission gate with
+  reasons (which the probation reason uses).
 - **Gates for this slice.** The updater refuses a restore across a
   work-state epoch, not only across a store-schema window (`restorePrior`,
   `updater.go:943-994`; T13). Probation has a guest-side TTL: if vmctl
@@ -671,6 +739,13 @@ Rollback: ring gating off returns to LU1 behavior.
 Rollback: `VM_UPDATE_HEALTH_GATE=off` returns to LU3a behavior.
 
 ### LU5: one apply path shared with self-development
+
+**Status: drafted (V18).** Not specified enough to build: whether a
+`platform_image` apply is driven by vmctl (an image refresh) or by the
+guest updater (an M9a offer, whose only producer a47122de deleted), and
+how one transaction spans a host-driven boot and a guest-driven swap,
+need their own design round after C1e Freeze and Verify. The direction
+below stands.
 
 - One `ReleaseApply` transaction for every change to what a computer
   runs: `kind` (platform_image, selfdev_bundle, restore; platform_runtime

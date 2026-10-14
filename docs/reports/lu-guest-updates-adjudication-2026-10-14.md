@@ -229,3 +229,103 @@ record resolution (T2-T4, T8, T9) are rewritten; LU1a binds the booted
 image and narrows its claim (T5-T7); the deferral class gets a fixed
 backoff (T10, T11); starvation is closed (T12); later-slice gates T13,
 T14, T25 are named. Next: a round-4 panel on the amended files.
+
+# Round 4 (per slice)
+
+Reviewed: the round-4 files at b158b954. Same runner, mode and members,
+timeout raised to 1800 s. This round asked for a verdict per slice as well
+as overall, so that accepted slices can proceed while the rest iterate.
+Raw outputs: the session scratchpad, `panel-lu/round4/`. muse-spark timed
+out again (1800 s, no output); five answered.
+
+## Per-slice verdicts
+
+| Slice | claude | gemini | glm | deepseek | luna | Adjudicated |
+| --- | --- | --- | --- | --- | --- | --- |
+| LU1a | accept w/ repairs | accept | accept | accept | accept w/ repairs | **reviewed** (repairs V1-V6 adopted) |
+| LU2 | accept w/ repairs | accept | accept | accept w/ repairs | send_back | **reviewed** (repairs V7-V10 adopted, V7 is luna's blocker) |
+| LU1b | send_back | send_back | send_back | send_back | send_back | **drafted**; structural assessment instead of a fifth patch |
+| LU3a | accept w/ repairs | accept | accept w/ repairs | accept | accept w/ repairs | **reviewed** (repairs V11-V15 adopted) |
+| LU3b | accept w/ repairs | accept | accept | accept | accept w/ repairs | **reviewed**, gated on L1c, L1b and LU1b's gate (V16, V17) |
+| LU4 | accept | accept | accept | accept | accept | **reviewed**, conditional on O5 |
+| LU5 | send_back | accept | accept | accept w/ repairs | accept | **drafted**: needs its own design round (V18) |
+
+Overall (station structure and invariants): claude accept the structure,
+gemini accept with repairs, glm accept, deepseek accept scoped to LU1a and
+LU2, luna send_back (on LU2 and LU1b). Adjudicated: **reviewed, scoped**.
+LU1a, LU2, LU3a, LU3b and LU4 are reviewed; LU1b and LU5 are drafted and
+must not be built until a panel accepts them.
+
+## Repairs adopted (all verified)
+
+| ID | Slice | Finding (panelists) | Verified | Repair |
+| --- | --- | --- | --- | --- |
+| V1 | LU1a | A pinned launch would stick: `bootVM` stores its config as `inst.Config` and `ResumeVM` launches from it, so one resolved-path boot pins every later resume to the old image (claude) | `manager.go:840-846,1086-1093` | Resolved artifact paths are per boot only; the configured paths stay the stable paths. An explicit image root from a caller (a final-call record, a rollback) takes precedence; `ResumeVM` gains the overrides parameter |
+| V2 | LU1a | An `unknown` computer would restart every pass (claude) | design | A computer that booted `unknown` from an attempt for target X is not attempted again for X; it alerts once (U4) |
+| V3 | LU1a | With the flag at `ring0`, the CI change leaves every other computer with no update path (claude) | design | While `VM_UPDATE_SWEEP` is not `all`, CI keeps its per-computer loop for computers outside the sweep's scope; the kick replaces the loop only at `all` |
+| V4 | LU1a | `ring0` needs a definition before LU3a (claude) | `warmness_policy.go:16-19` | Before LU3a, `ring0` means `WarmnessClassTest` computers |
+| V5 | LU1a | Retention pruning is missing from the claim's exclusion set (claude) | `ownership.go:983` | Add `PruneRetention` |
+| V6 | LU1a | Do not enable `all` before LU1b, because today's endpoint keeps the F4 race (luna) | `planned_restart.go:395-415` | **Not adopted as stated.** LU1a does not add exposures: each pending computer is refreshed once per target, as CI does today; only the timing changes (at a quiet moment instead of at deploy time). `all` stays gated on LU1a's ring-0 acceptance. The design now says so, and says LU1a never claims U2 (T6) |
+| V7 | LU2 | **The epoch check must come before `Store.Open` mutates anything**: open runs DDL, drops retired tables, backfills and rewrites the store-schema receipt before returning (luna) | `store.go:627-693,711-770` | A non-mutating epoch preflight reads the persisted epoch before bootstrap; an absent epoch is the seed case; a newer or unreadable epoch holds before any schema write |
+| V8 | LU2 | What a `crash` step does is ambiguous, including on a planned boot (claude, deepseek) | design | A `crash` step advances the epoch in its own transaction and makes the boot a crash boot even when a marker was consumed; all steps run, then the crash closure every crash boot runs; `work_state_migrated` names the step; the boot is recorded crash-kind with an alert. U3 gains the qualifier "unless the registry declares that step a `crash` entry" |
+| V9 | LU2 | A fresh store needs a rule (claude) | `store.go:684` (`freshStore`) | A fresh store seeds at the binary's epoch |
+| V10 | LU2 | The producer of `work_state_epoch` and `store_schema` in the guest image's `build.json` has no owner (claude) | — | LU2's release adds both fields to `build.json` (`flake.nix`); LU1a's identity and LU3b's U7 check read them |
+| V11 | LU3a | A ring timeout with no validated member "halts", which contradicts S19 for the paper, a ring of one (claude) | design | A timeout pauses advancement and alerts; it refuses nothing and resumes when a member validates. Only a failure halts |
+| V12 | LU3a | Where halt state lives (claude) | — | Derived from refusal records; un-halt is an owner record; both survive a vmctl restart |
+| V13 | LU3a | Who runs the health wait once CI no longer refreshes per computer (glm) | — | The sweep runs it after each update boot |
+| V14 | LU3a | The owner's un-halt and un-refuse need a no-SSH surface and an acceptance line; O2 must be ratified before the rollout goes past the paper's ring (luna) | — | Acceptance added; ring 2 waits for O2 |
+| V15 | LU3a | Small: images declare the `update` action in `build.json`; the rollback line says LU1a, not LU1; the mid-drain target case moves behind LU1b (claude, glm) | — | Adopted |
+| V16 | LU3b | Probation with an owner message needs an acceptance case (luna) | — | Adopted |
+| V17 | LU3b | LU3b uses LU1b's gate with reasons | design | Named as a dependency |
+| V18 | LU5 | **Not specified enough to build**: whether `platform_image` is driven by vmctl (an image refresh) or by the guest updater (an M9a offer, whose only producer a47122de deleted) is undefined, and "one transaction" across a host-driven boot and a guest-driven swap has no driver or commit point; U1 says vmctl is the only driver (claude; deepseek on the offer producer) | `platform_update.go:75,774`; q4 | **LU5 drafted.** It needs its own design round after C1e Freeze and Verify; U1 is scoped to platform image updates. It blocks nothing else |
+| V19 | station | `must_preserve` says no automatic path restarts a guest before its final call, which LU1a itself does through today's endpoint (deepseek); stale round labels (gemini, glm) | — | Reworded: "no automatic path forces a busy guest; from LU1b on, no automatic path restarts a guest before the final call's commit"; labels fixed |
+
+## LU1b: structural assessment instead of a fifth patch
+
+All five panelists sent LU1b back, and the final call has drawn new
+blocking findings in every round since round 2 (S1-S6, T2-T4, and now
+V20-V25 below). CLAUDE.md "Escalate on dead ends" applies: three or more
+iterations without convergence means stop patching and assess the
+structure.
+
+Round-4 findings, all verified, which any LU1b design must satisfy:
+
+| ID | Finding (panelists) | Verified |
+| --- | --- | --- |
+| V20 | The abort path still runs after the dispatcher stops and the stores close; nothing reopens a live runtime's stores or restarts its kernel (gemini, glm, luna, deepseek) | `store.go:913-946`; `adapter.go:628-635`; `runtime.go:845-859` |
+| V21 | A pending desk mutation blocks every drain: the activation that clears it has no executing ancestor, so lineage admission defers it, and "drained" waits for it (claude) | `runtime.go:2326-2335` |
+| V22 | The recover bridge publishes its request with no restart-handoff call, so the handoff refusal covers only one bridge (claude, deepseek) | `internal/updater/runtime.go:37-77` |
+| V23 | The journal check misses an apply that is still staging: `Apply` writes its journal after staging and closure materialization; and the check runs before the routes that start an apply are closed (luna, claude) | `updater.go:295-324`; `platform_update.go:774` |
+| V24 | A guest that commits and then hangs while still answering has no fate; a failure after the commit point is not a crash boot, because `Restart=on-failure` restarts the runtime in place and it consumes the fresh marker as a planned boot on the old image (deepseek, claude) | `autoputer-vm.nix:842-843`; `planned_restart.go:109-142` |
+| V25 | A stale non-terminal journal from a spent apply refuses every later final call (deepseek) | `planned_restart.go:215` |
+
+**The common cause.** Every one of these lives in the same place: two
+processes (the guest runtime and the host's vmctl) must agree, across a
+network call that can be lost, on the moment a guest may be killed. The
+guest decides it is safe; a different process, later, does the killing.
+Every round has closed one interleaving of "decide" and "kill" and exposed
+another. That is a substrate problem (who ends the guest's life), not a
+wording problem.
+
+**A substrate change that removes the class (hypothesis, to verify).**
+Let the guest end its own life. After draining and writing its marker,
+the guest reboots itself. The guest kernel runs with `reboot=k`
+(`manager.go:1642,1674`), so a guest reboot resets the CPU through the
+keyboard controller, and Firecracker exits on that reset (to verify
+against Firecracker 1.15.1 and vmctl's process reconcile). The host then
+needs no final-call record, no kill timing and no reachability rule: it
+sees a Firecracker process that exited after the guest accepted an update,
+and it boots the target image. The boot consumes the marker as planned. A
+guest that never reboots was never committed, and an unreachable one is
+handled by the existing wedge and recovery paths and by L1's bounds.
+Findings V20, V24 and most of the S1-S5 and T2 machinery disappear; V21,
+V22, V23 and V25 remain as guest-side drain rules (admit desk-mutation
+activations snapshotted at drain start; an in-process count of updater
+calls in flight, closed by the final step, instead of journal scanning;
+treat a journal whose writer is gone as settled by the materializer).
+
+**Escalated for a decision** (coordinator or owner): build LU1b on the
+guest-initiated reboot (recommended: it removes the failure class), or
+patch the host-kill protocol a fifth time. Either way LU1b's next text goes
+to a panel before any LU1b code. Nothing else waits on it: LU1a, LU2 and
+LU3a proceed now.

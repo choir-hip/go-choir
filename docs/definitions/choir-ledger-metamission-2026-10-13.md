@@ -137,7 +137,7 @@ metamission:
         host.
     - id: LU
       path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
-      readiness: drafted
+      readiness: reviewed
       status: working
       depends_on: []
       note: >-
@@ -156,8 +156,10 @@ metamission:
         binary-only swap only if measured downtime warrants it.
         Specification: docs/reports/lu-guest-updates-design-2026-10-14.md;
         panels adjudicated in
-        docs/reports/lu-guest-updates-adjudication-2026-10-14.md (rounds 1-3
-        send_back with repairs adopted; round 4 written). Only LU3b
+        docs/reports/lu-guest-updates-adjudication-2026-10-14.md. Round 4
+        was judged per slice: LU1a, LU2, LU3a, LU3b and LU4 reviewed (LU1a
+        and LU2 may start); LU1b and LU5 drafted, with LU1b's final call
+        escalated for a structural decision after four rounds. Only LU3b
         depends on L1 (L1c, L1b).
         Cause: the paper is never idle and updated only by an owner act
         (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
