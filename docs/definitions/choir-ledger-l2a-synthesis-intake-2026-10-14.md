@@ -353,3 +353,15 @@ header). This file tracks the first slice.
     baseline under the tripwire.
 - **S3, close.** A consensus review on the landed candidate and its
   deployed evidence; then the deploy lane passes to C1e B1.
+
+## Owner rulings, 2026-10-14 (about 10:40 UTC)
+
+- **O3 (Jev settles high-confidence feeds): yes.** "let [Jev] settle high
+  confidence feeds." This amends L2a's earlier "labels are advice": a Jev
+  label at high confidence that names an existing story becomes a system
+  Feed without a model call; management (or its tasks) still decides
+  everything else, and every system Feed is a recorded act that can be
+  overridden. Deterministic intake is the destination named in the
+  delegation design (R2-22).
+- **Snapshot hibernation resumes overnight:** at least 24 h (set to 36 h,
+  `VM_SNAPSHOT_MAX_AGE`).

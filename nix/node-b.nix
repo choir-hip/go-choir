@@ -761,6 +761,11 @@ in
         # code default is kill, and kill mode never loads a snapshot).
         "VM_HIBERNATE_MODE=snapshot"
         "VM_SNAPSHOT_BUDGET_GIB=48"
+        # Owner 2026-10-14: overnight hibernation resumes from its snapshot,
+        # at least 24 h. The credential window no longer limits it (resume
+        # delivers a fresh credential); the budget's oldest-first eviction
+        # and the 16 GiB free-space floor still bound disk.
+        "VM_SNAPSHOT_MAX_AGE=36h"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Keep personal computers resident while the host is under capacity.
         "VMCTL_IDLE_TIMEOUT=30m"
