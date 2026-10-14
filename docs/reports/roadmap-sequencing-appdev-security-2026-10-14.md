@@ -149,3 +149,28 @@ own ChatGPT credits. It only helps users with paid ChatGPT accounts, and
 the owner does not want Choir to be reselling ChatGPT; it belongs with a
 later decision on how users' token spending is handled. "For now, users
 using it and consuming tokens are a good thing."
+
+## Owner ruling, about 14:55 UTC: scoring public statements, uncertainty, accepted risk
+
+"We need to capture the uncertainty. [...] If someone says something in a
+podcast, it's less certain, more ambiguous, more subject to
+interpretation. [...] We need to extract an estimated level of
+certainty." And: "I am not worried about the defamation risk at all,
+because we're doing a serious best effort aiming for excellence at making
+this an automated system that is attempting to be neutral and
+multi-perspectival. It's essential that if you want to act in the public
+sphere, there's accountability [...] not cancel culture, but [...] do
+intelligent observers take you at your word? [...] As machine intelligence
+diffuses throughout the world, the value of a good reputation rises [...]
+the fundamental compression of intelligence is: can I take you at your
+word? [...] maybe take on a little bit of legal risk to really provide the
+service for the world."
+
+Consequences: the claims and precommitment design
+(docs/reports/claims-events-entities-ontology-2026-10-14.md, in progress)
+records attribution, interpretation, expressed-confidence, extraction and
+settlement uncertainty and carries them into scoring; legal risk from
+scoring public figures is accepted by the owner, and the quality bar
+(attribution evidence, multiple readings, neutrality, correction) stays as
+the standard of excellence. Calibrated say-do track records are a central
+evaluation, for Choir's own agents first.
