@@ -29,7 +29,11 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 	case "mode", "replay-completeness", "genesis":
 		return "", "", false
 	case "operations":
-		return strings.TrimSpace(decoded), "propose", true
+		// GET lists. C1e B1 deleted the guest's start-operation POST; a
+		// change starts with POST /api/prompt-bar on an armed computer, so
+		// the collection is read-only here too
+		// (docs/problems/surface-broken-calls-2026-10-14.md, item 10).
+		return strings.TrimSpace(decoded), "read", true
 	case "rollbacks":
 		return strings.TrimSpace(decoded), "rollback", true
 	case "kernel-capabilities":
@@ -55,7 +59,7 @@ func isSelfDevelopmentGuestPath(path string) bool {
 
 func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 	switch action {
-	case "propose", "approve", "rollback":
+	case "approve", "rollback":
 		return method == http.MethodPost
 	case "read":
 		return method == http.MethodGet
@@ -333,10 +337,6 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
-	if action == "propose" && r.Method == http.MethodGet {
-		// GET on the operations collection lists; it is a read, never a proposal.
-		action = "read"
-	}
 	if !selfDevelopmentGuestMethodAllowed(r.Method, action) {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
@@ -393,7 +393,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	}
 	u.RawQuery = r.URL.RawQuery
 	maxBody := int64(64 << 10)
-	if action == "propose" || action == "approve" {
+	if action == "approve" {
 		maxBody = 1 << 20
 	}
 	upstream, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), http.MaxBytesReader(w, r.Body, maxBody))

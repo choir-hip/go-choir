@@ -1,12 +1,16 @@
 # Clients and routes that disagree: the surface audit's broken calls (2026-10-14)
 
-Status: open (documented before the fix). Branch `fix/surface-broken-calls`.
+Status: repaired in code on branch `fix/surface-broken-calls` (not pushed,
+not deployed; the fix commit follows this note's first commit). Staging
+proof is still owed for items 1, 3, 5 and 6, and the m11 probe has not been
+rerun.
 Mutation class of the fix: **orange** (product APIs, runtime behaviour,
 probe scripts). Rollback: `git revert` of the fix commit. Source:
 [surface-audit-cli-mcp-api-2026-10-14.md](../reports/surface-audit-cli-mcp-api-2026-10-14.md)
 §2 ("Broken" and "Latent"). This note re-verifies each item at
-`origin/main` e9d85a71d before any code changes. Three of the audit's
-claims needed correcting; they are marked **Correction**.
+`origin/main` e9d85a71d before any code changes. One of the audit's
+claims needed correcting (marked **Correction**), and items 2 and 3 carry
+consequences the audit did not name.
 
 ## Findings
 

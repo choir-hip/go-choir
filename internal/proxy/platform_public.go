@@ -22,23 +22,6 @@ type proposalRequest struct {
 	Transclusions        []platform.TransclusionRef `json:"transclusions,omitempty"`
 }
 
-type authorProposalDeliveryRequest struct {
-	OwnerID              string `json:"owner_id"`
-	ProposalID           string `json:"proposal_id"`
-	PublicationID        string `json:"publication_id"`
-	PublicationVersionID string `json:"publication_version_id,omitempty"`
-	SubmitterID          string `json:"submitter_id,omitempty"`
-	DeliveryID           string `json:"delivery_id,omitempty"`
-}
-
-type authorProposalDeliveryResponse struct {
-	DeliveryID    string `json:"delivery_id"`
-	TargetAgentID string `json:"target_agent_id"`
-	ChannelID     string `json:"channel_id"`
-	State         string `json:"state"`
-	RunID         string `json:"loop_id,omitempty"`
-}
-
 type publicationProposalClientResponse struct {
 	ProposalID           string   `json:"proposal_id"`
 	PublicationID        string   `json:"publication_id"`
@@ -333,15 +316,10 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to decode platform response"})
 			return
 		}
-		if state := h.deliverPublicationProposalToAuthor(r, out); state != "" && state != out.DeliveryState {
-			if err := h.recordPublicationProposalDeliveryState(r, out, state); err != nil {
-				log.Printf("proxy: platform proposal delivery state update failed: %v", err)
-			} else {
-				out.DeliveryState = state
-			}
-		} else if state != "" {
-			out.DeliveryState = state
-		}
+		// corpusd records the proposal for its author (delivery_state
+		// recorded_for_author). There is no guest delivery: R3d deleted the
+		// author computer's /internal/texture/proposals route, and the proxy
+		// must not resolve (and so start) the author's computer for a reader.
 		writeJSON(w, resp.StatusCode, publicationProposalClientResponse{
 			ProposalID:           out.ProposalID,
 			PublicationID:        out.PublicationID,
@@ -368,98 +346,6 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 	}
 	writeJSON(w, resp.StatusCode, out)
 	h.lifecycle.record("platform_proposal.total", lifecycleHTTPStatus(resp.StatusCode), time.Since(started))
-}
-
-func (h *Handler) deliverPublicationProposalToAuthor(r *http.Request, proposal platform.SubmitPublicationProposalResponse) string {
-	if h == nil || r == nil || strings.TrimSpace(proposal.SourceOwnerID) == "" || strings.TrimSpace(proposal.ProposalID) == "" {
-		return ""
-	}
-	autoputerURL, err := h.resolveComputerURL(r.Context(), proposal.SourceOwnerID, "")
-	if err != nil {
-		log.Printf("proxy: platform proposal author autoputer resolve failed: %v", err)
-		return "recorded_for_author"
-	}
-	target, err := joinBasePath(autoputerURL, "/internal/texture/proposals")
-	if err != nil {
-		log.Printf("proxy: platform proposal author delivery target failed: %v", err)
-		return "recorded_for_author"
-	}
-	payload := authorProposalDeliveryRequest{
-		OwnerID:              proposal.SourceOwnerID,
-		ProposalID:           proposal.ProposalID,
-		PublicationID:        proposal.PublicationID,
-		PublicationVersionID: proposal.PublicationVersionID,
-		SubmitterID:          proposal.SubmitterID,
-		DeliveryID:           proposal.DeliveryID,
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return "recorded_for_author"
-	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, bytes.NewReader(data))
-	if err != nil {
-		return "recorded_for_author"
-	}
-	req.Header.Set("Content-Type", "application/json")
-	hostauth.MarkInternal(req)
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("proxy: platform proposal author delivery failed: %v", err)
-		return "recorded_for_author"
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		log.Printf("proxy: platform proposal author delivery status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-		return "recorded_for_author"
-	}
-	var out authorProposalDeliveryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "delivered"
-	}
-	if strings.TrimSpace(out.State) != "" {
-		return out.State
-	}
-	return "delivered"
-}
-
-func (h *Handler) recordPublicationProposalDeliveryState(r *http.Request, proposal platform.SubmitPublicationProposalResponse, state string) error {
-	state = strings.TrimSpace(state)
-	if state == "" || proposal.ProposalID == "" || proposal.DeliveryID == "" {
-		return nil
-	}
-	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/proposal-deliveries/state")
-	if err != nil {
-		return err
-	}
-	reqBody := platform.UpdateProposalDeliveryStateRequest{
-		ProposalID:    proposal.ProposalID,
-		DeliveryID:    proposal.DeliveryID,
-		DeliveryState: state,
-		DeliveryRef:   "author-runtime:" + state,
-		RecordedBy:    "proxy",
-	}
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("marshal platform delivery update: %w", err)
-	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, target, bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("build platform delivery update: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	hostauth.MarkInternal(req)
-	resp, err := h.corpusd.Do(req)
-	if err != nil {
-		return fmt.Errorf("call platform delivery update: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("platform delivery update status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
 }
 
 type platformStatusError struct {

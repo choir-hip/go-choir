@@ -2,15 +2,18 @@ package textureowner
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/mail"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -146,43 +149,90 @@ func (h *Handler) getTextureRevision(ctx context.Context, ownerID, revisionID st
 	}
 	return revision, nil
 }
-func (h *Handler) listTextureDocuments(ctx context.Context, ownerID string, limit int) ([]types.Document, error) {
+
+// textureDocumentCursor is the position after the last document of a page in
+// the list's order: updated_at descending, then doc_id descending.
+type textureDocumentCursor struct {
+	UpdatedAt time.Time `json:"u"`
+	DocID     string    `json:"d"`
+}
+
+func (c textureDocumentCursor) encode() string {
+	raw, _ := json.Marshal(c)
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+func decodeTextureDocumentCursor(raw string) (textureDocumentCursor, error) {
+	var cursor textureDocumentCursor
+	decoded, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return cursor, err
+	}
+	if err := json.Unmarshal(decoded, &cursor); err != nil {
+		return cursor, err
+	}
+	if cursor.UpdatedAt.IsZero() || strings.TrimSpace(cursor.DocID) == "" {
+		return cursor, fmt.Errorf("incomplete cursor")
+	}
+	return cursor, nil
+}
+
+func textureDocumentNewer(a, b types.Document) bool {
+	if !a.UpdatedAt.Equal(b.UpdatedAt) {
+		return a.UpdatedAt.After(b.UpdatedAt)
+	}
+	return a.DocID > b.DocID
+}
+
+// listTextureDocumentsPage lists the owner's documents visible on this
+// computer, newest first, limit at a time after the cursor. It returns the
+// next page's cursor when more documents follow. The stores rank in memory
+// over every document of the kind, so asking them for all is no extra load.
+func (h *Handler) listTextureDocumentsPage(ctx context.Context, ownerID string, limit int, after *textureDocumentCursor) ([]types.Document, *textureDocumentCursor, error) {
 	if h == nil || h.Store == nil {
-		return nil, fmt.Errorf("texture store unavailable")
+		return nil, nil, fmt.Errorf("texture store unavailable")
 	}
 	if limit <= 0 {
-		limit = 50
+		limit = textureDocumentListDefaultLimit
 	}
-	legacy, err := h.Store.ListDocumentsByOwner(ctx, ownerID, limit)
+	const all = math.MaxInt32
+	legacy, err := h.Store.ListDocumentsByOwner(ctx, ownerID, all)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	docs := legacy
 	computerID := ""
 	if h.Core != nil {
 		computerID = strings.TrimSpace(h.Core.TextureComputerID())
 	}
-	if computerID == "" {
-		return legacy, nil
-	}
-	scoped, err := h.Store.ListDocumentsByScope(ctx, ownerID, computerID, limit)
-	if err != nil {
-		return nil, err
-	}
-	seen := make(map[string]bool, len(scoped))
-	docs := append([]types.Document(nil), scoped...)
-	for _, doc := range scoped {
-		seen[doc.DocID] = true
-	}
-	for _, doc := range legacy {
-		if !seen[doc.DocID] {
-			docs = append(docs, doc)
+	if computerID != "" {
+		scoped, err := h.Store.ListDocumentsByScope(ctx, ownerID, computerID, all)
+		if err != nil {
+			return nil, nil, err
+		}
+		seen := make(map[string]bool, len(scoped))
+		docs = append([]types.Document(nil), scoped...)
+		for _, doc := range scoped {
+			seen[doc.DocID] = true
+		}
+		for _, doc := range legacy {
+			if !seen[doc.DocID] {
+				docs = append(docs, doc)
+			}
 		}
 	}
-	sort.Slice(docs, func(i, j int) bool { return docs[i].UpdatedAt.After(docs[j].UpdatedAt) })
-	if len(docs) > limit {
-		docs = docs[:limit]
+	sort.Slice(docs, func(i, j int) bool { return textureDocumentNewer(docs[i], docs[j]) })
+	if after != nil {
+		mark := types.Document{UpdatedAt: after.UpdatedAt, DocID: after.DocID}
+		start := sort.Search(len(docs), func(i int) bool { return textureDocumentNewer(mark, docs[i]) })
+		docs = docs[start:]
 	}
-	return docs, nil
+	if len(docs) <= limit {
+		return docs, nil, nil
+	}
+	page := docs[:limit]
+	last := page[len(page)-1]
+	return page, &textureDocumentCursor{UpdatedAt: last.UpdatedAt, DocID: last.DocID}, nil
 }
 
 func (h *Handler) listTextureRevisions(ctx context.Context, ownerID, docID string, limit int) ([]types.Revision, error) {

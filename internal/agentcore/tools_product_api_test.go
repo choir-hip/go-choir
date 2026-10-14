@@ -45,7 +45,7 @@ func TestProductAPIRequestUsesCanonicalServerAndRunOwner(t *testing.T) {
 	})
 
 	rt := &Runtime{}
-	rt.SetProductAPIHandler(canonical)
+	rt.SetProductAPIHandler(canonical, "")
 
 	raw, err := rt.productAPIRequest(context.Background(), "user-product-api", "owner@example.com",
 		" post ", "https://ignored.example/api/autopaper/sources/schedules?source=tool",
@@ -89,7 +89,7 @@ func TestProductAPIRequestRejectsDisallowedRoutes(t *testing.T) {
 	t.Parallel()
 
 	rt := &Runtime{}
-	rt.SetProductAPIHandler(server.NewServer("product-api-rejection-test", "0"))
+	rt.SetProductAPIHandler(server.NewServer("product-api-rejection-test", "0"), "")
 
 	for _, tc := range []struct {
 		name   string
@@ -134,7 +134,7 @@ func TestProductAPIRequestCapsResponseAndReportsHTTPError(t *testing.T) {
 		_, _ = w.Write([]byte(strings.Repeat("x", productAPIMaxBodyBytes+1)))
 	})
 	rt := &Runtime{}
-	rt.SetProductAPIHandler(canonical)
+	rt.SetProductAPIHandler(canonical, "")
 
 	raw, err := rt.productAPIRequest(context.Background(), "user-product-api", "", "GET", "/api/run-acceptances/oversized", nil)
 	if err != nil {

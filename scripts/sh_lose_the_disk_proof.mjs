@@ -28,6 +28,7 @@
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
+import { NODE_B_INTERNAL_AUTH } from '../frontend/tests/helpers/node-b-internal-auth.js';
 
 const requireFrontend = createRequire(new URL('../frontend/package.json', import.meta.url));
 const { chromium } = requireFrontend('@playwright/test');
@@ -57,7 +58,7 @@ function nodeB(command) {
   return execFileSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', 'node-b', command], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).trim();
 }
 function ownershipsFor(userId) {
-  const list = JSON.parse(nodeB('curl -fsS -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list'));
+  const list = JSON.parse(nodeB(`curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} http://127.0.0.1:8083/internal/vmctl/list`));
   return (list?.ownerships || [])
     .filter(o => o.user_id === userId)
     .map(o => ({ state: o.state, vm_id: o.vm_id, computer_id: o.computer_id, epoch: o.epoch, computer_url: o.computer_url }));
@@ -105,7 +106,7 @@ try {
   if (written.status !== 200 || synced.status !== 200) throw new Error('file write or sync failed');
 
   if (MODE === 'remove') {
-    const removed = nodeB(`curl -sS -X POST -H "X-Internal-Caller: true" -H "Content-Type: application/json" -d '{"user_id":"${userId}","desktop_id":"primary"}' http://127.0.0.1:8083/internal/vmctl/remove`);
+    const removed = nodeB(`curl -sS -X POST -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "Content-Type: application/json" -d '{"user_id":"${userId}","desktop_id":"primary"}' http://127.0.0.1:8083/internal/vmctl/remove`);
     step('ownership_removed', { response: removed, after: ownershipsFor(userId) });
   } else {
     // Recovery replays onto a projection base; a computer this young has none

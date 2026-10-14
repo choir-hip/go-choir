@@ -178,9 +178,19 @@ type textureDocumentStreamEvent struct {
 }
 
 // textureListDocsResponse is the JSON response for GET /api/texture/documents.
+// NextCursor is set when more documents follow; pass it back as ?cursor=.
 type textureListDocsResponse struct {
-	Documents []textureDocumentResponse `json:"documents"`
+	Documents  []textureDocumentResponse `json:"documents"`
+	NextCursor string                    `json:"next_cursor,omitempty"`
 }
+
+// The document list pages newest first: ?limit= (default 50, at most 500)
+// and ?cursor= from the previous page's next_cursor. Each listed document
+// costs a revision-stats query, which bounds the page.
+const (
+	textureDocumentListDefaultLimit = 50
+	textureDocumentListMaxLimit     = 500
+)
 
 // textureCreateRevisionRequest is the public JSON payload for
 // POST /api/texture/documents/{id}/revisions. The public route always creates
@@ -801,7 +811,26 @@ func (h *Handler) HandleTextureListDocuments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	docs, err := h.listTextureDocuments(r.Context(), ownerID, 50)
+	limit := textureDocumentListDefaultLimit
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "limit must be a positive integer"})
+			return
+		}
+		limit = min(parsed, textureDocumentListMaxLimit)
+	}
+	var after *textureDocumentCursor
+	if raw := strings.TrimSpace(r.URL.Query().Get("cursor")); raw != "" {
+		cursor, err := decodeTextureDocumentCursor(raw)
+		if err != nil {
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid cursor"})
+			return
+		}
+		after = &cursor
+	}
+
+	docs, next, err := h.listTextureDocumentsPage(r.Context(), ownerID, limit, after)
 	if err != nil {
 		log.Printf("texture api: list documents: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list documents"})
@@ -812,6 +841,9 @@ func (h *Handler) HandleTextureListDocuments(w http.ResponseWriter, r *http.Requ
 	for _, doc := range docs {
 		docResp := h.textureDocumentResponse(r.Context(), doc)
 		resp.Documents = append(resp.Documents, docResp)
+	}
+	if next != nil {
+		resp.NextCursor = next.encode()
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)

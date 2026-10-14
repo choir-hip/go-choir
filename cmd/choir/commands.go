@@ -202,7 +202,7 @@ func buildRegistry() []*command {
 				pStr("title", "Texture document title").req(),
 				pStr("content", "initial owner-authored v0 content and objective").req(),
 				pStr("request_id", "stable client occurrence id for exact retries").req(),
-				pStr("desk", "bound desk: texture (default) or engineering"),
+				pStr("desk", "bound desk; only texture (the default) is accepted"),
 			},
 			usage:  "--title, --content, and --request-id are required",
 			scopes: writeTexture, idempotent: true, openWorld: true,
@@ -487,7 +487,7 @@ func buildRegistry() []*command {
 		computerAction("start", "Start or resume the current computer", false),
 		computerAction("restart", "Stop then resolve the current computer (same boot artifacts)", true),
 		computerAction("refresh", "Reboot onto current guest image, preserving persistent data", true),
-		computerAction("recover", "Run the owner recovery job for the current computer", false),
+		computerAction("recover", "Clear the maintenance hold on the current computer, then start it if it is not active", false),
 
 		// api keys
 		{

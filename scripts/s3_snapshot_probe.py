@@ -32,6 +32,14 @@ import urllib.request
 
 HOST = "https://choir.news"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Host-internal credential for vmctl's internal routes (internal/hostauth),
+# as a shell fragment run on Node B: `-H @<root-only header file>` when it is
+# readable, nothing otherwise, the way ci.yml's deploy sends it. The marker
+# header is a hint, never authority; without the token these calls are
+# refused once hostauth enforces
+# (docs/problems/surface-broken-calls-2026-10-14.md, item 9).
+TOKEN_HEADER_FILE = "/var/lib/go-choir/secrets/internal-service-token.header"
+VMCTL_AUTH = f"-H 'X-Internal-Caller: true' $(test -r {TOKEN_HEADER_FILE} && echo -H @{TOKEN_HEADER_FILE})"
 
 
 def log(event, **kv):
@@ -67,7 +75,7 @@ def ssh(host, cmd):
 
 
 def vm_id(host, computer_id):
-    listing = json.loads(ssh(host, "curl -s localhost:8083/internal/vmctl/list") or "{}")
+    listing = json.loads(ssh(host, f"curl -s {VMCTL_AUTH} localhost:8083/internal/vmctl/list") or "{}")
     for o in listing.get("ownerships") or []:
         if o.get("computer_id") == computer_id:
             return o.get("vm_id"), o
@@ -115,7 +123,7 @@ def main():
     log("pre_hibernate", vm_id=vm, rss_kib=receipt["rss_kib_before"], api_socket=sock[-120:])
 
     t0 = time.time()
-    hib = ssh(args.ssh, f"curl -s -XPOST localhost:8083/internal/vmctl/hibernate -H 'Content-Type: application/json' -d '{{\"computer_id\":\"{c.id}\"}}'")
+    hib = ssh(args.ssh, f"curl -s -XPOST {VMCTL_AUTH} localhost:8083/internal/vmctl/hibernate -H 'Content-Type: application/json' -d '{{\"computer_id\":\"{c.id}\"}}'")
     receipt["hibernate_ms"] = int((time.time() - t0) * 1000)
     try:
         receipt["hibernate"] = json.loads(hib)
@@ -138,7 +146,7 @@ def main():
     receipt["state_after"] = [(s.get("key"), s.get("value")) for s in after.get("settings") or []]
     log("woke", request_ms=receipt["wake_request_ms"], state=receipt["state_after"])
 
-    tl = ssh(args.ssh, f"curl -s 'localhost:8083/internal/vmctl/boot-timeline?computer_id={c.id}'")
+    tl = ssh(args.ssh, f"curl -s {VMCTL_AUTH} 'localhost:8083/internal/vmctl/boot-timeline?computer_id={c.id}'")
     try:
         timeline = json.loads(tl)
     except json.JSONDecodeError:

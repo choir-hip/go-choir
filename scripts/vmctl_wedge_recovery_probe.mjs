@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { registerPasskey } from '../frontend/tests/helpers/auth.js';
 import { setupVirtualAuthenticator } from '../frontend/tests/helpers/webauthn.js';
+import { NODE_B_INTERNAL_AUTH } from '../frontend/tests/helpers/node-b-internal-auth.js';
 
 const requireFrontend = createRequire(new URL('../frontend/package.json', import.meta.url));
 const { chromium } = requireFrontend('@playwright/test');
@@ -46,7 +47,7 @@ function nodeB(command, input) {
 }
 
 function ownership(userID) {
-  const raw = nodeB(`curl -fsS -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/list | jq -c --arg u '${userID}' '.ownerships[] | select(.user_id==$u and .desktop_id=="primary" and .kind=="interactive")'`);
+  const raw = nodeB(`curl -fsS -H 'X-Internal-Caller: true' ${NODE_B_INTERNAL_AUTH} http://127.0.0.1:8083/internal/vmctl/list | jq -c --arg u '${userID}' '.ownerships[] | select(.user_id==$u and .desktop_id=="primary" and .kind=="interactive")'`);
   return raw ? JSON.parse(raw) : null;
 }
 
@@ -132,7 +133,7 @@ try {
   result.legs.reload_boots_new_epoch = Boolean(rebooted);
 
   nodeB(
-    `curl -sS -o /dev/null -X POST -H 'Content-Type: application/json' -H 'X-Internal-Caller: true' -H 'X-Choir-Lifecycle-Caller: ${CALLER}' --data-binary @- http://127.0.0.1:8083/internal/vmctl/stop`,
+    `curl -sS -o /dev/null -X POST -H 'Content-Type: application/json' -H 'X-Internal-Caller: true' ${NODE_B_INTERNAL_AUTH} -H 'X-Choir-Lifecycle-Caller: ${CALLER}' --data-binary @- http://127.0.0.1:8083/internal/vmctl/stop`,
     JSON.stringify({ user_id: userID, desktop_id: 'primary' }),
   );
 } catch (error) {

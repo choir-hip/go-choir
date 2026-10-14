@@ -31,6 +31,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { NODE_B_INTERNAL_AUTH } from './helpers/node-b-internal-auth.js';
 
 const requireFrontend = createRequire(new URL('../package.json', import.meta.url));
 const { chromium } = requireFrontend('@playwright/test');
@@ -83,15 +84,15 @@ function writeReceipt(name, data) {
   return path;
 }
 function vmctlList() {
-  return nodeBJSON(`curl -fsS -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list`);
+  return nodeBJSON(`curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} http://127.0.0.1:8083/internal/vmctl/list`);
 }
 function vmctlBootTimeline(params) {
-  return nodeBJSON(`curl -fsS -H "X-Internal-Caller: true" 'http://127.0.0.1:8083/internal/vmctl/boot-timeline?${params}'`);
+  return nodeBJSON(`curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} 'http://127.0.0.1:8083/internal/vmctl/boot-timeline?${params}'`);
 }
 // Maybe-variant for the poll loop: 404 while the boot hasn't written its
 // receipt yet is a pending signal, not an error.
 function vmctlBootTimelineMaybe(params) {
-  const r = nodeBMaybe(`curl -fsS -H "X-Internal-Caller: true" 'http://127.0.0.1:8083/internal/vmctl/boot-timeline?${params}'`);
+  const r = nodeBMaybe(`curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} 'http://127.0.0.1:8083/internal/vmctl/boot-timeline?${params}'`);
   if (r.err) return { pending: r.err };
   try { return JSON.parse(r.out); } catch { return { pending: 'not json' }; }
 }
@@ -335,7 +336,7 @@ async function main() {
   // continuously, so a fresh refresh now measures a real nonzero replay.
   console.log('  [7] owner re-refresh for real replay volume …');
   try {
-    nodeB(`curl -fsS -m 300 -H "X-Internal-Caller: true" -H "Content-Type: application/json" -d '{"user_id":"5bd6de97-3b58-408c-bf89-c42c81b083de","desktop_id":"primary"}' http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null`);
+    nodeB(`curl -fsS -m 300 -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "Content-Type: application/json" -d '{"user_id":"5bd6de97-3b58-408c-bf89-c42c81b083de","desktop_id":"primary"}' http://127.0.0.1:8083/internal/vmctl/refresh >/dev/null`);
     execFileSync('sleep', ['12']);
     const tl = vmctlBootTimeline(`computer_id=${OWNER_COMPUTER_ID}`);
     if (tl?.outcome) {

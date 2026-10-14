@@ -1527,6 +1527,12 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 // only returned once at creation time.
 
 // validScopes is the set of scope strings accepted by the API key system.
+//
+// computer:self_development:propose is retired: it guarded only the deleted
+// start-operation POST and no route checks it. It stays accepted so a
+// computer still serving an older SettingsApp can mint its self-development
+// bundle; remove it once every computer serves the form without it
+// (docs/problems/surface-broken-calls-2026-10-14.md, item 10).
 var validScopes = map[string]bool{
 	"read:texture":                       true,
 	"write:texture":                      true,

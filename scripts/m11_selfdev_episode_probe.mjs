@@ -9,6 +9,7 @@ const requireFrontend = createRequire(new URL('../frontend/package.json', import
 const { chromium } = requireFrontend('@playwright/test');
 import { registerPasskey } from '../frontend/tests/helpers/auth.js';
 import { setupVirtualAuthenticator } from '../frontend/tests/helpers/webauthn.js';
+import { NODE_B_INTERNAL_AUTH } from '../frontend/tests/helpers/node-b-internal-auth.js';
 
 const runtimeProcess = globalThis.process || null;
 const BASE_URL = runtimeProcess?.env?.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news';
@@ -19,7 +20,7 @@ const result = {
   marker,
   base_url: BASE_URL,
   started_at: new Date().toISOString(),
-  harness_version: '2026-09-27',
+  harness_version: '2026-10-14',
   predicate:
     'A fresh owner tracking computer can stage a reversible self-development operation, ' +
     'bind its approval to an independently reproduced qualified-consensus receipt, apply it, ' +
@@ -126,13 +127,13 @@ function nodeBJSON(command, input) {
 
 function vmctlOwnership(userID) {
   return nodeBJSON(
-    `curl -fsS -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list | jq -c --arg u '${userID}' '.ownerships[] | select(.user_id==$u and .desktop_id=="primary" and .kind=="interactive")'`,
+    `curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} http://127.0.0.1:8083/internal/vmctl/list | jq -c --arg u '${userID}' '.ownerships[] | select(.user_id==$u and .desktop_id=="primary" and .kind=="interactive")'`,
   );
 }
 
 function corpusdEventHead(computerID, ownerID) {
   return nodeBJSON(
-    `curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/head?computer_id=${encodeURIComponent(computerID)}'`,
+    `curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/head?computer_id=${encodeURIComponent(computerID)}'`,
   );
 }
 
@@ -147,7 +148,7 @@ function corpusdEvents(computerID, ownerID, limit = 2000) {
   const headSeq = Number(head?.canonical_sequence ?? head?.sequence ?? head?.max_sequence ?? 0);
   if (Number.isFinite(headSeq) && headSeq > limit) afterSequence = headSeq - limit;
   return nodeBJSON(
-    `curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/replay?computer_id=${encodeURIComponent(computerID)}&limit=${limit}&after_sequence=${afterSequence}'`,
+    `curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/replay?computer_id=${encodeURIComponent(computerID)}&limit=${limit}&after_sequence=${afterSequence}'`,
   );
 }
 
@@ -157,20 +158,20 @@ function modeURL(computerID) {
 
 function getMode(computerID, ownerID) {
   return nodeBJSON(
-    `curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" '${modeURL(computerID)}'`,
+    `curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "X-Authenticated-User: ${ownerID}" '${modeURL(computerID)}'`,
   );
 }
 
 function setMode(computerID, ownerID, body) {
   return nodeBJSON(
-    `curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" --data-binary @- '${modeURL(computerID)}'`,
+    `curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "X-Authenticated-User: ${ownerID}" --data-binary @- '${modeURL(computerID)}'`,
     canonicalJSON(body),
   );
 }
 
 function resolveRoute(ownerID) {
   return nodeBJSON(
-    `curl -fsS -H "X-Internal-Caller: true" 'http://127.0.0.1:8083/internal/vmctl/computer-version-routes/resolve?route_slot_id=computer:${encodeURIComponent(ownerID)}:primary'`,
+    `curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} 'http://127.0.0.1:8083/internal/vmctl/computer-version-routes/resolve?route_slot_id=computer:${encodeURIComponent(ownerID)}:primary'`,
   );
 }
 
@@ -349,6 +350,25 @@ async function waitForOperation(page, computerID, operationID, wanted, timeout =
   return last;
 }
 
+// A change starts with POST /api/prompt-bar on a computer armed propose_only:
+// C1e B1 deleted the start-operation POST, and engineering's Freeze opens the
+// operation on the request's trajectory
+// (docs/problems/surface-broken-calls-2026-10-14.md, item 10). The operations
+// list is newest first, so the first match is the newest operation.
+async function startChange(page, computerID, commandID, text, timeout = 3_600_000) {
+  const run = await postJSON(page, '/api/prompt-bar', { text, command_id: commandID });
+  const trajectoryID = run.json?.trajectory_id || '';
+  if (run.status < 200 || run.status >= 300 || !trajectoryID) return { run, trajectoryID, operationID: '' };
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const listed = await fetchJSON(page, `/api/computers/${encodeURIComponent(computerID)}/self-development/operations`);
+    const match = (listed.json?.operations ?? []).find((op) => op.trajectory_id === trajectoryID);
+    if (match?.operation_id) return { run, trajectoryID, operationID: match.operation_id };
+    await page.waitForTimeout(15_000);
+  }
+  return { run, trajectoryID, operationID: '' };
+}
+
 function findMateriality(value) {
   return JSON.stringify(value ?? {}).includes('commitment_materiality');
 }
@@ -429,14 +449,11 @@ try {
   if (proposeOnly?.mode !== 'propose_only' || !proposeOnly?.receipt) throw new Error(`propose_only arm refused: ${JSON.stringify(proposeOnly)}`);
   mark('propose_only_armed');
 
-  const primaryStart = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/self-development/operations`, {
-    idempotency_key: `${marker}:primary`,
-    prompt: `Create a minimal reversible self-development evidence change for ${marker}; freeze, verify, and await approval.`,
-    mode_receipt: proposeOnly.receipt,
-  });
-  result.primary_start = primaryStart.json ?? primaryStart.text;
-  const primaryID = primaryStart.json?.operation_id;
-  if ((primaryStart.status !== 200 && primaryStart.status !== 201) || !primaryID) throw new Error(`primary operation refused: ${JSON.stringify(result.primary_start)}`);
+  const primaryStart = await startChange(page, computerID, `${marker}:primary`,
+    `Create a minimal reversible self-development evidence change for ${marker}; freeze, verify, and await approval.`);
+  result.primary_start = { run: primaryStart.run.json ?? primaryStart.run.text, trajectory_id: primaryStart.trajectoryID };
+  const primaryID = primaryStart.operationID;
+  if (!primaryID) throw new Error(`primary change opened no operation: ${JSON.stringify(result.primary_start)}`);
   result.primary_operation_id = primaryID;
   mark('primary_started', {operation_id: primaryID});
 
@@ -530,15 +547,11 @@ try {
       if (candidateProposeOnly?.mode !== 'propose_only' || !candidateProposeOnly?.receipt) {
         throw new Error(`candidate-B propose_only arm refused: ${JSON.stringify(candidateProposeOnly)}`);
       }
-      const candidateMode = getMode(computerID, ownerID);
-      const candidateStart = await postJSON(page, `/api/computers/${encodeURIComponent(computerID)}/self-development/operations`, {
-        idempotency_key: `${marker}:candidate-b`,
-        prompt: `Produce and verify a candidate-B falsification exercise for ${marker}; await decision.`,
-        mode_receipt: candidateMode.receipt,
-      });
-      result.candidate_b_start = candidateStart.json ?? candidateStart.text;
-      const candidateID = candidateStart.json?.operation_id;
-      if ((candidateStart.status === 200 || candidateStart.status === 201) && candidateID) {
+      const candidateStart = await startChange(page, computerID, `${marker}:candidate-b`,
+        `Produce and verify a candidate-B falsification exercise for ${marker}; await decision.`);
+      result.candidate_b_start = { run: candidateStart.run.json ?? candidateStart.run.text, trajectory_id: candidateStart.trajectoryID };
+      const candidateID = candidateStart.operationID;
+      if (candidateID) {
         result.candidate_b_operation_id = candidateID;
         mark('candidate_b_started', {operation_id: candidateID});
         const candidate = await waitForOperation(page, computerID, candidateID, 'awaiting_approval');
@@ -568,7 +581,7 @@ try {
           result.candidate_b_blocker = 'candidate-B did not reach awaiting_approval; no public commitment-record mint endpoint exists';
         }
       } else {
-        result.candidate_b_blocker = `candidate-B operation refused: ${JSON.stringify(result.candidate_b_start)}`;
+        result.candidate_b_blocker = `candidate-B change opened no operation: ${JSON.stringify(result.candidate_b_start)}`;
       }
     }
 

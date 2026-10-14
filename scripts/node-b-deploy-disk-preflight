@@ -22,8 +22,17 @@ if [ -n "$avail_kib" ] && [ "$avail_kib" -ge "$min_free_kib" ]; then
 fi
 
 echo "    Low root disk headroom; running bounded reclaim before deploy build"
-if ! curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/reclaim; then
-  curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/idle-check || true
+# Host-internal credential for vmctl's internal routes (internal/hostauth),
+# sent as ci.yml's deploy sends it: curl reads the root-only header file, so
+# the secret never appears on a command line. Without it the reclaim is
+# refused once hostauth enforces
+# (docs/problems/surface-broken-calls-2026-10-14.md, item 9).
+choir_internal_auth=()
+if [ -r /var/lib/go-choir/secrets/internal-service-token.header ]; then
+  choir_internal_auth=(-H @/var/lib/go-choir/secrets/internal-service-token.header)
+fi
+if ! curl -fsS -X POST -H 'X-Internal-Caller: true' "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/reclaim; then
+  curl -fsS -X POST -H 'X-Internal-Caller: true' "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/idle-check || true
 fi
 journalctl --vacuum-size=256M || true
 nix-env -p /nix/var/nix/profiles/system --delete-generations +4 || true

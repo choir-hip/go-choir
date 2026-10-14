@@ -207,9 +207,20 @@ func TestLoadServiceHealthURLs_Override(t *testing.T) {
 	if urls["qdrant"] != "http://override:6333/healthz" {
 		t.Errorf("qdrant url = %q, want override", urls["qdrant"])
 	}
-	// Non-overridden entries keep defaults.
-	if urls["ollama"] != DefaultServiceHealthURLs["ollama"] {
-		t.Errorf("ollama url = %q, want default %q", urls["ollama"], DefaultServiceHealthURLs["ollama"])
+}
+
+// Readiness aggregates every default probe, so a default naming a service
+// that does not run on the host keeps /health/ready "degraded" forever.
+// runtime and dolt (127.0.0.1:8085) and ollama (:11434) did exactly that on
+// Node B (docs/problems/surface-broken-calls-2026-10-14.md, item 5).
+func TestDefaultServiceHealthURLsProbeOnlyLiveHostServices(t *testing.T) {
+	if len(DefaultServiceHealthURLs) != 1 || DefaultServiceHealthURLs["qdrant"] == "" {
+		t.Fatalf("default probes = %v, want only qdrant", DefaultServiceHealthURLs)
+	}
+	for _, retired := range []string{"runtime", "dolt", "ollama"} {
+		if _, ok := loadServiceHealthURLs()[retired]; ok {
+			t.Errorf("readiness still probes %s, which does not run on the host", retired)
+		}
 	}
 }
 

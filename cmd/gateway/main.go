@@ -84,8 +84,8 @@ func main() {
 	handler.SetJevTransport(gateway.NewJevTransportFromEnv(cfg.JevJudgmentsEnabled))
 
 	// M22b / C20: wire per-service health checkers so GET /health/{service}
-	// can probe backend dependencies (runtime, qdrant, dolt,
-	// ollama) from outside the gateway. The checkers are lightweight HTTP
+	// can probe the live host dependencies (gateway.DefaultServiceHealthURLs)
+	// from outside the gateway. The checkers are lightweight HTTP
 	// probes with a 2s timeout; they expose no secrets. The same checkers
 	// feed the /health/ready aggregator so overall readiness reflects
 	// backend dependency health, not just gateway liveness.

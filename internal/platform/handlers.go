@@ -343,9 +343,6 @@ func (h *Handler) HandleInternalGetTextureDocument(w http.ResponseWriter, r *htt
 		return
 	}
 	docID := strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/documents/")
-	if docID == r.URL.Path {
-		docID = strings.TrimPrefix(r.URL.Path, "/internal/platform/texture/documents")
-	}
 	docID = strings.TrimSuffix(docID, "/revisions")
 	docID = strings.Trim(docID, "/")
 	docID = strings.TrimSpace(docID)
@@ -504,7 +501,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/texture/sync", h.HandleInternalSyncTextureDocument)
 	s.HandleFunc("/internal/platform/texture/revisions/", h.HandleInternalGetTextureRevision)
 	s.HandleFunc("/internal/platform/texture/documents/", h.HandleInternalListTextureRevisions)
-	s.HandleFunc("/internal/platform/texture/documents", h.HandleInternalGetTextureDocument)
 	s.HandleFunc("/internal/platform/artifact-gc", h.HandleArtifactGC)
 }
 

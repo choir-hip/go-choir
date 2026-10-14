@@ -47,8 +47,8 @@ type Config struct {
 	// retiring its station-owned credentials and rate-limit buckets.
 	JevJudgmentsEnabled bool
 
-	// ServiceHealthURLs maps a dependency service name (e.g. "runtime",
-	// "qdrant", "dolt", "ollama") to the URL the gateway should
+	// ServiceHealthURLs maps a dependency service name (today only
+	// "qdrant") to the URL the gateway should
 	// probe for GET /health/{service}. Empty entries fall back to defaults
 	// (see DefaultServiceHealthURLs). These are used by the per-service
 	// health endpoint and /health/ready aggregator so operators can observe
@@ -65,16 +65,16 @@ const (
 )
 
 // DefaultServiceHealthURLs are the default probe URLs for the per-service
-// health endpoint. Each points at a localhost-only backend service the
-// gateway depends on (directly or transitively). "dolt" is probed through
-// the autoputer runtime readiness endpoint because Dolt is an embedded store
-// owned by the runtime, not a standalone TCP service. Operators can override
-// any entry via GATEWAY_HEALTH_<SERVICE>_URL.
+// health endpoint and the /health/ready aggregator. Each must point at a
+// service that runs on the host beside the gateway, or readiness can never
+// go green. Only qdrant does (nix/node-b.nix services.qdrant). The former
+// "runtime" and "dolt" probes targeted 127.0.0.1:8085, where nothing listens
+// since computers run in VMs, and "ollama" is not deployed; with them
+// /health/ready was permanently "degraded"
+// (docs/problems/surface-broken-calls-2026-10-14.md, item 5). Operators can
+// override an entry via GATEWAY_HEALTH_<SERVICE>_URL.
 var DefaultServiceHealthURLs = map[string]string{
-	"runtime": "http://127.0.0.1:8085/health",
-	"qdrant":  "http://127.0.0.1:6333/healthz",
-	"dolt":    "http://127.0.0.1:8085/health/ready",
-	"ollama":  "http://127.0.0.1:11434/api/tags",
+	"qdrant": "http://127.0.0.1:6333/healthz",
 }
 
 // LoadConfig resolves gateway configuration from environment variables.

@@ -199,17 +199,6 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, operation)
-	case len(parts) == 3 && parts[1] == "events":
-		if r.Method != http.MethodGet || !computerevent.IsSHA256(strings.TrimSpace(parts[2])) {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer event not found"})
-			return
-		}
-		event, found, err := h.rt.store.EventByDigest(r.Context(), computerID, strings.TrimSpace(parts[2]))
-		if err != nil || !found {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer event not found"})
-			return
-		}
-		writeAPIJSON(w, http.StatusOK, event)
 	default:
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer route not found"})
 	}

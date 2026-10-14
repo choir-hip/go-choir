@@ -114,12 +114,12 @@ export function lifecycleCurrentDocumentRevisionID(snapshot) {
     || '';
 }
 
-export async function createRevision(docId, { content, bodyDoc, sourceEntities, authorKind, authorLabel, citations, metadata, parentRevisionId, allowRebase = false }) {
-  const body = {
-    content,
-    author_kind: authorKind,
-    author_label: authorLabel,
-  };
+// createRevision posts an owner revision. The server decodes the body strictly
+// (unknown fields are a 400) and always records the authenticated owner as the
+// author, so the body carries no authorship fields
+// (docs/problems/surface-broken-calls-2026-10-14.md, item 1).
+export async function createRevision(docId, { content, bodyDoc, sourceEntities, citations, metadata, parentRevisionId, allowRebase = false }) {
+  const body = { content };
   if (bodyDoc !== undefined) {
     body.body_doc = bodyDoc;
   }

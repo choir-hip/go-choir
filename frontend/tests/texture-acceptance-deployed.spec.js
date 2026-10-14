@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from './helpers/fixtures.js';
+import { NODE_B_INTERNAL_AUTH } from './helpers/node-b-internal-auth.js';
 
 // Texture acceptance suite (Gate 1 exit item): docs/texture-acceptance-suite.md.
 // Each check is a failure the owner reported this week or the crash rule
@@ -243,7 +244,7 @@ test('Texture acceptance suite on staging', async ({ desktopSession }) => {
   const beforeCrash = (await appagentRevisions(page, docID)).length;
   const payload = JSON.stringify({ user_id: userID, desktop_id: 'primary' });
   const refresh = execFileSync('ssh', ['-o', 'BatchMode=yes', 'node-b',
-    `curl -sS -m 300 -X POST -H "X-Internal-Caller: true" -H "Content-Type: application/json" -d '${payload}' http://127.0.0.1:8083/internal/vmctl/refresh`],
+    `curl -sS -m 300 -X POST -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "Content-Type: application/json" -d '${payload}' http://127.0.0.1:8083/internal/vmctl/refresh`],
   { encoding: 'utf8' }).trim();
   const back = await waitFor(async () => {
     const doc = await api(page, 'GET', `/api/texture/documents/${docID}`);

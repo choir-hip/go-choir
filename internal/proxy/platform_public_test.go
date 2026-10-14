@@ -201,6 +201,13 @@ func TestPlatformFrontStoriesIsPublicAndNeverCallsAComputer(t *testing.T) {
 	}
 }
 
+// The proposal is recorded for its author by corpusd and nowhere else. R3d
+// deleted the author guest's /internal/texture/proposals route; the proxy
+// used to POST there anyway (after resolving, and so starting, the author's
+// computer) and always fell back (docs/problems/surface-broken-calls-2026-10-14.md,
+// item 2). Failure modes pinned: a request reaches the author computer, the
+// proxy calls corpusd's delivery-state route, or the client sees a delivery
+// state corpusd did not record.
 func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *testing.T) {
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -208,7 +215,6 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 	}
 
 	var gotPlatformReq platform.SubmitPublicationProposalRequest
-	var gotDeliveryUpdate platform.UpdateProposalDeliveryStateRequest
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Internal-Caller") != "true" {
 			t.Fatalf("corpusd missing internal caller header")
@@ -230,22 +236,12 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 				DeliveryState:        "recorded_for_author",
 				State:                "proposed",
 			})
-		case "/internal/platform/proposal-deliveries/state":
-			if err := json.NewDecoder(r.Body).Decode(&gotDeliveryUpdate); err != nil {
-				t.Fatalf("decode platform delivery update: %v", err)
-			}
-			_ = json.NewEncoder(w).Encode(platform.UpdateProposalDeliveryStateResponse{
-				ProposalID:    gotDeliveryUpdate.ProposalID,
-				DeliveryID:    gotDeliveryUpdate.DeliveryID,
-				DeliveryState: gotDeliveryUpdate.DeliveryState,
-			})
 		default:
 			t.Fatalf("corpusd path: got %s", r.URL.Path)
 		}
 	}))
 	defer corpusd.Close()
 
-	delivered := false
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -268,17 +264,6 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 				DocID:      "doc-1",
 				OwnerID:    "reader-1",
 				Content:    "reader proposal content",
-			})
-		case "/internal/texture/proposals":
-			if r.Header.Get("X-Internal-Caller") != "true" {
-				t.Fatalf("author delivery missing internal caller")
-			}
-			delivered = true
-			_ = json.NewEncoder(w).Encode(authorProposalDeliveryResponse{
-				DeliveryID:    "delivery-1",
-				TargetAgentID: "management:author-1",
-				ChannelID:     "management:author-1",
-				State:         "delivered",
 			})
 		default:
 			t.Fatalf("autoputer path: got %s", r.URL.Path)
@@ -311,12 +296,6 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 	if len(gotPlatformReq.Transclusions) != 1 || gotPlatformReq.Transclusions[0].SpanID != "span-1" {
 		t.Fatalf("platform proposal transclusions: %#v", gotPlatformReq.Transclusions)
 	}
-	if !delivered {
-		t.Fatalf("expected author delivery attempt")
-	}
-	if gotDeliveryUpdate.ProposalID != "readerprop-1" || gotDeliveryUpdate.DeliveryID != "delivery-1" || gotDeliveryUpdate.DeliveryState != "delivered" {
-		t.Fatalf("platform delivery update mismatch: %#v", gotDeliveryUpdate)
-	}
 	if strings.Contains(w.Body.String(), "source_owner_id") {
 		t.Fatalf("client proposal response leaked source owner: %s", w.Body.String())
 	}
@@ -324,7 +303,7 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 	if err := json.NewDecoder(w.Body).Decode(&clientResp); err != nil {
 		t.Fatalf("decode client proposal response: %v", err)
 	}
-	if clientResp.DeliveryState != "delivered" {
-		t.Fatalf("client delivery_state = %q, want delivered", clientResp.DeliveryState)
+	if clientResp.DeliveryState != "recorded_for_author" {
+		t.Fatalf("client delivery_state = %q, want corpusd's recorded_for_author", clientResp.DeliveryState)
 	}
 }

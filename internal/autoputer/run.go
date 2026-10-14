@@ -585,8 +585,9 @@ func Run() {
 	// SMG: the management desk reaches the product API in-cell via
 	// choir.ProductAPI (broker ActionProductAPI); the typed
 	// product_api_request tool is deleted. The canonical route table is
-	// the same server `s`.
-	rt.Runtime.SetProductAPIHandler(s)
+	// the same server `s`, bound to this computer's boot identity (the
+	// computer routes require it; docs/problems/surface-broken-calls-2026-10-14.md).
+	rt.Runtime.SetProductAPIHandler(s, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")))
 	log.Printf("autoputer: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
 		sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
 		rt.Runtime.ToolRegistryForProfile(agentprofile.Management).Size(),

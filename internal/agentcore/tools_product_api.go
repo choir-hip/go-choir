@@ -23,24 +23,28 @@ const productAPIMaxBodyBytes = 1 << 20
 // SetProductAPIHandler on the Runtime.
 
 // SetProductAPIHandler binds the canonical product API route table for the
-// management desk's choir.ProductAPI verb. Called once at autoputer boot.
-func (rt *Runtime) SetProductAPIHandler(h http.Handler) {
+// management desk's choir.ProductAPI verb, and the computer's own identity
+// the calls are bound to. Called once at autoputer boot with the boot
+// identity (CHOIR_COMPUTER_ID); an empty computerID sends no binding, so
+// /api/computers/ routes refuse.
+func (rt *Runtime) SetProductAPIHandler(h http.Handler, computerID string) {
 	rt.productAPIMu.Lock()
 	rt.productAPISrv = h
+	rt.productAPIComputerID = strings.TrimSpace(computerID)
 	rt.productAPIMu.Unlock()
 }
 
-func (rt *Runtime) productAPIServer() http.Handler {
+func (rt *Runtime) productAPIServer() (http.Handler, string) {
 	rt.productAPIMu.RLock()
 	defer rt.productAPIMu.RUnlock()
-	return rt.productAPISrv
+	return rt.productAPISrv, rt.productAPIComputerID
 }
 
 // productAPIRequest serves one allowlisted product API call as the given
 // owner. Called from the desk-cell egress dispatch; ownerID/ownerEmail come
 // from the run's execution context, never from cell input.
 func (rt *Runtime) productAPIRequest(ctx context.Context, ownerID, ownerEmail, method, path string, body json.RawMessage) (string, error) {
-	s := rt.productAPIServer()
+	s, computerID := rt.productAPIServer()
 	if s == nil {
 		return "", fmt.Errorf("choir.ProductAPI host unavailable")
 	}
@@ -69,6 +73,13 @@ func (rt *Runtime) productAPIRequest(ctx context.Context, ownerID, ownerEmail, m
 	req.Header.Set("X-Authenticated-User", ownerID)
 	if ownerEmail != "" {
 		req.Header.Set("X-Authenticated-Email", ownerEmail)
+	}
+	// The computer routes require the caller's computer binding (the proxy
+	// sets it for owner requests). An in-process ProductAPI call is this
+	// computer acting on itself: the binding is its boot identity, so a path
+	// naming any other computer is refused by the router.
+	if computerID != "" {
+		req.Header.Set("X-Authenticated-Computer", computerID)
 	}
 	if rdr != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -173,6 +184,13 @@ func validateProductAPIRoute(method, requestURI string) error {
 		if path == strings.TrimSuffix(blocked, "/") || strings.HasPrefix(path, blocked) {
 			return fmt.Errorf("product_api refuses non-product route %s", path)
 		}
+	}
+	// The computer routes are read-only to a desk. Their writes are owner
+	// acts (operation decisions, restore, replace-workspace, bootstrap-chain,
+	// rematerialize, residue import), fenced off agents in 5b17bb572; the
+	// computer binding above must not hand them to the management desk.
+	if method != http.MethodGet && strings.HasPrefix(path, "/api/computers/") {
+		return fmt.Errorf("product_api refuses %s %s: computer routes are read-only to a desk; their writes are owner acts", method, path)
 	}
 	// Only the Texture desk writes a Texture (protocol P2b): a desk reads
 	// Texture routes but never mutates one. A desk that needs a Texture

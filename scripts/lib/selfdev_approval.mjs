@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { NODE_B_INTERNAL_AUTH } from '../../frontend/tests/helpers/node-b-internal-auth.js';
 
 export const POLICY_DIGEST = 'c34ddf073aecaacc307f375d6f2e398798350d7a48c8d3c2e7c6d10248b394d7';
 
@@ -75,7 +76,7 @@ export function nodeBJSON(command, input) {
 
 export function corpusdEventHead(computerID, ownerID) {
   return nodeBJSON(
-    `curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/head?computer_id=${encodeURIComponent(computerID)}'`,
+    `curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "X-Authenticated-User: ${ownerID}" 'http://127.0.0.1:8086/internal/computers/events/head?computer_id=${encodeURIComponent(computerID)}'`,
   );
 }
 
@@ -84,12 +85,12 @@ function modeURL(computerID) {
 }
 
 export function getMode(computerID, ownerID) {
-  return nodeBJSON(`curl -fsS -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" '${modeURL(computerID)}'`);
+  return nodeBJSON(`curl -fsS -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "X-Authenticated-User: ${ownerID}" '${modeURL(computerID)}'`);
 }
 
 export function setMode(computerID, ownerID, body) {
   return nodeBJSON(
-    `curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" -H "X-Authenticated-User: ${ownerID}" --data-binary @- '${modeURL(computerID)}'`,
+    `curl -fsS -X POST -H "Content-Type: application/json" -H "X-Internal-Caller: true" ${NODE_B_INTERNAL_AUTH} -H "X-Authenticated-User: ${ownerID}" --data-binary @- '${modeURL(computerID)}'`,
     canonicalJSON(body),
   );
 }

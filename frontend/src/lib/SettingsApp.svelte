@@ -46,7 +46,6 @@
   const selfDevScopes = [
     'computer:self_development:read',
     'computer:self_development:genesis',
-    'computer:self_development:propose',
     'computer:self_development:approve',
     'computer:self_development:rollback',
     'computer:self_development:mode',

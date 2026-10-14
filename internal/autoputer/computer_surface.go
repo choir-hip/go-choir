@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -26,6 +27,16 @@ func NewComputerSurfaceFromEnv() *ComputerSurface {
 }
 
 func (h *ComputerSurface) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// An /api path that reached the catch-all names no route. Answer it as
+	// an API would, so a stale client sees 404, not index.html or 405
+	// (docs/problems/surface-broken-calls-2026-10-14.md, item 6).
+	if cleaned := path.Clean("/" + r.URL.Path); cleaned == "/api" || strings.HasPrefix(cleaned, "/api/") {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"api route not found"}` + "\n"))
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return

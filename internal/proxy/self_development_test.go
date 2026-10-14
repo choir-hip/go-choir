@@ -286,8 +286,8 @@ func TestPublicProposalAndDecisionRequireAuthThenForwardGuestRefuse(t *testing.T
 	proposal := httptest.NewRequest(http.MethodPost, "/api/computers/computer-propose/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
 	proposalResponse := httptest.NewRecorder()
 	handler.HandleAPI(proposalResponse, proposal)
-	if proposalResponse.Code != http.StatusUnauthorized {
-		t.Fatalf("unauthenticated proposal status=%d body=%s", proposalResponse.Code, proposalResponse.Body.String())
+	if proposalResponse.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("unauthenticated proposal status=%d body=%s, want 405 (the start-operation POST is gone)", proposalResponse.Code, proposalResponse.Body.String())
 	}
 	decision := httptest.NewRequest(http.MethodPost, "/api/computers/computer-decision/self-development/operations/operation-decision/decision", strings.NewReader(`{"decision":"reject"}`))
 	decisionResponse := httptest.NewRecorder()
@@ -297,24 +297,20 @@ func TestPublicProposalAndDecisionRequireAuthThenForwardGuestRefuse(t *testing.T
 	}
 }
 
-func TestSelfDevelopmentGuestForwardsProposeAndPassesModeOffRefuse(t *testing.T) {
-	var gotUser, gotComputer, gotPath, gotMethod string
+// C1e B1 deleted the guest's start-operation POST, so the proxy no longer maps
+// POST .../self-development/operations to a "propose" action: it answers 405
+// before auth, the guest is never called, and no scope (the retired
+// computer:self_development:propose, or admin) reopens it
+// (docs/problems/surface-broken-calls-2026-10-14.md, item 10).
+func TestSelfDevelopmentOperationsPostIsRefusedAtTheProxy(t *testing.T) {
+	guestCalls := 0
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotUser = r.Header.Get("X-Authenticated-User")
-		gotComputer = r.Header.Get("X-Authenticated-Computer")
-		gotPath = r.URL.Path
-		gotMethod = r.Method
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"error":"current signed mode does not authorize proposal"}`))
+		guestCalls++
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	}))
 	defer autoputer.Close()
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
 	user, err := store.CreateUser("selfdev-propose-user", "selfdev-propose@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "propose", []string{"computer:self_development:propose"}, "computer-a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,31 +323,22 @@ func TestSelfDevelopmentGuestForwardsProposeAndPassesModeOffRefuse(t *testing.T)
 	defer ownership.Close()
 	handler.vmctlClient = vmctl.NewClient(ownership.URL)
 
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
-	request.Header.Set("Authorization", "Bearer "+secret)
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-	handler.HandleAPI(response, request)
-	if response.Code != http.StatusConflict {
-		t.Fatalf("mode-off proposal status=%d body=%s", response.Code, response.Body.String())
+	for _, scope := range []string{"computer:self_development:propose", "admin"} {
+		_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, scope, []string{scope}, "computer-a", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
+		request.Header.Set("Authorization", "Bearer "+secret)
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler.HandleAPI(response, request)
+		if response.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s operations POST status=%d body=%s, want 405", scope, response.Code, response.Body.String())
+		}
 	}
-	if !strings.Contains(response.Body.String(), "does not authorize proposal") {
-		t.Fatalf("guest refuse not forwarded: %s", response.Body.String())
-	}
-	if gotUser != user.ID || gotComputer != "computer-a" || gotPath != "/api/computers/computer-a/self-development/operations" || gotMethod != http.MethodPost {
-		t.Fatalf("upstream binding user=%q computer=%q path=%q method=%q", gotUser, gotComputer, gotPath, gotMethod)
-	}
-
-	denied := httptest.NewRequest(http.MethodPost, "/api/computers/computer-a/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
-	_, readSecret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "read2", []string{"computer:self_development:read"}, "computer-a", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	denied.Header.Set("Authorization", "Bearer "+readSecret)
-	deniedResponse := httptest.NewRecorder()
-	handler.HandleAPI(deniedResponse, denied)
-	if deniedResponse.Code != http.StatusForbidden {
-		t.Fatalf("read-scope propose status=%d body=%s", deniedResponse.Code, deniedResponse.Body.String())
+	if guestCalls != 0 {
+		t.Fatalf("guest called %d times for a refused operations POST", guestCalls)
 	}
 }
 
@@ -391,8 +378,8 @@ func TestSelfDevelopmentGuestForwardsDecisionWithApproveScope(t *testing.T) {
 }
 
 // Listing the operations collection is a read: a read-scoped key lists, and a
-// propose-only key (which may start operations) may not read them back through
-// this route — GET on the collection never borrows the POST scope.
+// key holding only the retired propose scope may not read them through this
+// route.
 func TestSelfDevelopmentGuestListsOperationsWithReadScope(t *testing.T) {
 	var gotPath, gotMethod, gotQuery string
 	autoputer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

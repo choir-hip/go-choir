@@ -270,10 +270,6 @@
     }, title || currentDoc.title || appContext.windowTitle || 'Texture');
   }
 
-  function getAuthorLabel() {
-    return currentUser?.email || 'unknown';
-  }
-
   function draftStorageKey(docId = currentDoc?.doc_id) {
     const owner = currentUser?.id || currentUser?.email || 'guest';
     return buildDraftStorageKey(owner, docId || '');
@@ -691,8 +687,6 @@
       content: structuredContent,
       bodyDoc,
       sourceEntities: structuredSourceEntities,
-      authorKind: 'user',
-      authorLabel: getAuthorLabel(),
       metadata: buildRevisionMetadata(),
       parentRevisionId: currentRevision?.revision_id || '',
       allowRebase: false,
@@ -925,8 +919,6 @@
         if (appContext.createInitialVersion && initialValue) {
           const initialRevision = await createRevision(currentDoc.doc_id, {
             content: initialValue,
-            authorKind: 'user',
-            authorLabel: getAuthorLabel(),
             metadata: {
               ...buildRevisionMetadata(),
               created_from: appContext.createdFrom || 'conductor',
@@ -1082,8 +1074,6 @@
       editorBodyDoc = null;
       const revision = await createRevision(currentDoc.doc_id, {
         content: editorValue,
-        authorKind: 'user',
-        authorLabel: getAuthorLabel(),
         citations: publishedCitationPayload(ref),
         metadata: {
           ...buildRevisionMetadata(),
