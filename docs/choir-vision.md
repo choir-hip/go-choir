@@ -3,181 +3,178 @@
 **Status:** product vision — the north star that mission sequencing flows
 downstream from. Not an implementation plan, not doctrine. Where this document
 and `docs/choir-doctrine.md` conflict, the doctrine is apex; where this
-document and a Definition conflict, the Definition governs.
+document and a Definition conflict, the Definition governs. Current sequencing
+lives in `docs/ACTIVE.md`, not here.
 
 ## The One Idea
 
 **Choir is the automatic computer: a persistent computer that works for you
 continuously and develops itself under your supervision.**
 
-That is the whole product. Everything else — settlement, forks, publication,
-multiplayer authoring, the World Wire — is what the automatic computer does,
-not what it is.
+The usual agent product gives an agent a computer and a chat thread to reach
+you through. Choir inverts it: **the multi-agent system is the computer.** AI
+is framed not as a worker that replaces a person but as the thing that replaces
+the computer. Everything else — settlement, forks, publication, Autopaper,
+Autoradio, reputation — is what the automatic computer does, not what it is.
+
+The tagline (owner, 2026-10-14) is **multiplayer intelligence for the learning
+economy**: people and agents learning from each other's settled records.
 
 ## The Order
 
-Two mountains, climbed in exactly one order:
+1. **The automatic computer, working for supervised self-development.** A
+   persistent per-user computer that runs continuously, corrects itself, and
+   improves itself — its own code, state, and way of working — within rules the
+   owner grants. This is the core; a computer that cannot develop itself cannot
+   be trusted to report the world.
+2. **Autopaper, the automatic newspaper — downstream, and now live.** Live since
+   2026-10-13 as a platform tier: scheduled sources polled around the clock,
+   stories written and revised by the computer's own desks, citations checked,
+   versions published at public permalinks. It proves the substrate carries
+   real continuous work; it is the first large application of the computer, not
+   a separate ontology. Its synthesis quality is still maturing, and it runs
+   ahead of the self-development gate by the owner's deliberate choice, which
+   makes proving self-development on the new substrate the weak link and the
+   next priority.
+3. **Autoradio**, the interactive, two-way listening and voice surface over the
+   same objects: a prototype only with free capacity and framed as one,
+   production after the architecture work, with a no-slop bar.
 
-1. **The automatic computer working for supervised self-development.** A
-   persistent, per-user computer that runs continuously, corrects itself, and
-   improves itself — its own code, its own state, its own way of working —
-   within rules the owner grants. This is the core. Until it works, nothing
-   else is real.
-2. **The World Wire, the automatic newspaper.** Once the computer genuinely
-   develops itself, it can run the news: sourcing, writing, verification,
-   correction, and publication operating around the clock. The automatic
-   newspaper is the payoff the automatic computer enables — the first big
-   downstream application, not a separate product.
+The owner's standing correction (2026-10-14): **deepen foundations, do not
+accelerate growth.** Growth, go-to-market and fundraising come after the
+software reaches diminishing marginal returns for more human attention.
 
-The order is not negotiable. A computer that cannot develop itself cannot be
-trusted to report the world. Self-development comes first because it is the
-hardest thing and the thing everything else depends on.
+World Wire, Universal Wire and `sourcecycled` are retired names for Autopaper;
+some code identifiers keep them until the rename
+(`docs/autopaper-sw-design-2026-10-09.md` §9). The shared graph of published
+objects that computers adopt onto their own tapes is **the Autopaper object
+graph**.
 
 ## The Automatic Computer
 
-The product object is a persistent computer, not a conversational session, not
+The product object is a persistent computer — not a conversational session, not
 a disposable autoputer, not a publishing surface:
 
-- **Persistent** — it has a stable identity and a canonical event chain. It is
-  still there tomorrow, and its history is its state.
+- **Persistent** — stable identity (`ComputerID`) and a canonical event chain;
+  its history is its state.
 - **One tape** — every meaningful change is a typed transaction on the audit
   log. The tape is the authority; every surface is a projection of it.
-- **Deterministic** — projections are computed by reducers folding the tape.
-  Given the tape and the code version, the same computer can be reconstructed
-  anywhere. State is intentional, not an accident of execution: every byte has
-  a reason.
-- **Durable work** — long-running trajectories run for hours and days, and
-  survive restarts, because the database remembers and the tape is replayable.
+- **Deterministic** — projections are reducers folding the tape; given the tape
+  and the code version, the computer can be reconstructed anywhere.
+- **Durable work** — trajectories run for hours and days. A crash ends work; a
+  planned restart may resume it (`CLAUDE.md`).
 
-A human cannot supervise this computer action by action. It runs too long and
-too continuously for that. So supervision happens where the work lives: at the
-level of ideas and standing state, read off the artifact — not in the
-transcript.
+Four persistent root desks share the work: **Texture** (the only agent that
+writes documents; the owner-facing supervision surface), **management**
+(coherence, attention, spend, admission), **engineering** (mutation only inside
+disposable capsules) and **research** (read-only toward the world). They talk
+through precommitment records.
+
+A human cannot supervise this computer action by action. Supervision happens
+where the work lives: at the level of ideas and standing state, read off the
+artifact — not in the transcript.
 
 ## Supervised Self-Development — the first goal
 
-The automatic computer is a self-authoring program: it changes itself through
-the same typed transactions it runs on. Each change is a conjecture tested by
-execution; the computer learns what it should be by acting on what it
-believes, observing results, and revising.
+The computer changes itself through the same typed transactions it runs on.
+Each change is a conjecture tested by execution. Self-development is
+**supervised** because the human is the constitutional root of intention, not
+because the human approves every effect:
 
-Self-development is **supervised** because the human is the constitutional root
-of intention, not because the human approves every consequential action:
-
-- The owner establishes and can revise the policies under which the computer
-  acts.
+- The owner sets and can revise the policies under which the computer acts.
 - Effect-specific multiagent consensus evaluates proposals under those
-  policies. A human may be a required, optional, or absent participant.
-- Irreversible effects remain inside the autonomy window when their stronger
-  policy is satisfied. Their consequences cannot be erased by restore, so they
-  require stronger evidence, narrower subject binding, durable receipts, and
-  compensation or new forward action when correction is needed.
-- The owner does not need to be the continuous operator. Supervision of last
-  resort is the honest claim: rarely exercised by design, never made to vanish.
-- The computer corrects itself within policy—visible, legible, and on the tape;
-  reversible state may additionally return to a prior checkpoint.
+  policies; a human may be a required, optional, or absent participant.
+- Irreversible effects stay inside the autonomy window when their stronger
+  policy is satisfied (stronger evidence, narrower binding, durable receipts,
+  compensation or forward action), because restore cannot erase them.
+- Supervision of last resort is the honest claim: rarely exercised by design,
+  never made to vanish.
 
-The mechanism by which self-development becomes real and legible is
-**correction as an ordinary write**: a rival proposal is forked, a
-policy-governed consensus selects one effective head, and a correction
-supersedes a settlement when new admissible evidence falsifies it. The owner
-holds constitutional authority over policy; trusted reducers and actuators
-enforce each consensus decision. This is the load-bearing spine of the vision —
-the thing to make real first — and it is deliberately stated as a consequence
-of the vision, not as the vision itself.
+The mechanism is **correction as an ordinary write**: a rival proposal is
+forked, a policy-governed consensus selects one effective head, and a
+correction supersedes a settlement when new admissible evidence falsifies it.
 
-The learning mechanism is **precommitment records**: before a step with a
-verifiable outcome, the computer commits a typed prediction (hypothesis,
-assumptions, alternatives, probabilities); the outcome resolves and scores it;
-the accumulated log is the computer's evolving world model. One mechanism
-serves context packs (learning), procedural fidelity (alignment), and audit —
-and it is what the human supervises: the commitment ledger, not the transcript.
-See `docs/Precommitment Records — Engineering Memo.md`.
+The proof target is a self-development program on staging: real changes to its
+own working state, under granted rules, legible on the tape, durable across
+restarts. One complete episode has been shown (2026-10-10); the gate must be
+re-proven on the records substrate. Self-development is only real when built on
+precommitment scoring — self-supervising and self-learning, not another app
+builder.
 
-The proof target is a self-development program on staging: the computer makes
-real changes to its own working state, under granted rules, with the whole
-story legible on the tape and durable across restarts. One bounded episode is
-the minimum proof target; the gate is a program whose depth is set by the
-revised roadmap (`world-wire-mission-stack-2026-09-22.md`, Phase 3), not a
-single candidate.
+## Precommitment Records: The Core Mechanism
 
-## The World Wire — the downstream payoff
+Before a step with a verifiable outcome, an agent commits a typed prediction
+(hypothesis, assumptions, alternatives, probabilities); the outcome resolves and
+scores it; the accumulated log is the agent's evolving world model. This is
+prospective self-alignment (PSA), the core of the product:
 
-Once the automatic computer works, the automatic newspaper follows: a
-continuous publication that reports the world *as reported* — contested and
-plural, not a god's-eye index.
+- **In-context reinforcement learning.** Records live in the desk's REPL and come
+  back as context packs and on-demand retrieval, so feedback teaches a model
+  without touching its weights.
+- **Verifiability from unverifiable work.** Turning a task into a scoreable
+  prediction elicits a verifiable signal where there was none.
+- **Oversight.** The same records, viewed by role, are the supervision surface.
+  Several scorers (self, peer desks, Jev, rules, humans) score each settlement,
+  and each scorer is itself scored.
 
-- Sources are gathered, synthesized, and written by the computer's own
-  durable trajectories.
-- Verification and correction are the same settlement machinery that made
-  self-development legible, pointed at claims about the world.
-- Publication runs 24/7 because the computer itself runs 24/7.
+Documentation-driven development is the same pattern applied to the builders:
+goal files with value criteria, typed conjectures and named evidence are
+precommitments for coding agents. See
+[`precommitment-records.md`](precommitment-records.md).
 
-The World Wire is not a separate ontology. It is the automatic computer's
-first large application: the same tape, the same artifacts, the same settlement
-spine, one more projection. Its reach and honesty are bounded by the
-computer's; there is no wire before the computer.
+## Multiplayer By Design
+
+Choir is multiplayer by design, which is why its interfaces are content-centric
+— Texture documents, records, supervision surfaces — rather than chat logs. Chat
+does not scale to long horizons, many agents or many users: after an eight-hour
+run you do not read the message log, and an eight-day run with eighty agents and
+eight teammates is unreadable as one. Multiplayer happens between computers
+through publication and adoption, never direct merge.
+
+The end state is an **organizational operating system**: the organization is a
+multi-agent system in which humans are one type of agent and language-model
+agents another. One Texture supervises one task, the root Texture supervises all
+Textures in a computer, and a further level supervises many computers. Executives
+and managers oversee every agent in their purview, now and historically,
+through an interactive surface — not a dashboard. Chat agents remain interfaces
+into Choir, which runs in the background around the clock. Each app becomes an
+app agent: its own desk, with front ends as replaceable clients.
 
 ## What This Vision Is Not
 
-- **Not chat-first.** Choir is multiplayer by design — "multiplayer
-  intelligence for the learning economy" is the tagline (owner, 2026-10-14) —
-  and that is why its interfaces are content-centric (Texture documents,
-  records, supervision surfaces) rather than chat logs: chat does not scale
-  to long-horizon, multi-agent, multi-user work. After an eight-hour run you
-  do not read the message log; imagine an eight-day run with eighty agents
-  and eight teammates.
-- **Not a settlement protocol.** Settlement, forks, and publication are
-  machinery. They are how supervised self-development and the World Wire stay
-  legible and honest. Confusing the machinery for the vision is how work
-  drifts into implementation detail and loses the big picture.
-- **Not a supervised-by-default platform.** The human is the constitutional
-  authority and root of intention, but not a universal per-effect approval gate.
-  The machine works continuously under effect-specific consensus policies;
-  human participation is one policy option.
-- **Not a publication product.** The newspaper is a downstream proof of the
-  automatic computer, not the product the substrate is built for.
-## How Missions Flow From Here
-
-Implementation flows downstream from this vision, in this order:
-
-1. **Supervised self-development, proven.** Restore the automatic computer's
-   resident liveness on the existing lifecycle authority, then prove the
-   self-development program: candidate changes proposed, settled under granted
-   rules, and legibly corrected — durable across restart, on staging.
-2. **Deletion of displaced machinery.** As the proven slice displaces
-   duplicated publication and liveness paths, delete them. Cleanup follows
-   proof; it does not lead it.
-3. **The World Wire.** Only after the computer demonstrably develops itself,
-   point the same settlement spine at reporting, verification, and continuous
-   publication — the automatic newspaper.
-
-Each step is a throughline goal file with its own pre-flight, evidence class,
-and landing loop. The ordered mission stack from here to World Wire live is
-[`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md).
-The vision does not sequence itself; it sets the order in which
-candidate missions are worth writing.
+- **Not chat-first** (above).
+- **Not a settlement protocol.** Settlement, forks and publication are machinery
+  that keeps self-development and Autopaper legible and honest.
+- **Not supervised-by-default.** The human is the root of intention, not a
+  universal per-effect approval gate; human participation is one policy option.
+- **Not a publication product.** Autopaper is live and matters, but it is a tier
+  the substrate carries, not what the substrate exists for.
+- **Not growth-first.** Autoradio may drive growth; that is no reason to
+  accelerate it before the foundations are deep.
 
 ## Why This Vision Is Right
 
 [`signal-is-sparse-not-the-learner-2026-08-01.md`](signal-is-sparse-not-the-learner-2026-08-01.md)
-is the foundational argument for this vision: sample inefficiency is undirected
-learning, not architecture; signal density comes from a learner with standing
-questions and from correction by genuinely independent others; and both have to
-be built into the environment the intelligence runs in. Choir is that
-environment — the tape is standing state, the harness is owned, plurality is
-architecturally available, and correction is an ordinary write. The frontier's
-bottleneck is supervision, and this vision is the architecture supervision
-lives in.
+is the foundational argument: sample inefficiency is undirected learning, not
+architecture; signal density comes from a learner with standing questions and
+from correction by genuinely independent others; both must be built into the
+environment the intelligence runs in. Choir is that environment — the tape is
+standing state, the harness is owned, plurality is architecturally available,
+correction is an ordinary write, and precommitment records are how standing
+questions become scoreable. The frontier's bottleneck is supervision, and this
+vision is the architecture supervision lives in.
 
 ## Lineage and Authority
 
-- `docs/choir-doctrine.md` — apex doctrine. This vision defers to it.
+- `docs/choir-doctrine.md` — apex doctrine; this vision defers to it.
 - `docs/computer-ontology.md` — persistent computer, candidate, promotion
   ontology.
+- `docs/precommitment-records.md` — the core mechanism.
+- `docs/signal-is-sparse-not-the-learner-2026-08-01.md` — the foundational
+  argument.
+- `docs/reports/choir-state-and-vision-2026-10-14.md` — what is built, designed
+  and vision today, and the business model.
+- `docs/ACTIVE.md` — current sequencing (`docs/world-wire-mission-stack-2026-09-22.md`
+  is a superseded roadmap kept for reference).
 - `docs/archive/choir-coherent-computer-convergence-2026-07-21.md` — the
   ratified durable-work kernel this vision runs on.
-- `docs/archive/vision-choir-category-texture-transclusion-v0.md` — the
-  earlier texture/transclusion vision; its re-visioning banner and this
-  document supersede its center. The audited-computer core it contains is the
-  ancestor of this vision.
