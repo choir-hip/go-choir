@@ -4,7 +4,8 @@ Date: 2026-10-14, 09:30 UTC. Found by the owner on the live paper ("some
 (not all) of the articles published are stubs"; phone screenshots at
 09:21-09:23 UTC). Computer: the live paper
 (computer-1355b83bced1613eb048ee28d66688a8, build 9ace75e5, VM
-vm-1669020adcece51c2f5ff9b6df399ef5). Status: documented; not fixed.
+vm-1669020adcece51c2f5ff9b6df399ef5). Status: fixed on a branch (see
+"Fix" below); not pushed, not deployed, no staging proof yet.
 
 ## What the owner saw
 
@@ -141,3 +142,38 @@ for pool composition, not part of this fix.
 - The rule reaches owner-initiated publishes, or retroactively unpublishes
   stubs already published.
 - A held revision leaves no visible reason.
+
+## Fix (branch; not pushed or deployed)
+
+- 8f074cb0 (gateway): one breaker per (provider, model) plus one for the
+  provider. A model's 429, 5xx and timeouts open only its own breaker.
+  The provider breaker counts only transport failures that are not
+  deadlines. A model's open circuit says "provider P model M: circuit
+  open" and carries no status code. 429 keeps counting, now per model:
+  the open model breaker is the short backoff, and Retry-After is not
+  plumbed.
+- 733ded02 (tool loop, gateway client): failover walks the remaining
+  pool members forward, each at most once, and the run fails only when
+  the last member fails. The gateway client no longer retries a 502
+  that says "circuit open".
+- ef5d8e7e (story publish): a publish-auto story's revision that cites
+  no source is held. It stays committed, its version is a gap, and the
+  next cited revision publishes as its own number. The hold is logged,
+  and the turn receipt carries `publish_held`. Owner publishes are
+  unchanged, and stubs already published stay published.
+
+Residuals:
+
+- Staging proof is owed for all three. The breaker change needs a
+  loaded paper: a cat-jam 429 burst with deepseek still answering, and
+  research runs that end completed through luna.
+- The prompt line "a turn whose records bring no new evidence writes
+  nothing; Wait" was not added. The Texture core is at 3988 of its
+  4000-character budget, so adding it means trimming another rule. The
+  publish hold covers the reader-facing harm.
+- The proxy's guest publish route still accepts any revision. The
+  evidence rule is enforced on the guest only.
+- The pool's load shift (two of three members on opencode-go) is
+  unchanged.
+- A Retry-After from the upstream is still dropped by the provider's
+  sanitized errors.
