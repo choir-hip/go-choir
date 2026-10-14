@@ -169,6 +169,36 @@ func (g *GuestCredentials) Capability(ctx context.Context) (string, error) {
 	if time.Until(g.expiresAt) > 90*time.Second {
 		return g.token, nil
 	}
+	return g.renewLocked(ctx)
+}
+
+// RenewNow renews the capability regardless of its remaining lifetime and
+// returns the new expiry. Snapshot hibernate (S3) calls it right before the
+// memory snapshot so the frozen capability carries the longest possible
+// lifetime, and again on resume so the woken guest holds a fresh one.
+func (g *GuestCredentials) RenewNow(ctx context.Context) (time.Time, error) {
+	if g == nil {
+		return time.Time{}, fmt.Errorf("guest credential: unavailable")
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if _, err := g.renewLocked(ctx); err != nil {
+		return time.Time{}, err
+	}
+	return g.expiresAt, nil
+}
+
+// ExpiresAt reports when the held capability expires.
+func (g *GuestCredentials) ExpiresAt() time.Time {
+	if g == nil {
+		return time.Time{}
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.expiresAt
+}
+
+func (g *GuestCredentials) renewLocked(ctx context.Context) (string, error) {
 	body, err := computerevent.CanonicalJSON(map[string]string{"computer_id": g.computerID})
 	if err != nil {
 		return "", err

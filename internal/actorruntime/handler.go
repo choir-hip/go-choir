@@ -166,6 +166,13 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		log.Printf("actorruntime: %s %s for %s waits for the self-development apply checkpoint", u.Kind, u.UpdateID, agentID)
 		return nil, actor.ErrDeferUnprocessed
 	}
+	// S3 hibernate fence: while the host snapshots this guest, work waits
+	// here; the fence closes only when no occurrence is inside.
+	release, err := h.rt.EnterWork(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: hibernate fence: %v", actor.ErrDeferUnprocessed, err)
+	}
+	defer release()
 	switch u.Kind {
 	case "initial_dispatch":
 		return h.handleInitialDispatch(ctx, u, memory)

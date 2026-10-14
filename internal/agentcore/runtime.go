@@ -177,6 +177,9 @@ type Runtime struct {
 	// only pre-bind assignments opened before it as restart strands; one this
 	// boot opened belongs to its pending spawn saga.
 	bootedAt time.Time
+	// hibernate is the S3 snapshot-hibernate work admission fence
+	// (hibernate.go).
+	hibernate hibernateFence
 	// replayProbeAfterCapture is a test seam: it runs after the
 	// replay-completeness probe captures its head and live state.
 	replayProbeAfterCapture func()
