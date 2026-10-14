@@ -278,7 +278,7 @@ for path in "${changed[@]}"; do
       mark_vmctl_restart
       add_explanation "$path -> autoputer runtime package + vmctl runtime-package endpoint restart"
       ;;
-    internal/agentcore/*|internal/textureowner/*)
+    internal/agentcore/*|internal/textureowner/*|internal/calibration/*)
       add_host_service "gateway"
       add_host_service "autoputer"
       mark_vmctl_restart

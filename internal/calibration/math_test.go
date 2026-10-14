@@ -192,8 +192,17 @@ func TestSelfScoreGap(t *testing.T) {
 		settled("3", 0.9, sv(types.CalibrationScorerSelf, "a", types.CalibrationOutcomeFalse, "t1"), sv(types.CalibrationScorerIndependent, "b", types.CalibrationOutcomePartial, "t2")),
 		settled("4", 0.9, sv(types.CalibrationScorerSelf, "a", types.CalibrationOutcomeTrue, "t1")),
 	}
-	gap := Summarize(claims, SummaryOptions{}, time.Now()).Overall.SelfGap
+	sum := Summarize(claims, SummaryOptions{}, time.Now())
+	gap := sum.Overall.SelfGap
 	if gap == nil || gap.N != 3 || gap.Agree != 1 || gap.SelfFavorable != 1 || gap.SelfUnfavorable != 1 {
 		t.Fatalf("self gap = %+v", gap)
+	}
+	// Self never governs oversight: a claim settled only by its claimant is
+	// counted and named as such.
+	if sum.Overall.SelfOnly != 1 || !strings.Contains(sum.Context, "settled only by yourself") {
+		t.Fatalf("self-only = %d; context:\n%s", sum.Overall.SelfOnly, sum.Context)
+	}
+	if ind := Summarize(claims, SummaryOptions{Scorer: types.CalibrationScorerIndependent}, time.Now()).Overall; ind.Settled != 2 || ind.SelfOnly != 0 {
+		t.Fatalf("scorer=independent: settled %d self-only %d", ind.Settled, ind.SelfOnly)
 	}
 }

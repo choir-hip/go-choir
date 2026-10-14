@@ -116,6 +116,11 @@ type GroupStats struct {
 	Overconfidence *float64 `json:"overconfidence"`
 	Bins           []Bin    `json:"bins"`
 	SelfGap        *SelfGap `json:"self_gap,omitempty"`
+	// SelfOnly counts settled claims whose only settlement is the
+	// claimant's own. They teach the agent (self-scoring is the default
+	// learning signal) but are not oversight evidence: self never
+	// governs anything that gates action (docs/precommitment-records.md §5.2).
+	SelfOnly int `json:"self_only"`
 }
 
 // Miss is a settled claim with a large Brier score, for the context text.
@@ -242,6 +247,22 @@ func stats(items []scored) GroupStats {
 		g.Bins = append(g.Bins, Bin{Lo: float64(i) / 10, Hi: float64(i+1) / 10, N: int(b.n), MeanP: b.p / b.n, Observed: b.y / b.n})
 	}
 	g.SelfGap = selfGap(items)
+	for _, it := range items {
+		if it.status != StatusSettled {
+			continue
+		}
+		if _, ok := Governing(it.claim.Settlements, ""); ok {
+			selfOnly := true
+			for _, s := range it.claim.Settlements {
+				if s.Method != types.CalibrationScorerSelf {
+					selfOnly = false
+				}
+			}
+			if selfOnly {
+				g.SelfOnly++
+			}
+		}
+	}
 	return g
 }
 
@@ -440,6 +461,9 @@ func ContextText(sum Summary) string {
 	}
 	if len(scoredGroups) > 1 {
 		b.WriteString("By group:" + strings.Join(scoredGroups, "") + "\n")
+	}
+	if o.SelfOnly > 0 {
+		fmt.Fprintf(&b, "%d of the %d settled claims are settled only by yourself: a learning signal, not independent evidence.\n", o.SelfOnly, o.Settled)
 	}
 	if o.SelfGap != nil {
 		fmt.Fprintf(&b, "Self-scoring: of %d claims you and an independent scorer both settled, you agreed on %d and scored yourself more favourably on %d.\n",
