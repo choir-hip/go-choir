@@ -26,7 +26,7 @@ down to do it.
 |---|---|---|---|---|
 | d3f7d9b2 | 00:05:06 | 00:06:44 | 00:08:15 | 3 min 9 s |
 | 6c6bc1aa | 00:19:48 | 00:22:17 | 00:23:48 | 4 min 0 s |
-| 809755a7 | 00:43:52 | not yet at 00:52:56 (stop-sigterm) | not yet | over 9 min |
+| 809755a7 | 00:43:52 | 00:53:34 | 00:55:05 | 11 min 13 s |
 
 The deploy at 00:43 began while the paper computer had long model calls
 in flight. The journal shows completions still landing at 00:46:36,
@@ -40,9 +40,16 @@ including one with 23,019 output tokens.
   minutes tonight.
 - **The cause of a deploy can be trivial.** A script file under `scripts/`
   counts as deploy-impacting, so a docs commit with one script took the
-  site down for over 9 minutes.
+  site down for 11 minutes.
 - **The drain protects only the gateway.** Requests to the proxy, auth and
   corpusd made during that window fail outright.
+
+- **Each deploy restarts the services twice.** After the switch, the
+  deploy runs `systemctl restart` on auth, maild, corpusd, gateway and
+  proxy (`.github/workflows/ci.yml`, "Ensuring edge config and host
+  services are live"). That is the second blip in each row's journal, two
+  seconds after the first start. Its gateway drain is short only because
+  the new gateway has nothing in flight yet.
 
 ## Candidate directions (not decided here)
 
