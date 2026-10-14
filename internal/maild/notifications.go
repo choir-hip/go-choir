@@ -26,10 +26,13 @@ func (h *Handler) HandleRiskAlert(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	ownerID, ownerEmail, ok := h.authenticatedInternalOwnerWithEmail(w, r)
+	caller, ok := h.authenticateCaller(w, r)
 	if !ok {
 		return
 	}
+	// A guest may raise an alert; it goes only to the owner's address of
+	// record, never to a header the guest set (G6).
+	ownerID, ownerEmail := caller.OwnerID, h.ownerAddressOfRecord(r.Context(), caller)
 	if ownerEmail == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "verified signup email is required"})
 		return

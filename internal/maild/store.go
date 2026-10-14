@@ -382,6 +382,14 @@ func (s *Store) EnsureSchema(cfg *Config) error {
 			draft_id text not null,
 			created_at text not null
 		)`,
+		// The owner's address of record for guest-originated owner mail
+		// (approval requests, risk alerts). Written only from an owner
+		// session; derived from the auth registry via the proxy (G6).
+		`CREATE TABLE IF NOT EXISTS email_owner_addresses (
+			owner_id text primary key,
+			address text not null,
+			updated_at text not null
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.routingDB.Exec(stmt); err != nil {
@@ -782,6 +790,19 @@ func ensureMailboxSchema(db *sql.DB) error {
 			provider_message_id text,
 			created_at text not null
 		)`,
+		// Owner edit requests from approval replies, recorded and never
+		// applied to a draft body (G4).
+		`CREATE TABLE IF NOT EXISTS email_draft_edit_requests (
+			id text primary key,
+			draft_id text not null,
+			owner_id text not null,
+			version integer not null,
+			version_hash text not null,
+			request_text text not null,
+			provider_message_id text,
+			status text not null,
+			created_at text not null
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
@@ -1157,6 +1178,36 @@ func (s *Store) recordProviderMessageIndex(ctx context.Context, provider, provid
 		return fmt.Errorf("record provider message index: %w", err)
 	}
 	return nil
+}
+
+// RecordOwnerAddress stores the owner's address of record. Call it only
+// with the address an owner session carried (see Handler.rememberOwnerAddress).
+func (s *Store) RecordOwnerAddress(ctx context.Context, ownerID, address string) error {
+	ownerID = strings.TrimSpace(ownerID)
+	address = normalizedTrustedEmail(address)
+	if ownerID == "" || address == "" {
+		return fmt.Errorf("owner and address are required")
+	}
+	_, err := s.routingDB.ExecContext(ctx, `INSERT INTO email_owner_addresses (owner_id, address, updated_at)
+		VALUES (?, ?, ?)
+		ON CONFLICT(owner_id) DO UPDATE SET address = excluded.address, updated_at = excluded.updated_at
+		WHERE email_owner_addresses.address <> excluded.address`,
+		ownerID, address, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return fmt.Errorf("record owner address: %w", err)
+	}
+	return nil
+}
+
+// OwnerAddressOfRecord returns the owner's address of record, or
+// sql.ErrNoRows when no owner session has carried one yet.
+func (s *Store) OwnerAddressOfRecord(ctx context.Context, ownerID string) (string, error) {
+	var address string
+	if err := s.routingDB.QueryRowContext(ctx, `SELECT address FROM email_owner_addresses WHERE owner_id = ?`,
+		strings.TrimSpace(ownerID)).Scan(&address); err != nil {
+		return "", err
+	}
+	return address, nil
 }
 
 // ListWebhookEvents returns recent provider webhook receipts without raw payloads.

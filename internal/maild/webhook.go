@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -28,6 +29,11 @@ type Handler struct {
 	cfg    *Config
 	store  *Store
 	resend resendClient
+
+	// knownAddresses caches the owner address of record already stored, so
+	// an owner session does not write it on every request.
+	addressMu      sync.Mutex
+	knownAddresses map[string]string
 }
 
 type webhookResponse struct {
@@ -241,8 +247,8 @@ func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceived
 	whitelisted := false
 	senderAuthority := "public"
 	if policy.RequireSenderWhitelist {
-		if !hasPassingAuthenticationResultEvidence(email.Headers) {
-			return receivePolicyResult{}, fmt.Errorf("%w: passing authentication results required", errReceivePolicyRejected)
+		if !senderAuthenticatedFor(h.cfg, email.Headers, senderAddress) {
+			return receivePolicyResult{}, fmt.Errorf("%w: aligned sender authentication from a trusted receiving server required", errReceivePolicyRejected)
 		}
 		whitelisted, err = h.store.IsSenderWhitelisted(ctx, alias.TargetID, alias.ID, senderAddress)
 		if err != nil {
@@ -272,6 +278,10 @@ func (h *Handler) enforceReceivePolicy(ctx context.Context, email resendReceived
 	return result, nil
 }
 
+// hasPassingAuthenticationResultEvidence is the pre-E1 verdict: any pass
+// substring in any authentication header, for any domain, from any server
+// (G3). It is used only under MAILD_SEND_GATE_MODE=legacy (the rollback);
+// senderAuthenticated is the verdict.
 func hasPassingAuthenticationResultEvidence(headers map[string]string) bool {
 	for key, value := range headers {
 		normalized := strings.ToLower(strings.TrimSpace(key))

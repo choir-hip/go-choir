@@ -117,10 +117,11 @@ func (h *Handler) HandleAliases(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleDrafts(w http.ResponseWriter, r *http.Request) {
-	ownerID, ownerEmail, ok := h.authenticatedInternalOwnerWithEmail(w, r)
+	caller, ok := h.authenticateCaller(w, r)
 	if !ok {
 		return
 	}
+	ownerID := caller.OwnerID
 	if r.URL.Path == "/api/email/drafts" {
 		switch r.Method {
 		case http.MethodGet:
@@ -153,6 +154,10 @@ func (h *Handler) HandleDrafts(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
+		// Approving and sending is an owner act (G1).
+		if !h.requireOwnerSession(w, r, caller, "approving and sending a draft") {
+			return
+		}
 		h.handleDraftSend(w, r, ownerID, draftID)
 		return
 	}
@@ -161,7 +166,9 @@ func (h *Handler) HandleDrafts(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		h.handleDraftApprovalEmail(w, r, ownerID, ownerEmail, draftID)
+		// Asking the owner is a proposal, which a guest may make; the
+		// request goes only to the owner's address of record (G6).
+		h.handleDraftApprovalEmail(w, r, ownerID, h.ownerAddressOfRecord(r.Context(), caller), draftID)
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -815,47 +822,24 @@ func (s *Store) UseDraftApprovalToken(ctx context.Context, tokenID, status strin
 	return sql.ErrNoRows
 }
 
-func (s *Store) UpdateDraftTextFromApprovalEdit(ctx context.Context, draft EmailDraft, editText string) (EmailDraft, error) {
-	editText = strings.TrimSpace(editText)
-	if editText == "" {
-		return EmailDraft{}, fmt.Errorf("edit text is required")
-	}
-	updated := draft
-	updated.TextBody = "Owner approval reply requested edits:\n\n" + editText
-	updated.Version++
-	updated.Status = "draft_pending_owner_approval"
-	updated.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	updated.VersionHash = draftVersionHash(updated)
-	db, err := s.mailboxForOwner(updated.OwnerID)
+// RecordDraftEditRequest keeps an owner's emailed edit request against the
+// exact draft version it was about. Nothing applies it to the draft: the
+// email desk, when it exists, rewrites the draft as a new version that the
+// owner approves again (G4).
+func (s *Store) RecordDraftEditRequest(ctx context.Context, draft EmailDraft, requestText, providerMessageID string) error {
+	db, err := s.mailboxForOwner(draft.OwnerID)
 	if err != nil {
-		return EmailDraft{}, err
+		return err
 	}
-	tx, err := db.BeginTx(ctx, nil)
+	_, err = db.ExecContext(ctx, `INSERT INTO email_draft_edit_requests (
+		id, draft_id, owner_id, version, version_hash, request_text, provider_message_id, status, created_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending_desk', ?)`,
+		"email-edit-request-"+uuid.NewString(), draft.ID, draft.OwnerID, draft.Version, draft.VersionHash,
+		strings.TrimSpace(requestText), nullString(providerMessageID), time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
-		return EmailDraft{}, err
+		return fmt.Errorf("insert draft edit request: %w", err)
 	}
-	defer func() {
-		if tx != nil {
-			_ = tx.Rollback()
-		}
-	}()
-	if _, err := tx.ExecContext(ctx, `UPDATE email_drafts
-		SET text_body = ?, status = ?, version = ?, version_hash = ?, updated_at = ?
-		WHERE id = ? AND owner_id = ? AND status <> 'sent'`,
-		updated.TextBody, updated.Status, updated.Version, updated.VersionHash, updated.UpdatedAt, updated.ID, updated.OwnerID); err != nil {
-		return EmailDraft{}, fmt.Errorf("update draft edit: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE email_draft_approval_tokens
-		SET status = 'superseded'
-		WHERE draft_id = ? AND owner_id = ? AND status = 'active'`,
-		updated.ID, updated.OwnerID); err != nil {
-		return EmailDraft{}, fmt.Errorf("supersede edited draft tokens: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return EmailDraft{}, err
-	}
-	tx = nil
-	return s.GetDraft(ctx, updated.OwnerID, updated.ID)
+	return nil
 }
 
 func (s *Store) RecordRiskAlert(ctx context.Context, ownerID, riskKind, sourceRef, snippet, providerMessageID string) (EmailRiskAlert, error) {

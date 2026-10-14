@@ -28,6 +28,7 @@ func main() {
 		log.Fatalf("maild schema: %v", err)
 	}
 
+	log.Printf("maild: %s", cfg.SendGateStatus())
 	handler := maild.NewHandler(cfg, store)
 	s := server.NewServer("maild", cfg.Port)
 	maild.RegisterRoutes(s, handler)

@@ -486,6 +486,7 @@ func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 	cfg.WebhookSecret = "whsec_" + "dGVzdC1zZWNyZXQ="
 	cfg.ResendAPIKey = "re_test"
 	seedTrustedUploadAlias(t, store, true)
+	cfg.TrustedAuthservIDs = []string{"mx.example"}
 	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
@@ -495,7 +496,7 @@ func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 			"created_at":"2026-05-26T10:00:00Z",
 			"subject":"Trusted upload",
 			"text":"Please file this.",
-			"headers":{"from":"Sender <sender@example.com>","authentication-results":"mx.example; spf=pass; dkim=pass"},
+			"headers":{"from":"Sender <sender@example.com>","authentication-results":"mx.example; spf=pass smtp.mailfrom=sender@example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com"},
 			"bcc":[],
 			"cc":[],
 			"reply_to":[],
@@ -530,7 +531,7 @@ func TestHandleResendWebhookAcceptsWhitelistedTrustedUploadAlias(t *testing.T) {
 	if err := json.Unmarshal([]byte(messages[0].AuthenticationResultsJSON), &authResults); err != nil {
 		t.Fatalf("unmarshal authentication results: %v", err)
 	}
-	if authResults["authentication-results"] != "mx.example; spf=pass; dkim=pass" {
+	if authResults["authentication-results"] != "mx.example; spf=pass smtp.mailfrom=sender@example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com" {
 		t.Fatalf("authentication results = %+v", authResults)
 	}
 	events, err := store.ListIngressEvents(req.Context(), "user-root", messages[0].ID, 10)

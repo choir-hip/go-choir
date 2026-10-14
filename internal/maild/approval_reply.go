@@ -42,6 +42,15 @@ func (h *Handler) processApprovalReply(ctx context.Context, providerEventID stri
 	if !strings.EqualFold(strings.TrimSpace(fromAddress), token.ApprovalEmail) {
 		return h.rejectApprovalReply(ctx, token, "approval_sender_mismatch", "approval reply sender mismatch", email)
 	}
+	// G2: a matching From is a claim, not proof. Every command (approve,
+	// reject, edit) needs the receiving server's aligned DMARC or DKIM pass
+	// for the owner's domain as well as the token. The token is not
+	// consumed, so a forged reply cannot burn the owner's approval. The
+	// rollback switch restores the pre-E1 rule, which checked nothing here.
+	if !h.cfg.legacySendGate() && !senderAuthenticated(email.Headers, fromAddress, h.cfg.TrustedAuthservIDs) {
+		return h.rejectApprovalReply(ctx, token, "approval_sender_unverified",
+			"approval reply sender is not authenticated (no aligned DMARC or DKIM pass from the receiving server)", email)
+	}
 	command, editText := parseApprovalReplyCommand(email.Text)
 	draft, err := h.store.GetDraft(ctx, token.OwnerID, token.DraftID)
 	if err != nil {
@@ -82,20 +91,17 @@ func (h *Handler) processApprovalReply(ctx context.Context, providerEventID stri
 		}
 		return h.store.UseDraftApprovalToken(ctx, token.ID, "rejected")
 	case "edit":
+		// G4: an edit request is the owner's instruction, never the email's
+		// body. It is recorded for the email desk to act on (a rewrite is a
+		// new version the owner approves again); the draft is untouched and
+		// stays approvable in the Mail app.
 		if _, err := h.store.RecordDraftApprovalEvent(ctx, draft, "email_reply_edit_requested", email.ID); err != nil {
 			return err
 		}
-		if err := h.store.UseDraftApprovalToken(ctx, token.ID, "edited"); err != nil {
+		if err := h.store.RecordDraftEditRequest(ctx, draft, editText, email.ID); err != nil {
 			return err
 		}
-		updated, err := h.store.UpdateDraftTextFromApprovalEdit(ctx, draft, editText)
-		if err != nil {
-			return err
-		}
-		if _, err := h.sendDraftApprovalEmail(ctx, updated, token.ApprovalEmail); err != nil {
-			log.Printf("maild: edited draft approval email failed owner=%s draft=%s: %v", token.OwnerID, token.DraftID, err)
-		}
-		return nil
+		return h.store.UseDraftApprovalToken(ctx, token.ID, "edited")
 	default:
 		return h.rejectApprovalReply(ctx, token, "approval_reply_unsupported_command", "unsupported approval reply command", email)
 	}

@@ -24,6 +24,13 @@ func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Reque
 	if !h.authorizeAPIKeyScope(w, r, authResult) {
 		return
 	}
+	// Approving and sending is an owner act: it needs the owner's browser
+	// session, never a headless API key, which an agent inside the computer
+	// may hold (docs/problems/maild-send-gate-defects-2026-10-14.md).
+	if authResult.AuthMethod == "api_key" && isEmailOwnerActRoute(r) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "owner session required: approving and sending mail needs the owner's signed-in session, not an API key"})
+		return
+	}
 	target, err := joinBasePath(h.cfg.MaildURL, r.URL.Path)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "mail service is not configured"})
@@ -56,6 +63,27 @@ func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Reque
 	copyResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+// isEmailOwnerActRoute reports whether r is maild's approve-and-send route,
+// POST /api/email/drafts/{id}/send. Empty path segments are ignored, so
+// every spelling maild could treat as the send route is caught (and a few it
+// would not, which only refuses more).
+func isEmailOwnerActRoute(r *http.Request) bool {
+	if r == nil || r.URL == nil || r.Method != http.MethodPost {
+		return false
+	}
+	const prefix = "/api/email/drafts/"
+	if !strings.HasPrefix(r.URL.Path, prefix) {
+		return false
+	}
+	var parts []string
+	for _, part := range strings.Split(strings.TrimPrefix(r.URL.Path, prefix), "/") {
+		if part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return len(parts) == 2 && parts[1] == "send"
 }
 
 func stripClientIdentityHeaders(header http.Header) {

@@ -596,9 +596,11 @@ func TestApprovalReplyApprovesExactDraftVersionOnce(t *testing.T) {
 		From: "owner@example.com",
 		Text: "approve",
 		Headers: map[string]string{
-			"from": "owner@example.com",
+			"from":                   "owner@example.com",
+			"authentication-results": testOwnerReplyAuthResults,
 		},
 	}
+	h.cfg.TrustedAuthservIDs = []string{testReceivingAuthservID}
 	if err := h.processApprovalReply(nilSafeContext(), "event-approval-1", email, token.Token); err != nil {
 		t.Fatalf("processApprovalReply: %v", err)
 	}
@@ -646,8 +648,9 @@ func TestApprovalReplyDenyRejectsDraftWithoutSending(t *testing.T) {
 		To:      []string{"approve+" + token.Token + "@choir.news"},
 		From:    "owner@example.com",
 		Text:    "Deny",
-		Headers: map[string]string{"from": "owner@example.com"},
+		Headers: map[string]string{"from": "owner@example.com", "authentication-results": testOwnerReplyAuthResults},
 	}
+	h.cfg.TrustedAuthservIDs = []string{testReceivingAuthservID}
 	if err := h.processApprovalReply(nilSafeContext(), "event-deny-reply", email, token.Token); err != nil {
 		t.Fatalf("processApprovalReply deny: %v", err)
 	}
@@ -754,105 +757,13 @@ func TestApprovalReplySenderMismatchBlocksRetryAndSendsRiskAlert(t *testing.T) {
 	}
 }
 
-func TestApprovalReplyEditCreatesNewVersionAndInvalidatesOldToken(t *testing.T) {
-	store, cfg := newTestStore(t)
-	cfg.ResendAPIKey = "re_test"
-	var payloads []resendSendRequest
-	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload resendSendRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("decode payload: %v", err)
-		}
-		payloads = append(payloads, payload)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id":"provider-call-` + string(rune('0'+len(payloads))) + `"}`))
-	}))
-	defer resend.Close()
-	cfg.ResendBaseURL = resend.URL
-	h := NewHandler(cfg, store)
-	h.resend = newResendClient(cfg, resend.Client())
-	alias, _ := store.ResolveAlias(nilSafeContext(), "choir.news", "000")
-	draft, err := store.CreateDraft(nilSafeContext(), "user-root", alias, createDraftRequest{
-		ToAddresses: []string{"friend@example.com"},
-		Subject:     "Edit reply",
-		TextBody:    "Original body.",
-	})
-	if err != nil {
-		t.Fatalf("CreateDraft: %v", err)
-	}
-	token, err := store.CreateDraftApprovalToken(nilSafeContext(), draft, "owner@example.com", time.Hour)
-	if err != nil {
-		t.Fatalf("CreateDraftApprovalToken: %v", err)
-	}
-	editReply := resendReceivedEmail{
-		ID:      "received-edit-reply",
-		To:      []string{"approve+" + token.Token + "@choir.news"},
-		From:    "owner@example.com",
-		Text:    "edit: make it warmer and shorter",
-		Headers: map[string]string{"from": "owner@example.com"},
-	}
-	if err := h.processApprovalReply(nilSafeContext(), "event-edit-reply", editReply, token.Token); err != nil {
-		t.Fatalf("processApprovalReply edit: %v", err)
-	}
-	updated, err := store.GetDraft(nilSafeContext(), "user-root", draft.ID)
-	if err != nil {
-		t.Fatalf("GetDraft: %v", err)
-	}
-	if updated.Status != "draft_pending_owner_approval" || updated.Version != draft.Version+1 || updated.VersionHash == draft.VersionHash {
-		t.Fatalf("updated draft = %+v, original=%+v", updated, draft)
-	}
-	if !strings.Contains(updated.TextBody, "make it warmer and shorter") || updated.ProviderMessageID != "" {
-		t.Fatalf("updated draft body/provider = %+v", updated)
-	}
-	if len(payloads) != 1 {
-		t.Fatalf("payload count after edit = %d, want fresh approval email; payloads=%+v", len(payloads), payloads)
-	}
-	if payloads[0].Subject != "Choir email draft needs approval: Edit reply" ||
-		payloads[0].Headers["X-Choir-Maild"] != "v0-email-draft-approval" ||
-		payloads[0].Headers["X-Choir-Email-Draft-Version-Hash"] != updated.VersionHash {
-		t.Fatalf("fresh approval payload = %+v updated=%+v", payloads[0], updated)
-	}
-	if !strings.Contains(payloads[0].Text, "Draft message:") ||
-		!strings.Contains(payloads[0].Text, "Owner approval reply requested edits:") ||
-		!strings.Contains(payloads[0].Text, "make it warmer and shorter") {
-		t.Fatalf("approval email should embed the current draft body for review: %q", payloads[0].Text)
-	}
-	if strings.Contains(payloads[0].Text, updated.VersionHash) || strings.Contains(payloads[0].Text, "user-root") {
-		t.Fatalf("approval email should keep internal ids and hashes out of human body: %q", payloads[0].Text)
-	}
-	used, err := store.GetDraftApprovalToken(nilSafeContext(), token.Token)
-	if err != nil {
-		t.Fatalf("GetDraftApprovalToken: %v", err)
-	}
-	if used.Status != "edited" {
-		t.Fatalf("old token status = %q, want edited", used.Status)
-	}
-	var activeTokenCount int
-	mbDB, err := store.mailboxForOwner("user-root")
-	if err != nil {
-		t.Fatalf("open mailbox: %v", err)
-	}
-	if err := mbDB.QueryRowContext(nilSafeContext(), `SELECT count(*) FROM email_draft_approval_tokens WHERE draft_id = ? AND status = 'active' AND version_hash = ?`, draft.ID, updated.VersionHash).Scan(&activeTokenCount); err != nil {
-		t.Fatalf("active token count query: %v", err)
-	}
-	if activeTokenCount != 1 {
-		t.Fatalf("active token count for edited version = %d, want 1", activeTokenCount)
-	}
+// The pre-E1 test that an edit reply rewrote the draft body asserted defect
+// G4; TestAuthenticatedEditReplyIsRecordedNotApplied replaces it.
 
-	approveOld := editReply
-	approveOld.ID = "received-approve-old-token"
-	approveOld.Text = "approve"
-	err = h.processApprovalReply(nilSafeContext(), "event-approve-old-token", approveOld, token.Token)
-	if !errors.Is(err, errApprovalReplyRejected) || shouldRetryIngest(err) {
-		t.Fatalf("old token approval err=%v retry=%v", err, shouldRetryIngest(err))
-	}
-	if len(payloads) != 2 {
-		t.Fatalf("payload count after old-token approval = %d, want approval + risk alert; payloads=%+v", len(payloads), payloads)
-	}
-	if payloads[1].Headers["X-Choir-Risk-Kind"] != "approval_token_not_active" {
-		t.Fatalf("risk alert payload after old token approval = %+v", payloads[1])
-	}
-}
+const (
+	testReceivingAuthservID   = "mx.provider.test"
+	testOwnerReplyAuthResults = testReceivingAuthservID + "; spf=pass smtp.mailfrom=owner@example.com; dkim=pass header.d=example.com; dmarc=pass header.from=example.com"
+)
 
 func TestApprovalReplyAfterOwnerClickSendIsBlockedNonRetry(t *testing.T) {
 	store, cfg := newTestStore(t)

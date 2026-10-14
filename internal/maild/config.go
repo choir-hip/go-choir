@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,19 @@ const (
 	DefaultWebhookMaxBody  = 1 << 20
 	DefaultAPIMaxBody      = 1 << 20
 	DefaultProviderMaxBody = 4 << 20
+)
+
+// Send gate modes (MAILD_SEND_GATE_MODE;
+// docs/problems/maild-send-gate-defects-2026-10-14.md).
+const (
+	// SendGateEnforce: only the owner's session (a host caller) may approve
+	// and send; approval replies and trusted senders need an aligned DMARC
+	// or DKIM pass written by a trusted receiving server. The default, and
+	// what an unknown value means (fail closed).
+	SendGateEnforce = "enforce"
+	// SendGateLegacy is the rollback: the pre-E1 rules for guest owner acts
+	// (G1), reply authentication (G2) and the trusted-sender verdict (G3).
+	SendGateLegacy = "legacy"
 )
 
 // Config holds maild runtime configuration.
@@ -40,6 +54,12 @@ type Config struct {
 	// DraftAttachmentMaxBytes caps total attachment bytes per draft (25 MiB).
 	DraftAttachmentMaxBytes int64
 	WebhookClockSkew        time.Duration
+	// SendGateMode is SendGateEnforce or SendGateLegacy; empty means enforce.
+	SendGateMode string
+	// TrustedAuthservIDs are the authserv-ids (RFC 8601) of the receiving
+	// server whose Authentication-Results maild believes, lowercased. Empty
+	// means no inbound sender is ever "authenticated" (fail closed).
+	TrustedAuthservIDs []string
 }
 
 // LoadConfig resolves MAILD_* and RESEND_* environment variables.
@@ -61,6 +81,8 @@ func LoadConfig() (*Config, error) {
 		AttachmentMaxBytes:      int64EnvOr("MAILD_ATTACHMENT_MAX_BYTES", DefaultAttachmentMaxBytes),
 		DraftAttachmentMaxBytes: int64EnvOr("MAILD_DRAFT_ATTACHMENT_MAX_BYTES", DefaultDraftAttachmentMaxBytes),
 		WebhookClockSkew:        5 * time.Minute,
+		SendGateMode:            parseSendGateMode(os.Getenv("MAILD_SEND_GATE_MODE")),
+		TrustedAuthservIDs:      parseAuthservIDs(os.Getenv("MAILD_TRUSTED_AUTHSERV_IDS")),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -100,6 +122,46 @@ func (c *Config) validate() error {
 		return fmt.Errorf("MAILD_VMCTL_URL is required (host autoputer fallback removed)")
 	}
 	return nil
+}
+
+func parseSendGateMode(raw string) string {
+	if strings.EqualFold(strings.TrimSpace(raw), SendGateLegacy) {
+		return SendGateLegacy
+	}
+	return SendGateEnforce
+}
+
+func parseAuthservIDs(raw string) []string {
+	var out []string
+	for _, id := range strings.Split(raw, ",") {
+		if id = strings.ToLower(strings.TrimSpace(id)); id != "" {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// legacySendGate reports whether the rollback switch is set.
+func (c *Config) legacySendGate() bool {
+	return c != nil && c.SendGateMode == SendGateLegacy
+}
+
+// SendGateStatus describes the send gate for the startup log.
+func (c *Config) SendGateStatus() string {
+	mode := SendGateEnforce
+	if c.legacySendGate() {
+		mode = SendGateLegacy
+	}
+	note := ""
+	if raw := strings.TrimSpace(os.Getenv("MAILD_SEND_GATE_MODE")); raw != "" &&
+		!strings.EqualFold(raw, SendGateEnforce) && !strings.EqualFold(raw, SendGateLegacy) {
+		note = fmt.Sprintf(" (unknown MAILD_SEND_GATE_MODE %q treated as enforce)", raw)
+	}
+	verdict := "trusted authserv-ids " + strings.Join(c.TrustedAuthservIDs, ",")
+	if len(c.TrustedAuthservIDs) == 0 {
+		verdict = "no trusted authserv-id (MAILD_TRUSTED_AUTHSERV_IDS unset): approval replies and trusted senders are never authenticated"
+	}
+	return fmt.Sprintf("send gate mode=%s%s; %s", mode, note, verdict)
 }
 
 // EnsureDirs creates maild's durable state directories.

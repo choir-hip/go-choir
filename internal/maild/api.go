@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/mail"
@@ -201,15 +202,38 @@ func maildLookupGuestOwnership(ctx context.Context, vmctlURL, remoteAddr string)
 }
 
 func (h *Handler) authenticatedInternalOwner(w http.ResponseWriter, r *http.Request) (string, bool) {
-	ownerID, _, ok := h.authenticatedInternalOwnerWithEmail(w, r)
-	return ownerID, ok
+	caller, ok := h.authenticateCaller(w, r)
+	return caller.OwnerID, ok
 }
 
-func (h *Handler) authenticatedInternalOwnerWithEmail(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+// callerClass says who reached maild, which decides what it may do
+// (docs/problems/maild-send-gate-defects-2026-10-14.md). It comes from the
+// transport, never from a header the caller sets.
+type callerClass string
+
+const (
+	// callerOwnerSession is a host service on a trusted transport: in
+	// production, the proxy forwarding the owner's authenticated session.
+	callerOwnerSession callerClass = "owner_session"
+	// callerGuest is the owner's computer over its tap, bound by S1a. It
+	// may draft, read and propose; it may never approve or send.
+	callerGuest callerClass = "guest"
+)
+
+type maildCaller struct {
+	OwnerID string
+	Class   callerClass
+	// SessionEmail is the owner's signup address as the proxy read it from
+	// the session (X-Authenticated-Email). Empty for a guest: a guest's
+	// header is never believed.
+	SessionEmail string
+}
+
+func (h *Handler) authenticateCaller(w http.ResponseWriter, r *http.Request) (maildCaller, bool) {
 	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
 	if ownerID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
-		return "", "", false
+		return maildCaller{}, false
 	}
 	// S1a: the caller must be either a host service on a trusted transport
 	// (loopback / unix socket / TEST-NET-1 test harness) or a bound guest
@@ -218,19 +242,90 @@ func (h *Handler) authenticatedInternalOwnerWithEmail(w http.ResponseWriter, r *
 	if isMaildLoopbackHost(srcHost) {
 		if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Internal-Caller")), "true") {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal caller required"})
-			return "", "", false
+			return maildCaller{}, false
 		}
 		if !hostauth.Authorize(r) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal credential required"})
-			return "", "", false
+			return maildCaller{}, false
 		}
-		return ownerID, normalizedTrustedEmail(r.Header.Get("X-Authenticated-Email")), true
+		caller := maildCaller{
+			OwnerID:      ownerID,
+			Class:        callerOwnerSession,
+			SessionEmail: normalizedTrustedEmail(r.Header.Get("X-Authenticated-Email")),
+		}
+		h.rememberOwnerAddress(r.Context(), caller)
+		return caller, true
 	}
 	boundID, ok := h.s1aBindTapCallerToOwner(w, r, ownerID)
 	if !ok {
-		return "", "", false
+		return maildCaller{}, false
 	}
-	return boundID, normalizedTrustedEmail(r.Header.Get("X-Authenticated-Email")), true
+	// The guest's X-Authenticated-Email is never read, in either send gate
+	// mode: owner-facing mail goes to the address of record (G6).
+	return maildCaller{OwnerID: boundID, Class: callerGuest}, true
+}
+
+// requireOwnerSession refuses an owner act (approve, send) from anything
+// but the owner's session. A guest bound to the owner is the party the
+// approval gates, so it cannot open the gate (G1).
+func (h *Handler) requireOwnerSession(w http.ResponseWriter, r *http.Request, caller maildCaller, act string) bool {
+	if caller.Class == callerOwnerSession || h.cfg.legacySendGate() {
+		return true
+	}
+	log.Printf("maild: send gate: refused %s from %s caller owner=%s remote=%s: owner session required",
+		act, caller.Class, caller.OwnerID, r.RemoteAddr)
+	writeJSON(w, http.StatusForbidden, map[string]string{
+		"error": "owner session required: " + act + " is an owner act and cannot come from the computer",
+	})
+	return false
+}
+
+// rememberOwnerAddress keeps the owner's address of record: the signup
+// address the proxy forwards from an authenticated owner session (the JWT
+// email claim, or the auth registry for an API key). The auth service stays
+// the authority; this is a derived copy, refreshed by every owner request,
+// so guest-originated mail (approval requests, risk alerts) has a recipient
+// the guest cannot choose (G6).
+func (h *Handler) rememberOwnerAddress(ctx context.Context, caller maildCaller) {
+	if h == nil || h.store == nil || caller.Class != callerOwnerSession || caller.SessionEmail == "" {
+		return
+	}
+	h.addressMu.Lock()
+	known := h.knownAddresses[caller.OwnerID] == caller.SessionEmail
+	h.addressMu.Unlock()
+	if known {
+		return
+	}
+	if err := h.store.RecordOwnerAddress(ctx, caller.OwnerID, caller.SessionEmail); err != nil {
+		log.Printf("maild: record owner address of record owner=%s: %v", caller.OwnerID, err)
+		return
+	}
+	h.addressMu.Lock()
+	if h.knownAddresses == nil {
+		h.knownAddresses = map[string]string{}
+	}
+	h.knownAddresses[caller.OwnerID] = caller.SessionEmail
+	h.addressMu.Unlock()
+}
+
+// ownerAddressOfRecord is where owner-facing mail goes: the live session's
+// address for the owner's own requests, and the recorded address for a
+// guest's. Never a header a guest set. Empty when there is none.
+func (h *Handler) ownerAddressOfRecord(ctx context.Context, caller maildCaller) string {
+	if caller.Class == callerOwnerSession {
+		return caller.SessionEmail
+	}
+	if h == nil || h.store == nil {
+		return ""
+	}
+	address, err := h.store.OwnerAddressOfRecord(ctx, caller.OwnerID)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			log.Printf("maild: load owner address of record owner=%s: %v", caller.OwnerID, err)
+		}
+		return ""
+	}
+	return address
 }
 
 func normalizedTrustedEmail(value string) string {

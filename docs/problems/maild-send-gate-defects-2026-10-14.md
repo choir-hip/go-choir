@@ -3,8 +3,8 @@
 Date: 2026-10-14. Source: the agentic email desk design
 ([report](../reports/agentic-email-desk-2026-10-14.md), §1.4, defects G1–G6),
 re-checked read-only against the code at `origin/main` `6b07fd651`. Status:
-**documented; not repaired** (this is phase E0, docs only). Repair is phase E1
-on branch `fix/maild-send-gate-2026-10-14`. Mutation class of the repair:
+**documented** (phase E0, docs only); G1–G4 and G6 **repaired on branch
+`fix/maild-send-gate-2026-10-14`, not deployed** (phase E1; see "E1 status"). Mutation class of the repair:
 **red** (approval is an auth surface; it decides provider sends).
 
 ## The problem in one sentence
@@ -191,6 +191,40 @@ enforce closes it for maild's send route with no further maild change.
   header collapse under the verdict.
 - **Introduced:** none (docs only).
 - **Repaired:** none (docs only).
+
+## E1 status (branch `fix/maild-send-gate-2026-10-14`, not deployed)
+
+| # | State | Where |
+|---|---|---|
+| G1 | **repaired** for direct callers: the send route needs the owner-session class; the proxy refuses API keys on it | `internal/maild/api.go` (`authenticateCaller`, `requireOwnerSession`), `drafts.go` (`HandleDrafts`), `internal/proxy/email.go` (`isEmailOwnerActRoute`) |
+| G2 | **repaired**: every reply command needs a trusted, aligned DMARC or DKIM pass as well as the token; a refusal alerts the owner and leaves the token usable | `approval_reply.go`, `sender_auth.go` |
+| G3 | **repaired**: one verdict (`senderAuthenticated`) for replies and trusted aliases | `sender_auth.go`, `webhook.go` |
+| G4 | **repaired**: edit replies are recorded in `email_draft_edit_requests`, never applied | `approval_reply.go`, `drafts.go` (`RecordDraftEditRequest`) |
+| G5 | **residual**, moved to E4 (see the plan above) | none |
+| G6 | **repaired**, including the approval-email route: owner-facing mail goes to the address of record (`email_owner_addresses`, written only from an owner session) | `api.go` (`rememberOwnerAddress`, `ownerAddressOfRecord`), `notifications.go`, `store.go` |
+| G7 | **residual** (substrate): needs a host-served approval origin or per-approval WebAuthn | none |
+
+Residuals beyond G5 and G7:
+
+- **The authserv-id must be configured.** Until `MAILD_TRUSTED_AUTHSERV_IDS`
+  is set, approval-by-reply and trusted-sender aliases fail closed (the Mail
+  app still approves). Whether the provider strips a sender-supplied
+  `Authentication-Results` that claims its authserv-id is UNVERIFIED; the
+  token remains a second factor if it does not.
+- **Header collapse** (one value per header name) still decides which
+  `Authentication-Results` the verdict sees; a value that looks like two
+  joined headers is refused.
+- **Relaxed alignment has no public-suffix list**: a DKIM pass for a public
+  suffix with a dot (`co.uk`) would align; no such signer exists in practice.
+- **The address of record is learned**: a guest-originated approval request
+  or alert is refused until the owner has made one signed-in mail request
+  since deploy. Reading the auth registry directly needs an auth-service
+  lookup route (maild cannot read the WAL-mode auth DB without write access
+  to its directory).
+- **Host-namespace callers** can claim the owner-session class until
+  hostauth `enforce` (F2).
+- **No rate limit** on guest-requested approval emails to the owner.
+- Edit requests are not yet shown in the Mail app.
 
 ## Conjecture
 

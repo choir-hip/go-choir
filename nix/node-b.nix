@@ -636,6 +636,17 @@ in
         # Maild routes trace events through vmctl to user VMs. The host
         # autoputer fallback (MAILD_RUNTIME_URL) was removed in PR 5.
         "MAILD_VMCTL_URL=http://127.0.0.1:8083"
+        # Send gate (docs/problems/maild-send-gate-defects-2026-10-14.md):
+        # only the owner's session approves and sends; a guest drafts and
+        # proposes. Rollback: "legacy" restores the pre-E1 rules for guest
+        # sends, approval-reply authentication and trusted senders.
+        "MAILD_SEND_GATE_MODE=enforce"
+        # MAILD_TRUSTED_AUTHSERV_IDS (comma-separated) names the receiving
+        # server whose Authentication-Results maild believes. Unset, approval
+        # replies and trusted-sender aliases fail closed. Set it from the
+        # authserv-id (first token) of a real inbound message's
+        # Authentication-Results header, read in the Mail app, after checking
+        # that the provider strips sender-supplied copies of that header.
         internalAuthEnv
       ];
     };
