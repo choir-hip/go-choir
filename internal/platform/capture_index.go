@@ -38,11 +38,14 @@ const (
 	captureIDPrefix = "obj:" + string(objectgraph.WebCaptureObjectKind) + ":"
 	captureIDEnd    = "obj:" + string(objectgraph.WebCaptureObjectKind) + ";"
 	// captureBackfillPage is one backfill read.
-	captureBackfillPage = 500
+	captureBackfillPage = 250
 )
 
 // captureRecountDelay separates the two counts of a reconcile check.
 var captureRecountDelay = 2 * time.Second
+
+// captureBackfillPause separates two written backfill pages.
+var captureBackfillPause = 250 * time.Millisecond
 
 // kickReconcile wakes the periodic reconciler (non-blocking).
 func (s *Store) kickReconcile() {
@@ -430,6 +433,16 @@ func (s *Store) reconcileCaptureIndex(ctx context.Context) (int, error) {
 		written += len(missing) + len(stale)
 		if len(objs) < captureBackfillPage {
 			break
+		}
+		if len(missing)+len(stale) > 0 && captureBackfillPause > 0 {
+			// Yield to the capture route between written pages: on a
+			// sql-server every commit serializes with the route's.
+			select {
+			case <-ctx.Done():
+				s.retrievalState.captureIndexDirty.Store(true)
+				return written, ctx.Err()
+			case <-time.After(captureBackfillPause):
+			}
 		}
 	}
 	// Projection rows whose capture is gone are not repaired by the
