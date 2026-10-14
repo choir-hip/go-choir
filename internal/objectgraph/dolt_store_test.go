@@ -713,8 +713,8 @@ func TestReadObjectSnapshotFilteredBatchesAcrossBoundaries(t *testing.T) {
 	now := time.Now().UTC()
 	for i := 0; i < total; i++ {
 		obj := Object{
-			CanonicalID: fmt.Sprintf("obj:choir.batch:owner-b:%05d", i),
-			ObjectKind:  "choir.batch",
+			CanonicalID: fmt.Sprintf("obj:choir.event:owner-b:%05d", i),
+			ObjectKind:  "choir.event",
 			OwnerID:     "owner-b",
 			ComputerID:  "computer-b",
 			ContentHash: fmt.Sprintf("sha256:%05d", i),
@@ -727,7 +727,7 @@ func TestReadObjectSnapshotFilteredBatchesAcrossBoundaries(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got, err := store.ReadObjectSnapshotFiltered(ctx, "owner-b", "computer-b", []ObjectKind{"choir.batch"}, func(_ ObjectKind, metadata json.RawMessage) bool {
+	got, err := store.ReadObjectSnapshotFiltered(ctx, "owner-b", "computer-b", []ObjectKind{"choir.event"}, func(_ ObjectKind, metadata json.RawMessage) bool {
 		var m struct{ Keep bool }
 		_ = json.Unmarshal(metadata, &m)
 		return m.Keep

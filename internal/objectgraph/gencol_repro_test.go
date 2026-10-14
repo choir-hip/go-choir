@@ -19,7 +19,7 @@ func TestGeneratedColumnInsertRepro(t *testing.T) {
 	}
 	obj := Object{
 		CanonicalID: "repro-1",
-		ObjectKind:  ObjectKind("choir.run.event"),
+		ObjectKind:  ObjectKind("choir.event"),
 		OwnerID:     "owner",
 		ComputerID:  "comp",
 		VersionID:   "v1",
@@ -30,7 +30,7 @@ func TestGeneratedColumnInsertRepro(t *testing.T) {
 	if err := store.PutBatch(ctx, Batch{Objects: []Object{obj}}); err != nil {
 		t.Fatalf("put batch: %v", err)
 	}
-	got, err := store.ListObjectsByMetadata(ctx, "choir.run.event", "$.run_id", "r1", 10)
+	got, err := store.ListObjectsByMetadata(ctx, "choir.event", "$.run_id", "r1", 10)
 	if err != nil {
 		t.Fatalf("list by metadata: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestGeneratedColumnInsertRepro(t *testing.T) {
 		t.Fatalf("indexed lookup returned %+v", got)
 	}
 	// Fallback path still works for unmapped fields.
-	got, err = store.ListObjectsByMetadata(ctx, "choir.run.event", "$.nope", "r1", 10)
+	got, err = store.ListObjectsByMetadata(ctx, "choir.event", "$.nope", "r1", 10)
 	if err != nil {
 		t.Fatalf("fallback metadata query: %v", err)
 	}

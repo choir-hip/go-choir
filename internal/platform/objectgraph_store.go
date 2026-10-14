@@ -100,6 +100,9 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
 	}
+	if err := objectgraph.CheckWrite([]objectgraph.Object{obj}, nil); err != nil {
+		return err
+	}
 	bodyRef, err := o.externalizeBody(obj.Body)
 	if err != nil {
 		return err
@@ -142,6 +145,9 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 func (o *ObjectGraphStore) InsertObjectIfAbsent(ctx context.Context, obj objectgraph.Object) (bool, error) {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return false, fmt.Errorf("platform objectgraph: nil store")
+	}
+	if err := objectgraph.CheckWrite([]objectgraph.Object{obj}, nil); err != nil {
+		return false, err
 	}
 	bodyRef, err := o.externalizeBody(obj.Body)
 	if err != nil {
@@ -247,6 +253,9 @@ func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.L
 func (o *ObjectGraphStore) PutEdge(ctx context.Context, edge objectgraph.Edge) error {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
+	}
+	if err := objectgraph.CheckWrite(nil, []objectgraph.Edge{edge}); err != nil {
+		return err
 	}
 	_, err := o.store.corpus().ExecContext(ctx, `INSERT INTO og_edges
 		(edge_id, from_id, to_id, kind, metadata, created_at, tombstone)
@@ -428,6 +437,9 @@ func (o *ObjectGraphStore) ListEdgesByKind(ctx context.Context, fromID string, k
 func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch) error {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")
+	}
+	if err := objectgraph.CheckWrite(batch.Objects, batch.Edges); err != nil {
+		return err
 	}
 	tx, err := o.store.corpus().BeginTx(ctx, nil)
 	if err != nil {

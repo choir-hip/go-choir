@@ -215,6 +215,9 @@ func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
+	if err := CheckWrite([]Object{obj}, nil); err != nil {
+		return err
+	}
 	// validate + intercept run OUTSIDE engineMu: intercept is the projection
 	// append path (network CAS + event write) and must not hold the engine
 	// mutex across a host round-trip. Only the direct-SQL engine write below
@@ -460,6 +463,9 @@ func (s *DoltStore) PutEdge(ctx context.Context, edge Edge) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
 	}
+	if err := CheckWrite(nil, []Edge{edge}); err != nil {
+		return err
+	}
 	// intercept is the projection append path — do not hold engineMu across it.
 	if s.intercept != nil {
 		return s.intercept(ctx, nil, []Edge{edge})
@@ -543,6 +549,9 @@ func (s *DoltStore) PutBatchConditional(ctx context.Context, conditions []Object
 func (s *DoltStore) putBatch(ctx context.Context, conditions []ObjectCondition, batch Batch) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if err := CheckWrite(batch.Objects, batch.Edges); err != nil {
+		return err
 	}
 	// validate + intercept run OUTSIDE engineMu. intercept is the projection
 	// append path (network CAS + event write); holding the engine mutex across
