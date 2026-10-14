@@ -6,6 +6,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/containerd/cgroups/v3 v3.1.3
 	github.com/creack/pty/v2 v2.0.1
+	github.com/dolthub/dolt/go v0.40.5-0.20260716231223-6bea93f2f665
 	github.com/dolthub/driver/v2 v2.2.0
 	github.com/elastic/go-seccomp-bpf v1.6.0
 	github.com/go-sql-driver/mysql v1.9.3
@@ -80,7 +81,6 @@ require (
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/denisbrodbeck/machineid v1.0.1 // indirect
 	github.com/dolthub/aws-sdk-go-ini-parser v0.0.0-20250305001723-2821c37f6c12 // indirect
-	github.com/dolthub/dolt/go v0.40.5-0.20260716231223-6bea93f2f665 // indirect
 	github.com/dolthub/eventsapi_schema v0.0.0-20260310172945-37a9265ade69 // indirect
 	github.com/dolthub/flatbuffers/v23 v23.3.3-dh.2 // indirect
 	github.com/dolthub/fslock v0.0.5 // indirect
