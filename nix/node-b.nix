@@ -978,7 +978,7 @@ in
       ExecStart = lib.concatStringsSep " " [
         "${goChoirPackages.goproxy}/bin/goproxy"
         "-listen 127.0.0.1:8088"
-        "-cache-dir /var/lib/go-choir/goproxy"
+        "-cache-dir /var/lib/go-choir-goproxy"
         "-max-bytes 8589934592"
         "-warm-go-sum ${goChoirPackages.goproxy}/share/go-choir/go.sum"
       ];
@@ -987,7 +987,10 @@ in
       # SIGTERM drains in-flight module downloads for up to 45 s.
       TimeoutStopSec = "60s";
       DynamicUser = true;
-      StateDirectory = "go-choir/goproxy";
+      # A top-level state dir the dynamic user owns: a nested one under root's
+      # 0750 /var/lib/go-choir is not traversable by the dynamic user
+      # (docs/problems/goproxy-unit-cannot-create-cache-2026-10-14.md).
+      StateDirectory = "go-choir-goproxy";
       StateDirectoryMode = "0750";
       RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
       MemoryMax = "1G";
