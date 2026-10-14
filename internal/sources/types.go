@@ -18,6 +18,11 @@ const (
 	SourceTypePolymarket SourceType = "polymarket"
 )
 
+// TOSClassTestFixture marks a registry entry that serves test data (L2a
+// R2-7). A schedule on it starts only when the request is marked as a
+// fixture run, and research's PollSource refuses it.
+const TOSClassTestFixture = "test_fixture"
+
 type Source struct {
 	ID                  string     `json:"id"`
 	Type                SourceType `json:"type"`

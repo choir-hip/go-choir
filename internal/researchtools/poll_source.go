@@ -88,6 +88,13 @@ func newPollSourceTool(deps Dependencies) toolregistry.Tool {
 			if exec.OwnerID == "" {
 				return "", fmt.Errorf("poll_source missing owner context")
 			}
+			// Test data is polled only by a schedule marked as a fixture run
+			// (L2a R2-7), never into the shared store as research's news.
+			if reg, err := deps.sourceRegistry(); err == nil {
+				if source, ok := reg.Lookup(in.SourceID); ok && strings.TrimSpace(source.TOSClass) == sources.TOSClassTestFixture {
+					return "", fmt.Errorf("poll_source: %s is a %s; it is polled only by a schedule marked as a fixture run", source.ID, sources.TOSClassTestFixture)
+				}
+			}
 			report, err := PollSourceOnce(ctx, deps, exec.OwnerID, exec.ComputerID, in.SourceID, in.MaxItems)
 			if err != nil {
 				return "", err

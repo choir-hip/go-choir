@@ -58,7 +58,17 @@ func (rt *Runtime) armSourcePoll(ctx context.Context, sched store.SourceSchedule
 
 // StartSourceSchedule starts (or restarts) polling sourceID every interval.
 // The first poll is due now. Any earlier chain for the source goes stale.
+// A test_fixture source is refused; StartSourceScheduleRun marks a fixture
+// run.
 func (rt *Runtime) StartSourceSchedule(ctx context.Context, ownerID, computerID, sourceID string, interval time.Duration, maxItems int) (store.SourceSchedule, error) {
+	return rt.StartSourceScheduleRun(ctx, ownerID, computerID, sourceID, interval, maxItems, false)
+}
+
+// StartSourceScheduleRun is StartSourceSchedule with the fixture-run mark:
+// a source whose tos_class is test_fixture starts only when fixtureRun is
+// set, so test data never becomes a standing schedule by accident (L2a
+// R2-7).
+func (rt *Runtime) StartSourceScheduleRun(ctx context.Context, ownerID, computerID, sourceID string, interval time.Duration, maxItems int, fixtureRun bool) (store.SourceSchedule, error) {
 	if rt == nil || rt.store == nil {
 		return store.SourceSchedule{}, fmt.Errorf("source schedule: store unavailable")
 	}
@@ -70,8 +80,13 @@ func (rt *Runtime) StartSourceSchedule(ctx context.Context, ownerID, computerID,
 	} else if reg, err = sources.DefaultRegistry(); err != nil {
 		return store.SourceSchedule{}, err
 	}
-	if _, ok := reg.Lookup(sourceID); !ok {
+	source, ok := reg.Lookup(sourceID)
+	if !ok {
 		return store.SourceSchedule{}, fmt.Errorf("unknown source %q", sourceID)
+	}
+	isFixture := strings.TrimSpace(source.TOSClass) == sources.TOSClassTestFixture
+	if isFixture && !fixtureRun {
+		return store.SourceSchedule{}, fmt.Errorf("source %q is a %s; a schedule on it starts only when the request is marked as a fixture run (fixture_run)", sourceID, sources.TOSClassTestFixture)
 	}
 	if interval <= 0 {
 		interval = defaultSourcePollInterval
@@ -87,7 +102,7 @@ func (rt *Runtime) StartSourceSchedule(ctx context.Context, ownerID, computerID,
 	}
 	now := time.Now().UTC()
 	sched.OwnerID, sched.ComputerID, sched.SourceID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), sourceID
-	sched.IntervalSeconds, sched.MaxItems = int64(interval/time.Second), maxItems
+	sched.IntervalSeconds, sched.MaxItems, sched.FixtureRun = int64(interval/time.Second), maxItems, isFixture
 	sched.State, sched.StateReason = store.SourceScheduleActive, ""
 	sched.Generation++
 	sched.NextDue, sched.ConsecutiveFailures, sched.UpdatedAt = now, 0, now
@@ -327,6 +342,8 @@ type sourceScheduleRequest struct {
 	IntervalMinutes int    `json:"interval_minutes,omitempty"`
 	MaxItems        int    `json:"max_items,omitempty"`
 	Reason          string `json:"reason,omitempty"`
+	// FixtureRun marks a schedule on a test_fixture source (L2a R2-7).
+	FixtureRun bool `json:"fixture_run,omitempty"`
 }
 
 // HandleSourceSchedules serves /api/autopaper/sources/schedules: GET lists
@@ -357,8 +374,8 @@ func (h *APIHandler) HandleSourceSchedules(w http.ResponseWriter, r *http.Reques
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid JSON body"})
 			return
 		}
-		sched, err := rt.StartSourceSchedule(r.Context(), ownerID, rt.TextureComputerID(), req.SourceID,
-			time.Duration(req.IntervalMinutes)*time.Minute, req.MaxItems)
+		sched, err := rt.StartSourceScheduleRun(r.Context(), ownerID, rt.TextureComputerID(), req.SourceID,
+			time.Duration(req.IntervalMinutes)*time.Minute, req.MaxItems, req.FixtureRun)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return

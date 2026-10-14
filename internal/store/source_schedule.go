@@ -65,11 +65,14 @@ type SourcePollTotals struct {
 // SourceSchedule is one source's schedule. Generation changes on every start
 // and stop; a wake carrying another generation is stale and does nothing.
 type SourceSchedule struct {
-	OwnerID             string            `json:"owner_id"`
-	ComputerID          string            `json:"computer_id"`
-	SourceID            string            `json:"source_id"`
-	IntervalSeconds     int64             `json:"interval_seconds"`
-	MaxItems            int               `json:"max_items"`
+	OwnerID         string `json:"owner_id"`
+	ComputerID      string `json:"computer_id"`
+	SourceID        string `json:"source_id"`
+	IntervalSeconds int64  `json:"interval_seconds"`
+	MaxItems        int    `json:"max_items"`
+	// FixtureRun marks a schedule on a test_fixture source, started by a
+	// request marked as a fixture run (L2a R2-7).
+	FixtureRun          bool              `json:"fixture_run,omitempty"`
 	State               string            `json:"state"`
 	Generation          int64             `json:"generation"`
 	NextDue             time.Time         `json:"next_due,omitempty"`

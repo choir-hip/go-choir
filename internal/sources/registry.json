@@ -5713,6 +5713,30 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_text",
       "retention_days": 30
+    },
+    {
+      "id": "fixture:l2a_multilingual_2026_10_14",
+      "type": "rss",
+      "name": "Choir L2a multilingual fixture",
+      "url": "https://raw.githubusercontent.com/choir-hip/go-choir/main/testdata/fixtures/l2a-multilingual-2026-10-14.xml",
+      "verticals": [
+        "test_fixture"
+      ],
+      "languages": [
+        "multi"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 3600,
+      "max_items_per_poll": 100,
+      "rate_limit": "fixture run only",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "test_fixture",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "bounded_abstract",
+      "retention_days": 30
     }
   ]
 }
