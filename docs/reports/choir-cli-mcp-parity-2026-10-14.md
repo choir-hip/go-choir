@@ -138,6 +138,7 @@ Every command takes a required `computer`.
 | `self-dev list` | `self_dev_list` | GET `.../self-development/operations?state=` | state[] | R | :read |
 | `self-dev show` | `self_dev_show` | GET `.../operations/{op}` | operation | R | :read |
 | `self-dev head` | `self_dev_head` | GET `.../head` | — | R | :read |
+| `self-dev patch` | `self_dev_patch` | GET `.../operations/{op}/source-patch` | operation; `--out` CLI only (MCP inlines up to 256 KiB); sha256 verified client-side | R | :read |
 | ~~`self-dev start`~~ | ~~`self_dev_start`~~ | removed 2026-10-14: the route was deleted in C1e B1 (a06191f9e); a change starts with `run start` on an armed computer | | | |
 | `self-dev wait` | CLI only | polls GET `.../operations/{op}` | operation, state[], interval, deadline (2h) | R L | :read |
 | `self-dev approve` | `self_dev_approve` | GET op, GET head, GET mode, PUT mode (arm `accept_once`), POST `.../operations/{op}/decision` | operation, idempotency_key, window | W D I (applies the candidate) | :read, :mode, :approve |
