@@ -114,13 +114,15 @@ func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit prov
 	}
 
 	progressPayload, _ := json.Marshal(map[string]string{
-		"status":      "completed",
-		"provider":    resp.ProviderName,
-		"routed":      "true",
-		"model":       resp.Model,
-		"stop_reason": resp.StopReason,
-		"tokens_in":   fmt.Sprintf("%d", resp.Usage.InputTokens),
-		"tokens_out":  fmt.Sprintf("%d", resp.Usage.OutputTokens),
+		"status":         "completed",
+		"provider":       resp.ProviderName,
+		"routed":         "true",
+		"model":          resp.Model,
+		"stop_reason":    resp.StopReason,
+		"tokens_in":      fmt.Sprintf("%d", resp.Usage.InputTokens),
+		"tokens_out":     fmt.Sprintf("%d", resp.Usage.OutputTokens),
+		"tokens_cached":  fmt.Sprintf("%d", resp.Usage.CachedInputTokens),
+		"cache_reported": fmt.Sprintf("%t", resp.Usage.CacheReported),
 	})
 	emit(types.EventRunProgress, "execution", progressPayload)
 	task.Result = resp.Text
@@ -153,8 +155,10 @@ func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoop
 		Text:             resp.Text,
 		ReasoningContent: resp.ReasoningContent,
 		Usage: provideriface.TokenUsage{
-			InputTokens:  resp.Usage.InputTokens,
-			OutputTokens: resp.Usage.OutputTokens,
+			InputTokens:       resp.Usage.InputTokens,
+			OutputTokens:      resp.Usage.OutputTokens,
+			CachedInputTokens: resp.Usage.CachedInputTokens,
+			CacheReported:     resp.Usage.CacheReported,
 		},
 		Model: resp.Model,
 	}
@@ -371,6 +375,10 @@ func parseGatewaySSE(body io.Reader, onChunk func(streamChunk)) (*llmResponse, e
 		if chunk.Usage != nil {
 			accumulated.Usage.InputTokens = chunk.Usage.InputTokens
 			accumulated.Usage.OutputTokens = chunk.Usage.OutputTokens
+			if chunk.Usage.CacheReported {
+				accumulated.Usage.CachedInputTokens = chunk.Usage.CachedInputTokens
+				accumulated.Usage.CacheReported = true
+			}
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -547,8 +555,10 @@ type llmResponse struct {
 }
 
 type tokenUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens       int  `json:"input_tokens"`
+	OutputTokens      int  `json:"output_tokens"`
+	CachedInputTokens int  `json:"cached_input_tokens,omitempty"`
+	CacheReported     bool `json:"cache_reported,omitempty"`
 }
 
 type contentToolCall struct {
@@ -572,6 +582,8 @@ type streamChunk struct {
 }
 
 type streamUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens       int  `json:"input_tokens"`
+	OutputTokens      int  `json:"output_tokens"`
+	CachedInputTokens int  `json:"cached_input_tokens,omitempty"`
+	CacheReported     bool `json:"cache_reported,omitempty"`
 }

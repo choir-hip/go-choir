@@ -3622,6 +3622,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	rec.Metadata["input_tokens"] = usage.InputTokens
 	rec.Metadata["output_tokens"] = usage.OutputTokens
+	rec.Metadata["cached_input_tokens"] = usage.CachedInputTokens
 
 	// For texture agent revision runs, create the canonical revision and emit the
 	// texture completion event before the run is surfaced as completed. This keeps
@@ -3642,9 +3643,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// persistActivationStateAndEmit after the commit, so a subscriber that
 	// reacts to the event and fetches run status observes the terminal state.
 	resultLenPayload, _ := json.Marshal(map[string]any{
-		"result_length": len(text),
-		"input_tokens":  usage.InputTokens,
-		"output_tokens": usage.OutputTokens,
+		"result_length":       len(text),
+		"input_tokens":        usage.InputTokens,
+		"output_tokens":       usage.OutputTokens,
+		"cached_input_tokens": usage.CachedInputTokens,
 	})
 	persisted, err := rt.persistActivationStateAndEmit(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	if err != nil {
@@ -3749,15 +3751,17 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	}
 	rec.Metadata["input_tokens"] = usage.InputTokens
 	rec.Metadata["output_tokens"] = usage.OutputTokens
+	rec.Metadata["cached_input_tokens"] = usage.CachedInputTokens
 	rec.Metadata["passivated_reason"] = reason
 	rec.Metadata["actor_sleep_state"] = "idle"
 	rec.Metadata["actor_sleep_at"] = now.Format(time.RFC3339Nano)
 
 	payload := map[string]any{
-		"reason":        reason,
-		"result_length": len(text),
-		"input_tokens":  usage.InputTokens,
-		"output_tokens": usage.OutputTokens,
+		"reason":              reason,
+		"result_length":       len(text),
+		"input_tokens":        usage.InputTokens,
+		"output_tokens":       usage.OutputTokens,
+		"cached_input_tokens": usage.CachedInputTokens,
 	}
 	if runHasProfile(rec, agentprofile.Texture) {
 		if docID := strings.TrimSpace(firstNonEmpty(metadataStringValue(rec.Metadata, "doc_id"), rec.ChannelID)); docID != "" {

@@ -29,6 +29,20 @@ type ModelPricing struct {
 
 	// OutputPerMillion is the USD price per 1M output (completion) tokens.
 	OutputPerMillion float64
+
+	// CachedInputPerMillion is the USD price per 1M input tokens served from
+	// the provider's prompt cache. Zero means no cached rate is known: cached
+	// tokens then price at InputPerMillion (never at $0, which would
+	// understate cost).
+	CachedInputPerMillion float64
+}
+
+// cachedRate is the per-1M price a cached input token is billed at.
+func (p ModelPricing) cachedRate() float64 {
+	if p.CachedInputPerMillion > 0 {
+		return p.CachedInputPerMillion
+	}
+	return p.InputPerMillion
 }
 
 // pricingTable is the hardcoded pricing table. Prices are USD per 1M tokens:
@@ -58,16 +72,16 @@ var pricingTable = []ModelPricing{
 	// DeepSeek V4.1 Flash: DeepSeek's peak rate (off-peak is half; peak is
 	// 01-04 and 06-10 UTC on weekdays). On opencode-go it draws down the
 	// Go plan's per-model allowance at the same rates.
-	{Provider: "deepseek", Model: "deepseek-v4.1-flash", InputPerMillion: 0.30, OutputPerMillion: 1.20},
+	{Provider: "deepseek", Model: "deepseek-v4.1-flash", InputPerMillion: 0.30, CachedInputPerMillion: 0.006, OutputPerMillion: 1.20},
 	// DeepSeek V4 Pro (0813): DeepSeek's peak rate.
-	{Provider: "deepseek", Model: "deepseek-v4-pro", InputPerMillion: 1.32, OutputPerMillion: 3.96},
+	{Provider: "deepseek", Model: "deepseek-v4-pro", InputPerMillion: 1.32, CachedInputPerMillion: 0.044, OutputPerMillion: 3.96},
 	// GPT-6 Luna: OpenAI API standard tier up to 272K context. The chatgpt
 	// route is a flat ChatGPT subscription.
-	{Provider: "openai", Model: "gpt-6-luna", InputPerMillion: 0.10, OutputPerMillion: 0.50},
+	{Provider: "openai", Model: "gpt-6-luna", InputPerMillion: 0.10, CachedInputPerMillion: 0.01, OutputPerMillion: 0.50},
 	// Kimi K2.6: Moonshot's rate as listed on OpenRouter.
-	{Provider: "moonshot", Model: "kimi-k2p6", InputPerMillion: 0.95, OutputPerMillion: 4.00},
+	{Provider: "moonshot", Model: "kimi-k2p6", InputPerMillion: 0.95, CachedInputPerMillion: 0.16, OutputPerMillion: 4.00},
 	// Jev 1.13: TypeSafe through OpenRouter's Decisions endpoint; output is
-	// not billed.
+	// not billed, and no cached rate is listed.
 	{Provider: "typesafe", Model: "jev-1.13", InputPerMillion: 0.042, OutputPerMillion: 0},
 	// Free previews on opencode-go: found at $0, not unpriced. Free "for a
 	// limited time" with no end date; LongCat 2.5 Preview lists at about

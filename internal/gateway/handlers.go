@@ -407,8 +407,8 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 6: Return the successful response.
-	log.Printf("gateway: inference succeeded for autoputer %s (provider=%s tokens=%d+%d text_len=%d)",
-		computerID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, len(resp.Text))
+	log.Printf("gateway: inference succeeded for autoputer %s (provider=%s tokens=%d+%d cached=%d text_len=%d)",
+		computerID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.CachedInputTokens, len(resp.Text))
 
 	writeGatewayJSON(w, http.StatusOK, ProviderResponse{
 		ID:               resp.ID,
@@ -473,8 +473,8 @@ func (h *Handler) handleStreamingInference(w http.ResponseWriter, r *http.Reques
 		flusher.Flush()
 	}
 
-	log.Printf("gateway: streaming inference succeeded for autoputer %s (provider=%s tokens=%d+%d text_len=%d)",
-		computerID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, len(resp.Text))
+	log.Printf("gateway: streaming inference succeeded for autoputer %s (provider=%s tokens=%d+%d cached=%d text_len=%d)",
+		computerID, resp.ProviderName, resp.Usage.InputTokens, resp.Usage.OutputTokens, resp.Usage.CachedInputTokens, len(resp.Text))
 }
 
 // resolveProvider selects the appropriate provider for the given request.

@@ -24,7 +24,9 @@ type costsResponse struct {
 }
 
 // HandleCosts handles GET /api/costs, returning aggregated LLM cost estimates
-// derived from trace events for the authenticated owner.
+// derived from trace events for the authenticated owner. The summary and its
+// breakdowns carry prompt-cache figures (total_cached_input_tokens,
+// cache_hit_rate over calls that reported caching, cache_savings_usd).
 //
 // Query parameters:
 //   - limit: max events to scan (default 2000, max 10000)

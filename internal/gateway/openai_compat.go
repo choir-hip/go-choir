@@ -480,7 +480,7 @@ func (h *Handler) handleOpenAIStreamingChatCompletions(w http.ResponseWriter, r 
 				},
 			}}}, "", nil))
 		case chunk.Usage != nil:
-			usage := openAIUsage(provider.Usage{InputTokens: chunk.Usage.InputTokens, OutputTokens: chunk.Usage.OutputTokens})
+			usage := openAIUsage(provider.Usage{InputTokens: chunk.Usage.InputTokens, OutputTokens: chunk.Usage.OutputTokens, CachedInputTokens: chunk.Usage.CachedInputTokens, CacheReported: chunk.Usage.CacheReported})
 			writeOpenAISSE(w, canFlush, flusher, openAIChatCompletionChunk(llmReq.Model, openAIChatDelta{}, "", &usage))
 		}
 	})
@@ -595,6 +595,9 @@ func openAIUsage(usage provider.Usage) openAIChatUsage {
 		PromptTokens:     usage.InputTokens,
 		CompletionTokens: usage.OutputTokens,
 		TotalTokens:      usage.InputTokens + usage.OutputTokens,
+		// The upstream provider's prompt-cache count, passed through in
+		// OpenAI's shape.
+		PromptTokensDetails: openAIPromptTokensDetails{CachedTokens: usage.CachedInputTokens},
 	}
 }
 

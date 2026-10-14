@@ -156,8 +156,37 @@ type LLMResponse struct {
 
 // Usage tracks token counts for a provider response.
 type Usage struct {
+	// InputTokens is the whole prompt, cached and uncached.
 	InputTokens  int `json:"input_tokens"`
 	OutputTokens int `json:"output_tokens"`
+
+	// CachedInputTokens is the part of InputTokens the provider served from
+	// its prompt cache (billed at the cached-input rate). Always <= InputTokens.
+	CachedInputTokens int `json:"cached_input_tokens,omitempty"`
+
+	// CacheReported is true when the provider's usage carried a cache field
+	// at all, so "0 cached" (a miss) is distinguishable from "not reported".
+	CacheReported bool `json:"cache_reported,omitempty"`
+}
+
+// normalizeCache clamps CachedInputTokens to the prompt size.
+func (u Usage) normalizeCache() Usage {
+	if u.CachedInputTokens < 0 {
+		u.CachedInputTokens = 0
+	}
+	if u.CachedInputTokens > u.InputTokens {
+		u.CachedInputTokens = u.InputTokens
+	}
+	return u
+}
+
+func (u Usage) streamUsage() *StreamUsage {
+	return &StreamUsage{
+		InputTokens:       u.InputTokens,
+		OutputTokens:      u.OutputTokens,
+		CachedInputTokens: u.CachedInputTokens,
+		CacheReported:     u.CacheReported,
+	}
 }
 
 // ContentToolCall represents a tool invocation extracted from a tool_use
@@ -217,8 +246,10 @@ type StreamChunk struct {
 
 // StreamUsage carries token counts for streaming responses.
 type StreamUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens       int  `json:"input_tokens"`
+	OutputTokens      int  `json:"output_tokens"`
+	CachedInputTokens int  `json:"cached_input_tokens,omitempty"`
+	CacheReported     bool `json:"cache_reported,omitempty"`
 }
 
 // Provider is the interface for executing LLM requests. Implementations
@@ -1340,6 +1371,39 @@ type openAIChatCompletionUsage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+	// OpenAI-style cache report (also sent by DeepSeek and most
+	// OpenAI-compatible routers).
+	PromptTokensDetails *struct {
+		CachedTokens *int `json:"cached_tokens"`
+	} `json:"prompt_tokens_details,omitempty"`
+	// DeepSeek-native cache report.
+	PromptCacheHitTokens  *int `json:"prompt_cache_hit_tokens,omitempty"`
+	PromptCacheMissTokens *int `json:"prompt_cache_miss_tokens,omitempty"`
+}
+
+func (u openAIChatCompletionUsage) present() bool {
+	return u.PromptTokens > 0 || u.CompletionTokens > 0 || u.PromptCacheHitTokens != nil
+}
+
+// usage maps a chat-completions usage object to Usage. When both the OpenAI
+// and the DeepSeek cache fields are present the larger is taken (they report
+// the same quantity); when prompt_tokens is absent, hit+miss is the prompt.
+func (u openAIChatCompletionUsage) usage() Usage {
+	out := Usage{InputTokens: u.PromptTokens, OutputTokens: u.CompletionTokens}
+	if d := u.PromptTokensDetails; d != nil && d.CachedTokens != nil {
+		out.CacheReported = true
+		out.CachedInputTokens = *d.CachedTokens
+	}
+	if u.PromptCacheHitTokens != nil {
+		out.CacheReported = true
+		if *u.PromptCacheHitTokens > out.CachedInputTokens {
+			out.CachedInputTokens = *u.PromptCacheHitTokens
+		}
+		if out.InputTokens == 0 && u.PromptCacheMissTokens != nil {
+			out.InputTokens = *u.PromptCacheHitTokens + *u.PromptCacheMissTokens
+		}
+	}
+	return out.normalizeCache()
 }
 
 func convertOpenAIInput(messages []Message) []openAIItem {
@@ -1575,8 +1639,27 @@ type anthropicResponseBlock struct {
 }
 
 type anthropicUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int  `json:"input_tokens"`
+	OutputTokens             int  `json:"output_tokens"`
+	CacheReadInputTokens     *int `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens *int `json:"cache_creation_input_tokens,omitempty"`
+}
+
+// usage maps an Anthropic usage object to Usage. Anthropic's input_tokens
+// excludes cache reads and cache writes; InputTokens here is the whole
+// prompt so CachedInputTokens stays a subset of it.
+func (u anthropicUsage) usage() Usage {
+	out := Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens}
+	if u.CacheReadInputTokens != nil {
+		out.CacheReported = true
+		out.CachedInputTokens = *u.CacheReadInputTokens
+		out.InputTokens += *u.CacheReadInputTokens
+	}
+	if u.CacheCreationInputTokens != nil {
+		out.CacheReported = true
+		out.InputTokens += *u.CacheCreationInputTokens
+	}
+	return out.normalizeCache()
 }
 
 func convertMessages(msgs []Message) []anthropicMessage {
@@ -1886,7 +1969,7 @@ func parseBedrockResponse(resp *http.Response, modelID string) (*LLMResponse, er
 		ID:           payload.ID,
 		Model:        coalesce(payload.Model, modelID),
 		StopReason:   payload.StopReason,
-		Usage:        Usage{InputTokens: payload.Usage.InputTokens, OutputTokens: payload.Usage.OutputTokens},
+		Usage:        payload.Usage.usage(),
 		ProviderName: "bedrock",
 	}
 
@@ -1929,7 +2012,7 @@ func parseAnthropicResponse(resp *http.Response, modelID string, providerName st
 		ID:           payload.ID,
 		Model:        coalesce(payload.Model, modelID),
 		StopReason:   payload.StopReason,
-		Usage:        Usage{InputTokens: payload.Usage.InputTokens, OutputTokens: payload.Usage.OutputTokens},
+		Usage:        payload.Usage.usage(),
 		ProviderName: providerName,
 	}
 
@@ -1974,7 +2057,7 @@ func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, pro
 	result := &LLMResponse{
 		ID:           payload.ID,
 		Model:        coalesce(payload.Model, modelID),
-		Usage:        Usage{InputTokens: payload.Usage.PromptTokens, OutputTokens: payload.Usage.CompletionTokens},
+		Usage:        payload.Usage.usage(),
 		ProviderName: providerName,
 	}
 
@@ -2065,15 +2148,14 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 		default:
 			result.StopReason = reason
 		}
-		if usage.PromptTokens > 0 || usage.CompletionTokens > 0 {
-			result.Usage.InputTokens = usage.PromptTokens
-			result.Usage.OutputTokens = usage.CompletionTokens
+		if usage.present() {
+			result.Usage = usage.usage()
 		}
 		emitStart()
 		onChunk(StreamChunk{
 			Type:       "message_delta",
 			StopReason: result.StopReason,
-			Usage:      &StreamUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens},
+			Usage:      result.Usage.streamUsage(),
 		})
 	}
 
@@ -2145,9 +2227,8 @@ func parseOpenAIChatCompletionsStream(body io.Reader, modelID string, providerNa
 				finish(choice.FinishReason, payload.Usage)
 			}
 		}
-		if len(payload.Choices) == 0 && (payload.Usage.PromptTokens > 0 || payload.Usage.CompletionTokens > 0) {
-			result.Usage.InputTokens = payload.Usage.PromptTokens
-			result.Usage.OutputTokens = payload.Usage.CompletionTokens
+		if len(payload.Choices) == 0 && payload.Usage.present() {
+			result.Usage = payload.Usage.usage()
 		}
 		return nil
 	}); err != nil {
@@ -2272,10 +2353,7 @@ func parseSSEStream(body io.Reader, modelID string, providerName string, onChunk
 			Delta        json.RawMessage `json:"delta"`
 			Message      json.RawMessage `json:"message"`
 			ContentBlock json.RawMessage `json:"content_block"`
-			Usage        struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
-			} `json:"usage"`
+			Usage        anthropicUsage  `json:"usage"`
 		}
 
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
@@ -2287,24 +2365,25 @@ func parseSSEStream(body io.Reader, modelID string, providerName string, onChunk
 		case "message_start":
 			// Extract message fields.
 			var msg struct {
-				ID    string `json:"id"`
-				Model string `json:"model"`
-				Usage struct {
-					InputTokens int `json:"input_tokens"`
-				} `json:"usage"`
+				ID    string         `json:"id"`
+				Model string         `json:"model"`
+				Usage anthropicUsage `json:"usage"`
 			}
 			if err := json.Unmarshal(event.Message, &msg); err == nil {
 				result.ID = msg.ID
 				if msg.Model != "" {
 					result.Model = msg.Model
 				}
-				result.Usage.InputTokens = msg.Usage.InputTokens
+				start := msg.Usage.usage()
+				result.Usage.InputTokens = start.InputTokens
+				result.Usage.CachedInputTokens = start.CachedInputTokens
+				result.Usage.CacheReported = start.CacheReported
 			}
 			onChunk(StreamChunk{
 				Type:  "message_start",
 				ID:    result.ID,
 				Model: result.Model,
-				Usage: &StreamUsage{InputTokens: result.Usage.InputTokens},
+				Usage: &StreamUsage{InputTokens: result.Usage.InputTokens, CachedInputTokens: result.Usage.CachedInputTokens, CacheReported: result.Usage.CacheReported},
 			})
 
 		case "content_block_start":
@@ -2426,6 +2505,22 @@ func parseSSEStream(body io.Reader, modelID string, providerName string, onChunk
 	return result, nil
 }
 
+// responsesUsage maps a Responses API usage object, whose cache report is
+// input_tokens_details.cached_tokens.
+func responsesUsage(usage map[string]any) Usage {
+	out := Usage{
+		InputTokens:  int(numberValue(usage["input_tokens"])),
+		OutputTokens: int(numberValue(usage["output_tokens"])),
+	}
+	if details, ok := usage["input_tokens_details"].(map[string]any); ok {
+		if cached, ok := details["cached_tokens"]; ok {
+			out.CacheReported = true
+			out.CachedInputTokens = int(numberValue(cached))
+		}
+	}
+	return out.normalizeCache()
+}
+
 func parseOpenAIStream(body io.Reader, modelID string, providerName string, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	result := &LLMResponse{
 		Model:        modelID,
@@ -2536,8 +2631,7 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 					result.Model = model
 				}
 				if usage, ok := response["usage"].(map[string]any); ok {
-					result.Usage.InputTokens = int(numberValue(usage["input_tokens"]))
-					result.Usage.OutputTokens = int(numberValue(usage["output_tokens"]))
+					result.Usage = responsesUsage(usage)
 				}
 				if typ == "response.incomplete" {
 					if details, ok := response["incomplete_details"].(map[string]any); ok {
@@ -2553,7 +2647,7 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 			onChunk(StreamChunk{
 				Type:       "message_delta",
 				StopReason: result.StopReason,
-				Usage:      &StreamUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens},
+				Usage:      result.Usage.streamUsage(),
 			})
 		case "response.failed":
 			response, _ := payload["response"].(map[string]any)

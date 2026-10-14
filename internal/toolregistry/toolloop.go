@@ -550,8 +550,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		}
 
 		// Accumulate token usage.
-		totalUsage.InputTokens += resp.Usage.InputTokens
-		totalUsage.OutputTokens += resp.Usage.OutputTokens
+		totalUsage.Add(resp.Usage)
 
 		// Emit progress event for this iteration.
 		progressPayload, _ := json.Marshal(map[string]any{
@@ -568,6 +567,11 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			"model_policy":         "run_metadata",
 			"input_tokens":         resp.Usage.InputTokens,
 			"output_tokens":        resp.Usage.OutputTokens,
+			// Prompt-cache measurement: the part of input_tokens served
+			// from the provider's cache, and whether the provider reported
+			// it at all (llmcost prices and rates only reported calls).
+			"cached_input_tokens": resp.Usage.CachedInputTokens,
+			"cache_reported":      resp.Usage.CacheReported,
 		})
 		emit(types.EventRunProgress, "tool_loop", progressPayload)
 

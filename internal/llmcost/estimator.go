@@ -15,6 +15,14 @@ type Cost struct {
 	// contributing to this cost.
 	OutputTokens int
 
+	// CachedInputTokens is the part of InputTokens served from the
+	// provider's prompt cache, priced at the cached-input rate.
+	CachedInputTokens int
+
+	// CacheSavingsUSD is what the cached tokens would have cost more at the
+	// uncached input rate.
+	CacheSavingsUSD float64
+
 	// Model is the model identifier used for the estimate. For aggregations
 	// that span multiple models this is empty.
 	Model string
@@ -33,24 +41,43 @@ type Cost struct {
 // in the pricing table, the returned Cost has Found=false and USD=0 so callers
 // can distinguish unpriced models from genuinely free calls.
 func EstimateCall(model string, inputTokens, outputTokens int) Cost {
+	return EstimateCallWithCache(model, inputTokens, 0, outputTokens)
+}
+
+// EstimateCallWithCache is EstimateCall for a call whose prompt was partly
+// served from the provider's prompt cache. inputTokens is the whole prompt;
+// cachedInputTokens (clamped to inputTokens) is priced at the model's cached
+// rate and the rest at the input rate.
+func EstimateCallWithCache(model string, inputTokens, cachedInputTokens, outputTokens int) Cost {
+	if cachedInputTokens < 0 {
+		cachedInputTokens = 0
+	}
+	if cachedInputTokens > inputTokens {
+		cachedInputTokens = inputTokens
+	}
 	entry, ok := LookupPricing(model)
 	if !ok {
 		return Cost{
-			InputTokens:  inputTokens,
-			OutputTokens: outputTokens,
-			Model:        model,
-			Found:        false,
+			InputTokens:       inputTokens,
+			OutputTokens:      outputTokens,
+			CachedInputTokens: cachedInputTokens,
+			Model:             model,
+			Found:             false,
 		}
 	}
-	usd := float64(inputTokens)*entry.InputPerMillion/1_000_000 +
+	uncached := inputTokens - cachedInputTokens
+	usd := float64(uncached)*entry.InputPerMillion/1_000_000 +
+		float64(cachedInputTokens)*entry.cachedRate()/1_000_000 +
 		float64(outputTokens)*entry.OutputPerMillion/1_000_000
 	return Cost{
-		USD:          usd,
-		InputTokens:  inputTokens,
-		OutputTokens: outputTokens,
-		Model:        model,
-		Provider:     entry.Provider,
-		Found:        true,
+		USD:               usd,
+		InputTokens:       inputTokens,
+		OutputTokens:      outputTokens,
+		CachedInputTokens: cachedInputTokens,
+		CacheSavingsUSD:   float64(cachedInputTokens) * (entry.InputPerMillion - entry.cachedRate()) / 1_000_000,
+		Model:             model,
+		Provider:          entry.Provider,
+		Found:             true,
 	}
 }
 
@@ -62,6 +89,8 @@ func (c *Cost) Add(other Cost) {
 	c.USD += other.USD
 	c.InputTokens += other.InputTokens
 	c.OutputTokens += other.OutputTokens
+	c.CachedInputTokens += other.CachedInputTokens
+	c.CacheSavingsUSD += other.CacheSavingsUSD
 	if c.Model == "" {
 		c.Model = other.Model
 	} else if other.Model != "" && c.Model != other.Model {

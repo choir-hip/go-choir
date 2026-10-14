@@ -32,6 +32,15 @@ type CostEntry struct {
 	// OutputTokens is the completion token count for this call.
 	OutputTokens int
 
+	// CachedInputTokens is the part of InputTokens the provider served from
+	// its prompt cache. Zero on events recorded before 2026-10-14.
+	CachedInputTokens int
+
+	// CacheReported is true when the provider reported a cache count for
+	// this call (a reported 0 is a miss; an unreported call is unknown and
+	// stays out of the hit rate).
+	CacheReported bool
+
 	// Timestamp is when the event was recorded.
 	Timestamp time.Time
 
@@ -47,11 +56,12 @@ type CostEntry struct {
 // progress events:
 //
 //   - phase "tool_loop": per-iteration provider call with llm_model,
-//     llm_provider, input_tokens, output_tokens.
+//     llm_provider, input_tokens, output_tokens, and (since 2026-10-14)
+//     cached_input_tokens and cache_reported.
 //   - phase "jev_judgment": one decision-model (Jev) call made for a run,
 //     with the same fields.
 //   - phase "execution": gateway provider completion with model, provider,
-//     tokens_in, tokens_out.
+//     tokens_in, tokens_out, tokens_cached, cache_reported.
 //
 // Cumulative budget-usage events (phase "tool_loop_budget_usage") are
 // intentionally excluded to avoid double-counting, since they report
@@ -89,6 +99,7 @@ func extractFromToolLoopEvent(ev types.EventRecord, payload map[string]any) (Cos
 	)
 	inputTokens := payloadInt(payload, "input_tokens")
 	outputTokens := payloadInt(payload, "output_tokens")
+	cachedTokens := payloadInt(payload, "cached_input_tokens")
 	// Skip events that carry no token data — these are pre-cost-tracking
 	// events or non-LLM progress updates.
 	if inputTokens == 0 && outputTokens == 0 {
@@ -98,21 +109,23 @@ func extractFromToolLoopEvent(ev types.EventRecord, payload map[string]any) (Cos
 		return CostEntry{}, false
 	}
 	provider := payloadString(payload, "llm_provider")
-	cost := EstimateCall(model, inputTokens, outputTokens)
+	cost := EstimateCallWithCache(model, inputTokens, cachedTokens, outputTokens)
 	if provider == "" {
 		provider = cost.Provider
 	}
 	return CostEntry{
-		RunID:        ev.RunID,
-		TrajectoryID: ev.TrajectoryID,
-		AgentID:      ev.AgentID,
-		Provider:     provider,
-		Model:        model,
-		InputTokens:  inputTokens,
-		OutputTokens: outputTokens,
-		Timestamp:    ev.Timestamp,
-		Cost:         cost,
-		EventID:      ev.EventID,
+		RunID:             ev.RunID,
+		TrajectoryID:      ev.TrajectoryID,
+		AgentID:           ev.AgentID,
+		Provider:          provider,
+		Model:             model,
+		InputTokens:       inputTokens,
+		OutputTokens:      outputTokens,
+		CachedInputTokens: cost.CachedInputTokens,
+		CacheReported:     payloadBool(payload, "cache_reported") || cost.CachedInputTokens > 0,
+		Timestamp:         ev.Timestamp,
+		Cost:              cost,
+		EventID:           ev.EventID,
 	}, true
 }
 
@@ -125,6 +138,7 @@ func extractFromExecutionEvent(ev types.EventRecord, payload map[string]any) (Co
 	model := payloadString(payload, "model")
 	inputTokens := payloadInt(payload, "tokens_in")
 	outputTokens := payloadInt(payload, "tokens_out")
+	cachedTokens := payloadInt(payload, "tokens_cached")
 	if inputTokens == 0 && outputTokens == 0 {
 		return CostEntry{}, false
 	}
@@ -132,21 +146,23 @@ func extractFromExecutionEvent(ev types.EventRecord, payload map[string]any) (Co
 		return CostEntry{}, false
 	}
 	provider := payloadString(payload, "provider")
-	cost := EstimateCall(model, inputTokens, outputTokens)
+	cost := EstimateCallWithCache(model, inputTokens, cachedTokens, outputTokens)
 	if provider == "" {
 		provider = cost.Provider
 	}
 	return CostEntry{
-		RunID:        ev.RunID,
-		TrajectoryID: ev.TrajectoryID,
-		AgentID:      ev.AgentID,
-		Provider:     provider,
-		Model:        model,
-		InputTokens:  inputTokens,
-		OutputTokens: outputTokens,
-		Timestamp:    ev.Timestamp,
-		Cost:         cost,
-		EventID:      ev.EventID,
+		RunID:             ev.RunID,
+		TrajectoryID:      ev.TrajectoryID,
+		AgentID:           ev.AgentID,
+		Provider:          provider,
+		Model:             model,
+		InputTokens:       inputTokens,
+		OutputTokens:      outputTokens,
+		CachedInputTokens: cost.CachedInputTokens,
+		CacheReported:     payloadBool(payload, "cache_reported") || cost.CachedInputTokens > 0,
+		Timestamp:         ev.Timestamp,
+		Cost:              cost,
+		EventID:           ev.EventID,
 	}, true
 }
 
@@ -167,6 +183,27 @@ type CostSummary struct {
 	// UnpricedCallCount is the number of calls whose model had no pricing
 	// entry. These calls contributed tokens but zero USD to TotalCost.
 	UnpricedCallCount int `json:"unpriced_call_count"`
+
+	// TotalCachedInputTokens is the part of TotalInputTokens the providers
+	// served from their prompt caches.
+	TotalCachedInputTokens int `json:"total_cached_input_tokens"`
+
+	// CacheReportedCallCount is the number of calls whose provider reported
+	// a cache count (hit or miss).
+	CacheReportedCallCount int `json:"cache_reported_call_count"`
+
+	// CacheReportedInputTokens is the input tokens of those calls: the
+	// denominator of CacheHitRate.
+	CacheReportedInputTokens int `json:"cache_reported_input_tokens"`
+
+	// CacheHitRate is TotalCachedInputTokens / CacheReportedInputTokens:
+	// the token-weighted prompt-cache hit rate over calls that reported
+	// caching. Zero when no call reported.
+	CacheHitRate float64 `json:"cache_hit_rate"`
+
+	// CacheSavingsUSD is what the cached tokens would have cost more at
+	// the uncached input rate.
+	CacheSavingsUSD float64 `json:"cache_savings_usd"`
 
 	// ByProvider breaks the summary down by LLM provider.
 	ByProvider map[string]CostSummary `json:"by_provider,omitempty"`
@@ -197,20 +234,44 @@ func Aggregate(entries []CostEntry) CostSummary {
 		ByDay:        make(map[string]CostSummary),
 	}
 	for _, entry := range entries {
-		summary.TotalCost += entry.Cost.USD
-		summary.TotalInputTokens += entry.InputTokens
-		summary.TotalOutputTokens += entry.OutputTokens
-		summary.CallCount++
-		if !entry.Cost.Found {
-			summary.UnpricedCallCount++
-		}
+		summary.add(entry)
 		addToBucket(summary.ByProvider, entry.Provider, entry)
 		addToBucket(summary.ByModel, entry.Model, entry)
 		addToBucket(summary.ByRun, entry.RunID, entry)
 		addToBucket(summary.ByTrajectory, entry.TrajectoryID, entry)
 		addToBucket(summary.ByDay, entry.Timestamp.UTC().Format("2006-01-02"), entry)
 	}
+	summary.finishHitRate()
+	for _, bucket := range []map[string]CostSummary{summary.ByProvider, summary.ByModel, summary.ByRun, summary.ByTrajectory, summary.ByDay} {
+		for key, sub := range bucket {
+			sub.finishHitRate()
+			bucket[key] = sub
+		}
+	}
 	return summary
+}
+
+func (s *CostSummary) add(entry CostEntry) {
+	s.TotalCost += entry.Cost.USD
+	s.TotalInputTokens += entry.InputTokens
+	s.TotalOutputTokens += entry.OutputTokens
+	s.TotalCachedInputTokens += entry.CachedInputTokens
+	s.CacheSavingsUSD += entry.Cost.CacheSavingsUSD
+	s.CallCount++
+	if !entry.Cost.Found {
+		s.UnpricedCallCount++
+	}
+	if entry.CacheReported {
+		s.CacheReportedCallCount++
+		s.CacheReportedInputTokens += entry.InputTokens
+	}
+}
+
+func (s *CostSummary) finishHitRate() {
+	s.CacheHitRate = 0
+	if s.CacheReportedInputTokens > 0 {
+		s.CacheHitRate = float64(s.TotalCachedInputTokens) / float64(s.CacheReportedInputTokens)
+	}
 }
 
 func addToBucket(bucket map[string]CostSummary, key string, entry CostEntry) {
@@ -218,13 +279,7 @@ func addToBucket(bucket map[string]CostSummary, key string, entry CostEntry) {
 		return
 	}
 	sub := bucket[key]
-	sub.TotalCost += entry.Cost.USD
-	sub.TotalInputTokens += entry.InputTokens
-	sub.TotalOutputTokens += entry.OutputTokens
-	sub.CallCount++
-	if !entry.Cost.Found {
-		sub.UnpricedCallCount++
-	}
+	sub.add(entry)
 	bucket[key] = sub
 }
 
@@ -265,6 +320,19 @@ func payloadInt(payload map[string]any, key string) int {
 		return n
 	default:
 		return 0
+	}
+}
+
+// payloadBool reads a JSON bool or a "true"/"1" string.
+func payloadBool(payload map[string]any, key string) bool {
+	switch value := payload[key].(type) {
+	case bool:
+		return value
+	case string:
+		v := strings.TrimSpace(value)
+		return v == "1" || strings.EqualFold(v, "true")
+	default:
+		return false
 	}
 }
 

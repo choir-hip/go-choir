@@ -140,8 +140,26 @@ type ToolLoopResponse struct {
 
 // TokenUsage tracks token counts for a tool-loop response.
 type TokenUsage struct {
+	// InputTokens is the whole prompt, cached and uncached.
 	InputTokens  int `json:"input_tokens"`
 	OutputTokens int `json:"output_tokens"`
+
+	// CachedInputTokens is the part of InputTokens served from the
+	// provider's prompt cache.
+	CachedInputTokens int `json:"cached_input_tokens,omitempty"`
+
+	// CacheReported is true when the provider reported a cache count, so a
+	// reported miss (0) is distinguishable from no report.
+	CacheReported bool `json:"cache_reported,omitempty"`
+}
+
+// Add accumulates another call's usage. CacheReported stays true once any
+// call reported.
+func (u *TokenUsage) Add(other TokenUsage) {
+	u.InputTokens += other.InputTokens
+	u.OutputTokens += other.OutputTokens
+	u.CachedInputTokens += other.CachedInputTokens
+	u.CacheReported = u.CacheReported || other.CacheReported
 }
 
 // ToolDefinition is the LLM-facing schema for a tool, without the Go
