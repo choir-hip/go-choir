@@ -42,8 +42,10 @@ func main() {
 		run(os.Args[2:])
 	case "postings":
 		postings(os.Args[2:])
+	case "platform":
+		platformBench(os.Args[2:])
 	default:
-		fmt.Fprintln(os.Stderr, "usage: ograph-bench gen|run|postings ...")
+		fmt.Fprintln(os.Stderr, "usage: ograph-bench gen|run|postings|platform ...")
 		os.Exit(2)
 	}
 }
