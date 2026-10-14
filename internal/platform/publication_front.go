@@ -41,6 +41,10 @@ type FrontStory struct {
 	VersionCount   int        `json:"version_count"`
 	LatestRevision int        `json:"latest_revision"`
 	Route          FrontRoute `json:"route"`
+	// Importance (1..10) and Promo come from the host front-importance
+	// scores file when it scores this story; absent otherwise.
+	Importance int  `json:"importance,omitempty"`
+	Promo      bool `json:"promo,omitempty"`
 }
 
 // FrontRoute is a story's bare link (serves the latest version in place)
@@ -212,6 +216,7 @@ func (s *Service) ListFrontStories(ctx context.Context, limit int, cursor string
 	sort.SliceStable(page.Stories, func(i, j int) bool {
 		return page.Stories[i].UpdatedAt.After(page.Stories[j].UpdatedAt)
 	})
+	s.attachFrontImportance(page.Stories)
 	return page, nil
 }
 

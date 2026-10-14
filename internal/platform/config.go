@@ -10,6 +10,9 @@ const (
 	DefaultPort          = "8086"
 	DefaultDoltDSN       = "root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
 	DefaultArtifactsRoot = "/var/lib/go-choir/platform-artifacts"
+	// DefaultFrontImportancePath is where the host front-importance timer
+	// writes its scores (cmd/front-importance).
+	DefaultFrontImportancePath = "/var/lib/go-choir/front-importance/scores.json"
 )
 
 type Config struct {
@@ -33,6 +36,11 @@ type Config struct {
 	// ids whose auto stories the front list shows; unset shows every
 	// owner's (ParseAutopaperOwners).
 	AutopaperOwnersRaw string
+	// FrontImportancePath is CORPUSD_FRONT_IMPORTANCE_PATH: the scores file
+	// the host front-importance timer writes (cmd/front-importance). The
+	// front list attaches its scores read-only; a missing or bad file
+	// leaves the list unchanged.
+	FrontImportancePath string
 }
 
 func LoadConfig() (*Config, error) {
@@ -52,6 +60,7 @@ func LoadConfig() (*Config, error) {
 		ArtifactGCMaxBytes:    os.Getenv("PLATFORM_ARTIFACT_GC_MAX_BYTES"),
 		ArtifactGCNamespaces:  os.Getenv("PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES"),
 		AutopaperOwnersRaw:    os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
+		FrontImportancePath:   envOr("CORPUSD_FRONT_IMPORTANCE_PATH", DefaultFrontImportancePath),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err

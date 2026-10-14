@@ -2,17 +2,24 @@ package main
 
 import (
 	"context"
+	"github.com/yusefmosiah/go-choir/internal/frontimportance"
 	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"log"
+	"os"
 	"strconv"
 	"time"
 )
 
 func main() {
+	// `corpusd front-importance` is the host timer's scoring pass
+	// (internal/frontimportance); it never starts the platform service.
+	if len(os.Args) > 1 && os.Args[1] == "front-importance" {
+		os.Exit(frontimportance.Main(os.Args[2:]))
+	}
 	cfg, err := platform.LoadConfig()
 	if err != nil {
 		log.Fatalf("corpusd config: %v", err)
@@ -45,6 +52,9 @@ func main() {
 	// The Autopaper front lists only these owners' auto stories when
 	// CORPUSD_AUTOPAPER_OWNERS is set; every owner's when unset.
 	svc.SetAutopaperOwners(platform.ParseAutopaperOwners(cfg.AutopaperOwnersRaw))
+	// Front rows carry importance scores when the host scorer's file is
+	// present; absent or unreadable, the front list is unchanged.
+	svc.SetFrontImportancePath(cfg.FrontImportancePath)
 	// Periodic platform-artifacts reachability GC (dry-run unless explicitly
 	// activated). The on-demand endpoint /internal/platform/artifact-gc runs
 	// the same sweep, clamped to this policy.

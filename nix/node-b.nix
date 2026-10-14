@@ -655,6 +655,47 @@ in
     };
   };
 
+  # Autopaper front-page importance (`corpusd front-importance`,
+  # internal/frontimportance). A low-priority
+  # oneshot asks Jev to score new or revised front stories and writes
+  # /var/lib/go-choir/front-importance/scores.json atomically; corpusd only
+  # reads that file. Failures just log; a missing file leaves the front page
+  # ranked by recency. It reads the OpenRouter key from the gateway's
+  # provider environment file (never logged) and no other unit depends on it.
+  systemd.services.go-choir-front-importance = {
+    description = "Autopaper front-page importance scores (Jev)";
+    after = [ "network-online.target" "go-choir-corpusd.service" ];
+    wants = [ "network-online.target" ];
+    serviceConfig = commonServiceHardening // {
+      Type = "oneshot";
+      ExecStart = "${serviceExec "corpusd" goChoirPackages.corpusd} front-importance";
+      TimeoutStartSec = "5min";
+      MemoryMax = "512M";
+      CPUQuota = "50%";
+      Nice = 15;
+      IOSchedulingClass = "idle";
+      OOMScoreAdjust = 1000;
+      StateDirectory = "go-choir/front-importance";
+      StateDirectoryMode = "0755";
+      ReadWritePaths = [ "/var/lib/go-choir/front-importance" ];
+      EnvironmentFile = "-/var/lib/go-choir/gateway-provider.env";
+      Environment = [
+        "FRONT_IMPORTANCE_FRONT_URL=http://127.0.0.1:8086/internal/platform/publications/front?limit=100"
+        "FRONT_IMPORTANCE_SCORES_PATH=/var/lib/go-choir/front-importance/scores.json"
+        "GATEWAY_JEV_RECEIPT_PATH=/var/lib/go-choir/front-importance/jev-receipts.jsonl"
+      ];
+    };
+  };
+  systemd.timers.go-choir-front-importance = {
+    description = "Score Autopaper front stories for importance every 10 minutes";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "5min";
+      OnUnitInactiveSec = "10min";
+      Unit = "go-choir-front-importance.service";
+    };
+  };
+
   systemd.services.go-choir-vmctl = {
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
     startLimitIntervalSec = 600;

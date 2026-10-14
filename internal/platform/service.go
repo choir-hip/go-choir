@@ -56,6 +56,9 @@ type Service struct {
 	// owners' stories (CORPUSD_AUTOPAPER_OWNERS).
 	frontMu         sync.RWMutex
 	autopaperOwners map[string]bool
+	// frontImportance attaches model-judged importance scores to front
+	// rows when its scores file is present (publication_front_importance.go).
+	frontImportance frontImportanceCache
 }
 
 type citationInput struct {
