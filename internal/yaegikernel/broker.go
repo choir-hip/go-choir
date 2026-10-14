@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -198,17 +199,7 @@ func (b *Broker) handleExec(ctx context.Context, req *BrokerRequest, receiptID s
 		cmd.Dir = b.cfg.AllowedRoot
 	}
 
-	// Clean environment: inherit only safe baseline, never pass credentials
-	cmd.Env = []string{
-		"PATH=/run/current-system/sw/bin:/usr/bin:/bin",
-		"HOME=/tmp",
-		"TMPDIR=/tmp",
-	}
-	for k, v := range payload.Env {
-		if !strings.HasPrefix(strings.ToUpper(k), "CHOIR_") && !strings.Contains(strings.ToUpper(k), "KEY") && !strings.Contains(strings.ToUpper(k), "TOKEN") {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-		}
-	}
+	cmd.Env = cellExecEnv(payload.Env, os.LookupEnv)
 	cmd.Env = append(cmd.Env, egressProxyEnvFromWorker()...)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -486,6 +477,29 @@ var EgressProxyKeys = []string{
 	"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy",
 	"npm_config_proxy", "npm_config_https_proxy", "SSL_CERT_FILE", "NIX_SSL_CERT_FILE",
 	"GOPROXY", "GOSUMDB", "GOFLAGS",
+}
+
+// cellExecEnv is the clean environment of an exec action: a safe baseline,
+// the build toolchain when the worker carries one
+// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// option B), then the payload's variables minus anything credential-shaped.
+// The payload comes last, so a cell may override a toolchain variable.
+func cellExecEnv(payloadEnv map[string]string, lookup func(string) (string, bool)) []string {
+	path, toolchain := WorkloadToolchainEnv("/run/current-system/sw/bin:/usr/bin:/bin", lookup)
+	env := []string{"PATH=" + path, "HOME=/tmp", "TMPDIR=/tmp"}
+	env = append(env, toolchain...)
+	keys := make([]string, 0, len(payloadEnv))
+	for k := range payloadEnv {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		upper := strings.ToUpper(k)
+		if !strings.HasPrefix(upper, "CHOIR_") && !strings.Contains(upper, "KEY") && !strings.Contains(upper, "TOKEN") {
+			env = append(env, fmt.Sprintf("%s=%s", k, payloadEnv[k]))
+		}
+	}
+	return env
 }
 
 func egressProxyEnvFromWorker() []string {

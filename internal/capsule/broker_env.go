@@ -1,0 +1,25 @@
+package capsule
+
+import (
+	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
+)
+
+// BrokerProcessEnv is the environment the executor launches a capsule broker
+// with, read from the autoputer's own environment through lookup: the
+// autoputer's PATH behind the system profile (so exec.LookPath in the broker
+// resolves `sh` as the service PATH intends), HOME and TMPDIR, and the build
+// toolchain carry (yaegikernel.BuildToolchainCarry) the broker hands its
+// workloads (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// option B). Nothing else crosses.
+func BrokerProcessEnv(lookup func(string) (string, bool)) []string {
+	brokerPath, _ := lookup("PATH")
+	if strings.TrimSpace(brokerPath) == "" {
+		brokerPath = "/run/current-system/sw/bin:/bin:/usr/bin"
+	} else if !strings.Contains(brokerPath, "/run/current-system/sw/bin") {
+		brokerPath = "/run/current-system/sw/bin:" + brokerPath
+	}
+	env := []string{"PATH=" + brokerPath + ":/bin:/usr/bin", "HOME=/root", "TMPDIR=/tmp"}
+	return append(env, yaegikernel.BuildToolchainCarry(lookup)...)
+}

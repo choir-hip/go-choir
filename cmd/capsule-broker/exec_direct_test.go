@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // TestDirectExecEnvAllowlist proves the canonical runner never inherits the
@@ -114,5 +115,69 @@ func TestHandleExecRejectsMissingArgs(t *testing.T) {
 	resp := b.handleExec(context.Background(), nil, params)
 	if resp.Error != "exec_args_required: direct args vector is required" {
 		t.Fatalf("missing args response = %+v", resp)
+	}
+}
+
+func toolchainLookup(env map[string]string) func(string) (string, bool) {
+	return func(key string) (string, bool) {
+		value, ok := env[key]
+		return value, ok
+	}
+}
+
+var guestToolchain = map[string]string{
+	yaegikernel.BuildToolchainPathEnv: "/nix/store/aaa-gcc-wrapper/bin:/nix/store/bbb-binutils-wrapper/bin",
+	"CGO_CFLAGS":                      "-I/nix/store/ccc-icu4c-dev/include",
+	"CGO_CXXFLAGS":                    "-I/nix/store/ccc-icu4c-dev/include",
+	"CGO_LDFLAGS":                     "-L/nix/store/ddd-icu4c/lib",
+	"PKG_CONFIG_PATH":                 "/nix/store/ccc-icu4c-dev/lib/pkgconfig",
+	"RUNTIME_GATEWAY_TOKEN_FILE":      "/run/choir-bootstrap/gateway-token",
+}
+
+// Direct exec gets the guest's C toolchain and ICU cgo flags when the broker
+// carries them, appended after the baseline PATH (busybox/bash resolution is
+// unchanged), and nothing else from the broker's environment
+// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, B1-B4).
+func TestDirectExecEnvCarriesBuildToolchain(t *testing.T) {
+	env := directExecEnvFrom(toolchainLookup(guestToolchain), nil)
+	joined := "\n" + strings.Join(env, "\n") + "\n"
+	for _, want := range []string{
+		"\nPATH=/run/current-system/sw/bin:/bin:/usr/bin:/nix/store/aaa-gcc-wrapper/bin:/nix/store/bbb-binutils-wrapper/bin\n",
+		"\nCGO_ENABLED=1\n", "\nCGO_CFLAGS=-I/nix/store/ccc-icu4c-dev/include\n", "\nCGO_LDFLAGS=-L/nix/store/ddd-icu4c/lib\n",
+		"\nPKG_CONFIG_PATH=/nix/store/ccc-icu4c-dev/lib/pkgconfig\n",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("direct env missing %q in %q", strings.TrimSpace(want), env)
+		}
+	}
+	for _, absent := range []string{"GATEWAY", yaegikernel.BuildToolchainPathEnv} {
+		if strings.Contains(joined, absent) {
+			t.Errorf("direct env leaked %q: %q", absent, env)
+		}
+	}
+	if plain := directExecEnvFrom(toolchainLookup(nil), nil); strings.Contains(strings.Join(plain, "\n"), "CGO_") {
+		t.Fatalf("a broker without the toolchain gave one: %q", plain)
+	}
+}
+
+// The session worker is spawned with the toolchain carry, so its exec action
+// (cellExecEnv) can hand it to every choir.Exec a cell runs.
+func TestSessionWorkerEnvCarriesBuildToolchain(t *testing.T) {
+	env := sessionWorkerEnv(false, toolchainLookup(guestToolchain))
+	joined := "\n" + strings.Join(env, "\n") + "\n"
+	for _, want := range []string{
+		"\nPATH=/run/current-system/sw/bin:/bin:/usr/bin\n", "\nTMPDIR=/tmp\n",
+		"\n" + yaegikernel.BuildToolchainPathEnv + "=/nix/store/aaa-gcc-wrapper/bin:/nix/store/bbb-binutils-wrapper/bin\n",
+		"\nCGO_CFLAGS=-I/nix/store/ccc-icu4c-dev/include\n", "\nPKG_CONFIG_PATH=/nix/store/ccc-icu4c-dev/lib/pkgconfig\n",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("worker env missing %q in %q", strings.TrimSpace(want), env)
+		}
+	}
+	if strings.Contains(joined, "GATEWAY") || strings.Contains(joined, "HTTP_PROXY") {
+		t.Fatalf("worker env leaked: %q", env)
+	}
+	if inet := sessionWorkerEnv(true, toolchainLookup(nil)); !strings.Contains(strings.Join(inet, "\n"), "HTTP_PROXY=") {
+		t.Fatalf("L2 worker lost its egress env: %q", inet)
 	}
 }

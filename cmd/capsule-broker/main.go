@@ -479,12 +479,22 @@ var directExecAllowlist = map[string]bool{"PATH": true, "HOME": true, "TMPDIR": 
 // caller overrides restricted to the allowlist. Credential-shaped keys never
 // pass, even when allowlisted by name collision.
 func directExecEnv(overrides []string) []string {
+	return directExecEnvFrom(os.LookupEnv, overrides)
+}
+
+// directExecEnvFrom is directExecEnv over an explicit broker environment:
+// the guest's C toolchain and ICU cgo flags join the baseline when the
+// broker carries them (yaegikernel.WorkloadToolchainEnv; docs/problems/
+// selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
+func directExecEnvFrom(lookup func(string) (string, bool), overrides []string) []string {
+	path, toolchain := yaegikernel.WorkloadToolchainEnv("/run/current-system/sw/bin:/bin:/usr/bin", lookup)
 	env := []string{
-		"PATH=/run/current-system/sw/bin:/bin:/usr/bin",
+		"PATH=" + path,
 		"HOME=/tmp",
 		"TMPDIR=/tmp",
 		"LANG=C.UTF-8",
 	}
+	env = append(env, toolchain...)
 	for _, kv := range overrides {
 		name, value, ok := strings.Cut(kv, "=")
 		if !ok {

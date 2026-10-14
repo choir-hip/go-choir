@@ -77,6 +77,18 @@ const sessionReadyTimeout = 10 * time.Second
 // spawnSessionWorker starts a session worker process in its own process group
 // with a sanitized environment, mirroring the one-shot worker hardening. The
 // role rides a trusted flag from the verified outer capability and bounds the
+// sessionWorkerEnv is the session worker's environment: a fixed PATH, the
+// egress proxy settings for an L2 capsule, and the build toolchain carry the
+// broker was given, which the worker's exec action hands to each
+// choir.Exec (yaegikernel.cellExecEnv).
+func sessionWorkerEnv(inet bool, lookup func(string) (string, bool)) []string {
+	env := []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
+	if inet {
+		env = append(env, capsule.EgressProxyEnv()...)
+	}
+	return append(env, yaegikernel.BuildToolchainCarry(lookup)...)
+}
+
 func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, error) {
 	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err != nil {
@@ -106,10 +118,7 @@ func spawnSessionWorker(bin string, cfg workerSessionConfig) (*sessionWorker, er
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = cfg.allowedRoot
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
-	cmd.Env = []string{"PATH=/run/current-system/sw/bin:/bin:/usr/bin", "TMPDIR=/tmp"}
-	if cfg.inet {
-		cmd.Env = append(cmd.Env, capsule.EgressProxyEnv()...)
-	}
+	cmd.Env = sessionWorkerEnv(cfg.inet, os.LookupEnv)
 	cmd.ExtraFiles = []*os.File{childFile}
 	stderr := &lockedTail{limit: 2048}
 	cmd.Stderr = stderr

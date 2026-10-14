@@ -805,6 +805,12 @@ EOF
       CGO_CXXFLAGS = "-I${pkgs.icu.dev}/include";
       CGO_LDFLAGS = "-L${pkgs.icu}/lib";
       PKG_CONFIG_PATH = "${pkgs.icu.dev}/lib/pkgconfig";
+      # Engineering capsules build cmd/autoputer, which needs cgo (gozstd,
+      # go-icu-regex). The capsule executor appends these bin dirs to every
+      # capsule workload's PATH and hands it the four cgo variables above;
+      # the store is read-only through the capsule's lower root
+      # (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option B).
+      CHOIR_CAPSULE_BUILD_PATH = lib.makeBinPath (with pkgs; [ gcc binutils pkg-config ]);
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.autoputer}/share/go-choir/skills";
       CHOIR_BASELINE_RELEASE_ROOT = "${goChoirPackages.autoputer}";
       # Autoputer identity token: read through the file on the root-only
