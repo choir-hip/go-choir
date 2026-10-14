@@ -882,6 +882,39 @@ func (r *OwnershipRegistry) SetWarmnessPolicyConfig(cfg WarmnessPolicyConfig) {
 	r.warmnessPolicy = normalizeWarmnessPolicyConfig(cfg)
 }
 
+func (r *OwnershipRegistry) warmnessPolicySnapshot() WarmnessPolicyConfig {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return normalizeWarmnessPolicyConfig(r.warmnessPolicy)
+}
+
+// refreshTestAccounts reloads the test tier from the auth DB: the accounts
+// retention treats as ephemeral (by email domain or user-id prefix). A
+// failed read keeps the last good set, so a missing DB never promotes test
+// computers or drops anyone's tier.
+func (r *OwnershipRegistry) refreshTestAccounts() {
+	r.mu.RLock()
+	retention := r.retentionPrune
+	r.mu.RUnlock()
+	if strings.TrimSpace(retention.AuthDBPath) == "" {
+		return
+	}
+	emails, errs := loadRetentionEmailsFromAuthDB(retention.AuthDBPath)
+	if len(errs) > 0 {
+		log.Printf("vmctl: test tier refresh kept the previous set: %s", strings.Join(errs, "; "))
+		return
+	}
+	test := make(map[string]bool)
+	for userID, email := range emails {
+		if retentionOwnershipEphemeral(&VMOwnership{UserID: userID}, email, retention) {
+			test[userID] = true
+		}
+	}
+	r.mu.Lock()
+	r.warmnessPolicy.TestUserIDs = test
+	r.mu.Unlock()
+}
+
 func (r *OwnershipRegistry) setPressureSamplerForTest(sampler hostPressureSampler) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -912,6 +945,7 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 	sweep := func() {
 		sweepMu.Lock()
 		defer sweepMu.Unlock()
+		r.refreshTestAccounts()
 		r.ReconcileVMProcesses(ctx, guard)
 		if warmed := r.WarmAlwaysOnDesktops(ctx, guard); warmed > 0 {
 			log.Printf("vmctl: warmness policy resumed %d always-on desktop VM(s)", warmed)

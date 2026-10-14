@@ -13,6 +13,10 @@ const (
 	WarmnessClassPrimary           WarmnessClass = "primary"
 	WarmnessClassPremiumAlwaysOn   WarmnessClass = "premium_always_on"
 	WarmnessClassCriticalProtected WarmnessClass = "critical_protected"
+	// WarmnessClassTest is a computer of a test account (the ephemeral
+	// accounts retention already recognizes): below the free tier, the
+	// first reclaimed under memory pressure.
+	WarmnessClassTest WarmnessClass = "test"
 )
 
 const (
@@ -27,6 +31,9 @@ type WarmnessPolicyConfig struct {
 	PrimaryKeepaliveMode string
 	PaidUserIDs          map[string]bool
 	PlatformComputerIDs  map[string]bool
+	// TestUserIDs is refreshed from the auth DB by the idle sweep
+	// (refreshTestAccounts), not configured.
+	TestUserIDs map[string]bool
 }
 
 type WarmnessPolicyConfigSummary struct {
@@ -69,6 +76,7 @@ func normalizeWarmnessPolicyConfig(cfg WarmnessPolicyConfig) WarmnessPolicyConfi
 	}
 	cfg.PaidUserIDs = normalizedIDSet(cfg.PaidUserIDs)
 	cfg.PlatformComputerIDs = normalizedIDSet(cfg.PlatformComputerIDs)
+	cfg.TestUserIDs = normalizedIDSet(cfg.TestUserIDs)
 	return cfg
 }
 
@@ -112,6 +120,9 @@ func warmnessClassForOwnership(own *VMOwnership, cfg WarmnessPolicyConfig) Warmn
 	if cfg.PaidUserIDs[strings.TrimSpace(own.UserID)] {
 		return WarmnessClassPremiumAlwaysOn
 	}
+	if cfg.TestUserIDs[strings.TrimSpace(own.UserID)] {
+		return WarmnessClassTest
+	}
 	return WarmnessClassPrimary
 }
 
@@ -127,6 +138,8 @@ func computerLevelClass(class WarmnessClass) WarmnessClass {
 
 func warmnessPriority(class WarmnessClass) int {
 	switch class {
+	case WarmnessClassTest:
+		return 10
 	case WarmnessClassPrimary:
 		return 20
 	case WarmnessClassPublicPlatform:

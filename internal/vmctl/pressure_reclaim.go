@@ -663,7 +663,9 @@ func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmne
 	if own.LastActiveAt.IsZero() {
 		reasons = append(reasons, "unknown_last_active")
 	}
-	if cfg.MinIdle > 0 && idle < cfg.MinIdle {
+	// A test computer yields to real ones: recent activity does not
+	// protect it, only a busy guest does.
+	if cfg.MinIdle > 0 && idle < cfg.MinIdle && warmnessClassForOwnership(own, warmnessPolicy) != WarmnessClassTest {
 		reasons = append(reasons, "recent_activity")
 	}
 	if busyProbe != nil && busyProbe(own) {

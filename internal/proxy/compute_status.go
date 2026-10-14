@@ -739,6 +739,8 @@ func protectionText(class string) string {
 		return "primary computer kept warm while capacity allows"
 	case string(vmctl.WarmnessClassPublicPlatform):
 		return "public platform computer lane"
+	case string(vmctl.WarmnessClassTest):
+		return "test computer, reclaimed first under memory pressure"
 	case "static":
 		return "static autoputer routing"
 	default:
