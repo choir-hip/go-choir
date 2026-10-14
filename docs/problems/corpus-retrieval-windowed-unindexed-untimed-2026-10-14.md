@@ -184,9 +184,85 @@ surfaces:
 - `store.SearchDocuments` (the story half of `SearchWireCorpus`) scans
   every Texture document in the guest: guest-side, not touched here.
 
+## Found while measuring: an unthrottled backfill starves capture writes
+
+`scripts/ograph-bench platform` (local `dolt sql-server` 2.1.9, one owner,
+three computers, 120 days, a capture writer every 20 ms beside the
+migration). The first projection writer issued three statements per
+capture: 20,000 captures backfilled in 613 s. Batched into multi-row
+statements: 60 s. At 200,000 captures the batched, unthrottled backfill
+took 69 min and **stalled one capture write for 45.8 s** (inline
+projection writes up to 21 s; p95 569 ms; no errors) — long enough to
+time out a guest's 100-item poll (60 s client). With 250-capture pages
+and a 250 ms pause after each written page, 50,000 captures backfill in
+278 s and the concurrent writer saw p50 38 ms, p95 225 ms, max 3.4 s, no
+errors. (Recorded in the commit message of 4326473df and here; the fix
+landed in the same sitting.)
+
+## Fix on the branch `retrieval-store-b-rungs-0-3` (not pushed, not deployed)
+
+| Commit | What |
+|---|---|
+| e87fdf56e | rung 0: per-operation retrieval counters and latency buckets on corpusd `/health` (`retrieval`), one journal line per route-level call, guest corpus-search line with query and result ids; `retrieval-eval-v1` definition and 568 frozen queries |
+| 278d6b200 | this record: the Dolt 2.1.9 upsert breakage |
+| cc3dc5250 | rung 1: composite and edge indexes, `og_lookup_keys`, time-bounded newest-N ladder, plan tests |
+| 0643f7fa2 | rungs 2-3: capture projection and term table (`dolt_ignore`d), search and URL routes, guest switch with window fallback, E2E and recall tests |
+| c49bd6b62 | multi-row projection and key backfill writes |
+| a023151c4 | `ograph-bench platform`: before/after through the shipped code |
+| 4326473df | backfill throttle |
+
+Local measurements, ms p50 / p95, warm, one owner over three computers
+(the computer searched holds a third of the captures):
+
+| Query | 50k before | 50k after | 200k before | 200k after |
+|---|---|---|---|---|
+| corpus window, newest 1,000 of a computer | 125 / 137 | 34 / 106 (ladder) | 771 / 944 | 170 / 206 (ladder) |
+| origin/main window text, new composite index | — | 80 / 106 | — | 539 / 1,270 |
+| corpus search, `[harbor storm]` (window: 1,000 newest; after: all history) | 125 (window) | 6.0 / 6.2 | 771 (window) | 24 / 26 |
+| corpus search, `[ai]` (very common; 500 candidates) | 125 (window) | 72 / 80 | 771 (window) | 193 / 211 |
+| corpus search, `[人工智能]` | 125 (window) | 36 / 40 | 771 (window) | 75 / 105 |
+| URL citation lookup | 127 / 134 (window, misses older) | 4.0 / 5.1 | 602 / 734 | 5.1 / 5.4 |
+| `public_route` by `route_path` | 2.2 / 3.2 | 1.2 / 4.9 | 8.1 / 8.5 | 4.9 / 5.3 |
+| `publication_check` by version | 10 / 11 | 5.0 / 14 | 44 / 54 | 5.2 / 8.5 |
+| capture write (`InsertObjectIfAbsent`) | 10 / 11 | 20 / 31 | 9.3 / 14 | 30 / 41 |
+| migration, all steps | | 278 s (throttled) | | 69 min (unthrottled) |
+
+The time ladder does not reach the research note's 28 ms because a
+computer here holds ~550 captures a day, so the newest 1,000 span two
+windows, and the call returns 1,000 full rows; the unbounded text on the
+same index stays 3-6× slower and grows with the range. Each capture write
+pays ~10-20 ms more for its projection (a second transaction).
+
+## Residuals
+
+- **Backfill of a large Store B is slow** (~180 captures/s throttled, and
+  the rate falls as the term table grows). At today's Store B size (reset
+  10-09; ~4,500 captures a day) it is minutes; at 1M captures it would be
+  hours in the background, with search refusing (guest on the window)
+  until it completes. A bulk offline build is the next step if needed.
+- **A capture written a moment before its projection row** is missed by
+  the index; the URL lookup falls back to the window on a miss, the
+  corpus search does not (it is ranked over all history and finds it on
+  the next call).
+- **`og_lookup_keys` backfill race**: an object whose keyed field changes
+  while the boot backfill reads it can keep a stale key until the next
+  boot. The keyed fields are immutable ids.
+- **Node B absolute numbers are unmeasured** (6-core Xeon vs the 8-core
+  M1 here); `/health` `retrieval` gives them after deploy.
+- **retrieval-eval-v1 labels are silver** (the run read it); pooled blind
+  judging and the frozen corpus snapshot come with the first scored rung.
+- Guest-side shapes (`capture_label.capture_id`, `SearchDocuments`,
+  `ListStoryDocuments`) are the guest-store work's (Overlap above).
+
 ## Heresy delta
 
-- discovered: as listed under Evidence (no new ones beyond the research
-  note, which first recorded them).
-- introduced: none (documentation).
-- repaired: none yet.
+- discovered: as listed under Evidence; Dolt 2.1.9 upserts break on
+  virtual generated columns and functional indexes; an unthrottled
+  projection backfill starves Store B writers.
+- introduced: two rebuildable projections outside Dolt history
+  (`proj_capture_index`, `proj_capture_terms`) whose authority stays
+  `og_objects`; a ~2× capture write cost.
+- repaired (on the branch, not deployed): untimed retrieval; the
+  newest-1,000 corpus window and URL lookup (now all history); JSON-path
+  scans for the five Store B lookups; unbounded newest-N sorts; edges to an
+  id by kind.
