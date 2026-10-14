@@ -29,14 +29,17 @@ import (
 // Observation is one settled self-score: the probability a desk stated
 // and the outcome independent settlement gave it, in [0, 1].
 type Observation struct {
-	Desk      string  `json:"desk"`
-	ClaimType string  `json:"claim_type"`
-	Thread    string  `json:"thread"`
-	ModelID   string  `json:"model_id,omitempty"`
-	RecordID  string  `json:"record_id"`
-	Key       string  `json:"key"`
-	P         float64 `json:"p"`
-	Y         float64 `json:"y"`
+	Desk      string `json:"desk"`
+	ClaimType string `json:"claim_type"`
+	Thread    string `json:"thread"`
+	// Story is the inbox the claim is about (texture:<doc>): the cluster
+	// of the experiment's story-clustered bootstrap.
+	Story    string  `json:"story,omitempty"`
+	ModelID  string  `json:"model_id,omitempty"`
+	RecordID string  `json:"record_id"`
+	Key      string  `json:"key"`
+	P        float64 `json:"p"`
+	Y        float64 `json:"y"`
 	// Scorers name who settled it; several scorers' outcomes are averaged.
 	Scorers     []string `json:"scorers,omitempty"`
 	CommittedAt string   `json:"committed_at,omitempty"`

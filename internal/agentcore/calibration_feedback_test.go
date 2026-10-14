@@ -122,8 +122,11 @@ func TestCollectCalibrationTakesOnlySettledSelfScores(t *testing.T) {
 			t.Errorf("%s held-out flag %v", key, o.HeldOut)
 		}
 	}
-	if o := byKey["cell-m:cast:1#H1"]; o.ModelID != "opencode-go/deepseek-v4.1-flash" || len(o.Scorers) != 2 {
-		t.Errorf("H1 model/scorers = %q %v", o.ModelID, o.Scorers)
+	if o := byKey["cell-m:cast:1#H1"]; o.ModelID != "opencode-go/deepseek-v4.1-flash" || len(o.Scorers) != 2 || o.Story != "texture:doc-1" {
+		t.Errorf("H1 model/scorers/story = %q %v %q", o.ModelID, o.Scorers, o.Story)
+	}
+	if o := byKey["sp-1"]; o.Story != "texture:doc-1" {
+		t.Errorf("citation story = %q", o.Story)
 	}
 	pend := map[string]CalibrationPending{}
 	for _, p := range pending {

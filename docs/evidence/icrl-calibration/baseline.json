@@ -1,0 +1,91 @@
+{
+ "source": "E6a e6a-raw.json (paper, 2026-10-13/14), judge gemini-3.8-flash HYPOTHESIS_SETTLE_V0",
+ "management_hypotheses_resolved": {
+  "n": 559,
+  "brier": 0.11635635062611807,
+  "ece": 0.14361359570661927,
+  "mean_p": 0.6477280858676208,
+  "observed": 0.7871198568872988,
+  "gap": -0.13939177101967803,
+  "reliability": 0.02475150672209517,
+  "resolution": 0.0059577533225777125,
+  "uncertainty": 0.16756218778101706,
+  "hedge_share": 0.4364937388193202,
+  "bins": [
+   {
+    "label": "<0.5",
+    "n": 57,
+    "mean_p": 0.3728,
+    "observed": 0.6228
+   },
+   {
+    "label": "0.5-0.7",
+    "n": 250,
+    "mean_p": 0.5694,
+    "observed": 0.752
+   },
+   {
+    "label": "0.7-0.85",
+    "n": 176,
+    "mean_p": 0.7443,
+    "observed": 0.8438
+   },
+   {
+    "label": "0.85-0.95",
+    "n": 67,
+    "mean_p": 0.8776,
+    "observed": 0.903
+   },
+   {
+    "label": ">=0.95",
+    "n": 9,
+    "mean_p": 0.9644,
+    "observed": 0.8333
+   }
+  ]
+ },
+ "management_hypotheses_strict": {
+  "n": 652,
+  "brier": 0.14145291411042946,
+  "ece": 0.05243865030674851,
+  "mean_p": 0.6289723926380367,
+  "observed": 0.6748466257668712,
+  "gap": -0.04587423312883443,
+  "reliability": 0.0035239588928780066,
+  "resolution": 0.01860191298935162,
+  "uncertainty": 0.2194286574579397,
+  "hedge_share": 0.4539877300613497,
+  "bins": [
+   {
+    "label": "<0.5",
+    "n": 87,
+    "mean_p": 0.3598,
+    "observed": 0.408
+   },
+   {
+    "label": "0.5-0.7",
+    "n": 298,
+    "mean_p": 0.5663,
+    "observed": 0.6309
+   },
+   {
+    "label": "0.7-0.85",
+    "n": 188,
+    "mean_p": 0.7441,
+    "observed": 0.7899
+   },
+   {
+    "label": "0.85-0.95",
+    "n": 69,
+    "mean_p": 0.8768,
+    "observed": 0.8768
+   },
+   {
+    "label": ">=0.95",
+    "n": 10,
+    "mean_p": 0.964,
+    "observed": 0.75
+   }
+  ]
+ }
+}

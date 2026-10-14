@@ -286,4 +286,19 @@ open claims, row 19.
 
 ## 10. Amendments
 
-None.
+- **2026-10-14, before any treatment data (clarification, no threshold
+  changed).** Resolution in condition 3 is the Murphy resolution over the
+  same five bins as ECE, as `icrl_calibration.py measure` computes it. On
+  the E6a baseline that is 0.0060 (resolved only, n = 559); E6a's 0.013
+  came from `claimslab`'s finer decomposition. ECE 0.144, Brier 0.116 and
+  mean p 0.65 against 0.79 observed (resolved only) reproduce
+  (`docs/evidence/icrl-calibration/baseline.json`).
+- **2026-10-14 (clarification).** The script automates the calibration
+  harm rule. The operational stop rules (run failure rate and input
+  tokens per arm) are read at the daily check from `/api/runs` and
+  `/api/costs`, splitting runs by `calibration.Arm(agent_id)`.
+- **2026-10-14 (implementation).** Settlement scorer names are
+  `e6a-m1-gemini-v0` (hypotheses) and `e6a-r2-gemini-v0` (completed
+  Reports); one record per (scorer, target), so a target is settled once
+  per scorer. The bootstrap clusters by the story the claim is about (the
+  observation's `story`, the Cast's or Report's `texture:<doc>` inbox).

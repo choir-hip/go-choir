@@ -63,6 +63,7 @@ type CalibrationPending struct {
 	Desk           string   `json:"desk"`
 	ClaimType      string   `json:"claim_type"`
 	Thread         string   `json:"thread"`
+	Story          string   `json:"story,omitempty"`
 	RecordID       string   `json:"record_id"`
 	ConversationID string   `json:"conversation_id,omitempty"`
 	HypothesisID   string   `json:"hypothesis_id,omitempty"`
@@ -224,13 +225,13 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 				if len(settled.ys) == 0 {
 					if !withdrawn[rec.ConversationID+"|"+h.ID] {
 						p := h.Probability
-						pending = append(pending, CalibrationPending{Desk: desk, ClaimType: types.CalibrationClaimHypothesis, Thread: thread,
+						pending = append(pending, CalibrationPending{Desk: desk, ClaimType: types.CalibrationClaimHypothesis, Thread: thread, Story: rec.Inbox,
 							RecordID: rec.RecordID, ConversationID: rec.ConversationID, HypothesisID: h.ID, Statement: h.Statement,
 							P: &p, ModelID: model, CommittedAt: committed})
 					}
 					continue
 				}
-				obs = append(obs, calibration.Observation{Desk: desk, ClaimType: types.CalibrationClaimHypothesis, Thread: thread,
+				obs = append(obs, calibration.Observation{Desk: desk, ClaimType: types.CalibrationClaimHypothesis, Thread: thread, Story: rec.Inbox,
 					ModelID: model, RecordID: rec.RecordID, Key: key, P: h.Probability, Y: settled.mean(), Scorers: settled.scorers,
 					CommittedAt: committed, HeldOut: calibration.HeldOut(key)})
 			}
@@ -240,12 +241,12 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 			p := reportSelfP(rec)
 			settled := doneSettled[rec.RecordID]
 			if settled == nil {
-				pending = append(pending, CalibrationPending{Desk: desk, ClaimType: types.CalibrationClaimCompleted, Thread: thread,
+				pending = append(pending, CalibrationPending{Desk: desk, ClaimType: types.CalibrationClaimCompleted, Thread: thread, Story: rec.Inbox,
 					RecordID: rec.RecordID, ConversationID: rec.ConversationID, P: p, ModelID: model, CommittedAt: committed})
 				continue
 			}
 			if p != nil {
-				obs = append(obs, calibration.Observation{Desk: desk, ClaimType: types.CalibrationClaimCompleted, Thread: thread,
+				obs = append(obs, calibration.Observation{Desk: desk, ClaimType: types.CalibrationClaimCompleted, Thread: thread, Story: rec.Inbox,
 					ModelID: model, RecordID: rec.RecordID, Key: rec.RecordID, P: *p, Y: settled.mean(), Scorers: settled.scorers,
 					CommittedAt: committed, HeldOut: calibration.HeldOut(rec.RecordID)})
 			}
@@ -274,7 +275,7 @@ func collectCalibration(records []types.CommitmentRecord, checks []store.Support
 			continue // Jev has not judged it: pending in the guest, settled by its own job
 		}
 		thread := agentprofile.Texture + ":" + check.Pair.DocID
-		obs = append(obs, calibration.Observation{Desk: agentprofile.Texture, ClaimType: types.CalibrationClaimCitationSupport, Thread: thread,
+		obs = append(obs, calibration.Observation{Desk: agentprofile.Texture, ClaimType: types.CalibrationClaimCitationSupport, Thread: thread, Story: thread,
 			ModelID: check.ModelID, RecordID: check.Pair.RevisionID, Key: check.Pair.Key, P: *check.SelfP, Y: y,
 			Scorers: []string{firstNonEmptyString(v.Judge, types.SupportSystemAgentID)}, CommittedAt: c.At.UTC().Format(time.RFC3339Nano),
 			HeldOut: calibration.HeldOut(check.Pair.Key)})
