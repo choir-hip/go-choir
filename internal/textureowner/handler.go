@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -273,13 +274,11 @@ type apiError struct {
 	Error string `json:"error"`
 }
 
-func authenticateUser(r *http.Request) (string, error) {
-	user := r.Header.Get("X-Authenticated-User")
-	if user == "" {
-		return "", fmt.Errorf("missing authenticated user identity")
-	}
-	return user, nil
-}
+// authenticateUser is the guest's one owner-identity rule: the proxy's
+// X-Authenticated-User, believed only from the host side of the guest
+// boundary, never from an in-guest caller
+// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F2).
+var authenticateUser = server.AuthenticatedOwner
 
 func authenticatedUserEmail(r *http.Request) string {
 	value := strings.TrimSpace(r.Header.Get("X-Authenticated-Email"))

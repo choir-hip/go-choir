@@ -70,6 +70,10 @@ func (rt *Runtime) productAPIRequest(ctx context.Context, ownerID, ownerEmail, m
 		rdr = bytes.NewReader(body)
 	}
 	req := httptest.NewRequest(method, norm, rdr).WithContext(ctx)
+	// In-process: an empty RemoteAddr is the guest's in-process marker
+	// (server.GuestHostCaller). httptest's default TEST-NET-1 address counts
+	// only inside test binaries.
+	req.RemoteAddr = ""
 	req.Header.Set("X-Authenticated-User", ownerID)
 	if ownerEmail != "" {
 		req.Header.Set("X-Authenticated-Email", ownerEmail)

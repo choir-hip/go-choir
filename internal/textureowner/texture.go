@@ -34,6 +34,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -45,9 +46,12 @@ var (
 	textureSHA256RequirementRE   = regexp.MustCompile(`\b[a-fA-F0-9]{64}\b`)
 )
 
+// requireInternalRuntimeCaller admits only the host side of the guest
+// boundary. The X-Internal-Caller marker alone was the gate before, and any
+// in-guest process can send it (auth-boundary-gaps F6 c).
 func requireInternalRuntimeCaller(r *http.Request) error {
-	if r.Header.Get("X-Internal-Caller") != "true" {
-		return fmt.Errorf("missing internal caller marker")
+	if !server.GuestHostCaller(r) || r.Header.Get("X-Internal-Caller") != "true" {
+		return fmt.Errorf("host-side internal caller required")
 	}
 	return nil
 }

@@ -39,12 +39,8 @@ func (h *APIHandler) importResidueSnapshot(w http.ResponseWriter, r *http.Reques
 	if r.Body != nil {
 		defer r.Body.Close()
 	}
-	if !server.HostSourcedCaller(r) {
-		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "authenticated owner binding required"})
-		return
-	}
-	ownerID := strings.TrimSpace(r.Header.Get("X-Authenticated-User"))
-	if ownerID == "" {
+	ownerID, err := server.AuthenticatedOwner(r)
+	if err != nil || ownerID == "" {
 		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "authenticated owner binding required"})
 		return
 	}

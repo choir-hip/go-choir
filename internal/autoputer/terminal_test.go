@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
 // dialTerminalWS is a test helper that dials the terminal WebSocket on the
@@ -31,8 +33,41 @@ func newTerminalTestServer() (*httptest.Server, *TerminalHandler) {
 	th := NewTerminalHandler()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/terminal/ws", th.HandleTerminalWS)
-	ts := httptest.NewServer(mux)
+	// The test dials over loopback, which inside a computer is an in-guest
+	// caller, never the owner. Present the connection as the host side
+	// (the proxy's TEST-NET-1 stand-in) so these tests exercise the terminal;
+	// newInGuestTerminalTestServer keeps the real loopback source.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.RemoteAddr = "192.0.2.10:40000"
+		mux.ServeHTTP(w, r)
+	}))
 	return ts, th
+}
+
+// newInGuestTerminalTestServer serves the terminal with the caller's real
+// loopback source address.
+func newInGuestTerminalTestServer() *httptest.Server {
+	th := NewTerminalHandler()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/terminal/ws", th.HandleTerminalWS)
+	return httptest.NewServer(mux)
+}
+
+// An in-guest process (another terminal, zot, a capsule workload) dials the
+// terminal on loopback with a forged owner header: refused
+// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F2).
+func TestTerminalWS_InGuestLoopbackOwnerHeaderRefused(t *testing.T) {
+	t.Setenv(server.EnvGuestTrustLoopback, "")
+	ts := newInGuestTerminalTestServer()
+	defer ts.Close()
+	conn, resp, err := dialTerminalWS(ts, "owner-1")
+	if err == nil {
+		_ = conn.Close()
+		t.Fatal("an in-guest loopback caller opened the owner's terminal")
+	}
+	if resp == nil || resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("in-guest loopback terminal dial = %v, want 401", resp)
+	}
 }
 
 // terminalTestConn wraps a websocket.Conn for terminal test helpers.

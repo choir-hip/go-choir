@@ -17,7 +17,7 @@ import (
 func TestLiveWSPublishesOwnerScopedProductEvents(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
-	httpSrv := httptest.NewServer(http.HandlerFunc(handler.HandleLiveWS))
+	httpSrv := httptest.NewServer(hostSide(handler.HandleLiveWS))
 	defer httpSrv.Close()
 
 	conn := dialLiveWS(t, httpSrv.URL, "/api/ws?desktop_id=branch-a", "user-live")
@@ -53,7 +53,7 @@ func TestLiveWSPublishesOwnerScopedProductEvents(t *testing.T) {
 func TestLiveWSCatchesUpAfterStreamSeq(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
-	httpSrv := httptest.NewServer(http.HandlerFunc(handler.HandleLiveWS))
+	httpSrv := httptest.NewServer(hostSide(handler.HandleLiveWS))
 	defer httpSrv.Close()
 
 	first, err := rt.EmitProductEvent(context.Background(), "user-live", "primary", types.EventThemeUpdated, map[string]any{

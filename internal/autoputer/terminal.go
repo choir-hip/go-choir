@@ -129,10 +129,7 @@ func (th *TerminalHandler) Manager() *TerminalManager {
 func (th *TerminalHandler) HandleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	// The proxy-authenticated identity is valid only over the host peer
 	// transport; guests can otherwise assert the header themselves.
-	user := ""
-	if server.HostSourcedCaller(r) {
-		user = r.Header.Get("X-Authenticated-User")
-	}
+	user, _ := server.AuthenticatedOwner(r)
 	if user == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)

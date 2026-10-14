@@ -541,7 +541,7 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	h := NewAPIHandler(rt)
-	server := httptest.NewServer(http.HandlerFunc(h.HandleTrajectoryDetail))
+	server := httptest.NewServer(hostSide(h.HandleTrajectoryDetail))
 	defer server.Close()
 
 	doRequest := func(method, escapedPath, ownerID string) (int, []byte) {

@@ -159,21 +159,16 @@ func NewAPIHandler(rt *Runtime) *APIHandler {
 }
 
 // authenticateUser extracts a proxy-authenticated identity only when it
-// arrived over the host peer transport. A guest can otherwise forge this
-// caller-asserted header.
-func authenticateUser(r *http.Request) (string, error) {
-	if !server.HostSourcedCaller(r) {
-		return "", fmt.Errorf("missing authenticated user identity")
-	}
-	user := r.Header.Get("X-Authenticated-User")
-	if user == "" {
-		return "", fmt.Errorf("missing authenticated user identity")
-	}
-	return user, nil
-}
+// arrived from the host side of the guest boundary; loopback is an in-guest
+// caller, not the owner (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F2).
+var authenticateUser = server.AuthenticatedOwner
 
+// requireInternalRuntimeCaller admits the host side of the guest boundary
+// only. These routes write the planned-restart marker, hibernate, apply a
+// platform update and append run events; an in-guest process must reach
+// none of them.
 func requireInternalRuntimeCaller(r *http.Request) error {
-	if !server.HostSourcedCaller(r) {
+	if !server.GuestHostCaller(r) {
 		return fmt.Errorf("request was not host sourced")
 	}
 	return nil

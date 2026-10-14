@@ -21,10 +21,8 @@ import (
 // the host peer transport. A guest can assert the header itself, so it is not
 // an identity unless its transport is host-sourced.
 func requireAuth(r *http.Request) error {
-	if !server.HostSourcedCaller(r) || r.Header.Get("X-Authenticated-User") == "" {
-		return fmt.Errorf("missing authenticated user identity")
-	}
-	return nil
+	_, err := server.AuthenticatedOwner(r)
+	return err
 }
 
 // FileEntry represents a single file or directory in a listing response.

@@ -50,10 +50,7 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := ""
-	if server.HostSourcedCaller(r) {
-		user = r.Header.Get("X-Authenticated-User")
-	}
+	user, _ := server.AuthenticatedOwner(r)
 
 	resp := BootstrapResponse{
 		ComputerID: h.cfg.ComputerID,

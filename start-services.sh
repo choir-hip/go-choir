@@ -113,6 +113,10 @@ export RUNTIME_LLM_MODEL="${RUNTIME_LLM_MODEL:-gpt-6-luna}"
 export RUNTIME_LLM_REASONING_EFFORT="${RUNTIME_LLM_REASONING_EFFORT:-low}"
 export RUNTIME_VMCTL_URL="${RUNTIME_VMCTL_URL:-http://127.0.0.1:${VMCTL_PORT}}"
 export AUTOPUTER_PORT="${AUTOPUTER_PORT:-8085}" AUTOPUTER_ID="${AUTOPUTER_ID:-autoputer-dev}" RUNTIME_ENABLE_TEST_APIS="${RUNTIME_ENABLE_TEST_APIS:-0}"
+# The local proxy reaches this autoputer over 127.0.0.1, so loopback is the
+# host side here. A computer's guest image never sets this: inside a VM,
+# loopback is every in-guest process (internal/server/guest_owner.go).
+export CHOIR_GUEST_TRUST_LOOPBACK=1
 nohup go run ./cmd/autoputer > autoputer.log 2>&1 &
 AUTOPUTER_PID=$!
 [ "${CHOIR_SERVICES_FOREGROUND:-0}" = "1" ] || disown "$AUTOPUTER_PID"

@@ -2,10 +2,10 @@ package apihandler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
@@ -26,13 +26,11 @@ type apiError struct {
 
 // authenticateUser extracts the authenticated user identity from the trusted
 // X-Authenticated-User header injected by the proxy.
-func authenticateUser(r *http.Request) (string, error) {
-	user := r.Header.Get("X-Authenticated-User")
-	if user == "" {
-		return "", fmt.Errorf("missing authenticated user identity")
-	}
-	return user, nil
-}
+// authenticateUser is the guest's one owner-identity rule: the proxy's
+// X-Authenticated-User, believed only from the host side of the guest
+// boundary, never from an in-guest caller
+// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F2).
+var authenticateUser = server.AuthenticatedOwner
 
 func writeAPIJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
