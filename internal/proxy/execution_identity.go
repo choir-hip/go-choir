@@ -63,8 +63,12 @@ type hostDeploymentIdentity struct {
 type deploymentIdentityReceipt struct {
 	SchemaVersion int    `json:"schema_version"`
 	TargetCommit  string `json:"target_commit"`
-	ActivatedAt   string `json:"activated_at"`
-	Github        struct {
+	// DeployedCommit is the platform commit a merged receipt records (equal
+	// to TargetCommit); absent on receipts written before the merge. It
+	// must be declared here because this decoder disallows unknown fields.
+	DeployedCommit string `json:"deployed_commit,omitempty"`
+	ActivatedAt    string `json:"activated_at"`
+	Github         struct {
 		RunID      string `json:"run_id"`
 		RunAttempt string `json:"run_attempt"`
 	} `json:"github"`
@@ -112,6 +116,7 @@ func readDeploymentIdentityReceipt() (json.RawMessage, deploymentIdentityReceipt
 	}
 	proxy := receipt.HostIdentity.Services["proxy"]
 	if receipt.SchemaVersion != 1 || !executionIdentityFullCommit(receipt.TargetCommit) || receipt.Github.RunID == "" ||
+		(receipt.DeployedCommit != "" && receipt.DeployedCommit != receipt.TargetCommit) ||
 		receipt.HostIdentity.CanonicalRef != "refs/heads/main@"+receipt.TargetCommit ||
 		receipt.HostIdentity.CheckoutHead != receipt.TargetCommit || !receipt.HostIdentity.CheckoutClean ||
 		!strings.HasPrefix(receipt.HostIdentity.NixOSClosure, "/nix/store/") ||
@@ -350,16 +355,23 @@ func executionIdentityCommitsJoin(receipt deploymentIdentityReceipt, host buildi
 	} else if !executionIdentityFullCommit(routeCommit) {
 		return false
 	}
-	rawArtifact, selected := receipt.Artifacts["proxy"]
-	if !selected {
+	rawArtifact, present := receipt.Artifacts["proxy"]
+	if !present {
 		return strings.TrimSpace(host.DeployedCommit) == ""
 	}
 	var artifact struct {
-		Commit string `json:"commit"`
-		Status string `json:"status"`
+		Commit             string `json:"commit"`
+		Status             string `json:"status"`
+		CarriedForwardFrom string `json:"carried_forward_from"`
 	}
 	if json.Unmarshal(rawArtifact, &artifact) != nil {
 		return false
+	}
+	// A merged receipt carries forward the proxy artifact of the deploy
+	// that last moved it; off the target, that means this deploy did not
+	// select the proxy, so it joins exactly like an absent proxy artifact.
+	if artifact.CarriedForwardFrom != "" && artifact.Commit != target {
+		return strings.TrimSpace(host.DeployedCommit) == ""
 	}
 	return artifact.Commit == target && artifact.Status == "active" &&
 		host.Commit == target && host.DeployedCommit == target

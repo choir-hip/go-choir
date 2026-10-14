@@ -548,8 +548,9 @@ func executionIdentityCLICommonCommit(signed *executionIdentityCLIEnvelope, host
 	var deployment struct {
 		TargetCommit string `json:"target_commit"`
 		Artifacts    map[string]struct {
-			Commit string `json:"commit"`
-			Status string `json:"status"`
+			Commit             string `json:"commit"`
+			Status             string `json:"status"`
+			CarriedForwardFrom string `json:"carried_forward_from"`
 		} `json:"artifacts"`
 		HostIdentity struct {
 			CanonicalRef       string `json:"canonical_ref"`
@@ -579,7 +580,13 @@ func executionIdentityCLICommonCommit(signed *executionIdentityCLIEnvelope, host
 		proxy.Role != "proxy" || !strings.HasPrefix(proxy.PackageDigest, "sha256:") {
 		return "", false
 	}
-	if artifact, selected := deployment.Artifacts["proxy"]; selected {
+	artifact, selected := deployment.Artifacts["proxy"]
+	// A merged receipt carries forward the proxy artifact of the deploy that
+	// last moved it; off the target, this deploy did not select the proxy.
+	if selected && artifact.CarriedForwardFrom != "" && artifact.Commit != target {
+		selected = false
+	}
+	if selected {
 		if artifact.Commit != target || artifact.Status != "active" ||
 			host.Commit != target || host.DeployedCommit != target {
 			return "", false

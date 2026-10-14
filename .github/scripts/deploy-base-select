@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Select the git base a main push diffs from to decide what to test and
+# deploy. The base is what staging actually runs, never the push's own
+# before-SHA: a cancelled or skipped run between deploys would otherwise
+# shrink the delta and strand code off staging (docs/problems/
+# partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+#
+# Candidates, first trustworthy one wins:
+#   1. /health platform.deployed_commit (platform commit from the receipt)
+#   2. /health build.deployed_commit (proxy per-service; older proxies)
+#   3. Node B receipt deployed_commit, else target_commit (receipts are
+#      written only after a verified deploy; incomplete ones are skipped)
+#   4. /health build.commit: the running proxy binary. It is never newer
+#      than the platform commit, so its diff is a conservative superset.
+# A candidate must be a full SHA that resolves in this repository (fetched
+# at depth 1 when missing). With none, base is empty and the caller must
+# act conservatively (deploy or test everything) and say so.
+#
+# Usage: deploy-base-select --after <sha> [--health <file>] [--receipt <file>]
+# Prints base=<sha|empty> and base_source=<candidate|none> on stdout;
+# explains each candidate on stderr.
+set -euo pipefail
+
+after=""
+health=""
+receipt=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --after) after="${2:-}"; shift 2 ;;
+    --health) health="${2:-}"; shift 2 ;;
+    --receipt) receipt="${2:-}"; shift 2 ;;
+    *) echo "deploy-base-select: unknown argument $1" >&2; exit 2 ;;
+  esac
+done
+if [[ ! "$after" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "deploy-base-select: --after must be a full commit SHA" >&2
+  exit 2
+fi
+
+read_field() {
+  local file="$1" filter="$2"
+  [ -n "$file" ] && [ -s "$file" ] || return 0
+  jq -r "$filter // empty" "$file" 2>/dev/null || true
+}
+
+resolves() {
+  local sha="$1"
+  git cat-file -e "${sha}^{commit}" 2>/dev/null && return 0
+  git fetch --no-tags --depth=1 origin "$sha" >/dev/null 2>&1 || true
+  git cat-file -e "${sha}^{commit}" 2>/dev/null
+}
+
+receipt_filter='if (type == "object" and .schema_version == 1 and .status == null) then . else null end'
+
+candidates=(
+  "health.platform.deployed_commit|$(read_field "$health" '.platform.deployed_commit')"
+  "health.build.deployed_commit|$(read_field "$health" '.build.deployed_commit')"
+  "receipt.deployed_commit|$(read_field "$receipt" "($receipt_filter) | .deployed_commit")"
+  "receipt.target_commit|$(read_field "$receipt" "($receipt_filter) | .target_commit")"
+  "health.build.commit|$(read_field "$health" '.build.commit')"
+)
+
+for candidate in "${candidates[@]}"; do
+  source="${candidate%%|*}"
+  sha="${candidate#*|}"
+  if [ -z "$sha" ]; then
+    echo "deploy-base-select: ${source}: absent" >&2
+    continue
+  fi
+  if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "deploy-base-select: ${source}: ${sha} is not a full commit SHA; skipped" >&2
+    continue
+  fi
+  if ! resolves "$sha"; then
+    echo "deploy-base-select: ${source}: ${sha} does not resolve; skipped" >&2
+    continue
+  fi
+  echo "deploy-base-select: base ${sha} from ${source}" >&2
+  printf 'base=%s\nbase_source=%s\n' "$sha" "$source"
+  exit 0
+done
+
+echo "deploy-base-select: no trustworthy deployed base (health platform/deployed commit, Node B receipt, proxy binary commit); the caller must act conservatively" >&2
+printf 'base=\nbase_source=none\n'

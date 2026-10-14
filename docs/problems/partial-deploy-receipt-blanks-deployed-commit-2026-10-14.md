@@ -1,8 +1,9 @@
 # A Partial Host Deploy Blanks the Deployed Commit, and Later Deploys Skip
 
 Date: 2026-10-14. Found by the lead at ~20:15 UTC when the jailer slice
-(10e9f18e1) never reached staging. Status: documented; workaround is a
-manual forced deploy (workflow_dispatch); fix to follow.
+(10e9f18e1) never reached staging. Status: fix on branch
+`fix/deploy-receipt-platform-commit` (see "Fix" below), not yet landed;
+workaround was a manual forced deploy (workflow_dispatch).
 
 ## Evidence
 
@@ -112,3 +113,21 @@ Rollback hazard: reverting this change leaves a merged receipt (with
 `deployed_commit`) on Node B that the old proxy's strict decoder rejects,
 so execution identity is unavailable until the revert's own deploy
 rewrites the receipt in the old shape (the window is that one deploy).
+
+## Fix
+
+- `.github/scripts/deploy-receipt-merge` (test:
+  `deploy-receipt-merge-test`): the Node B receipt writer merges the new
+  receipt into the previous one (M1-M6). Schema stays 1; the new
+  top-level `deployed_commit` and per-artifact `carried_forward_from` are
+  additive.
+- `internal/buildinfo.PlatformSnapshot` and proxy `/health`
+  `platform.{deployed_commit,deployed_at,source}`: the platform answer,
+  beside `build`; `build.deployed_commit` keeps its per-service meaning.
+- `internal/proxy` identity receipt decoder declares `deployed_commit`
+  and rejects a conflicting one; the proxy and `choir identity` joins
+  treat a carried proxy artifact as unselected (R1-R4).
+- `.github/scripts/deploy-base-select` (test: `deploy-base-select-test`):
+  one base chooser for the plan job and deploy-impact; deploy-impact
+  reads the Node B receipt over SSH (best effort) and deploys everything
+  when no base is trustworthy; the plan job runs every lane (B1-B5).

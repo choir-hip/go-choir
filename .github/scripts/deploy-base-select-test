@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Pins deploy base selection (docs/problems/
+# partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md, B1-B4): the
+# push before-SHA is never a deploy base.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+select_base="$root/.github/scripts/deploy-base-select"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+fail() {
+  echo "deploy-base-select-test: $*" >&2
+  exit 1
+}
+
+repo="$work/repo"
+git init -q "$repo"
+commit() {
+  git -C "$repo" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "$1"
+  git -C "$repo" rev-parse HEAD
+}
+binary="$(commit binary)"   # proxy binary still here (last deploy that moved it)
+platform="$(commit platform)" # last successful partial deploy
+head="$(commit head)"       # the push being planned
+unknown=ffffffffffffffffffffffffffffffffffffffff
+
+json() { printf '%s' "$1" >"$work/$2"; printf '%s' "$work/$2"; }
+
+run() {
+  (cd "$repo" && "$select_base" --after "$head" "$@" 2>"$work/stderr")
+}
+
+expect() {
+  local label="$1" want_base="$2" want_source="$3"
+  shift 3
+  local out
+  out="$(run "$@")" || fail "$label: script failed: $(cat "$work/stderr")"
+  grep -qx "base=${want_base}" <<<"$out" || fail "$label: want base=${want_base}, got: $out"
+  grep -qx "base_source=${want_source}" <<<"$out" || fail "$label: want base_source=${want_source}, got: $out"
+}
+
+new_health="$(json "{\"platform\":{\"deployed_commit\":\"$platform\"},\"build\":{\"commit\":\"$binary\"}}" new-health.json)"
+old_health="$(json "{\"build\":{\"commit\":\"$binary\",\"deployed_commit\":\"$platform\"}}" old-health.json)"
+blank_health="$(json "{\"build\":{\"commit\":\"$binary\",\"deployed_commit\":null}}" blank-health.json)"
+merged_receipt="$(json "{\"schema_version\":1,\"target_commit\":\"$platform\",\"deployed_commit\":\"$platform\",\"artifacts\":{}}" merged-receipt.json)"
+old_receipt="$(json "{\"schema_version\":1,\"target_commit\":\"$platform\",\"artifacts\":{}}" old-receipt.json)"
+incomplete_receipt="$(json "{\"schema_version\":1,\"status\":\"incomplete\",\"target_commit\":\"$platform\"}" incomplete-receipt.json)"
+unknown_platform="$(json "{\"platform\":{\"deployed_commit\":\"$unknown\"},\"build\":{\"commit\":\"$binary\"}}" unknown-health.json)"
+local_health="$(json '{"build":{"commit":"local","deployed_commit":""}}' local-health.json)"
+
+# B1: the platform commit on /health wins.
+expect "platform field" "$platform" health.platform.deployed_commit --health "$new_health" --receipt "$old_receipt"
+# B1: an old proxy's per-service deployed commit is still a base.
+expect "old health" "$platform" health.build.deployed_commit --health "$old_health"
+# B1 (this incident): /health blank, the Node B receipt answers, not the
+# proxy binary and never the push before-SHA.
+expect "blank health, merged receipt" "$platform" receipt.deployed_commit --health "$blank_health" --receipt "$merged_receipt"
+expect "blank health, old receipt" "$platform" receipt.target_commit --health "$blank_health" --receipt "$old_receipt"
+# B1: an incomplete receipt is not a base; the proxy binary commit (an
+# older, conservative base) is next.
+expect "incomplete receipt" "$binary" health.build.commit --health "$blank_health" --receipt "$incomplete_receipt"
+# B2: an unresolvable candidate is skipped.
+expect "unresolvable platform" "$binary" health.build.commit --health "$unknown_platform"
+# B3: nothing trustworthy -> empty base (caller deploys everything).
+expect "no candidates" "" none --health "$local_health" --receipt "$work/missing.json"
+expect "no inputs" "" none
+printf 'not json' >"$work/corrupt.json"
+expect "corrupt inputs" "" none --health "$work/corrupt.json" --receipt "$work/corrupt.json"
+grep -q 'no trustworthy deployed base' "$work/stderr" || fail "no-base case did not explain itself"
+# B4: a deployed head is its own base (nothing to deploy).
+head_health="$(json "{\"platform\":{\"deployed_commit\":\"$head\"}}" head-health.json)"
+expect "head already deployed" "$head" health.platform.deployed_commit --health "$head_health"
+
+# Usage errors fail loudly.
+if (cd "$repo" && "$select_base" --health "$new_health" >/dev/null 2>&1); then
+  fail "missing --after accepted"
+fi
+
+echo "deploy-base-select tests passed"

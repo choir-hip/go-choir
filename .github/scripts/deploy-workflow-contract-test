@@ -25,6 +25,17 @@ require 'git fetch --no-tags origin "$DEPLOY_COMMIT"'
 require 'git reset --hard "$DEPLOY_COMMIT"'
 require 'x-choir-build-commit:'
 require 'deploy-receipt.json'
+# A partial deploy merges into the previous receipt instead of replacing it,
+# and deploy decisions never diff from the push before-SHA (docs/problems/
+# partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+require '.github/scripts/deploy-receipt-merge /var/lib/go-choir/deploy-receipt.json < "${receipt_tmp}.new" > "$receipt_tmp"'
+require 'selection="$(.github/scripts/deploy-base-select --after "$after" --health "$health_json" --receipt "$RUNNER_TEMP/deployed-receipt.json")"'
+require "'cat /var/lib/go-choir/deploy-receipt.json' >\"\$receipt_json\""
+require 'Staging deploy forced: no trustworthy deployed base'
+require 'selection="$(.github/scripts/deploy-base-select --after "$AFTER" --health "$health_json")"'
+reject 'before="${{ github.event.before }}"'
+reject 'git diff-tree --no-commit-id --name-only -r "$after"'
+reject "jq -r '.build.deployed_commit // empty'"
 require 'Refusing to publish an activation receipt with no verified artifacts'
 require 'deploy-failures'
 require 'verify_artifact_manifest'

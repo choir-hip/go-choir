@@ -76,14 +76,24 @@ jobs:
               # base), not the push's own before: a docs push that superseded a
               # queued code run must still test and deploy that code
               # (docs/problems/ci-deploy-latency-per-service-go-builds-2026-10-09.md).
+              # The push before-SHA is never the main plan base: with no
+              # trustworthy staging base every lane runs, because a docs-only
+              # verdict here also skips deploy-impact
+              # (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
               if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
-                deployed="$(curl -fsSI --max-time 10 https://choir.news 2>/dev/null | tr -d '\r' | awk 'tolower($1)=="x-choir-build-commit:"{print $2; exit}' || true)"
-                if [[ "$deployed" =~ ^[0-9a-f]{40}$ ]]; then
-                  git cat-file -e "${deployed}^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$deployed" || true
-                  if git cat-file -e "${deployed}^{commit}" 2>/dev/null; then
-                    before="$deployed"
-                    echo "Plan base: live staging commit $deployed"
-                  fi
+                health_json="$(mktemp)"
+                curl -fsS --max-time 10 https://choir.news/health >"$health_json" 2>/dev/null || true
+                selection="$(.github/scripts/deploy-base-select --after "$AFTER" --health "$health_json")"
+                deployed="$(sed -n 's/^base=//p' <<<"$selection")"
+                if [[ -z "$deployed" ]]; then
+                  force_all=true
+                  before=""
+                  echo "Plan base: no trustworthy live staging commit; running every lane (never the push before-SHA)"
+                elif [[ "$deployed" == "$AFTER" ]]; then
+                  echo "Plan base: $AFTER is already the live staging commit; testing the push delta from $before"
+                else
+                  before="$deployed"
+                  echo "Plan base: live staging commit $deployed ($(sed -n 's/^base_source=//p' <<<"$selection"))"
                 fi
               fi
               ;;
@@ -141,6 +151,8 @@ jobs:
           .github/scripts/ci-workflow-contract-test
           .github/scripts/deploy-impact-classify-test
           .github/scripts/deploy-workflow-contract-test
+          .github/scripts/deploy-base-select-test
+          .github/scripts/deploy-receipt-merge-test
           .github/scripts/node-b-sync-service-pointers-test
           bash -n .github/scripts/*
 
@@ -564,7 +576,31 @@ jobs:
         run: |
           .github/scripts/deploy-impact-classify-test
           .github/scripts/deploy-workflow-contract-test
+          .github/scripts/deploy-base-select-test
+          .github/scripts/deploy-receipt-merge-test
           .github/scripts/node-b-sync-service-pointers-test
+
+      - name: Read deployed base receipt from Node B
+        # Best effort: the receipt is the deployed-base candidate when /health
+        # has no deployed commit (a partial deploy that did not move the
+        # proxy). A failure here only removes a candidate.
+        shell: bash
+        run: |
+          set -uo pipefail
+          receipt_json="$RUNNER_TEMP/deployed-receipt.json"
+          : >"$receipt_json"
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "${{ secrets.OVH_DEPLOY_SSH_KEY }}" >~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if timeout 30 ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            "root@${{ secrets.OVH_NODE_B_HOST }}" 'cat /var/lib/go-choir/deploy-receipt.json' >"$receipt_json" 2>/dev/null; then
+            echo "Read Node B deploy receipt (target $(jq -r '.target_commit // "unknown"' "$receipt_json" 2>/dev/null))"
+          else
+            : >"$receipt_json"
+            echo "Node B deploy receipt unavailable; base selection continues without it"
+          fi
+          rm -f ~/.ssh/deploy_key
+          exit 0
 
       - name: Detect deployed artifact changes
         id: detect
@@ -587,32 +623,37 @@ jobs:
             exit 0
           fi
 
-          before="${{ github.event.before }}"
           after="${{ github.sha }}"
 
-          # The deployed identity is the authoritative diff base: intermediate
-          # push heads between successful deploys must not shrink the delta
-          # (the staged runtime changes after failing runs must still deploy).
-          # Fail soft to the push event's parent when the health endpoint is
-          # unreachable or the commit does not resolve.
-          deployed="$(curl -fsS --max-time 10 https://choir.news/health 2>/dev/null | jq -r '.build.deployed_commit // empty' || true)"
-          if [[ "$deployed" =~ ^[0-9a-f]{40}$ ]] && [[ "$deployed" != "$after" ]]; then
-            if git cat-file -e "${deployed}^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$deployed" 2>/dev/null; then
-              if git cat-file -e "${deployed}^{commit}" 2>/dev/null; then
-                before="$deployed"
-                echo "Diff base: deployed staging identity $deployed"
-              fi
-            fi
-          fi
-          if [[ -n "$before" && ! "$before" =~ ^0+$ ]]; then
-            git fetch --no-tags --depth=1 origin "$before" || true
-          fi
+          # The deployed identity is the only diff base: intermediate push
+          # heads between successful deploys must not shrink the delta (the
+          # staged runtime changes after failing, cancelled or skipped runs
+          # must still deploy). Never the push before-SHA: with no trustworthy
+          # base, deploy everything (docs/problems/
+          # partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+          health_json="$RUNNER_TEMP/deployed-health.json"
+          curl -fsS --max-time 10 https://choir.news/health >"$health_json" 2>/dev/null || : >"$health_json"
+          selection="$(.github/scripts/deploy-base-select --after "$after" --health "$health_json" --receipt "$RUNNER_TEMP/deployed-receipt.json")"
+          before="$(sed -n 's/^base=//p' <<<"$selection")"
+          base_source="$(sed -n 's/^base_source=//p' <<<"$selection")"
 
-          if [[ -z "$before" || "$before" =~ ^0+$ ]] || ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
-            mapfile -t changed < <(git diff-tree --no-commit-id --name-only -r "$after")
-          else
-            mapfile -t changed < <(git diff --name-only "$before" "$after")
+          if [[ -z "$before" ]]; then
+            {
+              echo "deploy_needed=true"
+              echo "deploy_host=true"
+              echo "deploy_frontend=true"
+              echo "deploy_host_service=true"
+              echo "deploy_host_os=true"
+              echo "deploy_vmctl_restart=true"
+              echo "deploy_active_vm_refresh=true"
+              echo "host_services=autoputer"
+              echo "class_explanation=no trustworthy deployed base (health, Node B receipt, proxy binary); conservative full host/frontend deploy with active VM refresh"
+            } >> "$GITHUB_OUTPUT"
+            echo "Staging deploy forced: no trustworthy deployed base; deploying everything rather than diffing from the push before-SHA."
+            exit 0
           fi
+          echo "Diff base: deployed staging identity $before ($base_source)"
+          mapfile -t changed < <(git diff --name-only "$before" "$after")
 
           printf '%s\n' "${changed[@]}" | .github/scripts/deploy-impact-classify "$GITHUB_OUTPUT"
 
@@ -1776,7 +1817,13 @@ jobs:
               --argjson artifacts "$receipt_artifacts" \
               --argjson host_identity "$host_identity" \
               '{schema_version: 1, target_commit: $target_commit, activated_at: $activated_at, github: {run_id: $run_id, run_attempt: $run_attempt}, artifacts: $artifacts, host_identity: $host_identity}' \
-              > "$receipt_tmp"
+              > "${receipt_tmp}.new"
+            # Merge, never replace: carry forward untouched services'
+            # artifacts and record the platform deployed_commit, so a partial
+            # deploy cannot blank /health's deployed commit (docs/problems/
+            # partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+            .github/scripts/deploy-receipt-merge /var/lib/go-choir/deploy-receipt.json < "${receipt_tmp}.new" > "$receipt_tmp"
+            rm -f "${receipt_tmp}.new"
             if [ -f /var/lib/go-choir/deploy-receipt.json ]; then
               cp /var/lib/go-choir/deploy-receipt.json /var/lib/go-choir/deploy-receipt-previous.json
             fi

@@ -78,14 +78,21 @@ type errorResponse struct {
 // build identity; host pressure, global VM inventory, vmctl URLs, and raw VM
 // handles must remain off browser-public surfaces.
 type proxyHealthResponse struct {
-	Status        string                 `json:"status"`
-	Service       string                 `json:"service"`
-	Upstream      string                 `json:"upstream"`
-	VMctlRouting  string                 `json:"vmctl_routing,omitempty"`
-	VMctlStatus   string                 `json:"vmctl_status,omitempty"`
-	Lifecycle     lifecycleHealthSummary `json:"lifecycle,omitempty"`
-	Build         buildinfo.Info         `json:"build"`
-	UpstreamBuild *buildinfo.Info        `json:"upstream_build,omitempty"`
+	Status       string                 `json:"status"`
+	Service      string                 `json:"service"`
+	Upstream     string                 `json:"upstream"`
+	VMctlRouting string                 `json:"vmctl_routing,omitempty"`
+	VMctlStatus  string                 `json:"vmctl_status,omitempty"`
+	Lifecycle    lifecycleHealthSummary `json:"lifecycle,omitempty"`
+	Build        buildinfo.Info         `json:"build"`
+	// Platform is the commit of the last successful staging deploy, from
+	// the activation receipt. It sits beside Build because Build is this
+	// binary's own identity and stays blank after a partial deploy that did
+	// not move the proxy (docs/problems/
+	// partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md); CI
+	// diffs deploys from this answer.
+	Platform      *buildinfo.Platform `json:"platform,omitempty"`
+	UpstreamBuild *buildinfo.Info     `json:"upstream_build,omitempty"`
 }
 
 type proxyVMctlHealthSummary struct {
@@ -1553,6 +1560,9 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		Lifecycle:     h.lifecycle.summary(),
 		Build:         buildinfo.Snapshot("proxy"),
 		UpstreamBuild: upstreamBuild,
+	}
+	if platform := buildinfo.PlatformSnapshot("proxy"); platform.DeployedCommit != "" {
+		resp.Platform = &platform
 	}
 
 	// Report vmctl routing status (VAL-VM-002).

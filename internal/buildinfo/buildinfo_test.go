@@ -122,3 +122,73 @@ func TestSnapshotDoesNotLeakCrossServiceDeploymentIdentity(t *testing.T) {
 		t.Fatalf("frontend DeployedCommit = %q, want %q", frontendInfo.DeployedCommit, commit)
 	}
 }
+
+// writeReceipt points CHOIR_DEPLOY_RECEIPT_PATH at a receipt with the given
+// body for the rest of the test.
+func writeReceipt(t *testing.T, body string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "deploy-receipt.json")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write deploy receipt: %v", err)
+	}
+	t.Setenv("CHOIR_DEPLOY_RECEIPT_PATH", path)
+}
+
+// A partial deploy that did not move the proxy carries the proxy's artifact
+// forward with its own commit. /health must still answer the platform
+// commit (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md,
+// M3/M6), while the proxy's per-service identity stays strict: it was not
+// deployed by this receipt's deploy.
+func TestPlatformSnapshotReadsMergedReceiptAfterPartialDeploy(t *testing.T) {
+	const target = "1111111111111111111111111111111111111111"
+	const carried = "2222222222222222222222222222222222222222"
+	writeReceipt(t, `{"schema_version":1,"target_commit":"`+target+`","deployed_commit":"`+target+`","activated_at":"2026-10-14T19:39:00Z",`+
+		`"artifacts":{"vmctl":{"commit":"`+target+`","status":"active"},"proxy":{"commit":"`+carried+`","status":"active","carried_forward_from":"`+carried+`"}}}`)
+
+	platform := PlatformSnapshot("proxy")
+	if platform.DeployedCommit != target || platform.DeployedAt != "2026-10-14T19:39:00Z" || platform.Source != PlatformSourceReceipt {
+		t.Fatalf("PlatformSnapshot = %+v, want receipt platform commit %s", platform, target)
+	}
+	if info := Snapshot("proxy"); info.DeployedCommit != "" || info.DeployedAt != "" {
+		t.Fatalf("proxy per-service identity = %+v, want empty: a carried artifact is not this deploy's", info)
+	}
+	if info := Snapshot("vmctl"); info.DeployedCommit != target {
+		t.Fatalf("vmctl per-service DeployedCommit = %q, want %q", info.DeployedCommit, target)
+	}
+}
+
+// An old receipt (no platform field) falls back to the per-service rule.
+func TestPlatformSnapshotFallsBackToServiceArtifactForOldReceipts(t *testing.T) {
+	const target = "3333333333333333333333333333333333333333"
+	writeReceipt(t, `{"schema_version":1,"target_commit":"`+target+`","activated_at":"2026-10-14T19:39:00Z","artifacts":{"proxy":{"commit":"`+target+`","status":"active"}}}`)
+	platform := PlatformSnapshot("proxy")
+	if platform.DeployedCommit != target || platform.Source != PlatformSourceServiceArtifact {
+		t.Fatalf("PlatformSnapshot = %+v, want per-service fallback %s", platform, target)
+	}
+
+	writeReceipt(t, `{"schema_version":1,"target_commit":"`+target+`","activated_at":"2026-10-14T19:39:00Z","artifacts":{"vmctl":{"commit":"`+target+`","status":"active"}}}`)
+	if platform := PlatformSnapshot("proxy"); platform != (Platform{}) {
+		t.Fatalf("PlatformSnapshot = %+v, want empty for an old partial receipt without the proxy", platform)
+	}
+}
+
+// A receipt whose platform field conflicts with its target is not trusted
+// for either answer (R2).
+func TestReceiptWithConflictingPlatformCommitReportsNothing(t *testing.T) {
+	const target = "4444444444444444444444444444444444444444"
+	const other = "5555555555555555555555555555555555555555"
+	writeReceipt(t, `{"schema_version":1,"target_commit":"`+target+`","deployed_commit":"`+other+`","activated_at":"2026-10-14T19:39:00Z","artifacts":{"proxy":{"commit":"`+target+`","status":"active"}}}`)
+	if platform := PlatformSnapshot("proxy"); platform != (Platform{}) {
+		t.Fatalf("PlatformSnapshot = %+v, want empty for a conflicting receipt", platform)
+	}
+	if info := Snapshot("proxy"); info.DeployedCommit != "" {
+		t.Fatalf("Snapshot DeployedCommit = %q, want empty for a conflicting receipt", info.DeployedCommit)
+	}
+}
+
+func TestPlatformSnapshotWithoutReceiptIsEmpty(t *testing.T) {
+	t.Setenv("CHOIR_DEPLOY_RECEIPT_PATH", filepath.Join(t.TempDir(), "missing.json"))
+	if platform := PlatformSnapshot("proxy"); platform != (Platform{}) {
+		t.Fatalf("PlatformSnapshot = %+v, want empty without a receipt", platform)
+	}
+}

@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Pins the deploy receipt merge (docs/problems/
+# partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md, M1-M6).
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+merge="$root/.github/scripts/deploy-receipt-merge"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+old=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+mid=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+new=cccccccccccccccccccccccccccccccccccccccc
+
+fail() {
+  echo "deploy-receipt-merge-test: $*" >&2
+  exit 1
+}
+
+expect() {
+  local json="$1" filter="$2" label="$3"
+  jq -e "$filter" >/dev/null <<<"$json" || fail "$label: $filter on $json"
+}
+
+receipt() {
+  local target="$1" artifacts="$2"
+  jq -n --arg target "$target" --argjson artifacts "$artifacts" \
+    '{schema_version: 1, target_commit: $target, activated_at: "2026-10-14T19:39:00Z", github: {run_id: "1", run_attempt: "1"}, artifacts: $artifacts, host_identity: {canonical_ref: ("refs/heads/main@" + $target)}}'
+}
+
+# The full deploy that put the proxy at $old.
+receipt "$old" "{\"proxy\":{\"commit\":\"$old\",\"status\":\"active\"},\"vmctl\":{\"commit\":\"$old\",\"status\":\"active\"},\"frontend\":{\"commit\":\"$old\",\"status\":\"active\",\"asset\":\"index-1.js\"}}" >"$work/previous.json"
+
+# M1, M2, M6: a partial deploy touching vmctl only carries the proxy and
+# frontend forward with their own commits, replaces vmctl, and records the
+# platform commit.
+partial="$(receipt "$mid" "{\"vmctl\":{\"commit\":\"$mid\",\"status\":\"active\"}}" | "$merge" "$work/previous.json")"
+expect "$partial" ".schema_version == 1 and .target_commit == \"$mid\" and .deployed_commit == \"$mid\"" "platform commit"
+expect "$partial" ".artifacts.vmctl == {commit: \"$mid\", status: \"active\"}" "touched service replaced"
+expect "$partial" ".artifacts.proxy == {commit: \"$old\", status: \"active\", carried_forward_from: \"$old\"}" "untouched proxy carried"
+expect "$partial" ".artifacts.frontend.asset == \"index-1.js\" and .artifacts.frontend.carried_forward_from == \"$old\"" "untouched frontend carried with its fields"
+expect "$partial" ".host_identity.canonical_ref == \"refs/heads/main@$mid\" and .github.run_id == \"1\"" "new receipt fields kept"
+
+# M3: a second partial deploy keeps the original carry origin, and a
+# service touched again sheds its carried marker.
+printf '%s' "$partial" >"$work/partial.json"
+second="$(receipt "$new" "{\"proxy\":{\"commit\":\"$new\",\"status\":\"active\"}}" | "$merge" "$work/partial.json")"
+expect "$second" ".deployed_commit == \"$new\"" "second platform commit"
+expect "$second" ".artifacts.proxy == {commit: \"$new\", status: \"active\"}" "touched proxy has no carried marker"
+expect "$second" ".artifacts.vmctl == {commit: \"$mid\", status: \"active\", carried_forward_from: \"$mid\"}" "vmctl carried from its own deploy"
+expect "$second" ".artifacts.frontend.carried_forward_from == \"$old\"" "carry origin kept across merges"
+
+# M4: missing, corrupt, non-v1 and incomplete previous receipts never block
+# the receipt; they carry nothing and say so.
+fresh="$(receipt "$new" "{\"vmctl\":{\"commit\":\"$new\",\"status\":\"active\"}}")"
+printf 'not json' >"$work/corrupt.json"
+jq -n '{schema_version: 2, target_commit: "x", artifacts: {proxy: {commit: "x", status: "active"}}}' >"$work/v2.json"
+jq -n --arg t "$old" '{schema_version: 1, status: "incomplete", target_commit: $t, artifacts: {proxy: {commit: $t, status: "active"}}}' >"$work/incomplete.json"
+jq -n --arg t "$old" '{schema_version: 1, target_commit: $t, artifacts: []}' >"$work/badartifacts.json"
+for previous in "$work/missing.json" "$work/corrupt.json" "$work/v2.json" "$work/incomplete.json" "$work/badartifacts.json"; do
+  out="$("$merge" "$previous" <<<"$fresh" 2>"$work/stderr")"
+  expect "$out" ".deployed_commit == \"$new\" and (.artifacts | keys) == [\"vmctl\"]" "unusable previous $(basename "$previous")"
+  if [ "$previous" != "$work/missing.json" ]; then
+    grep -q 'carrying nothing forward' "$work/stderr" || fail "unusable previous $(basename "$previous") did not warn"
+  fi
+done
+# No previous path at all behaves like a missing receipt.
+out="$("$merge" <<<"$fresh")"
+expect "$out" ".deployed_commit == \"$new\"" "no previous argument"
+
+# M5: an invalid new receipt fails and prints nothing.
+for bad in \
+  "$(receipt "$new" '{}')" \
+  "$(receipt short "{\"vmctl\":{\"commit\":\"$new\",\"status\":\"active\"}}")" \
+  "$(jq -n --arg t "$new" '{schema_version: 2, target_commit: $t, artifacts: {vmctl: {commit: $t, status: "active"}}}')" \
+  "$(jq -n --arg t "$new" '{schema_version: 1, target_commit: $t, deployed_commit: "dddddddddddddddddddddddddddddddddddddddd", artifacts: {vmctl: {commit: $t, status: "active"}}}')" \
+  'not json'; do
+  if out="$("$merge" "$work/previous.json" <<<"$bad" 2>/dev/null)"; then
+    fail "invalid new receipt accepted: $bad -> $out"
+  fi
+  [ -z "$out" ] || fail "invalid new receipt printed output: $out"
+done
+
+echo "deploy-receipt-merge tests passed"

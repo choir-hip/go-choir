@@ -42,11 +42,57 @@ func Snapshot(service string) Info {
 	}
 }
 
+// Platform is the platform-level deployment answer: the commit of the last
+// successful staging deploy, whatever services that deploy moved. It is
+// deliberately not part of Info. Info.DeployedCommit stays per-service
+// ("this receipt's deploy moved this binary"), which the execution-identity
+// join relies on, and Info is inside guest-signed evidence that a proxy
+// decodes strictly, so a new Info field would break guest/host version skew
+// (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+type Platform struct {
+	DeployedCommit string `json:"deployed_commit,omitempty"`
+	DeployedAt     string `json:"deployed_at,omitempty"`
+	// Source names where the answer came from: the receipt's platform
+	// field, or (old receipts) the reporting service's own artifact.
+	Source string `json:"source,omitempty"`
+}
+
+const (
+	PlatformSourceReceipt         = "receipt.deployed_commit"
+	PlatformSourceServiceArtifact = "receipt.artifacts.service"
+)
+
+// PlatformSnapshot reports the platform deployed commit from the activation
+// receipt's deployed_commit field. Receipts written before that field
+// existed fall back to the per-service rule for service, so an old partial
+// receipt without that service still reports nothing rather than guessing.
+func PlatformSnapshot(service string) Platform {
+	receipt, activatedAt, ok := readDeployReceipt()
+	if !ok {
+		return Platform{}
+	}
+	if strings.TrimSpace(receipt.DeployedCommit) != "" {
+		return Platform{
+			DeployedCommit: strings.TrimSpace(receipt.TargetCommit),
+			DeployedAt:     activatedAt,
+			Source:         PlatformSourceReceipt,
+		}
+	}
+	deployedAt, deployedCommit := serviceDeployMetadata(receipt, activatedAt, service)
+	if deployedCommit == "" {
+		return Platform{}
+	}
+	return Platform{DeployedCommit: deployedCommit, DeployedAt: deployedAt, Source: PlatformSourceServiceArtifact}
+}
+
 type deployReceipt struct {
-	SchemaVersion int                              `json:"schema_version"`
-	TargetCommit  string                           `json:"target_commit"`
-	ActivatedAt   string                           `json:"activated_at"`
-	Artifacts     map[string]deployReceiptArtifact `json:"artifacts"`
+	SchemaVersion int    `json:"schema_version"`
+	TargetCommit  string `json:"target_commit"`
+	// DeployedCommit is the platform commit (equal to TargetCommit) that
+	// merged receipts record; absent on receipts written before the merge.
+	DeployedCommit string                           `json:"deployed_commit"`
+	ActivatedAt    string                           `json:"activated_at"`
+	Artifacts      map[string]deployReceiptArtifact `json:"artifacts"`
 }
 
 type deployReceiptArtifact struct {
@@ -54,27 +100,51 @@ type deployReceiptArtifact struct {
 	Status string `json:"status"`
 }
 
-func deployMetadata(service string) (string, string) {
+// readDeployReceipt returns a structurally valid activation receipt and its
+// activation time. A receipt whose platform field conflicts with its target
+// is not trusted for any answer.
+func readDeployReceipt() (deployReceipt, string, bool) {
 	path := strings.TrimSpace(os.Getenv("CHOIR_DEPLOY_RECEIPT_PATH"))
 	if path == "" {
 		path = "/var/lib/go-choir/deploy-receipt.json"
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", ""
+		return deployReceipt{}, "", false
 	}
 	var receipt deployReceipt
 	if err := json.Unmarshal(data, &receipt); err != nil {
-		return "", ""
+		return deployReceipt{}, "", false
 	}
 	activatedAt := strings.TrimSpace(receipt.ActivatedAt)
 	targetCommit := strings.TrimSpace(receipt.TargetCommit)
 	if receipt.SchemaVersion != 1 || !isFullCommit(targetCommit) || len(receipt.Artifacts) == 0 {
-		return "", ""
+		return deployReceipt{}, "", false
+	}
+	if platform := strings.TrimSpace(receipt.DeployedCommit); platform != "" && platform != targetCommit {
+		return deployReceipt{}, "", false
 	}
 	if _, err := time.Parse(time.RFC3339, activatedAt); err != nil {
+		return deployReceipt{}, "", false
+	}
+	return receipt, activatedAt, true
+}
+
+func deployMetadata(service string) (string, string) {
+	receipt, activatedAt, ok := readDeployReceipt()
+	if !ok {
 		return "", ""
 	}
+	return serviceDeployMetadata(receipt, activatedAt, service)
+}
+
+// serviceDeployMetadata is the per-service rule: a service reports the
+// receipt's target only when this receipt's deploy moved it (its artifact
+// commit is the target and it is active or installed). An artifact carried
+// forward from an earlier deploy keeps its own older commit and so reports
+// nothing here.
+func serviceDeployMetadata(receipt deployReceipt, activatedAt, service string) (string, string) {
+	targetCommit := strings.TrimSpace(receipt.TargetCommit)
 	artifact, ok := receipt.Artifacts[service]
 	if !ok {
 		return "", ""

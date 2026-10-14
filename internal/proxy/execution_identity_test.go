@@ -330,3 +330,116 @@ func TestDeploymentIdentityReceiptRefusesMissingHostInventory(t *testing.T) {
 		t.Fatal("deployment receipt without host inventory was accepted")
 	}
 }
+
+// A merged receipt (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md)
+// carries the platform deployed_commit; the strict identity decoder must
+// accept it (R1) and refuse one that conflicts with the target (R2).
+func TestDeploymentIdentityReceiptAcceptsMergedPlatformCommit(t *testing.T) {
+	const target = "1234567890abcdef1234567890abcdef12345678"
+	const carried = "abcdef1234567890abcdef1234567890abcdef12"
+	receipt := func(platform string) string {
+		return `{"schema_version":1,"target_commit":"` + target + `","deployed_commit":"` + platform + `","activated_at":"2026-10-14T00:00:00Z","github":{"run_id":"123","run_attempt":"1"},` +
+			`"artifacts":{"vmctl":{"commit":"` + target + `","status":"active"},"proxy":{"commit":"` + carried + `","status":"active","carried_forward_from":"` + carried + `"}},` +
+			`"host_identity":{"canonical_ref":"refs/heads/main@` + target + `","checkout_head":"` + target + `","checkout_clean":true,"nixos_closure":"/nix/store/system","nixos_closure_digest":"sha256:nixos","services":{"proxy":{"package_path":"/nix/store/proxy","package_digest":"sha256:proxy","embedded_commit":"` + carried + `"}}}}`
+	}
+	path := filepath.Join(t.TempDir(), "deploy-receipt.json")
+	t.Setenv("CHOIR_DEPLOY_RECEIPT_PATH", path)
+	if err := os.WriteFile(path, []byte(receipt(target)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	public, parsed, err := readDeploymentIdentityReceipt()
+	if err != nil {
+		t.Fatalf("merged receipt refused: %v", err)
+	}
+	if parsed.DeployedCommit != target || !strings.Contains(string(public), `"deployed_commit":"`+target+`"`) {
+		t.Fatalf("platform commit not carried: parsed=%q public=%s", parsed.DeployedCommit, public)
+	}
+	if !executionIdentityCommitsJoin(parsed, buildinfo.Info{Service: "proxy", Commit: carried},
+		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", false,
+		buildinfo.Info{Commit: "fedcba0987654321fedcba0987654321fedcba09", DeployedCommit: "fedcba0987654321fedcba0987654321fedcba09"}) {
+		t.Fatal("merged receipt with a carried proxy refused the bound identity join")
+	}
+	if err := os.WriteFile(path, []byte(receipt("cccccccccccccccccccccccccccccccccccccccc")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := readDeploymentIdentityReceipt(); err == nil {
+		t.Fatal("receipt with a conflicting platform commit was accepted")
+	}
+}
+
+// /health answers the platform deployed commit after a partial deploy that
+// did not move the proxy, beside (not inside) the proxy's per-service
+// build identity, which stays blank (docs/problems/
+// partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md).
+func TestProxyHealthReportsPlatformDeployedCommitAfterPartialDeploy(t *testing.T) {
+	const target = "1234567890abcdef1234567890abcdef12345678"
+	const carried = "abcdef1234567890abcdef1234567890abcdef12"
+	path := filepath.Join(t.TempDir(), "deploy-receipt.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":1,"target_commit":"`+target+`","deployed_commit":"`+target+`","activated_at":"2026-10-14T19:39:00Z",`+
+		`"artifacts":{"vmctl":{"commit":"`+target+`","status":"active"},"proxy":{"commit":"`+carried+`","status":"active","carried_forward_from":"`+carried+`"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CHOIR_DEPLOY_RECEIPT_PATH", path)
+	h, _, _ := testProxyEnv(t)
+	w := httptest.NewRecorder()
+	h.HandleHealth(w, httptest.NewRequest(http.MethodGet, "/health", nil))
+	var body struct {
+		Build    map[string]any `json:"build"`
+		Platform map[string]any `json:"platform"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Platform["deployed_commit"] != target || body.Platform["source"] != buildinfo.PlatformSourceReceipt {
+		t.Fatalf("health platform = %v, want deployed_commit %s from the receipt", body.Platform, target)
+	}
+	if _, present := body.Build["deployed_commit"]; present {
+		t.Fatalf("health build = %v, want no per-service deployed_commit for a carried proxy", body.Build)
+	}
+}
+
+// A proxy artifact carried forward from an earlier deploy means this
+// deploy did not move the proxy (R4): it joins like an unselected proxy.
+// An unmarked proxy artifact whose commit is not the target stays a
+// conflict.
+func TestExecutionIdentityCommitsJoinTreatsCarriedProxyAsUnselected(t *testing.T) {
+	const targetCommit = "1234567890abcdef1234567890abcdef12345678"
+	const hostCommit = "abcdef1234567890abcdef1234567890abcdef12"
+	const guestCommit = "fedcba0987654321fedcba0987654321fedcba09"
+	const routeCommit = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	receipt := func(proxyArtifact string) deploymentIdentityReceipt {
+		return deploymentIdentityReceipt{
+			TargetCommit:   targetCommit,
+			DeployedCommit: targetCommit,
+			Artifacts: map[string]json.RawMessage{
+				"vmctl": json.RawMessage(`{"commit":"` + targetCommit + `","status":"active"}`),
+				"proxy": json.RawMessage(proxyArtifact),
+			},
+			HostIdentity: hostDeploymentIdentity{Services: map[string]hostServiceIdentity{
+				"proxy": {EmbeddedCommit: hostCommit},
+			}},
+		}
+	}
+	carried := receipt(`{"commit":"` + hostCommit + `","status":"active","carried_forward_from":"` + hostCommit + `"}`)
+	unmarked := receipt(`{"commit":"` + hostCommit + `","status":"active"}`)
+	host := buildinfo.Info{Service: "proxy", Commit: hostCommit}
+	guest := buildinfo.Info{Commit: guestCommit, DeployedCommit: guestCommit}
+
+	if !executionIdentityCommitsJoin(carried, host, routeCommit, false, guest) {
+		t.Fatal("carried proxy artifact refused the bound identity join")
+	}
+	if executionIdentityCommitsJoin(carried, buildinfo.Info{Service: "proxy", Commit: hostCommit, DeployedCommit: targetCommit}, routeCommit, false, guest) {
+		t.Fatal("carried proxy accepted a host claiming the target")
+	}
+	if executionIdentityCommitsJoin(unmarked, host, routeCommit, false, guest) {
+		t.Fatal("unmarked proxy artifact off the target was accepted")
+	}
+	routeAbsent := carried
+	routeAbsent.Artifacts = map[string]json.RawMessage{
+		"proxy":     carried.Artifacts["proxy"],
+		"autoputer": json.RawMessage(`{"commit":"` + targetCommit + `","status":"installed"}`),
+	}
+	if executionIdentityCommitsJoin(routeAbsent, host, "", true, buildinfo.Info{Commit: targetCommit, DeployedCommit: targetCommit}) {
+		t.Fatal("route-absent identity accepted a proxy this deploy did not move")
+	}
+}

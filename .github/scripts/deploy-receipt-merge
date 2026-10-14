@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Merge a fresh deploy activation receipt with the receipt it replaces.
+#
+# A deploy records artifacts only for the services it touched. Written
+# alone, that receipt drops every untouched service and blanks the
+# platform's deployed commit (docs/problems/
+# partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md). This merge:
+#
+# - keeps every artifact the new receipt records (touched services win);
+# - carries forward the previous receipt's artifacts for untouched
+#   services, with their own commit and status, marked
+#   carried_forward_from (the target of the receipt that first carried
+#   them, kept across later merges);
+# - records the platform deployed_commit = the new target_commit. A
+#   receipt is written only after a fully verified deploy, so its target
+#   is the commit of the last successful deploy.
+#
+# A missing or unusable previous receipt never blocks the new one (it
+# would freeze the platform commit forever): the merge warns and carries
+# nothing. An invalid new receipt fails with no output.
+#
+# Usage: deploy-receipt-merge [previous-receipt.json] < new-receipt.json
+set -euo pipefail
+
+previous_path="${1:-}"
+
+new_receipt="$(cat)"
+if ! jq -e '
+  type == "object"
+  and .schema_version == 1
+  and (.status == null)
+  and (.target_commit | type == "string" and test("^[0-9a-f]{40}$"))
+  and (.deployed_commit == null or .deployed_commit == .target_commit)
+  and (.artifacts | type == "object" and length > 0)
+' >/dev/null 2>&1 <<<"$new_receipt"; then
+  echo "deploy-receipt-merge: refusing an invalid new receipt (needs schema_version 1, a full target_commit, and at least one artifact)" >&2
+  exit 1
+fi
+
+previous='null'
+if [ -n "$previous_path" ] && [ -e "$previous_path" ]; then
+  if jq -e '
+    type == "object"
+    and .schema_version == 1
+    and (.status == null)
+    and (.target_commit | type == "string" and test("^[0-9a-f]{40}$"))
+    and (.artifacts | type == "object")
+  ' >/dev/null 2>&1 <"$previous_path"; then
+    previous="$(jq -c . <"$previous_path")"
+  else
+    echo "deploy-receipt-merge: previous receipt ${previous_path} is unusable (not a v1 activation receipt); carrying nothing forward" >&2
+  fi
+fi
+
+jq -n --argjson new "$new_receipt" --argjson previous "$previous" '
+  ($previous // {artifacts: {}, target_commit: null}) as $prev
+  | ($prev.artifacts
+      | with_entries(
+          select(.key as $k | ($new.artifacts | has($k)) | not)
+          | select(.value | type == "object")
+          | .value |= (. + {carried_forward_from: (.carried_forward_from // $prev.target_commit)})
+        )) as $carried
+  | $new
+  | .deployed_commit = .target_commit
+  | .artifacts = ($carried + $new.artifacts)
+'

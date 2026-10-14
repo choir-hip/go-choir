@@ -301,6 +301,33 @@ func TestExecutionIdentityCLICommonCommitAllowsBoundMixedGeneration(t *testing.T
 	if _, ok := executionIdentityCLICommonCommit(signed, staleMetadata, selectedStalePair); ok {
 		t.Fatal("selected proxy with stale runtime/package pair was accepted")
 	}
+
+	// A merged receipt carries the proxy artifact of the deploy that last
+	// moved it (docs/problems/partial-deploy-receipt-blanks-deployed-commit-2026-10-14.md,
+	// R4): it joins like an unselected proxy; unmarked, it stays a conflict.
+	mergedReceipt := func(proxyArtifact string) json.RawMessage {
+		return json.RawMessage(`{
+			"target_commit":"` + targetCommit + `",
+			"deployed_commit":"` + targetCommit + `",
+			"artifacts":{"gateway":{"commit":"` + targetCommit + `","status":"active"},"proxy":` + proxyArtifact + `},
+			"host_identity":{
+				"canonical_ref":"refs/heads/main@` + targetCommit + `",
+				"nixos_closure_digest":"sha256:nixos",
+				"services":{"proxy":{"role":"proxy","package_digest":"sha256:proxy","embedded_commit":"` + hostCommit + `"}}
+			}
+		}`)
+	}
+	carried := mergedReceipt(`{"commit":"` + hostCommit + `","status":"active","carried_forward_from":"` + hostCommit + `"}`)
+	if got, ok := executionIdentityCLICommonCommit(signed, host, carried); !ok || got != targetCommit {
+		t.Fatalf("carried proxy identity = (%q, %v), want target and accepted", got, ok)
+	}
+	if _, ok := executionIdentityCLICommonCommit(signed, staleMetadata, carried); ok {
+		t.Fatal("carried proxy with deployment metadata was accepted")
+	}
+	unmarked := mergedReceipt(`{"commit":"` + hostCommit + `","status":"active"}`)
+	if _, ok := executionIdentityCLICommonCommit(signed, host, unmarked); ok {
+		t.Fatal("unmarked proxy artifact off the target was accepted")
+	}
 }
 
 func TestTextureCreateStableJSON(t *testing.T) {
