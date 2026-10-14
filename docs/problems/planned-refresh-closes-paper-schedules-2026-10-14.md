@@ -125,3 +125,22 @@ schedules"). The paper was also silent through the hibernation itself
   silent) is a separate problem; the crash-loop bound counts only crashes
   with a poll in flight, so a crash a poll causes after it records its
   result is not attributed to it.
+
+## After the fix deployed (ce59d406, 07:46 UTC)
+
+- The fix is live on the platform, and new and idle computers get it on
+  their next refresh.
+- The paper itself has not been refreshed: at 08:28 it was still on
+  9ace75e5, 14 of 14 schedules active (generation 9, the 06:49 restore).
+  With intake.labels on and 14 sources polling every 15 minutes, it is
+  never idle, and deploys never restart a busy computer. That confirms
+  the hypothesis in the cost-track report: a 24/7 paper does not take
+  updates by itself. Its schedules are safe meanwhile: a refresh at the
+  same work-state epoch is planned, so it keeps them even under the old
+  code.
+- Open: how a always-busy computer takes updates. Options: a short
+  update window (pause polling at a quiet minute, let the refresh run,
+  resume, which is allowed once per planned restart); the paper split
+  across several computers that update in turn; or the snapshot path
+  (S3) for a fast restart. For the owner, with the multi-computer
+  question.
