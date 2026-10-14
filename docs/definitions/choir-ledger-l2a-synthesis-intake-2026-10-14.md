@@ -130,9 +130,11 @@ finish:
         registered before the run (model, prompt, tie rule), labels
         anything ambiguous.
       proves: >-
-        Each labelled event yields exactly one story, whose published
-        version cites captures from at least 2 languages and 2 outlets.
-        Over all same-event capture pairs, merge recall is at least 0.8
+        Each labelled event yields exactly one story. (Amended by the
+        owner 2026-10-14: "no hard rule that multiple languages be in
+        every story. That's silly"; the earlier clause that each
+        published version cite at least 2 languages and 2 outlets was a
+        test bar only, never a production rule, and is removed.) Over all same-event capture pairs, merge recall is at least 0.8
         and false merges of different events are at most 1. Every
         capture has a disposition. Singletons open or decline. The run is
         scored by a script against the labels, and the bar is not
@@ -306,15 +308,13 @@ now:
     lossless: items left over are taken on the next poll and recorded as
     skipped, never dropped; check this in S0.
   next_action: >-
-    Fixture run 1 (docs/evidence/l2a-fixture-run-1-2026-10-14.md) is
-    incomplete: merging passes everything (27 of 27 captured, one story
-    per event, merge recall 1.0, 0 false merges, 0 undisposed); citation
-    diversity fails the strict measure on 4 of 8 events (E2 and E6 cite
-    English only; E5 and E8 cite other-language origin sources the
-    measure cannot language-tag). Next: tighten Texture's synthesis
-    contract to cite each language's capture when it adds anything,
-    make the scorer language-aware for non-fixture citations, rerun the
-    fixture; the paper is enabled only after a pass.
+    Fixture run 1 passes (docs/evidence/l2a-fixture-run-1-2026-10-14.md):
+    27 of 27 captured, one story per event, merge recall 1.0, 0 false
+    merges, 0 undisposed. The citation-language clause was removed by the
+    owner (a test bar, not a production rule). Next: after C1e B1 lands,
+    refresh the paper computer when idle, read its effective build back,
+    turn on intake.labels, and measure the after-window against baseline
+    A with scripts/l2a_window_pairs.py under the tripwire.
 
 receipts: []
 ---

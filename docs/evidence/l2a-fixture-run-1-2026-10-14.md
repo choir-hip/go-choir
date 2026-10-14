@@ -2,9 +2,14 @@
 
 Date: 2026-10-14. Station:
 [L2a](../definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md).
-Verdict: **incomplete**. Merging passes every criterion. Citation
-diversity fails on the strict measure for 4 of 8 events. The bar is not
-lowered.
+Verdict: **pass** (amended 04:15 UTC). Merging passes every criterion.
+The first reading was "incomplete" because 4 of 8 published versions did
+not cite 2 or more languages. The owner then removed that clause: "no hard
+rule that multiple languages be in every story. That's silly", and "Was
+that just a test? That's not a production autopaper rule". It was a
+fixture bar written in the L2a station file, never a production rule; no
+prompt requires it. The citation-language table below is kept as
+information.
 
 ## Run
 
@@ -47,7 +52,7 @@ now serves `scripts/l2a_window_pairs.py`.
 | merge recall (same-event pairs in one story) | at least 0.8 | **1.0** (16 of 16) |
 | false merges | at most 1 | **0** |
 | captures without a disposition | 0 | **0** |
-| each event's published version cites 2 or more languages and 2 or more outlets | all events | **4 of 8** on the strict measure |
+| ~~each published version cites 2 or more languages and 2 or more outlets~~ (removed by the owner) | — | 4 of 8 on the strict measure (information only) |
 
 Per event, the published version's citations (languages are counted
 only for the fixture's own labelled links):
@@ -75,7 +80,8 @@ used the Japanese ITmedia capture.
 - Synthesis intake is working: every event became one story, with no false
   merge and nothing dropped, across zh, ja, ko, ar, es, fr and de over
   three polls.
-- The remaining gap is in Texture's writing, not in intake. The
+- (Superseded by the owner's ruling; kept as an observation.) The
+  remaining gap is in Texture's writing, not in intake. The
   published version does not reliably carry the event's other-language
   coverage into its citations. The synthesis contract asks for
   convergence and conflict across sources, but nothing makes it cite each
@@ -83,4 +89,5 @@ used the Japanese ITmedia capture.
   contract and score citations by language, including non-fixture
   sources (each capture's language from its arrival record or its Jev
   label).
-- The paper is not enabled yet, per the station's rule.
+- Next: enable intake on the paper after C1e B1 lands and the paper
+  computer refreshes when idle.
