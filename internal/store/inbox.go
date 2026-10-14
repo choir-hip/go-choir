@@ -729,6 +729,12 @@ func (s *Store) listInboxRecordsBy(ctx context.Context, ownerID, computerID, fie
 	if err != nil {
 		return nil, err
 	}
+	return inboxRecordsOf(objs, ownerID, computerID)
+}
+
+// inboxRecordsOf keeps the live inbox records of one owner and computer,
+// decoded and sorted by (inbox, seq).
+func inboxRecordsOf(objs []objectgraph.Object, ownerID, computerID string) ([]types.CommitmentRecord, error) {
 	records := make([]types.CommitmentRecord, 0, len(objs))
 	for _, obj := range objs {
 		if obj.Tombstone || obj.OwnerID != ownerID || obj.ComputerID != computerID {
@@ -753,8 +759,28 @@ func (s *Store) listInboxRecordsBy(ctx context.Context, ownerID, computerID, fie
 
 // ListInboxRecords returns an inbox's records in (afterSeq, throughSeq] by
 // sequence; throughSeq <= 0 means no upper bound.
+//
+// It reads only the (afterSeq, throughSeq] range of the inbox's sequence
+// index (a cell reads its unread records, not the whole inbox) when that
+// index is live. The range is on the metadata inbox_seq, which
+// planInboxRecords writes from the same value as the body's; the body
+// filter below still decides, so the result is the unindexed read's.
 func (s *Store) ListInboxRecords(ctx context.Context, ownerID, computerID, inbox string, afterSeq, throughSeq int64) ([]types.CommitmentRecord, error) {
-	records, err := s.listInboxRecordsBy(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), "inbox", strings.TrimSpace(inbox))
+	ownerID, computerID, inbox = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(inbox)
+	var records []types.CommitmentRecord
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	objs, indexed, err := graph.ListRecordsByInboxSeq(ctx, inbox, afterSeq, throughSeq)
+	switch {
+	case err != nil:
+		return nil, err
+	case indexed:
+		records, err = inboxRecordsOf(objs, ownerID, computerID)
+	default:
+		records, err = s.listInboxRecordsBy(ctx, ownerID, computerID, "inbox", inbox)
+	}
 	if err != nil {
 		return nil, err
 	}

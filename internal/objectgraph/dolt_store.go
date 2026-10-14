@@ -197,6 +197,37 @@ var metadataIndexColumns = []metadataIndexColumn{
 	{Field: "conversation_id", Column: "og_rec_conversation_id", Kind: commitmentRecordKind, MaxChars: generatedColumnMaxChars, KeysetIndex: true},
 }
 
+// Record-scoped access paths that are not single-field equality lookups.
+// Each is live only when its columns and its index exist.
+const (
+	// recordInboxSeqIndex serves an inbox's records in a sequence range
+	// (ListRecordsByInboxSeq): a cell reads only its unread range.
+	recordInboxSeqColumn = "og_rec_inbox_seq"
+	recordInboxSeqIndex  = "idx_og_objects_rec_inbox_seq"
+	// recordClaimIndex serves the newest records that are not directives
+	// (ListCommitmentClaimObjects) as a reverse index walk.
+	recordClaimColumn = "og_rec_claim"
+	recordClaimIndex  = "idx_og_objects_rec_claim"
+)
+
+// recordClaimPredicate is the body predicate the claim pack filtered with
+// before the column existed: ListObjectsByOwnerAndBody with "$.directive"
+// missing or empty. The column holds exactly it.
+const recordClaimPredicate = `(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), '$.directive') IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), '$.directive')) = '')`
+
+// recordColumns are the record-scoped columns beyond the equality lookups.
+// The claim column guards with JSON_VALID: a column over CAST(body AS JSON)
+// would refuse the insert of a record whose body is not JSON (the unindexed
+// predicate failed the whole query on such a row instead).
+var recordColumns = []generatedColumn{
+	{Name: recordInboxSeqColumn, Def: fmt.Sprintf(
+		`BIGINT GENERATED ALWAYS AS (CASE WHEN object_kind = '%s' THEN CAST(JSON_EXTRACT(CAST(metadata AS JSON), '$.inbox_seq') AS SIGNED) END) STORED`,
+		string(commitmentRecordKind))},
+	{Name: recordClaimColumn, Def: fmt.Sprintf(
+		`BOOLEAN GENERATED ALWAYS AS (CASE WHEN object_kind = '%s' AND (body IS NULL OR JSON_VALID(CAST(body AS CHAR))) THEN %s END) STORED`,
+		string(commitmentRecordKind), recordClaimPredicate)},
+}
+
 // generatedColumn is one STORED generated column of og_objects: its name
 // and its definition after the name.
 type generatedColumn struct {
@@ -241,11 +272,20 @@ func (s *DoltStore) ensureMetadataColumns(ctx context.Context) {
 	for _, mc := range metadataIndexColumns {
 		columns = append(columns, mc.generatedColumn())
 	}
+	columns = append(columns, recordColumns...)
 	present := s.ensureGeneratedColumns(ctx, columns)
 	for _, mc := range metadataIndexColumns {
 		if present[mc.Column] && s.ensureGeneratedIndex(ctx, mc.indexName(), mc.indexColumns()) {
 			s.metaColumns[mc.Column] = true
 		}
+	}
+	if present["og_rec_inbox"] && present[recordInboxSeqColumn] &&
+		s.ensureGeneratedIndex(ctx, recordInboxSeqIndex, "object_kind, og_rec_inbox, "+recordInboxSeqColumn) {
+		s.metaColumns[recordInboxSeqIndex] = true
+	}
+	if present[recordClaimColumn] &&
+		s.ensureGeneratedIndex(ctx, recordClaimIndex, "object_kind, owner_id, "+recordClaimColumn+", updated_at, canonical_id") {
+		s.metaColumns[recordClaimIndex] = true
 	}
 }
 
@@ -1042,6 +1082,97 @@ func (s *DoltStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph dolt: list by owner and body: %w", err)
+	}
+	defer rows.Close()
+	var out []Object
+	for rows.Next() {
+		obj, err := scanDoltObject(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
+// recordsByInboxSeqSQL is ListRecordsByInboxSeq's query: an index range on
+// (object_kind, inbox, inbox_seq), ordered by every index column so the
+// engine reads it in index order. The plan-shape tests EXPLAIN this text.
+func recordsByInboxSeqSQL(inbox string, afterSeq, throughSeq int64) (string, []any) {
+	query := `SELECT ` + objectColumnsSQL + ` FROM og_objects
+		 WHERE object_kind = ? AND og_rec_inbox = ? AND ` + recordInboxSeqColumn + ` > ?`
+	args := []any{string(commitmentRecordKind), inbox, afterSeq}
+	if throughSeq > 0 {
+		query += ` AND ` + recordInboxSeqColumn + ` <= ?`
+		args = append(args, throughSeq)
+	}
+	query += ` ORDER BY object_kind ASC, og_rec_inbox ASC, ` + recordInboxSeqColumn + ` ASC`
+	return query, args
+}
+
+// ListRecordsByInboxSeq returns the commitment records whose metadata inbox
+// is inbox and whose metadata inbox_seq lies in (afterSeq, throughSeq]
+// (throughSeq <= 0: no upper bound), by sequence. It reads only that range
+// of the index instead of every record of the inbox. ok is false when the
+// index is not live or the inbox is too long for the column; the caller
+// then reads the inbox its unindexed way. Owner, computer and tombstone
+// are the caller's filters, as on the metadata lookups.
+func (s *DoltStore) ListRecordsByInboxSeq(ctx context.Context, inbox string, afterSeq, throughSeq int64) ([]Object, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, false, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if !s.metaColumns[recordInboxSeqIndex] || utf8.RuneCountInString(inbox) >= generatedColumnMaxChars {
+		return nil, false, nil
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	query, args := recordsByInboxSeqSQL(inbox, afterSeq, throughSeq)
+	objects, err := s.queryObjects(ctx, query, args...)
+	if err != nil {
+		return nil, true, fmt.Errorf("objectgraph dolt: records by inbox seq: %w", err)
+	}
+	return objects, true, nil
+}
+
+// commitmentClaimSQL is ListCommitmentClaimObjects' query: a reverse walk of
+// (object_kind, owner_id, og_rec_claim, updated_at, canonical_id), ordered
+// by every index column descending so the engine stops after limit rows.
+func commitmentClaimSQL(ownerID string, limit int) (string, []any) {
+	return `SELECT ` + objectColumnsSQL + ` FROM og_objects
+		 WHERE object_kind = ? AND owner_id = ? AND ` + recordClaimColumn + ` = TRUE
+		 ORDER BY object_kind DESC, owner_id DESC, ` + recordClaimColumn + ` DESC, updated_at DESC, canonical_id DESC LIMIT ?`,
+		[]any{string(commitmentRecordKind), ownerID, NormalizedLimit(limit)}
+}
+
+// ListCommitmentClaimObjects returns the owner's newest commitment records
+// whose body has no directive (missing or empty), newest first: the rows
+// ListObjectsByOwnerAndBody returns for that predicate, read as a reverse
+// index walk instead of a JSON evaluation of every record's body. Rows with
+// equal updated_at (second precision) come by canonical_id descending; the
+// unindexed read left their order to the engine. ok is false when the
+// index is not live.
+func (s *DoltStore) ListCommitmentClaimObjects(ctx context.Context, ownerID string, limit int) ([]Object, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, false, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if !s.metaColumns[recordClaimIndex] {
+		return nil, false, nil
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	query, args := commitmentClaimSQL(ownerID, limit)
+	objects, err := s.queryObjects(ctx, query, args...)
+	if err != nil {
+		return nil, true, fmt.Errorf("objectgraph dolt: commitment claims: %w", err)
+	}
+	return objects, true, nil
+}
+
+// queryObjects runs a full-row object query; the caller holds engineMu.
+func (s *DoltStore) queryObjects(ctx context.Context, query string, args ...any) ([]Object, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
 	}
 	defer rows.Close()
 	var out []Object

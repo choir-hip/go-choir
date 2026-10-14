@@ -127,10 +127,26 @@ func (s *Store) ListCommitmentClaimRecords(ctx context.Context, ownerID, compute
 	if ownerID == "" || computerID == "" {
 		return nil, fmt.Errorf("commitment claim list requires owner and computer")
 	}
-	matches := []objectgraph.JSONFieldMatch{{JSONPath: "$.directive", Value: "", MissingMatchesEmpty: true}}
-	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit)
+	// The pack is read per desk cell. With the claim index live it is a
+	// reverse index walk that stops at limit rows; otherwise every record's
+	// body is evaluated as JSON (11% of a busy computer's CPU,
+	// guest-cpu-is-unindexed-store-scans-2026-10-14).
+	var objs []objectgraph.Object
+	indexed := false
+	var err error
+	if graph := s.ogReadStore; graph != nil {
+		objs, indexed, err = graph.ListCommitmentClaimObjects(ctx, ownerID, limit)
+	} else if s.ogStore != nil {
+		objs, indexed, err = s.ogStore.ListCommitmentClaimObjects(ctx, ownerID, limit)
+	}
 	if err != nil {
 		return nil, err
+	}
+	if !indexed {
+		matches := []objectgraph.JSONFieldMatch{{JSONPath: "$.directive", Value: "", MissingMatchesEmpty: true}}
+		if objs, err = s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit); err != nil {
+			return nil, err
+		}
 	}
 	records := make([]types.CommitmentRecord, 0, len(objs))
 	for _, obj := range objs {
