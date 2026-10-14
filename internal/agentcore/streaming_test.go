@@ -208,14 +208,19 @@ func TestStreamingDeltaEventsReceivedOnBus(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	// Collect events for enough time to receive all streaming chunks.
+	// Collect events until the run completes. A fixed 500 ms window failed
+	// on a loaded host before the run reached its deltas; the deadline only
+	// bounds a run that never completes.
 	var received []events.RuntimeEvent
-	timer := time.After(500 * time.Millisecond)
+	timer := time.After(15 * time.Second)
 	for {
 		select {
 		case ev := <-ch:
 			if ev.Record.OwnerID == "user-bus" {
 				received = append(received, ev)
+				if ev.Record.Kind == types.EventRunCompleted {
+					goto done
+				}
 			}
 		case <-timer:
 			goto done
@@ -367,13 +372,9 @@ func TestStreamingFailureEmitsErrorEvents(t *testing.T) {
 		t.Fatalf("submit task: %v", err)
 	}
 
-	time.Sleep(200 * time.Millisecond)
-
-	// Verify task failed.
-	stored, err := rt.GetRun(ctx, rec.RunID, "user-fail")
-	if err != nil {
-		t.Fatalf("get task: %v", err)
-	}
+	// Verify task failed. Wait for the terminal state instead of a fixed
+	// 200 ms sleep, which a loaded host outlasted.
+	stored := waitForRunTerminalState(t, rt, rec.RunID, "user-fail", 15*time.Second)
 	if stored.State != types.RunFailed {
 		t.Fatalf("state: got %q, want failed", stored.State)
 	}
