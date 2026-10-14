@@ -118,6 +118,36 @@ Written before the code. Each names the test or check that guards it.
     Counters are lock-cheap; the log line is one per retrieval call at the
     route level, PK and edge reads log only when slow.
 
+## Found while building: Dolt 2.1.9 breaks upserts on indexed expressions
+
+The research note's §3.1 measured functional indexes and generated
+columns as working for **reads**. They break Store B's **writes**.
+Reproduced on the `dolt 2.1.9` CLI (the Node B binary) and on the
+embedded engine the platform tests use, with Store B's own upsert shape
+(`INSERT … ON DUPLICATE KEY UPDATE col = VALUES(col)`, used by
+`PutObject` and `PutBatch`):
+
+- **VIRTUAL generated column** on `og_objects`: the second upsert of a
+  row fails with `'{"a":"2"}' is not a valid value for 'bigint'` — the
+  update writes `metadata` into `body_size`. The `AS new … new.col` alias
+  form fails the same way. Caught by the platform tests
+  (`TestPublishTextureCreatesImmutablePublicRecords`,
+  `TestPublicationPublicSurfacesEnforceVisibilityPolicy`) before any
+  commit.
+- **Functional index**: every upsert fails with `column "!hidden!fk!0!0"
+  could not be found in any table in scope`; a composite functional index
+  `(object_kind, (expr))` is refused ("multiple expressions are not
+  supported").
+- **STORED generated column**: upserts work, but adding one rewrites every
+  `og_objects` row, so the whole table re-enters Dolt history (the 218 G
+  class of growth).
+
+Consequence for failure mode 3: the four JSON lookups cannot be indexed
+on `og_objects` itself on this Dolt. They get a narrow side table
+`og_lookup_keys (object_kind, lookup_key, canonical_id)` written in the
+same transaction as the object, backfilled by the migration, read by
+primary key, with the JSON comparison still deciding.
+
 ## Plan (this branch; not pushed, not deployed)
 
 Rungs 0-3 of the research note's ladder, on Store B only:
@@ -126,11 +156,11 @@ Rungs 0-3 of the research note's ladder, on Store B only:
    counters and latency buckets on corpusd `/health` under `retrieval`);
    define `retrieval-eval-v1` (queries and judged ids in the repo; any
    article text outside it).
-2. Store B: composite `(object_kind, owner_id, computer_id, updated_at)`; one
-   virtual generated lookup key over the registered `(kind, path)` pairs
-   with an index `(object_kind, lookup key, updated_at)` and the queries
-   rewritten to it; `(to_id, kind)` on edges; a time-bounded ladder on every
-   newest-N query (`ListObjects`, the front list); plan tests.
+2. Store B: composite `(object_kind, owner_id, computer_id, updated_at)`; a
+   lookup key per registered `(kind, path)` pair (the side table above,
+   not a generated column) and the lookups rewritten to seek it;
+   `(to_id, kind)` on edges; a time-bounded ladder on every newest-N query
+   (`ListObjects`, the front list); plan tests.
 3. A typed capture projection and a term table (any token length, CJK and
    other unsegmented scripts by character unigrams and bigrams), written
    with each capture and backfilled, both `dolt_ignore`d; a corpusd search
