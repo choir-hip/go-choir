@@ -146,6 +146,7 @@ var frozenOGObjectKinds = map[string]bool{
 	"choir.channel_message":              true,
 	"choir.coagent_mailbox":              true,
 	"choir.commitment_record":            true,
+	"choir.computer_setting":             true,
 	"choir.consent_record":               true,
 	"choir.content_item":                 true,
 	"choir.desktop_app_instance":         true,

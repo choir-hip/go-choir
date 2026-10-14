@@ -80,6 +80,7 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.worker_update", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 		{Kind: "choir.coagent_mailbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 		{Kind: "choir.source_schedule", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
+		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 
 		// --- corpusd: publication layer ---
 		{Kind: "choir.subject", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
