@@ -66,6 +66,30 @@ func TestNormalizeConfigPreservesExplicitZeroAndDerivesDefaults(t *testing.T) {
 	}
 }
 
+// K, the management task slots (management delegation S2b, FM30): unset or
+// below 1 is the default 4, a large value is capped, and the env sets it.
+func TestManagementTaskSlotsDefaultEnvAndBounds(t *testing.T) {
+	if DefaultManagementTaskSlots != 4 {
+		t.Fatalf("DefaultManagementTaskSlots = %d, want 4 (O7)", DefaultManagementTaskSlots)
+	}
+	if got := NormalizeConfig(Config{}).ManagementTaskSlots; got != DefaultManagementTaskSlots {
+		t.Fatalf("default slots = %d, want 4", got)
+	}
+	if got := NormalizeConfig(Config{ManagementTaskSlots: -2}).ManagementTaskSlots; got != DefaultManagementTaskSlots {
+		t.Fatalf("negative slots = %d, want the default", got)
+	}
+	if got := NormalizeConfig(Config{ManagementTaskSlots: 50}).ManagementTaskSlots; got != MaxManagementTaskSlots {
+		t.Fatalf("large slots = %d, want the cap %d", got, MaxManagementTaskSlots)
+	}
+	if got := NormalizeConfig(Config{ManagementTaskSlots: 1}).ManagementTaskSlots; got != 1 {
+		t.Fatalf("explicit K = 1 = %d, want 1 (S2a's behaviour)", got)
+	}
+	t.Setenv("RUNTIME_MANAGEMENT_TASK_SLOTS", "2")
+	if got := LoadConfig().ManagementTaskSlots; got != 2 {
+		t.Fatalf("env slots = %d, want 2", got)
+	}
+}
+
 func TestLoadConfigPreservesExplicitZeroDedupThreshold(t *testing.T) {
 	t.Setenv("QDRANT_DEDUP_THRESHOLD", "0")
 

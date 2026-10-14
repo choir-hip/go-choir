@@ -139,8 +139,9 @@ type Runtime struct {
 	commitCaptureArrival func(ctx context.Context, req types.CommitInboxRecordsRequest) error
 
 	modelPolicy *modelpolicy.Manager
-	// researchChildCalls spaces every research child's model calls on
-	// this computer (research_children.go).
+	// researchChildCalls spaces every sub-RLM's model calls on this
+	// computer: research children and management tasks
+	// (subRLMCallSpacer, research_children.go).
 	researchChildCalls     *callSpacer
 	researchChildCallsOnce sync.Once
 	qdrantPipelineMu       sync.Mutex
@@ -3429,6 +3430,12 @@ func payloadWithPhase(payload json.RawMessage, phase string) json.RawMessage {
 // enabling the LLM to invoke registered Go function-call tools.
 func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord, registry *toolregistry.ToolRegistry, emit provideriface.EventEmitFunc) {
 	tlp := toolregistry.AsToolLoopProvider(rt.provider)
+	if isManagementTaskRun(rec) {
+		// K tasks call at once: every task model call, compaction
+		// included, waits on the sub-RLM spacer research children share
+		// (S2b, FM14).
+		tlp = spacedProvider{ToolLoopProvider: tlp, spacer: rt.subRLMCallSpacer()}
+	}
 
 	// Build the initial conversation from the run prompt.
 	initialMessages := []json.RawMessage{}

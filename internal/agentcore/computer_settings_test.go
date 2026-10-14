@@ -78,8 +78,13 @@ func TestIntakeLabelsSettingIsOffByDefaultAndSetByTheOwner(t *testing.T) {
 	var listed struct {
 		Settings []store.ComputerSetting `json:"settings"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil || len(listed.Settings) != 1 || !listed.Settings[0].Value {
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil || len(listed.Settings) != len(store.KnownComputerSettings) {
 		t.Fatalf("list after set = %s (%v)", rec.Body, err)
+	}
+	for _, setting := range listed.Settings {
+		if want := setting.Key == store.SettingIntakeLabels; setting.Value != want {
+			t.Fatalf("list after set: %s = %v, want %v (%s)", setting.Key, setting.Value, want, rec.Body)
+		}
 	}
 
 	// Disabling is the rollback.

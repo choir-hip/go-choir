@@ -614,7 +614,7 @@ func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecor
 	}
 	// The story-library head (management delegation R2-5) refuses an open
 	// from a run whose last read of the library is behind it.
-	libraryObjects, libraryConditions, err := s.planStoryLibrary(ctx, ownerID, computerID, req.StoryLibraryHead, records, opened, now)
+	libraryObjects, libraryConditions, libraryHead, err := s.planStoryLibrary(ctx, ownerID, computerID, req.StoryLibraryHead, records, opened, now)
 	if err != nil {
 		return nil, nil, nil, types.InboxCommitReceipt{}, err
 	}
@@ -646,6 +646,7 @@ func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecor
 	objects, conditions = append(objects, storyObjects...), append(conditions, storyConditions...)
 	objects, conditions = append(objects, verdictObjects...), append(conditions, verdictConditions...)
 	receipt.Verdicts = recorded
+	receipt.StoryLibraryHead = libraryHead
 	receipt.CommandID, receipt.CommandDigest = req.CommandID, req.CommandDigest
 	commandObj, err := lifecycleObject(ogKindInboxCommand, ownerID, computerID, req.CommandID, receipt,
 		map[string]any{"command_id": req.CommandID, "computer_id": computerID}, now, now)

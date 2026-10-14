@@ -131,12 +131,21 @@ type delegationFixture struct {
 	pope     string
 	mu       sync.Mutex
 	wakes    []string
+	// deliverTaskWakes delivers inbox_record wakes to task inboxes (the
+	// slot starter's durable starts) when the outbox is swept.
+	deliverTaskWakes bool
 }
 
+// newDelegationFixture runs at K = 1, S2a's slots, unless a test sets
+// rt.cfg.ManagementTaskSlots before it delegates (S2b).
 func newDelegationFixture(t *testing.T, owner string) *delegationFixture {
 	t.Helper()
 	deskTestWorkerBin(t)
 	rt, s := testRuntime(t)
+	rt.cfg.ManagementTaskSlots = 1
+	// Task model calls are spaced on the sub-RLM spacer (S2b, FM14); a
+	// short interval keeps the fixture fast.
+	rt.researchChildCalls = &callSpacer{interval: time.Millisecond}
 	f := &delegationFixture{t: t, rt: rt, s: s, owner: owner, computer: rt.cfg.ComputerID}
 	f.model = &delegationModel{StubProvider: provider.NewStubProvider(0), parentCell: delegateAllCell}
 	rt.provider = f.model
@@ -161,7 +170,11 @@ func newDelegationFixture(t *testing.T, owner string) *delegationFixture {
 		case "inbox_record":
 			f.mu.Lock()
 			f.wakes = append(f.wakes, to)
+			deliver := f.deliverTaskWakes
 			f.mu.Unlock()
+			if _, task := types.ManagementTaskIDOfInbox(to); task && deliver {
+				go func() { _, _ = rt.WakeRecordsInbox(context.WithoutCancel(dctx), ownerID, computerID, to) }()
+			}
 		}
 		return nil
 	})
@@ -507,80 +520,106 @@ func TestManagementTasksAtACrashBootAndAPlannedBoot(t *testing.T) {
 			owner := "owner-task-boot"
 			t.Setenv("CHOIR_OWNER_ID", owner)
 			f := newDelegationFixture(t, owner)
+			// S2b (AC6 at K > 1): two tasks running and one queued.
+			f.rt.cfg.ManagementTaskSlots = 2
 			ctx := context.Background()
 			seedArrival(t, f.s, f.owner, f.computer, "rss:k1", []types.CaptureArrival{{CaptureID: "cap-k1", Title: "Pope recovers", URL: "https://k.example/1"}})
-			seedArrival(t, f.s, f.owner, f.computer, "rss:k2", []types.CaptureArrival{{CaptureID: "cap-k2", Title: "Listing", URL: "https://k.example/2"}})
+			seedArrival(t, f.s, f.owner, f.computer, "rss:k2", []types.CaptureArrival{{CaptureID: "cap-k2", Title: "Pope leaves hospital", URL: "https://k.example/2"}})
+			seedArrival(t, f.s, f.owner, f.computer, "rss:k3", []types.CaptureArrival{{CaptureID: "cap-k3", Title: "Listing", URL: "https://k.example/3"}})
 			f.parentTurn()
 			queued := f.tasks(types.ManagementTaskQueued)
-			if len(queued) != 2 {
+			if len(queued) != 3 {
 				t.Fatalf("queued = %+v", queued)
 			}
-			running, waiting := queued[0], queued[1]
+			waiting := queued[2]
 			f.model.mu.Lock()
 			f.model.gate = make(chan struct{})
 			f.model.mu.Unlock()
-			run, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, running.TaskInbox)
-			if err != nil || run == nil {
-				t.Fatalf("start: %v, %v", run, err)
+			// One wake fills both free slots, oldest first.
+			if first, err := f.rt.WakeRecordsInbox(ctx, f.owner, f.computer, queued[0].TaskInbox); err != nil || first == nil {
+				t.Fatalf("start: %v, %v", first, err)
 			}
-			eventually(t, func() bool {
-				rec, err := f.s.GetRunByOwner(ctx, f.owner, run.RunID)
-				return err == nil && rec.State == types.RunRunning
-			})
+			var runs []string
+			for _, task := range queued[:2] {
+				row := f.task(task.TaskID)
+				if row.State != types.ManagementTaskRunning || row.RunID == "" {
+					t.Fatalf("task %s after one wake at K=2 = %+v", task.TaskID, row)
+				}
+				runs = append(runs, row.RunID)
+			}
+			if q := f.task(waiting.TaskID); q.State != types.ManagementTaskQueued {
+				t.Fatalf("the third task at K=2 = %+v", q)
+			}
+			for _, runID := range runs {
+				eventually(t, func() bool {
+					rec, err := f.s.GetRunByOwner(ctx, f.owner, runID)
+					return err == nil && rec.State == types.RunRunning
+				})
+			}
 
-			// The guest goes down with one task running and one queued.
+			// The guest goes down with two tasks running and one queued.
 			boot := testPeerRuntime(t, f.rt, f.s)
 			if planned {
 				WithBootRestart(PlannedRestart{Reason: "platform_update", Target: "t"}, true)(boot)
 			}
-			booted := time.Now().UTC()
 			boot.Start(ctx)
-			after, _ := f.s.GetRunByOwner(ctx, f.owner, run.RunID)
-			if after.State == types.RunPassivated || after.State.Active() {
-				t.Fatalf("the boot left the task run %s: tasks are not resumed", after.State)
-			}
-			closed := f.task(running.TaskID)
-			if closed.State != types.ManagementTaskClosed {
-				t.Fatalf("the running task's row after the boot = %+v", closed)
-			}
-			report := f.closingReport(running)
-			if !planned {
-				// AC6: the crash boot closes the run and both rounds as
-				// interrupted, frees the leases, and wakes no one.
-				if after.Error != runFateInterruptedByRestart || closed.ClosureReason != types.ClosureReasonInterruptedByRestart {
-					t.Fatalf("crash: run %s (%s), row %s", after.State, after.Error, closed.ClosureReason)
+			for i, task := range queued[:2] {
+				after, _ := f.s.GetRunByOwner(ctx, f.owner, runs[i])
+				if after.State == types.RunPassivated || after.State.Active() {
+					t.Fatalf("the boot left task run %s %s: tasks are not resumed", runs[i], after.State)
 				}
+				closed := f.task(task.TaskID)
+				if closed.State != types.ManagementTaskClosed {
+					t.Fatalf("running task %s's row after the boot = %+v", task.TaskID, closed)
+				}
+				report := f.closingReport(task)
+				if !planned {
+					// AC6: the crash boot closes the runs and the rounds as
+					// interrupted, frees the leases, and wakes no one.
+					if after.Error != runFateInterruptedByRestart || closed.ClosureReason != types.ClosureReasonInterruptedByRestart {
+						t.Fatalf("crash: run %s (%s), row %s", after.State, after.Error, closed.ClosureReason)
+					}
+					if store.RecordWakesReader(report) || f.outboxWakes(f.management(), report.RecordID) != 0 {
+						t.Fatal("crash: a closure woke the parent")
+					}
+					if d, _, _ := f.s.CaptureDispositionOf(ctx, f.owner, f.computer, task.LeasedCaptures[0]); d.CrashCount != 1 {
+						t.Fatalf("crash: %s's crash budget = %+v", task.LeasedCaptures[0], d)
+					}
+					continue
+				}
+				// FM24: the planned boot closes each running task
+				// run_passivated with its residuals, which wakes the parent.
+				if closed.ClosureReason != types.TaskClosureRunPassivated || report.TaskOutcome == nil || len(report.TaskOutcome.Residuals) != 1 {
+					t.Fatalf("planned: row %+v, outcome %+v", closed, report.TaskOutcome)
+				}
+				if !store.RecordWakesReader(report) || f.outboxWakes(f.management(), report.RecordID) != 1 {
+					t.Fatal("planned: a residual Report did not wake the parent")
+				}
+			}
+			if !planned {
 				if q := f.task(waiting.TaskID); q.State != types.ManagementTaskClosed || q.ClosureReason != types.ClosureReasonInterruptedByRestart {
 					t.Fatalf("crash: the queued task = %+v", q)
 				}
-				if store.RecordWakesReader(report) || f.outboxWakes(f.management(), report.RecordID) != 0 || f.outboxWakes(waiting.TaskInbox, "start_after") != 0 {
-					t.Fatal("crash: a closure woke the parent or started the queued task")
+				if f.outboxWakes(waiting.TaskInbox, "start_after") != 0 {
+					t.Fatal("crash: a closure started the queued task")
 				}
 				// FM9: a task inbox wake after the boot starts nothing.
 				if rec, err := boot.WakeRecordsInbox(ctx, f.owner, f.computer, waiting.TaskInbox); err != nil || rec != nil {
 					t.Fatalf("crash: a task started after the boot: %v, %v", rec, err)
 				}
-				if d, _, _ := f.s.CaptureDispositionOf(ctx, f.owner, f.computer, "cap-k1"); d.CrashCount != 1 {
-					t.Fatalf("crash: cap-k1's crash budget = %+v", d)
+				if running := f.tasks(types.ManagementTaskRunning); len(running) != 0 {
+					t.Fatalf("crash: tasks running after the boot: %+v", running)
 				}
 				return
 			}
-			// FM24: the planned boot closes the running task run_passivated
-			// with its residuals, which wakes the parent once; the queued
-			// task starts once, through the start wake its closure minted.
-			if closed.ClosureReason != types.TaskClosureRunPassivated || report.TaskOutcome == nil || len(report.TaskOutcome.Residuals) != 1 {
-				t.Fatalf("planned: row %+v, outcome %+v", closed, report.TaskOutcome)
-			}
-			if !store.RecordWakesReader(report) || f.outboxWakes(f.management(), report.RecordID) != 1 {
-				t.Fatal("planned: the residual Report did not wake the parent")
-			}
+			// The queued task starts through the start wakes the closures
+			// minted (one slot each; the starter fills free slots once).
 			if q := f.task(waiting.TaskID); q.State != types.ManagementTaskQueued {
 				t.Fatalf("planned: the queued task = %+v", q)
 			}
-			if f.outboxWakes(waiting.TaskInbox, "start_after") != 1 {
+			if f.outboxWakes(waiting.TaskInbox, "start_after") < 1 {
 				t.Fatal("planned: no start for the queued task")
 			}
-			_ = booted
 		})
 	}
 }

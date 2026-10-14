@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -32,16 +33,24 @@ import (
 // runtime starts tasks (the slot starter), closes them when their run ends,
 // and shapes their run: its registry, prompt, model and deadline.
 
-const (
-	// managementTaskSlots is K (O7): how many tasks run at once on a
-	// computer; the rest queue, never refused. S2a runs at K = 1, so no two
-	// tasks open stories concurrently; S2b raises it to 4 with the shared
-	// model-call spacer.
-	managementTaskSlots = 1
-	// managementTaskDeadline bounds a task's run from its start (O7, B10):
-	// the activation budget of a task run.
-	managementTaskDeadline = 10 * time.Minute
-)
+// managementTaskDeadline bounds a task's run from its start (O7, B10): the
+// activation budget of a task run.
+const managementTaskDeadline = 10 * time.Minute
+
+// managementTaskSlots is K (O7, S2b): how many tasks run at once on this
+// computer; the rest queue, never refused. It is the runtime config's
+// ManagementTaskSlots (default 4, at most 8), or 1 while the owner's
+// management.serial_tasks setting is on: the live rollback to S2a's one at
+// a time, read on every start, so it needs no restart. Concurrent tasks
+// are kept coherent by the store, not by K: the lease and the disposition
+// index (one capture, one disposition) and the story-library head (an open
+// from a run that has not seen the stories opened since is refused).
+func (rt *Runtime) managementTaskSlots(ctx context.Context, ownerID, computerID string) int {
+	if rt.computerSettingOn(ctx, ownerID, computerID, store.SettingManagementSerialTasks) {
+		return 1
+	}
+	return provideriface.NormalizeManagementTaskSlots(rt.cfg.ManagementTaskSlots)
+}
 
 // managementTaskCallTimeout bounds one model call of a task (R2-9), so one
 // slow call cannot use the task's whole deadline. A var so a test can
@@ -81,14 +90,17 @@ func managementTaskID(cellID, localID string, group int) string {
 // task is an open task round with no run; its start is the inbox_record
 // wake of its opening Cast, or the start wake a task's closure mints for
 // the next one. Both are restart work kinds: a crash boot interrupts them
-// (and closes the rounds), a planned boot delivers them. It returns the
-// first run it started.
+// (and closes the rounds), a planned boot delivers them. One wake fills
+// every free slot (S2b, FM8), in one pass over one listing of the queue, so
+// a task that cannot start is not retried within the call and a refused
+// claim takes no slot (FM29). It returns the first run it started.
 func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, computerID string) (*types.RunRecord, error) {
 	if rt == nil || rt.store == nil {
 		return nil, nil
 	}
 	rt.managementTaskStartMu.Lock()
 	defer rt.managementTaskStartMu.Unlock()
+	slots := rt.managementTaskSlots(ctx, ownerID, computerID)
 	running, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskRunning)
 	if err != nil {
 		return nil, fmt.Errorf("management tasks: list running: %w", err)
@@ -108,19 +120,25 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 		// the slot frees (the closure is idempotent).
 		rt.closeManagementTaskOfEndedRun(ctx, &run)
 	}
+	if busy >= slots {
+		return nil, nil
+	}
+	queued, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskQueued)
+	if err != nil {
+		return nil, fmt.Errorf("management tasks: list queued: %w", err)
+	}
 	var first *types.RunRecord
-	for busy < managementTaskSlots {
-		queued, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskQueued)
-		if err != nil {
-			return first, fmt.Errorf("management tasks: list queued: %w", err)
-		}
-		if len(queued) == 0 {
+	for _, task := range queued {
+		if busy >= slots {
 			break
 		}
-		rec, err := rt.startManagementTask(ctx, queued[0])
+		rec, err := rt.startManagementTask(ctx, task, slots)
 		if err != nil {
-			log.Printf("runtime: management task %s did not start: %v", queued[0].TaskID, err)
+			log.Printf("runtime: management task %s did not start: %v", task.TaskID, err)
 			continue
+		}
+		if rec == nil {
+			continue // claimed or closed by another path: no slot taken
 		}
 		busy++
 		if first == nil {
@@ -130,10 +148,47 @@ func (rt *Runtime) startQueuedManagementTasks(ctx context.Context, ownerID, comp
 	return first, nil
 }
 
+// managementTaskObservability is the slot starter's state on
+// /api/runtime/observability (S2b): the probe reads K and the queue from a
+// product route. Slots is K in force; ConfiguredSlots is the runtime
+// config's K, which management.serial_tasks overrides with 1.
+type managementTaskObservability struct {
+	Slots            int     `json:"slots"`
+	ConfiguredSlots  int     `json:"configured_slots"`
+	SerialTasks      bool    `json:"serial_tasks"`
+	Running          int     `json:"running"`
+	Queued           int     `json:"queued"`
+	OldestQueuedAgeS float64 `json:"oldest_queued_age_s,omitempty"`
+	Error            string  `json:"error,omitempty"`
+}
+
+func (rt *Runtime) managementTaskObservability(ctx context.Context, ownerID, computerID string) *managementTaskObservability {
+	out := &managementTaskObservability{
+		Slots:           rt.managementTaskSlots(ctx, ownerID, computerID),
+		ConfiguredSlots: provideriface.NormalizeManagementTaskSlots(rt.cfg.ManagementTaskSlots),
+		SerialTasks:     rt.computerSettingOn(ctx, ownerID, computerID, store.SettingManagementSerialTasks),
+	}
+	running, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskRunning)
+	if err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	queued, err := rt.store.ListManagementTasks(ctx, ownerID, computerID, types.ManagementTaskQueued)
+	if err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	out.Running, out.Queued = len(running), len(queued)
+	if len(queued) > 0 {
+		out.OldestQueuedAgeS = time.Since(queued[0].CreatedAt).Round(100 * time.Millisecond).Seconds()
+	}
+	return out
+}
+
 // startManagementTask claims one queued task's slot and starts its run. A
 // task that cannot start is closed with the error, so its captures return
 // to the parent as residuals.
-func (rt *Runtime) startManagementTask(ctx context.Context, task types.ManagementTask) (*types.RunRecord, error) {
+func (rt *Runtime) startManagementTask(ctx context.Context, task types.ManagementTask, slots int) (*types.RunRecord, error) {
 	claimed, err := rt.store.ClaimManagementTask(ctx, task.OwnerID, task.ComputerID, task.TaskID, time.Now().UTC())
 	if err != nil {
 		if errors.Is(err, store.ErrInboxRefused) {
@@ -157,6 +212,9 @@ func (rt *Runtime) startManagementTask(ctx context.Context, task types.Managemen
 		"management_task_deadline":       claimed.DeadlineAt.UTC().Format(time.RFC3339Nano),
 		"management_task_leased_count":   len(claimed.LeasedCaptures),
 		"management_task_opening_record": claimed.OpeningRecordID,
+		// K when it started, so the probe reads concurrency against the
+		// slots in force (S2b).
+		"management_task_slots": slots,
 	}
 	rec, err := rt.createRunWithMetadata(ctx, managementTaskPrompt, claimed.OwnerID, metadata)
 	if err != nil {

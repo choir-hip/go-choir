@@ -21,11 +21,19 @@ const ogKindComputerSetting = objectgraph.ObjectKind("choir.computer_setting")
 // off is the rollback.
 const SettingIntakeLabels = "intake.labels"
 
+// SettingManagementSerialTasks holds management tasks to one at a time
+// (K = 1, S2a's behaviour) on the next start, without a restart: the live
+// rollback of management delegation S2b on an always-busy computer. Off by
+// default (K from the runtime config); running tasks finish, none is
+// cancelled.
+const SettingManagementSerialTasks = "management.serial_tasks"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
 var KnownComputerSettings = map[string]bool{
-	SettingIntakeLabels: false,
+	SettingIntakeLabels:          false,
+	SettingManagementSerialTasks: false,
 }
 
 // ComputerSetting is one switch's value on one computer.

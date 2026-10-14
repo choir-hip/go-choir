@@ -76,9 +76,14 @@ type InboxCommitReceipt struct {
 	Cursor        *InboxCursorAdvance  `json:"cursor,omitempty"`
 	// Verdicts are the verdicts this command recorded, each with its pair
 	// and, for a failure, the record it sent; a memo hit is not listed.
-	Verdicts  []SupportVerdict `json:"verdicts,omitempty"`
-	CreatedAt time.Time        `json:"created_at"`
-	Replay    bool             `json:"replay,omitempty"`
+	Verdicts []SupportVerdict `json:"verdicts,omitempty"`
+	// StoryLibraryHead is the story-library head after this command's
+	// opens, set only when the command carried a head and the check passed
+	// (R2-5): the committing run has then seen every open up to it, its own
+	// included (management delegation S2b, FM28).
+	StoryLibraryHead int64     `json:"story_library_head,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	Replay           bool      `json:"replay,omitempty"`
 }
 
 // InboxHead is the cached last sequence number taken in one inbox.

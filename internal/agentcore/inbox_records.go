@@ -725,6 +725,12 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			return nil, fmt.Errorf("reduce: commit records: %w", err)
 		}
 	}
+	if req.StoryLibraryHead != nil && committed.StoryLibraryHead > 0 {
+		// A checked open passed: the run has seen the library up to the
+		// head after its own opens, so its next open is not refused by
+		// them (S2b, FM28).
+		rt.storyLibraryShown.Store(strings.TrimSpace(r.scope.RunID), committed.StoryLibraryHead)
+	}
 	for i, in := range localIDs {
 		seq, opened := int64(0), ""
 		if i < len(committed.Records) {

@@ -271,4 +271,11 @@ type Config struct {
 	// baseline (0.7862); tune via QDRANT_DEDUP_THRESHOLD. A threshold of 0
 	// disables semantic dedup.
 	QdrantDedupThreshold float32
+
+	// ManagementTaskSlots is K, how many management tasks run at once on a
+	// computer; the rest queue, never refused (management delegation O7,
+	// S2b). Unset or below 1 is DefaultManagementTaskSlots; it is capped at
+	// MaxManagementTaskSlots. The owner's management.serial_tasks setting
+	// holds it at 1 live. Env: RUNTIME_MANAGEMENT_TASK_SLOTS.
+	ManagementTaskSlots int
 }

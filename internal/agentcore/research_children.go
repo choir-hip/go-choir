@@ -76,8 +76,8 @@ func (s *callSpacer) wait(ctx context.Context) error {
 	}
 }
 
-// spacedProvider waits on the computer's research-child call spacer before
-// each model call.
+// spacedProvider waits on the computer's sub-RLM call spacer before each
+// model call.
 type spacedProvider struct {
 	provideriface.ToolLoopProvider
 	spacer *callSpacer
@@ -90,7 +90,11 @@ func (p spacedProvider) CallWithTools(ctx context.Context, req provideriface.Too
 	return p.ToolLoopProvider.CallWithTools(ctx, req)
 }
 
-func (rt *Runtime) researchChildSpacer() *callSpacer {
+// subRLMCallSpacer is the one computer-wide spacer every sub-RLM's model
+// calls share: research children and management tasks (management
+// delegation O5, S2b FM14), 40 a minute together, so the root desks keep
+// about 20 of the gateway's 60.
+func (rt *Runtime) subRLMCallSpacer() *callSpacer {
 	rt.researchChildCallsOnce.Do(func() {
 		if rt.researchChildCalls == nil {
 			rt.researchChildCalls = &callSpacer{interval: researchChildCallInterval}
@@ -212,7 +216,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 		"content": []any{map[string]string{"type": "text", "text": spec.Objective}},
 	})
 	noEmit := func(types.EventKind, string, json.RawMessage) {}
-	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.researchChildSpacer()}
+	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.subRLMCallSpacer()}
 	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
 		[]json.RawMessage{userMsg}, researchChildPreamble+researchChildTime(share)+"\n\n"+rolePrompt,
 		provideriface.MaxInteractiveOutputTokensForSelection(selection, agentprofile.Research),

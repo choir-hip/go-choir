@@ -69,6 +69,14 @@ const (
 	// measured ~0.7862 as the clean-separation midpoint for 25 headlines;
 	// it is a tunable baseline, not a universal constant.
 	DefaultQdrantDedupThreshold = 0.7862
+
+	// DefaultManagementTaskSlots is K (management delegation O7, S2b): four
+	// tasks at once, as research children and intake labels. Each task is
+	// a desk worker (about 17 MiB) and shares the sub-RLM call spacer.
+	DefaultManagementTaskSlots = 4
+	// MaxManagementTaskSlots caps K for guest memory and the gateway's
+	// per-computer call budget.
+	MaxManagementTaskSlots = 8
 )
 
 // ResolveFilesRoot returns the effective files root. It prefers the explicit
@@ -132,6 +140,7 @@ func LoadConfig() Config {
 		OllamaURL:            envOr("OLLAMA_URL", DefaultOllamaURL),
 		OllamaEmbeddingModel: envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
 		QdrantDedupThreshold: float32Or("QDRANT_DEDUP_THRESHOLD", DefaultQdrantDedupThreshold),
+		ManagementTaskSlots:  intOr("RUNTIME_MANAGEMENT_TASK_SLOTS", DefaultManagementTaskSlots),
 	})
 }
 
@@ -161,11 +170,24 @@ func NormalizeConfig(cfg Config) Config {
 	if strings.TrimSpace(cfg.OllamaEmbeddingModel) == "" {
 		cfg.OllamaEmbeddingModel = DefaultOllamaEmbeddingModel
 	}
+	cfg.ManagementTaskSlots = NormalizeManagementTaskSlots(cfg.ManagementTaskSlots)
 	// QdrantDedupThreshold is intentionally not normalized here: a zero value
 	// means semantic dedup is disabled (the default for test configs that do
 	// not opt in). LoadConfig applies the production default via envOr when
 	// QDRANT_DEDUP_THRESHOLD is unset; an explicit "0" disables the pass.
 	return cfg
+}
+
+// NormalizeManagementTaskSlots bounds K: unset or below 1 is the default,
+// above the cap is the cap.
+func NormalizeManagementTaskSlots(k int) int {
+	switch {
+	case k < 1:
+		return DefaultManagementTaskSlots
+	case k > MaxManagementTaskSlots:
+		return MaxManagementTaskSlots
+	}
+	return k
 }
 
 func defaultPromptRoot(storePath string) string {

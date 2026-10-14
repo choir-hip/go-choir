@@ -637,6 +637,12 @@ type guestObservabilityResponse struct {
 	ComputerID string         `json:"computer_id"`
 	Build      buildinfo.Info `json:"build"`
 	RecentLog  []string       `json:"recent_log"`
+	// ManagementTasks is the slot starter's state for the caller's
+	// management (S2b): K, the slots in use and the queue.
+	ManagementTasks *managementTaskObservability `json:"management_tasks,omitempty"`
+	// EngineMutex is the engine lock's cumulative wait and hold per call
+	// path since boot (H3: lock waits at K = 4).
+	EngineMutex map[string]objectgraph.EngineMutexOpStats `json:"engine_mutex,omitempty"`
 }
 
 // HandleGuestObservability handles GET /api/runtime/observability: the guest's
@@ -647,16 +653,22 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	if _, err := authenticateUser(r); err != nil {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, guestObservabilityResponse{
+	resp := guestObservabilityResponse{
 		Service:    "autoputer",
 		ComputerID: h.rt.cfg.ComputerID,
 		Build:      buildinfo.Snapshot("autoputer"),
 		RecentLog:  h.rt.RecentBootLog(),
-	})
+	}
+	if h.rt.store != nil {
+		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
+		resp.EngineMutex = h.rt.store.EngineMutexStats()
+	}
+	writeAPIJSON(w, http.StatusOK, resp)
 }
 
 // HandleInternalRuntimeRunRouter dispatches internal service-to-service run

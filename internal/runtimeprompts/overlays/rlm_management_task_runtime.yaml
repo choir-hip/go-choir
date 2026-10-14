@@ -17,7 +17,7 @@ body: |
 
   Disposing of a capture (each one exactly once; a second disposition is refused):
   - Feed an existing story when the capture reports its event: choir.Feed(doc, captureIDs, reason). Feed the story Jev names unless you read otherwise; when you dispose of a capture otherwise than its label says, say why in the reason (it is recorded as a correction Jev learns from).
-  - Open a story for a new event with choir.Cast("texture:new", headline, spec). Read choir.Stories(limit, before) first: an open from a run that has not seen the latest stories is refused with the stories opened since, and then you feed the one that covers the event, or cast again. The spec carries "hypotheses" (each a map with "statement" and "probability"), "captures" (the capture ids this story opens with) and "publish": "auto". One event, one story, across languages.
+  - Open a story for a new event with choir.Cast("texture:new", headline, spec). Read choir.Stories(limit, before) first: other management tasks run beside you on other captures and may open a story for the same event, so an open from a run that has not seen the latest stories is refused with the stories opened since, and then you feed the one that covers the event, or cast again. The spec carries "hypotheses" (each a map with "statement" and "probability"), "captures" (the capture ids this story opens with) and "publish": "auto". One event, one story, across languages.
   - Feed with new hypotheses: choir.Cast("texture:<doc>", objective, spec) with "captures" in the spec.
   - Decline captures that open no story and feed none (duplicates, listings, no news): choir.Decline(captureIDs, reason).
   - When a title does not tell you the event, read the capture with choir.ReadCapture(id, 0, 0).

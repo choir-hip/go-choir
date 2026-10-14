@@ -393,27 +393,40 @@ func TestStoryLibraryHeadRefusesAStaleOpen(t *testing.T) {
 	}
 	seen := int64(0)
 	first := openingCast("lib-open-1")
-	if _, err := commitTaskRequest(t, s, types.CommitInboxRecordsRequest{CommandID: "lib-1", Records: []types.CommitmentRecord{first}, StoryLibraryHead: &seen}); err != nil {
+	receipt, err := commitTaskRequest(t, s, types.CommitInboxRecordsRequest{CommandID: "lib-1", Records: []types.CommitmentRecord{first}, StoryLibraryHead: &seen})
+	if err != nil {
 		t.Fatalf("first open at head 0: %v", err)
 	}
 	if head() != 1 {
 		t.Fatalf("head after one open = %d", head())
 	}
+	// FM28 (S2b): a checked open's receipt carries the head after it; the
+	// run saw everything up to it, its own open included.
+	if receipt.StoryLibraryHead != 1 {
+		t.Fatalf("checked open receipt head = %d, want 1", receipt.StoryLibraryHead)
+	}
 	// FM3: a second run that saw head 0 opens the same event.
 	second := openingCast("lib-open-2")
-	_, err := commitTaskRequest(t, s, types.CommitInboxRecordsRequest{CommandID: "lib-2", Records: []types.CommitmentRecord{second}, StoryLibraryHead: &seen})
+	_, err = commitTaskRequest(t, s, types.CommitInboxRecordsRequest{CommandID: "lib-2", Records: []types.CommitmentRecord{second}, StoryLibraryHead: &seen})
 	if !errors.Is(err, ErrInboxRefused) || !strings.Contains(err.Error(), "Harbor reopens after the storm") || !strings.Contains(err.Error(), "capture-a") {
 		t.Fatalf("stale open: %v; want a refusal naming the story opened since", err)
 	}
 	// Having seen head 1, it opens (a distinct event).
 	current := head()
-	if _, err := commitTaskRequest(t, s, types.CommitInboxRecordsRequest{CommandID: "lib-3", Records: []types.CommitmentRecord{second}, StoryLibraryHead: &current}); err != nil {
+	if receipt, err = commitTaskRequest(t, s, types.CommitInboxRecordsRequest{CommandID: "lib-3", Records: []types.CommitmentRecord{second}, StoryLibraryHead: &current}); err != nil {
 		t.Fatalf("open at the current head: %v", err)
 	}
-	// A caller that names no head (not a management cell) is unchecked.
+	if receipt.StoryLibraryHead != 2 {
+		t.Fatalf("second checked open receipt head = %d, want 2", receipt.StoryLibraryHead)
+	}
+	// A caller that names no head (not a management cell) is unchecked,
+	// and its receipt names no head: nothing was seen.
 	third := openingCast("lib-open-3")
-	if _, err := commitTaskRequest(t, s, types.CommitInboxRecordsRequest{CommandID: "lib-4", Records: []types.CommitmentRecord{third}}); err != nil {
+	if receipt, err = commitTaskRequest(t, s, types.CommitInboxRecordsRequest{CommandID: "lib-4", Records: []types.CommitmentRecord{third}}); err != nil {
 		t.Fatalf("unchecked open: %v", err)
+	}
+	if receipt.StoryLibraryHead != 0 {
+		t.Fatalf("unchecked open receipt head = %d, want 0", receipt.StoryLibraryHead)
 	}
 	if head() != 3 {
 		t.Fatalf("head = %d, want 3", head())

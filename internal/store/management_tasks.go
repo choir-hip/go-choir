@@ -576,8 +576,11 @@ func (p *taskPlan) objects(records []types.CommitmentRecord) ([]objectgraph.Obje
 
 // planStoryLibrary advances the story-library head for each story this
 // command opens, and refuses the opens when the committing run's last read
-// of the library (seen) is behind the head (R2-5).
-func (s *Store) planStoryLibrary(ctx context.Context, ownerID, computerID string, seen *int64, records []types.CommitmentRecord, opened map[string]bool, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, error) {
+// of the library (seen) is behind the head (R2-5). When seen was checked,
+// it returns the head after the opens: the run has seen every open up to
+// it, its own included, so its next open is not refused by its own (S2b,
+// FM28). Otherwise it returns 0.
+func (s *Store) planStoryLibrary(ctx context.Context, ownerID, computerID string, seen *int64, records []types.CommitmentRecord, opened map[string]bool, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, int64, error) {
 	var opens []types.CommitmentRecord
 	for _, rec := range records {
 		if opened[strings.TrimSpace(rec.RecordID)] {
@@ -585,11 +588,11 @@ func (s *Store) planStoryLibrary(ctx context.Context, ownerID, computerID string
 		}
 	}
 	if len(opens) == 0 {
-		return nil, nil, nil
+		return nil, nil, 0, nil
 	}
 	head, err := loadInboxCached[types.StoryLibraryHead](ctx, s, ogKindStoryLibraryHead, ownerID, computerID, storyLibraryKey)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	if seen != nil && *seen < head.value.Head {
 		var since []string
@@ -608,7 +611,7 @@ func (s *Store) planStoryLibrary(ctx context.Context, ownerID, computerID string
 		if missed := head.value.Head - *seen; missed > int64(len(since)) {
 			more = fmt.Sprintf(" and %d more; read choir.Stories() for them", missed-int64(len(since)))
 		}
-		return nil, nil, fmt.Errorf("%w: %w", ErrStoryLibraryMoved, inboxRefused(
+		return nil, nil, 0, fmt.Errorf("%w: %w", ErrStoryLibraryMoved, inboxRefused(
 			"the story library moved since this run last read choir.Stories() (head %d, now %d); stories opened since, newest first: %s%s. Feed the story that covers this event, or, if none does, cast texture:new again",
 			*seen, head.value.Head, strings.Join(since, "; "), more))
 	}
@@ -628,9 +631,13 @@ func (s *Store) planStoryLibrary(ctx context.Context, ownerID, computerID string
 	}
 	obj, condition, err := head.write(ogKindStoryLibraryHead, ownerID, computerID, map[string]any{"head": head.value.Head}, now)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	return []objectgraph.Object{obj}, []objectgraph.ObjectCondition{condition}, nil
+	seenAfter := int64(0)
+	if seen != nil {
+		seenAfter = head.value.Head
+	}
+	return []objectgraph.Object{obj}, []objectgraph.ObjectCondition{condition}, seenAfter, nil
 }
 
 // ErrStoryLibraryMoved marks a texture:new refused by the library head

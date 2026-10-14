@@ -21,13 +21,19 @@ import (
 // intakeLabelsEnabled reports whether intake.labels is on for the computer.
 // Anything but a stored true (no setting, a store error) is off.
 func (rt *Runtime) intakeLabelsEnabled(ctx context.Context, ownerID, computerID string) bool {
+	return rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeLabels)
+}
+
+// computerSettingOn reports whether a boolean setting is on for the
+// computer. Anything but a stored true (no setting, a store error) is off.
+func (rt *Runtime) computerSettingOn(ctx context.Context, ownerID, computerID, key string) bool {
 	if rt == nil || rt.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(computerID) == "" {
 		return false
 	}
-	setting, err := rt.store.GetComputerSetting(ctx, ownerID, computerID, store.SettingIntakeLabels)
+	setting, err := rt.store.GetComputerSetting(ctx, ownerID, computerID, key)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			log.Printf("computer settings: read %s on %s: %v; treating it as off", store.SettingIntakeLabels, computerID, err)
+			log.Printf("computer settings: read %s on %s: %v; treating it as off", key, computerID, err)
 		}
 		return false
 	}
