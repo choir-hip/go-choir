@@ -29,6 +29,12 @@ business-model section of docs/reports/choir-state-and-vision-2026-10-14.md
   Clubhouse" with an algorithm that routes takes to other people's agents).
 - **Compute upgrades are not in the $35 tier.** More CPU, RAM and storage
   are sold separately with a healthy margin.
+- **Why margin sits on compute, not inference:** "demand for CPU, RAM and
+  storage naturally scales with usage and utility, so users will be happy
+  to pay extra for these, even at margin. And there are things people
+  don't understand the pricing of very well, whereas people do really
+  understand the pricing of LLM API inference. You don't want to be
+  overpricing a commodity that people understand the market of."
 - **Costs ahead:** inference and search will keep falling (Keenable as
   the price leader); CPU, memory and storage will not, because demand for
   agent sandboxes is rising. Autopaper's inference amortizes across users
