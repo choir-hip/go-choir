@@ -93,3 +93,34 @@ Each station gets an investigation (current ranking inputs; what the
 ledger already records per story; attention capture that respects
 privacy), a design note, and a review panel before any code. The live
 front page is not changed until the owner reviews the design.
+
+## Owner update, about 12:10 UTC: a first slice before the demos
+
+"Maybe I do want to make these improvements before my meetings [...] But
+yeah, let's be safe about it [...] I definitely don't want to break it."
+And: "I would trust models to understand that the [...] OpenAI spying story
+is more important than some story about [...] Codex [...] which is
+basically an ad."
+
+Evidence (preview, not deployed): Gemini, asked to score each front story's
+importance 1-10 and flag promotion, put the Pope's surgery, Ukraine's power
+loss and the UK stillborn-burials apology at 8-9, the OpenAI bugging arrest
+at 7 (from #33 to #12 once recency decays with a 24 h half-life), and gave 1
+with a promotion flag to "1Password reports productivity gains from Codex"
+and to two leaked management instruction titles ("Open a story on ...").
+A second preview, ranking by distinct cited outlets, lifted research-heavy
+stories instead, so breadth alone is not importance.
+
+Second problem found: **management instruction text published as a
+story title.** Two front-page stories are titled "Open a story on ...",
+the wording of a management instruction, not a headline.
+
+First slice (LF0), additive and reversible: a host timer asks Jev (the
+gateway's typed-judgement model) for each front story's importance and a
+promotion flag, keyed by publication and revision; corpusd attaches the
+scores to the front API when the file exists; the front page ranks by
+importance with recency decay only when most stories have a score, and
+keeps promotion and instruction-titled stories out of the lead and top
+tier. Missing or bad scores fall back to today's ranking. Rollback: revert,
+or delete the scores file. The rest of LF (scored predictions, breadth,
+personalization) is unchanged intent.
