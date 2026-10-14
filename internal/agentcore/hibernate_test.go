@@ -31,6 +31,17 @@ import (
 //   - resumed answers 200 when the capability renewal failed, so the host
 //     keeps a guest that cannot write events;
 //   - a guest (not the host peer) can fence or resume a neighbour.
+//
+// Re-credential on resume (design note items 31-36):
+//   - resumed with an envelope still renews the frozen capability (refused
+//     hours after hibernate) instead of installing the delivered one;
+//   - the envelope is installed but its consumption receipt is never appended
+//     as key_revoked, so the frozen capability stays valid and the guest keeps
+//     an epoch-E token the next boot revokes under it;
+//   - an install or key_revoked failure still reopens admission;
+//   - the envelope is echoed in a response;
+//   - prepare does not advertise credential_resume, so the host never
+//     delivers and the old deadline keeps applying.
 
 type fakeHibernateCredential struct {
 	calls     atomic.Int32
@@ -40,6 +51,20 @@ type fakeHibernateCredential struct {
 
 func (f *fakeHibernateCredential) RenewNow(context.Context) (time.Time, error) {
 	f.calls.Add(1)
+	if f.err != nil {
+		return time.Time{}, f.err
+	}
+	return f.expiresAt, nil
+}
+
+type fakeResumeCredential struct {
+	envelopes []string
+	err       error
+	expiresAt time.Time
+}
+
+func (f *fakeResumeCredential) InstallResumeEnvelope(_ context.Context, envelope string) (time.Time, error) {
+	f.envelopes = append(f.envelopes, envelope)
 	if f.err != nil {
 		return time.Time{}, f.err
 	}
@@ -241,6 +266,114 @@ func TestHibernateEndpointsAreHostPeerOnly(t *testing.T) {
 	}
 	if cred.calls.Load() != 0 {
 		t.Fatal("a non-host peer reached the capability renewal")
+	}
+}
+
+// resumeCredentialRuntime fences a runtime whose credential accepts delivered
+// envelopes; reconciled counts key_revoked reconciliations.
+func resumeCredentialRuntime(t *testing.T) (*Runtime, *fakeHibernateCredential, *fakeResumeCredential, *atomic.Int32) {
+	t.Helper()
+	rt, renew := hibernateTestRuntime(t)
+	install := &fakeResumeCredential{expiresAt: time.Date(2026, 10, 14, 16, 10, 0, 0, time.UTC)}
+	rt.hibernate.resumeCredential = install
+	reconciled := &atomic.Int32{}
+	rt.hibernate.reconcile = func(context.Context) error {
+		reconciled.Add(1)
+		return nil
+	}
+	prevClock := setSystemClock
+	setSystemClock = func(time.Time) error { return nil }
+	t.Cleanup(func() { setSystemClock = prevClock })
+	return rt, renew, install, reconciled
+}
+
+const testResumeEnvelope = "eyJ2ZXJzaW9uIjoxfQ"
+
+func TestHibernatePrepareAdvertisesCredentialResume(t *testing.T) {
+	rt, _, _, _ := resumeCredentialRuntime(t)
+	code, body := postHibernate(t, &APIHandler{rt: rt}, "/internal/runtime/hibernate/prepare", "192.0.2.1:4000", `{}`)
+	if code != http.StatusOK || body["credential_resume"] != true {
+		t.Fatalf("prepare: %d %v, want credential_resume=true", code, body)
+	}
+	plain, _ := hibernateTestRuntime(t)
+	_, body = postHibernate(t, &APIHandler{rt: plain}, "/internal/runtime/hibernate/prepare", "192.0.2.1:4000", `{}`)
+	if _, ok := body["credential_resume"]; ok {
+		t.Fatalf("a guest that cannot install envelopes advertised credential_resume: %v", body)
+	}
+}
+
+func TestHibernateResumedInstallsDeliveredCredential(t *testing.T) {
+	rt, renew, install, reconciled := resumeCredentialRuntime(t)
+	handler := &APIHandler{rt: rt}
+	if code, body := postHibernate(t, handler, "/internal/runtime/hibernate/prepare", "192.0.2.1:4000", `{}`); code != http.StatusOK {
+		t.Fatalf("prepare: %d %v", code, body)
+	}
+	renewsAfterPrepare := renew.calls.Load()
+	// The frozen capability is long past the renewal grace: renewal fails.
+	renew.err = errors.New("renewal refused: expired")
+	code, body := postHibernate(t, handler, "/internal/runtime/hibernate/resumed", "192.0.2.1:4000",
+		`{"host_unix_nano":`+jsonInt(time.Now().Add(5*time.Hour).UnixNano())+`,"credential_envelope":"`+testResumeEnvelope+`"}`)
+	if code != http.StatusOK || body["status"] != "resumed" || body["credential"] != "installed" {
+		t.Fatalf("resumed with envelope: %d %v, want 200 resumed credential=installed", code, body)
+	}
+	if len(install.envelopes) != 1 || install.envelopes[0] != testResumeEnvelope {
+		t.Fatalf("installed envelopes = %v", install.envelopes)
+	}
+	if renew.calls.Load() != renewsAfterPrepare {
+		t.Fatal("resumed with an envelope renewed the frozen capability")
+	}
+	if reconciled.Load() != 1 {
+		t.Fatalf("key_revoked reconciliations = %d, want 1", reconciled.Load())
+	}
+	if body["capability_expires_at"] != "2026-10-14T16:10:00Z" {
+		t.Fatalf("capability_expires_at = %v", body["capability_expires_at"])
+	}
+	raw, _ := json.Marshal(body)
+	if bytes.Contains(raw, []byte(testResumeEnvelope)) {
+		t.Fatal("resumed response echoes the credential envelope")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	release, err := rt.EnterWork(ctx)
+	if err != nil {
+		t.Fatalf("admission not reopened after an installed resume: %v", err)
+	}
+	release()
+}
+
+func TestHibernateResumedKeepsFenceWhenCredentialInstallFails(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(rt *Runtime, install *fakeResumeCredential)
+	}{
+		{"install refused", func(_ *Runtime, install *fakeResumeCredential) { install.err = errors.New("exchange refused") }},
+		{"key_revoked append failed", func(rt *Runtime, _ *fakeResumeCredential) {
+			rt.hibernate.reconcile = func(context.Context) error { return errors.New("append refused") }
+		}},
+		{"guest cannot install", func(rt *Runtime, _ *fakeResumeCredential) { rt.hibernate.resumeCredential = nil }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rt, _, install, _ := resumeCredentialRuntime(t)
+			handler := &APIHandler{rt: rt}
+			if code, body := postHibernate(t, handler, "/internal/runtime/hibernate/prepare", "192.0.2.1:4000", `{}`); code != http.StatusOK {
+				t.Fatalf("prepare: %d %v", code, body)
+			}
+			tc.setup(rt, install)
+			code, body := postHibernate(t, handler, "/internal/runtime/hibernate/resumed", "192.0.2.1:4000",
+				`{"host_unix_nano":`+jsonInt(time.Now().UnixNano())+`,"credential_envelope":"`+testResumeEnvelope+`"}`)
+			if code == http.StatusOK {
+				t.Fatalf("resumed answered 200 although the credential was not installed: %v", body)
+			}
+			raw, _ := json.Marshal(body)
+			if bytes.Contains(raw, []byte(testResumeEnvelope)) {
+				t.Fatal("refusal echoes the credential envelope")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			if _, err := rt.EnterWork(ctx); err == nil {
+				t.Fatal("work entered a guest whose re-credential failed (the host is about to kill it)")
+			}
+		})
 	}
 }
 

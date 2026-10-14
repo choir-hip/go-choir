@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
 // S3 snapshot hibernate, guest side
@@ -21,7 +22,9 @@ import (
 // the platform capability so the frozen copy lives as long as possible, and
 // sync the filesystems. After the host loads the snapshot it tells the guest
 // it resumed: step the wall clock to the host's, drop pooled connections that
-// went stale while frozen, renew the capability, reopen admission.
+// went stale while frozen, re-credential (install the fresh envelope the host
+// delivered, or renew the frozen capability when none came), reopen
+// admission.
 //
 // A snapshot resume is not a boot. Nothing restarts, no planned-restart
 // marker is written or consumed, and the work admitted after the resume is
@@ -47,6 +50,18 @@ type hibernateCredential interface {
 	RenewNow(ctx context.Context) (time.Time, error)
 }
 
+// hibernateResumeCredential installs a fresh bootstrap envelope the host
+// delivered with the resumed call (selfdev.GuestCredentials). It exchanges
+// and consumes the envelope; the consumption receipt is then appended as
+// key_revoked by the fence's reconcile step.
+type hibernateResumeCredential interface {
+	InstallResumeEnvelope(ctx context.Context, encodedEnvelope string) (time.Time, error)
+}
+
+// hibernateResumeCredentialTimeout bounds the install (exchange, consume)
+// and the key_revoked append on resume. The host waits 60 s for resumed.
+const hibernateResumeCredentialTimeout = 45 * time.Second
+
 // hibernateFence is the work admission gate the host closes before a
 // snapshot. Work enters through enterWork (the actor handler's boundary);
 // the fence closes only while nothing is inside.
@@ -59,6 +74,10 @@ type hibernateFence struct {
 
 	// credential overrides the runtime's guest credential (tests).
 	credential hibernateCredential
+	// resumeCredential overrides the envelope installer (tests).
+	resumeCredential hibernateResumeCredential
+	// reconcile overrides the key_revoked append after an install (tests).
+	reconcile func(context.Context) error
 	// now overrides time.Now (tests).
 	now func() time.Time
 }
@@ -165,6 +184,40 @@ func (rt *Runtime) hibernateCredential() hibernateCredential {
 	return nil
 }
 
+// guestCredentials is the runtime's platform credential holder, if any.
+func (rt *Runtime) guestCredentials() *selfdev.GuestCredentials {
+	if rt.selfdevControl != nil {
+		return rt.selfdevControl
+	}
+	return rt.ownerRecoveryControl
+}
+
+func (rt *Runtime) hibernateResumeCredential() hibernateResumeCredential {
+	if rt.hibernate.resumeCredential != nil {
+		return rt.hibernate.resumeCredential
+	}
+	if credentials := rt.guestCredentials(); credentials != nil && rt.eventAppender != nil {
+		return credentials
+	}
+	return nil
+}
+
+// reconcileResumedCredential appends the installed envelope's consumption as
+// key_revoked and switches to the post-revocation capability, as boot does.
+func (rt *Runtime) reconcileResumedCredential(ctx context.Context) error {
+	if rt.hibernate.reconcile != nil {
+		return rt.hibernate.reconcile(ctx)
+	}
+	credentials := rt.guestCredentials()
+	if credentials == nil || len(credentials.PendingLifecycleReceipts()) == 0 {
+		return nil
+	}
+	if rt.eventAppender == nil {
+		return fmt.Errorf("computer event appender unavailable")
+	}
+	return ReconcilePendingLifecycleReceipts(rt.eventAppender, credentials, credentials.ComputerID(), ctx)
+}
+
 // setSystemClock steps the wall clock (hibernate_clock_*.go); tests replace it.
 var setSystemClock = stepSystemClock
 
@@ -177,13 +230,20 @@ type hibernatePrepareResponse struct {
 	Error               string    `json:"error,omitempty"`
 	CapabilityExpiresAt time.Time `json:"capability_expires_at,omitempty"`
 	GuestBuild          string    `json:"guest_build,omitempty"`
-	RunningRuns         int       `json:"running_runs,omitempty"`
-	InflightWork        int       `json:"inflight_work,omitempty"`
-	SelfdevActiveOps    int       `json:"selfdev_active_operations,omitempty"`
+	// CredentialResume tells the host this guest installs a fresh envelope
+	// delivered with resumed, so its snapshot is not bounded by the frozen
+	// capability's renewal window.
+	CredentialResume bool `json:"credential_resume,omitempty"`
+	RunningRuns      int  `json:"running_runs,omitempty"`
+	InflightWork     int  `json:"inflight_work,omitempty"`
+	SelfdevActiveOps int  `json:"selfdev_active_operations,omitempty"`
 }
 
 type hibernateResumedRequest struct {
 	HostUnixNano int64 `json:"host_unix_nano"`
+	// CredentialEnvelope is a fresh bootstrap envelope for this realization
+	// (base64url canonical JSON, as on the credential disk). Never logged.
+	CredentialEnvelope string `json:"credential_envelope,omitempty"`
 }
 
 type hibernateResumedResponse struct {
@@ -191,6 +251,8 @@ type hibernateResumedResponse struct {
 	Error               string    `json:"error,omitempty"`
 	ClockStepMS         int64     `json:"clock_step_ms"`
 	CapabilityExpiresAt time.Time `json:"capability_expires_at,omitempty"`
+	// Credential is "installed" (delivered envelope) or "renewed".
+	Credential string `json:"credential,omitempty"`
 }
 
 // HandleInternalHibernatePrepare serves POST /internal/runtime/hibernate/prepare.
@@ -239,7 +301,7 @@ func (rt *Runtime) prepareHibernate(ctx context.Context) (int, hibernatePrepareR
 			RunningRuns: running, SelfdevActiveOps: selfdevActive,
 		}
 	}
-	resp := hibernatePrepareResponse{Status: "prepared", GuestBuild: buildinfo.Commit}
+	resp := hibernatePrepareResponse{Status: "prepared", GuestBuild: buildinfo.Commit, CredentialResume: rt.hibernateResumeCredential() != nil}
 	if credential := rt.hibernateCredential(); credential != nil {
 		renewCtx, cancel := context.WithTimeout(ctx, hibernateRenewTimeout)
 		expiresAt, err := credential.RenewNow(renewCtx)
@@ -274,17 +336,17 @@ func (h *APIHandler) HandleInternalHibernateResumed(w http.ResponseWriter, r *ht
 		return
 	}
 	var request hibernateResumedRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32<<10))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil || request.HostUnixNano <= 0 {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid hibernate resumed request"})
 		return
 	}
-	status, resp := h.rt.resumeFromHibernate(r.Context(), time.Unix(0, request.HostUnixNano))
+	status, resp := h.rt.resumeFromHibernate(r.Context(), time.Unix(0, request.HostUnixNano), request.CredentialEnvelope)
 	writeAPIJSON(w, status, resp)
 }
 
-func (rt *Runtime) resumeFromHibernate(ctx context.Context, hostNow time.Time) (int, hibernateResumedResponse) {
+func (rt *Runtime) resumeFromHibernate(ctx context.Context, hostNow time.Time, envelope string) (int, hibernateResumedResponse) {
 	resp := hibernateResumedResponse{}
 	step := hostNow.Sub(time.Now())
 	if step >= hibernateClockStepThreshold || step <= -hibernateClockStepThreshold {
@@ -299,7 +361,32 @@ func (rt *Runtime) resumeFromHibernate(ctx context.Context, hostNow time.Time) (
 	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
 		transport.CloseIdleConnections()
 	}
-	if credential := rt.hibernateCredential(); credential != nil {
+	if envelope != "" {
+		// Re-credential (after the clock step: envelope and capability
+		// expiry checks read the wall clock). The frozen capability may be
+		// hours past expiry; the envelope is the proof, so it is not needed.
+		// Any failure keeps admission closed; the host kills and cold boots.
+		installer := rt.hibernateResumeCredential()
+		if installer == nil {
+			return http.StatusServiceUnavailable, hibernateResumedResponse{
+				Error: "hibernate: this guest cannot install a delivered credential", ClockStepMS: resp.ClockStepMS,
+			}
+		}
+		installCtx, cancel := context.WithTimeout(ctx, hibernateResumeCredentialTimeout)
+		expiresAt, err := installer.InstallResumeEnvelope(installCtx, envelope)
+		if err == nil {
+			err = rt.reconcileResumedCredential(installCtx)
+		}
+		cancel()
+		if err != nil {
+			return http.StatusServiceUnavailable, hibernateResumedResponse{
+				Error:       "hibernate: install delivered credential after resume: " + err.Error(),
+				ClockStepMS: resp.ClockStepMS,
+			}
+		}
+		resp.CapabilityExpiresAt = expiresAt.UTC()
+		resp.Credential = "installed"
+	} else if credential := rt.hibernateCredential(); credential != nil {
 		renewCtx, cancel := context.WithTimeout(ctx, hibernateRenewTimeout)
 		expiresAt, err := credential.RenewNow(renewCtx)
 		cancel()
@@ -310,10 +397,11 @@ func (rt *Runtime) resumeFromHibernate(ctx context.Context, hostNow time.Time) (
 			}
 		}
 		resp.CapabilityExpiresAt = expiresAt.UTC()
+		resp.Credential = "renewed"
 	}
 	rt.hibernate.lift()
 	resp.Status = "resumed"
-	log.Printf("agentcore: resumed from hibernate snapshot; clock stepped %dms; work admission open", resp.ClockStepMS)
+	log.Printf("agentcore: resumed from hibernate snapshot; clock stepped %dms; credential %s; work admission open", resp.ClockStepMS, resp.Credential)
 	return http.StatusOK, resp
 }
 

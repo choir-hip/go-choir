@@ -61,21 +61,7 @@ func (g *GuestCredentials) IssuanceProof() (commitment, token string, ok bool) {
 }
 
 func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, computerID, realizationID string) (*GuestCredentials, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encodedEnvelope))
-	if err != nil {
-		return nil, fmt.Errorf("guest credential: malformed bootstrap envelope")
-	}
-	var envelope platform.ComputerCredentialEnvelope
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&envelope); err != nil {
-		return nil, fmt.Errorf("guest credential: decode bootstrap envelope: %w", err)
-	}
-	canonical, err := computerevent.CanonicalJSON(envelope)
-	if err != nil || !bytes.Equal(canonical, raw) {
-		return nil, fmt.Errorf("guest credential: non-canonical bootstrap envelope")
-	}
-	publicKey, err := envelope.VerifyBootstrap(computerID, realizationID, time.Now().UTC())
+	raw, envelope, publicKey, err := verifyBootstrapEnvelope(encodedEnvelope, computerID, realizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,22 +70,57 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 		http: hostlink.NewClient(15 * time.Second), publicKey: publicKey,
 		keyID: envelope.SigningKeyID,
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, manager.baseURL+"/internal/computers/credentials/exchange", bytes.NewReader(raw))
+	result, expiresAt, err := exchangeBootstrapEnvelope(ctx, manager.http, manager.baseURL, raw)
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("Content-Type", "application/vnd.choir.computer-credential-envelope+json")
-	response, err := manager.http.Do(request)
+	manager.installExchangeLocked(envelope, result, expiresAt)
+	return manager, nil
+}
+
+// verifyBootstrapEnvelope decodes a base64url canonical envelope and verifies
+// it is signed and bound to this computer and realization and still valid.
+func verifyBootstrapEnvelope(encodedEnvelope, computerID, realizationID string) ([]byte, platform.ComputerCredentialEnvelope, ed25519.PublicKey, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encodedEnvelope))
 	if err != nil {
-		return nil, fmt.Errorf("guest credential: exchange: %w", err)
+		return nil, platform.ComputerCredentialEnvelope{}, nil, fmt.Errorf("guest credential: malformed bootstrap envelope")
+	}
+	var envelope platform.ComputerCredentialEnvelope
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&envelope); err != nil {
+		return nil, platform.ComputerCredentialEnvelope{}, nil, fmt.Errorf("guest credential: decode bootstrap envelope: %w", err)
+	}
+	canonical, err := computerevent.CanonicalJSON(envelope)
+	if err != nil || !bytes.Equal(canonical, raw) {
+		return nil, platform.ComputerCredentialEnvelope{}, nil, fmt.Errorf("guest credential: non-canonical bootstrap envelope")
+	}
+	publicKey, err := envelope.VerifyBootstrap(computerID, realizationID, time.Now().UTC())
+	if err != nil {
+		return nil, platform.ComputerCredentialEnvelope{}, nil, err
+	}
+	return raw, envelope, publicKey, nil
+}
+
+// exchangeBootstrapEnvelope trades a verified envelope for the capability
+// pair. The envelope is the proof: no bearer is sent.
+func exchangeBootstrapEnvelope(ctx context.Context, client *http.Client, baseURL string, raw []byte) (platform.CredentialExchangeResult, time.Time, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/internal/computers/credentials/exchange", bytes.NewReader(raw))
+	if err != nil {
+		return platform.CredentialExchangeResult{}, time.Time{}, err
+	}
+	request.Header.Set("Content-Type", "application/vnd.choir.computer-credential-envelope+json")
+	response, err := client.Do(request)
+	if err != nil {
+		return platform.CredentialExchangeResult{}, time.Time{}, fmt.Errorf("guest credential: exchange: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("guest credential: exchange refused")
+		return platform.CredentialExchangeResult{}, time.Time{}, fmt.Errorf("guest credential: exchange refused")
 	}
 	var result platform.CredentialExchangeResult
 	if err := json.NewDecoder(io.LimitReader(response.Body, 256<<10)).Decode(&result); err != nil {
-		return nil, fmt.Errorf("guest credential: decode exchange: %w", err)
+		return platform.CredentialExchangeResult{}, time.Time{}, fmt.Errorf("guest credential: decode exchange: %w", err)
 	}
 	expiresAt, err := capabilityExpiry(result.Capability)
 	var postRevocationExpiresAt time.Time
@@ -108,14 +129,74 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 		postRevocationExpiresAt, postRevocationErr = capabilityExpiry(result.PostRevocationCapability)
 	}
 	if err != nil || postRevocationErr != nil || (!postRevocationExpiresAt.IsZero() && !postRevocationExpiresAt.Equal(expiresAt)) {
-		return nil, fmt.Errorf("guest credential: invalid revocation handoff capability")
+		return platform.CredentialExchangeResult{}, time.Time{}, fmt.Errorf("guest credential: invalid revocation handoff capability")
 	}
-	manager.token, manager.postRevocationToken, manager.expiresAt = result.Capability, result.PostRevocationCapability, expiresAt
-	manager.issuanceToken, manager.issuanceCommitment, manager.issuanceExpiresAt = result.Capability, envelope.RequestCommitment, expiresAt
-	manager.pendingConsumption = &platform.CredentialConsumptionRequest{
+	return result, expiresAt, nil
+}
+
+// installExchangeLocked holds an exchanged capability pair and the pending
+// consumption of its envelope. Callers hold g.mu (or own g exclusively).
+func (g *GuestCredentials) installExchangeLocked(envelope platform.ComputerCredentialEnvelope, result platform.CredentialExchangeResult, expiresAt time.Time) {
+	g.token, g.postRevocationToken, g.expiresAt = result.Capability, result.PostRevocationCapability, expiresAt
+	g.issuanceToken, g.issuanceCommitment, g.issuanceExpiresAt = result.Capability, envelope.RequestCommitment, expiresAt
+	g.pendingConsumption = &platform.CredentialConsumptionRequest{
 		ComputerID: envelope.ComputerID, Nonce: envelope.Nonce, RequestCommitment: envelope.RequestCommitment,
 	}
-	return manager, nil
+}
+
+// InstallResumeEnvelope re-credentials a guest resumed from a memory snapshot
+// (S3, docs/reports/s3-snapshot-hibernate-design-2026-10-14.md "Re-credential
+// on resume"). The host delivers a fresh envelope for this same realization
+// over the host-only resumed call; the frozen capability may be long expired
+// and is never needed. It runs the boot protocol: verify the envelope against
+// this computer, realization and platform key, exchange it, then consume it.
+// On return the consumption receipt is pending: the caller appends it as
+// key_revoked (ReconcilePendingLifecycleReceipts), which advances the
+// credential revocation epoch and revokes the frozen capability, exactly as a
+// boot does. Any refusal before the exchange leaves the credentials unchanged.
+func (g *GuestCredentials) InstallResumeEnvelope(ctx context.Context, encodedEnvelope string) (time.Time, error) {
+	if g == nil {
+		return time.Time{}, fmt.Errorf("guest credential: unavailable")
+	}
+	g.mu.Lock()
+	raw, envelope, publicKey, err := verifyBootstrapEnvelope(encodedEnvelope, g.computerID, g.realizationID)
+	if err != nil {
+		g.mu.Unlock()
+		return time.Time{}, err
+	}
+	if envelope.SigningKeyID != g.keyID || !publicKey.Equal(g.publicKey) {
+		g.mu.Unlock()
+		return time.Time{}, fmt.Errorf("guest credential: resume envelope signed by another platform key; a new realization boot is required")
+	}
+	if g.pendingConsumption != nil || len(g.pendingLifecycle) != 0 || (g.postRevocationToken != "" && g.postRevocationToken == g.token) {
+		g.mu.Unlock()
+		return time.Time{}, fmt.Errorf("guest credential: a credential transition is unfinished; a new realization boot is required")
+	}
+	result, expiresAt, err := exchangeBootstrapEnvelope(ctx, g.http, g.baseURL, raw)
+	if err != nil {
+		g.mu.Unlock()
+		return time.Time{}, err
+	}
+	g.installExchangeLocked(envelope, result, expiresAt)
+	if g.recoveryHandoffPath != "" {
+		if err := g.writeRestartHandoffLocked(g.recoveryHandoffPath); err != nil {
+			g.mu.Unlock()
+			return time.Time{}, fmt.Errorf("guest credential: persist resumed recovery handoff: %w", err)
+		}
+	}
+	g.mu.Unlock()
+	if err := g.CompleteCredentialExchange(ctx); err != nil {
+		return time.Time{}, err
+	}
+	return expiresAt, nil
+}
+
+// ComputerID names the computer these credentials act for.
+func (g *GuestCredentials) ComputerID() string {
+	if g == nil {
+		return ""
+	}
+	return g.computerID
 }
 
 func (g *GuestCredentials) CompleteCredentialExchange(ctx context.Context) error {
