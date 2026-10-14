@@ -74,6 +74,18 @@ type fakeFirecrackerAPI struct {
 	memBytes  int
 	loadState string
 	loadMem   string
+	// root, when set, is the jail root: request paths are jail-relative and
+	// resolve under it, as they do for a jailed Firecracker.
+	root string
+	// loadFilesPresent records that both load paths existed at load time.
+	loadFilesPresent bool
+}
+
+func (f *fakeFirecrackerAPI) hostPath(p string) string {
+	if f.root == "" {
+		return p
+	}
+	return filepath.Join(f.root, p)
 }
 
 func (f *fakeFirecrackerAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -96,14 +108,17 @@ func (f *fakeFirecrackerAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/snapshot/create":
 		state, _ := body["snapshot_path"].(string)
 		mem, _ := body["mem_file_path"].(string)
-		_ = os.WriteFile(state, []byte("vmstate"), 0o644)
-		_ = os.WriteFile(mem, make([]byte, f.memBytes), 0o644)
+		_ = os.WriteFile(f.hostPath(state), []byte("vmstate"), 0o644)
+		_ = os.WriteFile(f.hostPath(mem), make([]byte, f.memBytes), 0o644)
 	case "/snapshot/load":
 		f.mu.Lock()
 		f.loadState, _ = body["snapshot_path"].(string)
 		if backend, ok := body["mem_backend"].(map[string]any); ok {
 			f.loadMem, _ = backend["backend_path"].(string)
 		}
+		_, stateErr := os.Stat(f.hostPath(f.loadState))
+		_, memErr := os.Stat(f.hostPath(f.loadMem))
+		f.loadFilesPresent = f.loadState != "" && f.loadMem != "" && stateErr == nil && memErr == nil
 		f.mu.Unlock()
 	}
 	w.WriteHeader(http.StatusNoContent)

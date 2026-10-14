@@ -134,9 +134,15 @@ func drainLegacyConsolePipe(fdPath, logPath string, maxBytes int64, generations 
 }
 
 // adoptConsole keeps a reattached VM's console safe: a legacy pipe gets a
-// reader, a file console gets its bound.
-func (m *Manager) adoptConsole(vmID string, pid int) {
+// reader, a file console gets its bound. A jailed VMM always writes a file
+// console, and probing its /proc/<pid>/fd would need ptrace rights across
+// uids that vmctl no longer holds.
+func (m *Manager) adoptConsole(vmID string, pid int, jailed bool) {
 	path := consoleLogPath(m.cfg.StateDir, vmID)
+	if jailed {
+		go watchConsoleLog(vmID, pid, path, nil)
+		return
+	}
 	drained, err := drainLegacyConsolePipe(fmt.Sprintf("/proc/%d/fd/1", pid), path, consoleLogMaxBytes, consoleLogGenerations)
 	if err != nil {
 		log.Printf("vmmanager: adopt console for VM %s (pid=%d): %v", vmID, pid, err)

@@ -207,6 +207,10 @@ type VMInstance struct {
 	// boot attempt (S0a). Persisted under the VM state dir on terminal
 	// observation; nil for instances reattached without a boot.
 	BootTimeline *BootTimeline
+
+	// confinement is how the running Firecracker was confined (jailer or
+	// direct); read from confinement.json on reattach.
+	confinement *ConfinementReceipt
 }
 
 // ManagerConfig holds the global configuration for the VM manager.
@@ -310,6 +314,10 @@ type ManagerConfig struct {
 	// SnapshotMaxAge bounds how long a snapshot stays resumable
 	// (VM_SNAPSHOT_MAX_AGE, default DefaultSnapshotMaxAge).
 	SnapshotMaxAge time.Duration
+
+	// Jailer runs each Firecracker under the Firecracker jailer (VMCTL_JAILER;
+	// off by default). See confinement.go.
+	Jailer JailerConfig
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -327,6 +335,7 @@ func DefaultManagerConfig() ManagerConfig {
 		HealthCheckTimeout:  3 * time.Second,
 		BootReadyTimeout:    20 * time.Second,
 		ReplayStallTimeout:  120 * time.Second,
+		Jailer:              defaultJailerConfig(),
 	}
 }
 
@@ -356,13 +365,25 @@ type Manager struct {
 	snapshotFallback map[string]string
 
 	// firecrackerStarter replaces the process start in tests; nil runs the
-	// real binary.
+	// real binary. A jailed launch passes the jailer's arguments.
 	firecrackerStarter func(vmID string, args []string) error
 
 	// hostNet runs ip/iptables for guest taps (hostfirewall.go); tests
 	// replace it. Reached through m.net().
 	hostNetOnce sync.Once
 	hostNet     *hostNet
+
+	// Jailer state (confinement.go). jailerHostErr is nil once Start has
+	// prepared the host for jailed launches; while it is set, every launch
+	// is direct and says why.
+	jailerMu      sync.RWMutex
+	jailerHostErr error
+	uidMu         sync.Mutex
+	cgroupRoot    string
+	// chownFn and fileOwnerFn are chown(2) and the owner lookup; tests that
+	// cannot change owners replace them.
+	chownFn     func(path string, uid, gid int) error
+	fileOwnerFn func(path string) (int, bool)
 }
 
 func (m *Manager) StateDir() string {
@@ -383,12 +404,19 @@ func NewManager(cfg ManagerConfig) *Manager {
 	if cfg.HostBasePort <= 0 {
 		cfg.HostBasePort = 9000
 	}
-	return &Manager{
-		cfg:      cfg,
-		vms:      make(map[string]*VMInstance),
-		vmOps:    make(map[string]*sync.Mutex),
-		nextPort: cfg.HostBasePort,
+	m := &Manager{
+		cfg:         cfg,
+		vms:         make(map[string]*VMInstance),
+		vmOps:       make(map[string]*sync.Mutex),
+		nextPort:    cfg.HostBasePort,
+		cgroupRoot:  defaultCgroupRoot,
+		chownFn:     os.Lchown,
+		fileOwnerFn: defaultFileOwner,
 	}
+	if cfg.Jailer.Enabled {
+		m.jailerHostErr = errJailerHostNotPrepared
+	}
+	return m
 }
 
 func (m *Manager) lockVMOperation(vmID string) func() {
@@ -546,8 +574,20 @@ func (m *Manager) Start() {
 	// the guest forward default-deny (hostfirewall.go).
 	m.net().reconcileAtStart()
 	m.loadSnapshotReservations()
+	if m.cfg.Jailer.Enabled {
+		err := m.prepareJailerHost()
+		m.jailerMu.Lock()
+		m.jailerHostErr = err
+		m.jailerMu.Unlock()
+		if err != nil {
+			log.Printf("vmmanager: JAILER UNAVAILABLE: %v; every VM launches direct (unconfined) until this is fixed", err)
+		} else {
+			log.Printf("vmmanager: jailer ready: bin=%s chroot_base=%s uids=%d+%d cgroup_parent=%s only=%v",
+				m.cfg.Jailer.BinPath, m.jailChrootBase(), m.cfg.Jailer.UIDBase, m.cfg.Jailer.UIDCount, m.cfg.Jailer.CgroupParent, m.cfg.Jailer.Only)
+		}
+	}
 	go m.healthCheckLoop()
-	log.Printf("vmmanager: started with state_dir=%s base_port=%d hibernate_mode=%s", m.cfg.StateDir, m.cfg.HostBasePort, m.hibernateMode())
+	log.Printf("vmmanager: started with state_dir=%s base_port=%d hibernate_mode=%s jailer=%t", m.cfg.StateDir, m.cfg.HostBasePort, m.hibernateMode(), m.cfg.Jailer.Enabled)
 }
 
 // Stop shuts down all managed VMs and stops the health checker.
@@ -871,7 +911,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	m.vms[cfg.VMID] = inst
 
 	// Launch Firecracker.
-	if err := m.launchFirecracker(cfg.VMID, fcConfig, hostPort, cfg.GuestPort); err != nil {
+	if err := m.launchFirecracker(cfg, fcConfig, hostPort); err != nil {
 		inst.State = StateFailed
 		return nil, fmt.Errorf("launch firecracker for VM %s: %w", cfg.VMID, err)
 	}
@@ -1098,7 +1138,7 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 
 	fcConfig := m.buildFirecrackerConfig(inst.Config, hostPort)
 
-	if err := m.launchFirecracker(vmID, fcConfig, hostPort, inst.Config.GuestPort); err != nil {
+	if err := m.launchFirecracker(inst.Config, fcConfig, hostPort); err != nil {
 		inst.State = StateFailed
 		return nil, fmt.Errorf("resume firecracker for VM %s: %w", vmID, err)
 	}
@@ -1245,12 +1285,13 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	if healthy {
 		inst.LastHealthyAt = now
 	}
+	inst.confinement = m.loadConfinement(vmID)
 	m.vms[vmID] = inst
 	m.reserveHostURLLocked(hostURL)
 	m.mu.Unlock()
 
 	m.reconcileTapIsolation(vmID, hostURL)
-	m.adoptConsole(vmID, pid)
+	m.adoptConsole(vmID, pid, inst.confinement.jailed())
 	log.Printf("vmmanager: reattached VM %s (host=%s pid=%d epoch=%d)", vmID, hostURL, pid, epoch)
 	return inst, nil
 }
@@ -1334,6 +1375,12 @@ func (m *Manager) DestroyVMState(vmID string) error {
 
 	if len(vmID) >= 8 {
 		m.deleteTapDevice(tapNameForVMID(vmID))
+	}
+	if validJailerID(vmID) {
+		if err := os.RemoveAll(m.jailDir(vmID)); err != nil {
+			return fmt.Errorf("destroy jail of VM %s: %w", vmID, err)
+		}
+		m.removeCgroupLeaf(vmID)
 	}
 	stateRoot := filepath.Clean(m.cfg.StateDir)
 	stateDir := filepath.Clean(filepath.Join(stateRoot, vmID))
@@ -1905,11 +1952,31 @@ func consoleLogPath(stateDir, vmID string) string {
 	return filepath.Join(stateDir, vmID, consoleLogName)
 }
 
-// launchFirecracker starts a Firecracker process for the given VM.
+// launchFirecracker starts a Firecracker process for the VM cfg describes.
 // hostPort is the host port assigned for this VM, used for setting up
-// networking. guestPort is the port the guest autoputer listens on.
-func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}, hostPort int, guestPort int) (err error) {
-	// Write the config to a temp file.
+// networking. The confinement (jailer or direct) is decided here, per launch.
+func (m *Manager) launchFirecracker(cfg VMConfig, fcConfig map[string]interface{}, hostPort int) (err error) {
+	vmID := cfg.VMID
+	mode, reason := m.decideConfinement(cfg)
+	receipt := &ConfinementReceipt{Mode: mode, Reason: reason}
+	var files []jailFile
+	if mode == ConfinementJailer {
+		jailConfig, jailFiles, err := rewriteFirecrackerConfigForJail(fcConfig)
+		if err != nil {
+			return fmt.Errorf("jail launch config: %w", err)
+		}
+		fcConfig, files = jailConfig, jailFiles
+		uid, err := m.allocateVMMUID(vmID)
+		if err != nil {
+			return err
+		}
+		receipt.UID, receipt.GID = uid, uid
+		receipt.JailRoot = m.jailRoot(vmID)
+		receipt.Cgroup = m.cgroupLeafRel(vmID)
+	}
+
+	// Write the config. A jailed launch writes the same bytes into the jail;
+	// this host copy is what the snapshot launch-config hash reads.
 	configData, err := json.Marshal(fcConfig)
 	if err != nil {
 		return fmt.Errorf("marshal firecracker config: %w", err)
@@ -1924,14 +1991,30 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 	if err := os.WriteFile(configPath, configData, 0o644); err != nil {
 		return fmt.Errorf("write firecracker config: %w", err)
 	}
+	m.recordConfinementLocked(vmID, receipt)
 
-	m.prepareVMNetwork(vmID, hostPort, guestPort)
+	networkReady := false
 	defer func() {
-		if err != nil {
+		if err != nil && networkReady {
 			// The network was prepared for a process that never started.
 			m.deleteTapDevice(tapNameForVMID(vmID))
 		}
 	}()
+
+	if receipt.jailed() {
+		notes, jailErr := m.prepareJail(vmID, receipt.UID, files, configData)
+		if jailErr != nil {
+			return fmt.Errorf("prepare jail for VM %s: %w", vmID, jailErr)
+		}
+		receipt.JailFiles = notes
+		m.prepareVMNetwork(vmID, hostPort, cfg.GuestPort, receipt.UID)
+		networkReady = true
+		return m.startJailedFirecracker(vmID, receipt, jailFirecrackerLaunchArgs(m.hibernateMode() == HibernateModeSnapshot))
+	}
+
+	m.reclaimDirectOwnership(vmID)
+	m.prepareVMNetwork(vmID, hostPort, cfg.GuestPort, -1)
+	networkReady = true
 
 	// Build the Firecracker command.
 	// --no-api disables the Firecracker API socket (kill hibernate mode);
@@ -1948,12 +2031,14 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 // prepareVMNetwork creates the VM's tap and host-side routing for its /30
 // subnet. Boot and snapshot restore share it: a restored guest keeps the IP
 // and MAC it had, so the tap must be exactly the one it was launched with.
-func (m *Manager) prepareVMNetwork(vmID string, hostPort int, guestPort int) {
+// tapOwner >= 0 creates the tap owned by that uid/gid, so a jailed VMM with
+// no capabilities can attach to it.
+func (m *Manager) prepareVMNetwork(vmID string, hostPort int, guestPort int, tapOwner int) {
 	// Create the tap device for VM networking.
 	// Firecracker requires the tap device to exist before launching.
 	// The tap name comes from the config's host_dev_name field.
 	tapName := tapNameForVMID(vmID)
-	if err := m.createTapDevice(tapName); err != nil {
+	if err := m.createTapDevice(tapName, tapOwner); err != nil {
 		log.Printf("vmmanager: warning: could not create tap device %s: %v (may already exist)", tapName, err)
 	}
 
@@ -1993,8 +2078,22 @@ func (m *Manager) startFirecrackerProcess(vmID string, args []string) error {
 	cmd := exec.Command(bin, args...)
 	cmd.Stdout = console
 	cmd.Stderr = os.Stderr
+	// Nothing of vmctl's environment (it holds VMCTL_ROUTE_DSN) reaches the
+	// VMM.
+	cmd.Env = []string{}
 
-	if err := cmd.Start(); err != nil {
+	// The launch thread cuts the bounding set to CAP_NET_ADMIN (the VMM
+	// attaches to an ownerless tap) before the fork: vmctl's own set is wider
+	// because it runs the jailer.
+	report, err := startWithThreadPolicy(cmd, threadPolicy{
+		keepCaps:     directKeepCaps,
+		tolerateCaps: legacyCaps,
+		speculation:  m.cfg.Jailer.SpeculationDirect,
+	})
+	if inst, ok := m.vms[vmID]; ok && inst.confinement != nil && !inst.confinement.jailed() {
+		inst.confinement.LaunchThread = &report
+	}
+	if err != nil {
 		_ = console.Close()
 		return fmt.Errorf("start firecracker: %w", err)
 	}
@@ -2013,6 +2112,10 @@ func (m *Manager) startFirecrackerProcess(vmID string, args []string) error {
 		inst.done = make(chan struct{})
 		if err := m.savePID(vmID, inst.PID); err != nil {
 			log.Printf("vmmanager: warning: could not save pid for VM %s: %v", vmID, err)
+		}
+		if inst.confinement != nil {
+			inst.confinement.PID = inst.PID
+			m.recordConfinementLocked(vmID, inst.confinement)
 		}
 	}
 
@@ -2061,6 +2164,15 @@ func (m *Manager) killFirecrackerProcess(inst *VMInstance, cause string) {
 		killedPrimaryPID = inst.PID
 		if proc, err := os.FindProcess(inst.PID); err == nil {
 			m.killProcessWithReceipt(proc, receipt)
+		}
+		// A jailed Firecracker is not vmctl's child; its pidfd watcher closes
+		// done when it is gone. Reattached instances have no done channel.
+		if inst.done != nil {
+			select {
+			case <-inst.done:
+			case <-time.After(5 * time.Second):
+				log.Printf("vmmanager: timeout waiting for VM process %d to exit", inst.PID)
+			}
 		}
 	}
 	inst.PID = 0
@@ -2256,7 +2368,7 @@ func firecrackerCmdlineBytesMatchVM(data []byte, vmID string) bool {
 		return false
 	}
 	args := processCmdlineArgs(data)
-	if len(args) == 0 {
+	if len(args) == 0 || isJailerCmdline(args) {
 		return false
 	}
 	hasFirecracker := false
@@ -2274,6 +2386,21 @@ func firecrackerCmdlineBytesMatchVM(data []byte, vmID string) bool {
 			return true
 		}
 		if strings.TrimPrefix(arg, "--id=") != arg && strings.TrimPrefix(arg, "--id=") == vmID {
+			return true
+		}
+	}
+	return false
+}
+
+// isJailerCmdline reports the jailer's own process: its command line names
+// firecracker (--exec-file) and carries --id, but it is not the VM's
+// Firecracker and must never be adopted, reaped or counted as it.
+func isJailerCmdline(args []string) bool {
+	if len(args) > 0 && strings.Contains(filepath.Base(args[0]), "jailer") {
+		return true
+	}
+	for _, arg := range args {
+		if arg == "--exec-file" || strings.HasPrefix(arg, "--exec-file=") {
 			return true
 		}
 	}
@@ -3119,16 +3246,27 @@ func syncDirectory(path string) error {
 // and the guest is expected to configure 10.200.X.2 as its IP. NAT
 // masquerading is set up so the guest can reach the host's localhost
 // services (gateway, etc.).
-func (m *Manager) createTapDevice(name string) error {
+//
+// owner >= 0 creates the tap owned by that uid/gid: a jailed VMM holds no
+// capability and can attach only to a tap its uid owns.
+func (m *Manager) createTapDevice(name string, owner int) error {
 	h := m.net()
 
 	// Check if the tap device already exists.
 	if _, err := h.ip("link", "show", name); err == nil {
-		return nil // already exists
+		if owner < 0 {
+			return nil // already exists
+		}
+		// The owner of an existing tap cannot be changed: recreate it.
+		m.deleteTapDevice(name)
 	}
 
 	// Create the tap device.
-	if _, err := h.ip("tuntap", "add", "dev", name, "mode", "tap"); err != nil {
+	createArgs := []string{"tuntap", "add", "dev", name, "mode", "tap"}
+	if owner >= 0 {
+		createArgs = append(createArgs, "user", strconv.Itoa(owner), "group", strconv.Itoa(owner))
+	}
+	if _, err := h.ip(createArgs...); err != nil {
 		return fmt.Errorf("create tap device %s: %w", name, err)
 	}
 

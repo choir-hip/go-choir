@@ -108,7 +108,17 @@ func (m *Manager) hibernateVMSnapshot(vmID string) error {
 // reason is empty on success; otherwise it names why the kill path must be
 // used, and stopped reports whether Firecracker was already stopped.
 func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl *BootTimeline, snap *SnapshotTimeline) (*SnapshotMeta, bool, string, error) {
+	m.mu.Lock()
+	var conf *ConfinementReceipt
+	if inst := m.vms[vmID]; inst != nil {
+		conf = inst.confinement.clone()
+	}
+	m.mu.Unlock()
+	jailed := conf.jailed()
 	sock := m.apiSocketPath(vmID)
+	if jailed {
+		sock = m.jailAPISocketHostPath(vmID)
+	}
 	if _, err := os.Stat(sock); err != nil {
 		return nil, false, snapshotReasonNoAPISocket, err
 	}
@@ -167,6 +177,23 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 	}
 	statePath := filepath.Join(partial, snapshotStateName)
 	memPath := filepath.Join(partial, snapshotMemName)
+	// A jailed VMM writes inside its jail, to a capture dir its uid owns;
+	// the files move to the host partial dir once it has stopped.
+	jailPartial := ""
+	if jailed {
+		jailPartial = filepath.Join(m.jailRoot(vmID), snapshotPartialDirName)
+		if err := os.RemoveAll(jailPartial); err != nil {
+			return nil, false, snapshotReasonCreateFailed, err
+		}
+		if err := os.Mkdir(jailPartial, 0o700); err != nil {
+			return nil, false, snapshotReasonCreateFailed, err
+		}
+		if err := m.chownFn(jailPartial, conf.UID, conf.GID); err != nil {
+			return nil, false, snapshotReasonCreateFailed, err
+		}
+		statePath = "/" + snapshotPartialDirName + "/" + snapshotStateName
+		memPath = "/" + snapshotPartialDirName + "/" + snapshotMemName
+	}
 	createStart := time.Now()
 	createCtx, cancel := context.WithTimeout(context.Background(), snapshotCreateTimeout)
 	err = api.CreateFullSnapshot(createCtx, statePath, memPath)
@@ -188,7 +215,22 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 	m.mu.Unlock()
 	tl.mark("firecracker_stopped")
 
-	meta, err := m.commitSnapshot(vmID, cfg, hostURL, hostPort, launchConfig, prepared, snap)
+	if jailed {
+		for _, name := range []string{snapshotStateName, snapshotMemName} {
+			from, to := filepath.Join(jailPartial, name), filepath.Join(partial, name)
+			if err := os.Rename(from, to); err != nil {
+				return nil, true, snapshotReasonCommitFailed, fmt.Errorf("move jailed snapshot %s out of the jail: %w", name, err)
+			}
+			// Owned by the VMM uid only, as Firecracker created it.
+			if err := m.chownFn(to, conf.UID, conf.GID); err != nil {
+				return nil, true, snapshotReasonCommitFailed, err
+			}
+		}
+		_ = os.Remove(jailPartial)
+		tl.mark("snapshot_moved_from_jail")
+	}
+
+	meta, err := m.commitSnapshot(vmID, cfg, hostURL, hostPort, launchConfig, prepared, snap, conf)
 	if err != nil {
 		return nil, true, snapshotReasonCommitFailed, err
 	}
@@ -200,7 +242,7 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 // disk identities taken after Firecracker stopped, metadata, then one rename
 // of snapshot.partial/ to snapshot/. An interrupted commit leaves only the
 // partial dir, which is never loaded.
-func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, hostPort int, launchConfig []byte, prepared guestHibernatePrepareResponse, snap *SnapshotTimeline) (*SnapshotMeta, error) {
+func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, hostPort int, launchConfig []byte, prepared guestHibernatePrepareResponse, snap *SnapshotTimeline, conf *ConfinementReceipt) (*SnapshotMeta, error) {
 	partial := m.snapshotPartialDir(vmID)
 	for _, name := range []string{snapshotStateName, snapshotMemName} {
 		path := filepath.Join(partial, name)
@@ -248,6 +290,11 @@ func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, host
 		FenceMS:            snap.FenceMS,
 		PauseMS:            snap.PauseMS,
 		SnapshotMS:         snap.SnapshotMS,
+		Confinement:        ConfinementDirect,
+	}
+	if conf.jailed() {
+		meta.Confinement = ConfinementJailer
+		meta.VMMUID = conf.UID
 	}
 	if meta.FirecrackerVersion == "" || meta.HostKernelRelease == "" {
 		return nil, fmt.Errorf("firecracker version or host kernel release unknown")
@@ -435,14 +482,50 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 		return fallback(reason, err)
 	}
 
-	sock, ok := m.prepareAPISocket(vmID)
-	if !ok {
-		return restoreFailed(snapshotReasonSpawnFailed, fmt.Errorf("API socket unavailable"))
+	// Validation proved the snapshot's confinement is the one this restore
+	// uses. A jailed restore rebuilds the jail with the launch's layout (the
+	// vmstate names jail paths) and links the snapshot files into it.
+	mode, modeReason := m.decideConfinement(cfg)
+	receipt := &ConfinementReceipt{Mode: mode, Reason: modeReason}
+	sock := ""
+	statePath, memPath := filepath.Join(dir, snapshotStateName), filepath.Join(dir, snapshotMemName)
+	if receipt.jailed() {
+		receipt.UID, receipt.GID = meta.VMMUID, meta.VMMUID
+		receipt.JailRoot = m.jailRoot(vmID)
+		receipt.Cgroup = m.cgroupLeafRel(vmID)
+		_, files, err := rewriteFirecrackerConfigForJail(m.buildFirecrackerConfig(cfg, meta.HostPort))
+		if err != nil {
+			return restoreFailed(snapshotReasonSpawnFailed, err)
+		}
+		notes, err := m.prepareJail(vmID, receipt.UID, files, nil)
+		if err != nil {
+			return restoreFailed(snapshotReasonSpawnFailed, err)
+		}
+		receipt.JailFiles = notes
+		if err := m.linkSnapshotIntoJail(vmID, dir, receipt.UID); err != nil {
+			return restoreFailed(snapshotReasonSpawnFailed, err)
+		}
+		sock = m.jailAPISocketHostPath(vmID)
+		statePath = "/" + snapshotDirName + "/" + snapshotStateName
+		memPath = "/" + snapshotDirName + "/" + snapshotMemName
+		m.mu.Lock()
+		m.recordConfinementLocked(vmID, receipt)
+		m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort, receipt.UID)
+		err = m.startJailedFirecracker(vmID, receipt, jailFirecrackerRestoreArgs())
+		m.mu.Unlock()
+	} else {
+		var ok bool
+		sock, ok = m.prepareAPISocket(vmID)
+		if !ok {
+			return restoreFailed(snapshotReasonSpawnFailed, fmt.Errorf("API socket unavailable"))
+		}
+		m.mu.Lock()
+		m.recordConfinementLocked(vmID, receipt)
+		m.reclaimDirectOwnership(vmID)
+		m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort, -1)
+		err = m.startFirecrackerProcess(vmID, firecrackerRestoreArgs(vmID, sock))
+		m.mu.Unlock()
 	}
-	m.mu.Lock()
-	m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort)
-	err = m.startFirecrackerProcess(vmID, firecrackerRestoreArgs(vmID, sock))
-	m.mu.Unlock()
 	if err != nil {
 		return restoreFailed(snapshotReasonSpawnFailed, err)
 	}
@@ -457,7 +540,7 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 	}
 	loadStart := time.Now()
 	loadCtx, cancel := context.WithTimeout(context.Background(), snapshotLoadTimeout)
-	err = api.LoadSnapshot(loadCtx, filepath.Join(dir, snapshotStateName), filepath.Join(dir, snapshotMemName))
+	err = api.LoadSnapshot(loadCtx, statePath, memPath)
 	cancel()
 	snap.LoadMS = time.Since(loadStart).Milliseconds()
 	if err != nil {

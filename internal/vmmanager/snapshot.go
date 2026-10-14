@@ -112,6 +112,10 @@ const (
 	snapshotReasonGuestResumed     = "guest_resumed_failed"
 	snapshotReasonHealthFailed     = "health_failed"
 	snapshotReasonColdBoot         = "cold_boot_discarded"
+	// snapshotReasonConfinement refuses a snapshot taken under another
+	// confinement (jailer vs direct) or another VMM uid: no mixed-mode
+	// resume (VMM jailer slice 1, failure item 15).
+	snapshotReasonConfinement = "confinement_mismatch"
 )
 
 // Credential paths of a snapshot resume, recorded on the wake timeline.
@@ -195,6 +199,19 @@ type SnapshotMeta struct {
 	SnapshotMS      int64     `json:"snapshot_ms"`
 	Consumed        bool      `json:"consumed"`
 	ConsumedAt      time.Time `json:"consumed_at,omitempty"`
+	// Confinement is the capturing VMM's confinement (direct or jailer);
+	// empty in snapshots from before the jailer, which were direct. VMMUID is
+	// the jailed VMM's uid, which owns the snapshot files.
+	Confinement string `json:"confinement,omitempty"`
+	VMMUID      int    `json:"vmm_uid,omitempty"`
+}
+
+// snapshotConfinement is the confinement a snapshot was captured under.
+func (meta *SnapshotMeta) snapshotConfinement() string {
+	if meta.Confinement == "" {
+		return ConfinementDirect
+	}
+	return meta.Confinement
 }
 
 // SnapshotTimeline is the S3 section of a hibernate or wake timeline.
@@ -434,7 +451,38 @@ func (m *Manager) expectedLaunchConfig(meta *SnapshotMeta, expect VMConfig) (VMC
 	cfg.RecoveryReplayOnly = false
 	m.applyLaunchDefaults(&cfg)
 	cfg.GatewayToken = m.resolveGatewayToken(cfg)
-	return cfg, m.buildFirecrackerConfig(cfg, meta.HostPort)
+	fcConfig := m.buildFirecrackerConfig(cfg, meta.HostPort)
+	// A jailed launch hashes its jail-path config, so the hash matches only
+	// a snapshot taken under the same confinement.
+	if mode, _ := m.decideConfinement(cfg); mode == ConfinementJailer {
+		if jailConfig, _, err := rewriteFirecrackerConfigForJail(fcConfig); err == nil {
+			fcConfig = jailConfig
+		}
+	}
+	return cfg, fcConfig
+}
+
+// snapshotConfinementMismatch refuses a snapshot whose confinement is not
+// the one the restore would use, or whose files another uid owns.
+func (m *Manager) snapshotConfinementMismatch(dir string, meta *SnapshotMeta, cfg VMConfig) bool {
+	want, _ := m.decideConfinement(cfg)
+	if want != meta.snapshotConfinement() {
+		return true
+	}
+	if want != ConfinementJailer {
+		return false
+	}
+	uid, ok := m.readVMMUID(meta.VMID)
+	if !ok || uid != meta.VMMUID {
+		return true
+	}
+	for _, name := range []string{snapshotStateName, snapshotMemName} {
+		owner, ok := m.fileOwnerFn(filepath.Join(dir, name))
+		if !ok || owner != uid {
+			return true
+		}
+	}
+	return false
 }
 
 // snapshotValidation carries the facts a validation compares against.
@@ -483,7 +531,10 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 	if meta.HostKernelRelease == "" || meta.HostKernelRelease != v.HostKernelRelease {
 		return snapshotReasonHostKernel
 	}
-	_, fcConfig := m.expectedLaunchConfig(meta, v.Expect)
+	expectCfg, fcConfig := m.expectedLaunchConfig(meta, v.Expect)
+	if m.snapshotConfinementMismatch(dir, meta, expectCfg) {
+		return snapshotReasonConfinement
+	}
 	hash, err := launchConfigHash(fcConfig)
 	if err != nil || hash != meta.LaunchConfigSHA256 {
 		return snapshotReasonLaunchConfig
@@ -534,6 +585,7 @@ func (m *Manager) discardSnapshotFiles(vmID string) bool {
 			removed = true
 		}
 	}
+	m.removeJailSnapshotLinks(vmID)
 	m.releaseSnapshotPort(vmID)
 	return removed
 }

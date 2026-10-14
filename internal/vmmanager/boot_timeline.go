@@ -87,7 +87,22 @@ type BootTimeline struct {
 	// and the outcome (snapshot | kill | fallback_cold) with its reason.
 	Snapshot *SnapshotTimeline `json:"snapshot,omitempty"`
 
+	// Confinement is how this launch confined its VMM (jailer or direct, and
+	// why); see confinement.go.
+	Confinement *ConfinementReceipt `json:"confinement,omitempty"`
+
 	start time.Time
+}
+
+// setConfinement records the launch's confinement receipt (a copy, so later
+// changes to the caller's receipt never race a marshal).
+func (t *BootTimeline) setConfinement(receipt *ConfinementReceipt) {
+	if t == nil {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.Confinement = receipt
 }
 
 // bootTimelineJSON is the marshaling view of BootTimeline: identical layout,

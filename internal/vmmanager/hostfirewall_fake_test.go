@@ -126,7 +126,7 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 		val string
 		set bool
 	}
-	var s, d, in, out, proto, dport, comment, target, toDest opt
+	var s, d, in, out, proto, dport, uidOwner, comment, target, toDest opt
 	neg := false
 	for i := 0; i < len(spec); i++ {
 		tok := spec[i]
@@ -154,12 +154,14 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 			dst = &dport
 		case "--comment":
 			dst = &comment
+		case "--uid-owner":
+			dst = &uidOwner
 		case "-j":
 			dst = &target
 		case "--to-destination":
 			dst = &toDest
 		case "-m":
-			if val != "tcp" && val != "comment" {
+			if val != "tcp" && val != "comment" && val != "owner" {
 				return nil, false
 			}
 			i++
@@ -193,6 +195,10 @@ func normalizeFakeSpec(spec []string) ([]string, bool) {
 	if dport.set {
 		outFields = append(outFields, "-m", "tcp")
 		add(dport, "--dport")
+	}
+	if uidOwner.set {
+		outFields = append(outFields, "-m", "owner")
+		add(uidOwner, "--uid-owner")
 	}
 	if comment.set {
 		outFields = append(outFields, "-m", "comment")

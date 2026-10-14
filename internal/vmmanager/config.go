@@ -5,6 +5,7 @@ package vmmanager
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -127,6 +128,8 @@ func LoadConfigFromEnv() ManagerConfig {
 		}
 	}
 
+	cfg.Jailer = loadJailerConfigFromEnv(cfg.FirecrackerBinPath)
+
 	if v := os.Getenv("VM_SOURCE_SEED_REPO"); v != "" {
 		cfg.SourceSeedRepoPath = strings.TrimSpace(v)
 	} else if _, err := os.Stat("/opt/go-choir/.git"); err == nil {
@@ -138,6 +141,63 @@ func LoadConfigFromEnv() ManagerConfig {
 	}
 
 	return cfg
+}
+
+// loadJailerConfigFromEnv reads the VMM jailer flag (slice 1). Rollback is
+// VMCTL_JAILER=off (the default): new launches are direct again.
+//
+//	VMCTL_JAILER=off|on             run each Firecracker under the jailer
+//	VMCTL_JAILER_ONLY=a,b           only these VM ids or computer ids
+//	VM_JAILER_BIN                   jailer binary (default: beside firecracker)
+//	VMCTL_JAILER_CHROOT_BASE        default <VM_STATE_DIR>/.jail
+//	VMCTL_JAILER_UID_BASE/_COUNT    per-VM uid range (900000 + 4096)
+//	VMCTL_JAILER_CGROUP_PARENT      VMs' parent cgroup (default: derived)
+//	VMCTL_JAILER_PIDS_MAX           pids.max per VM (default 128; 0 omits)
+//	VMCTL_JAILER_CPU_WEIGHT         cpu.weight per VM (default 100; 0 omits)
+//	VMCTL_VMM_SPECULATION_BARRIERS  also force barriers on direct launches
+func loadJailerConfigFromEnv(firecrackerBin string) JailerConfig {
+	j := defaultJailerConfig()
+	j.Enabled = envFlagOn("VMCTL_JAILER")
+	for _, id := range strings.Split(os.Getenv("VMCTL_JAILER_ONLY"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			j.Only = append(j.Only, id)
+		}
+	}
+	j.BinPath = "jailer"
+	if dir := filepath.Dir(firecrackerBin); dir != "." && dir != "" {
+		j.BinPath = filepath.Join(dir, "jailer")
+	}
+	if v := strings.TrimSpace(os.Getenv("VM_JAILER_BIN")); v != "" {
+		j.BinPath = v
+	}
+	if v := strings.TrimSpace(os.Getenv("VMCTL_JAILER_CHROOT_BASE")); v != "" {
+		j.ChrootBase = filepath.Clean(v)
+	}
+	if v := strings.Trim(strings.TrimSpace(os.Getenv("VMCTL_JAILER_CGROUP_PARENT")), "/"); v != "" {
+		j.CgroupParent = filepath.Clean(v)
+	}
+	for name, dst := range map[string]*int{
+		"VMCTL_JAILER_UID_BASE":   &j.UIDBase,
+		"VMCTL_JAILER_UID_COUNT":  &j.UIDCount,
+		"VMCTL_JAILER_PIDS_MAX":   &j.PidsMax,
+		"VMCTL_JAILER_CPU_WEIGHT": &j.CPUWeight,
+	} {
+		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+				*dst = n
+			}
+		}
+	}
+	j.SpeculationDirect = envFlagOn("VMCTL_VMM_SPECULATION_BARRIERS")
+	return j
+}
+
+func envFlagOn(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(name))) {
+	case "1", "true", "on", "yes":
+		return true
+	}
+	return false
 }
 
 // Validate checks that the manager configuration is usable for

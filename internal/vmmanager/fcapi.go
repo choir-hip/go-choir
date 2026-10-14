@@ -24,8 +24,9 @@ type fcAPIClient struct {
 func newFCAPIClient(sock string) *fcAPIClient {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", sock)
+			// A jailed VMM's socket lives deep in its jail; the dialer
+			// handles paths longer than sun_path.
+			return dialUnixSocket(ctx, sock)
 		},
 		DisableKeepAlives: true,
 	}

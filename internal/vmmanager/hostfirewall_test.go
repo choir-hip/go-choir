@@ -537,7 +537,7 @@ func TestLaunchFailureTearsDownTapNetwork(t *testing.T) {
 	m.firecrackerStarter = func(string, []string) error { return fmt.Errorf("spawn refused") }
 	vmID := "vm-launch-failure"
 	tap := tapNameForVMID(vmID)
-	if err := m.launchFirecracker(vmID, map[string]interface{}{}, 9300, 8085); err == nil {
+	if err := m.launchFirecracker(VMConfig{VMID: vmID, GuestPort: 8085}, map[string]interface{}{}, 9300); err == nil {
 		t.Fatal("launch succeeded with a failing starter")
 	}
 	if ip.has(tap) {
@@ -557,7 +557,7 @@ func TestFirecrackerExitTearsDownOnlyItsOwnNetwork(t *testing.T) {
 		m := NewManager(ManagerConfig{StateDir: t.TempDir(), HostBasePort: 9000})
 		m.hostNet = newFakeHostNet(t, ipt, ip)
 		vmID := "vm-exit-teardown"
-		m.prepareVMNetwork(vmID, 9301, 8085)
+		m.prepareVMNetwork(vmID, 9301, 8085, -1)
 		cmd := &exec.Cmd{}
 		inst := &VMInstance{Config: VMConfig{VMID: vmID}, cmd: cmd, State: StateRunning}
 		m.vms[vmID] = inst
