@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // SchemaDDL creates the og_objects and og_edges tables if they do not
@@ -147,57 +149,202 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 	return nil
 }
 
-// metadataIndexColumns maps the three hot metadata fields (measured under
-// drain: JSON_EXTRACT full scans at ~1.4s/call) to generated columns so
-// ListObjectsByMetadata resolves them as index seeks. Column names are
-// stable identifiers, not part of any wire protocol.
-var metadataIndexColumns = []struct {
+// commitmentRecordKind is the object kind of the addressed-record ledger
+// (internal/store inbox.go). Its inbox, conversation and claim reads are the
+// hot scans the record-scoped generated columns below serve
+// (docs/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md).
+const commitmentRecordKind = ObjectKind("choir.commitment_record")
+
+// generatedColumnMaxChars bounds the record-scoped text columns. A VARCHAR
+// generated column refuses the insert of a longer value, so they hold
+// LEFT(value, 255), and a lookup value of 255 characters or more keeps the
+// JSON path: below that length, LEFT(x) = v exactly when x = v.
+const generatedColumnMaxChars = 255
+
+// metadataIndexColumn is one generated column over a metadata field that an
+// equality lookup (ListObjectsByMetadata, ListObjectsByMetadataPage) can use
+// instead of evaluating JSON_EXTRACT on every row of the kind.
+type metadataIndexColumn struct {
 	Field  string // JSON path leaf under metadata
 	Column string // generated column name
-}{
-	{"run_id", "og_meta_run_id"},
-	{"trajectory_id", "og_meta_trajectory_id"},
-	{"channel_id", "og_meta_channel_id"},
+	// Kind restricts the column to one object kind: the expression yields
+	// NULL for every other kind, and lookups of other kinds keep the JSON
+	// path. Empty means every kind.
+	Kind ObjectKind
+	// MaxChars is the LEFT() bound of the column; 0 means the column holds
+	// the whole value (a longer value refuses the insert, so none exist).
+	MaxChars int
+	// KeysetIndex marks an equality index of (object_kind, column,
+	// canonical_id): a canonical-ID keyset page is then read in index order
+	// with no sort. The legacy columns are indexed (object_kind, column,
+	// updated_at) for the newest-first lookups.
+	KeysetIndex bool
+}
+
+// metadataIndexColumns maps hot metadata fields to generated columns so
+// lookups resolve as index seeks. The first three (measured under drain:
+// JSON_EXTRACT full scans at ~1.4s/call) cover every kind. All are STORED:
+// with an indexed VIRTUAL generated column, the embedded engine panics on
+// INSERT ... ON DUPLICATE KEY UPDATE (index out of range in the secondary
+// index writer; every og_objects write is that upsert). Column names are
+// stable identifiers, not part of any wire protocol.
+var metadataIndexColumns = []metadataIndexColumn{
+	{Field: "run_id", Column: "og_meta_run_id"},
+	{Field: "trajectory_id", Column: "og_meta_trajectory_id"},
+	{Field: "channel_id", Column: "og_meta_channel_id"},
+	{Field: "inbox", Column: "og_rec_inbox", Kind: commitmentRecordKind, MaxChars: generatedColumnMaxChars, KeysetIndex: true},
+	{Field: "sender_inbox", Column: "og_rec_sender_inbox", Kind: commitmentRecordKind, MaxChars: generatedColumnMaxChars, KeysetIndex: true},
+	{Field: "conversation_id", Column: "og_rec_conversation_id", Kind: commitmentRecordKind, MaxChars: generatedColumnMaxChars, KeysetIndex: true},
+}
+
+// generatedColumn is one STORED generated column of og_objects: its name
+// and its definition after the name.
+type generatedColumn struct {
+	Name, Def string
+}
+
+// generatedColumn returns the column definition of a metadata column.
+func (mc metadataIndexColumn) generatedColumn() generatedColumn {
+	extract := fmt.Sprintf(`JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.%s'))`, mc.Field)
+	if mc.MaxChars > 0 {
+		extract = fmt.Sprintf(`LEFT(%s, %d)`, extract, mc.MaxChars)
+	}
+	if mc.Kind != "" {
+		extract = fmt.Sprintf(`CASE WHEN object_kind = '%s' THEN %s END`, string(mc.Kind), extract)
+	}
+	return generatedColumn{Name: mc.Column, Def: fmt.Sprintf(`VARCHAR(255) GENERATED ALWAYS AS (%s) STORED`, extract)}
+}
+
+func (mc metadataIndexColumn) indexName() string { return "idx_og_objects_" + mc.Column }
+
+func (mc metadataIndexColumn) indexColumns() string {
+	if mc.KeysetIndex {
+		return "object_kind, " + mc.Column + ", canonical_id"
+	}
+	return "object_kind, " + mc.Column + ", updated_at"
 }
 
 // ensureMetadataColumns creates the generated metadata columns + indexes on
-// an existing og_objects table. A column is added only when absent
+// an existing og_objects table. A column or index is added only when absent
 // (information_schema check), so the DDL stays idempotent across engines
-// whose ALTER lacks IF NOT EXISTS. A column whose expression errors on
-// legacy rows is skipped: metaColumns records which indexes are live, and
-// ListObjectsByMetadata falls back to JSON_EXTRACT for the rest.
+// whose ALTER lacks IF NOT EXISTS and across every open of an existing
+// store; og_objects is a projection, so no tape event is written. A column
+// whose expression errors on legacy rows is skipped: metaColumns records
+// which access paths are live, and the readers fall back to JSON_EXTRACT
+// for the rest. The columns are additive and older binaries never name
+// them, so the store schema epoch does not change.
 func (s *DoltStore) ensureMetadataColumns(ctx context.Context) {
 	if s.metaColumns == nil {
 		s.metaColumns = map[string]bool{}
 	}
+	columns := make([]generatedColumn, 0, len(metadataIndexColumns))
 	for _, mc := range metadataIndexColumns {
-		var count int
-		err := s.db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects' AND COLUMN_NAME = ?`,
-			mc.Column).Scan(&count)
-		if err == nil && count == 0 {
-			_, err = s.db.ExecContext(ctx, fmt.Sprintf(
-				`ALTER TABLE og_objects ADD COLUMN %s VARCHAR(255) GENERATED ALWAYS AS (JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.%s'))) STORED`,
-				mc.Column, mc.Field))
+		columns = append(columns, mc.generatedColumn())
+	}
+	present := s.ensureGeneratedColumns(ctx, columns)
+	for _, mc := range metadataIndexColumns {
+		if present[mc.Column] && s.ensureGeneratedIndex(ctx, mc.indexName(), mc.indexColumns()) {
+			s.metaColumns[mc.Column] = true
 		}
-		if err != nil {
-			// Expression rejected or column DDL unsupported: query path falls
-			// back to JSON_EXTRACT for this field.
+	}
+}
+
+// ensureGeneratedColumns adds the columns information_schema does not list.
+// A STORED column rewrites every row, so the missing ones go in one ALTER
+// (one rewrite); if that fails, each is tried alone so one rejected
+// expression does not take the others down. It returns the columns that
+// exist afterwards.
+func (s *DoltStore) ensureGeneratedColumns(ctx context.Context, columns []generatedColumn) map[string]bool {
+	present := map[string]bool{}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects'`)
+	if err != nil {
+		log.Printf("objectgraph dolt: list og_objects columns, JSON paths kept: %v", err)
+		return present
+	}
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil {
+			present[strings.ToLower(name)] = true
+		}
+	}
+	_ = rows.Close()
+	var missing []generatedColumn
+	for _, column := range columns {
+		if !present[column.Name] {
+			missing = append(missing, column)
+		}
+	}
+	if len(missing) == 0 {
+		return present
+	}
+	start := time.Now()
+	clauses := make([]string, len(missing))
+	for i, column := range missing {
+		clauses[i] = "ADD COLUMN " + column.Name + " " + column.Def
+	}
+	if _, err := s.db.ExecContext(ctx, `ALTER TABLE og_objects `+strings.Join(clauses, ", ")); err == nil {
+		for _, column := range missing {
+			present[column.Name] = true
+		}
+		log.Printf("objectgraph dolt: added %d generated columns in %s", len(missing), time.Since(start).Round(time.Millisecond))
+		return present
+	}
+	for _, column := range missing {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE og_objects ADD COLUMN `+column.Name+` `+column.Def); err != nil {
+			// Expression rejected or column DDL unsupported: the readers keep
+			// the JSON_EXTRACT path for this field.
+			log.Printf("objectgraph dolt: generated column %s unavailable, JSON path kept: %v", column.Name, err)
 			continue
 		}
-		idx := "idx_og_objects_" + mc.Column
-		var idxCount int
-		err = s.db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects' AND INDEX_NAME = ?`,
-			idx).Scan(&idxCount)
-		if err == nil && idxCount == 0 {
-			if _, err = s.db.ExecContext(ctx, fmt.Sprintf(
-				`CREATE INDEX %s ON og_objects(object_kind, %s, updated_at)`, idx, mc.Column)); err != nil {
-				continue
-			}
-		}
-		s.metaColumns[mc.Field] = true
+		present[column.Name] = true
 	}
+	log.Printf("objectgraph dolt: added generated columns one by one in %s", time.Since(start).Round(time.Millisecond))
+	return present
+}
+
+// ensureGeneratedIndex creates index over columns unless information_schema
+// already lists it. It reports whether the index exists afterwards.
+func (s *DoltStore) ensureGeneratedIndex(ctx context.Context, index, columns string) bool {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects' AND INDEX_NAME = ?`,
+		index).Scan(&count)
+	if err == nil && count == 0 {
+		start := time.Now()
+		_, err = s.db.ExecContext(ctx, fmt.Sprintf(`CREATE INDEX %s ON og_objects(%s)`, index, columns))
+		if err == nil {
+			log.Printf("objectgraph dolt: built index %s in %s", index, time.Since(start).Round(time.Millisecond))
+		}
+	}
+	if err != nil {
+		log.Printf("objectgraph dolt: index %s unavailable, JSON path kept: %v", index, err)
+		return false
+	}
+	return true
+}
+
+// metadataColumnFor returns the live generated column that answers
+// metadata.<jsonPath> = value for kind, if any. The column name comes from
+// the fixed metadataIndexColumns table, never from the caller.
+func (s *DoltStore) metadataColumnFor(kind, jsonPath, value string) (metadataIndexColumn, bool) {
+	leaf, ok := strings.CutPrefix(jsonPath, "$.")
+	if !ok {
+		return metadataIndexColumn{}, false
+	}
+	for _, mc := range metadataIndexColumns {
+		if mc.Field != leaf || !s.metaColumns[mc.Column] {
+			continue
+		}
+		if mc.Kind != "" && string(mc.Kind) != kind {
+			continue
+		}
+		if mc.MaxChars > 0 && utf8.RuneCountInString(value) >= mc.MaxChars {
+			continue
+		}
+		return mc, true
+	}
+	return metadataIndexColumn{}, false
 }
 
 // InheritMetadataColumns copies the live generated-column set from the store
@@ -684,6 +831,43 @@ func (s *DoltStore) GetObjectByMetadata(ctx context.Context, kind, jsonPath, val
 		 LIMIT 1`, kind, jsonPath, value))
 }
 
+const objectColumnsSQL = `canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by`
+
+// metadataListSQL is ListObjectsByMetadata's query: the indexed generated
+// column when one is live for (kind, field, value), JSON_EXTRACT otherwise.
+// The plan-shape tests EXPLAIN exactly this text.
+func (s *DoltStore) metadataListSQL(kind, jsonPath, value string, limit int) (string, []any) {
+	if mc, ok := s.metadataColumnFor(kind, jsonPath, value); ok {
+		return `SELECT ` + objectColumnsSQL + ` FROM og_objects
+		 WHERE object_kind = ? AND ` + mc.Column + ` = ?
+		 ORDER BY updated_at DESC LIMIT ?`, []any{kind, value, NormalizedLimit(limit)}
+	}
+	return `SELECT ` + objectColumnsSQL + ` FROM og_objects
+		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
+		 ORDER BY updated_at DESC LIMIT ?`, []any{kind, jsonPath, value, NormalizedLimit(limit)}
+}
+
+// metadataPageSQL is ListObjectsByMetadataPage's query. With a keyset index
+// (object_kind, column, canonical_id) the page orders by every index column:
+// object_kind and the column are fixed by equality, so the order is
+// canonical_id's, and the engine reads the page in index order with no sort
+// (ordering by canonical_id alone makes it a TopN over the whole remaining
+// range). A legacy column, indexed for newest-first, still seeks the range.
+func (s *DoltStore) metadataPageSQL(kind, jsonPath, value, afterCanonicalID string, limit int) (string, []any) {
+	if mc, ok := s.metadataColumnFor(kind, jsonPath, value); ok {
+		order := `canonical_id ASC`
+		if mc.KeysetIndex {
+			order = `object_kind ASC, ` + mc.Column + ` ASC, canonical_id ASC`
+		}
+		return `SELECT ` + objectColumnsSQL + ` FROM og_objects
+		 WHERE object_kind = ? AND ` + mc.Column + ` = ? AND canonical_id > ?
+		 ORDER BY ` + order + ` LIMIT ?`, []any{kind, value, afterCanonicalID, NormalizedLimit(limit)}
+	}
+	return `SELECT ` + objectColumnsSQL + ` FROM og_objects
+		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ? AND canonical_id > ?
+		 ORDER BY canonical_id ASC LIMIT ?`, []any{kind, jsonPath, value, afterCanonicalID, NormalizedLimit(limit)}
+}
+
 // ListObjectsByMetadata finds objects by kind + a metadata JSON path
 // equality check.
 func (s *DoltStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, value string, limit int) ([]Object, error) {
@@ -692,28 +876,8 @@ func (s *DoltStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, v
 	}
 	s.engineMu.Lock()
 	defer s.engineMu.Unlock()
-	// Prefer the indexed generated column when EnsureSchema created one for
-	// this metadata field; fall back to JSON_EXTRACT otherwise. The column
-	// name is resolved from the fixed metadataIndexColumns map — never
-	// interpolated from jsonPath, so no SQL injection surface opens.
-	cond := `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?`
-	args := []any{kind, jsonPath, value}
-	leaf := strings.TrimPrefix(jsonPath, "$.")
-	if s.metaColumns[leaf] {
-		for _, mc := range metadataIndexColumns {
-			if mc.Field == leaf {
-				cond = mc.Column + ` = ?`
-				args = []any{kind, value}
-				break
-			}
-		}
-	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-		 FROM og_objects
-		 WHERE object_kind = ? AND `+cond+`
-		 ORDER BY updated_at DESC LIMIT ?`,
-		append(args, NormalizedLimit(limit))...)
+	query, args := s.metadataListSQL(kind, jsonPath, value, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph dolt: list by metadata: %w", err)
 	}
@@ -771,12 +935,8 @@ func (s *DoltStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPat
 	if !strings.HasPrefix(jsonPath, "$.") {
 		return nil, fmt.Errorf("objectgraph dolt: invalid metadata JSON path %q", jsonPath)
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
-		 FROM og_objects
-		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ? AND canonical_id > ?
-		 ORDER BY canonical_id ASC LIMIT ?`,
-		kind, jsonPath, value, afterCanonicalID, NormalizedLimit(limit))
+	query, args := s.metadataPageSQL(kind, jsonPath, value, afterCanonicalID, limit)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph dolt: list by metadata page: %w", err)
 	}

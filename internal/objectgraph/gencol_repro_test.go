@@ -14,7 +14,7 @@ func TestGeneratedColumnInsertRepro(t *testing.T) {
 	if err := store.EnsureSchema(ctx); err != nil {
 		t.Fatalf("schema: %v", err)
 	}
-	if !store.metaColumns["run_id"] {
+	if !store.metaColumns["og_meta_run_id"] {
 		t.Skipf("generated columns not created: %v", store.metaColumns)
 	}
 	obj := Object{
