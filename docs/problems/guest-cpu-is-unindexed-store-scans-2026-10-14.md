@@ -183,3 +183,80 @@ measure).
      liveness, bounded by the updater's 15-minute cap). Until it finishes,
      every read keeps its old JSON path, so correctness never depends on
      the migration. A failure is logged and the boot continues.
+
+## Repair status (2026-10-14): landed on a branch, not deployed
+
+Commits (branch `worktree-agent-abbca2a953bc56d43`, not pushed):
+`b16e80570` (this record's failure modes), `bc3b08b5e` C1, `e27173684`
+C2, `34d7aff82` C3, `5f4a0e029` C5, `2177bef7c` C4 (host), `529d36434`
+(the migration finding above), `3aa304a13` (migration behind the gate),
+`51f11b9b7` (two timing-fragile streaming tests), and the benchmark
+commit that adds this section.
+
+**Measured before/after** (CPU ms per call, same store, one process;
+`docs/evidence/store-scan-levers-bench-2026-10-14.json`; 15,000 records,
+60,289 `og_objects`, management inbox of 12,557 records):
+
+| read | before | after | lever |
+|---|---|---|---|
+| run-end check, management (`closeRoundsOfEndedRun`'s read) | 53,359 | 134 | C2 |
+| run-end check, a texture desk | 1,266 | 7.1 | C2 |
+| `OpenRounds` fold, management (other readers) | 43,497 | 1,070 | C1 |
+| records by inbox (12,557 rows) | 10,429 | 324 | C1 |
+| `ConversationState` | 476 | 20 | C1 |
+| cell inbox read, last 10 records | 15,383 | 0.98 | C3 |
+| claim pack, 256 records | 404 | 6.9 | C3 |
+| `AppendEvent`, run depth 401-800 | 6.6 + 20.0 (the old seq scan) | 6.6 | C5 |
+
+The 10,000-record run agrees (run-end 30,728 → 118; cell inbox 4,818 →
+1.8; claims 312 → 4.6). `AppendEvent` is now flat with run depth (6-7 ms
+per append from 51 to 800 events); the removed scan grew from 3.8 ms to
+20 ms per append over the same depths.
+
+**Costs:**
+- Writes: each `og_objects` write carries five more index entries and
+  generated-column evaluations: about +1 to 1.5 ms CPU per write (probe:
+  `choir.event` 3.0-3.7 → 4.1-5.5 ms). At the paper's ~5-10 projected
+  writes a second that is about 0.01-0.02 core, against the ~0.6-0.7 core
+  the reads above cost it.
+- One-time migration at the first boot of this release on a computer
+  with rows: 31.6 s CPU at 60,289 objects (about 0.5 ms per row for the
+  five columns), 121 s wall on the loaded laptop, 60 heartbeats. Scaled:
+  about 1.5-2 min CPU at 200,000 objects. It runs behind the replay
+  health gate with heartbeats; reads stay on JSON until it finishes.
+
+**Deploy impact:** the guest binary (autoputer) changes; a computer
+migrates at its next boot of this release (deploys reach a busy computer
+at its next idle moment). Boot timeline gains a `record_indexes` mark;
+the guest log prints `objectgraph dolt: record indexes ensured in <d>
+(live: [...])`. C4 needs a Node B host rebuild and takes effect at the
+next host boot (or the sysfs write in `nix/node-b.nix`).
+
+**Rollback:** revert the commits; the extra columns and indexes are
+ignored by older binaries (store schema epoch unchanged), so a rolled-back
+guest boots without a migration. C4: delete the kernel parameter.
+
+**Verify on the paper after deploy:**
+1. Guest log or boot timeline: the migration finished
+   (`record indexes ensured`, live set lists `og_rec_inbox`,
+   `idx_og_objects_rec_inbox_seq`, `idx_og_objects_rec_claim`).
+2. `python3 scripts/cpu_efficiency_probe.py --cred <qa.json> --vm-id
+   vm-1669020adcece51c2f5ff9b6df399ef5 --seconds 120 --profile --out <dir>`
+   at a quiet hour and at a capture burst. Pass: CPU-seconds per model
+   call below 0.6 (was 2.27), and `closeRoundsOfEndedRun`,
+   `ListObjectsByMetadataPage`'s JSON path, `ListObjectsByOwnerAndBody`
+   and `AppendEvent`'s scan gone from the top cumulative frames
+   (`encoding/json.Unmarshal` well under the 40% it was).
+3. `ssh node-b 'python3 - 300' < scripts/cpu_host_sample.py`: the
+   paper's vCPU guest-mode cores (was 0.95-1.2). After the C4 host boot,
+   the KVM halt-poll row (`halt_poll_success_ns + halt_poll_fail_ns`)
+   should read about 0 (was 0.07-0.10 core).
+4. Repeat 2 a day later: CPU per call should not rise with the record
+   count (the record-count hypothesis above).
+
+**Residuals:** the paper's `og_objects` count (and so its migration time)
+is not measured; the write overhead could shrink by serving the inbox
+lookup from the sequence index (one index fewer) or by option 2 (a typed
+projection table); `OpenRounds`' fold remains O(records of the inbox) for
+its non-run-end readers (now index reads); tape append once (report C7)
+is not done.
