@@ -1,6 +1,6 @@
 # Owner Rulings On The Ledger Roadmap
 
-Date: 2026-10-14, about 00:35 UTC. The owner's answers to Part 2 of the
+Date: 2026-10-14, about 00:20 UTC. The owner's answers to Part 2 of the
 ledger roadmap report ("The Ledger Roadmap: Decisions, Stations and
 Future Thoughts", 13 October 2026), given in session. Numbers match the
 report's decisions 1 to 12. These rulings supersede the report's
@@ -150,13 +150,16 @@ Consequences to check now, not later:
 - Does the live paper open one story per capture, or one per real-world
   story? Three captures of one event in three languages must update one
   story. That is a check on the current paper's publications.
-- **Observed 2026-10-14 00:45 UTC on the live paper computer** (its
+- **Observed 2026-10-14 00:25 UTC on the live paper computer** (its
   50 documents, read through the owner's API as counts only). For each
   document, I read the management Cast records in its `texture:<doc>`
   inbox.
   - 47 stories opened from exactly one capture, 2 from two, 1 from four.
-  - No story received a second management Cast: no later capture was ever
-    routed into an existing story.
+  - No story received a second management Cast. Feeds go by Note: about
+    11 Notes carried one new capture each into 8 existing stories, mostly
+    follow-ups from the same source (the same NPR interview, Hacker News
+    threads). *(Corrected 00:30 UTC: the first count read Casts only and
+    missed the Note feeds.)*
   - The titles track single source articles (TechCrunch, Hacker News, BBC,
     NPR).
 
