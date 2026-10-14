@@ -5,17 +5,30 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Pre-demo deploy (2026-10-14, 12:45 UTC; owner demos about 14:10 UTC)
+## Today after the demo (2026-10-14, queue as of 15:05 UTC)
 
-Owner overruled a proposed hold: "we have time before the demos. Don't
-hold anything back." One combined deploy carries LF0 (model-judged
-front-page importance), S2a management delegation, snapshot budget by real
-bytes, cached-token measurement, the artifact GC fix (still dry-run; active
-deletion waits on the dry-run report) and the Nix store retention timer.
-Rollback: revert the deploy commits; LF0 alone: delete
-/var/lib/go-choir/front-importance/scores.json. No load tests and no
-host-wide disk scans before the demos
-([problem](problems/pressure-reclaim-wedged-a-user-computer-2026-10-14.md)).
+Live on staging (bdc996432): LF0/LF1 front page (importance x depth x
+recency, sections remembered per device, general editorial criteria), S2a
+delegation (vocab fix 6f8e36ceb), artifact GC active, Nix store retention,
+search benching fix + result cache, Jev peer re-pin (L2a labels can flow),
+28 sources on the paper (U.S. politics and business feeds added).
+
+Queued for one deploy right after the owner's 15:50 demo (each tested on
+its branch, not pushed):
+- instruction titles: Texture's headline titles the story, headline-less
+  story revisions held (branch fix/instruction-titles, ec5a2c35a; problem
+  doc bcaa1b61a);
+- free-first search routing with daily caps (branch search-budget-routing:
+  1915aa9d0, fa69be74b, ab0f82bc6, 0ccba92ae); rollback by env
+  (CHOIR_SEARCH_ROUTING=fanout);
+then: confirm Jev labels on the paper, start L2a window 2 with the fixed
+scorer (f9a513482).
+
+In progress: object-graph gaps (registration on every write path, dead
+kind, matched quote spans); VM density limits design. Designed, awaiting
+owner decisions: claims/events/entities ontology (da9de233f, D1-D13),
+search efficiency (b3e73e110 design), deepen (dd47dd84b), media and rights
+research (148e83e36), EmbeddingGemma 2 (475e781f0).
 
 ## Now (2026-10-14, 07:00 UTC): what landed overnight, what is next
 
