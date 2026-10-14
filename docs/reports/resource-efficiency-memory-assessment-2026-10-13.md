@@ -110,18 +110,79 @@ Not a lever: lowering `VM_INTERACTIVE_MEM_MIB`. A 4 GiB trial thrashed
 the owner's store (guest-store-history-bloat). The ceiling follows the
 store size until R1 is fixed.
 
-## Model cost (the other half of the mission)
+## Model cost (the other half of the mission): first read
 
-Not measured yet. Next is cost per capture, per story and per published
-version, from the paper computer's run ledger and the gateway's usage
-records. Then the owner's cost amendment (decision 1 in the roadmap
-report) can be written against real numbers.
+Source: the paper computer's `GET /api/costs?limit=10000&detail=1`
+(events 2026-10-13 19:24 to 2026-10-14 00:01 UTC; the 10,000-event limit
+sets the window). Token counts only. The pricing table knows none of the
+models in use, so every call is unpriced and `total_cost_usd` reads 0.
+That is a gap in its own right: the cost surface reports $0.
+
+The totals over 1,335 calls are 64.2 M input tokens and 2.3 M output
+tokens. Input outweighs output 28 to 1.
+
+| desk | calls | input tokens | output tokens |
+|---|---|---|---|
+| research | 757 | 48.1 M (75%) | 1.0 M |
+| management | 284 | 10.5 M | 0.3 M |
+| texture | 294 | 5.7 M | 1.0 M |
+
+By model: deepseek-v4.1-flash carries 1,159 calls, gpt-6-luna 156 and
+longcat-2.5-preview-free 20.
+
+Per run, the input grows with every call:
+
+| desk | runs | calls per run (median, max) | first-call input (median) | last-call input (median, max) |
+|---|---|---|---|---|
+| research | 28 | 22, 73 | 4.6 K | 94 K, 134 K |
+| management | 18 | 10, 46 | 8.0 K | 30 K, 99 K |
+| texture | 73 | 3, 10 | 7.1 K | 20 K, 111 K |
+
+The longest research run's input per call, in thousands of tokens:
+4, 4, 5, 5, 6, 7, 30, 34, 37, 42 … 121, 124, 125, 127, 127, 131, then
+28, 31. One large tool result enters the transcript at the seventh call
+(7 K to 30 K) and is re-sent on every call after it. A compaction near
+130 K resets it. So a run's input cost is roughly quadratic in its call
+count.
+
+**R5 (cost root, confirmed from the trace).** The recursive desks keep
+tool output in the model's transcript instead of in the cell's own
+variables.
+
+Evidence: research run `8fa7b5e9-ebcd-4d76-96fd-fbed9624f91f`, iteration
+7 (20:19:30 UTC). The cell looped over six searches and printed each
+whole record with `fmt.Printf("… %+v", s)`. Its `tool.result` output was
+103,782 characters. The next model call's input went from 7,211 to
+30,221 tokens and stayed in every later call. Nothing bounds a cell's
+stdout before it enters the transcript. The RLM design point
+is that the model sees references and small views while the bulk stays
+in the REPL environment. Research, the desk that reads the world, pays
+for this most.
+
+Rough effect, an estimate and not a measurement: if a research call
+stayed near 10 K input, research input would be about 7.6 M instead of
+48 M, and the total about 24 M instead of 64 M, roughly 60% less. Prompt
+caching, if the providers honor it on a stable prefix, would cut the
+re-sent part further. Whether they do is unmeasured.
+
+**Lever 6 (R5).** Keep bulk tool results out of the transcript: a cell
+result above a size bound is stored in a cell variable and the model
+sees its handle, length and head. Red-adjacent (prompt and runtime
+contract of every desk). It needs the cross-model cell surface work
+(docs/reports/cross-model-cell-errors-2026-10-13.md) to stay consistent.
+Measured by this same query: research's last-call input median and
+input per published story version.
+
+**Lever 7.** Price the models in use, so `/api/costs` reports dollars.
+Without that, the owner's cost amendment (roadmap decision 1) cannot be
+written against real numbers.
 
 ## Proposed order
 
-1. Lever 1 (attribution, signal-specific reclaim).
-2. Lever 2 (test tier).
-3. The model-cost measurement.
+1. Lever 1 (attribution, signal-specific reclaim). Landed at d3f7d9b2.
+2. Lever 2 (test tier). Committed at 1cd32a21.
+3. Lever 7 (pricing) and lever 6 (tool output out of the transcript):
+   the largest cost lever found.
 4. The balloon probe.
 5. Store compaction.
 
