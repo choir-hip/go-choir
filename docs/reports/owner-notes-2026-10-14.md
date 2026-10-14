@@ -236,3 +236,20 @@ Lead: recorded at the top of
   tree. A patch that doesn't apply cleanly becomes a conflict for the
   adopter's engineering desk.
 - S7 (app packages) moves onto the critical path for binary adoption.
+
+## 16. Distribution plan (agreed)
+
+- **Source in, binaries out.** Only source is published, and the host is
+  the only builder: reproducible, host-signed builds. Users never pass
+  binaries to each other.
+- **Station B is a one-test proof.**
+- **App packages (S7) are the real distribution path,** with host-built
+  packages that any computer can install.
+- **Two lanes:**
+  - apps travel as packages;
+  - core changes go upstream through the owner's merge to `main` and a
+    deploy, never adopted directly between diverged computers.
+- **Order:** Station A → minimal Station B → S7.
+
+Recorded at the top of
+`docs/reports/selfdev-update-architecture-2026-10-15.md`.

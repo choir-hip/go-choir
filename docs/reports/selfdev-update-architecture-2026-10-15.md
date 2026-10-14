@@ -39,6 +39,33 @@ divergence. This changes the report as follows:
 - **Open decision 2 ("host-built bytes for adopters") is resolved:** source
   adoption now, binary adoption per package after S7.
 
+**Owner ruling (2026-10-14, later): the distribution plan.**
+
+1. **Only source is ever published.** Binaries come only from the trusted
+   builder, the host, built from published source; builds are reproducible
+   and host-signed. Users never pass binaries to one another. This holds in
+   every phase: anyone who distributes code on the public system publishes
+   its source.
+2. **Station B, source adoption, is a proof, not a product.** The host
+   builder from Station A builds the adopter's tree plus the patch. There is
+   one test and no investment in rebasing patches across diverged
+   computers.
+3. **App packages (S7) are the real distribution path.** A package (a
+   frontend module plus an optional backend service, with its own build
+   recipe) is published as source. The host builds it once, and any computer
+   installs that build whatever its own divergence.
+4. **There are two lanes.**
+   - **Apps** travel as packages.
+   - **Core platform changes** (runtime, desks, kernel) go upstream as a
+     platform release: the owner's merge to `main` and a deploy, the one
+     human-approved push to everyone.
+
+   Core changes are never adopted directly between diverged computers.
+
+**Order:** Station A, then a minimal Station B, then S7 packages ahead of
+any broader adoption work. Station C (the host adopts a core change) follows
+the core lane.
+
 ## The answer in one page
 
 1. **One object carries a change everywhere: a release record.** It is
