@@ -229,8 +229,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			b.WriteString("\n\nSelf-development supervision:\nThis document supervises self-development operation " + operationID + ". The runtime runs the operation: engineering builds and freezes the change, an independent judgment checks it, the owner approves or rejects it, and the update applies. Do not ask to verify, approve, apply or re-run it. Keep the document a true account of where the operation stands, from the reports in choir.Updates(): what was built, what the evidence shows, and what is still pending. When a report adds nothing the document needs, call choir.Wait(why) instead of writing.")
 		}
 	}
+	// The computer's intake.labels setting adds management's intake text
+	// and functions (L2a A6); off, the prompt is as before.
+	intakeLabels := profile == agentprofile.Management && rec != nil && rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)
 	if profile == agentprofile.Management {
-		b.WriteString(runtimeprompts.RLMManagementOverlay())
+		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels}))
 	}
 	if profile == agentprofile.Engineering {
 		hasSelfDevelopmentOperation := false
@@ -270,7 +273,7 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString(runtimeprompts.RLMResearchOverlay())
 	}
 	var hidden []string
-	if profile == agentprofile.Management && (rec == nil || !rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)) {
+	if profile == agentprofile.Management && !intakeLabels {
 		hidden = yaegikernel.IntakeVerbs
 	}
 	if surface := deskSurfacePrompt(profile, rec, hidden...); surface != "" {

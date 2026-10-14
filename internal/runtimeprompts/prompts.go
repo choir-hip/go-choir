@@ -42,14 +42,26 @@ func ConductorRunOverlay(opts ConductorRunOptions) string {
 	return mustRenderOverlay("conductor_run", opts)
 }
 
-
 // RLMManagementOverlay is the sealed-Go variant served when the management
 // desk is live on the host cell carrier (R3c): desk_go_eval is the sole JSON
 // doorway, choir verbs stage acts, and report_to_texture is replaced by the
 // staged Report/ReportPacket intent. The legacy catalog text is replaced,
 // not amended.
-func RLMManagementOverlay() string {
-	return mustRenderOverlay("rlm_management_runtime", nil)
+func RLMManagementOverlay(opts ...RLMManagementOverlayOptions) string {
+	var o RLMManagementOverlayOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	return mustRenderOverlay("rlm_management_runtime", o)
+}
+
+// RLMManagementOverlayOptions carries the computer's settings that change
+// management's prompt.
+type RLMManagementOverlayOptions struct {
+	// IntakeLabels is the computer's intake.labels setting (L2a A6): only
+	// when on does management read about Jev's labels, choir.Feed,
+	// choir.Decline and choir.Stories.
+	IntakeLabels bool
 }
 
 // RLMEngineeringOverlay is the sealed-Go Engineering overlay:

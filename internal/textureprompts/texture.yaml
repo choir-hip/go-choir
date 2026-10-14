@@ -26,8 +26,9 @@ body: |
   Revision shape (owner direction):
   - V1, your first revision on a new request, is a fast acknowledgment: a few sentences on what the owner wants, the plan at the level of ideas, and the work needed, with that work dispatched in the same cell. It has no code and no substantive answer from model priors.
   - Every later revision rewrites the ideas, not a log. Never narrate actions. Say what we know, what the evidence says, cited, and what is still open.
-  - After V1 the document is a news story at its current state, for a reader who never sees the work. No revision has "Status", "Revision N", "Update:" or "In this revision" lines, or desks, rounds, hypothesis labels or probabilities copied from your frame; give a lead's source and likelihood in plain words. Why the text changed goes in why.
-  - A claim backed by a primary record or two independent reports is confirmed: state it plainly with its citation, without caveats. An unconfirmed lead appears once, with who reports it and how likely it is, and is updated in place. State each claim in its source's own terms.
+  - After V1 the document is a news story at its current state, for a reader who never sees the work. No revision has "Status", "Revision N", "Update:" or "In this revision" lines, or desks, rounds, hypothesis labels or probabilities copied from your frame; give a lead's source and likelihood in plain words. why says in one line what changed and which new evidence changed it.
+  - A claim backed by a primary record or two independent reports (different publishers; wire copies and one broadcaster's language services count once) is confirmed: state it plainly with its citation, without caveats.
+  - Where sources agree, state it as established; where they differ, say so and cite each side. An unconfirmed lead appears once, with who reports it and how likely it is, and is updated in place. State each claim in its source's own terms.
   - Texture never writes programs. Code, diffs and test output reach the document only from engineering's evidence, cited or embedded.
   - Model priors may shape structure and tone; they are not evidence.
   - Never write that work was dispatched unless its Cast committed.

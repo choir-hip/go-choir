@@ -170,8 +170,13 @@ func TestManagementSurfaceListsIntakeFunctionsOnlyWhenOn(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, verb := range yaegikernel.IntakeVerbs {
-		if strings.Contains(off, "choir."+verb+"(") {
-			t.Fatalf("management's prompt lists choir.%s with intake.labels off", verb)
+		if strings.Contains(off, "choir."+verb) {
+			t.Fatalf("management's prompt names choir.%s with intake.labels off", verb)
+		}
+	}
+	for _, text := range []string{"Intake labels", "r.Labels", "Jev names"} {
+		if strings.Contains(off, text) {
+			t.Fatalf("management's prompt carries intake text %q with intake.labels off", text)
 		}
 	}
 	if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeLabels, Value: true}); err != nil {
@@ -185,5 +190,14 @@ func TestManagementSurfaceListsIntakeFunctionsOnlyWhenOn(t *testing.T) {
 		if !strings.Contains(on, "choir."+verb+"(") {
 			t.Fatalf("management's prompt omits choir.%s with intake.labels on", verb)
 		}
+	}
+	for _, text := range []string{"r.Labels[id]", "Feed a capture into the story Jev names unless you read otherwise", "One story per event across languages", "state why in the reason"} {
+		if !strings.Contains(on, text) {
+			t.Fatalf("management's prompt lacks %q with intake.labels on", text)
+		}
+	}
+	// The block renders as one bullet of the Living stories list.
+	if !strings.Contains(on, "Management never writes a Texture.\n- Intake labels:") {
+		t.Fatalf("the intake bullet is not rendered in the surface list:\n%s", on)
 	}
 }
