@@ -1,0 +1,24 @@
+{
+ "n_items": 47,
+ "n_pairs": 77,
+ "event_structured": {
+  "different_event|same_story_hand_read|apart": 10,
+  "same_event|judge_cross_outlet|apart": 2,
+  "same_event|judge_cross_outlet|merged": 44,
+  "same_event|same_story_hand_read|apart": 5,
+  "same_event|same_story_hand_read|merged": 16
+ },
+ "titles_only": {
+  "different_event|same_story_hand_read|apart": 5,
+  "different_event|same_story_hand_read|merged": 5,
+  "same_event|judge_cross_outlet|merged": 46,
+  "same_event|same_story_hand_read|apart": 5,
+  "same_event|same_story_hand_read|merged": 16
+ },
+ "control_management": {
+  "different_event|same_story_hand_read|merged": 10,
+  "same_event|judge_cross_outlet|apart": 38,
+  "same_event|judge_cross_outlet|merged": 8,
+  "same_event|same_story_hand_read|merged": 21
+ }
+}
