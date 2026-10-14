@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -67,63 +66,14 @@ func TestReconcileEngineeringAssignmentCapsulesAfterRestartTerminalizesAbsentCap
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignmentID := "assignment-boot-sweep"
+	assignmentID := seed.AssignmentIDs[0]
 	capability := "opaque-boot-sweep"
-	capsuleID := "capsule-boot-sweep"
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
-	}
-	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
-	if err != nil {
-		t.Fatal(err)
-	}
+	open := store.SeedEngineeringOpenRequest(seed, 0, capability)
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	runID := "run:" + assignmentID
-	run := types.RunRecord{
-		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-			"source_candidate_id": open.Binding.SourceCandidateID,
-		},
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-" + assignmentID + "-1",
-		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
-		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-		OpaqueCapability: capability, CapsuleID: capsuleID,
-	}
-	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bind := store.SeedEngineeringBindRequest(open, runID, capability)
 	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
 		t.Fatal(err)
 	}
@@ -147,89 +97,41 @@ func TestReconcileSkipsTerminalUnboundCapsule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	openReq := func(assignmentID, capsuleID, capability string, index int) types.OpenEngineeringAssignmentRequest {
-		req := types.OpenEngineeringAssignmentRequest{
-			CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-			Binding: types.EngineeringAssignmentBinding{
-				OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-				ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-				ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-				ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[index], AssignedAgentID: seed.AssignedAgentIDs[index],
-				Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-				ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-				CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-				SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-				SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-				Writable:          true, CapsuleID: capsuleID,
-				NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-				FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-			},
-			AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[index]},
-			AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[index], AssignedAgentID: seed.AssignedAgentIDs[index], Objective: "bounded delegated assignment"},
-		}
-		req.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(req)
-		return req
-	}
-	bindReq := func(open types.OpenEngineeringAssignmentRequest, runID, capability string) types.BindEngineeringAssignmentRequest {
-		run := types.RunRecord{
-			RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-			RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-			AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-			State: types.RunPending, Prompt: open.AssignedWork.Objective,
-			Metadata: map[string]any{
-				"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-				"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-				"assignment_id": open.AssignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-				"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-				"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-				"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-				"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-				"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-				"source_candidate_id": open.Binding.SourceCandidateID,
-			},
-		}
-		req := types.BindEngineeringAssignmentRequest{
-			CommandID: "command-bind-" + open.AssignmentID + "-1",
-			OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: open.AssignmentID,
-			Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-			OpaqueCapability: capability, CapsuleID: open.Binding.CapsuleID,
-		}
-		req.CommandDigest, _ = store.ComputeBindEngineeringAssignmentDigest(req)
-		return req
-	}
+	bindReq := store.SeedEngineeringBindRequest
 
-	openA := openReq("assignment-a", "capsule-a", "cap-a", 0)
+	openA := store.SeedEngineeringOpenRequest(seed, 0, "cap-a")
 	if _, err := s.OpenEngineeringAssignment(ctx, openA); err != nil {
 		t.Fatal(err)
 	}
 	cancelA := types.CancelEngineeringAssignmentRequest{
 		CommandID: "command-cancel-a-1", OwnerID: openA.Binding.OwnerID, ComputerID: openA.Binding.ComputerID,
-		AssignmentID: "assignment-a", Attempt: 1, ExpectedLifecycleVersion: 1, Reason: "spawn failed before bind",
+		AssignmentID: openA.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1, Reason: "spawn failed before bind",
 	}
 	cancelA.CommandDigest, _ = store.ComputeCancelEngineeringAssignmentDigest(cancelA)
 	if _, err := s.CancelEngineeringAssignment(ctx, cancelA); err != nil {
 		t.Fatal(err)
 	}
 
-	openB := openReq("assignment-b", "capsule-b", "cap-b", 1)
+	openB := store.SeedEngineeringOpenRequest(seed, 1, "cap-b")
+	runBID := "run:" + openB.AssignmentID
 	if _, err := s.OpenEngineeringAssignment(ctx, openB); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.BindEngineeringAssignment(ctx, bindReq(openB, "run:assignment-b", "cap-b")); err != nil {
+	if _, err := s.BindEngineeringAssignment(ctx, bindReq(openB, runBID, "cap-b")); err != nil {
 		t.Fatal(err)
 	}
 
 	rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx)
 
-	a, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, "assignment-a", 1)
+	a, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, openA.AssignmentID, 1)
 	if err != nil || !a.Disposition.Terminal() || a.CapsuleDisposition != types.EngineeringCapsuleUnbound {
 		t.Fatalf("terminal-unbound assignment changed: %+v err=%v", a, err)
 	}
-	b, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, "assignment-b", 1)
+	b, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, openB.AssignmentID, 1)
 	if err != nil || !b.Disposition.Terminal() || b.CapsuleDisposition != types.EngineeringCapsuleRevoked {
 		t.Fatalf("bound assignment not reconciled: %+v err=%v", b, err)
 	}
-	runB, err := s.GetLifecycleRun(ctx, seed.OwnerID, seed.ComputerID, "run:assignment-b")
+	runB, err := s.GetLifecycleRun(ctx, seed.OwnerID, seed.ComputerID, runBID)
 	if err != nil || !runB.State.Terminal() {
 		t.Fatalf("bound run not terminal: %+v err=%v", runB, err)
 	}
@@ -248,63 +150,14 @@ func TestRewarmAssignedEngineeringReconcilesAbsentCapsuleWithoutWake(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignmentID := "assignment-boot-absent"
+	assignmentID := seed.AssignmentIDs[0]
 	capability := "opaque-boot-absent"
-	capsuleID := "capsule-boot-absent"
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
-	}
-	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
-	if err != nil {
-		t.Fatal(err)
-	}
+	open := store.SeedEngineeringOpenRequest(seed, 0, capability)
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	runID := "run:" + assignmentID
-	run := types.RunRecord{
-		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-			"source_candidate_id": open.Binding.SourceCandidateID,
-		},
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-" + assignmentID + "-1",
-		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
-		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-		OpaqueCapability: capability, CapsuleID: capsuleID,
-	}
-	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bind := store.SeedEngineeringBindRequest(open, runID, capability)
 	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +175,9 @@ func TestRewarmAssignedEngineeringReconcilesAbsentCapsuleWithoutWake(t *testing.
 	if !found {
 		t.Fatalf("bound Engineering run missing from lifecycle pending index: %+v", listed)
 	}
-	if err := rt.ReconcileLifecycleWorkAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, open.Binding.AssignedAgentID, open.Binding.TrajectoryID, open.Binding.AssignedWorkItemID); err != nil {
+	// A records assignment has no work item (C1e D1); its wake path is the
+	// trajectory reconcile.
+	if err := rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, open.Binding.OwnerID, open.Binding.ComputerID, open.Binding.TrajectoryID); err != nil {
 		t.Fatalf("reconcile assigned Engineering work wake: %v", err)
 	}
 	for _, wake := range wakes {
@@ -340,7 +195,7 @@ func TestRewarmAssignedEngineeringReconcilesAbsentCapsuleWithoutWake(t *testing.
 	}
 }
 
-// A Complete reduce that failed after the freeze ack leaves the assignment
+// On a planned-restart boot, a Complete reduce that failed after the freeze ack leaves the assignment
 // bound with a frozen capsule and a staged pending proposal. The restart
 // reconcile must claim that state for the reducer-authored resume BEFORE the
 // restart-cancel branch can destroy the work evidence; on darwin the resume
@@ -355,62 +210,14 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignmentID := "assignment-strand-frozen"
+	assignmentID := seed.AssignmentIDs[0]
 	capability := "opaque-strand-frozen"
-	capsuleID := "capsule-strand-frozen"
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
-	}
-	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
-	if err != nil {
-		t.Fatal(err)
-	}
+	open := store.SeedEngineeringOpenRequest(seed, 0, capability)
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	runID := "run:" + assignmentID
-	run := types.RunRecord{
-		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-		},
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-" + assignmentID + "-1",
-		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
-		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-		OpaqueCapability: capability, CapsuleID: capsuleID,
-	}
-	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
-	if err != nil {
-		t.Fatal(err)
-	}
+	bind := store.SeedEngineeringBindRequest(open, runID, capability)
 	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
 		t.Fatal(err)
 	}
@@ -458,6 +265,9 @@ func TestReconcileResumesStrandedFrozenProposalBeforeRestartCancel(t *testing.T)
 		t.Fatal(err)
 	}
 
+	// Only a planned-restart boot resumes (CLAUDE.md restart rule; C1e D7):
+	// a crash boot interrupts the strand instead (c1e_engineering_records_test).
+	rt.bootRestartPlanned = true
 	rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx)
 	assignment, err := s.GetEngineeringAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
 	if err != nil {
@@ -555,253 +365,64 @@ func TestDeadlineWakeCancelsExpiredBoundAssignmentWithoutManagementSelection(t *
 
 	// Two live assignments on one trajectory collide on the lifecycle
 	// optimistic-concurrency lock, so each case gets its own seed/trajectory.
-	openAndBind := func(owner string, assignmentID string) (types.EngineeringAssignmentBinding, error) {
+	openAndBind := func(owner string, assignmentID string) (types.EngineeringAssignmentBinding, string, error) {
 		seed, err := store.SeedEngineeringAssignmentAuthority(s, owner, rt.TextureComputerID(), 1)
 		if err != nil {
-			return types.EngineeringAssignmentBinding{}, err
+			return types.EngineeringAssignmentBinding{}, "", err
 		}
-		open := types.OpenEngineeringAssignmentRequest{
-			CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID,
-			Binding: types.EngineeringAssignmentBinding{
-				OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-				ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-				ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-				ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-				Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-				ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-				CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-" + assignmentID), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID)),
-				SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-				SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-				Writable:          true, CapsuleID: "capsule-" + assignmentID,
-				NetworkMode: types.EngineeringCapsuleNetworkForbidden, FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-			},
-			AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-			AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "deadline expiry"},
-		}
-		open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
-		if err != nil {
-			return types.EngineeringAssignmentBinding{}, err
-		}
+		capability := "cap-" + assignmentID
+		open := store.SeedEngineeringOpenRequest(seed, 0, capability)
 		if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
-			return types.EngineeringAssignmentBinding{}, err
+			return types.EngineeringAssignmentBinding{}, "", err
 		}
-		runID := "run:" + assignmentID
-		run := types.RunRecord{
-			RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-			RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-			AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-			State: types.RunPending, Prompt: open.AssignedWork.Objective,
-			Metadata: map[string]any{
-				"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-				"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-				"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-				"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-				"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-				"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-				"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-				"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-			},
-		}
-		bind := types.BindEngineeringAssignmentRequest{
-			CommandID: "command-bind-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-			AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-			OpaqueCapability: "cap-" + assignmentID, CapsuleID: open.Binding.CapsuleID,
-		}
-		bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
-		if err != nil {
-			return types.EngineeringAssignmentBinding{}, err
-		}
+		runID := "run:" + open.AssignmentID
+		bind := store.SeedEngineeringBindRequest(open, runID, capability)
 		if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
-			return types.EngineeringAssignmentBinding{}, err
+			return types.EngineeringAssignmentBinding{}, "", err
 		}
-		return open.Binding, nil
+		return open.Binding, open.AssignmentID, nil
 	}
 
 	// Fresh assignment: deadline not reached, handler must no-op.
-	freshBinding, err := openAndBind("owner-deadline-fresh", "assignment-deadline-live")
+	freshBinding, freshID, err := openAndBind("owner-deadline-fresh", "assignment-deadline-live")
 	if err != nil {
 		t.Fatal(err)
 	}
-	fresh, err := s.GetEngineeringAssignment(ctx, freshBinding.OwnerID, freshBinding.ComputerID, "assignment-deadline-live", 1)
+	fresh, err := s.GetEngineeringAssignment(ctx, freshBinding.OwnerID, freshBinding.ComputerID, freshID, 1)
 	if err != nil || fresh.Disposition != types.EngineeringAssignmentBound || fresh.CapsuleDisposition != types.EngineeringCapsuleActive {
 		t.Fatalf("fresh bound+active assignment: %+v err=%v", fresh, err)
 	}
-	content, err := encodeAssignedEngineeringFateDeadline("assignment-deadline-live", 1)
+	content, err := encodeAssignedEngineeringFateDeadline(freshID, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := rt.HandleAssignedEngineeringFateDeadline(ctx, freshBinding.OwnerID, freshBinding.ComputerID, freshBinding.ParentAgentID, content); err != nil {
 		t.Fatalf("live assignment handler: %v", err)
 	}
-	if after, _ := s.GetEngineeringAssignment(ctx, freshBinding.OwnerID, freshBinding.ComputerID, "assignment-deadline-live", 1); after.Disposition != types.EngineeringAssignmentBound {
+	if after, _ := s.GetEngineeringAssignment(ctx, freshBinding.OwnerID, freshBinding.ComputerID, freshID, 1); after.Disposition != types.EngineeringAssignmentBound {
 		t.Fatalf("not-yet-due assignment was touched: %+v", after)
 	}
 
 	// Expired assignment: the same wake cancels it — no management reconcile ran.
 	t.Setenv("CHOIR_ASSIGNMENT_DEADLINE", "1ms")
-	expiredBinding, err := openAndBind("owner-deadline-expired", "assignment-deadline-expired")
+	expiredBinding, expiredID, err := openAndBind("owner-deadline-expired", "assignment-deadline-expired")
 	if err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(10 * time.Millisecond)
-	expiredContent, err := encodeAssignedEngineeringFateDeadline("assignment-deadline-expired", 1)
+	expiredContent, err := encodeAssignedEngineeringFateDeadline(expiredID, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := rt.HandleAssignedEngineeringFateDeadline(ctx, expiredBinding.OwnerID, expiredBinding.ComputerID, expiredBinding.ParentAgentID, expiredContent); err != nil {
 		t.Fatalf("expired assignment handler: %v", err)
 	}
-	done, err := s.GetEngineeringAssignment(ctx, expiredBinding.OwnerID, expiredBinding.ComputerID, "assignment-deadline-expired", 1)
+	done, err := s.GetEngineeringAssignment(ctx, expiredBinding.OwnerID, expiredBinding.ComputerID, expiredID, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if done.Disposition != types.EngineeringAssignmentCancelled {
 		t.Fatalf("expired assignment not cancelled by derivable wake: %+v", done)
-	}
-	requireServingVocabularyDeposits(t, s)
-}
-
-// A guest restart terminally cancels the bound assignment (absent capsule) but
-// must not strand the cast: the desk reconcile re-opens the cast at the next
-// attempt carrying a retry_after_block supersede tuple that names the prior
-// attempt's cancel report. A deliberate cancel (different reason) stays dead.
-func TestRestartCancelledCastRecastsAtNextAttempt(t *testing.T) {
-	rt, s := testRuntime(t)
-	ctx := context.Background()
-	rt.assignmentRuntime = absentAssignmentCapsule{}
-	rt.capsuleExecutor = capsule.NewExecutor(t.TempDir(), t.TempDir(), t.TempDir(), 0)
-
-	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-restart-recast", rt.TextureComputerID(), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assignmentID := "assignment-restart-recast"
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-" + assignmentID), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: "capsule-" + assignmentID,
-			NetworkMode: types.EngineeringCapsuleNetworkForbidden, FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "restart recast"},
-	}
-	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
-		t.Fatal(err)
-	}
-	runID := "run:" + assignmentID
-	run := types.RunRecord{
-		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-		},
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-" + assignmentID, OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		AssignmentID: assignmentID, Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-		OpaqueCapability: "cap-" + assignmentID, CapsuleID: open.Binding.CapsuleID,
-	}
-	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
-		t.Fatal(err)
-	}
-
-	// Restart: the capsule is absent, so the sweep revokes + cancels attempt 1.
-	rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx)
-	cancelled, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 1)
-	if err != nil || cancelled.Disposition != types.EngineeringAssignmentCancelled {
-		t.Fatalf("attempt 1 not restart-cancelled: %+v err=%v", cancelled, err)
-	}
-	if cancelled.DispositionReason != restartCancelledAssignmentReason {
-		t.Fatalf("unexpected cancel reason %q", cancelled.DispositionReason)
-	}
-
-	// The reconcile predicate: the latest terminal attempt cancelled by restart
-	// is recast-admissible; a deliberate cancel is not.
-	attempts, err := s.ListEngineeringAssignments(ctx, seed.OwnerID, seed.ComputerID, seed.TrajectoryID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	latest, admissible := latestCancelledForRestartRecast(attempts, assignmentID)
-	if !admissible || latest.Binding.Attempt != 1 {
-		t.Fatalf("restart-cancelled attempt not marked recast-admissible: latest=%+v admissible=%v", latest, admissible)
-	}
-	reportRef := rt.restartRecastReportRef(ctx, latest)
-	if reportRef == "" {
-		t.Fatal("cancel report receipt not resolvable for supersede tuple")
-	}
-
-	// Attempt 2 opens with the frozen supersede tuple naming the cancel report.
-	open2 := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + ":2", AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID:   seed.ParentWorkID,
-			AssignedWorkItemID: "work:" + assignmentID + ":attempt-2",
-			AssignedAgentID:    agentprofile.Engineering + ":" + assignmentID + ":attempt-2",
-			Kind:               types.EngineeringAssignmentImplementation, Attempt: 2,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-" + assignmentID + "-2"), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID + "-2")),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: "capsule-" + assignmentID + "-2",
-			NetworkMode: types.EngineeringCapsuleNetworkForbidden, FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: agentprofile.Engineering + ":" + assignmentID + ":attempt-2"},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: "work:" + assignmentID + ":attempt-2", AssignedAgentID: agentprofile.Engineering + ":" + assignmentID + ":attempt-2", Objective: "restart recast"},
-		Supersedes: &types.EngineeringSupersedeTuple{
-			SupersedesAssignmentID: assignmentID, SupersedesAttempt: 1,
-			PriorReceiptRef: reportRef, SupersedeKind: types.EngineeringSupersedeRetryAfterBlock,
-			ReasonEnum: "restart_passivation",
-			DeltaDigest: objectgraph.SHA256([]byte(strings.Join([]string{
-				"retry_after_block", assignmentID, "1", "2", restartCancelledAssignmentReason,
-			}, "\x00"))),
-		},
-	}
-	open2.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.OpenEngineeringAssignment(ctx, open2); err != nil {
-		t.Fatalf("attempt-2 recast open refused: %v", err)
-	}
-	recast, err := s.GetEngineeringAssignment(ctx, seed.OwnerID, seed.ComputerID, assignmentID, 2)
-	if err != nil || recast.Disposition != types.EngineeringAssignmentOpen {
-		t.Fatalf("attempt 2 not open after recast: %+v err=%v", recast, err)
-	}
-
-	// A deliberate cancel is not recast-admissible: same predicate, wrong reason.
-	deliberate := cancelled
-	deliberate.DispositionReason = "owner requested cancellation"
-	if _, ok := latestCancelledForRestartRecast([]types.EngineeringAssignment{deliberate}, assignmentID); ok {
-		t.Fatal("deliberate cancel must not be restart-recast admissible")
 	}
 	requireServingVocabularyDeposits(t, s)
 }
@@ -824,61 +445,19 @@ func TestRevokedAssignmentResumeCommitsStagedProposalEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignmentID := "assignment-resume-proposal"
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-" + assignmentID), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: "capsule-" + assignmentID,
-			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "resume staged proposal"},
-	}
-	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assignmentID := seed.AssignmentIDs[0]
+	open := store.SeedEngineeringOpenRequest(seed, 0, "cap-"+assignmentID)
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	runID := "run:" + assignmentID
-	run := types.RunRecord{
-		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-		},
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-" + assignmentID,
-		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
-		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-		OpaqueCapability: "cap-" + assignmentID, CapsuleID: open.Binding.CapsuleID,
-	}
-	bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind)
+	bind := store.SeedEngineeringBindRequest(open, runID, "cap-"+assignmentID)
+	bound, err := s.BindEngineeringAssignment(ctx, bind)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bound, err := s.BindEngineeringAssignment(ctx, bind)
+	// The durable run, as the worker reads it (metadata round-tripped).
+	run, err := s.GetLifecycleRun(ctx, open.Binding.OwnerID, open.Binding.ComputerID, runID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1043,104 +622,6 @@ func TestExecutionAttestationPinsFrozenFinalSubject(t *testing.T) {
 	}
 }
 
-// TestProgressOverdueDeadlineEmitsObservation fires the derivable
-// progress-overdue wake: a bound, silent assignment past the window emits one
-// observation packet to its parent target; a fresh assignment no-ops; a
-// superseded anchor no-ops.
-func TestProgressOverdueDeadlineEmitsObservation(t *testing.T) {
-	rt, s := testRuntime(t)
-	ctx := context.Background()
-	t.Setenv("CHOIR_PROGRESS_DEADLINE", "1ms")
-
-	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-progress", rt.TextureComputerID(), 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	binding := types.EngineeringAssignmentBinding{
-		OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-		ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-		ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-		ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-		Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-		ScopeDigest: objectgraph.SHA256([]byte("scope:progress")), RequestDigest: objectgraph.SHA256([]byte("request:progress")),
-		CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-progress"), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-progress")),
-		SubjectDigest:     objectgraph.SHA256([]byte("subject:progress")),
-		SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:progress")),
-		Writable:          true, CapsuleID: "capsule-progress",
-		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-	}
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-progress", AssignmentID: "assignment-progress", Binding: binding,
-		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: "progress probe"},
-	}
-	open.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(open)
-	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	run := types.RunRecord{
-		RunID: seed.AssignedRunIDs[0], AgentID: binding.AssignedAgentID, ChannelID: binding.AssignedAgentID,
-		RequestedByRunID: seed.ParentRunID, TrajectoryID: seed.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: seed.OwnerID, ComputerID: seed.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{binding.AssignedWorkItemID}, "lifecycle_work_item_id": binding.AssignedWorkItemID,
-			"requested_by_agent_id": binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": open.AssignmentID, "assignment_attempt": uint64(1), "assignment_kind": string(binding.Kind),
-			"assigned_work_item_id": binding.AssignedWorkItemID, "parent_work_item_id": binding.ParentWorkItemID,
-			"parent_decision_id": binding.ParentDecisionID, "parent_control_id": binding.ParentControlID,
-			"capsule_id": binding.CapsuleID, "scope_digest": binding.ScopeDigest, "request_digest": binding.RequestDigest,
-			"capability_digest": binding.CapabilityDigest, "execution_handle_digest": binding.ExecutionHandleDigest,
-			"subject_digest": binding.SubjectDigest, "source_artifact_ref": binding.SourceArtifactRef,
-		},
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-progress", OwnerID: seed.OwnerID, ComputerID: seed.ComputerID,
-		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
-		RunID: run.RunID, Run: run, OpaqueCapability: "cap-progress", CapsuleID: binding.CapsuleID,
-	}
-	bind.CommandDigest, _ = store.ComputeBindEngineeringAssignmentDigest(bind)
-	bound, err := s.BindEngineeringAssignment(ctx, bind)
-	if err != nil {
-		t.Fatalf("bind: %v", err)
-	}
-	time.Sleep(10 * time.Millisecond)
-
-	content, err := json.Marshal(struct {
-		AssignmentID         string `json:"assignment_id"`
-		Attempt              uint64 `json:"attempt"`
-		SilenceSinceUnixNano int64  `json:"silence_since_unix_nano"`
-	}{AssignmentID: open.AssignmentID, Attempt: 1, SilenceSinceUnixNano: bound.Assignment.UpdatedAt.UnixNano()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := rt.HandleEngineeringProgressOverdueDeadline(ctx, seed.OwnerID, seed.ComputerID, seed.ParentAgentID, string(content)); err != nil {
-		t.Fatalf("progress deadline handler: %v", err)
-	}
-	updates, err := s.ListDeliveredPendingProducerReports(ctx, seed.OwnerID, seed.ComputerID, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, u := range updates {
-		if strings.HasPrefix(u.ProducerUpdateID, "progress-overdue:"+open.AssignmentID) {
-			found = true
-			if u.TargetAgentID != seed.ParentAgentID || u.AgentID != binding.AssignedAgentID {
-				t.Fatalf("observation target mismatch: %+v", u)
-			}
-		}
-	}
-	if !found {
-		t.Fatal("no progress-overdue observation packet emitted")
-	}
-
-	// Second delivery with the same anchor dedupes to the replayed command.
-	if err := rt.HandleEngineeringProgressOverdueDeadline(ctx, seed.OwnerID, seed.ComputerID, seed.ParentAgentID, string(content)); err != nil {
-		t.Fatalf("replay handler: %v", err)
-	}
-}
-
 // Owner cancellation must reach trajectory fate past a never-bound cancelled
 // assignment. Failure modes pinned (docs/problems/texture-zombie-activations-
 // revising-forever-2026-10-09.md): prepare requested a capsule revoke on a
@@ -1155,26 +636,7 @@ func TestTrajectoryCancellationSkipsTerminalUnboundAssignment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-never-bound-1", AssignmentID: "assignment-never-bound",
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:never-bound")), RequestDigest: objectgraph.SHA256([]byte("request:never-bound")),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability("cap-never-bound"), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-never-bound")),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:never-bound")),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:never-bound")),
-			Writable:          true, CapsuleID: "capsule-never-bound",
-			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
-	}
-	open.CommandDigest, _ = store.ComputeOpenEngineeringAssignmentDigest(open)
+	open := store.SeedEngineeringOpenRequest(seed, 0, "opaque-never-bound")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}

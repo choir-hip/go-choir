@@ -175,24 +175,6 @@ func TestAssignedEngineeringCancellationIsAVerbNotATool(t *testing.T) {
 	}
 }
 
-func TestAssignmentIdentityUsesOnlyDocumentRevisionAndKind(t *testing.T) {
-	ownerID, computerID, trajectoryID, revisionID := "owner", "computer", "trajectory", "revision"
-	left := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.EngineeringAssignmentImplementation, "")
-	right := deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.EngineeringAssignmentVerification, "candidate")
-	if left == right {
-		t.Fatal("assignment kind absent from document assignment identity")
-	}
-	if left == deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, "other-revision", types.EngineeringAssignmentImplementation, "") {
-		t.Fatal("admitting revision absent from assignment identity")
-	}
-	if left == deterministicDocumentAssignmentIdentity(ownerID, computerID, "other-trajectory", revisionID, types.EngineeringAssignmentImplementation, "") {
-		t.Fatal("trajectory absent from assignment identity")
-	}
-	if left != deterministicDocumentAssignmentIdentity(ownerID, computerID, trajectoryID, revisionID, types.EngineeringAssignmentImplementation, "") {
-		t.Fatal("document assignment identity is not deterministic")
-	}
-}
-
 func TestStartCoagentRunHardRefusesEngineeringForEveryCaller(t *testing.T) {
 	s, err := openTestStore(filepath.Join(t.TempDir(), "runtime.db"))
 	if err != nil {
@@ -226,7 +208,7 @@ func TestAssignedEngineeringPromptNamesExactKindWithoutFutureToolLie(t *testing.
 		if !strings.Contains(prompt, "kind="+string(kind)) {
 			t.Fatalf("prompt does not name exact %s assignment: %s", kind, prompt)
 		}
-		if !strings.Contains(prompt, "Report progress to Management with choir.ReportPacket") {
+		if !strings.Contains(prompt, `Report progress to management with choir.Report("management"`) {
 			t.Fatalf("assigned Engineering prompt omits the in-cell report channel: %s", prompt)
 		}
 		for _, name := range []string{"commit_transaction", "inspect_self_development_bundle", "record_self_development_verification", "update_coagent", "record_assignment_result"} {

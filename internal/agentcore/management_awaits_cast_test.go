@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -43,30 +42,8 @@ func TestManagementParksOnlyWhileItsOwnCastIsOpen(t *testing.T) {
 		t.Fatalf("before any cast: authored=%v open=%v err=%v", authored, open, err)
 	}
 
-	assignmentID, capability := "assignment-awaits", "opaque-awaits"
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: "capsule-awaits",
-			NetworkMode:    types.EngineeringCapsuleNetworkEcosystemProxy,
-			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "replicate"},
-	}
-	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
-	if err != nil {
-		t.Fatal(err)
-	}
+	open := store.SeedEngineeringOpenRequest(seed, 0, "opaque-awaits")
+	assignmentID := open.AssignmentID
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatalf("open assignment: %v", err)
 	}

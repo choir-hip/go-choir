@@ -55,7 +55,7 @@ func TestFreezeAcceptsAdvancedBookkeepingHead(t *testing.T) {
 		t.Fatal(err)
 	}
 	operation, err := operations.Start(ctx, selfdev.StartRequest{
-		ComputerID: computerID, IdempotencyKey: "freeze-drift-op",
+		ComputerID: computerID, IdempotencyKey: choirstore.EngineeringFreezeIdempotencyKey("assignment-freeze-drift"),
 		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
 		BaseHead:          baseHead.CanonicalEventHead,
 	})
@@ -76,7 +76,9 @@ func TestFreezeAcceptsAdvancedBookkeepingHead(t *testing.T) {
 	if _, err := operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateRequested, selfdev.StateExecuting, nil); err != nil {
 		t.Fatal(err)
 	}
-	rec := &types.RunRecord{TrajectoryID: operation.TrajectoryID}
+	// The operation is the assignment's own (C1e D2): the freeze resolves it
+	// by the assignment's freeze key.
+	rec := &types.RunRecord{TrajectoryID: operation.TrajectoryID, Metadata: map[string]any{"assignment_id": "assignment-freeze-drift"}}
 	toolCtx := &CapsuleToolCtx{
 		ComputerID:         computerID,
 		UpdaterRoot:        t.TempDir(),
@@ -140,7 +142,7 @@ func TestFreezeRefusalStampsOperationIntentError(t *testing.T) {
 		t.Fatal(err)
 	}
 	operation, err := operations.Start(ctx, selfdev.StartRequest{
-		ComputerID: computerID, IdempotencyKey: "freeze-stamp-op",
+		ComputerID: computerID, IdempotencyKey: choirstore.EngineeringFreezeIdempotencyKey("assignment-freeze-stamp"),
 		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
 	})
 	if err != nil {

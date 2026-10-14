@@ -367,6 +367,22 @@ func testPeerRuntime(t *testing.T, primary *Runtime, sharedStore *store.Store) *
 	return peer
 }
 
+// openBoundSeedAssignment opens seed assignment index through the records
+// path (management's Cast composed into the open, C1e D4) and binds it to
+// its run, through the store alone. It returns the open request.
+func openBoundSeedAssignment(t *testing.T, s *store.Store, seed store.EngineeringAssignmentSeed, index int, capability string) types.OpenEngineeringAssignmentRequest {
+	t.Helper()
+	ctx := context.Background()
+	open := store.SeedEngineeringOpenRequest(seed, index, capability)
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("open seed assignment %d: %v", index, err)
+	}
+	if _, err := s.BindEngineeringAssignment(ctx, store.SeedEngineeringBindRequest(open, seed.AssignedRunIDs[index], capability)); err != nil {
+		t.Fatalf("bind seed assignment %d: %v", index, err)
+	}
+	return open
+}
+
 // setTestDispatch sets a test dispatch function that executes runs
 // asynchronously. Production uses the actor runtime (actorruntime.New);
 // tests use this minimal dispatch that calls ExecuteActivationSync in a
@@ -392,19 +408,6 @@ func setTestDispatch(rt *Runtime, s *store.Store) {
 		case "coagent_result":
 			// Synchronous: the boot sweep needs the reconcile to
 			// complete before the test checks the result.
-			if strings.HasPrefix(toAgentID, agentprofile.Engineering+":") {
-				// Engineering desk occurrence: decode the revision cast and
-				// open the assignment directly, mirroring the actor handler.
-				// Non-occurrence content falls through to the generic wake.
-				if occurrence, occErr := DecodeTextureActorOccurrence(content); occErr == nil &&
-					occurrence.Kind == TextureActorOccurrenceDocumentRevision {
-					docID := strings.TrimSpace(strings.TrimPrefix(toAgentID, agentprofile.Engineering+":"))
-					if _, err := rt.ReconcileEngineeringRevisionCast(ctx, ownerID, docID, occurrence.HeadRevisionID); err != nil {
-						log.Printf("test dispatch: reconcile engineering cast for %s: %v", toAgentID, err)
-					}
-					return nil
-				}
-			}
 			agent, err := s.GetAgentByScope(ctx, ownerID, computerID, toAgentID)
 			if err != nil {
 				return nil // agent not found — nothing to wake

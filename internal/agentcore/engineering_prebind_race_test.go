@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -28,38 +27,18 @@ func TestWorkWakeLeavesThisBootsPreBindAssignmentToItsSpawn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignmentID := "assignment-prebind"
-	capability := "opaque-prebind"
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: "capsule-prebind",
-			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "build the game"},
-	}
-	open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open)
-	if err != nil {
-		t.Fatal(err)
-	}
+	open := store.SeedEngineeringOpenRequest(seed, 0, "opaque-prebind")
+	assignmentID := open.AssignmentID
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
+	// A records assignment has no work item (C1e D1): the reconcile the
+	// trajectory's wakes run is the one that must leave this boot's
+	// pre-bind window to its spawn.
 	wake := func() types.EngineeringAssignment {
 		t.Helper()
-		if err := rt.ReconcileLifecycleWorkAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, open.Binding.AssignedAgentID, open.Binding.TrajectoryID, open.Binding.AssignedWorkItemID); err != nil {
-			t.Fatalf("work wake: %v", err)
+		if err := rt.ReconcileEngineeringAssignmentsForTrajectory(ctx, open.Binding.OwnerID, open.Binding.ComputerID, open.Binding.TrajectoryID); err != nil {
+			t.Fatalf("reconcile: %v", err)
 		}
 		assignment, err := s.GetEngineeringAssignment(ctx, open.Binding.OwnerID, open.Binding.ComputerID, assignmentID, 1)
 		if err != nil {

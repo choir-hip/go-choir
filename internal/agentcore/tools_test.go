@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -18,7 +17,6 @@ import (
 )
 
 // --- Batch executor contract tests ---
-
 
 func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
@@ -63,7 +61,6 @@ func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t
 		t.Fatalf("output_projection = %#v, want test_projection", resultPayload["output_projection"])
 	}
 }
-
 
 func testSourceAPIItem() sourceapi.ItemResult {
 	return sourceapi.ItemResult{
@@ -174,63 +171,8 @@ func TestFallbackLeavesAssignedTerminalRunToFateReconcile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignmentID := "assignment-orphan-prod"
-	capability := "opaque-orphan-prod"
-	capsuleID := "capsule-orphan-prod"
-	open := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + "-1", AssignmentID: assignmentID,
-		Binding: types.EngineeringAssignmentBinding{
-			OwnerID: seed.OwnerID, ComputerID: seed.ComputerID, TrajectoryID: seed.TrajectoryID,
-			ParentAgentID: seed.ParentAgentID, ParentRunID: seed.ParentRunID,
-			ParentDecisionID: seed.ParentDecisionID, ParentControlID: seed.ParentControlID,
-			ParentWorkItemID: seed.ParentWorkID, AssignedWorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0],
-			Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-			ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-			CapabilityDigest: store.DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-			SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-			SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-			Writable:          true, CapsuleID: capsuleID,
-			NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-			FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-		},
-		AssignedAgent: types.AgentRecord{AgentID: seed.AssignedAgentIDs[0]},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: seed.AssignedWorkIDs[0], AssignedAgentID: seed.AssignedAgentIDs[0], Objective: "bounded delegated assignment"},
-	}
-	if open.CommandDigest, err = store.ComputeOpenEngineeringAssignmentDigest(open); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
-		t.Fatal(err)
-	}
-	runID := seed.AssignedRunIDs[0]
-	run := types.RunRecord{
-		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": assignmentID, "assignment_attempt": 1, "assignment_kind": string(open.Binding.Kind),
-			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-			"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-		},
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-" + assignmentID + "-1",
-		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: assignmentID,
-		Attempt: 1, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-		OpaqueCapability: capability, CapsuleID: capsuleID,
-	}
-	if bind.CommandDigest, err = store.ComputeBindEngineeringAssignmentDigest(bind); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
-		t.Fatal(err)
-	}
+	open := openBoundSeedAssignment(t, s, seed, 0, "opaque-orphan-prod")
+	assignmentID, runID := open.AssignmentID, seed.AssignedRunIDs[0]
 	persisted, err := s.GetLifecycleRun(ctx, seed.OwnerID, seed.ComputerID, runID)
 	if err != nil {
 		t.Fatal(err)
@@ -259,7 +201,7 @@ func TestFallbackLeavesAssignedTerminalRunToFateReconcile(t *testing.T) {
 	if assignment.Disposition.Terminal() {
 		t.Fatalf("assignment disposition = %v, want non-terminal (fate reconcile owns closure)", assignment.Disposition)
 	}
-	updates, err := s.ListPendingWorkerUpdates(ctx, seed.OwnerID, "texture:"+run.ChannelID, 10)
+	updates, err := s.ListPendingWorkerUpdates(ctx, seed.OwnerID, "texture:"+open.Binding.AssignedAgentID, 10)
 	if err != nil {
 		t.Fatal(err)
 	}

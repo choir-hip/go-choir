@@ -64,8 +64,8 @@ func TestFreezeOpensCandidateOnlyWhenModeAuthorizes(t *testing.T) {
 	if _, err := openFreezeCandidate(ctx, operations, refused, computerID, "trajectory-doc", "engineering:assignment-a", "make an app"); err == nil {
 		t.Fatal("candidate opened while the signed mode does not authorize proposals")
 	}
-	if _, err := operations.GetByTrajectory(ctx, computerID, "trajectory-doc"); err == nil {
-		t.Fatal("refused open left a candidate behind")
+	if ops, err := operations.ListByTrajectory(ctx, computerID, "trajectory-doc"); err != nil || len(ops) != 0 {
+		t.Fatalf("refused open left a candidate behind: %+v, %v", ops, err)
 	}
 }
 
@@ -87,9 +87,9 @@ func TestFreezeOpensExecutingCandidateBoundToAssignment(t *testing.T) {
 	if opened.DesiredHead != head.DesiredEventHead || opened.EffectiveHead != head.EffectiveEventHead {
 		t.Fatalf("candidate pins stale heads: %+v vs %+v", opened, head)
 	}
-	found, err := operations.GetByTrajectory(ctx, computerID, "trajectory-doc")
-	if err != nil || found.OperationID != opened.OperationID {
-		t.Fatalf("freeze lookup by trajectory = %+v, %v", found, err)
+	found, ok, err := operations.GetByIdempotency(ctx, computerID, choirstore.EngineeringFreezeIdempotencyKey("engineering:assignment-a"))
+	if err != nil || !ok || found.OperationID != opened.OperationID {
+		t.Fatalf("freeze lookup by assignment key = %+v, %v, %v", found, ok, err)
 	}
 	again, err := openFreezeCandidate(ctx, operations, authorized, computerID, "trajectory-doc", "engineering:assignment-a", "make an app that does x")
 	if err != nil || again.OperationID != opened.OperationID {

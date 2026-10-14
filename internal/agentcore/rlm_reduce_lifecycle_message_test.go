@@ -537,11 +537,10 @@ func TestCommitTrayLifecycleEscalateCastRetractMintRecordNative(t *testing.T) {
 	}
 }
 
-// Cast cutover mints record+directive packet via CommitLifecycleAct and then
-// invokes the delegated-cast admission hook against the record's canonical id
-// (LifecycleResult.RecordCanonicalID). testRuntime has no capsule executor, so
-// admission fails post-mint — the record and packet are durable regardless.
-func TestCommitTrayLifecycleCastMintsBeforeAdmission(t *testing.T) {
+// C1e B1: the packet path no longer casts engineering. An act-path Cast to
+// engineering (no records parent) is refused before anything commits: no
+// record, no directive packet, no assignment.
+func TestCommitTrayPacketPathEngineeringCastIsRefused(t *testing.T) {
 	rt, s := testRuntime(t)
 	rt.SetDispatchActor(func(context.Context, string, string, string, string, string, string, string) error { return nil })
 
@@ -579,27 +578,21 @@ func TestCommitTrayLifecycleCastMintsBeforeAdmission(t *testing.T) {
 	deskCaller.AgentProfile = agentprofile.Management
 	reduction := &rlmCallReduction{active: true, mb: rt, st: rt.store, ledger: rt.store, scope: scope, rec: &deskCaller}
 
-	// The cast record+packet mint atomically; admission fails on the missing
-	// capsule executor in the test runtime — the same legacy-ordering defect,
-	// but now the record mint is inside the lifecycle transaction.
 	err = reduction.commitTray(ctx, []yaegikernel.StagedIntent{
 		{LocalID: "cast-1", Kind: yaegikernel.IntentCast, ToDesk: "engineering", Objective: "build the widget", Statement: "spec body"},
 	}, 1)
-	if err == nil || !strings.Contains(err.Error(), "capsule authority unavailable") {
-		t.Fatalf("expected delegated-cast admission failure, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "naming the Texture request it serves") {
+		t.Fatalf("packet-path engineering Cast was not refused: %v", err)
 	}
-
 	pending, err := s.ListAllPendingLifecycleUpdates(ctx, caller.OwnerID, caller.ComputerID, engineeringID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pending) != 1 {
-		t.Fatalf("cast directive did not queue on engineering: pending=%d", len(pending))
+	if len(pending) != 0 {
+		t.Fatalf("refused engineering Cast queued a directive: %+v", pending)
 	}
-	if pending[0].Direction != types.LifecyclePacketDirectionDirective ||
-		pending[0].SourceRecordID != "cell-cast:cast:cast-1" ||
-		!strings.Contains(strings.Join(pending[0].Packet.Notes, " "), "cast_objective:build the widget") {
-		t.Fatalf("cast packet malformed: %+v", pending[0])
+	if assignments, err := s.ListEngineeringAssignments(ctx, caller.OwnerID, caller.ComputerID, fixture.trajectoryID); err != nil || len(assignments) != 0 {
+		t.Fatalf("refused engineering Cast opened an assignment: %+v, %v", assignments, err)
 	}
 }
 

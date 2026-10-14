@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
@@ -55,12 +56,17 @@ func TestCommitFreezeIntentRejectsDocumentTrajectoryBeforeExecutorEffect(t *test
 	ctx = toolregistry.WithExecutionContext(ctx, toolregistry.ExecutionContext{RunID: rec.RunID, RunRecord: rec})
 	reduction := &rlmCallReduction{rec: rec, toolCtx: toolCtx}
 
+	// C1e D2: a document trajectory's assignment may open its own candidate,
+	// so the refusal here is the incomplete freeze itself; it must land
+	// before any executor effect and open no operation.
 	_, err := reduction.commitFreezeIntent(ctx, yaegikernel.StagedIntent{Kind: yaegikernel.IntentFreeze})
-	if err == nil || !strings.Contains(err.Error(), "resolve self-development operation") {
-		t.Fatalf("document trajectory freeze error = %v, want self-development operation refusal", err)
+	if err == nil {
+		t.Fatal("incomplete document trajectory freeze was not refused")
+	}
+	if _, found, lookupErr := rt.selfdevOperations.GetByIdempotency(context.Background(), rec.ComputerID, store.EngineeringFreezeIdempotencyKey("assignment-document-freeze")); lookupErr != nil || found {
+		t.Fatalf("refused freeze opened an operation: found=%v err=%v", found, lookupErr)
 	}
 }
-
 
 // TestInboxCursorSurvivesDeskRespawn proves the (channel,desk) rekey: a
 // cursor committed under run A is recovered when the desk respawns with a
@@ -219,7 +225,6 @@ func TestCellTerminalDeadlineDoesNotCancelReactivatedRun(t *testing.T) {
 		t.Fatalf("reactivated cell fate = %q, found=%t, err=%v", fate, found, err)
 	}
 }
-
 
 func TestCommitAdvancesOnlyInboxHighWater(t *testing.T) {
 	rt, _ := testRuntime(t)
@@ -421,8 +426,6 @@ func TestCommitActIntentReportPacketBody(t *testing.T) {
 		t.Fatalf("report packet body not on the wire: %+v", msgs)
 	}
 }
-
-
 
 func TestChannelCastWakesAddressedActor(t *testing.T) {
 	rt, _ := testRuntime(t)

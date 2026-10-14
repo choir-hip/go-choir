@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
 )
 
 func TestMaintenanceHoldRefusesRunAdmission(t *testing.T) {
@@ -16,14 +14,5 @@ func TestMaintenanceHoldRefusesRunAdmission(t *testing.T) {
 	_, err := rt.createRunWithMetadata(context.Background(), "p", "owner", nil)
 	if err == nil || !strings.Contains(err.Error(), "maintenance hold") {
 		t.Fatalf("expected maintenance-hold admission refusal, got %v", err)
-	}
-}
-
-func TestMaintenanceHoldRefusesSelfDevelopmentRun(t *testing.T) {
-	t.Setenv("RUNTIME_MAINTENANCE_HOLD", "1")
-	h := &APIHandler{rt: &Runtime{}}
-	_, err := h.ensureSelfDevelopmentRun(nil, selfdev.Operation{}, "owner", "prompt")
-	if err == nil || !strings.Contains(err.Error(), "maintenance hold") {
-		t.Fatalf("expected maintenance-hold self-development refusal, got %v", err)
 	}
 }

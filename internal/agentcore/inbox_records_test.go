@@ -35,11 +35,11 @@ func TestResearchCellReadsRecordsAndReportsToTexture(t *testing.T) {
 
 	cast := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "seed-cast", Records: []types.CommitmentRecord{{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cast:tray-1", Kind: types.CommitmentKindDirective,
-		Directive:   &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "cover chips", Body: `{"kind":"question","summary":"chips"}`},
-		Cast:        &types.CommitmentCast{},
-		Inbox:       research, SenderInbox: texture, Addressee: research,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "cover chips", Body: `{"kind":"question","summary":"chips"}`},
+		Cast:      &types.CommitmentCast{},
+		Inbox:     research, SenderInbox: texture, Addressee: research,
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
-		Provenance:  types.CommitmentProvenance{AgentID: texture},
+		Provenance: types.CommitmentProvenance{AgentID: texture},
 	}}}
 	cast.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(cast)
 	if _, err := s.CommitInboxRecords(ctx, cast); err != nil {
@@ -165,11 +165,11 @@ func TestManagementCellAnswersTextureOnRecords(t *testing.T) {
 
 	cast := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "seed-mgmt-cast", Records: []types.CommitmentRecord{{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "texture-cell:cast:mgmt", Kind: types.CommitmentKindDirective,
-		Directive:   &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "publish the page", Body: `{"kind":"execution_request","summary":"publish"}`},
-		Cast:        &types.CommitmentCast{},
-		Inbox:       management, SenderInbox: texture, Addressee: management,
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "publish the page", Body: `{"kind":"execution_request","summary":"publish"}`},
+		Cast:      &types.CommitmentCast{},
+		Inbox:     management, SenderInbox: texture, Addressee: management,
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
-		Provenance:  types.CommitmentProvenance{AgentID: texture},
+		Provenance: types.CommitmentProvenance{AgentID: texture},
 	}}}
 	cast.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(cast)
 	if _, err := s.CommitInboxRecords(ctx, cast); err != nil {
@@ -197,8 +197,8 @@ func TestManagementCellAnswersTextureOnRecords(t *testing.T) {
 	if out := cell(`choir.ReportPacket("texture", map[string]interface{}{"kind":"blocker","summary":"x","notes":[]string{"x"}}, "")`); !strings.Contains(out, "texture:<doc>") {
 		t.Fatalf("a bare \"texture\" was not refused: %s", out)
 	}
-	if out := cell(`choir.Cast("engineering", "build it", map[string]interface{}{})`); !strings.Contains(out, "not available on this build") {
-		t.Fatalf("an engineering Cast from a records turn was not refused: %s", out)
+	if out := cell(`choir.Cast("engineering", "build it", map[string]interface{}{})`); !strings.Contains(out, "name the Texture request it serves") {
+		t.Fatalf("an engineering Cast naming no parent Texture request was not refused: %s", out)
 	}
 	out := cell(`rs := choir.Records()
 fmt.Println(len(rs), rs[0].Kind, rs[0].From)
@@ -239,7 +239,7 @@ func TestRecordsRecheckAfterTurn(t *testing.T) {
 		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "late-" + id, Records: []types.CommitmentRecord{{
 			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
 			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: id},
-			Inbox: research, SenderInbox: texture, Addressee: research, EmitterKind: types.CommitmentEmitterAgent,
+			Inbox:     research, SenderInbox: texture, Addressee: research, EmitterKind: types.CommitmentEmitterAgent,
 			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: texture, CommittedAt: at.Format(time.RFC3339Nano)},
 		}}}
 		req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
@@ -429,7 +429,7 @@ func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
 		req := types.CommitInboxRecordsRequest{OwnerID: owner, ComputerID: computer, CommandID: "shown-" + id, Records: []types.CommitmentRecord{{
 			SchemaID: types.CommitmentRecordSchemaV1, RecordID: id, Kind: types.CommitmentKindDirective,
 			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: id},
-			Inbox: management, SenderInbox: source, Addressee: management, EmitterKind: types.CommitmentEmitterSystem,
+			Inbox:     management, SenderInbox: source, Addressee: management, EmitterKind: types.CommitmentEmitterSystem,
 			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: "system:captures", CommittedAt: at.Format(time.RFC3339Nano)},
 		}}}
 		req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
