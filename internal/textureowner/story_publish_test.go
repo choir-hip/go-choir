@@ -86,6 +86,12 @@ func (p *recordingStoryPublisher) none(t *testing.T, label string) {
 // texture:new) and projects a Texture records-route run onto it.
 func openStoryForTexture(t *testing.T, h *Handler, s *store.Store, suffix string, publish string) types.RunRecord {
 	t.Helper()
+	return openStoryWithObjective(t, h, s, suffix, publish, "Harbor reopens "+suffix)
+}
+
+// openStoryWithObjective opens a story whose opening Cast carries objective.
+func openStoryWithObjective(t *testing.T, h *Handler, s *store.Store, suffix, publish, objective string) types.RunRecord {
+	t.Helper()
 	ctx := context.Background()
 	// The story lives on the runtime's own computer, as it does deployed
 	// (B12: a story on another computer hid the seed-role carry-forward).
@@ -93,7 +99,7 @@ func openStoryForTexture(t *testing.T, h *Handler, s *store.Store, suffix string
 	management := agentprofile.Management + ":" + owner
 	cast := types.CommitmentRecord{
 		SchemaID: types.CommitmentRecordSchemaV1, RecordID: "cell-open-" + suffix + ":cast:c1", Kind: types.CommitmentKindDirective,
-		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: "Harbor reopens " + suffix},
+		Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveCast, Objective: objective},
 		Cast:      &types.CommitmentCast{Captures: []string{"cap-court"}, Publish: publish},
 		Inbox:     types.StoryOpenInbox, SenderInbox: management, Addressee: types.StoryOpenInbox,
 		EmitterKind: types.CommitmentEmitterAgent, Discrepancy: types.DiscrepancyUnresolved,
@@ -274,4 +280,95 @@ func TestCrashBootPublishesNothing(t *testing.T) {
 		t.Fatalf("texture owner boot: %v", err)
 	}
 	pub.none(t, "a crash boot")
+}
+
+// Management opened stories with a writing brief as the Cast's objective
+// ("Write the story of Switzerland proposing to ban ..."), the store made
+// it the title, nothing retitled the story, and every version published
+// under it, while Texture's own headline sat unread in the body
+// (docs/problems/instruction-text-published-as-story-titles-2026-10-14.md).
+// Ways the fix can fail, written first:
+//   - a heading-led revision leaves the brief as the title;
+//   - a headingless revision (a V1 plan) still publishes, under the brief
+//     and with the plan as its dek, or it is held with no reason Texture
+//     can read;
+//   - a held revision changes the title, or the next heading-led revision
+//     is renumbered into the held slot;
+//   - a later headline does not retitle the story as it develops, or its
+//     marks break the title's spacing;
+//   - a document that is not a story is retitled by its heading.
+func TestStoryIsTitledByTexturesHeadlineAndAHeadlinelessRevisionIsHeld(t *testing.T) {
+	_, h, s, pub := storySetup(t)
+	brief := "Write the story of the harbor reopening: who reopens it, when, and what the court ruled."
+	rec := openStoryWithObjective(t, h, s, "headline", types.CastPublishAuto, brief)
+	ctx := context.Background()
+	title := func() string {
+		t.Helper()
+		doc, err := s.GetLifecycleDocument(ctx, rec.OwnerID, rec.ComputerID, rec.ChannelID)
+		if err != nil {
+			t.Fatalf("story document: %v", err)
+		}
+		return doc.Title
+	}
+	if got := title(); got != brief {
+		t.Fatalf("opening title = %q; want the Cast's objective as the working title", got)
+	}
+
+	base := headOf(t, s, rec)
+	plan := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@all\nThis document will explain the harbor reopening.\n\n" + cited("The court ruling comes first."),
+		Why:   "plan the story",
+	}})
+	out, err := h.CommitCellTextureAuthor(ctx, &rec, plan, "write-plan")
+	if err != nil {
+		t.Fatalf("headingless Write: %v", err)
+	}
+	if head := headOf(t, s, rec); head.RevisionID == base.RevisionID {
+		t.Fatal("the headingless Write committed nothing; it must commit and only not publish")
+	}
+	pub.none(t, "a revision that does not lead with a headline")
+	if !strings.Contains(out, `"publish_held"`) || !strings.Contains(out, "does not lead with a headline") {
+		t.Fatalf("turn result %s does not tell Texture the revision was held for its headline", out)
+	}
+	if got := title(); got != brief {
+		t.Fatalf("a headingless revision retitled the story to %q", got)
+	}
+
+	first := storyWrite(t, h, s, &rec, "write-headline", cited("The harbor reopens Monday."))
+	if got := title(); got != "Harbor" {
+		t.Fatalf("title after a heading-led revision = %q; want Texture's headline %q", got, "Harbor")
+	}
+	if v := pub.next(t); v.RevisionID != first.RevisionID || v.Revision != 3 {
+		t.Fatalf("published %+v; want the heading-led revision %s as v3 (v2, the plan, stays a gap)", v, first.RevisionID)
+	}
+
+	head := headOf(t, s, rec)
+	developed := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: head.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@all\n## Ferries **resume** Tuesday as the harbor reopens\n\n" + cited("The harbor reopened Monday."),
+		Why:   "the ferries resumed",
+	}})
+	if _, err := h.CommitCellTextureAuthor(ctx, &rec, developed, "write-developed"); err != nil {
+		t.Fatalf("developed Write: %v", err)
+	}
+	if got, want := title(), "Ferries resume Tuesday as the harbor reopens"; got != want {
+		t.Fatalf("title after a new headline = %q; want %q", got, want)
+	}
+	if v := pub.next(t); v.Revision != 4 {
+		t.Fatalf("published %+v; want v4", v)
+	}
+	pub.none(t, "after the developed revision")
+
+	// An owner's document is not a story: its heading does not retitle it.
+	dh, ds, docRec := cellAuthorSetup(t, "not-a-story")
+	docBase := headOf(t, ds, docRec)
+	edit := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: docBase.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@replace b1\n# Merger approved", Why: "retitle the section",
+	}})
+	if _, err := dh.CommitCellTextureAuthor(ctx, &docRec, edit, "write-doc"); err != nil {
+		t.Fatalf("document Write: %v", err)
+	}
+	owned, err := ds.GetLifecycleDocument(ctx, docRec.OwnerID, docRec.ComputerID, docRec.ChannelID)
+	if err != nil || owned.Title != "Cell author not-a-story" {
+		t.Fatalf("owner document title = %q, %v; want it unchanged", owned.Title, err)
+	}
 }

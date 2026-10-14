@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -152,9 +153,18 @@ func (rt *Runtime) storyPublishesAuto(ctx context.Context, ownerID, computerID, 
 // wrote one-paragraph "the claims are unverified" revisions and they
 // published as stories (docs/problems/free-model-429-opens-provider-
 // circuit-stub-stories-2026-10-14.md). An owner's publish is another
-// route and is not held. held is the reason when a publish-auto story's
-// revision was held for that, so the caller can say so; it is empty
-// otherwise.
+// route and is not held.
+//
+// A revision that does not lead with a headline is held the same way. A
+// story is titled by the headline Texture writes (the store retitles it in
+// the revision's commit); without one the title is still the opening
+// Cast's objective, and management's writing briefs ("Write the story of
+// ...") went out as published titles, while V1 plans ("This document will
+// explain ...") went out as deks (docs/problems/instruction-text-published-
+// as-story-titles-2026-10-14.md).
+//
+// held is the reason when a publish-auto story's revision was held, so
+// the caller can say so; it is empty otherwise.
 func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc types.Document, rev types.Revision) (held string) {
 	if rt == nil || rt.store == nil {
 		log.Printf("story publish: %s revision %s not considered: no runtime store", doc.DocID, rev.RevisionID)
@@ -183,6 +193,11 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc 
 		if err != nil {
 			held = "its citations could not be read (" + err.Error() + "), so v" + strconv.Itoa(v.Revision) + " stays a gap"
 		}
+		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
+		return held
+	}
+	if texturedoc.Headline(rev.BodyDoc) == "" {
+		held = "it does not lead with a headline (a heading as its first block, which titles the story), so v" + strconv.Itoa(v.Revision) + " stays a gap; the next revision that leads with one publishes"
 		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
 		return held
 	}

@@ -73,8 +73,9 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 			t.Errorf("prompt core still teaches %q", retired)
 		}
 	}
-	if n := len(prompt); n > 4000 {
-		t.Errorf("prompt core is %d characters; the budget is about 3.5k", n)
+	// 4000 until the story headline rule (2026-10-14) added one line.
+	if n := len(prompt); n > 4300 {
+		t.Errorf("prompt core is %d characters; the budget is about 4.3k", n)
 	}
 }
 
@@ -95,6 +96,29 @@ func TestPromptCoreTeachesCitesAreNumbersAndInferenceFirst(t *testing.T) {
 		`"costs 75% less {{cite ...}}", not "costs {{cite ...}}"`,
 		"Lead with what the evidence adds up to",
 		"A list of findings is not an answer.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt core lacks %q", want)
+		}
+	}
+}
+
+// Stories were published under management's writing brief ("Write the
+// story of ...") and with V1 plans as their deks ("This document will
+// explain ...") (docs/problems/instruction-text-published-as-story-titles-
+// 2026-10-14.md). The store now titles a story from the heading its
+// revision leads with, and a story revision without one is held. Ways the
+// prompt can fail: Texture is never told a story leads with a headline, so
+// every revision is held; it is not told the headline is not the brief, so
+// it copies the brief into the heading; it still writes a story's V1 as an
+// acknowledgment, now under a heading, and the plan publishes.
+func TestPromptCoreTeachesTheStoryHeadline(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	for _, want := range []string{
+		"publish: auto",
+		"V1 included, so its V1 is news, not a plan",
+		"leads with one heading, its headline, never the brief you were sent",
+		"it titles the story, and a revision without it does not publish",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("prompt core lacks %q", want)

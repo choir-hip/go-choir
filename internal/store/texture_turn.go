@@ -435,6 +435,7 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		if err != nil {
 			return types.LifecycleResult{}, err
 		}
+		resultDocument.Title = storyTitleAfterRevision(trajectory, resultDocument.Title, revision)
 		revisionMeta := lifecycleMetadata("revision_id", revision.RevisionID, computerID, req.TrajectoryID, seq+1)
 		revisionMeta["doc_id"], revisionMeta["revision_hash"] = req.DocumentID, revision.RevisionHash
 		revisionObj, buildErr := lifecycleObject(ogKindTexRev, ownerID, computerID, revision.RevisionID, revision, revisionMeta, now, now)

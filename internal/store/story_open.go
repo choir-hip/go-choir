@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -49,6 +50,24 @@ func storyTitle(objective string) string {
 		title = "Story"
 	}
 	return title
+}
+
+// storyTitleAfterRevision is a story's title once Texture commits revision:
+// the headline the revision leads with, else the title it had. Texture
+// titles the story; the opening Cast's objective is only a working title
+// until Texture's first headline (docs/problems/instruction-text-published-
+// as-story-titles-2026-10-14.md: management's briefs, "Write the story of
+// ...", stood as the published titles because nothing replaced them).
+// Documents that are not stories keep their titles.
+func storyTitleAfterRevision(trajectory types.TrajectoryRecord, title string, revision types.Revision) string {
+	if trajectory.Kind != types.TrajectoryKindStory {
+		return title
+	}
+	headline := texturedoc.Headline(revision.BodyDoc)
+	if headline == "" {
+		return title
+	}
+	return storyTitle(headline)
 }
 
 // planStoryOpenings rewrites every Cast to StoryOpenInbox to its new

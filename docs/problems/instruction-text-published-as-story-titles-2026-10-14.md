@@ -173,3 +173,83 @@ and the field's other job (the work brief) pulls the other way.
   acknowledgments. An acknowledgment written under a heading still
   publishes. The full fix is a story V1 that is already news, and it
   needs its own decision.
+
+## Fix (Texture titles the story)
+
+Mutation class: **red**. It touches the Texture canonical write
+(`ApplyTextureTurn`'s document object) and the auto-publish gate. It does
+not touch the publish route, the platform or the management prompts. The
+intake/L2a prompts are left alone; the opening Cast keeps its shape.
+
+- `texturedoc.Headline(body)` returns the text of the body's first block
+  that has text, when that block is a heading (any level, text nodes
+  only, whitespace collapsed). It returns "" otherwise.
+- `store.ApplyTextureTurnWithSourceGraph`: in the commit of a Texture
+  revision on a story trajectory (`TrajectoryKindStory`), the document
+  title becomes that headline, cut to 160 runes (`storyTitleAfterRevision`).
+  It is the same object write that moves the head, so title and head
+  cannot disagree. A headingless revision keeps the title. Documents that
+  are not stories never change title. The opening objective stays only as
+  a working title until Texture's first headline.
+- `agentcore.AutoPublishRevision`: a publish-auto story revision with no
+  leading headline is held, like one that cites no source. It stays
+  committed, its version is a gap, it gets a log line, and the turn
+  result carries `publish_held`. So no version publishes under the
+  opening brief. Headingless V1 plans ("This document will explain…") are
+  held too.
+- Texture's prompt has one line in "Revision shape": a story publishes
+  every revision, V1 included, so its V1 is news, not a plan. Each
+  revision leads with one heading, its headline, never the brief; it
+  titles the story, and without it the revision does not publish. The
+  prompt-core budget test moves from 4000 to 4300 characters for this
+  line.
+
+Failure modes, written before the code (tests:
+`TestHeadline`, `TestStoryIsTitledByTexturesHeadlineAndAHeadlinelessRevisionIsHeld`,
+`TestPromptCoreTeachesTheStoryHeadline`):
+
+- a heading-led revision leaves the brief as the title;
+- a later section heading ("Background") or a leading paragraph is read
+  as the headline;
+- marks split the heading and break its spacing, or a citation in it
+  leaks into the title;
+- a headingless revision still publishes, or is held with no reason
+  Texture can read;
+- a held revision retitles the story, or the next one is renumbered into
+  the held slot;
+- an owner's document (not a story) is retitled by its heading;
+- Texture is never told, so every story revision is held. This is the
+  live risk. In the newest 50 stories, 24 current revisions lead with a
+  heading and 25 do not. Until Texture follows the new prompt line, more
+  story versions are gaps. Watch `story publish: … does not lead with a
+  headline` in the computer log after deploy.
+
+### Existing leaked stories
+
+Published versions are immutable; they keep their manifest titles. The
+publication's title is its latest version's title, and the front reads
+that. So a leaked story is fixed when its next Texture revision commits
+with a leading heading: the store retitles the document and the version
+publishes under the headline. Of the ten instruction-titled documents in
+the newest 50, nine already lead with a heading. Any further revision
+fixes them. No code backfill is safe or needed. Retitling the document
+without a new version would leave the front unchanged.
+
+A one-off owner act forces it: send each leaked story a Note asking
+Texture to revise. The leaked doc ids:
+
+- 888c8135, 5e1e355d, 17a2f6fb, 4fcd4f76, a6a93a84, 26d1d8e9, b3586842,
+  f7df6f21, abeadee8 and 4e217e05 (newest 50);
+- b823d76c, 282380c9, 93ee459e, b5db8e8d, 99e90aa5 and 7eeddad7 (the
+  10:15 batch).
+
+Fujifilm (26d1d8e9) and three of the 10:15 batch lead with a paragraph,
+so their next revision must also add a heading.
+
+Each publication's route slug was fixed by its v1
+(`/pub/texture/write-the-story-of-…`) and stays: links never change.
+
+### Rollback
+
+Revert the fix commit. Titles already set from headlines stay; they are
+data, and correct. Holds stop at once.
