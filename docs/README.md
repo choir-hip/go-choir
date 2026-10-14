@@ -125,6 +125,7 @@ Read the relevant contract before touching its protected surface.
 | `reports/` | design reports, station letters, owner direction | the 10-13/14 set is current; older ones are pruned when closed |
 | `research/` | dated research bundles | kept while they inform an open decision |
 | `learn/` | teaching series | current |
+| `briefings/` | read-aloud system briefings for the owner ([how](briefings/README.md)) | keep; each settles the previous one's predicted questions |
 | `runbooks/` | operational procedures | keep working procedures only |
 | `deck/`, `design/`, `legal/` | pitch, showreel, policies | latest variants only |
 | `archive/` | historical corpus | opt-in; see `archive/README.md` |
