@@ -1,0 +1,193 @@
+# Patch watch (DRAFT, report-only).
+# Design: docs/reports/patch-pipeline-time-to-patch-2026-10-15.md, section 4.1
+# and rollout step 1. Compares what main DECLARES (host and guest kernel,
+# Firecracker, the production Go toolchain, npm lock) against primary feeds:
+# kernel.org, the kernel CNA vulns repo, CISA KEV, Firecracker advisories,
+# the Go vulnerability database and npm advisories. It opens or updates one
+# `patch-sla` issue per finding class. It reads no secrets beyond the default
+# token, never touches Node B, never changes the repo, and never deploys.
+# The RUNNING side (booted kernel) is checked on the host (design 4.2).
+name: Patch Watch
+
+on:
+  schedule:
+    - cron: '17 6 * * *' # daily, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: patch-watch
+  cancel-in-progress: false
+
+jobs:
+  declared-vs-feeds:
+    name: Declared versions vs security feeds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: DeterminateSystems/determinate-nix-action@v3
+
+      - name: Evaluate declared versions (no build)
+        id: declared
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "REPORT=$RUNNER_TEMP/patch-watch.md" >> "$GITHUB_ENV"
+          ev() { nix eval --raw "$1"; }
+          {
+            echo "host_kernel=$(ev .#nixosConfigurations.go-choir-b.config.boot.kernelPackages.kernel.version)"
+            echo "guest_kernel=$(ev .#nixosConfigurations.go-choir-autoputer-vm.config.boot.kernelPackages.kernel.version)"
+            echo "firecracker=$(ev .#nixosConfigurations.go-choir-b.pkgs.firecracker.version)"
+            echo "go=$(ev .#nixosConfigurations.go-choir-b.pkgs.go.version)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: Kernel - KEV entries vs kernel CNA fixed versions, and 6.18 lag
+        id: kernel
+        shell: bash
+        env:
+          HOST_KERNEL: ${{ steps.declared.outputs.host_kernel }}
+          GUEST_KERNEL: ${{ steps.declared.outputs.guest_kernel }}
+        run: |
+          set -euo pipefail
+          python3 -I - <<'EOF'
+          import json, os, re, urllib.request, urllib.error, datetime
+          def get(url):
+              req = urllib.request.Request(url, headers={"User-Agent": "choir-patch-watch/1 (+https://choir.news)"})
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.load(r)
+          def vt(s):
+              return tuple(int(x) for x in re.findall(r"\d+", s)[:3])
+          host, guest = os.environ["HOST_KERNEL"], os.environ["GUEST_KERNEL"]
+          branch = ".".join(host.split(".")[:2])
+          rel = get("https://www.kernel.org/releases.json")["releases"]
+          head = next((r for r in rel if r["version"].startswith(branch + ".")), None)
+          lines, findings = [], []
+          if head:
+              behind = vt(head["version"])[2] - vt(host)[2] if len(vt(host)) > 2 else "?"
+              lines.append(f"- {branch} longterm head: {head['version']} ({head['released']['isodate']}); host declares {host} ({behind} releases behind); guest declares {guest}")
+          kev = get("https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json")
+          cutoff = (datetime.date.today() - datetime.timedelta(days=730)).isoformat()
+          kernel_kev = [v for v in kev["vulnerabilities"]
+                        if v["vendorProject"] == "Linux" and v["product"] == "Kernel" and v["dateAdded"] >= cutoff]
+          for v in sorted(kernel_kev, key=lambda v: v["dateAdded"]):
+              cve = v["cveID"]; year = cve.split("-")[1]
+              url = f"https://git.kernel.org/pub/scm/linux/security/vulns.git/plain/cve/published/{year}/{cve}.json"
+              try:
+                  rec = get(url)
+              except urllib.error.HTTPError:
+                  note = "no kernel CNA record (pre-2024 CVE assumed fixed before 6.18; human check)" if int(year) < 2024 else "NO kernel CNA record; human check"
+                  lines.append(f"- {cve} (KEV {v['dateAdded']}): {note}")
+                  if int(year) >= 2024:
+                      findings.append(cve)
+                  continue
+              allv = [x for a in rec["containers"]["cna"].get("affected", []) for x in a.get("versions", [])]
+              sem = [x for x in allv if x.get("versionType") == "semver"]
+              fixed = next((x["version"] for x in sem if x.get("status") == "unaffected"
+                            and x.get("lessThanOrEqual") == branch + ".*"), None)
+              intro = next((x["lessThan"] for x in sem if x.get("status") == "unaffected"
+                            and x.get("version") == "0" and "lessThan" in x), None)
+              # The mainline fix is typed original_commit_for_fix, not semver.
+              mainfix = next((x["version"] for x in allv if x.get("status") == "unaffected"
+                              and x.get("lessThanOrEqual") == "*"), None)
+              if fixed:
+                  bad = [n for n, k in (("host", host), ("guest", guest)) if vt(k) < vt(fixed)]
+                  state = f"fixed in {fixed}; AFFECTED: {', '.join(bad)}" if bad else f"fixed in {fixed}; ok"
+                  if bad: findings.append(cve)
+              elif intro and vt(branch) < vt(intro):
+                  state = f"introduced in {intro}; {branch} not affected"
+              elif mainfix and vt(mainfix) <= vt(branch):
+                  state = f"fixed in mainline {mainfix}, before {branch}; ok"
+              else:
+                  state = f"no {branch} fix listed; human check"
+                  findings.append(cve)
+              lines.append(f"- {cve} (KEV {v['dateAdded']}, {v['vulnerabilityName']}): {state}")
+          with open(os.environ["REPORT"], "a") as f:
+              f.write("## Kernel (declared)\n\n" + "\n".join(lines) + "\n\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"kev_affected={' '.join(findings)}\n")
+          EOF
+
+      - name: Firecracker - declared vs upstream releases and advisories
+        id: firecracker
+        shell: bash
+        env:
+          DECLARED: ${{ steps.declared.outputs.firecracker }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api repos/firecracker-microvm/firecracker/releases --jq '[.[] | select(.prerelease | not)][0].tag_name' | sed 's/^v//')
+          advisories=$(gh api repos/firecracker-microvm/firecracker/security-advisories --jq '.[] | "- \(.ghsa_id) \(.cve_id // "no CVE") \(.severity) \(.published_at[0:10]): \(.summary)"')
+          {
+            echo "## Firecracker"
+            echo
+            echo "- declared ${DECLARED}; upstream latest ${latest}"
+            echo "$advisories"
+            echo
+          } >> "$REPORT"
+          [ "$DECLARED" = "$latest" ] && echo "lag=" >> "$GITHUB_OUTPUT" || echo "lag=${DECLARED}->${latest}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up the production Go toolchain version
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ steps.declared.outputs.go }}
+          cache: false
+
+      - name: govulncheck (reachable findings, production Go)
+        id: govuln
+        shell: bash
+        run: |
+          set -uo pipefail
+          go run golang.org/x/vuln/cmd/govulncheck@latest ./... > "$RUNNER_TEMP/govuln.txt" 2>&1
+          status=$?
+          count=$(grep -c '^Vulnerability #' "$RUNNER_TEMP/govuln.txt" || true)
+          { echo "## Go (toolchain ${{ steps.declared.outputs.go }})"; echo; echo "- govulncheck exit ${status}, reachable findings: ${count}"; echo; } >> "$REPORT"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+      - name: npm audit (lock used by the Nix build, runtime deps)
+        id: npm
+        shell: bash
+        run: |
+          set -uo pipefail
+          cd frontend
+          npm audit --package-lock-only --omit=dev --json > "$RUNNER_TEMP/npm-audit.json" || true
+          high=$(jq '[.vulnerabilities[] | select(.severity == "high" or .severity == "critical")] | length' "$RUNNER_TEMP/npm-audit.json")
+          { echo "## Frontend runtime dependencies"; echo;
+            jq -r '.vulnerabilities[] | "- \(.name) \(.range): \(.severity)"' "$RUNNER_TEMP/npm-audit.json"; echo; } >> "$REPORT"
+          echo "high=${high}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: '[ -f "$REPORT" ] && cat "$REPORT" >> "$GITHUB_STEP_SUMMARY" || true'
+
+      - name: Open or update patch-sla issues (main only)
+        if: always() && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          KEV_AFFECTED: ${{ steps.kernel.outputs.kev_affected }}
+          FC_LAG: ${{ steps.firecracker.outputs.lag }}
+          GO_COUNT: ${{ steps.govuln.outputs.count }}
+          NPM_HIGH: ${{ steps.npm.outputs.high }}
+        run: |
+          set -euo pipefail
+          gh label create patch-sla --color B60205 --description "Patch pipeline finding with an SLO" --force >/dev/null
+          upsert() { # title, severity label, body file
+            gh label create "$2" --color D93F0B --force >/dev/null
+            n=$(gh issue list --label patch-sla --state open --search "in:title \"$1\"" --json number --jq '.[0].number // empty')
+            if [ -n "$n" ]; then gh issue edit "$n" --body-file "$3"; else gh issue create --title "$1" --label patch-sla --label "$2" --body-file "$3"; fi
+          }
+          body="$RUNNER_TEMP/body.md"
+          { echo "Opened by Patch Watch run ${{ github.run_id }}. Detected-at is this issue's creation time."; echo; cat "$REPORT"; } > "$body"
+          [ -n "$KEV_AFFECTED" ] && upsert "Patch SLA: known-exploited kernel CVEs affect the declared kernel" sev-S0 "$body"
+          [ -n "$FC_LAG" ] && upsert "Patch SLA: Firecracker behind upstream ($FC_LAG)" sev-S2 "$body"
+          [ "${GO_COUNT:-0}" != "0" ] && upsert "Patch SLA: govulncheck reachable findings" sev-S2 "$body"
+          [ "${NPM_HIGH:-0}" != "0" ] && upsert "Patch SLA: high-severity frontend runtime advisories" sev-S1 "$body"
+          exit 0
