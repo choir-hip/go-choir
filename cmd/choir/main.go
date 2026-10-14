@@ -31,7 +31,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
 )
 
 const (
@@ -51,129 +50,19 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
+// run dispatches through the command registry (registry.go, commands.go),
+// which generates the CLI and the MCP tools from one declaration.
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		printUsage(stderr)
 		return 2
 	}
-	cmd := args[0]
-	rest := args[1:]
-
-	switch cmd {
-	case "trajectories":
-		return runTrajectories(rest, stdout, stderr)
-	case "trajectory":
-		return runTrajectory(rest, stdout, stderr)
-	case "lifecycle":
-		return runLifecycle(rest, stdout, stderr)
-	case "texture":
-		return runTexture(rest, stdout, stderr)
-	case "search":
-		return runSearch(rest, stdout, stderr)
-	case "run":
-		return runRun(rest, stdout, stderr)
-	case "files":
-		return runFiles(rest, stdout, stderr)
-	case "computer":
-		return runComputer(rest, stdout, stderr)
-	case "identity":
-		return runExecutionIdentity(rest, stdout, stderr)
-	case "api-key":
-		return runAPIKey(rest, stdout, stderr)
-	case "self-dev":
-		return runSelfDevelopment(rest, stdout, stderr)
-	case "trace":
-		return runTrace(rest, stdout, stderr)
-	case "precommit":
-		return runPrecommit(rest, stdout, stderr)
-	case "mcp":
-		return runMCP(rest, stdout, stderr)
-	case "version":
-		fmt.Fprintln(stdout, "choir v0 (Phase 1: existing /api/ routes)")
-		return 0
-	case "help", "-h", "--help":
+	switch args[0] {
+	case "-h", "--help":
 		printUsage(stdout)
 		return 0
-	default:
-		fmt.Fprintf(stderr, "choir: unknown command %q\n", cmd)
-		printUsage(stderr)
-		return 2
 	}
-}
-
-func printUsage(w io.Writer) {
-	fmt.Fprintln(w, `choir — headless Choir control surface
-
-Usage:
-  choir <command> [flags]
-
-Commands:
-  trajectories        List recent trajectories (ingestion/run state)
-  trajectory <id>     Show one trajectory's obligations
-  trajectory cancel <id>  Cancel an owner-scoped trajectory
-  lifecycle snapshot <id>  Reconstruct one durable lifecycle from canonical state
-  lifecycle events <id>  Read reducer events after a durable cursor
-  lifecycle <snapshot|events>  Observe the narrow durable-work protocol
-  identity            Verify a nonce-bound signed execution identity
-  texture create --request-id id --title title --content text  Create a Texture document
-  texture read <doc>  Read a Texture document's metadata (title, current revision id)
-  texture history <doc>  List revision history for a document (metadata only)
-  texture revisions <doc>  List revisions with full content bodies
-  texture show [--revision id] <doc>  Show the current or exact historical version as JSON
-  texture watch [--after cursor] <doc>  Watch durable version/control events as JSONL
-  texture open-source --revision id --source-ref id --source-ref-version id <doc>
-  search <query>      Search the corpus
-  run start <text>    Submit a prompt to the conductor (starts a run)
-  run status <id>     Get the status of a prompt-bar submission
-  files mkdir <path>  Create a directory in the guest store
-  files put <path>    Upload stdin or --local file to the guest store
-  files get <path>    Download a guest store file to stdout
-  computer replay-completeness  Capture live-versus-event-replay state evidence
-  computer replace-workspace  Quarantine the VM-local workspace onto current DDL
-  computer rematerialize-from-tape  Rebuild VM-local state from the event tape
-  computer checkpoint Bind a restore-set checkpoint or refuse live-only/underivable SPA
-  computer import-residue-snapshot  Append current desktop+OG residue as one tape snapshot
-  computer restore    Restore VM-local state and served SPA from a checkpoint
-  computer bootstrap-chain    Establish a canonical event chain on a pre-genesis computer
-  computer stop        Stop the current computer through owner-scoped vmctl
-  computer start       Start or resume the current computer
-  computer restart     Stop then resolve the current computer (same boot artifacts)
-  computer refresh     Reboot onto current guest image, preserving persistent data
-  api-key list        List your API keys
-  api-key create      Create a delegated API key (requires manage:keys or admin)
-  api-key revoke <id> Revoke this key, or a delegated key with manage:keys/admin
-  self-dev list        List self-development operations (--state filters)
-  self-dev show        Show one operation (--operation)
-  self-dev head        Read the computer's event head and state commitments
-  self-dev start       Propose a change (--prompt, --idempotency-key)
-  self-dev wait        Poll an operation until it reaches --state
-  self-dev approve     Owner's single approval: arm accept_once for exactly the frozen candidate, then decide
-  self-dev reject      Reject a candidate awaiting approval (--reason)
-  self-dev mode get|set  Read or generation-CAS the explicit computer mode
-  trace export <trajectory> [--out file]  Write a trace bundle (product routes only;
-                      default ~/.config/choir-qa/traces/<trajectory>.json, mode 0600)
-  precommit add --claim text --p 0.85 [--type forecast] [--criterion text] [--deadline t]
-                      Record a calibrated claim (needs precommit:write; identity from
-                      $CHOIR_AGENT, $CHOIR_MODEL, $CHOIR_SESSION or --agent/--model/--session)
-  precommit settle <claim-id> --outcome true|false|partial|unresolvable --evidence ref
-                      Append one scorer's settlement (scorer defaults to $CHOIR_AGENT)
-  precommit list [--status open|overdue|settled|all] [--all]  List claims
-  precommit calibration [--text] [--scorer s] [--group-by keys]  Calibration summary;
-                      --text prints the track record to paste into an agent's context
-  precommit import-ledger [--file docs/calibration/claude-ledger.md] [--model m --apply]
-                      Import the level-1 Markdown ledger (dry run unless --apply)
-  mcp                 Serve the precommit tools over stdio MCP (key from $CHOIR_API_KEY
-                      or $CHOIR_API_KEY_FILE)
-  version             Print CLI version
-  help                Print this usage
-
-Auth:
-  --api-key-file path  Read API key from a mode-0600 file; "-" reads stdin.
-                       Defaults to $CHOIR_API_KEY when omitted.
-  --host string        Choir host. Defaults to $CHOIR_HOST or https://choir.news.
-  --timeout duration   Request timeout. Defaults to $CHOIR_TIMEOUT or 75s.
-
-Output is JSON to stdout; diagnostics and errors go to stderr.`)
+	return dispatch(args, stdout, stderr)
 }
 
 // client holds shared CLI state.
@@ -186,57 +75,23 @@ type client struct {
 	stderr     io.Writer
 }
 
+// newClient defines the shared client flags on flags, parses args and
+// builds the client. Verbs with their own --computer flag (computer-scoped
+// routes) register it before newClient; the client shares it.
 func newClient(flags *flag.FlagSet, args []string, stdout, stderr io.Writer) (*client, error) {
-	apiKeyFile := flags.String("api-key-file", "", "Read API key from a mode-0600 file; '-' reads stdin; defaults to $"+apiKeyEnvVar)
-	host := flags.String("host", envOr(hostEnvVar, defaultHost), "Choir host")
-	// Verbs with their own --computer flag (computer-scoped routes) register it
-	// before newClient; share that definition instead of redefining it. The
-	// value is read after Parse so verb-passed flags resolve correctly.
-	var sharedComputer *string
-	if flags.Lookup("computer") == nil {
-		sharedComputer = flags.String("computer", envOr("CHOIR_COMPUTER", ""), "Stable ComputerID targeting for owner-wide API keys (sent as X-Choir-Computer)")
-	}
-	timeout := flags.String("timeout", "", "Request timeout (for example 75s or 2m)")
+	build := clientFlags(flags)
 	if err := flags.Parse(args); err != nil {
 		return nil, err
 	}
-	key := strings.TrimSpace(os.Getenv(apiKeyEnvVar))
-	if strings.TrimSpace(*apiKeyFile) != "" {
-		var err error
-		key, err = readCLISecretFile(*apiKeyFile, cliStdin)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if key == "" {
-		return nil, fmt.Errorf("api key required: set --api-key-file or $%s", apiKeyEnvVar)
-	}
-	if !strings.HasPrefix(key, apiKeyPrefix) {
-		return nil, fmt.Errorf("api key must start with %q", apiKeyPrefix)
-	}
-	h := strings.TrimRight(strings.TrimSpace(*host), "/")
-	if h == "" {
-		h = defaultHost
-	}
-	requestTimeout, err := resolveTimeout(*timeout, os.Getenv(timeoutEnvVar))
+	c, err := build()
 	if err != nil {
 		return nil, err
 	}
-	computerIDStr := ""
-	if sharedComputer != nil {
-		computerIDStr = strings.TrimSpace(*sharedComputer)
-	} else if defined := flags.Lookup("computer"); defined != nil {
-		computerIDStr = strings.TrimSpace(defined.Value.String())
-	}
-	return &client{
-		host:       h,
-		apiKey:     key,
-		computerID: computerIDStr,
-		http:       &http.Client{Timeout: requestTimeout},
-		stdout:     stdout,
-		stderr:     stderr,
-	}, nil
+	c.stdout, c.stderr = stdout, stderr
+	return c, nil
 }
+
+func newHTTPClient(timeout time.Duration) *http.Client { return &http.Client{Timeout: timeout} }
 
 func readCLISecretFile(path string, stdin io.Reader) (string, error) {
 	path = strings.TrimSpace(path)
@@ -415,88 +270,6 @@ func writeJSON(w io.Writer, v any) int {
 	return 0
 }
 
-// ---- trajectories ----
-
-func runTrajectories(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir trajectories", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir trajectories: %v\n", err)
-		return 2
-	}
-	var resp trajectoriesListResponse
-	if err := c.do(http.MethodGet, "/api/trajectories", nil, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir trajectories: %v\n", err)
-		return 1
-	}
-	if len(resp.Trajectories) > defaultListLimit {
-		resp.Trajectories = resp.Trajectories[:defaultListLimit]
-	}
-	return writeJSON(stdout, resp)
-}
-
-func runTrajectory(args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] == "cancel" {
-		return runTrajectoryCancel(args[1:], stdout, stderr)
-	}
-	fs := flag.NewFlagSet("choir trajectory", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir trajectory: %v\n", err)
-		return 2
-	}
-	rest := fs.Args()
-	if len(rest) == 0 || strings.TrimSpace(rest[0]) == "" {
-		fmt.Fprintln(stderr, "choir trajectory: trajectory id required")
-		return 2
-	}
-	id := strings.TrimSpace(rest[0])
-	var resp json.RawMessage
-	if err := c.do(http.MethodGet, "/api/trajectories/"+id, nil, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir trajectory %s: %v\n", id, err)
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-func runTrajectoryCancel(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir trajectory cancel", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	idempotencyKey := fs.String("idempotency-key", "", "Stable caller-supplied command key for replay/conflict detection")
-	expectedLifecycleVersion := fs.Int64("expected-lifecycle-version", 0, "Lifecycle version observed before cancellation")
-	expectedHeadRevisionID := fs.String("expected-head-revision-id", "", "Artifact head observed before cancellation")
-	reason := fs.String("reason", "owner cancellation", "Cancellation reason included in the request commitment")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir trajectory cancel: %v\n", err)
-		return 2
-	}
-	rest := fs.Args()
-	if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
-		fmt.Fprintln(stderr, "choir trajectory cancel: trajectory id required")
-		return 2
-	}
-	id := strings.TrimSpace(rest[0])
-	if strings.TrimSpace(*idempotencyKey) == "" || *expectedLifecycleVersion <= 0 || strings.TrimSpace(*expectedHeadRevisionID) == "" {
-		fmt.Fprintln(stderr, "choir trajectory cancel: --idempotency-key, --expected-lifecycle-version, and --expected-head-revision-id are required")
-		return 2
-	}
-	request := map[string]any{
-		"idempotency_key":            strings.TrimSpace(*idempotencyKey),
-		"expected_lifecycle_version": *expectedLifecycleVersion,
-		"expected_head_revision_id":  strings.TrimSpace(*expectedHeadRevisionID),
-		"reason":                     strings.TrimSpace(*reason),
-	}
-	var resp json.RawMessage
-	path := "/api/trajectories/" + url.PathEscape(id) + "/cancel"
-	if err := c.do(http.MethodPost, path, request, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir trajectory cancel %s: %v\n", id, err)
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-
 type executionIdentityCLIPlatformAttestation struct {
 	Receipt         computerevent.Receipt `json:"receipt"`
 	SignerPublicKey string                `json:"signer_public_key"`
@@ -619,102 +392,80 @@ func executionIdentityCLICommonCommit(signed *executionIdentityCLIEnvelope, host
 	return target, true
 }
 
-func runExecutionIdentity(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir identity", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir identity: %v\n", err)
-		return 2
-	}
-	if len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir identity: no positional arguments allowed")
-		return 2
-	}
+// verifyExecutionIdentity fetches the nonce-bound execution identity and
+// verifies the guest receipt, the platform join attestation and the common
+// commit; any refusal is an error.
+func verifyExecutionIdentity(x *call) (any, error) {
+	c := x.c
 	expectedPlatformSignerKeyDigest, trustErr := executionIdentityPlatformTrustDigest()
 	if trustErr != nil || !strings.HasPrefix(expectedPlatformSignerKeyDigest, "sha256:") {
-		fmt.Fprintln(stderr, "choir identity: platform trust configuration unavailable")
-		return 1
+		return nil, errors.New("platform trust configuration unavailable")
 	}
 	nonceBytes := make([]byte, 24)
 	if _, err := rand.Read(nonceBytes); err != nil {
-		fmt.Fprintf(stderr, "choir identity: generate nonce: %v\n", err)
-		return 1
+		return nil, fmt.Errorf("generate nonce: %w", err)
 	}
 	nonce := base64.RawURLEncoding.EncodeToString(nonceBytes)
 	var envelope executionIdentityCLIEnvelope
 	if err := c.do(http.MethodGet, "/api/acceptance/execution-identity?nonce="+url.QueryEscape(nonce), nil, &envelope); err != nil {
-		fmt.Fprintf(stderr, "choir identity: %v\n", err)
-		return 1
+		return nil, err
 	}
 	if !envelope.Joined || envelope.Guest == nil || envelope.PlatformAttestation == nil {
-		fmt.Fprintln(stderr, "choir identity: platform identity join refused")
-		return 1
+		return nil, errors.New("platform identity join refused")
 	}
 	signed := envelope.Guest
 	if signed.Schema != "choir.execution_identity.v1" || signed.Identity["schema"] != signed.Schema || signed.Identity["nonce"] != nonce || signed.Identity["audience"] != executionIdentityCLIAudience {
-		fmt.Fprintln(stderr, "choir identity: schema or nonce binding refused")
-		return 1
+		return nil, errors.New("schema or nonce binding refused")
 	}
 	publicKey, err := base64.RawStdEncoding.DecodeString(signed.SignerPublicKey)
 	if err != nil || len(publicKey) != ed25519.PublicKeySize || len(signed.Receipt.RequiredSigners) != 1 {
-		fmt.Fprintln(stderr, "choir identity: invalid signer public key")
-		return 1
+		return nil, errors.New("invalid signer public key")
 	}
 	actualSignerKeyDigest := "sha256:" + computerevent.DigestBytes(publicKey)
 	if signed.Receipt.ReceiptKind != "ExecutionIdentity" {
-		fmt.Fprintln(stderr, "choir identity: unexpected receipt kind")
-		return 1
+		return nil, errors.New("unexpected receipt kind")
 	}
 	ref := signed.Receipt.RequiredSigners[0]
 	if ref.SignerDomain != "guest-core" || signed.Receipt.Verify(executionIdentityCLIResolver{ref: ref, key: ed25519.PublicKey(publicKey)}) != nil {
-		fmt.Fprintln(stderr, "choir identity: signature verification failed")
-		return 1
+		return nil, errors.New("signature verification failed")
 	}
 	if !sameJSONValue(signed.Receipt.IssuedAt, signed.Identity["issued_at"]) {
-		fmt.Fprintln(stderr, "choir identity: signed field issued_at mismatch")
-		return 1
+		return nil, errors.New("signed field issued_at mismatch")
 	}
 	for key, value := range signed.Identity {
 		if key == "issued_at" {
 			continue
 		}
 		if !sameJSONValue(signed.Receipt.KindFields[key], value) {
-			fmt.Fprintf(stderr, "choir identity: signed field %s mismatch\n", key)
-			return 1
+			return nil, fmt.Errorf("signed field %s mismatch", key)
 		}
 	}
 	expiresAt, expiresErr := time.Parse(time.RFC3339Nano, fmt.Sprint(signed.Identity["expires_at"]))
 	issuedAt, issuedErr := time.Parse(time.RFC3339Nano, fmt.Sprint(signed.Identity["issued_at"]))
 	now := time.Now().UTC()
 	if expiresErr != nil || issuedErr != nil || !expiresAt.After(now) || issuedAt.After(now.Add(30*time.Second)) || expiresAt.Sub(issuedAt) > 2*time.Minute {
-		fmt.Fprintln(stderr, "choir identity: expired or invalid validity window")
-		return 1
+		return nil, errors.New("expired or invalid validity window")
 	}
 	build, ok := signed.Identity["build"].(map[string]any)
 	if !ok || strings.TrimSpace(fmt.Sprint(build["commit"])) == "" || build["commit"] != build["deployed_commit"] {
-		fmt.Fprintln(stderr, "choir identity: build/deploy identity conflict")
-		return 1
+		return nil, errors.New("build/deploy identity conflict")
 	}
 	targetCommit, commonCommit := executionIdentityCLICommonCommit(signed, envelope.HostBuild, envelope.DeploymentReceipt)
 	if !commonCommit {
-		fmt.Fprintln(stderr, "choir identity: host, guest, route, and deployment commit join refused")
-		return 1
+		return nil, errors.New("host, guest, route, and deployment commit join refused")
 	}
 	if envelope.PlatformAttestation != nil {
 		platformKey, decodeErr := base64.RawStdEncoding.DecodeString(envelope.PlatformAttestation.SignerPublicKey)
 		if decodeErr != nil || len(platformKey) != ed25519.PublicKeySize ||
 			!strings.EqualFold(expectedPlatformSignerKeyDigest, "sha256:"+computerevent.DigestBytes(platformKey)) {
-			fmt.Fprintln(stderr, "choir identity: platform signer key does not match the repository trust manifest")
-			return 1
+			return nil, errors.New("platform signer key does not match the repository trust manifest")
 		}
 		guestDigest, guestDigestErr := executionIdentityCLIDigest(signed.Receipt)
 		routeDigest := strings.TrimSpace(envelope.RouteDigest)
 		hostBuildDigest, hostBuildDigestErr := executionIdentityCLIDigest(envelope.HostBuild)
 		deploymentDigest, deploymentDigestErr := executionIdentityCLIDigest(envelope.DeploymentReceipt)
 		if guestDigestErr != nil || !strings.HasPrefix(routeDigest, "sha256:") || hostBuildDigestErr != nil || deploymentDigestErr != nil {
-			fmt.Fprintln(stderr, "choir identity: platform join digest unavailable")
-			return 1
+			return nil, errors.New("platform join digest unavailable")
 		}
 		expectedFields := map[string]any{
 			"schema": signed.Schema, "nonce": signed.Identity["nonce"], "audience": executionIdentityCLIAudience,
@@ -732,11 +483,10 @@ func runExecutionIdentity(args []string, stdout, stderr io.Writer) int {
 			len(expectedKeyID) < 16 || !strings.EqualFold(platformReceipt.RequiredSigners[0].KeyID, expectedKeyID[:16]) ||
 			!sameJSONValue(platformReceipt.KindFields, expectedFields) ||
 			platformReceipt.Verify(executionIdentityCLIResolver{ref: platformReceipt.RequiredSigners[0], key: ed25519.PublicKey(platformKey)}) != nil {
-			fmt.Fprintln(stderr, "choir identity: platform identity join verification failed")
-			return 1
+			return nil, errors.New("platform identity join verification failed")
 		}
 	}
-	return writeJSON(stdout, envelope)
+	return envelope, nil
 }
 
 func validateDurableWorkResponse(raw json.RawMessage) error {
@@ -750,83 +500,6 @@ func validateDurableWorkResponse(raw json.RawMessage) error {
 		return fmt.Errorf("unsupported lifecycle schema %q", envelope.Schema)
 	}
 	return nil
-}
-
-func runLifecycle(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir lifecycle: subcommand required (snapshot|events|capsule-evidence)")
-		return 2
-	}
-	subcommand := args[0]
-	fs := flag.NewFlagSet("choir lifecycle "+subcommand, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	after := fs.Int64("after", 0, "Event cursor (events only)")
-	limit := fs.Int("limit", 100, "Maximum events per page (events only)")
-	attempt := fs.Uint64("attempt", 0, "Positive assignment attempt (capsule-evidence only)")
-	c, err := newClient(fs, args[1:], stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir lifecycle %s: %v\n", subcommand, err)
-		return 2
-	}
-	if subcommand == "capsule-evidence" {
-		rest := fs.Args()
-		if len(rest) != 2 || rest[0] == "" || rest[1] == "" || rest[0] != strings.TrimSpace(rest[0]) || rest[1] != strings.TrimSpace(rest[1]) || *attempt == 0 {
-			fmt.Fprintln(stderr, "choir lifecycle capsule-evidence: trajectory id, assignment id, and positive --attempt required")
-			return 2
-		}
-		var response json.RawMessage
-		path := fmt.Sprintf("/api/trajectories/%s/capsule-evidence/%s?attempt=%d", url.PathEscape(rest[0]), url.PathEscape(rest[1]), *attempt)
-		if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-			fmt.Fprintf(stderr, "choir lifecycle capsule-evidence: %v\n", err)
-			return 1
-		}
-		var envelope struct {
-			Schema string `json:"schema"`
-		}
-		if err := json.Unmarshal(response, &envelope); err != nil || envelope.Schema != vocabmigrate.SchemaCapsuleEvidenceV1 {
-			fmt.Fprintln(stderr, "choir lifecycle capsule-evidence: invalid capsule evidence response")
-			return 1
-		}
-		return writeJSON(stdout, response)
-	}
-	if subcommand == "events" {
-		rest := fs.Args()
-		if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" || *after < 0 || *limit <= 0 {
-			fmt.Fprintln(stderr, "choir lifecycle events: trajectory id, non-negative --after, and positive --limit required")
-			return 2
-		}
-		var response json.RawMessage
-		path := fmt.Sprintf("/api/trajectories/%s/events?after=%d&limit=%d", url.PathEscape(strings.TrimSpace(rest[0])), *after, *limit)
-		if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-			fmt.Fprintf(stderr, "choir lifecycle events: %v\n", err)
-			return 1
-		}
-		if err := validateDurableWorkResponse(response); err != nil {
-			fmt.Fprintf(stderr, "choir lifecycle events: %v\n", err)
-			return 1
-		}
-		return writeJSON(stdout, response)
-	}
-	if subcommand == "snapshot" {
-		rest := fs.Args()
-		if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
-			fmt.Fprintln(stderr, "choir lifecycle snapshot: trajectory id required")
-			return 2
-		}
-		var response json.RawMessage
-		path := "/api/trajectories/" + url.PathEscape(strings.TrimSpace(rest[0]))
-		if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-			fmt.Fprintf(stderr, "choir lifecycle snapshot: %v\n", err)
-			return 1
-		}
-		if err := validateDurableWorkResponse(response); err != nil {
-			fmt.Fprintf(stderr, "choir lifecycle snapshot: %v\n", err)
-			return 1
-		}
-		return writeJSON(stdout, response)
-	}
-	fmt.Fprintf(stderr, "choir lifecycle: unknown subcommand %q\n", subcommand)
-	return 2
 }
 
 type trajectoriesListResponse struct {
@@ -872,461 +545,93 @@ func textureWatchEventTerminal(raw json.RawMessage) bool {
 	return json.Unmarshal(raw, &event) == nil && event.WorkState == "terminal"
 }
 
-func runTexture(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir texture: subcommand required (create|read|history|revisions|show|watch|open-source|revise)")
-		return 2
-	}
-	sub := args[0]
-	fs := flag.NewFlagSet("choir texture "+sub, flag.ContinueOnError)
+// runTextureWatch streams one document's durable version/control events as
+// JSONL until a terminal event (CLI only: an MCP call returns once).
+func runTextureWatch(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir texture watch", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var revisionID, sourceRefID, sourceRefVersionID string
-	var title, initialContent, clientRequestID, desk, prompt, expectedHead string
 	var after int64
 	var limit, reconnectAttempts int
 	var once bool
 	var pollInterval time.Duration
-	switch sub {
-	case "create":
-		fs.StringVar(&title, "title", "", "Texture document title")
-		fs.StringVar(&initialContent, "content", "", "initial owner-authored v0 content and objective")
-		fs.StringVar(&clientRequestID, "request-id", "", "stable client occurrence id for exact retries")
-		fs.StringVar(&desk, "desk", "", "bound desk: texture (default) or engineering")
-	case "revise":
-		fs.StringVar(&prompt, "prompt", "", "owner directive carried by the revision")
-		fs.StringVar(&expectedHead, "expected-head", "", "head revision id observed before revising")
-		fs.StringVar(&clientRequestID, "request-id", "", "stable client occurrence id for exact retries")
-	case "show":
-		fs.StringVar(&revisionID, "revision", "", "exact historical revision id; defaults to current head")
-	case "watch":
-		fs.Int64Var(&after, "after", 0, "resume after this durable cursor")
-		fs.IntVar(&limit, "limit", 100, "events per durable page")
-		fs.BoolVar(&once, "once", false, "fetch one durable page and exit")
-		fs.DurationVar(&pollInterval, "poll-interval", time.Second, "delay between caught-up durable pages")
-		fs.IntVar(&reconnectAttempts, "reconnect-attempts", 3, "consecutive request failures tolerated before exit")
-	case "open-source":
-		fs.StringVar(&revisionID, "revision", "", "exact Texture revision id")
-		fs.StringVar(&sourceRefID, "source-ref", "", "canonical source_ref id")
-		fs.StringVar(&sourceRefVersionID, "source-ref-version", "", "exact source_ref version id")
-	}
-	c, err := newClient(fs, args[1:], stdout, stderr)
+	fs.Int64Var(&after, "after", 0, "resume after this durable cursor")
+	fs.IntVar(&limit, "limit", 100, "events per durable page")
+	fs.BoolVar(&once, "once", false, "fetch one durable page and exit")
+	fs.DurationVar(&pollInterval, "poll-interval", time.Second, "delay between caught-up durable pages")
+	fs.IntVar(&reconnectAttempts, "reconnect-attempts", 3, "consecutive request failures tolerated before exit")
+	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir texture: %v\n", err)
 		return 2
 	}
 	rest := fs.Args()
-	if sub == "create" {
-		if strings.TrimSpace(title) == "" || strings.TrimSpace(initialContent) == "" || strings.TrimSpace(clientRequestID) == "" {
-			fmt.Fprintln(stderr, "choir texture create: --title, --content, and --request-id are required")
-			return 2
-		}
-		var created json.RawMessage
-		body := map[string]string{"title": strings.TrimSpace(title), "initial_content": strings.TrimSpace(initialContent), "client_request_id": strings.TrimSpace(clientRequestID)}
-		if strings.TrimSpace(desk) != "" {
-			body["desk"] = strings.TrimSpace(desk)
-		}
-		if err := c.do(http.MethodPost, "/api/texture/lifecycle-documents", body, &created); err != nil {
-			fmt.Fprintf(stderr, "choir texture create: %v\n", err)
-			return 1
-		}
-		var envelope struct {
-			Schema string `json:"schema"`
-		}
-		if json.Unmarshal(created, &envelope) != nil || envelope.Schema != "choir.texture_create.v1" {
-			fmt.Fprintf(stderr, "choir texture create: unsupported create schema %q\n", envelope.Schema)
-			return 1
-		}
-		return writeJSON(stdout, created)
-	}
 	if len(rest) == 0 || strings.TrimSpace(rest[0]) == "" {
-		fmt.Fprintf(stderr, "choir texture %s: document id required\n", sub)
+		fmt.Fprintln(stderr, "choir texture watch: document id required")
 		return 2
 	}
 	docID := strings.TrimSpace(rest[0])
 	escapedDocID := url.PathEscape(docID)
-	switch sub {
-	case "revise":
-		if strings.TrimSpace(prompt) == "" {
-			fmt.Fprintln(stderr, "choir texture revise: --prompt is required")
-			return 2
-		}
-		body := map[string]string{"prompt": strings.TrimSpace(prompt)}
-		if strings.TrimSpace(clientRequestID) != "" {
-			body["client_request_id"] = strings.TrimSpace(clientRequestID)
-		}
-		if strings.TrimSpace(expectedHead) != "" {
-			body["expected_head_revision_id"] = strings.TrimSpace(expectedHead)
-		}
-		var resp json.RawMessage
-		if err := c.do(http.MethodPost, "/api/texture/documents/"+escapedDocID+"/revise", body, &resp); err != nil {
-			fmt.Fprintf(stderr, "choir texture revise %s: %v\n", docID, err)
-			return 1
-		}
-		return writeJSON(stdout, resp)
-	case "read":
-		var resp json.RawMessage
-		if err := c.do(http.MethodGet, "/api/texture/documents/"+escapedDocID, nil, &resp); err != nil {
-			fmt.Fprintf(stderr, "choir texture read %s: %v\n", docID, err)
-			return 1
-		}
-		return writeJSON(stdout, resp)
-	case "history":
-		var resp json.RawMessage
-		if err := c.do(http.MethodGet, "/api/texture/documents/"+escapedDocID+"/history", nil, &resp); err != nil {
-			fmt.Fprintf(stderr, "choir texture history %s: %v\n", docID, err)
-			return 1
-		}
-		return writeJSON(stdout, resp)
-	case "revisions":
-		var resp json.RawMessage
-		if err := c.do(http.MethodGet, "/api/texture/documents/"+escapedDocID+"/revisions", nil, &resp); err != nil {
-			fmt.Fprintf(stderr, "choir texture revisions %s: %v\n", docID, err)
-			return 1
-		}
-		return writeJSON(stdout, resp)
-	case "show":
-		var document json.RawMessage
-		if err := c.do(http.MethodGet, "/api/texture/documents/"+escapedDocID, nil, &document); err != nil {
-			fmt.Fprintf(stderr, "choir texture show %s: %v\n", docID, err)
-			return 1
-		}
-		var head struct {
-			CurrentRevisionID string `json:"current_revision_id"`
-		}
-		if err := json.Unmarshal(document, &head); err != nil {
-			fmt.Fprintf(stderr, "choir texture show %s: decode document: %v\n", docID, err)
-			return 1
-		}
-		requestedRevisionID := strings.TrimSpace(revisionID)
-		if requestedRevisionID == "" {
-			requestedRevisionID = strings.TrimSpace(head.CurrentRevisionID)
-		}
-		if requestedRevisionID == "" {
-			fmt.Fprintf(stderr, "choir texture show %s: document has no current revision\n", docID)
-			return 1
-		}
-		var revision json.RawMessage
-		if err := c.do(http.MethodGet, "/api/texture/revisions/"+url.PathEscape(requestedRevisionID), nil, &revision); err != nil {
-			fmt.Fprintf(stderr, "choir texture show %s: %v\n", docID, err)
-			return 1
-		}
-		var exactRevision struct {
-			DocID string `json:"doc_id"`
-		}
-		if err := json.Unmarshal(revision, &exactRevision); err != nil || strings.TrimSpace(exactRevision.DocID) != docID {
-			fmt.Fprintf(stderr, "choir texture show %s: revision %s is not an exact version of this document\n", docID, requestedRevisionID)
-			return 1
-		}
-		return writeJSON(stdout, textureShowCLIResponse{
-			Schema: "choir.texture_show.v1", Document: document, Revision: revision,
-			Current: requestedRevisionID == strings.TrimSpace(head.CurrentRevisionID),
-		})
-	case "watch":
-		if after < 0 || limit <= 0 || limit > 1000 || reconnectAttempts < 0 || pollInterval < 0 {
-			fmt.Fprintln(stderr, "choir texture watch: after, limit, reconnect-attempts, or poll-interval is invalid")
-			return 2
-		}
-		cursor, failures := after, 0
-		encoder := json.NewEncoder(stdout)
-		for {
-			path := fmt.Sprintf("/api/texture/documents/%s/events?after=%d&limit=%d", escapedDocID, cursor, limit)
-			var page textureWatchCLIPage
-			if err := c.do(http.MethodGet, path, nil, &page); err != nil {
-				var responseErr *apiErrorResp
-				if errors.As(err, &responseErr) && responseErr.Status == http.StatusConflict {
-					var expired textureWatchCLIPage
-					if json.Unmarshal([]byte(responseErr.Body), &expired) == nil && expired.CursorExpired && expired.ReplayRequired {
-						fmt.Fprintf(stderr, "choir texture watch %s: cursor %d expired; replay required at watermark %d\n", docID, cursor, expired.Watermark)
-						return 1
-					}
-				}
-				failures++
-				retryable := !errors.As(err, &responseErr) || responseErr.Status >= http.StatusInternalServerError
-				if !retryable || failures > reconnectAttempts {
-					fmt.Fprintf(stderr, "choir texture watch %s after %d: %v\n", docID, cursor, err)
+	if after < 0 || limit <= 0 || limit > 1000 || reconnectAttempts < 0 || pollInterval < 0 {
+		fmt.Fprintln(stderr, "choir texture watch: after, limit, reconnect-attempts, or poll-interval is invalid")
+		return 2
+	}
+	cursor, failures := after, 0
+	encoder := json.NewEncoder(stdout)
+	for {
+		path := fmt.Sprintf("/api/texture/documents/%s/events?after=%d&limit=%d", escapedDocID, cursor, limit)
+		var page textureWatchCLIPage
+		if err := c.do(http.MethodGet, path, nil, &page); err != nil {
+			var responseErr *apiErrorResp
+			if errors.As(err, &responseErr) && responseErr.Status == http.StatusConflict {
+				var expired textureWatchCLIPage
+				if json.Unmarshal([]byte(responseErr.Body), &expired) == nil && expired.CursorExpired && expired.ReplayRequired {
+					fmt.Fprintf(stderr, "choir texture watch %s: cursor %d expired; replay required at watermark %d\n", docID, cursor, expired.Watermark)
 					return 1
 				}
-				if pollInterval > 0 {
-					time.Sleep(pollInterval)
-				}
-				continue
 			}
-			failures = 0
-			if page.Schema != "choir.texture_observation.v1" {
-				fmt.Fprintf(stderr, "choir texture watch %s: unsupported observation schema %q\n", docID, page.Schema)
+			failures++
+			retryable := !errors.As(err, &responseErr) || responseErr.Status >= http.StatusInternalServerError
+			if !retryable || failures > reconnectAttempts {
+				fmt.Fprintf(stderr, "choir texture watch %s after %d: %v\n", docID, cursor, err)
 				return 1
 			}
-			if page.CursorExpired || page.ReplayRequired {
-				fmt.Fprintf(stderr, "choir texture watch %s: cursor %d expired; replay required at watermark %d\n", docID, cursor, page.Watermark)
-				return 1
-			}
-			terminal := false
-			for _, event := range page.Events {
-				if err := encoder.Encode(event); err != nil {
-					fmt.Fprintf(stderr, "choir texture watch %s: encode event: %v\n", docID, err)
-					return 1
-				}
-				terminal = terminal || textureWatchEventTerminal(event)
-			}
-			if page.NextCursor < cursor {
-				fmt.Fprintf(stderr, "choir texture watch %s: durable cursor regressed from %d to %d\n", docID, cursor, page.NextCursor)
-				return 1
-			}
-			cursor = page.NextCursor
-			if once || terminal {
-				return 0
-			}
-			if len(page.Events) == 0 && pollInterval > 0 {
+			if pollInterval > 0 {
 				time.Sleep(pollInterval)
 			}
+			continue
 		}
-	case "open-source":
-		if strings.TrimSpace(revisionID) == "" || strings.TrimSpace(sourceRefID) == "" || strings.TrimSpace(sourceRefVersionID) == "" {
-			fmt.Fprintln(stderr, "choir texture open-source: --revision, --source-ref, and --source-ref-version are required")
-			return 2
-		}
-		query := url.Values{}
-		query.Set("revision_id", revisionID)
-		query.Set("source_ref_id", sourceRefID)
-		query.Set("source_ref_version_id", sourceRefVersionID)
-		var resp json.RawMessage
-		if err := c.do(http.MethodGet, "/api/texture/documents/"+escapedDocID+"/source-open?"+query.Encode(), nil, &resp); err != nil {
-			fmt.Fprintf(stderr, "choir texture open-source %s: %v\n", docID, err)
+		failures = 0
+		if page.Schema != "choir.texture_observation.v1" {
+			fmt.Fprintf(stderr, "choir texture watch %s: unsupported observation schema %q\n", docID, page.Schema)
 			return 1
 		}
-		var sourceOpen struct {
-			Schema string `json:"schema"`
-		}
-		if json.Unmarshal(resp, &sourceOpen) != nil || sourceOpen.Schema != "choir.texture_source_open.v1" {
-			fmt.Fprintf(stderr, "choir texture open-source %s: unsupported source-open schema %q\n", docID, sourceOpen.Schema)
+		if page.CursorExpired || page.ReplayRequired {
+			fmt.Fprintf(stderr, "choir texture watch %s: cursor %d expired; replay required at watermark %d\n", docID, cursor, page.Watermark)
 			return 1
 		}
-		return writeJSON(stdout, resp)
-	default:
-		fmt.Fprintf(stderr, "choir texture: unknown subcommand %q\n", sub)
-		return 2
+		terminal := false
+		for _, event := range page.Events {
+			if err := encoder.Encode(event); err != nil {
+				fmt.Fprintf(stderr, "choir texture watch %s: encode event: %v\n", docID, err)
+				return 1
+			}
+			terminal = terminal || textureWatchEventTerminal(event)
+		}
+		if page.NextCursor < cursor {
+			fmt.Fprintf(stderr, "choir texture watch %s: durable cursor regressed from %d to %d\n", docID, cursor, page.NextCursor)
+			return 1
+		}
+		cursor = page.NextCursor
+		if once || terminal {
+			return 0
+		}
+		if len(page.Events) == 0 && pollInterval > 0 {
+			time.Sleep(pollInterval)
+		}
 	}
-}
-
-// ---- search ----
-
-func runSearch(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir search", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir search: %v\n", err)
-		return 2
-	}
-	rest := fs.Args()
-	if len(rest) == 0 || strings.TrimSpace(strings.Join(rest, " ")) == "" {
-		fmt.Fprintln(stderr, "choir search: query required")
-		return 2
-	}
-	q := strings.TrimSpace(strings.Join(rest, " "))
-	// The proxy owns /api/platform/retrieval/search; it expects the query
-	// in the q parameter.
-	var resp json.RawMessage
-	if err := c.do(http.MethodGet, "/api/platform/retrieval/search?q="+url.QueryEscape(q), nil, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir search: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-
-// ---- self-development ----
-
-func runSelfDevelopment(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir self-dev: subcommand required: list|show|head|start|wait|approve|reject|mode get|set")
-		return 2
-	}
-	switch args[0] {
-	case "list":
-		return runSelfDevList(args[1:], stdout, stderr)
-	case "show":
-		return runSelfDevShow(args[1:], stdout, stderr)
-	case "head":
-		return runSelfDevHead(args[1:], stdout, stderr)
-	case "start":
-		return runSelfDevStart(args[1:], stdout, stderr)
-	case "wait":
-		return runSelfDevWait(args[1:], stdout, stderr)
-	case "approve", "reject":
-		return runSelfDevDecide(args[0], args[1:], stdout, stderr)
-	case "mode":
-	default:
-		fmt.Fprintf(stderr, "choir self-dev: unknown subcommand %q\n", args[0])
-		return 2
-	}
-	if len(args) < 2 {
-		fmt.Fprintln(stderr, "choir self-dev mode: get|set required")
-		return 2
-	}
-	switch args[1] {
-	case "get":
-		return runSelfDevelopmentModeGet(args[2:], stdout, stderr)
-	case "set":
-		return runSelfDevelopmentModeSet(args[2:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "choir self-dev mode: unknown subcommand %q\n", args[1])
-		return 2
-	}
-}
-
-func runSelfDevelopmentModeGet(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev mode get", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev mode get: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir self-dev mode get: --computer is required and positional arguments are forbidden")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/mode"
-	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir self-dev mode get: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev mode set", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	mode := fs.String("mode", "", "off, audit_only, propose_only, accept_once, or qualified_consensus")
-	expectedGeneration := fs.Uint64("expected-generation", 0, "Expected mode generation")
-	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
-	expiresAt := fs.String("expires-at", "", "Canonical UTC expiry for accept_once or qualified_consensus")
-	operationID := fs.String("operation", "", "Exact operation ID for accept_once or qualified_consensus")
-	desiredHead := fs.String("expected-desired-head", "", "Expected desired event head for accept_once or qualified_consensus")
-	effectiveHead := fs.String("expected-effective-head", "", "Expected effective event head for accept_once or qualified_consensus")
-	pendingRef := fs.String("expected-pending-ref", "", "Expected pending transition reference (empty when absent)")
-	desiredCommitment := fs.String("expected-desired-commitment", "", "Expected desired state commitment for accept_once or qualified_consensus")
-	effectiveCommitment := fs.String("expected-effective-commitment", "", "Expected effective state commitment for accept_once or qualified_consensus")
-	bundle := fs.String("bundle", "", "Exact bundle digest for accept_once or qualified_consensus")
-	policyDigest := fs.String("policy-digest", "", "Frozen policy digest for qualified_consensus")
-	consensusReceipt := fs.String("consensus-receipt-digest", "", "QualifiedConsensusReceipt digest for qualified_consensus")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev mode set: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*mode) == "" || strings.TrimSpace(*idempotencyKey) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir self-dev mode set: --computer, --mode, and --idempotency-key are required; positional arguments are forbidden")
-		return 2
-	}
-	body := map[string]any{
-		"mode": *mode, "expected_generation": *expectedGeneration, "idempotency_key": *idempotencyKey,
-	}
-	if *mode == "accept_once" || *mode == "qualified_consensus" {
-		body["expires_at"] = *expiresAt
-		body["operation_id"] = *operationID
-		body["expected_desired_event_head"] = *desiredHead
-		body["expected_effective_event_head"] = *effectiveHead
-		body["expected_pending_transition_ref"] = strings.TrimSpace(*pendingRef)
-		body["expected_desired_state_commitment"] = *desiredCommitment
-		body["expected_effective_state_commitment"] = *effectiveCommitment
-		body["bundle_digest"] = *bundle
-	}
-	if *mode == "qualified_consensus" {
-		body["policy_digest"] = strings.TrimSpace(*policyDigest)
-		body["consensus_receipt_digest"] = strings.TrimSpace(*consensusReceipt)
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/mode"
-	if err := c.do(http.MethodPut, path, body, &response); err != nil {
-		fmt.Fprintf(stderr, "choir self-dev mode set: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
 }
 
 // ---- computer ----
-
-func runComputer(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir computer: subcommand required (status|replay-completeness|checkpoint|import-residue-snapshot|replace-workspace|rematerialize-from-tape|restore|bootstrap-chain|producer-reports|settle-producer-reports|stop|start|restart|refresh)")
-		return 2
-	}
-	switch args[0] {
-	case "status":
-		return runComputerStatus(args[1:], stdout, stderr)
-	case "replay-completeness":
-		return runComputerReplayCompleteness(args[1:], stdout, stderr)
-	case "replace-workspace":
-		return runComputerReplaceWorkspace(args[1:], stdout, stderr)
-	case "rematerialize-from-tape":
-		return runComputerRematerializeFromTape(args[1:], stdout, stderr)
-	case "checkpoint":
-		return runComputerCheckpoint(args[1:], stdout, stderr)
-	case "import-residue-snapshot":
-		return runComputerImportResidueSnapshot(args[1:], stdout, stderr)
-	case "restore":
-		return runComputerRestore(args[1:], stdout, stderr)
-	case "bootstrap-chain":
-		return runComputerBootstrapChain(args[1:], stdout, stderr)
-	case "producer-reports":
-		return runComputerProducerReports(args[1:], stdout, stderr)
-	case "settle-producer-reports":
-		return runComputerSettleProducerReports(args[1:], stdout, stderr)
-	case "stop", "start", "restart", "refresh", "recover":
-		return runComputerAction(args[1:], args[0], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "choir computer: unknown subcommand %q\n", args[0])
-		return 2
-	}
-}
-
-func runComputerStatus(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer status", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer status: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer status: --computer is required")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/status"
-	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer status: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerReplayCompleteness(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer replay-completeness", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer replay-completeness: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer replay-completeness: --computer is required")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/replay-completeness"
-	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer replay-completeness: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
 
 // extractCheckpointArtifact accepts the restore operand in any of the product
 // envelopes: a Checkpoint, a CheckpointResponse, or a checkpoint bind report
@@ -1359,400 +664,6 @@ func extractCheckpointArtifact(raw []byte) (json.RawMessage, error) {
 	return json.RawMessage(raw), nil
 }
 
-func runComputerImportResidueSnapshot(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer import-residue-snapshot", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer import-residue-snapshot: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer import-residue-snapshot: --computer is required")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/import-residue-snapshot"
-	if err := c.do(http.MethodPost, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer import-residue-snapshot: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerCheckpoint(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer checkpoint", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer checkpoint: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer checkpoint: --computer is required")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/checkpoint"
-	if err := c.do(http.MethodPost, path, map[string]any{}, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer checkpoint: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerRestore(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer restore", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	checkpointFile := fs.String("checkpoint-file", "", "JSON checkpoint artifact")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer restore: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*checkpointFile) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer restore: --computer and --checkpoint-file are required")
-		return 2
-	}
-	raw, err := os.ReadFile(*checkpointFile)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer restore: %v\n", err)
-		return 2
-	}
-	checkpoint, err := extractCheckpointArtifact(raw)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer restore: invalid checkpoint: %v\n", err)
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/restore"
-	body := map[string]any{
-		"checkpoint":     checkpoint,
-		"operand_scopes": []string{"vm_local", "computer_surface_frontend"},
-	}
-	if err := c.do(http.MethodPost, path, body, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer restore: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerRematerializeFromTape(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer rematerialize-from-tape", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	checkpointFile := fs.String("checkpoint-file", "", "JSON checkpoint artifact")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*checkpointFile) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer rematerialize-from-tape: --computer and --checkpoint-file are required")
-		return 2
-	}
-	raw, err := os.ReadFile(*checkpointFile)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: %v\n", err)
-		return 2
-	}
-	checkpoint, err := extractCheckpointArtifact(raw)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: invalid checkpoint: %v\n", err)
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/rematerialize-from-tape"
-	if err := c.do(http.MethodPost, path, map[string]json.RawMessage{"checkpoint": checkpoint}, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer rematerialize-from-tape: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerReplaceWorkspace(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer replace-workspace", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer replace-workspace: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer replace-workspace: --computer is required")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/replace-workspace"
-	if err := c.do(http.MethodPost, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer replace-workspace: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerBootstrapChain(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer bootstrap-chain", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer bootstrap-chain: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer bootstrap-chain: --computer is required")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/bootstrap-chain"
-	if err := c.do(http.MethodPost, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer bootstrap-chain: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerProducerReports(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer producer-reports", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	agentID := fs.String("agent-id", "", "Filter by producer agent ID")
-	staleDelivered := fs.Bool("stale-delivered", false, "List pending reports already delivered to non-active runs")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer producer-reports: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer producer-reports: --computer is required")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/producer-reports"
-	query := url.Values{}
-	if strings.TrimSpace(*agentID) != "" {
-		query.Set("agent_id", strings.TrimSpace(*agentID))
-	}
-	if *staleDelivered {
-		query.Set("stale_delivered", "true")
-	}
-	if len(query) > 0 {
-		path += "?" + query.Encode()
-	}
-	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer producer-reports: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerSettleProducerReports(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer settle-producer-reports", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	commandID := fs.String("command-id", "", "Idempotency command ID (generated if empty)")
-	trajectoryID := fs.String("trajectory", "", "Trajectory ID")
-	reportIDsFlag := fs.String("report-ids", "", "Comma-separated report IDs to settle")
-	reason := fs.String("reason", "", "Settlement reason")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer settle-producer-reports: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" {
-		fmt.Fprintln(stderr, "choir computer settle-producer-reports: --computer is required")
-		return 2
-	}
-	var reportIDs []string
-	if strings.TrimSpace(*reportIDsFlag) != "" {
-		for _, id := range strings.Split(*reportIDsFlag, ",") {
-			if trimmed := strings.TrimSpace(id); trimmed != "" {
-				reportIDs = append(reportIDs, trimmed)
-			}
-		}
-	}
-	for _, arg := range fs.Args() {
-		if trimmed := strings.TrimSpace(arg); trimmed != "" {
-			reportIDs = append(reportIDs, trimmed)
-		}
-	}
-	if len(reportIDs) == 0 {
-		fmt.Fprintln(stderr, "choir computer settle-producer-reports: at least one report ID is required (via --report-ids or positional args)")
-		return 2
-	}
-	cmdID := strings.TrimSpace(*commandID)
-	if cmdID == "" {
-		cmdID = fmt.Sprintf("cmd-settle-producer-reports-%d", time.Now().UTC().UnixNano())
-	}
-	req := map[string]any{
-		"command_id":    cmdID,
-		"trajectory_id": strings.TrimSpace(*trajectoryID),
-		"report_ids":    reportIDs,
-		"reason":        strings.TrimSpace(*reason),
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/settle-producer-reports"
-	if err := c.do(http.MethodPost, path, req, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer settle-producer-reports: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runComputerAction(args []string, action string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer "+action, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir computer %s: %v\n", action, err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*idempotencyKey) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintf(stderr, "choir computer %s: --computer and --idempotency-key are required\n", action)
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/" + action
-	if err := c.do(http.MethodPost, path, map[string]string{"idempotency_key": strings.TrimSpace(*idempotencyKey)}, &response); err != nil {
-		fmt.Fprintf(stderr, "choir computer %s: %v\n", action, err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-// ---- run ----
-
-func runRun(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir run: subcommand required (start|status|list|cancel)")
-		return 2
-	}
-	sub := args[0]
-	switch sub {
-	case "start":
-		return runRunStart(args[1:], stdout, stderr)
-	case "status":
-		return runRunStatus(args[1:], stdout, stderr)
-	case "list":
-		return runRunList(args[1:], stdout, stderr)
-	case "cancel":
-		return runRunCancel(args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "choir run: unknown subcommand %q\n", sub)
-		return 2
-	}
-}
-
-func runRunStart(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir run start", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	idempotencyKey := fs.String("idempotency-key", "", "Stable caller-supplied lifecycle command key for replay/conflict detection")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir run start: %v\n", err)
-		return 2
-	}
-	rest := fs.Args()
-	if len(rest) == 0 || strings.TrimSpace(strings.Join(rest, " ")) == "" {
-		fmt.Fprintln(stderr, "choir run start: prompt text required")
-		return 2
-	}
-	if strings.TrimSpace(*idempotencyKey) == "" {
-		fmt.Fprintln(stderr, "choir run start: --idempotency-key is required")
-		return 2
-	}
-	text := strings.TrimSpace(strings.Join(rest, " "))
-	var resp promptBarSubmitResponse
-	if err := c.do(http.MethodPost, "/api/prompt-bar", map[string]string{"text": text, "command_id": strings.TrimSpace(*idempotencyKey)}, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir run start: %v\n", err)
-		return 1
-	}
-	if resp.Schema != "choir.durable_work.v1" || resp.CommandID == "" || resp.StartRequestDigest == "" ||
-		resp.TrajectoryID == "" || resp.DocID == "" || resp.RevisionID == "" ||
-		resp.SubjectID == "" || len(resp.ObligationIDs) == 0 || resp.ReducerSeq <= 0 || resp.SnapshotCursor <= 0 {
-		fmt.Fprintln(stderr, "choir run start: incomplete durable-work response")
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-
-func runRunStatus(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir run status", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir run status: %v\n", err)
-		return 2
-	}
-	rest := fs.Args()
-	if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
-		fmt.Fprintln(stderr, "choir run status: run id required")
-		return 2
-	}
-	id := strings.TrimSpace(rest[0])
-	var resp json.RawMessage
-	if err := c.do(http.MethodGet, "/api/runs/"+url.PathEscape(id), nil, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir run status %s: %v\n", id, err)
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-
-func runRunList(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir run list", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	limit := fs.Int("limit", defaultListLimit, "Maximum number of recent runs")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir run list: %v\n", err)
-		return 2
-	}
-	if len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir run list: unexpected positional arguments")
-		return 2
-	}
-	if *limit <= 0 || *limit > 500 {
-		fmt.Fprintln(stderr, "choir run list: --limit must be between 1 and 500")
-		return 2
-	}
-	var resp json.RawMessage
-	path := fmt.Sprintf("/api/runs?limit=%d", *limit)
-	if err := c.do(http.MethodGet, path, nil, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir run list: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-
-func runRunCancel(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir run cancel", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir run cancel: %v\n", err)
-		return 2
-	}
-	rest := fs.Args()
-	if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
-		fmt.Fprintln(stderr, "choir run cancel: run id required")
-		return 2
-	}
-	id := strings.TrimSpace(rest[0])
-	var resp json.RawMessage
-	if err := c.do(http.MethodPost, "/api/runs/"+url.PathEscape(id)+"/cancel", nil, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir run cancel %s: %v\n", id, err)
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-
 // promptBarSubmitResponse mirrors textureowner.promptBarSubmitResponse.
 type promptBarSubmitResponse struct {
 	Schema             string   `json:"schema"`
@@ -1769,103 +680,4 @@ type promptBarSubmitResponse struct {
 	State              string   `json:"state"`
 	CreatedAt          string   `json:"created_at"`
 	StatusURL          string   `json:"status_url"`
-}
-
-// ---- api-key ----
-
-func runAPIKey(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir api-key: subcommand required (list|create|revoke)")
-		return 2
-	}
-	sub := args[0]
-	switch sub {
-	case "list":
-		return runAPIKeyList(args[1:], stdout, stderr)
-	case "create":
-		return runAPIKeyCreate(args[1:], stdout, stderr)
-	case "revoke":
-		return runAPIKeyRevoke(args[1:], stdout, stderr)
-	default:
-		fmt.Fprintf(stderr, "choir api-key: unknown subcommand %q\n", sub)
-		return 2
-	}
-}
-
-func runAPIKeyList(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir api-key list", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir api-key list: %v\n", err)
-		return 2
-	}
-	var resp json.RawMessage
-	if err := c.do(http.MethodGet, "/auth/api-keys", nil, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir api-key list: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-
-func runAPIKeyCreate(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir api-key create", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	labelFlag := fs.String("label", "CLI key", "Label for the new API key")
-	scopesFlag := fs.String("scopes", "read:texture,read:base,read:runtime", "Comma-separated child scopes (must be within the caller's delegated scopes)")
-	computerFlag := fs.String("computer", os.Getenv("CHOIR_COMPUTER_ID"), "Optional stable ComputerID to attenuate the key to one computer; omit for an owner-wide key that controls every computer you own")
-	expiresFlag := fs.String("expires-at", "", "Optional RFC 3339 expiry (for example 2026-08-11T12:00:00Z); must be in the future")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir api-key create: %v\n", err)
-		return 2
-	}
-	scopes := []string{}
-	for _, s := range strings.Split(*scopesFlag, ",") {
-		s = strings.TrimSpace(s)
-		if s != "" {
-			scopes = append(scopes, s)
-		}
-	}
-	body := map[string]any{
-		"label":       strings.TrimSpace(*labelFlag),
-		"scopes":      scopes,
-		"computer_id": strings.TrimSpace(*computerFlag),
-	}
-	if strings.TrimSpace(*expiresFlag) != "" {
-		exp, err := time.Parse(time.RFC3339, strings.TrimSpace(*expiresFlag))
-		if err != nil {
-			fmt.Fprintf(stderr, "choir api-key create: --expires-at must be RFC 3339: %v\n", err)
-			return 2
-		}
-		body["expires_at"] = exp.UTC().Format(time.RFC3339)
-	}
-	var resp json.RawMessage
-	if err := c.do(http.MethodPost, "/auth/api-keys", body, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir api-key create: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, resp)
-}
-
-func runAPIKeyRevoke(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir api-key revoke", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir api-key revoke: %v\n", err)
-		return 2
-	}
-	rest := fs.Args()
-	if len(rest) == 0 || strings.TrimSpace(rest[0]) == "" {
-		fmt.Fprintln(stderr, "choir api-key revoke: key id required")
-		return 2
-	}
-	id := strings.TrimSpace(rest[0])
-	if err := c.do(http.MethodDelete, "/auth/api-keys/"+id, nil, nil); err != nil {
-		fmt.Fprintf(stderr, "choir api-key revoke %s: %v\n", id, err)
-		return 1
-	}
-	fmt.Fprintf(stdout, `{"revoked":%q}`+"\n", id)
-	return 0
 }
