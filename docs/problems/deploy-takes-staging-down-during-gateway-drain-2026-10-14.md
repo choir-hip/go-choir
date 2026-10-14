@@ -51,6 +51,28 @@ including one with 23,019 output tokens.
   seconds after the first start. Its gateway drain is short only because
   the new gateway has nothing in flight yet.
 
+## Second finding: docs pushes set off full deploys (01:00 UTC)
+
+A third outage began at 01:03 for `8d8b0084`, a docs-only commit.
+- The plan job diffs a push against the live staging commit, the
+  `X-Choir-Build-Commit` header (`.github/workflows/ci.yml`, "Plan base:
+  live staging commit"). That header is the commit compiled into the
+  proxy binary.
+- A deploy that rebuilds no Go service leaves the header where it was. So
+  the base stayed at `6c6bc1aa`, and every later push carried two files
+  from earlier commits: `scripts/l2a_paper_window.py` and
+  `testdata/fixtures/l2a-multilingual-2026-10-14.xml`.
+- `.github/scripts/deploy-impact-classify` has no rule for top-level
+  `testdata/` or for Python scripts. Both fall to its last case, "unknown
+  deployed path: conservative host + canonical guest image", which means
+  a host OS switch, the five-service restart and an active-VM refresh.
+- Neither file is deployed anywhere. The fixture is served from GitHub's
+  raw URL, and the script is an operator harness.
+- So every push re-deployed and took the site down, until a deploy that
+  rebuilt a Go service moved the header. Tonight's docs commits set off
+  deploys at 00:43 (`809755a7`) and 01:03 (`8d8b0084`). A third was
+  cancelled before it started.
+
 ## Candidate directions (not decided here)
 
 1. Mark the gateway `stopIfChanged = false`. NixOS then restarts it after
@@ -59,8 +81,9 @@ including one with 23,019 output tokens.
    drain.
 2. Hand the listener over (socket activation, or an old and a new process
    overlapping), so the gateway keeps accepting during its own drain.
-3. Leave out of the deploy-impact set the paths that do not ship, such as
-   `scripts/` that the deploy never reads and `testdata/` fixtures.
+3. Leave out of the deploy-impact set the paths that do not ship:
+   top-level `testdata/` and `scripts/*.py` (operator harnesses). This
+   stops the docs-push redeploys.
 
 Direction 1 is the smallest change. It touches deployment routing, which
 is red, so it needs its own ceremony and a deployed proof: the site stays
