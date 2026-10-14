@@ -78,6 +78,15 @@ assignment, work item) is closed with the visible fate "interrupted by a
 restart", never re-dispatched. Auto-resume after a crash is how
 crash-restart loops happen.
 
+**Standing owner intents survive a crash; their occurrences do not**
+(owner, 2026-10-14: "we need paper publishing 24/7, even after
+crashes"). An Autopaper source schedule is a standing intent: a crash
+closes only the poll in flight, and the schedule's next tick is new work
+on a computer that booted under the restart bounds. A schedule whose tick
+crashes the computer twice is closed with that cause. Until the code
+lands (station L1), a crash still closes schedules and the owner act
+restarts them.
+
 **A planned restart for an update may resume work.** The distinction is a
 durable planned-restart marker (reason, target version) written by the
 host before the restart and consumed once at the next boot. Marker

@@ -104,3 +104,12 @@ Read at 00:45 UTC from Node B.
   trusted. They join L2a's S1 (2, 3, 4, 5) and the poll path (1).
 - The memory findings go to LR's provisional scaling read.
 - Fixes come in later commits that cite this record.
+
+## Correction (panel round 2, 2026-10-14)
+
+The first design of the fix for defect 1 (stop storing validators while
+items are deferred) does not work. Truncation happens before the repeat
+check, so the next poll keeps the same first N items. The corrected fix
+applies the limit to new captures after the repeat check
+(`docs/reports/l2a-synthesis-intake-design-2026-10-14.md`, R2-1). Defect 4's
+dead filter moves into S1a, and the search over captures stays in S1b.

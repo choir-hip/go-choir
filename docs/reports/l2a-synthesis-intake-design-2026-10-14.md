@@ -10,7 +10,9 @@ Inputs:
 - a code survey of the poll path, Jev, object-graph edges, research
   addressing, corpus search and the library view (cited inline).
 
-Mutation class of the work: red (a model call on the poll path, records
+Status: accepted in panel round 2 with the amendments in "Round 2
+adjudication" below, which supersede the text above them where they
+differ. Mutation class of the work: red (a model call on the poll path, records
 routes). This note is green.
 
 ## Shape: two slices
@@ -207,3 +209,84 @@ the rollback. Bug fixes A5 are not gated: they are corrections.
 3. Fixture run on a minted test computer with `intake.labels` on.
 4. If the fixture passes, enable the paper and run the after-window.
 5. S1b after that.
+
+## Round 2 adjudication (2026-10-14)
+
+Panel: claude and glm accept; deepseek and gemini send back on one
+point, which all four name. gpt-6.1-sol was usage-limited. The blocker
+is fixed below, so the note is accepted with these amendments.
+
+**R2-1. Defect 1 is fixed in the right order (the blocker).**
+- The poller truncates to `max_items` before the repeat check
+  (`rss.go:91-96`, then `sourcegraph/captures.go:154-158`). Withholding
+  validators alone would re-read the same first N items every poll, never
+  reach the rest, and turn off 304s for every feed longer than N.
+- The fix:
+  - the poller returns every parsed item, up to the hard cap of 100;
+  - the per-poll limit applies to new captures, after the repeat check,
+    in feed order, and new items beyond it are counted as `deferred`;
+  - validators are stored only when `deferred` is 0.
+- Residual: an item that leaves the feed's window before it is captured
+  stays unreachable without a per-source cursor. The `deferred` count
+  makes that visible.
+- The fixture schedule sets `max_items` to at least the fixture's item
+  count, so its acceptance cannot hide this defect.
+
+**R2-2. The pending-arrival list (defect 2).**
+- The list lives on the existing `choir.source_schedule` object.
+- It is written before the append is attempted and cleared when the
+  append succeeds.
+- Writing it is best effort: a failure is logged and counted, and never
+  fails the poll.
+- A crash boot clears it, and its ids are recorded with the fate
+  "interrupted by a restart". A boot with a planned-restart marker keeps
+  it.
+
+**R2-3. One Jev call per capture, with short choices and siblings.**
+- The event and topic questions go in one request.
+- The choices are short aliases (c1, c2, …) mapped back to doc ids.
+- The candidates include the poll's other new captures (n1, n2, …), so
+  same-event captures in one poll are labelled as siblings.
+- Labelling has its own gateway rate scope, so it cannot starve the
+  support judge that publication needs.
+- A poll labels its captures in parallel (at most 4 at once) within 15
+  seconds in total.
+- The cost comes from the response's `usage`, which the decoder must
+  read.
+
+**R2-4. The shortlist weights recency over tokens.** The 30 newest
+stories plus 10 by token overlap. The live window reports label recall
+separately from merge recall. Before the paper is enabled, it states how
+far back cross-language matches reached.
+
+**R2-5. Structured dispositions.**
+- Management gets `choir.Feed(doc, captureIDs, reason)` and
+  `choir.Decline(captureIDs, reason)`. They write the same records a Note
+  and a decline write today, plus a structured list of captures.
+- The runtime compares each disposition with the label and records an
+  `override` on a mismatch.
+- This is what the override examples, the override rate and the
+  fixture's "every capture has a disposition" score are read from.
+
+**R2-6. Labels join the view where the store is.**
+- `inboxRecordView` is a pure function of the record, so the join happens
+  in `loadCellRecords`.
+- The view names the label version it showed, so a later override never
+  rewrites what management saw.
+
+**R2-7. The enable and the fixture guard are new, named surfaces.**
+- `intake.labels` is a `choir.computer_setting` object, set by an owner
+  act through the product API, like the schedules endpoint. It must be
+  live on staging before the paper is enabled.
+- The fixture's registry entry has `tos_class: test_fixture`.
+  `StartSourceSchedule` refuses that class unless the request is marked
+  as a fixture run.
+
+**R2-8. Moved into S1a.** Deleting the dead "published" filter in
+`SearchWireCorpus` (defect 4, one line), so per-document research can
+already find the paper's own stories. Searching captures stays in S1b.
+
+**R2-9. The order gains the live-window denominator.** The judge-scored
+same-event pair count in `scripts/l2a_paper_window.py` is built before
+the after-window. L2a does not close until S1b lands, because
+`finish.deliver` names the researchers and the corpus search.
