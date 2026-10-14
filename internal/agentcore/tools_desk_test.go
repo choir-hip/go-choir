@@ -69,6 +69,12 @@ func deskTestWorkerBin(t *testing.T) {
 			return
 		}
 		deskTestWorkerBinDir = dir
+		// A root test run spawns workers as a desk's cell user, which must
+		// be able to exec the binary (the guest's is in the Nix store).
+		if err := os.Chmod(dir, 0o755); err != nil {
+			deskTestWorkerBinErr = fmt.Errorf("desk worker bin dir mode: %v", err)
+			return
+		}
 		bin := filepath.Join(dir, "autoputer")
 		cmd := exec.Command("go", "build", "-o", bin, "../../cmd/autoputer")
 		if out, err := cmd.CombinedOutput(); err != nil {

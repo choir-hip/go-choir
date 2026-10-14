@@ -397,6 +397,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					KeepCellOutput: true,
 				},
 				ProcessGroup: true,
+				// The guest image sets CHOIR_DESK_CELL_CONFINEMENT=required:
+				// the worker runs as its desk's own user in an empty network
+				// namespace under Landlock and seccomp, or does not run.
+				Confinement: yaegikernel.CellConfinement{Mode: yaegikernel.DeskCellConfinementModeFromEnv(os.Getenv)},
 				// Workers get a clean environment; an operator's worker
 				// GOMEMLIMIT override is the one memory setting passed through.
 				ExtraEnv: gomemlimit.WorkerEnv(os.Getenv),
