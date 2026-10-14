@@ -257,7 +257,9 @@ their computer.
 
 ## Residuals
 
-- **R1** credential window (item 11): re-credential on resume.
+- **R1** credential window (item 11): lifted by re-credential on resume
+  (section below); it still bounds snapshots of guests without
+  `credential_resume` and wakes whose issuance fails.
 - **R2** snapshot space does not yet feed the pressure-reclaim decision;
   the budget bounds it instead.
 - **R3** VMGenID module loaded in the guest: check on staging
@@ -294,3 +296,165 @@ their computer.
    two concurrent resolves (one loader); kill vmctl mid-hibernate (no
    `snapshot/` dir, only `snapshot.partial/`).
 7. Rollback drill: set `VM_HIBERNATE_MODE=kill`, redeploy, hibernate: kill.
+
+## Re-credential on resume (R1 lift, 2026-10-14)
+
+Mutation class: **red** (guest credential delivery and installation,
+platform capability lifecycle, VM lifecycle wake path). Before this slice a
+snapshot was resumable only until the frozen capability's expiry + 15 min
+renewal grace − 3 min margin (about 42 minutes after hibernate); later wakes
+cold booted (crash boot). Most hibernations last hours, so real hibernation
+rarely applied.
+
+### How boot delivery works today (read from the code)
+
+- vmctl (`reserveFreshVMConfig`) asks corpusd
+  `POST /internal/computers/credentials/issue` (trusted internal caller only)
+  for a signed bootstrap envelope bound to `(computer_id, realization_id)`
+  with idempotency key `guest-credential:<realization_id>:<epoch>`; TTL
+  10 min. vmmanager writes it to `credential.img` (never logged, stripped
+  from snapshot metadata).
+- The guest (`autoputer/run.go`) verifies the envelope against its own
+  computer and realization (`VerifyBootstrap`), exchanges it
+  (`/credentials/exchange`, no bearer: the envelope is the proof) for a
+  capability at the head's current **credential revocation epoch** E plus a
+  post-revocation capability at E+1, consumes it (`/credentials/consume`,
+  authorized by the new capability, one-shot per envelope nonce), then
+  appends the consumption receipt as `key_revoked`, which advances the head
+  to E+1 and revokes every older capability; the guest switches to the E+1
+  token (`CompletePostRevocation`).
+
+### What the platform allows (checked, no platform change needed)
+
+Two different epochs exist and must not be confused:
+
+- **Realization epoch** (vmctl `ReserveBootEpoch`, in `realization_id`
+  `<vm>-epoch-<n>`): a snapshot resume keeps it. corpusd puts no uniqueness
+  rule on envelopes per realization: a second envelope for the same
+  realization is issued as long as the idempotency key differs. The boot key
+  cannot be reused: a same-key request replays the stored issuance with an
+  expiry derived from its recorded issue time, which is long past, and is
+  refused (409). The resume therefore uses a fresh key
+  `guest-credential-resume:<realization_id>:<epoch>:<random>`.
+- **Credential revocation epoch** (event head, carried in every capability):
+  the exchanged capability is minted at the head's current epoch, which
+  `SignedCapabilityVerifier` requires; so minting a fresh capability for the
+  same epoch is allowed. Consuming the envelope and appending `key_revoked`
+  then advances this epoch by one — exactly what every cold boot does. The
+  resume follows that boot protocol unchanged rather than skipping
+  consumption (skipping it would leave the envelope re-exchangeable for its
+  10-minute life and keep the frozen capability valid). Consequence: a
+  resume advances the credential revocation epoch by one and revokes the
+  snapshot's frozen capability; it does not advance the realization epoch.
+  Pinned by `TestResumeEnvelopeForSameRealizationIsIssuedExchangedAndConsumed`
+  (`internal/platform`).
+
+### Design
+
+- Prepare advertises `credential_resume: true` when the guest can install a
+  delivered envelope; metadata records it.
+- Wake: vmctl hands the manager an issuer (a closure, not a value: an
+  envelope is minted only for a snapshot that validated, never for every
+  wake of a hibernated computer). The manager validates, calls the issuer,
+  then consumes the snapshot, loads, and posts
+  `{"host_unix_nano", "credential_envelope"}` to
+  `/internal/runtime/hibernate/resumed`.
+- Guest: step the clock (envelope expiry checks need the right time), drop
+  idle connections, verify the envelope against its own computer,
+  realization and platform signing key, exchange, consume, append
+  `key_revoked`, switch to the post-revocation token, then reopen admission.
+  Without an envelope the guest renews as before.
+- The `resume_deadline` is no longer enforced when the snapshot's guest
+  accepts delivered credentials and vmctl can issue them. It is still
+  recorded and still bounds the renew-only path (older guests, no corpusd
+  URL, issuance failure). `VM_SNAPSHOT_MAX_AGE` (12 h) and the disk budget
+  are unchanged.
+
+### Failure modes (written before the code)
+
+26. **Envelope minted but the snapshot is invalid.** Wasted issuance on
+    every wake. Answer: the issuer runs only after validation passed.
+27. **Issuance fails (corpusd down, refusal).** Answer: within the old
+    renewal window the resume proceeds without an envelope (guest renews);
+    past it, fall back to a cold boot (`credential_issue_failed`); that boot
+    needs corpusd too and fails the same way it does today.
+28. **Boot idempotency key reused.** corpusd replays an expired issuance and
+    refuses. Answer: fresh random key per resume attempt; vmctl's retry
+    inside one attempt reuses it, so a timed-out issuance is replayed, not
+    duplicated.
+29. **Envelope for another computer or realization delivered to this
+    guest.** Answer: `VerifyBootstrap` binds computer and realization; any
+    mismatch refuses, the host kills and cold boots.
+30. **Platform signing key rotated while hibernated.** The guest's receipt
+    resolver holds the old key. Answer: an envelope signed by a different
+    key is refused (cold boot rebuilds everything from the new key).
+31. **Old capability already expired past the grace.** Renewal is refused.
+    Answer: the exchange needs no old bearer (the envelope is the proof);
+    consume is authorized by the newly exchanged token.
+32. **Guest mid-transition** (an unconsumed exchange or unreconciled
+    lifecycle receipt left in memory). Answer: install refuses; cold boot.
+33. **Exchange succeeds, consume or `key_revoked` append fails.** Answer:
+    resumed answers non-200; admission stays closed; host kills, discards
+    the (already consumed) snapshot and cold boots. The cold boot's own
+    envelope and `key_revoked` revoke whatever the failed install held. An
+    unjoined consumption receipt is left, the same as a boot that crashed at
+    that step.
+34. **A background append races the epoch switch** (between the
+    `key_revoked` append and `CompletePostRevocation`). Admission is closed,
+    so no actor work runs; a stray background request may be refused once.
+    Answer: accepted, named here; the window is one in-process call.
+35. **Credential material leaks.** Answer: the envelope travels only in the
+    host-only resumed call (host-peer check on the guest, the host's TAP
+    link, like every guest↔corpusd bearer); it is never written to snapshot
+    metadata, the timeline, `inst.Config`, or logs; error strings carry no
+    token. The snapshot's frozen token is revoked by the resume's
+    `key_revoked`.
+36. **Old guest, new host** (snapshot taken by a guest without the field).
+    Answer: no `credential_resume` in metadata, so no envelope is sent and
+    the deadline applies (today's behavior). A guest that does not know the
+    field would refuse the request (unknown field) and cold boot, which is
+    safe.
+37. **Resume twice / envelope replay.** Answer: snapshot one-shot is
+    unchanged (consumed before load); the envelope is consumed once by the
+    platform; a replayed exchange after consumption is refused.
+38. **Resumed call now does three corpusd calls and an append.** Answer:
+    the host's resumed timeout rises from 30 s to 60 s.
+
+### Red ceremony
+
+- **Conjecture delta:** before, a hibernated computer older than ~42 min
+  woke by crash boot. After: a snapshot of a credential-resume guest wakes
+  by memory resume up to `VM_SNAPSHOT_MAX_AGE` (12 h), with a fresh
+  capability from the same issuance path a boot uses. Falsified if staging
+  shows `snapshot_fallback` with `credential_window_passed` or
+  `guest_resumed_failed` after hibernations longer than 45 minutes.
+- **Protected surfaces:** corpusd credential issuance (called with a new key
+  shape, no code change), guest credential install
+  (`selfdev.GuestCredentials.InstallResumeEnvelope`), guest `key_revoked`
+  append at runtime (the boot reconcile function moved, unchanged, to
+  `agentcore.ReconcilePendingLifecycleReceipts`), vmmanager resume
+  validation and resumed call, vmctl wake path.
+- **Admissible evidence:** unit tests with fakes (below) for shape;
+  staging-only for the claim (real corpusd, real guest, real clock): a
+  hibernation held > 45 min must wake with `boot_kind=snapshot_resume`,
+  `credential=delivered`, the same realization epoch, the event head's
+  credential revocation epoch +1, a `key_revoked` event on the tape, and no
+  `interrupted by a restart` fates.
+- **Rollback:** revert the commits (the host then sends no envelope and the
+  deadline applies again), or `VM_HIBERNATE_MODE=kill` for the whole
+  feature.
+- **Heresy delta:** discovered — "same epoch" is ambiguous in the S3 note:
+  the realization epoch is kept, but every envelope consumption (boot or
+  resume) advances the credential revocation epoch; the boot key cannot be
+  replayed past its window. Introduced — the guest appends `key_revoked`
+  while running (only boot did before), with the race in item 34. Repaired —
+  R1: snapshot resume no longer bounded by capability lifetime.
+
+### Staging evidence plan addition
+
+8. Hibernate a computer, wait 50 minutes, wake: expect
+   `boot_kind=snapshot_resume`, `snapshot.credential=delivered`, epoch
+   unchanged, corpusd lifecycle receipts `credential_envelope_issued` and
+   `credential_envelope_consumed` under a `guest-credential-resume:` key,
+   one new `key_revoked` event on the computer's tape, and a subsequent
+   event append succeeding.
