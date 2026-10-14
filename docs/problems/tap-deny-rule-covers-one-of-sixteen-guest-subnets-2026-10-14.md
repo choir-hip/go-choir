@@ -85,3 +85,70 @@ fix should derive the deny from the same constants.
   when the tap is torn down; sweep orphans at vmctl start).
 - The FORWARD policy is ACCEPT, so isolation rests entirely on per-tap
   rules.
+
+## Second live read and code read before the fix (2026-10-14 ~15:53 UTC, read-only)
+
+Read with `sudo iptables -S`, `sudo iptables -t nat -S`,
+`sudo ip6tables -S FORWARD`, `ip -o addr show`, and `sysctl` on Node B.
+Nothing on the host was changed.
+
+**The pool's upper /16s have been used.** Stale nat rules remain for two
+vanished taps of the older naming scheme: `vm-vm-5b0c1-tap` held
+10.202.16.1 and `vm-vm-unive-tap` held 10.202.17.1. So allocations have
+reached 10.202 before. That was under the older scheme, but it shows that
+reaching 10.201+ is not hypothetical.
+
+**What is stale, by chain.** None of these interfaces exists any more.
+- FORWARD: 61 untagged `-i`/`-o` ACCEPT pairs (122 rules) for
+  `vm-vm-<prefix>-tap`.
+- INPUT: 15 rules. Fourteen are tagged
+  `go-choir-vm-vm-vm-{5b0c1,unive}-tap`; one is untagged
+  `-i vm-vm-eefb4-tap --dport 8084`.
+- nat: 20 rules (PREROUTING DNAT, OUTPUT DNAT, POSTROUTING MASQUERADE,
+  with the retired `-o lo` masquerade among them), tagged for the same
+  two taps. They include DNATs to 127.0.0.1:8085 and :8787, ports that
+  have since been retired.
+
+**A related ordering defect in INPUT.** For each live tap, the six
+tap-to-host-service ACCEPTs (8082-8088) come *before* that tap's INPUT
+anti-spoof DROP. The cause is that `setupHostNetworking` inserts the DROP at
+INPUT 1 first, and `ensureTapHostServiceInputRules` then inserts each
+ACCEPT at INPUT 1, which puts them ahead of it. The ACCEPTs have no source
+match. So a packet entering tap T with a forged source reaches host
+service ports, against the S1a rule "only the guest's own /30 source may
+enter this tap". Blind TCP spoofing cannot finish a handshake, because the
+SYN-ACK goes to the forged address, so this is hard to exploit. It still
+breaks a stated invariant.
+
+NixOS's reverse-path filter narrows the exposure further. mangle
+PREROUTING jumps to `nixos-fw-rpfilter`, which ends `-m rpfilter ... -j
+DROP` with no `--accept-local`. A forged source whose return route does not
+leave through the same tap (another guest, an outside address) is dropped
+there. So is a source that is a local host address, such as the tap's own
+.1. What gets through is a forged source inside the tap's own /30 other
+than the guest's .2.
+
+**IPv6 is not a path today.** `net.ipv6.conf.all.forwarding = 0`, and the
+taps carry only kernel `fe80::` link-local addresses, which are never
+forwarded. The ip6tables FORWARD chain is empty, with policy ACCEPT. No
+IPv6 rule is needed now. If guests ever get routable v6, the deny must be
+mirrored in ip6tables.
+
+**Teardown gaps found by reading the code** (`main` dd88b1767):
+- A Firecracker exit that vmctl did not cause (a crash, or a guest
+  poweroff) only marks the instance failed (`startFirecrackerProcess`'s
+  wait goroutine). The tap and all its rules stay until a later stop,
+  recover or boot of the same VM.
+- If `launchFirecracker` fails after `prepareVMNetwork` (for example, the
+  Firecracker spawn fails), `bootVM` returns with the tap and its rules
+  still installed.
+- `deleteIPTablesRulesForTap` matches rules by substring, and only in the
+  six built-in chains.
+- Rules for a tap that disappears while vmctl is not running are never
+  removed. Nothing sweeps at start, which is how the 157 stale rules above
+  built up.
+
+**Fail-open posture.** The FORWARD policy is ACCEPT, so guest-originated
+forwarding is allowed unless a per-tap DROP happens to match. A tap whose
+rules were never installed, or were lost, can forward anywhere, including
+into other guests.
