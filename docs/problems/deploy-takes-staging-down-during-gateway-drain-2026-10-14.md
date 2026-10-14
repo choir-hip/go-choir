@@ -2,7 +2,7 @@
 
 Date: 2026-10-14, about 00:55 UTC. Found when `https://choir.news/health`
 answered 502 during a deploy that a docs commit with one script set off
-(`809755a7`, CI run 38491257877). Status: documented; no fix yet.
+(`809755a7`, CI run 38491257877). Status: repaired for the site (classifier fix 6fdcf583; restart fix 2db4bc02, proven on the ecc51d79 deploy with 417 of 417 health probes at 200). Open: model calls are refused during the gateway drain (D3).
 
 ## What happens
 

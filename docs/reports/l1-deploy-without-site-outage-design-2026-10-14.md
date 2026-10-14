@@ -91,3 +91,27 @@ deploy, and the journal timestamps of each unit's stop and start are
 recorded. Pass: no gap over 10 seconds in `/health` while the gateway
 drains, and each of the five units runs its new binary (the deployed
 commit in `/health`, and each pointer's target).
+
+## Deployed proof (2026-10-14)
+
+Deploy of `ecc51d79` (CI run 38495519250; it carried the change
+`2db4bc02`), deployed 01:39:07 UTC.
+- The switch, at 01:34:31, restarted none of the five services. The option
+  took effect on the first deploy, so failure mode 5 did not occur.
+- The one restart came after the pointer sync. At 01:36:05, auth, maild,
+  corpusd and proxy restarted together within the same second. The
+  gateway then drained from 01:36:05 to 01:38:44 (2 min 39 s) and
+  started again.
+- A probe polled `/health` every 2 seconds from 01:24:16 to the end of
+  the deploy: 417 samples, all 200, with no gap. Before this change, the
+  three deploys earlier that night took the site down for 3, 4 and 11
+  minutes. The probe log is at
+  `~/.config/choir-qa/traces/l1/`.
+- Each of the five units runs its service pointer (`/var/lib/go-choir/
+  services/<name>/bin/<name>`). `/health` reports `commit` and
+  `deployed_commit` `ecc51d79`.
+- Separately: the first switch attempt failed with status 4 at 01:36:03
+  ("Reload failed for D-Bus System Message Bus"), and the deploy's
+  existing one retry succeeded. This happened before and is unrelated.
+- Residual (D3): model calls from computers are refused while the gateway
+  drains, for 2 min 39 s on this deploy and up to 11 min.
