@@ -389,7 +389,6 @@ func TestDesktopExchangeCodeValidatesCallbackAuthority(t *testing.T) {
 	}
 }
 
-
 func mustDesktopSession(t *testing.T, backend string) *desktopSession {
 	t.Helper()
 	session, err := newDesktopSession(backend)

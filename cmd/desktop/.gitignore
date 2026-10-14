@@ -1,12 +1,5 @@
-# Build artifacts
+# Build output (cmd/desktop/build.sh)
 bin/
-frontend/dist/*
-!frontend/dist/.gitkeep
-
-# Go
-go.sum
 
 # macOS
 .DS_Store
-*.app
-desktop

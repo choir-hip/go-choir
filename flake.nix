@@ -384,14 +384,14 @@ EOF
           devPkgs = importPkgs devSystem;
         in
         devPkgs.mkShell {
+          # Go only: the app embeds no frontend, and cmd/desktop/build.sh
+          # compiles cgo with Xcode's clang and SDK, not a Nix toolchain.
           packages = [
             devPkgs.go
-            devPkgs.nodejs
-            devPkgs.go-task
           ];
           shellHook = ''
             echo "Choir Desktop dev shell (Wails v3)"
-            echo "  cd cmd/desktop && task deps && task dev"
+            echo "  cmd/desktop/build.sh run"
           '';
         };
     in

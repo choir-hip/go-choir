@@ -1,22 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Code-signing entitlements for Choir.app (not sandboxed).
+  Only com.apple.security.* entitlement keys belong here. Usage strings
+  (NSMicrophoneUsageDescription, NSCameraUsageDescription) live in
+  Info.plist: put here, they get an ad-hoc-signed bundle SIGKILLed at launch
+  (docs/problems/desktop-app-does-not-launch-when-signed-2026-10-14.md).
+  The device keys matter once the app is signed with the hardened runtime;
+  WKWebView media capture needs them.
+-->
 <plist version="1.0">
 <dict>
-    <key>com.apple.security.app-autoputer</key>
-    <false/>
-    <key>com.apple.security.network.client</key>
+    <key>com.apple.security.device.audio-input</key>
     <true/>
-    <key>com.apple.security.network.server</key>
-    <false/>
-    <key>com.apple.security.cs.allow-javascript</key>
+    <key>com.apple.security.device.camera</key>
     <true/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
-    <key>com.apple.security.automation.apple-events</key>
-    <true/>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Choir needs microphone access for voice input and Automatic Radio.</string>
-    <key>NSCameraUsageDescription</key>
-    <string>Choir needs camera access for video calls and media capture.</string>
 </dict>
 </plist>

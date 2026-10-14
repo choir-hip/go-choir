@@ -48,12 +48,17 @@ func newDesktopSession(rawBackend string) (*desktopSession, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create desktop cookie jar: %w", err)
 	}
+	// One backend host serves every request the window makes, so allow more
+	// idle connections to it than the default two.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 16
 	return &desktopSession{
 		backend: backend,
 		jar:     jar,
 		client: &http.Client{
-			Jar:     jar,
-			Timeout: desktopAuthNetworkLimit,
+			Jar:       jar,
+			Timeout:   desktopAuthNetworkLimit,
+			Transport: transport,
 		},
 		openAuthSession: startWebAuthSession,
 	}, nil
