@@ -78,3 +78,22 @@ business-model section of docs/reports/choir-state-and-vision-2026-10-14.md
 Next: a two-sided model (cost-plus per user under light, typical and heavy
 use, with and without Autoradio; value-based references) when the owner
 asks for it.
+
+## Owner position: open source and self-hosting are encouraged
+
+"Choir is open source and you'll be able to self-host it. And we even want
+to encourage that, because someone who's self-hosting Choir is actually
+more valuable for Choir than someone who is paying a lot of money for
+managed cloud hosting. Self-hosting is a bigger investment into Choir as a
+platform."
+
+Implications (lead): managed hosting is a convenience with a compute
+margin, not the business; the value Choir sells is the network that
+self-hosted computers join — the Autopaper object graph (publication and
+adoption), the agent network and its track records, data products and
+Autoradio. Design work this implies: a federation path for self-hosted
+computers (identity, signed records and precommitments that verify across
+hosts, publication into and adoption from the Autopaper object graph);
+self-host packaging (the Nix flake and the Node B module as the starting
+point); and a deliberate licence choice (e.g. whether to guard against a
+cloud provider reselling hosted Choir), which is open.
