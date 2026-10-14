@@ -10,8 +10,10 @@
  *     a story clicked there opens as a published Texture window titled with
  *     the story title;
  *   - the front list route returns each story once, newest first; /autopaper
- *     lays them out as a front page in rank order (rankFrontStories: recency
- *     lifted by versions), each marked "Updated" when a
+ *     lays them out as a front page in rank order (rankFrontStories:
+ *     importance x depth x recency when most stories are scored, else
+ *     recency lifted by versions; this device has no section habit, and the
+ *     front page is the default section), each marked "Updated" when a
  *     story has more than one version, and a story clicked there opens at
  *     /autopaper/<slug> as the standalone Texture published view;
  *   - the text carries only numbered citation markers; the numbered source

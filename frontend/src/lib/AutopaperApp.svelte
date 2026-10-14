@@ -10,6 +10,14 @@
   screen, so the same layout serves the public /autopaper page and a
   desktop window: one column on a phone, two on a tablet, four when wide.
 
+  Under the masthead, a row of section names (Front page, World, U.S.
+  Politics, Business & Finance, Tech & AI) switches the page to one
+  section's stories, in the same rank; it scrolls sideways on a phone. The
+  row shows only when at least half the stories carry a section. The last
+  section chosen is remembered on this device and restored on reopen, and
+  the reader's section choices, counted on this device only, lift those
+  sections on the front page.
+
   A story is not read here: it opens in the Texture app's read-only
   published mode, the same Texture UI as a user's own documents. On the
   desktop that is a Texture window; on the public /autopaper page it is the
@@ -21,13 +29,22 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import AutopaperStory from './AutopaperStory.svelte';
   import {
+    AUTOPAPER_SECTIONS,
     editionTime,
+    FRONT_SECTION_ID,
     FRONT_FIRST_PAGE_SIZE,
     fetchFrontPage,
     formatWhen,
     layoutFrontPage,
+    loadSavedSection,
+    loadSectionVisits,
     rankFrontStories,
+    recordSectionVisit,
+    saveSection,
+    sectionShares,
+    storiesInSection,
     storyTextureContext,
+    usesSections,
     type FrontStory,
   } from './autopaper';
 
@@ -49,8 +66,17 @@
   let loadingMore = false;
   let today = new Date();
 
-  $: layout = layoutFrontPage(rankFrontStories(frontStories));
-  $: moreStories = [...layout.more, ...olderStories];
+  // The section the reader chose (restored from this device on mount), and
+  // their section visits on this device.
+  let section = FRONT_SECTION_ID;
+  let visits: Record<string, number> = {};
+
+  $: sectioned = usesSections(frontStories);
+  $: activeSection = sectioned ? section : FRONT_SECTION_ID;
+  $: shares = activeSection === FRONT_SECTION_ID ? sectionShares(visits) : null;
+  $: layout = layoutFrontPage(rankFrontStories(storiesInSection(frontStories, activeSection), { sectionShares: shares }));
+  $: moreStories = [...layout.more, ...storiesInSection(olderStories, activeSection)];
+  $: sectionEmpty = status === 'ready' && frontStories.length > 0 && !layout.lead && moreStories.length === 0;
   $: storyCount = frontStories.length + olderStories.length;
   $: edition = editionTime(frontStories);
   $: editionISO = Number.isFinite(edition) ? new Date(edition).toISOString() : '';
@@ -86,6 +112,13 @@
     }
   }
 
+  function selectSection(id: string) {
+    if (id === section) return;
+    section = id;
+    saveSection(id);
+    visits = recordSectionVisit(id);
+  }
+
   function openStory(event: MouseEvent, row: FrontStory, route: string) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!route) return;
@@ -103,6 +136,8 @@
   }
 
   onMount(() => {
+    section = loadSavedSection();
+    visits = loadSectionVisits();
     void loadFront();
   });
 </script>
@@ -123,6 +158,26 @@
           </span>
         {/if}
       </p>
+      {#if sectioned}
+        <nav class="ap-sections" aria-label="Sections" data-autopaper-sections>
+          <ul>
+            {#each AUTOPAPER_SECTIONS as item (item.id)}
+              <li>
+                <button
+                  type="button"
+                  class="ap-section"
+                  class:current={item.id === activeSection}
+                  aria-current={item.id === activeSection ? 'page' : undefined}
+                  data-autopaper-section={item.id}
+                  on:click={() => selectSection(item.id)}
+                >
+                  {item.label}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </nav>
+      {/if}
     </header>
 
     <section class="ap-front" data-autopaper-front aria-label="Front page" aria-busy={status === 'loading'}>
@@ -132,6 +187,8 @@
         <p class="ap-status ap-error" role="alert" data-autopaper-error>Could not load stories. Try again shortly.</p>
       {:else if storyCount === 0}
         <p class="ap-status" data-autopaper-empty>No stories yet.</p>
+      {:else if sectionEmpty}
+        <p class="ap-status" data-autopaper-section-empty>No stories in this section yet.</p>
       {:else}
         <div class="ap-grid" data-autopaper-grid>
           {#if layout.lead}
@@ -271,6 +328,75 @@
     font-size: 0.86rem;
     font-style: italic;
     letter-spacing: 0;
+  }
+
+  /* ---- sections: a row of section names under the edition line, like a
+     broadsheet's section nav. On a narrow page the row scrolls sideways
+     inside itself, so the page never scrolls horizontally. */
+
+  .ap-sections {
+    min-width: 0;
+    border-bottom: 1px solid var(--ap-rule);
+  }
+
+  /* Auto margins on the ends center the row when it fits and leave its
+     start reachable when it scrolls (centering would clip the start). */
+  .ap-sections ul {
+    display: flex;
+    gap: 0 1.4rem;
+    margin: 0;
+    padding: 0 0.25rem;
+    list-style: none;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+
+  .ap-sections ul::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ap-sections li {
+    flex: none;
+  }
+
+  .ap-sections li:first-child {
+    margin-left: auto;
+  }
+
+  .ap-sections li:last-child {
+    margin-right: auto;
+  }
+
+  .ap-section {
+    min-height: 2.5rem;
+    padding: 0.55rem 0 0.45rem;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ap-ink-soft);
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .ap-section:hover {
+    color: var(--ap-ink);
+  }
+
+  .ap-section.current {
+    border-bottom-color: var(--ap-ink);
+    color: var(--ap-ink);
+    font-weight: 700;
+  }
+
+  .ap-section:focus-visible {
+    outline: 2px solid var(--choir-accent);
+    outline-offset: -2px;
   }
 
   /* ---- states ---- */

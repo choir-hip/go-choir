@@ -21,10 +21,18 @@
  *     Autopaper window open on the desktop, in the London Salmon default
  *     theme (owner request 2026-10-14); the window renders the same front
  *     page.
+ *   - sections (owner, 2026-10-14, LF1): with at least half the stories
+ *     filed under a section, a row of five section names sits under the
+ *     masthead (Front page current by default); a section shows only its
+ *     stories in rank order; the chosen section is restored after a reload;
+ *     section choices counted on the device lift those sections on the front
+ *     page; with fewer than half filed the row is absent; at 375px the row
+ *     scrolls inside itself with no page overflow.
  * The rank rule itself (rankFrontStories in src/lib/autopaper.ts) is checked
  * directly in the first describe block; the repo has no TS unit runner, and
  * Playwright loads the TypeScript module as is.
  *
+ * Section screenshots (375px and 1440px) go to AUTOPAPER_UI_SHOT_DIR too.
  * Screenshots at 1280px and 390px, in the London Salmon default theme and
  * the dark Futuristic Noir theme, are written to AUTOPAPER_UI_SHOT_DIR when set (else
  * the test output dir) and attached to the report.
@@ -42,8 +50,18 @@ import {
   FRONT_FRESH_WINDOW_MS,
   FRONT_MAX_LIFTED_VERSIONS,
   FRONT_VERSION_LIFT_MS,
+  SECTION_STORAGE_KEY,
+  SECTION_VISITS_STORAGE_KEY,
+  depthFactor,
   layoutFrontPage,
+  loadSavedSection,
+  loadSectionVisits,
   rankFrontStories,
+  recordSectionVisit,
+  saveSection,
+  sectionShares,
+  storiesInSection,
+  usesSections,
 } from '../src/lib/autopaper.ts';
 
 const BASE_URL = (process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:4173').replace(/\/+$/, '');
@@ -260,6 +278,107 @@ test.describe('front-page rank', () => {
     expect(rankFrontStories(half).map((s) => s.publication_id)).not.toEqual(baseline);
   });
 
+  const deep = (s, importance, source_count, words) => ({ ...s, importance, source_count, words });
+
+  test('depth weighs importance: one source halves it, two weigh 0.75, a short body 0.8, unknown counts in full', () => {
+    const base = story('x', 'X', '', 0, 1, now);
+    expect(depthFactor(deep(base, 5, 3, 400))).toBe(1);
+    expect(depthFactor(deep(base, 5, 2, 400))).toBe(0.75);
+    expect(depthFactor(deep(base, 5, 1, 400))).toBe(0.5);
+    expect(depthFactor(deep(base, 5, 0, 400))).toBe(0.5);
+    expect(depthFactor(deep(base, 5, 3, 121))).toBeCloseTo(0.8);
+    expect(depthFactor(deep(base, 5, 1, 121))).toBeCloseTo(0.4);
+    expect(depthFactor(base)).toBe(1);
+    // The Mauritius case: importance 8, one source, 121 words (8 x 0.4 = 3.2)
+    // falls below a researched importance-6 story of the same hour (6).
+    const stub = deep(story('stub', 'Stub', '', 0, 1, now), 8, 1, 121);
+    const researched = deep(story('deep', 'Researched', '', 20 * MIN, 3, now), 6, 5, 600);
+    const plain = deep(story('plain', 'Plain', '', 10 * MIN, 1, now), 3, 3, 300);
+    expect(rankFrontStories([stub, researched, plain]).map((s) => s.title)).toEqual(['Researched', 'Stub', 'Plain']);
+    // Without depth fields the same stories rank as before (importance x recency).
+    const bare = [stub, researched, plain].map(({ source_count, words, ...rest }) => rest);
+    expect(rankFrontStories(bare).map((s) => s.title)).toEqual(['Stub', 'Researched', 'Plain']);
+  });
+
+  test('a story citing fewer than two sources never leads, but keeps its place in the top tier', () => {
+    // Importance 10 with one long source still outscores the rest (10 x 0.5 = 5).
+    const big = deep(story('big', 'Big one-source', '', 0, 1, now), 10, 1, 500);
+    const two = deep(story('two', 'Two sources', '', 30 * MIN, 1, now), 6, 2, 500);
+    const three = deep(story('three', 'Three sources', '', HOUR, 1, now), 4, 3, 500);
+    const ranked = rankFrontStories([three, big, two]);
+    expect(ranked.map((s) => s.title)).toEqual(['Two sources', 'Big one-source', 'Three sources']);
+    const layout = layoutFrontPage(ranked);
+    expect(layout.lead.title).toBe('Two sources');
+    expect(layout.top[0].title).toBe('Big one-source');
+    // Unknown depth may lead; with no story eligible the order stands.
+    const unknown = { ...story('unknown', 'Unknown depth', '', 2 * HOUR, 1, now), importance: 3 };
+    expect(rankFrontStories([big, unknown])[0].title).toBe('Unknown depth');
+    const lone = deep(story('lone', 'Lone', '', 0, 1, now), 2, 0, 50);
+    expect(rankFrontStories([lone, big]).map((s) => s.title)).toEqual(['Big one-source', 'Lone']);
+    // Promo stories still never lead.
+    const promo = { ...deep(story('promo', 'Promo', '', 0, 1, now), 9, 5, 500), promo: true };
+    expect(rankFrontStories([promo, big, two])[0].title).toBe('Two sources');
+  });
+
+  test('sections: filed stories, filtering, the half rule, and the reader habit lift', () => {
+    const filed = (s, importance, section) => ({ ...s, importance, section });
+    const world = filed(story('w', 'World story', '', 0, 1, now), 6, 'world');
+    const tech = filed(story('t', 'Tech story', '', 0, 1, now), 5, 'tech_ai');
+    const biz = filed(story('b', 'Business story', '', 0, 1, now), 4, 'business');
+    const loose = { ...story('l', 'Unfiled story', '', 0, 1, now), importance: 3 };
+    const list = [world, tech, biz, loose];
+    expect(usesSections(list)).toBe(true);
+    expect(usesSections([world, loose, { ...loose, publication_id: 'pub-l2' }])).toBe(false);
+    expect(usesSections([{ ...world, section: 'sports' }, loose])).toBe(false);
+    expect(storiesInSection(list, 'front')).toEqual(list);
+    expect(storiesInSection(list, 'tech_ai')).toEqual([tech]);
+    expect(storiesInSection(list, 'nonsense')).toEqual(list);
+    // Habit: all visits to Tech & AI lift it by 1.25 (5 x 1.25 = 6.25 > 6).
+    expect(rankFrontStories(list).map((s) => s.title)[0]).toBe('World story');
+    const shares = sectionShares({ tech_ai: 4 });
+    expect(rankFrontStories(list, { sectionShares: shares }).map((s) => s.title)).toEqual([
+      'Tech story',
+      'World story',
+      'Business story',
+      'Unfiled story',
+    ]);
+    // A split habit lifts less: half the visits lift by 1.125 (5.625 < 6).
+    const split = sectionShares({ tech_ai: 2, business: 2 });
+    expect(rankFrontStories(list, { sectionShares: split })[0].title).toBe('World story');
+    expect(sectionShares({})).toBeNull();
+  });
+
+  test('section memory and visit counts live in local storage and survive a blocked store', () => {
+    const data = new Map();
+    const store = { getItem: (k) => (data.has(k) ? data.get(k) : null), setItem: (k, v) => data.set(k, String(v)) };
+    expect(loadSavedSection(store)).toBe('front');
+    saveSection('tech_ai', store);
+    expect(loadSavedSection(store)).toBe('tech_ai');
+    saveSection('sports', store);
+    expect(data.get(SECTION_STORAGE_KEY)).toBe('tech_ai');
+    recordSectionVisit('tech_ai', store);
+    recordSectionVisit('tech_ai', store);
+    recordSectionVisit('front', store);
+    expect(recordSectionVisit('world', store)).toEqual({ tech_ai: 2, world: 1 });
+    expect(JSON.parse(data.get(SECTION_VISITS_STORAGE_KEY))).toEqual({ tech_ai: 2, world: 1 });
+    data.set(SECTION_STORAGE_KEY, 'nonsense');
+    data.set(SECTION_VISITS_STORAGE_KEY, '{bad json');
+    expect(loadSavedSection(store)).toBe('front');
+    expect(loadSectionVisits(store)).toEqual({});
+    const blocked = {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    expect(loadSavedSection(blocked)).toBe('front');
+    expect(() => saveSection('world', blocked)).not.toThrow();
+    expect(recordSectionVisit('world', blocked)).toEqual({ world: 1 });
+    expect(loadSavedSection(null)).toBe('front');
+  });
+
   test('the layout cuts lead, four top stories, six briefs, and the rest', () => {
     const { first } = fixture(now);
     const ranked = rankFrontStories(first);
@@ -269,6 +388,123 @@ test.describe('front-page rank', () => {
     expect(layout.briefs).toEqual(ranked.slice(5, 11));
     expect(layout.more).toEqual(ranked.slice(11));
     expect(layoutFrontPage([])).toEqual({ lead: null, top: [], briefs: [], more: [] });
+  });
+});
+
+// The fixture filed into sections and scored, as corpusd serves it once the
+// scorer has run: every story but the last carries a section.
+const SECTION_OF = {
+  harbor: 'world',
+  storm: 'world',
+  'zh-transit': 'world',
+  'ja-rice': 'business',
+  'ko-chip': 'tech_ai',
+  'ar-water': 'world',
+  court: 'us_politics',
+  vaccine: 'us_politics',
+  library: 'world',
+  longword: 'tech_ai',
+  election: 'us_politics',
+  rail: 'business',
+  museum: 'world',
+};
+
+function sectionedFixture(now = Date.now()) {
+  const fx = fixture(now);
+  const file = (s, i) => {
+    const key = s.publication_id.replace(/^pub-/, '');
+    const out = { ...s, importance: 3 + (i % 6), source_count: 3, words: 300 };
+    if (SECTION_OF[key]) out.section = SECTION_OF[key];
+    return out;
+  };
+  return { first: fx.first.map(file), second: fx.second.map(file) };
+}
+
+test.describe('Autopaper sections', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('a section row under the masthead filters by section and restores the last section after reload', async ({ page }, testInfo) => {
+    const fx = sectionedFixture();
+    await openFront(page, { width: 1440, height: 900 }, fx);
+    const nav = page.locator('[data-autopaper-sections]');
+    await expect(nav).toBeVisible();
+    await expect(nav.locator('button')).toHaveText(['Front page', 'World', 'U.S. Politics', 'Business & Finance', 'Tech & AI']);
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('Front page');
+    // Under the edition line, inside the masthead.
+    const editionBox = await page.locator('[data-autopaper-edition]').boundingBox();
+    const navBox = await nav.boundingBox();
+    expect(navBox.y).toBeGreaterThanOrEqual(editionBox.y + editionBox.height - 1);
+    // The front page lists every story, unfiled ones included.
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText(rankFrontStories(fx.first).map((s) => s.title));
+    await shoot(page, testInfo, 'autopaper-sections-1440-front');
+
+    await nav.locator('[data-autopaper-section="us_politics"]').click();
+    await expect(nav.locator('[aria-current="page"]')).toHaveText('U.S. Politics');
+    const politics = rankFrontStories(storiesInSection(fx.first, 'us_politics'));
+    expect(politics.length).toBe(3);
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText(politics.map((s) => s.title));
+    await expect(page.locator('h2')).toHaveCount(1);
+    await expect(page.locator('[data-autopaper-lead] h2')).toHaveText(politics[0].title);
+    await shoot(page, testInfo, 'autopaper-sections-1440-us-politics');
+
+    // Older stories in the section only (the second page has no politics).
+    await page.locator('[data-autopaper-more]').click();
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText(politics.map((s) => s.title));
+
+    await nav.locator('[data-autopaper-section="tech_ai"]').click();
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText(
+      rankFrontStories(storiesInSection(fx.first, 'tech_ai')).map((s) => s.title),
+    );
+    const stored = await page.evaluate(([a, b]) => [localStorage.getItem(a), localStorage.getItem(b)], [SECTION_STORAGE_KEY, SECTION_VISITS_STORAGE_KEY]);
+    expect(stored[0]).toBe('tech_ai');
+    expect(JSON.parse(stored[1])).toEqual({ us_politics: 1, tech_ai: 1 });
+
+    // Reopen: the last section is restored.
+    await page.reload();
+    await expect(page.locator('[data-autopaper-grid]')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('[data-autopaper-sections] [aria-current="page"]')).toHaveText('Tech & AI');
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText(
+      rankFrontStories(storiesInSection(fx.first, 'tech_ai')).map((s) => s.title),
+    );
+  });
+
+  test('the reader habit lifts their sections on the front page', async ({ page }) => {
+    const fx = sectionedFixture();
+    await page.addInitScript((key) => {
+      window.localStorage.setItem(key, JSON.stringify({ tech_ai: 9, business: 1 }));
+    }, SECTION_VISITS_STORAGE_KEY);
+    await openFront(page, { width: 1440, height: 900 }, fx);
+    const lifted = rankFrontStories(fx.first, { sectionShares: sectionShares({ tech_ai: 9, business: 1 }) });
+    const plain = rankFrontStories(fx.first);
+    expect(lifted.map((s) => s.publication_id)).not.toEqual(plain.map((s) => s.publication_id));
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText(lifted.map((s) => s.title));
+  });
+
+  test('at 375px the section row scrolls inside itself, with no page overflow', async ({ page }, testInfo) => {
+    const fx = sectionedFixture();
+    await openFront(page, { width: 375, height: 812 }, fx);
+    const row = page.locator('[data-autopaper-sections] ul');
+    await expect(row).toBeVisible();
+    const dims = await row.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth, left: el.getBoundingClientRect().left }));
+    expect(dims.scroll).toBeGreaterThan(dims.client);
+    expect(dims.left).toBeGreaterThanOrEqual(16);
+    await expectNoHorizontalOverflow(page, '375px sections');
+    // The first section is reachable at the start; the last scrolls into view.
+    const firstLeft = await page.locator('[data-autopaper-section="front"]').evaluate((el) => el.getBoundingClientRect().left);
+    expect(firstLeft).toBeGreaterThanOrEqual(16);
+    await shoot(page, testInfo, 'autopaper-sections-375-front');
+    await page.locator('[data-autopaper-section="tech_ai"]').click();
+    await expect(page.locator('[data-autopaper-sections] [aria-current="page"]')).toHaveText('Tech & AI');
+    await expectNoHorizontalOverflow(page, '375px tech');
+    await shoot(page, testInfo, 'autopaper-sections-375-tech');
+  });
+
+  test('with fewer than half the stories filed, there is no section row and a remembered section is ignored', async ({ page }) => {
+    const fx = fixture();
+    await page.addInitScript((key) => window.localStorage.setItem(key, 'tech_ai'), SECTION_STORAGE_KEY);
+    await openFront(page, { width: 1280, height: 900 }, fx);
+    await expect(page.locator('[data-autopaper-sections]')).toHaveCount(0);
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText(rankFrontStories(fx.first).map((s) => s.title));
   });
 });
 
