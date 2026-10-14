@@ -39,6 +39,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -380,4 +381,41 @@ func logLimited(prefix string, r *http.Request, route, reason string) {
 	}
 	log.Printf("hostauth: %s internal call %s %s from %s: %s; send %s from %s (docs/problems/loopback-is-a-credential-2026-10-14.md)%s",
 		prefix, r.Method, route, r.RemoteAddr, reason, Header, CredentialName, extra)
+}
+
+// IsDocumentationNetwork reports whether ip is in one of the RFC 5737
+// documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24).
+// httptest.NewRequest uses 192.0.2.1 as RemoteAddr.
+func IsDocumentationNetwork(ip net.IP) bool {
+	ip4 := ip.To4()
+	if ip4 == nil {
+		return false
+	}
+	return (ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 2) ||
+		(ip4[0] == 198 && ip4[1] == 51 && ip4[2] == 100) ||
+		(ip4[0] == 203 && ip4[1] == 0 && ip4[2] == 113)
+}
+
+func documentationNetworkAllowed(ip net.IP, inTestBinary bool) bool {
+	return inTestBinary && IsDocumentationNetwork(ip)
+}
+
+// TestNetworkAllowed reports whether a request source (an address or
+// host:port) is in TEST-NET-1 (192.0.2.0/24, httptest.NewRequest's
+// RemoteAddr) AND this process is a Go test binary. The internal-route
+// gates (vmctl, corpusd, maild) used to admit TEST-NET-1 as a test
+// convenience in production; now a production binary never does
+// (docs/problems/loopback-is-a-credential-2026-10-14.md). The other two
+// documentation ranges stay "outside callers" in tests, as before.
+func TestNetworkAllowed(remote string) bool {
+	host := strings.TrimSpace(remote)
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return testNet1Allowed(net.ParseIP(host), testing.Testing())
+}
+
+func testNet1Allowed(ip net.IP, inTestBinary bool) bool {
+	ip4 := ip.To4()
+	return inTestBinary && ip4 != nil && ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 2
 }

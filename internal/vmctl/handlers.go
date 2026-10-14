@@ -1266,12 +1266,12 @@ func internalTransport(r *http.Request) bool {
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err == nil {
-		// TEST-NET-1 (192.0.2.x) is httptest.NewRequest's synthetic RemoteAddr;
-		// it cannot appear on a real socket, so admitting it is a test-only
-		// convenience that no guest can ride.
-		return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "192.0.2.")
+		// TEST-NET-1 (192.0.2.x) is httptest.NewRequest's synthetic
+		// RemoteAddr; it is admitted only inside a Go test binary, never in
+		// production (hostauth.TestNetworkAllowed).
+		return host == "127.0.0.1" || host == "::1" || hostauth.TestNetworkAllowed(host)
 	}
-	return r.RemoteAddr == "127.0.0.1" || r.RemoteAddr == "::1" || strings.HasPrefix(r.RemoteAddr, "192.0.2.")
+	return r.RemoteAddr == "127.0.0.1" || r.RemoteAddr == "::1" || hostauth.TestNetworkAllowed(r.RemoteAddr)
 
 }
 

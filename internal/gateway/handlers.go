@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
@@ -721,7 +722,18 @@ func isAuthorizedRuntimePeer(r *http.Request) bool {
 	if ip == nil {
 		return false
 	}
-	return ip.IsLoopback() || isChoirGuestPeer(ip) || isDocumentationTestPeer(ip)
+	return runtimePeerAllowed(ip, testing.Testing())
+}
+
+// runtimePeerAllowed is the runtime-peer rule with the test-binary switch
+// explicit, so a test can assert the production rule: loopback or a Choir
+// guest address, and the RFC 5737 documentation ranges (httptest's
+// RemoteAddr) only inside a test binary, never in production.
+func runtimePeerAllowed(ip net.IP, inTestBinary bool) bool {
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || isChoirGuestPeer(ip) || (inTestBinary && hostauth.IsDocumentationNetwork(ip))
 }
 
 func remoteIP(r *http.Request) net.IP {
@@ -746,19 +758,6 @@ func isChoirGuestPeer(ip net.IP) bool {
 	}
 	return (ip4[0] == 172 && ip4[2] == 0 && ip4[3] == 2) ||
 		(ip4[0] == 10 && ip4[1] >= 200 && ip4[1] <= 215 && ip4[3] == 2)
-}
-
-// httptest.NewRequest uses documentation-only test networks, which are never
-// routed on the public internet. Keep them accepted so handler tests exercise
-// the real auth path without needing per-request RemoteAddr overrides.
-func isDocumentationTestPeer(ip net.IP) bool {
-	ip4 := ip.To4()
-	if ip4 == nil {
-		return false
-	}
-	return (ip4[0] == 192 && ip4[1] == 0 && ip4[2] == 2) ||
-		(ip4[0] == 198 && ip4[1] == 51 && ip4[2] == 100) ||
-		(ip4[0] == 203 && ip4[1] == 0 && ip4[2] == 113)
 }
 
 // writeGatewayJSON writes a JSON response.

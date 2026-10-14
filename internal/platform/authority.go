@@ -31,7 +31,9 @@ func trustedInternalTransport(r *http.Request) bool {
 	if err != nil {
 		host = remoteAddr
 	}
-	return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "192.0.2.")
+	// The documentation ranges (httptest's RemoteAddr) count only inside a
+	// Go test binary.
+	return host == "127.0.0.1" || host == "::1" || hostauth.TestNetworkAllowed(host)
 }
 
 func tapSourcedTransport(r *http.Request) bool {

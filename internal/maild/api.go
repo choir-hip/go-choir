@@ -162,7 +162,7 @@ func maildRemoteAddrHost(r *http.Request) string {
 
 func isMaildLoopbackHost(host string) bool {
 	return host == "127.0.0.1" || host == "::1" || host == "" || host == "@" ||
-		strings.HasPrefix(host, "192.0.2.") || strings.HasPrefix(host, "/")
+		hostauth.TestNetworkAllowed(host) || strings.HasPrefix(host, "/")
 }
 
 type maildGuestOwnership struct {

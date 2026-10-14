@@ -62,7 +62,13 @@ mail owners and rewrite the tape's heads: the unprivileged user does not
 matter because loopback is the credential. The `192.0.2.*` allowance is a
 test convenience compiled into production gates (`vmctl/handlers.go:1252`,
 `platform/authority.go:33`); it cannot arrive on a real socket, so it is not
-exploitable, but it is authority-by-location in production code.
+exploitable, but it is authority-by-location in production code. maild
+has the same allowance (`isMaildLoopbackHost`), and the gateway's
+runtime-peer rule (`isAuthorizedRuntimePeer`,
+`internal/gateway/handlers.go:719-762`) accepts all three RFC 5737 ranges
+(192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) as if they were Choir
+guests (found by the teaching-series review,
+docs/learn/03-gateway-and-providers.md).
 
 ## The host services themselves (F3)
 
