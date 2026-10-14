@@ -83,7 +83,7 @@ func (s *ChoirScope) keepCellOutput(stdout string) string {
 	head := runePrefix(stdout, cellOutputHead)
 	tail := runeSuffix(stdout, cellOutputTail)
 	handle := instance + ":" + strconv.Itoa(n)
-	marker := fmt.Sprintf("… stdout truncated: %s chars; %s not shown. The whole output is out, err := choir.CellOut(%q) (a string); slice it or search it in your next cell.",
+	marker := fmt.Sprintf("… stdout truncated: %s chars; %s not shown. Read all of it with out, err := choir.CellOut(%q); out is a string to slice or search in your next cell.",
 		groupDigits(total), groupDigits(total-cellOutputHead-cellOutputTail), handle)
 	return head + "\n" + marker + "\n" + tail
 }
