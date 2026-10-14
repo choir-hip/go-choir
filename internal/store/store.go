@@ -164,7 +164,20 @@ type Store struct {
 	// owner-scale computers (docs/problems/sa2-appendevent-unbounded-scan-*).
 	maxStreamSeq    int64
 	streamSeqSeeded bool
+	// eventSeqs is the in-memory high-water mark of EventRecord.Seq per
+	// (run, owner), under eventMu. Each entry is seeded once per process
+	// from the store (the same bounded read the per-append scan did), so it
+	// is correct across restarts; AppendEvent is the only writer of a
+	// non-zero Seq (the lifecycle batch path writes Seq 0).
+	eventSeqs map[eventSeqKey]int64
 }
+
+type eventSeqKey struct{ runID, ownerID string }
+
+// eventSeqCacheLimit bounds eventSeqs. Past it the map is dropped and each
+// run re-seeds from the store on its next append, which is what every
+// append did before the high-water mark.
+const eventSeqCacheLimit = 100000
 
 // DB returns the primary embedded Dolt *sql.DB connection used by this store.
 // It is exposed so layers that share the workspace (e.g. the self-development
@@ -1911,25 +1924,36 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		rec.OwnerID = "__system__"
 	}
 
-	// Compute the next sequence number for this run from OG.
-	existing, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", rec.RunID, 10000)
-	if err != nil {
-		return fmt.Errorf("append event: list existing: %w", err)
-	}
-	maxSeq := int64(0)
-	for _, obj := range existing {
-		var ev types.EventRecord
-		if err := ogDecode(obj, &ev); err != nil {
-			continue
+	// Next sequence number for this run: an in-memory high-water mark, seeded
+	// from the store on the run's first append in this process. Reading and
+	// decoding every earlier event of the run on each append made a run's
+	// appends O(n²) (4.5 ms at 1 event to 25.6 ms at 800, measured;
+	// guest-cpu-is-unindexed-store-scans-2026-10-14, lever C5).
+	key := eventSeqKey{runID: rec.RunID, ownerID: rec.OwnerID}
+	maxSeq, seeded := s.eventSeqs[key]
+	if !seeded {
+		existing, err := s.ogListByMetadata(ctx, ogKindEvent, "run_id", rec.RunID, 10000)
+		if err != nil {
+			return fmt.Errorf("append event: list existing: %w", err)
 		}
-		if ev.OwnerID != rec.OwnerID {
-			continue
+		for _, obj := range existing {
+			var ev types.EventRecord
+			if err := ogDecode(obj, &ev); err != nil {
+				continue
+			}
+			if ev.OwnerID != rec.OwnerID {
+				continue
+			}
+			if ev.Seq > maxSeq {
+				maxSeq = ev.Seq
+			}
 		}
-		if ev.Seq > maxSeq {
-			maxSeq = ev.Seq
+		if s.eventSeqs == nil || len(s.eventSeqs) >= eventSeqCacheLimit {
+			s.eventSeqs = map[eventSeqKey]int64{}
 		}
 	}
 	rec.Seq = maxSeq + 1
+	s.eventSeqs[key] = rec.Seq
 
 	// StreamSeq: in-memory high-water mark incremented under eventMu. The
 	// unbounded ListObjects(100000) scan it replaced walked the entire event
@@ -1960,7 +1984,22 @@ func (s *Store) AppendEvent(ctx context.Context, rec *types.EventRecord) error {
 		s.eventMu.Unlock()
 		unlocked = true
 	}
-	return s.AppendEventOG(ctx, rec)
+	if err := s.AppendEventOG(ctx, rec); err != nil {
+		// The sequence was not written: forget the mark so the run's next
+		// append re-reads the store and takes this number again, as the
+		// per-append read did. If a concurrent append to the run (possible
+		// once the tape path released eventMu) already took a later number,
+		// keep the mark: a gap, never a duplicate.
+		if unlocked {
+			s.eventMu.Lock()
+			defer s.eventMu.Unlock()
+		}
+		if s.eventSeqs[key] == rec.Seq {
+			delete(s.eventSeqs, key)
+		}
+		return err
+	}
+	return nil
 }
 
 // ListEvents returns events for the given run, ordered by sequence ascending.
