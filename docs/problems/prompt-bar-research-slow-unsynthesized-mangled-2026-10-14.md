@@ -277,6 +277,27 @@ Designs, not built:
   corpus before the web for any question the paper may have covered.
   Extend the corpus search to captures and the published-object graph,
   scoped by the run's owner rather than an environment variable.
+  - Built on branch `worktree-agent-ac23ae99f25ec3949` (not pushed or
+    deployed), orange. `choir.SearchWireCorpus` keeps its contract
+    (`results` are stories) and adds `captures`: a keyword search over
+    this computer's newest 1000 captures in the shared store (title,
+    outlet as URL host and source id, language) plus Jev's latest label
+    per capture (outlet, script, the story headline it ties the capture
+    to). A query word must start a word (anywhere in Han, kana, Thai,
+    Arabic and Hebrew script); one- and two-word queries need every word,
+    longer ones at least half. Results rank by words matched, then field
+    weight (title over topic and outlet over language), then newest.
+    Each list is capped at 25 (default 10). Each hit's `capture_id` is a
+    `{{cite}}` handle. Owner and computer come from the run's execution
+    context; `CHOIR_OWNER_ID` is now only the last fallback. A capture-store
+    outage keeps the stories and says so in `captures_note`. The research
+    prompt (v9) and runtime overlay say to search the corpus first, then
+    use the web for what it lacks or to check the primary record.
+  - Not built: searching block text (each capture's row has no body, and
+    reading bodies costs one corpusd read per capture), captures older
+    than the newest 1000 (needs a corpusd-side search route), the
+    published-object graph beyond this computer's stories, and the
+    `WireCorpus` → Autopaper code rename.
 - **Slowness** (orange/red; model policy):
   - Do not let the prompt-bar answer depend on management's serial turn.
     Judge support in a sub-RLM or through Jev directly (owner direction
