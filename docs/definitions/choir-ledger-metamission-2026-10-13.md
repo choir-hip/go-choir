@@ -336,7 +336,11 @@ now:
     and lever 6. The provisional scaling-cost read is at bfc1bdd5. New
     problem: every deploy takes staging down while the gateway drains
     (20b56680; 11 min tonight, set off by a docs commit with a script).
-    It joins L1 (24/7 paper).
+    It joins L1 (24/7 paper). Owner, 2026-10-14 01:20 UTC: "make a
+    newspaper style ui, rather than the newsfeed". A newspaper-style
+    Autopaper front page is building concurrently in its own worktree
+    (frontend only). It ships bundled with a later deploy, because a
+    frontend change rebuilds the guest image.
   source_ref: c0a1e413
   deploy_identity: staging 6c6bc1aa (verified 00:24 UTC; the 00:43 deploy of 809755a7 changed no service code)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
