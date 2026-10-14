@@ -28,6 +28,25 @@ const (
 type JudgmentRequest struct {
 	State     json.RawMessage            `json:"state"`
 	Questions map[string]json.RawMessage `json:"questions"`
+	// Scope names the rate bucket the request draws on. Empty is the
+	// shared judgments bucket (support and candidate judgments); intake
+	// labels have their own, so a busy poll cannot starve the support
+	// judge publication needs (L2a R2-3). It is never sent upstream.
+	Scope string `json:"scope,omitempty"`
+}
+
+// JudgmentScopeIntakeLabels is the rate scope of intake labels.
+const JudgmentScopeIntakeLabels = "intake_labels"
+
+// judgmentRateScope maps a request's scope to its rate bucket.
+func judgmentRateScope(scope string) (string, error) {
+	switch strings.TrimSpace(scope) {
+	case "":
+		return "judgments", nil
+	case JudgmentScopeIntakeLabels:
+		return "judgments:" + JudgmentScopeIntakeLabels, nil
+	}
+	return "", fmt.Errorf("unknown judgment scope %q", scope)
 }
 
 // JevTransport calls OpenRouter's Decisions alpha endpoint without exposing
@@ -66,9 +85,9 @@ func (t *JevTransport) Decide(ctx context.Context, computerID string, request Ju
 	}
 
 	upstreamRequest, err := json.Marshal(struct {
-		Model     string                         `json:"model"`
-		State     json.RawMessage                `json:"state"`
-		Questions map[string]json.RawMessage     `json:"questions"`
+		Model     string                     `json:"model"`
+		State     json.RawMessage            `json:"state"`
+		Questions map[string]json.RawMessage `json:"questions"`
 	}{
 		Model:     jevModel,
 		State:     request.State,
@@ -255,8 +274,21 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		writeGatewayJSON(w, http.StatusForbidden, ErrorResponse{Error: "Jev bearer is not authorized for this VM"})
 		return
 	}
+	// The body is read before the rate check so the request's scope picks
+	// its bucket.
+	var request JudgmentRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, jevTransportMaxBodySize))
+	if err := decoder.Decode(&request); err != nil {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid judgment request"})
+		return
+	}
+	scope, err := judgmentRateScope(request.Scope)
+	if err != nil {
+		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
 	if h.rateLimiter != nil {
-		bucket := rateLimitBucketKey(computerID, "judgments")
+		bucket := rateLimitBucketKey(computerID, scope)
 		if !h.rateLimiter.Record(bucket) {
 			_, _, resetIn := h.rateLimiter.Status(bucket)
 			retrySeconds := int(resetIn.Seconds())
@@ -269,12 +301,6 @@ func (h *Handler) HandleJudgment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var request JudgmentRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, jevTransportMaxBodySize))
-	if err := decoder.Decode(&request); err != nil {
-		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid judgment request"})
-		return
-	}
 	if err := validateJudgmentRequest(request); err != nil {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return

@@ -41,10 +41,15 @@ type SourcePollUsage struct {
 	Skipped     int       `json:"skipped,omitempty"`
 	// Deferred counts items the poll left for the next one once it reached
 	// its limit (L2a A5, defect 1).
-	Deferred int    `json:"deferred,omitempty"`
-	PollMS   int64  `json:"poll_ms"`
-	TotalMS  int64  `json:"total_ms"`
-	Error    string `json:"error,omitempty"`
+	Deferred int `json:"deferred,omitempty"`
+	// Labelled and Unlabelled count the new captures Jev labelled and those
+	// left unlabelled (failure, timeout, rate limit) when intake.labels is
+	// on (L2a A1): the poll's label coverage.
+	Labelled   int    `json:"labelled,omitempty"`
+	Unlabelled int    `json:"unlabelled,omitempty"`
+	PollMS     int64  `json:"poll_ms"`
+	TotalMS    int64  `json:"total_ms"`
+	Error      string `json:"error,omitempty"`
 }
 
 // SourcePollTotals are a schedule's running totals since it was created.

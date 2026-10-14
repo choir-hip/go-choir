@@ -999,7 +999,13 @@ type candidateJudge struct {
 }
 
 func (j candidateJudge) Judge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
-	response, err := j.client.Decide(ctx, gatewayruntime.JudgmentRequest{State: state, Questions: questions})
+	return j.JudgeScoped(ctx, "", state, questions)
+}
+
+// JudgeScoped draws on the named gateway rate bucket (intake labels have
+// their own, L2a R2-3).
+func (j candidateJudge) JudgeScoped(ctx context.Context, scope string, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	response, err := j.client.Decide(ctx, gatewayruntime.JudgmentRequest{State: state, Questions: questions, Scope: scope})
 	if err != nil {
 		return nil, err
 	}

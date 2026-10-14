@@ -143,6 +143,8 @@ var frozenOGObjectKinds = map[string]bool{
 	"choir.autoradio_run_sheet":          true,
 	"choir.migration_marker":             true,
 	"choir.browser_session":              true,
+	"choir.capture_label":                true,
+	"choir.capture_label_override":       true,
 	"choir.channel_message":              true,
 	"choir.coagent_mailbox":              true,
 	"choir.commitment_record":            true,

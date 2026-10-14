@@ -170,6 +170,12 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		if pollErr != nil {
 			usage.Status, usage.Error = "error", pollErr.Error()
 		}
+		// With intake.labels on, Jev labels the new captures before the
+		// arrival names them (L2a A1). Labels are their own objects and
+		// never gate the arrival.
+		if len(report.Captured) > 0 && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
+			usage.Labelled, usage.Unlabelled = rt.labelCaptures(ctx, ownerID, computerID, sched.SourceID, report.Captured)
+		}
 		// The poll's new captures reach management as one record (Cut 2
 		// 2b), after any the source still has pending, at most the poll's
 		// limit. Captures a failed append could not announce stay pending

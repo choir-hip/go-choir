@@ -17,6 +17,9 @@ const judgmentClientMaxBodySize = 1 << 20
 type JudgmentRequest struct {
 	State     json.RawMessage            `json:"state"`
 	Questions map[string]json.RawMessage `json:"questions"`
+	// Scope names the gateway rate bucket ("" shared, "intake_labels" for
+	// intake labels, L2a R2-3).
+	Scope string `json:"scope,omitempty"`
 }
 
 // JudgmentResponse preserves the complete OpenRouter response distribution.
