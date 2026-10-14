@@ -1,4 +1,12 @@
-import { escapeHTML, renderInlineSourceRef, sourceEntityID } from './texture-source-renderer';
+import {
+  escapeHTML,
+  renderInlineSourceRef,
+  sourceEntityExcerptText,
+  sourceEntityID,
+  sourceEntityMedia,
+  sourceEntityTargetURL,
+  sourceEntityTitle,
+} from './texture-source-renderer';
 import {
   renderPublishedCitationRef,
   renderPublishedEmbedBlock,
@@ -117,6 +125,18 @@ function serializeBlockNode(node: any, nextID: (kind: string) => string): Struct
   if (node.nodeType === TEXT_NODE) return paragraphFromInline(serializeInlineNodes(node, nextID), nextID);
   if (!isElement(node)) return null;
   if (matches(node, '[data-texture-source-flow]') || matches(node, '[data-texture-source-entity]')) return null;
+  if (matches(node, '[data-texture-local-embed]')) {
+    const sourceEntityID = getAttr(node, 'data-source-entity-id');
+    if (!sourceEntityID) return null;
+    return paragraphFromInline([{
+      type: 'source_ref',
+      attrs: {
+        id: getAttr(node, 'data-texture-source-node-id') || nextID('source-ref'),
+        source_entity_id: sourceEntityID,
+        display_mode: 'expanded_ref',
+      },
+    }], nextID);
+  }
   const tag = elementTag(node);
   if (/^h[1-6]$/.test(tag)) {
     return {
@@ -186,9 +206,22 @@ type RenderContext = {
   citations: PublishedCitationContext | null;
 };
 
+// Paired ** in a text node that carries no marks: bold written before Write
+// parsed inline emphasis (d6f82142), which a later Write keeps verbatim when
+// it copies the block's frame text back unchanged. The flanking rule is
+// Write's: the opener is not preceded by a letter or digit and is followed
+// by a non-space; the closer is preceded by a non-space and not followed by
+// a letter or digit.
+const LEGACY_STRONG_RE = /(^|[^\p{L}\p{N}*])\*\*(?=[^\s*])([^*]*?[^\s*])\*\*(?![\p{L}\p{N}*])/gu;
+
+export function renderLegacyStrong(html: string): string {
+  return html.replace(LEGACY_STRONG_RE, '$1<strong>$2</strong>');
+}
+
 function renderInlineNode(node: StructuredNode, rc: RenderContext): string {
   if (node.type === 'text') {
     let html = escapeHTML(node.text || '');
+    if (!node.marks?.length) html = renderLegacyStrong(html);
     for (const mark of node.marks || []) {
       if (mark.type === 'strong') html = `<strong>${html}</strong>`;
       if (mark.type === 'emphasis') html = `<em>${html}</em>`;
@@ -209,7 +242,7 @@ function renderInlineNode(node: StructuredNode, rc: RenderContext): string {
     const entityID = String(node.attrs?.source_entity_id || '').trim();
     const entity = sourceEntities.find((item) => sourceEntityID(item) === entityID);
     const displayMode = String(node.attrs?.display_mode || 'numbered_ref').trim();
-    const html = renderInlineSourceRef(sourceEntityLabel(entity, entityID || 'source'), entityID, sourceEntities, displayMode);
+    const html = renderInlineSourceRef(sourceEntityLabel(entity, entityID || 'source'), entityID, sourceEntities, displayMode, { quote: sourceRefQuote(node) });
     return nodeID ? html.replace(' data-texture-source-ref', ` data-texture-source-ref data-texture-source-node-id="${escapeHTML(nodeID)}"`) : html;
   }
   return '';
@@ -226,13 +259,63 @@ function isPublishedEmbed(node: StructuredNode, rc: RenderContext): boolean {
     rc.citations.byAnchor.has(String(node.attrs?.id || ''));
 }
 
+/** The words a Write citation quotes (its ref attr), or ''. */
+export function sourceRefQuote(node: StructuredNode): string {
+  let ref: any = node.attrs?.ref;
+  if (typeof ref === 'string') {
+    try {
+      ref = JSON.parse(ref);
+    } catch {
+      ref = null;
+    }
+  }
+  return String(ref?.quote || '').trim();
+}
+
+/**
+ * An unpublished transclusion ({{embed}}, display_mode expanded_ref) whose
+ * source is not inline media. It is a block: drawn inside a paragraph its
+ * block body made the HTML parser close the paragraph, leaving the title as
+ * a stray line and the "[n]" marker as a lone paragraph.
+ */
+function isLocalEmbed(node: StructuredNode, rc: RenderContext): boolean {
+  if (rc.citations || node.type !== 'source_ref' || node.attrs?.display_mode !== 'expanded_ref') return false;
+  const entityID = String(node.attrs?.source_entity_id || '').trim();
+  const entity = rc.sourceEntities.find((item) => sourceEntityID(item) === entityID);
+  return !!entity && !sourceEntityMedia(entity, { inline: true });
+}
+
+/**
+ * The block an unpublished transclusion draws: the quoted words (the
+ * citation's own quote, else the entity's excerpt) and a caption with the
+ * source's number and title. It keeps the source_ref attributes so an owner
+ * edit serializes it back to the same citation.
+ */
+function renderLocalEmbedBlock(node: StructuredNode, rc: RenderContext): string {
+  const nodeID = String(node.attrs?.id || '').trim();
+  const entityID = String(node.attrs?.source_entity_id || '').trim();
+  const entity = rc.sourceEntities.find((item) => sourceEntityID(item) === entityID);
+  const number = rc.sourceEntities.indexOf(entity) + 1;
+  const title = sourceEntityTitle(entity);
+  const url = sourceEntityTargetURL(entity);
+  const quote = sourceRefQuote(node) || sourceEntityExcerptText(entity);
+  const titleHTML = /^https?:\/\//i.test(url)
+    ? `<a href="${escapeHTML(url)}" rel="noopener noreferrer" target="_blank">${escapeHTML(title)}</a>`
+    : escapeHTML(title);
+  return `<figure class="texture-embed-block" data-embed-block data-texture-local-embed${nodeID ? ` data-texture-source-node-id="${escapeHTML(nodeID)}"` : ''} data-source-entity-id="${escapeHTML(entityID)}" data-source-display-mode="expanded_ref" contenteditable="false">
+    ${quote ? `<blockquote class="texture-embed-quote">${escapeHTML(quote)}</blockquote>` : ''}
+    <figcaption><span class="texture-source-number">[${escapeHTML(String(number || ''))}]</span> ${titleHTML}</figcaption>
+  </figure>`;
+}
+
 /**
  * A paragraph. With published citations, a transcluded embed is a block, so
  * the paragraph splits around it: text runs, then the embed, then the rest.
  */
 function renderParagraph(node: StructuredNode, rc: RenderContext): string {
   const content = node.content || [];
-  if (!content.some((child) => isPublishedEmbed(child, rc))) {
+  const isEmbed = (child: StructuredNode) => isPublishedEmbed(child, rc) || isLocalEmbed(child, rc);
+  if (!content.some(isEmbed)) {
     return `<p>${renderInlineContent(content, rc)}</p>`;
   }
   const out: string[] = [];
@@ -243,12 +326,14 @@ function renderParagraph(node: StructuredNode, rc: RenderContext): string {
     run = [];
   };
   for (const child of content) {
-    if (!isPublishedEmbed(child, rc)) {
+    if (!isEmbed(child)) {
       run.push(child);
       continue;
     }
     flush();
-    const embed = renderPublishedEmbedBlock(rc.citations as PublishedCitationContext, String(child.attrs?.id || ''));
+    const embed = rc.citations
+      ? renderPublishedEmbedBlock(rc.citations, String(child.attrs?.id || ''))
+      : renderLocalEmbedBlock(child, rc);
     if (embed) out.push(embed);
   }
   flush();

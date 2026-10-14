@@ -341,8 +341,17 @@ export function renderSourceEntityFacts(entity: any): string {
   `;
 }
 
-export function renderSourceTransclusionBody(entity: any, { compact = false } = {}): string {
-  const snapshot = compact ? sourceEntityInlineExcerptText(entity, 360) : sourceEntityExcerptText(entity);
+/**
+ * A source's transclusion body. quote, when set, is the citation's own quoted
+ * words (a Write citation's ref.quote); it is shown in place of the entity's
+ * excerpt, which a Write-era entity does not carry (its selector is the
+ * whole resource).
+ */
+export function renderSourceTransclusionBody(entity: any, { compact = false, quote = '' } = {}): string {
+  const citedQuote = String(quote || '').trim();
+  const snapshot = citedQuote
+    ? (compact ? boundedExcerpt(citedQuote, 360) : citedQuote)
+    : compact ? sourceEntityInlineExcerptText(entity, 360) : sourceEntityExcerptText(entity);
   const facts = renderSourceEntityFacts(entity);
   if (compact) {
     return `<span class="texture-transclusion-body texture-transclusion-body--compact" data-texture-transclusion-body>
@@ -359,7 +368,7 @@ export function renderSourceTransclusionBody(entity: any, { compact = false } = 
   </div>`;
 }
 
-export function renderInlineSourceRef(label: string, entityID: string, sourceEntities: any[] = [], displayMode: string = 'numbered_ref'): string {
+export function renderInlineSourceRef(label: string, entityID: string, sourceEntities: any[] = [], displayMode: string = 'numbered_ref', options: { quote?: string } = {}): string {
   const entity = findSourceEntity(sourceEntities, entityID);
   const displayLabel = label || entity?.label || 'source';
   const expanded = displayMode === 'expanded_ref';
@@ -373,7 +382,7 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
     return `<span class="texture-source-ref texture-source-ref--expanded" data-texture-source-ref data-texture-citation-transclusion data-source-display-mode="expanded_ref" data-source-entity-id="${escapeHTML(entityID)}" data-source-label="${escapeHTML(displayLabel)}" data-source-expansion-surface="${escapeHTML(expansionSurface)}" contenteditable="false" tabindex="0" role="button" aria-label="${escapeHTML(`Source: ${title}`)}">
       <span class="texture-source-ref-block">
         <strong>${escapeHTML(title)}</strong>
-        ${renderSourceTransclusionBody(entity)}
+        ${renderSourceTransclusionBody(entity, { quote: options.quote })}
         <span class="texture-source-ref-marker">[${escapeHTML(marker || displayLabel)}]</span>
       </span>
     </span>`;
@@ -382,7 +391,7 @@ export function renderInlineSourceRef(label: string, entityID: string, sourceEnt
     <span class="texture-source-ref-label">${escapeHTML(marker || displayLabel)}</span>
     <span class="texture-source-ref-popover" data-texture-source-ref-popover data-texture-inline-transclusion role="note">
       <strong>${escapeHTML(title)}</strong>
-      ${renderSourceTransclusionBody(entity, { compact: true })}
+      ${renderSourceTransclusionBody(entity, { compact: true, quote: options.quote })}
       <button type="button" class="texture-source-open" data-texture-open-source data-source-entity-id="${escapeHTML(entityID)}">Open source</button>
     </span>
   </span>`;
