@@ -282,11 +282,45 @@ let
     SystemCallArchitectures = "native";
     # Remove /dev nodes that are not needed.
     PrivateDevices = true;
-    # Restrict which system calls the service can make.
-    SystemCallFilter = [ "@system-service" "~@mount" "@privileged" ];
+    # Restrict which system calls the service can make. "~@privileged"
+    # removes chown, setuid, capset, chroot, bpf, acct, ...; the old third
+    # entry "@privileged" re-allowed them (systemd applies the list in
+    # order; docs/problems/loopback-is-a-credential-2026-10-14.md). No host
+    # service or tool it runs (ip, iptables, mkfs.ext4, git, dolt,
+    # ssh-keygen, firecracker without the jailer) calls one.
+    SystemCallFilter = [ "@system-service" "~@privileged" "~@mount" ];
+    # A filtered call fails with EPERM (logged by the caller) instead of
+    # killing the process with SIGSYS, so a missed syscall degrades one
+    # operation rather than crash-looping a unit.
+    SystemCallErrorNumber = "EPERM";
     # Don't allow the service to change its mount namespace.
     MountFlags = "private";
+    # No root service needs a capability: every file in their state is
+    # root-owned and owner-writable (live check 2026-10-14), ports are
+    # unprivileged, and none changes uid. Units that need one (vmctl:
+    # CAP_NET_ADMIN) override this.
+    CapabilityBoundingSet = "";
+    # /root, /home and /run/user are an empty read-only tmpfs. "tmpfs" (not
+    # "yes") so a tool that probes $HOME (git) sees ENOENT, not EACCES.
+    ProtectHome = "tmpfs";
   };
+  # Host secrets a unit does not read stay out of its mount view
+  # (InaccessiblePaths; "-" tolerates an absent file). Each unit removes
+  # what it needs. EnvironmentFile= and LoadCredential= are read by systemd
+  # before the namespace exists, so files only used that way stay hidden.
+  hostSecretPaths = {
+    jwtKey = "-${authSigningDir}/ed25519-key";
+    providerEnv = "-/var/lib/go-choir/gateway-provider.env";
+    codexAuth = "-/var/lib/go-choir/codex-auth.json";
+    maildEnv = "-/var/lib/go-choir/maild.env";
+    searxngEnv = "-/var/lib/go-choir/searxng.env";
+    gatewayIdentities = "-/var/lib/go-choir/gateway-identities.json";
+    secretsDir = "-/var/lib/go-choir/secrets";
+    platformSigningKey = "-${platformArtifactsDir}/signing-key";
+    escrowKey = "-${platformArtifactsDir}/key-escrow-key";
+    mail = "-${mailDir}";
+  };
+  hiddenSecretsExcept = keep: lib.attrValues (removeAttrs hostSecretPaths keep);
 in
 {
 
@@ -490,6 +524,10 @@ in
       StateDirectory = "go-choir/auth";
       # Read-write paths for auth persistence and signing key.
       ReadWritePaths = [ "/var/lib/go-choir/auth" "/var/lib/go-choir/auth-signing" ];
+      InaccessiblePaths = hiddenSecretsExcept [ "jwtKey" ];
+      # auth.db holds sessions and API-key records; it was 0644 in a 0755
+      # directory, private only because /var/lib/go-choir is 0750.
+      StateDirectoryMode = "0750";
       Environment = [
         "AUTH_PORT=8081"
         "AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
@@ -523,8 +561,11 @@ in
       RestartSec = 3;
       EnvironmentFile = "-/var/lib/go-choir/deploy.env";
       LoadCredential = internalTokenCredential;
-      # Proxy needs to read auth signing material and the auth DB for API-key validation.
-      ReadWritePaths = [ "/var/lib/go-choir/auth-signing" "/var/lib/go-choir/auth" ];
+      # Proxy reads only the public key (PROXY_AUTH_PUBLIC_KEY_PATH) and the
+      # auth DB (SQLite needs write access for its -wal/-shm). It never
+      # writes auth-signing/ and never reads the private key.
+      ReadWritePaths = [ "/var/lib/go-choir/auth" ];
+      InaccessiblePaths = hiddenSecretsExcept [ ];
       Environment = [
         "SERVER_HOST=0.0.0.0"
         "PROXY_PORT=8082"
@@ -583,6 +624,7 @@ in
       EnvironmentFile = "-/var/lib/go-choir/maild.env";
       LoadCredential = internalTokenCredential;
       ReadWritePaths = [ mailDir ];
+      InaccessiblePaths = hiddenSecretsExcept [ "mail" ];
       Environment = [
         # Autoputer guest VMs persist Email appagent drafts via the host tap
         # address. The host firewall still keeps 8087 closed externally.
@@ -620,7 +662,9 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/platform-dolt";
+      StateDirectoryMode = "0750";
       ReadWritePaths = [ platformDoltDir ];
+      InaccessiblePaths = hiddenSecretsExcept [ ];
       Environment = [
         "HOME=${platformDoltDir}"
       ];
@@ -658,7 +702,9 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/corpus-dolt";
+      StateDirectoryMode = "0750";
       ReadWritePaths = [ corpusDoltDir ];
+      InaccessiblePaths = hiddenSecretsExcept [ ];
       Environment = [
         "HOME=${corpusDoltDir}"
       ];
@@ -688,7 +734,9 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       StateDirectory = "go-choir/platform-artifacts";
+      StateDirectoryMode = "0750";
       ReadWritePaths = [ platformArtifactsDir ];
+      InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
       LoadCredential = internalTokenCredential ++ doltClientCredential;
       # Track K two-approval operator credentials live in a deploy-created
       # file outside git (same trust class as gateway credentials):
@@ -759,6 +807,7 @@ in
       Nice = 10;
       UMask = "0077";
       ReadWritePaths = [ platformArtifactsDir ];
+      InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
       EnvironmentFile = [ "-/var/lib/go-choir/corpus-dsn.env" ];
       LoadCredential = doltClientCredential;
       Environment = doltClientEnv ++ [
@@ -801,6 +850,7 @@ in
       StateDirectory = "go-choir/front-importance";
       StateDirectoryMode = "0755";
       ReadWritePaths = [ "/var/lib/go-choir/front-importance" ];
+      InaccessiblePaths = hiddenSecretsExcept [ "codexAuth" ];
       EnvironmentFile = "-/var/lib/go-choir/gateway-provider.env";
       LoadCredential = internalTokenCredential;
       Environment = [
@@ -895,7 +945,16 @@ in
       # cycles (VAL-CROSS-116). Provider credentials are NEVER written here
       # (VAL-VM-011).
       StateDirectory = "go-choir/vm-state";
+      # data.img files were 0644 in a 0755 vm-state, private only because
+      # /var/lib/go-choir is 0750.
+      StateDirectoryMode = "0750";
       ReadWritePaths = [ "/var/lib/go-choir" "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" ];
+      # vmctl reads none of the host secrets, and every Firecracker VMM runs
+      # in vmctl's mount namespace: hiding them here takes the JWT key,
+      # provider credentials, escrow key and operator tokens out of reach of
+      # a VMM escape (F1 partial; VMMs started before the restart keep the
+      # old view until their next boot).
+      InaccessiblePaths = hiddenSecretsExcept [ ];
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" ];
       LoadCredential = internalTokenCredential ++ doltClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
@@ -1169,6 +1228,13 @@ in
       EnvironmentFile = "-/var/lib/go-choir/gateway-provider.env";
       LoadCredential = internalTokenCredential;
       ReadWritePaths = [ "/var/lib/go-choir" ];
+      InaccessiblePaths = hiddenSecretsExcept [ "codexAuth" "gatewayIdentities" "jwtKey" ] ++ [
+        "-/var/lib/go-choir/vm-state"
+        "-${authSigningDir}"
+        "-/var/lib/go-choir/auth"
+        "-${platformDoltDir}"
+        "-${corpusDoltDir}"
+      ];
       Environment = [
         # Guest autoputeres call the host gateway via the tap subnet
         # (172.X.0.1:8084). Keep operator-only credential endpoints locked to
@@ -1466,6 +1532,15 @@ in
     "z ${mailDir}/raw 0700 root root -"
     "z ${mailDir}/attachments 0700 root root -"
     "z ${mailDir}/attachments/quarantine 0700 root root -"
+    # World-readable files that only root (or systemd, as EnvironmentFile)
+    # reads; private today only because /var/lib/go-choir is 0750, which
+    # blocks moving any service to its own user.
+    "z /var/lib/go-choir/auth/auth.db 0600 root root -"
+    "z /var/lib/go-choir/auth/auth.db-wal 0600 root root -"
+    "z /var/lib/go-choir/auth/auth.db-shm 0600 root root -"
+    "z /var/lib/go-choir/corpus-dsn.env 0600 root root -"
+    "z /var/lib/go-choir/deploy.env 0600 root root -"
+    "z /var/lib/go-choir/sandbox-gateway-token.env 0600 root root -"
     "d /var/lib/go-choir/vm-state 0750 root root -"
     "d ${platformDoltDir} 0750 root root -"
     "d ${platformDoltDBDir} 0750 root root -"
