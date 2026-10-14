@@ -335,21 +335,35 @@ now:
   # the reviewed restart design. The spine's card points at the live station.
   status: working
   slice: >-
-    2026-10-14 01:25 UTC. Lane 2 designs are done: the L2a S0 design note
-    was accepted in round 2 with amendments (e8c8fe57; 4 of 4 named the
-    same defect-1 order bug, now fixed in the design); lever 6 was
-    accepted 4 of 4 (c0a1e413); B1 was accepted in round 4. Three builds
-    are running in separate worktrees: C1e B1, L2a S1a A5 (intake fixes),
-    and lever 6. The provisional scaling-cost read is at bfc1bdd5. New
-    problem: every deploy takes staging down while the gateway drains
-    (20b56680; 11 min tonight, set off by a docs commit with a script).
-    It joins L1 (24/7 paper). Owner, 2026-10-14 01:20 UTC: "make a
-    newspaper style ui, rather than the newsfeed". A newspaper-style
-    Autopaper front page is building concurrently in its own worktree
-    (frontend only). It ships bundled with a later deploy, because a
-    frontend change rebuilds the guest image.
-  source_ref: c0a1e413
-  deploy_identity: staging 6c6bc1aa (verified 00:24 UTC; the 00:43 deploy of 809755a7 changed no service code)
+    2026-10-14 08:40 UTC. Overnight deploys (staging ce59d406; site up
+    throughout except a 10 s proxy drain, L1 residual D4):
+    - L2a: S1a deployed; fixture run 1 passes (merge recall 1.0, 0 false
+      merges; the citation-language clause removed by the owner);
+      intake.labels ON on the live paper since 06:50:58 UTC; after-window
+      06:51-12:51 to score against baseline A.
+    - C1e B1 deployed (e9d727a7) with the capsule-gate fix (bc09dcc1) and
+      the Freeze fixes (9874ebc5, 96b82cec); paper scenario passes; the
+      engineering drill reaches honest failed Reports, blocked only by Go
+      module egress (owner decision:
+      docs/reports/capsule-go-modules-decision-2026-10-14.md).
+    - LR: lever 6, lever 7 (prices; /api/costs in dollars), LongCat out of
+      the pool, Jev support judgement off management's turn, balloon and
+      soft memory limits; desk worker ~17 MiB private, daemon ~690 MiB
+      (docs/evidence/guest-memory-split-balloon-2026-10-14.md).
+    - S3 real hibernation (accelerated into the cost track by the owner):
+      103 ms wake (9.7 s cold), 396 ms after 55 min with a delivered
+      credential (docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md).
+    - L1: standing source schedules survive planned and crash restarts
+      (ce59d406), after a refresh that crossed B1's work-state epoch
+      closed the paper's schedules (paper silent about an hour).
+    - The newspaper front page, the logged-out home straight to
+      Autopaper, London Salmon default.
+    In flight: management delegation to sub-RLMs (design note, owner
+    direction); research searching the corpus first. Open for the owner:
+    Go module route, how an always-busy paper takes updates, snapshot max
+    age, SP0 host and key backups.
+  source_ref: 0257fac3
+  deploy_identity: staging ce59d406 (deployed 07:46 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LG-1
