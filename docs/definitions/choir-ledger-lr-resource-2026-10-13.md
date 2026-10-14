@@ -134,8 +134,13 @@ boundaries:
 
 now:
   status: working
-  slice: levers 1 and 2 landed and verified; next the lever-6 design note
-  source_ref: 6c6bc1aa
+  slice: >-
+    Lever 6 was accepted 4 of 4 (c0a1e413) and is built on branch
+    lr-lever6 (0d9d4c63, c9fb12d6; deploy lane position 3). procmem, the
+    in-guest per-process memory read the report needs, ships in the next
+    deploy. The provisional scaling read is
+    docs/reports/lr-scaling-cost-provisional-2026-10-14.md.
+  source_ref: c9fb12d6
   deploy_identity: staging 6c6bc1aa
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
@@ -160,9 +165,9 @@ now:
     next_observation: vmctl list shows warmness_class test for example.com-owned computers after 6c6bc1aa deploys
   blocker_or_risk: lever 7 needs the per-token prices of deepseek-v4.1-flash, gpt-6-luna and longcat-2.5-preview-free from the owner or the provider; lever 6 changes every desk's cell contract
   next_action: >-
-    The lever-6 design is in panel. Next is a provisional scaling-cost
-    read from existing data (the paper computer's 14-source costs,
-    captures, stories, RSS and state). After the overnight deploys land:
+    After procmem deploys, read the paper computer's per-process split
+    (main process, desk workers, page cache). Lever 6 deploys after L2a
+    and B1. After the overnight deploys land:
     the source sweep, then the oversubscription probe. Candidate levers
     to evaluate there: KSM page merging across identical guests, the
     balloon, and the per-session yaegi footprint.
