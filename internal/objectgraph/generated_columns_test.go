@@ -93,8 +93,8 @@ func TestRecordColumnPlansUseIndexOrder(t *testing.T) {
 	kind := string(commitmentRecordKind)
 	for _, field := range []string{"inbox", "sender_inbox", "conversation_id"} {
 		column := "og_rec_" + field
-		if !store.metaColumns[column] {
-			t.Fatalf("column %s not live: %v", column, store.metaColumns)
+		if !store.live(column) {
+			t.Fatalf("column %s not live: %v", column, store.liveNames())
 		}
 		query, args := store.metadataPageSQL(kind, "$."+field, "v", "", 256)
 		assertIndexedPlan(t, explainPlan(t, db, query, args...), recordIndex(column), true)
@@ -226,18 +226,46 @@ func TestRecordColumnsMigrateExistingStore(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		putTestObject(t, old, fmt.Sprintf("old-%02d", i), commitmentRecordKind, map[string]any{"inbox": fmt.Sprintf("texture:doc-%d", i%3)}, `{}`, at)
 	}
+	// Opening a store with rows does not rewrite it: the record paths stay
+	// on JSON (and still answer correctly) until EnsureRecordIndexes.
+	opened := NewDoltStore(db)
+	if err := opened.EnsureSchema(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if opened.live("og_rec_inbox") || opened.live(recordClaimIndex) || !opened.live("og_meta_run_id") {
+		t.Fatalf("open of a store with rows: live %v, want the legacy columns only", opened.liveNames())
+	}
+	if _, ok, err := opened.ListCommitmentClaimObjects(ctx, "owner", 10); ok || err != nil {
+		t.Fatalf("claim index used before the migration: ok=%v err=%v", ok, err)
+	}
+	if got, err := opened.ListObjectsByMetadataPage(ctx, string(commitmentRecordKind), "$.inbox", "texture:doc-1", "", 100); err != nil || len(got) != 10 {
+		t.Fatalf("JSON read before the migration = %d, %v", len(got), err)
+	}
+	reader := NewDoltStore(db) // a second handle on the engine, like the read pool
+	reader.ShareEngineMutex(opened)
+	reader.InheritMetadataColumns(opened)
+	if err := opened.EnsureRecordIndexes(ctx, func() {}); err != nil {
+		t.Fatal(err)
+	}
+	reader.InheritMetadataColumns(opened)
+	if !reader.live(recordClaimIndex) {
+		t.Fatalf("read handle did not learn the migrated paths: %v", reader.liveNames())
+	}
 	for open := 0; open < 2; open++ { // idempotent across opens
 		store := NewDoltStore(db)
 		if err := store.EnsureSchema(ctx); err != nil {
 			t.Fatalf("open %d: %v", open, err)
 		}
+		if err := store.EnsureRecordIndexes(ctx, nil); err != nil {
+			t.Fatalf("open %d: %v", open, err)
+		}
 		for _, mc := range metadataIndexColumns {
-			if !store.metaColumns[mc.Column] {
-				t.Fatalf("open %d: %s not live: %v", open, mc.Column, store.metaColumns)
+			if !store.live(mc.Column) {
+				t.Fatalf("open %d: %s not live: %v", open, mc.Column, store.liveNames())
 			}
 		}
-		if !store.metaColumns[recordInboxSeqIndex] || !store.metaColumns[recordClaimIndex] {
-			t.Fatalf("open %d: record access paths not live: %v", open, store.metaColumns)
+		if !store.live(recordInboxSeqIndex) || !store.live(recordClaimIndex) {
+			t.Fatalf("open %d: record access paths not live: %v", open, store.liveNames())
 		}
 		claims, ok, err := store.ListCommitmentClaimObjects(ctx, "owner", 100)
 		if err != nil || !ok || len(claims) != 30 {
@@ -282,8 +310,8 @@ func TestRecordSeqAndClaimPlansUseIndexOrder(t *testing.T) {
 		putTestObject(t, store, fmt.Sprintf("rec-%02d", i), commitmentRecordKind,
 			map[string]any{"inbox": "management:o", "inbox_seq": i + 1}, `{"record_id":"x"}`, at.Add(time.Duration(i)*time.Second))
 	}
-	if !store.metaColumns[recordInboxSeqIndex] || !store.metaColumns[recordClaimIndex] {
-		t.Fatalf("record access paths not live: %v", store.metaColumns)
+	if !store.live(recordInboxSeqIndex) || !store.live(recordClaimIndex) {
+		t.Fatalf("record access paths not live: %v", store.liveNames())
 	}
 	seqIndex := "og_objects.object_kind,og_objects.og_rec_inbox,og_objects.og_rec_inbox_seq"
 	for _, through := range []int64{0, 15} {

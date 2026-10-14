@@ -663,6 +663,9 @@ func Run() {
 		if _, err := db.MigrateAndFenceServingVocabulary(ctx, false, nil); err != nil {
 			boot.fatalf("autoputer: vocabulary migration refused: %v", err)
 		}
+		if err := db.EnsureObjectGraphIndexes(ctx, nil); err != nil {
+			log.Printf("autoputer: object graph record indexes deferred: %v", err)
+		}
 		startPeriodicDoltGC(rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
 			boot.fatalf("autoputer: runtime startup refused: %v", err)
@@ -739,6 +742,15 @@ func runReplayPhase(boot *startupFailer, gate *replayHealthGate, appender *compu
 		log.Printf("autoputer: recovery replay-only drive complete (seq=%d committed=%d); exiting without runtime start or reconciliation", snap.Sequence, snap.CommittedSequence)
 		os.Exit(0)
 	}
+	// Record indexes (guest-cpu-is-unindexed-store-scans-2026-10-14): on a
+	// store that had rows before this release, adding them rewrites
+	// og_objects once, which can outlast a health probe that sees nothing.
+	// It runs here, behind the gate, with the gate's heartbeat; a failure
+	// leaves the reads on their unindexed paths and does not stop the boot.
+	if err := db.EnsureObjectGraphIndexes(bootstrapCtx, gate.tick); err != nil {
+		log.Printf("autoputer: object graph record indexes deferred: %v", err)
+	}
+	bootMark("record_indexes")
 	replaySnap := appender.ReplaySnapshot()
 	bootSetReplay(replaySnap.Sequence, replaySnap.CommittedSequence, replaySnap.AppliedRows)
 	bootMark("replay_done")

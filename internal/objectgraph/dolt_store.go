@@ -9,6 +9,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -66,10 +67,11 @@ type DoltStore struct {
 	// which is not safe for concurrent queries - they race on shared internal
 	// buffers (unescapeHTMLCodepoints mutating a JSON slice in place).
 	engineMu *engineMutex
-	// metaColumns records which metadata generated columns are live so
-	// ListObjectsByMetadata can use the indexed column for hot fields and
-	// fall back to JSON_EXTRACT otherwise. Populated by EnsureSchema.
-	metaColumns map[string]bool
+	// liveColumns records which generated-column access paths are live
+	// (column names, and composite index names for the record paths) so the
+	// readers use the index where it exists and JSON_EXTRACT otherwise. Set
+	// by EnsureSchema and EnsureRecordIndexes; replaced whole, never mutated.
+	liveColumns atomic.Pointer[map[string]bool]
 }
 
 // MutationInterceptor receives durable object/edge mutations before SQL.
@@ -145,7 +147,51 @@ func (s *DoltStore) EnsureSchema(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_og_objects_kind_owner_computer ON og_objects(object_kind, owner_id, computer_id)`); err != nil {
 		return fmt.Errorf("objectgraph dolt: ensure kind/owner/computer index: %w", err)
 	}
-	s.ensureMetadataColumns(ctx)
+	// The record columns cost a table rewrite per column on a table with
+	// rows (about 50 us per row per column, measured), and a store opens
+	// before the guest answers /health: on a large existing store that
+	// would outlast the updater's health probe. An empty table takes them
+	// at once; a store with rows takes them through EnsureRecordIndexes,
+	// which the boot runs with a health heartbeat.
+	var anyRow int
+	empty := s.db.QueryRowContext(ctx, `SELECT 1 FROM og_objects LIMIT 1`).Scan(&anyRow) == sql.ErrNoRows
+	s.ensureMetadataColumns(ctx, empty)
+	return nil
+}
+
+// EnsureRecordIndexes adds the record-scoped generated columns and indexes
+// (inbox, sender, conversation, inbox sequence, claim) to an og_objects
+// table that already has rows. It is idempotent and fast once they exist.
+// The DDL holds the engine for its duration (a rewrite of every row per
+// missing column); heartbeat, if set, is called every two seconds until it
+// ends, so a boot health gate can report liveness. Until it completes the
+// readers keep their JSON paths; afterwards they use the indexes. A store
+// sharing this engine learns the new columns through InheritMetadataColumns.
+func (s *DoltStore) EnsureRecordIndexes(ctx context.Context, heartbeat func()) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if heartbeat != nil {
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			ticker := time.NewTicker(2 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case <-ticker.C:
+					heartbeat()
+				}
+			}
+		}()
+	}
+	s.engineMu.Lock()
+	defer s.engineMu.Unlock()
+	start := time.Now()
+	s.ensureMetadataColumns(ctx, true)
+	log.Printf("objectgraph dolt: record indexes ensured in %s (live: %v)", time.Since(start).Round(time.Millisecond), s.liveNames())
 	return nil
 }
 
@@ -260,33 +306,76 @@ func (mc metadataIndexColumn) indexColumns() string {
 // (information_schema check), so the DDL stays idempotent across engines
 // whose ALTER lacks IF NOT EXISTS and across every open of an existing
 // store; og_objects is a projection, so no tape event is written. A column
-// whose expression errors on legacy rows is skipped: metaColumns records
-// which access paths are live, and the readers fall back to JSON_EXTRACT
-// for the rest. The columns are additive and older binaries never name
-// them, so the store schema epoch does not change.
-func (s *DoltStore) ensureMetadataColumns(ctx context.Context) {
-	if s.metaColumns == nil {
-		s.metaColumns = map[string]bool{}
-	}
-	columns := make([]generatedColumn, 0, len(metadataIndexColumns))
+// whose expression errors on legacy rows is skipped: the live set records
+// which access paths exist, and the readers fall back to JSON_EXTRACT for
+// the rest. The columns are additive and older binaries never name them, so
+// the store schema epoch does not change. With records false, only the
+// three legacy columns are added (they exist on every store already);
+// record columns already present are still recognized. The caller holds
+// engineMu.
+func (s *DoltStore) ensureMetadataColumns(ctx context.Context, records bool) {
+	live := map[string]bool{}
+	columns := make([]generatedColumn, 0, len(metadataIndexColumns)+len(recordColumns))
 	for _, mc := range metadataIndexColumns {
-		columns = append(columns, mc.generatedColumn())
+		if mc.Kind == "" || records {
+			columns = append(columns, mc.generatedColumn())
+		}
 	}
-	columns = append(columns, recordColumns...)
+	if records {
+		columns = append(columns, recordColumns...)
+	}
 	present := s.ensureGeneratedColumns(ctx, columns)
+	// An index is created only over a column this call ensured; an index
+	// that already exists is recognized either way.
+	index := func(name, columns string, ensured bool) bool {
+		if ensured {
+			return s.ensureGeneratedIndex(ctx, name, columns)
+		}
+		return s.indexExists(ctx, name)
+	}
 	for _, mc := range metadataIndexColumns {
-		if present[mc.Column] && s.ensureGeneratedIndex(ctx, mc.indexName(), mc.indexColumns()) {
-			s.metaColumns[mc.Column] = true
+		if present[mc.Column] && index(mc.indexName(), mc.indexColumns(), mc.Kind == "" || records) {
+			live[mc.Column] = true
 		}
 	}
 	if present["og_rec_inbox"] && present[recordInboxSeqColumn] &&
-		s.ensureGeneratedIndex(ctx, recordInboxSeqIndex, "object_kind, og_rec_inbox, "+recordInboxSeqColumn) {
-		s.metaColumns[recordInboxSeqIndex] = true
+		index(recordInboxSeqIndex, "object_kind, og_rec_inbox, "+recordInboxSeqColumn, records) {
+		live[recordInboxSeqIndex] = true
 	}
 	if present[recordClaimColumn] &&
-		s.ensureGeneratedIndex(ctx, recordClaimIndex, "object_kind, owner_id, "+recordClaimColumn+", updated_at, canonical_id") {
-		s.metaColumns[recordClaimIndex] = true
+		index(recordClaimIndex, "object_kind, owner_id, "+recordClaimColumn+", updated_at, canonical_id", records) {
+		live[recordClaimIndex] = true
 	}
+	s.liveColumns.Store(&live)
+}
+
+// live reports whether a generated-column access path (a column or a
+// composite index name) is usable. The set is replaced whole, never
+// mutated, so readers need no lock.
+func (s *DoltStore) live(name string) bool {
+	set := s.liveColumns.Load()
+	return set != nil && (*set)[name]
+}
+
+func (s *DoltStore) liveNames() []string {
+	set := s.liveColumns.Load()
+	if set == nil {
+		return nil
+	}
+	names := make([]string, 0, len(*set))
+	for name := range *set {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (s *DoltStore) indexExists(ctx context.Context, index string) bool {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'og_objects' AND INDEX_NAME = ?`,
+		index).Scan(&count)
+	return err == nil && count > 0
 }
 
 // ensureGeneratedColumns adds the columns information_schema does not list.
@@ -373,7 +462,7 @@ func (s *DoltStore) metadataColumnFor(kind, jsonPath, value string) (metadataInd
 		return metadataIndexColumn{}, false
 	}
 	for _, mc := range metadataIndexColumns {
-		if mc.Field != leaf || !s.metaColumns[mc.Column] {
+		if mc.Field != leaf || !s.live(mc.Column) {
 			continue
 		}
 		if mc.Kind != "" && string(mc.Kind) != kind {
@@ -395,7 +484,7 @@ func (s *DoltStore) InheritMetadataColumns(other *DoltStore) {
 	if s == nil || other == nil {
 		return
 	}
-	s.metaColumns = other.metaColumns
+	s.liveColumns.Store(other.liveColumns.Load())
 }
 
 func (s *DoltStore) PutObject(ctx context.Context, obj Object) error {
@@ -1121,7 +1210,7 @@ func (s *DoltStore) ListRecordsByInboxSeq(ctx context.Context, inbox string, aft
 	if s == nil || s.db == nil {
 		return nil, false, fmt.Errorf("objectgraph dolt: nil store")
 	}
-	if !s.metaColumns[recordInboxSeqIndex] || utf8.RuneCountInString(inbox) >= generatedColumnMaxChars {
+	if !s.live(recordInboxSeqIndex) || utf8.RuneCountInString(inbox) >= generatedColumnMaxChars {
 		return nil, false, nil
 	}
 	s.engineMu.Lock()
@@ -1155,7 +1244,7 @@ func (s *DoltStore) ListCommitmentClaimObjects(ctx context.Context, ownerID stri
 	if s == nil || s.db == nil {
 		return nil, false, fmt.Errorf("objectgraph dolt: nil store")
 	}
-	if !s.metaColumns[recordClaimIndex] {
+	if !s.live(recordClaimIndex) {
 		return nil, false, nil
 	}
 	s.engineMu.Lock()

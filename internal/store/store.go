@@ -706,6 +706,27 @@ func Open(dbPath string) (*Store, error) {
 	return s, nil
 }
 
+// EnsureObjectGraphIndexes adds the record-scoped generated columns and
+// indexes to an object graph that already had rows when the store opened
+// (a fresh store takes them in Open). On a large store this rewrites
+// og_objects once per missing column, about 50 us per row per column
+// (docs/problems/guest-cpu-is-unindexed-store-scans-2026-10-14.md), so the
+// boot calls it after the health gate is serving and passes the gate's
+// heartbeat. It is a no-op once the indexes exist; until then the reads use
+// their unindexed paths.
+func (s *Store) EnsureObjectGraphIndexes(ctx context.Context, heartbeat func()) error {
+	if s == nil || s.ogStore == nil {
+		return fmt.Errorf("runtime store: object graph not initialized")
+	}
+	if err := s.ogStore.EnsureRecordIndexes(ctx, heartbeat); err != nil {
+		return err
+	}
+	if s.ogReadStore != nil {
+		s.ogReadStore.InheritMetadataColumns(s.ogStore)
+	}
+	return nil
+}
+
 // retiredRuntimeTables are the legacy relational runtime tables dropped at
 // bootstrap. They are declared retired_absent in the replay airworthiness
 // manifest.
