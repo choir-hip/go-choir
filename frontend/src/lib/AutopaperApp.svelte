@@ -76,6 +76,12 @@
   $: shares = activeSection === FRONT_SECTION_ID ? sectionShares(visits) : null;
   $: layout = layoutFrontPage(rankFrontStories(storiesInSection(frontStories, activeSection), { sectionShares: shares }));
   $: moreStories = [...layout.more, ...storiesInSection(olderStories, activeSection)];
+  // On a section page the More stories block (and its Older stories button)
+  // shows only when the section has stories past the front tiers: a section
+  // with a handful of stories ends after them instead of offering a lone
+  // button that may page in nothing for it.
+  $: onFront = activeSection === FRONT_SECTION_ID;
+  $: showMoreSection = moreStories.length > 0 || (onFront && !!nextCursor);
   $: sectionEmpty = status === 'ready' && frontStories.length > 0 && !layout.lead && moreStories.length === 0;
   $: storyCount = frontStories.length + olderStories.length;
   $: edition = editionTime(frontStories);
@@ -215,7 +221,7 @@
           {/if}
         </div>
 
-        {#if moreStories.length || nextCursor}
+        {#if showMoreSection}
           <section class="ap-more-section" aria-label="More stories" data-autopaper-more-stories>
             <p class="ap-label" aria-hidden="true">More stories</p>
             {#if moreStories.length}

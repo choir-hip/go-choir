@@ -447,9 +447,10 @@ test.describe('Autopaper sections', () => {
     await expect(page.locator('[data-autopaper-lead] h2')).toHaveText(politics[0].title);
     await shoot(page, testInfo, 'autopaper-sections-1440-us-politics');
 
-    // Older stories in the section only (the second page has no politics).
-    await page.locator('[data-autopaper-more]').click();
-    await expect(page.locator('[data-autopaper-headline]')).toHaveText(politics.map((s) => s.title));
+    // A section that ends within its front tiers shows no lone More
+    // stories block or Older stories button, though the cursor has more.
+    await expect(page.locator('[data-autopaper-more-stories]')).toHaveCount(0);
+    await expect(page.locator('[data-autopaper-more]')).toHaveCount(0);
 
     await nav.locator('[data-autopaper-section="tech_ai"]').click();
     await expect(page.locator('[data-autopaper-headline]')).toHaveText(
@@ -466,6 +467,23 @@ test.describe('Autopaper sections', () => {
     await expect(page.locator('[data-autopaper-headline]')).toHaveText(
       rankFrontStories(storiesInSection(fx.first, 'tech_ai')).map((s) => s.title),
     );
+  });
+
+  test('a section with stories past its tiers keeps More stories and pages in only its own older stories', async ({ page }) => {
+    const base = sectionedFixture();
+    // Every first-page story but one is World; the second page has one World story.
+    const fx = {
+      first: base.first.map((s, i) => (i === 0 ? { ...s, section: 'tech_ai' } : { ...s, section: 'world' })),
+      second: base.second.map((s, i) => (i === 0 ? { ...s, section: 'world' } : s)),
+    };
+    await openFront(page, { width: 1440, height: 900 }, fx);
+    await page.locator('[data-autopaper-section="world"]').click();
+    const world = rankFrontStories(storiesInSection(fx.first, 'world'));
+    expect(world.length).toBe(13);
+    await expect(page.locator('[data-autopaper-more-stories]')).toHaveCount(1);
+    await page.locator('[data-autopaper-more]').click();
+    await expect(page.locator('[data-autopaper-more]')).toHaveCount(0);
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText([...world, fx.second[0]].map((s) => s.title));
   });
 
   test('the reader habit lifts their sections on the front page', async ({ page }) => {
