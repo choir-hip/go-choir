@@ -151,3 +151,27 @@ section switcher (Front page plus the four); the reader's last section is
 remembered on their device and reopened; section visits are counted on the
 reader's device only and lift that section's stories on their front page
 (private personalization, per LF: attention data stays with the reader).
+
+## Owner update, about 14:15 UTC: more sources, sublinear articles
+
+The sections showed thin verticals (of 100 front stories: Tech & AI 62,
+World 31, Business 4, U.S. Politics 3), which mirrors the paper's 14
+sources (mostly tech). Owner: "what is the quickest path to getting more
+sources so we can scale up our verticals in less than two hours?" Then:
+"we should be able to scale up the sources while only scaling up article
+production significantly sublinearly. More sources means only marginally
+more articles. Fundamentally, the ratio of sources to articles is a crude
+proxy of quality."
+
+Done: six registry sources added to the paper's schedules at 14:15
+(CNBC Markets, MarketWatch, FT Markets, Federal Reserve press, Al Jazeera,
+DW English); eight feeds added to the registry for U.S. politics and
+business (NPR Politics, Politico, The Hill, PBS NewsHour Politics, Guardian
+US Politics, BBC US & Canada, BBC Business, Guardian Business), scheduled
+on the paper after they deploy.
+
+Measure (with L2a's merge recall): sources cited per published story and
+captures per new story should rise as sources are added, while new
+stories per hour rise far less than captures per hour. Before: 14
+sources; the depth log (`journalctl -u go-choir-front-importance | grep
+depth:`) and the front API's source_count give the per-story numbers.

@@ -5737,6 +5737,218 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_abstract",
       "retention_days": 30
+    },
+    {
+      "id": "rss:npr_politics",
+      "type": "rss",
+      "name": "NPR Politics",
+      "url": "https://feeds.npr.org/1014/rss.xml",
+      "verticals": [
+        "politics",
+        "elections",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:politico_politics",
+      "type": "rss",
+      "name": "Politico Politics",
+      "url": "https://rss.politico.com/politics-news.xml",
+      "verticals": [
+        "politics",
+        "elections",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:thehill_news",
+      "type": "rss",
+      "name": "The Hill News",
+      "url": "https://thehill.com/homenews/feed/",
+      "verticals": [
+        "politics",
+        "elections",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:pbs_newshour_politics",
+      "type": "rss",
+      "name": "PBS NewsHour Politics",
+      "url": "https://www.pbs.org/newshour/feeds/rss/politics",
+      "verticals": [
+        "politics",
+        "elections",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:guardian_us_politics",
+      "type": "rss",
+      "name": "The Guardian US Politics",
+      "url": "https://www.theguardian.com/us-news/us-politics/rss",
+      "verticals": [
+        "politics",
+        "elections",
+        "macro_policy"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:bbc_us_canada",
+      "type": "rss",
+      "name": "BBC News US & Canada",
+      "url": "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml",
+      "verticals": [
+        "politics",
+        "elections",
+        "macro_policy",
+        "culture"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "us",
+        "north_america"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:bbc_business",
+      "type": "rss",
+      "name": "BBC News Business",
+      "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
+    },
+    {
+      "id": "rss:guardian_business",
+      "type": "rss",
+      "name": "The Guardian Business",
+      "url": "https://www.theguardian.com/business/rss",
+      "verticals": [
+        "finance",
+        "markets",
+        "economics",
+        "industry"
+      ],
+      "languages": [
+        "en"
+      ],
+      "regions": [
+        "global"
+      ],
+      "poll_interval_seconds": 900,
+      "max_items_per_poll": 100,
+      "rate_limit": "15m poll",
+      "conditional_request_mode": "etag_last_modified",
+      "tos_class": "public_feed",
+      "robots_policy": "rss_feed",
+      "auth_policy": "none",
+      "store_body_policy": "excerpt_only",
+      "retention_days": 90
     }
   ]
 }
