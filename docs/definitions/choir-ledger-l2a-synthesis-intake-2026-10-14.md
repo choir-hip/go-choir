@@ -255,8 +255,8 @@ now:
     edge: missing_oracle
     delta_o: the labelled fixture and a judge registered before the run, from a different model family
     scope_if_supported: Autopaper's intake on every source class
-    status: proposed
-    evidence_refs: [docs/reports/owner-roadmap-rulings-2026-10-14.md]
+    status: testing
+    evidence_refs: [docs/reports/owner-roadmap-rulings-2026-10-14.md, docs/evidence/l2a-jev-pair-probe-2026-10-14.md]
   decision:
     what: >-
       L2a first in the deploy lane, then C1e B1, then LR lever 6. Round-1
@@ -276,16 +276,21 @@ now:
       languages, but a deterministic labelled fixture needs a fixture-only
       registry entry and a static feed. Topic addressing and spawning do
       not exist: research is per document.
-    main_uncertainty: whether Jev separates same-event from same-topic-different-event across languages well enough to route on
-    next_observation: the Jev pair probe (20-40 pre-labelled cross-lingual pairs) as the design note's first evidence; and the paper's baseline window, started tonight before any deploy
+    main_uncertainty: >-
+      Whether a cheap shortlist finds the right candidate stories, and
+      whether Jev holds on whole captures, zh/ko and ambiguous follow-ups.
+      The pair probe (01:00 UTC) answered the first-order question: 26 of
+      26 cross-lingual pairs correct across en, ja, pt, es, ar, fr and de,
+      0.2 s median, about $0.00003 a pair
+      (docs/evidence/l2a-jev-pair-probe-2026-10-14.md).
+    next_observation: the S0 design note; the second baseline window (23:53-05:53 UTC) scored before the paper is enabled
   blocker_or_risk: >-
     Topic addressing and spawning are new runtime surface. Researcher
     dormancy must cost no live process. Per-poll truncation must be
     lossless: items left over are taken on the next poll and recorded as
     skipped, never dropped; check this in S0.
   next_action: >-
-    Start the paper's baseline window and its script; run the Jev pair
-    probe; write the S0 design note (arrival labels, topic versus story
+    Write the S0 design note (arrival labels, topic versus story
     and the learned boundaries, addressing and spawn, dormancy, the
     synthesis contract, the per-computer enable); panel round 2 on this
     file and the note together
