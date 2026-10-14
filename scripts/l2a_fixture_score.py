@@ -26,14 +26,15 @@ import sys
 import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from l2a_window_pairs import CAPTURE_ID, Client, registered_domain  # noqa: E402
+from l2a_window_pairs import CAPTURE_ID, Client, norm_id, registered_domain, stories_by_capture  # noqa: E402
 
 BAR = {"merge_recall": 0.8, "false_merges": 1}
 
 
 def norm(url):
     p = urllib.parse.urlparse(url or "")
-    return (p.hostname or "").lower() + p.path.rstrip("/")
+    # Feeds percent-encode non-Latin paths; the labels may not.
+    return (p.hostname or "").lower() + urllib.parse.unquote(p.path).rstrip("/")
 
 
 def main():
@@ -54,30 +55,29 @@ def main():
     for i, m in enumerate(labels["singletons"]):
         label_of[norm(m["link"])] = "S%d" % i
 
-    caps = c.get("/api/captures").get("captures") or []
-    key_of = {}  # capture id -> normalized link, fixture captures only
-    for cap in caps:
-        k = norm(cap.get("url"))
-        if k in label_of:
-            key_of[cap["capture_id"]] = k
+    # The arrivals are the source's captures records in management's inbox
+    # (sender source:<fixture>), not every capture whose link matches: the
+    # desks re-capture the same pages while researching.
+    owner = None
+    for st in c.get("/api/computer-settings").get("settings") or []:
+        owner = owner or st.get("owner_id")
+    mgmt = "management:" + owner
+    key_of = {}  # arrival capture id -> normalized link
+    declined = set()
+    recs = c.get("/api/inboxes/" + urllib.parse.quote(mgmt, safe="") + "/records?limit=500").get("records") or []
+    for inbox in [mgmt] + ["source:" + labels.get("source_id", "fixture:l2a_multilingual_2026_10_14")]:
+        rs = recs if inbox == mgmt else c.get("/api/inboxes/" + urllib.parse.quote(inbox, safe="") + "/records?limit=500").get("records") or []
+        for r in rs:
+            if str(r.get("sender_inbox", "")).startswith("source:"):
+                for item in (r.get("captures") or {}).get("items") or []:
+                    k = norm(item.get("url"))
+                    if k in label_of:
+                        key_of[norm_id(item["capture_id"])] = k
+            disp = r.get("disposition") or {}
+            if disp.get("kind") == "decline":
+                declined |= {norm_id(x) for x in disp.get("captures") or []}
 
-    story_of, declined = {}, set()
-    docs = c.get("/api/texture/documents?limit=500")
-    docs = docs.get("documents") or docs.get("items") or docs
-    for d in docs:
-        doc_id = d.get("doc_id") or d.get("id")
-        recs = c.get("/api/inboxes/" + urllib.parse.quote("texture:" + doc_id, safe="") + "/records?limit=500").get("records") or []
-        for r in recs:
-            if str(r.get("sender_inbox", "")).startswith("management:"):
-                for cid in CAPTURE_ID.findall(json.dumps(r.get("directive") or {})):
-                    story_of.setdefault(cid, doc_id)
-    # Declines are records from management to the capture's source inbox.
-    sources = {r.get("source_id") for r in (c.get("/api/autopaper/sources/schedules").get("schedules") or [])}
-    for sid in filter(None, sources):
-        recs = c.get("/api/inboxes/" + urllib.parse.quote("source:" + sid, safe="") + "/records?limit=500").get("records") or []
-        for r in recs:
-            if str(r.get("sender_inbox", "")).startswith("management:"):
-                declined |= set(CAPTURE_ID.findall(json.dumps(r.get("directive") or {})))
+    story_of = stories_by_capture(c)
 
     by_label = {}
     for cid, k in key_of.items():

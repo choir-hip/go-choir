@@ -306,13 +306,15 @@ now:
     lossless: items left over are taken on the next poll and recorded as
     skipped, never dropped; check this in S0.
   next_action: >-
-    Read the fixture score (about 04:00 UTC). If it passes the bar
-    (exactly one story per event citing two or more languages and
-    outlets, merge recall at least 0.8, at most one false merge, no
-    undisposed captures, all 27 captured), enable intake.labels on the
-    paper after an idle refresh and measure the after-window against
-    baseline A with scripts/l2a_window_pairs.py. If it fails, record it
-    as incomplete; the bar is not lowered.
+    Fixture run 1 (docs/evidence/l2a-fixture-run-1-2026-10-14.md) is
+    incomplete: merging passes everything (27 of 27 captured, one story
+    per event, merge recall 1.0, 0 false merges, 0 undisposed); citation
+    diversity fails the strict measure on 4 of 8 events (E2 and E6 cite
+    English only; E5 and E8 cite other-language origin sources the
+    measure cannot language-tag). Next: tighten Texture's synthesis
+    contract to cite each language's capture when it adds anything,
+    make the scorer language-aware for non-fixture citations, rerun the
+    fixture; the paper is enabled only after a pass.
 
 receipts: []
 ---

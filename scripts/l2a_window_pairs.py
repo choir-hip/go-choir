@@ -94,6 +94,36 @@ class Client:
         raise RuntimeError("unavailable: " + path)
 
 
+def norm_id(capture_id):
+    """Capture ids appear with and without the obj: prefix."""
+    return capture_id[4:] if capture_id.startswith("obj:") else capture_id
+
+
+def stories_by_capture(c):
+    """Which story each capture went into, read from each story's Texture
+    inbox: the Cast that opened it (cast.captures) or a Feed disposition
+    (disposition.captures), both sent by management. Older records name
+    captures only in the directive text, so that is read too."""
+    story_of = {}
+    docs = c.get("/api/texture/documents?limit=500")
+    docs = docs.get("documents") or docs.get("items") or docs
+    for d in docs:
+        doc_id = d.get("doc_id") or d.get("id")
+        recs = c.get("/api/inboxes/" + urllib.parse.quote("texture:" + doc_id, safe="") + "/records?limit=500").get("records") or []
+        for r in recs:
+            sender = str(r.get("sender_inbox") or (r.get("provenance") or {}).get("agent_id") or "")
+            if not sender.startswith("management:"):
+                continue
+            found = list((r.get("cast") or {}).get("captures") or [])
+            disp = r.get("disposition") or {}
+            if disp.get("kind") == "feed":
+                found += disp.get("captures") or []
+            found += CAPTURE_ID.findall(json.dumps(r.get("directive") or {}))
+            for cid in found:
+                story_of.setdefault(norm_id(cid), doc_id)
+    return story_of
+
+
 def last_assistant(obj):
     """The last assistant message in omp's JSON output, searched recursively."""
     found = None
@@ -182,19 +212,8 @@ def main():
         start += BLOCK - OVERLAP
     disputed -= agreed
 
-    # Which story each capture went into: the cast that opened it or a Note
-    # that fed it, read from each story's Texture inbox.
-    story_of = {}
-    docs = c.get("/api/texture/documents?limit=500")
-    docs = docs.get("documents") or docs.get("items") or docs
-    for d in docs:
-        doc_id = d.get("doc_id") or d.get("id")
-        recs = c.get("/api/inboxes/" + urllib.parse.quote("texture:" + doc_id, safe="") + "/records?limit=500").get("records") or []
-        for r in recs:
-            if not str(r.get("sender_inbox", "")).startswith("management:"):
-                continue
-            for cid in CAPTURE_ID.findall(json.dumps(r.get("directive") or {})):
-                story_of.setdefault(cid, doc_id)
+    story_of = stories_by_capture(c)
+    ids = [norm_id(x) for x in ids]
 
     cross = [(a, b) for a, b in agreed if registered_domain(items[a].get("url", "")) != registered_domain(items[b].get("url", ""))]
     merged = [(a, b) for a, b in cross if story_of.get(ids[a]) and story_of.get(ids[a]) == story_of.get(ids[b])]
