@@ -130,6 +130,10 @@ type VMOwnership struct {
 	// StoppedBy indicates why the VM was stopped. Empty if running.
 	// Valid values: "idle", "logout", "recovery", "manual".
 	StoppedBy string `json:"stopped_by,omitempty"`
+	// FailureWarmedAt is when the always-on sweep last spent its automatic
+	// retry on this computer after a wedged or recovery_failed stop. Interim
+	// bound until the boot ledger (restart station L1b).
+	FailureWarmedAt string `json:"failure_warmed_at,omitempty"`
 	// HoldStatus, when non-nil, places the computer under a durable
 	// host-authoritative maintenance hold. vmctl refuses any automatic
 	// lifecycle action (boot/recover/refresh/reattach/resume/reclaim/
@@ -3046,9 +3050,49 @@ func (r *OwnershipRegistry) StopIdleVMs(ctx context.Context, guard ComputerVersi
 }
 
 type alwaysOnWarmTarget struct {
-	userID    string
-	desktopID string
-	vmID      string
+	userID       string
+	desktopID    string
+	vmID         string
+	afterFailure bool
+}
+
+// failureWarmWindow bounds automatic warms of a computer that stopped by
+// failing: at most one per window.
+const failureWarmWindow = 24 * time.Hour
+
+func stoppedByFailure(stoppedBy string) bool {
+	return stoppedBy == stoppedByWedged || stoppedBy == stoppedByRecoveryFailed
+}
+
+func failureWarmAllowed(lastWarmedAt string, now time.Time) bool {
+	if strings.TrimSpace(lastWarmedAt) == "" {
+		return true
+	}
+	last, err := time.Parse(time.RFC3339Nano, lastWarmedAt)
+	if err != nil {
+		// An unreadable record fails closed: no automatic warm.
+		return false
+	}
+	return !now.Before(last.Add(failureWarmWindow))
+}
+
+// recordFailureWarm durably spends the automatic retry before the boot, so
+// a crash between the record and the boot loses the retry rather than
+// repeating it. It refuses if the retry was already spent.
+func (r *OwnershipRegistry) recordFailureWarm(vmID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own, ok := r.vmByID[vmID]
+	if !ok || own == nil || !stoppedByFailure(own.StoppedBy) {
+		return ok
+	}
+	now := r.now()
+	if !failureWarmAllowed(own.FailureWarmedAt, now) {
+		return false
+	}
+	own.FailureWarmedAt = now.UTC().Format(time.RFC3339Nano)
+	r.saveLocked()
+	return true
 }
 
 // alwaysOnWarmTargets lists the stopped or hibernated computers the tiers
@@ -3058,9 +3102,19 @@ func (r *OwnershipRegistry) alwaysOnWarmTargets() []alwaysOnWarmTarget {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	cfg := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
+	now := r.now()
 	targets := make([]alwaysOnWarmTarget, 0)
 	for _, own := range r.ownerships {
 		if own == nil || own.IsHeld() || own.StoppedBy == "recover_current" {
+			continue
+		}
+		// A computer stopped because it wedged or failed recovery gets one
+		// automatic warm per failureWarmWindow, so a transient fault heals
+		// without the owner (ruling 2026-10-10) and a repeating one cannot
+		// loop. Interim bound until the boot ledger (restart station L1b)
+		// replaces it; delete FailureWarmedAt then.
+		afterFailure := stoppedByFailure(own.StoppedBy)
+		if afterFailure && !failureWarmAllowed(own.FailureWarmedAt, now) {
 			continue
 		}
 		if own.State != VMStateStopped && own.State != VMStateHibernated {
@@ -3075,7 +3129,7 @@ func (r *OwnershipRegistry) alwaysOnWarmTargets() []alwaysOnWarmTarget {
 		default:
 			continue
 		}
-		targets = append(targets, alwaysOnWarmTarget{userID: own.UserID, desktopID: own.DesktopID, vmID: own.VMID})
+		targets = append(targets, alwaysOnWarmTarget{userID: own.UserID, desktopID: own.DesktopID, vmID: own.VMID, afterFailure: afterFailure})
 	}
 	return targets
 }
@@ -3093,6 +3147,12 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard Comp
 		if err := guard(ctx, target.userID, target.desktopID); err != nil {
 			log.Printf("vmctl: warmness policy refused always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
 			continue
+		}
+		if target.afterFailure {
+			if !r.recordFailureWarm(target.vmID) {
+				continue
+			}
+			log.Printf("vmctl: warmness policy spends the automatic retry for always-on desktop vm=%s after a failure stop; the next is allowed after %s", target.vmID, failureWarmWindow)
 		}
 		if _, err := r.ResumeVMForDesktop(target.userID, target.desktopID); err != nil {
 			log.Printf("vmctl: warmness policy failed to resume always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)

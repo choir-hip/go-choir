@@ -18,9 +18,11 @@ import (
 // again. The owner never has to (owner ruling 2026-10-10).
 
 const (
-	stoppedByWedged    = "wedged"
-	wedgedAfterDefault = 5 * time.Minute
-	wedgeProbeTimeout  = 3 * time.Second
+	stoppedByWedged = "wedged"
+	// stoppedByRecoveryFailed marks a computer whose recovery boot failed.
+	stoppedByRecoveryFailed = "recovery_failed"
+	wedgedAfterDefault      = 5 * time.Minute
+	wedgeProbeTimeout       = 3 * time.Second
 )
 
 // guestAcceptsConnection reports whether the guest's service port accepts a

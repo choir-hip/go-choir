@@ -78,7 +78,7 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 				current, ok := r.ownerships[key]
 				if ok && current != nil && current.VMID == snapshot.VMID && current.State == VMStateBooting {
 					current.State = VMStateFailed
-					current.StoppedBy = "recovery_failed"
+					current.StoppedBy = stoppedByRecoveryFailed
 					r.saveLocked()
 				}
 				r.mu.Unlock()
@@ -243,7 +243,7 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 				current := r.ownerships[key]
 				if current != nil && current.VMID == snapshot.VMID {
 					current.State = VMStateFailed
-					current.StoppedBy = "recovery_failed"
+					current.StoppedBy = stoppedByRecoveryFailed
 					r.saveLocked()
 				}
 				waiters := r.pendingWaiters[key]
