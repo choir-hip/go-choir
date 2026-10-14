@@ -1,0 +1,7 @@
+Choir
+Copyright 2025-2026 The Choir Authors
+
+This product includes software developed by the Choir project
+(https://github.com/choir-hip/go-choir), licensed under the Apache
+License, Version 2.0 (see LICENSE). Third-party components keep their
+own licenses; see their notices in vendor/ and frontend dependencies.

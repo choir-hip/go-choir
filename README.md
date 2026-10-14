@@ -163,3 +163,10 @@ frontend/             Svelte desktop and Playwright tests
 nix/                  deployment and NixOS configuration
 docs/                 architecture, doctrine, missions, evidence
 ```
+
+## License
+
+Choir is licensed under the [Apache License, Version 2.0](LICENSE)
+(see also [NOTICE](NOTICE)). Contributions are accepted under the same
+license; please sign off your commits (`git commit -s`, the Developer
+Certificate of Origin).
