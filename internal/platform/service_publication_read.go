@@ -547,6 +547,10 @@ func (s *Service) graphTransclusions(ctx context.Context, og *ObjectGraphStore, 
 // graphProvenanceSummary reads provenance summary from the object graph.
 func (s *Service) graphProvenanceSummary(ctx context.Context, og *ObjectGraphStore, versionID string) PublicationProvenanceSummary {
 	var out PublicationProvenanceSummary
+	done := og.store.retrievalTimer(retrievalListEdgesTo)
+	rowCount := 0
+	var readErr error
+	defer func() { done("", rowCount, readErr) }()
 	// Find consent, review, and attestation objects via edges to this version.
 	// These are edges TO the version, so we need to query by to_id.
 	// Since our ObjectGraphStore doesn't have a ListEdgesTo method,
@@ -555,6 +559,7 @@ func (s *Service) graphProvenanceSummary(ctx context.Context, og *ObjectGraphSto
 		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
 		 FROM og_edges WHERE to_id = ? AND tombstone = FALSE ORDER BY created_at`, versionID)
 	if err != nil {
+		readErr = err
 		return out
 	}
 	defer rows.Close()
@@ -563,6 +568,7 @@ func (s *Service) graphProvenanceSummary(ctx context.Context, og *ObjectGraphSto
 		if err != nil {
 			continue
 		}
+		rowCount++
 		switch string(edge.Kind) {
 		case "consent_for":
 			out.ConsentIDs = append(out.ConsentIDs, edge.FromID)

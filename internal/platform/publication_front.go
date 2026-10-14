@@ -340,7 +340,9 @@ type frontPublicationRow struct {
 
 // frontPublicationBatch reads up to n publications after the cursor,
 // newest updated first.
-func (s *Service) frontPublicationBatch(ctx context.Context, after *frontCursor, n int) ([]frontPublicationRow, error) {
+func (s *Service) frontPublicationBatch(ctx context.Context, after *frontCursor, n int) (out []frontPublicationRow, err error) {
+	done := s.store.retrievalTimer(retrievalFrontPublication)
+	defer func() { done("unbounded", len(out), err) }()
 	query := `SELECT canonical_id, metadata, updated_at FROM og_objects
 		WHERE object_kind = 'choir.publication' AND tombstone = FALSE`
 	var args []any
@@ -356,7 +358,6 @@ func (s *Service) frontPublicationBatch(ctx context.Context, after *frontCursor,
 		return nil, fmt.Errorf("platform front: list publications: %w", err)
 	}
 	defer rows.Close()
-	var out []frontPublicationRow
 	for rows.Next() {
 		var row frontPublicationRow
 		var metadata string

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -63,7 +64,9 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			limit := corpusLimit(in.Limit)
 			exec := toolregistry.ExecutionContextFrom(ctx)
 			ownerID := firstNonEmptyString(exec.OwnerID, in.OwnerID, universalWirePlatformOwnerID())
+			storiesStart := time.Now()
 			results, err := deps.Store.SearchDocuments(ctx, query, ownerID, limit)
+			storiesElapsed := time.Since(storiesStart)
 			if err != nil {
 				return "", fmt.Errorf("search wire corpus: %w", err)
 			}
@@ -86,10 +89,12 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			}
 			// A capture-store outage keeps the stories and says so; it never
 			// reads as "no captures".
+			capturesStart := time.Now()
 			captures, note, err := searchCaptures(ctx, deps, ownerID, exec.ComputerID, corpusQueryTerms(query), limit)
 			if err != nil {
 				captures, note = nil, "captures not searched: "+err.Error()
 			}
+			logCorpusSearch(query, exec.ComputerID, storiesElapsed, len(out), time.Since(capturesStart), captures, note)
 			if captures == nil {
 				captures = []CorpusCapture{}
 			}
@@ -130,4 +135,23 @@ func universalWirePlatformOwnerID() string {
 		ownerID = "universal-wire-platform"
 	}
 	return ownerID
+}
+
+// logCorpusSearch writes one journal line per corpus search (rung 0 of
+// docs/reports/object-graph-retrieval-research-2026-10-14.md): the query,
+// both halves' latency and counts, and the capture ids returned, so the
+// retrieval eval set can be grown from real searches and their hits.
+func logCorpusSearch(query, computerID string, storiesElapsed time.Duration, stories int, capturesElapsed time.Duration, captures []CorpusCapture, note string) {
+	ids := make([]string, 0, len(captures))
+	for i, c := range captures {
+		if i == 10 {
+			break
+		}
+		ids = append(ids, c.CaptureID)
+	}
+	if len(query) > 200 {
+		query = query[:200]
+	}
+	log.Printf("corpus search computer=%s stories_ms=%d stories=%d captures_ms=%d captures=%d note=%q query=%q capture_ids=%s",
+		computerID, storiesElapsed.Milliseconds(), stories, capturesElapsed.Milliseconds(), len(captures), note, query, strings.Join(ids, ","))
 }

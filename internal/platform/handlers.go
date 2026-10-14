@@ -33,6 +33,9 @@ type healthResponse struct {
 	Service string         `json:"service"`
 	Store   string         `json:"store"`
 	Build   buildinfo.Info `json:"build"`
+	// Retrieval counts and times Store B retrieval calls since start
+	// (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+	Retrieval *RetrievalSnapshot `json:"retrieval,omitempty"`
 }
 
 type apiError struct {
@@ -92,12 +95,17 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		status = "degraded"
 		storeStatus = "unreachable"
 	}
-	writeJSON(w, http.StatusOK, healthResponse{
+	resp := healthResponse{
 		Status:  status,
 		Service: "corpusd",
 		Store:   storeStatus,
 		Build:   buildinfo.Snapshot("corpusd"),
-	})
+	}
+	if h != nil && h.service != nil && h.service.store != nil {
+		snap := h.service.store.RetrievalSnapshot()
+		resp.Retrieval = &snap
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) HandleInternalPublishTexture(w http.ResponseWriter, r *http.Request) {

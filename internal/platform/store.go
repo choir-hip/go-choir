@@ -33,6 +33,9 @@ type Store struct {
 	// and unlink one candidate, so a reused object is never deleted between
 	// the sweep's live-set read and the writer's reference commit.
 	casReuseMu sync.RWMutex
+	// retrieval times and counts every Store B retrieval call (corpusd
+	// /health "retrieval").
+	retrieval *RetrievalMetrics
 }
 
 // SetArtifactsRoot configures the filesystem CAS root used to externalize
@@ -278,7 +281,8 @@ func openStore(ctx context.Context, dsn, corpusDSN string, bootstrap bool) (*Sto
 func NewStore(db *sql.DB) *Store {
 	configureDB(db)
 	committer := doltbatch.New(db, "platform", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
-	return &Store{db: db, committer: committer, corpusDB: db, corpusCommitter: committer}
+	return &Store{db: db, committer: committer, corpusDB: db, corpusCommitter: committer,
+		retrieval: &RetrievalMetrics{since: time.Now().UTC()}}
 }
 
 func configureDB(db *sql.DB) {
