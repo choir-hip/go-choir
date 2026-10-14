@@ -125,3 +125,26 @@ drill's path; to be checked once engineering reaches them):
 `engineering_evidence.go:361/485/556` (report events matched by
 `WorkItemID`, "" on records both sides), and
 `resumeStrandedFrozenAssignmentCommit` metadata.
+
+## After the capsule-gate fix (11a94193, drill 05:49 UTC)
+
+Label `c1e-b1fix-engineering-0549`, computer
+`computer-cac0d3508302ce513126d45f215f84fd` (kept for the trace).
+
+The gate fix works: management Cast engineering at 05:50:57, and
+engineering ran in its capsule and opened self-development operation
+`selfdev-11df3663aee4be09cce8f56f46018397` (executing, 05:52:15). Then
+the operation failed at 05:52:59 with `freeze: capsule release contains no
+frozen runtime artifacts`, and the run ended with "completion guard
+engineering_overlay_terminal_fate_required was not satisfied after 2
+retries". The final Report is again a cancel report, now one with an
+operation behind it.
+
+Open, to be read from the trace before any claim:
+- whether engineering built the runtime artifacts (bin/autoputer, the
+  frontend bundle) in the capsule before Freeze, and what Freeze requires
+  for a change that only adds a static file;
+- whether two retries after one refused Freeze is the intended guard,
+  given that a refused Freeze is recoverable (build, then Freeze again);
+- whether this freeze precondition predates B1 (the cut-1 drill's earlier
+  passes, if any, ran on the packet path).
