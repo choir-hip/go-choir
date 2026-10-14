@@ -200,3 +200,46 @@ func TestWriteCapturesBlockDocumentKeepsRawAndIdentityIsDocHash(t *testing.T) {
 		t.Fatalf("footnoted page = %+v, %v", out, err)
 	}
 }
+
+// L2a A5 (defects 5 and the Jev input plumbing,
+// docs/problems/autopaper-intake-defects-2026-10-14.md). Ways the captured
+// item report can fail, written before the code:
+//   - the language is the source's but the script guess is missing, or is
+//     read from the full article body instead of the title and summary;
+//   - a repeat reports different fields from the first write, so an
+//     arrival built from either is not the same record;
+//   - the feed summary or outlet is dropped between the poll and the
+//     report, so a later labeller has only the title.
+func TestWriteCapturesReportsLanguageScriptSummaryAndOutlet(t *testing.T) {
+	ctx := context.Background()
+	mem := objectgraph.NewMemoryStore()
+	graph := objectgraph.NewService(objectgraph.Config{Memory: mem, Durable: mem})
+	defer graph.Close()
+	fetched := time.Date(2026, 10, 14, 2, 0, 0, 0, time.UTC)
+	items := feedItems(
+		sources.Item{ID: "item-ja", SourceID: "rss:mixed", SourceType: sources.SourceTypeRSS, Title: "東京で地震", Summary: "震度5弱を観測しました",
+			Body: "An English article body that is much longer than the title and summary combined, so it would win a majority.",
+			URL:  "https://mixed.example/ja", FetchedAt: fetched, Language: "en", Outlet: "Mixed Wire"},
+		sources.Item{ID: "item-en", SourceID: "rss:mixed", SourceType: sources.SourceTypeRSS, Title: "Markets steady", Body: "Markets were steady on Tuesday.",
+			URL: "https://mixed.example/en", FetchedAt: fetched, Language: "en", Outlet: "Mixed Wire"},
+	)
+	cfg := CaptureWriteConfig{OwnerID: "owner-1", ComputerID: "computer-1", Now: fetched}
+	first, err := WriteCaptures(ctx, graph, memoryBodies{}, items, cfg)
+	if err != nil || len(first.Captured) != 2 {
+		t.Fatalf("first write = %+v, %v", first, err)
+	}
+	ja, en := first.Captured[0], first.Captured[1]
+	if ja.Language != "en" || ja.Script != sources.ScriptKana || ja.Summary != "震度5弱を観測しました" || ja.Outlet != "Mixed Wire" {
+		t.Fatalf("japanese item = %+v; want source language en, script kana from title+summary, summary and outlet", ja)
+	}
+	if en.Language != "en" || en.Script != sources.ScriptLatin || en.Outlet != "Mixed Wire" {
+		t.Fatalf("english item = %+v", en)
+	}
+	again, err := WriteCaptures(ctx, graph, memoryBodies{}, items, cfg)
+	if err != nil || len(again.Repeats) != 2 {
+		t.Fatalf("repeat write = %+v, %v", again, err)
+	}
+	if again.Repeats[0] != ja || again.Repeats[1] != en {
+		t.Fatalf("repeats report %+v, first write reported %+v", again.Repeats, first.Captured)
+	}
+}

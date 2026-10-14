@@ -94,6 +94,11 @@ type Item struct {
 	VintagePolicy      string     `json:"vintage_policy,omitempty"`
 	LookaheadStatus    string     `json:"lookahead_status,omitempty"`
 	ReleaseDate        string     `json:"release_date,omitempty"`
+	// Summary is the feed's own summary of the item, kept beside a body a
+	// reader snapshot replaced, and Outlet is the source's name. Both are
+	// reported with the capture for intake labelling (L2a A5), not stored.
+	Summary string `json:"summary,omitempty"`
+	Outlet  string `json:"outlet,omitempty"`
 }
 
 const (

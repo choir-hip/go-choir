@@ -94,6 +94,32 @@ type CapturedItem struct {
 	PublishedAt string `json:"published_at,omitempty"`
 	DocHash     string `json:"doc_hash,omitempty"`
 	BlockCount  int    `json:"block_count,omitempty"`
+	// Language is the source's first language; Script is guessed from the
+	// item's title and summary (L2a A5, defect 5). Summary and Outlet carry
+	// the feed's summary and the source's name for intake labelling. All
+	// four are pure functions of the item, so a repeat reports what the
+	// first write did.
+	Language string `json:"language,omitempty"`
+	Script   string `json:"script,omitempty"`
+	Summary  string `json:"summary,omitempty"`
+	Outlet   string `json:"outlet,omitempty"`
+}
+
+// captureScriptBodyRunes bounds how much of a body stands in for a missing
+// summary in the script guess.
+const captureScriptBodyRunes = 400
+
+// capturedScript guesses an item's script from its title and summary, or
+// from the start of its body when the feed gave no summary.
+func capturedScript(title, summary, body string) string {
+	text := strings.TrimSpace(summary)
+	if text == "" {
+		text = body
+		if runes := []rune(text); len(runes) > captureScriptBodyRunes {
+			text = string(runes[:captureScriptBodyRunes])
+		}
+	}
+	return sources.GuessScript(title + " " + text)
 }
 
 // WriteCaptures writes each item as one choir.web_capture whose blobs live
@@ -147,7 +173,9 @@ func WriteCaptures(ctx context.Context, graph *objectgraph.Service, bodies BodyS
 		if err != nil {
 			return result, fmt.Errorf("write captures: %w", err)
 		}
-		captured := CapturedItem{CaptureID: id, Title: req.Title, URL: req.CanonicalURL, DocHash: docHash, BlockCount: len(blocks)}
+		captured := CapturedItem{CaptureID: id, Title: req.Title, URL: req.CanonicalURL, DocHash: docHash, BlockCount: len(blocks),
+			Language: strings.TrimSpace(item.Language), Script: capturedScript(req.Title, item.Summary, projection),
+			Summary: strings.TrimSpace(item.Summary), Outlet: strings.TrimSpace(item.Outlet)}
 		if !item.Published.IsZero() {
 			captured.PublishedAt = item.Published.UTC().Format(time.RFC3339)
 		}
