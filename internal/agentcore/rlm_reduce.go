@@ -158,14 +158,6 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			if strings.TrimSpace(in.Body) == "" {
 				return fmt.Errorf("reduce: texture_turn %s missing its body", in.LocalID)
 			}
-		case yaegikernel.IntentJudge:
-			// Support verdicts are management's alone (decisions §12.7).
-			if fromDesk != agentprofile.Management {
-				return fmt.Errorf("reduce: judge %s: support judgement is management's, not %s's", in.LocalID, fromDesk)
-			}
-			if _, err := stagedVerdicts(in); err != nil {
-				return err
-			}
 		default:
 			if err := validateSemanticActIntent(in); err != nil {
 				return err
@@ -960,10 +952,6 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			// A Texture turn: no mailbox envelope — commit it through
 			// ApplyTextureTurn via the bound owner.
 			seq, err = r.commitTextureAuthorIntent(ctx, in)
-		case yaegikernel.IntentJudge:
-			// Verdicts commit only with management's records
-			// (commitRecordsRoute); one left here had no route to commit on.
-			err = fmt.Errorf("support verdicts commit only on management's records route")
 		default:
 			// Semantic acts (mission R2): ledger-bound kinds append the
 			// commitment record; every act may also mail its envelope.

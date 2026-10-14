@@ -48,6 +48,8 @@ type CostEntry struct {
 //
 //   - phase "tool_loop": per-iteration provider call with llm_model,
 //     llm_provider, input_tokens, output_tokens.
+//   - phase "jev_judgment": one decision-model (Jev) call made for a run,
+//     with the same fields.
 //   - phase "execution": gateway provider completion with model, provider,
 //     tokens_in, tokens_out.
 //
@@ -62,7 +64,10 @@ func ExtractCostEntries(events []types.EventRecord) []CostEntry {
 		}
 		payload := parsePayload(ev.Payload)
 		switch strings.TrimSpace(payloadString(payload, "phase")) {
-		case "tool_loop":
+		case "tool_loop", "jev_judgment":
+			// jev_judgment is one decision-model (Jev) call the runtime
+			// made for a run, such as judging its revision's citations; it
+			// carries the same fields as a tool-loop iteration.
 			entry, ok := extractFromToolLoopEvent(ev, payload)
 			if ok {
 				entries = append(entries, entry)

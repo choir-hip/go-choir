@@ -157,6 +157,14 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 	parents := map[string]types.EngineeringAssignmentBinding{}
 	for _, rec := range recs {
 		view := inboxRecordView(rec)
+		if rec.Support != nil && len(rec.Support.Pairs) > 0 {
+			// A support_pairs list minted before support judgement left
+			// management (support-judgement-to-jev-design-2026-10-14): its
+			// pairs go to Jev, and the desk reads it closed, with nothing
+			// to answer, so it is marked read like any other record.
+			rt.judgeLegacySupportPairs(ownerID, computerID, runID, rec)
+			view.Support, view.Body = nil, legacySupportPairsBody
+		}
 		if rec.Captures != nil && len(rec.Captures.Items) > 0 {
 			if !labelsRead {
 				labelsOn, labelsRead = rt.intakeLabelsEnabled(ctx, ownerID, computerID), true
@@ -436,21 +444,8 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	// row as one transaction.
 	var castPlan *engineeringCastPlan
 	var localIDs []yaegikernel.StagedIntent
-	// Management's support verdicts (Cut 2 2a (v)) commit in the same
-	// transaction as its records and cursor.
-	var verdicts []types.SupportVerdict
-	var judged []yaegikernel.StagedIntent
 	openRound := map[string]bool{}
 	for _, in := range intents {
-		if in.Kind == yaegikernel.IntentJudge && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management {
-			staged, err := stagedVerdicts(in)
-			if err != nil {
-				return nil, err
-			}
-			verdicts = append(verdicts, staged...)
-			judged = append(judged, in)
-			continue
-		}
 		if deskProfile == agentprofile.Management && engineeringCastIntent(in) {
 			if castPlan != nil {
 				return nil, fmt.Errorf("reduce: %s: one engineering Cast per cell", in.LocalID)
@@ -501,15 +496,12 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		localIDs = append(localIDs, in)
 	}
 	cursor := r.records.cursorAdvance()
-	if len(records) == 0 && cursor == nil && len(verdicts) == 0 {
+	if len(records) == 0 && cursor == nil {
 		return rest, nil
 	}
 	req := types.CommitInboxRecordsRequest{
 		OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID,
 		CommandID: "cell-records:" + r.scope.CellID, Records: records, Cursor: cursor,
-	}
-	if len(verdicts) > 0 {
-		req.Judge, req.Verdicts = r.scope.DeskAgentID, verdicts
 	}
 	digest, err := store.ComputeCommitInboxRecordsDigest(req)
 	if err != nil {
@@ -562,14 +554,6 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	if strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management {
 		rt.recordLabelOverrides(ctx, r.scope.OwnerID, r.scope.ComputerID, records, committed.Records)
 	}
-	// Verdicts reach the published overlay of the stories they judge, off
-	// the commit's path (Cut 2 2b).
-	if len(committed.Verdicts) > 0 {
-		rt.publishStoryVerdicts(r.scope.OwnerID, r.scope.ComputerID, committed.Verdicts)
-	}
-	for _, in := range judged {
-		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Kind: in.Kind})
-	}
 	return rest, nil
 }
 
@@ -604,18 +588,6 @@ func (r *rlmCallReduction) requireChildOutcomesRead(ctx context.Context, convers
 	return nil
 }
 
-// stagedVerdicts decodes a Judge intent's verdicts.
-func stagedVerdicts(in yaegikernel.StagedIntent) ([]types.SupportVerdict, error) {
-	var verdicts []types.SupportVerdict
-	if err := json.Unmarshal([]byte(in.Body), &verdicts); err != nil {
-		return nil, fmt.Errorf("reduce: judge %s: %w", in.LocalID, err)
-	}
-	if len(verdicts) == 0 {
-		return nil, fmt.Errorf("reduce: judge %s stages no verdict", in.LocalID)
-	}
-	return verdicts, nil
-}
-
 // inboxRecordRequestSource marks a run a records desk started because its
 // inbox has unread records (Cut 1 L3a).
 const inboxRecordRequestSource = "inbox_record"
@@ -648,7 +620,7 @@ func (rt *Runtime) WakeResearchInbox(ctx context.Context, ownerID, computerID, d
 // for its inbox.
 var recordsInboxPrompts = map[string]string{
 	agentprofile.Research:   "Your inbox has new records from Texture: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body). Answer in the same conversation with choir.ReportPacket(\"texture\", packet, \"\"); a packet whose work_disposition is completed or empty is your final Report and closes the round.",
-	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A support_pairs record lists a Texture's new citations in r.Support.Pairs: judge them with choir.Judge(r.Support.Pairs). A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline with choir.Note(r.From, reason).",
+	agentprofile.Management: "Your inbox has new records: read them with choir.Records() (each has seq, kind, from, conversation_id, round, objective and body; a Texture's Cast carries its packet in body). Answer each Texture in its own conversation with choir.ReportPacket(r.From, packet, \"\") where r.From is the Texture's inbox (texture:<doc>); a packet whose work_disposition is completed or empty is your final Report and closes the round that Texture's Cast opened. A captures record names a source poll's new captures in r.Captures.Items: open a story per new event with choir.Cast(\"texture:new\", headline, spec) (spec: hypotheses, captures, publish auto), feed an existing story at its texture:<doc>, or decline with choir.Note(r.From, reason).",
 }
 
 // WakeRecordsInbox starts a turn for a records desk (research or

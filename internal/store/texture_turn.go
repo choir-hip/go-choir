@@ -655,11 +655,12 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 		addCondition(objectgraph.ObjectCondition{CanonicalID: deskObj.CanonicalID})
 		objects = append(objects, deskObj)
 	}
-	// A revision's new citation pairs are listed to management in this
-	// transaction (Cut 2 2a (v)): their check memos and one system record.
+	// A revision's new citation pairs are listed in this transaction by
+	// their check memos; the runtime judges them with Jev after the commit
+	// (support-judgement-to-jev-design-2026-10-14). No record is sent.
 	inboxRecords := req.InboxRecords
 	if req.Outcome == types.TextureTurnRevision {
-		supportObjects, supportConditions, list, supportErr := s.planSupportPairs(ctx, ownerID, computerID, req, now)
+		supportObjects, supportConditions, supportErr := s.planSupportPairs(ctx, ownerID, computerID, req, now)
 		if supportErr != nil {
 			return types.LifecycleResult{}, supportErr
 		}
@@ -667,9 +668,6 @@ func (s *Store) ApplyTextureTurnWithSourceGraph(ctx context.Context, req types.A
 			addCondition(condition)
 		}
 		objects = append(objects, supportObjects...)
-		if list != nil {
-			inboxRecords = append(append([]types.CommitmentRecord(nil), inboxRecords...), *list)
-		}
 	}
 	if len(inboxRecords) > 0 || req.InboxCursor != nil {
 		inboxObjects, inboxConditions, planned, planErr := s.planInboxRecords(ctx, ownerID, computerID, inboxRecords, req.InboxCursor, now)

@@ -200,11 +200,12 @@ func validProbability(p float64) bool { return p >= 0 && p <= 1 }
 // inboxRecordWakes reports whether a record mints a wake row for its
 // recipient. A desk's record does. A system record does not (D5): a round
 // closure is minted at boot, and waking its caster there would resume work
-// after a crash. The one exception is a support pairs list (Cut 2 2a (v)):
-// it asks management to judge, nothing else would wake management for it,
-// and it is minted only by a live Texture commit, never at boot. So is a
-// capture arrival (Cut 2 2b): it is minted only by a live source poll, and
-// a crash boot closes every schedule, so no poll runs at boot.
+// after a crash. Two system records do wake, because each asks a desk to
+// act and is minted only by live work, never at boot: a support failure
+// (support-judgement-to-jev-design-2026-10-14) asks its Texture to correct
+// a citation and is minted only by the Jev job a live Texture commit
+// started; a capture arrival (Cut 2 2b) is minted only by a live source
+// poll, and a crash boot closes every schedule, so no poll runs at boot.
 func inboxRecordWakes(rec types.CommitmentRecord) bool {
 	if strings.HasPrefix(rec.Inbox, "source:") {
 		// A source's inbox (management's declines of its captures) has no
@@ -214,7 +215,7 @@ func inboxRecordWakes(rec types.CommitmentRecord) bool {
 	if rec.EmitterKind != types.CommitmentEmitterSystem {
 		return true
 	}
-	return (rec.Support != nil && len(rec.Support.Pairs) > 0) || (rec.Captures != nil && len(rec.Captures.Items) > 0)
+	return (rec.Support != nil && len(rec.Support.Failures) > 0) || (rec.Captures != nil && len(rec.Captures.Items) > 0)
 }
 
 // stepConversation validates rec against its conversation head, stamps its
@@ -605,8 +606,8 @@ func (s *Store) CommitInboxRecords(ctx context.Context, req types.CommitInboxRec
 // assignment row and its binding commit together.
 func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecordsRequest, now time.Time) ([]objectgraph.Object, []objectgraph.ObjectCondition, []objectgraph.Edge, types.InboxCommitReceipt, error) {
 	ownerID, computerID := req.OwnerID, req.ComputerID
-	// Support verdicts (Cut 2 2a (v)) commit their memos here, and their
-	// failure records ride the same plan as the cell's own records.
+	// Support verdicts (the runtime's Jev job, as system:support) commit
+	// their memos here, and their failure records ride the same plan.
 	verdictObjects, verdictConditions, failures, recorded, err := s.planSupportVerdicts(ctx, ownerID, computerID, req.Judge, req.CommandID, req.Verdicts, now)
 	if err != nil {
 		return nil, nil, nil, types.InboxCommitReceipt{}, err

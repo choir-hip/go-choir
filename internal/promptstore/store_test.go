@@ -75,3 +75,18 @@ func TestPromptStoreSupportsUserOverridesAndReset(t *testing.T) {
 		t.Fatalf("reset content should load yaml-backed texture prompt, got %q", reset.Content)
 	}
 }
+
+// Support judgement left management
+// (docs/reports/support-judgement-to-jev-design-2026-10-14.md): the default
+// management prompt must not teach Judge or support_pairs records.
+func TestManagementDefaultPromptCarriesNoSupportJudgement(t *testing.T) {
+	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Management)
+	if err != nil {
+		t.Fatalf("load management prompt: %v", err)
+	}
+	for _, absent := range []string{"choir.Judge", "support_pairs", "Judging citations"} {
+		if strings.Contains(prompt.Content, absent) {
+			t.Errorf("management prompt still says %q", absent)
+		}
+	}
+}

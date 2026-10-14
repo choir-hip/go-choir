@@ -27,10 +27,12 @@ type CommitInboxRecordsRequest struct {
 	CommandDigest string              `json:"command_digest"`
 	Records       []CommitmentRecord  `json:"records,omitempty"`
 	Cursor        *InboxCursorAdvance `json:"cursor,omitempty"`
-	// Judge and Verdicts are a management cell's support verdicts (Cut 2 2a
-	// (v)): Judge is the judging desk's inbox (management:<owner>). Each
+	// Judge and Verdicts are support verdicts, recorded by the runtime's
+	// Jev job as a system act (support-judgement-to-jev-design-2026-10-14):
+	// Judge is SupportSystemAgentID, the only judge the store accepts. Each
 	// verdict is memoized by its pair key; a failing one reaches the pair's
-	// texture:<doc> as a record from Judge, committed with this command.
+	// texture:<doc> as a system record from Judge, committed with this
+	// command.
 	Judge    string           `json:"judge,omitempty"`
 	Verdicts []SupportVerdict `json:"verdicts,omitempty"`
 }
@@ -48,7 +50,8 @@ type InboxRecordReceipt struct {
 	// the order the Cast listed them.
 	HypothesisIDs []string `json:"hypothesis_ids,omitempty"`
 	// WakeID is the actor wake outbox row minted for the recipient; empty
-	// for system records, which wake no one, except a support pairs list.
+	// for system records, which wake no one, except a support failure or a
+	// capture arrival.
 	WakeID string `json:"wake_id,omitempty"`
 	// OpenedStory marks a Cast to StoryOpenInbox that opened a new story;
 	// Inbox names the story's texture:<doc> (Cut 2 2b).

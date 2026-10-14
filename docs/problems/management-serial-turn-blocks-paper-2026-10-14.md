@@ -3,7 +3,10 @@
 Date: 2026-10-14, 03:50 UTC. Found by the owner ("Noticed last article is
 28 minutes old. Is autopaper down?"). Computer: the live paper,
 computer-1355b83bced1613eb048ee28d66688a8, build 66fe0917. Status:
-documented; owner direction recorded; not fixed.
+documented; owner direction recorded. The Jev half (support judgement
+leaves management) is implemented on a branch, not yet deployed:
+[design note](../reports/support-judgement-to-jev-design-2026-10-14.md).
+Management delegating to sub-RLMs is not started.
 
 ## What happened
 

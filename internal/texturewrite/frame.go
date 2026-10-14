@@ -235,11 +235,11 @@ type FrameRecord struct {
 	Claims     []FrameClaim
 	Sources    []Source
 	Publish    string
-	// Failures are management's failing support verdicts (Cut 2 2a (v)).
+	// Failures are Jev's failing support verdicts (Cut 2 2a (v)).
 	Failures []FrameFailure
 }
 
-// FrameFailure is one citation management judged unsupported: the citing
+// FrameFailure is one citation Jev judged unsupported: the citing
 // block, the cited capture and quote, and why.
 type FrameFailure struct {
 	BlockID string

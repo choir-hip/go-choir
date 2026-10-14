@@ -295,8 +295,8 @@ type ApplyTextureTurnRequest struct {
 	InboxRecords []CommitmentRecord  `json:"inbox_records,omitempty"`
 	InboxCursor  *InboxCursorAdvance `json:"inbox_cursor,omitempty"`
 	// Citations are a revision outcome's citation pairs (Cut 2 2a (v)): the
-	// turn's transaction lists those not yet listed or judged to
-	// management:<owner> in one system record and memoizes their checks.
+	// turn's transaction lists those not yet listed or judged by writing
+	// their check memos; the runtime judges them with Jev after the commit.
 	Citations []CitationPair `json:"citations,omitempty"`
 }
 

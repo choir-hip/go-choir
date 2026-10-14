@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -16,22 +17,23 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
-// Support judgement, the Texture side (Cut 2 2a (v)): a committed revision
-// lists its new citation pairs to management in the commit's own
-// transaction, and records each citation's quote check where the reader
-// reads it. Ways it can fail, written first:
-//   - a commit with new citations lists nothing, mints one record per
-//     citation, or addresses research instead of management;
-//   - the list is a system record, and system records wake no one (D5), so
-//     management never judges;
-//   - an unchanged pair is listed again on every later commit, so
-//     management wakes on every commit and judges the same pair twice;
+// Support judgement, the Texture side
+// (docs/reports/support-judgement-to-jev-design-2026-10-14.md): a committed
+// revision lists its new citation pairs by their check memos in the
+// commit's own transaction, and the commit path hands them to the
+// runtime's Jev job, which judges them after the commit. Ways it can fail,
+// written first:
+//   - the commit still sends management a pairs record (management's
+//     serial turn back in the path), or lists nothing;
+//   - the commit is not handed to Jev, so pairs stay pending forever;
+//   - Jev's failing verdict never reaches this Texture's inbox;
+//   - an unchanged pair is judged again on every later commit;
 //   - the pair names the citing block by id but hashes other text, so an
 //     edited sentence keeps the verdict its old text earned;
 //   - the quote check outcome is not recorded per citation, or a citation
 //     of a source nobody captured is memoized and never rechecked once a
 //     capture lands;
-//   - listing mints a revision or edits text.
+//   - listing or judging mints a revision or edits text.
 
 func managementInbox(rec types.RunRecord) string {
 	return agentprofile.Management + ":" + rec.OwnerID
@@ -50,11 +52,56 @@ func blockIDAt(t *testing.T, rev types.Revision, i int) (string, string) {
 	return blocks[i].ID, texturewrite.CitingText(blocks[i].Node)
 }
 
-func TestCommitListsNewCitationPairsToManagementOnce(t *testing.T) {
-	h, s, rec := cellAuthorSetup(t, "support-list")
+// supportJev answers every pair whose quote it names as unsupported and the
+// rest as supported, and counts the pairs it was asked about.
+type supportJev struct {
+	mu          sync.Mutex
+	unsupported map[string]bool
+	asked       []string
+}
+
+func (j *supportJev) Judge(_ context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	var parsed struct {
+		Pairs map[string]struct {
+			Quote string `json:"quote"`
+		} `json:"pairs"`
+	}
+	if err := json.Unmarshal(state, &parsed); err != nil {
+		return nil, err
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	answers := map[string]any{}
+	for name := range questions {
+		quote := parsed.Pairs[name].Quote
+		j.asked = append(j.asked, quote)
+		choice, yes := "yes", 0.95
+		if j.unsupported[quote] {
+			choice, yes = "no", 0.05
+		}
+		answers[name] = map[string]any{"type": "choice", "choice": choice, "probabilities": map[string]float64{"yes": yes, "no": 1 - yes}}
+	}
+	return json.Marshal(map[string]any{"model": "typesafe/jev-1.13", "answers": answers})
+}
+
+func (j *supportJev) askedQuotes() []string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return append([]string(nil), j.asked...)
+}
+
+func TestCommitListsNewPairsAndJevJudgesThemOffTheCommit(t *testing.T) {
+	core, h := testAPISetup(t)
+	court := courtCapture["https://example.org/court"]
+	core.SetTextureCaptures(fakeCaptureStore{"https://example.org/court": court, "cap-court": court})
+	jev := &supportJev{unsupported: map[string]bool{"appeal was filed on Monday": true}}
+	core.SetCandidateJudge(jev)
+	s := core.Store()
+	rec := seedCellAuthorLifecycle(t, s, "owner-cell-author", "support-list", "# Merger\n\nOpening line.\n\nClosing line.")
+	h.createAgentMutationForRun(context.Background(), &rec)
 	ctx := context.Background()
 	base := headOf(t, s, rec)
-	management := managementInbox(rec)
+	management, texture := managementInbox(rec), rec.AgentID
 	write := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b2\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the merger may proceed\"}}, and the regulator appealed {{cite https://example.org/court \"appeal was filed on Monday\"}}.",
 		Why:   "state the ruling and the appeal",
@@ -62,22 +109,32 @@ func TestCommitListsNewCitationPairsToManagementOnce(t *testing.T) {
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, write, "support-1"); err != nil {
 		t.Fatalf("Write with two cites: %v", err)
 	}
+	core.WaitSupportJudgements()
 	v1 := headOf(t, s, rec)
 	blockID, blockText := blockIDAt(t, v1, 1)
 	if blockText != "The court ruled that the merger may proceed, and the regulator appealed." {
 		t.Fatalf("citing text = %q; want the sentence without its citation tokens", blockText)
 	}
+	if head, _ := s.InboxHead(ctx, rec.OwnerID, rec.ComputerID, management); head != 0 {
+		t.Fatalf("management inbox head = %d; the commit must not send management its pairs", head)
+	}
 
-	got, err := s.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, management, 0, 10)
-	if err != nil || len(got) != 1 {
-		t.Fatalf("management inbox after the commit = %d records, %v; want one list", len(got), err)
+	// Each citation's quote check is recorded on the revision, and each
+	// pair is listed by its check memo.
+	checks := texturewrite.ChecksFrom(v1)
+	if len(checks) != 2 {
+		t.Fatalf("revision checks = %+v; want two", checks)
 	}
-	list := got[0]
-	if list.EmitterKind != types.CommitmentEmitterSystem || list.SenderInbox != rec.AgentID || list.Support == nil || len(list.Support.Pairs) != 2 {
-		t.Fatalf("the list = %+v; want one system record from %s with two pairs", list, rec.AgentID)
-	}
-	quotes := map[string]bool{}
-	for _, p := range list.Support.Pairs {
+	pairs := map[string]types.CitationCheck{}
+	for _, c := range checks {
+		if c.Outcome != quotematch.Matched || c.Tier != quotematch.TierExact || c.BlockID != blockID || c.Pair == "" || c.RefID == "" {
+			t.Fatalf("check %+v; want an exact match naming its pair", c)
+		}
+		check, found, err := s.CitationCheck(ctx, rec.OwnerID, rec.ComputerID, c.Pair)
+		if err != nil || !found || check.Outcome != string(quotematch.Matched) || !strings.HasPrefix(check.ListedBy, "texture-turn:") {
+			t.Fatalf("check memo for %s = %+v, %v, %v; want matched, listed by the Texture turn", c.Pair, check, found, err)
+		}
+		p := check.Pair
 		if p.DocID != rec.ChannelID || p.RevisionID != v1.RevisionID || p.BlockID != blockID || p.BlockHash != texturewrite.TextHash(blockText) || p.Text != blockText {
 			t.Fatalf("pair %+v does not name the citing block %s (%q) of %s", p, blockID, blockText, v1.RevisionID)
 		}
@@ -87,53 +144,53 @@ func TestCommitListsNewCitationPairsToManagementOnce(t *testing.T) {
 		if p.Key != texturewrite.PairKey(p.BlockHash, p.Cited.Hash, p.Cited.Quote) {
 			t.Fatalf("pair key %s is not the hash pair's key", p.Key)
 		}
-		quotes[p.Cited.Quote] = true
-		check, found, err := s.CitationCheck(ctx, rec.OwnerID, rec.ComputerID, p.Key)
-		if err != nil || !found || check.ListedBy != list.RecordID || check.Outcome != string(quotematch.Matched) {
-			t.Fatalf("check memo for %s = %+v, %v, %v; want matched, listed by %s", p.Key, check, found, err, list.RecordID)
-		}
+		pairs[p.Cited.Quote] = check
 	}
-	if !quotes["the merger may proceed"] || !quotes["appeal was filed on Monday"] {
-		t.Fatalf("pair quotes = %v; want the sources' own spans", quotes)
+	if len(pairs) != 2 {
+		t.Fatalf("pairs = %v; want the sources' own spans", pairs)
 	}
 
-	// The list must wake management: it is the one system record that asks
-	// a desk to act.
+	// Jev judged both after the commit; the failure reached this Texture's
+	// inbox, the pass only its memo.
+	if asked := jev.askedQuotes(); len(asked) != 2 {
+		t.Fatalf("Jev was asked about %v; want both pairs once", asked)
+	}
+	if v, found, _ := s.SupportVerdict(ctx, rec.OwnerID, rec.ComputerID, pairs["the merger may proceed"].Pair.Key); !found || v.Verdict != types.SupportSupported {
+		t.Fatalf("ruling verdict = %+v, %v; want supported", v, found)
+	}
+	failures, err := s.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, texture, 0, 10)
+	if err != nil || len(failures) != 1 || failures[0].Support == nil || len(failures[0].Support.Failures) != 1 ||
+		failures[0].Support.Failures[0].Key != pairs["appeal was filed on Monday"].Pair.Key || failures[0].SenderInbox != types.SupportSystemAgentID {
+		t.Fatalf("texture inbox = %+v, %v; want one failure from %s on the appeal citation", failures, err, types.SupportSystemAgentID)
+	}
 	wakes, err := s.ListUnprojectedActorWakes(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	woken := false
 	for _, w := range wakes {
-		if w.TargetAgentID == management && w.Kind == store.InboxRecordWakeKind {
+		if w.TargetAgentID == texture && w.Kind == store.InboxRecordWakeKind {
 			woken = true
 		}
 	}
 	if !woken {
-		t.Fatalf("no inbox wake for %s among %d wakes", management, len(wakes))
+		t.Fatalf("no inbox wake for %s among %d wakes", texture, len(wakes))
+	}
+	if head := headOf(t, s, rec); head.RevisionID != v1.RevisionID {
+		t.Fatal("judging minted a revision")
 	}
 
-	// Each citation's quote check is recorded on the revision.
-	checks := texturewrite.ChecksFrom(v1)
-	if len(checks) != 2 {
-		t.Fatalf("revision checks = %+v; want two", checks)
-	}
-	for _, c := range checks {
-		if c.Outcome != quotematch.Matched || c.Tier != quotematch.TierExact || c.BlockID != blockID || c.Pair == "" || c.RefID == "" {
-			t.Fatalf("check %+v; want an exact match naming its pair", c)
-		}
-	}
-
-	// A later commit that leaves the pairs unchanged lists nothing.
+	// A later commit that leaves the pairs unchanged asks Jev nothing.
 	other := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v1.RevisionID, Write: &yaegikernel.TextureWrite{Edits: "@replace b3\nA new closing line.", Why: "close"}})
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, other, "support-2"); err != nil {
 		t.Fatalf("unrelated Write: %v", err)
 	}
-	if head, _ := s.InboxHead(ctx, rec.OwnerID, rec.ComputerID, management); head != 1 {
-		t.Fatalf("management inbox head = %d after an unrelated commit; unchanged pairs were listed again", head)
+	core.WaitSupportJudgements()
+	if asked := jev.askedQuotes(); len(asked) != 2 {
+		t.Fatalf("Jev was asked about %v after an unrelated commit; unchanged pairs were judged again", asked)
 	}
 
-	// Editing the citing sentence makes a new pair.
+	// Editing the citing sentence makes a new pair, judged on its own.
 	v2 := headOf(t, s, rec)
 	edit := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: v2.RevisionID, Write: &yaegikernel.TextureWrite{
 		Edits: "@replace b2\nThe court said the merger may proceed {{cite https://example.org/court \"the merger may proceed\"}}.", Why: "tighten",
@@ -141,12 +198,12 @@ func TestCommitListsNewCitationPairsToManagementOnce(t *testing.T) {
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, edit, "support-3"); err != nil {
 		t.Fatalf("edit the citing sentence: %v", err)
 	}
-	got, _ = s.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, management, 1, 10)
-	if len(got) != 1 || got[0].Support == nil || len(got[0].Support.Pairs) != 1 {
-		t.Fatalf("records after the edit = %+v; want one list with the new pair", got)
+	core.WaitSupportJudgements()
+	if asked := jev.askedQuotes(); len(asked) != 3 || asked[2] != "the merger may proceed" {
+		t.Fatalf("Jev was asked about %v; want the edited sentence's new pair", asked)
 	}
-	for _, p := range list.Support.Pairs {
-		if got[0].Support.Pairs[0].Key == p.Key {
+	for _, c := range texturewrite.ChecksFrom(headOf(t, s, rec)) {
+		if c.Pair == pairs["the merger may proceed"].Pair.Key {
 			t.Fatal("an edited citing sentence kept its old pair key")
 		}
 	}
@@ -190,6 +247,7 @@ func TestNotCapturedCitationIsCheckedButNeverMemoized(t *testing.T) {
 	if _, err := h.CommitCellTextureAuthor(ctx, &rec, write, "uncaptured-1"); err != nil {
 		t.Fatalf("Write beside a legacy citation: %v", err)
 	}
+	core.WaitSupportJudgements()
 	v1 := headOf(t, s, rec)
 	checks := texturewrite.ChecksFrom(v1)
 	byRef := map[string]texturewrite.QuoteCheck{}
@@ -200,12 +258,22 @@ func TestNotCapturedCitationIsCheckedButNeverMemoized(t *testing.T) {
 	if !ok || legacy.Outcome != quotematch.NotCaptured || legacy.Pair != "" {
 		t.Fatalf("legacy citation check = %+v (all %+v); want not_captured with no pair", legacy, checks)
 	}
-	got, err := s.ListInboxRecords(ctx, rec.OwnerID, rec.ComputerID, managementInbox(rec), 0, 10)
-	if err != nil || len(got) != 1 || got[0].Support == nil || len(got[0].Support.Pairs) != 1 {
-		t.Fatalf("management list = %+v, %v; want only the captured citation's pair", got, err)
+	listed := 0
+	for _, c := range checks {
+		if c.Pair == "" {
+			continue
+		}
+		check, found, err := s.CitationCheck(ctx, rec.OwnerID, rec.ComputerID, c.Pair)
+		if err != nil || !found || check.Pair.Cited.Doc != "cap-court" || strings.Contains(check.Pair.Text, "nobody read") {
+			t.Fatalf("listed pair %+v, %v, %v; want only the captured citation's pair", check, found, err)
+		}
+		listed++
 	}
-	if p := got[0].Support.Pairs[0]; p.Cited.Doc != "cap-court" || strings.Contains(p.Text, "nobody read") {
-		t.Fatalf("listed pair %+v; the not-captured citation was listed", p)
+	if listed != 1 {
+		t.Fatalf("listed %d pairs; want only the captured citation's", listed)
+	}
+	if head, _ := s.InboxHead(ctx, rec.OwnerID, rec.ComputerID, managementInbox(rec)); head != 0 {
+		t.Fatalf("management inbox head = %d; the commit sent management a record", head)
 	}
 	if head := headOf(t, s, rec); head.RevisionID != v1.RevisionID {
 		t.Fatal("listing minted a revision")

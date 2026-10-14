@@ -48,7 +48,7 @@ func PairKey(blockHash, citedHash, quote string) string {
 }
 
 // CitingText is a block's words without its citations, the citing text a
-// pair hashes and management judges: whitespace collapsed, and no space
+// pair hashes and Jev judges: whitespace collapsed, and no space
 // left before closing punctuation where a citation token stood, so adding
 // or removing a citation beside a sentence keeps its hash.
 func CitingText(n texturedoc.Node) string {

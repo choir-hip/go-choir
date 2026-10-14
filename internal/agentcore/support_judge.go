@@ -2,23 +2,28 @@ package agentcore
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/google/uuid"
+
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // CandidateJudge asks the decision model (Jev) typed questions about one
-// state and returns its full answer distribution. Support judgement is its
-// one caller since C1e B1 deleted the frozen-candidate judgment (management's
-// Verify judges candidates now).
+// state and returns its full answer distribution. Support judgement and
+// intake labels are its callers since C1e B1 deleted the frozen-candidate
+// judgment (management's Verify judges candidates now).
 type CandidateJudge interface {
 	Judge(ctx context.Context, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error)
 }
@@ -31,16 +36,47 @@ func (rt *Runtime) SetCandidateJudge(judge CandidateJudge) {
 // candidateJudgmentModel names the model the gateway pins for judgments.
 const candidateJudgmentModel = "typesafe/jev-1.13"
 
-// Support judgement, the host half of management's choir.Judge (Cut 2 2a
-// (v)). A Texture commit lists its new citation pairs to management; a
-// management cell passes them to choir.Judge, and this resolves each one:
-// a judged pair returns its memoized verdict, a pair management judged
-// itself keeps its verdict, and the rest go to Jev, the gateway's pinned
-// decision model, in one call. Jev reads the committed sentence (from the
-// check memo the commit wrote) and the captured block (re-read and checked
-// against the Ref's hash), never text the cell supplied. The verdicts return
-// to the cell, which stages them; the cell's commit records them. Nothing
-// here writes: judging never edits text or mints a version.
+// Support judgement off every desk's turn
+// (docs/reports/support-judgement-to-jev-design-2026-10-14.md). A Texture
+// revision commit lists its new citation pairs by their check memos
+// (store.planSupportPairs) and, once the commit has returned, hands the
+// revision's pairs to JudgeRevisionSupport. A background job, bounded by
+// one runtime-wide semaphore like intake labels, judges every pair that is
+// listed and not yet judged: Jev reads the committed sentence (from the
+// check memo) and the captured block (re-read and checked against the
+// Ref's hash), never text a desk supplied. The verdicts are recorded as a
+// system act (CommitInboxRecords with Judge system:support): a pass writes
+// its memo only; a failure is one record per document to texture:<doc>,
+// which wakes the Texture to correct it with Write.
+//
+// Restarts: the job holds no durable obligation. A crash kills it, nothing
+// resumes it at boot, and its pairs stay pending (a check memo without a
+// verdict). A later live Texture commit that still cites a pending pair
+// judges it, as new work; there is no boot sweep.
+
+// Budgets. Vars so a test can shorten them.
+var (
+	supportJudgeConcurrency = 2
+	supportJudgeQueueWait   = 2 * time.Minute
+	supportJudgeCallTimeout = 90 * time.Second
+)
+
+// supportJudging is the runtime's support-judgement state: the semaphore
+// bounding concurrent jobs, the pairs in flight, the jobs running (for
+// tests and shutdown), and the legacy support_pairs records already handed
+// to Jev.
+type supportJudging struct {
+	once     sync.Once
+	sem      chan struct{}
+	inflight sync.Map
+	jobs     sync.WaitGroup
+	legacy   sync.Map
+}
+
+func (s *supportJudging) slots() chan struct{} {
+	s.once.Do(func() { s.sem = make(chan struct{}, supportJudgeConcurrency) })
+	return s.sem
+}
 
 // supportJudgeQuestion is the one typed question asked of each pair.
 var supportJudgeQuestion = map[string]any{
@@ -52,87 +88,159 @@ var supportJudgeQuestion = map[string]any{
 	"choices": []string{"yes", "no"},
 }
 
-// judgeSupportEgress serves ActionJudge for a management cell.
-func (rt *Runtime) judgeSupportEgress(ctx context.Context, exec toolregistry.ExecutionContext, payload json.RawMessage) (json.RawMessage, error) {
-	role := strings.TrimSpace(exec.Role)
-	if role == "" && exec.RunRecord != nil {
-		role = agentProfileForRun(exec.RunRecord)
+// JudgeRevisionSupport hands a committed revision's citation pairs to Jev
+// and returns at once: the judgement runs off the commit's path and never
+// blocks it. runID is the run that committed the revision, which carries
+// the Jev call's cost; revisionID names the commit. Pairs that are not
+// listed (no check memo), already judged, or in flight are skipped.
+func (rt *Runtime) JudgeRevisionSupport(ownerID, computerID, runID, revisionID string, pairs []types.CitationPair) {
+	if rt == nil || rt.store == nil || len(pairs) == 0 {
+		return
 	}
-	if role != agentprofile.Management {
-		return nil, fmt.Errorf("support judgement is management's")
-	}
-	if rt == nil || rt.store == nil {
-		return nil, fmt.Errorf("judge host unavailable")
-	}
-	var req yaegikernel.JudgePayload
-	if err := json.Unmarshal(payload, &req); err != nil {
-		return nil, fmt.Errorf("decode pairs: %w", err)
-	}
-	if len(req.Pairs) == 0 {
-		return nil, fmt.Errorf("no pairs: pass the pairs a support_pairs record lists (r.Support.Pairs)")
-	}
-	owner, computer := strings.TrimSpace(exec.OwnerID), strings.TrimSpace(exec.ComputerID)
-	verdicts := make([]types.SupportVerdict, len(req.Pairs))
-	var ask []int
-	for i, p := range req.Pairs {
-		key := strings.TrimSpace(p.Key)
-		if v, found, err := rt.store.SupportVerdict(ctx, owner, computer, key); err != nil {
-			return nil, err
-		} else if found {
-			v.Memo = true
-			verdicts[i] = v
-			continue
-		}
-		check, listed, err := rt.store.CitationCheck(ctx, owner, computer, key)
-		if err != nil {
-			return nil, err
-		}
-		if !listed {
-			return nil, fmt.Errorf("pair %q was not listed by a Texture commit; judge the pairs a support_pairs record lists", key)
-		}
-		pair := check.Pair
-		switch verdict := strings.TrimSpace(p.Verdict); verdict {
-		case "":
-			verdicts[i] = types.SupportVerdict{Key: key, Pair: &pair}
-			ask = append(ask, i)
-		case types.SupportSupported, types.SupportUnsupported:
-			why := strings.TrimSpace(p.Why)
-			if verdict == types.SupportUnsupported && why == "" {
-				return nil, fmt.Errorf("pair %s: an unsupported verdict needs Why, which the Texture reads to correct the sentence", key)
-			}
-			verdicts[i] = types.SupportVerdict{Key: key, Verdict: verdict, Why: why, Judge: agentprofile.Management, Pair: &pair}
-		default:
-			return nil, fmt.Errorf("pair %s: Verdict is %q; set %q or %q, or leave it empty for Jev", key, verdict, types.SupportSupported, types.SupportUnsupported)
+	seen := map[string]bool{}
+	var keys []string
+	for _, p := range pairs {
+		if key := strings.TrimSpace(p.Key); key != "" && !seen[key] {
+			seen[key] = true
+			keys = append(keys, key)
 		}
 	}
-	if len(ask) > 0 {
-		if err := rt.askJevForSupport(ctx, owner, verdicts, ask); err != nil {
-			return nil, err
-		}
+	if len(keys) == 0 {
+		return
 	}
-	return json.Marshal(verdicts)
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	rt.support.jobs.Add(1)
+	go func() {
+		defer rt.support.jobs.Done()
+		rt.judgeSupportJob(ownerID, computerID, strings.TrimSpace(runID), strings.TrimSpace(revisionID), keys)
+	}()
 }
 
-// askJevForSupport fills verdicts[ask] from one Jev call.
-func (rt *Runtime) askJevForSupport(ctx context.Context, owner string, verdicts []types.SupportVerdict, ask []int) error {
-	if rt.candidateJudge == nil {
-		return fmt.Errorf("no decision model (Jev) is bound on this computer; judge the pair yourself: set Verdict and Why on it and pass it again")
+// WaitSupportJudgements waits for the support judgements started so far.
+func (rt *Runtime) WaitSupportJudgements() {
+	if rt != nil {
+		rt.support.jobs.Wait()
 	}
+}
+
+func (rt *Runtime) judgeSupportJob(ownerID, computerID, runID, revisionID string, keys []string) {
+	slots := rt.support.slots()
+	wait := time.NewTimer(supportJudgeQueueWait)
+	select {
+	case slots <- struct{}{}:
+		wait.Stop()
+	case <-wait.C:
+		log.Printf("support judge: %s: no slot within %s; %d pairs stay pending for the next commit that cites them", revisionID, supportJudgeQueueWait, len(keys))
+		return
+	}
+	defer func() { <-slots }()
+
+	// Claim the pairs no other job is judging.
+	var claimed []string
+	for _, key := range keys {
+		flight := ownerID + "\x00" + computerID + "\x00" + key
+		if _, busy := rt.support.inflight.LoadOrStore(flight, struct{}{}); busy {
+			continue
+		}
+		claimed = append(claimed, key)
+		defer rt.support.inflight.Delete(flight)
+	}
+	if len(claimed) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), supportJudgeCallTimeout+30*time.Second)
+	defer cancel()
+	if err := rt.judgePendingSupport(ctx, ownerID, computerID, runID, revisionID, claimed); err != nil {
+		log.Printf("support judge: %s: %v; its pairs stay pending for the next commit that cites them", revisionID, err)
+	}
+}
+
+// judgePendingSupport judges the listed, unjudged pairs among keys and
+// records their verdicts.
+func (rt *Runtime) judgePendingSupport(ctx context.Context, ownerID, computerID, runID, revisionID string, keys []string) error {
+	var pending []types.SupportVerdict
+	for _, key := range keys {
+		if _, judged, err := rt.store.SupportVerdict(ctx, ownerID, computerID, key); err != nil {
+			return err
+		} else if judged {
+			continue
+		}
+		check, listed, err := rt.store.CitationCheck(ctx, ownerID, computerID, key)
+		if err != nil {
+			return err
+		}
+		if !listed {
+			continue
+		}
+		pair := check.Pair
+		pending = append(pending, types.SupportVerdict{Key: key, Pair: &pair})
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	if rt.candidateJudge == nil {
+		return fmt.Errorf("no decision model (Jev) is bound on this computer")
+	}
+	judged, err := rt.askJevForSupport(ctx, ownerID, runID, pending)
+	if err != nil {
+		return err
+	}
+	if len(judged) == 0 {
+		return nil
+	}
+	judgedKeys := make([]string, 0, len(judged))
+	for _, v := range judged {
+		judgedKeys = append(judgedKeys, v.Key)
+	}
+	sort.Strings(judgedKeys)
+	sum := sha256.Sum256([]byte(strings.Join(judgedKeys, "\n")))
+	req := types.CommitInboxRecordsRequest{
+		OwnerID: ownerID, ComputerID: computerID,
+		CommandID: "support-judge:" + revisionID + ":" + hex.EncodeToString(sum[:8]),
+		Judge:     types.SupportSystemAgentID, Verdicts: judged,
+	}
+	if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
+		return err
+	}
+	committed, err := rt.store.CommitInboxRecords(ctx, req)
+	if err != nil {
+		return fmt.Errorf("record verdicts: %w", err)
+	}
+	// Verdicts reach the published overlay of the stories they judge, off
+	// this path (Cut 2 2b).
+	if len(committed.Verdicts) > 0 {
+		rt.publishStoryVerdicts(ownerID, computerID, committed.Verdicts)
+	}
+	return nil
+}
+
+// askJevForSupport asks Jev about the pending pairs in one call and returns
+// those it judged. A pair whose cited block cannot be read, or no longer
+// hashes to its Ref, is not asked about; a pair Jev gives no answer for is
+// not returned. Both stay pending.
+func (rt *Runtime) askJevForSupport(ctx context.Context, owner, runID string, pending []types.SupportVerdict) ([]types.SupportVerdict, error) {
 	captures := rt.TextureCaptures()
 	if captures == nil {
-		return fmt.Errorf("the capture store is not configured, so Jev cannot read the cited blocks; judge the pair yourself: set Verdict and Why on it and pass it again")
+		return nil, fmt.Errorf("the capture store is not configured, so Jev cannot read the cited blocks")
 	}
 	byDoc := map[string]texturewrite.Capture{}
+	unreadable := map[string]error{}
 	pairs := map[string]any{}
 	questions := map[string]json.RawMessage{}
-	names := make(map[int]string, len(ask))
-	for n, i := range ask {
-		pair := verdicts[i].Pair
+	names := map[string]int{}
+	for i := range pending {
+		pair := pending[i].Pair
+		if err, bad := unreadable[pair.Cited.Doc]; bad {
+			log.Printf("support judge: pair %s stays pending: read the cited capture %s: %v", pair.Key, pair.Cited.Doc, err)
+			continue
+		}
 		capture, ok := byDoc[pair.Cited.Doc]
 		if !ok {
 			var err error
 			if capture, err = captures.CaptureBlocks(ctx, owner, pair.Cited.Doc); err != nil {
-				return fmt.Errorf("pair %s: read the cited capture %s: %w", pair.Key, pair.Cited.Doc, err)
+				unreadable[pair.Cited.Doc] = err
+				log.Printf("support judge: pair %s stays pending: read the cited capture %s: %v", pair.Key, pair.Cited.Doc, err)
+				continue
 			}
 			byDoc[pair.Cited.Doc] = capture
 		}
@@ -144,10 +252,11 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner string, verdicts 
 			}
 		}
 		if passage == "" || texturewrite.TextHash(passage) != pair.Cited.Hash {
-			return fmt.Errorf("pair %s: the cited block %s of %s is gone or changed since it was cited; judge it yourself or let the Texture re-cite it", pair.Key, pair.Cited.CID, pair.Cited.Doc)
+			log.Printf("support judge: pair %s stays pending: the cited block %s of %s is gone or changed since it was cited", pair.Key, pair.Cited.CID, pair.Cited.Doc)
+			continue
 		}
-		name := fmt.Sprintf("p%d", n+1)
-		names[i] = name
+		name := fmt.Sprintf("p%d", len(names)+1)
+		names[name] = i
 		pairs[name] = map[string]string{"sentence": pair.Text, "quote": pair.Cited.Quote, "cited_passage": passage, "source": firstNonEmpty(capture.Title, capture.URL)}
 		question := map[string]any{"instructions": fmt.Sprintf("Pair %s: does state.pairs.%s.cited_passage support what state.pairs.%s.sentence says where it cites that source? Judge support, not truth.", name, name, name)}
 		for k, v := range supportJudgeQuestion {
@@ -155,20 +264,23 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner string, verdicts 
 		}
 		raw, err := json.Marshal(question)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		questions[name] = raw
+	}
+	if len(questions) == 0 {
+		return nil, nil
 	}
 	state, err := json.Marshal(map[string]any{
 		"task":  "Each pair is a sentence from a news story and the source passage it cites (quote is the cited words). Judge whether the passage supports the sentence as cited.",
 		"pairs": pairs,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	raw, err := rt.candidateJudge.Judge(ctx, state, questions)
+	raw, err := callJudgeWithin(ctx, rt.candidateJudge, "", supportJudgeCallTimeout, state, questions)
 	if err != nil {
-		return fmt.Errorf("Jev: %w", err)
+		return nil, fmt.Errorf("Jev: %w", err)
 	}
 	var distribution struct {
 		Model   string `json:"model"`
@@ -176,16 +288,25 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner string, verdicts 
 			Choice        string             `json:"choice"`
 			Probabilities map[string]float64 `json:"probabilities"`
 		} `json:"answers"`
+		Usage jevUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &distribution); err != nil {
-		return fmt.Errorf("Jev: decode its answer: %w", err)
+		return nil, fmt.Errorf("Jev: decode its answer: %w", err)
 	}
-	judge := "jev:" + firstNonEmpty(distribution.Model, candidateJudgmentModel)
-	var missing []string
-	for _, i := range ask {
-		answer, ok := distribution.Answers[names[i]]
+	model := firstNonEmpty(distribution.Model, candidateJudgmentModel)
+	rt.recordJevCost(ctx, owner, runID, model, distribution.Usage, len(questions))
+	judge := "jev:" + model
+	ordered := make([]string, 0, len(names))
+	for name := range names {
+		ordered = append(ordered, name)
+	}
+	sort.Slice(ordered, func(a, b int) bool { return names[ordered[a]] < names[ordered[b]] })
+	var judged []types.SupportVerdict
+	for _, name := range ordered {
+		v := pending[names[name]]
+		answer, ok := distribution.Answers[name]
 		if !ok || (answer.Choice != "yes" && answer.Choice != "no") {
-			missing = append(missing, verdicts[i].Key)
+			log.Printf("support judge: pair %s stays pending: Jev gave no answer for it", v.Key)
 			continue
 		}
 		yes, known := answer.Probabilities["yes"]
@@ -195,7 +316,6 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner string, verdicts 
 				yes = 1
 			}
 		}
-		v := &verdicts[i]
 		v.Judge, v.PSupportedBP = judge, int64(math.Round(yes*10000))
 		if answer.Choice == "yes" && yes >= 0.5 {
 			v.Verdict = types.SupportSupported
@@ -203,10 +323,68 @@ func (rt *Runtime) askJevForSupport(ctx context.Context, owner string, verdicts 
 			v.Verdict = types.SupportUnsupported
 			v.Why = fmt.Sprintf("Jev judged the cited passage does not support the sentence (p(supported)=%.2f)", yes)
 		}
+		judged = append(judged, v)
 	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		return fmt.Errorf("Jev gave no answer for %s; call Judge again or judge them yourself", strings.Join(missing, ", "))
-	}
-	return nil
+	return judged, nil
 }
+
+// jevUsage is the token usage a Jev answer reports.
+type jevUsage struct {
+	InputTokens      int     `json:"input_tokens"`
+	OutputTokens     int     `json:"output_tokens"`
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	Cost             float64 `json:"cost"`
+}
+
+// jevJudgmentPhase is the run-progress phase of a Jev call's cost event;
+// llmcost reads it beside tool_loop.
+const jevJudgmentPhase = "jev_judgment"
+
+// recordJevCost appends a Jev call's token usage as a run-progress event on
+// the run that caused it, where /api/costs reads it. Best effort: a call
+// with no usage or no run records nothing.
+func (rt *Runtime) recordJevCost(ctx context.Context, ownerID, runID, model string, usage jevUsage, questions int) {
+	input, output := usage.InputTokens, usage.OutputTokens
+	if input == 0 && output == 0 {
+		input, output = usage.PromptTokens, usage.CompletionTokens
+	}
+	if rt == nil || rt.store == nil || runID == "" || (input == 0 && output == 0) {
+		return
+	}
+	payload, err := json.Marshal(map[string]any{
+		"phase": jevJudgmentPhase, "llm_model": model, "llm_provider": "openrouter",
+		"input_tokens": input, "output_tokens": output, "cost_usd": usage.Cost,
+		"purpose": "support_judgement", "questions": questions,
+	})
+	if err != nil {
+		return
+	}
+	ev := types.EventRecord{EventID: uuid.New().String(), Timestamp: time.Now().UTC(), RunID: runID, OwnerID: ownerID,
+		AgentID: types.SupportSystemAgentID, Kind: types.EventRunProgress, Phase: jevJudgmentPhase, Payload: payload}
+	if err := rt.store.AppendEvent(ctx, &ev); err != nil {
+		log.Printf("support judge: record Jev cost on run %s: %v", runID, err)
+	}
+}
+
+// judgeLegacySupportPairs hands the pairs of a support_pairs record minted
+// before support judgement left management to Jev, once per record per
+// process. The record is shown to management closed
+// (legacySupportPairsBody).
+func (rt *Runtime) judgeLegacySupportPairs(ownerID, computerID, runID string, rec types.CommitmentRecord) {
+	if rec.Support == nil || len(rec.Support.Pairs) == 0 {
+		return
+	}
+	if _, handed := rt.support.legacy.LoadOrStore(ownerID+"\x00"+computerID+"\x00"+rec.RecordID, struct{}{}); handed {
+		return
+	}
+	revisionID := strings.TrimSpace(rec.SubjectRefs["revision_id"])
+	if revisionID == "" {
+		revisionID = rec.RecordID
+	}
+	rt.JudgeRevisionSupport(ownerID, computerID, runID, revisionID, rec.Support.Pairs)
+}
+
+// legacySupportPairsBody is what management reads of a legacy support_pairs
+// record: its visible fate.
+const legacySupportPairsBody = "Closed: Jev judges citation support off your turn now; this record needs no answer."

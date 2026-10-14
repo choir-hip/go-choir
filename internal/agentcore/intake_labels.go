@@ -380,7 +380,14 @@ func (rt *Runtime) labelOneCapture(ctx context.Context, judge CandidateJudge, li
 // callIntakeJudge calls Jev on the intake rate scope within the per-call
 // timeout. It returns at the deadline even when the judge ignores it.
 func callIntakeJudge(ctx context.Context, judge CandidateJudge, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
-	callCtx, cancel := context.WithTimeout(ctx, intakeLabelCallTimeout)
+	return callJudgeWithin(ctx, judge, judgmentScopeIntakeLabels, intakeLabelCallTimeout, state, questions)
+}
+
+// callJudgeWithin calls Jev on a rate scope ("" for the judge's default
+// bucket) within timeout. It returns at the deadline even when the judge
+// ignores it.
+func callJudgeWithin(ctx context.Context, judge CandidateJudge, scope string, timeout time.Duration, state json.RawMessage, questions map[string]json.RawMessage) (json.RawMessage, error) {
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	type result struct {
 		raw json.RawMessage
@@ -389,8 +396,8 @@ func callIntakeJudge(ctx context.Context, judge CandidateJudge, state json.RawMe
 	done := make(chan result, 1)
 	go func() {
 		var r result
-		if scoped, ok := judge.(ScopedCandidateJudge); ok {
-			r.raw, r.err = scoped.JudgeScoped(callCtx, judgmentScopeIntakeLabels, state, questions)
+		if scoped, ok := judge.(ScopedCandidateJudge); ok && scope != "" {
+			r.raw, r.err = scoped.JudgeScoped(callCtx, scope, state, questions)
 		} else {
 			r.raw, r.err = judge.Judge(callCtx, state, questions)
 		}

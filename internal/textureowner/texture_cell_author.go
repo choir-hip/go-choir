@@ -349,6 +349,12 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 			return "", fmt.Errorf("apply atomic Texture turn: %w", applyErr)
 		}
 		h.recordTextureAudit(ctx, "revision_committed", rec.OwnerID, doc.ComputerID, doc.TrajectoryID, doc.DocID, rev.RevisionID, applied.Receipt.CommandID, applied.Receipt.CommandDigest, applied.Trajectory.LifecycleVersion)
+		// The commit listed its new citation pairs; Jev judges them off
+		// this path (support-judgement-to-jev-design-2026-10-14). The
+		// hand-off returns at once; a failure reaches this Texture's inbox.
+		if h.Core != nil {
+			h.Core.JudgeRevisionSupport(rec.OwnerID, doc.ComputerID, rec.RunID, rev.RevisionID, args.Citations)
+		}
 	} else if err := h.Store.CreateRevisionWithSourceGraph(ctx, rev, graph); err != nil {
 		return "", fmt.Errorf("create Texture revision: %w", err)
 	}

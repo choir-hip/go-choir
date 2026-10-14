@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 const ProtocolVersion = 1
@@ -39,10 +37,6 @@ const (
 	ActionListEvidence      BrokerAction = "list_evidence"
 	ActionGetRunMemoryEntry BrokerAction = "get_run_memory_entry"
 	ActionProductAPI        BrokerAction = "product_api"
-	// ActionJudge asks the decision model (Jev, through the gateway) whether
-	// listed citation pairs are supported: management's choir.Judge (Cut 2
-	// 2a (v)).
-	ActionJudge BrokerAction = "judge"
 	// ActionStories pages the computer's story library, newest first:
 	// management's choir.Stories (L2a A2).
 	ActionStories BrokerAction = "stories"
@@ -199,13 +193,6 @@ type ProductAPIPayload struct {
 	Body   json.RawMessage `json:"body,omitempty"`
 }
 
-// JudgePayload defines ActionJudge: the citation pairs to judge, as a
-// support list named them. A pair with Verdict set is management's own
-// judgement and is not sent to Jev.
-type JudgePayload struct {
-	Pairs []types.CitationPair `json:"pairs"`
-}
-
 // StoriesPayload defines ActionStories: a page of at most Limit stories
 // updated before Before (RFC 3339; empty for the newest).
 type StoriesPayload struct {
@@ -314,7 +301,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionJudge, ActionStories:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)
