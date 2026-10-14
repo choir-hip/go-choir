@@ -204,12 +204,15 @@ type PoolMember struct {
 // whether they meet the bar; gpt-6-luna sits last so a thread that fails
 // over from it wraps to deepseek. step-5-preview-free stays catalog-only
 // until its upstream answers (429 "endpoint unavailable" when probed).
+// longcat-2.5-preview-free was measured and left the pool on 2026-10-14:
+// 21.8 s median and 115 s p90 per call on the paper computer, up to 932 s,
+// against 2.5 s and 10 s for gpt-6-luna; a management turn on it held the
+// paper for 38 minutes (docs/evidence/model-latency-paper-2026-10-14.md).
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
 			{Provider: "opencode-go", Model: "deepseek-v4.1-flash"},
 			{Provider: "opencode-go", Model: "cat-jam-free"},
-			{Provider: "opencode-go", Model: "longcat-2.5-preview-free"},
 			{Provider: "chatgpt", Model: "gpt-6-luna"},
 		},
 	}
