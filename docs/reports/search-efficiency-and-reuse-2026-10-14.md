@@ -153,6 +153,97 @@ Serper ~$0.001 per call):
 This is the largest lever by two orders of magnitude, and it should land
 before any account is refilled.
 
+### 4.1 Slice 4 design (owner, 2026-10-14: "efficiency before scaling")
+
+The owner will spend more on search once it is efficient, and wants more
+resources for important stories, so paid providers stay reachable: the
+router escalates to them when the free answers fall short, it does not
+remove them. Mutation class red (gateway provider calls). Contained to
+`internal/gateway/searchplane` (router, config, health DB), the gateway
+search handler and its log line; one guest tolerance change (below).
+
+- **Tiers.** Each provider has a tier and a relative cost
+  (`CHOIR_SEARCH_PROVIDER_TIERS`, merged over defaults): `free`
+  (keenable, searxng, brave within its pacing), `paid` with a cost
+  (serper, parallel, exa, tavily, serpapi, cheapest first by list price),
+  `constrained` (chatgpt: shares the ChatGPT/Codex usage limit with
+  inference; always last). A provider not named is `paid` at the highest
+  cost: an unknown provider never spends by default.
+- **Free first.** A search starts every eligible free provider at once (as
+  today). Eligible paid providers are held in reserve; the start line
+  names them (`reserve`, additive), they are not cooling and not in N.
+- **Escalation rule** (one place, `shortfall` in the router). With
+  `min = min(MinResults, max_results)`, the search escalates by **one**
+  paid provider, cheapest first, when fewer than `min` distinct URLs have
+  arrived and either (a) every started call has answered (`short`; `free_failed`
+  when none answered with a result; `no_free` when no free provider could
+  start), or (b) the step's soft deadline passed (`slow`). After each paid
+  provider the rule is evaluated again, up to `MaxPaid` paid providers per
+  search. No paid provider starts later than the escalation window after
+  the search began. A `deep` search (optional request field
+  `depth: "deep"`, which the guest may send later) starts the cheapest
+  paid provider with the free tier and uses `DeepMinResults` /
+  `DeepMaxPaid`.
+- **Daily caps.** Each provider may have a calls-per-day cap
+  (`CHOIR_SEARCH_PROVIDER_DAILY_CAPS`). Every provider call is counted in
+  the health DB (`provider_daily_calls`, one row per provider per UTC
+  day): one state authority, durable across restarts, a new day at UTC
+  midnight. A call reserves its count atomically before it is sent, so
+  concurrent searches cannot overshoot a cap. A capped provider is
+  skipped with state and reason `capped`: not a failure, no strike, not in
+  N. Free providers have no cap by default.
+- **Stream shape.** Additive only: start line `routing`, `reserve`;
+  `cooling[]` may carry `capped`; an escalated provider's arrival is an
+  ordinary `provider` line; the final line's `total` counts every provider
+  started (escalated ones included) and gains `escalated[]`
+  (`provider`, `reason`). No new line type: the guest decoder rejects
+  unknown types.
+- **Guest tolerance.** The guest's search store takes N from the start
+  line. An arrival from a provider not named there (an escalated one) is
+  appended to its providers, so "M of N" stays M ≤ N. Old guests still work
+  (they show M of N with M possibly above N until updated).
+- **Log line.** Per search: `routing=budget|fanout`, `escalated=` (each
+  step `reason:provider`, or `no`), `paid_calls=` (paid calls this request
+  caused; 0 for a cache hit or join), `today=[provider=calls/cap …]` for
+  the providers this search called or skipped as capped.
+- **Ops.** `GET /provider/v1/search/health` gains `daily_calls`:
+  per provider, today's UTC count, its cap and its tier.
+- **Rollback switch.** `CHOIR_SEARCH_ROUTING=fanout` restores fan-out to
+  every eligible provider; `CHOIR_SEARCH_PROVIDER_DAILY_CAPS=none` removes
+  the caps. Both together are today's behaviour (counts are still
+  recorded; they change nothing).
+- **Per-run budget (not built).** The guest sends only `query` and
+  `max_results`; the gateway sees the computer, not the run. The soft
+  per-run budget needs the guest to send `run_id` (the desk run that owns
+  the session, from `startSearch`'s caller) in the request body; the
+  gateway would then count searches per (computer, run) and add
+  `budget_exceeded: {searches, budget}` to the start and final lines
+  after the threshold (12), and the guest would surface it in the cell's
+  search stub. Skipped in this slice.
+
+#### Failure modes this slice must not have
+
+1. The free tier is sufficient and a paid provider is called anyway.
+2. The free tier falls short and no paid provider is reached (an important
+   story starves), including when a free provider hangs until its timeout.
+3. Escalation starts every paid provider at once, or not cheapest first,
+   or exceeds `MaxPaid`.
+4. A cap is overshot by concurrent searches (check then act), counts are
+   lost on restart, or the day rolls at local rather than UTC midnight.
+5. A capped provider is recorded as a failure or strike, counted in N, or
+   skipped without the reason `capped` on the stream and in the log.
+6. A paid provider benched, paced or capped by the time it is reached is
+   called anyway, or stops escalation instead of yielding to the next.
+7. A cache hit or join calls a provider or counts a call; a `deep` search
+   is answered from a cached ordinary one.
+8. The stream changes shape incompatibly for the guest (new line type,
+   `total` below the arrivals, removed fields).
+9. The rollback switch does not restore fan-out to every eligible provider.
+10. Escalation outlives the stream bound, so escalated arrivals are cut
+    and their calls charged for nothing.
+11. Shared state (route, counts) races between the coordinator, the cache
+    joiners and the handler.
+
 ## 5. Horizon: local embeddings and a retrieval index over the graph
 
 The owner wants local embeddings (no cloud dependency) and "Hadoop"-scale
