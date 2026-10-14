@@ -49,8 +49,46 @@ finish:
     room for test computers; memory per computer falls toward its live
     working set; model input per published story version falls; and the
     owner's cost page reports dollars.
-  artifact: the assessment's levers landed with deployed receipts; /api/costs priced; a before-and-after measurement of research input per call on the paper computer
+  artifact: >-
+    The scaling-cost report (owner 2026-10-14: "a real understanding of
+    the costs of scaling choir. As we scale sources, how does that scale
+    quantity of stories (should be sublinear). How does that scale
+    quantity of agents? And llm token costs? And ram, storage, cpu? We
+    need to optimize and bug fix before we can speak with confidence").
+    It is a measured curve, not a projection from one point. As the
+    number of sources grows, it reports:
+    - captures per hour;
+    - stories opened and updated per hour (expected sublinear);
+    - live and dormant research threads;
+    - LLM tokens per hour, by desk and model;
+    - guest RAM (and how much of it is the store, the runtime and the
+      yaegi sessions), state-dir growth and CPU-seconds.
+
+    Two host-level results go with it:
+    - how many computers one host carries when oversubscribed (the
+      owner's earlier tests suggest many; yaegi is the wildcard);
+    - which bottleneck binds first.
+
+    It is measured twice: provisional now, and authoritative after
+    levers 1-2, 6 and L2a's dormancy have landed. Also delivered: the
+    landed levers with deployed receipts, and /api/costs priced once the
+    owner supplies real prices.
   acceptance:
+    - action: >-
+        The source sweep. Minted test computers run the same source mix at
+        N = 1, 4, 14 and 28 sources for a fixed window each, one at a time
+        (tracers run sequentially). The script reads /api/costs, the
+        census, vmctl's per-guest RSS, host CPU per Firecracker process and
+        state-dir growth. The paper computer gives a second point at 14.
+      proves: the exponent of stories, threads, tokens, RAM, disk and CPU against sources, with the bottleneck named
+      evidence_class: deployed proof
+    - action: >-
+        An oversubscription probe: k idle and k busy test computers on the
+        host, raised until pressure crosses the reclaim threshold, with
+        host RSS, memory-pressure stall and the yaegi share per guest read
+        at each step.
+      proves: computers per host for each workload shape, and whether yaegi sessions or the store dominate guest RAM
+      evidence_class: deployed proof
     - action: read vmctl's reclaim decisions on staging after levers 1 and 2
       proves: every decision names its signals; no hibernation answers a stall-only sample; test computers are reclaimed before free and paid ones
       evidence_class: deployed proof
@@ -121,7 +159,13 @@ now:
     main_uncertainty: which signal tripped the 21:00:10 UTC reclaim; lever 1 attributes only decisions after its deploy
     next_observation: vmctl list shows warmness_class test for example.com-owned computers after 6c6bc1aa deploys
   blocker_or_risk: lever 7 needs the per-token prices of deepseek-v4.1-flash, gpt-6-luna and longcat-2.5-preview-free from the owner or the provider; lever 6 changes every desk's cell contract
-  next_action: verify the test tier on staging; then the lever-6 design note
+  next_action: >-
+    The lever-6 design is in panel. Next is a provisional scaling-cost
+    read from existing data (the paper computer's 14-source costs,
+    captures, stories, RSS and state). After the overnight deploys land:
+    the source sweep, then the oversubscription probe. Candidate levers
+    to evaluate there: KSM page merging across identical guests, the
+    balloon, and the per-session yaegi footprint.
 
 receipts:
   - id: LR-lever-2
