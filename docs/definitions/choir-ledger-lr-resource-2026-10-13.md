@@ -135,13 +135,28 @@ boundaries:
 now:
   status: working
   slice: >-
-    Lever 6 was accepted 4 of 4 (c0a1e413) and is built on branch
-    lr-lever6 (0d9d4c63, c9fb12d6; deploy lane position 3). procmem, the
-    in-guest per-process memory read the report needs, ships in the next
-    deploy. The provisional scaling read is
-    docs/reports/lr-scaling-cost-provisional-2026-10-14.md.
-  source_ref: c9fb12d6
-  deploy_identity: staging 6c6bc1aa
+    2026-10-14 06:00 UTC. Deployed tonight:
+    - d5139fd6 (CI 38515928379 success; 244 of 244 health probes 200;
+      rollback tag lr-pre-stack-0510): lever 6 (choir.CellOut), lever 7
+      (model prices, docs/evidence/model-prices-2026-10-14.md),
+      longcat-2.5-preview-free out of the default pool
+      (docs/evidence/model-latency-paper-2026-10-14.md: 21.8 s p50,
+      115 s p90, 932 s max), support judgement moved to Jev off
+      management's turn, the research-prompt renderer and prompt fixes.
+      Acceptance on a fresh computer (stack-paper-0527): 6 stories in
+      5 minutes, all auto-published; /api/costs priced 173 calls at
+      $0.54 with 0 unpriced, Jev included; no LongCat calls; no
+      support_pairs record reached management.
+    - 11a94193 (342 of 342 probes 200; rollback tag lr-pre-balloon-0540):
+      the C1e B1 capsule-gate fix, virtio balloon free page reporting
+      (vmctl restarted 05:47:58 with VM_BALLOON_FREE_PAGE_REPORTING=1; a
+      new VM's fc-config.json carries the balloon and boots), and the
+      soft Go memory limits (daemon half of guest RAM, desk workers 1/16).
+    Next: real snapshot hibernation (S3, branch s3-snapshot-hibernate,
+    tested), then its credential-window follow-up; the balloon's host
+    RSS return measured on a fresh computer against an older one.
+  source_ref: 11a94193
+  deploy_identity: staging 11a94193
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LR-1
