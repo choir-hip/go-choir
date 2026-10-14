@@ -25,6 +25,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
+	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/health"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
@@ -168,6 +169,9 @@ func RunZotSession(stdin io.Reader, stdout, stderr io.Writer) int {
 // Run starts the autoputer service.
 func Run() {
 	bootMark("process_main_entry")
+	// First, before anything opens Dolt: Dolt sizes its caches from the Go
+	// memory limit once, at first use (docs/reports/lr-guest-memory-return-2026-10-14.md).
+	log.Printf("autoputer: gomemlimit %s", gomemlimit.ApplyDaemon())
 	cfg := LoadConfig()
 
 	s := server.NewServer("autoputer", cfg.Port)

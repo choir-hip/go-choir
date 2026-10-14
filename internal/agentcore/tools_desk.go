@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -359,6 +360,9 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					KeepCellOutput: true,
 				},
 				ProcessGroup: true,
+				// Workers get a clean environment; an operator's worker
+				// GOMEMLIMIT override is the one memory setting passed through.
+				ExtraEnv: gomemlimit.WorkerEnv(os.Getenv),
 				// Emit is a durable host write: the worker's ActionEmit crosses
 				// the session socket and lands here. Scope is derived per-call
 				// from the evaluating ctx (a worker persists across cells, so

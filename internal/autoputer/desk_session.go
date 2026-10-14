@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -28,6 +29,10 @@ func RunDeskSessionWorker() int {
 		fmt.Fprintf(os.Stderr, "desk-session: memory cap unavailable: %v\n", err)
 		return 2
 	}
+	// Soft Go limit beside the hard RLIMIT_AS cap: the GC collects before
+	// the heap doubles, so a finished cell's garbage does not sit in guest
+	// memory. The daemon's boot log names the value (desk_worker_limit_mib).
+	gomemlimit.ApplyDeskWorker()
 	yaegikernel.ExecuteWorkerSessionConn(conn, cfg)
 	return 0
 }

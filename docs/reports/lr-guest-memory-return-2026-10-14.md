@@ -188,10 +188,13 @@ All on minted test computers, never on the paper or owner computer.
 6. Control: set `VM_BALLOON_FREE_PAGE_REPORTING=0` on a test deploy (or use
    a computer booted before the change), repeat 2 to 5 on computer B.
    Expected: host RSS stays near the peak.
-7. GOMEMLIMIT: the daemon's boot log names its limit (`gomemlimit:
-   role=daemon`); worker stderr names each worker's. procmem shows main and
-   worker RSS before and after the burst; compare with the previous
-   deploy's numbers in the LR reports.
+7. GOMEMLIMIT: the daemon's boot log line `autoputer: gomemlimit
+   role=daemon mem_total_mib=… limit_mib=… desk_worker_limit_mib=…
+   dolt_budget=default dolt_node_cache_mib=256` names its limit, the limit
+   each worker computes from the same `MemTotal`, and the Dolt budget
+   (workers log nothing: their stderr is a buffer read only on spawn
+   failure). procmem shows main and worker RSS before and after the burst;
+   compare with the previous deploy's numbers in the LR reports.
 8. Optional Dolt probe on a third test computer with
    `CHOIR_DOLT_CACHE_NODE_MIB=64` in the guest env (needs a guest image
    built with that env): compare boot replay time and main-process RSS.
