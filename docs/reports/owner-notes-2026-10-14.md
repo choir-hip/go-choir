@@ -156,3 +156,30 @@ separate. Sent to the programming-engine design
 first-class programme type. It also refines the tagline: "multiplayer
 intelligence for the learning economy" is literal, because the learner
 is the human too.
+
+## 12. Autoradio: context over invariants, response over schedule, elevation over engagement
+
+Owner rulings on the programming-engine design
+(`docs/reports/autoradio-programming-engine-2026-10-14.md`):
+
+- **Contextual mix.** The voice mix has no hard rules ("≥50% human",
+  "≤4 min AI"). Briefings drawn from private, text-only state will be
+  mostly AI-voiced; other listening may be hours of human media.
+- **Response over schedule.** Hours of precomputed programme can't be
+  promised, because "tell me about X" can arrive at any moment. The
+  system acknowledges at once, jumps to the nearest retrievable adjacent
+  material (real audio if any, else TTS of precomputed text), and
+  generates the continuation in the background from the personal object
+  graph, the Autopaper object graph and the web.
+- **Learnings are records the listener can see.** What the system learns
+  about the listener (e.g. "will let this play uninterrupted for N
+  minutes") is a set of precommitment records on the listener's own
+  computer. The listener can read them and answer with instructions.
+- **Elevation, not engagement maximisation.** A listener can ask to be
+  challenged, or given less of what their lower self would demand. The
+  stated aspiration governs; engagement is one signal.
+- **Programmes wither.** Named programmes are a temporary inductive
+  bias. The end state is one stream where any source can interrupt any
+  other when something important emerges.
+
+Lead: sent back to the report's author for revision of §1, §2, §5 and §7.
