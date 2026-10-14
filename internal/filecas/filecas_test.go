@@ -69,3 +69,62 @@ func TestSealOpenChunk(t *testing.T) {
 		t.Fatal("wrong computer accepted")
 	}
 }
+
+// Failure mode (artifact-store-grows-12gb-a-day-2026-10-14): a random nonce
+// gave every re-seal of an unchanged chunk a new CAS digest, so each guest boot
+// stored its whole Files tree again. Sealing must be a function of (key,
+// computer, plaintext) so the platform's immutable PUT deduplicates.
+func TestSealChunkIsDeterministicPerComputer(t *testing.T) {
+	key := bytes.Repeat([]byte{7}, 32)
+	first, firstDigest, err := SealChunk(key, "computer-1", []byte("private chunk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, againDigest, err := SealChunk(key, "computer-1", []byte("private chunk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstDigest != againDigest || !bytes.Equal(first, again) {
+		t.Fatal("re-sealing an unchanged chunk produced a new ciphertext")
+	}
+	_, otherChunk, err := SealChunk(key, "computer-1", []byte("private chunk 2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, otherComputer, err := SealChunk(key, "computer-2", []byte("private chunk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, otherKey, err := SealChunk(bytes.Repeat([]byte{8}, 32), "computer-1", []byte("private chunk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if otherChunk == firstDigest || otherComputer == firstDigest || otherKey == firstDigest {
+		t.Fatal("distinct plaintext, computer or key shared a digest")
+	}
+	// Distinct plaintexts must never share a nonce (nonce reuse under one key
+	// breaks the AEAD): the nonce is the 24-byte prefix.
+	a, _, _ := SealChunk(key, "computer-1", []byte("aaaa"))
+	b, _, _ := SealChunk(key, "computer-1", []byte("aaab"))
+	if bytes.Equal(a[:24], b[:24]) {
+		t.Fatal("distinct plaintexts shared a nonce")
+	}
+	plain, err := OpenChunk(key, "computer-1", firstDigest, first)
+	if err != nil || string(plain) != "private chunk" {
+		t.Fatalf("open = %q, %v", plain, err)
+	}
+}
+
+// Chunks sealed before the change carry random nonces; they must still open.
+func TestOpenChunkAcceptsRandomNonceChunks(t *testing.T) {
+	key := bytes.Repeat([]byte{7}, 32)
+	nonce := bytes.Repeat([]byte{0x5a}, 24)
+	sealed, digest, err := sealChunkWithNonce(key, "computer-1", nonce, []byte("legacy chunk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := OpenChunk(key, "computer-1", digest, sealed)
+	if err != nil || string(plain) != "legacy chunk" {
+		t.Fatalf("legacy open = %q, %v", plain, err)
+	}
+}

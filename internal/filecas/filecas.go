@@ -4,7 +4,7 @@ package filecas
 import (
 	"bytes"
 	"crypto/cipher"
-	"crypto/rand"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -22,6 +22,7 @@ import (
 const (
 	manifestVersion = 1
 	chunkKeyInfo    = "choir/filecas/v1/chunk"
+	chunkNonceInfo  = "choir/filecas/v1/chunk-nonce"
 )
 
 // FileEntry describes one file in an encrypted file manifest. Chunks address
@@ -140,14 +141,51 @@ func (m *Manifest) rootDigest() (string, error) {
 
 // SealChunk encrypts one chunk and returns the nonce-prefixed ciphertext and
 // its SHA-256 CAS digest.
+//
+// The nonce is synthetic: HMAC-SHA256 of the plaintext under a key derived
+// from the DEK and computer ID (separate from the encryption key), truncated
+// to the 24-byte XChaCha20 nonce. Sealing is therefore deterministic per
+// (DEK, computer, plaintext): an unchanged chunk re-sealed after a guest
+// reboot has the same CAS digest and the platform stores it once. A random
+// nonce made every boot re-store the whole Files tree
+// (docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md). Distinct
+// plaintexts get distinct nonces except with negligible (2^-96 birthday)
+// probability, so the AEAD never reuses a nonce across messages. The cost is
+// that the CAS holder learns when two chunks of one computer are identical;
+// it already stores that computer's plaintext manifests (paths, sizes, chunk
+// lists). Nothing is shared across computers or keys. Chunks sealed earlier
+// with random nonces still open: OpenChunk reads the nonce from the prefix.
 func SealChunk(dek []byte, computerID string, chunk []byte) ([]byte, string, error) {
+	nonce, err := chunkNonce(dek, computerID, chunk)
+	if err != nil {
+		return nil, "", err
+	}
+	return sealChunkWithNonce(dek, computerID, nonce, chunk)
+}
+
+// chunkNonce derives the synthetic nonce for chunk.
+func chunkNonce(dek []byte, computerID string, chunk []byte) ([]byte, error) {
+	if len(dek) != chacha20poly1305.KeySize || strings.TrimSpace(computerID) == "" {
+		return nil, fmt.Errorf("filecas: invalid key or computer ID")
+	}
+	key := make([]byte, sha256.Size)
+	defer clear(key)
+	reader := hkdf.New(sha256.New, dek, []byte(computerID), []byte(chunkNonceInfo))
+	if _, err := io.ReadFull(reader, key); err != nil {
+		return nil, fmt.Errorf("filecas: derive chunk nonce key: %w", err)
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write(chunk)
+	return mac.Sum(nil)[:chacha20poly1305.NonceSizeX], nil
+}
+
+func sealChunkWithNonce(dek []byte, computerID string, nonce, chunk []byte) ([]byte, string, error) {
 	aead, err := chunkCipher(dek, computerID)
 	if err != nil {
 		return nil, "", err
 	}
-	nonce := make([]byte, chacha20poly1305.NonceSizeX)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, "", fmt.Errorf("filecas: random nonce: %w", err)
+	if len(nonce) != chacha20poly1305.NonceSizeX {
+		return nil, "", fmt.Errorf("filecas: invalid nonce size")
 	}
 	sealed := make([]byte, 0, len(nonce)+len(chunk)+aead.Overhead())
 	sealed = append(sealed, nonce...)

@@ -753,3 +753,102 @@ func TestFileSyncFreshVolumeMarkerOutsideTreeAndClearedWithoutRoot(t *testing.T)
 		t.Fatalf("first sync of a computer with no root: %v", err)
 	}
 }
+
+// Failure mode (artifact-store-grows-12gb-a-day-2026-10-14): the sync cache
+// is in memory, so the first sync after every boot re-sealed the whole Files
+// tree. With random nonces each re-seal was a new CAS object: one computer
+// stored its 167 MB tree 19 times a day. A rebooted guest (a fresh fileSync
+// over the same tree and key) must name the same chunk digests, so the
+// platform's immutable PUT stores nothing new.
+func TestFileSyncRebootReusesChunkDigests(t *testing.T) {
+	root := t.TempDir()
+	// Non-periodic bytes: identical chunks would (correctly) share a digest.
+	big := make([]byte, 2*fileSyncChunkSize+17)
+	for i := range big {
+		big[i] = byte(i * 31)
+	}
+	for i := 0; i < len(big); i += fileSyncChunkSize {
+		big[i] = byte(i / fileSyncChunkSize)
+	}
+	if err := os.WriteFile(filepath.Join(root, "big.bin"), big, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("unchanged across boots"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	stored := make(map[string]int)
+	manifests := map[string][]byte{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/internal/computers/files/chunks/"):
+			_, _ = io.Copy(io.Discard, r.Body)
+			mu.Lock()
+			stored[strings.TrimPrefix(r.URL.Path, "/internal/computers/files/chunks/")]++
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+		case r.Method == http.MethodPut && r.URL.Path == "/internal/computers/files/root":
+			var request struct {
+				Manifest string `json:"manifest"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Error(err)
+			}
+			manifest, err := filecas.ParseManifest([]byte(request.Manifest))
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			manifests[manifest.Root] = []byte(request.Manifest)
+			mu.Unlock()
+			w.WriteHeader(http.StatusCreated)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i + 1)
+	}
+	boot := func() fileSyncResult {
+		cipher, err := computerevent.NewPrivateArtifactCipher("computer-test", key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sync := newFileSync(root, server.URL, func(context.Context) (string, error) { return "file-sync-token", nil }, "computer-test", cipher, nil, nil)
+		result, err := sync.syncOnce(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	first := boot()
+	mu.Lock()
+	distinctAfterFirst := len(stored)
+	mu.Unlock()
+	if distinctAfterFirst != 4 {
+		t.Fatalf("first boot stored %d distinct chunks, want 4", distinctAfterFirst)
+	}
+	second := boot()
+	third := boot()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(stored) != distinctAfterFirst {
+		t.Fatalf("reboots created %d new chunk digests", len(stored)-distinctAfterFirst)
+	}
+	firstManifest, _ := filecas.ParseManifest(manifests[first.root])
+	for _, result := range []fileSyncResult{second, third} {
+		manifest, err := filecas.ParseManifest(manifests[result.root])
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range manifest.Files {
+			if strings.Join(manifest.Files[i].Chunks, ",") != strings.Join(firstManifest.Files[i].Chunks, ",") {
+				t.Fatalf("file %s re-sealed under new digests after reboot", manifest.Files[i].Path)
+			}
+		}
+	}
+}
