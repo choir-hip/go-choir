@@ -35,6 +35,15 @@ type CommitInboxRecordsRequest struct {
 	// command.
 	Judge    string           `json:"judge,omitempty"`
 	Verdicts []SupportVerdict `json:"verdicts,omitempty"`
+	// Tasks are the management task rows a delegation opens (management
+	// delegation S2a): each commits with the Cast into its inbox, which
+	// must be in Records and name the row's leased captures.
+	Tasks []ManagementTask `json:"tasks,omitempty"`
+	// StoryLibraryHead is the story-library head the committing run last
+	// read with choir.Stories() (R2-5). When set, a Cast to texture:new is
+	// refused if the library moved past it; nil skips the check (callers
+	// that are not a management cell).
+	StoryLibraryHead *int64 `json:"story_library_head,omitempty"`
 }
 
 // InboxRecordReceipt is what the store stamped on one committed record.

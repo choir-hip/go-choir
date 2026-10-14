@@ -157,6 +157,12 @@ type CommitmentProvenance struct {
 	ContextRef  string `json:"context_ref,omitempty"`
 	CommittedAt string `json:"committed_at"`
 	ResolvedAt  string `json:"resolved_at,omitempty"`
+	// ActingTask and ActingRunID name the management task and its run when
+	// a task authored a record management sends (management delegation
+	// R2-1, §4.2: the delegated sender). The host derives both from the
+	// run; the store requires them on every record a task scope commits.
+	ActingTask  string `json:"acting_task,omitempty"`
+	ActingRunID string `json:"acting_run_id,omitempty"`
 }
 
 // CommitmentRevision is the optional post-score model update: which
@@ -288,6 +294,10 @@ type CommitmentRecord struct {
 	// (feed, to texture:<doc>) or declined (decline, to source:<id>), and
 	// why.
 	Disposition *CommitmentDisposition `json:"disposition,omitempty"`
+	// TaskOutcome is the body of a management task's final Report
+	// (management delegation R2-8), minted by the host from the task inbox
+	// to management:<owner>.
+	TaskOutcome *CommitmentTaskOutcome `json:"task_outcome,omitempty"`
 }
 
 // CastHypothesis is one hypothesis a Cast opens. The store assigns ID

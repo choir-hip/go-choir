@@ -198,24 +198,17 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 func validProbability(p float64) bool { return p >= 0 && p <= 1 }
 
 // inboxRecordWakes reports whether a record mints a wake row for its
-// recipient. A desk's record does. A system record does not (D5): a round
-// closure is minted at boot, and waking its caster there would resume work
-// after a crash. Two system records do wake, because each asks a desk to
-// act and is minted only by live work, never at boot: a support failure
-// (support-judgement-to-jev-design-2026-10-14) asks its Texture to correct
-// a citation and is minted only by the Jev job a live Texture commit
-// started; a capture arrival (Cut 2 2b) is minted only by a live source
-// poll, and a crash boot closes every schedule, so no poll runs at boot.
+// recipient: RecordWakesReader, the one predicate the runtime's post-turn
+// re-check also asks (management delegation R2-3). A desk's record wakes.
+// A system record does not (D5): a round closure is minted at boot, and
+// waking its caster there would resume work after a crash. The system
+// records that do wake ask a desk to act and are minted only by live work,
+// never at a crash boot: a support failure
+// (support-judgement-to-jev-design-2026-10-14), a capture arrival (Cut 2
+// 2b; a crash boot closes every schedule, so no poll runs at boot), and a
+// management task's final Report that is not clean.
 func inboxRecordWakes(rec types.CommitmentRecord) bool {
-	if strings.HasPrefix(rec.Inbox, "source:") {
-		// A source's inbox (management's declines of its captures) has no
-		// reader desk; its mailbox is the source's poll chain.
-		return false
-	}
-	if rec.EmitterKind != types.CommitmentEmitterSystem {
-		return true
-	}
-	return (rec.Support != nil && len(rec.Support.Failures) > 0) || (rec.Captures != nil && len(rec.Captures.Items) > 0)
+	return RecordWakesReader(rec)
 }
 
 // stepConversation validates rec against its conversation head, stamps its
@@ -619,6 +612,21 @@ func (s *Store) planInboxCommand(ctx context.Context, req types.CommitInboxRecor
 	if err != nil {
 		return nil, nil, nil, types.InboxCommitReceipt{}, err
 	}
+	// The story-library head (management delegation R2-5) refuses an open
+	// from a run whose last read of the library is behind it.
+	libraryObjects, libraryConditions, err := s.planStoryLibrary(ctx, ownerID, computerID, req.StoryLibraryHead, records, opened, now)
+	if err != nil {
+		return nil, nil, nil, types.InboxCommitReceipt{}, err
+	}
+	storyObjects, storyConditions = append(storyObjects, libraryObjects...), append(storyConditions, libraryConditions...)
+	// Management tasks (S2a): task rows with their opening Casts, the
+	// task-scope precondition, the capture disposition index, and each task
+	// closure's outcome, all under this command's lock.
+	records, taskObjects, taskConditions, err := s.planManagementTasks(ctx, ownerID, computerID, req.Tasks, records, opened, now)
+	if err != nil {
+		return nil, nil, nil, types.InboxCommitReceipt{}, err
+	}
+	storyObjects, storyConditions = append(storyObjects, taskObjects...), append(storyConditions, taskConditions...)
 	if len(failures) > 0 {
 		records = append(append([]types.CommitmentRecord(nil), records...), failures...)
 	}
