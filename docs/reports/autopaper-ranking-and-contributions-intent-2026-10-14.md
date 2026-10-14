@@ -124,3 +124,30 @@ keeps promotion and instruction-titled stories out of the lead and top
 tier. Missing or bad scores fall back to today's ranking. Rollback: revert,
 or delete the scores file. The rest of LF (scored predictions, breadth,
 personalization) is unchanged intent.
+
+## Owner update, about 13:45 UTC: depth in the ranking, deepening, sections
+
+Depth: the new lead ("Mauritius reels from worst riots...", v3) is a
+one-paragraph stub citing one source. "Part of the ranking needs to be the
+quality of our article. [...] if it's important, we should be devoting
+more resources towards making sure we do have a quality article. That is
+doing web research in addition to pulling from our source ingestion."
+So: rank by importance and depth (sources cited, length); an important,
+thin story is deepened by research that searches the web
+(docs/problems/front-page-leads-with-a-one-source-stub-2026-10-14.md and
+docs/reports/autopaper-deepen-important-stories-2026-10-14.md, to come).
+
+Sections: "a very simple classification of world news, U.S. politics,
+business and finance, and tech and AI. [...] pages or sections where
+users can move between them. [...] whichever [...] they select should be
+remembered. So then they close and reopen the app. If they were just on
+the tech and AI section, they should return back to that. And then that is
+also something to learn from. And then the front page can be learned and
+customized from that. Very simple."
+
+Slice LF1: the importance scorer also assigns one of four sections (World,
+U.S. Politics, Business & Finance, Tech & AI); the front page gets a
+section switcher (Front page plus the four); the reader's last section is
+remembered on their device and reopened; section visits are counted on the
+reader's device only and lift that section's stories on their front page
+(private personalization, per LF: attention data stays with the reader).
