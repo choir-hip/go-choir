@@ -818,7 +818,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), h.searchClient.StreamBound())
 	defer cancel()
 
-	stream, err := h.searchClient.Stream(ctx, req)
+	stream, err := h.searchClient.StreamFor(ctx, computerID, req)
 	if err != nil {
 		sanitized := sanitizeError(err)
 		log.Printf("gateway: search failed for autoputer %s: %v", computerID, sanitized)
@@ -847,6 +847,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		pending[name] = true
 	}
 	answered := 0
+	var resultURLs []string
 	for len(pending) > 0 {
 		var arrival searchplane.Arrival
 		var ok bool
@@ -861,6 +862,9 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		if arrival.Answered() {
 			answered++
 		}
+		for _, hit := range arrival.Results {
+			resultURLs = append(resultURLs, hit.URL)
+		}
 		writeLine(searchStreamArrival(arrival))
 	}
 	done := SearchStreamDone{Type: "done", Answered: answered, Total: len(stream.Providers), Cooling: searchCoolingProviders(stream.Cooling)}
@@ -871,8 +875,14 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	writeLine(done)
 
-	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending) skipped=[%s]",
-		computerID, answered, len(stream.Providers), len(stream.Cooling), len(done.Pending), searchSkippedSummary(stream.Cooling))
+	// served/results/unique/seen measure reuse
+	// (docs/problems/search-is-duplicated-and-discarded-2026-10-14.md):
+	// seen is how many of this search's distinct URLs the computer already
+	// received from an earlier search within a day.
+	unique, seen := h.searchClient.observeResultURLs(computerID, resultURLs)
+	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending) skipped=[%s] served=%s results=%d unique=%d seen=%d",
+		computerID, answered, len(stream.Providers), len(stream.Cooling), len(done.Pending), searchSkippedSummary(stream.Cooling),
+		searchServed(stream), len(resultURLs), unique, seen)
 }
 
 // HandleSearchHealth handles GET /provider/v1/search/health. Like the

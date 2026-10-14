@@ -20,6 +20,14 @@ type Config struct {
 	// PaceWait is how long a call may wait for its slot; a provider whose
 	// slot is further away is skipped for that search as paced.
 	PaceWait time.Duration
+	// CacheTTL > 0 turns on the result cache and in-flight join (cache.go);
+	// CacheFreshTTL is the TTL for time-sensitive queries, CacheMaxBytes
+	// bounds the result text held, and CacheShared lets one computer's
+	// search answer another's (default: per computer).
+	CacheTTL      time.Duration
+	CacheFreshTTL time.Duration
+	CacheMaxBytes int64
+	CacheShared   bool
 }
 
 // DefaultProviderRPS paces Brave to its Free AI plan's one request a second.
@@ -28,9 +36,20 @@ const DefaultProviderRPS = "brave=1"
 // DefaultPaceWait is the default PaceWait.
 const DefaultPaceWait = 3 * time.Second
 
+// Result cache defaults (docs/reports/search-efficiency-and-reuse-2026-10-14.md
+// §1): 177 of 300 measured repeats came within 10 minutes, 255 within an
+// hour.
+const (
+	DefaultCacheTTL      = 30 * time.Minute
+	DefaultCacheFreshTTL = 10 * time.Minute
+	DefaultCacheMaxMB    = 64
+)
+
 // ConfigFromEnv loads router settings from environment variables.
 // CHOIR_SEARCH_PROVIDER_RPS ("brave=1,tavily=5"; rate 0 disables) replaces
-// DefaultProviderRPS when set.
+// DefaultProviderRPS when set. CHOIR_SEARCH_CACHE_TTL_SECONDS=0 turns the
+// result cache and in-flight join off; CHOIR_SEARCH_CACHE_SCOPE=shared
+// shares answers across computers.
 func ConfigFromEnv() Config {
 	rps := strings.TrimSpace(os.Getenv("CHOIR_SEARCH_PROVIDER_RPS"))
 	if rps == "" {
@@ -40,6 +59,10 @@ func ConfigFromEnv() Config {
 		RequestTimeout: time.Duration(envInt("CHOIR_SEARCH_REQUEST_TIMEOUT_SECONDS", 30)) * time.Second,
 		MinInterval:    parseProviderRPS(rps),
 		PaceWait:       time.Duration(envInt("CHOIR_SEARCH_PACE_WAIT_MS", int(DefaultPaceWait/time.Millisecond))) * time.Millisecond,
+		CacheTTL:       time.Duration(envInt("CHOIR_SEARCH_CACHE_TTL_SECONDS", int(DefaultCacheTTL/time.Second))) * time.Second,
+		CacheFreshTTL:  time.Duration(envInt("CHOIR_SEARCH_CACHE_FRESH_TTL_SECONDS", int(DefaultCacheFreshTTL/time.Second))) * time.Second,
+		CacheMaxBytes:  int64(envInt("CHOIR_SEARCH_CACHE_MAX_MB", DefaultCacheMaxMB)) << 20,
+		CacheShared:    strings.EqualFold(strings.TrimSpace(os.Getenv("CHOIR_SEARCH_CACHE_SCOPE")), "shared"),
 	}
 }
 

@@ -48,6 +48,11 @@ type Stream struct {
 	// Arrivals carries one Arrival per provider in Providers, in the order
 	// the calls complete, and is closed after the last.
 	Arrivals <-chan Arrival
+	// Served is how the cache answered (ServedMiss, ServedHit, ...); empty
+	// when the stream did not pass through a Cache.
+	Served string
+	// CachedAt is when a hit's answer was first received.
+	CachedAt time.Time
 }
 
 // Cooling is a provider a search skipped.

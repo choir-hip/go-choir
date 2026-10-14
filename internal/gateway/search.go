@@ -71,6 +71,13 @@ type SearchClient struct {
 	healthStore searchplane.HealthStore
 	planeConfig searchplane.Config
 	plane       *searchplane.Router
+	// cache answers repeated searches and joins identical ones in flight;
+	// nil when CacheTTL is 0 (the uncached path).
+	cache       *searchplane.Cache
+	cacheShared bool
+	// seen counts, per computer, result URLs already returned to it, for
+	// the per-search log line (measurement only).
+	seen *searchURLSeen
 	// streamMargin is how long a search stream stays open past the provider
 	// request timeout; zero means searchStreamMargin.
 	streamMargin time.Duration

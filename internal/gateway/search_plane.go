@@ -34,6 +34,9 @@ type SearchStreamStart struct {
 	Query     string                  `json:"query"`
 	Providers []string                `json:"providers"`
 	Cooling   []SearchCoolingProvider `json:"cooling"`
+	// CachedAt is set when the answer is replayed from the gateway's result
+	// cache: when it was first received. No provider was called. Additive.
+	CachedAt string `json:"cached_at,omitempty"`
 }
 
 // SearchCoolingProvider is a provider a search skipped because it was
@@ -114,6 +117,18 @@ func (c *SearchClient) ensurePlane() error {
 		}
 	}
 	c.plane = searchplane.NewRouter(adapters, store, cfg)
+	paceWait := cfg.PaceWait
+	if paceWait <= 0 {
+		paceWait = searchplane.DefaultPaceWait
+	}
+	c.cache = searchplane.NewCache(searchplane.CacheConfig{
+		TTL:      cfg.CacheTTL,
+		FreshTTL: cfg.CacheFreshTTL,
+		MaxBytes: cfg.CacheMaxBytes,
+		Bound:    c.plane.RequestTimeout() + paceWait + time.Second,
+	})
+	c.cacheShared = cfg.CacheShared
+	c.seen = newSearchURLSeen(24*time.Hour, searchSeenPerComputer)
 	return nil
 }
 
@@ -138,6 +153,14 @@ func (c *SearchClient) ResetProviderHealth(provider string) error {
 // Stream starts the search on every eligible provider and returns at once;
 // the stream's Arrivals carry each provider's answer as it lands.
 func (c *SearchClient) Stream(ctx context.Context, req SearchRequest) (*searchplane.Stream, error) {
+	return c.StreamFor(ctx, "", req)
+}
+
+// StreamFor is Stream for one computer: an identical search the computer
+// made within the cache TTL is replayed, and one in flight is joined
+// (stream.Served says which). With CacheShared the computer does not
+// partition the cache.
+func (c *SearchClient) StreamFor(ctx context.Context, computerID string, req SearchRequest) (*searchplane.Stream, error) {
 	if req.Query == "" {
 		return nil, fmt.Errorf("query is required")
 	}
@@ -156,7 +179,13 @@ func (c *SearchClient) Stream(ctx context.Context, req SearchRequest) (*searchpl
 	if maxResults > 50 {
 		maxResults = 50
 	}
-	return c.plane.Start(ctx, req.Query, maxResults)
+	scope := computerID
+	if c.cacheShared {
+		scope = ""
+	}
+	return c.cache.Start(ctx, scope, req.Query, maxResults, func(ctx context.Context) (*searchplane.Stream, error) {
+		return c.plane.Start(ctx, req.Query, maxResults)
+	})
 }
 
 // StreamBound is how long a search stream stays open: the provider request
@@ -177,7 +206,11 @@ func (c *SearchClient) StreamBound() time.Duration {
 }
 
 func searchStreamStart(stream *searchplane.Stream) SearchStreamStart {
-	return SearchStreamStart{Type: "start", Query: stream.Query, Providers: append([]string{}, stream.Providers...), Cooling: searchCoolingProviders(stream.Cooling)}
+	start := SearchStreamStart{Type: "start", Query: stream.Query, Providers: append([]string{}, stream.Providers...), Cooling: searchCoolingProviders(stream.Cooling)}
+	if stream.Served == searchplane.ServedHit && !stream.CachedAt.IsZero() {
+		start.CachedAt = stream.CachedAt.UTC().Format(time.RFC3339)
+	}
+	return start
 }
 
 func searchCoolingProviders(cooling []searchplane.Cooling) []SearchCoolingProvider {
