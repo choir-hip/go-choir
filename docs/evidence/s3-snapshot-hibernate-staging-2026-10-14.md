@@ -48,3 +48,22 @@ the open work kept instead of closed.
 - **Resume window:** this snapshot's `resume_deadline` was 42 minutes
   after the hibernate (capability expiry). The credential-window follow-up
   (branch s3-credential-window) lifts it to the 12 h maximum age.
+
+## Proof 2: past the credential window (deploy 9ace75e5)
+
+Computer `computer-ddedef8828cf03daa058231f4cd7560f` (VM
+`vm-e09dc6b3aeeb26e36672fc8a56f59bde`), build 9ace75e5, receipt
+`~/.config/choir-qa/traces/s3/proof-2-window.json`, all checks pass.
+
+| step | result |
+|---|---|
+| hibernate 06:38:05 | 6,139 ms snapshot; guest fence 9 ms; Firecracker gone (checked by process name) |
+| held hibernated | 55 minutes; the old `resume_deadline` (07:20:05) passed while hibernated |
+| wake 07:33 (owner start act) | `snapshot_resume`, healthy: validated 2 ms, **credential issued 14 ms**, consumed 17 ms, loaded 92 ms, guest resumed 376 ms (clock stepped 3,308 s), **first healthy 396 ms** |
+| credential | `delivered`: a fresh envelope for the same realization, exchanged by the guest |
+| state | the setting read back unchanged |
+| obligations | 0 closed as "interrupted by a restart" |
+| host RSS | 1.17 GiB before hibernate; 299 MiB just after the wake |
+
+Wake to healthy past the old window: 396 ms. The resume limit is now the
+12-hour maximum snapshot age (owner's call whether to lengthen it).
