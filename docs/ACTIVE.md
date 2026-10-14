@@ -45,6 +45,9 @@ model (object graph on Dolt) always; app packages (station LP: S6 then S7,
 existing apps converted first in S7-0) before building any new app; guest
 updates (station LU) and the capsule Go module proxy alongside. Puter
 review for app agents: `docs/research/puter-everything-2026-10-14/README.md`.
+Autopaper front-page ranking and personalization (station LF) and reader
+contributions, op-eds and editing (station LC), intent only, design first:
+`docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md`.
 Sequencing proposal for the rest of the app-development metamission,
 auth (station LA: recovery is broken today) and security (SP before
 agentic red teaming, station LT):

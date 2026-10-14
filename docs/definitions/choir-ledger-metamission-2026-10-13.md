@@ -247,6 +247,31 @@ metamission:
         self-development (Gate 2) and SP failover, against disposable
         isolated forks (S9 re-keying first): capsule boundary, egress, auth,
         gateway, publication and adoption.
+    - id: LF
+      path: unauthored (docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md)
+      readiness: intent
+      status: pending
+      depends_on: [L2a]
+      note: >-
+        Front-page ranking and personalization (owner 2026-10-14). Rank by
+        importance (coverage breadth across outlets and languages from
+        L2a, velocity, standing-question relevance, a recorded editorial
+        judgment), with attention a weak signal; learn by scored
+        predictions on the ledger; personalize on the reader's own
+        computer (Follow, Less like this, More on this; no thumbs).
+        Investigate and design first; do not change the live front page
+        until the owner reviews.
+    - id: LC
+      path: unauthored (docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md)
+      readiness: intent
+      status: pending
+      depends_on: [LA]
+      note: >-
+        Contributions (owner 2026-10-14): readers' own sources as
+        captures, op-eds citing pinned story versions in an Opinion
+        section, suggested edits to published stories (Texture stays the
+        sole writer), "make your own version" and "include this story"
+        in plain words. Needs accounts (LA). Design first.
     - id: L5
       path: docs/definitions/choir-ledger-l5-read-models-2026-10-13.md
       readiness: intent
