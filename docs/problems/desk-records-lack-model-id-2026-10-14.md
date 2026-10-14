@@ -6,8 +6,10 @@ Found by: E6a, the desks' first box score
 (computer-1355b83b…), read-only through the QA owner credential.
 Mutation class of the fix: **orange** (runtime behaviour: what the
 reducer writes on every desk record). Status: problem recorded first;
-the fix follows in a later commit on branch `icrl-calibration-2026-10-14`
-and references this file.
+fixed on branch `icrl-calibration-2026-10-14` (commit "fix(records):
+every desk record names the model that produced it"), not pushed, not
+deployed; acceptance is `model_id` on 100% of new desk records after
+deploy (the experiment's phase 0 check).
 
 ## Evidence
 
@@ -32,6 +34,10 @@ and references this file.
   for Texture's revision provenance), and the tool loop knows the model
   that answered the current call (`activeLLMConfig`, which changes on
   failover, `toolloop.go`). Neither reaches the reducer.
+
+- Re-checked read-only at ~20:30Z the same day: the eight newest front
+  stories' `texture:` and `research:` inbox records (non-system) are 33 of
+  33 empty, newest committed 20:21:12Z.
 
 ## Why it matters
 
