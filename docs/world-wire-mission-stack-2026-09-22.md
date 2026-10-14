@@ -4,10 +4,10 @@ Date: 2026-09-22 (revised same-day after owner review)
 Status: **proposed roadmap — the R-series spine ratified 2026-09-25**
 (desk-rlm-rectification-plan §11 owner-ratified); the M9+/world-wire tail
 stays under owner review. Supersedes the
-[`reports/choir-rlm-missions-overview-2026-09-09.md`](reports/choir-rlm-missions-overview-2026-09-09.md).
+[`reports/choir-rlm-missions-overview-2026-09-09.md`](archive/reports/choir-rlm-missions-overview-2026-09-09.md).
 Mission state lives in `ACTIVE.md` + `mission-graph.yaml`; this document
 supplies the corrected scope and ordering. The owner's situation brief is
-[`current-situation-2026-09-22.md`](current-situation-2026-09-22.md).
+[`current-situation-2026-09-22.md`](reports/choir-state-and-vision-2026-10-14.md).
 Format: every mission is authored as a **throughline** `/goal` file
 (`skills/throughline/SKILL.md`).
 Provenance: synthesized from a 13-agent divergent consensus panel

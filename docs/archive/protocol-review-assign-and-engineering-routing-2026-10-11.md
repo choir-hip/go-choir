@@ -1,10 +1,10 @@
 # Review: `choir.Assign`, and routing engineering's reports through management
 
-> **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): Assign is deleted. Jev is part of management and either passes a report straight through or management reasons and writes it; there is no hold (none exists in code). Path B dissolves into owner → Texture → management → engineering.
+> **Revised 2026-10-12** ([re-engineering decisions](../re-engineering-decisions-2026-10-12.md)): Assign is deleted. Jev is part of management and either passes a report straight through or management reasons and writes it; there is no hold (none exists in code). Path B dissolves into owner → Texture → management → engineering.
 
 2026-10-11. Research and review for the owner; no code changed. Answers
 design §9 item 3 and the owner's addressing note in
-[precommitment-protocol-design-2026-10-11.md](precommitment-protocol-design-2026-10-11.md)
+[precommitment-protocol-design-2026-10-11.md](../precommitment-protocol-design-2026-10-11.md)
 ("Owner answers"). Read against `main` 4b114e61. Evidence is code reading
 unless marked as a trace or receipt. Items marked **hypothesis** were not
 confirmed by a trace or a test.

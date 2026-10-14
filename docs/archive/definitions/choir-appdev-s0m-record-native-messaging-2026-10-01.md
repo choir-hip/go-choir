@@ -22,7 +22,7 @@ review:
   frozen_ref: main@3eb132c7
   verdict: accept
   evidence_ref: >-
-    docs/reports/agent-messaging-system-state-2026-10-01.md §§9-12;
+    docs/archive/agent-messaging-system-state-2026-10-01.md §§9-12;
     docs/desk-system-harness-architecture-2026-10-01.md;
     .agentic-consensus/record-native-20261001/
 
@@ -144,7 +144,7 @@ finish:
     stay additive/append-only (safe to keep). channel_message wake
     restoration is a git revert + redeploy. If mid-cutover rollback is
     needed, drain or explicitly quarantine in-flight packets per
-    docs/reports/agent-messaging-system-state-2026-10-01.md §12-E; rollback
+    docs/archive/agent-messaging-system-state-2026-10-01.md §12-E; rollback
     must preserve new records and pending packets — do not roll back to a
     binary that cannot read them.
   landing:

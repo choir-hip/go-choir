@@ -91,7 +91,7 @@ now:
 
 receipts:
   - kind: spine
-    ref: docs/definitions/choir-world-wire-metamission-2026-10-01.md
+    ref: docs/archive/definitions/choir-world-wire-metamission-2026-10-01.md
   - kind: precedent
     ref: 'docs/world-wire-mission-stack-2026-09-22.md Phase 5a names
       ReportedClaim/corroboration/contradiction objects — W0 is that

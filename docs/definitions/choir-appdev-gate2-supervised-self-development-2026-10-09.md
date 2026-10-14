@@ -172,7 +172,7 @@ now:
     delta_o: the M11 re-run receipt on the current build
     scope_if_supported: staging disposables on the current single host
     status: proposed
-    evidence_refs: [docs/definitions/choir-selfdev-gate-2026-09-27.md]
+    evidence_refs: [docs/archive/definitions/choir-selfdev-gate-2026-09-27.md]
   decision:
     what: >-
       Gate 2 v1 keeps capsules network-closed (S4 egress after the gate)

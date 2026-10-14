@@ -120,8 +120,8 @@ dispatcher topology.
 
 Owner direction 2026-09-17: the tape's second job is the learning record.
 The PICL paper review + nine-agent consensus
-(`docs/reviews/picl-paper-review-2026-09-17.md`,
-`docs/reviews/picl-consensus-synthesis-2026-09-17.md`) returned a unanimous
+(`docs/archive/picl-paper-review-2026-09-17.md`,
+`docs/archive/reviews/picl-consensus-synthesis-2026-09-17.md`) returned a unanimous
 verdict: **adopt at schema level now, defer consumption and the
 experimental program.** Eight decisions:
 
@@ -290,7 +290,7 @@ activation-wake family is the only cluster blocking the critical path.
 `docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md` ·
 `docs/memo-activation-wake-authority-substrate-2026-09-13.md` ·
 `docs/designs/choir-event-driven-rlm-ontology-minimal-2026-09-15.md` ·
-`docs/reviews/picl-consensus-synthesis-2026-09-17.md` ·
+`docs/archive/reviews/picl-consensus-synthesis-2026-09-17.md` ·
 `docs/mission-residues.md` · `docs/runtime-invariants.md` ·
 `docs/heresy-detectors.md` · `docs/standing-questions.md` ·
 `docs/supervision-protocol.md` ·

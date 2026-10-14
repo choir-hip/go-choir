@@ -45,7 +45,7 @@ documents:
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: roadmap, authority: support, lifecycle: living}
-    witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/reports/choir-rlm-missions-overview-2026-09-09.md]
+    witnesses: [docs/world-wire-mission-stack-2026-09-22.md, docs/ACTIVE.md, docs/mission-graph.yaml]
     refresh_triggers: [product_vision_change, doctrine_change]
 
   - path: AGENTS.md
@@ -333,7 +333,7 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: definition, authority: completed_mission_contract, lifecycle: frozen, entrypoint: false}
-    witnesses: [docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md, docs/archive/choir-rlm-target-architecture-cutover-2026-09-04.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md, docs/computer-ontology.md]
+    witnesses: [docs/evidence/choir-rlm-restore-zero-retained-boot-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-post-completion-consensus-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-constructed-refresh-skip-2026-09-09.md, docs/evidence/choir-rlm-restore-zero-deployed-proof-2026-09-09.md, docs/archive/choir-rlm-target-architecture-cutover-2026-09-04.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/choir-doctrine.md, docs/computer-ontology.md]
     refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, deployed_acceptance, registry_closure]
   - path: docs/archive/choir-rlm-engineering-carrier-2026-09-11.md
     claim_scope: historical
@@ -341,7 +341,7 @@ documents:
     is_evidence: true
     annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: frozen, entrypoint: false}
     superseded_by: [docs/archive/choir-texture-owner-input-cutover-2026-09-22.md]
-    witnesses: [docs/reports/choir-opencode-provider-research-2026-09-10.md, docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md, docs/mission-residues.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
+    witnesses: [docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md, docs/mission-residues.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/choir-doctrine.md]
     refresh_triggers: []
   - path: docs/archive/choir-sub-rlm-document-channel-2026-09-22.md
     claim_scope: historical
@@ -494,38 +494,6 @@ documents:
     annotations: {doc_role: register, authority: support, lifecycle: living}
     witnesses: [docs/state-homes-inventory-2026-10-08.md, docs/operational-invariants-register-2026-10-08.md, docs/computer-ontology.md]
     refresh_triggers: [doctrine_change, owner_ratification_change, deployed_acceptance]
-  - path: docs/definitions/choir-strand2-freeze-order-patch-2026-09-23.md
-    claim_scope: current
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: definition, authority: mission_receipt, lifecycle: frozen, entrypoint: false}
-    depends_on: []
-    witnesses: [docs/desk-rlm-rectification-plan-2026-09-23.md, docs/problems/document-cast-stray-complete-settlement-2026-09-23.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-  - path: docs/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md
-    claim_scope: current
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: definition, authority: mission_receipt, lifecycle: frozen, entrypoint: false}
-    depends_on: [docs/definitions/choir-ontology-kernel-2026-09-24.md]
-    witnesses: [docs/desk-rlm-rectification-plan-2026-09-23.md, docs/Precommitment Records — Engineering Memo.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: []
-  - path: docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md
-    claim_scope: current
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: landed, entrypoint: false}
-    depends_on: [docs/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md]
-    witnesses: [docs/desk-rlm-rectification-plan-2026-09-23.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, registry_closure]
-  - path: docs/definitions/choir-texture-ledger-consumer-2026-09-25.md
-    claim_scope: current
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: definition, authority: working_mission_contract, lifecycle: living, entrypoint: false}
-    depends_on: [docs/definitions/choir-carrier-substrate-integrity-2026-09-25.md]
-    witnesses: [docs/desk-rlm-rectification-plan-2026-09-23.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: [mission_state_change, deployment_identity_change, owner_ratification_change, registry_closure]
   - path: docs/definitions/choir-rectification-spine-2026-09-25.md
     claim_scope: current
     is_root: []
@@ -554,7 +522,7 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: evidence, authority: frozen_boundary_artifact, lifecycle: frozen}
-    witnesses: [docs/archive/choir-rlm-engineering-carrier-2026-09-11.md, docs/reports/choir-opencode-provider-research-2026-09-10.md]
+    witnesses: [docs/archive/choir-rlm-engineering-carrier-2026-09-11.md]
     refresh_triggers: [mission_state_change]
 
 
@@ -636,7 +604,7 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: implementation_evidence, authority: reviewed_runtime_and_landing_receipt, lifecycle: append_only}
-    witnesses: [docs/archive/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md]
+    witnesses: [docs/archive/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-requirement-audit-2026-08-08.md]
     refresh_triggers: [runtime_candidate_change, independent_review, ci, deployment_identity_change, deployed_acceptance]
 
   - path: docs/evidence/effects-red-boot-as-scheduler-ontological-error-2026-09-03.md
@@ -731,7 +699,7 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: requirement_audit, authority: definition_conformance_evidence, lifecycle: append_only}
-    witnesses: [docs/archive/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/problems/continuous-texture-supervision-implementation-inventory-2026-08-08.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    witnesses: [docs/archive/choir-continuous-texture-supervision-2026-08-07.md, docs/evidence/continuous-texture-supervision-joined-runtime-review-2026-08-08.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: [product_computer_identity_change, deployed_acceptance, registry_closure, goal_completion_audit]
 
   - path: docs/evidence/effects-red-super-texture-rewake-2026-08-20.md

@@ -64,7 +64,7 @@ follow-ons, and deferred decisions that a later mission must circle back to.
   providers' credential deployment; gateway routing refuses uncatalogued
   models loudly. Roster model ids are unaffected: `deepseek-v4.1-flash`
   routes through the funded opencode-go provider.
-  Source: owner statements 2026-09-12 and `docs/reports/choir-model-policy-consensus-2026-09-12.md`.
+  Source: owner statements 2026-09-12 and `docs/archive/reports/choir-model-policy-consensus-2026-09-12.md`.
 - **R10 — Super substrate retirement (owner ratification 2026-09-12).** The owner states Super
   should be gone. Mission 2 (`choir-rlm-versioned-rename-2026-09-09`) renamed the vocabulary
   only: V1 `co-super` names decode through the frozen V1 map into `engineering`, while the

@@ -12,7 +12,7 @@ Owner: the Universal Wire app "wasnt connecting to it correctly. the
 articles didnt load." Work moved to stabilizing the computer and enabling
 self-development. Ingestion stopped on 10-05 (`sourcecycled` out of the
 boot set). The 10-05 analysis is
-[`world-wire-rearchitecture-2026-10-05`](../world-wire-rearchitecture-2026-10-05.md).
+[`world-wire-rearchitecture-2026-10-05`](../archive/world-wire-rearchitecture-2026-10-05.md).
 
 ## State now
 

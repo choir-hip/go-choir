@@ -25,7 +25,7 @@ start:
       RLIMIT_AS worker cap; generic host tools retired. Every non-wire
       desk is on the carrier; only processor/reconciler (D4-deferred)
       remain on the tool loop.
-    evidence_ref: docs/definitions/choir-research-live-cell-2026-09-26.md
+    evidence_ref: docs/archive/definitions/choir-research-live-cell-2026-09-26.md
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: R4
   owner_directive: >-
@@ -248,8 +248,8 @@ receipts:
 # R4 — Commitment Scores + Surfacing + Context Packs (station on the rectification spine)
 
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
 (R4, on spine): derived accrual views, materiality projection, context packs, learning-claims gate.
 Proof: a falsified commitment stays visible in the doc; the acting desk's pack contains zero
 own-score fields.

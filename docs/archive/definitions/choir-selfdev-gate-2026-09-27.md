@@ -24,7 +24,7 @@ start:
       the single stratum-C point (repaired two latent compare gaps);
       identity seeds pinned (keep-v3); the pre-migration fold is proven
       identical. The proof-tape precondition for M11 is discharged.
-    evidence_ref: docs/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md
+    evidence_ref: docs/archive/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: M11
   owner_directive: >-
@@ -153,7 +153,7 @@ now:
     M11 landed 2026-09-29 (probe run 9, predicate `satisfied`, EXIT 0;
     staging build e886f576+probe). 2026-09-29 reoriented session after
     clustering assessment
-    (docs/problems/clustering-assessment-engineering-assignment-stalls-2026-09-29.md):
+    (docs/archive/problems/clustering-assessment-engineering-assignment-stalls-2026-09-29.md):
     Phase A closed six missing event-trigger edges into existing reconcile
     authorities (cancel choke point, desk kick on pending/running exit,
     verify-fail gated to frozen, spawn resume serialized, bind→activate
@@ -253,8 +253,8 @@ receipts:
 
 # M11 — Self-Development Gate (final spine station)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md)
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md)
 §11.2 and the mission stack's 3e gate: the reversible-selfdev-v1 episode, receipts as
 scored commitment_records readable in the live Texture doc.
 

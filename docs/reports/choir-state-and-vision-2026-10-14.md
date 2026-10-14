@@ -909,7 +909,7 @@ computer twice is closed with that cause (`CLAUDE.md`).
 
 **Receipts:** auto-resume after a crash is how crash-restart loops happen.
 The August held-computer boot crash loops
-(`docs/problems/held-computer-boot-crash-loop-and-resolve-race-2026-08-28.md`
+(`docs/reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md`
 and three siblings), a crash restart that left work open and re-cast
 engineering (`docs/problems/crash-restart-leaves-work-open-and-recasts-engineering-2026-10-12.md`),
 crash boots that re-applied updates

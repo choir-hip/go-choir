@@ -122,11 +122,11 @@ Then the smaller ones:
 - Protocol goal files: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md; docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md (receipts P2a-deployed, P2c-deployed; landed); docs/definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md (P2d1 landed; P2d2 held; receipts P2d-review1 to P2d-review3); docs/definitions/choir-precommitment-protocol-metamission-2026-10-11.md; design docs/precommitment-protocol-design-2026-10-11.md (owner answers recorded in section 9).
 - Research and design documents from tonight:
   - docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
-  - docs/search-plane-design-fast-deep-broad-2026-10-11.md
+  - docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md
   - docs/autopaper-app-design-2026-10-11.md
   - docs/precommitment-predictions-and-scoring-design-2026-10-11.md
   - docs/precommitment-signing-and-computer-keys-2026-10-11.md
-  - docs/protocol-review-assign-and-engineering-routing-2026-10-11.md
+  - docs/archive/protocol-review-assign-and-engineering-routing-2026-10-11.md
   - docs/problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md
 - Other problem records: docs/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md (corrected); docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md; docs/problems/texture-raced-activation-refused-first-turn-2026-10-11.md.
 - Verified code points: researchtools.go shouldRequireResearchUpdateAfterTool and its next_instruction; broker.go handleAssign; universal_wire.go fixed claims; platform service.go new publication id per publish; rlm_reduce.go distribution notes in the question packet; lifecycle_commit_act.go 10,000-record scan; gateway handlers.go 30-second search deadline; node-b.nix keepalive mode and warmness_policy.go primary skip.
@@ -141,4 +141,4 @@ The research job is now a drafted station. It keeps one research run alive as a 
 
 The search deadline ladder is a drafted station too, at docs/definitions/choir-search-deadline-ladder-2026-10-11.md. It holds the ChatGPT search routing decision for you.
 
-The directive inbox for P2d2 has a design answer, at docs/texture-directive-inbox-design-2026-10-11.md. A directive should carry no work item of its own. It joins the Texture's open request work, or reopens it the way an owner revision does. And a turn may not complete that work while a directive is still waiting. The design also found that the store's turn commit cannot consume a directive at all today. So the consumption change and the store fix must land together, or every Texture turn would fail while a directive is pending.
+The directive inbox for P2d2 has a design answer, at docs/archive/texture-directive-inbox-design-2026-10-11.md. A directive should carry no work item of its own. It joins the Texture's open request work, or reopens it the way an owner revision does. And a turn may not complete that work while a directive is still waiting. The design also found that the store's turn commit cannot consume a directive at all today. So the consumption change and the store fix must land together, or every Texture turn would fail while a directive is pending.

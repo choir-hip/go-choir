@@ -18,7 +18,7 @@ review:
 metamission:
   stations:
     - id: m0-debug-stabilize
-      path: docs/definitions/choir-signal-m0-debug-stabilize-2026-09-29.md
+      path: docs/archive/definitions/choir-signal-m0-debug-stabilize-2026-09-29.md
       readiness: drafted
       status: complete
       depends_on: []
@@ -28,7 +28,7 @@ metamission:
       status: working
       depends_on: [m0-debug-stabilize]
     - id: m0a-research-rlm-cutover
-      path: docs/definitions/choir-signal-research-rlm-cutover-2026-09-29.md
+      path: docs/archive/definitions/choir-signal-research-rlm-cutover-2026-09-29.md
       readiness: drafted
       status: superseded  # 2026-10-05: absorbed into app-dev SR (choir-appdev-sr-desk-surface-cleanup-2026-10-05.md)
       depends_on: [m-sub-signal-plane]
@@ -38,7 +38,7 @@ metamission:
       status: working
       depends_on: []
     - id: m2-model-policy-rlm-module
-      path: docs/definitions/choir-signal-model-policy-rlm-module-2026-09-29.md
+      path: docs/archive/definitions/choir-signal-model-policy-rlm-module-2026-09-29.md
       readiness: drafted
       status: superseded  # 2026-10-05: absorbed into app-dev SM (model policy rewrite + evals)
       depends_on: [m0a-research-rlm-cutover, m1-typed-commitments]
@@ -48,7 +48,7 @@ metamission:
       status: pending
       depends_on: [m2-model-policy-rlm-module]  # 2026-10-05: read as app-dev SM
     - id: m4-jev-transport
-      path: docs/definitions/choir-signal-jev-transport-2026-09-29.md
+      path: docs/archive/definitions/choir-signal-jev-transport-2026-09-29.md
       readiness: drafted
       status: complete
       depends_on: []

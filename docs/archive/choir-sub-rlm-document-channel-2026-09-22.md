@@ -27,7 +27,7 @@ start:
         but the roster receipt is quarantined: it was driven by texture tell,
         not the document channel.'
       claim_scope: current
-      evidence_ref: docs/current-situation-2026-09-22.md (carrier decision)
+      evidence_ref: docs/reports/choir-state-and-vision-2026-10-14.md (carrier decision)
     - claim: 'The carrier substrate exists: capsule_go_eval envelope, staged
         choir.* intents, in-cell session worker. What is missing is the
         document-channel cast path and the R7/R9 deletions.'

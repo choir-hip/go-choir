@@ -1123,7 +1123,7 @@ crashes"):
 - **August: held-computer boot crash loops.** The owner's computer would
   not boot for weeks; startup reconcile hit a deterministic fatal path on
   every boot, and the problem was chased as four different root causes
-  first ([problem](../problems/held-computer-boot-crash-loop-and-resolve-race-2026-08-28.md)).
+  first ([problem](../reports/choir-held-computer-boot-outage-postmortem-2026-08-28.md)).
   This is the origin of "a crash never resumes".
 - **12 October: a crash left work open and re-cast engineering.** Crash
   boots closed wakes but not the work items behind them, and an

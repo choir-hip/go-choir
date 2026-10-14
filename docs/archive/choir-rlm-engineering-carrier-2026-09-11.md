@@ -120,7 +120,7 @@ now:
       - docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md (this file, sole entrypoint after charter)
       - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
       - docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
-      - docs/reports/choir-opencode-provider-research-2026-09-10.md
+      - docs/archive/choir-opencode-provider-research-2026-09-10.md
       - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
       - docs/mission-residues.md (R7 inherited, R8 deferred)
       - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
@@ -147,15 +147,15 @@ now:
   evidence_refs:
     - docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
     - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
-    - docs/reports/choir-opencode-provider-research-2026-09-10.md
-    - docs/reports/choir-rlm-missions-overview-2026-09-09.md
+    - docs/archive/choir-opencode-provider-research-2026-09-10.md
+    - docs/archive/reports/choir-rlm-missions-overview-2026-09-09.md
     - docs/mission-residues.md
     - docs/evidence/choir-rlm-versioned-rename-deployed-proof-2026-09-11.md
     - docs/evidence/choir-rlm-engineering-carrier-p0-freeze-2026-09-11.md
     - docs/evidence/choir-rlm-engineering-carrier-completed-phase-audit-2026-09-12.md
     - docs/evidence/rlm-roster/p5-roster-evidence.md
     - docs/reports/choir-texture-in-cell-packet-reducer-design-2026-09-12.md
-    - docs/reports/choir-model-policy-consensus-2026-09-12.md
+    - docs/archive/reports/choir-model-policy-consensus-2026-09-12.md
   blocker_or_risk: 'P5 gate is OPEN on the terminal-saga strand family, now six strands, reducer-confirmed. The mechanism is proven: A9 was the first arm served end-to-end by its funded overlay (opencode-go/deepseek-v4.1-flash, gateway log 07:50:20Z), and A14 executed the task cells and staged choir.Complete. What blocks: the terminal saga strands at revoke_requested (receipt quarantined, needs_human_classify=true, pass=null; the worker run reports completed/settled from run state while the reducer fate is pending), two further arm cycles stranded the same way (121ae9fe, e8592727), and the +5m watchdog produced no journal evidence on either. Substrate repairs shipped this session: frozen-fate resume (caa171b6), receipt binding (7afda8d1), fate watchdog + revoke_requested resume (6a69878a), revoked-capsule coverage (6a869d7f), reducer-fate gate on roster collect (4bbb9266), task-digest gate (e97bfa9d), strand-state logging (def29358). The tally is 1-of-4 expected ids; the sibling supervision channels are dead (texture caller memory overflow) or pre-genesis. Convergence doctrine: the next action is the owner decision in docs/memo-activation-wake-authority-substrate-2026-09-13.md, not another incremental patch.'
   problems_discovered:
     - id: landlock-devpts-regression-2026-09-12
@@ -466,7 +466,7 @@ boundaries:
     - owner decisions 2026-09-11 recorded in now.decision
     - docs/reports/choir-rlm-mission-three-consensus-2026-09-11.md
     - docs/reports/choir-rlm-mission-three-review-2026-09-11.md
-    - docs/reports/choir-rlm-missions-overview-2026-09-09.md
+    - docs/archive/reports/choir-rlm-missions-overview-2026-09-09.md
     - docs/mission-residues.md (R7 inherited, R8 deferred)
     - docs/standing-questions.md
     - skills/agentic-consensus/SKILL.md (review panel contract)
@@ -572,7 +572,7 @@ receipts:
       - 'owner direction: model policy should ultimately be set at runtime inside the Go RLM code so model strings are chosen dynamically and a new model needs no code update'
     rollback_ref: none; a decision record
     disposition: recorded and settled; binding on this mission; the runtime model-policy direction is recorded as the product direction, not as a substitute for the overlay id in this mission
-    problem_ref: docs/reports/choir-opencode-provider-research-2026-09-10.md
+    problem_ref: docs/archive/choir-opencode-provider-research-2026-09-10.md
     authorization_ref: owner statement 2026-09-11
     candidate_or_evidence_refs: []
     landing:

@@ -59,7 +59,7 @@ narrows its own coverage and explains it wrongly.
 
 ## Measurement and design (2026-10-11, later)
 
-docs/search-plane-design-fast-deep-broad-2026-10-11.md measured 509
+docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md measured 509
 searches over 24 hours: 51 (10%) ran to exactly 30.0 seconds at the gateway
 and were logged as succeeded, usually with only one provider's 10 results;
 every guest-side search timeout in two saved demo traces matches one of

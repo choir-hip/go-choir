@@ -4,7 +4,7 @@ Read-only design research against `main` a401c878. No repo file changed.
 Inputs: the code below, `docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md`,
 `docs/precommitment-protocol-design-2026-10-11.md`,
 `docs/precommitment-predictions-and-scoring-design-2026-10-11.md`,
-`docs/texture-directive-inbox-design-2026-10-11.md`. I did not read Node B
+`docs/archive/texture-directive-inbox-design-2026-10-11.md`. I did not read Node B
 journals: the prior root-cause record already holds the gateway evidence, and
 nothing here depends on new staging traces.
 

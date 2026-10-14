@@ -311,7 +311,7 @@ receipts:
       - docs/problems/s0-vocab-rescan-fires-on-any-replay-2026-10-01.md
       - docs/problems/s0-internal-surface-forgeable-caller-2026-10-01.md
       - docs/problems/s0-fetch-guest-timeline-deadlock-2026-10-01.md
-      - docs/reports/s0a-boot-timeline-landing-2026-10-01.md
+      - docs/archive/reports/s0a-boot-timeline-landing-2026-10-01.md
   - id: s0b-boundary-close-2026-10-04
     kind: slice_transition
     status: closed
@@ -353,7 +353,7 @@ receipts:
       - docs/problems/s0-m9a-route-projection-owner-binding-2026-10-04.md
       - docs/problems/s0-selfdev-executing-wedge-2026-10-04.md
       - .agentic-consensus/s0b-boundary-panel-20261004
-      - docs/choir-appdev-s0-reality-boot-timeline-ledger-2026-10-01.md
+      - docs/archive/choir-appdev-s0-reality-boot-timeline-ledger-2026-10-01.md
 ---
 
 # S0 mechanism

@@ -127,7 +127,7 @@ writes, not reads, replay or migrations.
   no other Go reference), `internal/objectgraph/objectgraph_test.go:46`
   (the registry list test), `internal/vocabmigrate/families.go:192` (frozen
   decode table), and one doc,
-  `docs/definitions/choir-wire-kb-graph-schema-w0-2026-10-01.md:15`.
+  `docs/archive/definitions/choir-wire-kb-graph-schema-w0-2026-10-01.md:15`.
 - History: the kind was written by the deterministic clustering slice
   (5efdcd453, 338632879, 8121b4d41); its writer was deleted in 4b5c665bb
   ("delete Universal Wire deterministic-scaffold heresies"). Since then no

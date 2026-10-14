@@ -192,8 +192,8 @@ receipts:
 
 # R3b — Host Desk-Cell Carrier (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11:
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11:
 host-side spawn of the sessionWorker pattern for non-capsule desks;
 restricted stdlib; `InCellCarrier` fanned per profile; `Cast` validates
 target desk + kind. Kill mid-cell → derivable wake re-fires.

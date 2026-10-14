@@ -607,12 +607,12 @@ World Wire phase 1 (the newspaper) can start after S5.
 ## Successor Spine — World Wire Metamission (SUPERSEDED 2026-10-05; rewrite pending)
 
 The 10-01 file below predates the rearchitecture
-([`world-wire-rearchitecture-2026-10-05.md`](world-wire-rearchitecture-2026-10-05.md)):
+([`world-wire-rearchitecture-2026-10-05.md`](archive/world-wire-rearchitecture-2026-10-05.md)):
 processor/reconciler and host ingestion are deleted. It is kept for its
 receipts (owner verticals ordering, June failure receipt).
 
 
-[`definitions/choir-world-wire-metamission-2026-10-01.md`](definitions/choir-world-wire-metamission-2026-10-01.md)
+[`definitions/choir-world-wire-metamission-2026-10-01.md`](archive/definitions/choir-world-wire-metamission-2026-10-01.md)
 (`status: intent`, `entrypoint: false`) — designed from the 2026-10-01
 convergent panel (7/13) + the June attempt-12 receipt. RLM-native compounding
 knowledge base on the object graph: processor/reconciler stay non-desk but the
@@ -627,7 +627,7 @@ the capacity mission's deployed acceptance; W0 design runs green in parallel.
 
 ## Archived Receipt — Strand-2 Freeze-Order Patch (R0)
 
-[`definitions/choir-strand2-freeze-order-patch-2026-09-23.md`](definitions/choir-strand2-freeze-order-patch-2026-09-23.md)
+[`definitions/choir-strand2-freeze-order-patch-2026-09-23.md`](archive/definitions/choir-strand2-freeze-order-patch-2026-09-23.md)
 **landed 2026-09-24** (deployed commit `64468db2`, CI green). The
 freeze-before-validate wedge class is closed: a refused `choir.Freeze` on a
 document trajectory leaves the executor Active (a `capsule_go_eval` probe
@@ -644,7 +644,7 @@ were deleted; new throughline `/goal` files are authored per mission.
 
 ## Archived Receipt — Commitment Ledger + Desk Carrier (R2)
 
-[`definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md`](definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md)
+[`definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md`](archive/definitions/choir-commitment-ledger-desk-carrier-draft-2026-09-23.md)
 **closed on substrate 2026-09-25** (`now.status=complete`; carrier landed +
 deployed `537fce04`, `choir.Resolve` `5404d2c7` on main). Delivered the
 OG `choir.commitment_record`, the engineering in-cell carrier, the
@@ -695,15 +695,15 @@ terminal receipt, set the next mission's goal — the entrypoint below is the
 live one.
 - **Spine meta-goal** [`definitions/choir-rectification-spine-2026-09-25.md`](definitions/choir-rectification-spine-2026-09-25.md) — **settled 2026-09-29** on M11's landed receipt; archived. The live entrypoint is the Jev/supervision metamission above.
 - **R2x landed** (`ebdaef45`+`53035642`: deadline wake armed at bind, both selection sweeps deleted, commit self-heals via `recoverPartialActCommit`); deployed-cancel proof deferred — lever `CHOIR_ASSIGNMENT_DEADLINE` committed, needs `choir.assignment_deadline` cmdline plumbing for a staging probe.
-- **R3a landed** (`4cf82057`: occurrence/evidence resolves desk acts from `choir.commitment_record`, dual-read vs `worker_updates_*`); deployed live-record proof deferred to a doc desk report-cast. — goal file: [`definitions/choir-texture-ledger-consumer-2026-09-25.md`](definitions/choir-texture-ledger-consumer-2026-09-25.md).
-- **R3b landed+deployed** (`b9f43583`: host desk-cell carrier — `autoputer desk-session`, `desk_go_eval` sealed per profile, canonical-ledger reduction, `InCellCarrier` fan under `actuator=rlm`, unknown-desk cast rejected, kill mid-cell respawns clean); deployed live-desk acceptance deferred to R3c (actuator). — goal file: [`definitions/choir-desk-cell-carrier-2026-09-25.md`](definitions/choir-desk-cell-carrier-2026-09-25.md).
-- **R3c landed+deployed** (`b7ae7596`: management on the desk-cell carrier — `desk_go_eval` + typed lifecycle controls, cast reaches delegated admission on the canonical ledger). — goal file: [`definitions/choir-management-live-cast-2026-09-26.md`](definitions/choir-management-live-cast-2026-09-26.md).
-- **R3d landed+deployed** (`119e0edd`: texture full-RLM — `desk_go_eval` only; cell-authored `ApplyTextureTurn` commits mint `AuthorAppAgent` revisions; typed texture tools + `worker_updates` consumer deleted). — goal file: [`definitions/choir-texture-live-authoring-2026-09-26.md`](definitions/choir-texture-live-authoring-2026-09-26.md).
-- **R3r landed+deployed** (`3b56c34e`: research on the desk-cell carrier — `desk_go_eval` + typed research/evidence/memory surface under a per-activation egress budget and 8GiB worker cap; generic host tools retired; D2 discharged). — goal file: [`definitions/choir-research-live-cell-2026-09-26.md`](definitions/choir-research-live-cell-2026-09-26.md).
-- **R4 landed+deployed** (`68a2e023`: commitment ledger read surface — derived accrual views, falsification-visible materiality projection feeding `textureAvailableSourceEntities`, score-free acting packs on the cell frame via `choir.Pack`, learning-claims gate on the selfdev verification payload). — goal file: [`definitions/choir-commitment-scores-packs-2026-09-26.md`](definitions/choir-commitment-scores-packs-2026-09-26.md).
+- **R3a landed** (`4cf82057`: occurrence/evidence resolves desk acts from `choir.commitment_record`, dual-read vs `worker_updates_*`); deployed live-record proof deferred to a doc desk report-cast. — goal file: [`definitions/choir-texture-ledger-consumer-2026-09-25.md`](archive/definitions/choir-texture-ledger-consumer-2026-09-25.md).
+- **R3b landed+deployed** (`b9f43583`: host desk-cell carrier — `autoputer desk-session`, `desk_go_eval` sealed per profile, canonical-ledger reduction, `InCellCarrier` fan under `actuator=rlm`, unknown-desk cast rejected, kill mid-cell respawns clean); deployed live-desk acceptance deferred to R3c (actuator). — goal file: [`definitions/choir-desk-cell-carrier-2026-09-25.md`](archive/definitions/choir-desk-cell-carrier-2026-09-25.md).
+- **R3c landed+deployed** (`b7ae7596`: management on the desk-cell carrier — `desk_go_eval` + typed lifecycle controls, cast reaches delegated admission on the canonical ledger). — goal file: [`definitions/choir-management-live-cast-2026-09-26.md`](archive/definitions/choir-management-live-cast-2026-09-26.md).
+- **R3d landed+deployed** (`119e0edd`: texture full-RLM — `desk_go_eval` only; cell-authored `ApplyTextureTurn` commits mint `AuthorAppAgent` revisions; typed texture tools + `worker_updates` consumer deleted). — goal file: [`definitions/choir-texture-live-authoring-2026-09-26.md`](archive/definitions/choir-texture-live-authoring-2026-09-26.md).
+- **R3r landed+deployed** (`3b56c34e`: research on the desk-cell carrier — `desk_go_eval` + typed research/evidence/memory surface under a per-activation egress budget and 8GiB worker cap; generic host tools retired; D2 discharged). — goal file: [`definitions/choir-research-live-cell-2026-09-26.md`](archive/definitions/choir-research-live-cell-2026-09-26.md).
+- **R4 landed+deployed** (`68a2e023`: commitment ledger read surface — derived accrual views, falsification-visible materiality projection feeding `textureAvailableSourceEntities`, score-free acting packs on the cell frame via `choir.Pack`, learning-claims gate on the selfdev verification payload). — goal file: [`definitions/choir-commitment-scores-packs-2026-09-26.md`](archive/definitions/choir-commitment-scores-packs-2026-09-26.md).
 - **R5a** vocab decoders + seed freeze — gates M11; keep `choir:co-super-assignment:v3`. **R5b** rename-migrate deferred indefinitely.
-- **M7 landed+deployed** (`722b49bf`: derivable selfdev continuations — post-commit observer + coalesced drain advance an op through materialization with no API driver; mid-materialize crash recovers derivably; parked ops mint management-addressed boundary records). — goal file: [`definitions/choir-selfdev-derivable-continuations-2026-09-26.md`](definitions/choir-selfdev-derivable-continuations-2026-09-26.md).
-- **M9a** platform push + restore — on M11's restore edge; chartered under the meta-goal: [`definitions/choir-platform-update-push-restore-2026-09-26.md`](definitions/choir-platform-update-push-restore-2026-09-26.md).
+- **M7 landed+deployed** (`722b49bf`: derivable selfdev continuations — post-commit observer + coalesced drain advance an op through materialization with no API driver; mid-materialize crash recovers derivably; parked ops mint management-addressed boundary records). — goal file: [`definitions/choir-selfdev-derivable-continuations-2026-09-26.md`](archive/definitions/choir-selfdev-derivable-continuations-2026-09-26.md).
+- **M9a** platform push + restore — on M11's restore edge; chartered under the meta-goal: [`definitions/choir-platform-update-push-restore-2026-09-26.md`](archive/definitions/choir-platform-update-push-restore-2026-09-26.md).
 - **M11 settled — self-dev gate LANDED 2026-09-29** (staging `e886f576`):
   the reversible-selfdev-v1 episode ran end to end on staging with no
   manual repair — probe run 9 predicate `satisfied`, all six legs
@@ -714,7 +714,7 @@ live one.
   nine obligation-edge closures/merges landed under the clustering
   assessment; the probe found + fixed the reject pin-verification defect
   (`89cd7247`) — candidate-B reject had never committed since 7d635330.
-  Goal file: [`definitions/choir-selfdev-gate-2026-09-27.md`](definitions/choir-selfdev-gate-2026-09-27.md);
+  Goal file: [`definitions/choir-selfdev-gate-2026-09-27.md`](archive/definitions/choir-selfdev-gate-2026-09-27.md);
   evidence: [`evidence/m11-probe-run9-satisfied-2026-09-29.json`](evidence/m11-probe-run9-satisfied-2026-09-29.json).
   The spine is complete; the next frontier is the Jev/supervision
   metamission (entrypoint above). M9b/M10 of the world-wire stack are

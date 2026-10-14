@@ -1,6 +1,6 @@
 # Test-Signal Purge — Deletion Ledger (mission 1.5)
 
-Date: 2026-09-25. Definition: `docs/definitions/choir-test-signal-purge-2026-09-24.md`.
+Date: 2026-09-25. Definition: `docs/archive/definitions/choir-test-signal-purge-2026-09-24.md`.
 Metric (owner): safely minimize test quantity AND test wallclock duration —
 remove tests whose failure would not reveal a real defect the E2E suite misses.
 

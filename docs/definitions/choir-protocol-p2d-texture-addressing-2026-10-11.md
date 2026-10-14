@@ -293,7 +293,7 @@ now:
       a work settlement. Alternative: generalize the run to carry a set of
       work items, a larger change to the Texture root that the owner
       reserved for review.
-      Design answer for review: docs/texture-directive-inbox-design-2026-10-11.md
+      Design answer for review: docs/archive/texture-directive-inbox-design-2026-10-11.md
       recommends shape D (a directive carries no work item; the act joins
       the Texture's open request work or reopens it as an owner revise
       does; a turn cannot complete request work while a directive to it is
@@ -317,7 +317,7 @@ now:
   next_action: >-
     owner direction 2026-10-11 evening: research, review and design before
     building. P2d2 waits for the owner's review of this file and of
-    docs/protocol-review-assign-and-engineering-routing-2026-10-11.md
+    docs/archive/protocol-review-assign-and-engineering-routing-2026-10-11.md
     (engineering reaches a Texture only through management)
 
 receipts:

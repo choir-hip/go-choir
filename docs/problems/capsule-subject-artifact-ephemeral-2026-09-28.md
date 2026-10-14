@@ -95,7 +95,7 @@ Refs: `docs/problems/engineering-verification-chain-dead-2026-09-28.md`
 (reconcile fix, commit `765f35a4`), `vm-restart-no-rebind-8085-2026-09-25.md`,
 `vmctl-idle-sweep-hibernates-busy-guest-2026-09-28.md` (pressure hibernate
 mid-work is compounding this class).
-Mission: `docs/definitions/choir-selfdev-gate-2026-09-27.md` (M11).
+Mission: `docs/archive/definitions/choir-selfdev-gate-2026-09-27.md` (M11).
 
 ## Repair landed (pending deploy)
 

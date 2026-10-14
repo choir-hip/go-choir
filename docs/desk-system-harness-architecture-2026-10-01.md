@@ -152,7 +152,7 @@ letter while the addressee never wakes — is impossible by construction.
 ### The five record kinds (target, panel-adjudicated)
 
 The legacy verb set collapses to five primitives
-(`docs/reports/agent-messaging-system-state-2026-10-01.md` §12):
+(`docs/archive/agent-messaging-system-state-2026-10-01.md` §12):
 
 - **`precommit`** — staked prediction. Addressed to a desk, it IS the ask:
   "this question will yield material evidence" — and waking the addressee is

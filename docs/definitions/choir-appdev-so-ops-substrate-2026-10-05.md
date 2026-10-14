@@ -311,7 +311,7 @@ now:
     files "unreachable" — do NOT run og in active mode until a director
     decision classifies WW corpus (keep/archive/delete). Docs for
     director: docs/problems/world-wire-corpus-resource-burn-2026-10-05.md +
-    docs/world-wire-rearchitecture-2026-10-05.md.
+    docs/archive/world-wire-rearchitecture-2026-10-05.md.
 receipts:
   - id: s0-1-storage-lifecycle-2026-10-05
     kind: station_slice

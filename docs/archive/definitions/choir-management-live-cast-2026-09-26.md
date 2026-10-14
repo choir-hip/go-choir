@@ -25,7 +25,7 @@ start:
       research under actuator=rlm; Cast rejects an unknown desk. Deployed
       live-desk acceptance deferred to THIS station — staging desks run
       actuator=tools; the carrier activates only under actuator=rlm.
-    evidence_ref: docs/definitions/choir-desk-cell-carrier-2026-09-25.md
+    evidence_ref: docs/archive/definitions/choir-desk-cell-carrier-2026-09-25.md
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: R3c
 
@@ -189,8 +189,8 @@ receipts:
 
 # R3c — Management Live + Cast (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11:
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11:
 management desk on cells; `choir.Cast(engineering)` opens+binds+executes an
 assignment (the R2-deferred deployed proof); `report_to_texture` retires to
 the staged path. Proof: a management cell Cast → engineering assignment →

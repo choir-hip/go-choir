@@ -191,7 +191,7 @@ now:
     for review; no further prompt tuning until then
   next_action: >-
     owner reviews docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
-    and docs/search-plane-design-fast-deep-broad-2026-10-11.md; then design
+    and docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md; then design
     the research job as its own station
 
 receipts:
@@ -213,7 +213,7 @@ receipts:
       imported page, so unconfirmed leads have no path (one demo turned
       over 1,000 result cards into 10 sources). Search returned full result
       sets; one search in ten ties the guest's 30-second deadline
-      (docs/search-plane-design-fast-deep-broad-2026-10-11.md). This
+      (docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md). This
       explains S1c to S1i's plateau better than any prompt difference.
   - id: S1c
     at: 2026-10-11T02:57Z

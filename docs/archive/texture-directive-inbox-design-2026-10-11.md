@@ -1,10 +1,10 @@
 # How a Texture takes work from outside the owner's request (P2d2 open question)
 
-> **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): Shape D is not built. Texture's obligation becomes its inbox fold over records addressed to `texture:<doc>`, as a stage of the records-as-work migration; the per-addressee sequencing fix survives.
+> **Revised 2026-10-12** ([re-engineering decisions](../re-engineering-decisions-2026-10-12.md)): Shape D is not built. Texture's obligation becomes its inbox fold over records addressed to `texture:<doc>`, as a stage of the records-as-work migration; the per-addressee sequencing fix survives.
 
 Design doc for the owner's review, 2026-10-11. Resolves the structural question
 that held protocol station P2d2
-([definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md](definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md),
+([definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md](../definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md),
 receipt P2d-review3, `now.decision.open_question`). Read-only research against
 `main` 3e277431. No code changed. Mutation class of the eventual change: red
 (Texture root, owner-reserved).

@@ -222,7 +222,7 @@ now:
     metamission). Predates the rearchitecture: processor/reconciler and host
     ingestion are deleted; WW becomes four-desk work on a platform observer
     computer + tenant autopaper computers over a signed claim feed.
-    Rewrite pending from docs/world-wire-rearchitecture-2026-10-05.md.
+    Rewrite pending from docs/archive/world-wire-rearchitecture-2026-10-05.md.
     Carried forward: the 10-01 owner decision on verticals ordering and the
     June failure receipt. Kept, not deleted, because it holds those receipts.
   slice: 'metamission authored from panel consensus + June receipt; green-class

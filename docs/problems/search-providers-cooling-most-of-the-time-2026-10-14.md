@@ -157,7 +157,7 @@ And a fifth cause sits above the health store: **nothing in the plane
 knows about cost**. Since 10-13 every search calls every eligible paid
 provider; health benching was the only thing slowing quota burn, and the
 paid accounts drained anyway. The earlier design
-(docs/search-plane-design-fast-deep-broad-2026-10-11.md §4 clustering)
+(docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md §4 clustering)
 named "no single time authority" and "no honest attribution"; this adds
 "no episode boundary in strikes" and "no budget".
 

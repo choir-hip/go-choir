@@ -306,8 +306,8 @@ receipts:
 
 # R5a — Vocabulary Decoders + Seed Freeze (last station before M11)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11.2
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11.2
 (R5a, off spine, must precede M11): per-family frozen decoders, the V1→V2 normalization
 point, and the keep-`choir:co-super-assignment:v3` decision. R5b (the rename itself) is
 deferred indefinitely per §11.4 — this station freezes the *read* side so a pre-migration

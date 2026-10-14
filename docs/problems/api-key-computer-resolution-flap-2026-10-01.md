@@ -46,6 +46,6 @@ OOM-cycling guest that's a large fraction of uptime.
 
 - `docs/problems/coagent-result-parked-run-not-reactivated-2026-09-30.md` —
   parked-run strand (separate; the wake path, not the submit path).
-- Goal `docs/definitions/choir-parked-run-reactivation-2026-09-30.md` names the
+- Goal `docs/archive/definitions/choir-parked-run-reactivation-2026-09-30.md` names the
   guest OOM/serial-drain as an excluded substrate issue; this flap is a
   *symptom of that same environment* surfacing on the submit path.

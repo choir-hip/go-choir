@@ -24,7 +24,7 @@ start:
       doc's evidence surface, score-free acting-desk packs on the cell
       frame (choir.Pack), and the learning-claims gate (flag posture) on
       the selfdev verification event payload.
-    evidence_ref: docs/definitions/choir-commitment-scores-packs-2026-09-26.md
+    evidence_ref: docs/archive/definitions/choir-commitment-scores-packs-2026-09-26.md
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: M7
   owner_directive: >-
@@ -272,8 +272,8 @@ receipts:
 
 # M7 — Skip the Harness: Derivable Selfdev Continuations (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
 (M7, on spine): selfdev operations advance to materialization on derivable continuations, driven by the
 management cell — no external OMP/CLI stepping process. Proof: a self-dev op reaches a materialized
 change with no external driver.

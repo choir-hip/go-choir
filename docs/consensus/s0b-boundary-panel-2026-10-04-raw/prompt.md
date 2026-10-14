@@ -6,7 +6,7 @@ Frozen evidence follows; do not re-derive it.
 
 ## Mission context
 
-Station S0 (`docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md`)
+Station S0 (`docs/archive/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md`)
 is the reality-boot timeline station. S0a (deployed instrumentation + seven
 receipts) closed 2026-10-02; S0m (record-native messaging) landed between;
 S1a (host-boundary hotfix) landed 2026-10-04 and closed the S1a->S0b transition.

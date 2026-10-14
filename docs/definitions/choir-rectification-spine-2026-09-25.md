@@ -188,7 +188,7 @@ now:
     main at R3d's landing.
   next_action: >-
     Execute M11 per
-    docs/definitions/choir-selfdev-gate-2026-09-27.md — the
+    docs/archive/definitions/choir-selfdev-gate-2026-09-27.md — the
     reversible-selfdev-v1 episode on staging: expected-heads, qualified
     consensus, promotion, live-play, candidate-B falsification, pinned-
     head restore; receipts as scored commitment_records in the live
@@ -198,7 +198,7 @@ now:
 receipts:
   - "R5a terminal 2026-09-27: landed+deployed bc58fa8f (ci 36283101087 —
     all gating lanes green; staging build.commit=bc58fa8f); goal
-    docs/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md
+    docs/archive/definitions/choir-vocab-decoders-seed-freeze-2026-09-26.md
     now.status=settled. Per-family frozen decoders routed at
     interpretation boundaries (lifecycle kinds in decodeLifecycleObject,
     OG kinds in ogRekey, schema consts, seeds pinned); one stratum-C
@@ -270,7 +270,7 @@ receipts:
 
   - "M11 terminal 2026-09-29: landed on staging (probe run 9 predicate
     satisfied; deployed chain through 89cd7247 reject-pin fix); goal
-    docs/definitions/choir-selfdev-gate-2026-09-27.md now.status=landed;
+    docs/archive/definitions/choir-selfdev-gate-2026-09-27.md now.status=landed;
     mission-graph node settled. Driverless episode: desk-authored op
     frozen->awaiting_approval->accepted->applied under qualified
     consensus; candidate-B rejected; falsified record visible in the

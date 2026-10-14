@@ -78,4 +78,4 @@ only boot reconcile covers it — same as before.
 
 Refs: `docs/problems/engineering-verification-chain-dead-2026-09-28.md`,
 `docs/problems/capsule-subject-artifact-ephemeral-2026-09-28.md`.
-Mission: `docs/definitions/choir-selfdev-gate-2026-09-27.md` (M11).
+Mission: `docs/archive/definitions/choir-selfdev-gate-2026-09-27.md` (M11).

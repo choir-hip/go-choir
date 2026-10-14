@@ -206,8 +206,8 @@ receipts:
 
 # R3a — Texture Ledger Consumer (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11:
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11:
 `ResolveTextureActorOccurrence` + `producerOccurrence*` +
 `evidenceSourceEntitiesFromWorkerUpdates` + the `ListAllPendingLifecycleUpdates`
 desk-evidence branch resolve desk acts from `choir.commitment_record`;

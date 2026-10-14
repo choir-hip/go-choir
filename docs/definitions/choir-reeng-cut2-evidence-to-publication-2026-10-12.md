@@ -52,7 +52,7 @@ start:
     - >-
       Search waits on the slowest provider: Keenable about 0.2 s, Tavily
       and Parallel 2-4 s, ChatGPT about 23 s; 15-27% of searches hit the
-      30 s cap (docs/search-plane-design-fast-deep-broad-2026-10-11.md §1-2).
+      30 s cap (docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md §1-2).
     - >-
       REPL state: a persistent desk session per "agent:"+id
       (internal/agentcore/tools_desk.go:111), released at :226 and reclaimed

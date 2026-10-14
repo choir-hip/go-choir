@@ -4,7 +4,7 @@ Frozen 2026-09-11 for Definition
 `docs/definitions/choir-rlm-engineering-carrier-2026-09-11.md`, acceptance item
 P1-provider (red surface: gateway/provider routing, Node B credentials, model
 routing). Frozen before implementation. Facts below re-pin the 2026-09-10
-research note (`docs/reports/choir-opencode-provider-research-2026-09-10.md`);
+research note (`docs/archive/choir-opencode-provider-research-2026-09-10.md`);
 live probes in this phase re-confirm them before any roster conclusion.
 
 ## Model-to-wire-shape map

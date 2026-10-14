@@ -26,7 +26,7 @@ start:
       mid-materialize recovers on the same reconciler. The owner
       decision remains the only authority gate. M9a is unblocked: the
       pipeline produces a signable materialized change.
-    evidence_ref: docs/definitions/choir-selfdev-derivable-continuations-2026-09-26.md
+    evidence_ref: docs/archive/definitions/choir-selfdev-derivable-continuations-2026-09-26.md
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: M9a
   owner_directive: >-
@@ -138,7 +138,7 @@ boundaries:
   mutation_class: red
   authority_sources:
     - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (M9a)
-    - docs/reports/choir-platform-update-system-consensus-2026-09-08.md (platform-follow-v1)
+    - docs/archive/reports/choir-platform-update-system-consensus-2026-09-08.md (platform-follow-v1)
     - docs/agent-product-doctrine.md
     - docs/computer-ontology.md
   must_preserve:
@@ -244,7 +244,7 @@ now:
     status: active
     evidence_refs:
       - docs/desk-rlm-rectification-plan-2026-09-23.md §11 (M9a)
-      - docs/reports/choir-platform-update-system-consensus-2026-09-08.md
+      - docs/archive/reports/choir-platform-update-system-consensus-2026-09-08.md
       - internal/vmctl/handlers.go:1228-1297 (proxy transport)
       - internal/updater/updater.go:115-228 (apply state machine)
       - internal/agentcore/rematerialize.go (pinned-head restore)
@@ -261,7 +261,7 @@ now:
       now.slice + receipts)
     owner_ratification_ref: >-
       docs/desk-rlm-rectification-plan-2026-09-23.md §11 ratified
-      2026-09-25; docs/reports/choir-platform-update-system-consensus-2026-09-08.md
+      2026-09-25; docs/archive/reports/choir-platform-update-system-consensus-2026-09-08.md
       Phase-2 platform-follow-v1
   belief:
     believed_state: >-
@@ -332,8 +332,8 @@ receipts:
 
 # M9a — Platform-Signed Update Push + Restore (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
 (M9a, on spine, unblocked by M7): a tracking computer applies a platform-signed
 update push and restores to a pinned head — the forward transaction and the
 restore edge M11 needs. Architecture ratified:

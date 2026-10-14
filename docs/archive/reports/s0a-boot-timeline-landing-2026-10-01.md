@@ -32,7 +32,7 @@ The one thing worth remembering: the instrument did what it was built to do. It 
 
 ## Names and receipts
 
-- Goal file: `docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md`
+- Goal file: `docs/archive/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md`
 - Metamission spine: `docs/definitions/choir-supervised-app-development-metamission-2026-10-01.md`
 - Receipts under `docs/evidence/`: `s0a-boot-timeline-fresh-2026-10-01.json`, `s0a-boot-timeline-owner-sized-2026-10-01.json`, `s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json`, `s0a-guest-layout-2026-10-01.json`, `s0a-runtime-closure-2026-10-01.json`, `s0a-tap-reachability-2026-10-01.json`, `s0a-gateway-token-visibility-2026-10-01.json`, `s0-probe-index-2026-10-01.json`
 - Problem docs: `docs/problems/s0-gateway-token-on-kernel-cmdline-2026-10-01.md`, `docs/problems/s0-tap-egress-unfiltered-2026-10-01.md`, `docs/problems/s0-deploy-refresh-skips-autoputer-internals-2026-10-01.md`

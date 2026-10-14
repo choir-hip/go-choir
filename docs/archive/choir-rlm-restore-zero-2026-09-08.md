@@ -462,7 +462,7 @@ receipts:
       - "internal/projectionbase/rebase.go staged sibling install + quarantine swap"
       - "internal/autoputer/projection_base.go deletes non-empty skip"
       - "go test ./internal/projectionbase ./internal/autoputer ./cmd/choir-rebuild-base"
-      - "docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md"
+      - "docs/archive/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md"
     rollback_ref: "revert restores empty-store skip and unadvertised W=1 lifetime replay"
     disposition: "retained computers rebase onto advertised W or refuse a stale watermark; publication must keep W within 10000 of H"
     problem_ref: "boot skipped non-empty stores and lifetime-replayed retained computers; W=1/W=13 never consumed"

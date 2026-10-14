@@ -175,7 +175,7 @@ metadata — present only on `work.Details`) shows the defect is wider:
 
 Normalization options (a)/(b)/(c) are before the convergent panel
 (.agentic-consensus/messaging-normalize-20261001); the map doc
-docs/reports/agent-messaging-system-state-2026-10-01.md carries the full
+docs/archive/agent-messaging-system-state-2026-10-01.md carries the full
 mechanism census.
 
 **Residual repair landed 2026-10-01 under S0m RN0** (this commit). Items

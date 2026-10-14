@@ -112,7 +112,7 @@ boundaries:
   mutation_class: orange
   authority_sources:
     - owner 2026-10-05 ("we get to do that deletion"; "just delete processor and reconciler")
-    - docs/definitions/choir-signal-research-rlm-cutover-2026-09-29.md (M0a finish, absorbed)
+    - docs/archive/definitions/choir-signal-research-rlm-cutover-2026-09-29.md (M0a finish, absorbed)
   must_preserve:
     - Research keeps read-only world authority; egress stays metered by the shared ledger.
     - Frozen WW corpus tables are not dropped (data class frozen + retained).

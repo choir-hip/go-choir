@@ -23,7 +23,7 @@ start:
       typed lifecycle controls, sealed registry; staged Cast reaches
       delegated admission on the canonical ledger. The desk-cell carrier
       promotes desks per-profile; texture is the next promotion.
-    evidence_ref: docs/definitions/choir-management-live-cast-2026-09-26.md
+    evidence_ref: docs/archive/definitions/choir-management-live-cast-2026-09-26.md
   spine_meta_goal: docs/definitions/choir-rectification-spine-2026-09-25.md
   station: R3d
   owner_directive: >-
@@ -221,7 +221,7 @@ receipts:
   - "charter: R3d = full-RLM texture per owner directive 2026-09-26 — no
     a/b split; typed authoring tools retire; authoring is a choir.* cell
     verb committed via ApplyTextureTurn. Predecessor R3c receipts in
-    docs/definitions/choir-management-live-cast-2026-09-26.md."
+    docs/archive/definitions/choir-management-live-cast-2026-09-26.md."
   - "local proofs (pre-push): go build ./cmd/... ./internal/... clean;
     textureowner suite green (TestCommitCellTextureApplyCommitsAuthorRevision,
     TestCommitCellTextureDecideRecordsTurn — AuthorAppAgent revision, head
@@ -257,8 +257,8 @@ receipts:
 
 # R3d — Texture Live + Authoring, full RLM (station on the rectification spine)
 
-Live station under [`choir-rectification-spine-2026-09-25.md`](choir-rectification-spine-2026-09-25.md).
-Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../desk-rlm-rectification-plan-2026-09-23.md) §11
+Live station under [`choir-rectification-spine-2026-09-25.md`](../../definitions/choir-rectification-spine-2026-09-25.md).
+Scope per [`desk-rlm-rectification-plan-2026-09-23.md`](../../desk-rlm-rectification-plan-2026-09-23.md) §11
 (R3d) + the owner directive in `start.owner_directive`: texture is a
 full-RLM desk — `desk_go_eval` only; genuine `AuthorAppAgent` revisions
 metabolizing ledger traffic under editorial discretion are authored by a

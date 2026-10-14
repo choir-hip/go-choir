@@ -235,7 +235,7 @@ news sentences are attributions, not predictions"
 
 - **sourcecycled's processor and reconciler** extracted claims as a host
   daemon over queue tables. It failed on its substrate, not its idea
-  (`docs/world-wire-rearchitecture-2026-10-05.md`):
+  (`docs/archive/world-wire-rearchitecture-2026-10-05.md`):
   - it ran on the wrong plane, as a host daemon with no ComputerID or
     tape;
   - the store was entangled: 8.5M og objects shared a server with control
@@ -248,7 +248,7 @@ news sentences are attributions, not predictions"
   `entity`, `thread`, `article`) and seven edges (asserts, about,
   corroborates, contradicts, supersedes). It was superseded before it was
   built
-  (`docs/definitions/choir-wire-kb-graph-schema-w0-2026-10-01.md`). Two of
+  (`docs/archive/definitions/choir-wire-kb-graph-schema-w0-2026-10-01.md`). Two of
   its rules carry forward: a cap on claims per item, and nothing is ever
   deleted, only superseded.
 

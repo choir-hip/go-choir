@@ -71,12 +71,12 @@ review:
 metamission:
   stations:
     - id: S0-reality-and-boot-timeline
-      path: docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md
       readiness: reviewed
       status: complete
       depends_on: []
     - id: S0m-record-native-messaging
-      path: docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md
       readiness: reviewed
       status: complete
       depends_on: []
@@ -98,7 +98,7 @@ metamission:
       status: working
       depends_on: [S0-reality-and-boot-timeline, S1a-host-boundary-hotfix]
     - id: S2-layering-runtime-from-release
-      path: docs/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md
+      path: docs/archive/definitions/choir-appdev-s2-layering-runtime-from-release-2026-10-01.md
       readiness: reviewed
       status: complete  # closed 2026-10-05 (now card v5.1)
       depends_on: [S0-reality-and-boot-timeline]
@@ -299,7 +299,7 @@ start:
       Semantic snapshots already exist: ProjectionBase blobs + replay
       watermark W with PlanRecovery (rebase/resume/refuse, tail bound
       10,000) landed 9341b5d1
-      (docs/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md).
+      (docs/archive/reports/choir-rlm-restore-zero-snapshotting-correction-2026-09-09.md).
       The owner computer's blob is about 16 GB.
     - >-
       VM state lives on btrfs (nix/disks.nix), so reflink copies of
@@ -514,7 +514,7 @@ boundaries:
     - owner direction in session 2026-10-01 (deliverable, source only, fork ratification, latency targets)
     - docs/choir-doctrine.md
     - docs/computer-ontology.md (capsule, effect bundle, restore-set, forked computer, snapshot naming)
-    - docs/reports/choir-platform-update-system-consensus-2026-09-08.md (stratified layers)
+    - docs/archive/reports/choir-platform-update-system-consensus-2026-09-08.md (stratified layers)
   must_preserve:
     - Capsules own no semantic state; only an accepted event changes desired code.
     - Owner approval (or a stronger declared consensus policy) gates every commit.
@@ -681,10 +681,10 @@ now:
       + Svelte frontend + app backends, Firecracker v1.15.1.
     status: testing
     evidence_refs:
-      - docs/reports/s0b-disposable-probe-station-close-2026-10-04.md
+      - docs/archive/reports/s0b-disposable-probe-station-close-2026-10-04.md
       - docs/reports/s1a-host-boundary-station-close-2026-10-04.md
       - docs/reports/s0m-record-native-station-close-2026-10-04.md
-      - docs/reports/s2-layering-runtime-checkpoint-2026-10-04.md
+      - docs/archive/reports/s2-layering-runtime-checkpoint-2026-10-04.md
       - docs/evidence/s1a-refusal-matrix-2026-10-04.json
       - docs/evidence/s0b-go-effect-2026-10-04.json
       - docs/evidence/s0b-snapshot-resume-2026-10-04.json
@@ -849,9 +849,9 @@ receipts:
     status: closed
     landed: S0-reality-and-boot-timeline (S0a + S0b)
     next: S2-layering-runtime-from-release
-    terminal_receipt: docs/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md#s0b-boundary-close-2026-10-04
+    terminal_receipt: docs/archive/definitions/choir-appdev-s0-reality-boot-timeline-2026-10-01.md#s0b-boundary-close-2026-10-04
     panel: .agentic-consensus/s0b-boundary-panel-20261004 (8 accept_with_edge / 3 send_back; send-backs closed)
-    report: docs/reports/s0b-disposable-probe-station-close-2026-10-04.md
+    report: docs/archive/reports/s0b-disposable-probe-station-close-2026-10-04.md
     note: >-
       Recorded on the spine by the 2026-10-05 director review (the
       transition was executed but only receipted on the station file).
@@ -865,7 +865,7 @@ receipts:
     boundary: S0a landed -> S0b (S0b then deferred behind S0m)
     identity: main@7e412ca7 (instrument + deadlock hotfix), evidence refresh 4708a034, deployed fd8b2973
     proof_refs:
-      - docs/reports/s0a-boot-timeline-landing-2026-10-01.md
+      - docs/archive/reports/s0a-boot-timeline-landing-2026-10-01.md
       - docs/evidence/s0a-boot-timeline-fresh-2026-10-01.json
       - docs/evidence/s0a-boot-timeline-owner-sized-2026-10-01.json
       - docs/evidence/s0a-boot-timeline-owner-sized-post-refresh-2026-10-01.json
@@ -891,7 +891,7 @@ receipts:
     kind: station_terminal
     station: S0m-record-native-messaging
     status: closed
-    terminal_receipt: docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md#s0m-ask-acceptance-2026-10-04
+    terminal_receipt: docs/archive/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md#s0m-ask-acceptance-2026-10-04
     identity: main@a4fcdb8d deployed 2026-10-04T02:01:45Z
     landing:
       source_commit: a4fcdb8d
@@ -1013,7 +1013,7 @@ receipts:
       close affirmed + promote SA (not S3 — the DAG gates S3 on SA+SO);
       conditions discharged: SA now-card updated with the defect field,
       stale deploy-freshness residual removed, weak legs named as edges.
-    report: docs/reports/smg-management-rlm-cutover-station-close-2026-10-06.md
+    report: docs/archive/reports/smg-management-rlm-cutover-station-close-2026-10-06.md
     named_edges: >-
       Re-run legs 1-3 on the owner computer after SA slice 1 (director
       2026-10-06; owner-guest storm is SA's domain; do NOT drain/park it).
@@ -1527,7 +1527,7 @@ Slices, in order:
 Owner framing: World Wire / autopaper is "the true application of Choir,
 the purpose of all this infra". This is not one autopaper but a platform
 for others' autopapers, with white-label copies built from the primary.
-The rearchitecture analysis is `docs/world-wire-rearchitecture-2026-10-05.md`
+The rearchitecture analysis is `docs/archive/world-wire-rearchitecture-2026-10-05.md`
 (read it with its director notes); the evidence is
 `docs/problems/world-wire-corpus-resource-burn-2026-10-05.md`.
 

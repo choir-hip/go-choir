@@ -217,7 +217,7 @@ flight drain on the old kinds (consumed, never re-armed). Nothing migrates.
   docs/precommitment-predictions-and-scoring-design-2026-10-11.md.
 - Item 3: open; the owner asks whether Assign is a needless subsystem
   that can be simplified without changing its essence (review in
-  docs/protocol-review-assign-and-engineering-routing-2026-10-11.md).
+  docs/archive/protocol-review-assign-and-engineering-routing-2026-10-11.md).
 - Item 8: the owner trusts the recommendation and asks what blocks real
   per-computer keys (docs/precommitment-signing-and-computer-keys-2026-10-11.md).
 - Addressing: management sends records and scores to a Texture desk and

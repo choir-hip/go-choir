@@ -85,7 +85,7 @@ then to fix the places where the record itself lied about what happened.
 ## Names and receipts
 
 Station goal file:
-docs/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md.
+docs/archive/definitions/choir-appdev-s0m-record-native-messaging-2026-10-01.md.
 Deployed terminal commit: a4fcdb8d, deployed under CI run 37165170516
 (confirmed by x-choir-build-commit). Boundary-close receipts:
 docs/evidence/s0m-ask-acceptance-2026-10-04.json (trajectory 684ddcb1),

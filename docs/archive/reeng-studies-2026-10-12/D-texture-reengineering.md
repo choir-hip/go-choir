@@ -358,7 +358,7 @@ choir.Ask("research", "Policy actions on AI chips Oct 4–11: who, what, primary
 - **Management is the only technical input.** Engineering results reach
   Texture only as management records that are already translated: a plain
   summary plus artifact handles. Jev is a management routing step and never
-  a holder (`docs/protocol-review-assign-and-engineering-routing-2026-10-11.md:15-60`).
+  a holder (`docs/archive/protocol-review-assign-and-engineering-routing-2026-10-11.md:15-60`).
   The management prompt has to gain that translation contract. Today it says
   only "Report the result to Texture with choir.Report, carrying its
   evidence refs" (`promptstore/defaults/management.yaml:17-21`).
