@@ -1,7 +1,8 @@
 # Node B's Artifact Store Grows About 12.6 GB a Day; Garbage Collection Never Runs
 
 Date: 2026-10-14, about 12:00 UTC. Found while sizing the performance
-report. Status: documented; not fixed. Owner: "That much storage growth?
+report. Status: diagnosed; fix on branch `fix/artifact-store-gc`, not
+deployed (see "Fix and owner steps" at the end). Owner: "That much storage growth?
 Another storage leak to fix huh."
 
 ## Evidence (read-only, Node B)
@@ -210,3 +211,53 @@ the sweep; none has fired, because nothing ran active):
    owner approves blind.
 8. Repeatable chunk digests change the confidentiality property beyond
    what the platform already sees.
+
+## Fix (branch `fix/artifact-store-gc`, not pushed) and owner steps
+
+Commits after this doc commit, in order:
+
+1. `fix(platform)`: the artifact GC is safe to run active. Every live-set
+   query fails closed. A computer whose liveness cannot be proven keeps its
+   chunks. A namespace with an empty live set is reported, never swept.
+   Writers refresh a reused object under a reuse lock, and the GC re-checks
+   each candidate under it before the unlink. CAS writes go through a temp
+   file and rename. Each run is capped at 50,000 objects and 32 GiB. An
+   intent record is fsynced to `artifact-gc-log/<day>.jsonl` before every
+   unlink. Reports show the uncapped eligible set. The on-demand endpoint
+   is clamped to the configured policy. og is held back. `node-b.nix`
+   stays dry-run with the production policy (7-day window).
+2. `fix(filecas)`: chunk nonces are derived from the chunk (HMAC of the
+   plaintext under a key derived from the DEK), so a rebooted guest
+   re-seals unchanged chunks to the same digest and the platform stores
+   them once.
+3. `feat(node-b)`: Nix generation pruning (keep 4) and `nix store gc`
+   every 4 hours.
+4. `feat(node-b)`: `PLATFORM_ARTIFACT_GC_MODE=active` (the activation
+   gate).
+
+Owner steps:
+
+- **A. Push 1 to 3 and read the dry-run report.** After corpusd has been
+  up for 10 minutes, `journalctl -u go-choir-corpusd | grep 'artifact
+  gc:'` shows the per-namespace report. `eligible_bytes` and `deleted`
+  are the first active run's figures; the warnings show any unproven
+  computers. The expectation is about 7.7 GB of chunks plus 0 to 15.9 GB
+  of bases.
+- **B. Push 4 (activation)** once A looks right. Each hourly run then
+  deletes at most 50,000 objects or 32 GiB and logs every deletion. To
+  roll back, set `PLATFORM_ARTIFACT_GC_MODE=dry-run` (or `off`).
+- **C. Corpus dump.** Delete `/var/lib/go-choir/corpus-dolt/rebuild-20261009/`
+  (22.9 GB), or compress it and copy it to node-a first. Do not stop
+  `go-choir-corpus-dolt`: live Store B runs on it.
+- **D. Pre-teardown og bodies (about 1.1 GB, 570,000 files)**, only after
+  C: add `og` to `PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES`.
+- **E. Review of the nonce change (optional).** Deterministic chunk
+  sealing lets the platform see when two chunks of one computer are
+  identical. The platform already stores that computer's plaintext
+  manifests. A review panel can confirm this trade before step 2 deploys.
+
+Still open: the event tape (2.31 GB and 1.07 million files a day, kept by
+design) and its 268,000 events a day; full-snapshot projection bases (one
+per 2,500 events); `checkpointd` failing on `og migrate ... no verified
+identity formula`; and the guest still re-sending (not re-storing) its tree
+after each boot (network only).

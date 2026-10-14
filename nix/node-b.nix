@@ -604,7 +604,7 @@ in
         # bodies). Rollback: MODE=dry-run (report only) or MODE=off.
         # The on-demand /internal/platform/artifact-gc endpoint is clamped to
         # this policy.
-        "PLATFORM_ARTIFACT_GC_MODE=dry-run"
+        "PLATFORM_ARTIFACT_GC_MODE=active"
         "PLATFORM_ARTIFACT_GC_GRACE=168h"
         "PLATFORM_ARTIFACT_GC_INTERVAL=1h"
         "PLATFORM_ARTIFACT_GC_MAX_DELETES=50000"
