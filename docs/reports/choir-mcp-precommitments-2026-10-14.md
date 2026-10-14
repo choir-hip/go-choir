@@ -376,6 +376,15 @@ Only 4 resolved: too few to read calibration; keep recording.
   forecasts. The generated goal ledger (`docs/calibration/goal-ledger.md`,
   `scripts/goal_precommitments.py`) is a second level-1 source an import
   could read.
-- **R8. Staging proof owed.** Nothing here is deployed; the acceptance is
+- **R8. The reducer's 10,000-record scan.** `mechanicalResolveForReport`
+  lists up to 10,000 commitment records (newest first) to see whether a
+  desk precommit is already resolved, a known linear scan
+  (precommitment-records, scoring design §1.1). Calibration records count
+  toward that window, so a busy external agent brings the day the check
+  silently misses an old resolution closer. The desk pack's window is
+  protected (§6 item 7); this one is not, because changing it touches the
+  lifecycle reducer (red). The fix is the indexed lookup the scoring
+  design already asks for.
+- **R9. Staging proof owed.** Nothing here is deployed; the acceptance is
   a claim written, settled and summarised through `choir.news` with a
   `precommit:*` key, and a `write:runtime`-only key refused.
