@@ -329,7 +329,7 @@ now:
     scope_if_supported: Autopaper on staging, one vertical
     status: proposed
     evidence_refs: [docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md]
-  decision: {what: "stations L0-L5 as listed; L1a before C1e, L1b beside it, L1c after", kind: operational, status: proposal, evidence_ref: docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md, owner_ratification_ref: pending (owner asked for the metamission 2026-10-13; the open decisions above remain)}
+  decision: {what: "stations L0-L5 as listed; L1a before C1e, L1b beside it, L1c after", kind: operational, status: proposal, evidence_ref: docs/reports/roadmap-lateral-review-synthesis-2026-10-13.md, owner_ratification_ref: "owner answered decisions 1-12 on 2026-10-14 (docs/reports/owner-roadmap-rulings-2026-10-14.md): architecture and resource efficiency before source scaling; spend tracked, never capped; schedules survive crashes (option B); general and tech news vertical zero, Taiwan first; synthesis across sources and languages, never one article per capture"}
   belief:
     believed_state: >-
       Autopaper is live on the platform-tier paper computer, which the
