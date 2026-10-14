@@ -218,9 +218,11 @@ metamission:
         Auth and account (owner 2026-10-14: "we need to make a better auth
         system ... I don't even think we even have passkey recovery").
         Recovery today creates a token and never sends it, and there is no
-        recovery screen. Slices: real recovery through maild; emailed
-        one-time-code sign-in; several passkeys and visible sessions;
-        optional OAuth and TOTP; the account as the login for app windows.
+        recovery screen. Slices (owner 2026-10-14): passkeys plus email
+        magic-link sign-in through maild, recovery through the same path,
+        several passkeys and visible sessions, the account as the login
+        for app windows. No Google/Apple/OAuth providers for now; an
+        OpenAI sign-in for users' own credits is a later idea.
     - id: SP
       path: docs/definitions/choir-appdev-sp-production-infrastructure-2026-10-09.md
       readiness: intent

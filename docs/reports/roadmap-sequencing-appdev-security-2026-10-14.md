@@ -134,3 +134,18 @@ IOWeight), a quota'd subvolume, a dedicated restricted user and key for
 backup pushes, and a firewall rule for Node B only. It changes a host the
 other project manages, so it needs the owner's go-ahead and that
 project's agent to apply it.
+
+## Auth scope ruling (owner 2026-10-14)
+
+"In addition to pass keys, we should have email magic link auth. I don't
+want to deal with the Google setup or Apple or other sign in with X systems
+quite yet." So station LA is: passkeys plus **email magic-link sign-in**
+(a working login method, not only recovery), with recovery through the
+same email path, several passkeys per account, and visible, revocable
+sessions. No Google, Apple or other OAuth providers for now.
+
+Later idea, not now: an OpenAI sign-in that could let users spend their
+own ChatGPT credits. It only helps users with paid ChatGPT accounts, and
+the owner does not want Choir to be reselling ChatGPT; it belongs with a
+later decision on how users' token spending is handled. "For now, users
+using it and consuming tokens are a good thing."
