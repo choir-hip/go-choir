@@ -60,7 +60,8 @@ const managementCellDeadlineEnv = "CHOIR_MANAGEMENT_CELL_DEADLINE"
 // legitimate long calls (research's choir.SearchWait), and the design scopes
 // S1 to management.
 func deskCellHostDeadline(deskRole string) time.Duration {
-	if deskRole != agentprofile.Management {
+	// A management task's cells are management cells (S2a): the same bound.
+	if deskRole != agentprofile.Management && deskRole != agentprofile.ManagementTask {
 		return 0
 	}
 	raw := strings.TrimSpace(os.Getenv(managementCellDeadlineEnv))

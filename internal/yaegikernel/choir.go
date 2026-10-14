@@ -802,15 +802,20 @@ func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any) (s
 	if err != nil {
 		return "", fmt.Errorf("choir: Delegate: refs are record ids from choir.Records(): %w", err)
 	}
+	// A captures record delegates its captures; a task's final Report
+	// delegates its residuals again.
 	captures := map[string]int{}
 	for _, r := range s.records {
 		if r.Captures != nil && len(r.Captures.Items) > 0 {
 			captures[r.RecordID] = len(r.Captures.Items)
 		}
+		if r.TaskOutcome != nil && len(r.TaskOutcome.Residuals) > 0 {
+			captures[r.RecordID] = len(r.TaskOutcome.Residuals)
+		}
 	}
 	for _, id := range ids {
 		if _, ok := captures[id]; !ok {
-			return "", fmt.Errorf("choir: Delegate: %s is not a captures record of this turn (pass r.RecordID of a record whose r.Captures is set)", id)
+			return "", fmt.Errorf("choir: Delegate: %s is not a captures record or a task Report with residuals of this turn (pass r.RecordID of a record whose r.Captures or r.TaskOutcome.Residuals is set)", id)
 		}
 	}
 	var groups [][]string

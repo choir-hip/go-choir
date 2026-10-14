@@ -69,7 +69,7 @@ func (rt *Runtime) storiesEgress(ctx context.Context, exec toolregistry.Executio
 	if role == "" && exec.RunRecord != nil {
 		role = agentProfileForRun(exec.RunRecord)
 	}
-	if role != agentprofile.Management {
+	if role != agentprofile.Management && role != agentprofile.ManagementTask {
 		return nil, fmt.Errorf("the story library is management's")
 	}
 	if rt == nil || rt.store == nil {
@@ -104,6 +104,11 @@ func (rt *Runtime) storiesEgress(ctx context.Context, exec toolregistry.Executio
 			return nil, fmt.Errorf("before %q is not a page's Next; pass the Next of the page before", b)
 		}
 		beforeDoc = doc
+	}
+	if before.IsZero() {
+		// The newest page: the run has now seen the library's head, which
+		// its texture:new commits carry (management delegation R2-5).
+		rt.noteStoryLibraryShown(ctx, exec.RunID, owner, computer)
 	}
 	docs, err := rt.store.ListStoryDocuments(ctx, owner, computer, before, beforeDoc, limit+1)
 	if err != nil {

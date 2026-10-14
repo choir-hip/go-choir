@@ -431,6 +431,11 @@ func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
 			Directive: &types.CommitmentDirective{Subtype: types.CommitmentDirectiveNote, Body: id},
 			Inbox:     management, SenderInbox: source, Addressee: management, EmitterKind: types.CommitmentEmitterSystem,
 			Discrepancy: types.DiscrepancyUnresolved, Provenance: types.CommitmentProvenance{AgentID: "system:captures", CommittedAt: at.Format(time.RFC3339Nano)},
+			// A capture arrival, the system record that wakes its reader:
+			// the re-check asks the same wake predicate as the commit
+			// (management delegation R2-3), so a system record that wakes
+			// no one on commit would not re-arm the turn either.
+			Captures: &types.CommitmentCaptures{SourceID: "rss:test", Items: []types.CaptureArrival{{CaptureID: "cap-" + id, URL: "https://shown.example/" + id}}},
 		}}}
 		req.CommandDigest, _ = store.ComputeCommitInboxRecordsDigest(req)
 		if _, err := s.CommitInboxRecords(ctx, req); err != nil {

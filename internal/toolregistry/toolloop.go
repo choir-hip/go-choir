@@ -84,7 +84,11 @@ type toolLoopOptions struct {
 	// one (docs/model-pools-design-2026-10-12.md).
 	fallbackLLMConfigs []provideriface.LLMSelection
 
-	initialToolChoice      string
+	initialToolChoice string
+	// providerCallTimeout bounds each model call (0: none beyond ctx). A
+	// management task sets it below its deadline (management delegation
+	// R2-9), so one slow call cannot take the whole task.
+	providerCallTimeout    time.Duration
 	terminalToolResults    map[string]func(string) bool
 	passivatingToolResults map[string]func(string) bool
 	completionGuard        ToolLoopCompletionGuardFunc
@@ -159,6 +163,20 @@ func WithInitialToolChoice(choice string) ToolLoopOption {
 // accepts its structured output (e.g. an eval result carrying a committed
 // terminal assignment fate). The decision reads the result payload, not just
 // the tool name.
+// WithToolLoopProviderCallTimeout bounds each model call of the loop. A
+// call that reaches it fails the loop with ErrProviderCallTimeout.
+func WithToolLoopProviderCallTimeout(timeout time.Duration) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		if timeout > 0 {
+			opts.providerCallTimeout = timeout
+		}
+	}
+}
+
+// ErrProviderCallTimeout marks a model call that reached the loop's
+// per-call timeout.
+var ErrProviderCallTimeout = errors.New("model call exceeded its per-call timeout")
+
 func WithTerminalToolResult(name string, predicate func(output string) bool) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		if trimmed := strings.TrimSpace(name); trimmed != "" && predicate != nil {
@@ -414,11 +432,16 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		if requiredNextTool != nil && requiredNextToolCallTimeout > 0 {
 			requiredTimeout = requiredNextTool
 			providerCtx, cancelProviderCall = context.WithTimeout(ctx, requiredNextToolCallTimeout)
+		} else if options.providerCallTimeout > 0 {
+			providerCtx, cancelProviderCall = context.WithTimeout(ctx, options.providerCallTimeout)
 		}
 		resp, err := CallToolLoopProviderWithRetries(providerCtx, provider, req, emit)
 		providerCallErr := providerCtx.Err()
 		if cancelProviderCall != nil {
 			cancelProviderCall()
+		}
+		if err != nil && requiredTimeout == nil && options.providerCallTimeout > 0 && ctx.Err() == nil && errors.Is(providerCallErr, context.DeadlineExceeded) {
+			return "", totalUsage, fmt.Errorf("%w (%s): %v", ErrProviderCallTimeout, options.providerCallTimeout, err)
 		}
 		if err != nil {
 			if requiredTimeout != nil && ctx.Err() == nil && providerCallErr != nil {

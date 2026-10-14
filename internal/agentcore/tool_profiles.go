@@ -173,6 +173,9 @@ func isTextureAgentID(agentID string) bool {
 }
 
 func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
+	if isManagementTaskRun(rec) {
+		return rt.managementTaskSystemPrompt(rec), nil
+	}
 	profile := agentProfileForRun(rec)
 	channelID := channelIDForRun(rec)
 	ownerID := ""
@@ -427,6 +430,13 @@ func (rt *Runtime) InstallDefaultAgentTools() error {
 		}
 		deskCellRegistries[deskProfile] = deskReg
 	}
+	// A management task (S2a) runs on the same carrier with its own role,
+	// so its desk worker binds the task's module set and handle.
+	taskReg, err := buildDeskCellRegistry(rt, agentprofile.ManagementTask, researchDeps)
+	if err != nil {
+		return err
+	}
+	deskCellRegistries[agentprofile.ManagementTask] = taskReg
 
 	conductorRegistry := toolregistry.MustNewToolRegistry()
 	emailRegistry := toolregistry.MustNewToolRegistry()
@@ -452,6 +462,14 @@ func (rt *Runtime) toolRegistryForRun(rec *types.RunRecord) *toolregistry.ToolRe
 	if profile == "" {
 		return nil
 	}
+	if isManagementTaskRun(rec) {
+		// A task's desk_go_eval binds the task role's module set, not
+		// management's (R2-2). With no task registry it gets no tools.
+		if rt.toolProfiles != nil {
+			return rt.toolProfiles[agentprofile.ManagementTask]
+		}
+		return nil
+	}
 	if rt.toolProfiles != nil {
 		if registry, ok := rt.toolProfiles[profile]; ok && registry != nil {
 			return registry
@@ -465,6 +483,33 @@ func (rt *Runtime) ToolRegistryForProfile(profile string) *toolregistry.ToolRegi
 		return nil
 	}
 	return rt.toolProfiles[strings.TrimSpace(profile)]
+}
+
+// managementTaskSystemPrompt is a management task's prompt (S2a): the core,
+// the time, the task's own overlay (not management's, whose authority the
+// task does not hold), and its generated surface.
+func (rt *Runtime) managementTaskSystemPrompt(rec *types.RunRecord) string {
+	corePrompt := "Choir is a multiagent writing, research, and execution system with one user-facing product, one runtime, and one standard of truth."
+	if rt != nil && rt.promptStore != nil {
+		if loaded, err := rt.promptStore.LoadCore(); err == nil && strings.TrimSpace(loaded) != "" {
+			corePrompt = loaded
+		}
+	}
+	var b strings.Builder
+	b.WriteString(corePrompt)
+	b.WriteString("\n\n")
+	b.WriteString(runtimeprompts.TemporalContext(runtimeprompts.TemporalContextOptions{NowUTC: time.Now().UTC().Format(time.RFC3339)}))
+	b.WriteString(runtimeprompts.RLMManagementTaskOverlay(runtimeprompts.RLMManagementTaskOverlayOptions{
+		TaskID:   managementTaskIDOfRun(rec),
+		Deadline: managementTaskDeadline.String(),
+		Captures: metadataIntValue(rec.Metadata, "management_task_leased_count"),
+	}))
+	b.WriteString("\n\n")
+	b.WriteString(yaegikernel.DeskSurface(agentprofile.ManagementTask, "", true))
+	// Not the run-context overlay: it teaches ReportPacket and Ask, which a
+	// task does not have.
+	b.WriteString("\n\nCurrent agent id: " + agentIDForRun(rec) + ". You read this inbox; you send as " + persistentManagementAgentID(rec.OwnerID) + ".")
+	return b.String()
 }
 
 // deskSurfacePrompt is the generated block naming the desk's exact choir

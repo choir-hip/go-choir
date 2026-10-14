@@ -72,6 +72,13 @@ type Runtime struct {
 	// row (inbox -> int), for the backoff of the wake that retries the
 	// records a failed turn left unread. In memory: a restart resets it.
 	recordsFailedTurns sync.Map
+	// storyLibraryShown holds the story-library head each running desk run
+	// last read with choir.Stories() (run id -> int64), stamped on its
+	// texture:new commits (management delegation R2-5).
+	storyLibraryShown sync.Map
+	// managementTaskStartMu serializes the management task slot starter
+	// (R2-6), so two wakes cannot both take the last slot.
+	managementTaskStartMu sync.Mutex
 
 	cfg         provideriface.Config
 	store       *store.Store
@@ -401,7 +408,7 @@ func (rt *Runtime) activate(rec *types.RunRecord) {
 // lifecycle.
 func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunRecord) {
 	runRec := *rec
-	runCtx, cancel := context.WithTimeout(ctx, rt.cfg.ActivationBudget)
+	runCtx, cancel := context.WithTimeout(ctx, rt.activationBudgetForRun(rec))
 
 	rt.runningMu.Lock()
 	stored, err := rt.getRunForComputer(context.Background(), rec.OwnerID, rec.RunID)
@@ -430,6 +437,18 @@ func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunReco
 
 	rt.executeActivation(runCtx, &runRec)
 	*rec = runRec
+}
+
+// activationBudgetForRun bounds one activation. A management task's
+// deadline is its activation budget (O7): the durable
+// activation_budget_deadline closes its run, and the task, with reason
+// deadline.
+func (rt *Runtime) activationBudgetForRun(rec *types.RunRecord) time.Duration {
+	budget := rt.cfg.ActivationBudget
+	if isManagementTaskRun(rec) && (budget <= 0 || budget > managementTaskDeadline) {
+		budget = managementTaskDeadline
+	}
+	return budget
 }
 
 func cloneMetadata(metadata map[string]any) map[string]any {
@@ -1675,6 +1694,10 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 	}
 	errPayload, _ := json.Marshal(map[string]string{"error": reason})
 	rt.emitEvent(context.Background(), &rec, types.EventRunCancelled, events.CauseTaskLifecycle, errPayload)
+	// A cancelled or deadline-ended task run closes its task here: the
+	// activation's own error path finds the stored state terminal and
+	// skips the post-turn hook (management delegation R2-8, R2-20).
+	rt.closeManagementTaskOfEndedRun(context.Background(), &rec)
 	return nil
 }
 
@@ -2486,6 +2509,26 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	states := []types.RunState{types.RunPending, types.RunRunning}
 	rt.forEachPreBootRun(ctx, "boot passivation", states, func(rec *types.RunRecord, was types.RunState) bool {
 		now := time.Now().UTC()
+		if isManagementTaskRun(rec) {
+			// Tasks are not resumed (R2-12): the run ends here, never
+			// parked for a resume, and the task's round closes
+			// run_passivated with its residuals, which wakes the parent.
+			// The consumed marker permits that one wake.
+			rec.State = types.RunCancelled
+			rec.Error = "interrupted by a planned restart; management tasks are not resumed"
+			rec.UpdatedAt, rec.FinishedAt = now, &now
+			rec.Metadata = cloneMetadata(rec.Metadata)
+			rec.Metadata["fate"] = "planned_restart_closed"
+			if err := rt.terminalizeRunCanonical(ctx, rec, rec.Error); err != nil {
+				log.Printf("runtime: boot passivation: close task run %s: %v", rec.RunID, err)
+				return false
+			}
+			passivated := *rec
+			passivated.State = types.RunPassivated
+			rt.closeManagementTaskOfEndedRun(ctx, &passivated)
+			log.Printf("runtime: closed management task run %s (was %s) at a planned restart", rec.RunID, was)
+			return true
+		}
 		rec.State = types.RunPassivated
 		rec.Error = ""
 		rec.UpdatedAt = now
@@ -3404,7 +3447,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
 	assignedEngineeringOverlay := false
-	if rt.capsuleExecutor != nil {
+	if rt.capsuleExecutor != nil && !isManagementTaskRun(rec) {
 		switch agentProfileForRun(rec) {
 		case agentprofile.Management:
 			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
@@ -3521,6 +3564,15 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
+	}
+	if isManagementTaskRun(rec) {
+		// A task ends when its Done commits (R2-8), and no model call may
+		// take its whole deadline (R2-9).
+		toolLoopOptions = append(toolLoopOptions,
+			toolregistry.WithTerminalToolResult("desk_go_eval", func(output string) bool {
+				return strings.Contains(output, "rlm:"+yaegikernel.IntentTaskDone+":")
+			}),
+			toolregistry.WithToolLoopProviderCallTimeout(managementTaskCallTimeout))
 	}
 	if runHasProfile(rec, agentprofile.Texture) {
 		// Texture's durable transition is a committed texture_turn cell intent

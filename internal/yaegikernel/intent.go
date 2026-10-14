@@ -204,6 +204,11 @@ type InboxRecord struct {
 	// capture id, when intake labels are on (L2a A2 / R2-6). It is joined
 	// at read time, never stored on the record.
 	Labels map[string]CaptureLabelView `json:"labels,omitempty"`
+	// TaskOutcome is a management task's final Report (management
+	// delegation S2a): what each leased capture became and the residuals,
+	// the captures it left, which management may delegate again by this
+	// record's id.
+	TaskOutcome *types.CommitmentTaskOutcome `json:"task_outcome,omitempty"`
 	// ParentID, RelatedIDs and EvidenceRefs are the record's links (C1e
 	// D9): a Cast's parent request, the records a Reply answers, and the
 	// evidence a Report names (an engineering Report names its assignment,

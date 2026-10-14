@@ -429,7 +429,9 @@ func (h *actorHandler) handleInboxRecord(ctx context.Context, u actor.Update, me
 				}
 			}
 		}
-	case strings.HasPrefix(agentID, agentprofile.Research+":"), strings.HasPrefix(agentID, agentprofile.Management+":"):
+	case strings.HasPrefix(agentID, agentprofile.Research+":"), strings.HasPrefix(agentID, agentprofile.Management+":"),
+		// A management task's inbox wake is its durable start (S2a, R2-6).
+		strings.HasPrefix(agentID, types.ManagementTaskDesk+":"):
 		if _, err := h.rt.WakeRecordsInbox(ctx, ownerID, computerID, agentID); err != nil {
 			return nil, fmt.Errorf("%w: actorruntime: inbox wake for %s: %v", actor.ErrDeferUnprocessed, agentID, err)
 		}

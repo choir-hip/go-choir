@@ -64,6 +64,20 @@ type RLMManagementOverlayOptions struct {
 	IntakeLabels bool
 }
 
+// RLMManagementTaskOverlay is a management task's overlay (management
+// delegation S2a): its job, its records, how it disposes of captures, and
+// how it ends.
+func RLMManagementTaskOverlay(opts RLMManagementTaskOverlayOptions) string {
+	return mustRenderOverlay("rlm_management_task_runtime", opts)
+}
+
+// RLMManagementTaskOverlayOptions names the task in its prompt.
+type RLMManagementTaskOverlayOptions struct {
+	TaskID   string
+	Deadline string
+	Captures int
+}
+
 // RLMEngineeringOverlay is the sealed-Go Engineering overlay:
 // capsule_go_eval is the sole capsule doorway and the choir package subsumes
 // JSON file and exec operations so the model sees one authority.

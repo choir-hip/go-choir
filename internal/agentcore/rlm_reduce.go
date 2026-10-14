@@ -158,6 +158,18 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			if strings.TrimSpace(in.Body) == "" {
 				return fmt.Errorf("reduce: texture_turn %s missing its body", in.LocalID)
 			}
+		case yaegikernel.IntentDelegate, yaegikernel.IntentCancelTask, yaegikernel.IntentTaskDone:
+			// Management delegation (S2a): the records route reduces them;
+			// a desk off that route has no arm for them.
+			if fromDesk != agentprofile.Management && fromDesk != agentprofile.ManagementTask {
+				return fmt.Errorf("reduce: %s %s is management's", in.Kind, in.LocalID)
+			}
+			if in.Kind == yaegikernel.IntentDelegate && strings.TrimSpace(in.Body) == "" {
+				return fmt.Errorf("reduce: delegate %s missing its groups", in.LocalID)
+			}
+			if in.Kind == yaegikernel.IntentCancelTask && strings.TrimSpace(in.TargetRef) == "" {
+				return fmt.Errorf("reduce: cancel_task %s names no task", in.LocalID)
+			}
 		default:
 			if err := validateSemanticActIntent(in); err != nil {
 				return err
@@ -715,7 +727,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 		role = agentProfileForRun(execCtx.RunRecord)
 	}
 	var records cellRecords
-	if recordsDesk(role) {
+	if recordsDesk(role) || role == agentprofile.ManagementTask {
 		runID := ""
 		if role != agentprofile.Texture {
 			// Texture's frame decides what its cells see (Cut 2 2a).

@@ -95,6 +95,25 @@ func recordsRoute(fromAgentID, ownerID, toDesk string) (string, bool, error) {
 		if fromSubject != "" && toName == agentprofile.Management && strings.TrimSpace(ownerID) != "" && (!hasSubject || toSubject == ownerID) {
 			return agentprofile.Management + ":" + ownerID, true, nil
 		}
+	case types.ManagementTaskDesk:
+		// A management task (S2a, §3.1a) speaks outward as management, to
+		// a story or a source; its sender is set by the reducer. Engineering,
+		// management and the computer are the parent's.
+		if fromSubject == "" {
+			return "", false, nil
+		}
+		switch toName {
+		case captureSourceDesk:
+			if hasSubject && strings.TrimSpace(toSubject) != "" {
+				return captureSourceDesk + ":" + strings.TrimSpace(toSubject), true, nil
+			}
+		case agentprofile.Texture:
+			if !hasSubject || strings.TrimSpace(toSubject) == "" {
+				return "", false, fmt.Errorf("a task addresses a story by its inbox (texture:<doc>), or opens one at texture:new")
+			}
+			return agentprofile.Texture + ":" + strings.TrimSpace(toSubject), true, nil
+		}
+		return "", false, fmt.Errorf("a management task sends only to stories (texture:<doc>, texture:new) and to sources; %q is management's to address", to)
 	}
 	return "", false, nil
 }
@@ -186,6 +205,57 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 			view.ParentConversationID, view.ParentRound = binding.ParentConversationID, binding.ParentRound
 		}
 		out.view = append(out.view, view)
+		if _, task := types.ManagementTaskIDOfInbox(inbox); task && rec.IsCast() && rec.Cast != nil {
+			// A task's opening Cast names the captures records it was given
+			// (R2-14): each is shown as the captures record it is, cut to
+			// the captures the task leases, with Jev's labels, at the
+			// Cast's sequence. Records never change, so this is what the
+			// parent delegated.
+			delegated, err := rt.delegatedCaptureViews(ctx, ownerID, computerID, rec, &labelsOn, &labelsRead)
+			if err != nil {
+				return cellRecords{}, err
+			}
+			out.view = append(out.view, delegated...)
+		}
+	}
+	return out, nil
+}
+
+// delegatedCaptureViews shows a task the captures records its opening Cast
+// delegated, each cut to the captures the Cast leases.
+func (rt *Runtime) delegatedCaptureViews(ctx context.Context, ownerID, computerID string, cast types.CommitmentRecord, labelsOn, labelsRead *bool) ([]yaegikernel.InboxRecord, error) {
+	leased := map[string]bool{}
+	for _, c := range cast.Cast.Captures {
+		leased[strings.TrimSpace(c)] = true
+	}
+	var out []yaegikernel.InboxRecord
+	for _, id := range cast.RelatedIDs {
+		arrival, err := rt.store.GetCommitmentRecord(ctx, ownerID, computerID, id)
+		if err != nil {
+			return nil, fmt.Errorf("records: delegated record %s: %w", id, err)
+		}
+		if arrival == nil || arrival.Captures == nil {
+			continue
+		}
+		view := inboxRecordView(*arrival)
+		captures := *arrival.Captures
+		captures.Items = nil
+		for _, item := range arrival.Captures.Items {
+			if leased[item.CaptureID] {
+				captures.Items = append(captures.Items, item)
+			}
+		}
+		if len(captures.Items) == 0 {
+			continue
+		}
+		view.Captures, view.Seq = &captures, cast.InboxSeq
+		if !*labelsRead {
+			*labelsOn, *labelsRead = rt.intakeLabelsEnabled(ctx, ownerID, computerID), true
+		}
+		if *labelsOn {
+			view.Labels = rt.captureLabelViews(ctx, ownerID, computerID, captures.Items)
+		}
+		out = append(out, view)
 	}
 	return out, nil
 }
@@ -251,7 +321,7 @@ func inboxRecordView(rec types.CommitmentRecord) yaegikernel.InboxRecord {
 	view := yaegikernel.InboxRecord{
 		Seq: rec.InboxSeq, RecordID: rec.RecordID, Kind: inboxRecordKind(rec), From: rec.SenderInbox,
 		ConversationID: rec.ConversationID, Round: rec.Round, Final: rec.Final,
-		Cast: rec.Cast, Report: rec.Report, Support: rec.Support, Captures: rec.Captures,
+		Cast: rec.Cast, Report: rec.Report, Support: rec.Support, Captures: rec.Captures, TaskOutcome: rec.TaskOutcome,
 		ParentID: rec.ParentID, RelatedIDs: rec.RelatedIDs, EvidenceRefs: rec.EvidenceRefs,
 	}
 	if t, err := time.Parse(time.RFC3339Nano, rec.Provenance.CommittedAt); err == nil {
@@ -277,6 +347,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "support_failure"
 	case rec.Captures != nil:
 		return "captures"
+	case rec.TaskOutcome != nil:
+		return "task_report"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:
@@ -306,7 +378,12 @@ func recordsIntent(in yaegikernel.StagedIntent) bool {
 func inboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent, toInbox string, hasOpenRound bool) (types.CommitmentRecord, error) {
 	rec := commitmentRecordForIntent(scope, in)
 	rec.Inbox = toInbox
-	rec.SenderInbox = strings.TrimSpace(scope.DeskAgentID)
+	rec.SenderInbox = outwardSender(scope)
+	if taskID, ok := types.ManagementTaskIDOfInbox(scope.DeskAgentID); ok {
+		// The delegated sender (§4.2): a task's acts go out as management,
+		// with the task and its run named by the host.
+		rec.Provenance.ActingTask, rec.Provenance.ActingRunID = taskID, scope.RunID
+	}
 	rec.Addressee = toInbox
 	rec.EmitterKind = types.CommitmentEmitterAgent
 	rec.ComputerID = scope.ComputerID
@@ -338,6 +415,16 @@ func inboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent, toI
 		}
 	}
 	return rec, nil
+}
+
+// outwardSender is the inbox a scope's records are sent from: its desk
+// inbox, except a management task's, which sends as management:<owner>
+// (R2-1: the sender is not the reader).
+func outwardSender(scope ReductionScope) string {
+	if _, ok := types.ManagementTaskIDOfInbox(scope.DeskAgentID); ok {
+		return persistentManagementAgentID(scope.OwnerID)
+	}
+	return strings.TrimSpace(scope.DeskAgentID)
 }
 
 // castBodyFromPacket lifts hypotheses a Cast's packet names into the typed
@@ -423,8 +510,11 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		return intents, nil
 	}
 	// The desk's inbox is its agent id; a run whose agent id names another
-	// desk than its profile is not on a records route.
-	if deskOfAgent, _, _ := strings.Cut(strings.TrimSpace(r.scope.DeskAgentID), ":"); deskOfAgent != strings.TrimSpace(r.rec.AgentProfile) {
+	// desk than its profile is not on a records route. A management task
+	// reads management-task:<id> on profile management (R2-1).
+	deskOfAgent, _, _ := strings.Cut(strings.TrimSpace(r.scope.DeskAgentID), ":")
+	task := isManagementTaskRun(r.rec) && deskOfAgent == types.ManagementTaskDesk
+	if deskOfAgent != strings.TrimSpace(r.rec.AgentProfile) && !task {
 		return intents, nil
 	}
 	var rest []yaegikernel.StagedIntent
@@ -438,15 +528,83 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		}
 	}
 	deskProfile := strings.TrimSpace(r.rec.AgentProfile)
+	parent := deskProfile == agentprofile.Management && !task
+	// A management task stages only its intake acts and Done (§4.1): the
+	// kernel exports nothing else to it, and the reducer refuses anything
+	// else a cell might carry, before anything commits.
+	var taskDone *yaegikernel.StagedIntent
+	var taskRow types.ManagementTask
+	if task {
+		for i, in := range intents {
+			switch {
+			case in.Kind == yaegikernel.IntentTaskDone:
+				taskDone = &intents[i]
+			case in.Kind == yaegikernel.IntentCast || in.Kind == yaegikernel.IntentNote:
+				if engineeringCastIntent(in) {
+					return nil, fmt.Errorf("reduce: %s: a management task cannot cast engineering; leave the capture to management with choir.Done(why)", in.LocalID)
+				}
+			default:
+				return nil, fmt.Errorf("reduce: %s: a management task stages Cast, Note, Feed, Decline and Done; %s is management's", in.LocalID, in.Kind)
+			}
+		}
+		var err error
+		if taskRow, err = r.managementTaskOfScope(ctx); err != nil {
+			return nil, fmt.Errorf("reduce: %w", err)
+		}
+	}
+	// CancelTask runs before the cell's records commit, so a cell may
+	// cancel a task and delegate its captures again (R2-20).
+	if parent {
+		for _, in := range intents {
+			if in.Kind == yaegikernel.IntentCancelTask {
+				if err := r.cancelManagementTask(ctx, in); err != nil {
+					return nil, fmt.Errorf("reduce: %w", err)
+				}
+				receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Kind: in.Kind, Inbox: types.ManagementTaskInbox(strings.TrimPrefix(in.TargetRef, types.ManagementTaskDesk+":"))})
+			}
+		}
+	}
 	// A management Cast to engineering opens an assignment (C1e D4): it is
 	// planned and admitted here, before anything commits, and its record
 	// commits with the cell's other records, the cursor and the assignment
 	// row as one transaction.
 	var castPlan *engineeringCastPlan
 	var localIDs []yaegikernel.StagedIntent
+	var tasks []types.ManagementTask
 	openRound := map[string]bool{}
+	sender := outwardSender(r.scope)
+	opensStory := false
 	for _, in := range intents {
-		if deskProfile == agentprofile.Management && engineeringCastIntent(in) {
+		switch in.Kind {
+		case yaegikernel.IntentTaskDone, yaegikernel.IntentCancelTask:
+			if !task && in.Kind == yaegikernel.IntentTaskDone {
+				return nil, fmt.Errorf("reduce: %s: Done ends a management task; management ends its turn", in.LocalID)
+			}
+			if task && in.Kind == yaegikernel.IntentCancelTask {
+				return nil, fmt.Errorf("reduce: %s: CancelTask is management's", in.LocalID)
+			}
+			continue
+		case yaegikernel.IntentDelegate:
+			// choir.Delegate (R2-14): one task row and one Cast into its
+			// inbox per group, in this cell's one records transaction.
+			if !parent {
+				return nil, fmt.Errorf("reduce: %s: only management delegates (one level, PD1)", in.LocalID)
+			}
+			casts, rows, err := r.planDelegation(ctx, in)
+			if err != nil {
+				return nil, fmt.Errorf("reduce: %w", err)
+			}
+			for _, cast := range casts {
+				records = append(records, cast)
+				localIDs = append(localIDs, in)
+			}
+			tasks = append(tasks, rows...)
+			continue
+		}
+		if strings.TrimSpace(in.ToDesk) == types.StoryOpenInbox && in.Kind == yaegikernel.IntentCast {
+			opensStory = true
+		}
+		if parent && engineeringCastIntent(in) {
 			if castPlan != nil {
 				return nil, fmt.Errorf("reduce: %s: one engineering Cast per cell", in.LocalID)
 			}
@@ -470,14 +628,14 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			rest = append(rest, in)
 			continue
 		}
-		conversation := types.InboxConversationID(r.scope.DeskAgentID, toInbox)
+		conversation := types.InboxConversationID(sender, toInbox)
 		open, seen := openRound[conversation]
 		if !seen {
 			state, err := r.ledger.ConversationState(ctx, r.scope.OwnerID, r.scope.ComputerID, conversation)
 			if err != nil {
 				return nil, fmt.Errorf("reduce: conversation %s: %w", conversation, err)
 			}
-			open = state.Open && state.RecipientInbox == r.scope.DeskAgentID
+			open = state.Open && state.RecipientInbox == sender
 			openRound[conversation] = open
 		}
 		rec, err := inboxRecordForIntent(r.scope, in, toInbox, open)
@@ -503,12 +661,29 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		// (captures-undisposed-after-failed-management-runs-2026-10-14).
 		cursor = nil
 	}
+	// Done ends the task after the cell's acts commit: the host mints its
+	// final Report from the durable dispositions (R2-8).
+	finishTask := func() {
+		if taskDone == nil {
+			return
+		}
+		rt.closeManagementTask(ctx, taskRow, types.TaskClosureDone, taskDone.Body, "", r.scope.RunID)
+		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: taskDone.LocalID, Kind: taskDone.Kind})
+	}
 	if len(records) == 0 && cursor == nil {
+		finishTask()
 		return rest, nil
 	}
 	req := types.CommitInboxRecordsRequest{
 		OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID,
-		CommandID: "cell-records:" + r.scope.CellID, Records: records, Cursor: cursor,
+		CommandID: "cell-records:" + r.scope.CellID, Records: records, Cursor: cursor, Tasks: tasks,
+	}
+	if opensStory && deskProfile == agentprofile.Management && rt.intakeLabelsEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
+		// The story-library head this run last read (R2-5); a run that
+		// never read choir.Stories() has seen head 0. With intake.labels
+		// off, choir.Stories() is off too, and nothing is checked.
+		seen := rt.storyLibraryShownMark(r.scope.RunID)
+		req.StoryLibraryHead = &seen
 	}
 	digest, err := store.ComputeCommitInboxRecordsDigest(req)
 	if err != nil {
@@ -540,6 +715,13 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	} else {
 		committed, err = r.ledger.CommitInboxRecords(ctx, req)
 		if err != nil {
+			if errors.Is(err, store.ErrStoryLibraryMoved) {
+				// The refusal names the stories opened since; the run has
+				// now seen them.
+				if head, headErr := rt.store.StoryLibraryHeadOf(ctx, r.scope.OwnerID, r.scope.ComputerID); headErr == nil {
+					rt.storyLibraryShown.Store(strings.TrimSpace(r.scope.RunID), head)
+				}
+			}
 			return nil, fmt.Errorf("reduce: commit records: %w", err)
 		}
 	}
@@ -547,14 +729,16 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		seq, opened := int64(0), ""
 		if i < len(committed.Records) {
 			seq = committed.Records[i].InboxSeq
-			if committed.Records[i].OpenedStory {
+			if committed.Records[i].OpenedStory || in.Kind == yaegikernel.IntentDelegate {
 				// The receipt names the story a Cast to texture:new opened,
-				// so management can feed it (Cut 2 2b).
+				// so management can feed it (Cut 2 2b), and the inbox of
+				// each task a Delegate opened.
 				opened = committed.Records[i].Inbox
 			}
 		}
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: uint64(seq), Kind: in.Kind, Inbox: opened})
 	}
+	finishTask()
 	// Management's dispositions are compared with Jev's labels; a mismatch
 	// is recorded as an override on the label (L2a A3 / R2-5). Best effort:
 	// the records are committed.
@@ -638,6 +822,12 @@ var recordsInboxPrompts = map[string]string{
 func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, deskAgentID string) (*types.RunRecord, error) {
 	if rt == nil || rt.store == nil {
 		return nil, nil
+	}
+	if _, task := types.ManagementTaskIDOfInbox(deskAgentID); task {
+		// A task inbox's wake is the durable start of a queued task (R2-6):
+		// the slot starter takes the oldest queued task while a slot is
+		// free. A task already running reads its records in its next cell.
+		return rt.startQueuedManagementTasks(ctx, ownerID, computerID)
 	}
 	profile, _, _ := strings.Cut(strings.TrimSpace(deskAgentID), ":")
 	prompt, ok := recordsInboxPrompts[profile]
@@ -829,10 +1019,15 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 		rt.recordsRunStart.Delete(rec.RunID)
 		rt.recordsRunShown.Delete(rec.RunID)
 	}
+	if rt != nil && rec != nil && (rec.State.Terminal() || parked) {
+		rt.storyLibraryShown.Delete(rec.RunID)
+	}
 	if rt == nil || rt.store == nil || rec == nil || !(rec.State.Terminal() || parked) || rec.Error == runFateInterruptedByRestart {
 		return
 	}
-	if !recordsDesk(agentProfileForRun(rec)) {
+	if !recordsDesk(agentProfileForRun(rec)) || isManagementTaskRun(rec) {
+		// A task is one round: its run's end closed it (above), and
+		// nothing re-arms it.
 		return
 	}
 	failedTurns := rt.failedRecordsTurns(rec)
@@ -851,6 +1046,11 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	}
 	late := false
 	for _, r := range unread {
+		// One wake predicate (R2-3): a record that did not wake its reader
+		// on commit (a clean task Report) does not start a turn here either.
+		if !store.RecordWakesReader(r) {
+			continue
+		}
 		if committed, perr := time.Parse(time.RFC3339Nano, r.Provenance.CommittedAt); perr == nil && committed.After(rec.CreatedAt) {
 			late = true
 			break
@@ -917,6 +1117,13 @@ func (rt *Runtime) closeOpenRoundsAfterCrash(ctx context.Context) {
 // closes nothing; the boot already did.
 func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunRecord) {
 	if rt == nil || rt.store == nil || rec == nil || rec.Error == runFateInterruptedByRestart {
+		return
+	}
+	if isManagementTaskRun(rec) {
+		// A task's round closes with the host's final Report from its
+		// dispositions (R2-8), not a bare closure; the store decides from
+		// that Report whether the parent wakes (R2-3).
+		rt.closeManagementTaskOfEndedRun(ctx, rec)
 		return
 	}
 	profile := agentProfileForRun(rec)
