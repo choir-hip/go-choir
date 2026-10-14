@@ -46,8 +46,10 @@ func TestCircuitBreakingProviderCountsOnlyProviderSideFailures(t *testing.T) {
 					t.Fatalf("call %d: error = %v, want the provider's own error passed through", i, err)
 				}
 			}
-			if open := cbp.Breaker().State() == health.StateOpen; open != tc.wantOpen {
-				t.Fatalf("breaker open = %v, want %v", open, tc.wantOpen)
+			// The call's failures are judged against its model's breaker
+			// (free-model-429-opens-provider-circuit-stub-stories-2026-10-14).
+			if open := cbp.ModelBreaker("").State() == health.StateOpen; open != tc.wantOpen {
+				t.Fatalf("model breaker open = %v, want %v", open, tc.wantOpen)
 			}
 		})
 	}

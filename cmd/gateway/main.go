@@ -56,7 +56,7 @@ func main() {
 		wrapped := gateway.WrapMultiProvider(mp, breakerCfg)
 		for _, name := range wrapped.Names() {
 			if cbp, ok := wrapped.Get(name).(*gateway.CircuitBreakingProvider); ok {
-				breakers.Register(name, cbp.Breaker())
+				breakers.RegisterProvider(name, cbp)
 			}
 		}
 		log.Printf("gateway: circuit breakers enabled for %d provider(s)", len(breakers.Names()))

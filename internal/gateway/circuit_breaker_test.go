@@ -37,8 +37,8 @@ func TestCircuitBreakingProvider_OpensOnFailures(t *testing.T) {
 	cbp := NewCircuitBreakingProvider(p, health.BreakerConfig{FailureThreshold: 2, OpenTimeout: time.Hour})
 	_, _ = cbp.Call(context.Background(), provider.LLMRequest{})
 	_, _ = cbp.Call(context.Background(), provider.LLMRequest{})
-	if cbp.Breaker().State() != health.StateOpen {
-		t.Fatalf("state = %v, want open", cbp.Breaker().State())
+	if cbp.ModelBreaker("").State() != health.StateOpen {
+		t.Fatalf("state = %v, want open", cbp.ModelBreaker("").State())
 	}
 	_, err := cbp.Call(context.Background(), provider.LLMRequest{})
 	if err == nil {
