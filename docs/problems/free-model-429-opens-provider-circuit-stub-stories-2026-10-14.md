@@ -73,3 +73,71 @@ runs after the change: texture on gpt-6-luna, research on
 deepseek-v4.1-flash (one texture run still on cat-jam, a thread that
 started earlier). Restore `pool:default` once the per-model circuit and
 failover fix is live on the paper.
+
+## Confirmed from code (2026-10-14, fix branch)
+
+Code read at 2036b6f0. The trace claims above were not re-read; these are
+the code paths that produce them.
+
+1. **One breaker per provider.** `cmd/gateway/main.go` wraps each provider
+   once (`gateway.WrapMultiProvider`), and `CircuitBreakingProvider`
+   (`internal/gateway/circuit_breaker.go`) holds one
+   `health.CircuitBreaker` for every model it serves. `providerFailureCounts`
+   counts 429 as an upstream failure (deliberately, 2026-10-10). Five
+   consecutive counted failures open it for 30 s, and the half-open state
+   lets one probe through. Each runtime call is up to three gateway calls
+   (`gatewayruntime.Provider.call` retries a 502), and the tool loop
+   retries a "429" text three more times (5, 20, 60 s,
+   `providerRateLimitRetryDelays`). So a rate-limited cat-jam-free thread
+   alone produces the five failures. Whatever call takes the probe slot
+   after 30 s decides for every model, and on a busy paper that is often
+   another cat-jam call that gets 429 and reopens the breaker. Nothing in
+   the code tells a provider-wide failure apart from a model-specific one.
+2. **Failover goes one step, to the first fallback only.**
+   `modelcatalog.Pools()` orders the default pool [deepseek-v4.1-flash,
+   cat-jam-free, gpt-6-luna], and `modelpolicy.Assign` rotates it to the
+   thread's member. So the fallbacks are: for deepseek, [cat-jam, luna];
+   for cat-jam, [luna, deepseek]; for luna, [deepseek, cat-jam].
+   `RunToolLoop` (`internal/toolregistry/toolloop.go`, "Once per run")
+   fails over only once, to `fallbackLLMConfigs[0]`. A deepseek thread
+   fails over to cat-jam, which is on the same provider behind the same
+   open breaker. It then spends its three transient retries (15 s each)
+   and ends with `circuit open`. A cat-jam thread fails over to luna and
+   succeeds. This is why some calls failed over to luna and others did
+   not. The design (docs/model-pools-design-2026-10-12.md §5, "Failover
+   loops") assumed a pool of two. With three members, "at most once" stops
+   at the second member.
+3. **Auto publish does not look at the revision.**
+   `Runtime.AutoPublishRevision` (`internal/agentcore/story_publish.go`),
+   called after every committed Write by
+   `textureowner.CommitCellTextureAuthor`, publishes every non-seed
+   revision of a publish-auto story. It checks only the trajectory kind,
+   the publish mode and the seed role. A revision whose body cites no
+   captured source publishes like any other. The proxy's guest route
+   (`HandleGuestTexturePublication`) checks nothing about content either.
+   An owner-initiated publish (`PublishModeOwner`) is a different route.
+4. **The prompt has no rule for a turn with no new evidence.** The
+   Texture core forbids narrating process ("desks, rounds") but never
+   says what to do when the records bring no evidence. A failed research
+   record became a Write that said so ("no execution or verification work
+   was performed").
+
+The load shift (cause 3 above) is policy, not a defect. It is a residual
+for pool composition, not part of this fix.
+
+### Failure modes the fix must not have
+
+- A 429 from one model still blocks another model on the same provider.
+- A 429 opens nothing, so every run keeps hitting a rate-limited free
+  model and fails over only after 85 s of backoff.
+- Connection failures to a provider no longer open anything shared, and
+  each model has to find out for itself.
+- Failover visits a member twice, or bounces between members, so a run
+  never ends.
+- Failover stops at a member whose breaker is open while a healthy member
+  is left, or the run fails before every member has failed.
+- Our own cancellation, or a malformed request, triggers failover.
+- An uncited revision publishes, or a cited one does not.
+- The rule reaches owner-initiated publishes, or retroactively unpublishes
+  stubs already published.
+- A held revision leaves no visible reason.
