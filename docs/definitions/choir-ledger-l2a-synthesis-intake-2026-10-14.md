@@ -167,11 +167,24 @@ now:
     evidence_refs: [docs/reports/owner-roadmap-rulings-2026-10-14.md]
   decision: {what: "L2a ahead of C1e B1's build; B1's design rounds continue as docs", kind: operational, status: proposal, evidence_ref: docs/reports/owner-roadmap-rulings-2026-10-14.md, owner_ratification_ref: "owner 2026-10-14: intake redesign, very important"}
   belief:
-    believed_state: the paper copies, one capture per story; the mechanisms to feed and to synthesize exist but are unseen and unrequired
-    main_uncertainty: whether qdrant_dedup drops cross-language coverage before management sees it, and whether the fixture can enter through the real poller
-    next_observation: whether semantic dedup is enabled on staging guests and what it dropped on the paper computer; how the tracer or poller can serve a fixture feed
+    believed_state: >-
+      The paper copies, one capture per story; the mechanisms to feed and
+      to synthesize exist but are unseen and unrequired. Two S0
+      observations, 2026-10-14 00:45 UTC: semantic dedup is dead code
+      (dedupSourceItemsWithTimeout and dedupSourceItemsSemantically have no
+      production caller), so no runtime step drops coverage today, and S1
+      deletes qdrant_dedup.go. The registry already holds vertical-zero
+      feeds in other languages: general news from DW (de, ar, ru), France 24
+      (fr, es, ar), RFI, El País, El Mundo, Euronews, Folha and Agência
+      Brasil; tech from heise, Golem, ITmedia, Nikkei xTECH, 36kr, Numerama
+      and Xataka. So the fixture needs no hosted feed. A minted test computer
+      polls English and non-English world and tech feeds over the same
+      window through the real poller, and an independent judge, not a desk,
+      labels event identity across the captures afterwards.
+    main_uncertainty: whether same-window real feeds give at least 8 events covered in 2+ languages; if not, widen the window or add feeds before judging
+    next_observation: the panel's verdict on this file; then the design note
   blocker_or_risk: cross-lingual matching by the model is unproven for zh/ja/ko against en; the fixture must include them before a grouping model is chosen (L2's 200-pair evaluation stays in L2b)
-  next_action: run the convergent panel on this file; in parallel, observe semantic dedup on staging and find the fixture path
+  next_action: adjudicate the convergent panel on this file (running); then the S0 design note
 
 receipts: []
 ---
