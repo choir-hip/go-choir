@@ -24,6 +24,31 @@ const (
 
 var ErrSelfDevelopmentModeConflict = errors.New("self-development mode CAS conflict")
 
+// ErrSelfDevelopmentModeOwnerRequired refuses a mode write that is not an
+// owner act. Only the owner sets the mode: the proxy reaches corpusd as a
+// host-internal caller after it has authenticated the owner's session or an
+// owner API key scoped computer:self_development:mode. The guest's
+// event:append capability may only consume the grant the owner armed
+// (docs/problems/guest-can-arm-own-selfdev-mode-2026-10-15.md).
+var ErrSelfDevelopmentModeOwnerRequired = errors.New("self-development mode: owner authority required")
+
+// Mode writers, recorded as mode_writer in every new ModeReceipt. Receipts
+// signed before this field existed carry none; they were all written before
+// the owner-only rule and are not re-judged.
+const (
+	ModeWriterHostInternal     = "host-internal"
+	ModeWriterGuestConsumption = "guest-consumption"
+	ModeWriterCorpusdExpiry    = "corpusd-expiry"
+)
+
+// Consumption idempotency keys: agentcore's decision handler writes
+// <prefix><operation_id>:<decision binding digest> when it consumes an armed
+// grant, and its consumed-receipt verifier expects the same spelling.
+const (
+	AcceptOnceConsumptionKeyPrefix         = "accept-once-consumed:"
+	QualifiedConsensusConsumptionKeyPrefix = "qualified-consensus-consumed:"
+)
+
 type SelfDevelopmentMode struct {
 	ComputerID                       string                 `json:"computer_id"`
 	Mode                             string                 `json:"mode"`
@@ -94,10 +119,10 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 	if c.now().Before(expiresAt) {
 		return mode, nil
 	}
-	expired, err := c.Set(ctx, computerID, SetSelfDevelopmentModeRequest{
+	expired, err := c.set(ctx, computerID, SetSelfDevelopmentModeRequest{
 		Mode: SelfDevelopmentModeOff, ExpectedGeneration: mode.Generation,
 		IdempotencyKey: fmt.Sprintf("selfdev-mode-expiry-v1:%s:%d", computerID, mode.Generation),
-	})
+	}, ModeWriterCorpusdExpiry)
 	if err == nil {
 		return expired, nil
 	}
@@ -120,7 +145,43 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 	return current, nil
 }
 
+// Set is the owner's mode write. Its only callers are host-internal: the
+// proxy, after it has authenticated the owner.
 func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error) {
+	return c.set(ctx, computerID, request, ModeWriterHostInternal)
+}
+
+// ConsumeAsGuest is the only mode write a guest capability may make: the
+// decision handler's consumption of the grant the owner armed, accept_once
+// or qualified_consensus to propose_only, under the consumption key that
+// names the armed operation. Everything else is ErrSelfDevelopmentModeOwnerRequired.
+func (c *SelfDevelopmentModeCAS) ConsumeAsGuest(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error) {
+	return c.set(ctx, computerID, request, ModeWriterGuestConsumption)
+}
+
+// guestConsumptionAllowed admits exactly the two consumption writes in
+// agentcore's decision handler (api_self_development.go): the current mode
+// is an armed grant, the next mode is propose_only, and the idempotency key
+// is that grant's consumption key for the armed operation.
+func guestConsumptionAllowed(current SelfDevelopmentMode, request SetSelfDevelopmentModeRequest) bool {
+	prefix := ""
+	switch current.Mode {
+	case SelfDevelopmentModeAcceptOnce:
+		prefix = AcceptOnceConsumptionKeyPrefix
+	case SelfDevelopmentModeQualifiedConsensus:
+		prefix = QualifiedConsensusConsumptionKeyPrefix
+	default:
+		return false
+	}
+	operationID := strings.TrimSpace(current.OperationID)
+	if request.Mode != SelfDevelopmentModeProposeOnly || operationID == "" {
+		return false
+	}
+	digest, ok := strings.CutPrefix(request.IdempotencyKey, prefix+operationID+":")
+	return ok && computerevent.IsSHA256(digest)
+}
+
+func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest, writer string) (SelfDevelopmentMode, error) {
 	computerID = strings.TrimSpace(computerID)
 	request.Mode = strings.TrimSpace(request.Mode)
 	request.IdempotencyKey = strings.TrimSpace(request.IdempotencyKey)
@@ -152,6 +213,15 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 	}
 	if !found {
 		current = SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}
+	}
+	switch writer {
+	case ModeWriterHostInternal, ModeWriterCorpusdExpiry:
+	case ModeWriterGuestConsumption:
+		if !guestConsumptionAllowed(current, request) {
+			return SelfDevelopmentMode{}, ErrSelfDevelopmentModeOwnerRequired
+		}
+	default:
+		return SelfDevelopmentMode{}, ErrSelfDevelopmentModeOwnerRequired
 	}
 	if current.Generation != request.ExpectedGeneration {
 		return SelfDevelopmentMode{}, fmt.Errorf("%w: generation changed", ErrSelfDevelopmentModeConflict)
@@ -185,6 +255,7 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 		"consumed_policy_digest":              current.PolicyDigest,
 		"consumed_consensus_receipt_digest":   current.ConsensusReceiptDigest,
 		"idempotency_key":                     request.IdempotencyKey, "request_commitment": requestCommitment,
+		"mode_writer": writer,
 	}
 	receipt, err := computerevent.NewSignedReceipt("ModeReceipt", "corpusd", fields, []computerevent.SigningKey{c.signingKey}, now)
 	if err != nil {
@@ -361,9 +432,15 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		}
 		writeJSON(w, http.StatusOK, mode)
 	case http.MethodPost:
-		if !internalCaller && (h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:append") != nil) {
-			writeJSON(w, http.StatusForbidden, apiError{Error: "self-development mode mutation capability refused"})
-			return
+		// A host-internal caller is the proxy carrying an authenticated
+		// owner act. A guest capability may only consume the armed grant.
+		write := h.selfDevelopmentModes.Set
+		if !internalCaller {
+			if h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:append") != nil {
+				writeJSON(w, http.StatusForbidden, apiError{Error: "self-development mode mutation capability refused"})
+				return
+			}
+			write = h.selfDevelopmentModes.ConsumeAsGuest
 		}
 		var request SetSelfDevelopmentModeRequest
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
@@ -372,8 +449,12 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid mode request"})
 			return
 		}
-		mode, err := h.selfDevelopmentModes.Set(r.Context(), computerID, request)
+		mode, err := write(r.Context(), computerID, request)
 		if err != nil {
+			if errors.Is(err, ErrSelfDevelopmentModeOwnerRequired) {
+				writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
+				return
+			}
 			if errors.Is(err, ErrSelfDevelopmentModeConflict) {
 				writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 				return

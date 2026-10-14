@@ -378,7 +378,7 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			}
 			currentMode, modeErr = h.rt.selfdevControl.SetSelfDevelopmentMode(r.Context(), platform.SetSelfDevelopmentModeRequest{
 				Mode: platform.SelfDevelopmentModeProposeOnly, ExpectedGeneration: currentMode.Generation,
-				IdempotencyKey: "accept-once-consumed:" + operationID + ":" + consumptionDigest,
+				IdempotencyKey: platform.AcceptOnceConsumptionKeyPrefix + operationID + ":" + consumptionDigest,
 			})
 		case platform.SelfDevelopmentModeQualifiedConsensus:
 			expectedPending := strings.TrimSpace(*request.ExpectedPendingTransitionRef)
@@ -436,7 +436,7 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			}
 			currentMode, modeErr = h.rt.selfdevControl.SetSelfDevelopmentMode(r.Context(), platform.SetSelfDevelopmentModeRequest{
 				Mode: platform.SelfDevelopmentModeProposeOnly, ExpectedGeneration: currentMode.Generation,
-				IdempotencyKey: "qualified-consensus-consumed:" + operationID + ":" + consumptionDigest,
+				IdempotencyKey: platform.QualifiedConsensusConsumptionKeyPrefix + operationID + ":" + consumptionDigest,
 			})
 		default:
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "current mode does not authorize approval"})
@@ -673,9 +673,9 @@ func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, o
 	}
 	expectedConsumptionDigest, digestErr := selfdevprotocol.DecisionBindingDigest(selfDevelopmentDecisionBinding(operationID, request))
 	oldMode := field("old_mode")
-	expectedConsumptionKey := "accept-once-consumed:" + strings.TrimSpace(operationID) + ":" + expectedConsumptionDigest
+	expectedConsumptionKey := platform.AcceptOnceConsumptionKeyPrefix + strings.TrimSpace(operationID) + ":" + expectedConsumptionDigest
 	if oldMode == platform.SelfDevelopmentModeQualifiedConsensus {
-		expectedConsumptionKey = "qualified-consensus-consumed:" + strings.TrimSpace(operationID) + ":" + expectedConsumptionDigest
+		expectedConsumptionKey = platform.QualifiedConsensusConsumptionKeyPrefix + strings.TrimSpace(operationID) + ":" + expectedConsumptionDigest
 	}
 	if digestErr != nil || (oldMode != platform.SelfDevelopmentModeAcceptOnce && oldMode != platform.SelfDevelopmentModeQualifiedConsensus) || field("new_mode") != "propose_only" ||
 		field("consumed_operation_id") != operationID || field("consumed_bundle_digest") != request.BundleDigest ||

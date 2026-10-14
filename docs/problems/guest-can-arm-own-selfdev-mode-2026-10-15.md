@@ -203,3 +203,35 @@ Compatibility:
 - The proxy accepts an API key with the `admin` scope in place of
   `computer:self_development:mode`. That is the owner's own key, so it is in
   bounds, but it is broader than the scope the report names.
+
+## Repair (branch `fix/selfdev-mode-owner-only`, not pushed)
+
+- `HandleSelfDevelopmentMode` POST: a host-internal caller (the proxy after
+  it authenticated the owner) writes through `SelfDevelopmentModeCAS.Set`;
+  a guest capability writes only through `ConsumeAsGuest`.
+- `ConsumeAsGuest` admits exactly failure-mode list items 7 and 8: current
+  mode `accept_once` or `qualified_consensus`, next mode `propose_only`,
+  idempotency key `<that grant's consumption prefix><armed operation>:<sha256>`.
+  The idempotent-retry short-circuit runs before the check, so a retried
+  consumption returns its stored receipt. Anything else is
+  `ErrSelfDevelopmentModeOwnerRequired`, served as 403.
+- Every new ModeReceipt carries `mode_writer` (`host-internal`,
+  `guest-consumption`, `corpusd-expiry`). Old receipts lack it and still
+  verify; nothing requires the field.
+- The consumption key prefixes are exported from `internal/platform` and
+  used by agentcore's decision handler and consumed-receipt verifier, so the
+  two spellings cannot drift apart.
+- Replay is untouched: no mode event exists on the tape, so there is no
+  replay rule to tighten, and existing tapes fold as before.
+
+Tests (`internal/platform/self_development_modes_owner_test.go`): a guest
+bearer from a tap address is refused for every arm, raise, lower and stray
+consumption from `off`, `propose_only` and an armed grant, and the mode and
+generation stay unchanged; the guest's real consumption of `accept_once` and
+`qualified_consensus` succeeds and retries idempotently; the owner (host
+internal) sets every mode; expiry is recorded as a corpusd write. With the
+handler change reverted, the guest test fails (a guest arm returns 200).
+
+Staging proof still owed: the station-A negative leg (a guest-credential
+mode write is refused on a live computer) after this lands through the
+Landing Loop.
