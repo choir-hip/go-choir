@@ -124,6 +124,37 @@ def stories_by_capture(c):
     return story_of
 
 
+def window_arrivals(c, start, end):
+    """The intake arrivals in [start, end): every source poll's captures
+    record in management's inbox (sender source:<id>), paged by inbox seq.
+    /api/captures lists only the newest 500 captures, research re-captures
+    included, so it cannot serve an older window or count intake alone."""
+    owner = None
+    for st in c.get("/api/computer-settings").get("settings") or []:
+        owner = owner or st.get("owner_id")
+    inbox = urllib.parse.quote("management:" + owner, safe="")
+    caps, after = {}, 0
+    while True:
+        page = c.get(f"/api/inboxes/{inbox}/records?limit=500&after={after}")
+        recs = page.get("records") or []
+        if not recs:
+            break
+        for r in recs:
+            if not str(r.get("sender_inbox", "")).startswith("source:"):
+                continue
+            at = (r.get("provenance") or {}).get("committed_at") or ""
+            if not (start <= at[:19] + "Z" < end):
+                continue
+            for item in (r.get("captures") or {}).get("items") or []:
+                if item.get("capture_id") and item.get("title"):
+                    caps[item["capture_id"]] = dict(item, created_at=at)
+        nxt = int(page.get("next_after") or 0)
+        if nxt <= after:
+            break
+        after = nxt
+    return caps
+
+
 def last_assistant(obj):
     """The last assistant message in omp's JSON output, searched recursively."""
     found = None
@@ -183,14 +214,9 @@ def main():
     args = ap.parse_args()
     c = Client(json.load(open(args.cred)))
 
-    q = urllib.parse.urlencode({"since": args.start, "until": args.end})
-    window = c.get("/api/captures?" + q)
-    caps = {}
-    for cap in window.get("captures") or []:
-        if cap.get("in_window", True) and cap.get("capture_id") and cap.get("title"):
-            caps[cap["capture_id"]] = cap
+    caps = window_arrivals(c, args.start, args.end)
     items = sorted(caps.values(), key=lambda x: x.get("created_at") or "")
-    ids = [x["capture_id"] for x in items]
+    ids = [norm_id(x["capture_id"]) for x in items]
     lines = [f"{registered_domain(x.get('url', ''))} | {script_of(x['title'])} | {x['title'].strip()}" for x in items]
 
     agreed, disputed, misrouted = set(), set(), 0
@@ -213,7 +239,6 @@ def main():
     disputed -= agreed
 
     story_of = stories_by_capture(c)
-    ids = [norm_id(x) for x in ids]
 
     cross = [(a, b) for a, b in agreed if registered_domain(items[a].get("url", "")) != registered_domain(items[b].get("url", ""))]
     merged = [(a, b) for a, b in cross if story_of.get(ids[a]) and story_of.get(ids[a]) == story_of.get(ids[b])]
