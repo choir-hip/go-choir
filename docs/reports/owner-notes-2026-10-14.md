@@ -221,3 +221,18 @@ Lead:
 
 Ruling recorded at the top of
 `docs/reports/claude-agent-sdk-in-choir-2026-10-14.md`.
+
+## 15. Adoption: computers diverge, so not a host-built binary
+
+Owner: another computer probably can't just copy in a binary the host built,
+because each computer diverges. Binary updates come back through a more
+modular architecture: app packages, then binary updates per package.
+
+Lead: recorded at the top of
+`docs/reports/selfdev-update-architecture-2026-10-15.md`.
+- Station A is unchanged: the host builds the originating computer's own
+  tree.
+- Station B adopts as source, building the patch onto the adopter's own
+  tree. A patch that doesn't apply cleanly becomes a conflict for the
+  adopter's engineering desk.
+- S7 (app packages) moves onto the critical path for binary adoption.

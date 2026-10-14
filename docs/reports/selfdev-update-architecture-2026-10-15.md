@@ -16,6 +16,29 @@ can download it, and so can the host. Pushing an update to everyone takes
 human approval. Work out the real prerequisites, including app packages and
 other updates, and work efficiently.
 
+**Owner ruling (2026-10-14, after this report): adoption is not a copy of
+a host-built binary.** Computers diverge: each carries its own
+self-developed changes. A binary built from computer A's base plus A's
+patch is therefore not a valid build for computer B. Binary updates come
+back through a more modular architecture, app packages (S7), where a
+package can be built and swapped independently of each computer's own
+divergence. This changes the report as follows:
+
+- **Station A is unchanged.** The host builds the originating computer's
+  own tree (its base plus its patch), so host build authority still holds
+  for the computer that made the change.
+- **Station B is not "serve host-built bytes".** Until app packages exist,
+  an adopter takes the release as source. The patch is applied to the
+  adopter's own tree and built for that adopter's own base, through its
+  own capsule and gate, or by the host for that adopter. A patch that
+  does not apply cleanly is a conflict for the adopter's engineering desk,
+  never a silent overwrite.
+- **S7 (app packages) moves onto the critical path** for binary adoption.
+  "Not needed to prove the loop" (below) stays true only for source
+  adoption.
+- **Open decision 2 ("host-built bytes for adopters") is resolved:** source
+  adoption now, binary adoption per package after S7.
+
 ## The answer in one page
 
 1. **One object carries a change everywhere: a release record.** It is
