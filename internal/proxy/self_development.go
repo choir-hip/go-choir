@@ -153,6 +153,11 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		if _, ok := h.requireAPIKeyComputerTarget(w, r, authResult, computerID, ""); !ok {
 			return
 		}
+		// Arming self-development is the owner's act (selfdev update
+		// architecture P3), never an agent key's, `admin` included.
+		if r.Method == http.MethodPut && !authorizeOwnerAct(w, authResult, "self-development mode set") {
+			return
+		}
 	} else {
 		if h.vmctlClient == nil {
 			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
@@ -350,6 +355,23 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	if authResult.AuthMethod == "api_key" {
 		if !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, requiredScope) {
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + requiredScope})
+			return
+		}
+	}
+	switch action {
+	case "approve":
+		// A rejection withdraws a candidate and is fail-safe, so an agent
+		// key may send it; every other decision is the owner's act.
+		reject, err := selfDevelopmentDecisionIsReject(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development decision"})
+			return
+		}
+		if !reject && !authorizeOwnerAct(w, authResult, "self-development approval") {
+			return
+		}
+	case "rollback":
+		if !authorizeOwnerAct(w, authResult, "self-development rollback") {
 			return
 		}
 	}

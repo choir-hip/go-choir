@@ -18,7 +18,10 @@ Every command targets an explicit stable `ComputerID` (`--computer`). A key
 bound to that computer needs the matching scope:
 `computer:self_development:read` (list, show, head, mode get, wait),
 `:propose` (start), `:approve` plus `:mode` (approve), `:approve` (reject),
-`:mode` (mode set).
+`:mode` (mode set). Owner acts (approve, mode set, computer restore,
+bootstrap-chain, rematerialize-from-tape) also need `owner:acts`, which only
+the owner's signed-in session can grant (Settings or the browser mint), and
+which `admin` does not imply; reject stays an agent act.
 
 | Step | CLI surface | Durable evidence |
 | --- | --- | --- |

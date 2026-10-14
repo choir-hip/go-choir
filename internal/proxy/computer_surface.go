@@ -28,6 +28,7 @@ func isComputerSurfacePath(path string) bool {
 // to the vmctl-resolved guest after authentication. Unsigned callers receive
 // the host platform shell (picker/auth chrome), which stays OUT of restore.
 func (h *Handler) HandleComputerSurface(w http.ResponseWriter, r *http.Request) {
+	stripClientSuppliedHeaders(r)
 	started := time.Now()
 	if !isComputerSurfacePath(r.URL.Path) {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})

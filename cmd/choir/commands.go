@@ -585,7 +585,7 @@ func buildRegistry() []*command {
 				pDuration("window", "How long the owner's single approval stays armed").dflt(15 * time.Minute),
 			},
 			usage:       "--operation is required",
-			scopes:      []string{"computer:self_development:read", "computer:self_development:mode", "computer:self_development:approve"},
+			scopes:      []string{"computer:self_development:read", "computer:self_development:mode", "computer:self_development:approve", ownerActsScope},
 			destructive: true, idempotent: true,
 			handler: func(x *call) (any, error) { return selfDevDecide(x, "approve") },
 			cliOnly: ownerActReason,
@@ -628,7 +628,7 @@ func buildRegistry() []*command {
 				pStr("consensus_receipt_digest", "QualifiedConsensusReceipt digest for qualified_consensus"),
 			},
 			usage:  "--computer, --mode, and --idempotency-key are required; positional arguments are forbidden",
-			scopes: []string{"computer:self_development:mode"}, destructive: true, idempotent: true,
+			scopes: []string{"computer:self_development:mode", ownerActsScope}, destructive: true, idempotent: true,
 			handler: selfDevModeSet,
 			cliOnly: ownerActReason,
 		},
@@ -842,10 +842,19 @@ func computerPost(verb, summary, route string, body any, destructive bool) *comm
 // the ruling). Approving a frozen candidate, setting the computer mode and
 // rewriting a computer's state are the owner's supervision; an agent that
 // reaches them through a tool can approve its own work.
-const ownerActReason = "an owner act (approve, mode, restore, chain bootstrap, rematerialize): agents propose and read through MCP; the owner decides in the Choir UI or their own terminal"
+const ownerActReason = "an owner act (approve, mode, restore, chain bootstrap, rematerialize): agents propose and read through MCP; the owner decides from their own terminal, with a key minted from their signed-in session that carries owner:acts (admin does not)"
 
 // ownerAct marks a command as an owner act, CLI only.
-func ownerAct(cmd *command) *command { cmd.cliOnly = ownerActReason; return cmd }
+// ownerAct marks a command as the owner's: CLI-only, and its key needs
+// owner:acts, which the proxy requires for the act and auth grants only from
+// the owner's session (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F4).
+func ownerAct(cmd *command) *command {
+	cmd.cliOnly = ownerActReason
+	cmd.scopes = append(cmd.scopes, ownerActsScope)
+	return cmd
+}
+
+const ownerActsScope = "owner:acts"
 
 // computerCheckpointed is restore and rematerialize-from-tape: the CLI
 // reads the checkpoint artifact from --checkpoint-file, MCP takes it inline.

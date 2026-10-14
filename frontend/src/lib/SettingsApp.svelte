@@ -65,6 +65,10 @@
     { value: 'selfdev-group', label: 'Computer Self-Development (all)' },
     { value: 'manage:keys', label: 'Manage API Keys' },
     { value: 'admin', label: 'Admin' },
+    // Owner acts (arm, approve, restore, rematerialize, bootstrap-chain)
+    // need this scope on a key; Admin does not imply it, and only this
+    // signed-in session can grant it.
+    { value: 'owner:acts', label: 'Owner Acts (approve, arm, restore)' },
   ];
 
   const simpleKeyScopes = ['admin'];

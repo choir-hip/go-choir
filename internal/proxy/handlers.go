@@ -44,6 +44,10 @@ var clientIdentityHeaders = []string{
 	"X-Authenticated-User",
 	"X-Authenticated-Email",
 	"X-Authenticated-Scopes",
+	// The guest's computer router takes this header as the computer binding
+	// (agentcore api_self_development.go); only the proxy may set it
+	// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F1).
+	"X-Authenticated-Computer",
 	"X-User-Id",
 	"X-User-Name",
 	"X-Forwarded-User",
@@ -51,6 +55,41 @@ var clientIdentityHeaders = []string{
 	"X-Auth-User",
 	"X-Internal-Caller",
 	hostauth.Header,
+	// Headers other services trust from their own callers. No client value
+	// reaches them through the proxy today; strip them so none ever does.
+	"X-Internal-Updater",
+	"X-Choir-Operator",
+	"X-Choir-Operator-Token",
+	"X-Choir-Lifecycle-Caller",
+	"X-Choir-Capsule",
+}
+
+// proxyCarrierHeaders carry proxy-validated context from a handler to the
+// reverse proxy director. A client must never pre-set them: the director
+// reads them before it deletes them.
+var proxyCarrierHeaders = []string{
+	"X-Proxy-Trusted-User",
+	"X-Proxy-Trusted-Email",
+	"X-Proxy-Trusted-Scopes",
+	"X-Resolved-Autoputer-URL",
+	proxyOriginalEscapedPathHeader,
+	proxyOriginalRawQueryHeader,
+	"X-Original-Path",
+	"X-Original-RawQuery",
+}
+
+// stripClientSuppliedHeaders removes every identity and carrier header from
+// a public request at ingress, before any handler reads or forwards it.
+func stripClientSuppliedHeaders(r *http.Request) {
+	if r == nil || r.Header == nil {
+		return
+	}
+	for _, hdr := range clientIdentityHeaders {
+		r.Header.Del(hdr)
+	}
+	for _, hdr := range proxyCarrierHeaders {
+		r.Header.Del(hdr)
+	}
 }
 
 var (
@@ -417,6 +456,11 @@ func (h *Handler) SetAPIKeyValidator(v APIKeyValidator) {
 // strips all client-supplied identity headers and replaces them with these
 // trusted values before forwarding to the upstream.
 func (h *Handler) setTrustedAuthHeaders(r *http.Request, authResult *AuthResult) {
+	// Clear first: Email and Scopes are set only when present, so no stale
+	// or client value may survive for the director to copy.
+	r.Header.Del("X-Proxy-Trusted-User")
+	r.Header.Del("X-Proxy-Trusted-Email")
+	r.Header.Del("X-Proxy-Trusted-Scopes")
 	r.Header.Set("X-Proxy-Trusted-User", authResult.UserID)
 	if authResult.Email != "" {
 		r.Header.Set("X-Proxy-Trusted-Email", authResult.Email)
@@ -634,6 +678,7 @@ func preserveOriginalRequestTarget(r *http.Request) bool {
 // X-Authenticated-User header and preserves the original request path, method,
 // query string, and upstream status/body.
 func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
+	stripClientSuppliedHeaders(r)
 	started := time.Now()
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -775,6 +820,7 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 // proxy allowlist changes. Signed-out callers still see a 401 denial rather
 // than a route-specific 404 that might suggest which routes exist.
 func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
+	stripClientSuppliedHeaders(r)
 	path := r.URL.Path
 
 	// Route protocol-specific protected paths.
@@ -869,6 +915,14 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/api/notifications/"):
 		h.HandleNotificationAPI(w, r)
 		return
+	case strings.HasPrefix(path, "/api/computers/"):
+		// Every computer-scoped route is matched above, where the proxy
+		// checks ownership and scope and sets the computer binding itself.
+		// A spelling the matchers miss (a trailing slash) must not reach the
+		// guest through the generic forward, which checks only the
+		// read/write:runtime scope (auth-boundary-gaps F1).
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
+		return
 	case strings.HasPrefix(path, "/api/"):
 		// All HTTP /api/* routes are auth-gated at the proxy level and
 		// forwarded to the autoputer with trusted user context injected. The
@@ -910,6 +964,7 @@ func (h *Handler) HandlePulseSummary(w http.ResponseWriter, r *http.Request) {
 // context via the X-Authenticated-User header on the autoputer dial and strips
 // any client-supplied identity headers.
 func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
+	stripClientSuppliedHeaders(r)
 	started := time.Now()
 	// Step 1: Validate auth BEFORE upgrading. Missing or invalid auth is
 	// denied with a machine-readable 401 JSON response and no WS upgrade.
@@ -1033,6 +1088,7 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 // singleton zot PTY endpoint. This allows the browser to connect to zot through
 // the auth-gated proxy without exposing a raw terminal app.
 func (h *Handler) HandleManagementConsoleWS(w http.ResponseWriter, r *http.Request) {
+	stripClientSuppliedHeaders(r)
 	// Step 1: Validate auth BEFORE upgrading.
 	authResult, err := h.authenticate(r)
 	if err != nil {

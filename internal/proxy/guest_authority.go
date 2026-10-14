@@ -57,8 +57,18 @@ func (h *Handler) requirePlatformObjectGraphCaller(r *http.Request) error {
 	if r.Method == http.MethodGet {
 		// Captures and their bodies are shared Autopaper content: any bound
 		// guest reads them (W1b2).
-		if r.URL.Path == "/internal/platform/objects" || r.URL.Path == "/internal/platform/edges" ||
-			strings.HasPrefix(r.URL.Path, "/internal/platform/captures/") {
+		if strings.HasPrefix(r.URL.Path, "/internal/platform/captures/") {
+			return nil
+		}
+		// An object list is scoped to the guest's own owner and computer;
+		// corpusd sees this request as the proxy's, so the proxy enforces it
+		// (auth-boundary-gaps F5). No guest lists edges.
+		if r.URL.Path == "/internal/platform/objects" {
+			query := r.URL.Query()
+			if strings.TrimSpace(query.Get("owner")) != strings.TrimSpace(ownership.UserID) ||
+				strings.TrimSpace(query.Get("computer")) != strings.TrimSpace(ownership.ComputerID) {
+				return fmt.Errorf("guest object list must name its own owner and computer")
+			}
 			return nil
 		}
 		return fmt.Errorf("guest object graph reads must use a collection route")

@@ -76,7 +76,9 @@ func TestBootstrapChainRequiresLifecycleScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, lifecycleSecret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "lifecycle", []string{"computer:lifecycle"}, "computer-a", nil)
+	// bootstrap-chain is an owner act: the key needs owner:acts as well as
+	// the lifecycle scope (auth-boundary-gaps F4).
+	_, lifecycleSecret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "lifecycle", []string{"computer:lifecycle", OwnerActsScope}, "computer-a", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

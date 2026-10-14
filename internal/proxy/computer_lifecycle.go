@@ -334,6 +334,14 @@ func (h *Handler) HandleComputerWorkspaceReplace(w http.ResponseWriter, r *http.
 			return
 		}
 	}
+	// Restore and rematerialize-from-tape rewrite the computer's state from
+	// a checkpoint or its tape: owner acts (auth-boundary-gaps F4).
+	if isComputerRestorePath(r.URL.Path) && !authorizeOwnerAct(w, authResult, "computer restore") {
+		return
+	}
+	if isComputerRematerializePath(r.URL.Path) && !authorizeOwnerAct(w, authResult, "computer rematerialize-from-tape") {
+		return
+	}
 
 	var target *resolvedComputerTarget
 	if authResult.AuthMethod == "api_key" {
@@ -568,6 +576,11 @@ func (h *Handler) HandleComputerBootstrapChain(w http.ResponseWriter, r *http.Re
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing exact computer:lifecycle scope"})
 			return
 		}
+	}
+	// Bootstrapping a computer's event chain is an owner act
+	// (auth-boundary-gaps F4).
+	if !authorizeOwnerAct(w, authResult, "computer bootstrap-chain") {
+		return
 	}
 
 	var target *resolvedComputerTarget

@@ -34,6 +34,12 @@ const SCOPES = [
   'computer:self_development:read',
   'computer:self_development:approve', 'computer:self_development:rollback',
   'computer:self_development:mode',
+  // The tracer (scripts/reeng_tracer.mjs) plays the owner on its own test
+  // computer: it arms, approves, bootstraps and restores. Those are owner
+  // acts, which need owner:acts, and auth grants that scope only to a key
+  // minted from the owner's session, as this one is (owner session below)
+  // (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F4).
+  'owner:acts',
 ];
 
 // computerFromProductAPI reads the logged-in owner's computer id through
