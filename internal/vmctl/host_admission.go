@@ -128,6 +128,10 @@ type hostMemoryLedger struct {
 	peak         map[string]uint64
 	peakReset    map[string]bool
 	recent       []HostAdmissionDecision
+	// leases are memory hotplug leases (memory_hotplug.go): bytes plugged
+	// or requested above a computer's base, held at full size until the
+	// unplug completes, so starts and grows see each other.
+	leases map[string]uint64
 }
 
 func (l *hostMemoryLedger) initLocked() {
@@ -136,6 +140,9 @@ func (l *hostMemoryLedger) initLocked() {
 		l.rss = map[string]vmMemoryObservation{}
 		l.peak = map[string]uint64{}
 		l.peakReset = map[string]bool{}
+	}
+	if l.leases == nil {
+		l.leases = map[string]uint64{}
 	}
 }
 
@@ -181,7 +188,24 @@ func (l *hostMemoryLedger) outstandingLocked(now time.Time, cfg HostAdmissionCon
 		}
 		views = append(views, view)
 	}
-	sort.Slice(views, func(i, j int) bool { return views[i].ID < views[j].ID })
+	for vmID, bytes := range l.leases {
+		if bytes == 0 {
+			continue
+		}
+		total += bytes
+		views = append(views, AdmissionReservationView{
+			VMID:             vmID,
+			NeedBytes:        bytes,
+			NeedSource:       memoryLeaseNeedSource,
+			OutstandingBytes: bytes,
+		})
+	}
+	sort.Slice(views, func(i, j int) bool {
+		if views[i].ID != views[j].ID {
+			return views[i].ID < views[j].ID
+		}
+		return views[i].VMID < views[j].VMID
+	})
 	return total, views
 }
 

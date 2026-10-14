@@ -382,7 +382,10 @@ type VMManagerConfig struct {
 	GuestPort         int
 	MachineCPUCount   int
 	MachineMemSizeMib int
-	PersistentDir     string
+	// MemoryHotplugMiB is the virtio-mem region this computer boots with
+	// (0: none); vmctl's selection (memory_hotplug.go).
+	MemoryHotplugMiB int
+	PersistentDir    string
 	// GatewayToken is the credential token for the autoputer to authenticate
 	// to the host-side gateway. Written to the persistent directory so the
 	// guest init script can read it and set RUNTIME_GATEWAY_TOKEN.
@@ -498,6 +501,11 @@ type OwnershipRegistry struct {
 	// reservations for starts in flight (host_admission.go).
 	hostAdmission   HostAdmissionConfig
 	admissionLedger hostMemoryLedger
+
+	// memoryHotplug selects computers for a virtio-mem device and bounds
+	// their leases; memoryCtl is the lease controller (memory_hotplug.go).
+	memoryHotplug MemoryHotplugConfig
+	memoryCtl     memoryController
 
 	// retentionPrune controls durable VM-state deletion for explicitly
 	// disposable computers such as staging Playwright accounts.
@@ -1311,6 +1319,7 @@ func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken 
 	cfg := vmManagerConfigForOwnership(own, gatewayToken)
 	cfg.Epoch = epoch
 	cfg.RealizationID = realizationIDFor(own.VMID, epoch)
+	cfg.MemoryHotplugMiB = memoryHotplugMiBWith(own, r.memoryHotplug, r.warmnessPolicy)
 	corpusdURL := r.corpusdURL
 	r.mu.Unlock()
 
@@ -1425,7 +1434,11 @@ func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) 
 	if !ok || resumer == nil {
 		return nil, false
 	}
-	info, err := resumer.ResumeVMFromSnapshot(own.VMID, vmManagerConfigForOwnership(own, ""), r.resumeCredentialIssuer(own))
+	resumeCfg := vmManagerConfigForOwnership(own, "")
+	// The selection the snapshot's launch hash must match (a changed
+	// selection cold boots).
+	resumeCfg.MemoryHotplugMiB = r.memoryHotplugMiBFor(own)
+	info, err := resumer.ResumeVMFromSnapshot(own.VMID, resumeCfg, r.resumeCredentialIssuer(own))
 	if err != nil {
 		log.Printf("vmctl: computer %s (VM %s) not resumed from snapshot; cold boot follows: %v", own.ComputerID, own.VMID, err)
 		return nil, false
@@ -2149,6 +2162,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				GuestPort:                  8085,
 				MachineCPUCount:            shapeCPU,
 				MachineMemSizeMib:          shapeMem,
+				MemoryHotplugMiB:           r.memoryHotplugMiBFor(own),
 				GatewayToken:               gwToken,
 				ComputerCredentialEnvelope: credentialEnvelope,
 				ComputerKind:               "active",
