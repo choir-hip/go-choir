@@ -67,6 +67,41 @@ func TestRLMEngineeringOverlayNamesTheReleaseRootFreezeReads(t *testing.T) {
 	}
 }
 
+// A change with no Go input ships the running binary (docs/problems/
+// selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, option A): the
+// overlay must stop telling the desk to build bin/autoputer for a
+// frontend-only change, must name the Go inputs the executor classifies,
+// and must keep the build instruction for a Go change. Failure modes: the
+// overlay still demands a build for every change (the drill spends its
+// window linking); the overlay tells the desk to copy a binary itself; the
+// overlay's Go-input list drifts from capsule.BinaryInputPath.
+func TestRLMEngineeringOverlayTeachesBinaryReuseForNonGoChanges(t *testing.T) {
+	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
+	if strings.Contains(overlay, "a frontend-only change still ships the binary") {
+		t.Fatalf("overlay still demands a build for a frontend-only change")
+	}
+	for _, want := range []string{"touches no Go input", "Freeze stages this computer's running binary", "Never stage a stub"} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("overlay does not say %q", want)
+		}
+	}
+	for _, rel := range []string{"cmd/", "internal/", "vendor/", "nix/", "go.mod", "go.sum", "flake.nix", "flake.lock"} {
+		if !strings.Contains(overlay, rel) {
+			t.Errorf("overlay does not name Go input %q", rel)
+		}
+		probe := strings.TrimSuffix(rel, "/")
+		if strings.HasSuffix(rel, "/") {
+			probe = rel + "x.go"
+		}
+		if !capsule.BinaryInputPath(probe) {
+			t.Errorf("overlay names %q as a Go input but the executor does not classify %q as one", rel, probe)
+		}
+	}
+	if !capsule.BinaryInputPath("frontend/tools/gen.go") || capsule.BinaryInputPath("internal/x/y_test.go") {
+		t.Fatalf("executor classification drifted from the overlay's .go and _test.go rules")
+	}
+}
+
 // Research searches the computer's own corpus before the web (symptom 3 of
 // docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md):
 // the overlay's evidence doctrine names choir.SearchWireCorpus before it

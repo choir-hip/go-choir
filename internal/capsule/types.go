@@ -265,6 +265,10 @@ type FrozenReleaseFile struct {
 // (S2-f — runtime changes are source-carried, not binary payloads).
 type StagedRelease struct {
 	Files []FrozenReleaseFile
+	// Binary records where Files' bin/autoputer came from: built in the
+	// capsule, or this computer's running binary reused for a change with
+	// no binary input.
+	Binary *ReleaseBinaryProvenance
 	// SourcePatch is the staged unified-diff artifact (<dir>/source.patch).
 	// Empty when the capsule made no source changes.
 	SourcePatch      string

@@ -52,6 +52,30 @@ type CapsuleToolCtx struct {
 	Ledger  interface {
 		GetCommitmentRecord(context.Context, string, string, string) (*types.CommitmentRecord, error)
 	}
+	// RunningBinary identifies this computer's running executable for the
+	// verification of a reused release binary; nil means
+	// capsule.CurrentRunningBinary.
+	RunningBinary func() (capsule.RunningBinary, error)
+}
+
+// releaseBinaryStillRunning refuses a verification pass on a bundle whose
+// bin/autoputer was reused from the running build when that build is no
+// longer the one running (a deploy restarted the computer after Freeze), or
+// when the running identity cannot be read
+// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, A5).
+func releaseBinaryStillRunning(toolCtx *CapsuleToolCtx, bundle transaction.CapsuleEffectBundle) error {
+	if bundle.ReleaseBinary == nil || bundle.ReleaseBinary.Origin != capsule.ReleaseBinaryReusedRunning {
+		return nil
+	}
+	resolve := capsule.CurrentRunningBinary
+	if toolCtx != nil && toolCtx.RunningBinary != nil {
+		resolve = toolCtx.RunningBinary
+	}
+	running, err := resolve()
+	if err != nil {
+		return fmt.Errorf("verify reused release binary: running build identity unavailable: %w", err)
+	}
+	return capsule.CheckReusedBinaryIsRunning(bundle.ReleaseBinary, running)
 }
 
 type capsuleCtxKey struct{}
@@ -255,6 +279,7 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	record.SourcePatchSHA256 = staged.SourcePatchSHA
 	record.SourcePatchBaseCommit = staged.SourceBaseCommit
 	record.RuntimeFiles = files
+	record.ReleaseBinary = staged.Binary
 	record.ContentDigest, err = record.ComputeContentDigest()
 	if err != nil || record.Validate(false) != nil {
 		return nil, fmt.Errorf("complete capsule effect bundle draft unavailable")
@@ -283,7 +308,7 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
+	out := map[string]any{
 		"handle": handle, "change_count": len(changes), "classifier_version": record.ClassifierV,
 		"classifier_digest": record.ClassifierDigest, "groups": record.Groups,
 		"content_digest": record.ContentDigest, "bundle_digest": record.ContentDigest,
@@ -291,7 +316,11 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		// Internal: the changed source files, for rule precommit settlement;
 		// commitFreezeIntent removes the key before the cell sees the result.
 		freezeSourcePathsKey: capsuleSourcePaths(changes),
-	}, nil
+	}
+	if record.ReleaseBinary != nil {
+		out["release_binary_origin"] = record.ReleaseBinary.Origin
+	}
+	return out, nil
 }
 
 // recordSelfDevelopmentVerdict records one verdict on a frozen operation: the
@@ -458,6 +487,9 @@ func finalizeVerifiedCapsuleBundle(ctx context.Context, toolCtx *CapsuleToolCtx,
 			!selfDevelopmentContainsString(bundle.VerifierReceipts, verifierRef) || bundle.Validate(true) != nil {
 			return operation, fmt.Errorf("verified bundle recovery binding mismatch")
 		}
+	}
+	if err := releaseBinaryStillRunning(toolCtx, bundle); err != nil {
+		return operation, err
 	}
 	finalBytes, err := computerevent.CanonicalJSON(bundle)
 	if err != nil {

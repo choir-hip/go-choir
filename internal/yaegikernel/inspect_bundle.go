@@ -60,6 +60,15 @@ type bundleDraftMirror struct {
 	RuntimeFiles            []mountedRuntimeFile       `json:"runtime_files"`
 	SourcePatchSHA256       string                     `json:"source_patch_sha256,omitempty"`
 	SourcePatchBaseCommit   string                     `json:"source_patch_base_commit,omitempty"`
+	ReleaseBinary           *mountedReleaseBinary      `json:"release_binary,omitempty"`
+}
+
+// mountedReleaseBinary mirrors capsule.ReleaseBinaryProvenance.
+type mountedReleaseBinary struct {
+	Origin           string `json:"origin"`
+	SHA256           string `json:"sha256"`
+	RunningCommit    string `json:"running_commit,omitempty"`
+	SourceBaseCommit string `json:"source_base_commit,omitempty"`
 }
 
 type mountedRuntimeFile struct {
@@ -145,7 +154,7 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 		runtimeFiles = append(runtimeFiles, map[string]any{"path": file.Path, "sha256": file.SHA256, "mode": file.Mode})
 	}
 	sort.Slice(runtimeFiles, func(i, j int) bool { return runtimeFiles[i]["path"].(string) < runtimeFiles[j]["path"].(string) })
-	return map[string]any{
+	out := map[string]any{
 		"operation_id": binding.OperationID, "content_digest": record.ContentDigest,
 		"source_tree_ref": record.SourceTreeRef, "runtime_artifact_ref": record.RuntimeArtifactRef,
 		"base_event_head": record.BaseEventHead, "runtime_files": runtimeFiles,
@@ -153,5 +162,14 @@ func inspectMountedBundleAt(root string) (map[string]any, error) {
 		"dependency_toolchain_refs": record.DependencyToolchainRefs, "resource_receipts": record.ResourceReceipts,
 		"execution_receipts": executionRefs,
 		"classifier_version": record.ClassifierV, "classifier_digest": record.ClassifierDigest, "groups": record.Groups,
-	}, nil
+	}
+	if binary := record.ReleaseBinary; binary != nil {
+		// Where bin/autoputer came from: built in the capsule, or this
+		// computer's running binary reused for a change with no Go input.
+		out["release_binary"] = map[string]any{
+			"origin": binary.Origin, "sha256": binary.SHA256,
+			"running_commit": binary.RunningCommit, "source_base_commit": binary.SourceBaseCommit,
+		}
+	}
+	return out, nil
 }

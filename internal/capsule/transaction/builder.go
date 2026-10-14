@@ -54,6 +54,10 @@ type CapsuleEffectBundle struct {
 	// source-carried, not binary payloads.
 	SourcePatchSHA256     string `json:"source_patch_sha256,omitempty"`
 	SourcePatchBaseCommit string `json:"source_patch_base_commit,omitempty"`
+	// ReleaseBinary records where RuntimeFiles' bin/autoputer came from:
+	// built in the capsule, or this computer's running binary reused for a
+	// change with no binary input. Absent on bundles frozen before it.
+	ReleaseBinary *capsule.ReleaseBinaryProvenance `json:"release_binary,omitempty"`
 }
 
 // ChangeRecord is a single file change in the transaction record.
@@ -109,6 +113,9 @@ func (r CapsuleEffectBundle) Validate(final bool) error {
 		!validExecutionRefs(r.TestReceipts) || !validExecutionRefs(r.DependencyToolchainRefs) || !validImmutableRefs(r.ResourceReceipts) ||
 		len(r.RuntimeFiles) == 0 || r.Rejected || r.ContentDigest != contentDigest {
 		return fmt.Errorf("capsule effect bundle: complete immutable effect bindings are required")
+	}
+	if err := capsule.ValidateReleaseBinary(r.RuntimeFiles, r.ReleaseBinary); err != nil {
+		return fmt.Errorf("capsule effect bundle: %w", err)
 	}
 	if final && !validImmutableRefs(r.VerifierReceipts) {
 		return fmt.Errorf("capsule effect bundle: independent verifier receipt is required")

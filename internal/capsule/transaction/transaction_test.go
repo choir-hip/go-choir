@@ -182,3 +182,48 @@ func TestCapsuleEffectBundleValidateAcceptsGoEvalReceiptRefs(t *testing.T) {
 		t.Fatalf("capsule-go-eval receipt refs refused in draft: digest=%s validate=%v", bundle.ContentDigest, bundle.Validate(false))
 	}
 }
+
+// A bundle's release_binary provenance must bind the release's bin/autoputer
+// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md,
+// A6/A7): a record naming another hash, an unknown origin, or a reused binary
+// without equal running and source commits is refused; a legacy bundle
+// without the record still validates.
+func TestCapsuleEffectBundleValidateBindsReleaseBinaryProvenance(t *testing.T) {
+	digest := func(fill byte) string { return repeatHex(fill) }
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	base := CapsuleEffectBundle{
+		BundleVersion: 1, ComputerID: "computer-1", BaseEventHead: digest('a'),
+		TrajectoryRef: "trajectory-1", CapsuleIdentity: "capsule-1", CapabilityPolicyDigest: digest('b'),
+		SourceTreeRef:         "source-tree:sha256:" + digest('c'),
+		OrderedFileEffects:    []ChangeRecord{{Path: "workspace/platform/frontend/public/x.txt", Kind: "added", Mode: 0o644}},
+		GeneratedArtifactRefs: []string{"artifact:sha256:" + digest('d')},
+		BuildRecipeRef:        "capsule-go-eval:sha256:" + digest('e'),
+		RuntimeArtifactRef:    "runtime-artifact:sha256:" + digest('f'),
+		TestReceipts:          []string{"capsule-go-eval:sha256:" + digest('1')}, VerifierReceipts: []string{},
+		DependencyToolchainRefs: []string{"capsule-go-eval:sha256:" + digest('2')},
+		ResourceReceipts:        []string{"resource:sha256:" + digest('3')},
+		RuntimeFiles:            []capsule.FrozenReleaseFile{{Path: "bin/autoputer", SHA256: digest('d'), Mode: 0o555}},
+		Groups:                  map[string][]ChangeRecord{}, Ignored: []ChangeRecord{},
+	}
+	validate := func(provenance *capsule.ReleaseBinaryProvenance) error {
+		bundle := base
+		bundle.ReleaseBinary = provenance
+		bundle.ContentDigest, _ = bundle.ComputeContentDigest()
+		return bundle.Validate(false)
+	}
+	if err := validate(nil); err != nil {
+		t.Fatalf("legacy bundle refused: %v", err)
+	}
+	if err := validate(&capsule.ReleaseBinaryProvenance{Origin: capsule.ReleaseBinaryReusedRunning, SHA256: digest('d'), RunningCommit: commit, SourceBaseCommit: commit}); err != nil {
+		t.Fatalf("reused-running bundle refused: %v", err)
+	}
+	for name, provenance := range map[string]*capsule.ReleaseBinaryProvenance{
+		"other hash":     {Origin: capsule.ReleaseBinaryCapsuleBuilt, SHA256: digest('9')},
+		"unknown origin": {Origin: "copied", SHA256: digest('d')},
+		"commit drift":   {Origin: capsule.ReleaseBinaryReusedRunning, SHA256: digest('d'), RunningCommit: commit, SourceBaseCommit: repeatHex('7')[:40]},
+	} {
+		if err := validate(provenance); err == nil {
+			t.Errorf("%s: bundle accepted", name)
+		}
+	}
+}

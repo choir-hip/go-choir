@@ -48,6 +48,11 @@ func TestInBundleInspectionReadsEveryCapsuleEffectBundleField(t *testing.T) {
 		RuntimeFiles:          []capsule.FrozenReleaseFile{{Path: "bin/autoputer", SHA256: fileSHA, Mode: 0o755}},
 		SourcePatchSHA256:     repeatHex('7'),
 		SourcePatchBaseCommit: "0123456789abcdef0123456789abcdef01234567",
+		ReleaseBinary: &capsule.ReleaseBinaryProvenance{
+			Origin: capsule.ReleaseBinaryReusedRunning, SHA256: fileSHA,
+			RunningCommit:    "0123456789abcdef0123456789abcdef01234567",
+			SourceBaseCommit: "0123456789abcdef0123456789abcdef01234567",
+		},
 	}
 	var err error
 	bundle.ContentDigest, err = bundle.ComputeContentDigest()
@@ -74,5 +79,9 @@ func TestInBundleInspectionReadsEveryCapsuleEffectBundleField(t *testing.T) {
 	}
 	if out["content_digest"] != bundle.ContentDigest {
 		t.Fatalf("content_digest = %v, want %s", out["content_digest"], bundle.ContentDigest)
+	}
+	// The verifier sees where the release binary came from.
+	if binary, _ := out["release_binary"].(map[string]any); binary["origin"] != capsule.ReleaseBinaryReusedRunning || binary["sha256"] != fileSHA {
+		t.Fatalf("release_binary = %v, want the reused-running provenance", out["release_binary"])
 	}
 }

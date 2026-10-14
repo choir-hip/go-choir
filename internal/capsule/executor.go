@@ -58,6 +58,16 @@ type Executor struct {
 	// goModuleProxy is where L2 capsules' GoProxyRouteHost goes; invalid
 	// (unset) leaves the route out of the policy.
 	goModuleProxy netip.AddrPort
+	// runningBinary identifies the executable Freeze may reuse as a
+	// release's bin/autoputer; nil means CurrentRunningBinary.
+	runningBinary func() (RunningBinary, error)
+}
+
+func (e *Executor) currentRunningBinary() (RunningBinary, error) {
+	if e.runningBinary != nil {
+		return e.runningBinary()
+	}
+	return CurrentRunningBinary()
 }
 
 // SetGoModuleProxy routes L2 capsules' GoProxyRouteHost to the host Go
@@ -1605,20 +1615,53 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	if len(files) == 0 || files[0].Path == "" {
 		return nil, fmt.Errorf("capsule release contains no frozen runtime artifacts")
 	}
-	hasAutoputer, hasFrontend := false, false
+	hasAutoputer, hasFrontend, stagedAutoputer := false, false, false
+	var binary *ReleaseBinaryProvenance
 	for _, file := range files {
-		if file.Path == "bin/autoputer" && file.Mode&0o111 != 0 {
-			hasAutoputer = true
+		if file.Path == ReleaseBinaryPath {
+			stagedAutoputer = true
+			if file.Mode&0o111 != 0 {
+				hasAutoputer = true
+				binary = &ReleaseBinaryProvenance{Origin: ReleaseBinaryCapsuleBuilt, SHA256: file.SHA256}
+			}
 		}
 		if file.Path == "frontend/index.html" || strings.HasPrefix(file.Path, "frontend/") {
 			hasFrontend = true
 		}
 	}
-	if !hasAutoputer {
+	if !hasAutoputer && stagedAutoputer {
 		return nil, fmt.Errorf("capsule release must contain executable bin/autoputer")
 	}
 	if !hasFrontend {
 		return nil, fmt.Errorf("capsule freeze: computer-surface frontend artifacts are underivable")
+	}
+	if !hasAutoputer {
+		// Option A (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md):
+		// a change with no binary input ships this computer's running
+		// binary, hashed and bound to the commit the capsule source is
+		// pinned to, instead of a capsule build.
+		running, runningErr := e.currentRunningBinary()
+		if runningErr != nil {
+			running = RunningBinary{}
+		}
+		if err := PlanReleaseBinaryReuse(changes, caps.Spec.SourceArtifactRef, running); err != nil {
+			return nil, fmt.Errorf("capsule release must contain executable bin/autoputer: %w", errors.Join(err, runningErr))
+		}
+		reused, size, err := StageRunningBinary(ctx, temporary, running)
+		if err != nil {
+			return nil, err
+		}
+		total += size
+		if total > caps.MemoryMax {
+			return nil, fmt.Errorf("capsule release exceeds resource budget")
+		}
+		files = append(files, reused)
+		sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+		binary = &ReleaseBinaryProvenance{
+			Origin: ReleaseBinaryReusedRunning, SHA256: reused.SHA256,
+			RunningCommit:    strings.ToLower(strings.TrimSpace(running.Commit)),
+			SourceBaseCommit: SourceArtifactCommit(caps.Spec.SourceArtifactRef),
+		}
 	}
 	// S2-f: source changes (workspace/platform, classified LedgerSource) are
 	// source-carried. Emit a unified diff the host builder can apply to the
@@ -1631,6 +1674,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	cleanup = false
 	return &StagedRelease{
 		Files:            files,
+		Binary:           binary,
 		SourcePatch:      patch,
 		SourcePatchSHA:   patchSHA,
 		SourceBaseCommit: baseCommit,
