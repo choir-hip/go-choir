@@ -56,6 +56,16 @@
    the capture corpus is not read from its trace here; that is a
    hypothesis for the deepen design (part 2), not a finding.
 
+   **Trace read (about 14:10 UTC), superseding that hypothesis:** research
+   run dc4c5adc-ae98-4112-a994-b231ab927b1e searched the corpus (0
+   captures), then the web (three searches, each on 1 or 2 of 9 providers,
+   the rest cooling), read and captured two pages (Africanews/AFP and the
+   BBC), and reported one round citing one of them. Texture published that.
+   The stub is one shallow research round plus degraded search providers,
+   not a missing web search. The twenty newest research runs (13:22–13:41)
+   show the same provider state. Detail:
+   docs/reports/autopaper-deepen-important-stories-2026-10-14.md.
+
 ## Fix direction
 
 Part 1 (orange, frontend rank and an additive corpusd field): corpusd adds
