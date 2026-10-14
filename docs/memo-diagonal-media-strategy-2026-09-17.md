@@ -6,6 +6,13 @@ doc remains apex. This memo carries the business layer the repo has not
 had: what the technology is *for* commercially.
 **Mutation class:** green (documentation only)
 
+> **Update 2026-10-14 (docs prune):** the three-phase story below predates
+> Autopaper going live (2026-10-13), the precommitment-records core and the
+> owner's strategy takeaways. The current business framing (three lines:
+> data products, Autoradio, the organizational operating system; foundations
+> before growth) is `reports/strategy-takeaways-2026-10-14.md`. This memo is
+> kept as the origin of the diagonal/horizontal argument.
+
 ## The three phases
 
 Owner framing, 2026-09-17: the product story is three phases, and the
@@ -120,7 +127,7 @@ subscription at every paid tier.
 
 ```text
 computer  (the automatic computer — exists, mid-cutover)
-  → autonews  (the automatic newspaper — the World Wire)
+  → autonews  (the automatic newspaper — Autopaper, formerly the World Wire)
     → autoradio  (the voice projection — a projection OF autonews)
 ```
 

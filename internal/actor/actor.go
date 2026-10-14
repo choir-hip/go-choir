@@ -1,5 +1,5 @@
 // Package actor implements the durable-actor core of the runtime
-// rearchitecture (docs/choir-rearchitecture-durable-actors-2026-06-11.md),
+// rearchitecture (docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md),
 // conforming to specs/actor_protocol.tla.
 //
 // An agent is a durable actor: continuation obligations live on the tape as

@@ -1,6 +1,6 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-09-23 — rewritten for the desk-RLM rectification
+**Last updated:** 2026-10-14 (terminology and status rows refreshed in the docs prune; section bodies still carry the 2026-09-23 desk-RLM rectification rewrite and older text) — rewritten for the desk-RLM rectification
 (`docs/desk-rlm-rectification-plan-2026-09-23.md`). The prior revision
 (2026-07-24, stale-bannered 2026-09-22) described the Super/CoSuper/Researcher
 hierarchy and `update_coagent` as the agent-to-agent primitive; that model is
@@ -63,8 +63,8 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 | Web desktop | **Live** | `frontend/src/lib/apps/registry.ts` is the executable app inventory; this memo and `platform-os-app-state.md` classify behavior and gaps. |
 | macOS desktop | **Buildable wrapper; shipment unproven here** | Wails shell around the Svelte product; distribution/daily-driver status requires dated acceptance evidence. |
 | Choir Base / File Provider | **Substantial tested substrate, product wiring incomplete** | Append-only journal, tree/blob, sync, and API helpers exist. No deployed product service currently owns the API, and Base is not canonical app-state authority. |
-| Autopaper | **Tabled** | No active Definition or canonical implementation. Revival requires a fresh Definition; issue residue is not authority. |
-| `corpusd` | **Code-present and deployment-wired** | Service/store writer and sanitized public API boundary for publication/World Wire; platform-computer agents remain semantic owners. |
+| Autopaper | **Live (2026-10-13)** | The designated paper computer publishes in public from its source schedules (re-engineering Cut 2); design of record `autopaper-sw-design-2026-10-09.md`. Renamed from the World Wire and Universal Wire; code identifiers still carry the old names (rename TODO there, section 9). |
+| `corpusd` | **Code-present and deployment-wired** | Service/store writer and sanitized public API boundary for Autopaper publication; platform-computer agents remain semantic owners. |
 | `sourcecycled` | **Deleted 2026-10-13 (Cut 2 unit 2b)** | Captures and source schedules are the only ingestion path; see item 6 below. |
 | Capsules | **Live accepted construction substrate; later self-development candidate rejected** | Audited ComputerVersion construction proved guest-local isolation and lifecycle. Additional namespaces/cgroup/seccomp/Landlock/capability/updater work on the rejected branch remains source evidence only; no self-development effect is authorized. |
 | Features/package adoption | **Forbidden as authority; exact residue remains historical** | AppChangePackage/AppAdoption cannot authorize self-development. Rejected-branch deletion is not silently claimed as canonical-main state and no successor may revive it as fallback authority. |
@@ -200,7 +200,7 @@ The current cloud vocabulary matters for source/news work:
   with platform computer(s), many user computers, private source systems, and
   optional publication/subscription links;
 - **Wire** is the reusable source-to-Texture substrate;
-- **World Wire** is platform-level work in the Community Cloud, not a
+- **Autopaper** (formerly the World Wire) is platform-level work in the Community Cloud, not a
   user-computer feature;
 - personalization is user-computer work over accessible public/private corpora.
 
@@ -249,7 +249,7 @@ Important boundary rules:
 - The per-user computer runtime is where private Texture, appagent, Trace, run
   memory, app state, source metadata, canonical event projections, and inert
   capsule-proposal metadata live.
-- Platform-level semantic work, such as World Wire article/edition Textures and
+- Platform-level semantic work, such as Autopaper article/edition Textures and
   public source synthesis, should be scoped to platform computer authority even
   when host daemons perform serving, lifecycle, or adapter work.
 - Provider secrets stay in the gateway/platform boundary. Per-computer model
@@ -620,9 +620,9 @@ claim. Generic delegated agents remain durable runs/trajectories and may perform
 effects only through a separately accepted capsule path.
 
 `processor`, `reconciler`, and `conductor` are deferred roles: processor and
-reconciler are world-wire roles to be RLM-ified or deleted later; conductor may
-become a "system one" model. They are out of scope for the desk rectification
-and retain their current machinery until their phase.
+reconciler were Autopaper (World Wire) roles and were deleted by the 2026-10-05
+rearchitecture; conductor is superseded by the four desks. This paragraph is
+kept only as history of the rectification scope.
 
 ### Supervision Boundary And Current Gap
 
@@ -780,7 +780,7 @@ moving bytes.
 
 Choir uses exactly two Dolt stores.
 
-- **World-wire sql-server:** the existing corpusd `platform` database contains
+- **Corpus sql-server (Store B):** the corpus database behind corpusd contains
   public/source object-graph tables, route-slot tables, and narrow
   `computer_event_heads`, append/idempotency, key-history, mode, and lifecycle
   control rows. corpusd mechanically performs authenticated head and
@@ -811,7 +811,7 @@ by digest; runtime caches and opaque machine accidents are not semantic state.
 Texture content remains embedded-Dolt authority with optional filesystem
 aliases.
 
-The world-wire store also holds publications, public routes, source/retrieval/
+The corpus store (the Autopaper object graph) also holds publications, public routes, source/retrieval/
 citation/provenance objects, and public review/control records. Narrow event
 control tables are semantically separate from those objects and from route
 slots. They do not create a third store or grant corpusd semantic authorship.
@@ -980,7 +980,7 @@ Future coding agents should not simplify Choir into:
 - one global agent with tools
 - one active computer that mutable workers freely edit
 - desks patching `texture` text directly
-- world-wire store as a global polling bus
+- the corpus store (Autopaper object graph) as a global polling bus
 - provider-specific product behavior
 - publication as a flat export with no version/provenance model
 

@@ -146,7 +146,7 @@ now:
     (docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md,
     owner routing decision); idle test computers keep their old build
     after a deploy, so deployed demos use fresh test computers
-    (docs/problems/idle-test-computers-keep-old-builds-after-deploy-2026-10-11.md)
+    (docs/problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md)
   next_action: none here; continue in the re-engineering metamission (R1 first)
 
 receipts: []

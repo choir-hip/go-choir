@@ -6,16 +6,16 @@ Station D0 of the re-engineering metamission
 does/did." Nothing is removed until the owner rules on this document.
 
 Five read-only census agents (Sonnet) each covered one area at c30147a6. Their
-full reports, with file:line evidence, origin commits and risks, are in
+raw reports (Go static reachability, frontend, scripts/tests/data, and the
+50k-line per-function list) were removed in the 2026-10-14 docs prune because
+the deletions they drove have landed; they remain in version control history
+(see `archive/PRUNED-2026-10-14.md`). Two are kept in
 [dead-code-census-2026-10-12/](dead-code-census-2026-10-12/):
 
 | Area | File |
 |---|---|
-| Go static reachability (deadcode and staticcheck, linux build) | [go-static.md](dead-code-census-2026-10-12/go-static.md), per-function list [go-dead-functions-linux.tsv](dead-code-census-2026-10-12/go-dead-functions-linux.tsv) |
 | HTTP routes with no caller | [routes.md](dead-code-census-2026-10-12/routes.md) |
-| Frontend | [frontend.md](dead-code-census-2026-10-12/frontend.md) |
 | Desk verbs, prompts, metadata, env, nix | [desk-config.md](dead-code-census-2026-10-12/desk-config.md) |
-| Scripts, tests, specs, schema, tracked artifacts | [scripts-tests-data.md](dead-code-census-2026-10-12/scripts-tests-data.md) |
 
 This file merges the five reports by subsystem, removes the overlaps and asks
 the owner the questions that a grep cannot answer.

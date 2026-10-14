@@ -29,7 +29,7 @@ definition_version: 4
 # absorbs Jev M0a + processor/reconciler deletion), SA (agent density: memory +
 # Dolt engine bottleneck + store split; absorbs SO's memory slice), SM (model
 # policy rewrite + evals; absorbs Jev M2), SC (desk capability surface).
-# S3 now depends on SA, S5 on SC. World Wire: consuming lens; phase 1 can start
+# S3 now depends on SA, S5 on SC. Autopaper: consuming lens; phase 1 can start
 # after S5; the 10-01 WW metamission is superseded pending a rewrite. See
 # "v5 plan".
 # v5.1 2026-10-06 (director review): S2, SR closed; SMG landed with its
@@ -50,11 +50,11 @@ definition_version: 4
 # the long station chain as the spine. Gate 1 stable computer (SH O21, SL O1,
 # O7/O12 enforceable checks, O8/O9, Texture contract + acceptance); Gate 2
 # self-development with live Texture supervision (S1 remainder -> S4 -> S5 ->
-# S6; check how much of SC S5 truly needs); then World Wire design + build.
+# S6; check how much of SC S5 truly needs); then Autopaper design + build.
 # Optimizations deferred (S3, SA beyond the storm). Post-goal stations moved
-# out of the spine (S7-S11). World Wire interface design pulled forward as
+# out of the spine (S7-S11). Autopaper interface design pulled forward as
 # station SW (design only) so it cannot force late changes on Gates 1-2.
-# Owner decisions 2026-10-09: World Wire runs on the four core desks only
+# Owner decisions 2026-10-09: Autopaper runs on the four core desks only
 # (processor/reconciler deleted); shared data between computers uses the
 # object graph (published objects adopted onto the subscriber's tape, never
 # Dolt branch sync); no architectural ceiling on ingest — budget is the
@@ -163,7 +163,7 @@ metamission:
       status: working
       depends_on: []
     - id: SW-world-wire-interface
-      # v6 2026-10-09: World Wire interface design, pulled forward (design
+      # v6 2026-10-09: Autopaper interface design, pulled forward (design
       # only). Output: constraints on Gates 1-2 — schedule/timer obligation
       # kinds for SL, retention class + adopted-foreign-object homes for SH,
       # cross-computer object adoption (authority, privacy class,
@@ -538,7 +538,7 @@ boundaries:
     - Forking a computer mid-run (pending tool-call replay from the tape, audit pattern 2.3).
     - Building a bespoke fleet dashboard; fleet view is Texture transclusion.
     - Marketplace, payments, or ranking of publications.
-    - Bulk World Wire scale-out across VMs (v5; belongs to the World Wire metamission after S9).
+    - Bulk Autopaper scale-out across VMs (v5; belongs to the retired World Wire metamission after S9).
   dependencies_external:
     - >-
       Texture transclusion and rich formatting in the RLM tool-call
@@ -630,7 +630,7 @@ now:
     CI-driven app-layer pushes, and the pending-transition discharge path
     hardened for every downstream station. In flight: S1 remainder
     (non-root runtime), SO (storage lifecycle + og wrong-store GC fix,
-    observability, CI gating, World Wire containment). Next substrate: SR
+    observability, CI gating, Autopaper containment). Next substrate: SR
     desk-surface cleanup, then SA agent density in a 2-4 GiB guest, with
     SM model policy + evals after SR, and SC desk capability surface after
     SA + SM. See "v5 plan".
@@ -1337,7 +1337,7 @@ the GC run history before blaming fsync. SO items:
 
 Guest stores keep og bodies inline (`DoltStore`), so this loss is
 corpus-only. The corpus is frozen, so nothing user-facing regresses now. It
-must be repaired before World Wire ingests again.
+must be repaired before Autopaper ingests again.
 
 **Revised SA order:** 0 registration genesis → 1 storm convergence → 2
 baseline + offline GC re-measure → 3 memory → 4 engine lock (race test
@@ -1352,7 +1352,7 @@ VM before scaling VMs horizontally." Scale in order:
 2. guests per host (S3 residency tiers);
 3. hosts (out of scope).
 
-Bulk World Wire across many computers comes after S9, in the World Wire
+Bulk Autopaper across many computers comes after S9, in the Autopaper
 metamission.
 
 ### Critical path
@@ -1362,7 +1362,7 @@ S1 (non-root) ─┐
 S2 (accept) ───┼─> SR ─> SA ─> S3
 SO ────────────┘     └─> SM ─> SC ─> S5 ─> S6 ─> S7/S8 ─> S9 ─> S10/S11
                                      └ S4 (after S1) ┘
-World Wire phase 1 (the newspaper) can start after S5.
+Autopaper phase 1 (the newspaper) can start after S5.
 ```
 
 ### SR — desk-surface cleanup (small; absorbs Jev M0a)
@@ -1509,7 +1509,7 @@ Slices, in order:
 - **S8:** gains a design-only slice for the claim-feed protocol
   (cross-computer data subscription: signed append-only claim log, base +
   watermark + tail on the Restore-Zero pattern, subscription authority,
-  privacy class, revocation). It is built in the World Wire metamission.
+  privacy class, revocation). It is built in the retired World Wire metamission.
 
 ### Tracked open decisions
 
@@ -1522,9 +1522,9 @@ Slices, in order:
 7. Legal and licensing for scoring named public figures and republishing
    excerpts (owner/legal, not engineering).
 
-## World Wire as the consuming application (2026-10-05)
+## Autopaper (formerly the Autopaper) as the consuming application (2026-10-05)
 
-Owner framing: World Wire / autopaper is "the true application of Choir,
+Owner framing: Autopaper is "the true application of Choir,
 the purpose of all this infra". This is not one autopaper but a platform
 for others' autopapers, with white-label copies built from the primary.
 The rearchitecture analysis is `docs/archive/world-wire-rearchitecture-2026-10-05.md`
@@ -1532,7 +1532,7 @@ The rearchitecture analysis is `docs/archive/world-wire-rearchitecture-2026-10-0
 `docs/problems/world-wire-corpus-resource-burn-2026-10-05.md`.
 
 How this metamission treats it:
-- **v5 status:** the World Wire metamission
+- **v5 status:** the retired World Wire metamission
   (`choir-world-wire-metamission-2026-10-01.md`) and its W0 station are
   superseded. They predate the rearchitecture (processor/reconciler, host
   ingestion). A rewrite is pending, built on the rearchitecture analysis:
@@ -1930,7 +1930,7 @@ release refuses platform-follow updates with a typed hold, and the owner
 rebases through the same gate; S11's fleet security push stays deferred. SC/SM only as far as
 S5 needs them (to be checked when S5 is re-read).
 
-**Gate 3 — World Wire operational.** Designed on SW's constraints after
+**Gate 3 — Autopaper operational.** Designed on SW's constraints after
 Gate 2; four core desks (research reads and corroborates, management sets
 attention and spend, engineering writes source adapters in capsules,
 Texture writes, revises and publishes articles); deterministic steps are

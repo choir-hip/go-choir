@@ -18,3 +18,13 @@ the active Definition, and observed code or staging evidence.
 This corpus does not restore the pre-purge raw process-evidence or mission-ledger
 corpus. Bounded current evidence receipts remain outside this directory; deleted
 historical raw detail remains available through Git history when needed.
+
+## 2026-10-14 prune
+
+About 580 files were deleted from the docs tree on 2026-10-14 (most of this
+directory's older holdings among them) and about 60 were moved in. The
+deleted files, their reasons and the moves are listed in
+[`PRUNED-2026-10-14.md`](PRUNED-2026-10-14.md); everything is recoverable
+from Git history. Landed station goal files are under `definitions/`, the
+precommitment-record predecessors under `precommitment/`, and the lineage
+skills under `skills/`.

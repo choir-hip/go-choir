@@ -21,7 +21,7 @@ import (
 // (Track K): if the platform has no custodian wrap for this computer, the
 // guest seals its DEK under the host escrow public key and uploads it.
 // Failure is logged and retried on the next boot; escrow must never block a
-// boot (design: docs/designs/choir-durable-substrate-2026-08-23.md §3.2).
+// boot (design: docs/archive/choir-durable-substrate-2026-08-23.md §3.2).
 type keyEscrowClient struct {
 	platformURL string
 	capability  func(context.Context) (string, error)

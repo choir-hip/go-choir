@@ -7,7 +7,7 @@
 // computer identity bound as associated data so a wrap is useless for any
 // other computer.
 //
-// Design authority: docs/designs/choir-durable-substrate-2026-08-23.md §3.2
+// Design authority: docs/archive/choir-durable-substrate-2026-08-23.md §3.2
 // (custodian escrow protector; HSM/KMS deferred; passkey PRF is Track K 1b
 // and wraps the owner ROOT key, not DEKs directly).
 package keyescrow

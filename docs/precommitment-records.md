@@ -364,7 +364,7 @@ mutation; research has read-only world-evidence authority.
 | Precommit | no | no | A standalone prediction |
 | Resolve, Disagreement | no | the target | Disagreement keeps a scorer's differing verdict apart |
 
-Gone from the desk surface: `choir.Message`, `choir.Emit`, the `ApplyTexture`
+Retired from the desk surface (deleted): `choir.Message`, `choir.Emit`, the `ApplyTexture`
 controls that opened work, `choir.Assign`, and (per Re-eng 13, though the type
 still lists the subtype; verify) Retract. Management sits between Texture and
 engineering: engineering never addresses Texture; management sends records and

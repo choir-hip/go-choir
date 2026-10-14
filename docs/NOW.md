@@ -13,11 +13,9 @@ live owners elsewhere.
   product-path acceptance; see doctrine `C9`, `I8–I9`.
 - Active mission state and work-state caveats: [`ACTIVE.md`](ACTIVE.md).
   A promoted working Definition is the sole current authority root.
-- RLM mission research and consensus record:
-  [`reports/choir-rlm-mission-state-2026-09-08.md`](reports/choir-rlm-mission-state-2026-09-08.md).
-- Predictive ICRL research direction (the *RLMs are RLMs* working memo, held
-  outside this repo): [`memo-predictive-icrl-delta-2026-09-10.md`](memo-predictive-icrl-delta-2026-09-10.md).
-  It is research input, not architecture authority.
+- The learning and alignment mechanism (precommitment records, PSA):
+  [`precommitment-records.md`](precommitment-records.md).
+- Direction and state: [`reports/choir-state-and-vision-2026-10-14.md`](reports/choir-state-and-vision-2026-10-14.md).
 - Detailed architecture: [`current-architecture.md`](current-architecture.md).
 
 ## History

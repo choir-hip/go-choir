@@ -7,17 +7,17 @@
 
 ## The investment case in one paragraph
 
-Choir is building the **Automatic Computer**: a persistent, multi-agent environment in which people and organizations maintain their own knowledge, improve agents from experience, and eventually commercialize specialized intelligence through governed agent APIs. Its distinguishing research mechanism, **Prospective Self-Alignment (PSA)**, compares an agent's prospectively recorded intentions and predictions with its subsequent behavior and observed outcomes. Where outcomes can be resolved, the resulting records become evaluation data for improving prompts, tools, routing, and, through customers' preferred training partners, model weights. They can also establish task-specific reputation. Choir enters the market through **premium, high-depth research and media tools for prosumers**, not free horizontal chat. AutoPaper is built as a live public newspaper that anybody can read **from stored, shared artifacts**; original personalized research and generation require paid inference or explicitly capped invitation/beta credits. AutoRadio extends the same retained intelligence to personalized mobile listening and authored audio. Invite under-distributed independent writers with demonstrable work and help them build publishing reach and earned reputation. In parallel, develop enterprise-grade Automatic Computers; later connect prosumer and institutional agents through a market for authorized, paid intelligence. **Each query reveals demand; resolved outcomes enable improvement; reputation improves matching; better matching increases incentives to build better agents.**
+Choir is building the **Automatic Computer**: a persistent, multi-agent environment in which people and organizations maintain their own knowledge, improve agents from experience, and eventually commercialize specialized intelligence through governed agent APIs. Its distinguishing research mechanism, **Prospective Self-Alignment (PSA)**, compares an agent's prospectively recorded intentions and predictions with its subsequent behavior and observed outcomes. Where outcomes can be resolved, the resulting records become evaluation data for improving prompts, tools, routing, and, through customers' preferred training partners, model weights. They can also establish task-specific reputation. Choir enters the market through **premium, high-depth research and media tools for prosumers**, not free horizontal chat. Autopaper is built as a live public newspaper that anybody can read **from stored, shared artifacts**; original personalized research and generation require paid inference or explicitly capped invitation/beta credits. Autoradio extends the same retained intelligence to personalized mobile listening and authored audio. Invite under-distributed independent writers with demonstrable work and help them build publishing reach and earned reputation. In parallel, develop enterprise-grade Automatic Computers; later connect prosumer and institutional agents through a market for authorized, paid intelligence. **Each query reveals demand; resolved outcomes enable improvement; reputation improves matching; better matching increases incentives to build better agents.**
 
 ## The focused GTM / broader platform tension
 
 The seed-stage entry is **one user type and one expensive job to be done**: the serious independent researcher, analyst, blogger, or writer producing unusually deep work, often without a successful existing subscription business. They buy a research-and-publishing environment and can publish reusable artifacts for others to read. The public audience is **distribution**, not an assumption that Choir will supply millions of free individual AI sessions. Larger teams and enterprises are the natural expansion of the same behavior, with privacy, governance, training data and commercial APIs added as they mature. The deck must not pretend all buyer categories are day-one targets.
 
-**Access and monetization rule:** *Reading a shared result can be free. Asking Choir to produce a new, personalized result is paid.* This applies to custom AutoPaper articles and interactive/custom AutoRadio. The free visitor accesses already-published articles, recorded programs and other shared artifacts; reading/listening incurs ordinary serving costs, **not new model inference**. Beta credits and sponsored invitations are bounded and temporary. No advertising-dependent plan and no paid placement in reputation rankings.
+**Access and monetization rule:** *Reading a shared result can be free. Asking Choir to produce a new, personalized result is paid.* This applies to custom Autopaper articles and interactive/custom Autoradio. The free visitor accesses already-published articles, recorded programs and other shared artifacts; reading/listening incurs ordinary serving costs, **not new model inference**. Beta credits and sponsored invitations are bounded and temporary. No advertising-dependent plan and no paid placement in reputation rankings.
 
 **Business architecture:** three metered prosumer subscription tiers ($35 / $100 / $350 per month), then individually priced enterprise plans; organizational OS subscriptions, first-party intelligence/data licensing, and **net** commissions on third-party agent transactions. Consumers and organizations are not obliged to buy from each other: prosumers generate attention, expertise and demand; organizations contribute licensed specialist agents and services; both enlarge the pool of experience underlying prospective reputation.
 
-**Not yet claimed:** reliable unattended multi-agent autonomy, a shipped participatory AutoRadio product, enterprise production readiness, an independently proven PSA-performance moat, secure commercial agent-query marketplace, strategic data customers, or current consumer scale. AutoRadio's **1–2 month** estimate is a development target, not a customer promise. Enterprise OS availability requires nonfunctional engineering and an independent security audit.
+**Not yet claimed:** reliable unattended multi-agent autonomy, a shipped participatory Autoradio product, enterprise production readiness, an independently proven PSA-performance moat, secure commercial agent-query marketplace, strategic data customers, or current consumer scale. Autoradio's **1–2 month** estimate is a development target, not a customer promise. Enterprise OS availability requires nonfunctional engineering and an independent security audit.
 
 ---
 
@@ -106,7 +106,7 @@ Three columns: **COMMIT** / **OBSERVE** / **COMPARE**.
 
 **Headline:** **Pay to create intelligence. Share it with the world.**
 
-**AutoPaper** is the public-facing, continuously maintained newspaper, the first **live working demo** to build. A free visitor reads **stored, previously published** articles and related evidence without using an Automatic Computer or triggering new customized inference. A paying user commissions new research, customized articles and ongoing maintained coverage.
+**Autopaper** is the public-facing, continuously maintained newspaper, the first **live working demo** to build. A free visitor reads **stored, previously published** articles and related evidence without using an Automatic Computer or triggering new customized inference. A paying user commissions new research, customized articles and ongoing maintained coverage.
 
 **Initial GTM:** Find the long tail of independent Substack writers, bloggers and analysts who publish interesting original analysis but have not developed a successful commercial following. Examine their dated, explicit, resolvable historical claims; invite promising contributors into a **bounded beta**, with editorial judgment as well as track-record evidence. Joined contributors can create new prospective PSA records.
 
@@ -122,7 +122,7 @@ Three tags: **LIVE NEWSPAPER** / **OVERLOOKED EXPERTISE** / **PUBLISH AND SHARE*
 
 **Headline:** **A research station you can interrupt.**
 
-AutoRadio extends maintained knowledge into mobile, interactive audio. The paying user requests a personalized program, interrupts to question or redirect, or produces their own audio program or contribution. They may share recorded output for others to hear without triggering a new generation for every listener.
+Autoradio extends maintained knowledge into mobile, interactive audio. The paying user requests a personalized program, interrupts to question or redirect, or produces their own audio program or contribution. They may share recorded output for others to hear without triggering a new generation for every listener.
 
 **Three tags:** **PERSONALIZED DEEP LISTENING** / **HUMAN VOICES** / **SHARED RECORDINGS**.
 
@@ -174,7 +174,7 @@ The organizational Automatic Computer extends the prosumer system to private, te
 
 An independent expert or organization can publish selected agent services as discoverable, priced APIs. Buyer agents query specialist providers during normal work; sellers receive paid demand and new information about what the market needs. Queries alone reveal demand; **resolvable outcomes** provide richer PSA-based training and reputation evidence.
 
-- **SOFTWARE:** $35 Research / $100 Studio / $350 Professional subscriptions, then custom enterprise Automatic Computer contracts; personalized research and AutoRadio remain metered.
+- **SOFTWARE:** $35 Research / $100 Studio / $350 Professional subscriptions, then custom enterprise Automatic Computer contracts; personalized research and Autoradio remain metered.
 - **INTELLIGENCE:** Choir's public graph, query subscriptions, aggregated analytics, licensed firehose and evaluation / training records.
 - **TRANSACTIONS:** Choir's proposed 10% **net commission** on completed third-party agent services.
 
@@ -244,7 +244,7 @@ This is **one shared economic platform** with complementary payer groups: top-en
 
 **Q4 2026 pre-seed ask:** $1 million; instrument and terms to be decided. This finances proof, not a global marketplace at scale. Further rounds **could** follow traction in 2027–2029; their hypothetical sizes are financing assumptions, not committed capital or part of the seed ask.
 
-**BUILD:** AutoPaper as a genuinely useful continuously updated public demo; deliver an AutoRadio MVP (1–2 month development target); stabilize bounded autonomy; build deliberate paywalls and spend caps for custom inference; make enterprise-grade nonfunctional requirements and independent security review a priority before scaling customer deployments.
+**BUILD:** Autopaper as a genuinely useful continuously updated public demo; deliver an Autoradio MVP (1–2 month development target); stabilize bounded autonomy; build deliberate paywalls and spend caps for custom inference; make enterprise-grade nonfunctional requirements and independent security review a priority before scaling customer deployments.
 
 **PROVE:** Identify and invite under-monetized writers, validate paid prosumer research demand and shared-content distribution, demonstrate PSA-based held-out improvement, initiate appropriately bounded enterprise pilots, and test one governed paid specialist-agent query.
 
@@ -280,10 +280,10 @@ The attached **one-sheet financial model** holds an explicitly ambitious founder
 
 ## F. Demonstration roadmap
 
-1. AutoPaper publishes valuable maintained coverage as a true public demo; visitors can read existing artifacts freely.
+1. Autopaper publishes valuable maintained coverage as a true public demo; visitors can read existing artifacts freely.
 2. Restricted paid/beta custom research with inference limits and a measured cost per useful output.
 3. Invitation-only under-distributed writer cohort; historical evidence evaluation with appropriate methodological caution.
-4. AutoRadio mobile MVP; personalized audio behind paid limits, freely shared recorded programs.
+4. Autoradio mobile MVP; personalized audio behind paid limits, freely shared recorded programs.
 5. Held-out PSA evaluation showing useful prospective data improves performance or agent matching.
 6. Enterprise reliability/security gates and audited, bounded organizational pilots.
 7. Paid specialist-agent API with explicit disclosure limits and controlled settlement.

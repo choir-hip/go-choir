@@ -25,7 +25,7 @@ policy, and publication/subscription boundaries.
 Use these terms:
 
 - **Choir Community Cloud**: the public/shared Choir deployment, including
-  `choir.news`, World Wire (formerly Universal Wire), public publication
+  `choir.news`, Autopaper (formerly the World Wire and Universal Wire), public publication
   surfaces, public user computers, and Community Cloud platform computers.
 - **Private Choir Cloud**: a customer-controlled deployment with its own NixOS
   host or host cluster, platform computer(s), many user computers, private
@@ -107,7 +107,7 @@ authority.
 
 **Restore-set boundary (normative for the self-development gate):**
 a user-computer restore addresses an event head and restores the release pointer
-plus VM-local embedded state. Shared platform/world-wire Dolt (Store B:
+plus VM-local embedded state. Shared corpus Dolt (Store B, the Autopaper object graph:
 captures, publications) is OUT (restoring them would rewind other computers or
 shared services). Computer-surface frontend (Desktop, Texture, apps, Settings
 computer panes, served asset graph) is IN by doctrine `C15`/`I25`. The
@@ -144,7 +144,7 @@ D-STORES and D-WIRE in
   replay-watermark control tables. corpusd mechanically performs
   authenticated event-head and platform-control CAS here; it does not select
   semantic events.
-- **World-wire store (Store B):** the `corpus` database on a separate
+- **Corpus store (Store B, the Autopaper object graph):** the `corpus` database on a separate
   corpus-dolt sql-server process (`:13307`, `nix/node-b.nix`). It holds the
   platform `ObjectGraphStore` tables (`og_*`, via `Store.corpus()` in
   `internal/platform/objectgraph_store.go`) and the source/ingestion tables.

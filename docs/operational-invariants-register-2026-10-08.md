@@ -42,7 +42,7 @@ mission is written against an invariant instead of a symptom.
 - **Alarm:** what pages before the invariant is violated. Most are `none`.
 - **Proof:** the staging/disposable acceptance that demonstrates it.
 - **Goal:** 1 = stable automatic computer, 2 = supervised self-development,
-  3 = World Wire. Most operational invariants serve all three; listed is
+  3 = Autopaper (formerly the World Wire). Most operational invariants serve all three; listed is
   where they first bind.
 
 ## Liveness — durable work always progresses or ends visibly
@@ -332,7 +332,7 @@ regression passed unit tests and an 8-model frozen-candidate review.
   enforceable budget test and a lock-scope rule rather than more patches.
 - **Goal 2 (self-development)** additionally needs O18 and O19, and leans on
   O14 and O17, which S1a/S2 largely delivered.
-- **Goal 3 (World Wire)** adds O10 for the corpus and the store separation
+- **Goal 3 (Autopaper)** adds O10 for the corpus and the store separation
   in `world-wire-rearchitecture-2026-10-05.md`; the rest is goals 1 and 2
   applied to a platform-owned computer.
 

@@ -28,10 +28,12 @@ Files, Web Lens, Email, Compute Monitor, Pulse, Texture, Universal Wire,
 Podcast, Image, Audio, Video, PDF, EPUB, Slides, Calendar, Source,
 Super Console, Settings
 ```
+(2026-10-14: "Universal Wire" is the pre-rename app name for Autopaper; the
+registry has since changed, so treat this list as a 2026-07 snapshot.)
 
 Registration means code-live surface, not feature completeness or semantic
 endorsement of its visible name. `Universal Wire` is retained implementation
-vocabulary pending the World Wire rename; Source is the hidden reader/viewer
+vocabulary pending the Autopaper rename (docs/autopaper-sw-design-2026-10-09.md section 9); Source is the hidden reader/viewer
 path. Detailed rows below describe selected high-impact surfaces; absence of a
 row does not mean absence from the registry.
 

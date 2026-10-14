@@ -390,7 +390,7 @@ now:
     lifecycleDocDeskProfile was order-nondeterministic, and
     reconcileAgentWakeLocked would have armed apply_owner_revision cells
     on the supervision agent. Fixed in c58ed60a (receipt
-    docs/problems/owner-revision-supervision-desk-target-409-2026-09-30.md),
+    owner-revision-supervision-desk-target-409-2026-09-30, record pruned 2026-10-14: docs/archive/PRUNED-2026-10-14.md),
     deployed to staging, computer refreshed to epoch 972: texture revise
     409 -> 202 (revision 87baf761), artifact_head_advanced ->
     co_super_assignment_opened -> co_super_assignment_bound -> run

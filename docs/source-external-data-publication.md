@@ -1,7 +1,7 @@
 # Source, External Data, Texture, And Publication Contract
 
 **Status:** canonical current architecture  
-**Last updated:** 2026-06-04  
+**Last updated:** 2026-10-13 (naming: Universal Wire and World Wire are retired names for Autopaper; see the 2026-10-13 update below)  
 
 This document is the current requirements contract for external data, source
 artifacts, Texture source metadata, transclusion, and source-aware publication.

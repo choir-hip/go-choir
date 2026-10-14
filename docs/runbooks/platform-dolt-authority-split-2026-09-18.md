@@ -1,9 +1,11 @@
 # Runbook: platform-dolt authority split (Store A / Store B) — 2026-09-18
 
-Fenced cutover that moves the world-wire/corpus tables out of the
+Fenced cutover that moves the corpus (Autopaper object graph) tables out of the
 `platform` Dolt repo into a dedicated `corpus` repo served by
 `go-choir-corpus-dolt` (port 13307). Design:
 `docs/archive/platform-dolt-storage-normalization-2026-09-18.md` (Move 2).
+
+**Historical procedure (the split is done).** `sourcecycled` was deleted 2026-10-13 (Cut 2 unit 2b) and "world-wire" in older text means Autopaper; Store B is the corpus Dolt. The unit names below are those of the 2026-09-18 cutover.
 
 **Tools retired 2026-10-12, see git history:** `scripts/dolt-dump-split`, `scripts/og-body-backfill`, `scripts/og-delta-sync`.
 
