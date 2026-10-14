@@ -205,3 +205,34 @@ uncertain until measured.
 Deploy lane position 3, after L2a and C1e B1 (one shared-runtime cutover
 at a time). It is designed and reviewed now, built in its own worktree,
 and deployed after B1 is verified.
+
+## Round 2 adjudication (2026-10-14)
+
+Accepted: claude, glm and deepseek in round 2, and gemini on the revised
+note. No blocker remains. Build notes adopted:
+
+1. **Wiring.** The store of cut outputs and the instance id live on
+   `ChoirScope`, which `choir.CellOut` reads. `serveCell` hands the full
+   print to a new `CellHooks` member (`KeepOutput(stdout) string`, beside
+   `Refusals` and `SearchCounts`), which stores it and returns the view.
+2. **The cut needs the hook.** With nil hooks, or no `KeepOutput`, there
+   is no cut, because no store could serve the handle. The capsule path
+   (`cmd/capsule-broker`, `capsule_go_eval`) sets no `KeepOutput`. Its
+   output and its receipt's `StdoutDigest` stay uncut, so no evidence
+   surface changes.
+3. **Signature.** `choir.CellOut(handle string) (string, error)`. It
+   never panics, because a panic would poison the session. The marker
+   shows the two-value form: `out, err := choir.CellOut("…")`. It is
+   registered in `surfaceVerbs` with Help text.
+4. **Instance id.** 8 hex characters, so a collision is effectively
+   impossible.
+5. **Synchronization.** The store is guarded by its own mutex, since
+   cell code can start goroutines.
+6. **Rune-safe value views.** `cellValueText`'s 48,000 bound is in bytes
+   and can split a rune. It is moved to a rune boundary in the same pass.
+   The bound is stated as bytes.
+7. **Honest wording.** "The marker always states the total length" holds
+   unless the 100 KiB backstop drops stdout (a stderr over 100 KiB). On a
+   context timeout, the host ships no stdout at all, as today.
+8. **Refusal dedup** now checks the cut view, so a refusal printed in the
+   hidden middle is appended again. That is acceptable.
