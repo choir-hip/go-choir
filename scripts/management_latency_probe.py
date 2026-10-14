@@ -34,6 +34,15 @@ reports, as one JSON document:
     (GET /api/runs?channel_id=<task inbox>) and final Report: AC9's clean
     and deadline shares, closures by reason, residual captures, the queue
     depth and oldest queued age now, queue waits and task durations.
+  - S2b concurrency (tasks.concurrency): the peak of tasks running at once
+    and the share of the window with two or more, against the K each task
+    run started under (run metadata management_task_slots); story-library
+    refusals per task (H5, from the task runs' tool results); and, from
+    GET /api/runtime/observability, K and the queue now and the engine
+    lock's waits per call path since boot (H3). S2b works when queue_wait_s
+    and ac1_latency_s.undisposed (count, age, older_than_900s) fall from the
+    S2a window's (queue wait p50 425 s, p95 1,506 s; 149 undisposed, 81 over
+    15 minutes) while peak_running stays at most K.
 
 Routes: GET /api/computer-settings (owner id), GET
 /api/inboxes/<inbox>/records?after=&limit=500 (paged by next_after),
@@ -442,6 +451,13 @@ def main():
         outcome = (rep or {}).get("task_outcome") or {}
         started = parse_ts(run.get("created_at")) if run else None
         closed = committed_at(rep) if rep else None
+        # H5 (S2b): opens the story-library head refused in this task's
+        # cells (a tool result that names the refusal; one per refused cell).
+        refused = 0
+        if run:
+            for e in c.events(run["run_id"]):
+                if e.get("kind") == "tool.result" and "story library moved" in json.dumps(e.get("payload") or {}):
+                    refused += 1
         task_rows.append({
             "task_inbox": inbox, "opened_at": iso(opened), "started_at": iso(started), "closed_at": iso(closed),
             "queue_wait_s": round((started - opened).total_seconds(), 1) if started else None,
@@ -451,6 +467,8 @@ def main():
             "residuals": len(outcome.get("residuals") or []),
             "dispositions": len(outcome.get("dispositions") or []),
             "model": ((run or {}).get("metadata") or {}).get("llm_model"),
+            "slots": ((run or {}).get("metadata") or {}).get("management_task_slots"),
+            "library_refusals": refused,
         })
     closed_tasks = [t for t in task_rows if t["closed_at"]]
     open_tasks = [t for t in task_rows if not t["closed_at"]]
@@ -471,6 +489,46 @@ def main():
         "queue_wait_s": dist([t["queue_wait_s"] for t in task_rows if t["queue_wait_s"] is not None]),
         "duration_s": dist([t["duration_s"] for t in closed_tasks if t["duration_s"] is not None]),
         "models": sorted({t["model"] for t in task_rows if t["model"]}),
+    }
+
+    # S2b concurrency: tasks running at once over the window (from each
+    # task's run start to its final Report, or the window's end), against
+    # the K each run started under; library refusals (H5); and the slot
+    # starter and engine-lock counters (H3) from /api/runtime/observability.
+    edges = []
+    for t in task_rows:
+        if not t["started_at"]:
+            continue
+        s = max(parse_ts(t["started_at"]), start)
+        e = min(parse_ts(t["closed_at"]) if t["closed_at"] else end, end)
+        if e > s:
+            edges += [(s, 1), (e, -1)]
+    edges.sort(key=lambda x: (x[0], x[1]))
+    running, peak, multi_s, last = 0, 0, 0.0, None
+    for at, d in edges:
+        if last is not None and running >= 2:
+            multi_s += (at - last).total_seconds()
+        running += d
+        peak = max(peak, running)
+        last = at
+    try:
+        obs = c.get("/api/runtime/observability")
+    except SystemExit:
+        obs = {}
+    em = obs.get("engine_mutex") or {}
+    lock_rows = sorted(({"path": k, "calls": v.get("calls", 0),
+                         "mean_wait_ms": round(v.get("wait_ns", 0) / max(v.get("calls", 0), 1) / 1e6, 2),
+                         "max_wait_ms": round(v.get("max_wait_ns", 0) / 1e6, 1),
+                         "max_hold_ms": round(v.get("max_hold_ns", 0) / 1e6, 1)} for k, v in em.items()),
+                       key=lambda x: -x["max_wait_ms"])
+    tasks_out["concurrency"] = {
+        "slots_at_start": sorted({t["slots"] for t in task_rows if t["slots"] is not None}),
+        "peak_running": peak,
+        "share_of_window_2plus_running": round(multi_s / window_s, 3),
+        "library_refusals": sum(t["library_refusals"] for t in task_rows),
+        "tasks_with_a_refusal": sum(1 for t in task_rows if t["library_refusals"]),
+        "now": obs.get("management_tasks"),
+        "engine_lock_since_boot_top5": lock_rows[:5],
     }
 
     done = [t["duration_s"] for t in turn_rows if not t["open"]]
@@ -556,10 +614,15 @@ def main():
     else:
         print(text)
     a1 = out["ac1_latency_s"]["open_and_feed"]
+    und = out["ac1_latency_s"]["undisposed"]
+    qw = tasks_out["queue_wait_s"]
+    cc = tasks_out["concurrency"]
     print(f"window {iso(start)}..{iso(end)}: {n_arr} captures in {arrival_records} arrivals; "
           f"open+feed p50/p95/max {a1['p50']}/{a1['p95']}/{a1['max']} s; "
           f"turns {out['ac2_turns_s']['finished']}; busy {out['busy']['fraction']}; "
-          f"cells p50/p99/max {out['cells_ms']['p50']}/{out['cells_ms']['p99']}/{out['cells_ms']['max']} ms",
+          f"cells p50/p99/max {out['cells_ms']['p50']}/{out['cells_ms']['p99']}/{out['cells_ms']['max']} ms; "
+          f"tasks queue wait p50/p95 {qw['p50']}/{qw['p95']} s, peak running {cc['peak_running']} (K {cc['slots_at_start']}); "
+          f"undisposed {und['n']} ({und['older_than_900s']} over 15 min)",
           file=sys.stderr)
 
 
