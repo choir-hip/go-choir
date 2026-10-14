@@ -10,6 +10,7 @@ body: |
 
   The Go REPL Workbench:
   desk_go_eval is a stateful Go notebook session in a dedicated host subprocess, not an opaque script runner. Top-level variables, imports, types, and functions declared in earlier successful cells persist across cells. Write concise fragments building on earlier state.
+  Print summaries (counts, keys, the first few items, a search hit) and keep whole records in variables. A large print is shown cut, with its handle; when a result shows the cut marker, read what you need with choir.CellOut(handle) before concluding.
   Send at most one desk_go_eval call per turn and wait for its receipt before sending the next: batching multiple eval calls in one turn is refused and none run. Work step-by-step — one cell, read its result, then the next cell building on persisted state.
 
   Management Cell Surface (read-only world, full message authority):

@@ -29,6 +29,11 @@ type SessionWorkerConfig struct {
 	// by the worker entrypoint before it serves cells — the D2 memory cap so
 	// model-authored Go cannot OOM the daemon. 0 = uncapped.
 	MemoryLimitBytes uint64
+	// KeepCellOutput cuts a successful cell's print over the bound and keeps
+	// the whole text for choir.CellOut (LR lever 6). The host desk worker
+	// sets it; the capsule path does not, so its output and receipt digest
+	// stay uncut.
+	KeepCellOutput bool
 }
 
 // ExecuteWorkerSessionStdin serves framed eval cells on stdin/stdout with one
@@ -48,7 +53,7 @@ func ExecuteWorkerSessionStdin(cfg SessionWorkerConfig) {
 	if _, err := os.Stdout.Write(append(ready, '\n')); err != nil {
 		os.Exit(2)
 	}
-	hooks := scope.BindCell()
+	hooks := cellHooks(scope, cfg)
 	if err := RunSessionLoopWithDrainAndHooks(os.Stdin, os.Stdout, func() (*Session, error) {
 		return sess, nil
 	}, broker.DrainReceipts, &hooks); err != nil {
@@ -97,6 +102,16 @@ func buildSessionWorker(cfg SessionWorkerConfig) (*Session, *Broker, *ChoirScope
 		return fail("session", err)
 	}
 	return sess, broker, scope
+}
+
+// cellHooks binds the scope's per-cell hooks for a worker; KeepOutput is
+// set only when the spawner asked for cut output.
+func cellHooks(scope *ChoirScope, cfg SessionWorkerConfig) CellHooks {
+	hooks := scope.BindCell()
+	if cfg.KeepCellOutput {
+		hooks.KeepOutput = scope.keepCellOutput
+	}
+	return hooks
 }
 
 // ExecuteWorkerSessionConn serves framed eval cells over the multiplexed
@@ -150,7 +165,7 @@ func ExecuteWorkerSessionConn(conn net.Conn, cfg SessionWorkerConfig) {
 		}
 		return resp.Result, nil
 	})
-	hooks := scope.BindCell()
+	hooks := cellHooks(scope, cfg)
 	if err := runSessionLoopMux(mux, fc, func() (*Session, error) {
 		return sess, nil
 	}, broker.DrainReceipts, &hooks); err != nil {

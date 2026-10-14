@@ -37,6 +37,7 @@ var choirNamespaces = map[string]reflect.Type{
 
 var choirFunctionDocs = map[string]FunctionDoc{
 	"Help":             {Args: []string{"name"}, Summary: "Lists this desk's callable choir functions, or with a name returns that function's arguments, return fields and example. Free: stages nothing.", Example: `println(choir.Help("Cast"))`},
+	"CellOut":          {Args: []string{"handle"}, Summary: "Returns the whole printed output of a cell whose result was shown cut, by the handle its marker line names (\"k3f9a2b1:17\"). Slice it or search it; do not print it whole. The session keeps its last 8 cut outputs; an evicted handle, or one from a session that ended, returns an error saying so. Free: stages nothing.", Example: "out, err := choir.CellOut(\"k3f9a2b1:17\")\nfmt.Println(len(out), err, strings.Contains(out, \"needle\"))"},
 	"Context":          {Summary: "Your activation identity (agent, run, desk, doc and assignment ids)."},
 	"ReadFile":         {Args: []string{"path"}, Summary: "Reads a file inside your jailed workspace."},
 	"ListDir":          {Args: []string{"path"}, Summary: "Lists entry names of a directory inside your jailed workspace."},

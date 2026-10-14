@@ -173,6 +173,12 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 		return out, evalErr
 	}
 	out.Intents = staged
+	// Only the cell's own prints are cut, and only on this success path: a
+	// poisoned session could never serve the handle. The value views below
+	// keep their own bound.
+	if hooks != nil && hooks.KeepOutput != nil {
+		out.Stdout = hooks.KeepOutput(out.Stdout)
+	}
 	out.Stdout += sess.showListedNames(frame.Source)
 	if shown := describeCellValue(frame.Source, res.Value); shown != "" {
 		out.Stdout += shown
@@ -192,6 +198,8 @@ func serveCell(sess *Session, frame SessionFrame, drain func() []string, hooks *
 // choir.Research result is several children's multi-thousand-character
 // findings, and a 4,000-character bound hid most of them
 // (problems/research-parent-cannot-read-its-children-2026-10-11.md).
+// The bound is in bytes, and the cut falls on a rune boundary. Value views
+// are not prints: the LR lever 6 cut (cell_output.go) leaves them alone.
 const maxShownCellValue = 48000
 
 // describeCellValue renders a cell's final value, REPL style, when the cell
@@ -233,7 +241,9 @@ func cellValueText(value reflect.Value, max int) (string, bool) {
 		return "", false
 	}
 	if len(text) > max {
-		text = text[:max] + fmt.Sprintf("… [%d bytes truncated]", len(text)-max)
+		// The bound is in bytes; the cut backs off to a rune boundary.
+		cut := runeBoundary(text, max)
+		text = text[:cut] + fmt.Sprintf("… [%d bytes truncated]", len(text)-cut)
 	}
 	return text, true
 }

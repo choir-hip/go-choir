@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -134,6 +135,27 @@ func TestExecuteToolBatchProjectionAndCaps(t *testing.T) {
 	large := ExecuteToolBatch(context.Background(), registry, []types.ToolCall{{ID: "2", Name: "large"}}, func(types.EventKind, string, json.RawMessage) {})[0]
 	if !strings.Contains(large.Output, "[output truncated — 103424 bytes total, showing first 102400 bytes]") {
 		t.Fatalf("large output suffix missing: len=%d", len(large.Output))
+	}
+}
+
+// LR lever 6 (docs/reports/lr-lever6-cell-output-design-2026-10-14.md
+// L6-3): the 100 KiB backstop cut falls on a rune boundary, never inside a
+// UTF-8 sequence, and names the bytes it shows.
+func TestCapToolOutputCutsOnARuneBoundary(t *testing.T) {
+	const max = 100 * 1024
+	output := strings.Repeat("a", max-1) + strings.Repeat("中", 100)
+	got := capToolOutput(output)
+	if !utf8.ValidString(got) {
+		t.Fatal("capped tool output splits a rune")
+	}
+	if !strings.HasPrefix(got, strings.Repeat("a", max-1)+"\n\n[output truncated") {
+		t.Fatalf("cap did not back off to the rune boundary: %q", got[max-10:])
+	}
+	if want := "showing first 102399 bytes]"; !strings.HasSuffix(got, want) {
+		t.Fatalf("cap marker does not name the bytes shown: %q", got[max-1:])
+	}
+	if small := "héllo"; capToolOutput(small) != small {
+		t.Fatal("small output changed")
 	}
 }
 

@@ -353,6 +353,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					AllowedRoot:      deskWorkerRoot(execCtx),
 					Role:             deskRole,
 					MemoryLimitBytes: deskWorkerMemoryLimitBytes,
+					// A print over the bound reaches the transcript cut; the
+					// whole text stays in the session for choir.CellOut (LR
+					// lever 6).
+					KeepCellOutput: true,
 				},
 				ProcessGroup: true,
 				// Emit is a durable host write: the worker's ActionEmit crosses

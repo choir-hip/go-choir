@@ -170,6 +170,9 @@ func (c DeskSessionWorkerConfig) sessionEnv() []string {
 	if len(c.Session.AllowedPackages) > 0 {
 		env = append(env, prefix+"ALLOWED_PACKAGES="+joinCSV(c.Session.AllowedPackages))
 	}
+	if c.Session.KeepCellOutput {
+		env = append(env, prefix+"KEEP_CELL_OUTPUT=1")
+	}
 	return env
 }
 
@@ -196,6 +199,7 @@ func SessionWorkerConfigFromEnv(getenv func(string) string, prefix string) Sessi
 		Role:             getenv(prefix + "ROLE"),
 		Slot:             getenv(prefix + "SLOT"),
 		MemoryLimitBytes: parseUint64Env(getenv(prefix + "MEMORY_LIMIT_BYTES")),
+		KeepCellOutput:   getenv(prefix+"KEEP_CELL_OUTPUT") == "1",
 	}
 }
 

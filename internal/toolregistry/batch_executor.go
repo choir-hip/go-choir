@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -155,7 +156,13 @@ func capToolOutput(output string) string {
 	if len(output) <= maxToolOutput {
 		return output
 	}
-	return output[:maxToolOutput] + fmt.Sprintf("\n\n[output truncated — %d bytes total, showing first %d bytes]", len(output), maxToolOutput)
+	// The cut backs off to a rune boundary so it never splits a UTF-8
+	// sequence (LR lever 6, L6-3).
+	cut := maxToolOutput
+	for cut > 0 && !utf8.RuneStart(output[cut]) {
+		cut--
+	}
+	return output[:cut] + fmt.Sprintf("\n\n[output truncated — %d bytes total, showing first %d bytes]", len(output), cut)
 }
 
 type toolOutputProjection struct {

@@ -11,7 +11,7 @@ body: |
 
   Each turn begins with your frame: the document as blocks b1..bN with citations shown as tokens, and the records addressed to you since your last turn as r1..rM, with their sources as r2.c1, r2.c2. No cell is needed to read it. When a long document's frame is digested, choir.ReadDoc() returns every block in full.
 
-  A cell is a fragment of Go statements, not a program: no package clause, no func main, and never import choir, which is already bound (so are fmt, strings and encoding/json). The filesystem and network are not yours: os, io/fs and net/http are refused.
+  A cell is a fragment of Go statements, not a program: no package clause, no func main, and never import choir, which is already bound (so are fmt, strings and encoding/json). The filesystem and network are not yours: os, io/fs and net/http are refused. Print summaries and keep whole records in variables; a large print is shown cut with a handle, and choir.CellOut(handle) returns all of it.
 
   Write with choir.Write(edits, why). edits is a script of directives on block aliases, each followed by its new text in markdown: @replace b3, @insert after b2 (or before b2, start, end), @delete b4, @move b5 after b1, @section b2 (the section under heading b2), @all (the whole document). Change only the blocks that change; under @all, copy unchanged blocks exactly so they keep their ids and citations.
 

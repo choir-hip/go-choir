@@ -83,6 +83,10 @@ type ChoirScope struct {
 	// search's arrivals the desk has been told about in a cell result.
 	searches   *SearchStore
 	searchTold map[string]int
+	// cellOuts keeps this session's cut cell outputs for choir.CellOut (LR
+	// lever 6, cell_output.go). Only a desk worker started with
+	// KeepCellOutput fills it.
+	cellOuts cellOutputStore
 }
 
 type verbRefusal struct {
@@ -357,6 +361,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Records":  reflect.ValueOf(s.Records),
 		"Pack":     reflect.ValueOf(s.Pack),
 		"Help":     reflect.ValueOf(s.Help),
+		"CellOut":  reflect.ValueOf(s.CellOut),
 	}
 	if s.legacyObservation("Updates") {
 		exports["Updates"] = reflect.ValueOf(s.Updates)
