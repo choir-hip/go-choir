@@ -234,7 +234,10 @@ in
 
   # Capsule overlays and the enforcing boot probe both require the module to
   # be loaded, not merely present in the immutable kernel closure.
-  boot.kernelModules = [ "overlay" ];
+  # virtio_balloon (=m in the guest kernel) carries free page reporting
+  # (CONFIG_PAGE_REPORTING=y) when vmctl adds the balloon device; udev would
+  # load it by modalias, this makes it explicit. Inert without the device.
+  boot.kernelModules = [ "overlay" "virtio_balloon" ];
 
   # ── microvm configuration ────────────────────────────────────────────
   microvm = {

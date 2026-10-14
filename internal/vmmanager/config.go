@@ -100,6 +100,18 @@ func LoadConfigFromEnv() ManagerConfig {
 		}
 	}
 
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("VM_BALLOON_FREE_PAGE_REPORTING"))) {
+	case "1", "true", "on", "yes":
+		cfg.BalloonFreePageReporting = true
+	}
+	if v := os.Getenv("VM_BALLOON_STATS_POLLING_INTERVAL_S"); v != "" {
+		// Firecracker's field is a u16: refuse out-of-range values rather
+		// than fail every boot.
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 && n <= 65535 {
+			cfg.BalloonStatsPollingIntervalS = n
+		}
+	}
+
 	if v := os.Getenv("VM_SOURCE_SEED_REPO"); v != "" {
 		cfg.SourceSeedRepoPath = strings.TrimSpace(v)
 	} else if _, err := os.Stat("/opt/go-choir/.git"); err == nil {

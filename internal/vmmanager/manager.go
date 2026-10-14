@@ -289,6 +289,15 @@ type ManagerConfig struct {
 	// (/opt/go-choir on Node B); empty disables seeding (legacy behavior —
 	// the guest then must obtain Source some other way).
 	SourceSeedRepoPath string
+
+	// BalloonFreePageReporting adds a never-inflated virtio balloon with
+	// free page reporting to every cold boot (VM_BALLOON_FREE_PAGE_REPORTING;
+	// off by default). See balloon.go.
+	BalloonFreePageReporting bool
+
+	// BalloonStatsPollingIntervalS is the balloon statistics interval in
+	// seconds; 0 disables statistics. Only meaningful with the balloon on.
+	BalloonStatsPollingIntervalS int
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -1660,6 +1669,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 				"host_dev_name": tapNameForVMID(cfg.VMID),
 			},
 		},
+	}
+	if balloon := firecrackerBalloonConfig(m.cfg); balloon != nil {
+		fcConfig["balloon"] = balloon
 	}
 
 	return fcConfig

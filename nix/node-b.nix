@@ -748,6 +748,11 @@ in
         # allows 120-1500s; the ceiling gives a legitimate commit room while
         # still failing a truly frozen replay inside the 30m boot window.
         "VM_REPLAY_STALL_TIMEOUT=1500s"
+        # Free page reporting (virtio balloon, never inflated): freed guest
+        # memory returns to the host while the guest runs. Applies at each
+        # computer's next cold boot. Rollback: delete this line
+        # (docs/reports/lr-guest-memory-return-2026-10-14.md).
+        "VM_BALLOON_FREE_PAGE_REPORTING=1"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Keep personal computers resident while the host is under capacity.
         "VMCTL_IDLE_TIMEOUT=30m"
