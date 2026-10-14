@@ -27,7 +27,7 @@ const (
 	// append (three corpusd calls and one event append).
 	snapshotResumedTimeout = 60 * time.Second
 	// snapshotStateOverheadBytes covers the vmstate file beside the memory
-	// file in the budget.
+	// file in the budget's worst-case reservation for a new snapshot.
 	snapshotStateOverheadBytes = int64(64) << 20
 )
 
@@ -68,14 +68,16 @@ func (m *Manager) hibernateVMSnapshot(vmID string) error {
 	if reason == "" {
 		snap.Outcome = "snapshot"
 		snap.Bytes = meta.Bytes
+		snap.DiskBytes = meta.DiskBytes
+		snap.DiskBytesMethod = meta.DiskBytesMethod
 		snap.CreatedAt = meta.CreatedAt.UTC().Format(time.RFC3339Nano)
 		if !meta.ResumeDeadline.IsZero() {
 			snap.ResumeDeadline = meta.ResumeDeadline.UTC().Format(time.RFC3339Nano)
 		}
 		tl.finish("hibernated", nil)
 		m.persistHibernateTimeline(tl)
-		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d resume_deadline=%s)",
-			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.ResumeDeadline)
+		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d disk_bytes=%d disk_bytes_method=%s resume_deadline=%s)",
+			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.DiskBytes, snap.DiskBytesMethod, snap.ResumeDeadline)
 		return nil
 	}
 
@@ -217,6 +219,9 @@ func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, host
 		}
 		disks = append(disks, id)
 	}
+	// Measured after the fsyncs above, when btrfs has written the
+	// compressed extents.
+	diskBytes, diskMethod := dirDiskBytes(partial)
 	now := time.Now().UTC()
 	meta := &SnapshotMeta{
 		Version:            snapshotMetaVersion,
@@ -238,6 +243,8 @@ func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, host
 		ResumeDeadline:     resumeDeadlineFrom(prepared.CapabilityExpiresAt),
 		CredentialResume:   prepared.CredentialResume,
 		Bytes:              dirLogicalBytes(partial),
+		DiskBytes:          diskBytes,
+		DiskBytesMethod:    diskMethod,
 		FenceMS:            snap.FenceMS,
 		PauseMS:            snap.PauseMS,
 		SnapshotMS:         snap.SnapshotMS,
@@ -319,12 +326,14 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue Resum
 	tl.FirecrackerVer = firecrackerBuildVersion(m.cfg.FirecrackerBinPath)
 	tl.HostKernelRelease = hostKernelRelease()
 	snap := &SnapshotTimeline{
-		Mode:       HibernateModeSnapshot,
-		FenceMS:    meta.FenceMS,
-		PauseMS:    meta.PauseMS,
-		SnapshotMS: meta.SnapshotMS,
-		Bytes:      meta.Bytes,
-		CreatedAt:  meta.CreatedAt.UTC().Format(time.RFC3339Nano),
+		Mode:            HibernateModeSnapshot,
+		FenceMS:         meta.FenceMS,
+		PauseMS:         meta.PauseMS,
+		SnapshotMS:      meta.SnapshotMS,
+		Bytes:           meta.Bytes,
+		DiskBytes:       meta.DiskBytes,
+		DiskBytesMethod: meta.DiskBytesMethod,
+		CreatedAt:       meta.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	if !meta.ResumeDeadline.IsZero() {
 		snap.ResumeDeadline = meta.ResumeDeadline.UTC().Format(time.RFC3339Nano)

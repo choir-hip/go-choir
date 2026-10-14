@@ -54,8 +54,11 @@ const (
 
 	snapshotMetaVersion = 1
 
-	// DefaultSnapshotBudgetGiB bounds the logical bytes of all committed
-	// snapshots on the host (VM_SNAPSHOT_BUDGET_GIB).
+	// DefaultSnapshotBudgetGiB bounds the on-disk bytes of all committed
+	// snapshots on the host (VM_SNAPSHOT_BUDGET_GIB). btrfs compresses guest
+	// memory (about 6% on Node B), so committed snapshots count at their
+	// measured on-disk bytes and a new one at its logical worst case
+	// (snapshot_disk.go; design note items 39-43).
 	DefaultSnapshotBudgetGiB = 48
 	// DefaultSnapshotMaxAge bounds how long a snapshot stays resumable. Once
 	// fresh credentials are delivered on resume it is the only age bound.
@@ -180,13 +183,18 @@ type SnapshotMeta struct {
 	ResumeDeadline time.Time `json:"resume_deadline,omitempty"`
 	// CredentialResume records that the guest advertised it installs a
 	// fresh envelope delivered with resumed.
-	CredentialResume bool      `json:"credential_resume,omitempty"`
-	Bytes            int64     `json:"bytes"`
-	FenceMS          int64     `json:"fence_ms"`
-	PauseMS          int64     `json:"pause_ms"`
-	SnapshotMS       int64     `json:"snapshot_ms"`
-	Consumed         bool      `json:"consumed"`
-	ConsumedAt       time.Time `json:"consumed_at,omitempty"`
+	CredentialResume bool `json:"credential_resume,omitempty"`
+	// Bytes is the logical size of the snapshot files; DiskBytes what they
+	// occupy on disk (compressed on btrfs), measured by DiskBytesMethod
+	// after fsync. The budget counts DiskBytes.
+	Bytes           int64     `json:"bytes"`
+	DiskBytes       int64     `json:"disk_bytes,omitempty"`
+	DiskBytesMethod string    `json:"disk_bytes_method,omitempty"`
+	FenceMS         int64     `json:"fence_ms"`
+	PauseMS         int64     `json:"pause_ms"`
+	SnapshotMS      int64     `json:"snapshot_ms"`
+	Consumed        bool      `json:"consumed"`
+	ConsumedAt      time.Time `json:"consumed_at,omitempty"`
 }
 
 // SnapshotTimeline is the S3 section of a hibernate or wake timeline.
@@ -198,6 +206,8 @@ type SnapshotTimeline struct {
 	PauseMS         int64  `json:"pause_ms,omitempty"`
 	SnapshotMS      int64  `json:"snapshot_ms,omitempty"`
 	Bytes           int64  `json:"bytes,omitempty"`
+	DiskBytes       int64  `json:"disk_bytes,omitempty"`
+	DiskBytesMethod string `json:"disk_bytes_method,omitempty"`
 	CreatedAt       string `json:"created_at,omitempty"`
 	ResumeDeadline  string `json:"resume_deadline,omitempty"`
 	LoadMS          int64  `json:"load_ms,omitempty"`
@@ -578,9 +588,11 @@ func (m *Manager) loadSnapshotReservations() {
 // --- budget --------------------------------------------------------------
 
 type snapshotEntry struct {
-	vmID  string
-	dir   string
-	meta  *SnapshotMeta
+	vmID string
+	dir  string
+	meta *SnapshotMeta
+	// bytes is on disk: from metadata, or measured now for a snapshot
+	// committed before metadata carried it.
 	bytes int64
 }
 
@@ -618,7 +630,11 @@ func (m *Manager) listSnapshots() []snapshotEntry {
 		if err != nil {
 			continue
 		}
-		out = append(out, snapshotEntry{vmID: entry.Name(), dir: dir, meta: meta, bytes: dirLogicalBytes(dir)})
+		bytes := meta.DiskBytes
+		if bytes <= 0 {
+			bytes, _ = dirDiskBytes(dir)
+		}
+		out = append(out, snapshotEntry{vmID: entry.Name(), dir: dir, meta: meta, bytes: bytes})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].meta.CreatedAt.Before(out[j].meta.CreatedAt) })
 	return out
@@ -636,7 +652,10 @@ var statfsAvailable = func(path string) (int64, error) {
 // ensureSnapshotRoom makes room for a snapshot of need bytes for vmID within
 // the budget, discarding the least recently created snapshots of other VMs
 // (their computers cold-wake later). It returns false when there is still no
-// room; the caller then uses the kill path.
+// room; the caller then uses the kill path. Committed snapshots count at
+// their on-disk bytes; need is the new snapshot's logical worst case, since
+// its compressed size is unknown until written. The free-space floor guards
+// that worst case absolutely.
 func (m *Manager) ensureSnapshotRoom(vmID string, need int64) bool {
 	budget := m.snapshotBudgetBytes()
 	if need > budget {
@@ -657,7 +676,7 @@ func (m *Manager) ensureSnapshotRoom(vmID string, need int64) bool {
 		if entry.vmID == vmID {
 			continue
 		}
-		if !m.tryDiscardOtherSnapshot(entry.vmID, "budget_evicted") {
+		if locked, _ := m.tryDiscardSnapshot(entry.vmID, "budget_evicted"); !locked {
 			continue
 		}
 		used -= entry.bytes
@@ -673,9 +692,8 @@ func (m *Manager) ensureSnapshotRoom(vmID string, need int64) bool {
 	return avail-need >= snapshotDiskFloorBytes
 }
 
-// tryDiscardOtherSnapshot discards another VM's snapshot only if that VM's
-// operation lock is free, so an eviction never races its resume.
-func (m *Manager) tryDiscardOtherSnapshot(vmID, reason string) bool {
+// tryLockVMOperation takes the VM's operation lock only if it is free.
+func (m *Manager) tryLockVMOperation(vmID string) (func(), bool) {
 	m.opMu.Lock()
 	lock := m.vmOps[vmID]
 	if lock == nil {
@@ -684,13 +702,113 @@ func (m *Manager) tryDiscardOtherSnapshot(vmID, reason string) bool {
 	}
 	m.opMu.Unlock()
 	if !lock.TryLock() {
-		return false
+		return nil, false
 	}
-	defer lock.Unlock()
-	if m.discardSnapshotFiles(vmID) {
+	return lock.Unlock, true
+}
+
+// tryDiscardSnapshot discards a VM's snapshot only if that VM's operation
+// lock is free, so a discard never races its resume, capture or boot (each
+// of which removes the files itself). locked=false: the VM is mid-operation.
+func (m *Manager) tryDiscardSnapshot(vmID, reason string) (locked, removed bool) {
+	unlock, ok := m.tryLockVMOperation(vmID)
+	if !ok {
+		return false, false
+	}
+	defer unlock()
+	removed = m.discardSnapshotFiles(vmID)
+	if removed {
 		log.Printf("vmmanager: discarded snapshot of VM %s (%s)", vmID, reason)
 	}
-	return true
+	return true, removed
+}
+
+// hasSnapshotFiles reports whether a committed or partial snapshot exists.
+func (m *Manager) hasSnapshotFiles(vmID string) bool {
+	for _, dir := range []string{m.snapshotDir(vmID), m.snapshotPartialDir(vmID)} {
+		if _, err := os.Lstat(dir); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// DiscardSnapshot removes a stopped computer's snapshot and releases its
+// host-port reservation: a stopped computer cold boots, so the files are
+// dead weight (design note item 44). It never blocks: a VM mid-operation is
+// skipped (item 45). It reports whether files were removed.
+func (m *Manager) DiscardSnapshot(vmID, reason string) bool {
+	if strings.TrimSpace(vmID) == "" || strings.ContainsRune(vmID, os.PathSeparator) {
+		return false
+	}
+	locked, removed := m.tryDiscardSnapshot(vmID, reason)
+	if !locked && m.hasSnapshotFiles(vmID) {
+		log.Printf("vmmanager: snapshot of VM %s kept for now (%s): a manager operation holds the VM; it removes or replaces the files itself", vmID, reason)
+	}
+	return removed
+}
+
+// SweepOrphanSnapshots runs once at vmctl start. It removes every
+// interrupted capture (snapshot.partial/) and every committed snapshot whose
+// VM keep reports false (not hibernated), releasing its port, and logs each
+// removal. A nil keep removes no committed snapshot. Only real directories
+// under the state dir are touched (symlinks are skipped), and a VM whose
+// operation lock is held is left alone (design note items 46-47). It
+// returns the removed paths.
+func (m *Manager) SweepOrphanSnapshots(keep func(vmID string) bool) []string {
+	root := m.cfg.StateDir
+	if root == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		log.Printf("vmmanager: snapshot sweep: read %s: %v", root, err)
+		return nil
+	}
+	isDir := func(path string) bool {
+		info, err := os.Lstat(path)
+		return err == nil && info.IsDir()
+	}
+	removed := make([]string, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue // files and symlinks
+		}
+		vmID := entry.Name()
+		committed, partial := m.snapshotDir(vmID), m.snapshotPartialDir(vmID)
+		hasCommitted, hasPartial := isDir(committed), isDir(partial)
+		if !hasCommitted && !hasPartial {
+			continue
+		}
+		dropCommitted := hasCommitted && keep != nil && !keep(vmID)
+		if !hasPartial && !dropCommitted {
+			continue
+		}
+		unlock, ok := m.tryLockVMOperation(vmID)
+		if !ok {
+			log.Printf("vmmanager: snapshot sweep: VM %s is mid-operation; skipped", vmID)
+			continue
+		}
+		if hasPartial {
+			if err := os.RemoveAll(partial); err != nil {
+				log.Printf("vmmanager: snapshot sweep: remove %s: %v", partial, err)
+			} else {
+				log.Printf("vmmanager: snapshot sweep: removed interrupted capture %s", partial)
+				removed = append(removed, partial)
+			}
+		}
+		if dropCommitted {
+			if err := os.RemoveAll(committed); err != nil {
+				log.Printf("vmmanager: snapshot sweep: remove %s: %v", committed, err)
+			} else {
+				m.releaseSnapshotPort(vmID)
+				log.Printf("vmmanager: snapshot sweep: removed orphaned snapshot %s (VM %s is not hibernated)", committed, vmID)
+				removed = append(removed, committed)
+			}
+		}
+		unlock()
+	}
+	return removed
 }
 
 // --- guest fence client --------------------------------------------------

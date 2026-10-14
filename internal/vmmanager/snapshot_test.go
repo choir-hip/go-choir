@@ -832,6 +832,8 @@ func TestEnsureSnapshotRoomEvictsOldestFirst(t *testing.T) {
 	free := int64(1) << 50
 	statfsAvailable = func(string) (int64, error) { return free, nil }
 	t.Cleanup(func() { statfsAvailable = prevStatfs })
+	// Incompressible snapshots: on-disk bytes equal logical bytes.
+	fakeDiskBytes(t, 100)
 
 	const chunk = int64(400) << 20
 	base := time.Now().Add(-time.Hour)
