@@ -120,8 +120,13 @@ computer's; there is no wire before the computer.
 
 ## What This Vision Is Not
 
-- **Not a multiplayer app.** Many people and agents participate, but the unit
-  of the product is the computer and its trajectories, not a crowd.
+- **Not chat-first.** Choir is multiplayer by design — "multiplayer
+  intelligence for the learning economy" is the tagline (owner, 2026-10-14) —
+  and that is why its interfaces are content-centric (Texture documents,
+  records, supervision surfaces) rather than chat logs: chat does not scale
+  to long-horizon, multi-agent, multi-user work. After an eight-hour run you
+  do not read the message log; imagine an eight-day run with eighty agents
+  and eight teammates.
 - **Not a settlement protocol.** Settlement, forks, and publication are
   machinery. They are how supervised self-development and the World Wire stay
   legible and honest. Confusing the machinery for the vision is how work
