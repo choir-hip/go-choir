@@ -9,7 +9,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
 // E6a's management bins (box-score.json, calibration_resolved): the digest's
 // ECE over them must be the experiment's preregistered baseline, 0.144.
