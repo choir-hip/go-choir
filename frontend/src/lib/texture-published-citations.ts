@@ -19,11 +19,21 @@ export type CheckState = 'exact' | 'tolerant' | 'pending' | 'unread' | 'failed';
 
 export type PinnedBlock = { cid: string; text: string; kind: string };
 
+/**
+ * Where the quote check found a citation's quote in its block (Ref.span,
+ * H-OG3): code-point offsets [start, end), and one range per ellipsis
+ * segment. Refs written before spans have none.
+ */
+export type QuoteRange = { start: number; end: number };
+export type QuoteSpan = QuoteRange & { segments?: QuoteRange[] };
+
 export type PublishedCitation = {
   anchorId: string;
   relation: 'cites' | 'embeds';
   sourceKey: string;
   quote: string;
+  quoteCid: string;
+  span: QuoteSpan | null;
   blocks: PinnedBlock[];
   check: CheckState;
   judgement: string;
@@ -102,6 +112,43 @@ export function splitAtQuote(text: string, quote: string): { before: string; quo
     return { before: text.slice(0, lowered), quote: text.slice(lowered, lowered + quote.length), after: text.slice(lowered + quote.length) };
   }
   return null;
+}
+
+/** A Ref's span, or null when it is missing or malformed. */
+export function parseQuoteSpan(value: any): QuoteSpan | null {
+  const range = (r: any): QuoteRange | null =>
+    r && Number.isInteger(r.start) && Number.isInteger(r.end) && r.start >= 0 && r.end > r.start ? { start: r.start, end: r.end } : null;
+  const whole = range(value);
+  if (!whole) return null;
+  const segments = Array.isArray(value.segments) ? value.segments.map(range) : [];
+  if (segments.some((r: QuoteRange | null) => r === null)) return null;
+  return segments.length > 1 ? { ...whole, segments: segments as QuoteRange[] } : whole;
+}
+
+/**
+ * A pinned block's text cut at the citation's recorded span, so the exact
+ * words the quote check matched are marked, the right occurrence of a
+ * repeated phrase and every segment of an ellipsis quote. Null when there
+ * is no span or the block no longer reads as the quote at those offsets;
+ * the caller then falls back to splitAtQuote.
+ */
+export function splitAtSpan(text: string, quote: string, span: QuoteSpan | null): { text: string; marked: boolean }[] | null {
+  if (!span) return null;
+  const chars = Array.from(text);
+  const ranges = span.segments && span.segments.length > 1 ? span.segments : [{ start: span.start, end: span.end }];
+  const pieces: { text: string; marked: boolean }[] = [];
+  const marked: string[] = [];
+  let at = 0;
+  for (const r of ranges) {
+    if (r.start < at || r.end > chars.length) return null;
+    const words = chars.slice(r.start, r.end).join('');
+    pieces.push({ text: chars.slice(at, r.start).join(''), marked: false }, { text: words, marked: true });
+    marked.push(words);
+    at = r.end;
+  }
+  pieces.push({ text: chars.slice(at).join(''), marked: false });
+  if (quote && marked.join(' ... ') !== quote) return null;
+  return pieces;
 }
 
 // ---- model ----
@@ -195,6 +242,8 @@ export function buildPublishedCitationContext(bundle: any, sourceEntities: any[]
       relation: anchor?.relation === 'embeds' || node?.attrs?.display_mode === 'expanded_ref' ? 'embeds' : 'cites',
       sourceKey: key,
       quote: String(ref.quote || ''),
+      quoteCid: String(ref.cid || ''),
+      span: parseQuoteSpan(ref.span),
       blocks: resolved.map((b: any) => ({ cid: String(b.cid), text: String(b.text || ''), kind: String(b.kind || '') })),
       check: checkState(check),
       judgement: String(check?.judgement || ''),
@@ -221,7 +270,15 @@ function judgementHTML(citation: PublishedCitation): string {
 }
 
 /** One pinned block with the citation's quote marked inside it. */
-function pinnedBlockHTML(block: PinnedBlock, quote: string, tag: 'span' | 'blockquote'): string {
+function pinnedBlockHTML(block: PinnedBlock, citation: PublishedCitation, tag: 'span' | 'blockquote'): string {
+  const quote = citation.quote;
+  const pieces = block.cid === citation.quoteCid ? splitAtSpan(block.text, quote, citation.span) : null;
+  if (pieces) {
+    const body = pieces
+      .map((p) => (p.marked ? `<mark class="texture-citation-quote" data-citation-quote data-citation-span>${escapeHTML(p.text)}</mark>` : escapeHTML(p.text)))
+      .join('');
+    return `<${tag} class="texture-transclusion-quote texture-citation-block" data-pinned-cid="${escapeHTML(block.cid)}">${body}</${tag}>`;
+  }
   const split = splitAtQuote(block.text, quote);
   const body = split
     ? `${escapeHTML(split.before)}<mark class="texture-citation-quote" data-citation-quote>${escapeHTML(split.quote)}</mark>${escapeHTML(split.after)}`
@@ -232,7 +289,7 @@ function pinnedBlockHTML(block: PinnedBlock, quote: string, tag: 'span' | 'block
 /** The quote-in-source-block body shared by the popover and the source list. */
 function citationBodyHTML(citation: PublishedCitation, tag: 'span' | 'blockquote'): string {
   const blocks = citation.blocks.length
-    ? citation.blocks.map((block) => pinnedBlockHTML(block, citation.quote, tag)).join('')
+    ? citation.blocks.map((block) => pinnedBlockHTML(block, citation, tag)).join('')
     : citation.quote
       ? `<${tag} class="texture-transclusion-quote texture-citation-block"><mark class="texture-citation-quote" data-citation-quote>“${escapeHTML(citation.quote)}”</mark></${tag}>`
       : '';

@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
@@ -607,6 +609,7 @@ func (w *writer) citation(t Token) (texturedoc.Node, bool) {
 		ref.CID = match.BlockID
 		ref.Quote = match.Excerpt
 		ref.Hash = blockHash(capture.Blocks, match.BlockID)
+		ref.Span = RefSpanOf(match, blockText(capture.Blocks, match.BlockID))
 		tier = string(match.Tier)
 	} else if t.Kind == TokenCite {
 		w.errs.add(t.Line, "{{cite %s}} needs the quoted source words", t.Handle)
@@ -732,8 +735,61 @@ func blockHash(blocks []quotematch.Block, cid string) string {
 	return ""
 }
 
+func blockText(blocks []quotematch.Block, cid string) string {
+	for _, b := range blocks {
+		if b.ID == cid {
+			return b.Text
+		}
+	}
+	return ""
+}
+
+// RefSpanOf is the span a matched quote covers in its block's original
+// text (H-OG3): quotematch's byte offsets converted to code points, one
+// range per ellipsis segment when there is more than one, and the hash of
+// the covered text. It returns nil for a result that did not match or
+// whose offsets do not fall on character boundaries of text, so a Ref
+// never carries a span that points between the bytes of a character.
+func RefSpanOf(match quotematch.Result, text string) *types.RefSpan {
+	if match.Outcome != quotematch.Matched || len(match.Spans) == 0 {
+		return nil
+	}
+	codePoint := func(b int) (int, bool) {
+		if b < 0 || b > len(text) || (b < len(text) && !utf8.RuneStart(text[b])) {
+			return 0, false
+		}
+		return utf8.RuneCountInString(text[:b]), true
+	}
+	start, ok1 := codePoint(match.Start)
+	end, ok2 := codePoint(match.End)
+	if !ok1 || !ok2 || start >= end {
+		return nil
+	}
+	span := &types.RefSpan{Start: start, End: end, TextHash: TextHash(text[match.Start:match.End])}
+	if len(match.Spans) > 1 {
+		for _, s := range match.Spans {
+			a, okA := codePoint(s.Start)
+			b, okB := codePoint(s.End)
+			if !okA || !okB || a >= b {
+				return nil
+			}
+			span.Segments = append(span.Segments, types.RefRange{Start: a, End: b})
+		}
+	}
+	return span
+}
+
 func refAttrValue(ref types.Ref) map[string]any {
-	return map[string]any{"doc": ref.Doc, "version": ref.Version, "cid": ref.CID, "hash": ref.Hash, "quote": ref.Quote}
+	attrs := map[string]any{"doc": ref.Doc, "version": ref.Version, "cid": ref.CID, "hash": ref.Hash, "quote": ref.Quote}
+	if ref.Span != nil {
+		// Stored in its decoded JSON form, as the attrs read back after a
+		// revision round-trips.
+		var span map[string]any
+		if raw, err := json.Marshal(ref.Span); err == nil && json.Unmarshal(raw, &span) == nil {
+			attrs["span"] = span
+		}
+	}
+	return attrs
 }
 
 func copyAttrs(in map[string]any) map[string]any {
