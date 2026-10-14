@@ -69,3 +69,77 @@ substrate-level: indexed access paths, not per-caller patches.
 2. A typed projection table for commitment records (inbox, conversation,
    seq, directive), maintained on the tape's projection path. Larger (R),
    and it subsumes 1.
+
+## Chosen repair and its failure modes (written before the code)
+
+Option 1, in one slice per lever. Lever names follow the fix mission:
+C1 indexes, C2 run-end check, C3 claims and cell inbox, C4 host halt
+polling, C5 event sequence. (The report's own table numbers them C1, C2,
+C3+C4, C5 and C6.) Mutation class: orange (database queries, guest schema
+at open); C5 is red (Trace/evidence: the event sequence); C4 is a host
+kernel parameter (orange/red, Node B only).
+
+Probed on the embedded Dolt engine this repo links
+(go-mysql-server 2026-07-15) before writing the code:
+
+- A `VARCHAR(255)` generated column **refuses the insert** of a row whose
+  value is longer (`incompatible type for default value`). An unbounded
+  JSON value in a new generated column would turn into a write failure.
+- A generated column over `CAST(body AS JSON)` refuses the insert of a row
+  whose body is not JSON. The existing three columns read `metadata`, which
+  every write already parses, so they are safe.
+- `ORDER BY canonical_id LIMIT n` over an index `(object_kind, col,
+  canonical_id)` is still a TopN over the whole remaining range. Ordering by
+  every index column (`ORDER BY object_kind, col, canonical_id`) removes the
+  sort and the page reads only its rows. The same rule gives a reverse index
+  walk for `ORDER BY ... DESC` on every index column.
+- `CAST(<json> AS SIGNED)` never errors (a string gives 0, a boolean 1).
+
+Failure modes the code and tests must close:
+
+1. **A new column breaks writes.** A long value or a non-JSON body makes
+   inserts fail. Repair: the new columns are restricted to
+   `choir.commitment_record` rows (`CASE WHEN object_kind = ...`), the text
+   columns are `LEFT(..., 255)`, and the body column is guarded by
+   `JSON_VALID`. A lookup value of 255 characters or more keeps the old
+   JSON path, so `LEFT` never changes a match.
+2. **The indexed read returns different rows or order.** The column must
+   be the exact expression the old query evaluated, collation included
+   (trailing spaces, case, JSON `null`, numbers, missing fields). Repair:
+   equivalence tests run the old query and the new one over randomized
+   fixtures and compare rows and order.
+3. **The planner ignores the index or sorts the whole range** (retrieval
+   research §4 G). Repair: a plan-shape test per new query asserts the
+   index name, no full-table access, and no TopN or Sort where the index
+   order is meant to serve it, so a planner change fails CI.
+4. **The migration bricks or stalls a booting computer.** Repair:
+   additive `VIRTUAL` columns (no table rewrite), `CREATE INDEX` only when
+   `information_schema` says absent (idempotent, the existing mechanism),
+   any DDL failure leaves that field on the old JSON path. No tape event is
+   written or rewritten: `og_objects` is a projection. The store schema
+   epoch (`storeschema.Version`) stays 1: older binaries ignore the extra
+   columns, so a rollback needs no migration.
+5. **The run-end check misses a round it used to close (C2).** The new
+   check reads the conversation heads, the cache that `planInboxRecords`
+   writes in the same compare-and-set batch as every record, and that
+   already decides whether a closure commits (`stepConversation` reads the
+   head). Repair: a randomized test commits casts, reports, finals and
+   closures and compares the fold-based `OpenRounds` filtered by recipient
+   with the head-based read; `VerifyInboxHeads` stays the drift check.
+6. **The cell inbox range skips a record (C3).** The range is read on the
+   metadata `inbox_seq`, which `planInboxRecords` writes from the same
+   value as the body's. Repair: the same Go filter and sort run on the
+   fetched rows, and an equivalence test compares every (after, through]
+   window with the old read.
+7. **The claim pack changes (C3).** The newest-256 window moves from a
+   TopN to a reverse index walk. Ties on `updated_at` (second precision)
+   were ordered arbitrarily before; the index orders them by canonical ID.
+   Repair: equivalence test on distinct timestamps; the tie order is noted
+   as a refinement, not a change of the set outside ties.
+8. **The in-memory event sequence duplicates or skips (C5).** Repair: one
+   counter per (run, owner) under `eventMu`, seeded once per process from
+   the store (the same bounded read as today), so it is correct across
+   restarts; concurrent appends to one run, and reopen, are tested. Every
+   `choir.event` with a non-zero `Seq` is written through `AppendEvent`
+   (the lifecycle batch path writes `Seq` 0), so the process is the single
+   writer of the sequence, the same assumption `StreamSeq` already makes.
