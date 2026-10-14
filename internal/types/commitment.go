@@ -298,6 +298,12 @@ type CommitmentRecord struct {
 	// (management delegation R2-8), minted by the host from the task inbox
 	// to management:<owner>.
 	TaskOutcome *CommitmentTaskOutcome `json:"task_outcome,omitempty"`
+	// Calibration is the body of an agent calibration record (level 2,
+	// docs/reports/choir-mcp-precommitments-2026-10-14.md): a claim an agent
+	// wrote through /api/precommit (Kind precommit) or one scorer's
+	// settlement of it (Kind resolve). Desk packs exclude these records in
+	// their query.
+	Calibration *CommitmentCalibration `json:"calibration,omitempty"`
 }
 
 // CastHypothesis is one hypothesis a Cast opens. The store assigns ID

@@ -60,6 +60,8 @@
     { value: 'read:runtime', label: 'Read Runtime' },
     { value: 'write:runtime', label: 'Write Runtime' },
     { value: 'acceptance:read', label: 'Read Acceptance Evidence' },
+    { value: 'precommit:read', label: 'Read Precommitments and Calibration' },
+    { value: 'precommit:write', label: 'Write Precommitments (claims and settlements)' },
     { value: 'computer:lifecycle', label: 'Computer Lifecycle Control' },
     { value: 'selfdev-group', label: 'Computer Self-Development (all)' },
     { value: 'manage:keys', label: 'Manage API Keys' },

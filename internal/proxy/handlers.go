@@ -510,6 +510,10 @@ func requiredAPIKeyScope(r *http.Request) string {
 		action = "write"
 	}
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/api/precommit/"):
+		// Calibration level 2: agents' claim keys carry only the narrow
+		// precommit scopes, never read/write:runtime.
+		return "precommit:" + action
 	case strings.HasPrefix(r.URL.Path, "/api/base/"):
 		return action + ":base"
 	case strings.HasPrefix(r.URL.Path, "/api/texture/"):

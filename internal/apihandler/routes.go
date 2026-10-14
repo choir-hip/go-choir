@@ -22,6 +22,7 @@ func RegisterRoutes(s *server.Server, h *agentcore.APIHandler, texture *textureo
 	s.HandleFunc("/api/runs", h.HandleRunList)
 	s.HandleFunc("/api/runs/", h.HandleRunResource)
 	s.HandleFunc("/api/inboxes/", h.HandleInboxRecords)
+	s.HandleFunc("/api/precommit/", h.HandlePrecommit)
 	s.HandleFunc("/api/captures", h.HandleCaptures)
 	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
 	s.HandleFunc("/api/costs", api.HandleCosts)

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -110,9 +111,6 @@ func (s *Store) ListCommitmentRecords(ctx context.Context, ownerID, computerID, 
 	return records, nil
 }
 
-// GetCommitmentRecord returns the stored record body for one record id,
-// or nil when absent. Read-only — used by the learning-claims gate to
-// check whether a verifier ref names a scored record.
 // ListCommitmentClaimRecords lists the newest records that are not
 // directives (note, escalate, cast, retract), filtered in the query before
 // its limit. Directives carry no scored claim, and every Texture control
@@ -131,19 +129,34 @@ func (s *Store) ListCommitmentClaimRecords(ctx context.Context, ownerID, compute
 	// reverse index walk that stops at limit rows; otherwise every record's
 	// body is evaluated as JSON (11% of a busy computer's CPU,
 	// guest-cpu-is-unindexed-store-scans-2026-10-14).
+	//
+	// Agent calibration records (claims external agents write through
+	// /api/precommit) are excluded too: they belong to the agent that wrote
+	// them, not to a desk. The unindexed read filters them in the query; the
+	// claim index predicates on the directive alone, so the indexed read
+	// over-fetches and drops them here. A burst of calibration records
+	// larger than the over-fetch can still shorten a desk's window; a
+	// calibration-aware index column is the repair if that is ever seen.
 	var objs []objectgraph.Object
 	indexed := false
 	var err error
+	fetch := limit * 2
 	if graph := s.ogReadStore; graph != nil {
-		objs, indexed, err = graph.ListCommitmentClaimObjects(ctx, ownerID, limit)
+		objs, indexed, err = graph.ListCommitmentClaimObjects(ctx, ownerID, fetch)
 	} else if s.ogStore != nil {
-		objs, indexed, err = s.ogStore.ListCommitmentClaimObjects(ctx, ownerID, limit)
+		objs, indexed, err = s.ogStore.ListCommitmentClaimObjects(ctx, ownerID, fetch)
+	}
+	if err == nil && indexed {
+		objs = dropCalibrationRecords(objs, limit)
 	}
 	if err != nil {
 		return nil, err
 	}
 	if !indexed {
-		matches := []objectgraph.JSONFieldMatch{{JSONPath: "$.directive", Value: "", MissingMatchesEmpty: true}}
+		matches := []objectgraph.JSONFieldMatch{
+			{JSONPath: "$.directive", Value: "", MissingMatchesEmpty: true},
+			{JSONPath: "$.calibration", Value: "", MissingMatchesEmpty: true},
+		}
 		if objs, err = s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit); err != nil {
 			return nil, err
 		}
@@ -162,6 +175,9 @@ func (s *Store) ListCommitmentClaimRecords(ctx context.Context, ownerID, compute
 	return records, nil
 }
 
+// GetCommitmentRecord returns the stored record body for one record id,
+// or nil when absent. Read-only — used by the learning-claims gate to
+// check whether a verifier ref names a scored record.
 func (s *Store) GetCommitmentRecord(ctx context.Context, ownerID, computerID, recordID string) (*types.CommitmentRecord, error) {
 	ownerID, computerID, recordID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(recordID)
 	if ownerID == "" || computerID == "" || recordID == "" {
@@ -182,4 +198,59 @@ func (s *Store) GetCommitmentRecord(ctx context.Context, ownerID, computerID, re
 		return &rec, nil
 	}
 	return nil, nil
+}
+
+// ListCalibrationRecords lists agent calibration records (claims and their
+// settlements, calibration level 2) for one owner/computer, optionally for
+// one claimant agent, newest first. It returns at most limit records; the
+// caller reports truncation when the count reaches it.
+func (s *Store) ListCalibrationRecords(ctx context.Context, ownerID, computerID, agent string, limit int) ([]types.CommitmentRecord, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	ownerID, computerID, agent = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(agent)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("calibration record list requires owner and computer")
+	}
+	matches := []objectgraph.JSONFieldMatch{{JSONPath: "$.calibration.schema", Value: types.CalibrationSchemaV1}}
+	if agent != "" {
+		matches = append(matches, objectgraph.JSONFieldMatch{JSONPath: "$.calibration.agent", Value: agent})
+	}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID, matches, limit)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]types.CommitmentRecord, 0, len(objs))
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, fmt.Errorf("calibration record decode %s: %w", obj.CanonicalID, err)
+		}
+		records = append(records, rec)
+	}
+	return records, nil
+}
+
+// dropCalibrationRecords removes agent calibration records (a non-empty
+// "calibration" body field) and keeps at most limit of the rest, in order.
+func dropCalibrationRecords(objs []objectgraph.Object, limit int) []objectgraph.Object {
+	out := objs[:0]
+	for _, obj := range objs {
+		var probe struct {
+			Calibration json.RawMessage `json:"calibration"`
+		}
+		if len(obj.Body) > 0 && json.Unmarshal(obj.Body, &probe) == nil {
+			if c := strings.TrimSpace(string(probe.Calibration)); c != "" && c != "null" && c != `""` {
+				continue
+			}
+		}
+		out = append(out, obj)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out
 }
