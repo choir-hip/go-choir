@@ -1,0 +1,283 @@
+{
+ "window_s": 300.0,
+ "at": "2026-10-14T15:21:31Z",
+ "host_busy_cores": 1.384,
+ "host_guest_cores": 0.912,
+ "services_cores": {
+  "go-choir-auth": 0.0,
+  "go-choir-corpus-dolt": 0.0056,
+  "go-choir-corpusd": 0.0816,
+  "go-choir-gateway": 0.005,
+  "go-choir-goproxy": 0.0,
+  "go-choir-maild": 0.0001,
+  "go-choir-platform-dolt": 0.1307,
+  "go-choir-proxy": 0.0001,
+  "go-choir-vmctl": 1.0365
+ },
+ "vms": {
+  "vm-1669020adcece51c2f5ff9b6df399ef5": {
+   "pid": "1288901",
+   "threads": {
+    "firecracker#1288901": {
+     "user": 0.0014,
+     "sys": 0.0061,
+     "guest": 0.0,
+     "vcs_per_s": 252.7,
+     "nvcs_per_s": 0.0
+    },
+    "fc_api#1288902": {
+     "user": 0.0,
+     "sys": 0.0,
+     "guest": 0.0,
+     "vcs_per_s": 0.0,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 0#1288904": {
+     "user": 0.2247,
+     "sys": 0.0309,
+     "guest": 0.2271,
+     "vcs_per_s": 471.3,
+     "nvcs_per_s": 1.3
+    },
+    "fc_vcpu 1#1288905": {
+     "user": 0.2184,
+     "sys": 0.0285,
+     "guest": 0.2209,
+     "vcs_per_s": 429.3,
+     "nvcs_per_s": 1.4
+    },
+    "fc_vcpu 2#1288906": {
+     "user": 0.2236,
+     "sys": 0.0322,
+     "guest": 0.2257,
+     "vcs_per_s": 428.6,
+     "nvcs_per_s": 7.0
+    },
+    "fc_vcpu 3#1288907": {
+     "user": 0.2211,
+     "sys": 0.0302,
+     "guest": 0.2236,
+     "vcs_per_s": 454.0,
+     "nvcs_per_s": 1.2
+    },
+    "kvm-nx-lpage-re#1288908": {
+     "user": 0.0,
+     "sys": 0.0,
+     "guest": 0.0,
+     "vcs_per_s": 0.0,
+     "nvcs_per_s": 0.0
+    }
+   },
+   "kvm_per_s": {
+    "exits": 11064.6,
+    "halt_exits": 2826.5,
+    "halt_wakeup": 1784.0,
+    "halt_attempted_poll": 2301.1,
+    "halt_successful_poll": 1027.9,
+    "io_exits": 151.6,
+    "mmio_exits": 0.0,
+    "irq_exits": 1047.4,
+    "irq_injections": 3884.1,
+    "signal_exits": 0.0,
+    "request_irq_exits": 0.0,
+    "nmi_window_exits": 0.0,
+    "irq_window_exits": 113.9,
+    "insn_emulation": 0.0,
+    "preemption_reported": 4.5,
+    "directed_yield_attempted": 0.0,
+    "pf_taken": 139.5,
+    "tlb_flush": 20.0,
+    "host_state_reload": 1939.4,
+    "fpu_reload": 151.6,
+    "l1d_flush": 2757.3,
+    "halt_poll_success_cores": 0.0514,
+    "halt_poll_fail_cores": 0.0525,
+    "halt_wait_cores": 2.9904
+   },
+   "io_per_s": {
+    "rchar": 564703.9,
+    "wchar": 2192298.6,
+    "syscr": 381.9,
+    "syscw": 653.2,
+    "read_bytes": 495329.0,
+    "write_bytes": 1807964.3
+   }
+  },
+  "vm-48bc09812f3fce06d715f6c7f8e2db9a": {
+   "pid": "1299614",
+   "threads": {
+    "firecracker#1299614": {
+     "user": 0.0,
+     "sys": 0.0001,
+     "guest": 0.0,
+     "vcs_per_s": 1.9,
+     "nvcs_per_s": 0.0
+    },
+    "fc_api#1299615": {
+     "user": 0.0,
+     "sys": 0.0,
+     "guest": 0.0,
+     "vcs_per_s": 0.0,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 0#1299617": {
+     "user": 0.0019,
+     "sys": 0.0004,
+     "guest": 0.0019,
+     "vcs_per_s": 30.1,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 1#1299618": {
+     "user": 0.0017,
+     "sys": 0.0006,
+     "guest": 0.0014,
+     "vcs_per_s": 34.4,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 2#1299619": {
+     "user": 0.0015,
+     "sys": 0.0007,
+     "guest": 0.0014,
+     "vcs_per_s": 31.2,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 3#1299620": {
+     "user": 0.0017,
+     "sys": 0.0006,
+     "guest": 0.0016,
+     "vcs_per_s": 30.1,
+     "nvcs_per_s": 0.0
+    },
+    "kvm-nx-lpage-re#1299621": {
+     "user": 0.0,
+     "sys": 0.0,
+     "guest": 0.0,
+     "vcs_per_s": 0.0,
+     "nvcs_per_s": 0.0
+    }
+   },
+   "kvm_per_s": {
+    "exits": 430.6,
+    "halt_exits": 134.6,
+    "halt_wakeup": 125.9,
+    "halt_attempted_poll": 42.4,
+    "halt_successful_poll": 7.9,
+    "io_exits": 0.0,
+    "mmio_exits": 0.0,
+    "irq_exits": 13.8,
+    "irq_injections": 144.8,
+    "signal_exits": 0.0,
+    "request_irq_exits": 0.0,
+    "nmi_window_exits": 0.0,
+    "irq_window_exits": 5.1,
+    "insn_emulation": 0.0,
+    "preemption_reported": 0.1,
+    "directed_yield_attempted": 0.0,
+    "pf_taken": 1.4,
+    "tlb_flush": 8.0,
+    "host_state_reload": 125.8,
+    "fpu_reload": 0.0,
+    "l1d_flush": 132.3,
+    "halt_poll_success_cores": 0.0003,
+    "halt_poll_fail_cores": 0.0007,
+    "halt_wait_cores": 3.9933
+   },
+   "io_per_s": {
+    "rchar": 136.8,
+    "wchar": 264.9,
+    "syscr": 4.0,
+    "syscw": 3.8,
+    "read_bytes": 0.0,
+    "write_bytes": 0.0
+   }
+  },
+  "candidate-fleet-e15cb89f25d963c220319b7b": {
+   "pid": "1299762",
+   "threads": {
+    "firecracker#1299762": {
+     "user": 0.0,
+     "sys": 0.0001,
+     "guest": 0.0,
+     "vcs_per_s": 1.8,
+     "nvcs_per_s": 0.0
+    },
+    "fc_api#1299763": {
+     "user": 0.0,
+     "sys": 0.0,
+     "guest": 0.0,
+     "vcs_per_s": 0.0,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 0#1299765": {
+     "user": 0.0015,
+     "sys": 0.0005,
+     "guest": 0.0018,
+     "vcs_per_s": 30.4,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 1#1299766": {
+     "user": 0.002,
+     "sys": 0.0006,
+     "guest": 0.0021,
+     "vcs_per_s": 36.4,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 2#1299767": {
+     "user": 0.0021,
+     "sys": 0.0005,
+     "guest": 0.0021,
+     "vcs_per_s": 31.3,
+     "nvcs_per_s": 0.0
+    },
+    "fc_vcpu 3#1299768": {
+     "user": 0.0018,
+     "sys": 0.0005,
+     "guest": 0.0019,
+     "vcs_per_s": 26.9,
+     "nvcs_per_s": 0.0
+    },
+    "kvm-nx-lpage-re#1299769": {
+     "user": 0.0,
+     "sys": 0.0,
+     "guest": 0.0,
+     "vcs_per_s": 0.0,
+     "nvcs_per_s": 0.0
+    }
+   },
+   "kvm_per_s": {
+    "exits": 426.5,
+    "halt_exits": 132.9,
+    "halt_wakeup": 125.0,
+    "halt_attempted_poll": 40.8,
+    "halt_successful_poll": 7.1,
+    "io_exits": 0.0,
+    "mmio_exits": 0.0,
+    "irq_exits": 15.1,
+    "irq_injections": 143.3,
+    "signal_exits": 0.0,
+    "request_irq_exits": 0.0,
+    "nmi_window_exits": 0.0,
+    "irq_window_exits": 4.8,
+    "insn_emulation": 0.0,
+    "preemption_reported": 0.1,
+    "directed_yield_attempted": 0.0,
+    "pf_taken": 0.7,
+    "tlb_flush": 7.7,
+    "host_state_reload": 125.0,
+    "fpu_reload": 0.0,
+    "l1d_flush": 130.6,
+    "halt_poll_success_cores": 0.0003,
+    "halt_poll_fail_cores": 0.0006,
+    "halt_wait_cores": 3.993
+   },
+   "io_per_s": {
+    "rchar": 127.0,
+    "wchar": 256.8,
+    "syscr": 3.7,
+    "syscw": 3.6,
+    "read_bytes": 0.0,
+    "write_bytes": 0.0
+   }
+  }
+ }
+}
