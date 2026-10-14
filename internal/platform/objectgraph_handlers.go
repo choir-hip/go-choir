@@ -57,7 +57,11 @@ func (h *ObjectGraphHandler) ConfigureGuestBinding(lookup guestOwnershipLookup) 
 func (h *ObjectGraphHandler) HandleObjects(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		if err := h.requireInternalOrBoundGuest(r, "", "", true); err != nil {
+		// A guest lists only its own owner's and computer's objects: the
+		// filter must name exactly the computer vmctl binds the caller to
+		// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F5).
+		query := r.URL.Query()
+		if err := h.requireInternalOrBoundGuest(r, query.Get("owner"), query.Get("computer"), false); err != nil {
 			writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 			return
 		}
@@ -106,8 +110,10 @@ func (h *ObjectGraphHandler) HandleObjectByID(w http.ResponseWriter, r *http.Req
 func (h *ObjectGraphHandler) HandleEdges(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		if err := h.requireInternalOrBoundGuest(r, "", "", true); err != nil {
-			writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
+		// Edge filters name no owner, and no guest lists edges: host
+		// callers only (auth-boundary-gaps F5).
+		if !trustedInternalCaller(r) {
+			writeJSON(w, http.StatusForbidden, apiError{Error: errInternalCallerRequired.Error()})
 			return
 		}
 		h.listEdges(w, r)

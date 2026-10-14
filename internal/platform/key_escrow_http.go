@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 	"golang.org/x/crypto/curve25519"
 )
@@ -297,6 +298,15 @@ func (h *Handler) HandleKeyEscrowTransparencyHead(w http.ResponseWriter, r *http
 func (h *Handler) authorizeKeyEscrowOperator(w http.ResponseWriter, r *http.Request) bool {
 	if h == nil || h.keyEscrow == nil || !h.keyEscrow.gateOpen {
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "key escrow operator gate is closed"})
+		return false
+	}
+	// Break-glass unwrap is a host-side operator act: corpusd listens on
+	// every interface and guests reach it through their tap, so the operator
+	// token alone must not be enough. Require a host transport and the host
+	// credential, as every other internal route does
+	// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F5).
+	if !trustedInternalTransport(r) || !hostauth.Authorize(r) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
 		return false
 	}
 	name := r.Header.Get("X-Choir-Operator")
