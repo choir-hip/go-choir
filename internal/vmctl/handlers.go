@@ -8,7 +8,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"strconv"
 	"strings"
@@ -1103,80 +1102,6 @@ func (h *Handler) HandleBootTimeline(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(raw)
 }
 
-// HandleAutoputerProxy resolves the live autoputer URL and reverse-proxies the request.
-// Path format: /internal/vmctl/autoputer-proxy/{owner-id}/{...remaining-path}
-func (h *Handler) HandleAutoputerProxy(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost && r.Method != http.MethodGet {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "autoputer proxy is not publicly accessible"})
-		return
-	}
-
-	// Extract owner from path: /internal/vmctl/autoputer-proxy/{owner}/{...rest}
-	const prefix = "/internal/vmctl/autoputer-proxy/"
-	path := strings.TrimPrefix(r.URL.Path, prefix)
-	if path == "" || path == r.URL.Path {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "missing owner in proxy path"})
-		return
-	}
-
-	// Split into owner and remaining path.
-	slashIdx := strings.Index(path, "/")
-	var ownerID, remainingPath string
-	if slashIdx < 0 {
-		ownerID = path
-		remainingPath = "/"
-	} else {
-		ownerID = path[:slashIdx]
-		remainingPath = path[slashIdx:]
-	}
-
-	ownerID = strings.TrimSpace(ownerID)
-	if ownerID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "empty owner in proxy path"})
-		return
-	}
-
-	desktopID := strings.TrimSpace(r.URL.Query().Get("desktop"))
-	if desktopID == "" {
-		desktopID = UniversalWirePlatformDesktopID
-	}
-	if err := h.requireComputerVersionRoute(r.Context(), ownerID, desktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	if ownerID == UniversalWirePlatformOwnerID {
-		if err := h.registry.EnsureUniversalWirePlatformComputer(r.Context()); err != nil {
-			log.Printf("vmctl: ensure platform autoputer for %s: %v", ownerID, err)
-			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "platform autoputer is not ready"})
-			return
-		}
-	}
-
-	// Resolve live autoputer URL.
-	autoputerURL, err := h.registry.LiveComputerURL(ownerID, desktopID)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: fmt.Sprintf("resolve autoputer for %s: %v", ownerID, err)})
-		return
-	}
-
-	target, err := url.Parse(autoputerURL)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: fmt.Sprintf("invalid autoputer URL: %v", err)})
-		return
-	}
-
-	// Rewrite the request path to the remaining path.
-	r.URL.Path = remainingPath
-	r.URL.RawPath = ""
-
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	proxy.ServeHTTP(w, r)
-}
-
 // isInternalCaller checks whether the request originated from an internal
 // caller (localhost or internal service). vmctl control endpoints must only
 // be reachable from internal host/service paths (VAL-VM-012).
@@ -1302,7 +1227,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/retention-plan", h.HandleRetentionPlan)
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
-	s.HandleFunc("/internal/vmctl/autoputer-proxy/", h.HandleAutoputerProxy)
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
 	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
 }
