@@ -115,3 +115,15 @@ Deploy of `ecc51d79` (CI run 38495519250; it carried the change
   existing one retry succeeded. This happened before and is unrelated.
 - Residual (D3): model calls from computers are refused while the gateway
   drains, for 2 min 39 s on this deploy and up to 11 min.
+
+## Residual D4 (2026-10-14 07:46): a 10-second proxy drain
+
+Deploy ce59d406: 251 of 256 health probes answered 200; five 502s from
+07:46:12 to 07:46:21. The journal shows `Stopping go-choir Proxy Service`
+at 07:46:11 and `proxy: server stopped` at 07:46:21: the proxy took 10 s
+to stop, and requests in that window were refused. Hypothesis: a
+long-lived connection (live events or SSE) held the graceful shutdown open
+until its timeout. Earlier deploys tonight saw zero or one 502. Candidate
+fixes: close idle and streaming connections at the start of shutdown so
+the drain is short; or socket activation so the new proxy accepts before
+the old one stops.
