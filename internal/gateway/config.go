@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -269,6 +270,9 @@ type CredentialEnsureResult struct {
 	ComputerID string    `json:"computer_id"`
 	Status     string    `json:"status"`
 	ExpiresAt  time.Time `json:"expires_at"`
+	// JevPeerMoved reports that the ensure moved the Jev pin to the peer it
+	// named (EnsureCredentialForPeer).
+	JevPeerMoved bool `json:"jev_peer_moved,omitempty"`
 }
 
 // IssueCredential creates a new credential for the given autoputer ID.
@@ -318,6 +322,26 @@ func (r *IdentityRegistry) IssueCredential(computerID string) (*CredentialResult
 // identity persistence existed, where the host still has the VM bootstrap token
 // but the restarted gateway has lost the token hash.
 func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureResult, error) {
+	return r.EnsureCredentialForPeer(rawToken, "")
+}
+
+// EnsureCredentialForPeer is EnsureCredential from host lifecycle control
+// that also names the computer's current guest address. A computer keeps its
+// token across boots but takes a new guest address from each boot's host
+// port, so the Jev pin (BindJevPeer) is moved to the address the host
+// attests; only this caller can move it, never the Jev route itself. An
+// empty peer leaves the pin as it is; an address that is not a Choir guest
+// address is refused and changes nothing
+// (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md).
+func (r *IdentityRegistry) EnsureCredentialForPeer(rawToken, peerIP string) (*CredentialEnsureResult, error) {
+	peerIP = strings.TrimSpace(peerIP)
+	if peerIP != "" {
+		ip := net.ParseIP(peerIP)
+		if ip == nil || !isChoirGuestPeer(ip) {
+			return nil, fmt.Errorf("peer %q is not a Choir guest address", peerIP)
+		}
+		peerIP = ip.String()
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -339,10 +363,18 @@ func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureR
 		if now.After(existing.ExpiresAt) {
 			return nil, fmt.Errorf("credential expired")
 		}
+		moved := peerIP != "" && existing.JevPeerIP != peerIP
+		if moved {
+			existing.JevPeerIP = peerIP
+			if err := r.persistLocked(); err != nil {
+				return nil, err
+			}
+		}
 		return &CredentialEnsureResult{
-			ComputerID: computerID,
-			Status:     "already_active",
-			ExpiresAt:  existing.ExpiresAt,
+			ComputerID:   computerID,
+			Status:       "already_active",
+			ExpiresAt:    existing.ExpiresAt,
+			JevPeerMoved: moved,
 		}, nil
 	}
 
@@ -352,6 +384,7 @@ func (r *IdentityRegistry) EnsureCredential(rawToken string) (*CredentialEnsureR
 		IssuedAt:   now,
 		ExpiresAt:  now.Add(r.tokenTTL),
 		Active:     true,
+		JevPeerIP:  peerIP,
 	}
 	r.identities[computerID] = identity
 	if err := r.persistLocked(); err != nil {

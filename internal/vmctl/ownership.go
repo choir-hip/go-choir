@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -452,6 +453,11 @@ type OwnershipRegistry struct {
 	// proxied browser request while still retrying quickly after transient
 	// failures.
 	gatewayCredentialNextCheck map[string]time.Time
+	// gatewayCredentialPeer is the guest address each VM's last successful
+	// reconciliation named. A boot onto a new address is not throttled: the
+	// gateway's Jev pin must follow the computer at once
+	// (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md).
+	gatewayCredentialPeer map[string]string
 
 	// autoputerURLBase is the base URL pattern for autoputer runtimes.
 	// The VM ID is appended as a path component: base + "/" + vmID
@@ -539,6 +545,7 @@ func NewOwnershipRegistry(autoputerURLBase string) *OwnershipRegistry {
 		vmByID:                     make(map[string]*VMOwnership),
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
 		gatewayCredentialNextCheck: make(map[string]time.Time),
+		gatewayCredentialPeer:      make(map[string]string),
 		refreshing:                 make(map[string]struct{}),
 		autoputerURLBase:           autoputerURLBase,
 		idleTimeout:                0, // no idle timeout by default
@@ -1676,7 +1683,11 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 		r.mu.Unlock()
 		return
 	}
-	if nextCheck, ok := r.gatewayCredentialNextCheck[vmID]; ok && now.Before(nextCheck) {
+	peer := ""
+	if own := r.vmByID[vmID]; own != nil {
+		peer = guestAddressOf(own.ComputerURL)
+	}
+	if nextCheck, ok := r.gatewayCredentialNextCheck[vmID]; ok && now.Before(nextCheck) && r.gatewayCredentialPeer[vmID] == peer {
 		r.mu.Unlock()
 		return
 	}
@@ -1695,7 +1706,13 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 		log.Printf("vmctl: gateway credential ensure skipped for VM %s: empty token", vmID)
 		return
 	}
-	bodyBytes, err := json.Marshal(map[string]string{"raw_token": rawToken})
+	// The guest address moves the gateway's Jev pin to this boot's address;
+	// the token outlives boots, the address does not.
+	ensure := map[string]string{"raw_token": rawToken}
+	if peer != "" {
+		ensure["peer_ip"] = peer
+	}
+	bodyBytes, err := json.Marshal(ensure)
 	if err != nil {
 		log.Printf("vmctl: gateway credential ensure marshal failed for VM %s: %v", vmID, err)
 		return
@@ -1723,7 +1740,22 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 	}
 	r.mu.Lock()
 	r.gatewayCredentialNextCheck[vmID] = time.Now().Add(gatewayCredentialEnsureSuccessInterval)
+	r.gatewayCredentialPeer[vmID] = peer
 	r.mu.Unlock()
+}
+
+// guestAddressOf is the IP address in a VM's runtime URL, or "" when the
+// URL names none (a hostname, an empty or unparseable URL).
+func guestAddressOf(computerURL string) string {
+	u, err := url.Parse(strings.TrimSpace(computerURL))
+	if err != nil {
+		return ""
+	}
+	ip := net.ParseIP(u.Hostname())
+	if ip == nil {
+		return ""
+	}
+	return ip.String()
 }
 
 // ReconcileReadyGatewayCredentials imports host-held gateway credentials for

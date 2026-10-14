@@ -601,6 +601,9 @@ func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request)
 
 	var req struct {
 		RawToken string `json:"raw_token"`
+		// PeerIP is the computer's current guest address, which moves the
+		// Jev pin to it (EnsureCredentialForPeer). Optional.
+		PeerIP string `json:"peer_ip,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid request body"})
@@ -610,14 +613,27 @@ func (h *Handler) HandleEnsureCredential(w http.ResponseWriter, r *http.Request)
 		writeGatewayJSON(w, http.StatusBadRequest, ErrorResponse{Error: "raw_token is required"})
 		return
 	}
+	// A peer that is not a Choir guest address (a loopback runtime in
+	// development, say) never moves the Jev pin, and never fails the
+	// credential's reconciliation, which is this route's first job.
+	peer := strings.TrimSpace(req.PeerIP)
+	if peer != "" {
+		if ip := net.ParseIP(peer); ip == nil || !isChoirGuestPeer(ip) {
+			log.Printf("gateway: credential ensure named peer %q, which is not a Choir guest address; the Jev pin is not moved", peer)
+			peer = ""
+		}
+	}
 
-	result, err := h.registry.EnsureCredential(req.RawToken)
+	result, err := h.registry.EnsureCredentialForPeer(req.RawToken, peer)
 	if err != nil {
 		writeGatewayJSON(w, http.StatusConflict, ErrorResponse{Error: "credential could not be ensured"})
 		return
 	}
 	if result.Status == "imported" {
 		log.Printf("gateway: imported existing credential for autoputer %s (expires=%s)", result.ComputerID, result.ExpiresAt)
+	}
+	if result.JevPeerMoved {
+		log.Printf("gateway: Jev bearer of autoputer %s moved to its current guest address %s", result.ComputerID, peer)
 	}
 	writeGatewayJSON(w, http.StatusOK, result)
 }
