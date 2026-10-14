@@ -63,9 +63,11 @@ func foldTextureDispatch(intents []yaegikernel.StagedIntent, scope ReductionScop
 			return nil, nil, recErr
 		}
 		// The fold is a pure function of the staged intents: the commit
-		// stamps the record's time.
+		// stamps the record's time, and the Texture author the model that
+		// produced the turn (its identity must not depend on a failover).
 		rec.Provenance.CommittedAt = ""
 		rec.Prediction.CommittedAt = ""
+		rec.Provenance.ModelID = ""
 		inboxRecords = append(inboxRecords, rec)
 		folded = append(folded, in)
 		objectives = append(objectives, desk+": "+firstNonEmpty(in.Objective, in.Question, in.Body))

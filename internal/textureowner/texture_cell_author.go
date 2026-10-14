@@ -195,7 +195,7 @@ func (h *Handler) commitTextureTurn(ctx context.Context, rec *types.RunRecord, t
 	if base != head {
 		return "", fmt.Errorf("the document changed since your frame (your frame showed revision %s; the head is now %s). Nothing was committed; your next frame shows the new head, so write against it", base, head)
 	}
-	args := textureTurnArgs{InboxRecords: turn.InboxRecords, InboxCursor: turn.InboxCursor, WorkDisposition: types.WorkItemOpen, ToolCallID: identity}
+	args := textureTurnArgs{InboxRecords: stampRecordModel(turn.InboxRecords, textureTurnModelID(ctx, rec)), InboxCursor: turn.InboxCursor, WorkDisposition: types.WorkItemOpen, ToolCallID: identity}
 	if turn.Done != "" {
 		args.WorkDisposition = types.WorkItemCompleted
 	}

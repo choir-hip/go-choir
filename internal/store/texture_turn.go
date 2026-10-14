@@ -60,6 +60,16 @@ func normalizeTextureTurnDigestRequest(req types.ApplyTextureTurnRequest) (types
 	if err := normalizeApplyLifecycleRevisionDigest(&req.Revision); err != nil {
 		return req, err
 	}
+	// A dispatched record's model is observation metadata, stamped after the
+	// fold fixed the turn's identity (desk-records-lack-model-id-2026-10-14).
+	if len(req.InboxRecords) > 0 {
+		records := make([]types.CommitmentRecord, len(req.InboxRecords))
+		for i, rec := range req.InboxRecords {
+			rec.Provenance.ModelID = ""
+			records[i] = rec
+		}
+		req.InboxRecords = records
+	}
 	req.Inbound = append([]types.TextureTurnInboundDisposition(nil), req.Inbound...)
 	for i := range req.Inbound {
 		in := &req.Inbound[i]

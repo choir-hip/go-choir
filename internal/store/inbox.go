@@ -76,13 +76,15 @@ func inboxWakeKey(inbox string, seq int64) string {
 }
 
 // ComputeCommitInboxRecordsDigest returns the replay identity of an inbox
-// command. Provenance commit time is observation metadata, not identity.
+// command. Provenance commit time and model are observation metadata, not
+// identity: a cell replayed after a model failover replays its receipt.
 func ComputeCommitInboxRecordsDigest(req types.CommitInboxRecordsRequest) (string, error) {
 	req.OwnerID, req.ComputerID, req.CommandDigest = "", "", ""
 	req.CommandID = strings.TrimSpace(req.CommandID)
 	records := make([]types.CommitmentRecord, len(req.Records))
 	for i, rec := range req.Records {
 		rec.Provenance.CommittedAt = ""
+		rec.Provenance.ModelID = ""
 		records[i] = rec
 	}
 	req.Records = records

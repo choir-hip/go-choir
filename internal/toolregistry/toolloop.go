@@ -687,7 +687,9 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			if err := appendMessageWithContext(ctx, "assistant", assistantMsg); err != nil {
 				return "", totalUsage, fmt.Errorf("tool loop persist assistant message: %w", err)
 			}
-			toolResults := ExecuteToolBatch(ctx, registry, resp.ToolCalls, emit)
+			// The tools run under the model that answered this call, so a
+			// record they write names it (after a failover too).
+			toolResults := ExecuteToolBatch(WithActiveModel(ctx, activeLLMConfig.Provider, activeLLMConfig.Model), registry, resp.ToolCalls, emit)
 			toolResultMsg, _ := json.Marshal(map[string]any{
 				"role":    "user",
 				"content": buildToolResultContent(toolResults),

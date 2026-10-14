@@ -72,6 +72,10 @@ type ReductionScope struct {
 	ReturnTo    string // supervisor desk for completion reports
 	Cursor      uint64 // durable unread cursor entering the cell
 	CellID      string // stable cell identity for intent idempotency keys
+	// ModelID is "<provider>/<model>" of the model that answered the call
+	// whose cell this is (recordModelID); every record the cell authors
+	// carries it (docs/problems/desk-records-lack-model-id-2026-10-14.md).
+	ModelID string
 }
 
 // ReducedIntent pairs a cell-local ID with its durable sequence.
@@ -682,6 +686,7 @@ func rlmReductionForCall(ctx context.Context, rt *Runtime, toolCtx *CapsuleToolC
 			ReturnTo:    requester,
 			Cursor:      cursor,
 			CellID:      cellIDForExecution(execCtx, cursor),
+			ModelID:     recordModelID(ctx, execCtx.RunRecord),
 		},
 		ledger:    rt.store,
 		inbox:     inbox,
@@ -760,6 +765,7 @@ func rlmReductionForDeskCall(ctx context.Context, rt *Runtime) *rlmCallReduction
 			ReturnTo:    requester,
 			Cursor:      cursor,
 			CellID:      cellIDForExecution(execCtx, cursor),
+			ModelID:     recordModelID(ctx, execCtx.RunRecord),
 		},
 		ledger:    rt.store,
 		inbox:     inbox,
@@ -1128,6 +1134,7 @@ func commitmentRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent
 		Discrepancy: types.DiscrepancyUnresolved,
 		Provenance: types.CommitmentProvenance{
 			AgentID: scope.FromAgentID,
+			ModelID: scope.ModelID,
 			// CommittedAt is stamped here (R4): the required provenance
 			// field the materiality projection derives open-claim age
 			// from. Pre-R4 records carry an empty stamp and are never

@@ -36,6 +36,8 @@ func ComputeCommitLifecycleActDigest(req types.CommitLifecycleActRequest) (strin
 	// authored act identity. A re-reduced cell stamps a fresh wall time but
 	// must replay its already committed record and derived packet.
 	req.Record.Provenance.CommittedAt = ""
+	// So is the model that produced it (desk-records-lack-model-id-2026-10-14).
+	req.Record.Provenance.ModelID = ""
 	if req.PacketSpec != nil {
 		spec := *req.PacketSpec
 		spec.TargetAgentID = strings.TrimSpace(spec.TargetAgentID)
