@@ -1517,3 +1517,47 @@ Web sources are cited inline. Research was done by sub-agents on
 2026-10-14; Apple's JavaScript-rendered documentation pages often did not
 load for them, and claims resting on general knowledge are marked
 UNVERIFIED in the text.
+
+## Owner rulings, 2026-10-14 ~21:40 UTC
+
+Decisions (§10.2):
+1. Apple account: the owner already has a business (organization) Apple
+   Developer account — use it; push, passkeys, universal links and
+   TestFlight are available from M0.
+2-5, 7: agreed as recommended (Swift with a UIKit core; iOS 26 minimum;
+   Parakeet v3 default; code under `mobile/` in this repo).
+6. Takes are captured on the server (as private captures on the owner's
+   own computer).
+The "My computer" programme is replaced by the voice-driven model below.
+
+Autoradio is entirely voice-driven; with every visual element removed it
+should work on an Apple Watch. Want the state of your computer? Say so.
+Turn it on without saying anything and it plays whatever is most
+intelligent to play: it learns the mix of media you like and weighs the
+importance and urgency of topics for you.
+
+The core mechanism: Autoradio traverses the user's personal object graph
+and the global Autopaper object graph to produce a continuous stream of
+audio — segments and full episodes of media made by and for humans
+(podcasts, videos), AI-voiced updates from written media (Autopaper),
+updates from the user's agentic email, and updates on the state of the
+user's work from the other desks. The user can interrupt at any time to
+ask or redirect; it learns from usage and follows up on topics of
+interest (e.g. a new Machine Learning Street Talk episode plays when it
+appears for someone interested in AI and tech business strategy).
+
+Interaction model: not conversational turn-taking. Long monologues in
+(the owner may speak for ten minutes), long listening out (10, 30, 80
+minutes), with interruption whenever wanted; passive listening or active
+talking, including performing — a take that may be sent to other people,
+optionally edited automatically before it goes out. Execution is
+everything.
+
+Email: Choir's email app becomes a full desk app agent with its own RLM;
+every paid account gets its own agentic email address; by default it
+sends nothing without approval; users may grant policies (e.g. a daily
+digest to their personal address, or specific actions on their behalf).
+Email goes hand in hand with Texture and media (attachments, documents)
+and is included in Autoradio. Connecting external mailboxes (Gmail etc.)
+is deferred to near the end: commodity features are not built until
+users ask for them.
