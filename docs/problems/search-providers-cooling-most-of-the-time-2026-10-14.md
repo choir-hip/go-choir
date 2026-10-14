@@ -278,3 +278,35 @@ report and earlier notes); verify on each provider's billing page.
   "cooling" conflating exhausted, rate-limited and empty.
 - introduced: none (this commit is documentation).
 - repaired: none yet.
+
+## Fix on the branch (after this record; not pushed, not deployed)
+
+- f9294d4ec `red(searchplane)`: design items 1–4. One episode, one strike
+  (`sameEpisode` in `health.go`; `FileHealthStore.RecordOutcome`
+  serialized); per-class caps (`BackoffPolicy.MaxByClass`, quota base
+  1 h); pacing (`Config.MinInterval`/`PaceWait`,
+  `CHOIR_SEARCH_PROVIDER_RPS`, default `brave=1`, wait 3 s); skip reasons
+  (`cooling[].reason` on the stream, `skipped=[name=reason …]` in the log
+  line); "quota limit exceeded" classed as quota. Tests:
+  `searchplane/benching_test.go` (failure modes 1–8), updated
+  `policy_test.go`, `search_stream_test.go`.
+- 020aeeb61 `red(gateway)`: Exa bounded request and 2 MiB read cap
+  (`search_exa_test.go`). Drop this commit if the owner does not want Exa
+  spending.
+
+Repaired by these (once deployed): burst strikes, multi-day benches for
+transient classes, Brave benched by our own bursts, Exa parse failures,
+the misleading log label. **Not** repaired: the four spent accounts
+(owner), SearXNG's blocked engines (owner/ops), the absence of a cost
+model (owner decision 2). After deploy the plane is still Keenable +
+Brave until the owner acts; what changes is that Brave stops flapping and
+any top-up is picked up within hours instead of days (stored benches
+written by the old code — Tavily to 10-18, Parallel to 10-17, Exa to
+10-20, ChatGPT to 10-15 — need an operator reset of that provider via
+`POST /provider/v1/search/health/reset` with `X-Internal-Caller: true` on
+Node B loopback, or they run out on their own).
+
+Residuals: the gateway still logs no per-provider arrival status (the
+cause of a single failure is only in the health store's last summary);
+Brave's monthly allowance (`quota_limit` 2000 in the 10-11 fixture) may
+be reached faster once pacing stops wasting its calls on 429s.
