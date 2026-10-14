@@ -460,6 +460,12 @@ Steps:
 
 - Busy CPU is one sample (the paper, 1.2 cores including boot replay). The
   EPYC busy limit moves between about 15 and 30 with it.
+  - Follow-up: [computer CPU efficiency](computer-cpu-efficiency-2026-10-14.md)
+    profiles that CPU. 98% of the paper's guest time is the main daemon,
+    and most of that is unindexed store scans.
+  - Its target is 0.2 to 0.3 core, about 50 busy computers per EPYC by
+    CPU.
+  - It measures idle VMs at 0.008 to 0.009 cores.
 - The btrfs compression ratio of `data.img` is unmeasured (no compsize on
   the host). Registered-user figures assume about 1 GB per user today.
 - The active-share figures are assumptions. Choir has no real-user
