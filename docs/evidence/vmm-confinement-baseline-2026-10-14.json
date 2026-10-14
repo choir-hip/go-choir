@@ -1,0 +1,346 @@
+{
+  "collected": {
+    "collected_at": "2026-10-14T19:21:57Z",
+    "dev_kvm_mode": "0o666",
+    "host": "choiros-b",
+    "init_ns": {
+      "mnt": "mnt:[4026531832]",
+      "net": "net:[4026531833]",
+      "pid": "pid:[4026531836]"
+    },
+    "kernel": "6.18.16",
+    "noip_rules": {
+      "ip6tables": [],
+      "iptables": []
+    },
+    "vmctl": {
+      "cgroup": "/system.slice/go-choir-vmctl.service",
+      "pid": 1340701,
+      "status": {
+        "CapAmb": "0000000000000000",
+        "CapBnd": "0000000000081000",
+        "CapEff": "0000000000081000",
+        "CapInh": "0000000000000000",
+        "CapPrm": "0000000000081000",
+        "Cpus_allowed_list": "0-11",
+        "Gid": "0\t0\t0\t0",
+        "NSpid": "1340701",
+        "NoNewPrivs": "1",
+        "Seccomp": "2",
+        "Seccomp_filters": "5",
+        "SpeculationIndirectBranch": "conditional enabled",
+        "Speculation_Store_Bypass": "thread vulnerable",
+        "Uid": "0\t0\t0\t0"
+      }
+    },
+    "vmms": [
+      {
+        "argv0": "/nix/store/c4xn4qlry09b4rib1xxb310zxds0nzhr-firecracker-1.15.1/bin/firecracker",
+        "cap_bnd_names": [
+          "net_admin",
+          "sys_ptrace"
+        ],
+        "cap_eff_names": [
+          "net_admin",
+          "sys_ptrace"
+        ],
+        "cgroup": "/system.slice/go-choir-vmctl.service",
+        "cgroup_limits": {
+          "cpu.weight": "100",
+          "memory.max": "max",
+          "memory.swap.max": "0",
+          "pids.max": "38198"
+        },
+        "checks": [
+          {
+            "check": "cap_eff_at_most_net_admin",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "cap_bnd_at_most_net_admin",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "no_sys_ptrace",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "no_new_privs",
+            "got": "1",
+            "ok": true
+          },
+          {
+            "check": "seccomp_filter",
+            "got": "2",
+            "ok": true
+          },
+          {
+            "check": "environment_empty",
+            "got": 77,
+            "ok": false
+          }
+        ],
+        "confinement_record": null,
+        "environ_entries": 77,
+        "mode": "direct",
+        "ns": {
+          "mnt": "mnt:[4026532751]",
+          "net": "net:[4026531833]",
+          "pid": "pid:[4026531836]"
+        },
+        "ok": false,
+        "pid": 1318688,
+        "root": "/",
+        "root_is_host_root": true,
+        "root_is_jail": false,
+        "status": {
+          "CapAmb": "0000000000000000",
+          "CapBnd": "0000000000081000",
+          "CapEff": "0000000000081000",
+          "CapInh": "0000000000000000",
+          "CapPrm": "0000000000081000",
+          "Cpus_allowed_list": "0-11",
+          "Gid": "0\t0\t0\t0",
+          "NSpid": "1318688",
+          "NoNewPrivs": "1",
+          "Seccomp": "2",
+          "Seccomp_filters": "6",
+          "SpeculationIndirectBranch": "conditional enabled",
+          "Speculation_Store_Bypass": "thread vulnerable",
+          "Uid": "0\t0\t0\t0"
+        },
+        "thread_seccomp": [
+          "2"
+        ],
+        "vm_id": "vm-1669020adcece51c2f5ff9b6df399ef5"
+      },
+      {
+        "argv0": "/nix/store/c4xn4qlry09b4rib1xxb310zxds0nzhr-firecracker-1.15.1/bin/firecracker",
+        "cap_bnd_names": [
+          "net_admin",
+          "sys_ptrace"
+        ],
+        "cap_eff_names": [
+          "net_admin",
+          "sys_ptrace"
+        ],
+        "cgroup": "/system.slice/go-choir-vmctl.service",
+        "cgroup_limits": {
+          "cpu.weight": "100",
+          "memory.max": "max",
+          "memory.swap.max": "0",
+          "pids.max": "38198"
+        },
+        "checks": [
+          {
+            "check": "cap_eff_at_most_net_admin",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "cap_bnd_at_most_net_admin",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "no_sys_ptrace",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "no_new_privs",
+            "got": "1",
+            "ok": true
+          },
+          {
+            "check": "seccomp_filter",
+            "got": "2",
+            "ok": true
+          },
+          {
+            "check": "environment_empty",
+            "got": 77,
+            "ok": false
+          }
+        ],
+        "confinement_record": null,
+        "environ_entries": 77,
+        "mode": "direct",
+        "ns": {
+          "mnt": "mnt:[4026532755]",
+          "net": "net:[4026531833]",
+          "pid": "pid:[4026531836]"
+        },
+        "ok": false,
+        "pid": 1341176,
+        "root": "/",
+        "root_is_host_root": true,
+        "root_is_jail": false,
+        "status": {
+          "CapAmb": "0000000000000000",
+          "CapBnd": "0000000000081000",
+          "CapEff": "0000000000081000",
+          "CapInh": "0000000000000000",
+          "CapPrm": "0000000000081000",
+          "Cpus_allowed_list": "0-11",
+          "Gid": "0\t0\t0\t0",
+          "NSpid": "1341176",
+          "NoNewPrivs": "1",
+          "Seccomp": "2",
+          "Seccomp_filters": "6",
+          "SpeculationIndirectBranch": "conditional enabled",
+          "Speculation_Store_Bypass": "thread vulnerable",
+          "Uid": "0\t0\t0\t0"
+        },
+        "thread_seccomp": [
+          "2"
+        ],
+        "vm_id": "candidate-fleet-e15cb89f25d963c220319b7b"
+      },
+      {
+        "argv0": "/nix/store/c4xn4qlry09b4rib1xxb310zxds0nzhr-firecracker-1.15.1/bin/firecracker",
+        "cap_bnd_names": [
+          "net_admin",
+          "sys_ptrace"
+        ],
+        "cap_eff_names": [
+          "net_admin",
+          "sys_ptrace"
+        ],
+        "cgroup": "/system.slice/go-choir-vmctl.service",
+        "cgroup_limits": {
+          "cpu.weight": "100",
+          "memory.max": "max",
+          "memory.swap.max": "0",
+          "pids.max": "38198"
+        },
+        "checks": [
+          {
+            "check": "cap_eff_at_most_net_admin",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "cap_bnd_at_most_net_admin",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "no_sys_ptrace",
+            "got": "0000000000081000",
+            "ok": false
+          },
+          {
+            "check": "no_new_privs",
+            "got": "1",
+            "ok": true
+          },
+          {
+            "check": "seccomp_filter",
+            "got": "2",
+            "ok": true
+          },
+          {
+            "check": "environment_empty",
+            "got": 77,
+            "ok": false
+          }
+        ],
+        "confinement_record": null,
+        "environ_entries": 77,
+        "mode": "direct",
+        "ns": {
+          "mnt": "mnt:[4026532755]",
+          "net": "net:[4026531833]",
+          "pid": "pid:[4026531836]"
+        },
+        "ok": false,
+        "pid": 1341354,
+        "root": "/",
+        "root_is_host_root": true,
+        "root_is_jail": false,
+        "status": {
+          "CapAmb": "0000000000000000",
+          "CapBnd": "0000000000081000",
+          "CapEff": "0000000000081000",
+          "CapInh": "0000000000000000",
+          "CapPrm": "0000000000081000",
+          "Cpus_allowed_list": "0-11",
+          "Gid": "0\t0\t0\t0",
+          "NSpid": "1341354",
+          "NoNewPrivs": "1",
+          "Seccomp": "2",
+          "Seccomp_filters": "6",
+          "SpeculationIndirectBranch": "conditional enabled",
+          "Speculation_Store_Bypass": "thread vulnerable",
+          "Uid": "0\t0\t0\t0"
+        },
+        "thread_seccomp": [
+          "2"
+        ],
+        "vm_id": "vm-48bc09812f3fce06d715f6c7f8e2db9a"
+      }
+    ]
+  },
+  "expect": "any",
+  "expect_ok": true,
+  "host_checks": [
+    {
+      "check": "noip_rule_v4",
+      "got": [],
+      "ok": true
+    },
+    {
+      "check": "vmctl_without_sys_ptrace",
+      "got": [
+        "net_admin",
+        "sys_ptrace"
+      ],
+      "ok": false
+    }
+  ],
+  "kind": "vmm_confinement_receipt",
+  "missing_vms": [],
+  "ok": false,
+  "summary": [
+    {
+      "failed": [
+        "cap_eff_at_most_net_admin",
+        "cap_bnd_at_most_net_admin",
+        "no_sys_ptrace",
+        "environment_empty"
+      ],
+      "mode": "direct",
+      "ok": false,
+      "pid": 1318688,
+      "vm_id": "vm-1669020adcece51c2f5ff9b6df399ef5"
+    },
+    {
+      "failed": [
+        "cap_eff_at_most_net_admin",
+        "cap_bnd_at_most_net_admin",
+        "no_sys_ptrace",
+        "environment_empty"
+      ],
+      "mode": "direct",
+      "ok": false,
+      "pid": 1341176,
+      "vm_id": "candidate-fleet-e15cb89f25d963c220319b7b"
+    },
+    {
+      "failed": [
+        "cap_eff_at_most_net_admin",
+        "cap_bnd_at_most_net_admin",
+        "no_sys_ptrace",
+        "environment_empty"
+      ],
+      "mode": "direct",
+      "ok": false,
+      "pid": 1341354,
+      "vm_id": "vm-48bc09812f3fce06d715f6c7f8e2db9a"
+    }
+  ]
+}

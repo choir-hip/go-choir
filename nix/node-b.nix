@@ -718,10 +718,30 @@ in
       # Firecracker needs access to /dev/kvm for VM hardware acceleration.
       # We must allow KVM device access while keeping other hardening.
       PrivateDevices = lib.mkForce false;
-      # Allow Firecracker to create tap devices and access networking.
-      # CAP_NET_ADMIN is required for: ip tuntap, ip addr, ip link,
-      # iptables (DNAT, MASQUERADE, FORWARD rules), and ip route.
-      CapabilityBoundingSet = [ "CAP_NET_ADMIN" "CAP_SYS_PTRACE" ];
+      # VMM jailer slice 1 (docs/problems/firecracker-runs-as-root-without-
+      # jailer-2026-10-14.md, "Design: slice 1"). vmctl's bounding set:
+      #   NET_ADMIN   ip tuntap/addr/link/route and iptables (vmctl only);
+      #   SYS_ADMIN MKNOD CHOWN SETUID SETGID   the jailer it runs (mount
+      #               namespace, pivot_root, device nodes, uid drop);
+      #   DAC_OVERRIDE FOWNER KILL   VM files, sockets, /proc entries and
+      #               signals now belong to per-VM uids;
+      #   SETPCAP     cut the bounding set of every VMM launch (direct VMMs
+      #               keep NET_ADMIN only; jailed VMMs run as a non-root uid
+      #               and hold nothing).
+      # CAP_SYS_PTRACE is gone: nothing used it (it came with 7a15266d7).
+      CapabilityBoundingSet = [
+        "CAP_NET_ADMIN" "CAP_SYS_ADMIN" "CAP_MKNOD" "CAP_CHOWN" "CAP_SETUID" "CAP_SETGID"
+        "CAP_DAC_OVERRIDE" "CAP_FOWNER" "CAP_KILL" "CAP_SETPCAP"
+      ];
+      # The jailer mounts and pivot_roots in its own mount namespace.
+      SystemCallFilter = [ "@system-service" "@privileged" "@mount" ];
+      # Per-VM cgroup v2 leaves: vmctl runs in <unit>/supervisor and each
+      # jailed VMM in <unit>/vms/<vm>, all under this unit's MemoryLow and
+      # MemorySwapMax. cgroup v2 forbids processes in a cgroup whose
+      # controllers are delegated, hence the subgroup.
+      Delegate = "yes";
+      DelegateSubgroup = "supervisor";
+      ProtectControlGroups = lib.mkForce false;
       # Host memory budget: Firecracker guests live in this cgroup. Reserve
       # 14G for them against reclaim by everything else (3 always-on 4 GiB
       # guests plus slack), never swap them, and keep them last in OOM order.
@@ -772,6 +792,14 @@ in
         #   - initrd (for systemd module loading)
         #   - storedisk.erofs (shared nix store)
         "VM_FIRECRACKER_BIN=${pkgs.firecracker}/bin/firecracker"
+        # VMM jailer slice 1: off until staging proves it on one test
+        # computer. Rollout: VMCTL_JAILER=on with VMCTL_JAILER_ONLY=<that
+        # computer's id>, verify with scripts/vmm_confinement_verify.py, then
+        # drop VMCTL_JAILER_ONLY. Rollback: VMCTL_JAILER=off (new launches go
+        # direct; a jailed snapshot is refused and the computer cold boots).
+        "VMCTL_JAILER=off"
+        "VM_JAILER_BIN=${pkgs.firecracker}/bin/jailer"
+        "VMCTL_JAILER_CGROUP_PARENT=system.slice/go-choir-vmctl.service/vms"
         "VM_MKFS_EXT4_BIN=${pkgs.e2fsprogs}/bin/mkfs.ext4"
         "VM_KERNEL_IMAGE=/var/lib/go-choir/guest/vmlinux"
         "VM_ROOTFS_IMAGE=/var/lib/go-choir/guest/rootfs.ext4"

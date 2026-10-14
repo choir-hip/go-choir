@@ -3,7 +3,9 @@
 Date: 2026-10-14. Found by the isolation-runtimes research
 (docs/research/isolation-runtimes-2026-10-14.md, §5) from the vmctl unit
 and code; confirmed read-only on Node B at about 16:00 UTC. Status:
-documented; no fix yet. Mutation class of any fix: red (vmctl, VM
+slice 1 implemented behind `VMCTL_JAILER` (default off) on branch
+`vmm-jailer-slice1`, not deployed; see "Design: slice 1" and
+"Implementation notes" below. Mutation class of any fix: red (vmctl, VM
 lifecycle, tenant isolation).
 
 ## Evidence (Node B, live)
@@ -139,10 +141,10 @@ jailer --id <vm> --exec-file <firecracker> --uid U --gid U
 - **process tracking**: the jailer parent exits after the fork; vmctl reads
   `root/firecracker.pid`, checks `/proc/<pid>/cmdline` names `--id <vm>`,
   saves the pid as today, and watches exit with a pidfd. The cmdline
-  matcher now requires `argv[0]` to be a firecracker binary, so the
-  short-lived jailer process (whose `--exec-file` names firecracker) never
-  counts as the VM. Reattach after a vmctl restart is unchanged (pid file +
-  cmdline).
+  matcher now rejects the jailer's own process (argv[0] `jailer`, or any
+  `--exec-file` argument), so the short-lived jailer (whose `--exec-file`
+  names firecracker and which carries `--id`) never counts as the VM.
+  Reattach after a vmctl restart is unchanged (pid file + cmdline).
 - **snapshots**: the API socket is `root/run/fc.sock`. Capture asks
   Firecracker for `/snapshot.partial/vmstate` and `/snapshot.partial/mem`
   (a jail dir owned by the VM uid), and after Firecracker stops vmctl
@@ -173,9 +175,11 @@ jailer --id <vm> --exec-file <firecracker> --uid U --gid U
   uid, jail root, cgroup, speculation and capability-drop results),
   reachable through vmctl's boot-timeline route without SSH.
 - **verification**: `scripts/vmm_confinement_verify.py` reads, for each
-  Firecracker pid, `Uid`, `CapEff`, `CapBnd`, `NoNewPrivs`, `Seccomp`,
-  speculation lines, `readlink root`, `ns/mnt`, `ns/pid`, `ns/net` and
-  `cgroup`, and judges each against the contract above.
+  Firecracker pid, `Uid`, `CapEff`, `CapBnd`, `NoNewPrivs`, `Seccomp` (main
+  thread and every thread), speculation lines, the inode behind
+  `/proc/<pid>/root` against the jail root, `ns/mnt`, `ns/pid`, `ns/net`,
+  `cgroup` and the leaf's limits, and the count of environment entries,
+  and judges each against the contract above.
 
 ### Failure modes (written before code)
 
@@ -197,8 +201,8 @@ jailer --id <vm> --exec-file <firecracker> --uid U --gid U
 8. VMM exit not seen after `--new-pid-ns` (jailer parent exits): pid file +
    cmdline check + pidfd watcher; unexpected exit marks Running/Pending
    instances failed.
-9. The jailer process counted as the VM's Firecracker: matcher requires
-   `argv[0]` basename `firecracker`.
+9. The jailer process counted as the VM's Firecracker: matcher rejects a
+   process whose argv[0] is the jailer or which has `--exec-file`.
 10. Duplicate `--id` (jailer prepends one): stripped from Firecracker args.
 11. Controllers cannot be enabled on a cgroup holding processes:
     `DelegateSubgroup=supervisor`, start-time migration of root-resident
@@ -259,6 +263,92 @@ jailer --id <vm> --exec-file <firecracker> --uid U --gid U
   known (vmctl's own bounding set grows because it runs the jailer; the
   privilege split in §4.3 of the review is the follow-up). Repaired (when
   on): finding F1 of the review for jailed computers.
+
+### Implementation notes (2026-10-14, branch `vmm-jailer-slice1`)
+
+Evidence class: local unit tests (macOS and Linux arm64, `-race`) and a
+**real jailer run** in a privileged Linux container (official Firecracker
+and jailer v1.15.1 aarch64 release binaries, SHA256SUMS verified;
+`TestRealJailerLaunch`, gated by `CHOIR_JAILER_IT=1`): the jailer starts
+Firecracker pre-boot as uid 900482 with `CapEff`/`CapPrm`/`CapInh` 0,
+`NoNewPrivs` 1, its root the jail (same inode), its own pid namespace, an
+empty environment, cgroup leaf `vms/vm-jailer-it`; the API answers on the
+jail socket; the pidfd watcher sees the kill; the jail rebuilds over its
+own leftovers; and `scripts/vmm_confinement_verify.py` passes every check
+except the boot-time ones. This is not staging proof (no guest booted, no
+KVM, no tap, no snapshot); Node B acceptance remains the rollout below.
+
+What the runs changed in the design:
+
+- `readlink /proc/<pid>/root` reads `/` for a process that pivot_rooted in
+  another mount namespace (the path is not reachable from the reader's
+  root). The review's planned proof (`readlink ... = the jail`) cannot
+  work; the verifier compares the inode behind `/proc/<pid>/root` with the
+  jail root and with the host `/`.
+- Firecracker installs its VMM-thread seccomp filter at boot; pre-boot only
+  its API thread is filtered. The verifier checks the main thread and every
+  thread; pre-boot, only the API thread shows `Seccomp: 2`.
+- `NoNewPrivs` was inherited from the unit, not set by Firecracker. The
+  launch thread now sets `PR_SET_NO_NEW_PRIVS` itself (both modes), so it
+  never depends on the unit.
+- A capability drop on an unlocked thread poisoned later launches in the
+  test binary (the jailer lost `CAP_CHOWN`): the drop must only ever run on
+  the discarded launch thread (it does; the tests now use one too). If Go
+  locks the policy goroutine to the main thread, that thread is wedged, not
+  reused, so the state still reaches no other child.
+- The stricter "argv[0] must be firecracker" matcher broke reattach of
+  wrapped processes in existing tests; the matcher keeps its old rule and
+  rejects the jailer explicitly instead.
+- On an arm64 VM the kernel refused the indirect-branch control (`ENODEV`)
+  and accepted store bypass while still reporting "vulnerable"; both are
+  recorded in the receipt's `launch_thread`, never fatal. Node B (x86,
+  `spectre_v2_user` and SSB in prctl mode) is expected to report
+  `thread force mitigated` and `conditional force disabled`.
+
+Rebased onto efbd69e27 (guest forward default-deny, `hostfirewall.go`):
+the owned tap is created through its `hostNet` seam, the no-IP rule goes
+through it too (filter `OUTPUT` is outside its managed chains, and the
+`go-choir-vmm-noip` comment never parses as a tap owner), and a jailed
+VMM's unexpected exit tears its tap down as `releaseExitedVMNetwork` does
+for a direct one (keyed on the pid, since vmctl holds no `exec.Cmd`).
+
+Baseline (before any change; `docs/evidence/vmm-confinement-baseline-
+2026-10-14.json`, read-only): three direct VMMs, each failing
+`cap_eff_at_most_net_admin`, `cap_bnd_at_most_net_admin`,
+`no_sys_ptrace` and `environment_empty` (77 inherited environment
+entries); vmctl's bounding set holds `sys_ptrace`.
+
+### Staging rollout (owner/operator acts; not done by this branch)
+
+1. Deploy with `VMCTL_JAILER=off` (the Nix default). Expected: vmctl
+   restarts once into `go-choir-vmctl.service/supervisor`; direct VMMs
+   launched after the deploy show `CapBnd` = `net_admin` only, an empty
+   environment and `NoNewPrivs` 1; running VMMs are untouched until their
+   next launch. Verify: `scripts/vmm_confinement_verify.py --ssh node-b
+   --expect direct` for newly launched computers; `vmctl_without_sys_ptrace`
+   passes.
+2. Mint a disposable test computer (`scripts/qa_test_computer.mjs`); set
+   `VMCTL_JAILER=on` and `VMCTL_JAILER_ONLY=<its computer id>` (a reviewed
+   Nix change). Check vmctl's log for `jailer ready` (not `JAILER
+   UNAVAILABLE`). Stop/start the test computer. Verify:
+   `scripts/vmm_confinement_verify.py --ssh node-b --vm <its vm id>
+   --expect jailer --out docs/evidence/vmm-confinement-<date>.json`, and its
+   boot timeline's `confinement` block (mode `jailer`, `jail_files` showing
+   `reflink` for the store image).
+3. On that computer: hibernate by snapshot and wake (`scripts/
+   s3_snapshot_probe.py` pattern; expect `snapshot_resume`), stop/start,
+   restart vmctl and confirm reattach, and run the assumed-breach probe of
+   the review §7.2 (as its uid, in its namespaces: other computers'
+   `data.img`, `gateway-provider.env`, `auth-signing/ed25519-key`,
+   `127.0.0.1:8083` all refused).
+4. Drop `VMCTL_JAILER_ONLY`: every computer moves at its next launch;
+   hibernated snapshots taken direct are refused (`confinement_mismatch`)
+   and those computers cold boot once.
+
+Rollback at any step: `VMCTL_JAILER=off`. New launches are direct; a jailed
+computer keeps running until its next launch, which reclaims its disks to
+root and cold boots (its jailed snapshot is refused). Code: revert the
+branch commits; the unit changes revert with `nix/node-b.nix`.
 
 ### Residuals (not in slice 1)
 
