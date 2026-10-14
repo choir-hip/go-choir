@@ -50,3 +50,26 @@ failed without returning evidence". Others are full stories.
    execution or verification work was performed"); auto publish
    publishes it. A version with no cited source should not publish
    automatically.
+
+## Mitigation on the paper (09:36 UTC; no deploy)
+
+The owner's OpenCode console (09:21-09:25 UTC) shows the same thing from
+the provider side: Cat Jam requests answered `429 Rejected
+inference_failed`, while DeepSeek V4.1 requests answered 200. So
+DeepSeek was healthy upstream; our gateway's provider-wide circuit kept
+it from being used.
+
+A code fix will not reach the paper soon: the paper is never idle, so
+deploys do not refresh it. The paper reads its computer-owned model
+policy (`System/model-policy.toml`) at each run start, so the policy was
+changed through the owner files route (`PUT /api/files/System/model-policy.toml`),
+marked `# owner-edited` so platform defaults leave it alone:
+texture, conductor, verifier and defaults use `chatgpt/gpt-6-luna`;
+management, research and engineering use `opencode-go/deepseek-v4.1-flash`;
+nothing routes to cat-jam-free. The previous file is saved at
+`~/.config/choir-qa/traces/paper-model-policy-before-0935.toml`.
+Trade-off: single models have no fallback until the pool returns. New
+runs after the change: texture on gpt-6-luna, research on
+deepseek-v4.1-flash (one texture run still on cat-jam, a thread that
+started earlier). Restore `pool:default` once the per-model circuit and
+failover fix is live on the paper.
