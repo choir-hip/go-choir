@@ -24,7 +24,13 @@ import (
 )
 
 const (
-	engineeringAssignmentMemoryMax = int64(1 << 30)
+	// engineeringAssignmentMemoryMax holds the cmd/autoputer link (measured
+	// peak 1.50 GiB stripped, 1.80 GiB with DWARF; the 1 GiB budget made
+	// the drill's link thrash for 14+ minutes) and fits the default 4 GiB
+	// guest's admission budget (3/4 of MemTotal) with one engineering
+	// capsule live at a time
+	// (docs/problems/selfdev-drill-capsule-cannot-build-autoputer-2026-10-14.md, B5).
+	engineeringAssignmentMemoryMax = int64(2 << 30)
 	engineeringAssignmentCPUQuota  = int64(100000)
 	engineeringAssignmentPidsMax   = int64(256)
 	// coManagementAssignmentDeadline is the fail-closed scheduling deadline for one
