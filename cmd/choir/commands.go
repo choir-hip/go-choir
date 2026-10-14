@@ -430,11 +430,11 @@ func buildRegistry() []*command {
 		computerGet("status", "Read the computer's lifecycle status", "/lifecycle/status", lifecycle),
 		computerGet("replay-completeness", "Capture live-versus-event-replay state evidence", "/self-development/replay-completeness", selfDevRead),
 		computerPost("replace-workspace", "Quarantine the VM-local workspace onto current DDL", "/lifecycle/replace-workspace", nil, true),
-		computerCheckpointed("rematerialize-from-tape", "Rebuild VM-local state from the event tape", "/lifecycle/rematerialize-from-tape", nil),
+		ownerAct(computerCheckpointed("rematerialize-from-tape", "Rebuild VM-local state from the event tape", "/lifecycle/rematerialize-from-tape", nil)),
 		computerPost("checkpoint", "Bind a restore-set checkpoint or refuse live-only/underivable SPA", "/lifecycle/checkpoint", map[string]any{}, false),
 		computerPost("import-residue-snapshot", "Append current desktop+OG residue as one tape snapshot", "/lifecycle/import-residue-snapshot", nil, false),
-		computerCheckpointed("restore", "Restore VM-local state and served SPA from a checkpoint", "/lifecycle/restore", []string{"vm_local", "computer_surface_frontend"}),
-		computerPost("bootstrap-chain", "Establish a canonical event chain on a pre-genesis computer", "/lifecycle/bootstrap-chain", nil, true),
+		ownerAct(computerCheckpointed("restore", "Restore VM-local state and served SPA from a checkpoint", "/lifecycle/restore", []string{"vm_local", "computer_surface_frontend"})),
+		ownerAct(computerPost("bootstrap-chain", "Establish a canonical event chain on a pre-genesis computer", "/lifecycle/bootstrap-chain", nil, true)),
 		{
 			path: []string{"computer", "producer-reports"}, summary: "List pending producer reports",
 			params: []param{
@@ -602,6 +602,7 @@ func buildRegistry() []*command {
 			scopes:      []string{"computer:self_development:read", "computer:self_development:mode", "computer:self_development:approve"},
 			destructive: true, idempotent: true,
 			handler: func(x *call) (any, error) { return selfDevDecide(x, "approve") },
+			cliOnly: ownerActReason,
 		},
 		{
 			path: []string{"self-dev", "reject"}, summary: "Reject a candidate awaiting approval (--reason)",
@@ -643,6 +644,7 @@ func buildRegistry() []*command {
 			usage:  "--computer, --mode, and --idempotency-key are required; positional arguments are forbidden",
 			scopes: []string{"computer:self_development:mode"}, destructive: true, idempotent: true,
 			handler: selfDevModeSet,
+			cliOnly: ownerActReason,
 		},
 
 		// trace export
@@ -848,6 +850,16 @@ func computerPost(verb, summary, route string, body any, destructive bool) *comm
 		handler: func(x *call) (any, error) { return sendRaw(x, http.MethodPost, computerPath(x, route), body) },
 	}
 }
+
+// ownerActReason keeps owner acts off MCP (owner, 2026-10-14: "should that
+// even be in the CLI or MCP?" — undecided; the conservative default until
+// the ruling). Approving a frozen candidate, setting the computer mode and
+// rewriting a computer's state are the owner's supervision; an agent that
+// reaches them through a tool can approve its own work.
+const ownerActReason = "an owner act (approve, mode, restore, chain bootstrap, rematerialize): agents propose and read through MCP; the owner decides in the Choir UI or their own terminal"
+
+// ownerAct marks a command as an owner act, CLI only.
+func ownerAct(cmd *command) *command { cmd.cliOnly = ownerActReason; return cmd }
 
 // computerCheckpointed is restore and rematerialize-from-tape: the CLI
 // reads the checkpoint artifact from --checkpoint-file, MCP takes it inline.

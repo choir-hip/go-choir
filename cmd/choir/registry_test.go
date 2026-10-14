@@ -46,8 +46,9 @@ import (
 // The commands that are CLI-only. Adding one is a deliberate act: it needs a
 // reason in the registry and an entry here.
 var wantCLIOnly = []string{
-	"api-key create", "help", "mcp", "precommit import-ledger", "self-dev wait",
-	"texture watch", "trace export", "version",
+	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
+	"computer restore", "help", "mcp", "precommit import-ledger", "self-dev approve",
+	"self-dev mode set", "self-dev wait", "texture watch", "trace export", "version",
 }
 
 func TestRegistryParityCLIAndMCP(t *testing.T) {
@@ -451,13 +452,6 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	dropQuery := func(r *capReq) { r.Query = "" }
-	dropExpiry := func(r *capReq) {
-		var body map[string]any
-		if json.Unmarshal(r.Body, &body) == nil {
-			delete(body, "expires_at")
-			r.Body, _ = json.Marshal(body)
-		}
-	}
 	cases := map[string]parityCase{
 		"trajectories_list":  {cli: []string{"trajectories"}, mcp: `{}`, reply: `{"trajectories":[{"trajectory_id":"t1"}]}`},
 		"trajectory_get":     {cli: []string{"trajectory", "traj/1"}, mcp: `{"trajectory_id":"traj/1"}`},
@@ -487,11 +481,8 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"computer_status":                  {cli: []string{"computer", "status", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_replay_completeness":     {cli: []string{"computer", "replay-completeness", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_replace_workspace":       {cli: []string{"computer", "replace-workspace", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
-		"computer_rematerialize_from_tape": {cli: []string{"computer", "rematerialize-from-tape", "--computer", "c1", "--checkpoint-file", checkpointFile}, mcp: `{"computer":"c1","checkpoint":` + checkpoint + `}`},
 		"computer_checkpoint":              {cli: []string{"computer", "checkpoint", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_import_residue_snapshot": {cli: []string{"computer", "import-residue-snapshot", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
-		"computer_restore":                 {cli: []string{"computer", "restore", "--computer", "c1", "--checkpoint-file", checkpointFile}, mcp: `{"computer":"c1","checkpoint":` + checkpoint + `}`},
-		"computer_bootstrap_chain":         {cli: []string{"computer", "bootstrap-chain", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"computer_producer_reports":        {cli: []string{"computer", "producer-reports", "--computer", "c1", "--agent-id", "a", "--stale-delivered"}, mcp: `{"computer":"c1","agent_id":"a","stale_delivered":true}`},
 		"computer_settle_producer_reports": {cli: []string{"computer", "settle-producer-reports", "--computer", "c1", "--command-id", "cmd", "--report-ids", "r1,r2", "r3"}, mcp: `{"computer":"c1","command_id":"cmd","report_ids":["r1","r2","r3"]}`},
 		"computer_stop":                    {cli: []string{"computer", "stop", "--computer", "c1", "--idempotency-key", "k"}, mcp: `{"computer":"c1","idempotency_key":"k"}`},
@@ -505,12 +496,9 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"self_dev_show":                    {cli: []string{"self-dev", "show", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`},
 		"self_dev_head":                    {cli: []string{"self-dev", "head", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"self_dev_start":                   {cli: []string{"self-dev", "start", "--computer", "c1", "--prompt", "add a clock", "--idempotency-key", "k"}, mcp: `{"computer":"c1","prompt":"add a clock","idempotency_key":"k"}`},
-		"self_dev_approve":                 {cli: []string{"self-dev", "approve", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`, reply: approval, normalize: dropExpiry},
 		"self_dev_reject":                  {cli: []string{"self-dev", "reject", "--computer", "c1", "--operation", "op-1", "--reason", "no"}, mcp: `{"computer":"c1","operation":"op-1","reason":"no"}`, reply: approval},
 		"self_dev_mode_get":                {cli: []string{"self-dev", "mode", "get", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
-		"self_dev_mode_set": {cli: []string{"self-dev", "mode", "set", "--computer", "c1", "--mode", "qualified_consensus", "--expected-generation", "3", "--idempotency-key", "k", "--bundle", "b", "--policy-digest", "p"},
-			mcp: `{"computer":"c1","mode":"qualified_consensus","expected_generation":3,"idempotency_key":"k","bundle":"b","policy_digest":"p"}`},
-		"precommit_add": {cli: []string{"precommit", "add", "--claim", "tests pass", "--p", "0.8", "--tag", "a,b", "--key", "k"}, mcp: `{"claim":"tests pass","p":0.8,"tags":["a","b"],"idempotency_key":"k"}`},
+		"precommit_add":                    {cli: []string{"precommit", "add", "--claim", "tests pass", "--p", "0.8", "--tag", "a,b", "--key", "k"}, mcp: `{"claim":"tests pass","p":0.8,"tags":["a","b"],"idempotency_key":"k"}`},
 		"precommit_settle": {cli: []string{"precommit", "settle", "calib:1", "--outcome", "true", "--evidence", "CI 1", "--evidence", "a, b"},
 			mcp: `{"claim_id":"calib:1","outcome":"true","evidence":["CI 1","a, b"]}`},
 		"precommit_list":      {cli: []string{"precommit", "list", "--status", "open"}, mcp: `{"status":"open"}`},
@@ -599,7 +587,7 @@ func TestMCPProtocolOverStdio(t *testing.T) {
 		`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"texture_read","arguments":{}}}`,
 		`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"run_list","arguments":{"limit":"7"}}}`,
 		`{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"files_get","arguments":{"path":"a/../../auth/api-keys"}}}`,
-		`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"self_dev_mode_set","arguments":{"computer":"c","mode":"on","idempotency_key":"k"}}}`,
+		`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"precommit_list","arguments":{"status":"closed"}}}`,
 		`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"trajectory_get","arguments":{"trajectory_id":"../runs"}}}`,
 		`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"run_list","arguments":{"computer":"computer-b"}}}`,
 		`{"jsonrpc":"2.0","id":12,"method":"resources/list"}`,
@@ -615,7 +603,7 @@ func TestMCPProtocolOverStdio(t *testing.T) {
 		t.Fatalf("a CLI-only command must not be callable: %+v", replies[2])
 	}
 	refused := map[int]string{3: "limit must be a number between 1 and 500", 4: "unknown argument host", 5: "doc_id is required",
-		6: "limit: must be an integer", 7: "path segments . and .. are not allowed", 8: "mode must be one of"}
+		6: "limit: must be an integer", 7: "path segments . and .. are not allowed", 8: "status must be one of"}
 	for i, want := range refused {
 		var r mcpToolResult
 		_ = json.Unmarshal(replies[i].Result, &r)
