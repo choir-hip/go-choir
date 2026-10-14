@@ -124,7 +124,7 @@ boundaries:
 
 now:
   status: working
-  slice: L1a landed (L1a-1, L1a-2, L1a-3); next the fault-injection harness for the matrix cells, then L1b. Was L1a-3 — crash boots run no re-driver and settle from the updater journal (docs/problems/crash-boots-redrive-applies-2026-10-13.md); 3a platform-update resume and the leaked marker; 3b self-development reconcile, both the boot trigger and the post-commit observer, for every op decided before the boot (engineering capsule reconcile only closes work; the retry wake finds nothing once 3b settles)
+  slice: L1b-0, the warm-sweep bound, pulled ahead of the harness (2026-10-14 00:20 UTC). Computer tiers (188f98c3) put the paper computer in the always-on sweep, and the sweep warms a computer stopped as wedged or recovery_failed on every 2-minute pass, so a computer that wedges after each boot loops about every 7 minutes with no bound (the design's section-2 row "Always-on warm ... including stopped_by=wedged: no"). Zero retries is not the fix: the 2026-10-10 owner ruling (wedge.go header) says the always-on policy boots a wedged computer and the owner never has to, and nothing else opens the paper computer. L1b-0 is the design's "one automatic retry, then hold" as an interim: one automatic warm per failure stop per 24 h, written to the ownership before the boot (FailureWarmedAt, deleted when the ledger lands). L1a landed (L1a-1, L1a-2, L1a-3); after L1b-0 the fault-injection harness for the matrix cells, then L1b proper. Was L1a-3 — crash boots run no re-driver and settle from the updater journal (docs/problems/crash-boots-redrive-applies-2026-10-13.md); 3a platform-update resume and the leaked marker; 3b self-development reconcile, both the boot trigger and the post-commit observer, for every op decided before the boot (engineering capsule reconcile only closes work; the retry wake finds nothing once 3b settles)
   source_ref: 18d01cc0
   deploy_identity: staging 18d01cc0 (CI 38463609655 success)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -153,7 +153,7 @@ now:
     main_uncertainty: whether gating self-development materialization reconcile on crash boots strands post-decision ops that tests expect to recover (TestSelfDevReconcileRecoversMaterializingOperation)
     next_observation: which boot re-drivers already settle on crash and which re-drive
   blocker_or_risk: L1a's code is landed, so C1e may start; L1a's deployed matrix cells are still unproven. A loop slower than the start limit (one crash every 2 minutes or more, such as a poisoned record re-read after each boot) escapes the unit bound; the boot ledger (L1b) is the bound for it
-  next_action: build the matrix fault-injection harness (a minted test computer with a pending platform update or a decided self-development op, then a crash restart) and run L1a's cells; then L1b
+  next_action: land L1b-0 with the resource mission's test tier (one vmctl push); then build the matrix fault-injection harness (a minted test computer with a pending platform update or a decided self-development op, then a crash restart) and run L1a's cells; then L1b
 
 receipts:
   - id: L1a-1
