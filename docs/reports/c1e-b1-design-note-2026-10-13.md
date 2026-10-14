@@ -29,6 +29,21 @@ and found five gaps: premature closure of Texture's round, the missing
 request join, closure without reading, wrong outcome fields, and commit
 order. Each decision below says what changed.
 
+Revised again after round 2 (claude, codex, gpt-6.1-sol and
+deepseek-v4.1-flash sent it back; gemini-3.8-flash and glm-5.3-flash
+accepted). The round-1 repairs were confirmed. Round 2 found five gaps,
+each named by at least two panelists:
+- G1: a partial Complete would close the round;
+- G2: an automatic closure could still close Texture's round over an
+  unread outcome;
+- G3: an engineering run's end closed its round without settling the
+  assignment;
+- G4: the crash path tried a second final Report;
+- G5: the trajectory lookup did not pick the assignment's operation, and
+  the Cast record's order against the assignment open was undecided.
+
+Their fixes are marked *(Round 2: …)*.
+
 **D1. One conversation per assignment.** After step 3 deletes path B
 (document assignments and their restart recast,
 `engineering_assignment_runtime.go:398-406`, `engineering_desk.go:225-283`),
@@ -54,9 +69,23 @@ exists.** No new field:
   (`rlm_reduce.go:1388-1470`), holds the operation id and bundle digest.
 
 Management's Verify walks that chain. The Report's `EvidenceRefs` repeat
-the assignment, report and operation ids for the trace reader only.
+the assignment, report and operation ids.
 *(Round 1: the row does not hold the result or the operation; the chain
 does.)*
+
+The operation is found by the assignment, never by the trajectory. The
+freeze opener already gives each assignment one exact operation: id
+`selfdev-` plus the digest of computer and assignment id, idempotency key
+`freeze-open:<assignmentID>` (`freeze_candidate.go:28-48`). B1 changes
+Freeze and Verify to resolve by that key (`GetByIdempotency`) instead of
+`GetByTrajectory` (`tools_capsule.go:142`, `rlm_reduce.go:1402,1457`).
+Management's Verify takes the assignment id from the Report it read (its
+`EvidenceRefs`, rendered in the record view by D9). Two candidates on one
+trajectory at once stay refused, but the opener refuses only when the
+trajectory holds a candidate that is not terminal, so a retry after a
+failed assignment can open its own. *(Round 2, G5: `GetByTrajectory`
+takes whichever row the query returns, and Freeze returned an earlier
+frozen bundle without reading the new capsule.)*
 
 **D3. Engineering's final Report is minted by Complete, in the same
 transaction as the row.**
@@ -70,11 +99,28 @@ transaction as the row.**
   to the disposition. It closes the round atomically with the terminal
   row, so a Report can never precede the outcome it reports. This
   dissolves failure mode 1.
+- **A final Report is minted only when the row turns terminal in that
+  batch.** A partial Complete leaves the row open
+  (`store/engineering_assignments.go:1686-1687`), so its Report is
+  non-final progress into the open round. *(Round 2, G1: a final on a
+  partial Complete closed the round, the later terminal Complete was
+  refused, and the row stranded.)*
 - The cancellation path (`:2383`) mints the same final Report with
-  StopReason `cancelled`, also atomic with the row.
+  StopReason `cancelled`, atomic with the row, but only while the
+  engineering round is open. If the round is already closed (only the
+  crash closure does that, D7), the row turns terminal alone. That makes
+  cancellation idempotent against every closer.
 - Reports the engineering cell stages through `choir.Report` are
-  progress: non-final, and refused when the engineering conversation has
-  no open round, so no round-0 late records (`store/inbox.go:214-239`).
+  progress. The reducer strips finality from any Report an
+  `engineering:*` sender stages, so only Complete's or the cancel's
+  transaction mints a final. *(Round 2: reusing `reportBodyFromPacket`,
+  `inbox_records.go:330-345`, would derive Final from a "completed"
+  body.)*
+- A non-final record into a conversation with no open round commits at
+  round 0 today (`store/inbox.go:214-239` refuses only finals). B1 adds
+  that refusal for `engineering:*` senders only, since other desks send
+  round-0 notes. *(Round 2: the note had claimed this was existing
+  behavior.)*
 - `validateCellIntents` already makes Complete the last intent of a cell
   (`rlm_reduce.go:122-126`), and Freeze precedes it. That is the commit
   order.
@@ -82,7 +128,8 @@ transaction as the row.**
 *(Round 1: the reducer commits records before intents, `rlm_reduce.go:875-918`,
 so a staged final Report would precede Complete.)*
 
-**D4. The engineering Cast names the Texture request it serves.** The
+**D4. The engineering Cast names the Texture request it serves, and the
+Cast and the assignment commit together.** The
 engineering Cast's `ParentID` must name the Cast record that opened
 management's current round with `texture:<doc>`. The reducer validates
 this: the named record is a Cast into management's inbox, and its
@@ -94,16 +141,46 @@ the cast when the document has none. Records runs carry no trajectory
 (`inbox_records.go:501-505`), so the trajectory cannot come from the
 casting run. *(Round 1: the request join was undefined.)*
 
+Order, so that no round exists without its assignment:
+- The assignment id is derived before anything commits, from the Cast's
+  pre-commit `RecordID` (`cellID:Cast:localID`, `rlm_reduce.go:1143`),
+  the owner, the computer and the document's trajectory. So the Cast can
+  be addressed to `engineering:<assignmentID>` when it is minted.
+- D4's parent check, the trajectory lookup and spawn preflight all run
+  before commit. A failure refuses the cell's Cast, and nothing is
+  written.
+- The Cast record is composed into `OpenEngineeringAssignment`'s batch,
+  the same composition D3 uses. The Cast, the assignment row and the
+  binding commit in one transaction.
+- The check lives in `openDelegatedCastAssignment`, the one mint, so
+  both call sites (`rlm_reduce.go:1042` and `:1990`) pass through it.
+  Engineering casts from packet-path control turns are cut in B1; the
+  step-1 commit names that as a behavior change.
+
+*(Round 2, G5: the Cast committed in `commitRecordsRoute` before
+admission ran, so a failed admission left a round with no assignment and
+no run, which nothing closes.)*
+
 **D5. No resume, and Texture's round survives the casting turn.** A
 Report or closure into `management:<owner>` wakes a fresh `inbox_record`
 turn, so nothing parks. `managementRunCasts`, `managementParkDecision`
 and `awaiting_delegated_cast` serve only `lifecycle_texture_control`
-turns (`management_controller.go:2590-2593`, `:2637`) and go with path
-B.
+turns (`management_controller.go:2590-2593`, `:2637`). They are deleted
+with management's packet activation in step 7, not with path B. Because
+D4 cuts engineering casts from those turns in B1, the park has nothing
+to wait on from B1 onward. *(Round 2: the deletion was mis-scoped.)*
 - `closeRoundsOfEndedRun` (`inbox_records.go:675-716`) closes every
   incoming round of an ended management turn. It skips a round with
-  `texture:<doc>` while any assignment whose parent is that round
-  (D4) is non-terminal.
+  `texture:<doc>` while any assignment whose parent is that round (D4)
+  is non-terminal, **or** is terminal but the record that closed its
+  engineering round has an `InboxSeq` above management's durable reader
+  cursor. That cursor advances only to what a turn was shown, so "above
+  the cursor" means "not yet read". *(Round 2, G2: an outcome that
+  arrived during the last call made the child terminal, so the old skip
+  let the round close before the re-check woke a reader.)*
+- The skip and D6 share one helper: assignments by parent conversation
+  and round, a scan of the owner's assignment objects filtered on the
+  binding's parent fields. There is no new table.
 - When the last such assignment's final Report wakes management, that
   turn answers Texture. If it ends without a final Report, the round
   closes `run_<state>` as today.
@@ -116,22 +193,49 @@ Management's final Report into round R with `texture:<doc>` is refused
 unless every assignment whose parent is round R is terminal, and the
 record that closed each one's engineering round has `InboxSeq` at or
 below this run's shown mark for `management:<owner>` (`noteRecordsShown`,
-`inbox_records.go:141`). It is checked in the reduce step that commits
+`inbox_records.go:141`). That record is found by its id: D3's final
+Report gets a record id derived from the assignment report's `ReportID`,
+so the row's `ReportRefs` lead to it (`listInboxRecordsBy`,
+`store/inbox.go:676`). *(Round 2: the link from row to record was
+unnamed.)* It is checked in the reduce step that commits
 the Report. Scoping to the parent round means two documents' assignments
 never wait on each other. A crash loses the in-memory shown mark, but a
 crash closes every round anyway (no resume). This replaces the
 `ConsumedDeliveryUpdateIDs` rule (`store/lifecycle.go:3783-3800`).
 *(Round 1: a closed round can arrive mid-call, unread.)*
 
-**D7. Closures and wakes.** System records wake no one
-(`store/inbox.go:191-208`), so that a boot never resumes work.
-- `closeRoundsOfEndedRun` gains engineering. An engineering run that
-  ends without Complete has its round closed with fate `run_<state>`.
-- That closure, and a spawn failure's closure
-  (`engineering_assignment_runtime.go:634-637`), are minted only by a
-  live runtime, never at boot. `inboxRecordWakes` gains them as an
-  exception, like support pairs and captures. The crash closure
-  (`interrupted_by_restart`) stays silent.
+**D7. One terminal transition per assignment, and who wakes.** System
+records wake no one (`store/inbox.go:191-208`), so that a boot never
+resumes work.
+- **A live engineering run that ends without Complete settles its
+  assignment; it does not write a bare closure.** `closeRoundsOfEndedRun`
+  gains an engineering branch that runs only on terminal run states, not
+  on passivation, so a parked capsule run keeps its round. The branch
+  calls the assignment's cancel synchronously, with reason
+  `run_<state>`. The cancel turns the row terminal and mints the final
+  Report (D3) in one transaction. That Report closes the round and wakes
+  management like any agent Report. The asynchronous fate reconcile
+  (`runtime.go:1780-1799`) then finds a terminal row and does nothing. A
+  bare `run_<state>` closure is written only when no non-terminal
+  assignment matches the conversation. *(Round 2, G3: the synchronous
+  closure ran before the asynchronous cancel, whose final Report was then
+  refused, so the row never turned terminal.)*
+- A spawn failure already calls `CancelEngineeringAssignment`
+  (`engineering_assignment_runtime.go:613-631`), whose final Report under
+  D3 is the closure. No separate spawn-failure closure is minted.
+  *(Round 2: it would have been a duplicate.)*
+- Live run-end closures of management's own rounds already wake the
+  caster by an explicit `DispatchActor` call (`inbox_records.go:711-713`).
+  `inboxRecordWakes` gains no exception. *(Round 2: the note described
+  the wake path wrongly; both together would wake twice.)*
+- **Crash path.** The boot closes every open round
+  `interrupted_by_restart`, silently, as today. Boot reconciliation
+  (`runtime.go:756-765`) then turns each open assignment terminal with
+  disposition `interrupted_by_restart`. Its round is already closed, so
+  D3's cancel mints no Report and wakes no one. Nothing resumes, and no
+  assignment row stays open across a crash. *(Round 2, G4: boot
+  reconciliation tried a second final Report into a crash-closed
+  round.)*
 - Cancellation authority moves from the exact parent run
   (`cancelAssignedEngineering` requires "the exact recorded parent",
   `engineering_assignment_fate.go:166-180`) to the management desk that
@@ -142,8 +246,9 @@ crash closes every round anyway (no resume). This replaces the
   `store/engineering_assignments.go:2300`) stops the engineering run is
   not settled by reading. Step 1 checks it first, with a test. If it does
   not, the cancel also cancels the run through the runtime's run cancel.
-  The cancelled run then ends in a closure that its final Report already
-  made moot: the round is closed, so the closure is skipped.
+  The cancelled run then ends with its row already terminal, so the
+  engineering run-end branch above finds nothing to settle and writes
+  nothing.
 - The progress-overdue packet (`:2715`) is deleted. A capsule that
   overruns its deadline ends, and its run-end closure wakes management.
 
@@ -157,13 +262,24 @@ engineering Report, the outcome still sits on the assignment chain (D2).
 The store's existing check (a final Report comes from the round's
 recipient) is the sender check.
 
+**D9. Management can see what it must name.** A fresh management turn
+reads records through `inboxRecordView` (`inbox_records.go:225-245`),
+which renders neither `ParentID`/`RelatedIDs` nor `EvidenceRefs`, and the
+Texture request sits below the cursor when the turn starts. For
+engineering Reports the view gains both: the parent conversation and
+round from the binding, so the turn can answer `texture:<doc>`, and the
+evidence refs, so Verify can name the assignment (D2). It is a view
+change; nothing new is stored. *(Round 2: the woken turn could not name
+the request D6 checks or the assignment Verify needs.)*
+
 ## What B1 does not add
 
 There is no new table or record kind, and no field on
 `CommitmentRecord`. The binding swaps two work-item ids for a parent
-conversation and round and an assigned conversation. The closure gains
-reasons (`cancelled`, `run_<state>`, the spawn failure); its constructor
-already takes any reason. `inboxRecordWakes` gains one exception.
+conversation and round and an assigned conversation. Cancellation gains
+reasons (`run_<state>`, `interrupted_by_restart`); the closure constructor
+already takes any reason. `inboxRecordWakes` is unchanged. The record
+view renders two existing fields.
 
 ## Ways this could fail (written before the code)
 
@@ -183,7 +299,20 @@ already takes any reason. `inboxRecordWakes` gains one exception.
    assignment.
 6. A run-end closure at boot. It cannot happen: the boot writes only the
    crash closure, which stays silent (D7).
-7. The paper path. Autopaper's terminal-outcome packets do not cross
+7. A partial Complete, then a terminal one. The first mints a progress
+   Report, the second the final (D3). Tested.
+8. An engineering run dies with its assignment open. The run-end branch
+   cancels it in one transaction; the later asynchronous reconcile does
+   nothing (D7). Tested in both orders.
+9. Engineering finishes while management's last call is in flight. The
+   outcome is above the cursor, so Texture's round survives the turn's
+   end, and the re-check wakes a reader (D5). Tested.
+10. A retry on the same trajectory after a failed assignment. It opens
+    its own operation; Freeze and Verify resolve by assignment and never
+    see the earlier bundle (D2). Tested.
+11. A cast whose admission fails. Nothing commits: no Cast, no round, no
+    row (D4). Tested.
+12. The paper path. Autopaper's terminal-outcome packets do not cross
    this route (packet-reads report), so B1 does not change them. They go
    in step 7.
 
@@ -193,4 +322,10 @@ already takes any reason. `inboxRecordWakes` gains one exception.
   document can have more than one live trajectory, the cast must name
   one.
 - The run acceptance report (`run_acceptance.go`) names closed rounds
-  instead of consumed packet ids.
+  instead of consumed packet ids. It must tell a successful answer (a
+  final Report by management) from a system closure (`run_<state>`,
+  `interrupted_by_restart`); a closed round alone is not acceptance.
+- The records drill needs no verification-kind assignment: management's
+  Verify intent is the verification. Path B was the only
+  `Kind=Verification` mint, and it is deleted.
+- Store cancel versus run cancel (D7) is still checked by a test first.
