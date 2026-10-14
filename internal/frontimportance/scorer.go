@@ -27,6 +27,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/gateway"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 const (
@@ -189,7 +190,7 @@ func fetchFront(ctx context.Context, client *http.Client, url string) ([]frontSt
 	if err != nil {
 		return nil, fmt.Errorf("front list request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {

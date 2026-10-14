@@ -17,6 +17,7 @@ import (
 	"syscall"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 )
 
@@ -358,7 +359,7 @@ type internalCallerTransport struct {
 }
 
 func (t *internalCallerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	if t.ownerID != "" {
 		req.Header.Set("X-Authenticated-User", t.ownerID)
 	}

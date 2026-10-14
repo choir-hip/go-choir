@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -701,7 +702,7 @@ func (h *Handler) readTexturePublication(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to read publication"})
 		return
 	}
-	httpReq.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(httpReq)
 	resp, err := h.corpusd.Do(httpReq)
 	if err != nil {
 		log.Printf("proxy: owned publication read: %v", err)
@@ -750,7 +751,7 @@ func (h *Handler) postPlatformPublication(r *http.Request, req platform.PublishT
 		return nil, 0, fmt.Errorf("build platform request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(httpReq)
 	resp, err := h.corpusd.Do(httpReq)
 	if err != nil {
 		return nil, 0, fmt.Errorf("call corpusd: %w", err)

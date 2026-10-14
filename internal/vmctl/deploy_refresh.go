@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // Deploy refresh: how a deploy moves active computers onto the new guest
@@ -83,7 +85,7 @@ func (m httpGuestMarker) mark(ctx context.Context, own VMOwnership, target strin
 		return guestMarkUnavailable, err.Error()
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := m.httpClient().Do(req)
 	if err != nil {
 		return guestMarkUnavailable, err.Error()
@@ -110,7 +112,7 @@ func (m httpGuestMarker) clear(ctx context.Context, own VMOwnership) {
 	if err != nil {
 		return
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := m.httpClient().Do(req)
 	if err != nil {
 		log.Printf("vmctl: deploy refresh: clear planned-restart marker on %s: %v (it expires on its own)", own.VMID, err)

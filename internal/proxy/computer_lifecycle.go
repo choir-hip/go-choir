@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -208,7 +209,7 @@ func (h *Handler) lifecycleControl(r *http.Request, userID string, control platf
 		return platform.LifecycleControlResult{}, err
 	}
 	upstream.Header.Set("Content-Type", "application/json")
-	upstream.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(upstream)
 	upstream.Header.Set("X-Authenticated-User", userID)
 	response, err := h.corpusd.Do(upstream)
 	if err != nil {
@@ -505,7 +506,7 @@ func (h *Handler) corpusdCanonicalHead(ctx context.Context, computerID, userID s
 	if err != nil {
 		return "", err
 	}
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	request.Header.Set("X-Authenticated-User", userID)
 	response, err := h.corpusd.Do(request)
 	if err != nil {

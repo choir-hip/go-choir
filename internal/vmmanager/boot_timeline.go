@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // BootTimelineMark is one host-observed boundary in a VM boot.
@@ -250,7 +252,7 @@ func (t *BootTimeline) fetchGuestBootTimeline(hostURL string) {
 			lastErr = err.Error()
 			break
 		}
-		req.Header.Set("X-Internal-Caller", "true")
+		hostauth.MarkInternal(req)
 		resp, err := client.Do(req)
 		if err != nil {
 			lastErr = err.Error()

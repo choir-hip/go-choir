@@ -17,6 +17,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 const (
@@ -282,7 +283,7 @@ func (h *Handler) attestExecutionIdentity(
 		return executionIdentityPlatformAttestation{}, err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	response, err := h.corpusd.Do(request)
 	if err != nil {
 		return executionIdentityPlatformAttestation{}, err

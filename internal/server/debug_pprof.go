@@ -14,6 +14,8 @@ import (
 	rpprof "runtime/pprof"
 	"strings"
 	"sync"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // DebugPprofPrefix is the route prefix. The public edge refuses /internal/*
@@ -33,7 +35,7 @@ func EnableContentionProfiles() {
 var contentionOnce sync.Once
 
 func serveDebugPprof(w http.ResponseWriter, r *http.Request) {
-	if !HostSourcedCaller(r) {
+	if !HostSourcedCaller(r) || !hostauth.Authorize(r) {
 		http.Error(w, "profiles are served to host-sourced callers only", http.StatusForbidden)
 		return
 	}

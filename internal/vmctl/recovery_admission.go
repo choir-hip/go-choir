@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/recoveryplan"
 )
 
@@ -890,7 +891,7 @@ func (h httpRecoveryEvidence) get(ctx context.Context, client *http.Client, endp
 	if err != nil {
 		return nil, 0, err
 	}
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	if strings.TrimSpace(ownerID) != "" {
 		request.Header.Set("X-Authenticated-User", strings.TrimSpace(ownerID))
 	}
@@ -936,7 +937,7 @@ func (h httpCheckpointJobs) Enqueue(ctx context.Context, computerID, ownerID, re
 		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	if strings.TrimSpace(ownerID) != "" {
 		request.Header.Set("X-Authenticated-User", strings.TrimSpace(ownerID))
 	}
@@ -973,7 +974,7 @@ func (h httpCheckpointJobs) Status(ctx context.Context, computerID, ownerID stri
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	if strings.TrimSpace(ownerID) != "" {
 		request.Header.Set("X-Authenticated-User", strings.TrimSpace(ownerID))
 	}

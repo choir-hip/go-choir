@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // HTTPStore implements the Store interface by querying corpusd (the platform
@@ -49,7 +51,7 @@ func (h *HTTPStore) PutObject(ctx context.Context, obj Object) error {
 		return fmt.Errorf("objectgraph http: build put object request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("objectgraph http: put object: %w", err)
@@ -69,7 +71,7 @@ func (h *HTTPStore) GetObject(ctx context.Context, id string) (Object, error) {
 	if err != nil {
 		return Object{}, fmt.Errorf("objectgraph http: build get object request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return Object{}, fmt.Errorf("objectgraph http: get object: %w", err)
@@ -115,7 +117,7 @@ func (h *HTTPStore) ListObjects(ctx context.Context, filter ListFilter) ([]Objec
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph http: build list objects request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph http: list objects: %w", err)
@@ -144,7 +146,7 @@ func (h *HTTPStore) PutEdge(ctx context.Context, edge Edge) error {
 		return fmt.Errorf("objectgraph http: build put edge request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("objectgraph http: put edge: %w", err)
@@ -183,7 +185,7 @@ func (h *HTTPStore) ListEdges(ctx context.Context, filter EdgeFilter) ([]Edge, e
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph http: build list edges request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph http: list edges: %w", err)

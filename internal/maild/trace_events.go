@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -136,7 +137,7 @@ func (h *Handler) postRuntimeTraceEvent(ctx context.Context, runtimeURL, ownerID
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

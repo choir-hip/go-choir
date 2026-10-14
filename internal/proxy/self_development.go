@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool) {
@@ -184,7 +186,7 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
 		return
 	}
-	upstream.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(upstream)
 	upstream.Header.Set("X-Authenticated-User", authResult.UserID)
 	if r.Method == http.MethodPut {
 		upstream.Header.Set("Content-Type", "application/json")

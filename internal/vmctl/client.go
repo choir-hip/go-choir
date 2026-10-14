@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // Client is an HTTP client for the vmctl service. The proxy uses this
@@ -155,7 +157,7 @@ func (c *Client) ResolveDesktopContext(ctx context.Context, userID, desktopID st
 		return nil, fmt.Errorf("vmctl client: create resolve request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
@@ -210,7 +212,7 @@ func (c *Client) ColdRecover(ctx context.Context, computerID, expectedCanonicalH
 		return nil, fmt.Errorf("vmctl client: create cold recovery request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	setLifecycleCaller(request)
 	response, err := c.httpClient.Do(request)
 	if err != nil {
@@ -252,7 +254,7 @@ func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID st
 		return nil, fmt.Errorf("vmctl client: create refresh request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
@@ -303,7 +305,7 @@ func (c *Client) Unhold(ctx context.Context, computerID string) error {
 		return fmt.Errorf("vmctl client: create unhold request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
@@ -349,7 +351,7 @@ func (c *Client) LookupDesktopContext(ctx context.Context, userID, desktopID str
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: create lookup request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
@@ -408,7 +410,7 @@ func (c *Client) lookupComputerContext(ctx context.Context, userID, computerID s
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: create computer lookup request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -461,7 +463,7 @@ func (c *Client) LookupGuestContext(ctx context.Context, remoteAddr string) (*Gu
 		return nil, fmt.Errorf("vmctl client: create guest lookup request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -491,7 +493,7 @@ func (c *Client) ListOwnershipsContext(ctx context.Context) ([]ownershipResponse
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: create list request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
@@ -532,7 +534,7 @@ func (c *Client) PulseSummaryContext(ctx context.Context) (*PulseSummary, error)
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: create pulse request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)
@@ -605,7 +607,7 @@ func (c *Client) postActionContext(ctx context.Context, endpoint, userID, deskto
 		return fmt.Errorf("vmctl client: create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	setLifecycleCaller(req)
 
 	resp, err := c.httpClient.Do(req)

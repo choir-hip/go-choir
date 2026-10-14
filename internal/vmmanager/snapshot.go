@@ -33,6 +33,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 const (
@@ -896,7 +898,7 @@ func postGuestJSON(ctx context.Context, url string, body any, out any) (int, err
 		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := guestHibernateClient.Do(req)
 	if err != nil {
 		return 0, err

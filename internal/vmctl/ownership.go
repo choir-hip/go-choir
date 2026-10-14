@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // VMState represents the lifecycle state of a VM.
@@ -1521,7 +1522,7 @@ func (r *OwnershipRegistry) platformControlPublicKey(ctx context.Context, signer
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return nil, err
@@ -1593,7 +1594,7 @@ func issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID, 
 		return "", false
 	}
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		log.Printf("vmctl: computer credential request failed for %s: %v", realizationID, err)
@@ -1640,7 +1641,7 @@ func issueGatewayTokenAt(gwURL, computerID string) string {
 		return ""
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1754,7 +1755,7 @@ func (r *OwnershipRegistry) ensureExistingGatewayCredential(vmID string) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("vmctl: gateway credential ensure failed for VM %s: %v", vmID, err)
@@ -3246,7 +3247,7 @@ func httpGuestBusy() func(*VMOwnership) bool {
 		if err != nil {
 			return true
 		}
-		req.Header.Set("X-Internal-Caller", "true")
+		hostauth.MarkInternal(req)
 		resp, err := client.Do(req)
 		if err != nil {
 			return true

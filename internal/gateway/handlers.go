@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
 	"github.com/yusefmosiah/go-choir/internal/health"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -582,8 +583,6 @@ func (h *Handler) HandleIssueCredential(w http.ResponseWriter, r *http.Request) 
 	writeGatewayJSON(w, http.StatusCreated, result)
 }
 
-
-
 // HandleEnsureCredential handles POST /provider/v1/credentials/ensure.
 // It lets host-side lifecycle control reconcile an existing VM bootstrap token
 // into the durable gateway identity store after a gateway restart or upgrade.
@@ -711,7 +710,10 @@ func isAuthorizedCredentialCaller(r *http.Request) bool {
 	if r == nil {
 		return false
 	}
-	return isLocalhost(r) && strings.EqualFold(strings.TrimSpace(r.Header.Get(internalCallerHeader)), "true")
+	// Loopback, marker, then the host-internal credential: the credential
+	// and operator routes mint and import gateway identities
+	// (docs/problems/loopback-is-a-credential-2026-10-14.md).
+	return isLocalhost(r) && strings.EqualFold(strings.TrimSpace(r.Header.Get(internalCallerHeader)), "true") && hostauth.Authorize(r)
 }
 
 func isAuthorizedRuntimePeer(r *http.Request) bool {

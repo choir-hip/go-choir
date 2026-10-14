@@ -52,6 +52,25 @@ let
       ${pkgs.dolt}/bin/dolt init
     fi
   '';
+  # Host-internal service credential (internal/hostauth;
+  # docs/problems/loopback-is-a-credential-2026-10-14.md). vmctl's internal
+  # routes, the gateway's credential and operator routes, corpusd's and
+  # maild's internal routes and pprof require it in addition to loopback.
+  # The secret is a root-only 0600 file generated at activation and handed
+  # to each unit with LoadCredential=, so it lives only in that unit's
+  # private $CREDENTIALS_DIRECTORY: never in the environment (Firecracker
+  # inherits vmctl's) and never on a command line.
+  # Rollout: "observe" allows and logs every internal call that would be
+  # refused ("hostauth: observe: would refuse"); flip to "enforce" once the
+  # journal shows none for a full day of deploys and timers. Rollback:
+  # "off" (transport alone, the pre-repair rule), or "observe".
+  internalAuthMode = "observe";
+  internalTokenFile = "/var/lib/go-choir/secrets/internal-service-token";
+  # The same secret as a curl header line, for root shells (CI deploy,
+  # disk-gc): `curl -H @<file>` keeps it off the command line.
+  internalTokenHeaderFile = "${internalTokenFile}.header";
+  internalAuthEnv = "CHOIR_INTERNAL_AUTH_MODE=${internalAuthMode}";
+  internalTokenCredential = [ "choir-internal-token:${internalTokenFile}" ];
   goServiceLibraryPath = lib.makeLibraryPath [ pkgs.icu ];
   serviceExec = name: package: pkgs.writeShellScript "go-choir-${name}-exec" ''
     set -euo pipefail
@@ -81,7 +100,11 @@ let
     echo "go-choir disk retention: root_available_kib=''${avail_kib} emergency_min_free_kib=''${emergency_min_free_kib} target_free_kib=''${target_free_kib}"
     df -h / /var/lib/go-choir 2>/dev/null || df -h /
 
-    curl -fsS -X POST -H 'X-Internal-Caller: true' http://127.0.0.1:8083/internal/vmctl/reclaim || true
+    internal_auth=()
+    if [ -n "''${CREDENTIALS_DIRECTORY:-}" ] && [ -r "''${CREDENTIALS_DIRECTORY}/choir-internal-token.header" ]; then
+      internal_auth=(-H "@''${CREDENTIALS_DIRECTORY}/choir-internal-token.header")
+    fi
+    curl -fsS -X POST -H 'X-Internal-Caller: true' "''${internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/reclaim || true
     journalctl --vacuum-size=256M || true
     nix-env -p /nix/var/nix/profiles/system --delete-generations +4 || true
 
@@ -411,6 +434,7 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       EnvironmentFile = "-/var/lib/go-choir/deploy.env";
+      LoadCredential = internalTokenCredential;
       # Proxy needs to read auth signing material and the auth DB for API-key validation.
       ReadWritePaths = [ "/var/lib/go-choir/auth-signing" "/var/lib/go-choir/auth" ];
       Environment = [
@@ -442,6 +466,7 @@ in
         # Unsigned / and /assets/* serve this host tree (picker/auth chrome).
         # Authenticated computer surface is selected after vmctl resolve.
         "PROXY_PLATFORM_SHELL_ROOT=${frontendCurrent}"
+        internalAuthEnv
       ];
     };
   };
@@ -468,6 +493,7 @@ in
       StateDirectoryMode = "0700";
       UMask = "0077";
       EnvironmentFile = "-/var/lib/go-choir/maild.env";
+      LoadCredential = internalTokenCredential;
       ReadWritePaths = [ mailDir ];
       Environment = [
         # Autoputer guest VMs persist Email appagent drafts via the host tap
@@ -480,6 +506,7 @@ in
         # Maild routes trace events through vmctl to user VMs. The host
         # autoputer fallback (MAILD_RUNTIME_URL) was removed in PR 5.
         "MAILD_VMCTL_URL=http://127.0.0.1:8083"
+        internalAuthEnv
       ];
     };
   };
@@ -570,6 +597,7 @@ in
       RestartSec = 3;
       StateDirectory = "go-choir/platform-artifacts";
       ReadWritePaths = [ platformArtifactsDir ];
+      LoadCredential = internalTokenCredential;
       # Track K two-approval operator credentials live in a deploy-created
       # file outside git (same trust class as gateway credentials):
       # CHOIR_KEY_ESCROW_OPERATORS="name:token,..." — the unwrap gate stays
@@ -610,6 +638,7 @@ in
         "PLATFORM_ARTIFACT_GC_MAX_DELETES=50000"
         "PLATFORM_ARTIFACT_GC_MAX_BYTES=34359738368"
         "PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=projection-base,platform-update,file-cas-roots,file-cas-chunks"
+        internalAuthEnv
       ];
     };
   };
@@ -679,7 +708,9 @@ in
       StateDirectoryMode = "0755";
       ReadWritePaths = [ "/var/lib/go-choir/front-importance" ];
       EnvironmentFile = "-/var/lib/go-choir/gateway-provider.env";
+      LoadCredential = internalTokenCredential;
       Environment = [
+        internalAuthEnv
         "FRONT_IMPORTANCE_FRONT_URL=http://127.0.0.1:8086/internal/platform/publications/front?limit=100"
         "FRONT_IMPORTANCE_SCORES_PATH=/var/lib/go-choir/front-importance/scores.json"
         "GATEWAY_JEV_RECEIPT_PATH=/var/lib/go-choir/front-importance/jev-receipts.jsonl"
@@ -772,6 +803,7 @@ in
       StateDirectory = "go-choir/vm-state";
       ReadWritePaths = [ "/var/lib/go-choir" "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" ];
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" ];
+      LoadCredential = internalTokenCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
       # embedded in vmctl and changed by a reviewed commit (owner ruling
@@ -905,6 +937,7 @@ in
         "VMCTL_CORPUSD_URL=http://127.0.0.1:8086"
         "VMCTL_PLATFORM_WIRE_ENABLED=true"
         "VMCTL_AUTOPUTER_PROXY_SOCK=/run/go-choir/vmctl.sock"
+        internalAuthEnv
         # Path to system binaries (ip, iptables, mkfs.ext4) for network/disk setup.
         "PATH=/run/current-system/sw/bin:/bin:/usr/bin"
       ];
@@ -918,6 +951,7 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = diskRetentionSweep;
+      LoadCredential = [ "choir-internal-token.header:${internalTokenHeaderFile}" ];
       Environment = [
         # Emergency floor remains the lower bound. The higher target runs
         # routine Nix GC before storage pressure reaches recovery territory.
@@ -1038,6 +1072,7 @@ in
       #   SERPAPI_API_KEY=...
       #   KEENABLE_API_KEY=...
       EnvironmentFile = "-/var/lib/go-choir/gateway-provider.env";
+      LoadCredential = internalTokenCredential;
       ReadWritePaths = [ "/var/lib/go-choir" ];
       Environment = [
         # Guest autoputeres call the host gateway via the tap subnet
@@ -1062,6 +1097,7 @@ in
         # is first in the provider list, so this absorbs the majority of
         # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
         "SEARXNG_URL=http://127.0.0.1:8888"
+        internalAuthEnv
       ];
     };
   };
@@ -1076,6 +1112,27 @@ in
       chmod 600 /var/lib/go-choir/searxng.env
       echo "go-choir SearXNG secret key generated"
     fi
+  '';
+
+  # Host-internal service credential (internal/hostauth). Generated once;
+  # rotate by deleting both files and redeploying (every unit that loads it
+  # must restart to pick up the new value). Never printed.
+  system.activationScripts.go-choir-internal-token = ''
+    install -d -m 0700 -o root -g root /var/lib/go-choir/secrets
+    if [ ! -s ${internalTokenFile} ]; then
+      ( umask 077
+        ${pkgs.openssl}/bin/openssl rand -hex 32 > ${internalTokenFile}.next
+        mv -f ${internalTokenFile}.next ${internalTokenFile} )
+      rm -f ${internalTokenHeaderFile}
+      echo "go-choir internal service credential generated"
+    fi
+    chmod 0600 ${internalTokenFile}
+    if [ ! -s ${internalTokenHeaderFile} ]; then
+      ( umask 077
+        printf 'X-Choir-Internal-Token: %s\n' "$(cat ${internalTokenFile})" > ${internalTokenHeaderFile}.next
+        mv -f ${internalTokenHeaderFile}.next ${internalTokenHeaderFile} )
+    fi
+    chmod 0600 ${internalTokenHeaderFile}
   '';
 
   # Go module proxy for engineering capsules

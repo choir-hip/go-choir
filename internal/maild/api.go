@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 type messageListResponse struct {
@@ -127,7 +129,13 @@ func (h *Handler) HandleMessages(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) s1aBindTapCallerToOwner(w http.ResponseWriter, r *http.Request, ownerID string) (string, bool) {
 	srcHost := maildRemoteAddrHost(r)
 	if srcHost == "" || isMaildLoopbackHost(srcHost) {
-		return ownerID, true // loopback: host service, header trust is fine
+		// loopback: a host service, which must also hold the host-internal
+		// credential (docs/problems/loopback-is-a-credential-2026-10-14.md).
+		if !hostauth.Authorize(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal credential required"})
+			return "", false
+		}
+		return ownerID, true
 	}
 	if h.cfg == nil || strings.TrimSpace(h.cfg.VmctlURL) == "" {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "guest caller binding unavailable"})
@@ -172,7 +180,7 @@ func maildLookupGuestOwnership(ctx context.Context, vmctlURL, remoteAddr string)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	client := &http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -210,6 +218,10 @@ func (h *Handler) authenticatedInternalOwnerWithEmail(w http.ResponseWriter, r *
 	if isMaildLoopbackHost(srcHost) {
 		if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Internal-Caller")), "true") {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal caller required"})
+			return "", "", false
+		}
+		if !hostauth.Authorize(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal credential required"})
 			return "", "", false
 		}
 		return ownerID, normalizedTrustedEmail(r.Header.Get("X-Authenticated-Email")), true

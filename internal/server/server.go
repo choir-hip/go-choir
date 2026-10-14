@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // healthResponse is the JSON structure returned by the /health endpoint.
@@ -123,7 +124,11 @@ func NewServer(serviceName, port string) *Server {
 	// Every service serves runtime profiles to host-sourced callers.
 	EnableContentionProfiles()
 	mux.Handle(DebugPprofPrefix, http.HandlerFunc(serveDebugPprof))
-	s.handler = WithBuildIdentity(serviceName, mux)
+	// Host-internal credential: checked once per request, stripped before
+	// any handler (and so any reverse proxy to a guest) sees it
+	// (docs/problems/loopback-is-a-credential-2026-10-14.md).
+	hostauth.LogStartup(serviceName)
+	s.handler = WithBuildIdentity(serviceName, hostauth.Middleware(mux))
 	s.httpServer = &http.Server{
 		Addr:              addr,
 		Handler:           s.handler,

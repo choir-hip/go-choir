@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -59,7 +60,9 @@ func bindTapCaller(ctx context.Context, lookup guestOwnershipLookup, r *http.Req
 }
 
 func trustedInternalCaller(r *http.Request) bool {
-	return trustedInternalTransport(r) && r.Header.Get("X-Internal-Caller") == "true"
+	// Transport, marker, then the host-internal credential
+	// (docs/problems/loopback-is-a-credential-2026-10-14.md).
+	return trustedInternalTransport(r) && r.Header.Get("X-Internal-Caller") == "true" && hostauth.Authorize(r)
 }
 
 // requireInternalOrBoundGuestWrite is the one rule for a write a computer

@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // recoveryJobReadTimeout bounds the status-surface job read so a hung job
@@ -152,7 +154,7 @@ func (h *Handler) HandleComputerRecoveryJob(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build recovery job request"})
 		return
 	}
-	upstream.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(upstream)
 	upstream.Header.Set("X-Authenticated-User", authResult.UserID)
 	if r.Method == http.MethodPost {
 		upstream.Header.Set("Content-Type", "application/json")
@@ -197,7 +199,7 @@ func (h *Handler) recoveryJobForComputer(r *http.Request, ownerID, computerID st
 	if err != nil {
 		return nil
 	}
-	upstream.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(upstream)
 	if strings.TrimSpace(ownerID) != "" {
 		upstream.Header.Set("X-Authenticated-User", strings.TrimSpace(ownerID))
 	}

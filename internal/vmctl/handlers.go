@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -1247,6 +1248,13 @@ func (h *Handler) callerBoundToAnyOwnership(r *http.Request) bool {
 	return h.registry.GuestOwnershipForAddress(srcHost) != nil
 }
 func isInternalCaller(r *http.Request) bool {
+	// Transport first (so guest requests never reach the credential check),
+	// then the host-internal credential: loopback alone is not authority
+	// (docs/problems/loopback-is-a-credential-2026-10-14.md).
+	return internalTransport(r) && hostauth.Authorize(r)
+}
+
+func internalTransport(r *http.Request) bool {
 	// S1a: internal authority is transport-bound, not caller-asserted.
 	// A guest can set X-Internal-Caller and Host headers at will; only the
 	// socket-layer source is unforgeable once tap anti-spoofing is in

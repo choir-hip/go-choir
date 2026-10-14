@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // HTTPRecoveryHeadReader reads the canonical event head through the internal
@@ -33,7 +34,7 @@ func (h HTTPRecoveryHeadReader) CanonicalHead(ctx context.Context, computerID st
 	if err != nil {
 		return "", err
 	}
-	request.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(request)
 	request.Header.Set("X-Authenticated-User", token.OwnerID)
 	request.Header.Set("X-Recovery-Operation", "recover_current")
 	response, err := client.Do(request)

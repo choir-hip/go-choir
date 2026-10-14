@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // HandleEmailAPI handles authenticated /api/email/* routes. Webhook traffic is
@@ -43,7 +45,7 @@ func (h *Handler) forwardMaildAuthenticated(w http.ResponseWriter, r *http.Reque
 	if authResult.Email != "" {
 		req.Header.Set("X-Authenticated-Email", authResult.Email)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 
 	resp, err := h.maild.Do(req)
 	if err != nil {

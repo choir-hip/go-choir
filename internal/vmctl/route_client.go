@@ -11,6 +11,7 @@ import (
 	"reflect"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
@@ -43,7 +44,7 @@ func (c *Client) ResolveComputerVersionRouteOrAbsent(ctx context.Context, routeS
 	if err != nil {
 		return RouteResolution{}, fmt.Errorf("vmctl client: create ComputerVersion route request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return RouteResolution{}, fmt.Errorf("vmctl client: ComputerVersion route call failed: %w", err)
@@ -166,7 +167,7 @@ func (c *Client) postComputerVersionControl(ctx context.Context, endpoint string
 		return fmt.Errorf("vmctl client: create ComputerVersion control request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("vmctl client: ComputerVersion control call failed: %w", err)

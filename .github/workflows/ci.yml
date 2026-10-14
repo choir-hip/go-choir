@@ -910,6 +910,15 @@ jobs:
           ssh go-choir-node-b \
             "${remote_env_q}bash -s" <<'REMOTE_DEPLOY'
             set -euo pipefail
+            # Host-internal credential for vmctl's internal routes
+            # (internal/hostauth; docs/problems/loopback-is-a-credential-2026-10-14.md).
+            # curl reads it from the root-only header file, so it never appears
+            # on a command line. Before the first activation that creates the
+            # file, vmctl is not enforcing, so the empty array is correct.
+            choir_internal_auth=()
+            if [ -r /var/lib/go-choir/secrets/internal-service-token.header ]; then
+              choir_internal_auth=(-H @/var/lib/go-choir/secrets/internal-service-token.header)
+            fi
             export PATH="/run/current-system/sw/bin:/run/wrappers/bin:$PATH"
             export PKG_CONFIG_PATH="/run/current-system/sw/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
             deploy_started_at=$(date +%s)
@@ -1073,7 +1082,7 @@ jobs:
                 fi
               done
               echo "-- vmctl ownership snapshot" >&2
-              ownerships_snapshot=$(curl -fsS --max-time 5 -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list 2>/dev/null || true)
+              ownerships_snapshot=$(curl -fsS --max-time 5 -H "X-Internal-Caller: true" "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/list 2>/dev/null || true)
               if [ -n "$ownerships_snapshot" ]; then
                 printf '%s\n' "$ownerships_snapshot" | jq . >&2 || printf '%s\n' "$ownerships_snapshot" >&2
                 mapfile -t diagnostic_computer_urls < <(printf '%s' "$ownerships_snapshot" | jq -r '
@@ -1446,7 +1455,7 @@ jobs:
               # deferred ones through the operator refresh (crash boot).
               echo "==> Refreshing active interactive computers onto deployed VM boot contract (planned restart)"
               deploy_refresh_plan=""
-              if ! deploy_refresh_plan=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/deploy-refresh); then
+              if ! deploy_refresh_plan=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" "${choir_internal_auth[@]}" http://127.0.0.1:8083/internal/vmctl/deploy-refresh); then
                 deploy_refresh_plan=""
               fi
               if [ -z "$deploy_refresh_plan" ]; then
@@ -1491,6 +1500,7 @@ jobs:
                     refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
                     refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' \
                       -H "X-Internal-Caller: true" \
+                      "${choir_internal_auth[@]}" \
                       -H "X-Choir-Lifecycle-Caller: ci.deploy-refresh" \
                       -H "Content-Type: application/json" \
                       -d "$payload" \
@@ -1516,6 +1526,7 @@ jobs:
                       forced_payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id,desktop_id:$desktop_id}')
                       refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' --retry 2 --retry-delay 2 --retry-all-errors \
                         -H "X-Internal-Caller: true" \
+                        "${choir_internal_auth[@]}" \
                         -H "X-Choir-Lifecycle-Caller: ci.deploy-refresh-forced" \
                         -H "Content-Type: application/json" \
                         -d "$forced_payload" \

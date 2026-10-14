@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 )
 
@@ -313,7 +314,7 @@ func (h *Handler) HandlePublicationProposal(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(httpReq)
 	resp, err := h.corpusd.Do(httpReq)
 	if err != nil {
 		log.Printf("proxy: platform proposal post corpusd: %v", err)
@@ -400,7 +401,7 @@ func (h *Handler) deliverPublicationProposalToAuthor(r *http.Request, proposal p
 		return "recorded_for_author"
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -448,7 +449,7 @@ func (h *Handler) recordPublicationProposalDeliveryState(r *http.Request, propos
 		return fmt.Errorf("build platform delivery update: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := h.corpusd.Do(req)
 	if err != nil {
 		return fmt.Errorf("call platform delivery update: %w", err)
@@ -475,7 +476,7 @@ func (h *Handler) getPlatformJSON(r *http.Request, target string, out any) (int,
 	if err != nil {
 		return 0, fmt.Errorf("build platform request: %w", err)
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := h.corpusd.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("call corpusd: %w", err)

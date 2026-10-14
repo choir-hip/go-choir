@@ -24,6 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -49,6 +50,7 @@ var clientIdentityHeaders = []string{
 	"X-Remote-User",
 	"X-Auth-User",
 	"X-Internal-Caller",
+	hostauth.Header,
 }
 
 var (
@@ -1592,7 +1594,7 @@ func (h *Handler) probeVMctlHealth() (*proxyVMctlHealthSummary, bool) {
 	if err != nil {
 		return nil, false
 	}
-	req.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, false
@@ -1677,7 +1679,7 @@ func (h *Handler) HandlePlatformObjectGraph(w http.ResponseWriter, r *http.Reque
 	// The proxy is the trusted internal caller to corpusd. Strip any
 	// caller-supplied X-Internal-Caller header and set it ourselves so a
 	// VM process cannot forge internal-caller privileges.
-	httpReq.Header.Set("X-Internal-Caller", "true")
+	hostauth.MarkInternal(httpReq)
 	if v := r.Header.Get("Content-Type"); v != "" {
 		httpReq.Header.Set("Content-Type", v)
 	}
