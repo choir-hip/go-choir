@@ -97,7 +97,13 @@ func (p BackoffPolicy) CooldownDuration(class OutcomeClass, strikeCount int) tim
 	if exp < 1 {
 		exp = 1
 	}
-	d := time.Duration(float64(base) * exp)
+	// Clamp in float before converting: an out-of-range float-to-int
+	// conversion is implementation-defined (amd64 yields MinInt64, a
+	// negative bench), and enough strikes overflow int64 nanoseconds.
+	d := time.Duration(math.MaxInt64)
+	if f := float64(base) * exp; f < float64(math.MaxInt64) {
+		d = time.Duration(f)
+	}
 	if limit, ok := p.MaxByClass[class]; ok && limit > 0 && d > limit {
 		d = limit
 	}
