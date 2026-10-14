@@ -1302,6 +1302,7 @@ func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overri
 	m.mu.Unlock()
 
 	m.reconcileTapIsolation(vmID, hostURL)
+	m.ensureGuestEgressPolicy()
 	m.adoptConsole(vmID, pid, inst.confinement.jailed())
 	log.Printf("vmmanager: reattached VM %s (host=%s pid=%d epoch=%d)", vmID, hostURL, pid, epoch)
 	return inst, nil
@@ -3427,6 +3428,9 @@ func (m *Manager) setupHostNetworking(tapName, hostIP string, hostPort int, gues
 	if err := h.ensureNAT(tapName, hostIP, guestIP, hostPort, guestPort); err != nil {
 		log.Printf("vmmanager: warning: tap nat for %s incomplete: %v", tapName, err)
 	}
+	// F6: the guest egress policy (guest_egress.go) narrows what any tap
+	// may reach before the per-tap rules above see the packet.
+	m.ensureGuestEgressPolicy()
 	return nil
 }
 
