@@ -126,3 +126,33 @@ not another app builder.
 Lead: order: PSA scoring (claims E0/E6a, desk feedback loop) and the
 capsule build unblock (in progress) now; then the self-development gate
 built on PSA.
+
+## 11. Autoradio as a teacher; teaching as the point of superintelligence
+
+Owner (evening): an immediately valuable Autoradio use is building a
+complex system like Choir. The owner pours ideas in as streams of
+consciousness and wants depth back: the state of the system, the
+pathways open from here, and the concepts explained. Many people will
+soon work with systems and ideas well beyond their own expertise. The
+AI industry's pitch, and its financing, is human replacement. The more
+valuable thing a superintelligence does is teach: it amplifies people,
+alone and in teams, through feedback calibrated to challenge and speed
+their cognitive and emotional development. Because negotiation and
+collaboration will run through these systems, people who don't
+understand what their counterpart's system is doing, at least in
+compressed form, will be exploited. The social bond is central: the
+same advice helps inside a trusted relationship and can backfire
+outside one.
+
+Lead: this is PSA facing the human. Autoradio's "system briefing"
+programme traverses the owner's own tape (goals, landed and pending
+work, open decisions, precommitment records) and explains concepts on
+demand. The listener model is itself a precommitment: we predict what
+the listener understands, and the listener's questions settle it.
+Pathways are presented as typed alternatives with probabilities. A
+briefing can be shared with a team while each listener's model stays
+separate. Sent to the programming-engine design
+(`docs/reports/autoradio-programming-engine-2026-10-14.md`) as a
+first-class programme type. It also refines the tagline: "multiplayer
+intelligence for the learning economy" is literal, because the learner
+is the human too.
