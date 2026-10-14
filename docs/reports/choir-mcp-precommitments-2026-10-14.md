@@ -174,6 +174,12 @@ writes nothing new.
 
 ## 5. MCP server
 
+> Update (2026-10-14, branch `cli-mcp-parity`): `choir mcp` now serves
+> every CLI command that is not declared CLI-only (51 tools), generated
+> from one command registry. The four tools below keep their names and
+> arguments. See
+> [choir-cli-mcp-parity-2026-10-14.md](choir-cli-mcp-parity-2026-10-14.md).
+
 The repository has no MCP plumbing and no MCP dependency. A stdio MCP
 server is small enough to write directly in Go with the standard
 library: newline-delimited JSON-RPC 2.0 on stdin/stdout, logging on

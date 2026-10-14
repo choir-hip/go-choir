@@ -48,6 +48,25 @@ Shared GitHub source still lands through commit, push, CI, deploy identity, and
 deployed product-path proof. The reviewed G1 source candidate and the later
 deployed release are separate identities and both bind genesis.
 
+## The Same Commands Over MCP
+
+`choir mcp` is a stdio MCP server whose tools are the CLI's commands.
+Both are generated from one registry (`cmd/choir/commands.go`), so the
+same command name, parameters, scopes and output appear on both surfaces.
+The tool name is the command path joined by `_`, so `choir texture read`
+becomes `texture_read`. The precommit tools keep their earlier names:
+`precommit_add`, `precommit_settle`, `precommit_list` and
+`calibration_summary`.
+
+- Eight commands are CLI-only, each with a reason in its `--help`:
+  `texture watch`, `self-dev wait`, `trace export`,
+  `precommit import-ledger`, `api-key create`, `mcp`, `version`, `help`.
+- The key and host are the server's environment, never tool arguments.
+  Every tool takes an optional `computer`.
+- `choir <command> --help` prints the command's scopes and MCP tool.
+- Inventory and the hosted-MCP design:
+  `docs/reports/choir-cli-mcp-parity-2026-10-14.md`.
+
 ## Building
 
 ```sh
