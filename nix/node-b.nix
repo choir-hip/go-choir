@@ -1609,6 +1609,23 @@ in
   };
   boot.kernel.sysctl."vm.swappiness" = 1;
 
+  # KVM halt polling off (docs/reports/computer-cpu-efficiency-2026-10-14.md,
+  # lever C5 there, C4 in the store-scan fix mission). After each guest HLT
+  # the host spun up to 200 us (the default halt_poll_ns=200000) hoping the
+  # vCPU wakes again: 0.07-0.10 core per busy computer (7-9% of the paper),
+  # measured from debugfs halt_poll_success_ns + halt_poll_fail_ns. KVM's own
+  # guidance is to reduce polling when vCPUs overcommit host threads, which
+  # this host does. Cost: microseconds of extra wake latency per halt exit;
+  # the A/B on test computers (report section 7 step 4) checks cell and call
+  # latency.
+  # Takes effect at the next host boot (kvm-intel loads at boot). Without a
+  # reboot: `echo 0 > /sys/module/kvm/parameters/halt_poll_ns` as root;
+  # whether running VMs follow the module value or keep the one they were
+  # created with on this kernel is unverified, so read
+  # /sys/kernel/debug/kvm/*/halt_poll_*_ns before and after.
+  # Rollback: delete this line (or echo 200000 into the same file).
+  boot.kernelParams = [ "kvm.halt_poll_ns=0" ];
+
   nix.optimise = {
     automatic = true;
     dates = [ "Sun 03:30" ];
