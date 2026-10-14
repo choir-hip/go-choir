@@ -1637,6 +1637,25 @@ in
   # Rollback: delete this line (or echo 200000 into the same file).
   boot.kernelParams = [ "kvm.halt_poll_ns=0" ];
 
+  # Nested virtualization off (docs/problems/host-kernel-216-days-unpatched-
+  # 2026-10-15.md; docs/reports/boundary-strength-ladder-2026-10-15.md rung
+  # 4a). No Choir guest runs a hypervisor: Firecracker is host-only and its
+  # guests never get VMX. nested=Y only widened the KVM surface: the
+  # Januscape shadow-MMU bug needs guest root plus nested virtualization.
+  # Takes effect when kvm_intel next loads, i.e. at the next host boot
+  # (verify: cat /sys/module/kvm_intel/parameters/nested -> N).
+  # Rollback: delete this line and reboot.
+  boot.extraModprobeConfig = ''
+    options kvm_intel nested=0
+  '';
+
+  # SMT (hyperthreading): left ON pending an owner decision. The E-2236 is
+  # Coffee Lake; L1TF, MDS and VMScape cross-tenant leaks need SMT off for
+  # full protection. Cost: 6 cores / 12 threads -> 6 threads, i.e. half the
+  # vCPU-schedulable threads for computers (density analysis in the problem
+  # doc above). To turn it off, uncomment and reboot:
+  # boot.kernelParams = [ "nosmt=force" ];
+
   nix.optimise = {
     automatic = true;
     dates = [ "Sun 03:30" ];

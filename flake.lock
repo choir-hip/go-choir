@@ -134,6 +134,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-kernel": {
+      "locked": {
+        "lastModified": 1791883866,
+        "narHash": "sha256-yvkDdToRZ4IgPc9tSBzzCYJvTLf8n5eE3rgUkpCuD5A=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a033e66ab94a6bedf2c3d58d93a36319d3cbbbaf",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-26.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs-lib": {
       "locked": {
         "lastModified": 1774748309,
@@ -153,6 +169,7 @@
       "inputs": {
         "microvm": "microvm",
         "nixpkgs": "nixpkgs",
+        "nixpkgs-kernel": "nixpkgs-kernel",
         "sbomnix": "sbomnix"
       }
     },
