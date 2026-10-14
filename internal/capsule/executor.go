@@ -16,6 +16,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -54,6 +55,26 @@ type Executor struct {
 	initErr           error
 	vmMemoryTotal     int64
 	vmMemoryUsed      int64
+	// goModuleProxy is where L2 capsules' GoProxyRouteHost goes; invalid
+	// (unset) leaves the route out of the policy.
+	goModuleProxy netip.AddrPort
+}
+
+// SetGoModuleProxy routes L2 capsules' GoProxyRouteHost to the host Go
+// module proxy at addr. It applies to capsules spawned afterwards.
+func (e *Executor) SetGoModuleProxy(addr netip.AddrPort) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.goModuleProxy = addr
+}
+
+// egressPolicyLocked is the L2 policy for a new capsule.
+func (e *Executor) egressPolicyLocked() EgressPolicy {
+	policy := EcosystemEgressPolicy()
+	if e.goModuleProxy.IsValid() {
+		policy.Routes = map[string]netip.AddrPort{GoProxyRouteHost: e.goModuleProxy}
+	}
+	return policy
 }
 
 // NewExecutor constructs guest-local capsule authority. brokerPath must name a
@@ -415,7 +436,7 @@ func (e *Executor) startEgressLocked(caps *Capsule) error {
 	_ = os.MkdirAll(ledgerDir, 0o700)
 	ledgerPath := filepath.Join(ledgerDir, caps.ID+".jsonl")
 	var ledgerMu sync.Mutex
-	proxy := NewEgressProxy(caps.ID, EcosystemEgressPolicy(), func(record EgressRecord) {
+	proxy := NewEgressProxy(caps.ID, e.egressPolicyLocked(), func(record EgressRecord) {
 		line, _ := json.Marshal(record)
 		log.Printf("capsule-egress: %s", line)
 		ledgerMu.Lock()

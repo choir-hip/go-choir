@@ -101,7 +101,7 @@ func serveEchoUpstream(l net.Listener) {
 				if err != nil {
 					return
 				}
-				body := "upstream saw " + req.Method + " " + req.URL.RequestURI() + " host=" + req.Host
+				body := "upstream saw " + req.Method + " " + req.URL.RequestURI() + " host=" + req.Host + " capsule=" + req.Header.Get(CapsuleHeader)
 				fmt.Fprintf(c, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(body), body)
 				return
 			}
@@ -339,5 +339,155 @@ func TestEgressProxyEnvMatchesWorkerPassthrough(t *testing.T) {
 	}
 	if strings.Join(keys, ",") != strings.Join(yaegikernel.EgressProxyKeys, ",") {
 		t.Fatalf("broker sets %v, worker passes through %v", keys, yaegikernel.EgressProxyKeys)
+	}
+}
+
+// docs/reports/capsule-go-module-proxy-design-2026-10-14.md §3, capsule
+// side. Failure modes pinned here:
+//   F1 the goproxy route reaches anything but its configured address, or is
+//      tunnelled with CONNECT;
+//   F2 a capsule reaches the host proxy by IP literal instead of the route;
+//   F3 the route carries an upload method;
+//   F4 a capsule forges the capsule header the host logs;
+//   F5 routed requests skip the budgets or the egress record;
+//   F7 with no route configured the name goes anywhere at all;
+//   and the go command is pointed at anything but the route, or allowed to
+//   fall back past it.
+
+var goProxyRoute = netip.MustParseAddrPort("10.200.0.1:8088")
+
+func goProxyPolicy() EgressPolicy {
+	policy := EcosystemEgressPolicy()
+	policy.Routes = map[string]netip.AddrPort{GoProxyRouteHost: goProxyRoute}
+	return policy
+}
+
+func sendRaw(t *testing.T, addr, raw string) (int, string) {
+	t.Helper()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	io.WriteString(conn, raw)
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	return resp.StatusCode, string(body)
+}
+
+func TestEgressRoutesGoProxyToTheConfiguredAddressOnly(t *testing.T) {
+	h := newEgressHarness(t, goProxyPolicy())
+	status, body := sendRaw(t, h.addr, "GET http://goproxy.choir.internal/golang.org/x/mod/@v/v0.36.0.zip HTTP/1.1\r\n"+
+		"Host: goproxy.choir.internal\r\nX-Choir-Capsule: someone-else\r\n\r\n")
+	if status != http.StatusOK || !strings.Contains(body, "GET /golang.org/x/mod/@v/v0.36.0.zip host=goproxy.choir.internal capsule=capsule-test") {
+		t.Fatalf("routed GET = %d %q", status, body)
+	}
+	if d := h.dials(); len(d) != 1 || d[0] != goProxyRoute.String() {
+		t.Fatalf("dialed %v, want only the configured route %s", d, goProxyRoute)
+	}
+	records := h.waitRecords(1)
+	if len(records) != 1 || records[0].Outcome != EgressOutcomeOK || records[0].Host != GoProxyRouteHost ||
+		records[0].IP != goProxyRoute.Addr().String() || records[0].Port != 80 || records[0].BytesDown == 0 {
+		t.Fatalf("records = %+v", records)
+	}
+}
+
+func TestEgressRefusesGoProxyRouteMisuse(t *testing.T) {
+	cases := []struct {
+		name   string
+		policy EgressPolicy
+		raw    string
+	}{
+		{"connect to the route", goProxyPolicy(), "CONNECT goproxy.choir.internal:443 HTTP/1.1\r\nHost: goproxy.choir.internal:443\r\n\r\n"},
+		{"post to the route", goProxyPolicy(), "POST http://goproxy.choir.internal/x HTTP/1.1\r\nHost: goproxy.choir.internal\r\nContent-Length: 4\r\n\r\ndata"},
+		{"route on another port", goProxyPolicy(), "GET http://goproxy.choir.internal:8088/x/@v/list HTTP/1.1\r\nHost: goproxy.choir.internal:8088\r\n\r\n"},
+		{"host proxy by ip literal", goProxyPolicy(), "GET http://10.200.0.1/x/@v/list HTTP/1.1\r\nHost: 10.200.0.1\r\n\r\n"},
+		{"host proxy by ip literal and port", goProxyPolicy(), "GET http://10.200.0.1:8088/x/@v/list HTTP/1.1\r\nHost: 10.200.0.1:8088\r\n\r\n"},
+		{"lookalike name", goProxyPolicy(), "GET http://goproxy.choir.internal.evil.com/x HTTP/1.1\r\nHost: goproxy.choir.internal.evil.com\r\n\r\n"},
+		{"no route configured", EcosystemEgressPolicy(), "GET http://goproxy.choir.internal/x/@v/list HTTP/1.1\r\nHost: goproxy.choir.internal\r\n\r\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newEgressHarness(t, tc.policy)
+			h.resolved["goproxy.choir.internal.evil.com"] = []netip.Addr{publicAddr}
+			if status, body := sendRaw(t, h.addr, tc.raw); status == http.StatusOK {
+				t.Fatalf("allowed: %q", body)
+			}
+			if d := h.dials(); len(d) != 0 {
+				t.Fatalf("refused request still dialed %v", d)
+			}
+			records := h.waitRecords(1)
+			if len(records) != 1 || records[0].Outcome != EgressOutcomeRefused || records[0].Reason == "" {
+				t.Fatalf("records = %+v", records)
+			}
+		})
+	}
+	h := newEgressHarness(t, EcosystemEgressPolicy())
+	sendRaw(t, h.addr, "GET http://goproxy.choir.internal/x/@v/list HTTP/1.1\r\nHost: goproxy.choir.internal\r\n\r\n")
+	if r := h.waitRecords(1); len(r) != 1 || !strings.Contains(r[0].Reason, "Go module proxy") {
+		t.Fatalf("missing-route refusal should name the module proxy: %+v", r)
+	}
+}
+
+func TestEgressGoProxyRouteSpendsTheCapsuleBudget(t *testing.T) {
+	policy := goProxyPolicy()
+	policy.MaxConnections = 2
+	h := newEgressHarness(t, policy)
+	get := "GET http://goproxy.choir.internal/x/@v/list HTTP/1.1\r\nHost: goproxy.choir.internal\r\n\r\n"
+	for i := 0; i < 2; i++ {
+		if status, _ := sendRaw(t, h.addr, get); status != http.StatusOK {
+			t.Fatalf("request %d status = %d", i, status)
+		}
+	}
+	if status, _ := sendRaw(t, h.addr, get); status == http.StatusOK {
+		t.Fatal("routed request over the connection budget was allowed")
+	}
+}
+
+func TestEgressEnvPointsGoAtTheRouteWithNoFallback(t *testing.T) {
+	env := map[string]string{}
+	for _, kv := range EgressProxyEnv() {
+		k, v, _ := strings.Cut(kv, "=")
+		env[k] = v
+	}
+	if env["GOPROXY"] != "http://"+GoProxyRouteHost+",off" {
+		t.Fatalf("GOPROXY = %q", env["GOPROXY"])
+	}
+	if env["GOSUMDB"] != "sum.golang.org" || env["GOFLAGS"] != "-mod=mod" {
+		t.Fatalf("GOSUMDB = %q, GOFLAGS = %q", env["GOSUMDB"], env["GOFLAGS"])
+	}
+	for _, host := range EcosystemEgressPolicy().Hosts {
+		if host == "storage.googleapis.com" || host == "googleapis.com" || host == GoProxyRouteHost {
+			t.Fatalf("L2 host list carries %q", host)
+		}
+	}
+	if len(EcosystemEgressPolicy().Routes) != 0 {
+		t.Fatal("the default policy carries a route; only the executor's configuration may add one")
+	}
+}
+
+func TestGoModuleProxyAddr(t *testing.T) {
+	cases := []struct {
+		explicit, gateway string
+		want              string
+		ok, err           bool
+	}{
+		{"", "http://10.200.3.1:8084", "10.200.3.1:8088", true, false},
+		{"", "http://10.200.3.1:8084/", "10.200.3.1:8088", true, false},
+		{"10.0.0.5:9000", "http://10.200.3.1:8084", "10.0.0.5:9000", true, false},
+		{"", "", "", false, false},
+		{"", "http://gateway.local:8084", "", false, false},
+		{"not-an-addr", "", "", false, true},
+		{"", "::::", "", false, true},
+	}
+	for _, tc := range cases {
+		got, ok, err := GoModuleProxyAddr(tc.explicit, tc.gateway)
+		if ok != tc.ok || (err != nil) != tc.err || (ok && got.String() != tc.want) {
+			t.Errorf("GoModuleProxyAddr(%q, %q) = %v %v %v, want %s %v err=%v", tc.explicit, tc.gateway, got, ok, err, tc.want, tc.ok, tc.err)
+		}
 	}
 }

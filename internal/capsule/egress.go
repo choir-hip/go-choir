@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,13 +37,63 @@ func EgressProxyEnv() []string {
 		"NO_PROXY=" + noProxy, "no_proxy=" + noProxy,
 		"npm_config_proxy=" + proxy, "npm_config_https_proxy=" + proxy,
 		"SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt", "NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+		// The go command fetches modules and checksum-database data only
+		// from the host module proxy: module zips redirect from
+		// proxy.golang.org to a storage host L2 does not allow, and ",off"
+		// keeps a miss from trying any other route.
+		"GOPROXY=http://" + GoProxyRouteHost + ",off", "GOSUMDB=sum.golang.org", "GOFLAGS=-mod=mod",
 	}
+}
+
+// GoProxyRouteHost is the name capsule workloads use for the host Go module
+// proxy. It is an egress route, not a DNS name: the executor maps it to the
+// configured host address and the capsule never learns that address
+// (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
+const GoProxyRouteHost = "goproxy.choir.internal"
+
+// GoProxyHostPort is go-choir-goproxy's port on the guest's tap peer.
+const GoProxyHostPort = 8088
+
+// CapsuleHeader names the capsule on requests sent through a route.
+const CapsuleHeader = "X-Choir-Capsule"
+
+// GoModuleProxyAddr is where the executor routes GoProxyRouteHost: the
+// explicit address when one is configured, else the gateway URL's host (the
+// guest's tap peer) on GoProxyHostPort. ok is false when neither names an
+// address; the route is then absent and module fetches are refused.
+func GoModuleProxyAddr(explicit, gatewayURL string) (addr netip.AddrPort, ok bool, err error) {
+	if explicit = strings.TrimSpace(explicit); explicit != "" {
+		addr, err := netip.ParseAddrPort(explicit)
+		if err != nil {
+			return netip.AddrPort{}, false, fmt.Errorf("capsule Go module proxy address %q: want ip:port", explicit)
+		}
+		return netip.AddrPortFrom(addr.Addr().Unmap(), addr.Port()), true, nil
+	}
+	gatewayURL = strings.TrimSpace(gatewayURL)
+	if gatewayURL == "" {
+		return netip.AddrPort{}, false, nil
+	}
+	u, err := url.Parse(gatewayURL)
+	if err != nil || u.Hostname() == "" {
+		return netip.AddrPort{}, false, fmt.Errorf("gateway URL %q has no host", gatewayURL)
+	}
+	ip, err := netip.ParseAddr(u.Hostname())
+	if err != nil {
+		// Only a literal tap address makes a route; a name would need DNS.
+		return netip.AddrPort{}, false, nil
+	}
+	return netip.AddrPortFrom(ip.Unmap(), GoProxyHostPort), true, nil
 }
 
 // EgressPolicy is what an L2 capsule may reach. Hosts are DNS suffixes
 // matched on a label boundary; widening the list is a reviewed code change.
+// Routes map a fixed name to a configured address that is dialed without
+// DNS or the public-address check, for plain-HTTP GET/HEAD only: host
+// services a capsule may use (today only GoProxyRouteHost). The executor
+// fills Routes from its own configuration, never from the capsule.
 type EgressPolicy struct {
 	Hosts            []string
+	Routes           map[string]netip.AddrPort
 	MaxUploadBytes   int64
 	MaxDownloadBytes int64
 	MaxConnections   int
@@ -296,7 +347,15 @@ func (p *EgressProxy) serveConn(client net.Conn) {
 		refuse(http.StatusForbidden, fmt.Sprintf("%s is allowed only to port %d", req.Method, wantPort))
 		return
 	}
-	if !p.policy.allowsHost(rec.Host) {
+	route, routed := p.policy.Routes[rec.Host]
+	switch {
+	case routed && req.Method == http.MethodConnect:
+		refuse(http.StatusForbidden, rec.Host+" serves plain HTTP only")
+		return
+	case !routed && rec.Host == GoProxyRouteHost:
+		refuse(http.StatusForbidden, "no host Go module proxy is configured for this computer")
+		return
+	case !routed && !p.policy.allowsHost(rec.Host):
 		refuse(http.StatusForbidden, "host is not on the L2 ecosystem allowlist; ask management for a wider grant")
 		return
 	}
@@ -308,24 +367,33 @@ func (p *EgressProxy) serveConn(client net.Conn) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	addrs, err := p.resolve(ctx, rec.Host)
-	if err != nil || len(addrs) == 0 {
-		cancel()
-		refuse(http.StatusBadGateway, "host did not resolve")
-		return
-	}
-	// Refuse when any answer is non-public: a mixed answer is how DNS
-	// rebinding reaches the guest network.
-	for _, addr := range addrs {
-		if sourcefetch.AddressBlocked(net.IP(addr.Unmap().AsSlice())) {
+	var target string
+	if routed {
+		// A configured host service: no DNS, and its private address is the
+		// point. The capsule named the route; it cannot name the address.
+		rec.IP = route.Addr().String()
+		target = route.String()
+	} else {
+		addrs, err := p.resolve(ctx, rec.Host)
+		if err != nil || len(addrs) == 0 {
 			cancel()
-			refuse(http.StatusForbidden, "host resolves to a non-public address")
+			refuse(http.StatusBadGateway, "host did not resolve")
 			return
 		}
+		// Refuse when any answer is non-public: a mixed answer is how DNS
+		// rebinding reaches the guest network.
+		for _, addr := range addrs {
+			if sourcefetch.AddressBlocked(net.IP(addr.Unmap().AsSlice())) {
+				cancel()
+				refuse(http.StatusForbidden, "host resolves to a non-public address")
+				return
+			}
+		}
+		checked := addrs[0].Unmap()
+		rec.IP = checked.String()
+		target = net.JoinHostPort(checked.String(), port)
 	}
-	checked := addrs[0].Unmap()
-	rec.IP = checked.String()
-	upstream, err := p.dial(ctx, "tcp", net.JoinHostPort(checked.String(), port))
+	upstream, err := p.dial(ctx, "tcp", target)
 	cancel()
 	if err != nil {
 		fmt.Fprintf(client, "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
@@ -348,6 +416,11 @@ func (p *EgressProxy) serveConn(client net.Conn) {
 	} else {
 		req.Header.Del("Proxy-Connection")
 		req.Header.Del("Proxy-Authorization")
+		req.Header.Del(CapsuleHeader)
+		if routed {
+			// Attribution for the host service's log, never authority.
+			req.Header.Set(CapsuleHeader, p.capsuleID)
+		}
 		req.Header.Set("Connection", "close")
 		req.Close = true
 		req.RequestURI = ""

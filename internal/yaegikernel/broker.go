@@ -485,6 +485,7 @@ func newReceiptID() string {
 var EgressProxyKeys = []string{
 	"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy",
 	"npm_config_proxy", "npm_config_https_proxy", "SSL_CERT_FILE", "NIX_SSL_CERT_FILE",
+	"GOPROXY", "GOSUMDB", "GOFLAGS",
 }
 
 func egressProxyEnvFromWorker() []string {

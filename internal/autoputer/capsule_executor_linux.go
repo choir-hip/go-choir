@@ -4,6 +4,7 @@ package autoputer
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -63,6 +64,17 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	executor := capsule.NewExecutorWithArtifacts(state, artifact, lower, source, broker, memoryTotal)
 	if err := executor.InitializationError(); err != nil {
 		return nil, false, err
+	}
+	// L2 capsules reach the host Go module proxy through a fixed egress
+	// route; the address is the guest's tap peer unless set explicitly
+	// (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
+	goProxy, ok, err := capsule.GoModuleProxyAddr(os.Getenv("CHOIR_CAPSULE_GOPROXY_ADDR"), os.Getenv("RUNTIME_GATEWAY_URL"))
+	if err != nil {
+		// Not fatal: only capsule Go module fetches are lost, and they fail
+		// with a reason that names the missing proxy.
+		log.Printf("capsule executor: no Go module proxy route: %v", err)
+	} else if ok {
+		executor.SetGoModuleProxy(goProxy)
 	}
 	return executor, true, nil
 }
