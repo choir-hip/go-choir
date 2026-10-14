@@ -71,3 +71,20 @@ Research: docs/research/historical-precommitment-backtesting-2026-10-14.md
 4. Multi-computer supervision ("Choir in Choir") builds on S9 forks and
    fleets, S10 org templates and S11 mainline pushes in the app-dev
    metamission, plus hierarchical RBAC (a new station to author).
+
+## Owner correction, about 17:55 UTC: deepen foundations, don't accelerate growth
+
+"Even though Autoradio drives growth, that's not a reason to accelerate
+it. [...] Growth is actually not what we need. I don't see Autoradio as a
+hypothesis that needs proving. [...] We need to deepen foundations." A
+prototype can come when there is free capacity, ahead of production.
+Target: Autoputer, Autopaper and Autoradio production-grade in about a
+month. "Scaling up should be as simple as I just pay more and the
+infrastructure scales." Get the software to diminishing marginal returns
+for more human attention first; then product-led growth, go-to-market and
+fundraising. The owner is not bothered by code outrunning verification or
+decisions piling up (a decision list is coming), and wants maximum
+progress in the ~26 hours to the Claude credit reset (Thursday 15:00).
+On himself: "I'm working at my limit [...] how can I unbottleneck myself?
+How can I accelerate my own learning?" — teaching documents per substrate
+(like the isolation security review) and a daily digest.
