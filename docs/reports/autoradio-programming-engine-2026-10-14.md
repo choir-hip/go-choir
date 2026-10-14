@@ -1,6 +1,7 @@
 # Autoradio Programming Engine: Design
 
-Date: 2026-10-14 (late evening). Status: design only. No product code was
+Date: 2026-10-14 (late evening); revised the same evening after the
+owner's rulings below. Status: design only. No product code was
 written. Mutation class of this note: **green** (docs only). What it
 proposes is mostly **orange** (a new app-agent desk, new product APIs, a
 new client) with **red** edges (anything that sends mail, publishes a
@@ -65,49 +66,108 @@ Also binding, from the same rulings and earlier in the day:
 - "Auto radio quality is very execution dependent. I don't want slop."
   (doc: `docs/reports/choir-state-and-vision-2026-10-14.md` §2.11)
 
+The voice-contrast principle above still holds as a value: the AI voice
+stays clearly AI, and human voices are mixed in where they exist. Ruling 1
+below governs how much of each a listener hears; the contrast is no longer
+a quota.
+
+## Owner rulings (2026-10-14 evening)
+
+The owner ruled on the first version of this note (relayed by the
+coordinating session; paraphrased, not verbatim). The body below has been
+revised to agree with them; where an earlier sentence conflicted, it was
+changed, not left beside a correction.
+
+1. **No hard mix invariants.** The first version's "at least 50% human
+   voice" and "at most 4 minutes of AI in a row" are dropped as rules. The
+   mix is entirely contextual: a listener working on their own project
+   hears mostly the AI voice, because private state is text; another
+   listener may hear hours of human media. Mix and pacing are **learned
+   and settable preferences**, not invariants (§2.4).
+2. **Responsiveness beats precomputation.** Hours of precomputed programme
+   cannot be promised, because the listener can interrupt at any moment
+   with "tell me about X", and X may not be computed yet. The engineering
+   answer is **prompt response, then fill**: an immediate acknowledgement
+   ("ooh, interesting, let me think"); a jump to the nearest retrievable
+   adjacent material (real audio if there is any, otherwise TTS of
+   precomputed text); and background generation that continues the thread
+   by querying the personal object graph, the host's Autopaper object
+   graph and, if needed, web research. **The horizon is a speculative
+   buffer, not a schedule** (§2.1, §7.4, §7.5).
+3. **Learned preferences are precommitments, visible and steerable.** For
+   example: "the listener will let this play uninterrupted for N minutes".
+   Everything the system learns about the listener lives on the listener's
+   own computer, readable by them, and they can answer it with their own
+   instructions (§2.6, §2.7, §2.8).
+4. **Elevation over engagement maximisation.** A listener may know what
+   they respond to and still want to be challenged, or given less of what
+   their "lower self" would demand. The objective is the listener's
+   **stated aspiration**; engagement is one signal, not the target; the
+   listener's instructions override learned engagement (§2.3, §2.6, §2.7).
+5. **Programmes wither away.** Named programmes (briefing, news, mail and
+   so on) are a temporary inductive bias. The design is **one continuous
+   stream** in which any source can interrupt any other when something
+   important or urgent emerges, and the programme distinctions dissolve
+   over time. The system briefing is a **mode of content**, not a separate
+   show (§1, §5).
+
 ## Bottom line
 
-1. **The programme is a rolling, versioned run sheet of typed segments,**
-   not a playlist and not a chat. Ten segment kinds cover the brief:
-   human media (whole episodes or clips, from the publisher's own audio),
-   story updates and developing-event updates (AI voice, from Autopaper
-   story versions and the claims ledger), mail updates, desk updates (work
+1. **One continuous stream of typed segments,** not a set of shows, a
+   playlist or a chat. Ten segment kinds cover the brief: human media
+   (whole episodes or clips, from the publisher's own audio), story
+   updates and developing-event updates (AI voice, from Autopaper story
+   versions and the claims ledger), mail updates, desk updates (work
    state), takes (your own and teammates'), answers (replies to what you
-   said), alerts, and the connective tissue (bridges and idents). Every
-   segment carries duration, source refs, provenance, importance, urgency,
-   freshness, novelty for this listener, entities and topics, and the
-   engine's own prediction of whether you will finish and value it (§1).
-2. **Two loops, two places.** A slow **planner** on the user's computer,
-   the **Autoradio desk** (an app-agent RLM desk, per owner note §5),
-   builds a two-to-three-hour *horizon* of scored, scripted candidates,
-   with a precommitment on each. A fast **scheduler** on the phone (and
-   watch) picks the next segment at every boundary from that horizon plus
-   public candidates, handles interrupts and plays offline. The phone
+   said), alerts, and the connective tissue (bridges and idents). Any
+   source may interrupt any other when something important or urgent
+   emerges. Named programmes ("news", "mail", "briefing") are labels for
+   modes of content: a temporary inductive bias for cold start and for
+   explicit requests, designed to dissolve as the stream learns (§1.6).
+   Every segment carries duration, source refs, provenance, importance,
+   urgency, freshness, novelty for this listener, entities and topics, and
+   the engine's own predictions about it (§1).
+2. **Prompt response, then fill.** When the listener says "tell me about
+   X", the device answers at once: an acknowledgement within about 300 ms,
+   then, within about 2 s, the nearest retrievable material adjacent to X
+   (real audio if any exists, otherwise TTS of precomputed text), while
+   the Autoradio desk (an app-agent RLM desk on the user's computer)
+   generates the continuation of the thread in the background from the
+   personal object graph, the host's Autopaper object graph and, if
+   needed, web research through the research desk. **The horizon is a
+   speculative buffer, not a schedule:** precomputed material chosen for
+   what the listener is likely to hear *or ask about* next. The phone
    never invents authority; the computer never sits in the audio path
-   (§2.1, §7.2).
-3. **Scoring is importance-first, engagement-weak.** The score is the
-   predicted *value* of a segment for this listener now, combined with an
-   importance floor (things that matter play even if they are not "fun"),
-   urgency, freshness and novelty, under hour-clock constraints borrowed
-   from radio's format clock: a target mix of media kinds, fatigue and
-   repetition limits, a human-voice share, and the listener's time budget
-   (§2.3, §2.4).
-4. **Preemption is rationed.** Four urgency levels; only level 0 ("now")
-   cuts in mid-segment, at a sentence or word boundary, after an earcon
-   and a haptic. Every preemption is itself a prediction ("you will want
-   this interruption") that the listener's reaction settles, and the
-   engine has a budget of interruptions per hour (§2.5).
-5. **Learning is PSA, not a recommender bolted on.** Each scheduled
-   segment commits a typed prediction (finish, value, act) before it
-   plays; implicit signals (skip and when, interrupt, replay, listen-
-   through, voice acts such as "follow this", takes about the segment)
-   settle it by rule; Brier scores and calibration per segment kind are
-   views; the planner's context pack carries its own settled record. All
-   of it lives on the user's computer; aggregates over private listening
-   are never computed (§2.6, §2.7).
-6. **Voice is not turn-taking. The programme is the reply channel.** You
-   talk; the engine acknowledges with an earcon or one short line and
-   answers by *inserting segments into the programme*, not by holding a
+   (§2.1, §7.2, §7.4, §7.5).
+3. **The objective is the listener's stated aspiration, not engagement.**
+   Ordering of authority: the listener's instructions, then their stated
+   aspirations ("challenge me on macro", "less outrage politics even
+   though I click on it"), then importance and urgency, then learned
+   engagement as one signal among several. The mix of media kinds and the
+   pacing have **no invariants**: they are contextual, learned and
+   settable by voice. A listener working on their own project may hear
+   mostly AI voice; another may hear hours of human media (§2.3, §2.4).
+4. **Preemption is open to every source and rationed by learning.** Four
+   urgency levels; only level 0 ("now") cuts in mid-segment, at a sentence
+   or word boundary, after an earcon and a haptic. Every preemption is
+   itself a prediction ("you will want this interruption") that the
+   listener's reaction settles, and how often the listener will accept an
+   interruption is a learned, visible preference, not a fixed budget
+   (§2.5).
+5. **Learning is PSA, and what is learned is the listener's to read and
+   steer.** Each segment, and each learned preference ("the listener will
+   let this play uninterrupted for N minutes"), is a typed prediction
+   committed before the evidence; implicit signals (skip and when,
+   interrupt, replay, listen-through, voice acts, takes about the segment)
+   settle it by rule; Brier scores and calibration are views. All of it
+   lives on the listener's own computer, readable by them ("what have you
+   learned about me?"), and any of it can be answered with an instruction
+   that overrides it. Aggregates over private listening are never computed
+   (§2.6, §2.7, §2.8).
+6. **Voice is not turn-taking. The stream is the reply channel.** You
+   talk; the engine acknowledges at once with an earcon or one short line
+   and answers by *inserting segments into the stream* (adjacent material
+   first, generated continuation as it lands), not by holding a
    conversation. Commands ("skip", "follow this") run on the device in
    under 300 ms. Questions, directives and takes go to the computer and
    come back as segments (§3).
@@ -139,9 +199,11 @@ Also binding, from the same rulings and earlier in the day:
     with no screen: voice in, audio out, a small haptic vocabulary, double
     tap to talk. The watch plays pre-rendered assets and records takes; it
     leaves transcription to the phone or the computer (§6).
-12. **Cost is small and mostly shared** (estimate): model calls for
-    planning, scripts and summaries are about $0.03-0.15 per listening
-    hour per user; TTS on the device is free; story-update scripts are
+12. **Cost depends on the mix and is mostly shared** (estimate): model
+    calls for speculation, scripts, threads and summaries are about
+    $0.02-0.05 per listening hour for a media-heavy listener, $0.06-0.20
+    for a middle case, and $0.20-0.40 for a mostly-AI listener who
+    interrupts often; TTS on the device is free; story-update scripts are
     written once per story version and shared by every listener; human
     audio streams from the publisher. Data is the publisher audio (about
     30-60 MB an hour); AI segments travel as text (§8.2).
@@ -153,30 +215,36 @@ Also binding, from the same rulings and earlier in the day:
     updates from a provenance graph, or reports the state of your own
     agents, or turns your monologue into a routed take, or keeps a scored
     record of its own predictions about you (§9).
-14. **The system briefing is a programme type of its own** (owner
-    direction, §5): a 10-80 minute session that traverses the listener's
+14. **The system briefing is a mode of content in the one stream** (owner
+    direction and ruling 5, §5): content that traverses the listener's
     own tape (goals, landed and pending work, open decisions, residuals,
     precommitment records), presents pathways as typed alternatives with
     probabilities and named predictors (PSA surfaced to the human), and
-    explains concepts at the listener's level and just past it. The
-    learner model is itself a precommitment record, settled by the
-    listener's own questions and monologues; in teams each listener's
-    model stays private on their own computer; monologues feed back as
-    intent records. It is the expensive programme (about $0.30-0.60 per
-    30 minutes, estimate) and the owner's highest-value one.
+    explains concepts at the listener's level and just past it. "Brief
+    me" leans the stream into it for as long as the listener wants;
+    briefing segments also surface on their own when they matter, and
+    news or mail can interrupt a briefing like anything else. The learner
+    model is itself a precommitment record, settled by the listener's own
+    questions and monologues; in teams each listener's model stays private
+    on their own computer; monologues feed back as intent records. It is
+    the expensive content (about $0.30-0.60 per 30 minutes, estimate) and
+    the owner's highest-value use.
 15. **Build order:** the M0 client ships the scheduler with public
-    candidates and on-device commands; M1 adds the Autoradio desk v0 and
-    desk-update segments ("what is my computer doing?"); M2 adds
-    monologues, takes routing and per-segment precommitments; M3 adds the
-    watch, podcasts as first-class sources and the learned mix. Teammates'
+    candidates, on-device commands and the prompt-response path
+    (acknowledgement plus a jump to adjacent material); M1 adds the
+    Autoradio desk v0, background threads and desk-update segments ("what
+    is my computer doing?"); M2 adds monologues, takes routing, per-segment
+    and preference precommitments and the readable learned-preferences
+    record; M3 adds the watch, podcasts as first-class sources and the
+    learned mix. Teammates'
     takes and published audio Opinions wait for contributions and accounts
     (§10).
 
 ---
 
-## 1. The programme model
+## 1. The stream model
 
-### 1.1 Stream, segments, horizon
+### 1.1 Stream, segments, speculative buffer
 
 ```text
   time ─────────────────────────────────────────────────────────────────▶
@@ -184,21 +252,32 @@ Also binding, from the same rulings and earlier in the day:
   │ ident    │ story upd │bridge│ human: MLST episode   │ desk │ mail   │ ...
   │ AI 0:04  │ AI 1:10   │AI 0:06│ Human 1:12:40 (whole) │AI 0:40│AI 0:30 │
   └──────────┴───────────┴──────┴───────────────────────┴──────┴────────┘
-  ▲ now playing  ▲ next N prefetched on device   ▲ horizon (2-3 h) from planner
-                                               ▲ alert may preempt (level 0 only)
+  ▲ now playing  ▲ likely next, prefetched   ▲ speculative buffer (what may play OR be asked for)
+  ▲ "tell me about X" at any moment: ack ─▶ adjacent material ─▶ generated continuation (§2.1)
+  ▲ any source may preempt any other when important or urgent enough (§2.5)
 ```
 
+- **Stream:** the one continuous sequence the listener hears. There is no
+  fixed schedule and no set of shows; what plays next is decided at each
+  boundary and at each interruption (ruling 5).
 - **Segment:** the unit of playback, scheduling, prediction and signal.
   One audio item with one attribution: an episode, a clip, one AI-voiced
   update, one take. A segment is never a mixture of sources; a story
   update that mentions a podcast clip is two segments.
-- **Programme:** the ordered sequence actually played. It is a projection
-  of what the scheduler chose, recorded as events (§1.5).
-- **Horizon:** the planner's ranked candidate set for the next two to
-  three hours, with scripts written for AI segments and assets resolved for
-  human ones. It is a *candidate pool with a suggested order*, not a fixed
-  schedule; the phone may reorder within it (§2.1).
-- **Run sheet:** the persisted horizon plus what played. The object kind
+- **Programme:** the ordered sequence actually played, a projection of
+  what the scheduler chose, recorded as events (§1.5). The word survives
+  only in that sense and in the names of modes (§1.6).
+- **Speculative buffer** (called the *horizon* in the APIs): the
+  planner's ranked candidate set, with scripts written for AI segments and
+  assets resolved for human ones. It is chosen for two jobs: what the
+  listener is likely to hear next, and **what they are likely to ask
+  about** (the entities and topics of what is playing, open threads,
+  their open work). It is a bet, not a promise; an interruption may
+  discard most of it, and that is expected (ruling 2, §2.1).
+- **Thread:** what an interruption opens: "tell me about X" becomes a
+  thread whose first segments come from the buffer or the host and whose
+  later segments are generated in the background (§2.1).
+- **Run sheet:** the persisted buffer plus what played. The object kind
   already exists and is reserved for this: `choir.autoradio_run_sheet`
   (code: `internal/objectgraph/registry.go:76`, Dolt-backed, versioned,
   `Reserved: true`, no writer yet).
@@ -218,8 +297,9 @@ Also binding, from the same rulings and earlier in the day:
 | `alert` | Either: something urgent | **AI**, with a distinct earcon | 5-20 s | "Interrupting: engineering's capsule failed and rolled back." | The Autoradio desk; triggered by a desk or email-desk urgency judgment |
 | `bridge` / `ident` | None (connective tissue) | **AI** or a sonic ident | 2-10 s | "Next, from Business Daily by BBC World Service." | Template first, model only where a template cannot say it |
 
-The **system briefing** (§5) adds five kinds, used mostly inside that
-programme type: `state_brief` (where the project stands, with evidence
+The **system briefing** content (§5) adds five kinds, which play wherever
+the scorer puts them, most densely when the listener has asked to be
+briefed: `state_brief` (where the project stands, with evidence
 labels), `pathways` (typed alternatives with probabilities), `concept` (an
 explanation pitched by the learner model), `check` (an optional
 invitation to think, answered whenever the listener next talks), and
@@ -251,7 +331,7 @@ Two kinds the brief named deserve a note:
 
 ### 1.3 Segment metadata
 
-A sketch of the record, written as the planner emits it into the horizon
+A sketch of the record, written as the planner emits it into the speculative buffer
 (JSON for readability; the real type would live in `internal/types`):
 
 ```json
@@ -300,6 +380,7 @@ A sketch of the record, written as the planner emits it into the horizon
 | `novelty` | How much of this is new *to this listener*: 1 minus the overlap with what they already heard (story versions heard, claims already spoken, episodes started). The prototype's "you heard version 2" generalized to claims | planner, from the listening log |
 | `entities`, `topics`, `section` | Wikidata-keyed entities, standing topics, the four Autopaper sections | shared pipeline / claims layer |
 | `follow_reason` | Why this is a candidate: followed show, followed story or event, followed entity, front-page importance, open work, inbox, explicit request | planner |
+| `thread_id` | The interruption thread this segment answers or continues, if any ("tell me about X") | responder / desk |
 | `prediction` | The precommitment (§2.7) | planner |
 | `interruptible_at` | Where preemption may cut: `word`, `sentence`, `segment` | by kind (human media: `segment` unless level 0) |
 | `expires_at` | After this the segment is stale and must be re-planned (a story update superseded by version 5) | planner |
@@ -320,16 +401,24 @@ Rules, in order of importance:
    constant treatment (the mobile plan §4.2: Kokoro with band-limiting, or
    a deliberately machine voice at M0). A short sonic ident marks the
    switch to a human voice, so the contrast is audible with eyes closed.
+   How much of each voice a listener hears is not fixed (ruling 1): a
+   listener working through their own project may hear mostly the AI
+   voice, because their private state is text; the contrast rule is only
+   that the two are never confused.
 4. **Bridges are short and templated.** A bridge says what comes next and
    why it is here, in under ten seconds: "You follow MLST; a new episode
    came out this morning. Seventy-two minutes. Starting it." A model writes
    a bridge only when the *reason* needs words ("this connects to the
    export story you skipped yesterday").
-5. **No filler, no banter, no fake hosts.** The owner's principle: the AI
-   is the announcer and the reporter, the humans are the conversation. No
-   two-host AI banter (NotebookLM's format) and no personality patter
-   (Spotify DJ's). Silence between segments is under one second; there is
-   no dead air and no padding.
+5. **No banter, no fake hosts, no padding; one honest acknowledgement.**
+   The AI is the announcer, the reporter and the explainer; humans are
+   the conversation when human media exists. No two-host AI banter
+   (NotebookLM's format) and no personality patter (Spotify DJ's).
+   Silence between segments is under one second. The one sanctioned
+   filler is the **acknowledgement after an interruption** (ruling 2):
+   short, varied, templated and true ("Ooh, interesting; let me pull that
+   up"), never longer than the real wait and never pretending to think
+   when it is fetching (§2.1).
 6. **Numbers and names are spoken from structured fields, never
    paraphrased.** A figure comes from the claim's quantity field; a name
    from the entity's label; this is where synthetic voices most often
@@ -367,8 +456,10 @@ flows OG → queue → output; accountability flows action → tape. The tape is
 backwards-looking; the DJ never plays the tape" (doc:
 `docs/memo-diagonal-media-strategy-2026-09-17.md`).
 
-- **Planned:** each horizon is a new version of the run sheet object,
-  content-addressed; each segment's prediction is a commitment record.
+- **Planned:** each refill of the speculative buffer is a new version of
+  the run sheet object, content-addressed; each segment's prediction is a
+  commitment record; each learned preference is a standing commitment
+  record (§2.7).
 - **Played:** the device reports what played as signal events (§2.6): one
   event per segment start and end, with position and reason. These are
   the listener's private attention data; they settle the predictions and
@@ -377,43 +468,134 @@ backwards-looking; the DJ never plays the tape" (doc:
   did with them (command run, question answered by segment X, directive
   sent as record Y) is on the tape as ordinary records.
 
+### 1.6 Modes, not shows: programmes wither away
+
+The first version of this note treated "news", "your computer" and "the
+system briefing" as programmes. Ruling 5 reverses that: named programmes
+are a **temporary inductive bias**, useful while the engine knows little
+about a listener and when the listener asks for one by name, and they
+should dissolve into one stream.
+
+- **A mode is a label for a cluster of segment kinds and sources:** news
+  (story updates, developing events, clips), mail, work (desk updates,
+  alerts), briefing (state, pathways, concepts, playback), shows (whole
+  episodes). The scorer knows modes only as features.
+- **Asking for a mode leans the stream, it does not switch channels.**
+  "Brief me on Choir" or "just news for twenty minutes" raises the weight
+  of that mode for a stated or learned period; it does not lock other
+  sources out. A level-0 alert, a reply from a teammate or a major story
+  development can still interrupt (§2.5).
+- **Any source can interrupt any other.** News can cut into a briefing;
+  a briefing point can cut into news ("this story touches the decision
+  you have open on ranking"); mail can cut into a podcast. Whether it
+  does is a matter of importance, urgency and the listener's learned
+  tolerance for interruption, not of which show is on.
+- **How the distinctions dissolve** (inference): at cold start, modes
+  give the scorer and the listener a shared vocabulary ("more mail, less
+  news"). As preferences are learned per listener and per context, the
+  scorer stops needing the mode feature, and the spoken framing goes
+  from "Now your mail" to "Your accountant replied", which is what a
+  good human assistant says. The measure: the share of transitions that
+  cross modes without a mode announcement, and whether the listener ever
+  asks "where are we?".
+- **Batching is a learned preference, not a block.** The first version
+  batched mail and desk updates into fixed "your computer" blocks. Now a
+  listener who likes their mail in one go gets it that way because the
+  engine learned it (a preference precommitment, §2.7), and a listener who
+  likes items as they arrive gets that.
+
 ---
 
 ## 2. Selection and scheduling
 
-### 2.1 Two loops
+### 2.1 Prompt response, then fill
+
+Ruling 2 sets the shape. The listener can interrupt at any moment with
+"tell me about X", and X may not be computed yet, so the engine cannot
+promise hours of precomputed programme. It promises something else:
+**an answer that starts at once and gets better while it plays.**
 
 ```text
-                    the user's computer (guest)                       phone / watch
-  ┌────────────────────────────────────────────────────┐   ┌───────────────────────────────┐
-  │ AUTORADIO DESK (RLM, app agent)  — slow loop        │   │ SCHEDULER (Swift) — fast loop │
-  │  every 20-60 min, or on a new urgent record, or    │   │  at every segment boundary    │
-  │  when the device's horizon runs low:               │   │  and on every interrupt:      │
-  │   1 generate candidates (both graphs)   §2.2       │   │   pick next from horizon      │
-  │   2 score, write scripts, commit predictions §2.3  ├──▶│   + public candidates scored  │
-  │   3 publish horizon (run sheet version)            │   │     with the exported taste   │
-  │   4 settle last horizon's predictions   §2.7       │◀──┤     profile                   │
-  │  reads: listening log, supervision projection,     │   │   enforce hour clock    §2.4  │
-  │  email desk records, followed graph, packs         │   │   preempt (level 0)     §2.5  │
-  └────────────────────────────────────────────────────┘   │   log signals; play offline   │
-                 ▲ wakes on intent only (§7.5)              └───────────────────────────────┘
-  host (Node B): public Autopaper candidates and shared story-update scripts and audio,
-  served from Store B without waking any computer; supervision summary (counts, urgent flags)
+ "tell me about X"   (any moment; X may be in the buffer, on the host, or nowhere yet)
+        │
+        ▼ T+0.3 s  ON DEVICE: acknowledge
+        │          earcon + a short, true, templated line ("Ooh, interesting; let me pull that up")
+        │
+        ▼ T+2 s    ON DEVICE / HOST: jump to the nearest retrievable adjacent material
+        │          1 the device's adjacency index: buffered and recently played segments
+        │            whose entities or topics match X           (no network)
+        │          2 the host's public index: Autopaper stories, events, episodes and clips
+        │            by entity, alias or title, with shared scripts   (no computer wake)
+        │          preference: real audio (a clip, a take) > TTS of precomputed text
+        │          (a shared story script, a cached concept explainer) > a one-line
+        │          "here is what I know so far" from metadata
+        │
+        ▼ T+5-20 s ON THE COMPUTER: background generation continues the thread
+                   Autoradio desk opens a thread: queries the personal object graph,
+                   the host's Autopaper object graph, and if needed casts to research
+                   for web evidence; writes continuation segments, which stream in
+                   at the next sentence boundary ("Here's more on X, from your computer")
 ```
 
-Why two loops (inference, argued in §7.2):
+**Three parts, three places.**
+
+| Part | Where | Job | Model? |
+|---|---|---|---|
+| **Responder** | phone (and watch, reduced) | Acknowledge within ~300 ms; resolve X against the adjacency index and the host; start adjacent material within ~2 s; open a thread on the computer; splice in continuation segments as they land | no |
+| **Scheduler** | phone (and watch, reduced) | At every segment boundary, pick the next item from the buffer and public candidates, scored with the listener's exported preferences; apply learned pacing (§2.4); preempt (§2.5); log signals; play offline | no |
+| **Planner and thread worker** | the Autoradio desk on the user's computer | Fill the speculative buffer (§2.2-§2.3); run interruption threads in the background; commit predictions; settle the last buffer's predictions (§2.7) | yes |
+
+**The speculative buffer.** The planner fills the buffer with what is
+likely to be *heard* next and what is likely to be *asked about* next:
+
+- the entities and topics of what is playing and queued, each with its
+  best adjacent material resolved in advance (a clip, the shared story
+  script, a concept explainer pitched by the learner model, §5.4);
+- open threads and open work (the listener's pending decisions, running
+  desk work), because "what happened with..." questions cluster there;
+- what the listener asked about recently, since follow-ups are common.
+
+Each buffered item carries a prediction (§2.7): p(heard) and p(asked
+about). The planner is scored on both, so speculation that never pays off
+is visible and gets cheaper over time. An interruption that discards most
+of the buffer is the expected case, not a failure.
+
+**Threads.** A thread is the unit of "continue this": the question, the
+material already played, and what the desk is generating next. It stays
+open while the listener stays on the topic ("more", "go on", or a related
+question) and closes when they move on or say "enough". Generation is
+incremental: the first continuation segment is short (one source, one
+paragraph) so it can land within seconds; deeper segments (a research
+cast to the web, a synthesis across sources) follow if the listener is
+still there. A thread is an occurrence, not a standing intent: a crash
+closes it with the visible fate "interrupted by a restart" and it is not
+re-run (§7.7).
+
+**When nothing adjacent exists** (X is new to every graph): the
+acknowledgement says so honestly ("I don't have anything on that yet;
+I'm asking research"), the stream returns to what was playing, and the
+continuation interrupts when it lands, at level 1 (§2.5).
+
+Why the work is split this way (inference, argued in §7.2):
 
 - **The audio path cannot wait for a model, or for a computer to wake.**
-  A segment boundary needs the next item in milliseconds. A hibernated
-  computer takes seconds to resume and about 10.5 s to cold boot (doc:
-  `docs/learn/04-computer-lifecycle.md` §2.3).
-- **Planning needs the private graph and judgment.** Deciding that the
-  drain-call approval matters more than a sports story, or writing a mail
-  summary, needs the user's computer, its records and a model.
-- **The listener's computer must not stay awake for the listener's whole
-  commute.** A phone holding a socket to the guest keeps it from
-  hibernating (doc: mobile plan §8.3). The planner wakes the computer for a
-  few minutes per horizon, not for the listening hour.
+  A segment boundary or an acknowledgement needs audio in milliseconds. A
+  hibernated computer takes seconds to resume and about 10.5 s to cold
+  boot (doc: `docs/learn/04-computer-lifecycle.md` §2.3), so the
+  acknowledgement and the adjacent material come from the device and the
+  host, and only the continuation waits for the computer.
+- **Continuation needs the private graph and judgment.** Deciding that
+  the drain-call approval matters more than a sports story, writing a mail
+  summary, or answering "why did engineering take four rounds?" needs the
+  user's computer, its records and a model.
+- **The listener's computer must not stay awake for the whole commute.**
+  A phone holding a socket to the guest keeps it from hibernating (doc:
+  mobile plan §8.3). The computer wakes on intent: to refill the buffer
+  and to run a thread the listener opened.
+
+The host serves public Autopaper candidates, shared story-update scripts
+and audio, and the public adjacency lookup from Store B without waking any
+computer, plus the supervision summary (counts, urgent flags).
 
 ### 2.2 Candidate generation
 
@@ -432,7 +614,8 @@ not window scans.
 | Inbox | Personal (email desk) | Email desk records since the cursor, with the desk's urgency and a summary | `mail_update` |
 | Work state | Personal (supervision projection) | Approvals awaiting decision, open obligations, newly settled commitments, finished or failed runs, ordered by materiality (doc: `docs/precommitment-records.md` §4.7) | `desk_update`, `alert` |
 | Takes | Personal / team | Teammates' takes shared with the listener (LC/LA); replies to the listener's takes | `take` |
-| Requests | Either | Anything the listener asked for ("more on this", "what happened with...") becomes candidates with the highest personal weight | `answer` and any kind |
+| Requests and threads | Either, plus web research through the research desk | Anything the listener asked for ("tell me about X", "more on this", "what happened with...") opens a thread (§2.1): adjacent material first, generated continuation after; thread segments carry the highest personal weight while the listener stays on the topic | `answer` and any kind |
+| Likely questions | Either | Entities and topics of what is playing and queued, open threads and open work, each with adjacent material resolved in advance, so an interruption about them is answered from the buffer (§2.1) | any kind, marked speculative |
 | Exploration | Autopaper | A small share of candidates from outside the listener's profile: high-importance stories in sections they rarely hear, shows adjacent to followed shows (§2.6) | any public kind |
 
 **Shared scripts.** Story-update and developing-event scripts depend on the
@@ -449,83 +632,124 @@ applied to audio.
 user's computer except as the rendered segment sent to the user's own
 devices.
 
-### 2.3 Scoring
+### 2.3 Scoring: aspiration first, engagement as one signal
 
-For candidate *s*, listener *u*, context *c* (time of day, device, route
-such as car or headphones, how long they have been listening, what just
-played):
+Ruling 4 sets the objective: **elevation over engagement maximisation.** A
+listener may know exactly what they respond to and still want to be
+challenged, or given less of what their "lower self" would demand. So the
+engine does not maximise listening time, finish rate or any other
+engagement measure. It serves the listener's **stated aspiration**, and
+uses engagement as evidence about how well it is doing that.
+
+**Order of authority** (a higher layer always wins over a lower one):
+
+| Layer | What it is | Example | Where it comes from |
+|---|---|---|---|
+| 1 **Instructions** | What the listener said to do, now or as a standing rule | "No crypto." "Play the whole MLST." "Stop softening the hard parts." | Voice commands and standing intents, recorded on the listener's computer |
+| 2 **Aspirations** | What the listener says they want to become or keep up with, including what they want *less* of despite liking it | "Keep me sharp on AI and tech business strategy." "Challenge me on macro; I avoid it." "Less outrage politics, even though I click on it." | Monologues and onboarding (§2.9), read back and confirmed; revisable at any time |
+| 3 **Importance and urgency** | What matters in the world or in the listener's own work, independent of taste | A followed story's major development; a failed capsule | Autopaper's importance judgment; materiality of records; the email desk's urgency |
+| 4 **Learned engagement** | What the listener tends to finish, replay, act on or skip | Finishes long interviews in the evening; skips policy explainers in the morning | Settled predictions (§2.6, §2.7) |
+
+Within those constraints, for candidate *s*, listener *u* and context *c*
+(time of day, device, route such as car or headphones, how long they have
+been listening, what just played, what they are working on):
 
 ```text
-score(s) = V(s | u, c)                        predicted value for this listener now
-         × F(freshness, kind)                  decay by half-life per kind
-         × N(novelty)                          discount what they already know
-         + λ_imp · max(0, importance − floor)  importance lift, independent of taste
-         + U(urgency)                          urgency bonus (levels 1-3; level 0 preempts)
-         + E(s)                                exploration bonus (bounded share, §2.6)
-subject to the hour clock (§2.4)
+score(s) = A(s | aspirations)                  how well s serves the stated aspirations
+         + λ_imp · importance(s) + U(urgency)   what matters, independent of taste
+         + w_eng · V(s | u, c)                  learned engagement: one bounded signal
+         × F(freshness, kind) × N(novelty)      decay and "already knows this"
+         + E(s)                                 exploration (bounded share, §2.6)
+filtered by instructions (layer 1); paced by learned preferences (§2.4)
 ```
 
-- **V is the learned part.** It predicts value, not clicks: p(finish) times
-  the listener's per-kind completion weight, plus p(act) (follow, more on
-  this, a take, a save) weighted highest, minus p(early skip). At cold
-  start, V is a hand-set prior per kind and section (§2.9). Later it is a
-  small per-listener model (logistic regression or gradient-boosted trees
-  over a few dozen features: kind, show, section, entities followed,
-  length, time of day, position in session, novelty, importance), trained
-  on the listener's own settled predictions on their own computer
-  (inference: small models suffice for one listener's data; deep sequence
-  models such as the skip-prediction challenge entries need millions of
-  sessions; web: https://www.aicrowd.com/challenges/spotify-sequential-skip-prediction-challenge).
-- **The importance term keeps the station honest.** The owner's objective
-  for Autopaper is importance, with attention weighted low. A segment
-  whose importance is above the floor gets airtime even if V says the
-  listener would rather hear another tech podcast. The floor and λ_imp are
-  listener settings in words ("keep me on the big stories" versus "only my
-  interests"), not sliders.
+- **A is the aspiration term.** It is a judgment, not a click model: how
+  directly s advances what the listener said they want (a Jev typed
+  `score` question per candidate against the recorded aspirations, cached
+  per segment and aspiration version; inference: cheap at ~$0.042 per
+  million input tokens). "Challenge me" raises the weight of material
+  pitched above the listener's current level (§5.4); "less of X even
+  though I like it" lowers X regardless of V.
+- **V is learned engagement, capped.** It predicts p(finish), p(act) and
+  p(early skip) from a small per-listener model (logistic regression or
+  gradient-boosted trees over a few dozen features: kind, show, section,
+  entities followed, length, time of day, position in session, novelty,
+  importance), trained on the listener's own settled predictions on their
+  own computer (inference: small models suffice for one listener's data;
+  deep sequence models such as the skip-prediction challenge entries need
+  millions of sessions; web: https://www.aicrowd.com/challenges/spotify-sequential-skip-prediction-challenge).
+  Its weight `w_eng` is bounded so that V can reorder candidates the
+  aspiration term treats as equal but cannot overturn an aspiration. When
+  V and A disagree persistently, the engine does not quietly side with V:
+  it says so once and lets the listener decide ("You've skipped the macro
+  pieces three times this week. Keep them, or change what you asked
+  for?").
+- **Importance keeps the stream honest.** The owner's objective for
+  Autopaper is importance, with attention weighted low. A segment above
+  the listener's importance floor gets airtime even if V says they would
+  rather hear another tech podcast. The floor and λ_imp are set in words
+  ("keep me on the big stories" versus "only my interests"), not sliders.
 - **Personal importance is materiality.** For desk and mail candidates,
   importance is the supervision projection's materiality and the email
   desk's urgency judgment, not a guess by the Autoradio desk.
-- **Explicit standing intents dominate learned taste.** "I want to keep up
-  with AI and tech business strategy" is recorded as a standing intent on
-  the computer and enters as a hard lift on the matching topics and
-  shows; learned taste fills the rest. A standing intent survives a crash
-  (the restart rule's "standing intents survive; occurrences do not").
+- **Instructions and aspirations are standing intents.** They survive a
+  crash (the restart rule's "standing intents survive; occurrences do
+  not") and are listed whenever the listener asks "what have you learned
+  about me?" (§2.8).
 
-### 2.4 The hour clock: mix, fatigue, diversity, time budget
+### 2.4 Mix and pacing: contextual, learned, settable
 
 Radio solved "what next" under constraints long before recommenders: the
 **format clock**, a template for each hour listing which kind of segment
 goes in which slot (web: https://en.wikipedia.org/wiki/Broadcast_clock).
-Autoradio keeps the idea and makes the clock learned and personal.
+The first version of this note borrowed it as a set of constraints,
+including a minimum human-voice share and a maximum run of AI voice.
+Ruling 1 drops those as rules. **There are no mix invariants.** The right
+mix depends entirely on context: a listener working on their own project
+hears mostly the AI voice, because their private state is text; another
+listener on a long drive may hear hours of human media; the same listener
+may want both on the same day.
 
-| Constraint | Default (learned per listener) | Why |
-|---|---|---|
-| Human-voice share | ≥ 50% of listening time | The owner's contrast principle: AI is the announcer, humans are the conversation |
-| AI run length | ≤ 4 min of consecutive AI voice before a human segment, a take or a pause point | Fatigue; "keep you listening to an AI all day" is the competitor failure the owner named |
-| Personal block | Mail and desk updates batched into one or two "your computer" blocks per hour, except urgency ≤ 1 | Context switching is costly; batching is how humans read mail |
-| Same-topic spacing | ≥ 15 min between segments on the same event unless the listener asked | Repetition fatigue |
-| Same-show spacing | No two episodes of one show back to back unless binge mode | Diversity |
-| Section mix | Proportional to the listener's learned section weights, with the exploration share on top | Private personalization (LF1's section counting, generalized) |
-| Time budget | If the listener said "I have 25 minutes" or the context implies it (a calendar is out of scope; a learned commute length is in), fill to the budget and finish whole segments inside it | Long-form shows must not start with three minutes left |
-| Long-form slots | A whole episode only when the remaining budget covers at least half of it, or the listener resumes it by habit | Episodes are resumable; starting is a commitment |
+What remains of the clock is a set of **pacing preferences**. Each one
+starts from a weak prior, is learned per listener and per context, is
+itself a precommitment (§2.7), and can be set by voice at any time.
 
-**Algorithm (inference):** greedy fill with one-step lookahead. At each
-boundary the scheduler takes the highest-scoring candidate that keeps every
-constraint satisfiable for the rest of the budget; ties go to the
-candidate with the lower `expires_at`. The planner runs the same rules over
-the whole horizon to produce the suggested order, so the device usually
-just takes the next item. A knapsack or integer program is unnecessary at
-the scale of 20-60 segments an hour, and its results would be harder to
-explain aloud ("why did you play this?").
+| Preference | Starting prior (cold start only) | Learned from | Set by voice |
+|---|---|---|---|
+| Voice mix (human media vs AI voice vs takes) | None fixed; follows what the candidates are (a project-heavy context is mostly AI) | Finishes and skips by voice kind, per context | "More real voices." "I don't mind the AI; keep going." |
+| Run length before a change of source | No limit; a long AI run is fine if the listener is engaged | Late skips and "enough" during long runs | "Mix it up more." |
+| Interruption tolerance | Level 0 always; level 1 at segment ends (§2.5) | Defers and skips of interruptions, per source | "Don't interrupt me for mail." |
+| Batching of mail and work updates | Items as they become important; no fixed blocks | Whether the listener says "later" to single items and asks "anything else?" afterwards | "Give me my mail in one go." |
+| Same-topic spacing | Avoid repeating an event within a short window unless asked | Early skips of repeats | "Keep me on this story." |
+| Section and topic mix | Aspirations first, then the four Autopaper sections evenly | Finishes and acts per section, within aspirations | "Just tech for the next half hour." |
+| Time budget | None unless stated or learned (a commute length) | Session ends | "I have 25 minutes." |
+| Long-form episodes | Start a whole episode only if the remaining budget covers about half, or the listener resumes by habit | Resumes and abandons | "Save it for the drive home." |
+
+**Algorithm (inference):** greedy choice with one-step lookahead. At each
+boundary the scheduler takes the highest-scoring candidate that respects
+the listener's instructions and stated time budget; pacing preferences
+enter as soft penalties, not hard constraints, so a strong enough reason
+(importance, urgency, an open thread) wins. The planner runs the same
+rules over the speculative buffer to produce a suggested order, which the
+device follows until something better arrives or the listener
+interrupts. A knapsack or integer program is unnecessary at the scale of
+20-60 segments an hour, and its results would be harder to explain aloud
+("why did you play this?").
 
 ### 2.5 Urgency and preemption
 
-| Level | Meaning | Where it cuts in | Who may raise it | Budget |
+Ruling 5: **any source may interrupt any other** when something important
+or urgent emerges: news into a briefing, a briefing point into news, mail
+into a podcast, a teammate's reply into anything. What varies is only the
+level, and how often the listener will accept being interrupted, which is
+learned (§2.4, §2.7), not fixed.
+
+| Level | Meaning | Where it cuts in | Who may raise it | How often |
 |---|---|---|---|---|
-| 0 **now** | Waiting harms the listener: a self-development operation failed and rolled back, a deadline in the next hour, a teammate's take marked urgent and the listener allowed that | At the next word boundary of AI speech, the next sentence boundary of human speech (from transcript timestamps, or a 1.5 s silence detector) | Desks and the email desk by typed judgment; the Autoradio desk confirms against the listener's policy | ≤ 2 per hour by default; a third becomes level 1 |
-| 1 **next** | Should be heard soon: an approval waiting, a followed story's major development | At the end of the current segment; long human segments (over 20 min) are paused at a sentence boundary after 10 min of waiting | Same | ≤ 4 per hour |
-| 2 **this hour** | In the next personal block | Scheduled | Planner | none |
-| 3 **whenever** | Normal candidate | Scheduled | Planner | none |
+| 0 **now** | Waiting harms the listener: a self-development operation failed and rolled back, a deadline in the next hour, a teammate's take marked urgent and the listener allowed that | At the next word boundary of AI speech, the next sentence boundary of human speech (from transcript timestamps, or a 1.5 s silence detector) | Any source, by typed judgment (desks, the email desk, the Autopaper importance judgment for public events); the Autoradio desk confirms against the listener's instructions | Learned tolerance per source; starting prior about 2 an hour, after which further level-0 items wait for a boundary |
+| 1 **next** | Should be heard soon: an approval waiting, a followed story's major development, a thread's continuation landing | At the end of the current segment; long human segments (over 20 min) are paused at a sentence boundary after 10 min of waiting | Same | Learned; starting prior about 4 an hour |
+| 2 **soon** | Worth hearing in the next stretch, at a natural break | Scheduled | Planner | as scored |
+| 3 **whenever** | Normal candidate | Scheduled | Planner | as scored |
 
 - **Earcon and haptic first.** A level-0 cut-in is preceded by a distinct
   two-tone earcon and, on the watch, a distinct haptic; the listener can
@@ -544,11 +768,17 @@ explain aloud ("why did you play this?").
 
 ### 2.6 Learning from implicit signals
 
-The listener never rates anything. The signals, their meanings and their
-traps:
+The listener never rates anything. Every signal below is **evidence about
+how well the engine serves the listener's instructions and aspirations
+(§2.3), not a quantity to maximise** (ruling 4). A long listen-through of
+something the listener asked to hear less of is evidence that the
+aspiration and the habit diverge, which the engine reports once, not a
+reason to play more of it. The signals, their meanings and their traps:
 
 | Signal | Captured | Reading | Trap |
 |---|---|---|---|
+| Spoken instruction or aspiration | voice ("challenge me", "less of this even though I like it") | **authoritative**: becomes or revises a standing intent; overrides anything learned | Over-broad wording: read back the scope once |
+| "Tell me about X" mid-segment | interruption | strong positive for X; also a test of the speculative buffer (was X adjacent material ready?) | The interrupted segment is not a skip; record it as "interrupted for a question" |
 | Listen-through | segment end reached, or ≥ 90% | positive for value | Passive listening (phone in pocket) also finishes; weight by whether the listener acted at all in the session |
 | Early skip (< 10 s) | skip with position | strong negative for this item, weak for kind | Skipped because already heard elsewhere: novelty, not taste. Ask the novelty model first |
 | Late skip | skip after 10 s | negative for length or pacing more than topic | |
@@ -569,47 +799,82 @@ candidates, never at level 0-1, never in a time-budgeted slot), logging the
 probability with which each candidate was chosen so learning is unbiased,
 and **an explanation spoken with every exploratory pick** ("Something
 outside your usual: a story the paper ranks highly in World"). It does not
-borrow the objective (streams and engagement).
+borrow the objective (streams and engagement): Autoradio's reward is
+alignment with the listener's stated aspirations, and engagement enters
+only as the bounded V term (§2.3).
 
 ### 2.7 The precommitment loop
 
 The engine is a desk, so it is held to the same rule as every desk: commit
 to what you expect before the evidence arrives, then be scored by someone
-else (doc: `docs/precommitment-records.md` §1.1, §5.1).
+else (doc: `docs/precommitment-records.md` §1.1, §5.1). Ruling 3 extends
+the rule to **everything the engine learns about the listener**: a learned
+preference is not a hidden weight but a precommitment, visible and
+steerable.
 
-**What is committed.** For each segment placed in a horizon, one
-`choir.commitment_record` (act `precommit`, emitter the Autoradio desk,
-subject refs the segment and its sources), with typed questions:
+**Segment predictions.** For each segment placed in the speculative
+buffer, one `choir.commitment_record` (act `precommit`, emitter the
+Autoradio desk, subject refs the segment and its sources), with typed
+questions:
 
 | Question | Type | Resolves by (rule scorer) |
 |---|---|---|
 | Will the listener finish this segment (≥ 90%) if it plays? | yes/no with p | the device's end event |
 | Will they skip it in the first 10 s? | yes/no with p | the skip event |
 | Will they act on it (follow, more, take, save, reply)? | yes/no with p | voice acts within 10 min referencing the segment |
-| Will it play at all in this horizon? | yes/no with p | the played log (measures the planner's ordering against the device's choices) |
+| Will it be heard at all from this buffer? | yes/no with p | the played log (measures the planner's speculation against what actually played) |
+| Will the listener ask about its entities or topics (an interruption it was buffered to answer)? | yes/no with p | the responder's thread log (§2.1) |
 | For alerts: will the listener engage rather than defer? | yes/no with p | defer or skip events |
 
-Plus one record per horizon: "the listener will listen at least M minutes
-of this horizon and skip at most K segments", the mix-level forecast.
+**Preference predictions** (ruling 3). Each learned preference is a
+standing precommitment, restated when it changes, with its evidence:
+
+| Example preference, as committed | Resolves by |
+|---|---|
+| "The listener will let a whole-episode segment play uninterrupted for at least 25 minutes on weekday evenings" (p = 0.7) | Interruptions and skips during such segments over the next week |
+| "The listener prefers mail items one at a time as they arrive, not batched" (p = 0.6) | "Later" and "anything else?" acts on mail items |
+| "In a project-work context, the listener will accept AI-voice runs of 20 minutes or more" (p = 0.8) | Late skips and "mix it up" during long AI runs |
+| "The listener will accept up to 2 level-0 interruptions an hour from engineering, and none from mail" (p = 0.75) | Defers and skips of those interruptions |
+
+These are the engine's model of the listener, written as claims that can
+be wrong. They live on the listener's computer, the listener can hear them
+("what have you learned about me?") and read them (Texture renders them as
+a document on the listener's computer), and the listener can answer any
+of them with an instruction ("No: interrupt me for mail from my
+accountant"), which becomes a layer-1 standing intent that overrides the
+learned preference (§2.3). A preference the listener overrode is not
+re-learned behind their back; the engine may later say what it observed
+and ask once.
+
+**Aspiration predictions** (ruling 4). Periodically (weekly by default,
+inside a natural pause, never as a rating prompt), the engine commits a
+prediction about the aspiration itself and lets the listener's own words
+settle it: "This week I gave you more macro than you would have chosen.
+I predict you'll say it was worth it (p = 0.6)." The listener's answer,
+in a monologue, is the settlement (judged by Jev against the stated
+aspiration). For a teaching aspiration, the learner model's settled
+levels are the better evidence (§5.4): understanding that grew is the
+aspiration served.
 
 **Settlement and scoring.** Settlement is by rule from the listening log
 (the cheapest, most independent scorer in the precommitment design's
-order: rules first). The desk never settles its own records. A segment
-that never played resolves `unresolved`, not wrong; a session that a crash
-or a dead battery ended resolves `interrupted` and is excluded from
-calibration (precommitment design §5.4, "platform failure scored as
-forecasting error"). Scores are views: Brier per question type, per
-segment kind and per time of day; a reliability curve; sharpness beside
-calibration, because a planner can look calibrated by predicting 0.6 for
-everything (§5.3 there).
+order: rules first), and by Jev for spoken answers. The desk never settles
+its own records. A segment that never played resolves `unresolved`, not
+wrong; a session that a crash or a dead battery ended resolves
+`interrupted` and is excluded from calibration (precommitment design §5.4,
+"platform failure scored as forecasting error"). Scores are views: Brier
+per question type, per segment kind and per time of day; a reliability
+curve; sharpness beside calibration, because a planner can look calibrated
+by predicting 0.6 for everything (§5.3 there).
 
 **Learning in context.** The Autoradio desk's acting pack carries
 observations and discrepancies, not scorer judgments, per the decided
 boundary (§4.7 there): "Last week you predicted 0.8 finish for long policy
 episodes on weekday mornings; 3 of 11 finished; the listener skipped
 after the intro in 6." That is the in-context reinforcement learning the
-owner named as PSA's key value, applied to a taste model. Retrieval is by
-corrective value: the records most worth showing are the confident misses.
+owner named as PSA's key value, applied to a model of one listener.
+Retrieval is by corrective value: the records most worth showing are the
+confident misses, and the listener's overrides.
 
 **Why this is better than a black-box recommender** (inference):
 
@@ -618,69 +883,86 @@ corrective value: the records most worth showing are the confident misses.
   long interviews." That is a box score of the engine, scoped to one
   listener, shown to that listener only.
 - The model of the listener is legible records, so "forget that I listened
-  to that" is a deletion the next horizon honours, and a listener can
-  read why the engine believes what it believes.
+  to that" is a deletion the next buffer honours, and the listener can read
+  and overrule why the engine believes what it believes.
 - Drift is visible: a planner that slides toward engagement bait will show
-  rising p(finish) accuracy with falling p(act) and falling importance
-  share. That is a Goodhart detector, not just a dashboard.
+  rising p(finish) accuracy with falling p(act), a falling share of
+  airtime serving stated aspirations, and falling importance share. That
+  is a Goodhart detector, not just a dashboard.
 
 **Guards** (borrowing the design's table, §5.4 there):
 
 | Failure | Guard |
 |---|---|
-| Optimizing finish rate by playing short, safe, familiar segments | Importance floor and exploration share are constraints, not score terms the planner may trade away; report sharpness and the share of airtime above the importance floor beside accuracy |
-| Self-fulfilling predictions ("p(play) = 0.95" because the planner orders it first) | The "will it play" question measures the planner against the device only; it is excluded from taste calibration |
+| Optimizing finish rate by playing short, safe, familiar segments | The objective is the stated aspiration (§2.3); engagement is a bounded term. Report the share of airtime serving stated aspirations and above the importance floor beside accuracy |
+| Serving the "lower self" | Instructions and aspirations outrank learned engagement by construction; persistent disagreement is reported to the listener, never resolved silently in engagement's favour |
+| Self-fulfilling predictions ("p(heard) = 0.95" because the planner orders it first) | The "will it be heard" question measures speculation against what played; it is excluded from preference calibration |
 | Engagement as value | p(act) and explicit follows weigh more than finishing; takes count as value regardless of sentiment |
-| Learning a scorer's quirks | The scorer is a rule over the device's events; there is no model scorer to game at this level |
+| Learning a scorer's quirks | The scorer is a rule over the device's events, or Jev blind to the prediction; there is no model scorer the desk can query |
 | Private data leaking into shared aggregates | Settled predictions over private listening never leave the computer; no cross-user calibration is computed from them (state and vision §9 risk) |
 
-### 2.8 Privacy: where attention lives
+### 2.8 Privacy and legibility: where the listener model lives
 
-- **The listening log, the taste model and the settled predictions live on
-  the user's computer** (its tape and object graph). The host sees only
+- **Everything learned about the listener lives on the listener's own
+  computer** (its tape and object graph): the listening log, the learned
+  preferences and their precommitments, the aspirations and instructions,
+  the learner model (§5.4) and the settled predictions. The host sees only
   what any client request reveals (which public assets were fetched).
-- **The device holds a copy** for offline scheduling: the exported taste
-  profile (§7.3) is the user's own data on the user's own device.
+- **It is readable by the listener** (ruling 3): spoken on request ("what
+  have you learned about me?", "why do you think I like long interviews?"),
+  and rendered by Texture as a document on their computer, with each
+  preference's evidence and its current calibration.
+- **It is steerable by the listener**: any learned preference can be
+  answered with an instruction, corrected, or deleted; instructions are
+  standing intents that outrank what was learned (§2.3).
+- **The device holds a copy** for offline scheduling: the exported
+  preferences (§7.3) are the listener's own data on the listener's own
+  device.
 - **Shared Autopaper ranking learns only from public signals** (coverage,
   velocity, the editorial importance judgment), never from listeners'
   private attention. If the owner later wants aggregate listening
   statistics to inform the shared paper, it is an opt-in, differentially
   private contribution, decided separately (open question 6).
-- **Teammates do not see each other's listening.** A team programme sees
+- **Teammates do not see each other's listening.** Shared team content is
   only what was shared to the team.
 
 ### 2.9 Cold start
 
 1. **Ask once, by voice, in one breath.** First run: "Tell me what you
-   want to keep up with, as long as you like." The monologue becomes
-   standing intents and seed follows (topics, shows, entities), confirmed
-   in one read-back.
-2. **Priors.** Front-page importance, the four sections at equal weight,
-   human-voice share 50%, a handful of high-quality shows per section from
+   want to keep up with, and what you want to get better at, as long as
+   you like." The monologue becomes aspirations, standing intents and seed
+   follows (topics, shows, entities), confirmed in one read-back.
+2. **Priors, deliberately weak.** Front-page importance, the four sections
+   at equal weight, no fixed voice mix (the mix follows the candidates and
+   the context, ruling 1), a handful of high-quality shows per section from
    a curated seed list (the prototype's five feeds generalized and moved
-   into the source registry).
-3. **Fast learning from strong signals.** Explicit follows and takes count
-   immediately; finish and skip rates move V only after a few sessions.
+   into the source registry), and the named modes as a shared vocabulary
+   while the engine knows little (§1.6).
+3. **Fast learning from strong signals.** Instructions apply at once;
+   explicit follows and takes count immediately; finish and skip rates
+   move V only after a few sessions.
 
 ---
 
 ## 3. Voice-driven interaction
 
-### 3.1 The principle: the programme is the reply channel
+### 3.1 The principle: the stream is the reply channel
 
 Turn-taking assistants (Siri, Alexa, and full-duplex chat models such as
 Kyutai's Moshi, which models both speakers as parallel streams for a
 natural conversation; web: https://arxiv.org/abs/2410.00037) are built to
-hold a dialogue. Autoradio is built to hold a **programme**: long audio
-out, long speech in, and the two rarely alternate quickly. So:
+hold a dialogue. Autoradio is built to hold a **stream**: long audio out,
+long speech in, and the two rarely alternate quickly. So:
 
 - The listener speaks for as long as they want; the engine does not reply
   turn by turn.
-- The engine acknowledges with an earcon (heard) and, where useful, one
-  short line ("Got it: following TSMC." "Checking your computer.").
-- The substance of a reply is a **segment inserted into the programme**,
-  with the same attribution and provenance as any other. "Answer" is a
-  segment kind, not a mode.
+- The engine acknowledges at once with an earcon (heard) and, where
+  useful, one short line ("Got it: following TSMC." "Ooh, interesting;
+  let me pull that up." "Checking your computer."), per ruling 2.
+- The substance of a reply is **segments inserted into the stream**, with
+  the same attribution and provenance as any other: adjacent material
+  first, generated continuation as it lands (§2.1). "Answer" is a segment
+  kind, not a mode.
 - Conversation is possible (ask, hear an answer segment, ask again), but
   it emerges from inserted segments; there is no chat state machine to
   get stuck in.
@@ -793,7 +1075,7 @@ mic (16 kHz) ─▶ take file (whole, CAF/m4a, never lost) ───────
 |---|---|---|---|---|
 | **Command** (playback) | skip, back, pause, louder, faster, "play the whole episode", "stop in 20 minutes" | On device, a closed grammar over the EOU partials | Local | ≤ 300 ms after end of utterance |
 | **Command** (preference) | follow this, more on this, less like this, mute crypto, "fewer AI voices" | On device recognizes; computer records the standing intent | Local effect now; record syncs | ≤ 300 ms ack; record on next sync |
-| **Question** | "What's my computer doing?", "Why are you playing this?", "Where's that figure from?", "What happened with X?" | Computer (Autoradio desk), except "why this?" and "where from?" which the device answers from segment metadata | Insert an `answer` segment | Ack ≤ 1 s; answer audio ≤ 8 s when the computer is awake, ≤ 20 s from hibernation (inference) |
+| **Question** | "Tell me about X", "What's my computer doing?", "Why are you playing this?", "Where's that figure from?", "What happened with X?" | Device first: acknowledgement, then adjacent material from the buffer or the host; "why this?" and "where from?" answered from segment metadata. Computer: the continuation thread (§2.1) | Ack, adjacent material, then inserted `answer` segments as the thread produces them | Ack ≤ 0.3 s; adjacent audio ≤ 2 s; first generated continuation ≤ 8 s when the computer is awake, ≤ 20 s from hibernation (inference) |
 | **Directive** | "Tell engineering to hold the drain call", "Ask research to dig into the Mauritius story", "Draft a reply saying yes" | Computer: management receives a `directive` record (the existing delivery path; mobile plan §8.4); mail replies go to the email desk as a draft | A record to the desk; a confirmation line now; the outcome later as a `desk_update` | Ack ≤ 1 s; confirmation after read-back |
 | **Take** | Opinion, analysis, a reaction: speech about content, not to the engine | Computer: the desk proposes a title, summary and destination | Private capture; a review step (§4) | Draft ready ≤ 30 s after the monologue ends |
 | **Intent** | An idea about what the project should do or become: "Autopaper should rank by importance, not churn" | Computer: the desk files an intent record and links it to goals and decisions (§5.7) | Intent record for management; read back at the end of the monologue | Filed ≤ 30 s after the monologue ends |
@@ -806,15 +1088,25 @@ read-back in §3.8.
 
 ### 3.6 Answering by inserting segments
 
-- **Placement.** An answer is urgency 0 if the listener is waiting in a
-  talk session (programme paused), otherwise urgency 1: it plays at the
-  end of the current segment, introduced by "You asked about...".
-- **Long answers are several segments.** "What happened with the
-  Mauritius riots?" may become: an AI summary of the story at its current
-  version (shared script), a human clip from a podcast that covered it, and
-  a one-line "research is looking for more; I'll tell you when it lands"
-  if the listener said "dig into it" (a directive to research, whose
-  report returns as a later segment).
+- **Prompt response, then fill** (ruling 2, §2.1). A question asked while
+  the listener waits (stream paused, talk session just ended) is answered
+  at once: the acknowledgement, then the nearest adjacent material, then
+  generated continuation segments spliced in at sentence boundaries as
+  they land. A question asked in passing ("remind me to hear about X")
+  becomes a level-1 thread that plays at the end of the current segment,
+  introduced by "You asked about...".
+- **Adjacent material is chosen for honesty, not just speed.** Real audio
+  (a clip, a take) is preferred, then a precomputed text read by TTS (a
+  shared story script, a cached concept explainer), then a one-line
+  summary from metadata. The bridge says what it is: "Here's what the
+  paper has so far; your computer is pulling the rest."
+- **A thread is several segments.** "Tell me about the Mauritius riots"
+  may become: the shared story script at its current version (adjacent
+  material, from the host, within 2 s), a human clip from a podcast that
+  covered it (from the buffer or the host), a generated continuation from
+  the personal graph ("you asked about this on Tuesday; since then..."),
+  and, if the listener says "dig into it", a cast to research whose report
+  returns as a later segment.
 - **Answers carry their refs**, so "where's that from?" always works.
 - **Nothing is answered from nowhere.** If the computer has no record for
   a question about its own state, the answer says so; it does not
@@ -833,8 +1125,10 @@ read-back in §3.8.
   sheet (Face ID).
 - **Redirects:** "Enough politics", "Just tech for the next half hour",
   "Play the whole MLST", "Catch me up on the last two days of the Taiwan
-  story". These change the hour clock for a stated period or create an
-  `answer` series; they do not change learned taste unless repeated.
+  story". These are instructions (layer 1, §2.3): they lean the stream for
+  a stated period or open a thread; they do not change learned
+  preferences unless repeated, and a repeated one is offered back as a
+  standing instruction ("Make 'no politics in the morning' a rule?").
 - **Follows and mutes** are standing intents with a scope read back in one
   line, and they are listable ("What am I following?") and reversible.
 
@@ -946,7 +1240,7 @@ voice heard.
 
 ---
 
-## 5. The system briefing: a programme that teaches
+## 5. The system briefing: content that teaches
 
 ### 5.1 The direction
 
@@ -963,15 +1257,32 @@ feedback environment can speed their cognitive and emotional development.
 That is social, not one human alone with one AI, because advice lands only
 inside a trusted relationship.
 
-The system briefing is therefore a **programme type**, not a segment
-kind: a deliberate session of 10 to 80 minutes, started by voice ("brief
-me on Choir", "where are we?"), by a standing schedule ("every morning on
-my walk"), or proposed by the engine after a long monologue ("You raised
-four things; want a briefing on how they touch the open work?"). It runs
-inside the same engine and obeys the monologue-first ruling: long audio
-out, long speech in, no quiz-show turn-taking.
+The system briefing is a **mode of content in the one stream, not a
+separate show** (ruling 5, §1.6). Its segments (state, pathways,
+concepts, checks, playback) are scored alongside every other candidate,
+and they surface on their own when they matter: a pathway decision can
+interrupt news when its deadline nears; a concept explainer can follow a
+story that depends on it. When the listener asks for it ("brief me on
+Choir", "where are we?"), or a standing instruction asks for it ("every
+morning on my walk"), or the engine offers it after a long monologue
+("You raised four things; want to hear how they touch the open work?"),
+the stream leans into briefing content for as long as the listener
+stays, from ten minutes to well over an hour. Other sources can still
+interrupt it when something important or urgent emerges (§2.5). Early
+on, "the briefing" works as a named mode, because a name helps a new
+listener ask for it; over time it should simply be what the stream does
+when the listener's own project is the most important thing to hear.
 
-### 5.2 Shape of a briefing
+It obeys the monologue-first ruling: long audio out, long speech in, no
+quiz-show turn-taking. Because private project state is text, a listener
+in this mode hears mostly the AI voice, which ruling 1 explicitly allows.
+
+### 5.2 Shape of briefing content
+
+When the listener asks to be briefed, the content tends to arrive in the
+order below. It is a starting order, not a fixed format: the listener can
+jump ("skip to pathways", "tell me about X"), the scorer reorders by
+importance, and any chapter can surface alone in the ordinary stream.
 
 | Chapter | What it says | Source | Typical length |
 |---|---|---|---|
@@ -1170,7 +1481,8 @@ AI   Pathway decision: how to rank the front page next.
 ### 5.7 Monologues as intent capture
 
 The listener's idea streams are the briefing's input as much as its
-output. A monologue's units (§3.4) gain one class for this programme:
+output. A monologue's units (§3.4) gain one class, used most in this
+mode:
 
 | Class | Example | What happens |
 |---|---|---|
@@ -1180,28 +1492,34 @@ output. A monologue's units (§3.4) gain one class for this programme:
   goals, decisions and records it touches, and flags conflicts with
   settled decisions (the standing question on settled-decision
   conformance): "This conflicts with ruling 5 from this morning; which
-  stands?" The conflict is asked in the next briefing, not as an
-  interruption.
+  stands?" The conflict is a candidate like any other: it plays the next
+  time briefing content does, or interrupts sooner if the decision is
+  urgent (§2.5).
 - **Read back once, at the end.** "I heard five ideas. Two are new
   intents; one refines the ranking intent; one is a question I'll answer
   in the next segment; one sounded like a directive to engineering, and I
   have not sent it. Say 'send it' if you meant it."
-- **Fed forward.** The next briefing's "since last time" chapter opens
-  with what became of the listener's last intents: promoted, designed,
-  built, or still waiting.
+- **Fed forward.** The next "since last time" content opens with what
+  became of the listener's last intents: promoted, designed, built, or
+  still waiting.
 
 ### 5.8 Cost, placement and build
 
-- **This is the expensive programme, by design.** A 30-minute briefing is
+- **This is the expensive content, by design.** A 30-minute briefing is
   about 4,500 spoken words, written from a large context (records, goal
   files, commits, primers). At DeepSeek V4 Pro list prices ($1.32 per
   million input, $3.96 output; code: `internal/llmcost/pricing.go`),
   200-400k input tokens and 10k output is about $0.30-0.60 per briefing,
   less with cached context (estimate). Quality outranks cost here: it is
   the owner's highest-value use, and "execution is everything".
-- **Placement.** The Autoradio desk writes the briefing; the research desk
-  answers world questions; Texture renders a written companion (the same
-  briefing as a Texture document with its refs) for reading later.
+- **Placement.** The briefing is not a separate show or a separate desk.
+  The Autoradio desk writes briefing segments into the same speculative
+  buffer as everything else, pre-resolving adjacent material for the
+  concepts and decisions the listener is most likely to ask about, and
+  answers "tell me about X" inside the project through the same
+  prompt-response path (§2.1); the research desk answers world
+  questions; Texture renders a written companion (the same content as a
+  Texture document with its refs) for reading later.
 - **Build:** a briefing v0 can be built before the phone app: a script
   generated from the tape, `docs/ACTIVE.md`, the mission graph, goal files
   and `docs/learn/`, read by any TTS (the M0 client or the desktop). The
@@ -1250,11 +1568,15 @@ A spoken equivalent exists for each, for the first week or on request.
 
 ### 6.3 Watch architecture
 
-- **Thin player, not a second engine.** The watch fetches a short horizon
-  (the next 30-60 minutes) from the phone when nearby (WatchConnectivity)
-  or from the API when standalone, plays assets, records takes, logs
-  signals, and syncs. It runs the same scheduling rules in a reduced form:
-  take the next item; honour level-0 alerts from the phone or a push.
+- **Thin player, not a second engine.** The watch fetches a short
+  speculative buffer (the likely next 30-60 minutes, plus pre-rendered
+  adjacent material for the entities in it) from the phone when nearby
+  (WatchConnectivity) or from the API when standalone, plays assets,
+  records takes, logs signals, and syncs. It runs the same scheduling
+  rules in a reduced form: take the next item; honour level-0 alerts from
+  the phone or a push; on "tell me about X", play the on-watch
+  acknowledgement and any buffered adjacent material while the phone or
+  the computer resolves the rest.
 - **Public story-update audio is shared**, so the watch can stream it from
   the host without the computer awake. Personal segments (mail, desk) are
   rendered by the phone or the computer and fetched when the watch asks.
@@ -1280,46 +1602,56 @@ lists, not custom UI, which suits an audio-only design.
 |---|---|---|---|---|
 | Audio engine (one `AVAudioEngine` graph: TTS, human audio, earcons, ducking, voice processing) | ✓ | reduced (AVQueuePlayer) | | |
 | ASR: EOU streaming, Parakeet TDT v3 batch, VAD, diarization | ✓ | VAD only | Parakeet CPU fallback for watch uploads and podcast transcripts (inference) | |
-| TTS: personal segments | ✓ (AVSpeech at M0, Kokoro later) | | | fallback render for watch |
+| TTS: personal segments and acknowledgements | ✓ (AVSpeech at M0, Kokoro later) | acknowledgements pre-rendered | | fallback render for watch |
 | TTS: shared story-update segments | renders from script, or fetches audio | fetches audio | ✓ renders once per script version, serves from Store B (inference: Kokoro on CPU; cost in §8.2) | |
-| Scheduler (fast loop), hour clock, preemption | ✓ | reduced | | |
+| **Responder**: acknowledgement, adjacency index, jump to adjacent material, splice continuation (§2.1) | ✓ | reduced | public adjacency lookup (by entity, alias, title), no wake | |
+| Scheduler, pacing preferences, preemption | ✓ | reduced | | |
 | Signal log (buffer) and upload | ✓ | ✓ (via phone or API) | | stored on the tape |
-| Prefetch cache: next N segments, horizon | ✓ | short | | |
+| Speculative buffer cache (likely next, likely asked about) | ✓ | short | | |
 | Command grammar (local) | ✓ | small | | |
-| Autoradio desk: candidates, scoring, scripts for personal segments, utterance segmentation, answers, precommitments, settlement | | | | ✓ |
+| Autoradio desk: buffer filling, scoring, scripts for personal segments, **interruption threads**, utterance segmentation, precommitments (segments and preferences), settlement | | | | ✓ |
+| Learned preferences, aspirations, instructions, learner model (readable by the listener) | exported copy | | | ✓ authority |
+| Research for threads (web evidence) | | | gateway search plane | ✓ research desk |
 | Email desk (summaries, urgency, drafts) | | | maild transport (code: `internal/maild`) | ✓ (a desk; to be built) |
 | Public candidates (stories, scripts, episodes, clips) | | | ✓ Store B via corpusd, no wake | adopts |
 | Supervision summary (counts, urgent flags) | | | ✓ written by the computer on events | writes it |
 
 ### 7.2 An Autoradio desk, or a scheduler in the client?
 
-| | Client-only scheduler | Autoradio desk only (server streams the programme) | **Hybrid: desk plans, client schedules** |
+| | Client-only scheduler | Autoradio desk only (server streams the programme) | **Hybrid: device responds and schedules, desk speculates and continues** |
 |---|---|---|---|
-| Latency at boundaries | best | depends on network and wake | best |
-| Offline | yes | no | yes, for the cached horizon |
+| Latency at boundaries and on interruption | best for what is cached; nothing beyond it | depends on network and wake | acknowledgement and adjacent material at device speed; continuation at desk speed |
+| "Tell me about X" for an X nobody precomputed | cannot answer | answers, slowly, with silence first | answers at once with adjacent material, then fills |
+| Offline | yes | no | yes, for the buffer and cached public material |
 | Private graph (mail, desk state) | needs every source on the phone | natural | natural |
-| Scripts and answers (model calls) | from the phone, with credentials on the device | natural, through the gateway | natural |
+| Scripts, threads and research (model calls) | from the phone, with credentials on the device | natural, through the gateway | natural |
 | PSA (commitments, settlement, packs) | outside the ledger, so outside the doctrine | natural | natural |
-| Computer awake time | none | the whole listening session | minutes per horizon |
-| Multiple front ends (phone, watch, desktop, CarPlay, a sibling app) | each re-implements it | one | one planner, thin schedulers |
+| Computer awake time | none | the whole listening session | minutes per buffer refill and per thread |
+| Multiple front ends (phone, watch, desktop, CarPlay, a sibling app) | each re-implements it | one | one desk, thin responders and schedulers |
 | Owner note §5 ("each app agent is its own RLM desk; one desk can have several front ends") | no | yes | yes |
 
-**Decision: the hybrid.** The Autoradio desk is an app-agent desk with its
-own RLM and verb vocabulary (read: listening log, supervision projection,
-email desk records, followed graph, public candidates; write: run sheet
-versions, segment scripts, its own commitment records, answers; send:
-directive records to management on the listener's behalf, drafts to the
-email desk; nothing else). It has **no** authority to send mail, publish,
-approve or write canonical Texture revisions; those stay with the desks
-that own them. The client scheduler is deterministic code with no model,
-tested like any client logic (the prototype's `autoradio.ts` is its seed).
+**Decision: the hybrid**, organized around ruling 2. The device owns
+responsiveness (acknowledge, jump to adjacent material, schedule, play
+offline); the desk owns speculation (what to buffer) and continuation
+(threads). The Autoradio desk is an app-agent desk with its own RLM and
+verb vocabulary (read: listening log, supervision projection, email desk
+records, followed graph, public candidates, the listener's preferences and
+aspirations; write: run sheet versions, segment scripts, thread segments,
+its own commitment records, answers; send: directive records to
+management on the listener's behalf, casts to research for thread
+evidence, drafts to the email desk; nothing else). It has **no**
+authority to send mail, publish, approve or write canonical Texture
+revisions; those stay with the desks that own them. The responder and the
+scheduler are deterministic code with no model, tested like any client
+logic (the prototype's `autoradio.ts` is their seed).
 
 The desk's addressing (who may address whom, code:
 `internal/agentprofile/agentprofile.go`, `PolicyFor`) needs new entries:
-Autoradio may address management (directives) and the email desk (draft
-requests); management, the email desk and Texture may address Autoradio
-(urgent items, "tell the listener"). Fail-closed by default, as the code
-requires. This is station LP's verb registry work (state and vision §2.11).
+Autoradio may address management (directives), research (thread evidence)
+and the email desk (draft requests); management, research, the email desk
+and Texture may address Autoradio (urgent items, thread results, "tell the
+listener"). Fail-closed by default, as the code requires. This is station
+LP's verb registry work (state and vision §2.11).
 
 ### 7.3 APIs
 
@@ -1328,12 +1660,16 @@ All under the versioned product API with an OpenAPI contract (mobile plan
 
 | Endpoint | Served by | Wakes the computer? | Purpose |
 |---|---|---|---|
-| `GET /api/autoradio/horizon?after=<run_sheet_version>` | computer | yes (on intent: the device's horizon is low, or the listener started a session) | The planned horizon: segments with metadata, predictions, asset refs |
+| `GET /api/autoradio/horizon?after=<run_sheet_version>` | computer | yes (on intent: the buffer is low, or the listener started a session) | The speculative buffer: segments with metadata, predictions, asset refs, and pre-resolved adjacent material per entity and topic |
 | `GET /api/platform/autoradio/public?since=<cursor>&sections=` | host (Store B) | no | Public candidates: story updates with shared scripts and rendered audio refs, new episodes, clips |
+| `GET /api/platform/autoradio/adjacent?entity=<id>&q=<text>` | host (Store B) | no | The responder's public fallback: the best public material adjacent to X (shared story scripts, events, episodes, clips), seekable by entity id, alias and title (retrieval ladder rungs 1-3) |
+| `POST /api/autoradio/threads` | computer | yes (on intent) | Open a thread for "tell me about X": the utterance, the interrupted segment, what adjacent material is already playing; returns a thread id |
+| `GET /api/autoradio/threads/{id}/segments?after=` | computer | while open | Continuation segments as they are written (SSE while the thread is open; the cursor resumes on reconnect) |
 | `GET /api/autoradio/assets/{hash}` | host for shared, computer for personal | personal only | Script text or rendered audio, content-addressed, cacheable forever |
-| `GET /api/autoradio/taste-profile` | computer | yes | The listener's scoring weights, hour-clock parameters, follows and mutes, vocabulary list; lets the device score public candidates without waking the computer |
-| `POST /api/autoradio/signals` | computer | buffered: sent with the next horizon fetch, or flushed at session end | Batched playback events with idempotency keys; settle predictions |
-| `POST /api/autoradio/utterances` | computer | yes (on intent) | A transcript (with word timestamps) plus the take capture ref; returns accepted units and the planned insertions |
+| `GET /api/autoradio/preferences` | computer | yes | The listener's learned preferences (each with its prediction and evidence), aspirations, instructions, follows and mutes, vocabulary list; readable by the listener, exported to the device so it can score public candidates without waking the computer |
+| `POST /api/autoradio/instructions` | computer | buffered, or yes when spoken in a session | A standing instruction or aspiration from the listener; overrides learned preferences (§2.3) |
+| `POST /api/autoradio/signals` | computer | buffered: sent with the next buffer fetch, or flushed at session end | Batched playback events with idempotency keys; settle predictions |
+| `POST /api/autoradio/utterances` | computer | yes (on intent) | A transcript (with word timestamps) plus the take capture ref; returns accepted units, opened threads and planned insertions |
 | `POST /api/captures` (take variant) | computer | yes | The take audio and transcript (mobile plan §8.4) |
 | `GET /api/supervision/summary` | host | no | Counts and urgent flags (mobile plan §8.3) |
 | Push (APNs) | host relay | no | Level-0 and level-1 items, ids only, no content |
@@ -1345,32 +1681,57 @@ host-side encrypted drop box if buffering proves lossy).
 
 ### 7.4 Latency budgets
 
+Ruling 2 makes responsiveness the first budget: the listener must hear
+*something relevant* almost at once, and something better soon after.
+
 | Path | Budget | How |
 |---|---|---|
-| Segment boundary to next audio | ≤ 150 ms (gapless for prefetched) | Next N segments cached and pre-rendered; AI segments rendered ahead by sentence |
+| Interruption to acknowledgement | ≤ 300 ms after end of utterance | EOU (median 160 ms) + a pre-rendered or on-device templated line and earcon |
+| Interruption to adjacent material, X in the buffer | ≤ 1 s | On-device adjacency index; asset already cached |
+| Interruption to adjacent material, X only on the host | ≤ 2-3 s | Host adjacency lookup (seek queries, retrieval ladder rungs 1-3: ~1-30 ms server time) + fetch + TTS of the first sentence |
+| Interruption to first generated continuation, computer awake | ≤ 8 s | Thread opened in parallel with the adjacent jump; first segment deliberately short; TTS streams sentence by sentence |
+| Interruption to first generated continuation, computer hibernated | ≤ 20 s (inference) | Snapshot resume (seconds) or cold boot (~10.5 s), then the above; adjacent material covers the wait |
+| Thread continuation needing web research | 30-120 s (inference) | Research cast; the stream returns to what was playing and the result interrupts at level 1 when it lands |
+| Segment boundary to next audio | ≤ 150 ms (gapless for buffered items) | Likely-next items cached and pre-rendered; AI segments rendered ahead by sentence |
 | Voice onset to duck | ≤ 150 ms | VAD on device |
-| Command end to effect | ≤ 300 ms | EOU (median 160 ms) + local grammar |
-| Question ack | ≤ 1 s | Local earcon and templated line |
-| Question answer, computer awake | ≤ 8 s to first audio | Desk turn + script + TTS of the first sentence; stream the rest |
-| Question answer, computer hibernated | ≤ 20 s (inference) | Snapshot resume (seconds) or cold boot (~10.5 s), then the above; the ack line says "checking your computer" |
+| Command end to effect | ≤ 300 ms | EOU + local grammar |
 | Monologue end to draft take ready | ≤ 30 s (60 s for performances) | Chunked transcription during speech; desk segmentation after |
 | Level-0 item to on-air | ≤ 60 s from the source event while listening | Host summary poll (≤ 30 s) or push; fetch; next boundary |
 
-### 7.5 Caching, prefetch and offline
+The acknowledgement never promises more than the engine is doing: if the
+adjacent jump takes longer than its budget, the line is "Still looking",
+not a fake "thinking" pause.
 
-- **Prefetch depth:** the next N segments where N covers 30 minutes or 5
-  segments, whichever is more; on Wi-Fi, the whole horizon's AI segments
-  (they are text) and the first 10 minutes of each human episode, streamed
-  from the publisher's URL into the player's buffer only (no re-hosting,
-  no persistent copy; media plan §4; a personal offline download is an
-  open legal question, mobile plan §8.5).
-- **Offline:** the programme continues from the cached horizon and cached
-  public scripts with on-device TTS; personal segments older than their
+### 7.5 Speculative buffer, prefetch and offline
+
+The buffer is a bet on two things: what the listener will hear next, and
+what they will ask about. It is not a schedule and is expected to be
+partly thrown away (ruling 2).
+
+- **Likely next:** the next segments covering about 30 minutes or 5
+  items, whichever is more, pre-rendered; on Wi-Fi, all AI segments in
+  the buffer (they are text) and the first 10 minutes of each human
+  episode, streamed from the publisher's URL into the player's buffer only
+  (no re-hosting, no persistent copy; media plan §4; a personal offline
+  download is an open legal question, mobile plan §8.5).
+- **Likely asked about:** for the entities and topics of what is playing
+  and queued, the open threads and the listener's open work, the best
+  adjacent material resolved in advance: a clip ref, the shared story
+  script, a concept explainer, a one-line metadata summary. These form the
+  device's **adjacency index**, so most "tell me about X" questions are
+  answered with no network at all (inference; measured by the p(asked
+  about) predictions, §2.7).
+- **Refill:** when the likely-next part falls under 30 minutes, when the
+  listener changes topic or opens a thread (the old bets are stale), at
+  the start of a session if the buffer is older than its shortest
+  `expires_at`, or when the host summary shows a new urgent item. Each
+  refill or thread is one computer wake; expected 1-6 wakes per
+  listening hour, more for a listener who interrupts often (estimate).
+- **Offline:** the stream continues from the buffer and cached public
+  scripts with on-device TTS; "tell me about X" is answered from the
+  adjacency index only, and the acknowledgement says that the rest will
+  come when the phone is back online; personal segments older than their
   `expires_at` are dropped; signals buffer; takes queue.
-- **Horizon refresh:** when fewer than 30 minutes remain, at the start of a
-  session if the horizon is older than its shortest `expires_at`, or when
-  the host summary shows a new urgent item. Each refresh is one computer
-  wake. Expected 1-4 wakes per listening hour (estimate).
 
 ### 7.6 Battery and data
 
@@ -1388,24 +1749,27 @@ host-side encrypted drop box if buffering proves lossy).
 
 The repo's restart rule applies directly (CLAUDE.md, "Restarts end work"):
 
-- **A crash on the computer closes the planner's in-flight run**
-  ("interrupted by a restart"); the device keeps playing its cached
-  horizon and asks again later. Predictions for that horizon resolve
+- **A crash on the computer closes the planner's in-flight run and every
+  open thread** ("interrupted by a restart"); the device keeps playing its
+  cached buffer and asks again later. Predictions for that buffer resolve
   `interrupted` where they depended on the dead run.
-- **The listener's standing intents survive** (follows, mutes, the
-  programme being "on"); the occurrence (a planning run, an answer in
-  progress) does not resume after a crash. An unanswered question is
-  answered with "I lost that when your computer restarted; ask again?"
-  rather than silently re-run.
+- **The listener's standing intents survive** (instructions, aspirations,
+  follows, mutes, learned preferences, the stream being "on"); the
+  occurrences (a refill, a thread, an answer in progress) do not resume
+  after a crash. An unfinished thread is closed with "I lost that when
+  your computer restarted; ask again?" rather than silently re-run.
 - **The device never depends on the computer to keep playing** (fate-
-  sharing: a sleeping or crashed computer degrades the programme to public
-  content; it does not stop it).
+  sharing: a sleeping or crashed computer degrades the stream to public
+  content and the device's adjacency index; it does not stop it).
 
 ### 7.8 Mutation classes
 
 | Work | Class | Protected surfaces |
 |---|---|---|
-| Client scheduler, audio engine, local grammar | orange (client) | none server-side |
+| Client responder and scheduler, audio engine, local grammar | orange (client) | none server-side |
+| Host adjacency lookup (public, read-only) | orange (a query over Store B) | none; plan-shape tests per the retrieval research |
+| Interruption threads, including research casts | orange (model routing through the gateway; web search through the search plane) | gateway calls |
+| Learned-preferences record and listener instructions | orange | none; private to the listener's computer |
 | Autoradio desk (new app-agent desk, verbs, addressing policy) | orange; **red** where it adds addressing rules (`PolicyFor`) | desk authority |
 | Run sheet writer, segment records, signals ingestion | orange | object graph (reserved kind gets its first writer) |
 | Autoradio precommitments and rule settlement | orange (commitment records exist) | run acceptance not touched |
@@ -1439,35 +1803,45 @@ question 4), and published audio Opinions.
 
 ### 8.2 Cost per listening hour (estimate)
 
-Assumptions: an hour of programme is about 30 minutes of human audio and 30
-minutes of AI voice and takes; about 25 AI segments; one planning wake per
-20-30 minutes; model prices from `internal/llmcost/pricing.go` (DeepSeek
-V4.1 Flash $0.30 input / $1.20 output per million tokens; GPT-6 Luna
-$0.10 / $0.50; Jev $0.042 input).
+Assumptions: the mix is contextual (ruling 1), so cost depends on it. The
+table prices a middle case: about 30 minutes of human audio and 30
+minutes of AI voice and takes; about 25 AI segments; a buffer refill
+every 20-30 minutes; two or three interruption threads. A media-heavy
+hour costs less; a project-heavy, mostly-AI hour with many threads costs
+more (last row). Model prices from `internal/llmcost/pricing.go`
+(DeepSeek V4.1 Flash $0.30 input / $1.20 output per million tokens; GPT-6
+Luna $0.10 / $0.50; Jev $0.042 input).
 
 | Item | Tokens or units per listening hour | Cost per listener-hour |
 |---|---|---|
 | Shared story-update scripts (written once per story version) | ~15 scripts × 6k in / 400 out, shared by all listeners of that version | ≈ $0.04 for the first listener; ≈ $0 at scale |
 | Personal preambles, mail and desk scripts, bridges | ~10 × 4k in / 250 out | $0.01-0.015 (Flash), $0.005 (Luna) |
 | Planner desk turns (candidates, scoring, commitments) | 2-3 turns × 30-40k in (mostly cached) / 3k out | $0.01-0.05 |
-| Jev classifications (clip relevance, utterance classes, urgency) | ~200 × 1k in | ≈ $0.01 |
+| Interruption threads (first continuation segment, a deeper follow-up) | 2-3 threads × ~40k in / 1.5k out | $0.03-0.05 (Flash) |
+| Speculative buffer waste (material prepared but never heard or asked for) | included above; the planner's p(heard) and p(asked about) scores keep it bounded | — |
+| Jev classifications (clip relevance, utterance classes, urgency, aspiration fit) | ~300 × 1k in | ≈ $0.01-0.02 |
 | Monologue processing (10 min of speech) | ~2k tokens of transcript, ~15k in with context | ≈ $0.005-0.01 |
 | Email summaries (20 messages) | ~60k in / 3k out | ≈ $0.02 |
 | ASR | on device | $0 |
 | TTS, personal | on device | $0 |
 | TTS, shared, server-rendered | once per script version, CPU | ≈ $0 per listener |
 | Computer awake time | a few minutes per hour; a $129/month host serving ~1,200-2,000 users at ~1.5% busy (pricing notes) puts an awake computer-hour well under $0.01 (inference) | < $0.01 |
-| **Total** | | **≈ $0.03-0.15 per listener-hour** |
+| **Total, middle case** | | **≈ $0.06-0.20 per listener-hour** |
+| Mostly AI voice, many threads, some web research | ~40 personal AI segments, 6-10 threads, 2-3 research casts | ≈ $0.20-0.40 per listener-hour |
+| Mostly human media | a few scripts and bridges; few threads | ≈ $0.02-0.05 per listener-hour |
 
 The system briefing (§5) is priced separately: about $0.30-0.60 per
 30-minute briefing with the strongest listed model, less with cached
 context (estimate, §5.8).
 
-At two hours a day of the ordinary programme that is about $2-9 a month
-per listener (estimate),
-inside the $35 anchor but not negligible; the levers are shared scripts,
-caching, the cheapest model that passes a quality check per segment kind,
-and the state and vision note's "tiers by time spent". Human audio costs
+At two hours a day that is about $1-3 a month for a media-heavy listener,
+$4-12 for the middle case and $12-24 for a mostly-AI listener who
+interrupts often (estimate): inside the $35 anchor at the low and middle
+end, and the reason the heavy end needs care. The levers are shared
+scripts, caching, short first continuations (most threads end early),
+speculation scored by p(asked about) so the buffer does not grow
+unchecked, the cheapest model that passes a quality check per segment
+kind, and the state and vision note's "tiers by time spent". Human audio costs
 Choir nothing to serve: the publisher serves it.
 
 ---
@@ -1477,17 +1851,17 @@ Choir nothing to serve: the publisher serves it.
 | Product | What it does | Borrow | Avoid |
 |---|---|---|---|
 | **Spotify DJ** (2023; voice requests 2025) | A personalized music stream with a synthetic host voice modelled on a real person, commentary written with OpenAI models under heavy editorial oversight; hold the DJ button and speak a request (web: https://www.thurrott.com/?p=279662; https://www.tomsguide.com/entertainment/music-streaming/spotifys-ai-dj-now-takes-requests-heres-how-it-works) | Hold-to-talk on the main control; a host voice that only connects human-made content | A lifelike, human-modelled voice (the owner wants clearly AI); banter as a feature; requests as the only voice act |
-| **Spotify Personal Podcasts / Studio** (May 2026) | AI-generated personal podcasts and daily briefings from listening history and connected email, calendar and notes; a CLI for coding agents (web: https://www.macrumors.com/2026/05/08/spotify-personal-podcasts-ai-agent; https://spotify.substack.com/p/spotify-expands-into-ai-audio-with) | Briefings from personal data; agents as producers of audio | One-way generated episodes; an AI talking all hour |
+| **Spotify Personal Podcasts / Studio** (May 2026) | AI-generated personal podcasts and daily briefings from listening history and connected email, calendar and notes; a CLI for coding agents (web: https://www.macrumors.com/2026/05/08/spotify-personal-podcasts-ai-agent; https://spotify.substack.com/p/spotify-expands-into-ai-audio-with) | Briefings from personal data; agents as producers of audio | Precomputed one-way episodes that cannot follow an interruption to a topic nobody generated |
 | **NotebookLM Audio Overviews, interactive mode** | Two AI hosts discuss your sources; "Join" lets you ask a question, the hosts answer and resume; English only; delays and voice glitches noted (web: https://support.google.com/notebooklm/answer/16212820) | Answer-then-resume; answers grounded in sources | Two-host AI banter; the question box as the only interaction |
 | **Google Daily Listen** (Search Labs, 2025) | A ~5-minute personalized audio overview from Search and Discover activity, with transcript, per-story skip and thumbs (web: https://9to5google.com/2025/01/08/google-discover-daily-listen/) | Per-story skip as a unit; links out to sources | Thumbs; a fixed short episode instead of a stream |
-| **Huxe** (2025, shut down 28 May 2026) | Daily briefing from email and calendar, "live stations" on topics, interrupt the hosts to ask (web: https://techcrunch.com/2025/09/23/former-notebooklm-devs-new-app-huxe-taps-audio-to-help-you-with-news-and-research; shutdown: https://techcrunch.com/2026/05/22/audio-generation-app-huxe-founded-by-former-notebooklm-developers-shuts-down/) | Stations as standing topics that refresh; mail in the mix | The lesson: generated audio alone became a commodity the day a platform shipped it. Differentiation must be the graph (provenance, versions, claims), human media, the user's own agents, and two-way takes |
+| **Huxe** (2025, shut down 28 May 2026) | Daily briefing from email and calendar, "live stations" on topics, interrupt the hosts to ask (web: https://techcrunch.com/2025/09/23/former-notebooklm-devs-new-app-huxe-taps-audio-to-help-you-with-news-and-research; shutdown: https://techcrunch.com/2026/05/22/audio-generation-app-huxe-founded-by-former-notebooklm-developers-shuts-down/) | Standing topics that refresh (as follows inside one stream, not separate stations); mail in the mix | The lesson: generated audio alone became a commodity the day a platform shipped it. Differentiation must be the graph (provenance, versions, claims), human media, the user's own agents, and two-way takes |
 | **Snipd** | AI podcast player: tap headphones to save a moment, AI transcripts, chapters and summaries, clip bounds edited on the transcript (web: https://apps.apple.com/app/id1557206126) | Headphone gesture as an opt-in capture; transcript-based clip editing for takes | |
 | **Particle** | AI news reader; "Podcast Clips" matches podcast moments to stories with embeddings and AI-chosen clip bounds, transcript highlighted as spoken; entity pages list a person's podcast appearances (web: https://techcrunch.com/2026/02/23/particles-ai-news-app-listens-to-podcasts-for-interesting-clips-so-you-you-dont-have-to/) | Clips attached to stories; entity-keyed appearances (our claims layer does this by Wikidata id) | Unstated rights basis for clips; Choir plays the publisher's file and records the basis |
 | **Artifact** (2023-2024) | Personalized AI news ranking and summaries; wound down because "the market opportunity isn't big enough", with moderation of comments and posts too costly for a small team (web: https://the-decoder.com/ai-curated-news-app-artifact-shuts-down-after-one-year/) | | Personalization alone is not a product; social features need moderation before launch (LC's moderation gate) |
 | **ElevenReader / GenFM** | Lifelike TTS of any text; two AI co-hosts generated from a document (web: https://elevenlabs.io/text-reader; https://elevenlabs.io/de/genfm) | Reading any document aloud (Texture documents, PDFs) | Lifelike voices; fake co-hosts |
 | **Voice assistants and full-duplex models** (Siri, Alexa; Moshi) | Turn-taking dialogue; Moshi models overlap and interruption with ~200 ms latency (web: https://arxiv.org/abs/2410.00037) | Barge-in engineering, end-of-utterance detection | Conversation as the product; a long monologue does not fit a turn |
 | **Tutoring research and intelligent tutors** (Bloom's 2 sigma; knowledge tracing) | One-to-one tutoring beats group instruction by about two standard deviations; knowledge tracing keeps a probability per skill updated from the learner's actions (web: https://en.wikipedia.org/wiki/Bloom%27s_2_sigma_problem; https://link.springer.com/doi/10.1007/BF01099821) | A per-concept probabilistic learner model; pitching by what the learner knows | Quizzes as the main evidence; a monologue is better evidence and costs the listener nothing |
-| **Broadcast radio** | The format clock, station idents, back-announcing, traffic and news breaks that preempt (web: https://en.wikipedia.org/wiki/Broadcast_clock) | The clock as a constraint set; idents; preemption discipline | Fixed schedules; ads |
+| **Broadcast radio** | The format clock, station idents, back-announcing, traffic and news breaks that preempt (web: https://en.wikipedia.org/wiki/Broadcast_clock) | Idents; preemption discipline; the clock as a starting prior that learning replaces | Fixed schedules and fixed mix rules (ruling 1); named shows as permanent structure (ruling 5); ads |
 
 **What none of them does** (the differences that matter):
 
@@ -1499,9 +1873,15 @@ Choir nothing to serve: the publisher serves it.
 3. Accept **long monologues** and turn them into routed takes,
    performances, questions and directives.
 4. Keep a **scored record of its own predictions about you**, which it
-   learns from in context and which you can ask about.
-5. Keep your attention data **on your own computer**.
-6. **Teach you your own project**: brief you from your own tape, state
+   learns from in context and which you can read, ask about and overrule
+   with your own instructions.
+5. Keep your attention data **on your own computer**, and serve your
+   stated aspiration rather than your engagement.
+6. Answer **"tell me about X" at any moment**, for an X nobody
+   precomputed: an immediate acknowledgement, the nearest real material,
+   then a continuation generated from your own graph, the shared graph
+   and the web.
+7. **Teach you your own project**: brief you from your own tape, state
    pathways as scored predictions with named predictors, and pitch
    explanations from a learner model that is itself a scored record.
 
@@ -1515,31 +1895,35 @@ agent-days, as there.
 | Phase | Programming engine scope | Depends on | Done when (artifact) | Effort |
 |---|---|---|---|---|
 | **Spikes** (add to the mobile plan's three) | (d) Voice processing on `AVAudioEngine` with programme playback through the same engine: echo leakage into VAD, ducking behaviour, time to duck; (e) chunked Parakeet with FluidAudio custom vocabulary on 20 of the owner's spoken sentences with "Choir", "Autopaper", "Jev", teammates' names; (f) watch: stream an AAC asset with the built-in speaker and AirPods; record and upload a take | none | Dated evidence notes with numbers and recordings | 2-3 days |
-| **M0** (local prototype) | Swift scheduler: hour clock, public candidates from the front API, shared scripts generated on the client for now (labelled prototype), local command grammar, push-to-talk, signals logged locally, segment metadata schema v0 | none beyond M0 | The owner listens for 30 minutes, skips, follows, interrupts; the signal log shows every event; an XCUITest run plays a scripted programme | inside M0's 8-12 days, +3 |
-| **M1** (supervision) | Autoradio desk v0: horizon from public plus supervision projection; `desk_update` and `answer` segments; "what's my computer doing?"; host summary for urgent flags; level 0-1 preemption | Supervision feed and host summary (mobile plan §8.3); app-agent desk scaffolding and addressing policy (LP) | The owner asks the state of their computer by voice and hears a correct answer citing records; a failed capsule preempts within 60 s | +8-12 days server, +3 client |
-| **M2** (Parakeet takes) | Talk sessions and monologues; chunked transcription; utterance segmentation and routing; takes as private captures with auto-edit; directives to management; per-segment precommitments and rule settlement; calibration view for the listener | Take capture kind; directive records via API; commitment records from an app desk | A ten-minute monologue becomes a take, a directive and a question, each routed correctly; a week of predictions settles with a Brier score per kind | +10-14 days |
-| **System briefing v0** (can start before M0 ships; owner's highest-value use, §5) | A briefing script from the tape, `docs/ACTIVE.md`, the mission graph, goal files, open-decision lists and `docs/learn/`; chapters: since last time, state with evidence labels, decisions, pathways with named predictors, concepts on demand; read by the M0 client or the desktop; a written Texture companion | Read access to records and files (observation verbs exist); the Autoradio desk scaffold, or a one-off run while it does not exist | The owner listens to a 30-minute briefing on a walk and finds no claim without a ref; every pathway names its predictor | 4-6 days |
+| **M0** (local prototype) | Swift responder and scheduler: acknowledgement and a jump to adjacent material from an on-device adjacency index over public candidates; pacing preferences settable by voice (no fixed mix); public candidates from the front API; shared scripts generated on the client for now (labelled prototype); local command grammar; push-to-talk; signals logged locally; segment metadata schema v0 | none beyond M0 | The owner listens for 30 minutes, skips, follows, and interrupts with "tell me about X" for entities in the stream, hearing an acknowledgement within 0.3 s and adjacent material within 1 s; the signal log shows every event; an XCUITest run plays a scripted stream | inside M0's 8-12 days, +4 |
+| **M1** (supervision and threads) | Autoradio desk v0: speculative buffer from public plus supervision projection; interruption threads with background continuation; host adjacency lookup; `desk_update` and `answer` segments; "what's my computer doing?"; host summary for urgent flags; level 0-1 preemption from any source | Supervision feed and host summary (mobile plan §8.3); app-agent desk scaffolding and addressing policy (LP) | The owner asks the state of their computer by voice and hears a correct answer citing records; "tell me about X" for an X not in the buffer starts adjacent material within 3 s and a generated continuation within 8 s (computer awake); a failed capsule preempts within 60 s | +10-14 days server, +4 client |
+| **M2** (Parakeet takes) | Talk sessions and monologues; chunked transcription; utterance segmentation and routing; takes as private captures with auto-edit; directives to management; per-segment and preference precommitments and rule settlement; aspirations and instructions as standing intents; the readable learned-preferences record (spoken and as a Texture document); calibration view for the listener | Take capture kind; directive records via API; commitment records from an app desk | A ten-minute monologue becomes a take, a directive and a question, each routed correctly; a week of predictions settles with a Brier score per kind; the owner hears "what have you learned about me?", overrides one preference by voice, and the next buffer honours it | +10-14 days |
+| **System briefing v0** (can start before M0 ships; owner's highest-value use, §5) | Briefing content as segments (not a fixed script) from the tape, `docs/ACTIVE.md`, the mission graph, goal files, open-decision lists and `docs/learn/`; chapters: since last time, state with evidence labels, decisions, pathways with named predictors, concepts on demand; played in the M0 client or the desktop as a stream the owner can interrupt ("tell me about X" answered from pre-resolved concept and decision material); a written Texture companion | Read access to records and files (observation verbs exist); the Autoradio desk scaffold, or a one-off run while it does not exist | The owner listens to a 30-minute briefing on a walk and finds no claim without a ref; every pathway names its predictor | 4-6 days |
 | **System briefing v1** (with M2) | Learner model as precommitments over the `docs/learn/` concept inventory; settlement from monologues by Jev; pitch commands; check segments; intent capture with conflict flags; the owner's own forecasts (opt-in) | M2's monologue pipeline | Over two weeks, the engine's p(follow) is calibrated within 0.1 per level, and the owner's intents appear in management's queue with links | +6-10 days |
 | **Team briefings** (later) | One briefing, per-listener learner models, requested teammate takes | LA, team sharing | Two listeners hear one briefing pitched differently; neither model leaves its owner's computer | later |
 | **Email desk** (parallel, its own design) | `mail_update` segments; voice reply drafts; nothing sent without approval | The email desk (its own RLM), per owner ruling | The owner hears a new message summarized and dictates a reply that waits as a draft | its own plan |
-| **M3** (media, watch) | Podcast sources first-class in the registry (media plan step 3), transcripts as captures (step 9), clip selection by Jev; shared script and audio rendering on the host; the learned V model and exploration; watch app | Media plan steps 3 and 9; host rendering | A new MLST episode plays the morning it appears for a listener who follows AI strategy; the watch runs a 30-minute programme with no phone | +12-18 days |
+| **M3** (media, watch) | Podcast sources first-class in the registry (media plan step 3), transcripts as captures (step 9), clip selection by Jev; shared script and audio rendering on the host; the learned V model (bounded under aspirations) and exploration; watch app | Media plan steps 3 and 9; host rendering | A new MLST episode plays the morning it appears for a listener who follows AI strategy; the watch plays a 30-minute stream with no phone | +12-18 days |
 | **Later** | Teammates' takes and team programmes; audio Opinions; wake word; CarPlay; box score lines; Android | LC, LA, LC moderation, the lawyer's answers, the App Store | | |
 
 **What to do first:** the three new spikes, beside the mobile plan's three.
-Then the segment schema and the horizon API as a design note with an
-OpenAPI fragment (no code), because the client scheduler, the desk and the
-watch all depend on that contract.
+Then the segment schema, the buffer and thread APIs and the adjacency
+lookup as a design note with an OpenAPI fragment (no code), because the
+responder, the scheduler, the desk and the watch all depend on that
+contract.
 
 ### 10.1 Risks
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| The AI voice is tiring for long stretches | Listeners leave | Human-voice share ≥ 50%, AI runs ≤ 4 min, short templated bridges (§2.4) |
+| The AI voice is tiring for long stretches | Listeners leave | No fixed rule (ruling 1); run length is a learned, visible preference per context; human material offered when it exists and fits; short templated bridges (§2.4) |
+| Interruptions outrun generation ("tell me about X" for an X nobody prepared) | Silence or filler that sounds evasive | Prompt response, then fill: acknowledgement ≤ 0.3 s, host adjacency lookup ≤ 3 s, honest "still looking" lines; buffer scored on p(asked about) so speculation improves (§2.1, §7.4) |
+| Acknowledgement lines grate | Sounds like fake thinking | Short, varied, true, never longer than the real wait; learnable and mutable by voice ("skip the 'ooh'") |
 | Story-update scripts are slop | "I don't want slop" | Shared scripts written from claims deltas with verified quotes; a Jev check per script; the owner listens daily in M0-M2 |
 | Echo cancellation fails on speaker playback | Barge-in false triggers | Spike (d); fall back to push-to-talk only on speaker |
 | Monologue misclassified as directive | Unwanted actions | Default to take below p 0.7; read-back for directives |
-| Planner wakes the computer too often | Compute cost | Taste profile on device for public candidates; horizon of 2-3 h; measure wakes per listening hour |
-| Personalization becomes engagement bait | Owner's objective lost | Importance floor and exploration as constraints; Goodhart detector (§2.7) |
+| Desk wakes the computer too often (refills and threads) | Compute cost | Exported preferences on the device for public candidates; host adjacency lookup without a wake; short first continuations; measure wakes per listening hour |
+| Personalization becomes engagement bait | Owner's objective lost | Aspirations and instructions outrank learned engagement by construction (§2.3); persistent conflicts reported, never silently resolved; Goodhart detector (§2.7) |
+| Programme names persist and fragment the stream | Ruling 5 not met | Modes are scorer features only; measure cross-mode transitions without announcements (§1.6) |
 | Rights: clips | Takedowns | Publisher-hosted only; attribution; lawyer list |
 
 ### 10.2 Open questions for the owner
@@ -1547,15 +1931,18 @@ watch all depend on that contract.
 1. **The desk's name.** "Autoradio desk" (product name) or a role name
    such as "programme desk"? Recommendation: the Autoradio desk, since the
    owner's rule is that each app agent is a desk.
-2. **Human-voice share.** Is "at least half the listening time is human
-   voices" the right default, or should it be learned from zero?
+2. **Acknowledgement style.** Ruling 2's example is "ooh, interesting,
+   let me think". How warm should the acknowledgement be by default, and
+   should it ever say "let me think" when the engine is fetching rather
+   than generating? Recommendation: warm and short, and truthful about
+   what is happening ("let me pull that up" for a fetch).
 3. **Approvals and sends on the watch.** May a confirming double tap on an
    unlocked, worn watch approve a send (a take to the team, an email
    reply)? Self-development approvals stay on the phone with Face ID in any
    case. Recommendation: sends yes, approvals no.
-4. **Interruption budget.** Two level-0 interruptions an hour by default,
-   and which sources may raise level 0 (engineering failures, the email
-   desk, teammates)?
+4. **Interruption starting prior.** Any source may interrupt (ruling 5)
+   and tolerance is learned; is about two level-0 interruptions an hour
+   the right starting prior before anything is learned?
 5. **Whole episodes.** For followed shows, play whole episodes by default
    (the owner's MLST example) or offer a summary first? Recommendation:
    whole, with a one-line intro, resumable.
@@ -1571,18 +1958,26 @@ watch all depend on that contract.
    such: right, or should exploration be silent?
 10. **Engine transparency.** Should "how well do you know me?" give the
     listener their own calibration numbers, as recommended (§2.7)?
-11. **The listener's own forecasts.** In a briefing, may the owner commit
-    probabilities on pathways and get a private calibration record of his
-    own (§5.5)? Recommendation: yes, opt-in, never shown to anyone else.
+11. **The listener's own forecasts.** In briefing content, may the owner
+    commit probabilities on pathways and get a private calibration record
+    of their own (§5.5)? Recommendation: yes, opt-in, never shown to anyone else.
 12. **Check segments.** Are invitations to think ("Before I go on: why...?")
     welcome, or should concept evidence come only from what the listener
     says unprompted (§5.4)? Recommendation: on, rare, easy to turn off.
 13. **Learner-model sharing in teams.** Confirm the default that no one,
     including a manager, can read another listener's learner model, and
     that sharing a level is an explicit act by its owner (§5.6).
-14. **Briefing cadence and depth.** A standing daily briefing (say 20
-    minutes each morning), or only on request? And is about $0.30-0.60 per
+14. **Briefing cadence and depth.** A standing instruction that leans
+    the stream into briefing content at a time of day (say 20 minutes
+    each morning), or only on request and when it matters? And is about $0.30-0.60 per
     30 minutes acceptable for the strongest model (§5.8)?
+15. **Aspiration check-ins.** Is a weekly spoken check on the aspiration
+    ("This week I gave you more macro than you'd have chosen; was it
+    worth it?", §2.7) welcome, or does it feel like the thumbs the owner
+    rejected? Recommendation: weekly, one sentence, skippable.
+16. **Thread depth before research.** How far should a thread go before
+    it casts to research for web evidence (cost and wait)? Recommendation:
+    only on "dig into it", or when neither graph has anything on X.
 
 ---
 
