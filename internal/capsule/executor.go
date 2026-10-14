@@ -1413,7 +1413,7 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	if err != nil {
 		return nil, err
 	}
-	const releasePrefix = "var/lib/artifact/release/"
+	const releasePrefix = ReleaseTreePrefix
 	temporary, err := os.MkdirTemp(incomingRoot, ".freeze-")
 	if err != nil {
 		return nil, err

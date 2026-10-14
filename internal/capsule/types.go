@@ -7,6 +7,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
+// ReleaseTreePrefix is where a freeze reads the runtime release a capsule
+// built: upperdir-relative, so /var/lib/artifact/release/ at the capsule
+// root, never under /workspace/platform (that is source). The engineering
+// overlay teaches this path; runtimeprompts tests pin it to this constant.
+const ReleaseTreePrefix = "var/lib/artifact/release/"
+
 // SpawnSpec describes the desired state of a new capsule.
 type SpawnSpec struct {
 	CapsuleID  string       // unique capsule identifier (UUID)
