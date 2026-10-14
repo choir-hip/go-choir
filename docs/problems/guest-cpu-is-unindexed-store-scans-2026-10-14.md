@@ -260,3 +260,34 @@ lookup from the sequence index (one index fewer) or by option 2 (a typed
 projection table); `OpenRounds`' fold remains O(records of the inbox) for
 its non-run-end readers (now index reads); tape append once (report C7)
 is not done.
+
+## Deploy evidence: first boot builds the indexes past vmctl's 120 s write timeout (2026-10-14, ~22:45 UTC)
+
+The first deploy carrying C1–C5 (2d9e2b00c, run 38642430545) failed at
+"active computer refresh or identity verification". Host services and the
+NixOS switch completed (switch retried once after a dbus-broker reload
+failure).
+
+- Test computer candidate-fleet-e15cb… (7.3 GB guest disk) built the
+  record indexes before its first healthy response: "record indexes
+  ensured in 1m54.789s". The boot timeline shows first_healthy at
+  124,494 ms and guest_receipt_fetch_done at 128,200 ms. vm-48bc… (smaller
+  store) refreshed in 12 s.
+- vmctl's deploy-refresh handler is synchronous. It completed at 21:53:20
+  (`outcome=refreshed`), but the response passed the server WriteTimeout
+  of 120 s (internal/server/server.go defaultWriteTimeout), so CI's curl
+  got an empty reply (`curl_error_52`) and the deploy failed closed.
+- The paper's computer was busy and was deferred, which is correct. Its
+  first idle refresh will pay the same one-time index build.
+
+Belief: this is a one-time cost per store, not a regression in steady
+state. A re-run of the deploy should pass, because the indexes now exist.
+
+Remaining error and options, not yet chosen:
+- (a) build the indexes after first health, in the background, with
+  readers on the scan path until they are live (the `indexed` fallback
+  already exists);
+- (b) make deploy-refresh asynchronous: accept, then poll;
+- (c) raise the write timeout for that route.
+(a) removes the class for any future index; (b) removes it for any slow
+boot.
