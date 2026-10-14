@@ -1157,3 +1157,93 @@ FM10's drain is O6; FM13 and FM25 are S3; FM15 is S5.
    a stalled task model to its deadline (residual Report, re-delegation),
    and a guest kill with one task running and one queued (rounds and runs
    `interrupted_by_restart`, no wake, the next poll delegates anew).
+
+## 18. S2b: concurrency (branch `management-delegation-s2b`, not pushed)
+
+Problem record first:
+[management-intake-backlog-at-28-sources-2026-10-14](../problems/management-intake-backlog-at-28-sources-2026-10-14.md)
+(149 of 154 captures undisposed after 34 minutes at 28 sources; one task
+at a time, task p50 241 s, queue wait p50 425 s). S2b is §13's slice:
+K = 4, the slot starter and queue at K > 1, the library head under real
+concurrency, and the shared sub-RLM spacer. Red (management runtime,
+gateway call pacing). Nothing pushed or deployed.
+
+### 18.1 Failure modes (written before any code)
+
+Numbers continue §11 where S2b adds a way to fail; §11's numbers are reused
+where S2b exercises them at K > 1.
+
+- **FM23 at K > 1.** A burst starts more than K task runs: two wakes run
+  the starter at once and both see a free slot. Guard: the starter's
+  mutex, the claim's compare-and-set, and a claimed task with no run yet
+  counts as busy. Test: six queued tasks, concurrent wakes, exactly K
+  running.
+- **FM8, the queue stalls.** Queued tasks wait while slots are free,
+  because nothing starts them. Guard: every non-crash closure mints a
+  durable start wake (S2a), and one wake fills every free slot, not one.
+  Test: the queue drains through the outbox wakes alone, with the peak of
+  running tasks equal to K.
+- **FM3 under real concurrency.** Two running tasks read the library at
+  the same head and both open a story for one event. Guard: the library
+  head (S2a, R2-5), checked by the store under the commit lock: the first
+  open commits and moves the head, the second is refused with the first's
+  story named, and its task feeds that story. Whether two captures report
+  one event stays a judgement; the store only refuses an open from a run
+  that has not seen the stories opened since. No topic-keyed claim: Jev's
+  labels are advice (L2a), so a claim keyed by a label would make the
+  store judge. Test: two tasks held at a barrier after reading the
+  library, then both cast; one story, one open and one feed.
+- **FM28, a task refused by its own open.** A run's mark is the head it
+  read with `choir.Stories()`, so its own open moves the head past its
+  mark and its next open is refused naming its own story, which invites
+  feeding a different event into it. More tasks open more stories, so
+  this grows with K. Guard: a checked open's receipt carries the head
+  after the commit; the run had seen everything up to it (the check
+  passed), so its mark advances. Test: one task opens two stories in two
+  cells, with no refusal.
+- **FM4, FM12 at K > 1.** Two running tasks dispose of one capture, or a
+  re-delegation leases a capture a running task holds. Guard: the
+  disposition index under the commit lock (S2a). Exercised by the
+  concurrent tests (disjoint leases; the barrier test's captures).
+- **FM14, 429s.** K tasks' model calls burst past the gateway's 60 a
+  minute per computer. Guard: task model calls (and their compaction
+  calls) join the research children's computer-wide spacer, 40 a minute
+  for every sub-RLM together (O5). Test: the task run's provider is the
+  spaced one, and concurrent task calls start at least one interval
+  apart.
+- **FM9 and AC6 at K > 1.** A crash with two tasks running and one queued
+  resumes or starts any of them. Guard: unchanged (restart work kinds,
+  the boot closure). Test: the S2a boot test at K = 2 with two running
+  and one queued.
+- **FM29, a failing start blocks or spins the queue.** The starter in S2a
+  re-lists the queue after each attempt; a task whose start fails and
+  whose closure also fails stays queued and is retried forever in one
+  call, and a refused claim counts as a busy slot. Guard: one pass over
+  one listing per call; a refused claim takes no slot. Test: covered by
+  the drain test's slot count (no refused claim is counted).
+- **FM30, K misconfigured.** K = 0 starves the queue; a large K
+  overruns memory and the spacer. Guard: K is normalized (unset or
+  below 1 is 4) and capped at 8.
+- **FM31, no rollback without a deploy.** The paper is always busy, and
+  deploys never restart a busy computer, so a K change by deploy may not
+  reach it for hours. Guard: the owner setting `management.serial_tasks`
+  (off by default; on means K = 1), read on every start, set through
+  `/api/computer-settings`. Running tasks above 1 finish; none is
+  cancelled. Test: with the setting on, a second task stays queued.
+- **H3, lock waits.** K = 4 commits contend on the engine lock. Not a
+  test: measured. The engine-mutex counters are added to
+  `/api/runtime/observability` (product route), and the probe reports
+  them.
+
+### 18.2 Choices made without the owner (No Blocking Asks)
+
+- **K's config**: `RUNTIME_MANAGEMENT_TASK_SLOTS` (default 4, at most 8)
+  sets K; the owner setting `management.serial_tasks` forces K = 1 live.
+  The setting is the conservative rollback path for an always-busy
+  computer; the env var is for local runs and a later deploy.
+- **The open guard is the library head**, as designed (§6.1), not a
+  claim keyed by topic or event label (above).
+- **No intake reserve** (R2-18 is S3's: only intake tasks exist in S2).
+- **A queued task at a marker boot with no task running** starts at the
+  next delegation's wake or the next closure, as in S2a. Boot delivers
+  nothing (§7).
