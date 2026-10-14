@@ -224,7 +224,30 @@ Slices, in order:
     spawns one (today research is per document, opened by Texture);
   - what a dormant topic researcher costs, and when it ends (station LR's
     agents-per-computer measure);
-  - the synthesis contract Texture writes from.
+  - the synthesis contract Texture writes from;
+  - **learned topic and story boundaries** (owner 2026-10-14: "a smart
+    way to learn topic vs story; and topic and story boundaries ...
+    learned clustering, not me setting these in advance"). Candidate
+    design, to be argued in the note:
+    - boundaries are typed edges in the object graph, never a preset
+      taxonomy: capture-same-article-as-capture, capture-bears-on-story,
+      story-part-of-topic. A story is a cluster of captures and a topic a
+      cluster of stories, both emerging from the edges;
+    - Jev is the online merge judge over a cheap shortlist (shared
+      entities, translated titles, time window) and answers same article,
+      same event, same topic but a different event, or new;
+    - a story's boundary is the set of hypotheses its captures bear on (an
+      event's claims); a topic's is a standing question across events
+      (this joins L3);
+    - time is part of identity: the same entities weeks apart make a new
+      story in the same topic. How long stories keep drawing feeds is
+      measured per domain, not set;
+    - split and merge are first-class revisable acts by researchers and
+      management. Each one is recorded and becomes a labelled example
+      in Jev's prompt, so boundaries improve from the ledger without
+      fine-tuning;
+    - a sampled audit by an independent judge scores merge precision and
+      recall, and hard disagreements escalate to a stronger model.
 
   Then a panel on the note.
 - **S1, build.** Jev categorization at arrival, management routing to

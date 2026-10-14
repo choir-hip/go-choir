@@ -366,8 +366,18 @@ now:
     next_observation: the test tier and L1b-0 on staging; B1 round 3
   blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
   next_action: >-
-    Mission order from 2026-10-14 (owner: architecture first, intake
-    redesign very important): (1) L2a synthesis intake to deployed proof;
+    Overnight 2026-10-14 (owner: "we should do this redesign then optimize
+    resources. thats our overnight work, alongside b1"). Rule: design,
+    panels, measurement and code in separate worktrees run concurrently;
+    deploys to the shared guest runtime go one at a time, each verified on
+    staging before the next, and never while a tracer run is in flight.
+    Lane 1 (deploys, in order): L2a, then B1, then LR lever 6. Lane 2
+    (concurrent): B1 design round 4 and the B1 build in its own worktree;
+    the L2a design note and panel; the lever-6 design note and panel; an
+    LR baseline (RAM and tokens per research thread, threads per
+    computer). The owner's computer refresh happens in an idle window
+    between deploys. Mission order after that:
+    (1) L2a synthesis intake to deployed proof;
     (2) C1e B1 build (its design rounds continue as docs meanwhile); (3) LR
     lever 6, cell output out of the transcript; (4) L1: schedules survive
     crashes (ruling 6), the fault-injection harness, L1b; (5) C1e B2-B5
