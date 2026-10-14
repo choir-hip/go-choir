@@ -66,3 +66,23 @@ func TestRLMEngineeringOverlayNamesTheReleaseRootFreezeReads(t *testing.T) {
 		t.Fatalf("overlay places the release tree inside the workspace: %q", overlay)
 	}
 }
+
+// Research searches the computer's own corpus before the web (symptom 3 of
+// docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md):
+// the overlay's evidence doctrine names choir.SearchWireCorpus before it
+// teaches web search, and says a capture it returns is citable.
+func TestRLMResearchOverlaySearchesTheCorpusFirst(t *testing.T) {
+	overlay := RLMResearchOverlay()
+	at := strings.Index(overlay, "Evidence Doctrine")
+	if at < 0 {
+		t.Fatalf("overlay has no evidence doctrine: %q", overlay)
+	}
+	doctrine := overlay[at:]
+	corpus, web := strings.Index(doctrine, "choir.SearchWireCorpus("), strings.Index(doctrine, "choir.SearchStart")
+	if corpus < 0 || web < 0 || corpus > web {
+		t.Fatalf("evidence doctrine does not search the corpus before the web: %q", doctrine)
+	}
+	if !strings.Contains(doctrine, "capture_id") {
+		t.Fatalf("evidence doctrine does not say a corpus capture is citable by its capture_id: %q", doctrine)
+	}
+}

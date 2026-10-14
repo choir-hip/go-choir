@@ -90,3 +90,16 @@ func TestManagementDefaultPromptCarriesNoSupportJudgement(t *testing.T) {
 		}
 	}
 }
+
+// Research searches the computer's own corpus before the web (symptom 3 of
+// docs/problems/prompt-bar-research-slow-unsynthesized-mangled-2026-10-14.md).
+func TestResearchPromptSearchesTheCorpusBeforeTheWeb(t *testing.T) {
+	prompt, err := New(t.TempDir()).Load("user-alice", agentprofile.Research)
+	if err != nil {
+		t.Fatalf("load research prompt: %v", err)
+	}
+	corpus, web := strings.Index(prompt.Content, "choir.SearchWireCorpus("), strings.Index(prompt.Content, "choir.SearchStart(")
+	if corpus < 0 || web < 0 || corpus > web {
+		t.Fatalf("research prompt does not search the corpus before the web: %q", prompt.Content)
+	}
+}

@@ -163,6 +163,37 @@ func (s *Store) CaptureLabels(ctx context.Context, ownerID, computerID, captureI
 	return out, nil
 }
 
+// RecentCaptureLabels returns the newest label version of each capture
+// among the computer's newest limit label objects, keyed by capture id.
+// Corpus search reads them as topic and outlet hints for captures.
+func (s *Store) RecentCaptureLabels(ctx context.Context, ownerID, computerID string, limit int) (map[string]CaptureLabel, error) {
+	if s.og == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{Kind: ogKindCaptureLabel, OwnerID: ownerID, ComputerID: computerID, Limit: limit})
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]CaptureLabel{}
+	for _, obj := range objs {
+		var label CaptureLabel
+		if err := ogDecode(obj, &label); err != nil {
+			return nil, err
+		}
+		if label.OwnerID != ownerID || label.ComputerID != computerID {
+			continue
+		}
+		if have, ok := out[label.CaptureID]; !ok || label.Version > have.Version {
+			out[label.CaptureID] = label
+		}
+	}
+	return out, nil
+}
+
 // PutCaptureLabelOverride records one correction. The same disposition
 // record correcting the same label version is one override.
 func (s *Store) PutCaptureLabelOverride(ctx context.Context, o CaptureLabelOverride) error {

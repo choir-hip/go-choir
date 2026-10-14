@@ -27,6 +27,14 @@ type Dependencies struct {
 	Captures CaptureSink
 }
 
+// newSearchWireCorpusTool is choir.SearchWireCorpus: a keyword search of
+// this computer's own corpus, its stories (Texture documents, in results)
+// and its captures (the shared store's web_capture objects this computer
+// wrote, with Jev's labels as topic and outlet hints, in captures).
+// Research calls it before the web, so what the paper already holds is
+// cited, not fetched again. It is scoped by the run's owner and computer; a
+// call with no run context names the owner, and the environment's owner is
+// the last fallback. Each list is bounded (corpusMaxLimit).
 func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		Query   string `json:"query"`
@@ -34,11 +42,11 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 		OwnerID string `json:"owner_id,omitempty"`
 	}
 	return toolregistry.Tool{Name: "search_wire_corpus",
-		Description: "Search the existing Texture article corpus by topic, title, or keywords. Use before creating new articles to find existing coverage. Returns matching documents with titles, IDs, and snippets. Always search before spawning Texture to avoid duplicate articles.",
+		Description: "Search this computer's own corpus by topic, title, outlet or keywords: its stories (results: doc_id, title, snippet) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at), strongest and newest matches first. A capture_id is a citable handle. Search here before the web.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, or keywords"},
-			"limit":    map[string]any{"type": "integer", "description": "Max results (default 10)"},
-			"owner_id": map[string]any{"type": "string", "description": "Scope to owner (default: platform wire owner)"},
+			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, outlet, or keywords"},
+			"limit":    map[string]any{"type": "integer", "description": "Max results per list (default 10, at most 25)"},
+			"owner_id": map[string]any{"type": "string", "description": "Scope to owner when the call carries no run (default: this computer's owner)"},
 		}, []string{"query"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			if deps.Store == nil {
@@ -52,14 +60,9 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			if query == "" {
 				return "", fmt.Errorf("query is required")
 			}
-			limit := in.Limit
-			if limit <= 0 {
-				limit = 10
-			}
-			ownerID := strings.TrimSpace(in.OwnerID)
-			if ownerID == "" {
-				ownerID = universalWirePlatformOwnerID()
-			}
+			limit := corpusLimit(in.Limit)
+			exec := toolregistry.ExecutionContextFrom(ctx)
+			ownerID := firstNonEmptyString(exec.OwnerID, in.OwnerID, universalWirePlatformOwnerID())
 			results, err := deps.Store.SearchDocuments(ctx, query, ownerID, limit)
 			if err != nil {
 				return "", fmt.Errorf("search wire corpus: %w", err)
@@ -81,7 +84,20 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 					MatchSource: r.MatchSource,
 				})
 			}
-			return toolregistry.ResultJSON(map[string]any{"results": out, "count": len(out), "query": query})
+			// A capture-store outage keeps the stories and says so; it never
+			// reads as "no captures".
+			captures, note, err := searchCaptures(ctx, deps, ownerID, exec.ComputerID, corpusQueryTerms(query), limit)
+			if err != nil {
+				captures, note = nil, "captures not searched: "+err.Error()
+			}
+			if captures == nil {
+				captures = []CorpusCapture{}
+			}
+			body := map[string]any{"results": out, "count": len(out), "query": query, "captures": captures, "capture_count": len(captures)}
+			if note != "" {
+				body["captures_note"] = note
+			}
+			return toolregistry.ResultJSON(body)
 		}}
 }
 
@@ -94,8 +110,9 @@ func firstNonEmptyString(values ...string) string {
 	return ""
 }
 
-// universalWirePlatformOwnerID is the corpus owner search_wire_corpus scopes
-// to by default: this computer's owner (the guest boot's choir.owner_id).
+// universalWirePlatformOwnerID is search_wire_corpus's last-resort owner,
+// used only when the call carries neither a run's owner nor an owner_id:
+// this computer's owner (the guest boot's choir.owner_id).
 func universalWirePlatformOwnerID() string {
 	ownerID := strings.TrimSpace(os.Getenv("CHOIR_OWNER_ID"))
 	if ownerID == "" {
