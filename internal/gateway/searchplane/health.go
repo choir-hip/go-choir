@@ -20,6 +20,7 @@ type MemoryHealthStore struct {
 	mu      sync.Mutex
 	records map[string]ProviderHealth
 	policy  BackoffPolicy
+	calls   *memoryCallCounter
 }
 
 // NewMemoryHealthStore creates an empty in-memory health store.
@@ -27,6 +28,7 @@ func NewMemoryHealthStore() *MemoryHealthStore {
 	return &MemoryHealthStore{
 		records: map[string]ProviderHealth{},
 		policy:  DefaultBackoffPolicy(),
+		calls:   newMemoryCallCounter(),
 	}
 }
 

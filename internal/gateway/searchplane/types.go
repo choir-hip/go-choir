@@ -15,6 +15,9 @@ const (
 	// StatePaced is never stored: a search skips a healthy provider whose
 	// next call slot (Config.MinInterval) is further away than PaceWait.
 	StatePaced ProviderState = "paced"
+	// StateCapped is never stored: the provider reached its daily call cap
+	// (Config.DailyCaps) and is skipped until UTC midnight. Not a failure.
+	StateCapped ProviderState = "capped"
 )
 
 // OutcomeClass classifies a single provider call for backoff policy.

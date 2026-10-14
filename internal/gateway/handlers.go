@@ -858,13 +858,13 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeLine(searchStreamStart(stream))
-	pending := map[string]bool{}
-	for _, name := range stream.Providers {
-		pending[name] = true
-	}
+	// Under budget routing a paid provider may join after the start line,
+	// so the stream ends when its arrivals close (or at the bound), not
+	// when the start line's providers have answered.
+	arrived := map[string]bool{}
 	answered := 0
 	var resultURLs []string
-	for len(pending) > 0 {
+	for {
 		var arrival searchplane.Arrival
 		var ok bool
 		select {
@@ -874,7 +874,7 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			break
 		}
-		delete(pending, arrival.Provider)
+		arrived[arrival.Provider] = true
 		if arrival.Answered() {
 			answered++
 		}
@@ -883,9 +883,17 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLine(searchStreamArrival(arrival))
 	}
-	done := SearchStreamDone{Type: "done", Answered: answered, Total: len(stream.Providers), Cooling: searchCoolingProviders(stream.Cooling)}
-	for _, name := range stream.Providers {
-		if pending[name] {
+	started := searchStarted(stream)
+	route := stream.Route.Summary()
+	done := SearchStreamDone{
+		Type:      "done",
+		Answered:  answered,
+		Total:     len(started),
+		Cooling:   searchCoolingProviders(append(append([]searchplane.Cooling{}, stream.Cooling...), route.Skipped...)),
+		Escalated: searchEscalations(route),
+	}
+	for _, name := range started {
+		if !arrived[name] {
 			done.Pending = append(done.Pending, name)
 		}
 	}
@@ -896,9 +904,12 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	// seen is how many of this search's distinct URLs the computer already
 	// received from an earlier search within a day.
 	unique, seen := h.searchClient.observeResultURLs(computerID, resultURLs)
-	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending) skipped=[%s] served=%s results=%d unique=%d seen=%d",
-		computerID, answered, len(stream.Providers), len(stream.Cooling), len(done.Pending), searchSkippedSummary(stream.Cooling),
-		searchServed(stream), len(resultURLs), unique, seen)
+	// routing/escalated/paid_calls/today measure spend
+	// (docs/reports/search-efficiency-and-reuse-2026-10-14.md §4.1).
+	skipped := append(append([]searchplane.Cooling{}, stream.Cooling...), route.Skipped...)
+	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending) skipped=[%s] served=%s results=%d unique=%d seen=%d %s",
+		computerID, answered, len(started), len(skipped), len(done.Pending), searchSkippedSummary(skipped),
+		searchServed(stream), len(resultURLs), unique, seen, searchRouteSummary(stream))
 }
 
 // HandleSearchHealth handles GET /provider/v1/search/health. Like the
@@ -940,7 +951,27 @@ func (h *Handler) HandleSearchHealth(w http.ResponseWriter, r *http.Request) {
 		}
 		out[name] = summary
 	}
-	writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_health": out})
+	// daily_calls: today's (UTC) provider calls with cap and tier, the
+	// counts behind budget routing's daily caps. cap -1 is no cap.
+	counts, err := h.searchClient.DailyCounts()
+	if err != nil {
+		writeGatewayJSON(w, http.StatusInternalServerError, ErrorResponse{Error: sanitizeError(err)})
+		return
+	}
+	daily := map[string]SearchDailyCalls{}
+	for _, c := range counts {
+		daily[c.Provider] = SearchDailyCalls{Day: c.Day, Calls: c.Calls, Cap: c.Cap, Tier: string(c.Tier.Tier)}
+	}
+	writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_health": out, "daily_calls": daily})
+}
+
+// SearchDailyCalls is one provider's calls today (UTC) on the search
+// health route. Cap is -1 when the provider has no daily cap.
+type SearchDailyCalls struct {
+	Day   string `json:"day"`
+	Calls int    `json:"calls"`
+	Cap   int    `json:"cap"`
+	Tier  string `json:"tier"`
 }
 
 type searchHealthResetRequest struct {

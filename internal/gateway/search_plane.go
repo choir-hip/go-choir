@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -37,6 +38,18 @@ type SearchStreamStart struct {
 	// CachedAt is set when the answer is replayed from the gateway's result
 	// cache: when it was first received. No provider was called. Additive.
 	CachedAt string `json:"cached_at,omitempty"`
+	// Routing is "budget" or "fanout"; empty for a cache hit. Additive.
+	Routing string `json:"routing,omitempty"`
+	// Reserve names the paid providers held for escalation: started only
+	// if the free answers fall short. Not cooling, not in N. Additive.
+	Reserve []string `json:"reserve,omitempty"`
+}
+
+// SearchEscalation is a paid provider that joined a search after its start
+// line, and why (short, slow, failed, no_free, deep).
+type SearchEscalation struct {
+	Provider string `json:"provider"`
+	Reason   string `json:"reason"`
 }
 
 // SearchCoolingProvider is a provider a search skipped because it was
@@ -61,13 +74,19 @@ type SearchStreamArrival struct {
 }
 
 // SearchStreamDone is a search stream's last line. Pending names the
-// providers still out when the stream's bound ended it.
+// providers still out when the stream's bound ended it. Total counts every
+// provider started, escalated ones included; Cooling every provider
+// skipped, at the start or at escalation.
 type SearchStreamDone struct {
 	Type     string                  `json:"type"`
 	Answered int                     `json:"answered"`
 	Total    int                     `json:"total"`
 	Pending  []string                `json:"pending,omitempty"`
 	Cooling  []SearchCoolingProvider `json:"cooling"`
+	// Escalated names every paid provider budget routing added, and why:
+	// at the start (deep, no_free) or after it (short, slow, failed).
+	// Additive.
+	Escalated []SearchEscalation `json:"escalated,omitempty"`
 }
 
 type searchProviderAdapter struct {
@@ -125,8 +144,11 @@ func (c *SearchClient) ensurePlane() error {
 		TTL:      cfg.CacheTTL,
 		FreshTTL: cfg.CacheFreshTTL,
 		MaxBytes: cfg.CacheMaxBytes,
-		Bound:    c.plane.RequestTimeout() + paceWait + time.Second,
+		// A shared search may start a paid provider up to the escalation
+		// window after it began; that call needs its own timeout.
+		Bound: c.plane.RequestTimeout() + paceWait + c.plane.EscalationWindow() + time.Second,
 	})
+	log.Printf("gateway: search routing=%s caps=[%s]", c.plane.Routing(), searchplane.FormatDailyCaps(cfg.DailyCaps))
 	c.cacheShared = cfg.CacheShared
 	c.seen = newSearchURLSeen(24*time.Hour, searchSeenPerComputer)
 	return nil
@@ -183,26 +205,44 @@ func (c *SearchClient) StreamFor(ctx context.Context, computerID string, req Sea
 	if c.cacheShared {
 		scope = ""
 	}
+	deep := strings.EqualFold(strings.TrimSpace(req.Depth), SearchDepthDeep)
+	if deep {
+		// A deep search is never answered by an ordinary one's results.
+		scope += "\x00deep"
+	}
 	return c.cache.Start(ctx, scope, req.Query, maxResults, func(ctx context.Context) (*searchplane.Stream, error) {
-		return c.plane.Start(ctx, req.Query, maxResults)
+		return c.plane.StartRequest(ctx, searchplane.Request{Query: req.Query, MaxResults: maxResults, Deep: deep})
 	})
 }
 
+// DailyCounts returns today's (UTC) provider call counts with their caps.
+func (c *SearchClient) DailyCounts() ([]searchplane.DailyCount, error) {
+	if err := c.ensurePlane(); err != nil {
+		return nil, err
+	}
+	return c.plane.DailyCounts()
+}
+
 // StreamBound is how long a search stream stays open: the provider request
-// timeout plus a margin.
+// timeout, plus the escalation window under budget routing (a paid
+// provider may join that late), plus a margin.
 func (c *SearchClient) StreamBound() time.Duration {
 	timeout := c.planeConfig.RequestTimeout
+	window := searchplane.EscalationWindow(c.planeConfig)
 	if c.plane != nil {
 		timeout = c.plane.RequestTimeout()
+		window = c.plane.EscalationWindow()
 	}
 	if timeout <= 0 {
-		timeout = searchplane.ConfigFromEnv().RequestTimeout
+		env := searchplane.ConfigFromEnv()
+		timeout = env.RequestTimeout
+		window = searchplane.EscalationWindow(env)
 	}
 	margin := c.streamMargin
 	if margin <= 0 {
 		margin = searchStreamMargin
 	}
-	return timeout + margin
+	return timeout + window + margin
 }
 
 func searchStreamStart(stream *searchplane.Stream) SearchStreamStart {
@@ -210,7 +250,76 @@ func searchStreamStart(stream *searchplane.Stream) SearchStreamStart {
 	if stream.Served == searchplane.ServedHit && !stream.CachedAt.IsZero() {
 		start.CachedAt = stream.CachedAt.UTC().Format(time.RFC3339)
 	}
+	if stream.Route != nil {
+		route := stream.Route.Summary()
+		start.Routing = route.Mode
+		start.Reserve = route.Reserve
+	}
 	return start
+}
+
+// searchStarted is every provider a stream started: the route's record
+// (escalated providers included) or, for a cache hit, its providers.
+func searchStarted(stream *searchplane.Stream) []string {
+	if stream.Route == nil {
+		return append([]string{}, stream.Providers...)
+	}
+	started := stream.Route.Summary().Started
+	// A joiner's stream names the start providers; the route has them all.
+	seen := map[string]bool{}
+	for _, name := range started {
+		seen[name] = true
+	}
+	for _, name := range stream.Providers {
+		if !seen[name] {
+			started = append(started, name)
+		}
+	}
+	return started
+}
+
+func searchEscalations(route searchplane.RouteSummary) []SearchEscalation {
+	if len(route.Escalations) == 0 {
+		return nil
+	}
+	out := make([]SearchEscalation, len(route.Escalations))
+	for i, e := range route.Escalations {
+		out[i] = SearchEscalation{Provider: e.Provider, Reason: e.Reason}
+	}
+	return out
+}
+
+// searchRouteSummary renders a search's routing for the gateway log line:
+// routing mode, each escalation as reason(unique<min):provider, the paid
+// calls this request caused (none for a cache hit or a join: the leader's
+// line counts them), and today's count per provider touched
+// ("serper=14/150", "keenable=812" without a cap).
+func searchRouteSummary(stream *searchplane.Stream) string {
+	if stream.Route == nil {
+		return "routing=cache escalated=no paid_calls=0 today=[]"
+	}
+	route := stream.Route.Summary()
+	escalated := "no"
+	if len(route.Escalations) > 0 {
+		parts := make([]string, len(route.Escalations))
+		for i, e := range route.Escalations {
+			parts[i] = fmt.Sprintf("%s(%d):%s", e.Reason, e.Unique, e.Provider)
+		}
+		escalated = strings.Join(parts, ",")
+	}
+	paid := route.PaidCalls
+	if stream.Served == searchplane.ServedJoined {
+		paid = 0
+	}
+	today := make([]string, 0, len(route.Today))
+	for _, d := range route.Today {
+		entry := fmt.Sprintf("%s=%d", d.Provider, d.Calls)
+		if d.Cap >= 0 {
+			entry += fmt.Sprintf("/%d", d.Cap)
+		}
+		today = append(today, entry)
+	}
+	return fmt.Sprintf("routing=%s escalated=%s paid_calls=%d today=[%s]", route.Mode, escalated, paid, strings.Join(today, " "))
 }
 
 func searchCoolingProviders(cooling []searchplane.Cooling) []SearchCoolingProvider {

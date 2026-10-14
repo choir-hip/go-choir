@@ -40,7 +40,8 @@ type CacheConfig struct {
 	// the oldest entries go first.
 	MaxBytes int64
 	// Bound limits a shared search run on a context detached from its
-	// first caller: the provider timeout plus the pace wait.
+	// first caller: the provider timeout plus the pace wait, plus the
+	// escalation window under budget routing.
 	Bound time.Duration
 }
 
@@ -77,9 +78,13 @@ type flight struct {
 	mu        sync.Mutex
 	providers []string
 	cooling   []Cooling
-	arrivals  []Arrival
-	done      bool
-	wake      chan struct{} // closed and replaced on every change
+	// route is the shared search's routing record (escalated providers
+	// join it after the start); capacity bounds its arrivals.
+	route    *Route
+	capacity int
+	arrivals []Arrival
+	done     bool
+	wake     chan struct{} // closed and replaced on every change
 }
 
 // NewCache returns nil when cfg.TTL <= 0.
@@ -163,6 +168,8 @@ func (c *Cache) Start(ctx context.Context, scope, query string, maxResults int, 
 	}
 	f.providers = append([]string{}, stream.Providers...)
 	f.cooling = append([]Cooling{}, stream.Cooling...)
+	f.route = stream.Route
+	f.capacity = max(cap(stream.Arrivals), len(stream.Providers))
 	close(f.ready)
 	c.running.Add(1)
 	go c.pump(key, query, f, stream, cancel)
@@ -259,11 +266,12 @@ func (f *flight) join(ctx context.Context, query string) (*Stream, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
-	out := make(chan Arrival, len(f.providers))
+	out := make(chan Arrival, f.capacity)
 	s := &Stream{
 		Query:     query,
 		Providers: append([]string{}, f.providers...),
 		Cooling:   append([]Cooling{}, f.cooling...),
+		Route:     f.route,
 		Arrivals:  out,
 		Served:    ServedJoined,
 	}

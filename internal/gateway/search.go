@@ -2,8 +2,10 @@
 // Tavily, Brave, Parallel, Exa, Serper, SerpAPI, Keenable and ChatGPT/Codex
 // hosted web search.
 //
-// A search starts every eligible provider at once and streams each
-// provider's results as that provider answers (search_plane.go).
+// A search starts the free providers, adds paid ones cheapest first only
+// when the free answers fall short (budget routing; CHOIR_SEARCH_ROUTING=fanout
+// starts every eligible provider at once), and streams each provider's
+// results as that provider answers (search_plane.go, searchplane/router.go).
 package gateway
 
 import (
@@ -50,7 +52,16 @@ type SearchRequest struct {
 	// MaxResults is the maximum number of results each provider returns
 	// (default 40, max 50).
 	MaxResults int `json:"max_results,omitempty"`
+
+	// Depth "deep" asks for more resources (an important story): under
+	// budget routing the cheapest paid provider starts with the free ones
+	// and the deep thresholds apply. Optional; the guest does not send it
+	// yet.
+	Depth string `json:"depth,omitempty"`
 }
+
+// SearchDepthDeep is SearchRequest.Depth for a deep search.
+const SearchDepthDeep = "deep"
 
 // SearchProvider is the interface for search API implementations.
 type SearchProvider interface {

@@ -17,8 +17,11 @@ type FileHealthStore struct {
 	db     *sql.DB
 	policy BackoffPolicy
 	// mu makes RecordOutcome's read-modify-write atomic: concurrent calls
-	// must see each other's bench to count one episode once.
+	// must see each other's bench to count one episode once. It also makes
+	// ReserveCall's check-and-count atomic.
 	mu sync.Mutex
+	// prunedDay is the last day old call counts were pruned on (under mu).
+	prunedDay string
 }
 
 // OpenFileHealthStore opens or creates a SQLite health database at path.
@@ -57,8 +60,66 @@ CREATE TABLE IF NOT EXISTS provider_health (
   last_error_summary TEXT,
   updated_at TEXT NOT NULL
 )`)
+	if err != nil {
+		return err
+	}
+	// Provider calls per UTC day (budget routing's daily caps): same file,
+	// same lock as health, so one store is the authority for both.
+	_, err = s.db.Exec(`
+CREATE TABLE IF NOT EXISTS provider_daily_calls (
+  provider TEXT NOT NULL,
+  day TEXT NOT NULL,
+  calls INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (provider, day)
+)`)
 	return err
 }
+
+// ReserveCall implements CallCounter: under the store's lock, read the
+// day's count, refuse at the limit, else count the call.
+func (s *FileHealthStore) ReserveCall(provider, day string, limit int) (int, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var calls int
+	err := s.db.QueryRow(`SELECT calls FROM provider_daily_calls WHERE provider = ? AND day = ?`, provider, day).Scan(&calls)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, false, err
+	}
+	if limit >= 0 && calls >= limit {
+		return calls, false, nil
+	}
+	if _, err := s.db.Exec(`INSERT INTO provider_daily_calls (provider, day, calls) VALUES (?, ?, 1)
+ON CONFLICT(provider, day) DO UPDATE SET calls = calls + 1`, provider, day); err != nil {
+		return calls, false, err
+	}
+	if s.prunedDay != day {
+		s.prunedDay = day
+		_, _ = s.db.Exec(`DELETE FROM provider_daily_calls WHERE day < ?`, pruneCutoff(day))
+	}
+	return calls + 1, true, nil
+}
+
+// CallsOn implements CallCounter.
+func (s *FileHealthStore) CallsOn(day string) (map[string]int, error) {
+	rows, err := s.db.Query(`SELECT provider, calls FROM provider_daily_calls WHERE day = ?`, day)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var name string
+		var calls int
+		if err := rows.Scan(&name, &calls); err != nil {
+			return nil, err
+		}
+		out[name] = calls
+	}
+	return out, rows.Err()
+}
+
+// Close closes the database.
+func (s *FileHealthStore) Close() error { return s.db.Close() }
 
 func (s *FileHealthStore) Snapshot() (map[string]ProviderHealth, error) {
 	rows, err := s.db.Query(`SELECT provider, state, cooldown_until, strike_count, window_attempts, window_successes, window_results_total, last_failure_class, last_error_summary, updated_at FROM provider_health`)
