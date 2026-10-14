@@ -37,8 +37,9 @@ import { rankFrontStories } from '../src/lib/autopaper.ts';
 const BASE_URL = (process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news').replace(/\/+$/, '');
 const MAX_STORIES = Number(process.env.AUTOPAPER_MAX_STORIES || 8);
 const SHOT_DIR = process.env.AUTOPAPER_SCREENSHOT_DIR || '';
-// The front page shows the first page of the front list (20 stories), ranked.
-const FRONT_PAGE_SIZE = 20;
+// The front page shows the first page of the front list (60 stories,
+// FRONT_FIRST_PAGE_SIZE), ranked.
+const FRONT_PAGE_SIZE = 60;
 const CHECK_STATES = new Set(['exact', 'tolerant', 'pending', 'unread', 'failed']);
 
 test.use({ viewport: { width: 375, height: 812 }, storageState: { cookies: [], origins: [] } });
@@ -51,7 +52,7 @@ async function getJSON(request, path) {
 }
 
 async function publishedStories(request) {
-  const front = await getJSON(request, '/api/platform/publications/front?limit=50');
+  const front = await getJSON(request, '/api/platform/publications/front?limit=60');
   return Array.isArray(front.stories) ? front.stories : [];
 }
 

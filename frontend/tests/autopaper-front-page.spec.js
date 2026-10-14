@@ -211,6 +211,55 @@ test.describe('front-page rank', () => {
     expect(rankFrontStories([])).toEqual([]);
   });
 
+  const scored = (s, importance, promo) => ({ ...s, importance, ...(promo === undefined ? {} : { promo }) });
+
+  test('with at least half scored, importance times a 24 h recency decay orders the stories', () => {
+    // Serious news from 20 h ago (9 * 0.56 = 5.1) leads fresher minor news (3 * 1 = 3).
+    const serious = scored(story('serious', 'Serious', '', 20 * HOUR, 1, now), 9);
+    const minor = scored(story('minor', 'Minor', '', 0, 1, now), 3);
+    // Unscored counts as 4: fresh and unscored (4) sits above minor, below serious.
+    const unscored = story('unscored', 'Unscored', '', 0, 1, now);
+    // Two days old at 9 decays to 2.25: below minor.
+    const old = scored(story('old', 'Old', '', 48 * HOUR, 1, now), 9);
+    expect(rankFrontStories([minor, unscored, old, serious]).map((s) => s.title)).toEqual([
+      'Serious',
+      'Unscored',
+      'Minor',
+      'Old',
+    ]);
+    // Without scores the same stories rank by recency (today's rule).
+    const plain = [minor, unscored, old, serious].map(({ importance, ...rest }) => rest);
+    expect(rankFrontStories(plain).map((s) => s.title)).toEqual(['Minor', 'Unscored', 'Serious', 'Old']);
+  });
+
+  test('promotional stories and leaked "Open a story" titles never lead or sit in the top tier', () => {
+    const list = [
+      scored(story('promo', 'New phone launches with three cameras', '', 0, 3, now), 9, true),
+      scored(story('leak', 'Open a story on the harbor fire', '', 0, 1, now), 8),
+      scored(story('leak2', 'open A STORY about rail', '', 0, 1, now), 7, false),
+    ];
+    for (let i = 0; i < 11; i += 1) list.push(scored(story(`n${i}`, `News ${i}`, '', (i + 1) * HOUR, 1, now), 5));
+    const ranked = rankFrontStories(list);
+    const layout = layoutFrontPage(ranked);
+    const demoted = ['New phone launches with three cameras', 'Open a story on the harbor fire', 'open A STORY about rail'];
+    expect(ranked).toHaveLength(list.length);
+    for (const s of [layout.lead, ...layout.top, ...layout.briefs]) expect(demoted).not.toContain(s.title);
+    expect(layout.more.map((s) => s.title).slice(-3)).toEqual(demoted);
+    expect(layout.lead.title).toBe('News 0');
+  });
+
+  test('with fewer than half scored, the rank is exactly the recency rank', () => {
+    const { first } = fixture(now);
+    const baseline = rankFrontStories(first).map((s) => s.publication_id);
+    // Score fewer than half (6 of 14), including a promo story, in reverse
+    // recency order so an importance rank would visibly differ.
+    const partly = first.map((s, i) => (i >= first.length - 6 ? scored(s, 10, i === first.length - 1) : s));
+    expect(rankFrontStories(partly).map((s) => s.publication_id)).toEqual(baseline);
+    // At half scored the importance rank applies and the order changes.
+    const half = first.map((s, i) => (i >= first.length / 2 ? scored(s, 10) : s));
+    expect(rankFrontStories(half).map((s) => s.publication_id)).not.toEqual(baseline);
+  });
+
   test('the layout cuts lead, four top stories, six briefs, and the rest', () => {
     const { first } = fixture(now);
     const ranked = rankFrontStories(first);

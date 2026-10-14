@@ -22,6 +22,7 @@
   import AutopaperStory from './AutopaperStory.svelte';
   import {
     editionTime,
+    FRONT_FIRST_PAGE_SIZE,
     fetchFrontPage,
     formatWhen,
     layoutFrontPage,
@@ -59,7 +60,7 @@
   async function loadFront() {
     status = 'loading';
     try {
-      const page = await fetchFrontPage();
+      const page = await fetchFrontPage('', FRONT_FIRST_PAGE_SIZE);
       frontStories = page.stories;
       olderStories = [];
       nextCursor = page.next_cursor || '';

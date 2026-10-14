@@ -23,6 +23,10 @@ export type FrontStory = {
   version_count: number;
   latest_revision: number;
   route: { bare: string; permalink: string };
+  /** Model-judged importance 1..10 (host front-importance scorer); absent when unscored. */
+  importance?: number;
+  /** The scorer judged the story promotional (or an internal instruction). */
+  promo?: boolean;
 };
 
 export type FrontPage = { stories: FrontStory[]; next_cursor?: string };
@@ -101,6 +105,13 @@ export function storyTextureContext(route: string, title = ''): Record<string, u
 
 // ---- front list ----
 
+/**
+ * How many stories the front page's first load reads: about a day of
+ * stories, so importance ranking can lift an important story that is not
+ * among the newest twenty. Later pages ("more stories") read 20 at a time.
+ */
+export const FRONT_FIRST_PAGE_SIZE = 60;
+
 export async function fetchFrontPage(cursor = '', limit = 20): Promise<FrontPage> {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
@@ -156,10 +167,71 @@ export function frontProminence(story: FrontStory, edition: number): number {
   return updated + lift;
 }
 
+// Importance rank. When at least half the stories carry a model-judged
+// importance (1..10, attached by corpusd from the host scorer's file), a
+// story's prominence is its importance times a recency decay with a 24-hour
+// half-life, measured from the edition time (so it still reads no clock).
+// An unscored story counts as importance 4. A story judged promotional, or
+// whose title is a leaked internal instruction ("Open a story on ..."),
+// never leads and never sits in the top tier: it ranks after every other
+// story, still listed. With fewer than half scored, the rank above applies
+// unchanged.
+
+/** The recency half-life of the importance rank. */
+export const FRONT_IMPORTANCE_HALF_LIFE_MS = 24 * 60 * 60 * 1000;
+/** The importance an unscored story counts as under the importance rank. */
+export const FRONT_DEFAULT_IMPORTANCE = 4;
+
+function storyImportance(story: FrontStory): number | null {
+  if (story?.importance === undefined || story?.importance === null) return null;
+  const n = Number(story.importance);
+  return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
+}
+
+/** Whether enough stories are scored for the importance rank to apply. */
+export function usesImportanceRank(stories: FrontStory[]): boolean {
+  const list = Array.isArray(stories) ? stories : [];
+  if (list.length === 0) return false;
+  const scored = list.filter((story) => storyImportance(story) !== null).length;
+  return scored * 2 >= list.length;
+}
+
+/** A story that may not lead or sit in the top tier under the importance rank. */
+export function isDemotedStory(story: FrontStory): boolean {
+  return story?.promo === true || /^\s*open a story/i.test(String(story?.title || ''));
+}
+
+/** A story's importance-rank prominence against an edition time. */
+export function importanceProminence(story: FrontStory, edition: number): number {
+  const updated = updatedMs(story);
+  if (!Number.isFinite(updated)) return Number.NEGATIVE_INFINITY;
+  const age = Number.isFinite(edition) ? Math.max(0, edition - updated) : 0;
+  const importance = storyImportance(story) ?? FRONT_DEFAULT_IMPORTANCE;
+  return importance * Math.pow(0.5, age / FRONT_IMPORTANCE_HALF_LIFE_MS);
+}
+
 /** The stories in front-page order, most prominent first. Pure and stable. */
 export function rankFrontStories(stories: FrontStory[]): FrontStory[] {
   const list = Array.isArray(stories) ? stories : [];
   const edition = editionTime(list);
+  if (usesImportanceRank(list)) {
+    return list
+      .map((story) => ({
+        story,
+        demoted: isDemotedStory(story) ? 1 : 0,
+        score: importanceProminence(story, edition),
+        updated: updatedMs(story),
+      }))
+      .sort((a, b) => {
+        if (a.demoted !== b.demoted) return a.demoted - b.demoted;
+        if (a.score !== b.score) return b.score > a.score ? 1 : -1;
+        if (a.updated !== b.updated) return b.updated > a.updated ? 1 : -1;
+        const ida = String(a.story.publication_id || '');
+        const idb = String(b.story.publication_id || '');
+        return ida < idb ? -1 : ida > idb ? 1 : 0;
+      })
+      .map((entry) => entry.story);
+  }
   return list
     .map((story) => ({ story, score: frontProminence(story, edition), updated: updatedMs(story) }))
     .sort((a, b) => {
