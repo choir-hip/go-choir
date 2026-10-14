@@ -30,8 +30,16 @@ func openDiskCache(root string, maxBytes int64) (*diskCache, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
+	// A systemd DynamicUser StateDirectory is a symlink into /var/lib/private.
+	// WalkDir does not follow a symlink root, so the size walk and eviction
+	// must run on the resolved directory (else they see only the link).
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
+	root = resolved
 	c := &diskCache{root: root, maxBytes: maxBytes}
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}

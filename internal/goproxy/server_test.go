@@ -571,6 +571,56 @@ func TestEvictionKeepsTheCacheUnderItsCap(t *testing.T) {
 	}
 }
 
+// A systemd DynamicUser StateDirectory is a symlink into /var/lib/private
+// (docs/problems/goproxy-cache-root-is-a-symlink-2026-10-14.md). The cache
+// opened through the link must count the real files and evict files, never
+// the link itself.
+func TestCacheRootThroughSymlinkCountsAndEvictsRealFiles(t *testing.T) {
+	base := t.TempDir()
+	real := filepath.Join(base, "private", "goproxy")
+	if err := os.MkdirAll(filepath.Join(real, "cache", "example.com", "old", "@v"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := filepath.Join(real, "cache", "example.com", "old", "@v", "v1.0.0.zip")
+	if err := os.WriteFile(old, bytes.Repeat([]byte{'o'}, 400), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-2 * time.Hour)
+	os.Chtimes(old, past, past)
+	link := filepath.Join(base, "goproxy")
+	if err := os.Symlink(filepath.Join("private", "goproxy"), link); err != nil {
+		t.Fatal(err)
+	}
+	c, err := openDiskCache(link, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.bytes() != 400 {
+		t.Fatalf("cache opened through a symlink counts %d bytes, want 400", c.bytes())
+	}
+	for i := 0; i < 3; i++ {
+		rel := fmt.Sprintf("cache/example.com/m%d/@v/v1.0.0.zip", i)
+		tmp, err := c.create(rel)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tmp.Write(bytes.Repeat([]byte{'x'}, 300))
+		tmp.Close()
+		if err := c.commit(tmp.Name(), rel, 300); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("eviction removed or replaced the state directory link: %v", err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatal("the oldest real entry survived eviction")
+	}
+	if c.bytes() > 1000 {
+		t.Fatalf("cache is %d bytes over a 1000-byte cap", c.bytes())
+	}
+}
+
 func TestWarmFillsAndReverifiesTheCache(t *testing.T) {
 	h := newProxyHarness(t, nil)
 	modHash, _ := hashGoMod([]byte(testGo))
