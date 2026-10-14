@@ -147,3 +147,90 @@ Input dollars in the window at list prices: $0.774 → ~$0.42 (−46%).
 
 Revert the fix commits. No stored data changes shape: run-context messages
 are ordinary user turns in run memory and replay as such after a revert.
+
+## Repair (branch, not deployed)
+
+### 1. The system prompt is byte-stable per desk (B1, B3, B4)
+
+`systemPromptForRun` now renders only what every run of a desk shares: the
+core, the role prompt, skills, the role overlays, the generated surface and
+the peer-coordination sentence (`peer_coordination.yaml`). Everything
+volatile moved to a **run-context turn** (`internal/agentcore/run_context.go`):
+
+| Moved out of the system prompt | Now in |
+|---|---|
+| Current UTC date/time (all desks, management tasks) | run-context turn, every activation |
+| Current agent id, requester agent id, Texture delivery scope, channel id | run-context turn, first activation |
+| Engineering exact assignment (assignment_id, kind, subject_digest, candidate_id) | same |
+| Texture self-development supervision note (operation id) | same |
+| Conductor requested app and seed prompt | same |
+| Management task id, capture count, inbox line | same |
+| Research child time budget ("You have about …") | the child's first message |
+
+How the turn is placed, so the history stays append-only:
+
+- a new run's first message is `Run context:` + the time + the run's facts;
+- a resumed activation (Texture after each passivation, management and
+  research rewakes) appends `Run context:` + the time after its replayed
+  history, **persisted** in run memory, so the next activation replays the
+  same bytes (test: three activations, each a byte prefix of the next);
+- a compaction appends the time and the facts again after the summary,
+  and the "never compact twice in a row" guard skips that turn.
+
+What stays and is stable by construction: the management intake-labels
+overlay (a computer setting) and engineering's four overlay variants
+(two flags). The settings preview (`EffectiveSystemPrompt`) no longer shows
+the time or ids; it shows what the provider caches.
+
+### 2. Cache keys per desk thread, per provider (B6, B7)
+
+The tool loop derives `CacheKey = choir-<role>-<hash(owner, computer,
+agent)>-<hash(system prompt, tool definitions)>` once per activation
+(`toolregistry.PromptCacheKey`); the same desk on the same computer at the
+same prompt version gets the same key across runs; a new prompt version
+gets a new one; ids are hashed. It travels `ToolLoopRequest.CacheKey` →
+gatewayruntime `cache_key` → gateway `ProviderRequest.CacheKey` →
+`provider.LLMRequest.CacheKey`. A failover suffixes it (`-failover`), as the
+conversation id is. Research children share one key per parent desk.
+
+| Route | Provider caching | What Choir sends now |
+|---|---|---|
+| chatgpt (gpt-6-luna), Responses | automatic ≥1024 tokens, looked up by prefix hash + `prompt_cache_key` | `prompt_cache_key` = desk key, else the run's conversation id (so a gateway-only deploy already fixes within-run luna) |
+| opencode-go chat completions (deepseek-v4.1-flash, cat-jam-free, glm, hy3, longcat, step) | upstream automatic prefix caching; OpenCode routes a session to one upstream "for routing and prompt-cache affinity" | `x-opencode-session` = desk key (was the run id); no body field |
+| opencode-go Responses (muse-spark) | session affinity only is documented | `x-opencode-session` = desk key; no `prompt_cache_key` (pass-through unverified) |
+| opencode-go Messages (qwen3.7-max) | unverified | `x-opencode-session` = desk key; no `cache_control` (not in the pool) |
+| bedrock (Anthropic Messages) | explicit breakpoints only | system breakpoint (existing) + a breakpoint on the last message's last non-thinking block (new) |
+| zai (GLM, Anthropic-shaped) | automatic context caching | nothing |
+| fireworks | automatic prefix caching | nothing (not in the pool) |
+| gateway OpenAI-compatible endpoint | — | accepts the caller's `prompt_cache_key` and passes it as `CacheKey` |
+| Jev (OpenRouter) | short one-shots | unchanged |
+
+### 3. Message history order (B9, unchanged by design)
+
+The loop appends only; run memory replays stored bytes; compaction fires at
+70% of the window with 20K recent tokens kept, so it rewrites the prefix
+once per threshold crossing, not per turn. B2 (a new run seeds a summary as
+message 0), B5 (pool member by trajectory, a routing change), B8, B10 and
+B11 are left as residuals.
+
+### Measurement plan (after deploy)
+
+```
+python3 -I costs.py   <deploy time>   ""   after.json   # summary + per desk/model
+python3 -I percall.py after.json                         # first vs later calls
+```
+
+(the scripts read the QA credential inside python and never print it;
+copies are in the session scratchpad.) Compare with the baseline above,
+same computer, same window length. Pass criteria:
+
+- luna later calls ≥ 70% (from 5-10%); if they stay near 0, B7 was not
+  the cause and the next suspect is the chatgpt backend ignoring the key;
+- deepseek first calls > 50% (from 0-6%): the static system prompt and
+  tools now hit;
+- deepseek Texture ≥ 80% (from 69%): re-activations keep their history;
+- summary `cache_hit_rate` ≈ 0.9 (from 0.715).
+
+The run-context turn is visible on any run: `provider_call_started`
+`system_preview` no longer contains "Current UTC date/time"; the first
+message does.
