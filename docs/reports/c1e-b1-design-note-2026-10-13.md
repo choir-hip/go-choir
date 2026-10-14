@@ -58,6 +58,11 @@ found four more gaps:
 
 Their fixes are marked *(Round 3: …)*.
 
+**Round 4 accepted** (claude, gemini-3.8-flash and glm-5.3-flash accept,
+with no blocking finding; deepseek pending; gpt-6.1-sol and codex
+usage-limited). All four round-3 fixes were confirmed against the code.
+Their build notes are adopted in "Build notes from round 4" below.
+
 **D1. One conversation per assignment.** After step 3 deletes path B
 (document assignments and their restart recast,
 `engineering_assignment_runtime.go:398-406`, `engineering_desk.go:225-283`),
@@ -356,6 +361,46 @@ change; nothing new is stored. The desk-side struct
 `yaegikernel.InboxRecord` (`internal/yaegikernel/intent.go:100-108`)
 gains the same three fields. *(Round 2: the woken turn could not name
 the request D6 checks or the assignment Verify needs.)*
+
+## Build notes from round 4
+
+- **Compose the whole plan, not only `planInboxRecords`.**
+  `CommitInboxRecords` also plans support verdicts
+  (`planSupportVerdicts`), story openings (`planStoryOpenings`) and the
+  `choir.inbox_command` object that makes cell replay idempotent
+  (`store/inbox.go:567-597`). Move its body after the lock into one plan
+  function that both paths call. Plan inside `OpenEngineeringAssignment`'s
+  `trajectoryMu`: pass the request, not a stale plan. On replay, the
+  receipt sequence numbers come from the stored inbox command.
+- **One engineering Cast per cell.** `validateCellIntents` refuses a
+  second one.
+- **Trajectory-wide callers.** `textureRunSelfDevelopmentOperation`
+  (`tool_profiles.go:490`, Texture has no assignment) and
+  `run_acceptance.go:427` list every operation on the trajectory and pick
+  explicitly. So does `engineering_desk.go:321`. No list-by-trajectory
+  query exists today; step 1 adds one.
+- **D5's skip uses `rec.CreatedAt` exactly**, the re-check's own field,
+  so the two predicates cannot drift.
+- **A passivated run counts as usable on a planned boot too.** Boot
+  reconcile runs after `passivateInterruptedActivations`, and excluding
+  the run there would cost it the planned restart's one resume.
+- **Re-freeze after the mode is switched off.** With the pre-check gone,
+  the opener calls `GetByIdempotency` first and returns an existing
+  operation before `authorizeProposal`.
+- **Store cancel and capsule revoke.** The store cancel branches on
+  `CapsuleDisposition == Revoked` for parent authority rather than
+  strictly requiring it. Step 1's test settles whether revoke-first is
+  needed.
+- **Citations.**
+  - `yaegikernel.InboxRecord` is at `intent.go:153-185`.
+  - The crash closure that ends in `continue` is in `inbox_records.go`,
+    not `runtime.go:651`.
+  - The Verify lookup is at `rlm_reduce.go:1456`.
+  - In `engineering_assignment_fate.go`, `failBoundSelfdevOperation` is
+    called at `:241` and does its lookup at `:349`.
+- **Before B1's paper run.** Confirm that records-spawned engineering
+  runs carry the binding's trajectory, which
+  `kickEngineeringReconcileAfterPersist` needs.
 
 ## What B1 does not add
 
