@@ -174,7 +174,7 @@ def judge(lines):
     prompt = PROMPT + "\n".join(f"{i}. {line}" for i, line in enumerate(lines))
     out = subprocess.run(
         ["omp", "-p", "--mode", "json", "--model", MODEL, "--thinking", "high", "--no-session", "--no-tools", prompt],
-        capture_output=True, text=True, timeout=900, cwd="/tmp",
+        capture_output=True, text=True, timeout=1800, cwd="/tmp",
     ).stdout
     msg = None
     for raw in out.splitlines():
