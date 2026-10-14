@@ -253,3 +253,14 @@ The SP file's open decisions, read against today's evidence:
 Throughout: no budget caps (owner ruling 1, "track spending, but dont set
 budget caps"). Memory budgets above bound the guest's own processes for
 density; they never refuse or cap model spend.
+
+## Owner principle (2026-10-14, about 12:10 UTC)
+
+"Just really optimizing our system till it's a fine-tuned, well-oiled
+machine is what gives us the confidence to scale intelligently. The
+knowledge that we're doing the best we can with the resources we have is
+what encourages us to invest more resources into doing even more."
+
+So the cost track runs to diminishing marginal returns before Autopaper
+scales its utilization, and each optimization lands with a measurement
+that shows its effect, so that "the best we can" is a number, not a claim.
