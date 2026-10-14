@@ -16,7 +16,11 @@
 The owner's key is read from the 0600 credential file the mint wrote and
 is never printed. Output: one JSON receipt on stdout and in --out.
 
-usage: s3_snapshot_probe.py --out FILE [--keep-computer] [--ssh node-b]
+usage: s3_snapshot_probe.py --out FILE [--wait-min 0] [--keep-computer] [--ssh node-b]
+
+--wait-min holds the computer hibernated that long before the wake, to
+prove a resume past the guest capability's expiry (the credential window).
+The wake is the owner's start act (an operator hibernate waits for one).
 """
 import argparse
 import json
@@ -71,7 +75,8 @@ def vm_id(host, computer_id):
 
 
 def fc_rss_kib(host, vm):
-    out = ssh(host, f"pid=$(pgrep -f 'firecracker.*--id {vm}' | head -1); [ -n \"$pid\" ] && grep VmRSS /proc/$pid/status | awk '{{print $2}}'")
+    # pgrep -f over ssh also matches the remote shell; keep the real process.
+    out = ssh(host, f"for p in $(pgrep -f 'firecracker.*--id {vm}'); do [ \"$(cat /proc/$p/comm)\" = firecracker ] && grep VmRSS /proc/$p/status | awk '{{print $2}}'; done | head -1")
     return int(out.strip()) if out.strip().isdigit() else None
 
 
@@ -80,6 +85,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--ssh", default="node-b")
     ap.add_argument("--keep-computer", action="store_true")
+    ap.add_argument("--wait-min", type=float, default=0)
     args = ap.parse_args()
     label = "s3-proof-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     receipt = {"label": label, "checks": {}}
@@ -121,7 +127,12 @@ def main():
     receipt["snapshot_files"] = ssh(args.ssh, f"ls -la /var/lib/go-choir/vm-state/{vm}/snapshot/ 2>&1; stat -c '%a %n' /var/lib/go-choir/vm-state/{vm}/snapshot 2>&1").strip()
     log("after_hibernate", fc_rss_kib=receipt["rss_kib_after_hibernate"], files=receipt["snapshot_files"][-300:])
 
+    if args.wait_min:
+        log("holding_hibernated", minutes=args.wait_min)
+        time.sleep(args.wait_min * 60)
     t0 = time.time()
+    start = c.call("POST", f"/api/computers/{c.id}/lifecycle/start", {"idempotency_key": label + "-wake"})
+    receipt["wake_state"] = start.get("resulting_lifecycle_state") or start
     after = c.call("GET", "/api/computer-settings")
     receipt["wake_request_ms"] = int((time.time() - t0) * 1000)
     receipt["state_after"] = [(s.get("key"), s.get("value")) for s in after.get("settings") or []]
@@ -142,6 +153,7 @@ def main():
         "hibernate_snapshot": "hibernate_snapshot" in json.dumps(receipt["hibernate"]),
         "fc_gone_while_hibernated": receipt["rss_kib_after_hibernate"] is None,
         "snapshot_resume": "snapshot_resume" in kinds,
+        "credential_delivered": (not args.wait_min) or "delivered" in kinds,
         "state_survived": receipt["state_before"] == receipt["state_after"],
         "no_interrupted_fates": receipt["interrupted_fates"] == 0,
     }
