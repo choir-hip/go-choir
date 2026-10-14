@@ -1,6 +1,7 @@
 # Object graph: kind registration is not a write gate, a dead kind, and quote anchors drop their span, 2026-10-14
 
-Status: documented; fixes follow in separate commits on the same branch.
+Status: repaired on branch, not yet deployed: H-OG2 in 001aaf4d8, H-OG1 in
+74a2456e6, H-OG3 in 7287ca3a7 (see "Repairs" at the end).
 Source: the claims, events and entities design survey
 (`docs/reports/claims-events-entities-ontology-2026-10-14.md` §2, heresies
 H-OG1, H-OG2 and H-OG3). Owner, 2026-10-14 ~15:00 UTC: "we definitely need to
@@ -254,3 +255,25 @@ H-OG3:
   unseen relation type would fail a publish rather than land unregistered.
 - The four reserved Autoradio kinds stay registered without a writer until
   Autoradio or Autopaper media writes them or a later pass deletes them.
+
+## Repairs (branch, 2026-10-14)
+
+- **H-OG2** (001aaf4d8): registration and the two constants deleted; the
+  frozen decode table keeps the string, marked retired.
+- **H-OG1** (74a2456e6): `objectgraph.CheckWrite` against
+  `DefaultRegistry` runs first in every write method of `DoltStore` (before
+  the validator and the interceptor) and of `platform.ObjectGraphStore`.
+  26 object kinds and 12 edge kinds registered; every kind names an Owner;
+  the four Autoradio kinds are `Reserved`. Standing tests:
+  `TestEveryWrittenKindIsRegistered`, `TestEveryRegisteredKindHasAWriter`,
+  `TestCitationRelationEdgeKindsAreRegistered`, the Dolt and Store B gate
+  tests, and the replay test. Full `internal/agentcore` and
+  `internal/textureowner` suites pass at this commit.
+- **H-OG3** (7287ca3a7): `types.Ref.Span` (code points, segments,
+  `text_hash`), filled by Write from `quotematch.Result`, carried into
+  published anchors; the reader marks it through `splitAtSpan` and falls
+  back to `splitAtQuote`.
+
+Not done here: deploy and staging proof (the branch is not pushed); a
+staging count of kinds (no API); the deployed reader check of a span
+highlight, which needs a story published after the deploy.
