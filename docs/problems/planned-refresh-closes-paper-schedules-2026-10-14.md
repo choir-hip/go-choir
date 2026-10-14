@@ -51,3 +51,77 @@ Even with a correct marker, ruling 6 says schedules must survive a crash
 too (until L1's code lands, a crash closes them). So every unmarked
 restart of the paper stops publishing until someone restarts the
 schedules.
+
+## Findings (2026-10-14, from the guest console and vmctl journal)
+
+Status: cause established. Hypothesis 1 is confirmed in a specific form;
+hypotheses 2 and 3 are ruled out.
+
+**The 05:48 boot read as a crash, by design (D7 work-state epoch).** The
+guest console (`/var/lib/go-choir/vm-state/vm-1669020a…/console.log`)
+shows the whole sequence on the old binary and then the new one:
+
+```text
+05:48:10 runtime: host requested a planned restart (platform update 11a9419345a5…)
+05:48:43 agentcore: planned restart marker has work-state epoch 1, this binary reads 2; treating boot as a crash
+05:48:43 autoputer: restart kind=crash_or_stop
+05:48:47 source schedule: crash boot: rss:hn_best closed: interrupted by a restart
+         … (14 schedules, 05:48:47, matching updated_at)
+```
+
+- The marker was written (the old binary answered the host's
+  `/internal/runtime/planned-restart` at 05:48:10) and consumed. It was
+  refused because the old binary was pre-C1e-B1 (work-state epoch 1), and
+  11a94193 includes a06191f9 (C1e B1, `CurrentWorkStateEpoch = 2`).
+  `ConsumePlannedRestartMarker` treats an epoch-mismatched marker as a
+  crash on purpose (D7: nothing resumes into a new schema).
+- Why this refresh: the paper had run a pre-B1 binary since its 23:51
+  boot on 10-13. The 04:21 (e9d727a7) and 05:26 (d5139fd6) refreshes
+  carried B1 but were deferred (`busy`, 2 and 1 running runs). 05:48 was
+  the first refresh to land, so it was the paper's epoch-cutover boot.
+- vmctl logs `planned_restart=true` because the host's request succeeded;
+  it cannot see that the guest's own epoch check overruled it. The
+  divergence is visible only in the guest console and in
+  `/api/runtime/obligations` (`restart.kind`) for that boot.
+- The only writer of `interrupted_by_restart` on a schedule is
+  `closeSourceSchedulesAfterCrash`, and the console names it. No other path
+  (hypothesis 2) and no rewritten older closure (hypothesis 3).
+- Later boots (06:03 5e4b6fa7, 06:36 9ace75e5) were read as planned
+  (`restart kind=planned`), as expected for same-epoch refreshes.
+
+**A second closure the same night, also by design.** The schedules had
+already been closed once: vmctl hibernated the paper at 21:00 on 10-13
+(`reason=pressure`, a destructive kill with no snapshot); its wake at
+23:51 was a markerless boot (`restart kind=crash_or_stop`) that closed
+all 14 schedules at 23:51:47. The restart design draft predicted this
+("every idle hibernate wake today is a crash boot that closes
+schedules"). The paper was also silent through the hibernation itself
+(21:00 to 23:51).
+
+## Belief state
+
+- The marker path works as written. The failure is a rule, not a bug:
+  under today's code every crash-classified boot (a real crash, a
+  hibernate wake, an epoch-cutover refresh) stops the paper until an owner
+  act. Epoch bumps and pressure hibernates are routine, so the paper stops
+  routinely.
+- Ruling 6 (owner, 2026-10-14) and restart design option B (§3.4, adopted
+  by all six panelists) remove the class: a crash closes only the poll in
+  flight; the schedule stays active and its next tick, at now plus the
+  interval, is new work; a schedule whose poll was in flight at two
+  crash boots in a row is closed with that cause (the crash-loop bound).
+  Pending arrivals stay closed at a crash, as today (they are announced
+  only by a poll, and the design changes only the schedule's fate).
+- The D7 epoch rule stays as it is. It still guards the work it was built
+  for; schedules just stop depending on whether a boot is planned.
+
+## Remaining error field
+
+- Fix: schedules survive crash boots (station L1, "schedules survive
+  crash"), in a separate commit on a worktree branch, not yet deployed.
+- Residuals: vmctl's `planned_restart=true` can disagree with the
+  guest's boot kind (no host-side receipt of the guest's verdict); the
+  pressure hibernate of the paper computer itself (about three hours
+  silent) is a separate problem; the crash-loop bound counts only crashes
+  with a poll in flight, so a crash a poll causes after it records its
+  result is not attributed to it.
