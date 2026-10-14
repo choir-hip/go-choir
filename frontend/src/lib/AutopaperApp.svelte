@@ -443,7 +443,9 @@
     }
   }
 
-  /* ---- wide: four columns, the lead over three with a rail beside it ---- */
+  /* ---- wide: four columns. The first row is the lead over two columns
+     with the first two top stories beside it, one column each, so the row
+     is balanced; the other two top stories and the briefs fill the next. */
 
   @container autopaper (min-width: 1100px) {
     .ap-sheet {
@@ -454,11 +456,7 @@
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    .ap-cell-lead {
-      grid-column: span 3;
-      grid-row: span 2;
-    }
-
+    .ap-cell-lead,
     .ap-cell-briefs {
       grid-column: span 2;
     }

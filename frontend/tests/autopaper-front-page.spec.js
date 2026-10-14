@@ -265,15 +265,39 @@ test.describe('Autopaper front page', () => {
     await expect(front.locator('[data-autopaper-tier="brief"] .ap-dek')).toHaveCount(0);
     await expect(front.locator('[data-autopaper-tier="lead"] .ap-dek')).toHaveText(ranked[0].dek);
 
-    // Four columns; the lead spans three with the rail beside it.
-    const tracks = await page.locator('[data-autopaper-grid]').evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(' ').length);
-    expect(tracks).toBe(4);
+    // Four columns. Row one: the lead over two columns, top stories 1 and 2
+    // in columns 3 and 4. Row two: top stories 3 and 4, then the briefs.
+    const grid = page.locator('[data-autopaper-grid]');
+    const columns = await grid.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { tracks: style.gridTemplateColumns.split(' ').map(parseFloat), gap: parseFloat(style.columnGap) };
+    });
+    expect(columns.tracks).toHaveLength(4);
     const lefts = await cellLefts(page);
     expect(new Set(lefts).size).toBeGreaterThanOrEqual(3);
     const leadBox = await page.locator('[data-autopaper-lead]').boundingBox();
-    const railBox = await page.locator('.ap-cell-top').first().boundingBox();
-    expect(railBox.x).toBeGreaterThan(leadBox.x + leadBox.width);
-    expect(railBox.y).toBeLessThan(leadBox.y + leadBox.height);
+    expect(Math.abs(leadBox.width - (columns.tracks[0] + columns.tracks[1] + columns.gap))).toBeLessThanOrEqual(2);
+    const topBoxes = await page.locator('.ap-cell-top').evaluateAll((cells) =>
+      cells.map((cell) => {
+        const r = cell.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width };
+      }),
+    );
+    expect(topBoxes).toHaveLength(4);
+    // Top stories 1 and 2 share the lead's row, one column each, right of it.
+    expect(topBoxes[0].x).toBeGreaterThan(leadBox.x + leadBox.width);
+    expect(topBoxes[1].x).toBeGreaterThan(topBoxes[0].x + topBoxes[0].width);
+    for (const box of topBoxes.slice(0, 2)) {
+      expect(Math.abs(box.y - leadBox.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(box.width - columns.tracks[2])).toBeLessThanOrEqual(2);
+    }
+    // Top stories 3 and 4 start the next row, then the briefs.
+    expect(topBoxes[2].y).toBeGreaterThanOrEqual(leadBox.y + leadBox.height);
+    expect(Math.abs(topBoxes[2].x - leadBox.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(topBoxes[3].y - topBoxes[2].y)).toBeLessThanOrEqual(1);
+    const briefsBox = await page.locator('[data-autopaper-briefs]').boundingBox();
+    expect(Math.abs(briefsBox.y - topBoxes[2].y)).toBeLessThanOrEqual(1);
+    expect(briefsBox.x).toBeGreaterThan(topBoxes[3].x);
     const leadSize = await page.locator('[data-autopaper-lead] h2').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const topSize = await page.locator('.ap-cell-top h3').first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const briefSize = await page.locator('[data-autopaper-tier="brief"] h3').first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
