@@ -1,0 +1,22 @@
+{
+  "what": "owner-approved manual refreshes onto e3437f1c",
+  "approved_by": "owner in session, 2026-10-14 ~10:20 UTC: 'Yes, a manual restart is good, and I want you to update my own guest computer as well.'",
+  "paper": {
+    "computer": "computer-1355b83bced1613eb048ee28d66688a8",
+    "route": "POST /api/computers/<id>/lifecycle/refresh (owner act), idempotency_key owner-approved-paper-refresh-1020",
+    "before_build": "9ace75e5",
+    "after_build": "e3437f1c",
+    "restart_kind": "crash_or_stop (the refresh of a busy computer ran as a crash boot; in-flight runs closed as interrupted)",
+    "schedules_after": "14 of 14 active (L1 fix ce59d406: schedules survive a crash)",
+    "model_policy": "restored to the platform default (pool:default) after the per-model circuit and pool-wide failover reached it; the 09:36 owner-edited override is undone"
+  },
+  "owner_computer": {
+    "computer": "computer-03335285269bdba4f94377e56879f9e6",
+    "route": "POST /internal/vmctl/refresh {user_id, desktop_id: primary} via Node B, caller owner-approved-refresh-2026-10-14",
+    "before_epoch": 1190,
+    "after_epoch": 1191,
+    "after_build": "e3437f1cdfb0e5f11108afcba414dc32466913b3",
+    "status": "ready",
+    "boot_kind": "expected crash boot by design (D7: work-state epoch 1 -> 2 across C1e B1); open work closes as interrupted by a restart"
+  }
+}
