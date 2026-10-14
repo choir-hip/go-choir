@@ -285,6 +285,9 @@ type hostNet struct {
 	ip        func(args ...string) ([]byte, error)
 	writeProc func(path, value string) error
 	pool      []string
+	// egress is the guest egress policy (guest_egress.go). Nil in tests that
+	// fake the command runners, so they never touch the host's netfilter.
+	egress *guestEgressInstaller
 }
 
 func newSystemHostNet() *hostNet {
@@ -297,6 +300,11 @@ func newSystemHostNet() *hostNet {
 		},
 		writeProc: func(path, value string) error { return os.WriteFile(path, []byte(value), 0o644) },
 		pool:      guestPoolCIDRs(),
+		egress: &guestEgressInstaller{
+			run:  runCombinedOutput,
+			ipt:  findBinary("iptables", "/run/current-system/sw/bin/iptables"),
+			ip6t: findBinary("ip6tables", "/run/current-system/sw/bin/ip6tables"),
+		},
 	}
 }
 
@@ -616,6 +624,7 @@ func (h *hostNet) reconcileAtStart() {
 	if err := h.ensureBaseLocked(); err != nil {
 		log.Printf("vmmanager: warning: guest forward default-deny not installed: %v", err)
 	}
+	h.ensureGuestEgress()
 }
 
 // deleteMatching deletes rules of one chain whose listed text contains match.
