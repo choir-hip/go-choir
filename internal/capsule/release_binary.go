@@ -253,36 +253,37 @@ func CheckReusedBinaryIsRunning(provenance *ReleaseBinaryProvenance, running Run
 }
 
 var (
-	runningBinaryOnce sync.Once
-	runningBinary     RunningBinary
-	runningBinaryErr  error
+	runningBinaryMu sync.Mutex
+	runningBinary   *RunningBinary
 )
 
 // CurrentRunningBinary identifies this process's executable. On Linux it
 // reads /proc/self/exe, which names the executed file even when the path it
-// was started from has since been replaced. The hash is computed once: a
-// process's executable does not change while it runs.
+// was started from has since been replaced. A successful identity is cached:
+// a process's executable does not change while it runs. A failed read is
+// not cached, so a transient error does not disable reuse for the process.
 func CurrentRunningBinary() (RunningBinary, error) {
-	runningBinaryOnce.Do(func() {
-		exe := "/proc/self/exe"
-		if runtime.GOOS != "linux" {
-			exe, runningBinaryErr = os.Executable()
-			if runningBinaryErr != nil {
-				return
-			}
+	runningBinaryMu.Lock()
+	defer runningBinaryMu.Unlock()
+	if runningBinary != nil {
+		return *runningBinary, nil
+	}
+	exe := "/proc/self/exe"
+	if runtime.GOOS != "linux" {
+		var err error
+		if exe, err = os.Executable(); err != nil {
+			return RunningBinary{}, err
 		}
-		input, err := os.Open(exe)
-		if err != nil {
-			runningBinaryErr = fmt.Errorf("open running executable: %w", err)
-			return
-		}
-		defer input.Close()
-		hash := sha256.New()
-		if _, err := io.Copy(hash, input); err != nil {
-			runningBinaryErr = fmt.Errorf("hash running executable: %w", err)
-			return
-		}
-		runningBinary = RunningBinary{Path: exe, SHA256: hex.EncodeToString(hash.Sum(nil)), Commit: strings.TrimSpace(buildinfo.Commit)}
-	})
-	return runningBinary, runningBinaryErr
+	}
+	input, err := os.Open(exe)
+	if err != nil {
+		return RunningBinary{}, fmt.Errorf("open running executable: %w", err)
+	}
+	defer input.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, input); err != nil {
+		return RunningBinary{}, fmt.Errorf("hash running executable: %w", err)
+	}
+	runningBinary = &RunningBinary{Path: exe, SHA256: hex.EncodeToString(hash.Sum(nil)), Commit: strings.TrimSpace(buildinfo.Commit)}
+	return *runningBinary, nil
 }
