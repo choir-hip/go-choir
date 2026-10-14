@@ -12,6 +12,9 @@ const (
 	StateActive      ProviderState = "active"
 	StateCoolingDown ProviderState = "cooling_down"
 	StateDisabled    ProviderState = "disabled"
+	// StatePaced is never stored: a search skips a healthy provider whose
+	// next call slot (Config.MinInterval) is further away than PaceWait.
+	StatePaced ProviderState = "paced"
 )
 
 // OutcomeClass classifies a single provider call for backoff policy.

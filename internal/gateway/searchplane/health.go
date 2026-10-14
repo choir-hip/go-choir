@@ -106,7 +106,27 @@ func normalizeExpiredLocked(rec ProviderHealth, now time.Time) ProviderHealth {
 	return rec
 }
 
+// sameEpisode reports whether a failure belongs to the bench already in
+// force: the provider is benched past the moment this call started. A call
+// only starts on an eligible provider, so that bench was set while this call
+// was in flight, by another call reporting the same fact. Charging every
+// in-flight call a strike made the backoff exponent grow with our own
+// concurrency (Parallel: three strikes, 96 h, from one 402;
+// docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+func sameEpisode(rec ProviderHealth, outcome Outcome) bool {
+	if outcome.At.IsZero() || rec.CooldownUntil == nil {
+		return false
+	}
+	if rec.State != StateCoolingDown && rec.State != StateDisabled {
+		return false
+	}
+	return rec.CooldownUntil.After(outcome.At)
+}
+
 func applyOutcome(rec *ProviderHealth, outcome Outcome, policy BackoffPolicy, now time.Time) {
+	if outcome.Class != OutcomeSuccess && sameEpisode(*rec, outcome) {
+		return
+	}
 	switch outcome.Class {
 	case OutcomeSuccess:
 		rec.State = StateActive

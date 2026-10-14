@@ -871,8 +871,8 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	writeLine(done)
 
-	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending)",
-		computerID, answered, len(stream.Providers), len(stream.Cooling), len(done.Pending))
+	log.Printf("gateway: search for autoputer %s answered %d of %d providers (%d cooling, %d pending) skipped=[%s]",
+		computerID, answered, len(stream.Providers), len(stream.Cooling), len(done.Pending), searchSkippedSummary(stream.Cooling))
 }
 
 // HandleSearchHealth handles GET /provider/v1/search/health. Like the

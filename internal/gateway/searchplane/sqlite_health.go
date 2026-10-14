@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -15,6 +16,9 @@ import (
 type FileHealthStore struct {
 	db     *sql.DB
 	policy BackoffPolicy
+	// mu makes RecordOutcome's read-modify-write atomic: concurrent calls
+	// must see each other's bench to count one episode once.
+	mu sync.Mutex
 }
 
 // OpenFileHealthStore opens or creates a SQLite health database at path.
@@ -86,6 +90,8 @@ func (s *FileHealthStore) Get(provider string) (ProviderHealth, error) {
 }
 
 func (s *FileHealthStore) RecordOutcome(outcome Outcome) (ProviderHealth, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	rec, err := s.Get(outcome.Provider)
 	if err != nil {
 		return ProviderHealth{}, err

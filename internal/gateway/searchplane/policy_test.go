@@ -57,7 +57,19 @@ func TestRateLimitBenchesBrieflyQuotaExhaustionForADay(t *testing.T) {
 			t.Fatalf("%q is %q, want %q", msg, class, OutcomeQuotaLimited)
 		}
 	}
-	if d := p.CooldownDuration(OutcomeQuotaLimited, 1); d < 12*time.Hour {
-		t.Fatalf("quota exhaustion must keep the long bench, got %s", d)
+	// Quota exhaustion benches far longer than a rate limit, but is probed
+	// hourly so an owner top-up is seen within hours, not days
+	// (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+	if d := p.CooldownDuration(OutcomeQuotaLimited, 1); d < time.Hour {
+		t.Fatalf("quota exhaustion must bench at least an hour, got %s", d)
+	}
+	if d := p.CooldownDuration(OutcomeQuotaLimited, 10); d > 6*time.Hour {
+		t.Fatalf("quota exhaustion must be probed at least every 6h, got %s", d)
+	}
+	// Brave's monthly allowance arrives as a 429 whose body also carries the
+	// per-second fields; its phrase marks it as quota.
+	braveQuota := errors.New(`status 429 Too Many Requests: {"detail":"Request quota limit exceeded for plan","meta":{"plan":"Free AI","rate_limit":1,"quota_limit":2000,"quota_current":2000}}`)
+	if class := ClassifyCall(braveQuota, 0); class != OutcomeQuotaLimited {
+		t.Fatalf("brave monthly quota is %q, want %q", class, OutcomeQuotaLimited)
 	}
 }

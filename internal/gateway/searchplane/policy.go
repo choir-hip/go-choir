@@ -20,6 +20,11 @@ const EmptyStreakBeforeCooldown = 10
 // BackoffPolicy computes cooldown durations from outcome class and strike count.
 type BackoffPolicy struct {
 	BaseSeconds map[OutcomeClass]int64
+	// MaxByClass bounds each class's backoff below MaxCooldown, so a
+	// transient fault (a rate limit, a malformed body) can never bench a
+	// provider for days, and an exhausted quota is probed every few hours
+	// (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+	MaxByClass  map[OutcomeClass]time.Duration
 	MaxCooldown time.Duration
 	Multiplier  float64
 }
@@ -31,12 +36,22 @@ func DefaultBackoffPolicy() BackoffPolicy {
 			OutcomeSuccessEmpty: 5 * 60,
 			// A rate limit clears in seconds to minutes; a burst must not bench
 			// a provider for a day. Quota exhaustion keeps the long bench.
-			OutcomeRateLimited:  60,
-			OutcomeQuotaLimited: 24 * 60 * 60,
+			OutcomeRateLimited: 60,
+			// Quota exhaustion does not clear in minutes, but a probe is one
+			// call: an hour, doubling to six, sees an owner top-up the same day.
+			OutcomeQuotaLimited: 60 * 60,
 			OutcomeAuthError:    7 * 24 * 60 * 60,
 			OutcomeServerError:  2 * 60,
 			OutcomeTimeout:      2 * 60,
 			OutcomeError:        5 * 60,
+		},
+		MaxByClass: map[OutcomeClass]time.Duration{
+			OutcomeRateLimited:  15 * time.Minute,
+			OutcomeServerError:  30 * time.Minute,
+			OutcomeTimeout:      30 * time.Minute,
+			OutcomeError:        time.Hour,
+			OutcomeSuccessEmpty: 6 * time.Hour,
+			OutcomeQuotaLimited: 6 * time.Hour,
 		},
 		MaxCooldown: 7 * 24 * time.Hour,
 		Multiplier:  2,
@@ -83,6 +98,9 @@ func (p BackoffPolicy) CooldownDuration(class OutcomeClass, strikeCount int) tim
 		exp = 1
 	}
 	d := time.Duration(float64(base) * exp)
+	if limit, ok := p.MaxByClass[class]; ok && limit > 0 && d > limit {
+		d = limit
+	}
 	if p.MaxCooldown > 0 && d > p.MaxCooldown {
 		return p.MaxCooldown
 	}
@@ -108,7 +126,7 @@ func ClassifyCall(err error, resultCount int) OutcomeClass {
 		// "run out of searches" arrives as a 429 but does not clear in
 		// minutes. Match phrases, not the bare word: a per-second limit's
 		// body can carry quota_limit/quota_current fields.
-		for _, phrase := range []string{"run out", "out of credits", "no more credits", "insufficient", "quota exceeded", "exceeded your quota", "monthly"} {
+		for _, phrase := range []string{"run out", "out of credits", "no more credits", "insufficient", "quota exceeded", "quota limit exceeded", "exceeded your quota", "monthly"} {
 			if strings.Contains(msg, phrase) {
 				return OutcomeQuotaLimited
 			}

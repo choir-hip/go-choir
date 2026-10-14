@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/gateway/searchplane"
@@ -41,6 +42,9 @@ type SearchCoolingProvider struct {
 	Provider string `json:"provider"`
 	State    string `json:"state"`
 	Until    string `json:"until,omitempty"`
+	// Reason is the failure class that benched it (quota_limited,
+	// rate_limited, ...) or "paced"; never an error summary.
+	Reason string `json:"reason,omitempty"`
 }
 
 // SearchStreamArrival is one provider's completed call.
@@ -179,13 +183,28 @@ func searchStreamStart(stream *searchplane.Stream) SearchStreamStart {
 func searchCoolingProviders(cooling []searchplane.Cooling) []SearchCoolingProvider {
 	out := make([]SearchCoolingProvider, 0, len(cooling))
 	for _, c := range cooling {
-		entry := SearchCoolingProvider{Provider: c.Provider, State: string(c.State)}
+		entry := SearchCoolingProvider{Provider: c.Provider, State: string(c.State), Reason: c.Reason}
 		if !c.Until.IsZero() {
 			entry.Until = c.Until.UTC().Format(time.RFC3339)
 		}
 		out = append(out, entry)
 	}
 	return out
+}
+
+// searchSkippedSummary names each skipped provider with its reason for the
+// gateway log ("tavily=quota_limited brave=paced"), so "7 cooling" says
+// which are spent, which are throttled by us, and which are failing.
+func searchSkippedSummary(cooling []searchplane.Cooling) string {
+	parts := make([]string, 0, len(cooling))
+	for _, c := range cooling {
+		reason := c.Reason
+		if reason == "" {
+			reason = string(c.State)
+		}
+		parts = append(parts, c.Provider+"="+reason)
+	}
+	return strings.Join(parts, " ")
 }
 
 func searchStreamArrival(a searchplane.Arrival) SearchStreamArrival {

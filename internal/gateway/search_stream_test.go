@@ -197,6 +197,11 @@ func TestHandleSearch_FinalLineCountsEligibleAndListsCoolingSeparately(t *testin
 	if cooling != "quota,broken" || start.Cooling[0].Until == "" {
 		t.Fatalf("second start cooling = %+v, want quota and broken with their until", start.Cooling)
 	}
+	// Each skipped provider says why, by class, never by summary
+	// (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md).
+	if start.Cooling[0].Reason != "quota_limited" || start.Cooling[1].Reason != "server_error" {
+		t.Fatalf("second start cooling reasons = %+v, want quota_limited and server_error", start.Cooling)
+	}
 	var final streamLine
 	for line := nextLine(t, sc, 2*time.Second); line.Type != "eof"; line = nextLine(t, sc, 2*time.Second) {
 		if line.Type == "provider" && line.Provider != "ok" {
