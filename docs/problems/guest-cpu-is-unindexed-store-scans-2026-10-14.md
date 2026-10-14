@@ -143,3 +143,43 @@ Failure modes the code and tests must close:
    `choir.event` with a non-zero `Seq` is written through `AppendEvent`
    (the lifecycle batch path writes `Seq` 0), so the process is the single
    writer of the sequence, the same assumption `StreamSeq` already makes.
+
+## Found while building the repair (2026-10-14, before the fix commits)
+
+Two findings change failure mode 4. Evidence: local probes on the linked
+embedded Dolt and the store benchmark
+(`internal/store/store_scan_cost_test.go`, 40,269 `og_objects`, Apple M1
+under a host load average of 50 to 120, so CPU time, not wall time, is the
+measure).
+
+1. **VIRTUAL generated columns are unusable here.** With an indexed
+   VIRTUAL column, `INSERT ... ON DUPLICATE KEY UPDATE` (every `og_objects`
+   write) panics in the engine: `index out of range [12] with length 12`
+   in `prollySecondaryIndexWriter.keyFromRow`. Without an index the column
+   reads back empty after an upsert. So the record columns are STORED, as
+   the three legacy columns are (C1 commit `bc3b08b5e`).
+2. **A STORED column costs a table rewrite on a store with rows, once per
+   column.** Measured: about 50 µs CPU per row per column (adding one
+   column to 40,000 rows: 2.1 s CPU; four in one `ALTER`: 8.1 s, so the
+   engine rewrites once per column, not once per statement; a nullable
+   column with no default is instant, 4 ms). The five record columns took
+   16.2 s CPU and 51 s wall at 40,269 objects. The owner's computer had
+   205,966 `og_objects` on 10-09
+   ([guest store history bloat](guest-store-history-bloat-and-memory-shape-2026-10-09.md));
+   at that size the migration is estimated at 50 to 60 s CPU, and the
+   paper may hold more.
+   - `store.Open` runs before anything answers `/health`
+     (`internal/autoputer/run.go`: the server starts after the store and
+     runtime are built). The in-place updater's health probe gives a guest
+     that refuses connections 30 one-second attempts
+     (`internal/updater/runtime.go`), so a migration inside `Open` on a
+     large store **would roll the release back**, on every attempt.
+   - Repair: `EnsureSchema` adds the record columns only to an empty
+     table (a fresh store or a replay from scratch: free). A store with
+     rows gets them from `Store.EnsureObjectGraphIndexes`, which the boot
+     calls after the tape replay, behind the replay health gate, with the
+     gate's `tick` as a two-second heartbeat (the vocabulary migration's
+     pattern; vmctl and the updater treat a changing `progress` as
+     liveness, bounded by the updater's 15-minute cap). Until it finishes,
+     every read keeps its old JSON path, so correctness never depends on
+     the migration. A failure is logged and the boot continues.
