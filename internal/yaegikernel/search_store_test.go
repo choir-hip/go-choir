@@ -173,3 +173,27 @@ func TestSearchWaitReturnsAtDoneOrBound(t *testing.T) {
 		t.Fatalf("wait on an unknown id = %v, want an error naming the known searches", err)
 	}
 }
+
+// Budget routing (docs/reports/search-efficiency-and-reuse-2026-10-14.md
+// §4.1) adds a paid provider after the start frame when the free answers
+// fall short. Its arrival must count in N, or the count reads "2/1
+// answered, -1 pending".
+func TestSearchEscalatedProviderJoinsN(t *testing.T) {
+	store := newSearchStore()
+	store.apply(SearchFrame{ID: "s1", Kind: SearchFrameStart, Query: "q", Providers: []string{"keenable"}})
+	store.apply(providerFrame("s1", "keenable", true, "https://k.example/1"))
+	store.apply(providerFrame("s1", "serper", true, "https://s.example/1"))
+	count, _ := store.wait("s1", time.Millisecond)
+	if count.String() != "s1: 2/2 answered, 0 pending" {
+		t.Fatalf("count = %q", count.String())
+	}
+	s, _ := store.Get("s1")
+	if strings.Join(s.Providers, ",") != "keenable,serper" || s.Total != 2 {
+		t.Fatalf("providers=%v total=%d", s.Providers, s.Total)
+	}
+	// A provider named on the start frame is not added twice.
+	store.apply(providerFrame("s1", "keenable", true))
+	if s, _ := store.Get("s1"); s.Total != 2 {
+		t.Fatalf("total = %d after a repeated provider", s.Total)
+	}
+}

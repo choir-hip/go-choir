@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -176,6 +177,11 @@ func (st *SearchStore) apply(f SearchFrame) {
 		s.Cooling = append([]string(nil), f.Cooling...)
 	case SearchFrameProvider:
 		if f.Arrival != nil {
+			// The gateway's budget routing may add a paid provider after
+			// the start frame; it joins N so "M of N" keeps M <= N.
+			if !slices.Contains(s.Providers, f.Arrival.Provider) {
+				s.Providers = append(s.Providers, f.Arrival.Provider)
+			}
 			s.Arrivals = append(s.Arrivals, *f.Arrival)
 			if f.Arrival.Answered() {
 				s.Answered++
