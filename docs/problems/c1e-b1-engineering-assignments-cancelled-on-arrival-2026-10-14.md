@@ -264,3 +264,25 @@ Also seen, not on the failure path: build outputs (`frontend/node_modules`,
 `frontend/dist`) left in `/workspace/platform` become part of the frozen
 subject and the source patch, because the subject is the whole tree and
 does not read `.gitignore`.
+
+**Fixed on branch `worktree-agent-aa28287fc393b47d4` (not pushed):**
+c85af393 (cause 2: `symlinkEscapesTree` resolves a link against its own
+directory; the subject copy and both source-snapshot checks use it) and
+123ffa05 (cause 1: the overlay names `/var/lib/artifact/release/` at the
+capsule root, pinned by a test to `capsule.ReleaseTreePrefix`).
+
+**Residuals, in the order the next drill will meet them:**
+- Cause 3 (Go module zips refused by L2 egress) is open. Until it is
+  decided, a desk following the corrected overlay cannot build
+  `bin/autoputer` and should end `blocked`; the drill will not reach a
+  frozen bundle. Options: allow `storage.googleapis.com` (broad), or land
+  the design's deps cache route. Red class; needs review.
+- The freeze gate accepts any executable `bin/autoputer`, a stub
+  included; the desk declined to rely on its stub, the gate did not.
+- A terminal Complete whose candidate persistence fails after the
+  terminal freeze still strands the assignment until the run ends; the
+  cancel then closes it, and the desk's own failure Report is lost.
+- `choir.Exec` does not run in the cell's `cwd` (`/workspace/platform`);
+  relative commands failed at seq 12 and 20, and the overlay's worked
+  example `choir.Exec("go", {"test", "./internal/capsule/..."})` would
+  fail the same way.
