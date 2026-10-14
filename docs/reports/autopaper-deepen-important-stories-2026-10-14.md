@@ -158,6 +158,18 @@ Decisions needed before building it:
 3. **Owner switch:** default off, turned on by the owner act
    (`paper.deepen`), so the change ships dark.
 
+Lead's choices (2026-10-14, about 14:05 UTC, under No Blocking Asks; the
+owner asked for more resources on important stories, so the spend is in
+scope):
+1. Budget: 3 deepens an hour, as proposed; the depth log and /api/costs
+   report the extra spend, and the cap is the setting's to change.
+2. Order: search provider health first
+   (docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md,
+   in progress, with a clustering assessment of the three earlier
+   benching problems), then the deepen tick.
+3. Rollout: ships behind `paper.deepen`, default off, turned on for the
+   paper once provider health is restored and verified.
+
 ## What landed now: the measure
 
 `corpusd front-importance` logs, every run, the depth of the paper's
