@@ -232,3 +232,80 @@ Ways B could fail:
 - B5. Memory: zstd's C compile plus the Go compiler, or two builds at once,
   exceed the capsule's 1 GiB; the link's RSS was 400-465 MB. See the
   measurement below for the sizing.
+
+### Measurement (2026-10-14, local; not the guest)
+
+`go build ./cmd/autoputer`, peak RSS of the largest child process:
+
+| where | step | wall | peak RSS |
+|---|---|---|---|
+| macOS arm64, `/usr/bin/time -l`, cold `GOCACHE`, `-p 1` | compile everything | 1,021 s (336 s user) | 690 MiB (one compile) |
+| linux/arm64 container (golang:1.26, libicu-dev, external link via `g++`), GNU time | relink only | 87 s | 1.80 GiB |
+| same | relink, `GOGC=50` | 100 s | 1.75 GiB |
+| same | relink, `-ldflags=-s -w` | 25 s | 1.50 GiB |
+| same | relink, `-p 1` | 57 s | 1.81 GiB |
+
+The binary is 175 MB (130 MB stripped); a cold `GOCACHE` is 1.4-1.6 GB.
+`GOGC` and `-p 1` do not lower the link peak; dropping DWARF does. At the
+capsule's 1 GiB the drill's link held 400-465 MB RSS for 14+ minutes, which
+fits file pages being reclaimed and re-faulted under the cgroup limit.
+
+Sizing: the engineering capsule gets 2 GiB (holds the stripped link with
+headroom; the DWARF link is near the limit) and keeps 1 CPU. The admission
+budget is 3/4 of the guest's MemTotal (`capsule_executor_linux.go`), about
+2.9 GiB on the default 4 GiB guest, with one engineering capsule live at a
+time, so 2 GiB is admitted. The overlay tells the desk to build with
+`-ldflags='-s -w'` and to run one build at a time. Memory implication: the
+cap is a ceiling, not a reservation; most of the capsule's extra use is
+page cache the guest kernel can reclaim, but a build's anonymous memory can
+now reach 2 GiB of the guest's 4 GiB.
+
+## What landed (branch, not deployed)
+
+- A: `internal/capsule/release_binary.go` (classification, reuse plan,
+  staging, provenance checks), wired into `StageGrantedRelease`; bundle
+  field `release_binary` (`transaction.CapsuleEffectBundle`, Validate binds
+  it); the in-cell inspection mirror reads and reports it; management's
+  Verify pass re-checks a reused binary against the running build
+  (`releaseBinaryStillRunning`); Freeze's result names the origin; the
+  engineering overlay stops demanding a build for a change with no Go
+  input.
+- B: guest variable `CHOIR_CAPSULE_BUILD_PATH` (gcc, binutils, pkg-config);
+  `yaegikernel.BuildToolchainCarry` / `WorkloadToolchainEnv` used by the
+  executor's broker launch (`capsule.BrokerProcessEnv`), the broker's
+  direct exec (`directExecEnvFrom`), the session worker spawn
+  (`sessionWorkerEnv`) and each cell exec (`cellExecEnv`).
+- B5: engineering capsule memory 1 GiB to 2 GiB.
+
+Not proven here: the product path. The deployed drill after a deploy is the
+proof (`node scripts/reeng_tracer.mjs --scenario engineering --expect-sha
+<sha> --timeout-min 30`); a Linux capsule smoke test that runs `gcc` inside
+a real capsule needs the root/cgroup-v2 harness
+(`CHOIR_CAPSULE_INTEGRATION=1`) and the guest's store, not available here.
+
+## Follow-ups (recorded, not done)
+
+- C. A build budget for Go changes: more than one CPU while a build runs,
+  and a warm read-only `GOCACHE` for the deployed commit (the module-proxy
+  pattern), so a one-file Go change compiles incrementally. A cold compile
+  at one CPU is tens of minutes (1,021 s at `-p 1` on an M-series laptop).
+- D. A long-running exec primitive (start, then wait with a bound) so a
+  build is not polled cell by cell under the 30 s exec and 60 s cell
+  defaults.
+- Reuse when the source pin and the running binary differ in commit but
+  not in binary inputs (`git diff --name-only <running> <pin>` classified
+  by `BinaryInputPath`). Today reuse requires equal commits, so a
+  persistent computer whose `Source/platform` was seeded at an older commit
+  than its guest image must build.
+
+## Residuals
+
+- A9 (pre-existing): a computer running a layered release that applies a
+  plain self-development release execs the base binary after the swap.
+- The reused binary is not secret-scanned at Freeze (the scan guards
+  capsule output; this file is the deployed build, hash-checked against
+  the running process).
+- Heresy delta: discovered A9 (above); introduced none known; repaired the
+  capsule build environment's missing toolchain (finding 2) and, for
+  changes with no Go input, the build requirement itself (finding 1's
+  consequence).
