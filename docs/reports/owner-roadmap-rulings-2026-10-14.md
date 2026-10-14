@@ -150,6 +150,20 @@ Consequences to check now, not later:
 - Does the live paper open one story per capture, or one per real-world
   story? Three captures of one event in three languages must update one
   story. That is a check on the current paper's publications.
+- **Observed 2026-10-14 00:45 UTC on the live paper computer** (its
+  50 documents, read through the owner's API as counts only). For each
+  document, I read the management Cast records in its `texture:<doc>`
+  inbox.
+  - 47 stories opened from exactly one capture, 2 from two, 1 from four.
+  - No story received a second management Cast: no later capture was ever
+    routed into an existing story.
+  - The titles track single source articles (TechCrunch, Hacker News, BBC,
+    NPR).
+
+  So today the paper turns one capture into one story, which is the
+  pattern this principle rules out. This is not yet a measure of what
+  research cites while it writes; the per-version source count is the
+  next observation. It is the evidence for station L2.
 - The intake redesign (station L2) already treats a capture as an
   observation and the open question as the paid unit. Cross-language
   grouping is part of that, and so is updating existing stories over
