@@ -1,7 +1,9 @@
 # Claims, Events and Entities: The Ledger Between Sources and Stories
 
-Date: 2026-10-14. Status: **design only, draft for panel review.** No
-code changes here. Mutation class of this note: **green**. The slices it
+Date: 2026-10-14. Status: **design only.** Revised after a convergent
+panel (§15): three members accepted with repairs and one sent it back
+but approved E0 after revision; the repairs are folded in. No code
+changes here. Mutation class of this note: **green**. The slices it
 proposes are orange and red (§12).
 
 ## The owner's brief
@@ -107,7 +109,11 @@ Other directions from the same day that this layer serves:
 **The claim is the precommitment.** A claim is recorded with a time that
 can be proven (when Choir captured it), before the evidence that settles
 it exists. That is the prequential condition the precommitment memo
-requires. The speaker never wrote a record, and does not need to. Choir
+requires. Three times are kept apart: when the speaker said it, when the
+outlet says it published, and when Choir captured it. Only claims from
+scheduled, timely captures enter a track record. Claims that research
+dug up after the fact are recorded but never scored, so nobody can
+cherry-pick (§4.1). The speaker never wrote a record, and does not need to. Choir
 records it on the speaker's behalf. This amends the wording of the ledger
 metamission's rule ("sources never precommit"), but not its intent: a
 source's track record stays a view over settled claims, with denominators,
@@ -160,16 +166,21 @@ public actors. Goodhart is countered by:
 - Shared evidence lives in Store B behind corpusd; private overlays stay
   on computers.
 
-**Order of the slices (§12).** Each step waits for the one before it:
-1. an offline study on the L2a fixture and the after-window captures;
+**Order of the slices (§12).** Each step waits for the one before it,
+except that the say–do eval of Choir's own desks runs beside the first
+two:
+1. an offline study on a frozen, blind evaluation set, which measures
+   routing and whether settlement is feasible, and can stop the layer;
+   beside it, the say–do eval of Choir's own desks on their own
+   precommitments;
 2. claims and entities extracted for new captures on the paper, in shadow;
 3. events resolved in shadow against L2a's labels, measured by merge
    recall;
 4. routing by event, measured by sources per story;
 5. Texture cites claims and writes what changed;
 6. research retrieves from the corpus first;
-7. outlet box scores, internal, settled by counting, together with the
-   say–do eval of Choir's own desks on their own precommitments;
+7. outlet box scores, internal, settled by counting, with independence
+   counted by origin, not by carrier;
 8. public commitments and say–do, held to the excellence bar (§7.3);
 9. publication of the public part into the Autopaper object graph.
 
@@ -184,7 +195,7 @@ Nothing in the graph says what the story is about.
 
 **Most routing errors confuse topic with event.** The after-window
 re-read (`docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md`,
-commit a44ba3dc7, not yet on main) found:
+now on main) found:
 - 10 wrong merges, every one of them a feed by topic: the Guardian
   Europe live blog on the grid outage fed into the Zelenskyy-in-London
   story, and different Astra customer case studies folded into the
@@ -316,6 +327,29 @@ A claim has the precommitment memo's required fields
 | Discrepancy | the memo's classes: confirmed, qualified, contradicted, unresolved, plus the classes §6 adds per type |
 | Provenance | the speaker (entity), the carrier (the outlet and capture), the recorder (the computer, the extractor version and model), and the anchor (`Ref` plus the span) |
 
+**Three times, never one** (panel repair P-8):
+- `uttered_at`: when the speaker said it. This comes from the
+  transcript timestamp, the article's dateline or the quote's context,
+  and it is often only approximate.
+- `published_at`: what the outlet asserts. It can be backdated or
+  edited.
+- `fetched_at`: when Choir captured it. This is provable, because it is
+  store time and hashed.
+
+**When a claim counts as a precommitment.** A claim is a precommitment
+*for scoring purposes* only when Choir recorded it before the evidence
+that settles it existed. In practice that requires all three:
+- `fetched_at − published_at` is under a bound (default 48 hours);
+- the claim was extracted from a **scheduled** capture: a source poll,
+  or a search result recorded in the normal course of work;
+- no settling evidence was already in the graph at `fetched_at`.
+
+Claims from **targeted** captures (research digging into an actor's past
+statements) and stale captures are recorded and attributed, but they
+never enter a track record. A record that admitted them would let anyone
+cherry-pick a speaker's old misses after the fact. Every claim carries a
+`selection: scheduled | targeted` tag.
+
 **Recorder is not speaker.** Choir records the claim, and the speaker
 made it. This is how "X said Y at T is the precommitment" fits with the
 must_preserve "sources never precommit":
@@ -330,12 +364,19 @@ must_preserve "sources never precommit":
   denominators, never one reputation number."
 - This needs owner ratification (D1).
 
-**Attribution has two levels.**
-- "Reuters reports the ministry said 600,000 homes lost power" is one
-  claim with speaker = the ministry and carrier = Reuters.
-- The carrier's own act, faithfully relaying the ministry, is a
-  **relay**, scored as attribution fidelity (did the ministry say it?).
-  Speaker accuracy (was it true?) is scored separately.
+**Attribution has two levels, each an explicit claim** (panel repair
+P-4).
+- "Reuters reports the ministry said 600,000 homes lost power" yields
+  **two** claims from one span:
+  - the **embedded claim**: speaker = the ministry, proposition "about
+    600,000 lost power";
+  - the **reporting claim**: speaker = Reuters, proposition "the ministry
+    said P", modality `attribution`.
+- They are linked by `relays`. Attribution fidelity, meaning did the
+  ministry say it, is scored on the reporting claim, against a
+  first-party capture of the ministry's statement or against independent
+  relays. Speaker accuracy, meaning was it true, is scored on the
+  embedded claim.
 - When an outlet asserts something in its own voice, speaker and carrier
   are the same entity.
 - Folding the two together is the classic error of reputation systems
@@ -355,7 +396,8 @@ are rows, and some are sub-objects inside a blob, the way blocks are.
 | **Claim** | an attributed assertion: speaker, stance, modality and T_commit, anchored to a verified span | `<extraction>#c<n>` | immutable; a corrected article is a new capture, so a new claim, linked by `revises` |
 | **Proposition** | the content asserted, with no speaker: normalized English gloss, original-language text, optional quantity and optional deadline | minted on its first resolution (`prop:<ulid>`); scoped to an event | versioned (gloss and label only) |
 | **Event** (`choir.world_event`) | a real-world occurrence: a short free-text type, a time interval with a precision, places, participants with roles | minted on first resolution (`ev:<ulid>`); a Wikidata id when one exists | versioned |
-| **Entity** | a person, organization, place, product, work or law | `wd:Q<n>` when linked, otherwise minted (`ent:<ulid>`); multilingual aliases | versioned |
+| **Entity** | a person, organization, place, product, work or law, with `actor_scope` ∈ {organization, outlet, institution, public_official, public_figure, agent, private}; the default is `private` until positively set | `wd:Q<n>` when linked (QIDs are external identity *evidence*; a Wikidata redirect is followed by a `merged_into` judgment), otherwise minted (`ent:<ulid>`); multilingual aliases live in a side table, not in the versioned row, so new surface forms do not create versions | versioned |
+| **Topic** | a standing subject that is not one occurrence ("the war in Ukraine", "AI chip export controls"), anchored to entities | minted (`topic:<ulid>`); a `choir.world_event` row with `scale: topic` and no required interval; `part_of` chains are capped at depth 3 | versioned |
 | **Quantity** | a measurement inside a proposition: value, unit, measure, as_of, approximate | a field of Proposition, not a kind | — |
 | **Judgment** | one judge's assertion of a link (Mention→Entity, Claim→Proposition, Capture→Event, a relation between propositions or events, a merge or split) with p | content-addressed record | immutable; superseded by newer judgments |
 | **Settlement** | one scorer's answer for a claim at T′ (§6) | the scoring design's score record, targeting a claim | immutable |
@@ -387,7 +429,9 @@ point at propositions and events, and that link is how L3's hypotheses
 | `contradicts` | proposition → proposition | judgment | cannot both hold at the same as_of |
 | `copy_of` | capture → capture | judgment or deterministic | wire syndication; independence counts the original once |
 | `translation_of` | capture → capture | judgment | |
-| `relays` | claim → claim | judgment | outlet B's claim cites outlet A's |
+| `relays` | reporting claim → embedded claim | extractor, then judgment | the carrier's attribution claim relays the speaker's claim (§4.1); also outlet B citing outlet A |
+| `originates_from` | proposition support → entity or capture | judgment | the **origin** of a proposition: the first speaker or primary record it traces to. Independence for corroboration is counted by origin, not by carrier (§6) |
+| `found_by` | capture or claim → search result | deterministic | a search hit led to the page or the claim (§9.4) |
 | `revises` | claim → claim | deterministic | the same outlet and URL changed the span (a correction or a stealth edit) |
 | `member_of`, `owned_by` | entity → entity | judgment | ownership defines independence groups (one broadcaster's language services count once) |
 | `merged_into` | entity, event or proposition → same kind | judgment | redirect; reversible |
@@ -461,10 +505,17 @@ Mentions and claims are addressed as `<extraction id>#m<n>` and
 Two computers that extract the same capture with the same extractor get
 the same id, so extraction is idempotent.
 
-**Re-captures reuse block-level results.** Block content ids are content
-hashes, so a re-capture whose blocks did not change reuses the earlier
-extraction's claims for those blocks, and extraction runs only on changed
-blocks. The 34% HN churn then costs almost nothing.
+**Re-captures reuse earlier claims through a manifest** (panel repair
+P-12).
+- Block content ids are content hashes. A re-capture's extraction
+  carries a **manifest**: for each unchanged block, the id of the prior
+  extraction's claims anchored there (`carried`), with no new claim ids;
+  for changed blocks, new claims.
+- Extraction runs only on changed blocks, with the unchanged neighbours
+  passed as context, so a speaker named one paragraph earlier still
+  resolves.
+- The 34% HN churn then costs almost nothing, and a repeated claim is not
+  a new trial (§6, the scoring unit).
 
 Changed blocks of the same URL produce `revises` edges. This is also how
 stealth edits by outlets become visible: a later capture of the same URL
@@ -477,6 +528,32 @@ whose span changed with no correction notice.
   rate.
 - A capture beyond the cap is still entirely there: the cap limits
   extraction, never the capture.
+
+**Volume budget for Store B** (panel repair P-11). These are estimates
+at today's rate, to be measured in E1, with a tripwire at 2× budget:
+
+| Object | Rows a day | Bytes a day (row + blob) | Churn |
+|---|---|---|---|
+| `capture_extraction` | ~1,700 | ~1.5 KB row + ~6 KB blob → ~13 MB | append-only |
+| `graph_judgment` (one batch per capture per judge, plus management exports) | ~2,500 | ~1 KB row + ~3 KB blob → ~10 MB | append-only; supersession is a new row |
+| `world_event` and topics | ~300 new | small | versioned on label change only |
+| `proposition` | ~3,000 new | small | versioned on gloss change only |
+| `entity` | ~200 new | small | aliases in a side table, not versions |
+| `search_result` pointers (§9.4) | ~4,000 | ~0.5 KB row + ~3 KB hit-pointer blob → ~14 MB | append-only |
+
+- That is under 50 MB a day of new Dolt rows and blobs. Blobs live in
+  content storage beside capture bodies, not in Dolt. Captures already
+  write about 1.4 GB a day.
+- Store B's snapshot committer is already debounced; per-mutation Dolt
+  commits were removed after the 218 GB history incident
+  (`internal/platform/store.go:405-410`).
+- The design adds no update-in-place rows: everything is append-only
+  except the small canonical rows. The projection tables are rebuildable
+  and stay out of Dolt history (in `dolt_ignore`d tables, or a SQLite
+  file beside corpusd).
+- Tripwire: Store B growth over 2× this budget for a day turns the
+  extractor off on the paper (the per-computer enable), and the problem
+  is recorded.
 
 ### 5.2 Canonical nodes are small and versioned
 
@@ -501,11 +578,20 @@ whose span changed with no correction notice.
   - **Time is part of identity**, as L2a's A3 says: an event has an
     interval, and a judgment that two captures report one event sees both
     intervals.
-- **Proposition identity is scoped to an event.** Claims resolve to
-  propositions only within the event they report. This bounds the n²
-  problem: the comparison set is a single event's propositions, typically
-  under 30, never the whole corpus. Cross-event relations are rare and
-  are judged explicitly (`part_of`, `develops`).
+- **Proposition scope depends on modality** (panel repair P-3).
+  - **Assertions** resolve within the event they report. This bounds
+    the n² problem: the comparison set is a single event's propositions,
+    typically under 30, never the whole corpus.
+  - **Commitments, forecasts and intents** resolve by **speaker and
+    subject entity, across events**. The shortlist is the speaker's open
+    commitments and forecasts on the same subject, matched by quantity
+    and deadline. "We will release open weights by the end of October",
+    repeated in coverage of three different events, is one proposition
+    with three claims. Otherwise say–do would double-count and miss
+    reversals.
+  - Cross-event relations between assertions are rare and are judged
+    explicitly (`part_of`, `develops`).
+  - E0 and E2 measure a **duplicate-proposition rate**, with a bar.
 
 ### 5.3 Judgments carry every link, and the projection is the current graph
 
@@ -523,13 +609,33 @@ Rules:
 - **Every link carries confidence and provenance.** p, the judge, and
   what the judge saw are on every assertion. Edges made by `PutEdge`
   with a hashed metadata blob are not enough on their own.
-- **Batch per capture.** One resolution judgment per capture per judge
-  pass holds all of that capture's assertions. Rows grow with captures,
-  not with claims.
+- **Batch per capture, but every assertion is separately addressable**
+  (panel repair P-6).
+  - One resolution judgment per capture per judge pass holds all of that
+    capture's assertions, so rows grow with captures, not with claims.
+  - Each assertion has a stable id `<judgment>#a<n>`. `supersedes` names
+    assertion ids, not whole batches, so reversing one merge never
+    retracts the unrelated links in the same batch.
+- **Every judgment records the judging computer's event head**
+  (panel repair P-7). Store B is outside the restore set. When a
+  computer is restored to an earlier head, its projection may ignore its
+  own judgments made after that head, which the policy decides, and the
+  judgments themselves remain as history.
 - **The projection is the current graph.** A deterministic reducer
-  folds the judgments under a **governing policy**. The default is owner
-  > management > research > panel > Jev at p ≥ θ > extractor; on a tie
-  the later judgment wins.
+  folds the judgments under a **versioned governing policy**, with
+  precedence **by relation type**, never one global ranking (panel
+  repair P-6):
+
+  | Relation class | Precedence (highest first) |
+  |---|---|
+  | routing (`covers`, the event a capture is fed to) | owner > management > Jev at p ≥ θ > extractor |
+  | world evidence (`asserts`, `refers_to`, `refines`, `updates`, `contradicts`, `copy_of`, `originates_from`, `fulfills`) | owner > panel > count rule > Jev at p ≥ θ > research > management > extractor |
+  | identity (`merged_into`, split) | owner > panel > management (events) or Jev at p ≥ θ (entities and propositions) > extractor |
+
+  Within one rank, the later judgment wins. A merge cycle is resolved
+  union-find style: the earliest-created canonical id survives.
+  Management governs where stories go; it does not govern what the world
+  says.
 - The policy is a view parameter, as in scoring design §4.3. The paper
   reads its own policy, and a reader's computer may choose another.
 - The projection's tables (memberships, counts, independence groups) are
@@ -557,11 +663,22 @@ Rules:
 | settlements of world claims | Store B (same schema as `CommitmentScoreRecord`, home chosen by the target: a world claim lands here) | scorers | §6 |
 | desks' own records and scores | the computer's tape (exists) | desks and the harness | unchanged |
 | story covers event | the computer (story working state); published with the version | management or Texture | §9.1 |
+| management dispositions (feed, decline, open) | **the computer's records** (`CommitInboxRecords`, `choir.capture_disposition`): this is the authority | management | Store B receives a derived **export** judgment carrying the source record id. It is never edited independently, and a mismatch is a bug the projection reports |
+| citation support verdicts | the computer's `choir.support_verdict` memo (authority); published as `choir.support_judgement` (export) | `system:support` | used as settlement *evidence* by reference to the memo id, never copied as a second verdict |
+| search-result pointers | Store B (§9.4) | the computer that searched | |
 
-**One schema, homes partitioned by subject.** Settlement and score records
-share one Go type. A record about a desk's own commitment lives on the
-tape, and a record about a world claim lives in Store B. Each record has
-exactly one home, decided by what it targets. This is a partition, not a
+**One schema, homes partitioned by a stated function** (panel repair
+P-7). Settlement and score records share one Go type. The home is
+decided by `home(speaker class, target)`:
+- the target is a desk's own commitment record → **the tape**;
+- the target is a world claim (speaker is an outside entity, or the
+  edition speaking about the world, including research's Report claims
+  once extracted as claims) → **Store B**;
+- any record about a world claim that originates on the tape (a desk's
+  answerer settlement) is written once, to Store B, with the desk's
+  record id as provenance. It is not also kept on the tape.
+
+Each record therefore has exactly one home. This is a partition, not a
 second path for the same fact. Standing question 5 is answered per fact.
 
 **Restore.** Store B is outside a computer's restore set
@@ -639,18 +756,33 @@ mapping.**
 design §4.2 applied to world claims:
 
 1. **count**, a deterministic rule over the graph, with no model call:
-   - an assertion is confirmed when its proposition is affirmed by the
-     primary record or by k independent outlets (independence groups
-     from `copy_of` and `owned_by`), with no contradicting claim of equal
-     standing;
-   - a forecast or commitment resolves from a counted predicate over
-     events ("an event of type T with participant E occurs before the
-     deadline");
-   - for Choir agents, the trace. **count governs where it applies.**
+   - **Confirmation needs an independent origin** (panel repair P-2).
+     An assertion settles `confirmed_primary` when a primary record of
+     the fact is captured: the official dataset, filing, transcript, or
+     the actor's own act for a statement about itself. It settles
+     `corroborated` when at least k sources with **different origins**
+     affirm it. Origins come from `originates_from`, not from carriers,
+     so ten relays of the ministry's figure are one origin. A claim whose
+     only support traces back to its own speaker stays **unresolved**:
+     relays confirm attribution, never truth. The box score shows
+     `confirmed_primary` and `corroborated` separately, because
+     consensus is not truth.
+   - **Count predicates exist only for a small closed vocabulary of
+     settlement action classes** (panel repair P-9): release or launch,
+     ship or deliver, sign or enact, appoint or resign, publish a figure,
+     hold an event, start or stop an operation. Tens of classes, not
+     hundreds, and never constraining claim content. A forecast or
+     commitment whose criterion maps to a class resolves by a counted
+     predicate ("an event of class release with participant E as agent
+     before the deadline"). Everything else goes to Jev or the panel,
+     with its own agreement bar.
+   - For Choir agents, the settlement is the trace. **count governs where
+     it applies.**
 2. **jev**, a typed choice: "does evidence E confirm, qualify or
    contradict P?" and "does action event A fulfil commitment C?". It is
    blind to who asserted the claim, so an outlet's reputation cannot sway
-   it. At about $0.0001 per question, it governs the judged cases, as P4
+   it. At about $0.00002 to $0.0001 per question (input tokens only, at
+   $0.042 per million), it governs the judged cases, as P4
    decides.
 3. **research**, when the evidence must be found first. Research reports
    with typed answers, written as `answerer` settlements; it is
@@ -676,6 +808,32 @@ design §4.2 applied to world claims:
 - Scorers are scored against count ground truth and against the panel
   (scoring design §4.4). That is the defence against a captured or lazy
   scorer.
+
+**The unit of scoring is (speaker, proposition, reading), at its first
+scheduled utterance** (panel repair P-3).
+- A speaker repeating a figure, wire syndication and re-captures produce
+  more *claims*, but not more *trials*. Repeats count as evidence that
+  the speaker persisted in the claim, and a reversal is its own claim.
+- Without this rule n is inflated, the outcomes are correlated, and every
+  interval is too narrow.
+
+**Scoring differs by modality** (panel repair P-10). One formula for
+everything would be wrong:
+
+| Modality | Scored as | Probability used |
+|---|---|---|
+| assertion | accuracy rate by **stance class** (unhedged, hedged, reportedly), with denominators | none. An assertion is not a forecast, and no Brier score is computed |
+| forecast | Brier and log score; skill against a base rate; a Murphy decomposition (reliability, resolution, uncertainty) | the explicit probability; otherwise the versioned estimative-word mapping, fixed before any outcome; an unhedged "will" maps to a versioned default (0.85) that is refined per speaker by verbal calibration |
+| commitment | say–do (§7) | none, or the speaker's own stated confidence when given |
+| intent or value | consistency evidence | none |
+| Choir agent | P4 unchanged: skill, calibration, and **"unresolvable counts as wrong"** for questions the agent wrote itself (scoring design §4.5) | the agent's own p |
+
+**Unresolvable for agents differs from unscorable for public actors.**
+- Choir's agents write their own questions, so vagueness is their
+  choice, and P4 charges it as a miss.
+- For public actors Choir writes the operationalization, so vagueness is
+  shown in the unscorable bucket (§6a) rather than charged. Charging it
+  would score Choir's extraction, not the speaker.
 
 ## 6a. Uncertainty: five kinds, recorded and carried into scoring
 
@@ -707,22 +865,42 @@ and never folds them into one number before scoring.
 **How the uncertainties enter a score.**
 
 ```text
-weight(c)   = p_attr(c) · determinacy(c) · p_extract(c) · w_materiality(c)
-              determinacy = max reading weight            (1 when there is one clear reading)
-outcome(c)  = Σ_r weight_r · outcome_r                     (per-reading outcomes, U2)
-score(c)    = expected proper score under U5:
-              E[Brier] = p_s·(q−1)² + (1−p_s)·q²           (q = the speaker's U3 probability; p_s = P(yes) from the settlement)
-box score   = weighted means and intervals using weight(c); n_eff = (Σw)² / Σw² shown beside n
+weight(c)    = p_attr(c) · p_extract(c) · w_materiality(c)
+               (interpretation is NOT in the weight; it enters once, through the readings below)
+forecasts:   E[Brier](c) = Σ_r w_r · [ p_{s,r}·(q−1)² + (1−p_{s,r})·q² ]
+               q = the speaker's probability (U3); p_{s,r} = the settlement's P(yes) under reading r (U5)
+assertions,  outcome(c)  = Σ_r w_r · outcome_r        (outcome_r ∈ [0,1]; expected under U5)
+commitments: also report the charitable bound: max_r outcome_r ("kept under reading A")
+aggregates:  weighted mean m; n_eff = (Σw)² / Σw²; interval from Beta(1 + n_eff·m, 1 + n_eff·(1−m)),
+             or a bootstrap over scoring units when outcomes are fractional or correlated
 ```
+
+This corrects the draft's two mistakes (panel repair P-5):
+- the draft multiplied a determinacy factor into the weight *and* mixed
+  the outcomes across readings, which counted interpretation twice;
+- the draft put a Beta(1,1) interval over weighted, fractional outcomes,
+  where the n_eff pseudo-count or a bootstrap is the defensible form.
+
+**Reading weights are frozen at T_commit by a judge that cannot see the
+outcome.** The extractor proposes the readings, and Jev weights them at
+extraction time, before any settling evidence exists. A re-weighting
+after evidence exists is recorded but used only for display, never for
+calibration.
 
 **Unscorable is a result, not a pass or a fail.** A claim goes to the
 **unscorable** bucket, counted and shown but never averaged in, when any
 of these holds:
 - `p_attr` < 0.6;
-- determinacy < 0.5;
+- no reading has weight ≥ 0.25, which means it is too ambiguous to settle
+  under any reading. Several readings that each settle are fine;
 - the specificity check fails;
 - the evidence leaves it unresolvable;
-- the outcome is not observable (§7.2).
+- the outcome is not observable (§7.2);
+- the claim is `targeted` or stale (§4.1), so it is recorded but not
+  scored.
+
+This bucket applies to public actors only. Choir's agents follow P4's
+"unresolvable counts as wrong".
 
 The thresholds are defaults (D8), on the settlement so they can be
 recomputed. An actor whose claims are mostly unscorable shows exactly
@@ -774,7 +952,8 @@ countermeasures:
 
 | Gaming move | Countermeasure |
 |---|---|
-| **abstain**: hedge everything, so nothing is ever wrong | Proper scoring rules score the stated probability. A hedge maps to p ≈ 0.5, which earns about zero **skill** against the base rate, so hedging gains nothing. The hedge share and the unscorable share are shown. A declined task is a capability forecast and is scored |
+| **abstain**: hedge everything, so nothing is ever wrong | Corrected after the panel (P-5): hedging is **not** worthless to a poor forecaster. Zero skill beats negative skill, so a hedge is a safe harbour. The countermeasure is therefore display, not arithmetic. The **hedge share** and the **unscorable share** sit in the headline row, next to accuracy. Forecast cells show the Murphy decomposition, so **resolution and sharpness** (how far forecasts move from the base rate, and whether they discriminate) are visible beside reliability. A record of hedges reads as "calibrated, uninformative", which is exactly what an intelligent observer should conclude. For Choir's agents, P4's "unresolvable counts as wrong" closes the vagueness route |
+| **decline hard tasks** (a "no" can never be shown wrong) | Panel repair P-6b. A decline is a capability self-forecast, but it settles only if someone tries. A **random sample of declined tasks** (default 10%) is run anyway, on another desk or model, inside the existing engineering admission, to settle the counterfactual "could it have been done". Unsampled declines are counted and their rate is shown; their accuracy is never imputed |
 | **cherry-pick easy claims** | The **system selects** which claims count: every extracted claim from scheduled captures, plus every desk precommitment. The speaker never chooses. Skill is measured against a base rate and a reference forecast (a market price where one exists), so easy claims earn about zero |
 | **say little** | Volume and coverage are shown beside accuracy, in claims made, checkable and settled per period. A silent actor reads "n too small", never "accurate" |
 | **make many trivial promises** | Materiality weight; specificity check; difficulty weighting by the base rate |
@@ -797,7 +976,8 @@ Then:
 say–do(A, W) = Σ_c w(c) · s(c) / Σ_c w(c)      over c ∈ C_A settled in W
    s(c) = 1 kept, 0.5 partially kept, 0 broken          (overtaken / not observable excluded, counted)
    w(c) = materiality weight (default 1; the PSA weight w = P × impact × relevance is a later refinement)
-reported with n, the excluded counts, and a Beta(1,1) posterior interval — never as a bare number
+reported with n (scoring units, §6), n_eff, the excluded counts, and an interval
+   (Beta with n_eff pseudo-counts, or a bootstrap over units, §6a) — never as a bare number
 ```
 
 Two companion measures:
@@ -856,6 +1036,10 @@ settlement(c) = {kept | partially | broken | pending | overtaken | not observabl
 | outlet versus speaker | an outlet blamed for its source's error | relay versus assertion (§4.1) |
 | harm to a named actor from a wrong settlement | "X broke a promise" when X did not, or under a reading X did not mean | The owner accepted the legal risk (2026-10-14). The **excellence bar** for any published settlement about a named actor: a verified verbatim span (U1 ≥ bar); every plausible reading shown with its weight (U2); the dated evidence linked; uncertainty visible; a **right of reply** (a reply or dispute from the subject is a claim of theirs, shown beside the settlement, and it re-opens settlement); corrections published as prominently as the settlement. Scope: actors who act in the public sphere. Private individuals are not scored (the metamission excludes "individual-level tracking of people in public-discourse sources"; D6) |
 | Goodhart on the box score | optimizing the displayed number | several measures, never one; denominators; no ranking of people by a single score |
+| media selection of actions (panel) | outlets report failures and conflict more than routine kept promises, so say–do inherits newsroom selection | "not observable" is the strict default, unless the actor's **domain coverage** passes a measured bar: primary channels polled (official sites, gazettes, filings, release notes) and not only news. Coverage is shown **per actor**, never as a global figure |
+| data protection (panel) | scoring natural persons is profiling under GDPR as well as a defamation question; the owner's ruling covers defamation risk | named separately in D6: rights of access and objection, and how far the journalism exemption reaches. The reply path doubles as the objection channel |
+| false "silent edit" signals | page reflow, A/B variants or feed churn read as stealth edits by `revises` | the "silent span changes" cell is not shown until its false-positive rate is measured on a sample |
+| reference-forecast skew | market prices exist only for listed, money-attractive questions | skill against a market reference is reported only where one exists, with its coverage stated; otherwise the base rate is used |
 
 ## 8. The box score
 
@@ -868,9 +1052,10 @@ the as-of time hashed, so a reader's numbers never change under them. A
 
 ```text
 Ukrenergo (wd:Q4122614 · organization · ua)            Jun 1 – Oct 14 2026 · scorer policy: paper default
-Claims recorded 214   checkable 61%   by type: assertion 188 · forecast 9 · commitment 14 · intent 3
+Claims recorded 214 (scoring units 131 scheduled · 23 targeted, not scored)   checkable 61%   hedged 18%   by type: assertion 188 · forecast 9 · commitment 14 · intent 3
 Unscorable      84 (vague 51 · ambiguous 19 · weak attribution 9 · not observable 5)   n_eff 118
-Assertions      settled 97 / 131 checkable · confirmed 89 · qualified 5 · contradicted 3   [92% ± 5]
+Assertions      settled 97 / 131 checkable · confirmed by primary record 41 · corroborated (≥2 origins) 48
+                · qualified 5 · contradicted 3   [92% ± 5]   self-sourced only, unresolved: 22
                 updates own figures: 22 (median +4h)   first to report: 31 of confirmed
 Forecasts       resolved 6 (n too small for calibration) · Brier 0.19 vs base 0.24
 Commitments     kept 7 · partial 2 · broken 1 · pending 4 · not observable 0   say–do 0.80 [0.55–0.93]
@@ -986,12 +1171,58 @@ coverage", and deepening has a concrete target: the uncited propositions.
 - Research gets `choir.SearchClaims(query, entities, since)` and
   `choir.EntityTimeline(entity)` before any web search, which makes the
   "corpus first" rule concrete (L2a B2).
-- **Search results are kept as observations.** One `choir.search_result`
-  object per search: query, provider, rank, URL, snippet, time, in a
-  blob. Snippets are weak evidence, never claims, until the page is read
-  and captured.
-- **Owner decision (D7).** Several search providers' terms limit storing
-  results; this must be checked per provider before results are kept.
+- **Search results feed the same extraction as captures** (owner, about
+  15:05 UTC: "I really want to save search results as content, but we
+  should be extracting into our object graph — that's the transformative
+  work, so that we're not just copying the search result and reusing
+  that"). This aligns with `choir.search_result` in
+  `docs/reports/search-efficiency-and-reuse-2026-10-14.md` §2 and narrows
+  what it keeps.
+  - **Kept verbatim, as a pointer object** (`choir.search_result`, one
+    per search): query, normalized query key, run, desk, computer,
+    providers answered and skipped, time, and per hit: URL, canonical
+    URL, title, `published_at`, provider and rank. Edges:
+    `search_result —returned→ url-key`, and `found_by` from any later
+    capture of that URL.
+  - **Not kept: snippet text.** It is used *transiently*. The snippets of
+    a search's hits go to the extractor in one batched call while the
+    run holds them, and are then dropped. The blob holds pointers, not
+    snippets. This narrows the companion report's "merged hits with
+    snippet" blob.
+  - **Kept, transformed:** the claims, entities and events extracted
+    from the snippets, each attributed to **the source page's outlet**
+    (carrier) and speaker. Each gets `found_by` to the search result and
+    an anchor holding only the short quote span that grounds it, capped
+    like any claim quote (§5.5). The basis is `snippet`, so attribution
+    confidence (U1) is lowered, because a snippet is a provider's excerpt
+    and may be truncated or out of context. Snippet claims are
+    `targeted` unless the search was part of the normal course of work,
+    and they never settle anything on their own.
+  - **Upgrade on read.** When the page is later read and captured, the
+    claim is re-anchored to the capture's block, and `quotematch` must
+    pass. U1 rises, or the mismatch is recorded as a correction to the
+    snippet claim.
+  - **Reuse instead of re-search.** Before a web search, research's
+    `choir.SearchClaims` and the normalized query key return earlier
+    searches' extracted claims and pointers on the same subject, with
+    their age. Research re-searches only if they are stale (a freshness
+    bound by subject: hours for breaking news, days for documentation) or
+    insufficient. The companion report's refused-read fallback ("return
+    the stored hit text") becomes "return the extracted claims with their
+    snippet basis".
+  - **Provider terms (D7).** Titles and URLs are safe to keep under any
+    reading. Transient processing of snippets falls within ordinary
+    caching use. Extracted facts are Choir's own transformative work, and
+    facts are not copyrightable. But some provider terms restrict
+    building **derived datasets** from results, so each provider's terms
+    are an owner check before extraction from snippets is turned on.
+    Pointers can ship first.
+  - **Cost.** About 4,000 searches a day. Extraction is batched per
+    search and skips hits whose URL already has a capture or an earlier
+    extraction, at about $0.001 to $0.002 per search. Measured in E5.
+- This needs more research first (owner: "we shouldn't expect to ship
+  this in the next hour"). It is slice E5, after the capture path is
+  proven.
 - **Embeddings are a derived index, never authority.** The unwired qdrant
   path with `qwen3-embedding:0.6b` embeds propositions' glosses, claim
   glosses and entity labels: short texts, cheap, and cross-lingual. It
@@ -1030,7 +1261,7 @@ ledger:
 
 | Public (Store B, readable logged out) | Private (stays on the computer, or in Store B with private scope) |
 |---|---|
-| entities, events and propositions; claims with gloss, selector, link and a very short extract within the rights rule; the paper's judgments with judge identity; settlements and box-score snapshots pinned by published versions | full capture text; claims from private feeds, private documents or contributors' private sources; a private computer's judgments (its overlay); reader attention; named-person settlements not yet human-reviewed |
+| entities, events and propositions; claims with gloss, selector, link and a very short extract within the rights rule; the paper's judgments with judge identity; settlements and box-score snapshots pinned by published versions | full capture text; claims from private feeds, private documents or contributors' private sources; a private computer's judgments (its overlay); reader attention; settlements about named actors that do not yet meet the §7.3 excellence bar (span verified, readings shown, reply path) |
 
 Another computer **adopts** public ledger objects onto its own tape by
 reference (id and content hash). It may judge them differently, and its
@@ -1050,6 +1281,8 @@ missing. Here it is just reading Store B plus writing local judgments.
 | **Promise trackers (PolitiFact's Obameter and Trump-O-Meter; Polimeter)** | the say–do dimension, with kept, compromise, broken, stalled and in-the-works ratings | a few hundred hand-curated promises, one actor at a time; no probabilities; not comparable across actors; never applied to organizations or AI |
 | **GDELT** | events at global, multilingual scale; actor and event coding (CAMEO); metadata that may be reused | per-article event records with heavy duplication; a closed taxonomy; no who-said-what settlement; no scoring |
 | **Wikidata** | entity identity (QIDs); statements with qualifiers and references; multilingual labels | stores a consensus statement with ranks, not a time-ordered record of who claimed what when; no scoring. **Use:** entity identity |
+| **X Community Notes** (added after the panel) | plural rating with bridging: a note shows only when raters who usually disagree agree, the closest neighbour to "neutral, multi-perspectival" | rates single posts, not speakers over time; no forecasts, no say–do; volunteer selection |
+| **Automated claim checking (ClaimBuster, FEVER-style verification)** and **AI forecasting evals (ForecastBench)** | claim detection and verification at scale; scored forecasts by AI systems | one-shot benchmarks, not a standing ledger; no attribution to real speakers; no say–do for the agent's own work |
 | **Outlet raters (NewsGuard, Ad Fontes, Ground News)** | outlet-level judgments; coverage-gap views | rubric judgments by raters, not track records of claims; one number per outlet |
 
 **What none of them captures, and what Choir is:**
@@ -1161,8 +1394,19 @@ poll → captures (Store B) → arrival → [labels, L2a] → extract job (syste
   is fed it) extracts it on demand, because that is new work. A backfill
   is an explicit owner act.
 
-**Labels never filter.** An unextracted or claim-capped capture still
-reaches management with its arrival and label.
+**Labels never filter, and arrival never waits on extraction** (panel
+repair P-13).
+- An unextracted or claim-capped capture still reaches management with
+  its arrival and label.
+- After E3, event resolution for a capture with no extraction runs on
+  its title and summary, the same shortlist with fewer features, so a
+  crash never orphans a capture from routing.
+- Management's disposition of an unextracted capture is a live act on
+  it, so it triggers extraction then. That is new work, not a resumed
+  job.
+- E1's two-minute target counts only captures that arrived while no
+  crash intervened. Crash-interrupted captures are counted separately,
+  with their fate.
 
 **Cost per capture**, from `llmcost/pricing.go`:
 - Extraction: about 2,500 input and 700 to 1,000 output tokens (the
@@ -1212,21 +1456,22 @@ default), a tripwire, and landing on staging.
 
 | # | Slice | Class | Acceptance (measured, bar fixed before the run) |
 |---|---|---|---|
-| E0 | **Offline study.** Run the extractor and resolution prompts over the L2a fixture (27 captures, 8 events) and the 425 after-window captures, outside the runtime | green/yellow | event clusters from claims and entities: merge recall ≥ label recall at false merges ≤ 1; the 10 topic-feed wrong merges and causes C and D separated by `part_of`; the quote check passes on ≥ 95% of extracted claims; entity-link precision ≥ 0.9 by the registered judge; cost per capture. Gate: proceed only if E0 beats L2a's labels on topic versus event |
-| E1 | **Claims and entities on the paper, shadow.** `intake.extract`; extraction plus entity judgments written; no consumer reads them | red (gateway calls, new corpusd write route, poll path neighbour) | ≥ 95% of new captures extracted within 2 min; quote-check pass ≥ 95%; claim cap respected; reuse on re-captures ≥ 80% of unchanged blocks; cost reported; no publication regression (L2a tripwire) |
-| E2 | **Events in shadow.** Event and proposition judgments beside L2a labels | red | on two 6-h windows with the fixed scorer: event-keyed merge recall ≥ label-keyed, false merges lower, topic-versus-event errors named |
-| E3 | **Route by event.** Jev's arrival question targets events; `covers`; the capture_label story pointer retired (deletion clock) | red | merge recall ≥ 0.85, false merges ≤ 1 per window; captures per new story up; new stories per hour sublinear in captures per hour |
+| E0 | **Offline study**, outside the runtime, on a **frozen, blind evaluation set**: the L2a fixture (27 captures, 8 events) as a diagnostic, plus a held-out labelled sample of the after-window's 425 captures with re-captures removed. Event, sub-event, topic, duplicate and false-merge labels are made by the registered judge (gemini-3.8-flash, two shuffled calls) before any prompt tuning, and a tuning split is kept apart | green/yellow | **Routing:** event-cluster precision and recall against the event labels (not against L2a's story labels, which target a different object); L2a's labels are scored on the same set as the control, using the label rerun with the Jev peer pin fixed; the 10 topic-feed wrong merges and causes C and D separated by `part_of`; duplicate-proposition rate. **Extraction validity**, on a fixed sample by the judge: speaker correct ≥ 0.9, modality correct ≥ 0.85, readings non-vacuous; quote matches reported as **attempted versus retained**, with retained ≥ 95%; entity-link precision ≥ 0.9. **Settlement feasibility:** share of claims passing the specificity check; share of assertions that a count rule could settle (primary record, or two origins); commitments checkable per 100 captures. Cost per capture. **Exit:** if routing beats the control, take the merging-first order; if routing fails but settlement feasibility passes, take the settlement-first order (E6a, E6, then E1 for settlement); if both fail, stop, and the layer is recorded as falsified for now (CE-1) |
+| E6a | **Choir's own desks' say–do eval** (moved up by the panel: it needs no extraction, no entities and no Store B; it is the tape, P3, P4 and score records). P3 expectations, Cast hypotheses and capability self-forecasts are settled from the trace; per-desk and per-model box scores are kept off the acting context; 10% of declines are counterfactually sampled | orange | calibration (Murphy decomposition) and say–do per desk and model, with n and intervals; hedge and decline rates shown; scorers blind; runs **alongside E0 and E1** |
+| E1 | **Claims and entities on the paper, shadow.** `intake.extract`; extraction plus entity judgments written; no consumer reads them. **Entry conditions:** the Jev peer-pin fix (2cc8ab8fa on main) proven on the paper (label coverage near 100%); the new kinds registered and written only through typed corpusd routes with validation (H-OG1 repaired *for these kinds*); the volume budget and tripwire in place (§5.1) | red (gateway calls, new corpusd write route, poll path neighbour) | ≥ 95% of new captures that arrived with no crash in between extracted within 2 min; retained quote matches ≥ 95%; claim cap respected; re-captures carry ≥ 80% of unchanged blocks; Store B growth within budget; cost reported; no publication regression (L2a tripwire) |
+| E2 | **Events in shadow.** Event and proposition judgments beside L2a labels (the transitional dual answer, with a **dated** deletion clock: if E3 has not landed 21 days after E2 starts, the shadow writer turns off) | red | on two 6-h windows with the fixed scorer: event-keyed merge recall ≥ label-keyed, false merges lower, topic-versus-event errors named; duplicate-proposition rate within the E0 bar |
+| E3 | **Route by event.** Jev's arrival question targets events; `covers`; the capture_label story pointer retired | red | merge recall ≥ 0.85, false merges ≤ 1 per window; captures per new story up from the baseline of 2.35 (f4ef4436a); new stories per hour sublinear in captures per hour |
 | E4 | **Texture writes from the dossier and cites claims** | red (Texture write surface) | ≥ 80% of new citations name a claim; the "what changed" line names a new proposition in ≥ 80% of revisions after a feed; the support pass rate holds or rises |
-| E5 | **Corpus first.** `SearchClaims`, `EntityTimeline`; search results kept (after D7) | orange | the corpus share of research evidence rises; web searches per story fall; time to first report holds |
-| E6 | **Outlet box scores, internal, settled by count** (assertions only) | orange | per-outlet settled counts with intervals; Jev shadow-scored against count on 25% |
-| E6a | **Choir's own desks' say–do eval.** P3 expectations, Cast hypotheses and capability self-forecasts settled from the trace; per-desk and per-model box scores, off the acting context | orange | calibration and say–do per desk and model with n and intervals; the decline rate and its accuracy shown; the scorer is blind |
-| E7 | **Public commitments and say–do**: organizations first (vertical zero, tech: dated vendor promises), then people acting in public roles | red where published | ≥ 30 checkable commitments settled; panel agreement with Jev ≥ 0.8; every published named-actor settlement meets the §7.3 excellence bar (span verified, readings shown, reply path) |
-| E8 | **Publish the public part** into the Autopaper object graph; front page uses independent outlets per event and depth | red (publication) | public reads never touch the paper; 100% of published quotes within the rights rule |
+| E5 | **Corpus first, and search results into extraction.** `SearchClaims`, `EntityTimeline`; search-result pointers first; snippet extraction after D7 | orange (red for the gateway calls) | the corpus share of research evidence rises; web searches per story fall; time to first report holds; no snippet text retained |
+| E6 | **Outlet box scores, internal, settled by count** (assertions; origin-based independence) | orange | per-outlet settled counts with intervals, `confirmed_primary` and `corroborated` shown separately; Jev shadow-scored against count on 25%; a **back-test** once Store B's earliest captures (from about 2026-10-11) are 30 days old |
+| E7 | **Public commitments and say–do**: organizations first (vertical zero, tech: dated vendor promises), then people acting in public roles. **Gate:** D1 and D6 ratified as amendments in the metamission | red where published | ≥ 30 checkable commitments settled; panel agreement with Jev ≥ 0.8; per-actor coverage shown; every published named-actor settlement meets the §7.3 excellence bar (span verified, readings shown, reply path) |
+| E8 | **Publish the public part** into the Autopaper object graph; the front page uses independent outlets per event and depth | red (publication) | public reads never touch the paper; 100% of published quotes within the rights rule |
 
-**E0 is cheap and decides whether to continue.** If claims and entities
-do not separate topic from event better than L2a's label already does,
-the layer is still needed for settlement, but story merging is not its
-first consumer, and E1 would then be justified by E6 and E7 instead.
+**E0 decides the order, and can stop the layer.** E0 measures routing
+and settlement feasibility together, so it can fail the layer (panel
+repair P-1). E6a runs beside it from the start, because the owner made
+Choir's own agents the first population and their loop is already
+complete.
 
 ### 12.4 Ceremony for the red slices (carried into each slice's goal file)
 
@@ -1245,7 +1490,8 @@ first consumer, and E1 would then be justified by E6 and E7 instead.
 - **Heresy delta.**
   - Discovered: H-OG1, H-OG2, H-OG3.
   - Introduced, to be named per slice: the transitional dual answer of
-    capture_label and event judgments, with a deletion clock at E3.
+    capture_label and event judgments, with a dated deletion clock (21
+    days after E2 starts, or when E3 lands).
   - Repaired: none.
 
 ## 13. Open decisions for the owner
@@ -1253,14 +1499,15 @@ first consumer, and E1 would then be justified by E6 and E7 instead.
 1. **D1. The claim is the speaker's precommitment, recorded by Choir.**
    Amend the metamission's "sources never precommit" to "sources never
    emit records; Choir records their claims as attributed
-   precommitments". Recommended: yes.
+   precommitments; only scheduled, timely claims enter a track record".
+   Recommended: yes. Ratifying it in the metamission gates E7.
 2. **D2. Events are the merge key, and a story is a view over an event
    cluster.** This replaces "a story is the set of captures fed into it".
    Recommended: yes, after E0 and E2 confirm it.
 3. **D3. A fixed schema despite "existing types only".** The new kinds:
    - `choir.capture_extraction`;
    - `choir.entity`;
-   - `choir.world_event`;
+   - `choir.world_event`, with `scale: topic` for topics;
    - `choir.proposition`;
    - `choir.graph_judgment`;
    - `choir.search_result` (with D7).
@@ -1281,12 +1528,24 @@ first consumer, and E1 would then be justified by E6 and E7 instead.
    - not private individuals (for example a witness quoted once, or a
      social-media user in a discourse sample).
 
-   To confirm: that this narrows the metamission's exclusion of
-   "individual-level tracking of people in public-discourse sources"
-   rather than lifting it.
-7. **D7. Keeping search results.** Check each provider's terms on
-   storing results before E5 keeps them. Pages read are already kept as
-   captures.
+   - `actor_scope` on every entity defaults to `private` and must be
+     set positively before any box score exists.
+
+   To confirm:
+   - that this narrows the metamission's exclusion of "individual-level
+     tracking of people in public-discourse sources" rather than lifting
+     it. Ratifying it gates E7;
+   - separately from defamation, which the owner's ruling covers, scoring
+     natural persons is profiling under the GDPR (rights of access and
+     objection; the reach of the journalism exemption). Is that also an
+     accepted risk, with the reply path serving as the objection
+     channel?
+7. **D7. Search results.** Pointers (URL, title, query, run, provider,
+   rank, time) are kept. Snippets are used transiently for extraction and
+   not retained. Extracted claims are kept with attribution to the source
+   page (owner, about 15:05 UTC). Open: each provider's terms on building
+   derived data from results, checked before snippet extraction is turned
+   on in E5. Pointers can ship first.
 8. **D8. Estimative-word mapping and settlement horizons.** Recommended:
    - IPCC and Kent anchors, versioned;
    - a 30-day horizon for assertions;
@@ -1304,6 +1563,20 @@ first consumer, and E1 would then be justified by E6 and E7 instead.
 11. **D11. Extraction model.** deepseek-v4.1-flash or gpt-6-luna as
     default, chosen by E0's measured quality per dollar. Spend is
     tracked, not capped.
+12. **D12. The settlement action-class vocabulary.** A short closed list
+    (release, ship, sign or enact, appoint or resign, publish a figure,
+    hold an event, start or stop an operation) used only for counting
+    settlements, never to constrain what claims say. Recommended: yes.
+    This is the one closed vocabulary in the design.
+13. **D13. The scoring defaults:**
+    - the 48-hour freshness bound for a claim to count as a
+      precommitment;
+    - an unhedged "will" maps to 0.85;
+    - the unscorable thresholds (attribution 0.6, no reading at or above
+      0.25);
+    - 10% counterfactual sampling of declines.
+
+    All are versioned, and scores recompute under new values.
 
 ## 14. Conjecture and heresy deltas (this note)
 
@@ -1312,5 +1585,146 @@ first consumer, and E1 would then be justified by E6 and E7 instead.
   institutions up to coverage. It is falsified if the specificity filter
   leaves fewer than 1 in 5 commitments checkable on vertical zero.
 - Heresy delta: discovered H-OG1, H-OG2 and H-OG3. Introduced none,
-  since this is a note. Repaired none.
+  since this is a note. Repaired none. Also discovered, by the panel: the
+  draft's own count rule would have scored self-sourced figures as
+  confirmed (repaired in this note, P-2).
 - Mutation class: green (docs only).
+
+## 15. Panel adjudication (convergent, round 1)
+
+**Panel and subject.**
+- Runner: `agentic-consensus-runner.sh --mode convergent --keep-going`,
+  with members claude (opus), omp-gemini38, omp-gpt6-luna,
+  omp-deepseek-v41-flash and omp-glm53-flash. OMP members had no tools;
+  devin and codex were excluded.
+- Subject: draft d033b48a5, embedded in the prompt (prompt sha256
+  prefix 001fb4b0c2ec2cf0).
+- The prompt carried the owner's framing up to 14:55 UTC. The 15:05
+  search-results direction arrived after the run, and §9.4 takes it in
+  directly.
+- Raw outputs are session diagnostics outside the repo (scratchpad
+  `panel-cee/out`).
+
+**Verdicts.**
+
+| Member | Verdict | Notes |
+|---|---|---|
+| claude (opus) | accept with repairs | 10 blockers; E0 may start once its gate is fixed |
+| gemini-3.8-flash | accept with repairs | 4 blockers |
+| glm-5.3-flash | accept with repairs | 4 blockers |
+| gpt-6-luna | send back | approve E0 alone after revision |
+| deepseek-v4.1-flash | **no valid output** | it emitted a raw tool-call block with tools disabled, and no verdict. Recorded as a failed seat, not as a vote |
+
+**Consensus, raised by two or more members, adopted:**
+- **P-1. E0 could not fail the layer** (claude, glm, luna). E0 now has a
+  frozen blind evaluation set, labels for event, sub-event, topic,
+  duplicate and false merge, the control scored on the same set,
+  extraction-validity bars (speaker, modality, readings), quote matches
+  reported as attempted versus retained, settlement-feasibility bars,
+  and a three-way exit that can stop the layer (§12.3).
+- **P-2. Count settlement was circular on relays and syndication**
+  (claude, glm, gemini, luna). Independence is now counted by origin
+  (`originates_from`). Self-sourced support stays unresolved, and
+  `confirmed_primary` is split from `corroborated` (§6).
+- **P-3. Propositions scoped to one event break commitments and
+  forecasts** (claude, glm, gemini). Commitments, forecasts and intents
+  now resolve by speaker and subject across events. The scoring unit is
+  (speaker, proposition, reading) at its first scheduled utterance, and
+  a duplicate-proposition bar is set (§5.2, §6).
+- **P-5. Scoring math** (gemini, claude, luna):
+  - interpretation was counted twice, and is now removed from the
+    weight;
+  - the per-reading expected Brier is written out;
+  - the interval uses n_eff pseudo-counts or a bootstrap;
+  - reading weights are frozen at T_commit by a blind judge;
+  - "unscorable" applies to public actors only, while Choir's agents keep
+    P4's "unresolvable counts as wrong". Verified against
+    `docs/precommitment-predictions-and-scoring-design-2026-10-11.md`
+    §4.5;
+  - the hedging argument is corrected: a hedge is a safe harbour, so it
+    is countered by showing the hedge share, resolution and sharpness
+    (§6a, §7.0).
+- **P-6. Projection semantics** (luna, claude). Assertions inside a
+  batch judgment are individually addressable and supersedable.
+  Precedence is by relation type, and management governs routing, not
+  world evidence. Merge cycles are resolved union-find style (§5.3).
+- **P-8. Commit time and selection** (claude, luna). There are three
+  times. Claims are tagged `scheduled` or `targeted`, and only scheduled,
+  timely claims enter a track record (§4.1).
+- **P-11. Store B volume** (gemini, claude, luna, glm). There is now a
+  budget table, append-only rows, aliases in a side table, projection
+  tables out of history, and a tripwire (§5.1).
+  - Verified: Store B's committer is already debounced
+    (`internal/platform/store.go:405-410`, after the 218 GB history
+    incident). Gemini's "thousands of Dolt commits a day" is therefore
+    partly wrong. Its point about growth stands and is adopted.
+- **E6a moved up** (claude, luna). It runs beside E0 and E1, because it
+  needs only the tape, P3, P4 and score records.
+- **D1 and D6 must be ratified as metamission amendments before E7**
+  (gemini, luna). Adopted as a gate. `actor_scope` defaults to `private`
+  (gemini).
+
+**Single-member findings, verified and adopted:**
+- **P-4. Relay fidelity had no claim to score** (luna). The reporting
+  claim is now explicit, as an `attribution` modality (§4.1).
+- **P-7. Single state authority** (claude).
+  - Verified: dispositions are written on the computer
+    (`CommitInboxRecords`, `choir.capture_disposition`,
+    `internal/agentcore/intake_overrides.go`).
+  - Now the computer's records are the authority and the Store B
+    judgment is a derived export.
+  - Support verdicts are used by reference.
+  - The settlement home is a stated function of speaker class and
+    target.
+  - Judgments carry the computer's event head, for restore (§5.3, §5.4).
+- **P-6b. Declines can't be settled** (claude). 10% of declines are
+  counterfactually sampled; the rest are counted and never imputed
+  (§7.0).
+- **P-9. Free-text event types cannot be counted** (glm). A small closed
+  settlement action-class vocabulary is added, used only for counting
+  (§6, D12).
+- **P-10. Unhedged assertions had no probability, and modalities were
+  mixed** (glm, luna). Scoring is now per modality: assertions are scored
+  by accuracy per stance class, with no Brier score, and forecasts carry
+  a versioned default for an unhedged "will" (§6, D13).
+- **P-12. Block-level reuse conflicted with per-capture claim ids**
+  (luna). An extraction now carries a manifest of carried claims (§5.1).
+- **P-13. A crash could orphan routing after E3** (gemini). Arrival
+  never waits on extraction, event resolution falls back to title and
+  summary, and a disposition triggers extraction as new work (§12.1).
+- **E1 entry conditions** (claude): the Jev peer-pin fix proven on the
+  paper, and H-OG1 repaired for the new kinds (§12.3).
+- **Topic is not an event** (luna, glm). A topic node is a
+  `choir.world_event` with `scale: topic` and a depth cap (§4.2).
+- **Neighbours added** (claude): Community Notes, ClaimBuster and
+  FEVER-style automated claim checking, and ForecastBench (§10).
+- **Risks added to §7.3:** media selection of actions with per-actor
+  coverage (gemini); GDPR profiling as a separate question (claude); the
+  false-positive rate of "silent edit" signals (glm); market-reference
+  skew (glm).
+- **The dated deletion clock** for the shadow dual answer (claude):
+  21 days after E2 starts (§12.3).
+
+**Not adopted, with reasons:**
+- *Freeze the full schema before E0* (implied by luna's "do not build the
+  full object schema"). Agreed in the opposite direction: E0 writes no
+  Store B state and builds no kinds. Nothing to change.
+- *A blocking human-review gate for named actors.* The owner ruled at
+  about 14:55 UTC that legal risk is accepted. Review is a quality audit
+  (D9), and the excellence bar (§7.3) is the publication condition.
+- *Gemini's "thousands of Dolt commits a day"*, as a factual claim.
+  Contradicted by the code (debounced committer), as noted above.
+- *A back-test on weeks-old captures for E0* (claude). Store B restarted
+  from zero on 2026-10-09, and the captures since about 2026-10-11 are
+  days old. The back-test moves to E6, once those captures are 30 days
+  old. The June dump is a possible earlier source, unverified.
+
+**Residual dissent.**
+- Luna's send-back rested on blockers that this revision addresses.
+  Whether they are sufficient is for a round-2 review of this revision,
+  which is recommended before E1 (not before E0).
+- No member disputed the three-layer ontology, attribution versus
+  truth, judgments with a projection, or the thesis.
+
+**Heresy delta from the panel:** discovered: the draft's own count rule
+would have confirmed self-sourced figures (repaired here, P-2).
