@@ -21,13 +21,22 @@ definition_version: 4
 # categorize captures as they come in, and mgmt then send content to
 # researchers that are already working on existing topics, as well as
 # research desk can spawn new researchers for new topics".
+# Further owner direction the same night: "we should have a smart way to
+# learn topic vs story; and topic and story boundaries ... learned
+# clustering, not me setting these in advance ideally. and yes, we can
+# intelligently let research threads go dormant... we should do this
+# redesign then optimize resources."
+# Revised after convergent round 1 (claude, gemini, deepseek send_back;
+# glm accept with repairs; codex usage-limited): one architecture
+# throughout, red class, a frozen baseline and an operational metric, a
+# deterministic labelled fixture, a per-computer enable with tripwires.
 readiness: drafted
 
 review:
-  reviewer: none yet (agentic-consensus convergent round on this file is the first action)
+  reviewer: agentic-consensus convergent round 1 on 5d75fae9 (3 send_back, 1 accept with repairs; findings adopted in this revision); round 2 pending
   frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  verdict: send_back
+  evidence_ref: scratchpad panel-l2a-r1 (session diagnostics; adjudication in now.decision)
 
 start:
   captured_at: 2026-10-14T00:35:00Z
@@ -44,67 +53,104 @@ start:
   observed:
     - >-
       The live paper computer (computer-1355b83bced1613eb048ee28d66688a8,
-      platform tier, 14 sources mostly English wires and tech feeds) holds
-      50 stories. 47 opened from one capture, 2 from two, 1 from four.
-      About 11 management Notes fed one more capture each into 8 existing
-      stories, mostly follow-ups from the same source. No story synthesizes
-      across sources or languages (counts read 2026-10-14 00:25 UTC through
-      the owner's API).
+      platform tier, 14 sources, mostly English wires and tech feeds)
+      holds 50 stories. 47 opened from one capture, 2 from two, 1 from
+      four. About 11 management Notes fed one more capture each into 8
+      existing stories, mostly follow-ups from the same source. No story
+      synthesizes across outlets or languages. These counts were read at
+      00:25 UTC from management records in each story's inbox; they are
+      not per-version citation counts.
     - >-
       Management's prompt (internal/promptstore/defaults/management.yaml,
-      "Living stories") already says to cluster captures by event, never
-      open a story twice for one event, and feed existing stories by Note.
-      Its only view of the library is choir.ProductAPI GET
-      /api/texture/documents (doc ids and titles). It has no view of what
-      each story says, which sources and languages it has, or when it last
-      changed.
+      "Living stories") says to cluster by event and feed by Note. Its only
+      library view is doc ids and titles. Texture's prompt is
+      internal/textureprompts/texture.yaml. Research is opened per document
+      by Texture (inbox research:<doc>; recordsRoute in
+      internal/agentcore/inbox_records.go allows only texture:<doc> and
+      research:<doc>). Research has a corpus search
+      (choir.SearchWireCorpus).
     - >-
-      The runtime has a semantic dedup (internal/agentcore/qdrant_dedup.go)
-      that drops near-duplicate items before projection. It is listed for
-      retirement in the ledger metamission (L0's parallel items). Whether
-      it is active on staging, and whether it drops cross-language coverage
-      of one event, is unknown.
-    - >-
-      Model cost is unpriced on /api/costs; research input is dominated by
-      re-sent cell output (station LR, R5).
+      Semantic dedup (internal/agentcore/qdrant_dedup.go) is dead code with
+      no production caller. Nothing on the poll path calls a model
+      (internal/agentcore/source_schedule.go). The registry is embedded
+      (internal/sources/registry.json), and a schedule needs a registry
+      id.
+    - Model cost is unpriced on /api/costs (station LR).
 
 finish:
   deliver: >-
     Autopaper writes one story per real-world event, synthesized from the
-    convergence and the conflicts among its sources, across languages; a
-    new capture updates the story it bears on, and the new version says
-    what changed.
+    convergence and the conflicts among its sources, across outlets and
+    languages. A new capture updates the story it bears on, and the new
+    version says what changed. Topic and story boundaries are learned
+    from recorded judgments, not preset.
   artifact: >-
-    A deployed intake in which:
-    - management reads a story library (each story's headline, current
-      lede, sources and languages, last change) with every captures record;
-    - management's policy routes each capture to open, feed or decline,
-      with one story per event across languages;
-    - Texture's story contract writes from convergence and conflict and
-      states each revision's change;
-    - no runtime step drops a capture a desk has not seen.
-    The run receipts are a fixture run and the live paper measurement.
+    A deployed intake, enabled per computer, in which:
+    - Jev labels each arriving capture (same article as X; same event as
+      story S; same topic T but a new event; new). The label is recorded
+      as a typed edge in the object graph. Labels never filter.
+    - Management routes each capture with its label: to the standing
+      researcher of topic T, or to the research desk, which spawns a
+      researcher for a new topic. Every capture still gets an answer.
+    - Topic researchers read the corpus (SearchWireCorpus, ReadCapture)
+      and the web across languages. They report convergence, conflict and
+      what each new capture changes to the stories of their topic. They
+      go dormant when idle and wake on a new capture.
+    - Texture writes and revises each story from those reports, and stays
+      the sole writer.
+    - Splits and merges by researchers or management are recorded edges.
+      They become labelled examples for Jev, so boundaries improve from
+      the ledger.
+    - The dead semantic dedup is deleted.
   acceptance:
     - action: >-
-        A fixture run on a minted test computer through the real poller.
-        The fixture is a set of at least 8 real-world events, each covered
-        by 2-3 captures in at least 2 languages, plus unrelated singletons.
+        The fixture run. A static multilingual feed of real articles
+        covers at least 8 real-world events, each in 2-3 captures across
+        at least 2 languages including zh, ja or ko against en, from at
+        least 2 different outlets, plus at least 6 unrelated singletons.
+        It is served from this public repository through a fixture-only
+        registry entry (tos_class test, never scheduled on the paper
+        computer). A minted test computer with the intake enabled polls
+        it through the real poller. The event labels live only in the
+        proof harness, outside the repo and outside the desks' reach. A
+        judge from a model family other than Jev's and the desks',
+        registered before the run (model, prompt, tie rule), labels
+        anything ambiguous.
       proves: >-
-        Each multilingual event yields one story, not one per capture or
-        per language, and that story's published version cites captures in
-        at least 2 languages. Every capture has a disposition. Singletons
-        still open or decline.
+        Each labelled event yields exactly one story, whose published
+        version cites captures from at least 2 languages and 2 outlets.
+        Over all same-event capture pairs, merge recall is at least 0.8
+        and false merges of different events are at most 1. Every
+        capture has a disposition. Singletons open or decline. The run is
+        scored by a script against the labels, and the bar is not
+        lowered: a shortfall is recorded as incomplete.
       evidence_class: deployed proof
     - action: >-
-        The live paper computer, measured over at least 6 hours after
-        deploy, with the same count method as the start receipt.
+        The live paper, measured in two 6-hour windows with one script: a
+        baseline window before the paper is enabled (starting tonight on
+        the current build) and a window after. The script counts, for
+        stories opened or revised in the window:
+        - citations in the current published version, by independent
+          outlet. An outlet is the publisher's registered domain, and wire
+          copies count once;
+        - feeds into existing stories;
+        - captures without a disposition;
+        - a sample of revision diffs checked for substance.
+        The denominator is the same-event, cross-outlet capture pairs the
+        registered judge finds in each window.
       proves: >-
-        Against the 47/50 baseline, the share of stories whose current
-        version cites two or more independent sources rises, feeds into
-        existing stories rise, and publication continues. Measured cost
-        per published version is reported, not capped.
+        Against the measured baseline, merge recall over that denominator
+        rises, and the share of versions citing two or more outlets rises
+        without false merges. Publication continues. Cost per published
+        version and per capture is reported, including Jev's added calls,
+        and not capped.
       evidence_class: deployed proof
-  rollback: git revert of the slice commits (prompt defaults and the library view); the paper's existing stories are untouched
+  rollback: >-
+    Owner act: disable the intake on the computer. The paper falls back to
+    the current intake on its next turn and needs no deploy. Repo
+    rollback is git revert, then deploy and an idle refresh of the paper
+    computer, with its effective build read back. Published versions are
+    immutable and untouched.
   landing:
     required: true
     environment: staging
@@ -112,151 +158,155 @@ finish:
 
 value:
   better_means: >-
-    Maximize the share of published story versions that synthesize two or
-    more independent sources (and two or more languages where coverage
-    exists), and the share of new captures that update an existing story,
-    while every capture still gets a disposition and publication does not
-    stall.
+    Maximize merge recall of same-event coverage across outlets and
+    languages into one story, with false merges near zero. Every capture
+    keeps a disposition and publication does not stall.
   goodharting_would_be: >-
-    Citing a second source that adds nothing; merging unrelated events to
-    raise the multi-source share; stories that list sources without
-    reconciling them; declining captures to avoid opening stories;
-    counting same-outlet follow-ups as independent sources.
+    Citing a second source that adds nothing; merging unrelated events;
+    counting wire copies or one outlet's language services as
+    independent; declining captures to shrink the denominator; trivial
+    "what changed" lines on Notes; moving the fixture bar after seeing
+    the run.
 
 homotopy:
   realism_axis: >-
-    unit tests of the library view -> a fixture of multilingual events on a
-    minted test computer -> the live paper on its 14 sources -> the live
-    paper with a few non-English general-news feeds -> the long tail
-    (after the architecture work, ruling 2)
+    a pre-labelled pair probe of Jev (20-40 cross-lingual pairs) -> the
+    labelled multilingual fixture on a minted test computer -> the live
+    paper on its 14 sources -> the live paper with non-English feeds (the
+    owner's act) -> the long tail (after the architecture work)
 
 boundaries:
-  mutation_class: orange (management and Texture prompt defaults, a new read view for management; no change to Texture canonical writes, run acceptance or provider routing)
+  mutation_class: red
+  red_ceremony:
+    conjecture_delta: >-
+      L2a-1 replaces the visibility-only claim with the owner's
+      topic-researcher architecture (see now.conjecture).
+    protected_surfaces: >-
+      the poll path (a new model call on arrival), management and research
+      records routes (topic addressing and spawn), Texture-facing records,
+      provider calls through the existing judge route
+    admissible_evidence: deployed proof on a minted test computer and on the live paper; unit tests shape the code only
+    rollback: see finish.rollback (per-computer disable first)
+    heresy_delta: {discovered: [one capture per story on the live paper, a dead semantic dedup still in the tree], introduced: [], repaired: []}
   authority_sources:
-    - owner 2026-10-14 in session (synthesis principle; "intake redesign, very important")
+    - owner 2026-10-14 in session (synthesis principle; "intake redesign, very important"; Jev categorizes, topic researchers on the corpus; learned boundaries; dormancy)
     - docs/reports/owner-roadmap-rulings-2026-10-14.md
-    - docs/definitions/choir-ledger-metamission-2026-10-13.md (L2 note)
+    - docs/definitions/choir-ledger-metamission-2026-10-13.md (L2 note, overnight plan)
   must_preserve:
-    - Texture is the sole writer of canonical revisions; management never writes a story
+    - Texture is the sole writer of canonical revisions
     - every captures record gets an answer (a story, a feed or a decline)
-    - the runtime never filters a capture out of a desk's sight
-    - publication on the live paper does not stall; the paper computer stays up
-    - one shared-runtime cutover at a time (C1e B1 waits for this slice to land)
+    - Jev's labels are labels, never filters; no runtime step hides a capture from the desks
+    - the arrival call is bounded and recorded, and its cost is reported
+    - the intake changes behavior only on a computer where it is enabled; the paper is enabled only after the fixture passes
+    - the paper's schedules survive the update (an idle refresh, never a crash)
+    - one shared-runtime cutover at a time; no deploy while a tracer runs
     - spend is tracked, never capped
+  tripwires:
+    - >-
+      On the paper after enabling: if no version publishes for 90 minutes
+      while captures arrive, or more than half the captures in an hour are
+      declined, disable the intake (the owner act), record the problem,
+      and continue on the fixture.
   excluded:
-    - the per-window digest, triage model and 10x burst bound (L2b)
-    - adding long-tail or Telegram/RSSHub sources (after the architecture work)
-    - hypothesis settlement (L3)
-  protected_surfaces: [management desk prompt and records surface, Texture desk prompt, the paper computer's schedules]
-  admissible_evidence: deployed proof on staging (a minted test computer and the live paper); unit tests shape the library view only
+    - the per-window digest and the 10x burst bound (L2b)
+    - adding sources to the paper computer (owner act; ruling 2 defers source scaling)
+    - hypothesis settlement (L3), though a story's boundary may use its Cast hypotheses
+  protected_surfaces: [poll path, management and research records routes, Texture-facing records, the paper computer's schedules]
+  admissible_evidence: deployed proof on staging (a minted test computer and the live paper); unit tests shape the code only
 
 now:
   status: working
-  slice: S0, reconcile and design
-  source_ref: 6c6bc1aa
+  slice: S0, design
+  source_ref: e5744c51
   deploy_identity: staging 6c6bc1aa
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: L2a-1
     claim: >-
       Synthesis comes from standing topic researchers that research the
-      corpus, not from one research run per story. The owner's
-      architecture, 2026-10-14:
-      (1) Jev categorizes each capture as it arrives. It assigns the
-      capture to an existing topic or marks it new, and says when two
-      captures are fundamentally the same article. These are labels, never
-      filters: a "same" capture stays visible as more coverage.
-      (2) Management routes the capture to the researcher already working
-      on that topic. For a new topic, the research desk spawns a new
-      researcher.
-      (3) That researcher reads the corpus (SearchWireCorpus, ReadCapture)
-      across languages and outlets, plus the web. It reports what
-      converges, what conflicts and how the new capture updates earlier
-      stories. Texture writes and revises the story from those reports.
-      With that, multilingual coverage of one event becomes one
-      synthesized story, and Texture remains the sole writer.
-    test: the fixture run's stories-per-event and languages-per-story, Jev's labels scored against the independent event labels, then the live paper's multi-source share against 47/50
-    edge: frame_lock
-    delta_o: a labelled fixture with known event identity across languages, so Jev's categories and the desks' merges are scored against truth rather than judged by the same models
+      corpus, not from one research run per story. Jev labels each capture
+      on arrival as a recorded edge, never a filter. Management routes
+      the capture to the topic's researcher, or the research desk spawns
+      one. The researcher reports convergence, conflict and what changed,
+      and Texture writes from it. With that, multilingual coverage of one
+      event becomes one synthesized story, and boundaries learned from
+      recorded splits and merges hold up without preset categories.
+    test: >-
+      first the Jev pair probe (does Jev tell same-event from
+      same-topic-different-event across zh, ja and ko against en?), then
+      the fixture's merge recall and false merges against the labels, then
+      the live windows
+    edge: missing_oracle
+    delta_o: the labelled fixture and a judge registered before the run, from a different model family
     scope_if_supported: Autopaper's intake on every source class
     status: proposed
     evidence_refs: [docs/reports/owner-roadmap-rulings-2026-10-14.md]
-  decision: {what: "L2a ahead of C1e B1's build; B1's design rounds continue as docs", kind: operational, status: proposal, evidence_ref: docs/reports/owner-roadmap-rulings-2026-10-14.md, owner_ratification_ref: "owner 2026-10-14: intake redesign, very important"}
+  decision:
+    what: >-
+      L2a first in the deploy lane, then C1e B1, then LR lever 6. Round-1
+      findings adopted: one architecture, red class, a frozen baseline and
+      an operational metric, a deterministic labelled fixture, a
+      per-computer enable with tripwires, an explicit paper refresh, and
+      adding feeds to the paper left to the owner.
+    kind: operational
+    status: proposal
+    evidence_ref: docs/reports/owner-roadmap-rulings-2026-10-14.md
+    owner_ratification_ref: "owner 2026-10-14: intake redesign, very important; redesign then optimize resources, alongside B1"
   belief:
     believed_state: >-
-      The paper copies, one capture per story; the mechanisms to feed and
-      to synthesize exist but are unseen and unrequired. Two S0
-      observations, 2026-10-14 00:45 UTC: semantic dedup is dead code
-      (dedupSourceItemsWithTimeout and dedupSourceItemsSemantically have no
-      production caller), so no runtime step drops coverage today, and S1
-      deletes qdrant_dedup.go. The registry already holds vertical-zero
-      feeds in other languages: general news from DW (de, ar, ru), France 24
-      (fr, es, ar), RFI, El País, El Mundo, Euronews, Folha and Agência
-      Brasil; tech from heise, Golem, ITmedia, Nikkei xTECH, 36kr, Numerama
-      and Xataka. So the fixture needs no hosted feed. A minted test computer
-      polls English and non-English world and tech feeds over the same
-      window through the real poller, and an independent judge, not a desk,
-      labels event identity across the captures afterwards.
-    main_uncertainty: whether same-window real feeds give at least 8 events covered in 2+ languages; if not, widen the window or add feeds before judging
-    next_observation: the panel's verdict on this file; then the design note
-  blocker_or_risk: cross-lingual matching by the model is unproven for zh/ja/ko against en; the fixture must include them before a grouping model is chosen (L2's 200-pair evaluation stays in L2b)
-  next_action: adjudicate the convergent panel (running on the pre-architecture draft; keep its findings on acceptance and safety), then rerun it on this revision; then the S0 design note
+      The paper copies, one capture per story. Feeding by Note exists but
+      is starved. Nothing on the poll path calls a model, and semantic
+      dedup is dead code. The registry holds vertical-zero feeds in other
+      languages, but a deterministic labelled fixture needs a fixture-only
+      registry entry and a static feed. Topic addressing and spawning do
+      not exist: research is per document.
+    main_uncertainty: whether Jev separates same-event from same-topic-different-event across languages well enough to route on
+    next_observation: the Jev pair probe (20-40 pre-labelled cross-lingual pairs) as the design note's first evidence; and the paper's baseline window, started tonight before any deploy
+  blocker_or_risk: >-
+    Topic addressing and spawning are new runtime surface. Researcher
+    dormancy must cost no live process. Per-poll truncation must be
+    lossless: items left over are taken on the next poll and recorded as
+    skipped, never dropped; check this in S0.
+  next_action: >-
+    Start the paper's baseline window and its script; run the Jev pair
+    probe; write the S0 design note (arrival labels, topic versus story
+    and the learned boundaries, addressing and spawn, dormancy, the
+    synthesis contract, the per-computer enable); panel round 2 on this
+    file and the note together
 
 receipts: []
 ---
 
 # L2a: synthesis intake
 
-The owner's principle is the specification
-(docs/reports/owner-roadmap-rulings-2026-10-14.md, "The product
-principle"). This file tracks the first slice.
+The owner's principle and architecture are the specification
+(docs/reports/owner-roadmap-rulings-2026-10-14.md, plus this file's
+header). This file tracks the first slice.
 
-Slices, in order:
-- **S0, reconcile and design.** Observe semantic dedup (dead code) and
-  the fixture path (same-window multilingual feeds already in the
-  registry). The design note answers:
-  - Jev's categorize call: per capture or per poll; against which topic
-    shortlist; and how a label is recorded so management can override
-    it;
-  - topic versus story: a topic researcher may feed several stories, one
-    per event;
-  - how a researcher is addressed per topic, and how the research desk
-    spawns one (today research is per document, opened by Texture);
-  - what a dormant topic researcher costs, and when it ends (station LR's
-    agents-per-computer measure);
-  - the synthesis contract Texture writes from;
-  - **learned topic and story boundaries** (owner 2026-10-14: "a smart
-    way to learn topic vs story; and topic and story boundaries ...
-    learned clustering, not me setting these in advance"). Candidate
-    design, to be argued in the note:
-    - boundaries are typed edges in the object graph, never a preset
-      taxonomy: capture-same-article-as-capture, capture-bears-on-story,
-      story-part-of-topic. A story is a cluster of captures and a topic a
-      cluster of stories, both emerging from the edges;
-    - Jev is the online merge judge over a cheap shortlist (shared
-      entities, translated titles, time window) and answers same article,
-      same event, same topic but a different event, or new;
-    - a story's boundary is the set of hypotheses its captures bear on (an
-      event's claims); a topic's is a standing question across events
-      (this joins L3);
-    - time is part of identity: the same entities weeks apart make a new
-      story in the same topic. How long stories keep drawing feeds is
-      measured per domain, not set;
-    - split and merge are first-class revisable acts by researchers and
-      management. Each one is recorded and becomes a labelled example
-      in Jev's prompt, so boundaries improve from the ledger without
-      fine-tuning;
-    - a sampled audit by an independent judge scores merge precision and
-      recall, and hard disagreements escalate to a stronger model.
-
-  Then a panel on the note.
-- **S1, build.** Jev categorization at arrival, management routing to
-  topic researchers, topic researchers on the corpus, and Texture's
-  synthesis contract. Delete the dead semantic dedup
-  (`qdrant_dedup.go`). Then push, CI and deploy.
-- **S2, prove.** The fixture run on a minted test computer, then 6 hours
-  of the live paper. Optionally add a few non-English general-news feeds
-  to the paper, chosen for licence (commercial use) and overlap with the
-  existing world-news feeds.
-- **S3, close.** A consensus review on the landed candidate with its
-  deployed evidence; then hand off to C1e B1.
+- **S0, design.**
+  - Start the live paper's baseline window and its scoring script.
+  - Run the Jev pair probe.
+  - Write the design note:
+    - arrival labels as typed edges;
+    - learned topic and story boundaries: Jev as the online merge judge
+      over a cheap shortlist of shared entities, translated titles and a
+      time window; a story bounded by the hypotheses its captures bear
+      on, a topic by a standing question; time as part of identity;
+      splits and merges as recorded examples; a sampled independent
+      audit;
+    - topic addressing and spawning;
+    - dormancy;
+    - Texture's synthesis contract;
+    - the per-computer enable.
+  - Then a panel on the note and this file.
+- **S1, build.** Every point of the design note, with the dead semantic
+  dedup deleted. Push, CI and deploy, with the intake off by default.
+- **S2, prove.**
+  - Build the fixture: real articles found by search, served from the
+    repo, with labels in the harness.
+  - Run it on a minted test computer.
+  - Then enable the intake on the paper, after an idle refresh with its
+    effective build read back, and measure the after-window against the
+    baseline under the tripwire.
+- **S3, close.** A consensus review on the landed candidate and its
+  deployed evidence; then the deploy lane passes to C1e B1.
