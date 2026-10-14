@@ -98,6 +98,21 @@ func digestCanonicalSubjectTree(ctx context.Context, root string) (string, error
 	return hex.EncodeToString(digest[:]), nil
 }
 
+// symlinkEscapesTree reports whether a symlink at relativePath (relative to
+// the tree root) points outside the tree: an absolute target other than a
+// /nix/store path, or a relative target that, resolved against the link's
+// own directory, climbs above the root. A relative target is judged where it
+// lands, not by its spelling: frontend/node_modules/.bin/acorn ->
+// ../acorn/bin/acorn stays inside the tree.
+func symlinkEscapesTree(relativePath, link string) bool {
+	cleanLink := filepath.Clean(link)
+	if filepath.IsAbs(cleanLink) {
+		return !strings.HasPrefix(cleanLink, "/nix/store/")
+	}
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(filepath.Clean(relativePath)), cleanLink))
+	return resolved == ".." || strings.HasPrefix(resolved, ".."+string(os.PathSeparator)) || filepath.IsAbs(resolved)
+}
+
 func copyCanonicalSubjectTree(ctx context.Context, source, target string) error {
 	source, target = filepath.Clean(source), filepath.Clean(target)
 	if !filepath.IsAbs(source) || !filepath.IsAbs(target) || source == target {
@@ -147,9 +162,7 @@ func copyCanonicalSubjectTree(ctx context.Context, source, target string) error 
 			if err != nil {
 				return err
 			}
-			cleanLink := filepath.Clean(link)
-			if (filepath.IsAbs(cleanLink) && !strings.HasPrefix(cleanLink, "/nix/store/")) ||
-				(!filepath.IsAbs(cleanLink) && (cleanLink == ".." || strings.HasPrefix(cleanLink, ".."+string(os.PathSeparator)))) {
+			if symlinkEscapesTree(relative, link) {
 				return fmt.Errorf("subject copy refuses escaping symlink %q", relative)
 			}
 			return os.Symlink(link, destination)
@@ -294,8 +307,7 @@ func canonicalImmutableCommitDigest(ctx context.Context, source, commit string) 
 				return "", err
 			}
 			link := target.String()
-			cleanLink := filepath.Clean(link)
-			if (filepath.IsAbs(cleanLink) && !strings.HasPrefix(cleanLink, "/nix/store/")) || (!filepath.IsAbs(cleanLink) && (cleanLink == ".." || strings.HasPrefix(cleanLink, ".."+string(os.PathSeparator)))) {
+			if symlinkEscapesTree(file.path, link) {
 				return "", fmt.Errorf("source snapshot refuses escaping symlink %q", file.path)
 			}
 			digest := sha256.Sum256([]byte(link))
@@ -358,8 +370,8 @@ func copyImmutableCommitTree(ctx context.Context, source, commit, target string)
 			if err := readGitBlob(ctx, source, file.oid, func(r io.Reader) error { _, err := io.Copy(&targetValue, r); return err }); err != nil {
 				return "", err
 			}
-			link, cleanLink := targetValue.String(), filepath.Clean(targetValue.String())
-			if (filepath.IsAbs(cleanLink) && !strings.HasPrefix(cleanLink, "/nix/store/")) || (!filepath.IsAbs(cleanLink) && (cleanLink == ".." || strings.HasPrefix(cleanLink, ".."+string(os.PathSeparator)))) {
+			link := targetValue.String()
+			if symlinkEscapesTree(file.path, link) {
 				return "", fmt.Errorf("source snapshot refuses escaping symlink %q", file.path)
 			}
 			if err := os.Symlink(link, targetPath); err != nil {

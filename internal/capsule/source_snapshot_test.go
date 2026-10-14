@@ -277,3 +277,73 @@ func TestRequireFrozenComputerSurfaceSource(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A symlink escapes the subject tree only when its target, resolved against
+// the link's own directory, leaves the root. The C1e B1 drill
+// (docs/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md)
+// had its terminal Complete refused on frontend/node_modules/.bin/acorn ->
+// ../acorn/bin/acorn, an in-tree link a lexical ".." prefix test calls escaping.
+//
+// Failure modes this table guards:
+//   - an in-tree relative link from a nested directory is refused (the bug);
+//   - a nested link that climbs above the root is admitted;
+//   - a root-level ".." link is admitted;
+//   - a link that leaves the root and comes back by name is admitted;
+//   - an absolute link outside /nix/store is admitted, or a /nix/store one refused;
+//   - a link to the root itself (".." from depth one) is refused.
+func TestSymlinkEscapesTreeResolvesAgainstLinkDirectory(t *testing.T) {
+	cases := []struct {
+		path, link string
+		escapes    bool
+	}{
+		{"frontend/node_modules/.bin/acorn", "../acorn/bin/acorn", false},
+		{"frontend/node_modules/.bin/vite", "../vite/bin/vite.js", false},
+		{"a/b/c", "../../d", false},
+		{"a/link", "..", false},
+		{"link", "dir/file", false},
+		{"link", ".", false},
+		{"link", "../escape", true},
+		{"link", "..", true},
+		{"a/link", "../../etc/passwd", true},
+		{"a/b/link", "../../../x", true},
+		{"a/link", "../../subject/a/x", true},
+		{"link", "/etc/passwd", true},
+		{"link", "/nix/store", true},
+		{"link", "/nix/store/abc-pkg/bin/tool", false},
+	}
+	for _, c := range cases {
+		if got := symlinkEscapesTree(c.path, c.link); got != c.escapes {
+			t.Errorf("symlinkEscapesTree(%q, %q) = %v, want %v", c.path, c.link, got, c.escapes)
+		}
+	}
+}
+
+func TestCanonicalSubjectCopyAdmitsInTreeNestedSymlinkAndRefusesNestedEscape(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "subject")
+	bin := filepath.Join(source, "frontend", "node_modules", ".bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(source, "frontend", "node_modules", "acorn", "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "frontend", "node_modules", "acorn", "bin", "acorn"), []byte("#!/usr/bin/env node\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../acorn/bin/acorn", filepath.Join(bin, "acorn")); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "copy")
+	if err := copyCanonicalSubjectTree(context.Background(), source, target); err != nil {
+		t.Fatalf("in-tree nested symlink refused: %v", err)
+	}
+	if link, err := os.Readlink(filepath.Join(target, "frontend", "node_modules", ".bin", "acorn")); err != nil || link != "../acorn/bin/acorn" {
+		t.Fatalf("copied link = %q, %v; want the original link text", link, err)
+	}
+	if err := os.Symlink("../../../../outside", filepath.Join(bin, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyCanonicalSubjectTree(context.Background(), source, filepath.Join(t.TempDir(), "refused")); err == nil {
+		t.Fatal("nested escaping symlink accepted")
+	}
+}
