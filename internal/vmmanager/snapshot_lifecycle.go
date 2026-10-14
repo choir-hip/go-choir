@@ -22,7 +22,10 @@ const (
 	snapshotCreateTimeout   = 15 * time.Minute
 	snapshotAPIReadyTimeout = 5 * time.Second
 	snapshotLoadTimeout     = 2 * time.Minute
-	snapshotResumedTimeout  = 30 * time.Second
+	// snapshotResumedTimeout covers the guest's clock step plus, when a
+	// credential is delivered, its exchange, consumption and key_revoked
+	// append (three corpusd calls and one event append).
+	snapshotResumedTimeout = 60 * time.Second
 	// snapshotStateOverheadBytes covers the vmstate file beside the memory
 	// file in the budget.
 	snapshotStateOverheadBytes = int64(64) << 20
@@ -233,6 +236,7 @@ func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, host
 		GuestBuild:         prepared.GuestBuild,
 		CreatedAt:          now,
 		ResumeDeadline:     resumeDeadlineFrom(prepared.CapabilityExpiresAt),
+		CredentialResume:   prepared.CredentialResume,
 		Bytes:              dirLogicalBytes(partial),
 		FenceMS:            snap.FenceMS,
 		PauseMS:            snap.PauseMS,
@@ -261,11 +265,14 @@ func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, host
 // ResumeVMFromSnapshot wakes a hibernated VM from its snapshot, at most once.
 // expect carries what vmctl would cold boot now (machine shape, hold,
 // computer id); any difference from the snapshot's launch is a refusal. On
-// success the VM runs with the snapshot's epoch: no new realization, no new
-// credentials, no restart pass in the guest. Every refusal or failure
-// returns *SnapshotFallbackError and the caller cold boots, which is a crash
-// boot under the restart rule.
-func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig) (*VMInstance, error) {
+// success the VM runs with the snapshot's epoch: no new realization, no
+// restart pass in the guest. issue, when non-nil and the snapshot's guest
+// advertised credential_resume, mints a fresh envelope for that same
+// realization after validation; the guest installs it, so the frozen
+// capability's renewal window no longer bounds the resume (max age still
+// does). Every refusal or failure returns *SnapshotFallbackError and the
+// caller cold boots, which is a crash boot under the restart rule.
+func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig, issue ResumeCredentialIssuer) (*VMInstance, error) {
 	unlock := m.lockVMOperation(vmID)
 	defer unlock()
 
@@ -324,15 +331,40 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig) (*VMInstanc
 	}
 	tl.Snapshot = snap
 
+	delivery := issue != nil && meta.CredentialResume
 	if reason := m.validateSnapshot(dir, meta, snapshotValidation{
 		Now:                time.Now(),
 		FirecrackerVersion: tl.FirecrackerVer,
 		HostKernelRelease:  tl.HostKernelRelease,
 		Expect:             expect,
+		CredentialDelivery: delivery,
 	}); reason != "" {
 		return fallback(reason, nil)
 	}
 	tl.mark("snapshot_validated")
+	// Re-credential: mint the envelope only now, for a snapshot that will be
+	// loaded. It stays in this local variable: never in metadata, the
+	// timeline, the instance config, or a log line.
+	envelope := ""
+	if delivery {
+		issued, err := issue()
+		switch {
+		case err == nil && issued != "":
+			envelope = issued
+		case meta.resumeWindowPassed(time.Now()):
+			if err == nil {
+				err = fmt.Errorf("issuer returned no envelope")
+			}
+			return fallback(snapshotReasonCredentialIssue, err)
+		default:
+			log.Printf("vmmanager: credential issuance for snapshot resume of VM %s failed (%v); the guest renews its own capability inside its window", vmID, err)
+		}
+	}
+	snap.Credential = snapshotCredentialRenewOnly
+	if envelope != "" {
+		snap.Credential = snapshotCredentialDelivered
+		tl.mark("credential_issued")
+	}
 	cfg, _ := m.expectedLaunchConfig(meta, expect)
 	cfg.Epoch = meta.Epoch
 	cfg.BootKind = "snapshot_resume"
@@ -425,9 +457,10 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig) (*VMInstanc
 	tl.mark("snapshot_loaded")
 
 	// The guest steps its clock (stale since the snapshot), refreshes
-	// process-local state, and reopens run admission.
+	// process-local state, installs the delivered credential (or renews),
+	// and reopens run admission.
 	resumedCtx, cancel := context.WithTimeout(context.Background(), snapshotResumedTimeout)
-	resumed, err := guestHibernateResumed(resumedCtx, meta.HostURL, time.Now())
+	resumed, err := guestHibernateResumed(resumedCtx, meta.HostURL, time.Now(), envelope)
 	cancel()
 	if err != nil {
 		return restoreFailed(snapshotReasonGuestResumed, err)
@@ -465,8 +498,8 @@ func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig) (*VMInstanc
 	if perr := tl.persist(m.cfg.StateDir); perr != nil {
 		log.Printf("vmmanager: warning: could not persist snapshot resume timeline for VM %s: %v", vmID, perr)
 	}
-	log.Printf("vmmanager: resumed VM %s from snapshot (host=%s epoch=%d load=%dms wake_to_healthy=%dms clock_step=%dms)",
-		vmID, meta.HostURL, cfg.Epoch, snap.LoadMS, snap.WakeToHealthyMS, snap.ClockStepMS)
+	log.Printf("vmmanager: resumed VM %s from snapshot (host=%s epoch=%d load=%dms wake_to_healthy=%dms clock_step=%dms credential=%s)",
+		vmID, meta.HostURL, cfg.Epoch, snap.LoadMS, snap.WakeToHealthyMS, snap.ClockStepMS, snap.Credential)
 	return inst, nil
 }
 

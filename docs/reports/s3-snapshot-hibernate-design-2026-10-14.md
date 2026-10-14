@@ -193,10 +193,13 @@ Each item names how the design answers it.
   `GET /internal/vmctl/boot-timeline?computer_id=...&kind=hibernate`.
 - Guest: `internal/agentcore/hibernate.go`.
   `POST /internal/runtime/hibernate/prepare` answers 200
-  `{"status":"prepared","capability_expires_at","guest_build"}` or 409
-  `{"outcome":"busy",...}`; `POST /internal/runtime/hibernate/resumed`
-  `{"host_unix_nano"}` answers 200 `{"status":"resumed","clock_step_ms"}`.
-  Both are host-peer only. `GuestCredentials.RenewNow` forces a renewal.
+  `{"status":"prepared","capability_expires_at","guest_build","credential_resume"}`
+  or 409 `{"outcome":"busy",...}`; `POST /internal/runtime/hibernate/resumed`
+  `{"host_unix_nano","credential_envelope"?}` answers 200
+  `{"status":"resumed","clock_step_ms","credential":"installed|renewed"}`.
+  Both are host-peer only. `GuestCredentials.RenewNow` forces a renewal;
+  `GuestCredentials.InstallResumeEnvelope` installs a delivered envelope
+  (see "Re-credential on resume").
 - `nix/node-b.nix`: `VM_HIBERNATE_MODE=snapshot`, `VM_SNAPSHOT_BUDGET_GIB=48`.
 
 ## Restart rule
@@ -449,6 +452,21 @@ Two different epochs exist and must not be confused:
   replayed past its window. Introduced — the guest appends `key_revoked`
   while running (only boot did before), with the race in item 34. Repaired —
   R1: snapshot resume no longer bounded by capability lifetime.
+
+### Residuals of this slice
+
+- **R1′** the renewal window still bounds snapshots taken by guests built
+  before this slice (no `credential_resume`) and wakes whose issuance fails
+  past the window; both cold boot as before.
+- **R6** `VM_SNAPSHOT_MAX_AGE` (12 h) is now the binding age bound; an owner
+  ruling may lengthen it (overnight hibernation) once staging shows resumes
+  are clean.
+- **R7** item 34's window (a background request refused once between the
+  `key_revoked` append and the token switch) is accepted, not engineered.
+- **R8** each snapshot resume appends one `key_revoked` event and two
+  corpusd lifecycle receipts, as a boot does.
+- **R9** not proven on staging: everything here is unit evidence with fakes
+  plus the platform rules exercised on a real corpusd store in-process.
 
 ### Staging evidence plan addition
 

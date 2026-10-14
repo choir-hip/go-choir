@@ -377,10 +377,11 @@ func (a *vmManagerAdapter) BootTimeline(vmID string) (json.RawMessage, error) {
 }
 
 // ResumeVMFromSnapshot implements the vmctl snapshotResumer capability (S3):
-// it wakes a hibernated VM from its memory snapshot, or reports why it could
-// not so vmctl cold boots instead.
-func (a *vmManagerAdapter) ResumeVMFromSnapshot(vmID string, cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
-	inst, err := a.mgr.ResumeVMFromSnapshot(vmID, toManagerVMConfig(cfg))
+// it wakes a hibernated VM from its memory snapshot, delivering the fresh
+// credential issueCredential mints, or reports why it could not so vmctl
+// cold boots instead.
+func (a *vmManagerAdapter) ResumeVMFromSnapshot(vmID string, cfg vmctl.VMManagerConfig, issueCredential func() (string, error)) (*vmctl.VMInstanceInfo, error) {
+	inst, err := a.mgr.ResumeVMFromSnapshot(vmID, toManagerVMConfig(cfg), issueCredential)
 	if err != nil {
 		return nil, err
 	}

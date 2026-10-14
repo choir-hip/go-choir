@@ -287,11 +287,14 @@ type VMManager interface {
 // snapshotResumer is the optional S3 capability of a manager that hibernates
 // computers into a Firecracker memory snapshot
 // (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md). A successful
-// resume returns the snapshot's own realization: same epoch, same
-// credentials, no restart. Any error means the snapshot was not used (and is
-// gone); the caller cold boots, which is a crash boot.
+// resume returns the snapshot's own realization: same epoch, no restart.
+// issueCredential (nil when vmctl has no corpusd) mints a fresh envelope for
+// that same realization; the manager calls it only for a snapshot it will
+// load and delivers it to the guest in the host-only resumed call. Any error
+// means the snapshot was not used (and is gone); the caller cold boots,
+// which is a crash boot.
 type snapshotResumer interface {
-	ResumeVMFromSnapshot(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error)
+	ResumeVMFromSnapshot(vmID string, cfg VMManagerConfig, issueCredential func() (string, error)) (*VMInstanceInfo, error)
 }
 
 type vmGatewayTokenReader interface {
@@ -1324,7 +1327,7 @@ func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) 
 	if !ok || resumer == nil {
 		return nil, false
 	}
-	info, err := resumer.ResumeVMFromSnapshot(own.VMID, vmManagerConfigForOwnership(own, ""))
+	info, err := resumer.ResumeVMFromSnapshot(own.VMID, vmManagerConfigForOwnership(own, ""), r.resumeCredentialIssuer(own))
 	if err != nil {
 		log.Printf("vmctl: computer %s (VM %s) not resumed from snapshot; cold boot follows: %v", own.ComputerID, own.VMID, err)
 		return nil, false
@@ -1334,6 +1337,41 @@ func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) 
 	}
 	log.Printf("vmctl: computer %s (VM %s) resumed from snapshot (epoch=%d)", own.ComputerID, own.VMID, info.Epoch)
 	return info, true
+}
+
+// resumeCredentialIssuer returns the S3 re-credential issuer for one resume
+// attempt of own's snapshot, or nil when vmctl has no corpusd. The envelope
+// binds the snapshot's own realization (same VM, same epoch): a resume is
+// not a new realization. corpusd replays a same-key request from its
+// recorded issue time, so the boot key would be refused hours later; each
+// attempt gets a fresh key (a random nonce), which retries inside the attempt
+// reuse. Consuming the envelope advances the computer's credential
+// revocation epoch exactly as a boot does
+// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md).
+func (r *OwnershipRegistry) resumeCredentialIssuer(own *VMOwnership) func() (string, error) {
+	if own == nil {
+		return nil
+	}
+	r.mu.RLock()
+	corpusdURL := r.corpusdURL
+	r.mu.RUnlock()
+	if strings.TrimSpace(corpusdURL) == "" || own.ComputerID == "" {
+		return nil
+	}
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return nil
+	}
+	computerID, epoch := own.ComputerID, own.Epoch
+	realizationID := realizationIDFor(own.VMID, epoch)
+	key := fmt.Sprintf("guest-credential-resume:%s:%d:%s", realizationID, epoch, hex.EncodeToString(nonce[:]))
+	return func() (string, error) {
+		envelope := issueComputerCredentialEnvelopeWithKey(corpusdURL, computerID, realizationID, key)
+		if envelope == "" {
+			return "", fmt.Errorf("resume credential for %s unavailable", realizationID)
+		}
+		return envelope, nil
+	}
 }
 
 func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManagerConfig {
@@ -1424,11 +1462,17 @@ var credentialIssueRetryBackoff = func(attempt int) time.Duration {
 }
 
 func issueComputerCredentialEnvelope(corpusdURL, computerID, realizationID string, epoch int64) string {
-	if corpusdURL == "" || computerID == "" || realizationID == "" {
+	return issueComputerCredentialEnvelopeWithKey(corpusdURL, computerID, realizationID, fmt.Sprintf("guest-credential:%s:%d", realizationID, epoch))
+}
+
+// issueComputerCredentialEnvelopeWithKey requests an envelope under an
+// explicit idempotency key, retrying transport errors and 5xx with that key.
+func issueComputerCredentialEnvelopeWithKey(corpusdURL, computerID, realizationID, idempotencyKey string) string {
+	if corpusdURL == "" || computerID == "" || realizationID == "" || idempotencyKey == "" {
 		return ""
 	}
 	for attempt := 1; ; attempt++ {
-		envelope, retryable := issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID, epoch)
+		envelope, retryable := issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID, idempotencyKey)
 		if envelope != "" || !retryable || attempt >= credentialIssueAttempts {
 			return envelope
 		}
@@ -1439,11 +1483,11 @@ func issueComputerCredentialEnvelope(corpusdURL, computerID, realizationID strin
 
 // issueComputerCredentialEnvelopeOnce makes one issuance request. retryable
 // is true for transport errors and 5xx; an explicit refusal is final.
-func issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID string, epoch int64) (string, bool) {
+func issueComputerCredentialEnvelopeOnce(corpusdURL, computerID, realizationID, idempotencyKey string) (string, bool) {
 	body, _ := json.Marshal(map[string]string{
 		"computer_id":     computerID,
 		"realization_id":  realizationID,
-		"idempotency_key": fmt.Sprintf("guest-credential:%s:%d", realizationID, epoch),
+		"idempotency_key": idempotencyKey,
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), gatewayCredentialRequestTimeout)
 	defer cancel()

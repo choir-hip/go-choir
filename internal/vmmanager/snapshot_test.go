@@ -127,6 +127,12 @@ type fakeGuest struct {
 	prepares      int
 	resumed       int
 	hostUnixNano  int64
+	// credentialResume is what prepare advertises (re-credential on resume).
+	credentialResume bool
+	// envelopes records the credential_envelope of each resumed call.
+	envelopes []string
+	// resumedStatus, when set, is the resumed answer (a refused install).
+	resumedStatus int
 }
 
 func (g *fakeGuest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -144,17 +150,24 @@ func (g *fakeGuest) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(status)
 		if status == http.StatusOK {
-			_ = json.NewEncoder(w).Encode(map[string]any{"status": "prepared", "capability_expires_at": g.capExpiresAt, "guest_build": "test-build"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "prepared", "capability_expires_at": g.capExpiresAt, "guest_build": "test-build", "credential_resume": g.credentialResume})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "busy", "outcome": "busy", "running_runs": 1})
 	case guestHibernateResumedPath:
 		g.resumed++
 		var body struct {
-			HostUnixNano int64 `json:"host_unix_nano"`
+			HostUnixNano       int64  `json:"host_unix_nano"`
+			CredentialEnvelope string `json:"credential_envelope"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		g.hostUnixNano = body.HostUnixNano
+		g.envelopes = append(g.envelopes, body.CredentialEnvelope)
+		if g.resumedStatus != 0 {
+			w.WriteHeader(g.resumedStatus)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "hibernate: install delivered credential after resume: exchange refused"})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "resumed", "clock_step_ms": 1234})
 	default:
 		http.NotFound(w, r)
@@ -498,7 +511,7 @@ func TestHibernateAndResumeFromSnapshotRoundTrip(t *testing.T) {
 	restoreAPI := &fakeFirecrackerAPI{}
 	var restoreArgs []string
 	f.restoreStarter(t, restoreAPI, &restoreArgs)
-	inst, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect)
+	inst, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect, nil)
 	if err != nil {
 		t.Fatalf("ResumeVMFromSnapshot: %v", err)
 	}
@@ -531,7 +544,7 @@ func TestHibernateAndResumeFromSnapshotRoundTrip(t *testing.T) {
 	f.mgr.mu.Lock()
 	inst.State = StateHibernated
 	f.mgr.mu.Unlock()
-	_, err = f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect)
+	_, err = f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect, nil)
 	var fb *SnapshotFallbackError
 	if !errors.As(err, &fb) || fb.Reason != snapshotReasonNoSnapshot {
 		t.Fatalf("second resume = %v, want no_snapshot fallback", err)
@@ -560,7 +573,7 @@ func TestConsumedSnapshotIsNeverLoaded(t *testing.T) {
 	}
 	started := false
 	f.mgr.firecrackerStarter = func(string, []string) error { started = true; return nil }
-	_, err = f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect)
+	_, err = f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect, nil)
 	var fb *SnapshotFallbackError
 	if !errors.As(err, &fb) || fb.Reason != snapshotReasonConsumed {
 		t.Fatalf("resume = %v, want consumed fallback", err)
@@ -700,7 +713,7 @@ func TestResumeAfterDiskChangeFallsBackCold(t *testing.T) {
 	if err := os.Chtimes(filepath.Join(f.mgr.vmStateDir(f.vmID), "data.img"), later, later); err != nil {
 		t.Fatal(err)
 	}
-	_, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect)
+	_, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect, nil)
 	var fb *SnapshotFallbackError
 	if !errors.As(err, &fb) || fb.Reason != snapshotReasonDisk {
 		t.Fatalf("resume = %v, want disk fallback", err)
@@ -738,7 +751,7 @@ func TestResumeLoadFailureFallsBackAndNeverReloads(t *testing.T) {
 	restoreAPI := &fakeFirecrackerAPI{failPath: "/snapshot/load"}
 	var args []string
 	f.restoreStarter(t, restoreAPI, &args)
-	_, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect)
+	_, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect, nil)
 	var fb *SnapshotFallbackError
 	if !errors.As(err, &fb) || fb.Reason != snapshotReasonLoadFailed {
 		t.Fatalf("resume = %v, want load_failed", err)
@@ -764,7 +777,7 @@ func TestKillModeNeverLoadsLeftoverSnapshot(t *testing.T) {
 	f.mgr.cfg.HibernateMode = HibernateModeKill
 	started := false
 	f.mgr.firecrackerStarter = func(string, []string) error { started = true; return nil }
-	_, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect)
+	_, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect, nil)
 	var fb *SnapshotFallbackError
 	if !errors.As(err, &fb) || fb.Reason != snapshotReasonModeKill || started {
 		t.Fatalf("resume = %v started=%v, want mode_kill fallback without start", err, started)
@@ -779,7 +792,7 @@ func TestPartialSnapshotIsNeverResumable(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = os.WriteFile(filepath.Join(partial, snapshotStateName), []byte("x"), 0o600)
-	_, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect)
+	_, err := f.mgr.ResumeVMFromSnapshot(f.vmID, f.expect, nil)
 	var fb *SnapshotFallbackError
 	if !errors.As(err, &fb) || fb.Reason != snapshotReasonNoSnapshot {
 		t.Fatalf("resume = %v, want no_snapshot", err)

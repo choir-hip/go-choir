@@ -28,6 +28,16 @@ import (
 //     other computer's lookup and resolve stalls behind one hibernate;
 //   - the operator endpoint is reachable by a guest, or its receipt is not
 //     readable, so staging cannot prove which path a hibernate took.
+//
+// Re-credential on resume (design note items 26-28):
+//   - the resume credential is minted for a new realization or epoch, so the
+//     resumed guest (which keeps its realization) refuses it;
+//   - it reuses the boot idempotency key, which corpusd replays as an
+//     expired issuance and refuses;
+//   - two resume attempts share one key, so the second replays the first
+//     (already consumed) envelope;
+//   - an explicit refusal is retried, or reported as success;
+//   - an issuer is offered when vmctl has no corpusd to ask.
 
 type snapshotMockVMManager struct {
 	*mockVMManager
@@ -37,6 +47,12 @@ type snapshotMockVMManager struct {
 	snapshotErr     error
 	hibernateHook   func(vmID string)
 	hibernateRecord json.RawMessage
+	// callIssuer makes the mock mint the resume credential the way the
+	// manager does after validating a snapshot.
+	callIssuer bool
+	issuers    []func() (string, error)
+	issued     []string
+	issueErrs  []error
 }
 
 func (m *snapshotMockVMManager) HibernateVM(vmID string) error {
@@ -46,10 +62,18 @@ func (m *snapshotMockVMManager) HibernateVM(vmID string) error {
 	return m.mockVMManager.HibernateVM(vmID)
 }
 
-func (m *snapshotMockVMManager) ResumeVMFromSnapshot(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
+func (m *snapshotMockVMManager) ResumeVMFromSnapshot(vmID string, cfg VMManagerConfig, issue func() (string, error)) (*VMInstanceInfo, error) {
 	m.snapMu.Lock()
 	m.snapshotCalls = append(m.snapshotCalls, cfg)
+	m.issuers = append(m.issuers, issue)
 	m.snapMu.Unlock()
+	if m.callIssuer && issue != nil {
+		envelope, err := issue()
+		m.snapMu.Lock()
+		m.issued = append(m.issued, envelope)
+		m.issueErrs = append(m.issueErrs, err)
+		m.snapMu.Unlock()
+	}
 	if m.snapshotErr != nil {
 		return nil, m.snapshotErr
 	}

@@ -57,8 +57,8 @@ const (
 	// DefaultSnapshotBudgetGiB bounds the logical bytes of all committed
 	// snapshots on the host (VM_SNAPSHOT_BUDGET_GIB).
 	DefaultSnapshotBudgetGiB = 48
-	// DefaultSnapshotMaxAge bounds how long a snapshot stays resumable even
-	// when the guest reported no credential deadline.
+	// DefaultSnapshotMaxAge bounds how long a snapshot stays resumable. Once
+	// fresh credentials are delivered on resume it is the only age bound.
 	DefaultSnapshotMaxAge = 12 * time.Hour
 	// snapshotDiskFloorBytes is the free space the state filesystem must
 	// still have after a snapshot is written. It also covers memory files a
@@ -100,6 +100,7 @@ const (
 	snapshotReasonDisk             = "disk_identity_mismatch"
 	snapshotReasonFilesMissing     = "snapshot_files_missing"
 	snapshotReasonCredentialWindow = "credential_window_passed"
+	snapshotReasonCredentialIssue  = "credential_issue_failed"
 	snapshotReasonMaxAge           = "max_age_passed"
 	snapshotReasonSubnetTaken      = "subnet_taken"
 	snapshotReasonConsumeFailed    = "consume_failed"
@@ -109,6 +110,22 @@ const (
 	snapshotReasonHealthFailed     = "health_failed"
 	snapshotReasonColdBoot         = "cold_boot_discarded"
 )
+
+// Credential paths of a snapshot resume, recorded on the wake timeline.
+const (
+	// snapshotCredentialDelivered: the host minted a fresh envelope for the
+	// snapshot's realization and the guest installed it.
+	snapshotCredentialDelivered = "delivered"
+	// snapshotCredentialRenewOnly: no envelope; the guest renewed its frozen
+	// capability inside the renewal window.
+	snapshotCredentialRenewOnly = "renew_only"
+)
+
+// ResumeCredentialIssuer mints a fresh bootstrap envelope (base64url
+// canonical JSON) for the realization being resumed. vmctl supplies it; the
+// manager calls it only for a snapshot that validated, and the envelope goes
+// to the guest in the host-only resumed call, never to disk or logs.
+type ResumeCredentialIssuer func() (string, error)
 
 // SnapshotFallbackError reports that a wake did not use a snapshot. The
 // caller cold boots. Reason is one of the snapshotReason* values.
@@ -157,13 +174,19 @@ type SnapshotMeta struct {
 	VCPUCount          int                    `json:"vcpu_count"`
 	GuestBuild         string                 `json:"guest_build,omitempty"`
 	CreatedAt          time.Time              `json:"created_at"`
-	ResumeDeadline     time.Time              `json:"resume_deadline,omitempty"`
-	Bytes              int64                  `json:"bytes"`
-	FenceMS            int64                  `json:"fence_ms"`
-	PauseMS            int64                  `json:"pause_ms"`
-	SnapshotMS         int64                  `json:"snapshot_ms"`
-	Consumed           bool                   `json:"consumed"`
-	ConsumedAt         time.Time              `json:"consumed_at,omitempty"`
+	// ResumeDeadline is the last moment the guest could still renew its
+	// frozen capability. It bounds a resume only when no fresh credential
+	// can be delivered (CredentialResume false, or no issuer).
+	ResumeDeadline time.Time `json:"resume_deadline,omitempty"`
+	// CredentialResume records that the guest advertised it installs a
+	// fresh envelope delivered with resumed.
+	CredentialResume bool      `json:"credential_resume,omitempty"`
+	Bytes            int64     `json:"bytes"`
+	FenceMS          int64     `json:"fence_ms"`
+	PauseMS          int64     `json:"pause_ms"`
+	SnapshotMS       int64     `json:"snapshot_ms"`
+	Consumed         bool      `json:"consumed"`
+	ConsumedAt       time.Time `json:"consumed_at,omitempty"`
 }
 
 // SnapshotTimeline is the S3 section of a hibernate or wake timeline.
@@ -180,6 +203,8 @@ type SnapshotTimeline struct {
 	LoadMS          int64  `json:"load_ms,omitempty"`
 	WakeToHealthyMS int64  `json:"wake_to_healthy_ms,omitempty"`
 	ClockStepMS     int64  `json:"clock_step_ms,omitempty"`
+	// Credential is snapshotCredentialDelivered or snapshotCredentialRenewOnly.
+	Credential string `json:"credential,omitempty"`
 }
 
 // --- paths ---------------------------------------------------------------
@@ -408,6 +433,9 @@ type snapshotValidation struct {
 	FirecrackerVersion string
 	HostKernelRelease  string
 	Expect             VMConfig
+	// CredentialDelivery means a fresh envelope will be delivered on
+	// resume, so the frozen capability's renewal window does not bound it.
+	CredentialDelivery bool
 }
 
 // validateSnapshot returns "" when the snapshot may be loaded, else the
@@ -436,7 +464,7 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 	if !v.Now.Before(meta.CreatedAt.Add(m.snapshotMaxAge())) {
 		return snapshotReasonMaxAge
 	}
-	if !meta.ResumeDeadline.IsZero() && !v.Now.Before(meta.ResumeDeadline) {
+	if !v.CredentialDelivery && meta.resumeWindowPassed(v.Now) {
 		return snapshotReasonCredentialWindow
 	}
 	if meta.FirecrackerVersion == "" || meta.FirecrackerVersion != v.FirecrackerVersion {
@@ -465,6 +493,12 @@ func (m *Manager) validateSnapshot(dir string, meta *SnapshotMeta, v snapshotVal
 		}
 	}
 	return ""
+}
+
+// resumeWindowPassed reports whether the guest can no longer renew its
+// frozen capability by itself.
+func (meta *SnapshotMeta) resumeWindowPassed(now time.Time) bool {
+	return !meta.ResumeDeadline.IsZero() && !now.Before(meta.ResumeDeadline)
 }
 
 // resumeDeadlineFrom turns the guest's reported event-capability expiry into
@@ -668,6 +702,7 @@ type guestHibernatePrepareResponse struct {
 	Error               string    `json:"error,omitempty"`
 	CapabilityExpiresAt time.Time `json:"capability_expires_at,omitempty"`
 	GuestBuild          string    `json:"guest_build,omitempty"`
+	CredentialResume    bool      `json:"credential_resume,omitempty"`
 	RunningRuns         int       `json:"running_runs,omitempty"`
 	SelfdevActiveOps    int       `json:"selfdev_active_operations,omitempty"`
 }
@@ -723,13 +758,17 @@ func guestHibernatePrepare(ctx context.Context, hostURL string) (guestHibernateP
 	}
 }
 
-// guestHibernateResumed tells a resumed guest the host wall time; it steps
-// its clock, refreshes process-local state and reopens admission.
-func guestHibernateResumed(ctx context.Context, hostURL string, now time.Time) (guestHibernateResumedResponse, error) {
+// guestHibernateResumed tells a resumed guest the host wall time and, when
+// envelope is set, hands it a fresh credential envelope; it steps its clock,
+// installs the credential (or renews), and reopens admission. The envelope
+// travels only in this host-only request body.
+func guestHibernateResumed(ctx context.Context, hostURL string, now time.Time, envelope string) (guestHibernateResumedResponse, error) {
 	var resp guestHibernateResumedResponse
-	status, err := postGuestJSON(ctx, hostURL+guestHibernateResumedPath, map[string]any{
-		"host_unix_nano": now.UnixNano(),
-	}, &resp)
+	body := map[string]any{"host_unix_nano": now.UnixNano()}
+	if envelope != "" {
+		body["credential_envelope"] = envelope
+	}
+	status, err := postGuestJSON(ctx, hostURL+guestHibernateResumedPath, body, &resp)
 	if err != nil {
 		return resp, err
 	}
