@@ -41,6 +41,42 @@ const deskWorkerArg = "desk-session"
 // size (8 GiB virtual; Linux staging enforced).
 const deskWorkerMemoryLimitBytes uint64 = 8 << 30 // 8 GiB
 
+// managementCellDeadline bounds a management cell whose source sets no
+// timeout_ms (management delegation S1, design round 2 R2-19). Before it, a
+// management cell ran until its worker died: run 305a582d's cell 6 ran
+// 860,565 ms. The value is max(300 s, 2 x the p99 management cell duration
+// S0 measured on the live paper): p99 4.6 s over 295 cells (10-14
+// 06:51-09:12 UTC) and 1.0 s over 1,582 cells (10-13 15:00 to 10-14 09:12),
+// with one cell over 60 s, the 860 s one. So the 300 s floor governs.
+const managementCellDeadline = 300 * time.Second
+
+// managementCellDeadlineEnv overrides the management cell deadline with a Go
+// duration; "0" (any zero duration) or "off" removes it. A value that does not parse, or a
+// negative one, keeps the default, so a typo cannot unbound the cell.
+const managementCellDeadlineEnv = "CHOIR_MANAGEMENT_CELL_DEADLINE"
+
+// deskCellHostDeadline is the host's bound on a cell that sets no
+// timeout_ms, or 0 for none. Only management has one: other desks wait on
+// legitimate long calls (research's choir.SearchWait), and the design scopes
+// S1 to management.
+func deskCellHostDeadline(deskRole string) time.Duration {
+	if deskRole != agentprofile.Management {
+		return 0
+	}
+	raw := strings.TrimSpace(os.Getenv(managementCellDeadlineEnv))
+	switch strings.ToLower(raw) {
+	case "":
+		return managementCellDeadline
+	case "0", "off":
+		return 0
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d < 0 {
+		return managementCellDeadline
+	}
+	return d
+}
+
 // A desk's session outlives its run (PD2): the next run of the same agent
 // evaluates in the same REPL, so a follow-up continues from the values the
 // desk's earlier runs defined. Sessions are process memory: a restart, a
@@ -438,10 +474,22 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// score-free by construction (types.ActingPack), so the
 			// epistemic boundary holds on the wire.
 			pack := actingCommitmentPackForDesk(ctx, rt, execCtx)
+			// The cell's bound is its own timeout_ms when set, else the host's
+			// deadline for the desk (management only, S1). It goes on the eval
+			// context, not ctx: armCellTerminalDeadline keys on the outer
+			// context's deadline, which stays the activation's.
 			evalCtx := ctx
-			if input.TimeoutMS > 0 {
+			hostDeadline := time.Duration(0)
+			if input.TimeoutMS <= 0 {
+				hostDeadline = deskCellHostDeadline(deskRole)
+			}
+			if input.TimeoutMS > 0 || hostDeadline > 0 {
+				bound := hostDeadline
+				if input.TimeoutMS > 0 {
+					bound = time.Duration(input.TimeoutMS) * time.Millisecond
+				}
 				var cancel context.CancelFunc
-				evalCtx, cancel = context.WithTimeout(ctx, time.Duration(input.TimeoutMS)*time.Millisecond)
+				evalCtx, cancel = context.WithTimeout(ctx, bound)
 				defer cancel()
 			}
 			// RLM prompt-as-variable: pending update_coagent records ride the
@@ -454,31 +502,56 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			}
 			evalStart := time.Now()
 			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits, reduction.records.view)
+			elapsed := time.Since(evalStart)
+			// The cell's own bound fired, not the run's cancellation or the
+			// activation's deadline.
+			ownBoundFired := evalErr != nil && ctx.Err() == nil && evalCtx.Err() == context.DeadlineExceeded
 			cellEvent := map[string]any{
 				"desk_session": workers.sessionLabel(lease.key), "worker_pid": w.PID(), "run_id": execCtx.RunID,
 				"started_at": evalStart.UTC(), "finished_at": time.Now().UTC(),
-				"duration_ms":    time.Since(evalStart).Milliseconds(),
+				"duration_ms":    elapsed.Milliseconds(),
 				"waited_for_run": lease.waitedFor, "waited_ms": lease.waited.Milliseconds(),
 				"error": res.Error, "reuse": res.Reuse, "diag": res.DiagKind, "intents": len(res.Intents),
 			}
-			if evalErr != nil {
-				cellEvent["error"] = evalErr.Error()
+			if hostDeadline > 0 {
+				cellEvent["host_deadline_ms"] = hostDeadline.Milliseconds()
 			}
-			rt.recordDeskEvent(ctx, execCtx, types.EventDeskCell, cellEvent)
-
 			result := yaegikernel.SessionResult{}
 			if evalErr != nil {
+				cellEvent["error"] = evalErr.Error()
+				// A dead worker is released before the event is recorded, so
+				// the event and the log carry how it ended (R2-19, H1).
 				if w.Dead() {
 					workers.release(lease.key)
+					exit := w.ExitCause()
+					cellEvent["worker_exit"] = exit
+					switch {
+					case ownBoundFired && hostDeadline > 0:
+						cellEvent["killed_by"] = "host_deadline"
+						log.Printf("desk cell: %s cell deadline %s killed the cell of run %s after %d ms (desk session %s, worker pid %d); worker exit: %s",
+							deskRole, hostDeadline, execCtx.RunID, elapsed.Milliseconds(), workers.sessionLabel(lease.key), w.PID(), exit)
+					case ownBoundFired:
+						cellEvent["killed_by"] = "timeout_ms"
+						log.Printf("desk cell: %s cell of run %s reached its own timeout_ms=%d after %d ms (worker pid %d); worker exit: %s",
+							deskRole, execCtx.RunID, input.TimeoutMS, elapsed.Milliseconds(), w.PID(), exit)
+					default:
+						log.Printf("desk cell: %s worker of run %s ended after %d ms (worker pid %d): %v; worker exit: %s",
+							deskRole, execCtx.RunID, elapsed.Milliseconds(), w.PID(), evalErr, exit)
+					}
 				}
 				result.Error = evalErr.Error()
-				if input.TimeoutMS > 0 && ctx.Err() == nil && evalCtx.Err() == context.DeadlineExceeded {
-					result.Error = cellTimeoutError(input.TimeoutMS, time.Since(evalStart))
-					result.DurationMs = time.Since(evalStart).Milliseconds()
+				if ownBoundFired {
+					if hostDeadline > 0 {
+						result.Error = cellHostDeadlineError(deskRole, hostDeadline, elapsed)
+					} else {
+						result.Error = cellTimeoutError(input.TimeoutMS, elapsed)
+					}
+					result.DurationMs = elapsed.Milliseconds()
 				}
 			} else {
 				result = res
 			}
+			rt.recordDeskEvent(ctx, execCtx, types.EventDeskCell, cellEvent)
 			if reduction.active && result.Error != "" {
 				fate := cellFateFailure
 				if evalCtx.Err() == context.DeadlineExceeded {
@@ -944,6 +1017,15 @@ func cellTimeoutError(timeoutMS int, elapsed time.Duration) string {
 	return fmt.Sprintf("cell stopped by its own timeout_ms=%d after %d ms; the session was killed, so values defined in earlier cells are gone. "+
 		"Host calls such as choir.Read take several seconds each (up to about 10 s), and choir.SearchWait blocks as long as you ask: leave timeout_ms unset or allow for them",
 		timeoutMS, elapsed.Milliseconds())
+}
+
+// cellHostDeadlineError is what a model reads when the host's cell deadline
+// (S1) killed its cell: the bound, where it comes from, the time spent, the
+// lost session, and what to do instead.
+func cellHostDeadlineError(deskRole string, deadline, elapsed time.Duration) string {
+	return fmt.Sprintf("cell stopped by the host's %s cell deadline (%s, set by %s) after %d ms; the session was killed, so values defined in earlier cells are gone. "+
+		"Keep each cell short: do one step per cell, and end loops over records or captures on a bound you check",
+		deskRole, deadline, managementCellDeadlineEnv, elapsed.Milliseconds())
 }
 
 // deskEgress resolves one host-mediated choir.* call from a desk cell.

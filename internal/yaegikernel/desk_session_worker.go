@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,7 +75,24 @@ type DeskSessionWorker struct {
 	pid    int
 	dead   bool
 	cfg    DeskSessionWorkerConfig
+	// stderr carries only crash diagnostics; it is read once the process
+	// is reaped, when the copy into it has finished.
+	stderr *bytes.Buffer
+	// transportLost: the session socket failed before the host ended the
+	// worker, so the process may have exited on its own.
+	transportLost bool
+	reaped        bool
+	exitCause     string
 }
+
+// workerExitGrace is how long the host waits, after the session socket
+// fails, for the worker to exit on its own before it kills the corpse, so a
+// crash's own status (an exit code, the kernel's OOM kill) is what gets
+// recorded (management delegation S1, R2-19).
+const workerExitGrace = 2 * time.Second
+
+// stderrTailBytes bounds the crash diagnostics an exit cause carries.
+const stderrTailBytes = 600
 
 var deskSessionFrameID uint64
 var deskSessionFrameMu sync.Mutex
@@ -139,6 +157,7 @@ func SpawnDeskSessionWorker(cfg DeskSessionWorkerConfig) (*DeskSessionWorker, er
 		framed: NewFramedConn(parentConn),
 		pid:    cmd.Process.Pid,
 		cfg:    cfg,
+		stderr: &stderrBuf,
 	}
 	timeout := cfg.ReadyTimeout
 	if timeout <= 0 {
@@ -308,6 +327,7 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 	}
 	if err := w.framed.WriteFrame(StreamCell, raw); err != nil {
 		w.dead = true
+		w.transportLost = true
 		return SessionResult{}, fmt.Errorf("desk eval write: %w", err)
 	}
 	type result struct {
@@ -353,6 +373,7 @@ func (w *DeskSessionWorker) EvalCell(ctx context.Context, source string, inbox [
 	case r := <-ch:
 		if r.err != nil {
 			w.dead = true
+			w.transportLost = true
 			return SessionResult{}, r.err
 		}
 		if r.res.ID != frame.ID {
@@ -500,14 +521,69 @@ func (w *DeskSessionWorker) Kill() {
 
 func (w *DeskSessionWorker) killLocked() {
 	w.dead = true
-	if w.cmd != nil && w.cmd.Process != nil {
-		killProcessGroup(w.cmd.Process.Pid)
-		_ = w.cmd.Process.Kill()
-		_ = w.cmd.Wait()
-	}
+	w.reapLocked("killed by the host", 0)
 	if w.framed != nil {
 		_ = w.framed.Close()
 	}
+}
+
+// reapLocked ends the worker's process group, waits for the process once,
+// and records how it ended. After a lost transport it first gives the
+// worker workerExitGrace to exit on its own, so a crash is recorded as the
+// crash, not as the host's kill of the corpse.
+func (w *DeskSessionWorker) reapLocked(hostReason string, grace time.Duration) {
+	if w.reaped || w.cmd == nil || w.cmd.Process == nil {
+		return
+	}
+	w.reaped = true
+	done := make(chan error, 1)
+	go func() { done <- w.cmd.Wait() }()
+	if w.transportLost {
+		if grace <= 0 {
+			grace = workerExitGrace
+		}
+		select {
+		case err := <-done:
+			w.exitCause = w.describeExit("exited on its own", err)
+			return
+		case <-time.After(grace):
+			hostReason = "lost its session socket and was killed by the host after " + grace.String()
+		}
+	}
+	killProcessGroup(w.cmd.Process.Pid)
+	_ = w.cmd.Process.Kill()
+	w.exitCause = w.describeExit(hostReason, <-done)
+}
+
+// describeExit renders the reaped process's status and the tail of its
+// crash diagnostics.
+func (w *DeskSessionWorker) describeExit(reason string, waitErr error) string {
+	status := "exit status unknown"
+	if w.cmd != nil && w.cmd.ProcessState != nil {
+		status = w.cmd.ProcessState.String()
+	} else if waitErr != nil {
+		status = waitErr.Error()
+	}
+	out := reason + " (" + status + ")"
+	if w.stderr != nil {
+		tail := strings.TrimSpace(w.stderr.String())
+		if len(tail) > stderrTailBytes {
+			tail = "…" + tail[len(tail)-stderrTailBytes:]
+		}
+		if tail != "" {
+			out += "; stderr: " + tail
+		}
+	}
+	return out
+}
+
+// ExitCause reports how the worker process ended: who ended it (the host's
+// kill, a graceful close, or the worker on its own), the process status,
+// and the tail of its stderr. Empty while the process has not been reaped.
+func (w *DeskSessionWorker) ExitCause() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.exitCause
 }
 
 // PID exposes the worker's process id for receipts/observability.
@@ -529,10 +605,7 @@ func (w *DeskSessionWorker) Close() {
 		_ = w.framed.WriteFrame(StreamCell, raw)
 	}
 	w.dead = true
-	if w.cmd != nil && w.cmd.Process != nil {
-		killProcessGroup(w.cmd.Process.Pid)
-		_ = w.cmd.Wait()
-	}
+	w.reapLocked("closed by the host", 0)
 	if w.framed != nil {
 		_ = w.framed.Close()
 	}

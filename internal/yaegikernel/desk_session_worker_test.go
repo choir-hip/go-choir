@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestDeskSessionWorkerHelperProcess is the re-executed worker. It is not a
@@ -22,6 +23,15 @@ func TestDeskSessionWorkerHelperProcess(t *testing.T) {
 	fmt.Fprintf(os.Stderr, "helper: sockfd=%d conn=%v err=%v cfg=%+v\n", fd, conn != nil, err, cfg)
 	if err != nil || fd < 0 || conn == nil {
 		os.Exit(2)
+	}
+	// A worker that dies on its own mid-cell, with crash diagnostics on
+	// stderr, as run 305a582d's did (management delegation S1).
+	if after, perr := time.ParseDuration(os.Getenv("CHOIR_DESK_WORKER_CHILD_CRASH_AFTER")); perr == nil && after > 0 {
+		go func() {
+			time.Sleep(after)
+			fmt.Fprintln(os.Stderr, "fatal error: test crash")
+			os.Exit(7)
+		}()
 	}
 	ExecuteWorkerSessionConn(conn, cfg)
 	os.Exit(0)
