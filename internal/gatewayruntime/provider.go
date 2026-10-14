@@ -212,6 +212,11 @@ func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, erro
 		}
 		if httpResp.StatusCode != http.StatusOK {
 			stErr := gatewayStatusError(httpResp.Status, body)
+			// An open circuit stays open for its whole window; retrying it
+			// here only delays the caller's failover to its next model.
+			if strings.Contains(stErr.Error(), "circuit open") {
+				return nil, stErr
+			}
 			if transient, ok := stErr.(interface{ Transient() bool }); ok && transient.Transient() {
 				lastErr = stErr
 				continue

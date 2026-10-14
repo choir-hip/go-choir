@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -128,7 +129,8 @@ func WithToolLoopLLMConfig(config provideriface.LLMSelection) ToolLoopOption {
 }
 
 // WithToolLoopFallbackLLMConfigs names the models a run may fail over to,
-// in order. The loop fails over at most once.
+// in order. The loop walks them forward, each at most once, and never
+// returns to a member it left.
 func WithToolLoopFallbackLLMConfigs(configs []provideriface.LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.fallbackLLMConfigs = append([]provideriface.LLMSelection(nil), configs...)
@@ -330,7 +332,8 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	}
 
 	transientAttempts := 0
-	failedOver := false
+	nextFallback := 0
+	baseConversationID := options.conversationID
 	for i := 0; ; i++ {
 		if options.memoryHooks.BeforeProviderCall != nil {
 			rebuilt, err := options.memoryHooks.BeforeProviderCall(ctx, messages)
@@ -465,14 +468,22 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			}
 			// Model failover: a model that still fails after its retries
 			// hands the rest of the run to the next pool member. The cache
-			// breaks; the work continues. Once per run; never on our own
-			// cancellation.
-			if !failedOver && len(options.fallbackLLMConfigs) > 0 && ctx.Err() == nil && IsModelFailoverError(err) {
-				failedOver = true
+			// breaks; the work continues. The loop walks the fallbacks in
+			// order and never goes back, so each member is tried at most
+			// once and the run fails only when the last one fails. Going
+			// only to the first fallback stranded a deepseek thread on
+			// cat-jam behind the same open circuit while luna was healthy
+			// (docs/problems/free-model-429-opens-provider-circuit-stub-
+			// stories-2026-10-14.md). Never on our own cancellation.
+			if nextFallback < len(options.fallbackLLMConfigs) && ctx.Err() == nil && IsModelFailoverError(err) {
 				from := activeLLMConfig
-				activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[0], from)
-				if options.conversationID != "" {
-					options.conversationID += "#failover"
+				activeLLMConfig = fillFallbackSelection(options.fallbackLLMConfigs[nextFallback], from)
+				nextFallback++
+				if baseConversationID != "" {
+					options.conversationID = baseConversationID + "#failover"
+					if nextFallback > 1 {
+						options.conversationID += strconv.Itoa(nextFallback)
+					}
 				}
 				messages = stripProviderReplay(messages)
 				transientAttempts = 0
@@ -484,6 +495,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 						"to_provider":    activeLLMConfig.Provider,
 						"to_model":       activeLLMConfig.Model,
 						"provider_error": err.Error(),
+						"members_left":   len(options.fallbackLLMConfigs) - nextFallback,
 					})
 					emit(types.EventRunRetry, "model_failover", payload)
 				}

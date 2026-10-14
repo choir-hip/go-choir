@@ -144,7 +144,11 @@ On a switch:
 
 A pool of two means each model falls back to the other. A thread whose
 last member fails too ends with the error, as today. Failover is never
-attempted twice in one call.
+attempted twice in one call. (Amended 2026-10-14: with three members, "at
+most once" stranded a deepseek thread on cat-jam behind the same open
+circuit. Failover now walks the remaining members forward, each at most
+once, and never goes back; see
+docs/problems/free-model-429-opens-provider-circuit-stub-stories-2026-10-14.md.)
 
 **6. Every choice is recorded.**
 
@@ -211,7 +215,8 @@ the catalog but outside the default pool.
 - **Failover on the wrong errors.** A cancelled context, or our own
   malformed request, triggers failover and doubles the damage. Only the
   listed classes fail over, and a test covers a cancel.
-- **Failover loops.** Failover happens at most once per run.
+- **Failover loops.** Failover visits each member at most once per run
+  and never returns to a member it left (amended 2026-10-14).
 - **Replay poisoning.** Replaying one provider's reasoning items into the
   other provider breaks the request. On a switch, reasoning content is
   dropped from the history and a fresh conversation id is used.
