@@ -139,7 +139,7 @@ metamission:
       path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
       readiness: drafted
       status: working
-      depends_on: [L1]
+      depends_on: []
       note: >-
         Guest updates (owner 2026-10-14: "I want to be pushing safe updates
         out to guest computers ... this is going to relate to the
@@ -155,8 +155,10 @@ metamission:
         L1c and L1b); LU5 one apply path shared with self-development; LU4
         binary-only swap only if measured downtime warrants it.
         Specification: docs/reports/lu-guest-updates-design-2026-10-14.md;
-        round-1 panel adjudicated in
-        docs/reports/lu-guest-updates-adjudication-2026-10-14.md.
+        panels adjudicated in
+        docs/reports/lu-guest-updates-adjudication-2026-10-14.md (rounds 1
+        and 2 send_back with repairs adopted; round 3 written). Only LU3b
+        depends on L1 (L1c, L1b).
         Cause: the paper is never idle and updated only by an owner act
         (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
     - id: L3
@@ -435,7 +437,7 @@ now:
     direction); research searching the corpus first; station LU, guest
     updates (owner-approved 10-14; drafted, panel next), which answers how
     an always-busy paper takes updates. Open for the owner: Go module
-    route, LU's O1-O8, snapshot max age, SP0 host and key backups.
+    route, LU's O1-O3b, O5, O7-O9, snapshot max age, SP0 host and key backups.
   source_ref: 0257fac3
   deploy_identity: staging ce59d406 (deployed 07:46 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}

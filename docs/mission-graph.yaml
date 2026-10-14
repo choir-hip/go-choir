@@ -1714,11 +1714,11 @@ nodes:
     title: LU — guest updates (pull with a bounded drain, planned boots across epochs, health and rollback, rings, one apply path with self-development)
     path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
     ledger: ''
-    status: working  # drafted 2026-10-14; round-1 panel send_back adjudicated, round 2 written; round-2 panel next; LU1a and LU2 are the first build slices
+    status: working  # drafted 2026-10-14; rounds 1 and 2 send_back, repairs adopted; round 3 written; round-3 panel next; LU1a and LU2 are the first build slices
     kind: station
     entrypoint: false
     execution_mode: mission_orchestrator
-    depends_on: [choir-ledger-l1-restart-2026-10-13]
+    depends_on: []  # only LU3b needs L1 (L1c, L1b); recorded in the station file
     enables: [choir-ledger-metamission-2026-10-13]
     note: >-
       Owner 2026-10-14: "I want to be pushing safe updates out to guest

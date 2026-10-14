@@ -1,4 +1,4 @@
-# LU: Guest Updates (design note, round 2)
+# LU: Guest Updates (design note, round 3)
 
 Date: 2026-10-14. Station: LU of the ledger metamission
 ([station file](../definitions/choir-ledger-lu-guest-updates-2026-10-14.md)).
@@ -17,7 +17,7 @@ a trace.
 ## Changelog
 
 - **Round 1** (346d968c): first draft.
-- **Round 2** (this file): a convergent panel (claude, gemini, glm, muse,
+- **Round 2** (cca944f7): a convergent panel (claude, gemini, glm, muse,
   deepseek: accept with repairs; gpt-6-luna: send_back) found that the
   drain as written would block dispatcher slots, could not tell
   continuations from new work, shared one flag with hibernation, raced its
@@ -32,6 +32,20 @@ a trace.
   refuses rollback across store schema (R14) and never advances an
   unvalidated ring (R16); LU4 becomes conditional (R19); smaller fixes
   R8-R11, R17, R18, R20-R39.
+- **Round 3** (this file): the round-2 panel (claude, gemini, glm,
+  deepseek: accept with repairs; muse, gpt-6-luna: send_back) found every
+  round-1 blocker repaired and named new gaps, adjudicated as S1-S31 in
+  the same document. Changes: the final call is a recoverable protocol
+  (a durable host record and sweep completion, a finalization barrier, no
+  updater restart, abort and deadline for `update_final`; S1-S6, S25,
+  S26); lineage admission is a defined, fail-closed predicate with a
+  bounded ancestor walk and a rule for self-development retries (S7, S8);
+  update holds defer in their own class outside the poison budget (S9);
+  LU2 reads the epoch at open and advances it only inside each step's
+  transaction, covers the actor log, seeds the first boot and holds on a
+  downgrade (S10-S14); LU1a names its interfaces and uses vmctl's idle
+  test (S16, S17, S20); rings pin the image and treat stuck as not failed
+  (S15, S19, S24); LU no longer depends on L1 as a whole (S21).
 
 ## 0. The short version
 
@@ -256,6 +270,13 @@ about 29.5 minutes of deferral.
 | F30 | Retained or target images collected by Nix GC mid-drain | `node-b.nix:955-1000` (R21) | LU1a (GC roots) |
 | F31 | A guest runtime restart mid-drain forgets the drain | in-memory gate (R28) | LU1b (unknown drain = aborted) |
 | F32 | An executing activation outlives D (budget 60 min) | `config.go:24` (R24) | LU1b (D calibrated by the sample) |
+| F33 | vmctl dies between the final call's 200 and the kill: runtime down, marker written, and an unreachable guest reads as busy forever | `ownership.go:3100-3106`; `deploy_refresh.go:292-293` (S1) | LU1b (final-call record, sweep completes) |
+| F34 | The updater's restart bridge starts the runtime again after it exited | `autoputer-vm.nix:483-493` (S2) | LU1b (final call refuses with an updater operation or request pending) |
+| F35 | `Shutdown` waits for the handler that answers the final call; exiting before the flush looks like a failed call | `server.go:274-286` (S3) | LU1b (barrier, async shutdown) |
+| F36 | A self-development retry starts an apply mid-drain (it is not a restart work kind) | `handler.go:244-251`; `planned_restart.go:161-173` (S7) | LU1b (admit only for an operation already mid-transaction) |
+| F37 | LU2's epoch stamped before migrating, or old-schema actor-log occurrences delivered after a planned cross-epoch boot | `store.go:678-682`; `adapter.go:100-115` (S10, S12) | LU2 |
+| F38 | A downgrade or a revert after a migration runs an old binary on newer state | `planned_restart.go:133-141` (S13) | LU2 (hold) |
+| F39 | The target moves to an image that has not passed earlier rings | design (S15) | LU3a (pin the admitted image) |
 
 ## 3. Invariants
 
@@ -264,9 +285,12 @@ about 29.5 minutes of deferral.
   per-computer claim. CI sets the target, kicks one sweep, and reports.
 - **U2 (no work cut).** The host kills a guest for an update only after
   the guest's final call succeeded: new work held, nothing executing,
-  no desk pending mutation, no self-development transaction, filesystems
-  synced, marker written, runtime exited. Busy is never forced by an
-  automatic path (CLAUDE.md "Deploys never restart a busy computer").
+  no desk pending mutation, no self-development transaction or updater
+  operation, the runtime's dispatcher and stores closed, the marker
+  durable, a system-wide sync after it, the runtime exited. Writes by
+  other guest units after that sync are journal-recovered at boot (a
+  named residual, S4). Busy is never forced by an automatic path
+  (CLAUDE.md "Deploys never restart a busy computer").
 - **U3 (planned stays planned).** An update boot is planned unless a real
   crash happened. An epoch change is a migration, not a crash.
 - **U4 (bounded).** Per computer and target image: at most one apply, one
@@ -276,7 +300,9 @@ about 29.5 minutes of deferral.
 - **U5 (recorded).** Every update attempt, outcome and rollback is a record
   on the computer's event chain, joined to the image identities.
 - **U6 (one authority).** Pending is derived (booted image ≠ target image),
-  never stored. The image identity wins over CI's served-commit reading.
+  never stored. The canonical image identity is the resolved Nix store
+  path of `/var/lib/go-choir/guest` (S17); it wins over CI's served-commit
+  reading, and refusals and ring state are keyed by it.
   Attempt history lives in one host ledger (L1b's recovery ledger;
   interim fields on the ownership until it lands, as L1b-0 did).
 - **U7 (forward-only across state).** No automatic rollback across a
@@ -287,22 +313,33 @@ about 29.5 minutes of deferral.
 
 ### LU1a: pending and retry (host only)
 
-- **Booted image identity.** vmmanager records, at `launchFirecracker`
-  (the single spawn actuator, restart design §9), the resolved store path
-  of `/var/lib/go-choir/guest` and its `build.json` commit, store-schema
-  version and work-state epoch. Every launch path passes through it, so
-  none can skip it (F28). Pending = active computer whose booted image
-  differs from the target. `vmctl list` shows `update: {target, booted,
-  pending_since, last_attempt, outcome, guest_boot_kind}`.
+- **Booted image identity (F28, S17).** Both spawn paths, `bootVM` and
+  `ResumeVM`, resolve the image (the store path behind
+  `/var/lib/go-choir/guest`, and its `build.json` commit) and pass it with
+  the computer id into `launchFirecracker` (`manager.go:866,1093,1888`),
+  which returns it for vmctl to write on the ownership; a launch that
+  cannot resolve it fails. Store-schema version and work-state epoch join
+  the identity once the guest image's `build.json` carries them (produced
+  by the guest image build in `flake.nix`; consumed by LU3b's U7 check).
+  Pending = active computer whose booted image differs from the target.
+  `vmctl list` shows `update: {target, booted, pending_since,
+  target_first_seen, last_attempt, outcome, guest_boot_kind}`;
+  `pending_since` and `target_first_seen` are persisted on the ownership.
+- **Target.** The target is the resolved store path of
+  `/var/lib/go-choir/guest`, read at each pass; nothing else stores it.
 - **One driver (F25).** The idle sweeper (`ownership.go:957-1004`, every
   2 min on staging, `node-b.nix:772`) gains an update pass, run before the
   idle and pressure passes. For each pending computer (not held, not
-  divergent; platform tier first), it calls the existing
-  `deployRefresh` (`deploy_refresh.go:254`) under a per-computer claim,
-  at most one computer per host at a time. CI stops calling deploy-refresh
-  per computer: it kicks one sweep and reports the update state. The
-  forced dispatch input calls vmctl, which skips any computer with an
-  active drain.
+  divergent; platform tier first) it first applies vmctl's own idle test
+  (`guestBusy`, which counts desk pending mutations,
+  `ownership.go:3108-3125`; S16), then calls the existing `deployRefresh`
+  (`deploy_refresh.go:254`) under a per-computer claim, at most one
+  computer per host at a time. The refresh and its wait run under the
+  claim, off `sweepMu` (S20). CI stops calling deploy-refresh per
+  computer: it calls `POST /internal/vmctl/update-sweep` once and reports
+  the update state. An owner's forced refresh goes through vmctl; it may
+  interrupt a drain (a crash boot, the owner's act) but never the window
+  between a final call's 200 and the kill (S18).
 - **Bootstrap (F26).** LU1a works with today's guests: the existing
   planned-restart endpoint answers 200 at a quiet moment, and the sweep
   now asks every 2 minutes instead of once per deploy. That is how
@@ -312,88 +349,153 @@ about 29.5 minutes of deferral.
 - **No hibernating a pending computer (F27).** An idle pending computer is
   updated instead of hibernated.
 - **Retained images (F30).** vmctl holds a GC root on every image named by
-  a computer's booted, last-good or target record; above 3 distinct images
-  it alerts rather than collects.
+  a computer's booted, last-good or target record; above 3 distinct images,
+  or below a disk floor on the store volume, it alerts rather than
+  collects (S30).
 - **Guest verdict (F6).** After each update boot the sweep reads the
   guest's `restart.kind` from `/api/runtime/obligations` and records it.
 - **Flag.** `VM_UPDATE_SWEEP=off|ring0|all`. Lands as `ring0`; `all` after
   LU1a's acceptance on ring 0.
 
 Ways it could fail: a computer whose launch is not recorded is refreshed
-every pass (covered by recording at the actuator); a sweep pass that
-refreshes holds `sweepMu` for about a minute and delays warm passes (one
-refresh per pass, logged); the guest's restart test misses desk
-mutations (LU1b fixes the test; LU1a uses today's endpoint unchanged).
+every pass (covered: a launch without an identity fails); a refresh
+stalls other sweep passes (covered: it runs off `sweepMu`); today's
+endpoint misses desk mutations (covered: vmctl's idle test runs first);
+the F4 race between the endpoint's 200 and the kill remains until LU1b,
+as it does today.
 
 Rollback: revert; `VM_UPDATE_SWEEP=off`; CI's per-computer loop is a
 revert away.
 
 ### LU2: persisted epoch and migrations (guest)
 
-- The store persists the work-state epoch at open, beside the store-schema
-  epoch (`storeschema.Write`, `store.go:678-682`) (R12).
+- **Persisted, never stamped at open (S10).** The store keeps the
+  work-state epoch beside the store-schema epoch, but unlike
+  `storeschema.Write` (`store.go:678-682`, written at every open) the
+  work-state epoch is only **read** at open. It advances inside each
+  migration step's transaction, after the step's work. Steps are
+  idempotent, so a crash between a step and its epoch write re-runs the
+  step.
+- **First boot (S11).** With no persisted epoch, the boot seeds it from the
+  consumed marker's epoch if there is one, otherwise from the binary's.
+  The release that ships LU2 does not itself bump the epoch.
 - A registry: for each step `n → n+1`, a migration function or an
   explicit `crash` entry. A unit test fails when `CurrentWorkStateEpoch`
   changes without an entry, so every bump forces the author to choose.
 - On **every** boot where the persisted epoch is lower than the binary's,
-  the boot runs each step's migration before any closure and before the
-  actor runtime starts, one store transaction per step where the store
-  allows, and records `work_state_migrated {from, to, closed: [...]}`. A
-  migration closes only the state whose schema changed (B1's would have
-  closed engineering assignments opened under the packet schema), with
-  the fate "closed by a work-state migration". The boot kind stays what
-  the marker (later the host) says: a planned boot stays planned, and a
-  markerless boot is still a crash boot, now on migrated state (F10).
+  the boot runs each step before any closure, before the dispatcher and
+  before the actor runtime start, and records
+  `work_state_migrated {from, to, closed: [...]}`. A step covers both
+  databases (S12): first it closes or rewrites, idempotently, the
+  actor-log occurrences (SQLite, `internal/actorruntime/adapter.go:100-115`)
+  of kinds whose meaning changed, then it migrates the Dolt store and
+  advances the epoch in that transaction. A migration closes only the
+  state whose schema changed (B1's would have closed engineering
+  assignments opened under the packet schema), with the fate "closed by a
+  work-state migration". The boot kind stays what the marker (later the
+  host) says: a planned boot stays planned, and a markerless boot is
+  still a crash boot, now on migrated state (F10).
 - The marker's own epoch check (`planned_restart.go:133-136`) is replaced
   by the persisted check; the marker carries planned-ness only.
-- A `crash` entry, a missing entry or a downgrade (persisted epoch higher
-  than the binary's): the boot is a crash boot, as today. A failed
-  migration holds the runtime (no admission, visible on `/health`), never
-  runs on unmigrated state.
+- **Fail closed (S13, S14).** A `crash` entry or a missing entry: crash
+  boot, as today. A persisted epoch **higher** than the binary's (a
+  downgrade), or a failed migration: the runtime holds (no admission, no
+  closure run on state it cannot read, visible on `/health`) for an owner
+  act. A binary from before LU2 cannot read the persisted epoch, so
+  reverting LU2 or a later release after a migration has run is
+  forbidden; that is the slice rollback rule.
+- The guest change that skips unknown lifecycle actions (LU3a, F29)
+  ships in the same image (S27).
 - Timing: the next epoch bump is expected in C1e B2-B5 (packets and work
   items deleted). LU2 lands before it; that bump does not land until it
-  does.
+  does. LU2 is built in parallel with LU1a but reaches computers through
+  LU1a's sweep (S28).
 
-Rollback: revert; epoch steps without migrations fall back to D7.
+Rollback: revert only before any migration has run; after that, fix
+forward. Epoch steps without migrations fall back to D7.
 
 ### LU1b: the drain (guest and host)
 
-- **One gate with reasons (F23).** The hibernate fence becomes an
+- **One gate with reasons (F23, S6).** The hibernate fence becomes an
   admission gate with a set of reasons, each with its own deadline:
-  `hibernate`, `update_drain`, `update_final`, later `selfdev_apply`. The
-  gate is lifted only when its set is empty. Hibernate prepare refuses
-  while a drain is active.
-- **Defer, not block (F15, F22).** While `update_drain` is set, a held
-  occurrence returns `actor.ErrDeferUnprocessed` before `EnterWork`, as
-  the self-development apply hold does. It stays pending on the tape,
-  uses no dispatcher slot, and is delivered after the planned boot. D
-  plus the final-call window stays under the deferral budget (about 29.5
-  min); a unit test fails otherwise.
-- **Admission by lineage (R3).** At drain start the guest snapshots the
-  root runs and trajectories with an executing activation or a parked run
-  in flight. An occurrence whose root is in that set is admitted
-  (child spawns and child results included), plus cancels and deadline
-  closures. Every other occurrence of a `RestartWorkKinds` kind
-  (`planned_restart.go:161-173`) is deferred. Owner messages are deferred
-  too, unless O3 cancels the drain.
-- **Start and poll.** After the quiet wait Q (default 30 min pending with
-  no quiet moment), the sweep calls `POST /internal/runtime/update-drain
-  {deadline}`, which answers 202. Each pass polls `GET` for `draining`,
-  `drained` or `timed_out` (with the executing runs, their roots and
-  ages). The drain is guest-timed: a vmctl restart loses nothing (F17); a
-  guest runtime restart loses the drain, and the host reads an unknown
-  drain as aborted (F31).
+  `hibernate`, `update_drain`, `update_final`, `probation` (LU3b), later
+  `selfdev_apply`. The gate is lifted only when its set is empty. Only
+  `hibernate` keeps "set only while nothing is inside"; `update_drain`
+  sets while work is executing (that is its purpose); `update_final` sets
+  only after the drained re-check. Hibernate prepare refuses while a
+  drain is active.
+- **Defer, not block (F15, F22, S8, S9).** A held occurrence returns
+  `actor.ErrDeferUnprocessed` before `EnterWork`, as the self-development
+  apply hold does (`handler.go:165-168`), so it uses no dispatcher slot
+  and stays pending. Update holds defer in their own class: the
+  dispatcher does not count them toward `MaxDeferrals` (64,
+  `adapter.go:137`), and their live-lock bound is the hold's own deadline,
+  because `defer_count` is durable and would otherwise stack across the
+  drain, the final window, probation and the apply hold
+  (`log_sqlite.go:143-172`). An update-hold deferral `continue`s the
+  mailbox fold instead of `break`ing it (`dispatcher.go:394-433`), so a
+  continuation queued behind held work in the same mailbox is not
+  delayed. A unit test sums the worst-case stack of the counted holds
+  against the budget.
+- **Admission predicate (S7).** In order: set `update_drain`; then
+  snapshot the run ids of executing activations (the runtime's in-memory
+  set, `runtime.go:2283`) and their ancestors, found by a bounded walk of
+  each run's parent (`RequestedByRunID`). Never scan all runs
+  (`ListAllRunsByState` can exhaust the guest, `runtime.go:2515-2520`).
+  For each occurrence of a restart work kind
+  (`planned_restart.go:161-173`), resolve its run: the run id in
+  `Content` for `initial_dispatch`, the resume state for
+  `coagent_result`, `TrajectoryID` only as a hint checked against the
+  store (a child's trajectory is its parent's run id,
+  `runtime.go:4346-4363`). Admit it when that run or a bounded ancestor is
+  in the set; an admitted spawn joins the set. Admit cancels and deadline
+  closures. Admit `selfdev_materialization_retry` only for an operation
+  already mid-transaction when the drain began; defer it otherwise (it is
+  not a restart work kind and can start an apply, `handler.go:244-251`;
+  F36). Any resolution error defers (fail closed: a wrong deferral costs
+  a timeout, never a cut). Owner messages are deferred unless O3 cancels
+  the drain.
+- **Start and poll.** After the quiet wait Q (default 30 min after
+  `target_first_seen` with no quiet moment), the sweep calls
+  `POST /internal/runtime/update-drain {deadline}`, which answers 202. A
+  repeated request (for example after a vmctl restart) joins the active
+  drain and never extends its deadline (S26). Each pass polls `GET` for
+  `draining`, `drained`, `timed_out` or `cancelled` (with the executing
+  runs, their roots and ages). The drain is guest-timed; a guest runtime
+  restart loses it, and the host reads an unknown drain as aborted (F31).
 - **Drained.** The guest reports `drained` when nothing in the snapshot
-  set is executing, no desk mutation is pending and no self-development
-  transaction is open. It keeps deferring new work. No marker yet.
-- **Final call (F4, F5, F9, F24).** On `drained`, the same vmctl goroutine
-  calls the planned-restart endpoint with the current target (read now,
-  F18). The guest sets `update_final` (which also stops admitting
-  lineage occurrences), re-checks, syncs, writes the marker, answers 200,
-  and the runtime exits cleanly (exit 0; the unit does not restart on a
-  clean exit). vmctl waits up to 30 s for the runtime to stop answering,
-  then kills and boots. If the call fails or the runtime does not stop,
-  vmctl clears the marker and does not kill.
+  set is executing, no desk mutation is pending, no self-development
+  transaction is open and no updater operation is in flight. It keeps
+  deferring new work. No marker yet.
+- **Final call (F4, F5, F9, F24, F33-F35; S1-S5).**
+  1. vmctl writes a durable final-call record on the ownership
+     (`{target, at}`) before calling.
+  2. It calls the planned-restart endpoint with the image the computer
+     may take: the current target before rings exist, the image admitted
+     to its ring after LU3a (F39). The call runs under the per-computer
+     claim, off `sweepMu`.
+  3. The guest sets `update_final` (60 s deadline), re-checks drained,
+     and refuses if an updater operation is in flight or a restart request
+     file exists (`autoputer-vm.nix:483-493`). Then the barrier: stop the
+     dispatcher and the actor adapter, close the stores, write the marker,
+     `sync`, send and flush the 200, shut the server down asynchronously
+     (`Shutdown` waits for active handlers, `server.go:274-286`), exit 0.
+     The unit is `Restart=on-failure`, so a clean exit stays down
+     (`autoputer-vm.nix:842-843`).
+  4. vmctl waits up to 30 s for the runtime to stop answering, then kills
+     and boots, and clears the record after the boot.
+  5. On any error before the 200, the guest clears `update_final` and the
+     marker and returns to `update_drain`; vmctl clears the record and
+     does not kill. The 60 s deadline clears `update_final` if vmctl never
+     answers.
+  6. **Recovery.** If vmctl restarts between the 200 and the kill, the
+     next pass finds the record: if the runtime has not answered for 60 s
+     and the record is younger than the marker's 15 minutes, it kills and
+     boots (a planned boot, since the marker is written); otherwise it
+     clears the record. Without this an unreachable guest reads as busy
+     forever (`ownership.go:3100-3106`).
+  7. Once `update_final` is set, owner messages wait for the planned boot
+     (S25).
 - **Deadline.** At D (default 15 min; calibrated by the quiet-gap sample,
   since one activation may run up to 60 min) the guest clears
   `update_drain` and reports `timed_out`. The host backs off (default 30
@@ -401,7 +503,8 @@ Rollback: revert; epoch steps without migrations fall back to D7.
   stuck" on the owner's page and alerts. Never forced.
 - **Owner activity (O3, F16).** On interactive tiers, an owner message
   arriving at the API ingress cancels the drain before it reaches the
-  actor path (R27). On the platform tier it is deferred.
+  actor path (R27) and the poll reads `cancelled`; cancels are counted
+  apart from timeouts. On the platform tier it is deferred.
 - **No hibernating a draining computer (F27).** `/health` reports the
   drain, and the idle and pressure passes skip a draining computer.
 - **After L1c (R35).** The host's attestation replaces the marker in the
@@ -421,15 +524,25 @@ flag is `ring0` without drains.
   today, then stayed up through a soak S (default 10 min), and no ring-k
   computer failed. A ring timeout (default 2 h) without a validated member
   halts and alerts. A ring-k member that updates late takes the build
-  under the same health wait; it no longer gates.
+  under the same health wait; it no longer gates. "Update stuck" (drain
+  timeouts) is not a failure and does not halt anything (S19).
+- **Pinned image (F39, S15).** Rings and attempts are keyed by image
+  identity. A computer takes only an image admitted to its ring; when the
+  target moves, a drain or final call for the old image aborts and the
+  computer re-gates on the new one.
+- **Currency.** "Already current" is read from the booted-image record,
+  never from `/health` `build.commit` (a layered computer reports its
+  layer's commit).
 - **Failure.** A failed update halts the rollout of that image
   fleet-wide, refuses it for that computer, and alerts the owner. Un-halt
   and un-refuse are owner acts.
-- **Record (U5, F29).** First a guest change: unknown lifecycle actions
-  are acknowledged and skipped. Then vmctl issues a platform-signed
-  lifecycle receipt with action `update` and `{from_image, to_image,
-  outcome, reason}`, only to images that declare the action; the guest
-  appends it as `lifecycle_observed`.
+- **Record (U5, F29, S24).** The guest change that acknowledges and skips
+  unknown lifecycle actions ships first, with LU2. Then vmctl issues a
+  platform-signed lifecycle receipt with action `update` and
+  `{from_image, to_image, outcome, reason}` for every applied, refused or
+  rolled-back update, only to images that declare the action; the guest
+  appends it as `lifecycle_observed`. A refusal is recorded on the
+  computer's own chain, not only as an alert.
 
 Rollback: ring gating off returns to LU1 behavior.
 
@@ -510,7 +623,8 @@ binding (`autoputer-vm.nix:133-142`).
   (one episode per computer and target). LU3b needs L1c (host-asserted
   planned boots, for the probation flag and the rollback boot) and L1b
   (grants, and the ledger as LU's attempt history). LU1a, LU2, LU1b and
-  LU3a need neither.
+  LU3a need neither, so the station as a whole does not depend on L1
+  (S21).
 - **S3 snapshots.** A deploy invalidates every snapshot; the next wake is
   a cold boot without a marker, a crash boot (F10). With LU2 the boot at
   least runs on migrated state. Once L1c exists, the host can attest that
@@ -530,11 +644,11 @@ binding (`autoputer-vm.nix:133-142`).
 | # | Decision | Default in this note |
 | --- | --- | --- |
 | O1 | At the drain deadline: defer, or force after K failed drains | Defer; "update stuck" alert after K = 3; a forced refresh only by an owner act |
-| O2 | Ring order | test → paper → owner → others; a failure halts the image fleet-wide and alerts the owner. Soak and timeouts are operational |
+| O2 | Ring order, and whether the owner's computer may opt out of automatic updates | test → paper → owner → others; a failure halts the image fleet-wide and alerts the owner; no opt-out (the owner's computer follows ring 2). Soak and timeouts are operational |
 | O3 | Does the owner's activity cancel a drain on their own computer, and how long may new work wait there (D) | Cancel on interactive tiers; D = 15 min; on the platform tier, wait |
 | O3b | During probation on the owner's computer (up to T_ready = 5 min): hold the owner's messages visibly, or admit them and give up automatic rollback for that update | Hold visibly ("updating") |
 | O5 | Build LU4 (layered runtime swap) | Only if measured planned-refresh downtime matters; the owner asked for lighter restarts, so cutting it is the owner's call |
-| O7 | Update-lag target for the paper | Within 60 min of a deploy when its work drains; otherwise visibly pending |
+| O7 | Update-lag target for the paper | Within 60 min of a deploy when its work drains; otherwise visibly pending. The lag is reported for the owner's computer too |
 | O8 | CLAUDE.md wording ("Deploys never restart a busy computer") | Deferred; LU1 satisfies the current sentence literally. Later: "a deploy marks an update pending; each computer takes it at a quiet moment or after a bounded drain; busy is never forced" |
 | O9 | Who may un-halt a rollout or un-refuse an image | The owner, by an explicit act |
 
@@ -552,4 +666,7 @@ the quiet wait Q is operational.
 - It does not make deploys of host services zero-downtime (L1 D3, D4).
 - Residuals: interim attempt fields on the ownership lack fsync until
   L1b's ledger (R31); a real crash in the seconds between the final
-  call's 200 and the kill reads as planned until L1c.
+  call's 200 and the kill reads as planned until L1c; writes by other
+  guest units after the final sync are journal-recovered (S4); a
+  root-owned updater restart request created in the last seconds of the
+  final call could still start the runtime (S2).

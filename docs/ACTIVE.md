@@ -56,11 +56,12 @@ several computers on one host
 **New station LU, guest updates** (owner-approved 2026-10-14; drafted):
 [station file](definitions/choir-ledger-lu-guest-updates-2026-10-14.md),
 [design note](reports/lu-guest-updates-design-2026-10-14.md),
-[round-1 adjudication](reports/lu-guest-updates-adjudication-2026-10-14.md).
+[panel adjudication](reports/lu-guest-updates-adjudication-2026-10-14.md).
 Pull with a bounded drain instead of a once-per-deploy push, so the busy
 paper updates by itself; planned boots across epoch changes; rings,
-health and rollback; one apply path with self-development. Round 2
-written; round-2 panel next; LU2 must land before C1e's next epoch bump.
+health and rollback; one apply path with self-development. Rounds 1 and
+2 sent back with repairs adopted; round 3 written; round-3 panel next.
+LU2 must land before C1e's next epoch bump.
 
 ## Next (2026-10-13): ledger metamission (reviewed)
 

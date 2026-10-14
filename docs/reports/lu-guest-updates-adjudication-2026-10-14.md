@@ -91,3 +91,74 @@ these IDs. The slice order is now LU1a (host-only retry) and LU2
 (persisted epoch and migrations) first, then LU1b (drain with deferral,
 lineage admission and a final call), LU3a (rings), LU3b (probation and
 rollback), LU5, and LU4 only if measured.
+
+# Round 2
+
+Reviewed: the round-2 design note and station file at cca944f7 (landed on
+`main` as 0a0ab4c6 and cca944f7). Same runner, mode and members. Raw
+outputs: the session scratchpad, `panel-lu/round2/`.
+
+## Verdicts
+
+| Panelist | Verdict | Confidence |
+| --- | --- | --- |
+| claude (opus) | accept with repairs | medium |
+| gemini-3.8-flash | accept with repairs | high |
+| glm-5.3-flash | accept with repairs | medium |
+| deepseek-v4.1-flash | accept with repairs | high on the repairs, medium-high overall |
+| muse-spark | send_back (scoped: LU1b's final call and lineage predicate; LU1a and LU2 sound) | medium-high |
+| gpt-6-luna | send_back | high |
+
+All six found every round-1 blocker repaired in direction. Each round-2
+blocker below is a reproducible, code-cited gap, so the minority
+send_backs stand over the majority (throughline: "a reproducible minority
+blocker outweighs an unsupported majority pass"). **Outcome: send_back
+for round 2.** Every blocking finding is adopted and written into round 3.
+The station stays `drafted` until a round-3 panel accepts it. All six said
+LU1a needs no owner act.
+
+## Findings
+
+| ID | Finding (panelists) | Verified | Disposition |
+| --- | --- | --- | --- |
+| S1 | **The final call strands a computer if vmctl dies between the guest's 200 and the kill**: runtime down, marker written, and the sweep reads an unreachable guest as busy and defers forever (claude, deepseek, muse; gemini, luna) | `ownership.go:3100-3106` (transport error = busy); `deploy_refresh.go:292-293`; host deploys restart vmctl | **Adopt.** vmctl writes a durable final-call record before the call; the sweep completes kill and boot under the claim when the record exists, the runtime has not answered for 60 s and the record is younger than the marker's 15 min; otherwise it clears the record. New acceptance line |
+| S2 | **The updater's restart bridge can start the runtime again after it exits** (claude, luna, muse) | `autoputer-vm.nix:483-493` runs `systemctl restart go-choir-autoputer.service` from a request file | **Adopt.** The final call refuses while an updater operation is in flight or a restart request file exists; once `update_final` is set the runtime asks for no restart. Residual: a request appearing in the last seconds |
+| S3 | **No finalization barrier**: `Shutdown` waits for active handlers, the run path does not stop the adapter, and exiting before the 200 is flushed reads to vmctl as a failed call (luna, gemini) | `internal/server/server.go:274-286`; `internal/actorruntime/adapter.go:628-635` | **Adopt.** Order: stop the dispatcher and adapter, close the stores, write the marker, `sync`, send and flush the 200, then shut the server down asynchronously and exit 0 |
+| S4 | **"Filesystems synced" overclaims**: signers, the updater and timers can write after the sync (claude, muse) | `autoputer-vm.nix:596,635,714` | **Adopt.** U2 narrowed: runtime stores closed, marker durable, a system-wide sync after the marker; other units' later writes are journal-recovered (named residual) |
+| S5 | **Abort leaves `update_final` set**; no deadline and no cancelled state (deepseek, muse) | design text | **Adopt.** The guest clears `update_final` on an error return, on the host's abort, and at a 60 s deadline; poll states gain `cancelled` |
+| S6 | **`update_drain` must set while work is inside**; only `hibernate` keeps refuse-while-inside (deepseek) | `hibernate.go:107-119` | **Adopt** |
+| S7 | **Lineage admission is not implementable as written**: an update carries no root run; a child's trajectory is its parent's run id; `selfdev_materialization_retry` is outside `RestartWorkKinds` and can start an apply mid-drain; a scan of passivated runs can exhaust the guest (all six; luna and muse in detail) | `actor.go:48-60`; `runtime.go:4346-4363`; `handler.go:244-251`; `planned_restart.go:161-173`; `runtime.go:2515-2520` | **Adopt.** Set `update_drain` first, then snapshot the run ids of executing activations (in memory) and their ancestors by a bounded parent walk. Admit an occurrence when its run (from `Content` for `initial_dispatch`, the resume state for `coagent_result`, `TrajectoryID` only as a store-verified hint) or a bounded ancestor is in the set; admitted spawns join the set. Admit cancels and deadline closures. Admit `selfdev_materialization_retry` only for an operation already mid-transaction at drain start; defer it otherwise. Resolution errors defer (fail closed). Never `ListAllRunsByState`. Acceptance adds a grandchild and a cross-trajectory child |
+| S8 | **Head-of-line**: a deferral `break`s the mailbox fold (claude); luna reads later folds as skipping not-due items | `dispatcher.go:333-337,394-433` | **Adopt as hardening.** Both readings hold: the block lasts until the head's next backoff. Update-hold deferrals `continue` the fold; a test queues a child result behind held work in one mailbox |
+| S9 | **The deferral budget is cumulative**: `defer_count` is durable across boots and stacks across the drain, the final window, probation and the apply hold, reaching 64 (all six) | `log_sqlite.go:143-172`; `handler.go:61` | **Adopt.** Update holds (`update_drain`, `update_final`, `probation`) defer in a separate class that does not count toward `MaxDeferrals`; their live-lock bound is the hold's own deadline. The test sums the worst-case stack of the remaining counted holds |
+| S10 | **LU2's epoch would be stamped before the migration runs**, so a crash mid-migration skips it next boot (claude, glm, deepseek, luna, muse) | `store.go:678-682` writes at every open | **Adopt.** The work-state epoch is read at open and never written there; it advances inside each step's transaction after the step; steps are idempotent; a boot with persisted < binary holds admission until they match |
+| S11 | **First boot with no persisted epoch** (claude) | design gap | **Adopt.** Seed from the consumed marker's epoch if there is one, otherwise the binary's; the release that ships LU2 does not itself bump the epoch |
+| S12 | **Migrations do not reach the actor log**, a separate SQLite database whose old-schema occurrences a planned boot would deliver (claude) | `adapter.go:100-115`; `handler.go:110` | **Adopt.** A step also closes or rewrites actor-log occurrences of changed kinds, idempotently, before the dispatcher starts; "one transaction" narrowed to "one per database, actor log first" |
+| S13 | **A downgrade must fail closed**, not run as a crash boot on newer state; a revert after a migration ran is unsafe (luna, muse) | `planned_restart.go:133-141` only classifies | **Adopt.** A persisted epoch newer than the binary holds the runtime visibly for an owner act; reverting LU2 or later after a migration ran is forbidden (slice rollback says so) |
+| S14 | **LU2 must not weaken the crash-closure barrier** (luna) | `runtime.go:2417-2469` best-effort today | **Adopt** as an acceptance line: a failed migration holds the runtime |
+| S15 | **A moving target bypasses rings**: a drain started for A applies B before B passed earlier rings (luna) | design LU1b and LU3a | **Adopt.** Once rings exist, the final call applies only an image admitted to the computer's ring; otherwise it aborts and the computer re-gates |
+| S16 | **LU1a should apply vmctl's idle test** (with desk mutations) before calling today's endpoint (claude) | `ownership.go:3108-3125` | **Adopt** |
+| S17 | **LU1a's interfaces are undefined**: the kick route, where the target lives, how image identity reaches the ownership (`launchFirecracker` has no such parameter; boot and resume both call it), persisted `pending_since`, the canonical image identity (muse; deepseek on served commit) | `manager.go:866,1093,1888` | **Adopt.** `POST /internal/vmctl/update-sweep`; target = the resolved store path of `/var/lib/go-choir/guest`, the canonical identity (U6); identity passed through `bootVM` and `ResumeVM` to the ownership; `pending_since` and target-first-seen persisted; Q measured from first-seen and restarted on a target move |
+| S18 | **Forced refresh vs drains** (muse) | design | **Adopt.** An owner's forced refresh may interrupt a drain (a crash boot) but never the window between the final call's 200 and the kill |
+| S19 | **"Stuck" is not "failed"** for ring gating (muse) | design | **Adopt** |
+| S20 | **The final call and kill-wait under `sweepMu` stall other passes** (claude, glm, muse) | `ownership.go:961-964` | **Adopt.** They run under the per-computer claim, off `sweepMu` |
+| S21 | **The graph and spine make LU depend on L1**, contradicting LU1a and LU2 first (luna, deepseek) | `mission-graph.yaml` LU node; spine | **Adopt.** `depends_on: []`; LU3b's need for L1b and L1c stays in the station's dependencies |
+| S22 | The spine still says "LU's O1-O8" (deepseek) | spine | **Adopt** |
+| S23 | The now card bundled two moves (claude, luna) | station | **Adopt** |
+| S24 | A refusal needs its own record on the computer's chain (glm) | design LU3a | **Adopt** |
+| S25 | Owner activity racing `update_final` (luna) | design | **Adopt.** Once `update_final` is set, owner messages wait for the planned boot |
+| S26 | A repeated drain request after a vmctl restart (luna) | design | **Adopt.** It reuses the active drain and its deadline; it never extends it |
+| S27 | The skip-unknown-lifecycle-action change should ride the first guest image (claude) | `lifecycle_receipts.go:28-33` | **Adopt.** It ships with LU2 |
+| S28 | LU2 lands through LU1a's sweep: parallel in development, not in landing (deepseek) | — | **Adopt** |
+| S29 | The lag report should include the owner's computer (claude); O2 needs an owner opt-out (luna) | — | **Adopt** in O7 and O2 |
+| S30 | Nix store exhaustion before the 3-image alert (gemini) | — | **Adopt.** The alert also fires on a disk floor |
+| S31 | LU1a cannot start because the graph blocks LU on L1 (luna) | — | **Resolved by S21**, not by waiting for L1 |
+
+## What changes in round 3
+
+The design note and the station file carry a round-3 changelog naming
+these IDs. LU1b's final call becomes a recoverable protocol (S1-S6, S25,
+S26); its admission becomes a defined predicate (S7, S8) with its own
+deferral class (S9). LU2 orders its epoch write and covers the actor log
+and downgrades (S10-S14). LU1a's interfaces are named (S16, S17, S20).
+Rings pin the image (S15, S19, S24). Next: a round-3 panel on the amended
+files.
