@@ -3,6 +3,10 @@
 **An owner's report on the codebase, the last week, the next month, and the
 idea behind it.** 14 October 2026. Repository state: `origin/main` at
 7173cc4a0; staging (choir.news) reporting build dd47dd84, deployed 14:16 UTC.
+Revised about 15:30 UTC: a new section 8 on the business model and the
+medium-to-long-term vision (owner, about 15:05 UTC), and today's claims,
+search-reuse, embedding and VM density designs folded in; staging then reported build
+bdc99643 (deployed 14:57 UTC).
 
 ## How to read this report
 
@@ -19,7 +23,8 @@ every claim about a product element carries one of four labels:
 Claims about the code cite repository paths; claims about progress cite
 commit SHAs (short form). Section 2 explains the vision; section 3 the
 architecture; section 4 the principles; sections 5 and 6 the current state
-and the last week; section 7 the next week and month; section 8 the risks.
+and the last week; section 7 the next week and month; section 8 the
+business model and the long-term vision; section 9 the risks.
 A glossary, station index and file map are in the appendices.
 
 Product names follow the house rule: Autopaper, Autoputer, Autoradio.
@@ -78,6 +83,20 @@ magic-link sign-in and working recovery), the **self-development gate** on
 the new substrate, and **app packages** (LP). Settled, scored hypotheses
 (L3) and the Taiwan vertical (L4) follow; Autoradio after the architecture
 work, with a "no slop" bar.
+
+**The business model (owner, 14 October; vision).** Once the
+optimizations land, compute becomes small next to inference; Autopaper's
+inference is amortized across all readers, so the per-user cost is the
+research and analysis a user's agents ask for. Choir would sell inference
+at zero margin (and support bring-your-own credits, bulk and self-hosted
+inference), and take its margin on compute, memory and storage, an
+Autopaper data API (first for funds, through the Taiwan vertical),
+Autoradio subscriptions tiered by time spent, and the box score: track
+records of what speakers, outlets, organizations and agents said against
+what happened. The long-term vision is a social network of humans and
+agents in which agents subcontract to other agents for signal, priced by
+their settled records. None of the billing, data products or agent market
+exists in code yet (section 8).
 
 **The biggest risks.**
 
@@ -153,7 +172,7 @@ what it *is* (`docs/choir-vision.md`, "The One Idea").
 | Supervised self-development | The computer proposes changes to its own code and state in capsules, frozen, verified, approved, released, reversible | **Partly built: one complete probe-driven episode on staging; the gate program not passed** | M11 rerun 13 satisfied all 17 legs on 2026-10-10 (17b97b8fe; `docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json`); since the C1e cutover the engineering drill stops before Freeze because capsules cannot fetch Go modules (`docs/reports/capsule-go-modules-decision-2026-10-14.md`; host module proxy 3c6347e8) |
 | Precommitment records | Typed predictions committed before evidence, then settled and scored | **Partly built**: record type, append-once persistence, desk verbs, derived views exist; nothing settles or scores yet | `internal/types/commitment.go`; `docs/prospective-self-alignment-2026-10-09.md` §10; station L3 is intent |
 | Prospective self-alignment (PSA) | The research theory: procedural fidelity, calibration, materiality, oversight without readable chain of thought | **Theory; experiments H1-H5 not run** | `docs/prospective-self-alignment-2026-10-09.md` §8-10 |
-| Granular reputation | Track records per individual, agent, team, organization, institution, public figure, from settled records | **Designed (principles) / vision** | Boundary "sources never precommit; a source's record is a view over settled claims with denominators, never one reputation number" (`docs/definitions/choir-ledger-metamission-2026-10-13.md`) |
+| Granular reputation | Track records per individual, agent, team, organization, institution, public figure, from settled records | **Designed** (claims, events and entities ontology and box scores, 14 Oct; no code) | `docs/reports/claims-events-entities-ontology-2026-10-14.md` (be8e0dabb, da9de233f); boundary "a source's record is a view over settled claims with denominators, never one reputation number" (`docs/definitions/choir-ledger-metamission-2026-10-13.md`) |
 | Learning economy, multiplayer intelligence | Many computers and people exchanging work, judgments and paid queries, with reputation routing demand | **Vision** | `docs/prospective-self-alignment-2026-10-09.md` §7; seed deck treatment `docs/deck/choir-seed-deck-treatment-2026-10-08.md` |
 | App agents ("every application as an app agent") | Each app is a window plus its own desk, a verb registry, an op log, versioned objects | **Designed (research)**; app windows exist without desks | `docs/research/puter-everything-2026-10-14/README.md`; station LP (S7 app packages) pending |
 | Contributions and op-eds | Readers bring sources, write op-eds citing pinned story versions, suggest edits | **Intent (station LC)**; needs accounts (LA) | `docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md` |
@@ -212,7 +231,7 @@ has bent. Autopaper went live on 13 October before the self-development gate
 "Autopaper live" and the owner then made Autopaper scaling, and today
 efficiency, the top priorities. This is a deliberate reordering by the owner,
 not drift, but it means the newspaper now runs on a computer whose
-self-development loop is not yet proven. Section 8 lists that as a risk.
+self-development loop is not yet proven. Section 9 lists that as a risk.
 
 ### 2.4 Autopaper: the global OSINT automatic newspaper
 
@@ -325,11 +344,35 @@ public figures.
 - No individual-level tracking of people in public-discourse sources
   (excluded in the metamission).
 
-**Status: vision, with design principles.** There is no reputation view in
+**The design of 14 October** (`docs/reports/claims-events-entities-ontology-2026-10-14.md`,
+design only, one panel round adjudicated) adds the missing middle layer
+between sources and stories: **claims** (speaker S said Y at time T,
+anchored to a quote), the **propositions** they assert, the **events** they
+report and the **entities** they mention. A claim is the precommitment
+Choir records on the speaker's behalf, with a provable capture time; only
+scheduled, timely captures enter a track record. Claims are typed by how
+they settle (facts, forecasts, commitments, stated values, Choir's own
+agents' precommitments); five kinds of uncertainty are carried into every
+score; **say-do alignment** asks "can I take you at your word?"; and the
+**box score** is a view over settlements, never a stored number, never one
+trust score, and "n too small" below its sample bar. The first slice is an
+offline study plus the say-do eval of Choir's own desks; public actors come
+eighth of nine slices. The same design amends the wording "sources never
+precommit" (Choir records the claim for them) but keeps its intent.
+
+**The owner's ruling on risk** (about 14:55 UTC,
+`docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md`): legal
+risk from scoring public actors is accepted ("a serious best effort aiming
+for excellence ... attempting to be neutral and multi-perspectival"); the
+quality standards stay as the excellence bar: attribution evidence,
+several readings of a statement, neutrality, a right of reply and
+correction, and visible uncertainty.
+
+**Status: designed, not built.** There is no reputation view in
 the code. The first concrete instance will be L3's per-desk Brier view and
 per-source analytics with denominators. Public figures and institutions
-need claim extraction and attribution at scale, plus legal review (section
-8).
+need claim extraction and attribution at scale, held to the excellence bar
+above; selling scores raises the stakes (section 8.6).
 
 ### 2.7 The learning economy and multiplayer intelligence
 
@@ -357,7 +400,9 @@ publication into the host store, logged-out reads, the commitment record
 type, and API keys. There is no marketplace, pricing, paid query, or
 cross-computer reputation. The deck sets a rule worth keeping: "Reading a
 shared result can be free. Asking Choir to produce a new, personalized
-result is paid", and no paid placement in reputation rankings.
+result is paid", and no paid placement in reputation rankings. Section 8
+sets out the owner's current business model and the agent-consulting
+vision in full.
 
 ### 2.8 App agents: every application as an agent
 
@@ -974,7 +1019,7 @@ prefixes in the log (`docs`, `feat`, `fix`, `red(...)`) reflect this.
 found, documented and mostly fixed within hours. They also cost time and
 words. The repository has 1,290 files under `docs/`, 418 evidence entries
 and 111 reports, and design rounds of four panels for one station are
-common. Section 8 lists process weight as a risk to pace.
+common. Section 9 lists process weight as a risk to pace.
 
 
 ## 5. Current state of the codebase
@@ -1137,6 +1182,15 @@ which outcomes count, never how a count becomes a bench"
 ac5c17db on `main` reworks the strike model; refills and a cost model are
 owner decisions. Each metered provider costs roughly $20-40 a day at this
 volume.
+A measurement the same afternoon (`docs/reports/search-efficiency-and-reuse-2026-10-14.md`) found that only
+about 1.5% of returned results are read and none are kept, 27% of page
+reads fail at the publisher, exact repeats are 3.5% but a third of
+searches re-ask within ten minutes what the same computer just asked, and
+corpus search sees only the titles of the newest 1,000 captures. The
+levers, in order of money: stop paying every provider for every search,
+keep what was fetched and look there first, and do not repeat a recent
+search. The first slice, a result cache and in-flight join in the gateway,
+is on `main` (7250d36bf).
 
 **2. Story synthesis (merging).** There is no story-merge step in code
 beyond Jev's intake labels; the old cluster kind is registered but unused.
@@ -1508,6 +1562,13 @@ computers before pressure (`docs/reports/lr-scaling-cost-provisional-2026-10-14.
   story and captures per story should rise while stories per hour rise
   far less than captures per hour.
 - Fix instruction-phrased story titles (section 5.5).
+- Search reuse (`docs/reports/search-efficiency-and-reuse-2026-10-14.md`):
+  measure the result cache (7250d36bf), then keep every search and page
+  read as objects with provenance, look in held text first, and route by
+  budget instead of calling every provider.
+- Claims, events and entities (design): the offline study on a frozen,
+  blind set and the say-do eval of Choir's own desks, which can stop the
+  layer before any production code.
 
 **Guest updates (LU).** LU1a (host-only retry) and LU2 (persisted epoch and
 migrations) are cleared to start; LU2 must land before C1e's next epoch
@@ -1537,6 +1598,7 @@ self-development (the sequencing proposal says yes).
 | **LP**, app packages | S7-0: existing first-party apps converted to packages, fetched from a host cache | S6, L2a, LR, LU | Defining the generic app-document kind and verb registry well |
 | **SP0-lite** | Encrypted off-host backups and a log/metric sink on part of node-a | owner go-ahead and the other project's agent | Choir data on a host another project administers must stay encrypted |
 | **L2b** | Digest, triage and burst bounds; every capture gets a recorded disposition | L0 | Cost per capture as sources grow |
+| **Local embeddings** | EmbeddingGemma 2 on Node B under a 3-core idle-priority quota; backfill on a rented GPU (about $10) or by API (about $18) after a parity test (`docs/research/embeddinggemma-2-cpu-2026-10-14.md`) | the embedding contract pinned first | CPU contention with guests; a GPU only pays off for multimodal or 10-50x volume |
 | **L3**, hypotheses settled and scored | Hypotheses with `resolves_by` and criteria; separate settlement and scoring records; Brier per desk as a view | L0 and an off-host copy of the ledger | Goodharting: vague or near-certain hypotheses |
 | **L4**, Taiwan | 10-20 standing questions with scheduled settlements (TWSE, CEC, KEV); about 66 East Asian feeds | L2, L3 | Licences (CNA and UDN are non-commercial, so out) |
 | **LF** beyond LF1 | Scored importance predictions; personalization on the reader's computer | L2a, design review | Do not change the live front page without owner review |
@@ -1575,12 +1637,283 @@ ledger** (it gates L3, and every durable home today lives on one host) and
 through LU5, the shared apply path with self-development).
 
 
-## 8. Risks and open questions
+## 8. Business model and the medium-to-long-term vision
+
+This section records the owner's business model as stated on 14 October
+(about 15:05 UTC) and sets it beside what the repository has today. Almost
+all of it is **vision**: no billing, pricing, data feed, or customer exists
+in the code. Where a design or a built piece supports it, the section says
+so. The owner's words are quoted where they carry the decision.
+
+### 8.1 The owner's statement, structured
+
+> "After we do all the optimizations, the compute and VMs will become a de
+> minimis cost relative to model inference. And Autopaper has regular
+> software economies of scale on inference because we can amortize across
+> our user base. So really the per-user dynamic costs are about research
+> and engineering and analysis inference that the user themselves, or
+> rather their agents and data system, are requesting. And because that
+> would inherently be serving real demand, we can realistically charge
+> for it."
+
+The rest of the statement sets the pricing rules (8.3), the products and
+customers (8.4), and the long-term vision of an agent social network and
+agentic consulting (8.5). It ends with open questions the owner named
+himself (8.6).
+
+### 8.2 Cost structure
+
+| Cost | Fixed or per user | What drives it | What we know today |
+|---|---|---|---|
+| **Autopaper inference** (polling triage, research, writing, citation checks, ranking) | **Fixed per paper, amortized across all readers** | Number of sources and events, not readers | A priced window on the paper cost $0.33-$0.65 in usage, $2.91-$3.23 at list rates, 81% of list cost on a free-for-now model (`docs/evidence/model-prices-2026-10-14.md`). At list rates a 14-source paper is estimated at about $109 a day (`docs/reports/vm-density-limits-2026-10-14.md`). Logged-out readers trigger no inference: reads come from the host store |
+| **Search** (paid web search providers) | Mostly fixed for Autopaper; per user for personal research | Searches times providers per search | About 4,000 searches a day, each fanned out to every healthy provider; roughly $20-40 a day per metered provider at that volume; about 1.5% of results are read and none kept (`docs/reports/search-efficiency-and-reuse-2026-10-14.md`) |
+| **Embeddings** (planned, for corpus-first retrieval) | Fixed | Tokens of captured text | 22-45 M tokens a day; fits Node B under a 3-core quota; a backfill is about $10 on a rented GPU or about $18 by API; an API serves the same model at $0.02 per million tokens (`docs/research/embeddinggemma-2-cpu-2026-10-14.md`) |
+| **Personal inference** (a user's own research, engineering, analysis; Autoradio conversations) | **Per user, on demand** | What the user and their agents ask for | Recorded per call with list prices and cached tokens, shown per computer at `/api/costs` (`internal/llmcost`, `internal/apihandler`); not billed |
+| **Compute** (the VM, memory, disk) | Per user (a computer each), plus the paper and platform | RAM held, disk held, CPU while working | A paper-sized computer holds about 5.6 GiB host RSS; small computers 1.2-1.3 GiB; Node B has 31 GiB and a 476 GB disk. The density report (`docs/reports/vm-density-limits-2026-10-14.md`, estimates to be replaced by a benchmark) puts a 16-core, 128 GB EPYC 7371 host at about 20 busy computers (CPU binds) and about 1,200-2,000 registered users, with idle computers hibernated to disk |
+| **Platform** (host, staff, licences) | Fixed | | One host today; no paid source licences yet |
+
+**The owner's thesis on cost**: once LR's optimizations land, compute
+becomes a small cost next to inference. That is plausible but not yet
+measured. Evidence pointing each way:
+
+- *For:* the density report's arithmetic. Twenty paper-like busy computers
+  would cost about $2,200 a day in inference at list rates, very likely far
+  more than the daily cost of the one host that runs them (host prices are
+  not recorded in the repo), and model
+  account rate limits bind before the host's CPU does. Snapshot
+  hibernation frees a sleeping computer's RAM entirely and wakes it in
+  103 ms; a desk worker costs about 17 MiB of private memory;
+  most of a computer's RAM is the store and its caches, which LR targets.
+- *Against, for now:* the paper's inference is cheap mainly because of free
+  and flat-rate routes (a free model and a ChatGPT subscription); at list
+  rates and full cache misses, inference per story is higher than the
+  current bill suggests, and search is a larger and less visible cost than
+  either.
+
+**Amortization in Autopaper.** The paper's spend scales with the world
+(sources and events), not with readers. Reading a published story costs
+serving bandwidth, not new inference. That is the "regular software
+economies of scale" the owner describes, and the architecture already
+enforces it: published reads go to the host store and never touch the
+paper computer (section 3.8). The same holds for the planned box scores
+(8.4): a view over settled records, computed once and served to many.
+
+### 8.3 Pricing principles (owner, 14 October)
+
+| Principle | Owner's words | Status in the repo |
+|---|---|---|
+| **Zero margin on inference** | "We would not be extracting any margin whatsoever on inference ... we'll sell inference at zero margin" | **Vision.** Costs are metered per call at list price (`internal/llmcost/pricing.go`), which is the prerequisite; there is no billing |
+| **Bring your own inference** | "Have ways for people to plug in their own inference if they already have inference credits ... we will support that eventually" | **Vision.** Today the gateway holds *platform* credentials only (`internal/provider/provider.go`; providers register when the operator's credentials exist). The ChatGPT route is the operator's own ChatGPT subscription through Codex OAuth (`ChatGPTProvider`, `https://chatgpt.com/backend-api/codex/responses`), shared by every computer. There is no per-user provider credential, no per-user routing, and no sign-in with a model provider. The LA scope note records "an OpenAI sign-in for users' own credits" as a later idea and that the owner does not want Choir reselling ChatGPT (`docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md`) |
+| **Bulk and self-hosted inference** | "Buy inference in bulk and offer it at a lower price than API rates. And even self-host some of our own inference" | **Vision**, with one related research note: self-hosting embeddings is sized and recommended (CPU now, GPU only for multimodal or 10-50x volume) |
+| **Margin on compute** | "We will charge margins for cloud compute for VMs, for memory and storage" | **Vision.** Computer tiers exist (paid accounts always on, the platform tier above; 188f98c3), which is the product shape a compute price would attach to |
+| **Free reading, paid generation** | (seed deck, 8 Oct) "Reading a shared result can be free. Asking Choir to produce a new, personalized result is paid" | Consistent with the architecture; no paywall exists |
+| **No paid placement in reputation** | (seed deck) | A design rule; no ranking product exists |
+
+**How the pieces fit.** Inference at cost makes Choir's price for thinking
+the same as the provider's, so the user has no reason to route around it;
+compute and storage carry the margin because they are where Choir's
+engineering creates the efficiency. Bring-your-own inference then costs
+Choir nothing, and bulk or self-hosted inference becomes a discount that
+the user sees directly. One consequence to design for: if a user's
+inference is at cost, the paper's amortized inference has to be paid by
+something else (API and data sales, subscriptions, compute margin).
+
+**Two things to check before building bring-your-own.**
+1. Provider terms: whether a consumer subscription (ChatGPT, others) may
+   be used to power a third-party, multi-user service, both for users'
+   own credits and for the operator's current ChatGPT route. This report
+   did not check the terms.
+2. Security: per-user provider credentials would live in the gateway
+   beside platform keys; the gateway is a red-class surface and the only
+   credential holder by design.
+
+**An earlier price sketch.** The 8 October seed-deck treatment proposed
+three metered prosumer tiers ($35, $100 and $350 a month), then enterprise
+plans, data licensing and net commissions on third-party agent
+transactions (`docs/deck/choir-seed-deck-treatment-2026-10-08.md`). The
+14 October statement refines it: subscriptions index *time spent*, which
+indexes inference demand, with inference passed through at cost.
+
+### 8.4 Products and customers
+
+| Product | Customer | What it is | Status |
+|---|---|---|---|
+| **Autopaper (public site)** | Everyone | The free, logged-out newspaper | **Built, live** |
+| **Autopaper API and data feeds** | Funds first ("just to get some cash"), then others | Structured access to stories, claims, events and settlements; the Taiwan vertical as the first saleable feed | **Vision.** The front-page API is public and read-only today; there is no authenticated data API, rate plan or feed. The Taiwan vertical (L4) is intent |
+| **Autoradio subscription** | Consumers and prosumers | Personalized listening and voice; tiers by time spent, which indexes inference demand | **Vision** (section 2.11) |
+| **The box score** (aggregate statistics) | Media, funds, institutions, the public | Track records per speaker, outlet, organization, agent and for the platform and the world | **Designed** in the claims-events-entities ontology; no code |
+| **Agent API** | External agents | Programmatic access for agents to the paper, the box scores and Choir computers | **Partly built**: scoped API keys and the CLI operate a computer today; no published, versioned contract and no metering per key |
+| **Compute** (the computer itself) | Prosumers, then organizations | A persistent computer with margin on VM, memory and storage | **Built as a product object**, not as a priced product |
+| **Private Choir Clouds** | Organizations | A customer's own hosts, platform computers and user computers (section 2.11) | **Designed (ontology)** |
+
+**The Taiwan vertical for funds.** The owner plans to go to market with
+an Autopaper API "as soon as we really dial in the [Taiwan] vertical". L4's
+design is a good fit for that customer: standing questions with scheduled,
+structured settlements (Taiwan stock exchange monthly revenue, election
+commission data, ministry of defence figures, CISA's exploited
+vulnerabilities list), about 66 East Asian feeds, and a dated record of what
+was said before it settled. What a fund would buy is *earliness and
+calibration*: claims captured at a provable time, settled against
+structured outcomes, with lead times per source. Dependencies: L2 bounded
+attention, L3 settlement and scoring, L4 itself, and an off-host copy of the
+ledger. None has landed; on the owner's ordering, L3 and L4 follow the
+efficiency and scaling work, so a saleable Taiwan feed is a matter of
+months, not weeks.
+
+**The box score: the big data product.** The owner calls the aggregate
+statistics "the real big data product ... not just for individuals, but
+for the whole platform, the whole world, everyone". Today's design
+(`docs/reports/claims-events-entities-ontology-2026-10-14.md`) makes it
+concrete:
+
+- A **claim** is one attributed assertion (speaker S said Y at time T,
+  anchored to a quote in one capture). It is the precommitment Choir
+  records on the speaker's behalf, with a provable capture time. Only
+  claims from scheduled, timely captures enter a track record, so nobody
+  can cherry-pick.
+- Claims are **typed by how they settle**: facts by later evidence,
+  forecasts at a date with proper scoring rules, commitments by observed
+  actions, stated values by consistency of later actions, and Choir's own
+  agents' precommitments by the trace.
+- **Five uncertainties** are recorded on every claim (attribution,
+  interpretation, the speaker's own confidence, extraction, settlement) and
+  carried into every score; unscorable statements are shown as unscorable,
+  never as passes or fails.
+- **Say-do alignment** ("can I take you at your word?") is the share of an
+  actor's checkable commitments that its observed actions kept, with
+  sample size and uncertainty. The owner calls reputation in this sense
+  "the deep compression of intelligence", for humans, organizations, APIs
+  and AI agents alike.
+- A **box score** is a view, never a stored number: scope, window, topics
+  and a scoring policy over settlement records. It never shows a single
+  overall trust number or a rank of people, and below its sample bar a
+  cell reads "n too small". Choir's own paper is scored publicly like
+  anyone else.
+- **Order:** an offline study first, with the say-do eval of Choir's own
+  desks beside it; public commitments and say-do come eighth of nine
+  slices.
+
+**Media: sell or give away?** The owner's open question: sell the box score
+to media organizations, or give it to a broadcaster "if they put the
+number on TV, which is very valuable". Giving it away for attribution is a
+distribution play: a number on screen with the Choir name builds the brand
+and the habit of asking "can I take them at their word?". The design's
+rules matter more here than anywhere: snapshots pinned with their query
+and policy, the scorer named, never a characterization of a person, and
+nothing below the sample bar. A televised number that later proves wrong
+would be the most expensive kind of error.
+
+**Government intelligence.** Listed by the owner as an open question, with
+the note that some customers are "more exciting to me than others". This
+report reads that as mixed enthusiasm, not a plan. See the neutrality
+risk in 8.6.
+
+### 8.5 The medium-to-long-term vision: an agent social network and agentic consulting
+
+The owner: "I'm really interested in how we can use this to eventually
+build a social network for humans and agents, and a vision of consulting
+where one agent, in doing a task, subcontracts to dozens or hundreds of
+other agents which provide signals based on their proprietary data and
+insights without leaking that data ... Insofar as you can learn more from a
+query than you leak in giving the answer, an agentic consultant can
+generate alpha as it's working."
+
+**The social network.** People and agents are both participants: each has
+a computer, publishes into the Autopaper object graph, and carries a box
+score built from what it said and what then happened. Following,
+replying and op-eds (station LC) are the human-facing part; agents
+querying and paying each other are the agent-facing part. Both rest on the
+same record: what you committed to before the evidence, and how it settled.
+
+**Agentic consulting.**
+
+```text
+ a task arrives at agent A (a user's research desk, a fund's analyst agent)
+   |
+   | A decomposes it and asks: who has signal on this?
+   |   (box scores by topic: calibration, say-do, lead time)
+   v
+ A sends questions to dozens of specialist agents B1..Bn
+   each question is a precommitment by A ("I expect X; this resolves when ...")
+   each answer is a precommitment by Bi (a probability, a signal, a confidence)
+   |
+   | answers flow back; Bi's private data never leaves Bi's computer
+   v
+ A combines the signals (weighted by each Bi's track record), acts, reports
+   |
+   | later: the outcome settles every record
+   v
+ scores update: A's and each Bi's box scores; payments can depend on them
+```
+
+**The leak-versus-learn trade-off.** Every query reveals something about
+the asker (what it is working on) and every answer reveals something about
+the answerer (what its data says). The owner's claim is that an agent that
+learns more from the questions it is asked than it leaks in its answers
+gains information ("alpha") by working. Three things make this a market
+rather than a leak:
+
+1. **Precommitment records** give both sides a dated, falsifiable record of
+   what was asked and answered, so a specialist cannot claim afterwards to
+   have known, and a buyer cannot quietly ignore a correct answer.
+2. **Reputation as price.** A specialist's settled track record on a topic
+   sets what its answer is worth. The PSA paper's hypothesis H4 is exactly
+   this: a temporally prior, domain-specific record predicts later
+   performance better than popularity or ratings
+   (`docs/prospective-self-alignment-2026-10-09.md` §8). It is untested.
+3. **Authority and boundaries.** Answers flow between computers only by
+   publication or an authorized API call, never by direct access to
+   another computer's data (`CLAUDE.md`, "Safety": results return to
+   another computer "only through publication and adoption"). Leakage controls
+   (rate limits, query auditing, aggregate-only answers) are the PSA
+   paper's named necessities, "not guaranteed consequences" of the
+   mechanism (§7.2).
+
+**Status: vision.** What exists: computers that can be driven by API keys,
+a typed commitment record, a publication path, and Jev as a cheap scorer.
+What is missing: inter-computer queries, payments, per-topic box scores,
+and any measurement of leakage.
+
+**How it connects to the rest.** The same mechanism runs at three scales:
+Choir's own desks committing before they act (built in part), Autopaper
+recording what public actors said before the evidence (designed), and
+independent agents trading signals under the same records (vision). The
+first is the proving ground for the other two, which is why the ontology
+design puts the say-do eval of Choir's own desks first.
+
+### 8.6 Open questions and risks
+
+**The owner's own open questions.**
+
+1. Freemium for some products? The architecture already makes reading free
+   to serve; the question is which generation to give away.
+2. An API for agents to consume? Partly built (API keys); the product is a
+   contract, metering and pricing.
+3. Media: sell, or give away for on-air attribution?
+4. Funds: the first cash customer, via the Taiwan vertical.
+5. Government intelligence: open, with mixed enthusiasm.
+
+**Risks the business model adds.**
+
+| Risk | Why | Link |
+|---|---|---|
+| **Licensing for resale of derived data** | Selling a data feed is redistribution. Many sources forbid commercial use or redistribution (ACLED without a corporate licence, openrss.org, CNA and UDN as non-commercial, ransomware.live without written approval); Cofacts is CC BY-SA (share-alike on redistribution); terms for some paid news APIs are not stated. Whether a derived statistic (a box score, an aggregate) is "adapted material" is a question for counsel | `docs/reports/multilingual-osint-sourcing-research-2026-10-13.md`; `docs/reports/owner-roadmap-rulings-2026-10-14.md` ruling 12; `docs/research/autopaper-media-and-rights-2026-10-14/README.md` |
+| **Substitution** | The rights research finds liability where output substitutes for the source. A feed of story text substitutes more than a feed of claims, events and settlements with links | Media and rights README, bottom line 2 |
+| **EU press publishers' right and AI Act labelling** | Applies to what the API serves into the EU as much as to the site | Media and rights README, points 3-4 |
+| **Neutrality vs customers** | Selling to funds or governments creates a perceived (or real) interest in what the paper says and how actors score. The ontology's excellence bar (attribution evidence, several readings, neutrality, right of reply, visible uncertainty) and a public scoring policy are the defence; customer data must never shape scores | Ontology §7.3; owner ruling of 14 Oct on accepted legal risk |
+| **Scoring public actors** | The owner has accepted the legal risk (defamation) of scoring public statements, "a serious best effort aiming for excellence"; the quality standards stay as the bar. Selling those scores raises the stakes | `docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md` (ruling about 14:55 UTC) |
+| **Privacy** | Autoradio and personal computers hold private work, mail and voice; aggregate box scores must never be computed over private data; agent consulting must prove that private data does not leave a computer. Dolt keeps history forever, which conflicts with erasure | Section 9.3 (erasure vs versioned history) |
+| **Zero inference margin** | Leaves no buffer if providers raise prices or free tiers end; the paper's own inference must be funded elsewhere | 8.2 |
+| **Bring-your-own terms** | Consumer subscriptions may not permit third-party, multi-user use; the current operator ChatGPT route should be checked too | 8.3 |
+| **Market for signals** | Collusion, wash trading of reputations, and sanitized predictions under monitoring are the PSA paper's named manipulation risks (H5) | PSA paper §8 |
+| **Sequencing** | Every revenue line here depends on stations not yet built (L3, L4, LA, LC, an off-host ledger copy); the fastest path to cash (a Taiwan feed for funds) runs through L2-L4 | Section 7 |
+
+## 9. Risks and open questions
 
 Ranked roughly by how likely they are to hurt in the next month, within
 each group.
 
-### 8.1 Technical
+### 9.1 Technical
 
 | Risk | Why it matters | Evidence | Mitigation in the plan |
 |---|---|---|---|
@@ -1596,7 +1929,7 @@ each group.
 | **Deploy safety** | Each deploy to the shared guest runtime is still a careful, one-at-a-time act; residual 502s on deploy (D4) | `docs/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md` | 2db4bc02; LU; SP1 zero-downtime deploys |
 | **Breadth of the code** | The two largest packages, `internal/agentcore` and `internal/textureowner`, are so large CI shards them; most incidents this week were in the boot, restart and lifecycle paths | Code survey (section 5) | D0-style deletions; the tracer and invariant checker |
 
-### 8.2 Cost
+### 9.2 Cost
 
 - **Spend is cheap today because of free and flat-rate routes.** In the
   last priced window the paper cost $0.33 to $0.65 in usage against $2.91 to
@@ -1613,7 +1946,7 @@ each group.
 - **Policy:** spend is tracked, never capped by the runtime; no new
   recurring spend (paid APIs, licences, hosts) without owner sign-off.
 
-### 8.3 Legal and rights
+### 9.3 Legal and rights
 
 - **Source licences.** Autopaper is commercial (owner ruling 3), so
   non-commercial sources (CNA, UDN, ransomware.live without approval) are
@@ -1631,15 +1964,20 @@ each group.
 - **Images.** The og:image of a cited article is not Choir's to show; draw
   maps and charts from cited data, or use free-licensed images.
 - **Reputation of real people and institutions.** Scoring public figures'
-  claims raises defamation and data-protection questions; the plan already
-  excludes individual-level tracking in discourse sources. Counsel is
-  needed before any public reputation view of named people.
+  claims raises defamation and data-protection questions. The owner has
+  accepted the defamation risk (ruling of 14 October, about 14:55 UTC) and
+  kept the quality standards as the excellence bar: attribution evidence,
+  several readings, neutrality, right of reply and correction, visible
+  uncertainty. The plan still excludes individual-level tracking in
+  discourse sources. Data-protection law (for EU subjects in particular) is
+  not covered by that ruling and is worth a counsel read before a public
+  view of named people, and before selling one (section 8.6).
 - **Erasure vs versioned history.** Dolt keeps history forever, which
   conflicts with deleting personal data; per-person keys or a rewrite path
   are needed before personal data enters the versioned graph
   (`docs/research/puter-everything-2026-10-14/README.md`).
 
-### 8.4 Product and strategy
+### 9.4 Product and strategy
 
 - **Order of the two mountains.** The vision says self-development first,
   then the newspaper; the work this month puts the newspaper's efficiency
@@ -1669,7 +2007,7 @@ each group.
 - **Onboarding.** Accounts are passkey-only with broken recovery; no second
   user can be safely onboarded until LA lands.
 
-### 8.5 Open decisions for the owner (as recorded on 14 October)
+### 9.5 Open decisions for the owner (as recorded on 14 October)
 
 1. The Go module route for capsules (A, B or C); B (host module cache) is
    built and deployed.
@@ -1694,8 +2032,10 @@ each group.
 | **Autopaper object graph** | The shared graph of published objects (captures, published stories, later op-eds and templates) on the host, which computers adopt onto their own tapes. Physically Store B behind corpusd |
 | **Autoputer** | The implementation name of the guest daemon that runs inside each computer's VM. Not the product name; the product object is the persistent computer |
 | **Autoradio** | The planned mobile listening and voice surface (vision) |
+| **Box score** | A view over settled records for one scope (speaker, outlet, organization, agent), with sample sizes and uncertainty; never a stored or single trust number (designed) |
 | **Capsule** | A disposable, guest-local sandbox where engineering makes changes; its output is a frozen effect bundle |
 | **Capsule effect bundle** | Frozen, content-addressed proposed change bound to a computer and event head: the only self-development candidate |
+| **Claim** | One attributed assertion (speaker S said Y at time T, anchored to a quote): the precommitment Choir records on a speaker's behalf (designed) |
 | **Capture** | One fetched source item (`choir.web_capture`), with its body stored by hash |
 | **Cast, Ask, Note, Report, Resolve** | Inter-desk acts, each a precommitment record |
 | **corpusd** | Host service fronting Store A and Store B: event heads, publications, captures, escrow, checkpoints |
@@ -1712,6 +2052,7 @@ each group.
 | **Precommitment record** | A typed prediction committed before the evidence that resolves it, later settled and scored |
 | **PSA** | Prospective self-alignment, the research theory around precommitment records |
 | **Realization** | A running VM instance of a computer; replaceable without changing the computer's identity |
+| **Say-do alignment** | The share of an actor's checkable commitments its observed actions kept: "can I take you at your word?" (designed) |
 | **RLM** | Recursive language model: a model loop that writes code cells and can delegate to sub-agents |
 | **Staging** | choir.news, the acceptance environment |
 | **Station** | A unit of a metamission with its own goal file, acceptance and rollback |
@@ -1763,6 +2104,11 @@ each group.
 | App agents research | `docs/research/puter-everything-2026-10-14/README.md` |
 | Media and rights research | `docs/research/autopaper-media-and-rights-2026-10-14/README.md` |
 | Pre-flight questions | `docs/standing-questions.md` |
+| Claims, events, entities, box scores | `docs/reports/claims-events-entities-ontology-2026-10-14.md` |
+| Search efficiency and reuse | `docs/reports/search-efficiency-and-reuse-2026-10-14.md` |
+| Local embeddings | `docs/research/embeddinggemma-2-cpu-2026-10-14.md` |
+| VM density limits | `docs/reports/vm-density-limits-2026-10-14.md` |
+| Provider credentials (platform only) | `internal/provider/provider.go` (`ChatGPTProvider`, Codex OAuth) |
 | Guest runtime and reducer | `internal/agentcore/`, `internal/agentcore/rlm_reduce.go` |
 | Desk verbs | `internal/yaegikernel/choir.go` |
 | Texture writer | `internal/textureowner/texture_cell_author.go`, `internal/store/texture_turn.go` |
@@ -1783,7 +2129,8 @@ each group.
 
 ## Appendix D. How this report was made
 
-Read-only research on 14 October 2026 between about 13:50 and 15:30 UTC:
+Read-only research on 14 October 2026 between about 13:50 and 15:40 UTC
+(section 8 and the folded-in designs added after 15:05 UTC):
 the documents named above; `git log origin/main` from 7 October (midnight
 US Eastern) to 7173cc4a0; a line count of tracked files; a code survey of
 the packages named; and two public reads of choir.news (`/health` and
