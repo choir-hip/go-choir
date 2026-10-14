@@ -15,6 +15,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/yusefmosiah/go-choir/internal/computertiers"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/dbcred"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -175,6 +176,11 @@ func main() {
 	}
 	handler.RequireRouteAuthority()
 	if dsn := strings.TrimSpace(os.Getenv("VMCTL_ROUTE_DSN")); dsn != "" {
+		// The host's Dolt user and password (dbcred; never logged).
+		dsn, err := dbcred.ApplyDSN(dsn)
+		if err != nil {
+			log.Fatalf("vmctl: ComputerVersion route database credential: %v", err)
+		}
 		routeDB, err := sql.Open("mysql", dsn)
 		if err != nil {
 			log.Fatalf("vmctl: open ComputerVersion route database: %v", err)

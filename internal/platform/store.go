@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/yusefmosiah/go-choir/internal/dbcred"
 	"github.com/yusefmosiah/go-choir/internal/doltbatch"
 )
 
@@ -206,6 +207,18 @@ CREATE TABLE IF NOT EXISTS computer_key_escrow_transparency (
 // database (Store A); corpusDSN is the world-wire/corpus database (Store B).
 // An empty corpusDSN shares the Store A pool — the pre-split topology.
 func OpenStore(dsn, corpusDSN string) (*Store, error) {
+	sharedPool := strings.TrimSpace(corpusDSN) == "" || strings.TrimSpace(corpusDSN) == strings.TrimSpace(dsn)
+	// The host's Dolt user and password (dbcred; never logged). Unset, the
+	// DSNs are used as configured.
+	dsn, err := dbcred.ApplyDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("platform store: %w", err)
+	}
+	if !sharedPool {
+		if corpusDSN, err = dbcred.ApplyDSN(corpusDSN); err != nil {
+			return nil, fmt.Errorf("platform store: corpus: %w", err)
+		}
+	}
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("platform store: open mysql: %w", err)
@@ -216,7 +229,7 @@ func OpenStore(dsn, corpusDSN string) (*Store, error) {
 		return nil, fmt.Errorf("platform store: ping mysql: %w", err)
 	}
 	var corpusDB *sql.DB
-	if strings.TrimSpace(corpusDSN) != "" && strings.TrimSpace(corpusDSN) != strings.TrimSpace(dsn) {
+	if !sharedPool {
 		corpusDB, err = sql.Open("mysql", corpusDSN)
 		if err != nil {
 			_ = db.Close()

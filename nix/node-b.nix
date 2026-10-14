@@ -71,6 +71,94 @@ let
   internalTokenHeaderFile = "${internalTokenFile}.header";
   internalAuthEnv = "CHOIR_INTERNAL_AUTH_MODE=${internalAuthMode}";
   internalTokenCredential = [ "choir-internal-token:${internalTokenFile}" ];
+  # Dolt SQL authentication (internal/dbcred;
+  # docs/problems/loopback-is-a-credential-2026-10-14.md). Both Dolt servers
+  # accepted root with an empty password from any local process. Staged so
+  # no deploy changes the server and its clients at the same moment:
+  #   "users"   each Dolt server gets an application user `choir` with a
+  #             password and ALL on its one database (platform / corpus),
+  #             no global privileges; clients still connect as root.
+  #   "clients" corpusd, checkpointd and vmctl connect as `choir`
+  #             (CHOIR_DOLT_USER + LoadCredential choir-dolt-password).
+  #   "locked"  root@localhost gets its own password; passwordless root is
+  #             refused. Local `dolt sql` in the data directory (history
+  #             audit, runbooks) still works through Dolt's local-user file.
+  # Advance one stage per deploy, after scripts/verify-host-hardening.py
+  # shows the previous stage healthy. Rollback: the previous stage; "locked"
+  # is undone by hand: ALTER USER 'root'@'localhost' IDENTIFIED BY ''
+  # (connect with the root password from the file below).
+  doltAuthStage = "users";
+  doltAppUser = "choir";
+  doltAppPasswordFile = "/var/lib/go-choir/secrets/dolt-app-password";
+  doltRootPasswordFile = "/var/lib/go-choir/secrets/dolt-root-password";
+  doltClientsUseAppUser = doltAuthStage != "users";
+  doltClientEnv = lib.optional doltClientsUseAppUser "CHOIR_DOLT_USER=${doltAppUser}";
+  doltClientCredential = lib.optional doltClientsUseAppUser "choir-dolt-password:${doltAppPasswordFile}";
+  doltClientAfter = lib.optionals doltClientsUseAppUser [ "go-choir-platform-dolt-users.service" "go-choir-corpus-dolt-users.service" ];
+  # Idempotent: create/refresh the app user, grant it its database, and in
+  # the "locked" stage set root's password. Secrets come from
+  # $CREDENTIALS_DIRECTORY and reach dolt through stdin or DOLT_CLI_PASSWORD,
+  # never a command line; nothing secret is echoed.
+  doltEnsureUsers = pkgs.writeShellScript "go-choir-dolt-ensure-users" ''
+    set -euo pipefail
+    export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.dolt ]}:$PATH"
+    port="$1"; db="$2"; lock_root="$3"
+    HOME="$(mktemp -d)"; export HOME
+    cd "$HOME"
+    app_pw="$(cat "$CREDENTIALS_DIRECTORY/dolt-app-password")"
+    root_pw="$(cat "$CREDENTIALS_DIRECTORY/dolt-root-password")"
+    for v in "$app_pw" "$root_pw"; do
+      case "$v" in ""|*[!A-Za-z0-9]*) echo "dolt users ($db): a password file is empty or not alphanumeric" >&2; exit 1 ;; esac
+    done
+    as_root() { # $1 = root password ("" for none); SQL on stdin
+      if [ -z "$1" ]; then
+        dolt --host 127.0.0.1 --port "$port" --no-tls --user root --password "" sql
+      else
+        DOLT_CLI_PASSWORD="$1" dolt --host 127.0.0.1 --port "$port" --no-tls --user root sql
+      fi
+    }
+    for _ in $(seq 1 300); do
+      (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null && break
+      sleep 2
+    done
+    if printf 'select 1;\n' | as_root "$root_pw" >/dev/null 2>&1; then
+      current_root="$root_pw"; root_state=locked
+    elif printf 'select 1;\n' | as_root "" >/dev/null 2>&1; then
+      current_root=""; root_state=passwordless
+    else
+      echo "dolt users ($db, :$port): root accepts neither its password nor an empty one" >&2
+      exit 1
+    fi
+    printf "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY '%s';\nALTER USER '%s'@'%%' IDENTIFIED BY '%s';\nGRANT ALL PRIVILEGES ON \`%s\`.* TO '%s'@'%%';\n" \
+      "${doltAppUser}" "$app_pw" "${doltAppUser}" "$app_pw" "$db" "${doltAppUser}" | as_root "$current_root" >/dev/null
+    printf 'select 1;\n' | DOLT_CLI_PASSWORD="$app_pw" dolt --host 127.0.0.1 --port "$port" --no-tls --user ${doltAppUser} --use-db "$db" sql >/dev/null
+    echo "dolt users ($db, :$port): app user ${doltAppUser} ensured with ALL on $db; root $root_state"
+    if [ "$lock_root" = 1 ] && [ "$root_state" = passwordless ]; then
+      printf "ALTER USER 'root'@'localhost' IDENTIFIED BY '%s';\n" "$root_pw" | as_root "" >/dev/null
+      if printf 'select 1;\n' | as_root "" >/dev/null 2>&1; then
+        echo "dolt users ($db, :$port): root still accepts an empty password after locking" >&2
+        exit 1
+      fi
+      echo "dolt users ($db, :$port): root locked (passwordless login refused)"
+    fi
+    rm -rf "$HOME"
+  '';
+  doltUsersUnit = doltUnit: port: db: {
+    description = "go-choir Dolt users and grants for ${doltUnit} (${db})";
+    wantedBy = [ "multi-user.target" "${doltUnit}.service" ];
+    after = [ "${doltUnit}.service" ];
+    partOf = [ "${doltUnit}.service" ];
+    serviceConfig = commonServiceHardening // {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      TimeoutStartSec = "15min";
+      ExecStart = "${doltEnsureUsers} ${toString port} ${db} ${if doltAuthStage == "locked" then "1" else "0"}";
+      LoadCredential = [
+        "dolt-app-password:${doltAppPasswordFile}"
+        "dolt-root-password:${doltRootPasswordFile}"
+      ];
+    };
+  };
   goServiceLibraryPath = lib.makeLibraryPath [ pkgs.icu ];
   serviceExec = name: package: pkgs.writeShellScript "go-choir-${name}-exec" ''
     set -euo pipefail
@@ -577,6 +665,10 @@ in
     };
   };
 
+  # Dolt SQL users and grants (doltAuthStage above).
+  systemd.services.go-choir-platform-dolt-users = doltUsersUnit "go-choir-platform-dolt" 13306 "platform";
+  systemd.services.go-choir-corpus-dolt-users = doltUsersUnit "go-choir-corpus-dolt" 13307 "corpus";
+
   systemd.services.go-choir-corpusd = {
     # The deploy restarts this unit once, after the service pointer holds the
     # new binary; a switch-time restart ran the old pointer and held the site
@@ -588,8 +680,8 @@ in
     startLimitBurst = 10;
     description = "go-choir Platform Service";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ];
-    wants = [ "network-online.target" "go-choir-corpus-dolt.service" ];
+    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ] ++ doltClientAfter;
+    wants = [ "network-online.target" "go-choir-corpus-dolt.service" ] ++ doltClientAfter;
     requires = [ "go-choir-platform-dolt.service" ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "corpusd" goChoirPackages.corpusd}";
@@ -597,7 +689,7 @@ in
       RestartSec = 3;
       StateDirectory = "go-choir/platform-artifacts";
       ReadWritePaths = [ platformArtifactsDir ];
-      LoadCredential = internalTokenCredential;
+      LoadCredential = internalTokenCredential ++ doltClientCredential;
       # Track K two-approval operator credentials live in a deploy-created
       # file outside git (same trust class as gateway credentials):
       # CHOIR_KEY_ESCROW_OPERATORS="name:token,..." — the unwrap gate stays
@@ -615,6 +707,7 @@ in
         "CORPUSD_PORT=8086"
         "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
+      ] ++ doltClientEnv ++ [
         "CORPUSD_VMCTL_URL=http://127.0.0.1:8083"
         # The public Autopaper front list shows only the designated paper
         # computer's owner (Cut 2 2b; docs/reports/reeng-autopaper-paper-computer-2026-10-13.md),
@@ -647,7 +740,7 @@ in
   # One oneshot process per host; the timer does not overlap an active replay.
   systemd.services.go-choir-checkpointd = {
     description = "Choir verified projection checkpoint maintenance";
-    after = [ "go-choir-corpusd.service" "go-choir-platform-dolt.service" ];
+    after = [ "go-choir-corpusd.service" "go-choir-platform-dolt.service" ] ++ doltClientAfter;
     requires = [ "go-choir-platform-dolt.service" ];
     path = [ pkgs.dolt ];
     serviceConfig = commonServiceHardening // {
@@ -667,7 +760,8 @@ in
       UMask = "0077";
       ReadWritePaths = [ platformArtifactsDir ];
       EnvironmentFile = [ "-/var/lib/go-choir/corpus-dsn.env" ];
-      Environment = [
+      LoadCredential = doltClientCredential;
+      Environment = doltClientEnv ++ [
         "CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED=true"
         "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
@@ -738,8 +832,8 @@ in
     # deploy's restarts, each of which detaches every guest (vmctl 360 review
     # Phase 0 step 6).
     restartIfChanged = false;
-    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ];
-    wants = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ];
+    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ] ++ doltClientAfter;
+    wants = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ] ++ doltClientAfter;
     serviceConfig = commonServiceHardening // {
       ExecStart = "${vmctlExec}";
       Restart = "on-failure";
@@ -803,7 +897,7 @@ in
       StateDirectory = "go-choir/vm-state";
       ReadWritePaths = [ "/var/lib/go-choir" "/var/lib/go-choir/vm-state" "/var/lib/go-choir/guest" ];
       ReadOnlyPaths = [ "/var/lib/go-choir/auth" ];
-      LoadCredential = internalTokenCredential;
+      LoadCredential = internalTokenCredential ++ doltClientCredential;
       # Computer tiers (paid accounts, platform computers) are not host
       # configuration: they live in internal/computertiers/computer-tiers.json,
       # embedded in vmctl and changed by a reviewed commit (owner ruling
@@ -938,6 +1032,7 @@ in
         "VMCTL_PLATFORM_WIRE_ENABLED=true"
         "VMCTL_AUTOPUTER_PROXY_SOCK=/run/go-choir/vmctl.sock"
         internalAuthEnv
+      ] ++ doltClientEnv ++ [
         # Path to system binaries (ip, iptables, mkfs.ext4) for network/disk setup.
         "PATH=/run/current-system/sw/bin:/bin:/usr/bin"
       ];
@@ -1133,6 +1228,20 @@ in
         mv -f ${internalTokenHeaderFile}.next ${internalTokenHeaderFile} )
     fi
     chmod 0600 ${internalTokenHeaderFile}
+  '';
+
+  # Dolt passwords (doltAuthStage). Hex, generated once, 0600, never printed.
+  system.activationScripts.go-choir-dolt-passwords = ''
+    install -d -m 0700 -o root -g root /var/lib/go-choir/secrets
+    for f in ${doltAppPasswordFile} ${doltRootPasswordFile}; do
+      if [ ! -s "$f" ]; then
+        ( umask 077
+          ${pkgs.openssl}/bin/openssl rand -hex 32 > "$f.next"
+          mv -f "$f.next" "$f" )
+        echo "go-choir Dolt password generated: $f"
+      fi
+      chmod 0600 "$f"
+    done
   '';
 
   # Go module proxy for engineering capsules
