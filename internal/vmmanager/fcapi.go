@@ -47,6 +47,11 @@ func (e *fcAPIError) Error() string {
 }
 
 func (c *fcAPIClient) do(ctx context.Context, method, path string, body any) error {
+	return c.doJSON(ctx, method, path, body, nil)
+}
+
+// doJSON is do that also decodes a 2xx JSON answer into out (when non-nil).
+func (c *fcAPIClient) doJSON(ctx context.Context, method, path string, body any, out any) error {
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -70,6 +75,11 @@ func (c *fcAPIClient) do(ctx context.Context, method, path string, body any) err
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if out != nil {
+			if err := json.Unmarshal(raw, out); err != nil {
+				return fmt.Errorf("firecracker API %s %s: decode answer: %w", method, path, err)
+			}
+		}
 		return nil
 	}
 	var fault struct {
@@ -117,6 +127,13 @@ func (c *fcAPIClient) CreateFullSnapshot(ctx context.Context, statePath, memPath
 		"snapshot_path": statePath,
 		"mem_file_path": memPath,
 	})
+}
+
+// PatchMemoryHotplug sets the virtio-mem target above the base memory
+// (PATCH /hotplug/memory {"requested_size_mib": N}; Firecracker 1.15.1
+// swagger MemoryHotplugSizeUpdate).
+func (c *fcAPIClient) PatchMemoryHotplug(ctx context.Context, requestedMiB int) error {
+	return c.do(ctx, http.MethodPatch, "/hotplug/memory", map[string]int{"requested_size_mib": requestedMiB})
 }
 
 // LoadSnapshot restores a full snapshot into a fresh Firecracker process

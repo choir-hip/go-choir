@@ -122,6 +122,11 @@ type VMConfig struct {
 	// MachineMemSizeMib is the memory size in MiB for the guest.
 	MachineMemSizeMib int
 
+	// MemoryHotplugMiB is the virtio-mem hotplug region vmctl selected for
+	// this computer (0: no device). It is a boot-time machine shape like
+	// MachineMemSizeMib; the region boots unplugged (memory_hotplug.go).
+	MemoryHotplugMiB int
+
 	// PersistentDir is the host directory where per-VM persistent state
 	// (user data, task state) is stored. This directory is mounted into
 	// the guest and survives stop/resume cycles (VAL-CROSS-116).
@@ -323,6 +328,14 @@ type ManagerConfig struct {
 	// ClaudeDelegate is the Claude delegate allowlist and window
 	// (CHOIR_CLAUDE_DELEGATE_*; empty by default). See claude_delegate.go.
 	ClaudeDelegate ClaudeDelegateConfig
+
+	// MemoryHotplug lets a computer vmctl selected boot with a virtio-mem
+	// device (VM_MEMORY_HOTPLUG; off by default). See memory_hotplug.go.
+	MemoryHotplug bool
+	// MemoryHotplugBlockMiB and MemoryHotplugSlotMiB are Firecracker's block
+	// and slot sizes (VM_MEMORY_HOTPLUG_BLOCK_MIB/_SLOT_MIB; 0 = 2 and 128).
+	MemoryHotplugBlockMiB int
+	MemoryHotplugSlotMiB  int
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -1577,6 +1590,10 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	if overrides.MachineMemSizeMib != 0 {
 		cfg.MachineMemSizeMib = overrides.MachineMemSizeMib
 	}
+	// The hotplug selection is authoritative per call, like the boot-mode
+	// flags below: vmctl decides it for every boot, and 0 must be able to
+	// clear a stale selection.
+	cfg.MemoryHotplugMiB = overrides.MemoryHotplugMiB
 	if overrides.PersistentDir != "" {
 		cfg.PersistentDir = overrides.PersistentDir
 	}
@@ -1643,6 +1660,7 @@ func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfi
 // contain only the minimum bootstrap material (VAL-VM-011).
 func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]interface{} {
 	cfg.GatewayToken = m.resolveGatewayToken(cfg)
+	hotplug := m.firecrackerMemoryHotplugConfig(cfg)
 
 	// Calculate the /30 subnet for this VM based on host port. The ordinal
 	// wraps through a bounded private 10.200.0.0-10.215.255.255 pool so
@@ -1746,6 +1764,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		if cfg.MaintenanceHold {
 			runtimeArgs = append(runtimeArgs, "choir.runtime_maintenance_hold=1")
 		}
+		if hotplug != nil {
+			runtimeArgs = append(runtimeArgs, memoryHotplugKernelParam)
+		}
 		bootArgs = strings.Join(append([]string{kernelParams}, runtimeArgs...), " ")
 	} else {
 		// Legacy approach with custom init script. Keep the same runtime service
@@ -1769,6 +1790,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 		}
 		for _, arg := range append(legacyRuntimeArgs, guestIdentityKernelParams(cfg)...) {
 			bootArgs += " " + arg
+		}
+		if hotplug != nil {
+			bootArgs += " " + memoryHotplugKernelParam
 		}
 	}
 
@@ -1802,6 +1826,9 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 	}
 	if balloon := firecrackerBalloonConfig(m.cfg); balloon != nil {
 		fcConfig["balloon"] = balloon
+	}
+	if hotplug != nil {
+		fcConfig["memory-hotplug"] = hotplug
 	}
 
 	return fcConfig
@@ -2020,7 +2047,7 @@ func (m *Manager) launchFirecracker(cfg VMConfig, fcConfig map[string]interface{
 		receipt.JailFiles = notes
 		m.prepareVMNetwork(vmID, hostPort, cfg.GuestPort, receipt.UID)
 		networkReady = true
-		return m.startJailedFirecracker(vmID, receipt, jailFirecrackerLaunchArgs(m.hibernateMode() == HibernateModeSnapshot))
+		return m.startJailedFirecracker(vmID, receipt, jailFirecrackerLaunchArgs(m.wantsAPISocket(cfg)))
 	}
 
 	m.reclaimDirectOwnership(vmID)
@@ -2035,7 +2062,7 @@ func (m *Manager) launchFirecracker(cfg VMConfig, fcConfig map[string]interface{
 	// expected Firecracker device model.
 	// --id sets the VM identifier.
 	// --config-file provides the VM configuration.
-	err = m.startFirecrackerProcess(vmID, m.firecrackerLaunchArgs(vmID, configPath))
+	err = m.startFirecrackerProcess(vmID, m.firecrackerLaunchArgsWithAPI(vmID, configPath, m.wantsAPISocket(cfg)))
 	return err
 }
 

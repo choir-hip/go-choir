@@ -307,7 +307,14 @@ func (m *Manager) prepareAPISocket(vmID string) (string, bool) {
 // beside the same --config-file (Firecracker boots from the file and keeps
 // serving the API).
 func (m *Manager) firecrackerLaunchArgs(vmID, configPath string) []string {
-	if m.hibernateMode() == HibernateModeSnapshot {
+	return m.firecrackerLaunchArgsWithAPI(vmID, configPath, m.hibernateMode() == HibernateModeSnapshot)
+}
+
+// firecrackerLaunchArgsWithAPI is the boot command line with the API socket
+// on or off; a computer with a memory hotplug device needs it in either
+// hibernate mode (memory_hotplug.go).
+func (m *Manager) firecrackerLaunchArgsWithAPI(vmID, configPath string, apiSocket bool) []string {
+	if apiSocket {
 		if sock, ok := m.prepareAPISocket(vmID); ok {
 			return []string{"--api-sock", sock, "--enable-pci", "--id", vmID, "--config-file", configPath}
 		}
@@ -450,6 +457,9 @@ func (m *Manager) expectedLaunchConfig(meta *SnapshotMeta, expect VMConfig) (VMC
 		cfg.MachineMemSizeMib = expect.MachineMemSizeMib
 	}
 	cfg.MaintenanceHold = expect.MaintenanceHold
+	// The hotplug selection is today's vmctl decision: a snapshot taken
+	// under another selection hashes differently and cold boots.
+	cfg.MemoryHotplugMiB = expect.MemoryHotplugMiB
 	cfg.RecoveryReplayOnly = false
 	m.applyLaunchDefaults(&cfg)
 	cfg.GatewayToken = m.resolveGatewayToken(cfg)
