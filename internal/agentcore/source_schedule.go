@@ -21,14 +21,24 @@ import (
 // docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md):
 // each scheduled source is a chain of durable source_poll_due wakes. A wake
 // polls the source with no model call, records the poll's usage on the
-// schedule, and arms the next wake. A crash boot closes every active
-// schedule; a planned boot leaves the pending wake to fire.
+// schedule, and arms the next wake.
+//
+// A schedule is a standing owner intent; a poll is an occurrence (owner
+// ruling 6, 2026-10-14: "we need paper publishing 24/7, even after
+// crashes"; restart design 2026-10-13 §3.4 option B). A planned boot leaves
+// the pending wake to fire. A crash boot closes only the poll in flight and
+// arms the schedule's next tick one interval after boot, as new work under a
+// new generation; a schedule whose poll was in flight at
+// sourceScheduleCrashLoopLimit crash boots in a row is closed with that
+// cause, so a poll that crashes the computer cannot loop.
 const (
 	sourcePollDueKind            = "source_poll_due"
 	defaultSourcePollInterval    = 15 * time.Minute
 	minSourcePollInterval        = time.Minute
 	maxSourcePollBackoff         = 24 * time.Hour
 	sourceScheduleInterruptedWhy = "interrupted by a restart"
+	sourceScheduleCrashLoopLimit = 2
+	sourceScheduleCrashLoopWhy   = "closed: its poll was in flight at 2 crash restarts in a row; an owner act restarts it"
 )
 
 // sourceScheduleMu serializes schedule read-modify-write in this process.
@@ -106,6 +116,7 @@ func (rt *Runtime) StartSourceScheduleRun(ctx context.Context, ownerID, computer
 	sched.State, sched.StateReason = store.SourceScheduleActive, ""
 	sched.Generation++
 	sched.NextDue, sched.ConsecutiveFailures, sched.UpdatedAt = now, 0, now
+	sched.CrashesWithPollInFlight = 0
 	if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
 		return store.SourceSchedule{}, err
 	}
@@ -154,8 +165,16 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		}
 		return sched, sched.State == store.SourceScheduleActive && sched.Generation == due.Generation, nil
 	}
+	started := time.Now().UTC()
 	sourceScheduleMu.Lock()
 	sched, live, err := current()
+	if err == nil && live && sched.NextDue.Unix() == due.Due {
+		// The poll is in flight from here until it records its result, and
+		// durably so: a crash boot that finds the mark closes this poll and
+		// counts the crash against the schedule (the crash-loop bound).
+		sched.PollInFlightSince, sched.UpdatedAt = started, started
+		err = rt.store.PutSourceSchedule(ctx, sched)
+	}
 	sourceScheduleMu.Unlock()
 	if err != nil || !live {
 		return err
@@ -169,7 +188,6 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		return rt.armSourcePoll(ctx, sched)
 	}
 
-	started := time.Now().UTC()
 	usage := store.SourcePollUsage{At: started}
 	pendingAfter := sched.PendingArrivals
 	if rt.researchDeps == nil {
@@ -214,6 +232,8 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 	}
 	live = live && sched.NextDue.Unix() == due.Due
 	sched.RecordPoll(usage)
+	// The poll finished without crashing the computer.
+	sched.PollInFlightSince, sched.CrashesWithPollInFlight = time.Time{}, 0
 	// The pending list rides the schedule write below; if that write fails,
 	// the error is logged and returned as before, and the list is lost with
 	// it only when the store itself is down.
@@ -225,22 +245,13 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		log.Printf("source schedule: %s: %d oldest pending captures closed unannounced (pending bound %d)", sched.SourceID, dropped, sourceArrivalPendingLimit)
 	}
 	now := time.Now().UTC()
-	interval := time.Duration(sched.IntervalSeconds) * time.Second
-	if interval < minSourcePollInterval {
-		interval = minSourcePollInterval
-	}
 	if usage.Error != "" {
 		sched.ConsecutiveFailures++
-		for i := 0; i < sched.ConsecutiveFailures && interval < maxSourcePollBackoff; i++ {
-			interval *= 2
-		}
-		if interval > maxSourcePollBackoff {
-			interval = maxSourcePollBackoff
-		}
 		log.Printf("source schedule: %s poll failed (%d in a row): %s", sched.SourceID, sched.ConsecutiveFailures, usage.Error)
 	} else {
 		sched.ConsecutiveFailures = 0
 	}
+	interval := sourcePollInterval(sched)
 	sched.UpdatedAt = now
 	put := func() error {
 		err := rt.store.PutSourceSchedule(ctx, sched)
@@ -261,55 +272,137 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 	return rt.armSourcePoll(ctx, sched)
 }
 
-// closeSourceSchedulesAfterCrash closes every active schedule at a crash
-// boot (owner rule, CLAUDE.md "Restarts End Work (Crash) Or Resume It").
-// The pre-boot wake is refused by the actor handler; this makes the closed
-// state visible. It also closes every schedule's pending arrivals (L2a A5,
-// defect 2) with the fate "interrupted by a restart": they are counted in
-// ArrivalsClosed and their ids logged, never announced after the crash. A
-// planned boot closes nothing; its pending wake fires and its pending
+// sourcePollInterval is the wait before a schedule's next poll: its
+// interval, doubled for each failure in a row, at most maxSourcePollBackoff.
+func sourcePollInterval(sched store.SourceSchedule) time.Duration {
+	interval := time.Duration(sched.IntervalSeconds) * time.Second
+	if interval < minSourcePollInterval {
+		interval = minSourcePollInterval
+	}
+	for i := 0; i < sched.ConsecutiveFailures && interval < maxSourcePollBackoff; i++ {
+		interval *= 2
+	}
+	if interval > maxSourcePollBackoff {
+		interval = maxSourcePollBackoff
+	}
+	return interval
+}
+
+// recoverSourceSchedulesAtBoot carries every schedule across this boot
+// (owner rule, CLAUDE.md "Restarts End Work (Crash) Or Resume It"; ruling 6,
+// 2026-10-14: standing intents survive a crash, their occurrences do not).
+//
+// A planned boot may resume: an active schedule keeps its generation and its
+// saved tick, which is armed again (it collapses into the pending wake, so a
+// lost wake is repaired and an existing one is not doubled); its pending
 // arrivals are named by that poll.
-func (rt *Runtime) closeSourceSchedulesAfterCrash(ctx context.Context) {
+//
+// A crash boot never resumes an occurrence. For an active schedule:
+//   - a poll in flight is closed (recorded with the status
+//     interrupted_by_restart) and the crash counts against the schedule;
+//     with no poll in flight the count resets, since it counts crashes in a
+//     row;
+//   - at sourceScheduleCrashLoopLimit the schedule is closed as
+//     interrupted_by_restart with that cause: its tick crashes the computer;
+//   - otherwise it stays active under a new generation (the pre-boot wake,
+//     which the actor handler refuses, is stale too) and its next tick is
+//     armed one interval (with any failure backoff) after boot, never at
+//     once: new work on a computer that has stayed up that long.
+//
+// A crash boot also closes every schedule's pending arrivals (L2a A5,
+// defect 2) with the fate "interrupted by a restart": they are counted in
+// ArrivalsClosed and their ids logged, never announced after the crash.
+func (rt *Runtime) recoverSourceSchedulesAtBoot(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
 	}
-	if _, planned := rt.BootWasPlannedRestart(); planned {
-		return
-	}
+	_, planned := rt.BootWasPlannedRestart()
 	sourceScheduleMu.Lock()
 	defer sourceScheduleMu.Unlock()
 	schedules, err := rt.store.ListSourceSchedules(ctx, "")
 	if err != nil {
-		log.Printf("source schedule: crash boot: list schedules: %v", err)
+		log.Printf("source schedule: boot: list schedules: %v", err)
 		return
 	}
 	for _, sched := range schedules {
-		active, pending := sched.State == store.SourceScheduleActive, sched.PendingArrivals
-		if !active && len(pending) == 0 {
-			continue
+		if planned {
+			rt.recoverSourceScheduleAfterPlannedBoot(ctx, sched)
+		} else {
+			rt.recoverSourceScheduleAfterCrash(ctx, sched)
 		}
-		if active {
-			sched.State, sched.StateReason = store.SourceScheduleInterruptedByRestart, sourceScheduleInterruptedWhy
-			sched.Generation++
-			sched.NextDue = time.Time{}
-		}
-		if len(pending) > 0 {
-			sched.PendingArrivals = nil
-			sched.ArrivalsClosed += len(pending)
-			sched.ArrivalsClosedReason = sourceScheduleInterruptedWhy
-		}
-		sched.UpdatedAt = time.Now().UTC()
+	}
+}
+
+func (rt *Runtime) recoverSourceScheduleAfterPlannedBoot(ctx context.Context, sched store.SourceSchedule) {
+	if !sched.PollInFlightSince.IsZero() {
+		// The planned restart cut a poll; its wake is redelivered (a planned
+		// boot may resume) and marks it again. Not a crash: nothing counts.
+		sched.PollInFlightSince, sched.UpdatedAt = time.Time{}, time.Now().UTC()
 		if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
-			log.Printf("source schedule: crash boot: close %s: %v", sched.SourceID, err)
-			continue
+			log.Printf("source schedule: planned boot: %s: %v", sched.SourceID, err)
+			return
 		}
-		if active {
-			log.Printf("source schedule: crash boot: %s closed: %s", sched.SourceID, sourceScheduleInterruptedWhy)
+	}
+	if sched.State != store.SourceScheduleActive || sched.NextDue.IsZero() {
+		return
+	}
+	if err := rt.armSourcePoll(ctx, sched); err != nil {
+		log.Printf("source schedule: planned boot: %s: re-arm the saved tick: %v (the schedule list marks it overdue)", sched.SourceID, err)
+	}
+}
+
+func (rt *Runtime) recoverSourceScheduleAfterCrash(ctx context.Context, sched store.SourceSchedule) {
+	active, pending, inFlight := sched.State == store.SourceScheduleActive, sched.PendingArrivals, sched.PollInFlightSince
+	if !active && len(pending) == 0 && inFlight.IsZero() {
+		return
+	}
+	now := time.Now().UTC()
+	if !inFlight.IsZero() {
+		sched.RecordPoll(store.SourcePollUsage{At: inFlight, Status: store.SourcePollInterruptedByRestart, Error: sourceScheduleInterruptedWhy})
+		sched.PollInFlightSince = time.Time{}
+	}
+	closed := false
+	if active {
+		if inFlight.IsZero() {
+			sched.CrashesWithPollInFlight = 0
+		} else {
+			sched.CrashesWithPollInFlight++
 		}
-		if len(pending) > 0 {
-			log.Printf("source schedule: crash boot: %s: %d pending captures closed unannounced: %s: %v",
-				sched.SourceID, len(pending), sourceScheduleInterruptedWhy, arrivalIDs(pending))
+		sched.Generation++
+		if sched.CrashesWithPollInFlight >= sourceScheduleCrashLoopLimit {
+			sched.State, sched.StateReason = store.SourceScheduleInterruptedByRestart, sourceScheduleCrashLoopWhy
+			sched.NextDue, closed = time.Time{}, true
+		} else {
+			sched.NextDue = now.Add(sourcePollInterval(sched))
 		}
+	}
+	if len(pending) > 0 {
+		sched.PendingArrivals = nil
+		sched.ArrivalsClosed += len(pending)
+		sched.ArrivalsClosedReason = sourceScheduleInterruptedWhy
+	}
+	sched.UpdatedAt = now
+	if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
+		log.Printf("source schedule: crash boot: %s: %v", sched.SourceID, err)
+		return
+	}
+	if !inFlight.IsZero() {
+		log.Printf("source schedule: crash boot: %s: poll in flight since %s closed: %s (%d crash boots in a row with a poll in flight)",
+			sched.SourceID, inFlight.Format(time.RFC3339), sourceScheduleInterruptedWhy, sched.CrashesWithPollInFlight)
+	}
+	if len(pending) > 0 {
+		log.Printf("source schedule: crash boot: %s: %d pending captures closed unannounced: %s: %v",
+			sched.SourceID, len(pending), sourceScheduleInterruptedWhy, arrivalIDs(pending))
+	}
+	switch {
+	case closed:
+		log.Printf("source schedule: crash boot: %s: paper source stopped: %s", sched.SourceID, sourceScheduleCrashLoopWhy)
+	case active:
+		if err := rt.armSourcePoll(ctx, sched); err != nil {
+			log.Printf("source schedule: crash boot: %s: arm the next tick: %v (the schedule list marks it overdue)", sched.SourceID, err)
+			return
+		}
+		log.Printf("source schedule: crash boot: %s stays active; next tick %s (generation %d)", sched.SourceID, sched.NextDue.Format(time.RFC3339), sched.Generation)
 	}
 }
 

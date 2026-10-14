@@ -163,7 +163,9 @@ var RestartWorkKinds = map[string]bool{
 	"owner_revision": true, "lifecycle_work_assigned": true,
 	"delegated_assignment_spawn_deadline":   true,
 	"fresh_mint_management_resume_deadline": true,
-	// Autopaper's source schedule (W1c): a crash never resumes polling.
+	// Autopaper's source schedule (W1c): a crash never resumes the poll a
+	// pre-boot wake carries; the crash boot arms the schedule's next tick
+	// as a new wake (ruling 6, recoverSourceSchedulesAtBoot).
 	"source_poll_due": true,
 	// Cut 1 L3a: a record's wake starts a turn; unread records wait for the
 	// next post-boot commit.

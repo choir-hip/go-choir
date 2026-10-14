@@ -235,12 +235,12 @@ func TestCrashBootClosesPendingArrivalsAndAPlannedBootKeepsThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	WithBootRestart(PlannedRestart{Reason: "platform_update", Target: "next"}, true)(rt)
-	rt.closeSourceSchedulesAfterCrash(ctx)
+	rt.recoverSourceSchedulesAtBoot(ctx)
 	if got, _ := s.GetSourceSchedule(ctx, owner, sourceID); len(got.PendingArrivals) != 2 || got.ArrivalsClosed != 0 {
 		t.Fatalf("a planned boot touched the pending list: %+v", got)
 	}
 	WithBootRestart(PlannedRestart{}, false)(rt)
-	rt.closeSourceSchedulesAfterCrash(ctx)
+	rt.recoverSourceSchedulesAtBoot(ctx)
 	got, _ := s.GetSourceSchedule(ctx, owner, sourceID)
 	if len(got.PendingArrivals) != 0 || got.ArrivalsClosed != 2 || got.ArrivalsClosedReason != sourceScheduleInterruptedWhy {
 		t.Fatalf("after a crash boot = %+v; want the pending list closed with its count and fate", got)

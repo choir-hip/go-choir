@@ -86,9 +86,8 @@ crash-restart loops happen.
 crashes"). An Autopaper source schedule is a standing intent: a crash
 closes only the poll in flight, and the schedule's next tick is new work
 on a computer that booted under the restart bounds. A schedule whose tick
-crashes the computer twice is closed with that cause. Until the code
-lands (station L1), a crash still closes schedules and the owner act
-restarts them.
+crashes the computer twice is closed with that cause; the owner act
+restarts it (`recoverSourceSchedulesAtBoot`, station L1).
 
 **A planned restart for an update may resume work.** The distinction is a
 durable planned-restart marker (reason, target version) written by the

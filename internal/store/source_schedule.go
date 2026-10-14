@@ -17,13 +17,20 @@ import (
 // content in Store B.
 const ogKindSourceSchedule = objectgraph.ObjectKind("choir.source_schedule")
 
-// Source schedule states. A crash boot closes an active schedule as
-// interrupted_by_restart; nothing resumes it but a new start.
+// Source schedule states. A schedule is a standing owner intent: a restart,
+// crash or planned, leaves an active schedule active (owner ruling 6,
+// 2026-10-14). A crash closes only the poll in flight; a schedule whose
+// poll was in flight at two crash boots in a row is closed as
+// interrupted_by_restart, and nothing resumes it but a new start.
 const (
 	SourceScheduleActive               = "active"
 	SourceScheduleStopped              = "stopped"
 	SourceScheduleInterruptedByRestart = "interrupted_by_restart"
 )
+
+// SourcePollInterruptedByRestart is the status of a poll a crash cut short:
+// the occurrence's visible fate, recorded in the schedule's usage.
+const SourcePollInterruptedByRestart = "interrupted_by_restart"
 
 // SourcePollUsageLimit bounds the usage history a schedule keeps.
 const SourcePollUsageLimit = 24
@@ -90,6 +97,15 @@ type SourceSchedule struct {
 	PendingArrivals      []types.CaptureArrival `json:"pending_arrivals,omitempty"`
 	ArrivalsClosed       int                    `json:"arrivals_closed,omitempty"`
 	ArrivalsClosedReason string                 `json:"arrivals_closed_reason,omitempty"`
+	// PollInFlightSince is set durably when a poll starts and cleared when
+	// it records its result. A crash boot that finds it set closes that
+	// poll as interrupted_by_restart and counts the crash against the
+	// schedule. CrashesWithPollInFlight counts crash boots in a row that
+	// found a poll in flight; a finished poll, a crash boot with no poll in
+	// flight, and a new start reset it. At two the schedule is closed: its
+	// tick crashes the computer (the crash-loop bound).
+	PollInFlightSince       time.Time `json:"poll_in_flight_since,omitempty"`
+	CrashesWithPollInFlight int       `json:"crashes_with_poll_in_flight,omitempty"`
 }
 
 // sourcePollErrorLimit bounds a poll's saved error text: the schedule keeps

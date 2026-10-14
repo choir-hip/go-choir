@@ -22,8 +22,8 @@ import (
 // The Autopaper source schedule (W1c,
 // docs/definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md).
 // Failure modes pinned, written before the code:
-//  1. A crash boot leaves a schedule active (an auto-resume loop waiting to
-//     happen); a planned boot closes one.
+//  1. Restarts: see source_schedule_restart_test.go (a standing schedule
+//     survives a crash; only the poll in flight closes).
 //  2. Two chains for one source both poll: a stale generation still runs.
 //  3. A stopped schedule keeps polling.
 //  4. A failing feed retries at the plain interval instead of backing off.
@@ -176,27 +176,6 @@ func TestSourceScheduleBacksOffAFailingFeed(t *testing.T) {
 	}
 	if next := (*wakes)[len(*wakes)-1].notBefore.Sub(got.Recent[1].At); next < 39*time.Minute || next > 41*time.Minute {
 		t.Fatalf("after two failures the next poll is in %s, want 40 minutes", next)
-	}
-}
-
-func TestCrashBootClosesActiveSourceSchedules(t *testing.T) {
-	ctx := context.Background()
-	rt, _, _, _ := sourceScheduleFixture(t, "rss:sched-c", nil)
-	if _, err := rt.StartSourceSchedule(ctx, "owner-1", "computer-paper", "rss:sched-c", 0, 0); err != nil {
-		t.Fatal(err)
-	}
-
-	WithBootRestart(PlannedRestart{Reason: "platform_update", Target: "next"}, true)(rt)
-	rt.closeSourceSchedulesAfterCrash(ctx)
-	if got, _ := rt.store.GetSourceSchedule(ctx, "owner-1", "rss:sched-c"); got.State != store.SourceScheduleActive {
-		t.Fatalf("a planned boot closed the schedule: %+v", got)
-	}
-
-	WithBootRestart(PlannedRestart{}, false)(rt)
-	rt.closeSourceSchedulesAfterCrash(ctx)
-	got, _ := rt.store.GetSourceSchedule(ctx, "owner-1", "rss:sched-c")
-	if got.State != store.SourceScheduleInterruptedByRestart || got.StateReason != sourceScheduleInterruptedWhy || got.Generation != 2 {
-		t.Fatalf("after a crash boot = %+v, want interrupted_by_restart at a new generation", got)
 	}
 }
 
