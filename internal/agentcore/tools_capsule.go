@@ -288,6 +288,9 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 		"classifier_digest": record.ClassifierDigest, "groups": record.Groups,
 		"content_digest": record.ContentDigest, "bundle_digest": record.ContentDigest,
 		"operation_id": operation.OperationID, "state": operation.State,
+		// Internal: the changed source files, for rule precommit settlement;
+		// commitFreezeIntent removes the key before the cell sees the result.
+		freezeSourcePathsKey: capsuleSourcePaths(changes),
 	}, nil
 }
 

@@ -121,6 +121,13 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 		if toDesk, _, _ := strings.Cut(strings.TrimSpace(in.ToDesk), ":"); fromDesk == agentprofile.Engineering && toDesk == agentprofile.Texture {
 			return fmt.Errorf("reduce: %s %s: engineering reaches Texture only through management; address management", in.Kind, in.LocalID)
 		}
+		// Engineering's Precommits are rule-settled; no other desk's may
+		// carry a rule (engineering_precommit_rules.go).
+		if in.Kind == yaegikernel.IntentPrecommit {
+			if err := validateEngineeringPrecommit(fromDesk, in, intents); err != nil {
+				return err
+			}
+		}
 		switch in.Kind {
 		case yaegikernel.IntentMessage:
 			if in.ToDesk == "" {
@@ -951,6 +958,14 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			if err == nil {
 				r.verifyResult = out
 			}
+		case yaegikernel.IntentPrecommit:
+			// Engineering's precommits are rule-settled and ledger-only;
+			// every other desk's take the semantic-act path.
+			if r.rec != nil && strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Engineering {
+				seq, err = r.commitEngineeringPrecommit(ctx, in)
+			} else {
+				seq, err = r.commitActIntent(ctx, in)
+			}
 		case yaegikernel.IntentMessage:
 			// Every staged message on an assigned desk or lifecycle producer
 			// run carries the update_coagent authority contract. Other
@@ -1415,6 +1430,9 @@ func (r *rlmCallReduction) commitFreezeIntent(ctx context.Context, in yaegikerne
 	} else if operation.LastIntentError != "" {
 		r.recordOperationIntentError(operation.OperationID, "")
 	}
+	// A fresh, successful freeze settles the precommits it decides; this
+	// also removes the internal source-path key from the cell's result.
+	r.settleFreezePrecommits(ctx, in, out, assignmentID, time.Now().UTC())
 	return out, nil
 }
 
@@ -1494,6 +1512,12 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 	if operation.LastIntentError != "" {
 		stamp("")
 	}
+	// Management's verdict settles engineering's verify_pass precommits.
+	verdict := types.EngineeringVerifyObservation{Decision: in.Decision, BundleDigest: operation.BundleDigest, VerifierRefs: trimNonEmptyStrings(in.VerifierRefs)}
+	rt.settleRulePrecommits(ctx, assignment.Binding.OwnerID, assignment.Binding.ComputerID, assignmentID, "verify", time.Now().UTC(),
+		func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
+			return types.SettleRuleOnVerify(rule, verdict)
+		})
 	return out, nil
 }
 

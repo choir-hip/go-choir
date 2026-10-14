@@ -330,8 +330,11 @@ var deskModuleSets = map[string][]string{
 	SessionRoleManagementTask: {"Cast", "Note", "ReadCapture", "Stories", "Feed", "Decline", "Done"},
 	// Engineering mutates inside its capsule, converses with management on
 	// records (C1e B1: Report, Ask, Reply, Note into its one conversation),
-	// and ends its assignment with Complete, freezing a candidate first.
-	"engineering": {"WriteFile", "Exec", "Complete", "Freeze", "Report", "Ask", "Reply", "Note"},
+	// and ends its assignment with Complete, freezing a candidate first. It
+	// precommits what it expects with rule-settled Precommits, which the
+	// runtime settles from its Freeze, management's Verify and the
+	// assignment's end (types/commitment_rules.go).
+	"engineering": {"WriteFile", "Exec", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Note"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
 	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",

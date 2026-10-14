@@ -212,6 +212,7 @@ func (rt *Runtime) cancelAssignedEngineering(ctx context.Context, parent types.R
 	if !cancelled.Replay {
 		rt.failBoundSelfdevOperation(ctx, assignment.Binding.ComputerID, assignment.AssignmentID, cancel.Reason)
 		rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
+		rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
 	}
 	return cancelled, nil
 }
@@ -276,6 +277,7 @@ func (rt *Runtime) persistSystemEngineeringCancellation(ctx context.Context, ass
 				// (resolved by its freeze key, D2) fails here. Best-effort:
 				// a terminal or missing op converges.
 				rt.failBoundSelfdevOperation(ctx, current.Binding.ComputerID, current.AssignmentID, cancel.Reason)
+				rt.settleEngineeringPrecommitsAtTerminal(ctx, result.Assignment, cancel.Reason)
 			}
 			return result, nil
 		}
@@ -589,6 +591,7 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 			}
 			if !cancelled.Replay {
 				rt.failBoundSelfdevOperation(ctx, computerID, assignment.AssignmentID, cancel.Reason)
+				rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
 			}
 			continue
 		}
@@ -632,6 +635,7 @@ func (rt *Runtime) reconcileEngineeringAssignmentsForTrajectory(ctx context.Cont
 		if !cancelled.Replay {
 			rt.failBoundSelfdevOperation(ctx, computerID, assignment.AssignmentID, cancel.Reason)
 			rt.stopCancelledAssignmentRun(ctx, cancelled.Assignment, cancel.Reason)
+			rt.settleEngineeringPrecommitsAtTerminal(ctx, cancelled.Assignment, cancel.Reason)
 		}
 	}
 	// Terminal trajectories close their bound self-development operation here:
@@ -1276,7 +1280,11 @@ func (rt *Runtime) commitAssignedEngineeringReport(ctx context.Context, assignme
 		OutcomeRefs:           rt.assignmentOutcomeRefs(ctx, assignment, report),
 	}
 	req.CommandDigest, _ = store.ComputeRecordEngineeringAssignmentReportDigest(req)
-	return rt.store.RecordEngineeringAssignmentReport(ctx, req)
+	result, err := rt.store.RecordEngineeringAssignmentReport(ctx, req)
+	if err == nil && !result.Replay && result.Assignment.Disposition.Terminal() {
+		rt.settleEngineeringPrecommitsAtTerminal(ctx, result.Assignment, string(report.Result)+": "+report.Summary)
+	}
+	return result, err
 }
 
 // assignmentOutcomeRefs names, on a terminal report, the candidate the

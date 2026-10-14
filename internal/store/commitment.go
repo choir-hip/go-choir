@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -173,6 +174,76 @@ func (s *Store) ListCommitmentClaimRecords(ctx context.Context, ownerID, compute
 		records = append(records, rec)
 	}
 	return records, nil
+}
+
+// ListRulePrecommitRecords lists the rule-settled precommits the reducer
+// minted for one engineering assignment (types.PrecommitRule.AssignmentID,
+// runtime-stamped), oldest first.
+func (s *Store) ListRulePrecommitRecords(ctx context.Context, ownerID, computerID, assignmentID string) ([]types.CommitmentRecord, error) {
+	ownerID, computerID, assignmentID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(assignmentID)
+	if ownerID == "" || computerID == "" || assignmentID == "" {
+		return nil, fmt.Errorf("rule precommit list requires owner, computer and assignment")
+	}
+	objs, err := s.ogListByOwnerAndBody(ctx, ogKindCommitmentRecord, ownerID,
+		[]objectgraph.JSONFieldMatch{{JSONPath: "$.precommit.rule.assignment_id", Value: assignmentID}}, 200)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]types.CommitmentRecord, 0, len(objs))
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		var rec types.CommitmentRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, fmt.Errorf("commitment record decode %s: %w", obj.CanonicalID, err)
+		}
+		if rec.Precommit == nil || rec.Precommit.Rule == nil || rec.Resolve != nil {
+			continue
+		}
+		records = append(records, rec)
+	}
+	sort.SliceStable(records, func(i, j int) bool {
+		if records[i].Provenance.CommittedAt != records[j].Provenance.CommittedAt {
+			return records[i].Provenance.CommittedAt < records[j].Provenance.CommittedAt
+		}
+		return records[i].RecordID < records[j].RecordID
+	})
+	return records, nil
+}
+
+// SettleRulePrecommits appends the rule scorer's resolve record for every
+// open rule precommit of the assignment that settle decides. Each
+// settlement has one deterministic id written with a not-exists condition,
+// so the first settlement wins and a replay writes nothing (failure mode
+// R4, types/commitment_rules.go). It returns the records it appended.
+func (s *Store) SettleRulePrecommits(ctx context.Context, ownerID, computerID, assignmentID string, at time.Time,
+	settle func(types.PrecommitRule) (types.RuleSettlement, bool)) ([]types.CommitmentRecord, error) {
+	precommits, err := s.ListRulePrecommitRecords(ctx, ownerID, computerID, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	var appended []types.CommitmentRecord
+	for _, precommit := range precommits {
+		resolveID := types.RuleResolveRecordID(precommit.RecordID)
+		settled, err := s.CommitmentRecordExists(ctx, ownerID, computerID, resolveID)
+		if err != nil {
+			return appended, err
+		}
+		if settled {
+			continue
+		}
+		settlement, ok := settle(*precommit.Precommit.Rule)
+		if !ok {
+			continue
+		}
+		resolve := types.NewRuleResolveRecord(precommit, settlement, at)
+		if _, err := s.AppendCommitmentRecord(ctx, ownerID, computerID, resolve); err != nil {
+			return appended, err
+		}
+		appended = append(appended, resolve)
+	}
+	return appended, nil
 }
 
 // GetCommitmentRecord returns the stored record body for one record id,

@@ -93,6 +93,10 @@ type CommitmentPrecommit struct {
 	Question     string             `json:"question"`
 	Distribution map[string]float64 `json:"distribution"`
 	Resolver     string             `json:"resolver"`
+	// Rule, when present, makes the precommit rule-settled: the runtime
+	// answers it from receipts (commitment_rules.go). Engineering's
+	// precommits carry one; older bodies have none.
+	Rule *PrecommitRule `json:"rule,omitempty"`
 }
 
 // CommitmentResolve is the evidence-bearing result staged by choir.Resolve.
