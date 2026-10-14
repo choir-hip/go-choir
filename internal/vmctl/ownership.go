@@ -284,6 +284,16 @@ type VMManager interface {
 	CheckHealth(vmID string) (bool, error)
 }
 
+// snapshotResumer is the optional S3 capability of a manager that hibernates
+// computers into a Firecracker memory snapshot
+// (docs/reports/s3-snapshot-hibernate-design-2026-10-14.md). A successful
+// resume returns the snapshot's own realization: same epoch, same
+// credentials, no restart. Any error means the snapshot was not used (and is
+// gone); the caller cold boots, which is a crash boot.
+type snapshotResumer interface {
+	ResumeVMFromSnapshot(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error)
+}
+
 type vmGatewayTokenReader interface {
 	ReadGatewayToken(vmID string) (string, error)
 }
@@ -1275,6 +1285,10 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 	if err := r.admitRecoveryStart(own, false); err != nil {
 		return nil, err
 	}
+	if info, ok := r.resumeFromSnapshot(own, mgr); ok {
+		r.clearRecoveryCondition(own)
+		return info, nil
+	}
 	if mgr.GetVM(own.VMID) != nil {
 		cfg, err := r.reserveFreshVMConfig(own, "", mgr)
 		if err != nil {
@@ -1297,6 +1311,29 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 	}
 	r.clearRecoveryCondition(own)
 	return info, nil
+}
+
+// resumeFromSnapshot wakes a hibernated, unheld computer from its memory
+// snapshot when the manager kept one. It reports false whenever the caller
+// must start the computer the ordinary way (fresh epoch, cold boot).
+func (r *OwnershipRegistry) resumeFromSnapshot(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, bool) {
+	if own == nil || own.State != VMStateHibernated || own.IsHeld() {
+		return nil, false
+	}
+	resumer, ok := mgr.(snapshotResumer)
+	if !ok || resumer == nil {
+		return nil, false
+	}
+	info, err := resumer.ResumeVMFromSnapshot(own.VMID, vmManagerConfigForOwnership(own, ""))
+	if err != nil {
+		log.Printf("vmctl: computer %s (VM %s) not resumed from snapshot; cold boot follows: %v", own.ComputerID, own.VMID, err)
+		return nil, false
+	}
+	if info == nil {
+		return nil, false
+	}
+	log.Printf("vmctl: computer %s (VM %s) resumed from snapshot (epoch=%d)", own.ComputerID, own.VMID, info.Epoch)
+	return info, true
 }
 
 func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManagerConfig {
@@ -2493,25 +2530,43 @@ func (r *OwnershipRegistry) HibernateVMForDesktop(userID, desktopID string) erro
 
 func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, reason string) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	key := ownershipKey(userID, desktopID)
 	own, ok := r.ownerships[key]
 	if !ok {
+		r.mu.Unlock()
 		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
 	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		r.mu.Unlock()
 		return err
 	}
 
 	if own.State != VMStateActive && own.State != VMStateDegraded {
+		r.mu.Unlock()
 		return fmt.Errorf("VM %s cannot be hibernated (state=%s)", own.VMID, own.State)
 	}
 
-	// Delegate to the real VM manager if available.
-	if r.vmManager != nil {
-		_ = r.vmManager.HibernateVM(own.VMID)
+	// Delegate to the real VM manager if available. A snapshot hibernate
+	// (S3) fences the guest and writes its memory to disk, which takes
+	// seconds: it runs outside r.mu under the per-computer refreshing guard,
+	// so other computers' lookups and resolves are not stalled and this
+	// computer's read as booting meanwhile.
+	if mgr := r.vmManager; mgr != nil {
+		vmID, epoch := own.VMID, own.Epoch
+		r.refreshing[key] = struct{}{}
+		r.mu.Unlock()
+		if err := mgr.HibernateVM(vmID); err != nil {
+			log.Printf("vmctl: manager hibernate of VM %s: %v", vmID, err)
+		}
+		r.mu.Lock()
+		delete(r.refreshing, key)
+		own, ok = r.ownerships[key]
+		if !ok || own.VMID != vmID || own.Epoch != epoch {
+			r.mu.Unlock()
+			return fmt.Errorf("VM %s ownership changed during hibernate", vmID)
+		}
 	}
+	defer r.mu.Unlock()
 
 	own.State = VMStateHibernated
 	own.LastActiveAt = time.Now()

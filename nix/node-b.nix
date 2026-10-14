@@ -753,6 +753,14 @@ in
         # computer's next cold boot. Rollback: delete this line
         # (docs/reports/lr-guest-memory-return-2026-10-14.md).
         "VM_BALLOON_FREE_PAGE_REPORTING=1"
+        # S3 snapshot hibernate (docs/reports/s3-snapshot-hibernate-design-
+        # 2026-10-14.md): an idle hibernate fences the guest and writes a
+        # Firecracker memory snapshot; the next wake loads it once instead of
+        # cold booting. Any refusal or failure falls back to the kill
+        # hibernate and a cold (crash) boot. Rollback: remove this line (the
+        # code default is kill, and kill mode never loads a snapshot).
+        "VM_HIBERNATE_MODE=snapshot"
+        "VM_SNAPSHOT_BUDGET_GIB=48"
         "VMCTL_STOP_MANAGED_ON_EXIT=false"
         # Keep personal computers resident while the host is under capacity.
         "VMCTL_IDLE_TIMEOUT=30m"

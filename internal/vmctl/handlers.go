@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -962,6 +963,75 @@ type bootTimelineReader interface {
 	BootTimeline(vmID string) (json.RawMessage, error)
 }
 
+// hibernateTimelineReader is the optional S3 capability that returns the
+// VM's last hibernate receipt (fence, pause, snapshot times and bytes, and
+// the outcome: snapshot or kill with its reason).
+type hibernateTimelineReader interface {
+	HibernateTimeline(vmID string) (json.RawMessage, error)
+}
+
+// hibernateRequest is the JSON payload for POST /internal/vmctl/hibernate.
+type hibernateRequest struct {
+	ComputerID string `json:"computer_id,omitempty"`
+	UserID     string `json:"user_id,omitempty"`
+	DesktopID  string `json:"desktop_id,omitempty"`
+}
+
+// HandleHibernate serves POST /internal/vmctl/hibernate: an operator asks
+// for one computer to hibernate now, the same transition the idle sweep
+// makes (stop reason "operator"). With VM_HIBERNATE_MODE=snapshot the
+// manager fences the guest and writes a memory snapshot; a busy guest, or
+// any snapshot failure, falls back to the kill hibernate. The receipt is at
+// GET /internal/vmctl/boot-timeline?computer_id=...&kind=hibernate.
+func (h *Handler) HandleHibernate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
+		return
+	}
+	var req hibernateRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&req); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
+		return
+	}
+	userID, desktopID := strings.TrimSpace(req.UserID), normalizeDesktopID(req.DesktopID)
+	if computerID := strings.TrimSpace(req.ComputerID); computerID != "" {
+		own := h.registry.GetOwnershipByComputerID(computerID)
+		if own == nil {
+			writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no VM found for computer " + computerID})
+			return
+		}
+		userID, desktopID = own.UserID, normalizeDesktopID(own.DesktopID)
+	}
+	if userID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "computer_id or user_id is required"})
+		return
+	}
+	if err := h.requireComputerVersionRoute(r.Context(), userID, desktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := h.registry.hibernateVMForDesktopWithReason(userID, desktopID, "operator"); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	resp := map[string]any{"status": "hibernated"}
+	if own := h.registry.GetOwnershipForDesktop(userID, desktopID); own != nil {
+		resp["computer_id"] = own.ComputerID
+		resp["vm_id"] = own.VMID
+		resp["epoch"] = own.Epoch
+		if provider, ok := h.registry.VMManagerHandle().(hibernateTimelineReader); ok && provider != nil {
+			if raw, err := provider.HibernateTimeline(own.VMID); err == nil {
+				resp["hibernate_timeline"] = json.RawMessage(raw)
+			}
+		}
+	}
+	writeVMCTLJSON(w, http.StatusOK, resp)
+}
+
 // HandleBootTimeline serves GET /internal/vmctl/boot-timeline.
 // Query: computer_id, or user_id (+ desktop_id). Returns the VM's merged
 // host+guest boot receipt.
@@ -990,12 +1060,27 @@ func (h *Handler) HandleBootTimeline(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no VM found for target"})
 		return
 	}
-	provider, ok := h.registry.VMManagerHandle().(bootTimelineReader)
-	if !ok || provider == nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "boot timeline reader unavailable on this vm manager"})
+	var raw json.RawMessage
+	var err error
+	switch kind := strings.TrimSpace(r.URL.Query().Get("kind")); kind {
+	case "", "boot":
+		provider, ok := h.registry.VMManagerHandle().(bootTimelineReader)
+		if !ok || provider == nil {
+			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "boot timeline reader unavailable on this vm manager"})
+			return
+		}
+		raw, err = provider.BootTimeline(own.VMID)
+	case "hibernate":
+		provider, ok := h.registry.VMManagerHandle().(hibernateTimelineReader)
+		if !ok || provider == nil {
+			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "hibernate timeline reader unavailable on this vm manager"})
+			return
+		}
+		raw, err = provider.HibernateTimeline(own.VMID)
+	default:
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "kind must be boot or hibernate"})
 		return
 	}
-	raw, err := provider.BootTimeline(own.VMID)
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: fmt.Sprintf("no boot timeline for VM %s: %v", own.VMID, err)})
 		return
@@ -1199,6 +1284,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/autoputer-proxy/", h.HandleAutoputerProxy)
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
+	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
 }
 
 // attributedLifecycle logs who asked for a lifecycle call that can stop,

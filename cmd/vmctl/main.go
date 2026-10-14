@@ -376,6 +376,26 @@ func (a *vmManagerAdapter) BootTimeline(vmID string) (json.RawMessage, error) {
 	return json.Marshal(tl)
 }
 
+// ResumeVMFromSnapshot implements the vmctl snapshotResumer capability (S3):
+// it wakes a hibernated VM from its memory snapshot, or reports why it could
+// not so vmctl cold boots instead.
+func (a *vmManagerAdapter) ResumeVMFromSnapshot(vmID string, cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
+	inst, err := a.mgr.ResumeVMFromSnapshot(vmID, toManagerVMConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
+	return toVMInstanceInfo(inst), nil
+}
+
+// HibernateTimeline implements the vmctl hibernateTimelineReader capability.
+func (a *vmManagerAdapter) HibernateTimeline(vmID string) (json.RawMessage, error) {
+	tl, err := a.mgr.HibernateTimelineForVM(vmID)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(tl)
+}
+
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
