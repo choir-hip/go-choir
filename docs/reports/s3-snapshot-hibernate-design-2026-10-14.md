@@ -476,3 +476,107 @@ Two different epochs exist and must not be confused:
    `credential_envelope_consumed` under a `guest-credential-resume:` key,
    one new `key_revoked` event on the computer's tape, and a subsequent
    event append succeeding.
+
+## Real-disk budget and dead snapshots (follow-up, 2026-10-14)
+
+Mutation class: **red** (VM lifecycle: snapshot budget, stop paths, vmctl
+start). Evidence (Node B, 2026-10-14, `compsize`; recorded in
+[artifact store problem](../problems/artifact-store-grows-12gb-a-day-2026-10-14.md)
+"Also found"): the root filesystem is btrfs `compress=zstd:3`; an 8 GiB
+snapshot memory file uses about 560 MB of disk (6%). Item 17's budget counts
+logical bytes, so `VM_SNAPSHOT_BUDGET_GIB=48` admits about 6 snapshots where
+the disk allows about 85. Separately, snapshots of computers that were
+later stopped stayed on disk (`vm-0f24d3b8...`, `vm-db4bb41c...`, both
+stopped at 08:30): a stopped computer cold boots, so those files are dead
+weight, and they keep their host-port reservation.
+
+### Failure modes (written before the code)
+
+39. **Budget counts logical bytes** (observed). Answer: count each committed
+    snapshot at its on-disk bytes, recorded in metadata at commit.
+40. **The on-disk measure is wrong.** `st_blocks` on btrfs counts the
+    uncompressed size of allocated extents, so it is not compression-aware.
+    FIEMAP reports logical extent lengths and has no compressed-length
+    field. The free-space delta of `statfs` around the write is noisy (other
+    VMs and the artifact store write concurrently) and lags the transaction
+    commit. Answer: on btrfs, read the file's extent items with
+    `BTRFS_IOC_TREE_SEARCH` (what `compsize` does) and sum each distinct
+    extent's `disk_num_bytes` (inline extents: their inline length); holes
+    count zero. Measured after the files are fsynced, when the compressed
+    extents exist. Any error (not btrfs, no `CAP_SYS_ADMIN`, no extents found
+    for a non-empty file) falls back to `st_blocks*512`, which on btrfs
+    overcounts: the safe direction. The method is recorded with the bytes.
+41. **The next snapshot's on-disk size is unknown before it is written.**
+    Answer: reserve the worst case (logical memory size plus state
+    overhead: incompressible guest memory) for the new snapshot; committed
+    snapshots count at their measured bytes. With 48 GiB and 560 MB
+    snapshots that admits about 72, not 85; the remainder is the worst-case
+    reservation, not waste.
+42. **Snapshots committed before this change carry no on-disk bytes.**
+    Answer: measured live by the same method when the budget lists them.
+43. **The free-space floor is computed from compressed numbers.** Answer:
+    the 16 GiB floor stays an absolute guard against the worst-case
+    reservation (`statfs` free space on btrfs is real free space).
+44. **A stopped computer keeps its snapshot** (observed). Answer: every
+    vmctl stop path (explicit stop and wedge stop, logout, ownership
+    removal, a hold turning a hibernated computer stopped) discards the
+    snapshot and releases its port. It must not depend on the manager's
+    `StopVM`, which is not called for a hibernated computer the manager no
+    longer tracks (after a vmctl restart) and returns early for a
+    hibernated one it does track. Refresh and recover already cold boot,
+    and every cold boot discards first (item 7); purge
+    (`DestroyVMState`) removes the whole state dir and releases the port.
+45. **A discard races a manager operation on the same VM** (resume loading
+    it, a hibernate writing it, a boot). Blocking would hold vmctl's
+    registry lock behind a minutes-long boot. Answer: the discard takes the
+    VM's operation lock only if it is free; if busy it skips and logs: a
+    resume removes the files itself (after success or fallback), a cold
+    boot discards first, and the start sweep catches anything left.
+46. **The start sweep deletes a hibernated computer's snapshot.** The
+    computer then crash-boots instead of resuming. Answer: the sweep keeps
+    every snapshot whose ownership is `hibernated` (held or not), and runs
+    only when the ownership registry was actually read from its durable
+    file: an empty in-memory registry would make every snapshot look
+    orphaned. Ownerships the restart turned `stopped` (they were running)
+    have no committed snapshot to keep.
+47. **The sweep deletes outside the state dir or races a capture.** Answer:
+    it only removes `<state>/<vm>/snapshot` and `<state>/<vm>/snapshot.partial`
+    of real directories (symlinks skipped), and uses the same non-blocking
+    operation lock. `snapshot.partial/` is an interrupted capture and is
+    removed for every VM.
+48. **A hibernate whose ownership changed during capture** leaves a
+    committed snapshot vmctl does not record as hibernated. Answer: the
+    next start sweep removes it (named residual R10: until then it counts
+    against the budget and may be evicted first by age).
+
+### Red ceremony
+
+- **Conjecture delta:** the budget admits snapshots by real disk use, so
+  ~70 computers can hibernate warm on Node B instead of ~6; a stopped
+  computer never holds snapshot disk. Falsified if staging shows
+  `disk_budget` kill-path hibernates with fewer than ~60 committed
+  snapshots, or a `snapshot/` dir under a computer whose ownership is not
+  `hibernated` after a stop or a vmctl restart.
+- **Protected surfaces:** vmmanager budget (`ensureSnapshotRoom`), snapshot
+  metadata and hibernate timeline fields (`disk_bytes`,
+  `disk_bytes_method`), vmctl stop paths, vmctl start.
+- **Admissible evidence:** unit tests with a faked disk measure for the
+  budget, the stop discard and the sweep; the btrfs measure itself only on
+  staging: `disk_bytes` in a hibernate timeline within a few percent of
+  `compsize` for the same `mem` file.
+- **Rollback:** revert the commits; metadata gains only optional fields, so
+  the reverted code reads new snapshots (it counts them at logical bytes
+  again).
+- **Heresy delta:** discovered: items 39 and 44 (staging); the manager's
+  `StopVM` is a no-op for hibernated computers. Introduced: none intended;
+  R10 named. Repaired: item 17's budget unit; dead snapshots of stopped
+  computers.
+
+### Staging evidence plan addition
+
+9. Hibernate a computer; the hibernate timeline shows `bytes` (logical) and
+   `disk_bytes` with `disk_bytes_method=btrfs_extents`; `compsize
+   <state>/<vm>/snapshot/mem` agrees within a few percent. Stop it
+   (`POST /internal/vmctl/stop`): its `snapshot/` dir is gone. Restart
+   vmctl with one hibernated and one orphaned snapshot dir: the log names
+   the orphan as removed, the hibernated one survives and resumes.
