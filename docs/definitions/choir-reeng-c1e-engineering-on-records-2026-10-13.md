@@ -302,7 +302,15 @@ now:
     checker classification gap, and a residual for Cut 2's owner. I2's
     run half fails because a research run is still running at the
     paper scenario's export, which is expected mid-flight.
-  next_action: B1 design note (the Report body or assignment-row choice and the parked-caster resume), reviewed, then steps 1-4; tag reeng-c1e-pre-b1 at 19e56c54 before the B1 push; record the paper computer's publications before B1
+  next_action: >-
+    The B1 design note is accepted (round 4, 7d218d6f, after send_backs in
+    rounds 1-3). Steps 1-4 are being built in a separate worktree, branch
+    c1e-b1, concurrently with L2a's design (owner's overnight plan
+    2026-10-14). B1 deploys after L2a's deploy is verified, one
+    shared-runtime cutover at a time. Before the B1 push: tag
+    reeng-c1e-pre-b1 at the then-current main, and record the paper
+    computer's publications (scripts/l2a_paper_window.py gives the
+    counts).
 
 receipts:
   - id: c1e-b0
