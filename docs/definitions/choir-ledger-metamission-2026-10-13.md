@@ -237,6 +237,8 @@ metamission:
       status: pending
       depends_on: [LP, SP]
       note: >-
+        Owner 2026-10-14: S8-S11 (publication, fleets, templates, fleet
+        security pushes) come before red teaming, possibly before SP.
         Agentic red teaming (owner 2026-10-14), after supervised
         self-development (Gate 2) and SP failover, against disposable
         isolated forks (S9 re-keying first): capsule boundary, egress, auth,

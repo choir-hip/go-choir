@@ -10,7 +10,12 @@ whole agentic red teaming mission to do. Although [...] before we're ready
 for the agentic red teaming, we're going to need to scale the
 infrastructure so that we're not just running on one machine."
 
-Status: proposal; the order below is for the owner to ratify.
+Status: owner-reviewed 2026-10-14 with one change: "I would put the rest
+before the agentic red teaming and maybe before the infrastructure,
+depending on my timing and when I can get new infrastructure set up."
+Phase 6 (S8-S11) now comes before red teaming, and may come before SP
+depending on when a new server is available. Stopgap for SP: part of
+node-a (see "Node-a stopgap" below).
 
 ## What exists today (checked in code)
 
@@ -98,3 +103,34 @@ divergent fleet.
    OAuth providers, TOTP/backup codes.
 3. Whether LT's first target set includes the live paper's host services
    or only forks.
+
+## Node-a stopgap (owner 2026-10-14)
+
+Owner: node-a runs another project; "if there's a way that I could get
+like half or two thirds of the capacity of Node A for Choir and save the
+rest of it for the other project, that could be kind of a stopgap. And
+then maybe in a few days, I can get another server."
+
+Node-a: 12 cores, 31 GiB RAM, about 950 GB btrfs (907 GB free at the
+2026-10-09 handover), NixOS managed by the other project
+(`docs/node-a-shared-host.md`). Choir only uses it as a Nix builder today.
+
+What fits a shared host:
+- **SP0-lite: encrypted off-host backups.** Tape exports, Store A dumps,
+  the content store and the escrow material, encrypted with a key that is
+  never on node-a (restic or age; key on Node B and in the owner's
+  offline copy). Needs disk (a btrfs subvolume with a quota, say 300 GB)
+  and almost no CPU or RAM. Because the other project's administrators
+  have root on node-a, Choir data must only be stored there encrypted.
+- **A log and metric sink** (bounded, redacted), so Node B's logs survive
+  Node B.
+- **Not live failover yet.** A standby that can run guests needs KVM,
+  about 20 GiB reserved and plaintext state, which a shared host with
+  another root is the wrong place for. That waits for the new server.
+
+How: a small NixOS module the other project imports, like the builder
+module: a `choir.slice` systemd slice (MemoryMax, AllowedCPUs or CPUQuota,
+IOWeight), a quota'd subvolume, a dedicated restricted user and key for
+backup pushes, and a firewall rule for Node B only. It changes a host the
+other project manages, so it needs the owner's go-ahead and that
+project's agent to apply it.
