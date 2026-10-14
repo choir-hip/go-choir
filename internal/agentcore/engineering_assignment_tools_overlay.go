@@ -101,32 +101,9 @@ func (rt *Runtime) validateAssignedEngineeringExecution(ctx context.Context, rec
 	if rec == nil || rt == nil || rt.store == nil || rt.capsuleExecutor == nil {
 		return fmt.Errorf("assigned Engineering execution authority unavailable")
 	}
-	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
-	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
-	assignment, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+	assignment, err := rt.assignedEngineeringObligation(ctx, rec)
 	if err != nil {
 		return err
-	}
-	if assignment.Disposition != types.EngineeringAssignmentBound || assignment.CapsuleDisposition != types.EngineeringCapsuleActive ||
-		assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedWorkItemID != metadataStringValue(rec.Metadata, "assigned_work_item_id") {
-		return fmt.Errorf("assignment fate is not active and bound")
-	}
-	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID)
-	if err != nil || trajectory.Status != types.TrajectoryLive {
-		return fmt.Errorf("trajectory obligation is not live: %w", err)
-	}
-	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID); intentErr == nil {
-		return fmt.Errorf("trajectory cancellation is already authoritative")
-	} else if !errors.Is(intentErr, store.ErrNotFound) {
-		return fmt.Errorf("trajectory cancellation authority unavailable: %w", intentErr)
-	}
-	work, err := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.AssignedWorkItemID)
-	if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != rec.AgentID {
-		return fmt.Errorf("assigned work obligation is not open: %w", err)
-	}
-	storedRun, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
-	if err != nil || !storedRun.State.Active() || storedRun.AgentID != rec.AgentID || storedRun.TrajectoryID != assignment.Binding.TrajectoryID {
-		return fmt.Errorf("assigned run obligation is not active: %w", err)
 	}
 	handle, err := rt.capsuleExecutor.AssignmentHandle(rec.RunID, assignment.Binding.CapsuleID)
 	if err != nil || strings.TrimSpace(handle) == "" || !rt.capsuleExecutor.HasCapsule(assignment.Binding.CapsuleID) {
@@ -140,4 +117,56 @@ func (rt *Runtime) validateAssignedEngineeringExecution(ctx context.Context, rec
 		return fmt.Errorf("assignment capsule %s is not active (state=%s)", diagnostics.ID, diagnostics.State)
 	}
 	return nil
+}
+
+// assignedEngineeringObligation is the store half of the capsule gate: the
+// run's assignment is bound with its capsule active, its trajectory is live
+// and not being cancelled, its work obligation is open, and the run is the
+// assignment's active run. It returns the assignment for the capsule half.
+func (rt *Runtime) assignedEngineeringObligation(ctx context.Context, rec *types.RunRecord) (types.EngineeringAssignment, error) {
+	if rec == nil || rt == nil || rt.store == nil {
+		return types.EngineeringAssignment{}, fmt.Errorf("assigned Engineering execution authority unavailable")
+	}
+	assignmentID := metadataStringValue(rec.Metadata, "assignment_id")
+	attempt := uint64(metadataIntValue(rec.Metadata, "assignment_attempt"))
+	assignment, err := rt.store.GetEngineeringAssignment(ctx, rec.OwnerID, rec.ComputerID, assignmentID, attempt)
+	if err != nil {
+		return types.EngineeringAssignment{}, err
+	}
+	refuse := func(format string, args ...any) (types.EngineeringAssignment, error) {
+		return types.EngineeringAssignment{}, fmt.Errorf(format, args...)
+	}
+	if assignment.Disposition != types.EngineeringAssignmentBound || assignment.CapsuleDisposition != types.EngineeringCapsuleActive ||
+		assignment.BoundRunID != rec.RunID || assignment.Binding.AssignedWorkItemID != metadataStringValue(rec.Metadata, "assigned_work_item_id") {
+		return refuse("assignment fate is not active and bound")
+	}
+	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID)
+	if err != nil || trajectory.Status != types.TrajectoryLive {
+		return refuse("trajectory obligation is not live: %w", err)
+	}
+	if _, intentErr := rt.store.GetLifecycleCancellationIntent(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.TrajectoryID); intentErr == nil {
+		return refuse("trajectory cancellation is already authoritative")
+	} else if !errors.Is(intentErr, store.ErrNotFound) {
+		return refuse("trajectory cancellation authority unavailable: %w", intentErr)
+	}
+	if assignment.Binding.Records() {
+		// C1e: a records binding carries no work item. Its work obligation
+		// is the engineering conversation's round, open with this run's
+		// agent as recipient until the final Report closes it (D1, D3) —
+		// the same head planEngineeringReportRecord reads before minting.
+		head, err := rt.store.ConversationState(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.AssignedConversationID)
+		if err != nil || !head.Open || head.RecipientInbox != rec.AgentID || assignment.Binding.AssignedAgentID != rec.AgentID {
+			return refuse("assigned engineering round is not open: %w", err)
+		}
+	} else {
+		work, err := rt.store.GetLifecycleWorkItem(ctx, rec.OwnerID, rec.ComputerID, assignment.Binding.AssignedWorkItemID)
+		if err != nil || work.Status != types.WorkItemOpen || work.AssignedAgentID != rec.AgentID {
+			return refuse("assigned work obligation is not open: %w", err)
+		}
+	}
+	storedRun, err := rt.getRunForComputer(ctx, rec.OwnerID, rec.RunID)
+	if err != nil || !storedRun.State.Active() || storedRun.AgentID != rec.AgentID || storedRun.TrajectoryID != assignment.Binding.TrajectoryID {
+		return refuse("assigned run obligation is not active: %w", err)
+	}
+	return assignment, nil
 }
