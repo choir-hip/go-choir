@@ -31,8 +31,9 @@ type ModelPricing struct {
 	OutputPerMillion float64
 }
 
-// pricingTable is the hardcoded v0 pricing table. Prices are USD per 1M tokens
-// and reflect publicly known OpenAI and Anthropic pricing as of mid-2024.
+// pricingTable is the hardcoded pricing table. Prices are USD per 1M tokens:
+// OpenAI and Anthropic entries as of mid-2024, and the models Choir calls as
+// researched on 2026-10-14.
 // This table changes rarely; update it when providers publish new rates.
 var pricingTable = []ModelPricing{
 	// --- OpenAI ---
@@ -47,6 +48,32 @@ var pricingTable = []ModelPricing{
 	{Provider: "anthropic", Model: "claude-3-sonnet", InputPerMillion: 3.0, OutputPerMillion: 15.0},
 	{Provider: "anthropic", Model: "claude-3.5-sonnet", InputPerMillion: 3.0, OutputPerMillion: 15.0},
 	{Provider: "anthropic", Model: "claude-3-haiku", InputPerMillion: 0.25, OutputPerMillion: 1.25},
+
+	// --- Models Choir calls, researched 2026-10-14 ---
+	// Sources, dates and confidence: docs/evidence/model-prices-2026-10-14.md.
+	// Prices are the origin's list rate for the model, so a report reads
+	// "at list rates"; what a route actually charges (a flat subscription,
+	// a plan allowance, a free preview) is in that evidence file.
+	//
+	// DeepSeek V4.1 Flash: DeepSeek's peak rate (off-peak is half; peak is
+	// 01-04 and 06-10 UTC on weekdays). On opencode-go it draws down the
+	// Go plan's per-model allowance at the same rates.
+	{Provider: "deepseek", Model: "deepseek-v4.1-flash", InputPerMillion: 0.30, OutputPerMillion: 1.20},
+	// DeepSeek V4 Pro (0813): DeepSeek's peak rate.
+	{Provider: "deepseek", Model: "deepseek-v4-pro", InputPerMillion: 1.32, OutputPerMillion: 3.96},
+	// GPT-6 Luna: OpenAI API standard tier up to 272K context. The chatgpt
+	// route is a flat ChatGPT subscription.
+	{Provider: "openai", Model: "gpt-6-luna", InputPerMillion: 0.10, OutputPerMillion: 0.50},
+	// Kimi K2.6: Moonshot's rate as listed on OpenRouter.
+	{Provider: "moonshot", Model: "kimi-k2p6", InputPerMillion: 0.95, OutputPerMillion: 4.00},
+	// Jev 1.13: TypeSafe through OpenRouter's Decisions endpoint; output is
+	// not billed.
+	{Provider: "typesafe", Model: "jev-1.13", InputPerMillion: 0.042, OutputPerMillion: 0},
+	// Free previews on opencode-go: found at $0, not unpriced. Free "for a
+	// limited time" with no end date; LongCat 2.5 Preview lists at about
+	// 0.30/1.20 elsewhere (unverified), Cat Jam has no known origin.
+	{Provider: "opencode-go", Model: "longcat-2.5-preview-free", InputPerMillion: 0, OutputPerMillion: 0},
+	{Provider: "opencode-go", Model: "cat-jam-free", InputPerMillion: 0, OutputPerMillion: 0},
 }
 
 // LookupPricing returns the pricing entry for the given model identifier. The
@@ -55,6 +82,10 @@ var pricingTable = []ModelPricing{
 // base pricing entry. Returns the entry and true when a match is found.
 func LookupPricing(model string) (ModelPricing, bool) {
 	model = strings.ToLower(strings.TrimSpace(model))
+	// A provider-qualified id ("typesafe/jev-1.13") prices as its model.
+	if i := strings.LastIndex(model, "/"); i >= 0 {
+		model = model[i+1:]
+	}
 	if model == "" {
 		return ModelPricing{}, false
 	}
