@@ -29,7 +29,18 @@ health probes 200 throughout):
 - L2a fixture passes (merge recall 1.0, 0 false merges); next is the
   paper's enable.
 
-**Owner priorities (2026-10-14):** Autopaper scaling first; the data
+**Owner priority change (2026-10-14, about 12:00 UTC):** "I actually want
+to accelerate doing the optimizations. [...] even the auto paper scaling
+should come after these optimizations because we really shouldn't be
+scaling our utilization until we improve our efficiency to the point of
+diminishing marginal returns." Optimizations now come first: the artifact
+store leak (docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md),
+snapshot budget by real bytes, cached-token measurement and prompt-cache
+hits, guest memory right-sizing, the daemon's store memory, KSM, disk
+cleanup; then Autopaper scaling. "Always on" is renamed **available**
+(running, or snapshot-hibernated and waking in under a second).
+
+**Owner priorities (earlier 2026-10-14):** Autopaper scaling first; the data
 model (object graph on Dolt) always; app packages (station LP: S6 then S7,
 existing apps converted first in S7-0) before building any new app; guest
 updates (station LU) and the capsule Go module proxy alongside. Puter
