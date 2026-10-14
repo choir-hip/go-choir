@@ -76,6 +76,19 @@ start:
       (internal/sources/registry.json), and a schedule needs a registry
       id.
     - Model cost is unpriced on /api/costs (station LR).
+    - >-
+      Dated correction, 2026-10-14 00:55 UTC, to how the first observation
+      reads. It does not change the counts. Scored by
+      scripts/l2a_paper_window.py on 15:00-21:00 UTC (baseline A, on the
+      current intake): 33 stories opened, 33 published, and 31 of the 33
+      versions cite two or more outlets (median about 6; one cites 36).
+      Research widens every story from the open web. So the stories are
+      not copies of one article. What is missing is synthesis across
+      captures and across the library:
+      - intake opens a story per capture and rarely feeds one (11 feeds);
+      - research re-searches the web per story instead of building on the
+        corpus;
+      - stories do not update one another.
 
 finish:
   deliver: >-
@@ -140,8 +153,9 @@ finish:
         registered judge finds in each window.
       proves: >-
         Against the measured baseline, merge recall over that denominator
-        rises, and the share of versions citing two or more outlets rises
-        without false merges. Publication continues. Cost per published
+        rises without false merges, and feeds into existing stories rise.
+        The share of versions citing two or more outlets is already 0.94
+        in baseline A, so it is reported but is not a target. Publication continues. Cost per published
         version and per capture is reported, including Jev's added calls,
         and not capped.
       evidence_class: deployed proof
@@ -158,8 +172,10 @@ finish:
 
 value:
   better_means: >-
-    Maximize merge recall of same-event coverage across outlets and
-    languages into one story, with false merges near zero. Every capture
+    Maximize merge recall of same-event captures across outlets and
+    languages into one story, with false merges near zero, and the share
+    of a story's evidence that comes from the corpus and the library
+    rather than a fresh web search. Every capture
     keeps a disposition and publication does not stall.
   goodharting_would_be: >-
     Citing a second source that adds nothing; merging unrelated events;

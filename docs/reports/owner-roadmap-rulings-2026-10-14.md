@@ -163,8 +163,17 @@ Consequences to check now, not later:
   - The titles track single source articles (TechCrunch, Hacker News, BBC,
     NPR).
 
-  So today the paper turns one capture into one story, which is the
-  pattern this principle rules out. This is not yet a measure of what
+  So today intake turns one capture into one story.
+
+  *Correction, 00:55 UTC.* The published stories are not copies of that
+  one capture. Research widens each one from the open web: in 15:00-21:00
+  UTC, 31 of 33 published versions cite two or more outlets, with a
+  median of about 6 and one citing 36 (scripts/l2a_paper_window.py).
+  What the principle rules out is still there:
+  - captures of one event are not consolidated at intake;
+  - research re-searches the web per story instead of building on the
+    corpus;
+  - stories do not update one another. This is not yet a measure of what
   research cites while it writes; the per-version source count is the
   next observation. It is the evidence for station L2.
 - The intake redesign (station L2) already treats a capture as an
