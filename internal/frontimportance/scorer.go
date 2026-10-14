@@ -58,6 +58,9 @@ type frontStory struct {
 	Title          string `json:"title"`
 	Dek            string `json:"dek"`
 	LatestRevision int    `json:"latest_revision"`
+	// SourceCount is the latest version's distinct cited sources; nil when
+	// corpusd does not report it.
+	SourceCount *int `json:"source_count"`
 }
 
 // decider is the Jev transport (gateway.JevTransport in production).
@@ -101,11 +104,14 @@ func Main(args []string) int {
 		return 1
 	}
 	log.Printf("front-importance: %d stories, %d kept, %d scored, %d failed, %d deferred", stats.Stories, stats.Kept, stats.Scored, stats.Failed, stats.Deferred)
+	log.Printf("front-importance: depth: %d important (>= %d, not promo) with known depth, %d cite >= %d sources, median %.1f sources; thin: %v",
+		stats.Depth.Important, depthImportantAt, stats.Depth.Deep, depthDeepSources, stats.Depth.MedianSources, stats.Depth.Thin)
 	return 0
 }
 
 type runStats struct {
 	Stories, Kept, Scored, Failed, Deferred int
+	Depth                                   depthStats
 }
 
 // run scores the front list's unscored stories and rewrites the scores
@@ -162,6 +168,7 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 	if err := writeScores(cfg.ScoresPath, next); err != nil {
 		return stats, err
 	}
+	stats.Depth = summarizeDepth(stories, next.Scores)
 	return stats, nil
 }
 
