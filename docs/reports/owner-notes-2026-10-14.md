@@ -184,3 +184,27 @@ Owner rulings on the programming-engine design
   other when something important emerges.
 
 Lead: sent back to the report's author for revision of §1, §2, §5 and §7.
+
+## 13. Self-development: autonomous first, publish to the host, not GitHub
+
+Owner (late):
+- **Autonomous first.** Self-development runs with no approval until the
+  whole loop is proven; approvals come after.
+- **The update path is through the host, not GitHub.** A guest makes an
+  upgrade and publishes it to the host. Other computers can download it,
+  and so can the host. Pushing an update to everyone takes human approval.
+  GitHub comes later, perhaps as a branch.
+- **Prerequisites before patching.** The app package update and other
+  updates may be needed first. Work out the real prerequisites for the
+  right architecture, and work efficiently, not haphazardly.
+
+Lead:
+- The GitHub draft-PR script is dropped. The read-only patch export stays,
+  because publication reuses it.
+- An architecture agent is designing the path end to end, from the
+  existing appdev stations: S6 (commit gate and full release), S7 (app
+  packages), S8 (source publication) and gate 2. Its output, prerequisites
+  in dependency order plus the minimal proving sequence, is
+  `docs/reports/selfdev-update-architecture-2026-10-15.md`.
+- The capsule build fixes still land tonight: every path needs a capsule
+  that can build the binary.
