@@ -1298,12 +1298,16 @@ jobs:
               systemctl daemon-reload || true
               # A deploy releases a unit latched by its start limit (L1a).
               systemctl reset-failed go-choir-auth go-choir-maild go-choir-corpusd go-choir-gateway go-choir-proxy 2>/dev/null || true
+              # The site's services restart first, together, so systemd orders
+              # them; none waits on the gateway. The gateway restarts last and
+              # alone: its graceful drain (up to 11 min) holds only model calls,
+              # never the site (L1, deploy-without-site-outage design).
               systemctl restart \
                 go-choir-auth \
                 go-choir-maild \
                 go-choir-corpusd \
-                go-choir-gateway \
                 go-choir-proxy
+              systemctl restart go-choir-gateway
               if systemctl is-active --quiet caddy; then
                 systemctl reload caddy || systemctl restart caddy
               else

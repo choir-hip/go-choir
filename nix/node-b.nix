@@ -359,6 +359,11 @@ in
   #   sd_notify causes the service to be killed every 30 seconds.
 
   systemd.services.go-choir-auth = {
+    # The deploy restarts this unit once, after the service pointer holds the
+    # new binary; a switch-time restart ran the old pointer and held the site
+    # down while the gateway drained (L1, deploy-without-site-outage design;
+    # vmctl precedent 2f755bb3).
+    restartIfChanged = false;
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
     startLimitIntervalSec = 600;
     startLimitBurst = 10;
@@ -388,6 +393,11 @@ in
   };
 
   systemd.services.go-choir-proxy = {
+    # The deploy restarts this unit once, after the service pointer holds the
+    # new binary; a switch-time restart ran the old pointer and held the site
+    # down while the gateway drained (L1, deploy-without-site-outage design;
+    # vmctl precedent 2f755bb3).
+    restartIfChanged = false;
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
     startLimitIntervalSec = 600;
     startLimitBurst = 10;
@@ -437,6 +447,11 @@ in
   };
 
   systemd.services.go-choir-maild = {
+    # The deploy restarts this unit once, after the service pointer holds the
+    # new binary; a switch-time restart ran the old pointer and held the site
+    # down while the gateway drained (L1, deploy-without-site-outage design;
+    # vmctl precedent 2f755bb3).
+    restartIfChanged = false;
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
     startLimitIntervalSec = 600;
     startLimitBurst = 10;
@@ -536,6 +551,11 @@ in
   };
 
   systemd.services.go-choir-corpusd = {
+    # The deploy restarts this unit once, after the service pointer holds the
+    # new binary; a switch-time restart ran the old pointer and held the site
+    # down while the gateway drained (L1, deploy-without-site-outage design;
+    # vmctl precedent 2f755bb3).
+    restartIfChanged = false;
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
     startLimitIntervalSec = 600;
     startLimitBurst = 10;
@@ -831,6 +851,11 @@ in
   };
 
   systemd.services.go-choir-gateway = {
+    # The deploy restarts this unit once, after the service pointer holds the
+    # new binary; a switch-time restart ran the old pointer and held the site
+    # down while the gateway drained (L1, deploy-without-site-outage design;
+    # vmctl precedent 2f755bb3).
+    restartIfChanged = false;
     # No crash loops (docs/restart-subsystem-design-2026-10-13.md, L1a): after 10 starts in 10 minutes the unit stays failed until a deploy or an operator (systemctl reset-failed) starts it again.
     startLimitIntervalSec = 600;
     startLimitBurst = 10;
