@@ -219,9 +219,11 @@ type timedChildProvider struct {
 
 func (p *timedChildProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.mu.Lock()
-	p.told = append(p.told, strings.Contains(req.System, "You have about"))
-	p.mu.Unlock()
 	raw := rawMessagesForTest(req.Messages)
+	// The time budget is the child's run-context turn, not its system
+	// prompt (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md).
+	p.told = append(p.told, strings.Contains(raw, "You have about") && !strings.Contains(req.System, "You have about"))
+	p.mu.Unlock()
 	if strings.Contains(raw, "hang") && !strings.Contains(raw, "nest") {
 		<-ctx.Done()
 		return nil, ctx.Err()

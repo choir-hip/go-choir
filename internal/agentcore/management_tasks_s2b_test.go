@@ -386,7 +386,7 @@ type concurrencyModel struct {
 }
 
 func (m *concurrencyModel) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
-	task := strings.Contains(req.System, "You are management task")
+	task := strings.Contains(req.System, "You are a management task")
 	m.mu.Lock()
 	m.calls++
 	callID := fmt.Sprintf("call-%d", m.calls)

@@ -205,8 +205,14 @@ func TestAssignedEngineeringPromptNamesExactKindWithoutFutureToolLie(t *testing.
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(prompt, "kind="+string(kind)) {
-			t.Fatalf("prompt does not name exact %s assignment: %s", kind, prompt)
+		// The exact assignment is per run: it rides the run-context turn,
+		// not the cached system prompt
+		// (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md).
+		if runContext := rt.runContextForRun(rec); !strings.Contains(runContext, "kind="+string(kind)) {
+			t.Fatalf("run context does not name exact %s assignment: %s", kind, runContext)
+		}
+		if strings.Contains(prompt, "assignment_id=") {
+			t.Fatalf("system prompt carries the per-run assignment: %s", prompt)
 		}
 		if !strings.Contains(prompt, `Report progress to management with choir.Report("management"`) {
 			t.Fatalf("assigned Engineering prompt omits the in-cell report channel: %s", prompt)

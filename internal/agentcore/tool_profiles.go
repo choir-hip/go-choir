@@ -172,12 +172,19 @@ func isTextureAgentID(agentID string) bool {
 	return strings.HasPrefix(agentID, agentprofile.Texture+":") || strings.HasPrefix(agentID, agentprofile.Texture+":")
 }
 
+// systemPromptForRun is a desk's stable prefix: the core, the role prompt,
+// the role's overlays and its generated surface. It must be byte-identical
+// for every run and activation of the same desk/role (and owner prompt):
+// providers cache a prompt by its leading bytes, so anything volatile here
+// (the time, a run id, an assignment, a requester) throws away the cached
+// system prompt, tools and replayed history behind it on every turn
+// (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md). Per-run
+// facts and the time go in runContextForRun, which the run reads as a turn.
 func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if isManagementTaskRun(rec) {
 		return rt.managementTaskSystemPrompt(rec), nil
 	}
 	profile := agentProfileForRun(rec)
-	channelID := channelIDForRun(rec)
 	ownerID := ""
 	if rec != nil {
 		ownerID = rec.OwnerID
@@ -193,19 +200,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		}
 	}
 
-	corePrompt := "Choir is a multiagent writing, research, and execution system with one user-facing product, one runtime, and one standard of truth."
-	if rt != nil && rt.promptStore != nil {
-		if loaded, err := rt.promptStore.LoadCore(); err == nil && strings.TrimSpace(loaded) != "" {
-			corePrompt = loaded
-		}
-	}
-
 	var b strings.Builder
-	b.WriteString(corePrompt)
-	b.WriteString("\n\n")
-	b.WriteString(runtimeprompts.TemporalContext(runtimeprompts.TemporalContextOptions{
-		NowUTC: time.Now().UTC().Format(time.RFC3339),
-	}))
+	b.WriteString(rt.corePrompt())
 	if strings.TrimSpace(rolePrompt) != "" {
 		b.WriteString("\n\nRole-specific instructions:\n")
 		b.WriteString(rolePrompt)
@@ -215,31 +211,23 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString(skillContext)
 	}
 	if profile == agentprofile.Conductor {
-		requestedApp, _ := rec.Metadata["requested_app"].(string)
-		seedPrompt, _ := rec.Metadata["seed_prompt"].(string)
-		if requestedApp == "" {
-			requestedApp = agentprofile.Texture
-		}
-		b.WriteString(runtimeprompts.ConductorRunOverlay(runtimeprompts.ConductorRunOptions{
-			RequestedApp: requestedApp,
-			SeedPrompt:   strings.TrimSpace(seedPrompt),
-		}))
+		// The requested app and seed prompt are per run (runContextForRun).
+		b.WriteString(runtimeprompts.ConductorRunOverlay(runtimeprompts.ConductorRunOptions{}))
 	}
-	if profile == agentprofile.Texture {
-		// Texture's prompt is its core (texture.yaml) and the generated verb
-		// list; the frame carries the document and records each turn (Cut 2
-		// 2a). The per-run overlays were deleted with ApplyTexture.
-		if operationID := textureRunSelfDevelopmentOperation(rt, rec); operationID != "" {
-			b.WriteString("\n\nSelf-development supervision:\nThis document supervises self-development operation " + operationID + ". The runtime runs the operation: engineering builds and freezes the change, an independent judgment checks it, the owner approves or rejects it, and the update applies. Do not ask to verify, approve, apply or re-run it. Keep the document a true account of where the operation stands, from the reports in choir.Updates(): what was built, what the evidence shows, and what is still pending. When a report adds nothing the document needs, call choir.Wait(why) instead of writing.")
-		}
-	}
+	// Texture's prompt is its core (texture.yaml) and the generated verb
+	// list; the frame carries the document and records each turn (Cut 2
+	// 2a). Its self-development supervision note is per run.
+	//
 	// The computer's intake.labels setting adds management's intake text
-	// and functions (L2a A6); off, the prompt is as before.
+	// and functions (L2a A6); off, the prompt is as before. A computer
+	// setting, so stable across runs.
 	intakeLabels := profile == agentprofile.Management && rec != nil && rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)
 	if profile == agentprofile.Management {
 		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels}))
 	}
 	if profile == agentprofile.Engineering {
+		// The two flags pick one of four fixed overlay variants; the exact
+		// assignment is per run (runContextForRun).
 		hasSelfDevelopmentOperation := false
 		if rt != nil && rt.selfdevOperations != nil && rec != nil && strings.TrimSpace(rec.ComputerID) != "" {
 			// The assignment's own operation (C1e D2), not the trajectory's.
@@ -255,22 +243,6 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 			HasSelfDevelopmentOperation: hasSelfDevelopmentOperation,
 			CanProposeChange:            canProposeChange,
 		}))
-		kind := metadataStringValue(rec.Metadata, "assignment_kind")
-		if assignmentID := metadataStringValue(rec.Metadata, "assignment_id"); assignmentID != "" {
-			b.WriteString("\n\nExact authenticated assignment: assignment_id=")
-			b.WriteString(assignmentID)
-			b.WriteString(" kind=")
-			b.WriteString(kind)
-			b.WriteString(" subject_digest=")
-			b.WriteString(metadataStringValue(rec.Metadata, "subject_digest"))
-			if kind == string(types.EngineeringAssignmentVerification) {
-				b.WriteString(" candidate_id=")
-				b.WriteString(metadataStringValue(rec.Metadata, "source_candidate_id"))
-				b.WriteString(". This verification capsule contains that exact immutable candidate subject.")
-			} else {
-				b.WriteString(". Implement only the bounded objective in /workspace/platform and return a typed result.")
-			}
-		}
 	}
 	if profile == agentprofile.Research {
 		// SR: the research desk is always on the cell carrier — the legacy
@@ -285,24 +257,14 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\n\n")
 		b.WriteString(surface)
 	}
-	requesterAgentID := ""
-	textureDeliveryAgentID := ""
-	if rec != nil {
-		requesterAgentID = metadataStringValue(rec.Metadata, "requested_by_agent_id")
-		if profile == agentprofile.Research && isTextureAgentID(requesterAgentID) {
-			textureDeliveryAgentID = requesterAgentID
-		}
-	}
-	b.WriteString(runtimeprompts.RunContextOverlay(runtimeprompts.RunContextOptions{
-		AgentID:                agentIDForRun(rec),
-		RequesterAgentID:       requesterAgentID,
-		TextureDeliveryAgentID: textureDeliveryAgentID,
-		ChannelID:              channelID,
-		InCellCarrier:          deskCarrierLive(profile) || profile == agentprofile.Engineering,
+	b.WriteString(runtimeprompts.PeerCoordination(runtimeprompts.PeerCoordinationOptions{
+		InCellCarrier: deskCarrierLive(profile) || profile == agentprofile.Engineering,
 	}))
 	return b.String(), nil
 }
 
+// providerPromptForRun is the one-shot prompt of the legacy Execute path:
+// the stable system prompt, the run context, then the request.
 func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	systemPrompt, err := rt.systemPromptForRun(rec)
 	if err != nil {
@@ -313,6 +275,8 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	}
 	var b strings.Builder
 	b.WriteString(systemPrompt)
+	b.WriteString("\n\n")
+	b.WriteString(runContextText(time.Now(), rt.runContextForRun(rec)))
 	b.WriteString("\n\nUser request:\n")
 	b.WriteString(rec.Prompt)
 	return b.String(), nil
@@ -486,29 +450,17 @@ func (rt *Runtime) ToolRegistryForProfile(profile string) *toolregistry.ToolRegi
 }
 
 // managementTaskSystemPrompt is a management task's prompt (S2a): the core,
-// the time, the task's own overlay (not management's, whose authority the
-// task does not hold), and its generated surface.
-func (rt *Runtime) managementTaskSystemPrompt(rec *types.RunRecord) string {
-	corePrompt := "Choir is a multiagent writing, research, and execution system with one user-facing product, one runtime, and one standard of truth."
-	if rt != nil && rt.promptStore != nil {
-		if loaded, err := rt.promptStore.LoadCore(); err == nil && strings.TrimSpace(loaded) != "" {
-			corePrompt = loaded
-		}
-	}
+// the task's own overlay (not management's, whose authority the task does
+// not hold), and its generated surface. Every task shares it byte for byte;
+// the task id, capture count, inbox and the time are in its run context.
+func (rt *Runtime) managementTaskSystemPrompt(_ *types.RunRecord) string {
 	var b strings.Builder
-	b.WriteString(corePrompt)
-	b.WriteString("\n\n")
-	b.WriteString(runtimeprompts.TemporalContext(runtimeprompts.TemporalContextOptions{NowUTC: time.Now().UTC().Format(time.RFC3339)}))
+	b.WriteString(rt.corePrompt())
 	b.WriteString(runtimeprompts.RLMManagementTaskOverlay(runtimeprompts.RLMManagementTaskOverlayOptions{
-		TaskID:   managementTaskIDOfRun(rec),
 		Deadline: managementTaskDeadline.String(),
-		Captures: metadataIntValue(rec.Metadata, "management_task_leased_count"),
 	}))
 	b.WriteString("\n\n")
 	b.WriteString(yaegikernel.DeskSurface(agentprofile.ManagementTask, "", true))
-	// Not the run-context overlay: it teaches ReportPacket and Ask, which a
-	// task does not have.
-	b.WriteString("\n\nCurrent agent id: " + agentIDForRun(rec) + ". You read this inbox; you send as " + persistentManagementAgentID(rec.OwnerID) + ".")
 	return b.String()
 }
 

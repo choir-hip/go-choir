@@ -38,6 +38,12 @@ type LLMRequest struct {
 	// ConversationID is the durable calling-run identity used by providers
 	// that require request affinity/session headers.
 	ConversationID string `json:"conversation_id,omitempty"`
+	// CacheKey is the caller's prompt-cache thread key: one desk on one
+	// computer at one prompt version, shared across its runs. Each adapter
+	// uses it only where its provider documents a client cache-routing key
+	// (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md): chatgpt sends it as
+	// prompt_cache_key, OpenCode as x-opencode-session. Others ignore it.
+	CacheKey string `json:"cache_key,omitempty"`
 
 	// Model is the model identifier (provider-specific).
 	Model string `json:"model"`
@@ -472,6 +478,9 @@ func (p *BedrockProvider) buildRequestBody(req LLMRequest) anthropicRequest {
 	}
 
 	ar.Messages = convertMessages(req.Messages)
+	// Bedrock caches only at explicit breakpoints: the system one above
+	// (tools + system) and this one (the history so far).
+	markHistoryCacheBreakpoint(ar.Messages)
 	ar.Tools = convertToolDefs(req.Tools)
 	return ar
 }
@@ -961,6 +970,12 @@ func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openA
 		ToolChoice:   openAIResponsesToolChoice(req.ToolChoice),
 		Store:        false,
 		Stream:       req.Stream,
+		// Without a key the endpoint lands a request on a cache machine at
+		// random: 4-10% hits on gpt-6-luna even mid-activation
+		// (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md).
+		// Codex CLI sends its conversation id here; we send the desk
+		// thread's key, or the run's conversation id when there is none.
+		PromptCacheKey: cacheRoutingKey(req),
 	}
 	if effort := effectiveReasoning(req.ReasoningEffort, p.reasoning); effort != "" && effort != "none" && effort != "off" {
 		payload.Reasoning = &openAIReasoning{Effort: effort}
@@ -1069,9 +1084,23 @@ func (p *OpenCodeProvider) Stream(ctx context.Context, req LLMRequest, onChunk f
 	return p.call(ctx, req, onChunk)
 }
 
+// cacheRoutingKey is the key a provider routes cache lookups by: the
+// desk thread's cache key, else the run's conversation id.
+func cacheRoutingKey(req LLMRequest) string {
+	if key := strings.TrimSpace(req.CacheKey); key != "" {
+		return key
+	}
+	return strings.TrimSpace(req.ConversationID)
+}
+
 func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
-	conversationID := strings.TrimSpace(req.ConversationID)
-	if conversationID == "" {
+	// OpenCode routes a session to one upstream for "routing and
+	// prompt-cache affinity" (docs/reports/choir-opencode-provider-research-
+	// 2026-09-10.md §4). The session is the desk thread, so successive runs
+	// of a desk land where its prefix is cached; the run id only when the
+	// caller names no thread.
+	session := cacheRoutingKey(req)
+	if session == "" {
 		return nil, fmt.Errorf("%s: conversation_id is required for OpenCode requests", p.providerName)
 	}
 	modelID := effectiveModel(req.Model, p.modelID)
@@ -1118,7 +1147,7 @@ func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk fun
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", accept)
 	httpReq.Header.Set("User-Agent", "choir-gateway/0.1")
-	httpReq.Header.Set("x-opencode-session", conversationID)
+	httpReq.Header.Set("x-opencode-session", session)
 	if shape == openCodeMessages {
 		httpReq.Header.Set("x-api-key", p.apiKey)
 		httpReq.Header.Set("anthropic-version", "2023-06-01")
@@ -1294,6 +1323,9 @@ type openAIRequest struct {
 	Store           bool             `json:"store"`
 	Stream          bool             `json:"stream,omitempty"`
 	Reasoning       *openAIReasoning `json:"reasoning,omitempty"`
+	// PromptCacheKey routes the cache lookup with the prefix hash. Sent on
+	// the chatgpt route only, where Codex CLI sends it.
+	PromptCacheKey string `json:"prompt_cache_key,omitempty"`
 }
 
 type openAIReasoning struct {
@@ -1618,6 +1650,28 @@ type anthropicContent struct {
 	ToolUseID string          `json:"tool_use_id,omitempty"` // tool_result: originating call ID
 	Content   string          `json:"content,omitempty"`     // tool_result: result content (when string)
 	IsError   bool            `json:"is_error,omitempty"`    // tool_result: error flag
+	// CacheControl marks an Anthropic prompt-cache breakpoint on this block.
+	CacheControl map[string]string `json:"cache_control,omitempty"`
+}
+
+// markHistoryCacheBreakpoint puts an ephemeral cache breakpoint on the last
+// cacheable block of the last message, so an Anthropic-native endpoint
+// caches the conversation so far and the next call of the append-only loop
+// reads it back (the system breakpoint alone caches only tools and system).
+// Thinking blocks cannot carry one.
+func markHistoryCacheBreakpoint(messages []anthropicMessage) {
+	if len(messages) == 0 {
+		return
+	}
+	content := messages[len(messages)-1].Content
+	for i := len(content) - 1; i >= 0; i-- {
+		switch content[i].Type {
+		case "thinking", "redacted_thinking":
+			continue
+		}
+		content[i].CacheControl = map[string]string{"type": "ephemeral"}
+		return
+	}
 }
 
 type anthropicResponse struct {

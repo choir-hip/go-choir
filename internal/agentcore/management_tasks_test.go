@@ -54,7 +54,7 @@ type delegationModel struct {
 }
 
 func (m *delegationModel) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
-	task := strings.Contains(req.System, "You are management task")
+	task := strings.Contains(req.System, "You are a management task")
 	m.mu.Lock()
 	cell, gate := m.parentCell, m.gate
 	who := "parent"

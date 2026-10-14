@@ -48,6 +48,7 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 		Messages:       []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)},
 		ToolChoice:     "required",
 		ConversationID: "run-gateway-runtime",
+		CacheKey:       "choir-research-scope-version",
 
 		MaxTokens: 2048,
 		ToolDefinitions: []provideriface.ToolDefinition{{
@@ -67,6 +68,11 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	}
 	if gotReq.ConversationID != "run-gateway-runtime" {
 		t.Fatalf("conversation_id = %q, want run-gateway-runtime", gotReq.ConversationID)
+	}
+	// The desk's prompt-cache thread key rides beside the run identity
+	// (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md).
+	if gotReq.CacheKey != "choir-research-scope-version" {
+		t.Fatalf("cache_key = %q, want choir-research-scope-version", gotReq.CacheKey)
 	}
 
 	if gotReq.Stream {

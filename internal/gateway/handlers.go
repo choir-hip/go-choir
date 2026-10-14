@@ -47,6 +47,11 @@ type ProviderRequest struct {
 	// ConversationID is the durable caller-run identity used for provider
 	// session affinity. It is routing metadata, not a trust input.
 	ConversationID string `json:"conversation_id,omitempty"`
+	// CacheKey is the caller's prompt-cache thread key (one desk on one
+	// computer at one prompt version). Like ConversationID it is routing
+	// metadata, not a trust input; providers that route cache lookups by a
+	// client key send it.
+	CacheKey string `json:"cache_key,omitempty"`
 
 	// Messages is the conversation history in Anthropic Messages format.
 	Messages []provider.Message `json:"messages"`
@@ -382,6 +387,7 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		Stream:          req.Stream,
 		ReasoningEffort: req.ReasoningEffort,
 		ConversationID:  req.ConversationID,
+		CacheKey:        req.CacheKey,
 	}
 
 	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v)",

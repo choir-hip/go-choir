@@ -85,6 +85,12 @@ type ToolLoopRequest struct {
 	// ConversationID is the durable run identity forwarded to providers that
 	// require a per-conversation session header.
 	ConversationID string `json:"conversation_id,omitempty"`
+	// CacheKey names the prompt-cache thread: one desk on one computer at one
+	// prompt version, shared by its successive runs and activations. Providers
+	// that route cache lookups by a client key (OpenAI prompt_cache_key,
+	// OpenCode x-opencode-session) send it; others ignore it. Empty falls
+	// back to ConversationID where a session is required.
+	CacheKey string `json:"cache_key,omitempty"`
 
 	// System is the system prompt (potentially including the tool catalog).
 	System string `json:"system"`

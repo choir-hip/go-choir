@@ -206,7 +206,7 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 		result.Error = err.Error()
 		return result
 	}
-	rolePrompt, err := rt.systemPromptForRun(&types.RunRecord{OwnerID: lineage.ownerID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research})
+	systemPrompt, err := rt.researchChildSystemPrompt(lineage.ownerID)
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -218,13 +218,16 @@ func (rt *Runtime) runResearchChild(ctx context.Context, parent toolregistry.Exe
 	noEmit := func(types.EventKind, string, json.RawMessage) {}
 	provider := spacedProvider{ToolLoopProvider: toolregistry.AsToolLoopProvider(rt.provider), spacer: rt.subRLMCallSpacer()}
 	text, usage, loopErr := toolregistry.RunToolLoop(childCtx, provider, registry,
-		[]json.RawMessage{userMsg}, researchChildPreamble+researchChildTime(share)+"\n\n"+rolePrompt,
+		[]json.RawMessage{runContextMessage(time.Now(), researchChildTime(share)), userMsg}, systemPrompt,
 		provideriface.MaxInteractiveOutputTokensForSelection(selection, agentprofile.Research),
 		noEmit, nil, toolregistry.WithToolLoopLLMConfig(selection),
 		toolregistry.WithToolLoopFallbackLLMConfigs(fallbacks),
 		// OpenCode refuses a call without a conversation id; each child is
 		// its own provider conversation.
-		toolregistry.WithToolLoopConversationID("research-child:"+childKey))
+		toolregistry.WithToolLoopConversationID("research-child:"+childKey),
+		// Siblings share one system prompt and tools, so they share one
+		// cache thread under their parent desk.
+		toolregistry.WithToolLoopPromptCache(researchChildCacheScope(parent)))
 	result.Findings = strings.TrimSpace(text)
 	if loopErr != nil {
 		result.Error = loopErr.Error()
@@ -245,9 +248,32 @@ func researchChildDeadline(ctx context.Context) time.Time {
 	return time.Now().Add(time.Duration(float64(time.Until(parentDeadline)) * researchChildShare))
 }
 
-// researchChildTime tells the child how long it has.
+// researchChildTime tells the child how long it has. It is per child and
+// to the second, so it rides the child's run-context turn, never its system
+// prompt (B3, docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md).
 func researchChildTime(deadline time.Time) string {
-	return fmt.Sprintf(" You have about %s for this objective; findings you have not returned by then are lost.", time.Until(deadline).Round(time.Second))
+	return fmt.Sprintf("You have about %s for this objective; findings you have not returned by then are lost.", time.Until(deadline).Round(time.Second))
+}
+
+// researchChildSystemPrompt is every child's stable system prompt: the
+// child preamble and the research desk's prompt, byte-identical across
+// children, parents and time.
+func (rt *Runtime) researchChildSystemPrompt(ownerID string) (string, error) {
+	rolePrompt, err := rt.systemPromptForRun(&types.RunRecord{OwnerID: ownerID, AgentProfile: agentprofile.Research, AgentRole: agentprofile.Research})
+	if err != nil {
+		return "", err
+	}
+	return researchChildPreamble + "\n\n" + rolePrompt, nil
+}
+
+// researchChildCacheScope is the cache thread research children share: the
+// parent desk's agent on its computer.
+func researchChildCacheScope(parent toolregistry.ExecutionContext) (label, scope string) {
+	agentID := strings.TrimSpace(parent.AgentID)
+	if agentID == "" {
+		return "", ""
+	}
+	return "research_child", strings.TrimSpace(parent.OwnerID) + "\x00" + strings.TrimSpace(parent.ComputerID) + "\x00" + agentID + "\x00child"
 }
 
 // researchChildSelection resolves a child's model: the caller's own when

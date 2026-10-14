@@ -22,12 +22,19 @@ type ConductorRunOptions struct {
 	SeedPrompt   string
 }
 
-// RunContextOptions carries per-run agent coordination identifiers.
+// RunContextOptions carries per-run agent coordination identifiers. They
+// belong in the run-context turn, not the system prompt: the system prompt
+// is the stable prefix every run of a desk shares with the provider's
+// prompt cache.
 type RunContextOptions struct {
 	AgentID                string
 	RequesterAgentID       string
 	TextureDeliveryAgentID string
 	ChannelID              string
+}
+
+// PeerCoordinationOptions carries the desk's static coordination default.
+type PeerCoordinationOptions struct {
 	// InCellCarrier is true when the run's desk lives on the in-cell carrier:
 	// peer coordination is a semantic act (choir.ReportPacket, choir.Note,
 	// choir.Cast, choir.Ask), not a JSON tool.
@@ -71,11 +78,11 @@ func RLMManagementTaskOverlay(opts RLMManagementTaskOverlayOptions) string {
 	return mustRenderOverlay("rlm_management_task_runtime", opts)
 }
 
-// RLMManagementTaskOverlayOptions names the task in its prompt.
+// RLMManagementTaskOverlayOptions carries the task overlay's static
+// settings. The task id and capture count are per run and go in the
+// run-context turn.
 type RLMManagementTaskOverlayOptions struct {
-	TaskID   string
 	Deadline string
-	Captures int
 }
 
 // RLMEngineeringOverlay is the sealed-Go Engineering overlay:
@@ -102,6 +109,12 @@ func RLMResearchOverlay() string {
 
 func RunContextOverlay(opts RunContextOptions) string {
 	return mustRenderOverlay("run_context", opts)
+}
+
+// PeerCoordination is the desk's peer coordination default, part of the
+// stable system prompt.
+func PeerCoordination(opts PeerCoordinationOptions) string {
+	return mustRenderOverlay("peer_coordination", opts)
 }
 
 func mustRenderOverlay(name string, data any) string {

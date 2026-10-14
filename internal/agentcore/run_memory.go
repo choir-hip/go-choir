@@ -46,6 +46,11 @@ type runMemoryManager struct {
 	promptOverheadTokens      int
 	overflowRecoveryAttempted bool
 	compactionInProgress      bool
+	// resumeTurn and refreshTurn build the run-context turn (run_context.go):
+	// resumeTurn is appended when an activation resumes existing memory,
+	// refreshTurn after a compaction. Nil appends nothing.
+	resumeTurn  func() json.RawMessage
+	refreshTurn func() json.RawMessage
 }
 
 func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg provideriface.Config, emit provideriface.EventEmitFunc) *runMemoryManager {
@@ -64,6 +69,13 @@ func (m *runMemoryManager) withLLMCompactor(provider provideriface.ToolLoopProvi
 	return m
 }
 
+// withRunContext sets the run-context turns (see resumeTurn, refreshTurn).
+func (m *runMemoryManager) withRunContext(resumeTurn, refreshTurn func() json.RawMessage) *runMemoryManager {
+	m.resumeTurn = resumeTurn
+	m.refreshTurn = refreshTurn
+	return m
+}
+
 func (m *runMemoryManager) initialize(ctx context.Context, initialMessages []json.RawMessage) ([]json.RawMessage, error) {
 	entries, err := m.store.ListRunMemoryEntries(ctx, m.rec.OwnerID, m.rec.RunID)
 	if err != nil {
@@ -78,8 +90,28 @@ func (m *runMemoryManager) initialize(ctx context.Context, initialMessages []jso
 				return nil, err
 			}
 		}
+	} else if err := m.appendRunContextTurn(ctx, m.resumeTurn); err != nil {
+		// A resumed activation replays its history byte for byte and then
+		// reads the time; the turn is persisted so the next activation
+		// replays it too and the cached prefix holds.
+		return nil, err
 	}
 	return m.contextMessages(ctx)
+}
+
+// appendRunContextTurn persists one run-context turn, if build gives one.
+func (m *runMemoryManager) appendRunContextTurn(ctx context.Context, build func() json.RawMessage) error {
+	if build == nil {
+		return nil
+	}
+	msg := build()
+	if len(msg) == 0 {
+		return nil
+	}
+	if err := m.appendMessage(ctx, runMemoryMessageRole(msg), msg); err != nil {
+		return fmt.Errorf("append run context turn: %w", err)
+	}
+	return nil
 }
 
 func (m *runMemoryManager) seedActorMemorySnapshot(ctx context.Context) error {
@@ -170,8 +202,16 @@ func (m *runMemoryManager) hooks() toolregistry.ToolLoopMemoryHooks {
 }
 
 func (m *runMemoryManager) beforeProviderCall(ctx context.Context, _ []json.RawMessage) ([]json.RawMessage, error) {
-	if _, err := m.compactIfNeeded(ctx, "threshold", false); err != nil {
+	compacted, err := m.compactIfNeeded(ctx, "threshold", false)
+	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRunMemoryCompactionFailed, err)
+	}
+	if compacted {
+		// The summary may have dropped the run's facts; a compaction has
+		// already rewritten the prefix, so re-reading them costs no cache.
+		if err := m.appendRunContextTurn(ctx, m.refreshTurn); err != nil {
+			return nil, err
+		}
 	}
 	return m.contextMessages(ctx)
 }
@@ -218,6 +258,9 @@ func (m *runMemoryManager) onProviderError(ctx context.Context, _ []json.RawMess
 	}
 	if !compacted {
 		return nil, false, fmt.Errorf("%w: no compactable run memory: %w", ErrContextOverflowRecoveryFailed, providerErr)
+	}
+	if err := m.appendRunContextTurn(ctx, m.refreshTurn); err != nil {
+		return nil, false, fmt.Errorf("%w: %v: %w", ErrContextOverflowRecoveryFailed, err, providerErr)
 	}
 	payload, _ := json.Marshal(map[string]any{
 		"reason":  "context_overflow",
@@ -268,7 +311,13 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 		if tokens <= m.effectiveContextThresholdTokens() {
 			return false, nil
 		}
-		if entries[len(entries)-1].Kind == types.RunMemoryEntryCompaction {
+		// Never compact twice in a row. The run-context turn appended
+		// after a compaction does not count as new history.
+		last := len(entries) - 1
+		for last >= 0 && entries[last].Kind == types.RunMemoryEntryMessage && isRunContextMessage(entries[last].Message) {
+			last--
+		}
+		if last >= 0 && entries[last].Kind == types.RunMemoryEntryCompaction {
 			return false, nil
 		}
 	}

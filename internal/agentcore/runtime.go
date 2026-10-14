@@ -3487,6 +3487,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 			return
 		}
 	}
+	// The time and the run's own facts are its first turn, not part of the
+	// system prompt, which stays the desk's stable cached prefix
+	// (run_context.go).
+	runFacts := rt.runContextForRun(rec)
+	initialMessages = append([]json.RawMessage{runContextMessage(time.Now(), runFacts)}, initialMessages...)
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
 		return
@@ -3497,7 +3502,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		renderedSystemPrompt = toolregistry.BuildSystemPrompt(systemPrompt, registry)
 	}
 	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit).
-		withLLMCompactor(tlp, llmConfig, estimateTextTokens(renderedSystemPrompt))
+		withLLMCompactor(tlp, llmConfig, estimateTextTokens(renderedSystemPrompt)).
+		withRunContext(
+			func() json.RawMessage { return runContextMessage(time.Now(), "") },
+			func() json.RawMessage { return runContextMessage(time.Now(), runFacts) },
+		)
 	initialMailboxPhase := ""
 	if appendInitialMailboxTurns {
 		initialMailboxPhase = coagentPacketDeliveryThread
@@ -3543,6 +3552,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolregistry.WithToolLoopLLMConfig(llmConfig),
 		toolregistry.WithToolLoopFallbackLLMConfigs(provideriface.FallbackLLMConfigsFromMetadata(rec.Metadata, llmConfig)),
 		toolregistry.WithToolLoopConversationID(rec.RunID),
+		toolregistry.WithToolLoopPromptCache(promptCacheScope(rec)),
 	}
 	if assignedEngineeringOverlay {
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolResult("capsule_go_eval", func(output string) bool {

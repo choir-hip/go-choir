@@ -3,7 +3,7 @@ role: run_context_overlay
 flags:
   templated: true
 comments:
-  - Per-run agent and channel identifiers plus peer coordination default.
+  - "Per-run agent and channel identifiers. Rendered into the run-context turn at the start of a run, never into the system prompt: the system prompt is the stable cached prefix shared by every run of a desk (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md)."
 body: |
   {{if .AgentID}}
   Current agent id: {{.AgentID}}.
@@ -14,4 +14,3 @@ body: |
   {{end}}{{if .ChannelID}}
   Current coordination channel: {{.ChannelID}}.
   {{end}}
-  {{if .InCellCarrier}}Coordinate with peers through addressed acts (choir.ReportPacket, choir.Note, choir.Cast, choir.Ask) and keep them concise and actionable.{{else}}Use only the report or message module exposed in the current tool catalog for addressed peer coordination; keep messages concise and actionable.{{end}}

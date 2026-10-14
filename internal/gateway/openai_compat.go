@@ -23,6 +23,9 @@ type openAIChatCompletionRequest struct {
 	MaxTokens           int                  `json:"max_tokens,omitempty"`
 	MaxCompletionTokens int                  `json:"max_completion_tokens,omitempty"`
 	StreamOptions       *openAIStreamOptions `json:"stream_options,omitempty"`
+	// PromptCacheKey is OpenAI's client cache-routing key; the gateway
+	// passes it on as the request's CacheKey.
+	PromptCacheKey string `json:"prompt_cache_key,omitempty"`
 }
 
 type openAIStreamOptions struct {
@@ -150,6 +153,7 @@ func (h *Handler) HandleOpenAIChatCompletions(w http.ResponseWriter, r *http.Req
 		MaxTokens:       gwReq.MaxTokens,
 		Stream:          gwReq.Stream,
 		ReasoningEffort: gwReq.ReasoningEffort,
+		CacheKey:        strings.TrimSpace(req.PromptCacheKey),
 	}
 
 	log.Printf("gateway: openai-compatible chat request from autoputer %s (provider=%s model=%s messages=%d tools=%d reasoning=%s stream=%v)",

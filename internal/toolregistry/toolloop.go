@@ -2,6 +2,8 @@ package toolregistry
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -79,6 +81,10 @@ type toolLoopOptions struct {
 	memoryHooks    ToolLoopMemoryHooks
 	llmConfig      provideriface.LLMSelection
 	conversationID string
+	// cacheLabel and cacheScope name the prompt-cache thread
+	// (WithToolLoopPromptCache).
+	cacheLabel string
+	cacheScope string
 	// fallbackLLMConfigs are the pool members after llmConfig, in order. A
 	// failover-class provider error moves the rest of the run to the first
 	// one (docs/model-pools-design-2026-10-12.md).
@@ -147,6 +153,60 @@ func WithToolLoopConversationID(conversationID string) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.conversationID = strings.TrimSpace(conversationID)
 	}
+}
+
+// WithToolLoopPromptCache names the thread whose calls share a provider
+// prompt cache: label is the desk/role (kept readable in the key), scope
+// the desk's identity on its computer (hashed). The loop derives the key
+// with PromptCacheKey from what it actually sends, so a new prompt version
+// gets a new key. An empty scope sends no key.
+func WithToolLoopPromptCache(label, scope string) ToolLoopOption {
+	return func(opts *toolLoopOptions) {
+		opts.cacheLabel = strings.TrimSpace(label)
+		opts.cacheScope = scope
+	}
+}
+
+// PromptCacheKey is the cache-affinity key for a desk thread at a prompt
+// version: "choir-<label>-<scope hash>-<prompt hash>". The scope hash keeps
+// owner, computer and agent ids out of provider logs; the prompt hash
+// covers the system prompt and the tool definitions, the prefix every call
+// of the thread starts with. Byte-identical prefixes give identical keys.
+func PromptCacheKey(label, scope, system string, tools []provideriface.ToolDefinition) string {
+	if strings.TrimSpace(scope) == "" {
+		return ""
+	}
+	toolsJSON, _ := json.Marshal(tools)
+	label = promptCacheLabel(label)
+	return "choir-" + label + "-" + shortSHA256(scope) + "-" + shortSHA256(system, string(toolsJSON))
+}
+
+func promptCacheLabel(label string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(label)) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+		if b.Len() >= 24 {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "run"
+	}
+	return b.String()
+}
+
+func shortSHA256(parts ...string) string {
+	h := sha256.New()
+	for _, part := range parts {
+		h.Write([]byte(part))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
 // WithInitialToolChoice constrains tool use only on the first provider call.
@@ -256,6 +316,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 		toolDefs = registry.Definitions()
 		systemPrompt = BuildSystemPrompt(systemPrompt, registry)
 	}
+	cacheKey := PromptCacheKey(options.cacheLabel, options.cacheScope, systemPrompt, toolDefs)
 	forceInitialToolChoiceRetry := false
 	relaxInitialExactToolChoice := false
 	initialToolChoiceAttempts := 0
@@ -352,6 +413,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	transientAttempts := 0
 	nextFallback := 0
 	baseConversationID := options.conversationID
+	baseCacheKey := cacheKey
 	for i := 0; ; i++ {
 		if options.memoryHooks.BeforeProviderCall != nil {
 			rebuilt, err := options.memoryHooks.BeforeProviderCall(ctx, messages)
@@ -366,6 +428,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			Model:           activeLLMConfig.Model,
 			ReasoningEffort: activeLLMConfig.ReasoningEffort,
 			ConversationID:  options.conversationID,
+			CacheKey:        cacheKey,
 
 			System:          systemPrompt,
 			Messages:        messages,
@@ -506,6 +569,14 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					options.conversationID = baseConversationID + "#failover"
 					if nextFallback > 1 {
 						options.conversationID += strconv.Itoa(nextFallback)
+					}
+				}
+				if baseCacheKey != "" {
+					// The key doubles as OpenCode's session: a failed-over
+					// thread leaves the session pinned to the failing route.
+					cacheKey = baseCacheKey + "-failover"
+					if nextFallback > 1 {
+						cacheKey += strconv.Itoa(nextFallback)
 					}
 				}
 				messages = stripProviderReplay(messages)

@@ -142,6 +142,7 @@ func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoop
 		Stream:          false,
 		ReasoningEffort: firstNonEmpty(req.ReasoningEffort, p.reasoningEffort),
 		ConversationID:  req.ConversationID,
+		CacheKey:        req.CacheKey,
 	}
 
 	resp, err := p.call(ctx, llmReq)
@@ -502,6 +503,8 @@ type llmRequest struct {
 	Provider       string `json:"provider,omitempty"`
 	Model          string `json:"model,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"`
+	// CacheKey is the prompt-cache thread key (provideriface.ToolLoopRequest).
+	CacheKey string `json:"cache_key,omitempty"`
 
 	Messages        []message `json:"messages"`
 	System          string    `json:"system,omitempty"`

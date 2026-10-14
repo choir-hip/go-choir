@@ -3,6 +3,6 @@ role: temporal_context
 flags:
   templated: true
 comments:
-  - Dynamic UTC grounding appended to every agent system prompt.
+  - "Dynamic UTC grounding. Rendered into the run-context turn at the start of each activation, never into the system prompt, so the system prompt stays a stable cached prefix (docs/problems/prompt-cache-breaks-across-turns-2026-10-14.md)."
 body: |
   Current UTC date/time: {{.NowUTC}}. Treat relative-date requests such as today, tonight, yesterday, last night, latest, current, or now as time-sensitive. Anchor searches, evidence, and claims to this date/time, and state timezone uncertainty when the user's locale is not known.

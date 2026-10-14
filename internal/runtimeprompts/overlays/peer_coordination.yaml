@@ -1,0 +1,8 @@
+version: 1
+role: peer_coordination
+flags:
+  templated: true
+comments:
+  - "The desk's peer coordination default. Static per desk: it sits in the stable system prompt."
+body: |
+  {{if .InCellCarrier}}Coordinate with peers through addressed acts (choir.ReportPacket, choir.Note, choir.Cast, choir.Ask) and keep them concise and actionable.{{else}}Use only the report or message module exposed in the current tool catalog for addressed peer coordination; keep messages concise and actionable.{{end}}
