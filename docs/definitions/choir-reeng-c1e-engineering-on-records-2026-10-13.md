@@ -233,6 +233,26 @@ boundaries:
 now:
   status: working
   slice: >-
+    2026-10-14 01:50 UTC: B1 steps 1-4 are built on branch c1e-b1 (base
+    7d218d6f; fb042089, 6a9ad2cb, 510b110b red, b2e93fae, 69d4d0b5,
+    1512aa59; net -3,710 lines). Failure items 1-12 are tested, and four
+    deliberate breaks each failed their test. Store, runtime shards,
+    build and vet all pass locally. The open points the build named:
+    - the store cancel cannot stop a live loop, so a new
+      stopCancelledAssignmentRun stops it (trajectory cancel still relies
+      on the trajectory command);
+    - the reconcile and the run-end settle can each mint the final
+      Report, exactly one, with a reason that depends on which ran first;
+    - leftover dead code (verifier InspectBundle, unexported
+      Inbox/Emits/Assign/Message/Emit,
+      ListRunsBySelfDevelopmentOperation, two legacy reads in
+      texture_controller.go) goes to a follow-up deletion;
+    - the packet-world cancel tests were deleted with the packet path;
+    - a successful Cast and Verify need staging, through the
+      engineering drill.
+    Next: rebase onto main after L2a lands, tag reeng-c1e-pre-b1, record
+    the paper's publications, deploy, then run the engineering drill and
+    a paper run. Earlier:
     B0 landed and deployed at 19e56c54 (CI 38481001401). Contents:
     - the wire-neutral rename CoagentSourcePacketPayload -> SourcePacket
       (5766c87c);
