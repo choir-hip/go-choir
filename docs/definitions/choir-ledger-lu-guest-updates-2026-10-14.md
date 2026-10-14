@@ -13,13 +13,23 @@ definition_version: 4
 # Specification: docs/reports/lu-guest-updates-design-2026-10-14.md. This
 # file is the executable station over that design; the design stays the
 # specification.
+#
+# Changelog. Round 1 (346d968c): first draft. Round 2: a convergent panel
+# (claude, gemini, glm, muse, deepseek accept with repairs; gpt-6-luna
+# send_back) adjudicated in
+# docs/reports/lu-guest-updates-adjudication-2026-10-14.md; every blocking
+# finding adopted. Slices re-cut: LU1a (host-only retry) and LU2 first,
+# then LU1b (drain), LU3a (rings), LU3b (probation and rollback), LU5, LU4
+# only if measured. Acceptance re-scoped (the 60-minute lag is conditional
+# on the work draining; same-epoch builds until LU2); standing questions
+# q7-q9 rewritten as obligations; doc-authority-manifest entry added.
 readiness: drafted
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus convergent round 1 on 346d968c (claude, omp-gemini38, omp-glm53-flash, omp-muse-spark, omp-deepseek-v41-flash accept with repairs; omp-gpt6-luna send_back)
+  frozen_ref: commit 346d968c (round 1); round 2 (this file) not yet reviewed
+  verdict: send_back
+  evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md (raw outputs in the session scratchpad panel-lu/)
 
 start:
   captured_at: 2026-10-14T10:47:00Z
@@ -45,6 +55,10 @@ start:
       owner: not this session
       touch: forbidden
       recovery: leave in place
+  worktree_edge: >-
+    The authoring agent was isolated to its own worktree and could not
+    inspect the others. They are touch-forbidden and no LU move depends on
+    them; the first build slice reconciles them before any code commit.
   observed:
     - >-
       A deploy asks each running computer once, at deploy time, for a
@@ -52,94 +66,110 @@ start:
       nothing retries it in between (.github/workflows/ci.yml:1466-1469,
       1528; internal/vmctl/deploy_refresh.go:282-283).
     - >-
-      The live paper is never idle and did not take ce59d406 by itself; it
+      The paper accepted planned refreshes at 05:48, 06:03 and 06:36 on
+      10-14, was not refreshed after intake.labels went on (06:50), and
       took e3437f1c only through an owner-approved manual refresh that ran
       as a crash boot and closed its in-flight runs
       (docs/evidence/owner-approved-refreshes-2026-10-14.json).
     - >-
-      At 05:48 UTC the paper's first refresh after two busy deferrals
-      crossed work-state epoch 1 -> 2 (C1e B1); the guest read the planned
-      restart as a crash (internal/agentcore/planned_restart.go:133-136)
-      and closed all 14 schedules for about an hour
+      At 05:48 UTC the paper's refresh crossed work-state epoch 1 -> 2 (C1e
+      B1); the guest read the planned restart as a crash
+      (internal/agentcore/planned_restart.go:133-136) and closed all 14
+      schedules for about an hour
       (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
       Schedules now survive crashes (ce59d406); runs, rounds and pending
       arrivals still close.
     - >-
       The planned-restart endpoint closes no admission gate and does not
       sync filesystems before the host's SIGKILL
-      (planned_restart.go:395-415; internal/vmmanager/manager.go:1447). The
-      hibernate fence is the only admission gate
-      (internal/agentcore/hibernate.go:68-172).
+      (planned_restart.go:395-415; internal/vmmanager/manager.go:1447).
+      Four separate admission holds exist (hibernate fence, self-development
+      apply hold, pre-boot gate, maintenance hold); only the apply hold
+      defers instead of blocking (internal/actorruntime/handler.go:61-171).
     - >-
       An image refresh has no health gate and no automatic rollback; the
       previous guest image is not retained per computer. The guest updater
       already has stage, swap, restart, probe and restore-prior with signed
       receipts for layered releases (internal/updater/updater.go:192-418,
-      943-994), used by self-development and the M9a platform-update offer;
-      CI's app-layer push was deleted in a47122de after version skew and
-      0-of-2 bind failures.
+      943-994); CI's app-layer push was deleted in a47122de after version
+      skew and 0-of-2 bind failures.
 
 finish:
   deliver: >-
     Platform updates reach every guest computer safely and by themselves:
     each computer takes a deploy at its next quiet moment or after a
-    bounded drain, as a planned restart that keeps its work, under a
-    health check that rolls a bad build back automatically, staged from
-    test computers to the paper to the owner's computer, with every update
-    recorded on the computer's event chain, through the same apply path
-    approved self-development uses.
+    bounded drain, as a planned restart that keeps its work, staged from
+    test computers to the paper to the owner's computer, rolled back
+    automatically when the build fails its health check, recorded on the
+    computer's event chain, through the same apply path approved
+    self-development uses.
   artifact: >-
     vmctl's update sweep and per-computer update state in `vmctl list` and
-    the owner's computer page; the guest's drain endpoint and work-state
-    migration registry; the probation fence, retained previous image and
-    ring gate; the layered runtime swap; one ReleaseApply record shape for
-    platform and self-development applies; the deployed acceptance
-    receipts below
+    the owner's computer page; the persisted work-state epoch and migration
+    registry; the guest's admission gate with reasons, drain and final
+    call; ring gating, refusal records and lifecycle update receipts; the
+    probation hold and retained previous image; one ReleaseApply record
+    shape for platform and self-development applies; the layered runtime
+    swap only if O5 rules it in; the deployed acceptance receipts below
   acceptance:
     - action: >-
-        LU1. Deploy a guest-runtime change while the paper is busy; do not
-        touch the paper. Read vmctl's update state, the paper's
-        /api/runtime/obligations restart block, its schedules and its trace.
+        LU1a. With the sweep on ring 0, deploy a same-epoch guest change
+        while a minted test computer is busy, then let it go quiet. Read
+        `vmctl list` update state, the guest's restart.kind on
+        /api/runtime/obligations, and the sweep log.
+      proves: the computer is refreshed at its first quiet moment after the deploy, not at the next deploy; restart kind planned; exactly one driver attempted it
+      evidence_class: deployed proof
+    - action: >-
+        LU2. On a minted test computer with queued wakes and an active
+        schedule, deploy a fixture build that bumps the work-state epoch
+        with a registered migration; separately, wake a hibernated test
+        computer onto that build.
+      proves: the planned boot stays planned and a work_state_migrated record names exactly what it closed; the queued wakes are delivered; the markerless wake runs the migration before closure
+      evidence_class: deployed proof
+    - action: >-
+        LU1b. Deploy a same-epoch guest change while the live paper is
+        busy; do not touch the paper. Read vmctl's update state, the
+        paper's restart block, its schedules with generations, its trace
+        and its publications.
       proves: >-
-        the live paper takes a platform update within 60 minutes of the
-        deploy (O7) with restart kind planned, 14 of 14 schedules active at
-        their pre-update generation, no run, round or arrival closed as
-        interrupted_by_restart, and a story revision within 30 minutes
-        after the boot
+        when the paper's work drains within D, it takes the update within
+        60 minutes of the deploy (O7) with restart kind planned, 14 of 14
+        schedules at their pre-update generation, no run, round or arrival
+        closed as interrupted_by_restart, and a story revision within 30
+        minutes after the boot; when it does not, the state is visibly
+        pending or stuck and nothing was cut. The update-lag distribution
+        is reported either way
       evidence_class: deployed proof
     - action: >-
-        LU1. On a minted test computer, start a fixture run that outlives
-        the drain deadline, then deploy.
-      proves: the drain times out, admission reopens, no restart and no marker remain, the attempt is recorded, and the sweep retries later; after K attempts the "update stuck" signal shows
+        LU1b. On a minted test computer, a run executing at drain start
+        spawns a child and waits for its result; a new capture and an
+        owner-less schedule tick arrive during the drain.
+      proves: the child spawn and its result are admitted, the new work is deferred (not blocked, not poisoned), the run finishes, and the boot is planned with the deferred work delivered after it
       evidence_class: deployed proof
     - action: >-
-        LU1. On a minted test computer, a run that is executing when the
-        drain begins needs a continuation (a child result) to finish.
-      proves: the continuation is admitted, new work is held, the run finishes, and the boot is planned (no drain deadlock)
+        LU1b. On a minted test computer, a fixture activation outlives the
+        drain deadline; separately, the final call is made to fail.
+      proves: the drain times out and admission reopens with no marker; a failed final call leaves no marker and no kill; the attempt is recorded and retried; after K timeouts the "update stuck" signal shows
       evidence_class: deployed proof
     - action: >-
-        LU2. Deploy a build that bumps the work-state epoch (the next real
-        bump, or a fixture build on a minted test computer with queued
-        wakes and an open schedule).
-      proves: the boot is planned, a work_state_migrated record names exactly what the migration closed, and the queued wakes are delivered after the boot
+        LU3a. A deliberately bad build (fixture: /health never reaches
+        ready) with ring 0 = one minted test computer; then a good build.
+      proves: the bad build stops at ring 0, is refused for that computer, halts fleet-wide and alerts, and never reaches the paper; the good build passes ring 0, then the paper, then the owner's computer in order, each with a lifecycle_observed update record on its chain
       evidence_class: deployed proof
     - action: >-
-        LU3. Deploy a deliberately bad build (fixture: /health never
-        reaches ready) with ring 0 = one minted test computer.
-      proves: the test computer rolls back to its previous image automatically within T_ready plus one boot, exactly once; the bad build is refused for it; the rollout never reaches the paper; the rollback is a lifecycle_observed update record on its chain
-      evidence_class: deployed proof
-    - action: >-
-        LU3. A good build rolls out with rings on.
-      proves: ring 0, then the paper, then the owner's computer each pass probation and soak in order, each recorded on its chain
-      evidence_class: deployed proof
-    - action: >-
-        LU4. A runtime-only change on a minted test computer.
-      proves: the runtime is swapped by the guest updater with runtime unavailability of 10 s or less, the Firecracker process unchanged, restart kind planned, and the next VM boot runs the new base with no skew
+        LU3b. A deliberately bad same-epoch, same-store-schema build on a
+        minted test computer.
+      proves: the computer boots its previous image automatically within T_ready plus one boot, exactly once, as a planned boot; the image is refused; held wakes are delivered after the rollback boot; a bad build that changed the epoch or store schema is not rolled back but held (U7)
       evidence_class: deployed proof
     - action: >-
         LU5. On one test computer, an approved self-development apply and a
         platform update, then a restore to the pinned prior head.
-      proves: both use one ReleaseApply record, the same admission, health and rollback, and the restore returns the computer to the prior head
+      proves: both use one ReleaseApply record with the same admission, health and rollback; the restore joins event head, content witness, VM-local projection and route
+      evidence_class: deployed proof
+    - action: >-
+        LU4, only if O5 rules it in. A runtime-only change on a minted test
+        computer.
+      proves: the guest updater swaps the runtime with runtime unavailability of 10 s or less, the Firecracker process unchanged, restart kind planned, and the next VM boot runs the new base with no skew
       evidence_class: deployed proof
   rollback: >-
     Per slice (boundaries.slice_rollback). Tag the last-good commit before
@@ -155,19 +185,19 @@ value:
     (update lag, worst computer first) and the work lost per update (runs,
     rounds, arrivals closed; schedules stopped; minutes silent), while no
     update forces a busy computer, a crash stays a crash, and a bad build
-    reaches at most ring 0 before it is rolled back.
+    reaches at most ring 0 before it is stopped.
   goodharting_would_be: >-
     Low lag because updates force busy computers or kill mid-drain; "no
-    work lost" because the drain refuses work that is then silently
-    dropped instead of held; planned boots that are crashes relabelled;
-    "rollback works" shown only on a build that never ran work; a fleet
-    "up to date" because pending computers are hidden or skipped as
-    divergent.
+    work lost" because the drain drops or poisons held work instead of
+    deferring it; planned boots that are crashes relabelled; "rollback
+    works" shown only on a build that never ran work; a fleet "up to date"
+    because pending computers are hidden or skipped as divergent.
 
 homotopy:
   realism_axis: >-
-    unit tests and nix eval -> one minted test computer on staging with
-    fixture builds -> ring 0 with real deploys -> the live paper -> the
+    the one update path (vmctl sweep -> guest gate and drain -> final call
+    -> boot -> health -> record) exercised on: fixture builds on one minted
+    test computer -> ring 0 with real deploys -> the live paper -> the
     owner's computer -> every active computer
 
 boundaries:
@@ -177,13 +207,15 @@ boundaries:
     - CLAUDE.md "Restarts End Work (Crash) Or Resume It (Planned Update)", "Deploys never restart a busy computer", Landing Loop "Product restore vs platform deploy"
     - docs/restart-subsystem-design-2026-10-13.md v3 (Invariants R, W, P; §9 "wait, then defer")
     - docs/computer-ontology.md (self-development contract, restore-set boundary)
-    - docs/reports/lu-guest-updates-design-2026-10-14.md
+    - docs/reports/lu-guest-updates-design-2026-10-14.md (round 2)
   must_preserve:
     - a crash restart never resumes work; a planned restart resumes once
-    - no automatic path restarts a guest with work inside its admission fence; busy is never forced
+    - no automatic path restarts a guest before its final call succeeded; busy is never forced
+    - held work is deferred and delivered later, never blocked into a slot, dropped or poisoned
     - schedules (standing intents) survive every update
-    - no rollback across a work-state epoch or store-schema window
-    - one automatic rollback per computer and build; the same build is never re-applied automatically after it
+    - no automatic rollback across a work-state epoch or store-schema version (U7)
+    - one automatic rollback per computer and image; a refused image is never re-applied automatically
+    - vmctl's sweep is the only update driver, one computer at a time per host
     - the base image is rebuilt on every guest-runtime deploy (a47122de stands)
     - self-development authority stays the owner's decision; a platform update enters only under a platform-signed follow policy and never on a divergent computer
     - pending is derived from booted and target image identity, never stored as a second truth
@@ -192,12 +224,13 @@ boundaries:
     - rebasing platform updates onto self-developed (divergent) computers
     - zero-downtime host-service deploys (L1 D3, D4)
     - A/B image slots beyond keeping the previous image for rollback
+    - amending CLAUDE.md (O8) inside this station without the owner
   protected_surfaces:
     - deployment routing (CI deploy-refresh step, deploy-impact classification)
     - vmctl (refresh, idle sweep, ownership, retained images, ring state)
-    - VM lifecycle and boot (vmmanager refresh, boot overrides)
+    - VM lifecycle and boot (vmmanager launch and refresh, boot overrides)
     - restart semantics (planned marker, work-state epoch, crash closure)
-    - run admission (the guest fence and drain)
+    - run admission (the guest gate, drain and final call)
     - self-development apply (materializer, guest updater, checkpoint and route)
     - the computer event chain (lifecycle receipts)
   admissible_evidence: >-
@@ -205,133 +238,151 @@ boundaries:
     the owner's computer); unit tests and nix eval shape a slice but never
     prove vmctl, boot, restart or update behavior
   slice_rollback:
-    LU1: revert; interim ownership fields are ignored by older vmctl; the guest drain endpoint is additive; CI's deploy-time refresh stays until LU3
-    LU2: revert; epoch steps without a migration fall back to D7 (crash boot)
-    LU3: VM_UPDATE_HEALTH_GATE=off returns to LU1 behavior; the retained-image GC root is harmless
-    LU4: the classifier flag off sends every update down the VM path; a layer is dropped at the next boot by the base binding
+    LU1a: VM_UPDATE_SWEEP=off; revert; CI's per-computer loop is a revert away
+    LU2: revert; epoch steps without a migration fall back to D7 (crash boot); the persisted epoch is ignored by older binaries
+    LU1b: revert; the drain endpoint is additive and unused while the sweep runs without drains
+    LU3a: ring gating off returns to LU1 behavior; the skip-unknown-action guest change stays
+    LU3b: VM_UPDATE_HEALTH_GATE=off returns to LU3a behavior; retained-image GC roots are harmless
     LU5: revert per commit; record shapes are additive
+    LU4: the flag off sends every update down the VM path; a layer is dropped at the next VM boot by the base binding
   dependencies:
-    - LU1 needs nothing new; it lands between C1e slices (one shared-runtime cutover at a time)
-    - LU2 lands before the next work-state epoch bump (expected in C1e B2-B5)
-    - LU3 needs L1c (host-asserted planned boots, for the probation flag and the rollback boot) and L1b (grants and the recovery ledger)
-    - LU5 needs C1e's Freeze and Verify path working end to end on staging
+    - LU1a and LU2 need nothing new; LU2 lands before C1e's next work-state epoch bump, which does not land until it does
+    - LU1b and LU2 are shared-runtime changes and land between C1e slices, one cutover at a time
+    - LU3b needs L1c (host-asserted planned boots) and L1b (grants and the recovery ledger)
+    - LU5 needs C1e's Freeze and Verify working on staging and the self-development effects gate
+    - the paper's drains finish reliably only once management's work is bounded (delegation design S1 and S2); until then a drain may time out, visibly
   heresy_delta:
     discovered:
-      - deferred computers retried only at the next deploy (a busy computer never updates)
-      - planned-restart endpoint with no admission fence and no sync before the kill
+      - deferred computers retried only at the next deploy
+      - planned-restart endpoint with no admission gate and no sync before the kill
       - a marker that outlives a refresh that never happened
       - epoch changes turning planned refreshes into crashes
       - image refreshes with no health gate, no rollback and no ring order
       - updates absent from the computer's event chain
+      - an unknown lifecycle action stopping the guest's receipt processing
     introduced: []
     repaired: []
 
 standing_questions:
   q1_who_settled: >-
     The station and its six-point direction: owner, 2026-10-14 in session.
-    Every default in the design's §6 (drain deadline, rings, epoch
-    forward-only, LU4, hibernated computers, quiet wait, CLAUDE.md wording)
-    is an orchestrator proposal until the owner rules.
+    The design's defaults (O1-O3b, O5, O7-O9) are orchestrator proposals
+    until the owner rules; U7 (forward-only across state) is a technical
+    constraint, not a preference.
   q2_conformance: >-
-    Conforms to: crash never resumes (U3 keeps crashes crashes); deploys
-    never restart a busy computer (U2: restart only after a drain reports
-    nothing inside; never forced); restart design v3 §9 "wait, then defer";
-    Invariant P (LU3 waits for L1c); a47122de (base always rebuilt); the
-    ontology's self-development contract (owner decision stays the
-    authority; divergent computers excluded). Tension named: the drain
-    pauses new work on a computer for up to the deadline, which the
-    CLAUDE.md sentence does not describe; O8 asks the owner to amend it.
+    Conforms to: crash never resumes (U3); deploys never restart a busy
+    computer (U2: restart only after the final call; never forced);
+    restart design v3 §9 "wait, then defer"; Invariant P (LU3b waits for
+    L1c); a47122de (base always rebuilt; LU4 conditional); the ontology's
+    self-development contract (owner decision stays the authority;
+    divergent computers excluded). Tension named: a drain defers new work
+    for up to D, which the CLAUDE.md sentence does not describe; O8 is
+    deferred to the owner.
   q3_deletion_citers: >-
-    LU deletes nothing in LU1-LU3. LU5 retires the materializer's separate
-    soft hold (SelfDevelopmentApplyMaterializing) into the shared gate; its
-    only citer is the actor handler (internal/actorruntime/handler.go),
-    repaired in the same commit. CI's deploy-time refresh loop is removed only in LU3, with
-    the workflow contract test updated.
+    LU1a removes CI's per-computer refresh loop; its citer is the workflow
+    contract test, updated in the same commit. LU1b replaces the hibernate
+    fence's single flag with reasons; citers are hibernate.go, the actor
+    handler and their tests. LU2 replaces the marker's epoch check; citers
+    are planned_restart.go, its tests and the problem doc above (annotated,
+    not deleted). LU5 folds the materializer's apply hold into the gate; its
+    non-test citer is internal/actorruntime/handler.go.
   q4_production_consumers: >-
-    deploy-refresh: CI's deploy job (sole caller). planned-restart endpoint:
-    vmctl deploy refresh. updater.Apply: the self-development materializer
-    and the M9a platform-update offer handler (no live producer of offers
-    since a47122de). Hibernate fence: the actor handler and S3 hibernate.
+    deploy-refresh: CI's deploy job (sole caller today; the sweep after
+    LU1a). planned-restart endpoint: vmctl deploy refresh. updater.Apply:
+    the self-development materializer and the M9a platform-update handler
+    (no live producer of offers since a47122de). Hibernate fence: the actor
+    handler and S3 hibernate.
   q5_single_authority: >-
-    Pending: derived from vmctl's booted-image record and the host's target
-    image, never stored. Attempt history: one host ledger (L1b's recovery
-    ledger; interim fields on the ownership until it lands, as L1b-0 did).
-    Boot kind: the guest's consumed marker until L1c, then the host's
-    attestation; the guest's verdict is reported back so the two cannot
-    silently disagree. Release identity on a computer: its event chain.
+    Pending: derived from the booted-image record written at
+    launchFirecracker and the host's target image; image identity wins over
+    CI's served-commit reading. Update driving: vmctl's sweep only.
+    Attempt history: one host ledger (L1b's; interim ownership fields until
+    it lands). Boot kind: the guest's consumed marker until L1c, then the
+    host's attestation; the host records the guest's verdict. Release
+    identity on a computer: its event chain.
   q6_success_artifact: >-
     Each acceptance names the artifact read: vmctl's update state, the
-    guest's restart block, the schedule list with generations, the
-    trace (closed runs and arrivals), the lifecycle_observed update
-    records on the chain, the Firecracker pid. A CI line saying
-    "refreshed" is not proof.
+    guest's restart.kind on /api/runtime/obligations, the schedule list
+    with generations, the trace (closed runs and arrivals), the
+    lifecycle_observed update records on the chain, the Firecracker pid. A
+    CI line saying "refreshed" is not proof.
   q7_fate_sharing: >-
-    An update fate-shares with vmctl (sweep), the guest (drain, marker),
-    the host's image store (target and retained image) and corpusd (event
-    chain append). A vmctl restart mid-drain is survived by a guest-timed
-    drain; a corpusd outage delays the record, not the update (the receipt
-    stays pending in the guest, as lifecycle receipts do today).
+    An update fate-shares with vmctl (sweep), the guest runtime (gate,
+    drain, final call), the host's image store (target and retained
+    images, GC-rooted by LU1a) and corpusd (event chain append). Obligation
+    (LU1b): a vmctl restart mid-drain is survived because the drain is
+    guest-timed; a guest runtime restart aborts the drain and the host
+    reads it so. Obligation (LU3a): update receipts wait in the platform's
+    pending lifecycle receipts until the guest appends them, as start and
+    stop receipts do today.
   q8_restart: >-
-    Drain state is guest-side with a TTL; the marker is consumed once;
-    fence expiry clears an unused marker; interim attempt fields are on
-    the host ownership; ring state is a projection of chain records and is
-    rebuilt after a vmctl restart.
+    Obligations: the drain is in-memory guest state with a deadline and is
+    lost on a runtime restart (read by the host as aborted); the marker is
+    written only in the final call and cleared on abort; the work-state
+    epoch is persisted in the store (LU2); interim attempt fields live on
+    the host ownership (no fsync until L1b, a named residual); ring state
+    is a projection of chain records, rebuilt after a vmctl restart.
   q9_no_ssh: >-
-    Update state in `vmctl list` and the owner's computer page; the drain
-    and restart blocks through the runtime obligations route; rollouts
-    halted and resumed by owner acts through the product API. No step of
-    any acceptance uses SSH.
+    Today's read paths: /api/runtime/obligations (restart.kind) and the
+    product computer routes. Deliverables: update state in `vmctl list`
+    (read by CI on the host and by the owner's computer page), drain state
+    on /health, halt and un-halt as owner acts through the product API.
+    Every acceptance names one of these; none uses SSH.
   registry_hygiene: >-
-    Spine station list, docs/mission-graph.yaml and docs/ACTIVE.md updated
-    in the commit that adds this file. The ledger stations are not listed
-    in docs/doc-authority-manifest.yaml (none of L1, L2a, LR are); LU
-    follows that precedent, recorded as a residual.
+    Spine station list, docs/mission-graph.yaml, docs/ACTIVE.md and
+    docs/doc-authority-manifest.yaml updated. Residual: the other ledger
+    stations (L1, L2a, LR) are still absent from the manifest.
 
 now:
   status: working
   slice: >-
-    Definition: this file and the design note are drafted; a convergent
-    panel reviews both before LU1 starts. LU1 (pending, quiet moment,
-    drain) is the first build slice.
-  source_ref: 97d7a573
+    Definition, round 2: the design note and this file are amended from the
+    round-1 panel (adjudication R1-R39). A round-2 convergent panel on this
+    digest decides `reviewed`. The first build slices are LU1a (host-only
+    retry with one driver) and LU2 (persisted epoch and migrations).
+  source_ref: branch docs/lu-guest-updates-2026-10-14 (round-2 commit) on main 97d7a573
   deploy_identity: staging 97d7a573
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LU-1
     claim: >-
-      The paper has quiet moments or drains within 15 minutes once new
-      work is held, so a pull sweep with a bounded drain updates it within
-      60 minutes of a deploy without forcing it; and if update boots stay
-      planned (LU2), an update costs the paper no closed work.
+      With intake.labels on, the paper still has quiet moments within an
+      hour of most deploys, or drains within D once new work is deferred,
+      so a pull sweep with a bounded drain updates it within 60 minutes of
+      a deploy without forcing it; and with the epoch persisted and
+      migrated (LU2), an update costs the paper no closed work.
     test: >-
-      Sample the paper's executing runs and fenced occurrences every 60 s
-      for 6 h through the runtime obligations route (quiet-gap
-      distribution, what is executing at each refusal); then LU1's first
-      acceptance on staging
+      Sample the paper's executing activations, desk pending mutations and
+      gate occupancy every 60 s for 6 h through /health and the runtime
+      obligations route (quiet-gap distribution; activation durations;
+      what is executing at each refusal); then LU1a's and LU1b's
+      acceptances on staging
     edge: missing_oracle
-    delta_o: the guest reports why it refused (executing run ids, kinds, ages), so a refusal names its cause
+    delta_o: the guest reports why it refused (executing run ids, roots, kinds, ages), so a refusal names its cause
     scope_if_supported: the live paper and the owner's computer on staging
     status: proposed
-    evidence_refs: [docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md, docs/evidence/owner-approved-refreshes-2026-10-14.json]
+    evidence_refs: [docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md, docs/evidence/owner-approved-refreshes-2026-10-14.json, docs/reports/lu-guest-updates-adjudication-2026-10-14.md]
   decision:
-    what: "slices LU1 -> LU2 -> LU3 -> LU4 -> LU5; defaults of design §6 until the owner rules"
+    what: "slices LU1a and LU2, then LU1b, LU3a, LU3b, LU5; LU4 only if O5 rules it in; defaults of design §6 until the owner rules"
     kind: operational
     status: proposal
-    evidence_ref: docs/reports/lu-guest-updates-design-2026-10-14.md
-    owner_ratification_ref: "owner 2026-10-14 in session approved the station and its six-point direction; O1-O8 open"
+    evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md
+    owner_ratification_ref: "owner 2026-10-14 in session approved the station and its six-point direction; O1-O3b, O5, O7-O9 open"
   belief:
     believed_state: >-
-      Deploys push once and defer busy computers; the paper updates only by
-      owner act; an epoch bump makes a planned refresh a crash; image
-      refreshes have no health gate or rollback; the guest updater already
-      has health and rollback for layered releases.
-    main_uncertainty: whether the paper's executing work drains within a bounded deadline (or a continuation deadlock, F15, blocks every drain)
-    next_observation: the paper's quiet-gap and refusal-cause sample
+      Deploys push once and defer busy computers; the paper had quiet
+      moments before intake.labels and updated only by owner act after;
+      an epoch bump makes a planned refresh a crash; image refreshes have
+      no health gate or rollback; the guest updater already has health and
+      rollback for layered releases; the apply hold already shows how to
+      defer work without holding a dispatcher slot.
+    main_uncertainty: whether the paper's executing activations finish within D once new work is deferred (activations may run up to 60 min)
+    next_observation: the paper's quiet-gap and activation-duration sample
   blocker_or_risk: >-
-    LU3 waits on L1c and L1b. LU2 must land before the next epoch bump or
-    the next paper refresh is again a crash boot. LU1's guest half shares
-    the runtime with C1e and lands between its slices.
-  next_action: run the convergent panel on this file and the design note; adjudicate; amend to round 2
+    LU2 must land before C1e's next epoch bump. LU3b waits on L1c and L1b.
+    Until management's work is bounded (delegation S1, S2), paper drains
+    may time out; the stuck signal makes that visible rather than forced.
+  next_action: run the round-2 convergent panel on this file and the design note at the round-2 commit; the read-only quiet-gap sample of the paper may run beside it
 
 receipts: []
 ---
@@ -340,15 +391,19 @@ receipts: []
 
 The design note is the specification; this file tracks its execution.
 
-- **LU1** pending, quiet moment, drain: vmctl's sweep offers each pending
-  computer its update at every pass; the guest restarts at a quiet moment
-  or after a bounded drain that holds new work and never forces.
-- **LU2** work-state migrations: an epoch change runs a registered
-  migration at a planned boot instead of reading as a crash.
-- **LU3** health, rollback, rings: a probation fence and health contract,
-  automatic rollback to the retained previous image, rollout from test
-  computers to the paper to the owner's computer.
-- **LU4** binary-only swap: the guest updater swaps the runtime and
-  restarts one unit when nothing else changed.
+- **LU1a** pending and retry, host only: vmctl's sweep is the one update
+  driver and offers each pending computer its update at every pass, through
+  today's planned-restart endpoint. This is also how drain-capable code
+  reaches a busy computer.
+- **LU2** persisted epoch and migrations: an epoch change runs a
+  registered migration on any boot, so a planned update stays planned.
+- **LU1b** the drain: new work deferred (never blocked), work already in
+  flight admitted by lineage, a synchronous final call, never forced.
+- **LU3a** rings and refusal: test computers, then the paper, then the
+  owner's computer; a failure halts and alerts; updates recorded on the
+  chain.
+- **LU3b** probation and rollback: automatic return to the retained
+  previous image, same epoch and store schema only.
 - **LU5** one apply path: platform updates and approved self-development
   share admission, apply, health, rollback and the record on the chain.
+- **LU4** binary-only swap, only if measured downtime warrants it.

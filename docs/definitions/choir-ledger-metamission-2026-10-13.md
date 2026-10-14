@@ -145,15 +145,18 @@ metamission:
         out to guest computers ... this is going to relate to the
         self-development system"; "Yes, this all makes sense as a new
         station"). Pull, not push: a deploy changes the target, vmctl's
-        sweep offers each pending computer its update at every pass, the
-        guest restarts at a quiet moment or after a bounded drain that
-        holds new work and is never forced. Slices: LU1 pending + quiet
-        moment + drain; LU2 work-state migrations (an epoch bump stays a
-        planned boot; before C1e's next bump); LU3 health, automatic
-        rollback to the retained previous image, rings test -> paper ->
-        owner (needs L1c and L1b); LU4 binary-only runtime swap through the
-        guest updater; LU5 one apply path shared with self-development.
-        Specification: docs/reports/lu-guest-updates-design-2026-10-14.md.
+        sweep (the only update driver) offers each pending computer its
+        update at every pass, the guest restarts at a quiet moment or after
+        a bounded drain that defers new work and is never forced. Slices
+        (round 2): LU1a host-only retry and LU2 persisted epoch and
+        migrations first (LU2 before C1e's next epoch bump); then LU1b the
+        drain; LU3a rings test -> paper -> owner with halt and refusal;
+        LU3b probation and automatic rollback to the retained image (needs
+        L1c and L1b); LU5 one apply path shared with self-development; LU4
+        binary-only swap only if measured downtime warrants it.
+        Specification: docs/reports/lu-guest-updates-design-2026-10-14.md;
+        round-1 panel adjudicated in
+        docs/reports/lu-guest-updates-adjudication-2026-10-14.md.
         Cause: the paper is never idle and updated only by an owner act
         (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
     - id: L3
