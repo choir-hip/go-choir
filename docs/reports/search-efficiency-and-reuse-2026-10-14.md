@@ -236,3 +236,14 @@ newest indexed object time is reported with every answer).
   removes it. No stored state is written (the cache is memory only).
 - Slices 2–3: objects are additive kinds; the index is derived and can be
   dropped; prompts revert by commit.
+
+## Owner ruling, about 15:10 UTC: retrieval over the Dolt object graph first
+
+"Even before we move into embeddings and vector search, take our retrieval
+and query patterns over the object graph as a serious research project. We
+basically should table the vector embeddings until we reach diminishing
+marginal returns with our Dolt versioned SQL object graph." Embeddings
+(docs/research/embeddinggemma-2-cpu-2026-10-14.md) and the new server wait;
+the next retrieval work is structured and full-text retrieval over the
+object graph (claims, entities, events, captures, search-result pointers),
+measured until its gains flatten.
