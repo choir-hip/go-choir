@@ -70,6 +70,11 @@ type SourcePacket struct {
 	// moved from the deleted report_to_texture typed tool onto the packet so
 	// in-cell choir.ReportPacket can close work). open|completed|empty.
 	WorkDisposition WorkItemStatus `json:"work_disposition,omitempty"`
+	// PComplete is a final research Report's self-score: the desk's
+	// probability that the Report answers every question the Cast asked,
+	// stated before any settlement
+	// (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+	PComplete *float64 `json:"p_complete,omitempty"`
 }
 
 type CoagentPacketClaim struct {

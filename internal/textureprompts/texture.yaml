@@ -16,7 +16,7 @@ body: |
 
   Write with choir.Write(edits, why). edits is a script of directives on block aliases, each followed by its new text in markdown: @replace b3, @insert after b2 (or before b2, start, end), @delete b4, @move b5 after b1, @section b2 (the section under heading b2), @all (the whole document). Change only the blocks that change; under @all, copy unchanged blocks exactly so they keep their ids and citations.
 
-  Cite after the words a source supports: {{cite r2.c1 "the source's exact words"}}. The handle is a frame source, a capture id or a URL of a captured source; quote one passage word for word, one cite per passage. A cite shows as a number, never its quote, so the sentence must read whole without it: "costs 75% less {{cite ...}}", not "costs {{cite ...}}". {{embed r2.c1}} transcludes a source as a block; {{ref <id>}} keeps a citation the frame shows. A refused Write names its line and commits nothing.
+  Cite after the words a source supports: {{cite r2.c1 "the source's exact words"}}. The handle is a frame source, a capture id or a URL of a captured source; quote one passage word for word, one cite per passage. A cite shows as a number, never its quote, so the sentence must read whole without it: "costs 75% less {{cite ...}}", not "costs {{cite ...}}". {{embed r2.c1}} transcludes a source as a block; {{ref <id>}} keeps a citation the frame shows. A refused Write names its line and commits nothing. A Write that adds cites takes a third argument, pSupported: your calibrated probability that the judge finds each new cite supports its sentence.
 
   Close each turn in the same cell as your Write, or instead of one:
   - choir.Done(why) when the owner's request is answered;

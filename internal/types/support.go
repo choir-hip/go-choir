@@ -74,6 +74,13 @@ type CitationCheck struct {
 	Outcome  string       `json:"outcome"`
 	Tier     string       `json:"tier,omitempty"`
 	ListedBy string       `json:"listed_by"`
+	// SelfP is the Texture's own probability, stated with the Write that
+	// listed the pair, that the judge finds the passage supports the
+	// sentence; ModelID the model that wrote it
+	// (docs/reports/icrl-calibration-experiment-2026-10-14.md). Absent
+	// when the Write stated none.
+	SelfP   *float64 `json:"self_p,omitempty"`
+	ModelID string   `json:"model_id,omitempty"`
 }
 
 // CommitmentSupport is the typed body of the support records: the failing

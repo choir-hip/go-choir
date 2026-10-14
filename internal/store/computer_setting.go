@@ -28,12 +28,20 @@ const SettingIntakeLabels = "intake.labels"
 // cancelled.
 const SettingManagementSerialTasks = "management.serial_tasks"
 
+// SettingCalibrationFeedback turns on the in-context calibration digest
+// of the ICRL experiment (docs/reports/icrl-calibration-experiment-2026-10-14.md):
+// desks in the digest arm read their own settled calibration as a user
+// turn and in choir.Pack(). Off by default; off computes and shows nothing,
+// and turning it off is the rollback.
+const SettingCalibrationFeedback = "calibration.feedback"
+
 // KnownComputerSettings are the settings a computer has, with their
 // defaults. A key outside this list is refused, so a typo never stores a
 // setting nobody reads.
 var KnownComputerSettings = map[string]bool{
 	SettingIntakeLabels:          false,
 	SettingManagementSerialTasks: false,
+	SettingCalibrationFeedback:   false,
 }
 
 // ComputerSetting is one switch's value on one computer.

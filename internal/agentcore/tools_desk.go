@@ -820,6 +820,9 @@ func actingCommitmentPackForDesk(ctx context.Context, rt *Runtime, execCtx toolr
 		return nil
 	}
 	pack := types.BuildActingPack(records, agentID, actingPackMaxItems)
+	// The desk's calibration digest, under the same setting and arm rule
+	// as the digest turn (icrl-calibration-experiment-2026-10-14 P3).
+	pack.Calibration = rt.calibrationDigestForRun(ctx, execCtx.RunRecord)
 	return &pack
 }
 

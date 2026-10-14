@@ -407,6 +407,15 @@ func inboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent, toI
 		}
 		rec.Report = report
 		rec.Final = final && hasOpenRound
+		// A final Report's self-score (p_complete), stated with the act and
+		// before any settlement (icrl-calibration-experiment-2026-10-14).
+		// Deterministic from the intent, so a replay re-derives it.
+		if p := reportSelfScore(in.Packet); p != nil && rec.Final {
+			rec.Scores = append(rec.Scores, types.CommitmentScore{
+				ScorerAgentID: rec.SenderInbox, Self: true,
+				Probabilities: map[string]float64{types.SelfScoreComplete: *p},
+			})
+		}
 	case yaegikernel.IntentNote:
 		// choir.Feed and choir.Decline (L2a R2-5): the Note a hand-written
 		// feed or decline is, plus the structured captures.
@@ -461,6 +470,27 @@ func castBodyFromPacket(raw string) (*types.CommitmentCast, error) {
 		return nil, fmt.Errorf("a Cast's publish is %q; the only publish mode is %q", publish, types.CastPublishAuto)
 	}
 	return cast, nil
+}
+
+// reportSelfScore reads a Report packet's p_complete: the desk's own
+// probability that the Report answers every question it was asked. Nil
+// when absent or not a probability (the packet check refuses that at the
+// call; this is the reducer's own guard).
+func reportSelfScore(rawPacket string) *float64 {
+	rawPacket = strings.TrimSpace(rawPacket)
+	if rawPacket == "" {
+		return nil
+	}
+	var packet struct {
+		PComplete *float64 `json:"p_complete"`
+	}
+	if json.Unmarshal([]byte(rawPacket), &packet) != nil || packet.PComplete == nil {
+		return nil
+	}
+	if p := *packet.PComplete; !(p >= 0 && p <= 1) {
+		return nil
+	}
+	return packet.PComplete
 }
 
 // reportBodyFromPacket maps a report packet onto the typed Report body. The

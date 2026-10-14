@@ -134,6 +134,11 @@ type TextureTurn struct {
 type TextureWrite struct {
 	Edits string `json:"edits"`
 	Why   string `json:"why"`
+	// PSupported is the Write's self-score: Texture's probability that the
+	// judge finds each new citation's passage supports its sentence
+	// (docs/reports/icrl-calibration-experiment-2026-10-14.md). Nil when
+	// the Write states none.
+	PSupported *float64 `json:"p_supported,omitempty"`
 }
 
 // TextureReject declines one record (by record id) or one leftover update

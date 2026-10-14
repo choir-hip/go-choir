@@ -17,7 +17,7 @@ func TestEveryDeskPromptCarriesItsSurface(t *testing.T) {
 		want    []string
 		absent  []string
 	}{
-		{agentprofile.Texture, nil, []string{"choir.ReadDoc()", "choir.Write(edits string, why string)", "choir.Done(why string)", "choir.Wait(why string)", "choir.Reject(record string, why string)", "choir.Cast("}, []string{"choir.Exec(", "choir.ApplyTexture(", "choir.Judge("}},
+		{agentprofile.Texture, nil, []string{"choir.ReadDoc()", "choir.Write(edits string, why string, pSupported ...float64)", "choir.Done(why string)", "choir.Wait(why string)", "choir.Reject(record string, why string)", "choir.Cast("}, []string{"choir.Exec(", "choir.ApplyTexture(", "choir.Judge("}},
 		{agentprofile.Management, nil, []string{"choir.Cast(", "choir.ProductAPI(", "choir.ReadCapture(", "choir.Verify("}, []string{"choir.Write(", "choir.Judge("}},
 		{agentprofile.Research, nil, []string{"choir.SearchStart(", "choir.Searches.Get(", "choir.SearchWait(", "choir.Read(", "choir.ReadCapture(", "choir.SearchWireCorpus("}, []string{"choir.Exec(", "choir.WriteFile(", "choir.WebSearch(", "choir.Judge("}},
 		{agentprofile.Engineering, map[string]any{runMetadataEngineeringSlot: "verifier"}, []string{"choir.Exec(", "choir.InspectBundle()"}, []string{"choir.Verify("}},

@@ -132,6 +132,10 @@ func Validate(packet types.SourcePacket) error {
 	if Empty(packet) {
 		return fmt.Errorf("update_coagent requires at least one of claims, sources, actions, questions, or notes")
 	}
+	// A final Report's self-score (icrl-calibration-experiment-2026-10-14).
+	if p := packet.PComplete; p != nil && !(*p >= 0 && *p <= 1) {
+		return fmt.Errorf("update_coagent p_complete must be a probability from 0 to 1, not %v", *p)
+	}
 	if packet.Kind == "execution_request" && len(packet.Actions) == 0 {
 		return fmt.Errorf("update_coagent kind=execution_request requires actions")
 	}

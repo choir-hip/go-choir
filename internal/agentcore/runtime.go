@@ -76,6 +76,9 @@ type Runtime struct {
 	// last read with choir.Stories() (run id -> int64), stamped on its
 	// texture:new commits (management delegation R2-5).
 	storyLibraryShown sync.Map
+	// calibration caches each computer's calibration snapshot for the
+	// ICRL digest (calibration_feedback.go); in memory, rebuilt on demand.
+	calibration calibrationCache
 	// managementTaskStartMu serializes the management task slot starter
 	// (R2-6), so two wakes cannot both take the last slot.
 	managementTaskStartMu sync.Mutex
@@ -3520,7 +3523,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		rt.handleExecutionError(ctx, rec, fmt.Errorf("initialize run memory: %w", err))
 		return
 	}
-	initialTurns := frameTurns
+	// The calibration digest (ICRL experiment) is a user turn after the
+	// history, never the system prompt: the cached prefix holds.
+	calibrationTurns := rt.calibrationDigestInjector(rec, initialMessages)
+	injectUserTurns = composeInjectors(injectUserTurns, calibrationTurns)
+	initialTurns := composeInjectors(frameTurns, calibrationTurns)
 	if appendInitialMailboxTurns {
 		initialTurns = injectUserTurns
 	}

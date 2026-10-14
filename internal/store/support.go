@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -97,6 +99,7 @@ func (s *Store) planSupportPairs(ctx context.Context, ownerID, computerID string
 	}
 	var objects []objectgraph.Object
 	var conditions []objectgraph.ObjectCondition
+	selfP, modelID := revisionCitationSelfScore(req.Revision)
 	seen := map[string]bool{}
 	for _, p := range req.Citations {
 		if !validSupportPair(p) || p.DocID != req.DocumentID || p.RevisionID != req.Revision.RevisionID {
@@ -114,8 +117,9 @@ func (s *Store) planSupportPairs(ctx context.Context, ownerID, computerID string
 			continue
 		}
 		// Write matched every committed quote, so a listed pair's check is
-		// a match at its tier.
-		check := types.CitationCheck{Pair: p, Outcome: "matched", Tier: p.Tier, ListedBy: req.CommandID}
+		// a match at its tier. The Write's self-score, if it stated one,
+		// rides the check: Jev's verdict on the same key settles it.
+		check := types.CitationCheck{Pair: p, Outcome: "matched", Tier: p.Tier, ListedBy: req.CommandID, SelfP: selfP, ModelID: modelID}
 		obj, err := lifecycleObject(ogKindCitationCheck, ownerID, computerID, p.Key, check, map[string]any{
 			"pair_key": p.Key, "computer_id": computerID, "doc_id": p.DocID, "revision_id": p.RevisionID,
 		}, now, now)
@@ -205,4 +209,74 @@ func (s *Store) planSupportVerdicts(ctx context.Context, ownerID, computerID, ju
 		})
 	}
 	return objects, conditions, records, recorded, nil
+}
+
+// RevisionMetaPSupported is the revision metadata key a Texture Write's
+// self-score is stored under (choir.Write's pSupported).
+const RevisionMetaPSupported = "texture_write_p_supported"
+
+// revisionCitationSelfScore reads a revision's citation self-score and the
+// model that wrote it: the Write's pSupported from the revision metadata
+// and "<provider>/<model>" from its provenance
+// (docs/reports/icrl-calibration-experiment-2026-10-14.md). A missing or
+// malformed value is no self-score.
+func revisionCitationSelfScore(rev types.Revision) (*float64, string) {
+	var meta map[string]any
+	if len(rev.Metadata) == 0 || json.Unmarshal(rev.Metadata, &meta) != nil {
+		return nil, ""
+	}
+	p, ok := meta[RevisionMetaPSupported].(float64)
+	if !ok || !(p >= 0 && p <= 1) {
+		return nil, ""
+	}
+	var prov types.Provenance
+	model := ""
+	if len(rev.Provenance) > 0 && json.Unmarshal(rev.Provenance, &prov) == nil {
+		model = strings.TrimSpace(prov.AuthoringModel.Model)
+		if provider := strings.TrimSpace(prov.AuthoringModel.Provider); provider != "" && model != "" {
+			model = provider + "/" + model
+		}
+	}
+	return &p, model
+}
+
+// SupportMemo is one support memo with the time it was written.
+type SupportMemo[T any] struct {
+	Value T
+	At    time.Time
+}
+
+// ListCitationChecks lists the computer's citation check memos, newest
+// first, at most limit.
+func (s *Store) ListCitationChecks(ctx context.Context, ownerID, computerID string, limit int) ([]SupportMemo[types.CitationCheck], error) {
+	return listSupportMemos[types.CitationCheck](ctx, s, ogKindCitationCheck, ownerID, computerID, limit)
+}
+
+// ListSupportVerdicts lists the computer's support verdict memos, newest
+// first, at most limit.
+func (s *Store) ListSupportVerdicts(ctx context.Context, ownerID, computerID string, limit int) ([]SupportMemo[types.SupportVerdict], error) {
+	return listSupportMemos[types.SupportVerdict](ctx, s, ogKindSupportVerdict, ownerID, computerID, limit)
+}
+
+func listSupportMemos[T any](ctx context.Context, s *Store, kind objectgraph.ObjectKind, ownerID, computerID string, limit int) ([]SupportMemo[T], error) {
+	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
+	if ownerID == "" || computerID == "" {
+		return nil, fmt.Errorf("support memo list requires owner and computer")
+	}
+	objs, err := s.ogListByOwnerAndBody(ctx, kind, ownerID, nil, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SupportMemo[T], 0, len(objs))
+	for _, obj := range objs {
+		if obj.Tombstone || strings.TrimSpace(obj.ComputerID) != computerID {
+			continue
+		}
+		value, err := decodeLifecycleObject[T](obj)
+		if err != nil {
+			return nil, fmt.Errorf("support memo decode %s: %w", obj.CanonicalID, err)
+		}
+		out = append(out, SupportMemo[T]{Value: value, At: obj.CreatedAt})
+	}
+	return out, nil
 }

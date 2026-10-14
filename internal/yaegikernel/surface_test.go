@@ -165,7 +165,7 @@ func TestHelpOnFunctionShowsSignatureAndReturnFields(t *testing.T) {
 
 func TestDeskSurfacePromptBlock(t *testing.T) {
 	block := DeskSurface("texture", "", false)
-	for _, want := range []string{"choir.Write(edits string, why string)", "choir.Done(why string)", "choir.Wait(why string)", "choir.Reject(record string, why string)", "choir.ReadDoc()", "choir.Help()", "choir.Updates()"} {
+	for _, want := range []string{"choir.Write(edits string, why string, pSupported ...float64)", "choir.Done(why string)", "choir.Wait(why string)", "choir.Reject(record string, why string)", "choir.ReadDoc()", "choir.Help()", "choir.Updates()"} {
 		if !strings.Contains(block, want) {
 			t.Errorf("texture surface block missing %q:\n%s", want, block)
 		}

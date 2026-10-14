@@ -73,9 +73,11 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 			t.Errorf("prompt core still teaches %q", retired)
 		}
 	}
-	// 4000 until the story headline rule (2026-10-14) added one line.
-	if n := len(prompt); n > 4300 {
-		t.Errorf("prompt core is %d characters; the budget is about 4.3k", n)
+	// 4000 until the story headline rule (2026-10-14) added one line; 4.3k
+	// until the citation self-score (icrl-calibration-experiment-2026-10-14)
+	// added one sentence.
+	if n := len(prompt); n > 4420 {
+		t.Errorf("prompt core is %d characters; the budget is about 4.4k", n)
 	}
 }
 

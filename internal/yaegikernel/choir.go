@@ -1101,11 +1101,24 @@ func (s *ChoirScope) ReadDoc() DocSnapshot {
 // what the revision does. The grammar, aliases and frame handles are checked
 // now and a refusal names its script line; capture handles and quotes are
 // checked when the turn commits after the cell, with the same line numbers.
-// One Write per cell.
-func (s *ChoirScope) Write(edits, why string) (string, error) {
+// One Write per cell. An optional third argument, pSupported, is the
+// Write's self-score: the probability that the judge finds each new
+// citation's passage supports its sentence.
+func (s *ChoirScope) Write(edits, why string, pSupported ...float64) (string, error) {
 	t, err := s.boundTray("write")
 	if err != nil {
 		return "", err
+	}
+	var selfP *float64
+	switch {
+	case len(pSupported) > 1:
+		return "", fmt.Errorf("choir: Write takes one pSupported, not %d", len(pSupported))
+	case len(pSupported) == 1:
+		if p := pSupported[0]; !(p >= 0 && p <= 1) {
+			return "", fmt.Errorf("choir: Write refused, nothing staged: pSupported is a probability from 0 to 1, not %v", p)
+		}
+		p := pSupported[0]
+		selfP = &p
 	}
 	if s.doc == nil || strings.TrimSpace(s.doc.RevisionID) == "" {
 		return "", fmt.Errorf("choir: Write has no bound document in this cell")
@@ -1127,7 +1140,7 @@ func (s *ChoirScope) Write(edits, why string) (string, error) {
 		case turn.Wait != "":
 			return fmt.Errorf("choir: this cell already called Wait, which records a turn without a revision; a cell either Writes or Waits")
 		}
-		turn.Write = &TextureWrite{Edits: edits, Why: strings.TrimSpace(why)}
+		turn.Write = &TextureWrite{Edits: edits, Why: strings.TrimSpace(why), PSupported: selfP}
 		return nil
 	})
 }

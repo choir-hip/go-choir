@@ -283,6 +283,11 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 		meta = map[string]any{}
 	}
 	meta["texture_write_why"] = strings.TrimSpace(turn.Write.Why)
+	if p := turn.Write.PSupported; p != nil {
+		// The Write's self-score; the turn's transaction copies it onto
+		// each new citation's check memo (icrl-calibration-experiment).
+		meta[store.RevisionMetaPSupported] = *p
+	}
 	meta["texture_write_directives"] = result.Ops
 	meta["texture_write_base_revision_id"] = baseRev.RevisionID
 	if len(result.Dropped) > 0 {

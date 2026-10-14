@@ -109,6 +109,12 @@ type ActingPack struct {
 	// IssuerTallies is the issuer-visible ask tally: per-issuer accrual over
 	// acts addressed to this desk. Derived per read — never stored.
 	IssuerTallies []CommitmentAccrual `json:"issuer_tallies,omitempty"`
+	// Calibration is the desk's calibration digest: aggregate calibration
+	// of its own settled self-scores, never a per-item verdict. Present
+	// only while the computer's calibration.feedback setting is on and the
+	// run is in the experiment's digest arm
+	// (docs/reports/icrl-calibration-experiment-2026-10-14.md).
+	Calibration *CalibrationDigest `json:"calibration,omitempty"`
 }
 
 // SupervisionPackItem is the supervising surface's full per-act view: the
