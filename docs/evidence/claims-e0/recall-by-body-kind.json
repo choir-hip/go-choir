@@ -1,0 +1,55 @@
+{
+ "gpt-6-luna": {
+  "full_text/scheduled": {
+   "captures": 5,
+   "tp": 46,
+   "gold_material": 128,
+   "recall": 0.359,
+   "recall_within_cap": 0.902
+  },
+  "hn_stub/scheduled": {
+   "captures": 5,
+   "tp": 0,
+   "gold_material": 0,
+   "recall": 0.0,
+   "recall_within_cap": 0.0
+  },
+  "feed_item/scheduled": {
+   "captures": 25,
+   "tp": 50,
+   "gold_material": 63,
+   "recall": 0.794,
+   "recall_within_cap": 0.862
+  },
+  "full_text/targeted": {
+   "captures": 15,
+   "tp": 123,
+   "gold_material": 281,
+   "recall": 0.438,
+   "recall_within_cap": 0.755
+  }
+ },
+ "deepseek-v4.1-flash": {
+  "full_text/scheduled": {
+   "captures": 5,
+   "tp": 49,
+   "gold_material": 128,
+   "recall": 0.383,
+   "recall_within_cap": 0.961
+  },
+  "hn_stub/scheduled": {
+   "captures": 5,
+   "tp": 0,
+   "gold_material": 0,
+   "recall": 0.0,
+   "recall_within_cap": 0.0
+  },
+  "feed_item/scheduled": {
+   "captures": 25,
+   "tp": 53,
+   "gold_material": 63,
+   "recall": 0.841,
+   "recall_within_cap": 0.914
+  }
+ }
+}

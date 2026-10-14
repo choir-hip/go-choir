@@ -53,7 +53,7 @@ def packet(rec):
         return None
 
 
-def m1(stories, workers):
+def m1(stories, workers, model=L.GEMINI, sample=None):
     tasks = []
     for s in stories:
         hyps = []
@@ -84,13 +84,17 @@ def m1(stories, workers):
             return {"verdicts": [], "no_evidence": True}
         lines = "\n".join(f"{i}. {h['statement']}" for i, h in enumerate(t["hyps"], 1))
         ev = "RESEARCH FINDINGS\n" + "\n".join("- " + c for c in t["claims"][:40]) + "\n\nSUPPORT-CHECKED SOURCE QUOTES IN THE PUBLISHED STORY\n" + "\n".join("- " + q for q in t["quotes"][:40])
-        r = L.omp(L.GEMINI, P.HYPOTHESIS_SETTLE_V0 + "\nHYPOTHESES\n" + lines + "\n\nEVIDENCE\n" + ev[:24000])
+        r = L.omp(model, P.HYPOTHESIS_SETTLE_V0 + "\nHYPOTHESES\n" + lines + "\n\nEVIDENCE\n" + ev[:24000])
         try:
             return {"verdicts": L.parse_json(r["text"]).get("verdicts") or [], "usage": r["usage"], "served": r["served"]}
         except ValueError:
             return {"verdicts": None, "raw": r["text"][:300]}
 
-    print("M1 judge calls:", len(tasks), flush=True)
+    if sample:
+        rng = random.Random(20261016)
+        rng.shuffle(tasks)
+        tasks = tasks[:sample]
+    print("M1 judge calls:", model, len(tasks), flush=True)
     res = pmap(one, tasks, workers)
     rows = []
     for t, r in zip(tasks, res):
@@ -104,7 +108,7 @@ def m1(stories, workers):
 
 
 def r1(stories, captures):
-    items, meta = [], []
+    items, meta = {}, []
     for s in stories:
         for r in s["texture_records"]:
             if not (str(r.get("sender_inbox", "")).startswith("research:") and r.get("report")):
@@ -124,10 +128,11 @@ def r1(stories, captures):
                     meta.append({"key": key, "doc_id": s["doc_id"], "capture_id": cid, "has_capture_id": bool(cid),
                                  "capture_readable": bool(cap and cap.get("blocks")), "final": bool(r.get("final"))})
                     if cap and cap.get("blocks"):
-                        items.append({"key": key, "blocks": [{"id": b["id"], "text": b["text"]} for b in cap["blocks"]],
-                                      "quotes": [{"id": "q", "quote": sel["quote"], "hint": ""}]})
-    ver = L.claimslab("verify", {"items": items}) if items else {"results": []}
-    by = {x["key"]: x["check"] for x in ver["results"]}
+                        if cid not in items:
+                            items[cid] = {"key": cid, "blocks": [{"id": b["id"], "text": b["text"]} for b in cap["blocks"]], "quotes": []}
+                        items[cid]["quotes"].append({"id": key, "quote": sel["quote"], "hint": ""})
+    ver = L.claimslab("verify", {"no_cap": True, "items": list(items.values())}) if items else {"results": []}
+    by = {x["id"]: x["check"] for x in ver["results"]}
     for m in meta:
         c = by.get(m["key"])
         if not m["has_capture_id"]:
@@ -198,6 +203,7 @@ def main():
     ap.add_argument("--pull", default=os.path.join(L.DATA, "pull"))
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--coverage-sample", type=int, default=120)
+    ap.add_argument("--second-scorer-sample", type=int, default=60)
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     os.makedirs(EVID, exist_ok=True)
@@ -208,7 +214,6 @@ def main():
     r1rows = r1(stories, captures)
     r2res = r2(stories, a.workers, a.coverage_sample)
     t1rows = t1(stories)
-    json.dump({"m1": m1rows, "m1_raw": m1raw, "r1": r1rows, "r2": r2res, "t1": t1rows}, open(os.path.join(OUT, "e6a-raw.json"), "w"), ensure_ascii=False)
 
     # management M1: calibration
     scored = [x for x in m1rows if x["outcome"] != "no_evidence"]
@@ -238,6 +243,32 @@ def main():
     # texture T1: support
     judged = [x for x in t1rows if x["judgement"] in ("supported", "failed")]
     rate_in["t1_supported"] = {"w": [1] * len(judged), "y": [1.0 if x["judgement"] == "supported" else 0.0 for x in judged]}
+    # score the scorer: a second blind settler (gpt-6-luna) on a seeded sample
+    # of stories; agreement with gemini per hypothesis, and the desk's Brier
+    # under each scorer on the same hypotheses
+    m1b, _ = m1(stories, a.workers, model=L.LUNA, sample=a.second_scorer_sample)
+    g_by = {(x["record_id"], x["id"]): x for x in m1rows}
+    pairs = [(g_by[(x["record_id"], x["id"])], x) for x in m1b if (x["record_id"], x["id"]) in g_by and x["outcome"] != "no_evidence"]
+    agree = sum(1 for g, b in pairs if g["outcome"] == b["outcome"])
+    pos = lambda o: o in ("confirmed", "qualified")  # noqa: E731
+    agree_bin = sum(1 for g, b in pairs if pos(g["outcome"]) == pos(b["outcome"]))
+    cross = L.claimslab("brier", {"groups": {
+        "desk_p_under_gemini": {"p": [g["p"] for g, _ in pairs], "y": [YS[g["outcome"]] for g, _ in pairs]},
+        "desk_p_under_luna": {"p": [b["p"] for _, b in pairs], "y": [YS[b["outcome"]] for _, b in pairs]}}})
+    second = {"scorer": L.LUNA, "hypotheses": len(pairs), "exact_agreement": round(agree / len(pairs), 3) if pairs else None,
+              "binary_agreement_confirmed_or_qualified": round(agree_bin / len(pairs), 3) if pairs else None,
+              "luna_outcomes": dict(collections.Counter(b["outcome"] for _, b in pairs)),
+              "gemini_outcomes_same_items": dict(collections.Counter(g["outcome"] for g, _ in pairs)), "brier": cross}
+    # self-claims about the desk's own work, read as self-scores with an
+    # implied probability of 1, against independent settlement
+    ys_cov = [{"answered": 1.0, "partial": 0.5, "unanswered": 0.0}[x["answer"]] for x in r2res["rows"]]
+    self_scores = {
+        "research_completed_claim": L.claimslab("brier", {"groups": {"p1": {"p": [1.0] * len(ys_cov), "y": ys_cov}}})["p1"],
+        "research_verbatim_quote_claim": L.claimslab("brier", {"groups": {"p1": {"p": [1.0] * len(rate_in["r1_quote_matched"]["y"]), "y": rate_in["r1_quote_matched"]["y"]}}})["p1"],
+        "texture_citation_supports_claim": L.claimslab("brier", {"groups": {"p1": {"p": [1.0] * len(rate_in["t1_supported"]["y"]), "y": rate_in["t1_supported"]["y"]}}})["p1"],
+        "explicit_self_scores_on_records": {"report_settled": 0, "resolve": 0, "scores": 0,
+                                            "note": "no desk settles or scores its own records on the paper; self-scores here are implied (p=1) by the desk's own claims"},
+    }
     rates = L.claimslab("rate", {"groups": rate_in})
 
     box = {
@@ -264,8 +295,11 @@ def main():
         },
         "texture": {"T1_citation_support": {"citations": len(t1rows), "judgement": dict(collections.Counter(x["judgement"] for x in t1rows)),
                                             "quote_state": dict(collections.Counter(x["quote"] for x in t1rows)), "supported": rates["t1_supported"]}},
+        "score_the_scorer_M1": second,
+        "self_scores": self_scores,
         "engineering": {"assignments": 0, "note": "no engineering runs or assignments on the paper computer; E6a for engineering needs a computer that runs engineering work"},
     }
+    json.dump({"m1": m1rows, "m1_raw": m1raw, "m1_second": m1b, "r1": r1rows, "r2": r2res, "t1": t1rows}, open(os.path.join(OUT, "e6a-raw.json"), "w"), ensure_ascii=False)
     json.dump(box, open(os.path.join(EVID, "box-score.json"), "w"), indent=1)
     print(json.dumps(box, indent=1)[:6000])
 

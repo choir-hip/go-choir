@@ -45,6 +45,8 @@ func main() {
 
 func verify(dec *json.Decoder, enc *json.Encoder) error {
 	var in struct {
+		// NoCap checks quotes of any length (desk quote fidelity, E6a R1).
+		NoCap bool `json:"no_cap"`
 		Items []struct {
 			Key    string `json:"key"`
 			Blocks []struct {
@@ -76,7 +78,11 @@ func verify(dec *json.Decoder, enc *json.Encoder) error {
 			blocks[i] = quotematch.Block{ID: b.ID, Text: b.Text}
 		}
 		for _, q := range it.Quotes {
-			out.Results = append(out.Results, row{Key: it.Key, ID: q.ID, Check: claimslab.CheckQuote(q.Quote, q.Hint, blocks)})
+			capRunes := claimslab.QuoteCap
+			if in.NoCap {
+				capRunes = 0
+			}
+			out.Results = append(out.Results, row{Key: it.Key, ID: q.ID, Check: claimslab.CheckQuoteCap(q.Quote, q.Hint, blocks, capRunes)})
 		}
 	}
 	return enc.Encode(out)

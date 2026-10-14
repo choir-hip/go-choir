@@ -25,14 +25,22 @@ type QuoteCheck struct {
 	HintMismatch bool `json:"hint_mismatch,omitempty"`
 }
 
-// CheckQuote verifies a quote against a capture's blocks with quotematch.
-// The model's block hint is tried first and is never trusted: the quote is
-// then checked against every block, and the matched block decides.
+// CheckQuote verifies a quote against a capture's blocks with quotematch,
+// under the claim quote cap. The model's block hint is tried first and is
+// never trusted: the quote is then checked against every block, and the
+// matched block decides.
 func CheckQuote(quote, hint string, blocks []quotematch.Block) QuoteCheck {
+	return CheckQuoteCap(quote, hint, blocks, QuoteCap)
+}
+
+// CheckQuoteCap is CheckQuote with an explicit cap in runes; a cap of zero
+// or less checks a quote of any length (a desk's quote fidelity is not
+// bound by the claims layer's extract rule).
+func CheckQuoteCap(quote, hint string, blocks []quotematch.Block, capRunes int) QuoteCheck {
 	if !strings.ContainsFunc(quote, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) }) {
 		return QuoteCheck{Reason: ReasonEmpty, Result: quotematch.Result{Outcome: quotematch.NotFound}}
 	}
-	if utf8.RuneCountInString(strings.TrimSpace(quote)) > QuoteCap {
+	if capRunes > 0 && utf8.RuneCountInString(strings.TrimSpace(quote)) > capRunes {
 		return QuoteCheck{Reason: ReasonOverCap, Result: quotematch.Result{Outcome: quotematch.NotFound}}
 	}
 	if hint != "" {

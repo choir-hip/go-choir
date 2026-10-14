@@ -1,0 +1,251 @@
+{
+ "computer": "autopaper paper (computer-1355b83b...)",
+ "stories_with_doc": 373,
+ "scorer_blind": "judges never see the desk's probability or identity; nothing is written back (I26)",
+ "model_ids_on_records": {
+  "empty": 2931
+ },
+ "management": {
+  "M1_cast_hypotheses": {
+   "n": 730,
+   "stories": 373,
+   "no_research_evidence": 78,
+   "outcomes": {
+    "confirmed": 363,
+    "qualified": 154,
+    "no_evidence": 78,
+    "unresolved": 93,
+    "contradicted": 42
+   },
+   "mean_p": 0.629,
+   "hedge_share_p_0.4_0.6": 0.454,
+   "withdrawn": 0,
+   "brier": {
+    "resolved_binary": {
+     "valid": true,
+     "n": 405,
+     "brier": 0.14778469135802458,
+     "reliability": 0.07538599699295238,
+     "resolution": 0.02055055117676585,
+     "uncertainty": 0.09294924554183817,
+     "base_rate": 0.8962962962962963,
+     "skill": -0.5899504132231386
+    },
+    "resolved_only": {
+     "valid": true,
+     "n": 559,
+     "brier": 0.11635635062611802,
+     "reliability": 0.030595903194709746,
+     "resolution": 0.012928752871970131,
+     "uncertainty": 0.09868920030337841,
+     "base_rate": 0.7871198568872988,
+     "skill": 0.3055930328495037
+    },
+    "strict_unresolved_wrong": {
+     "valid": true,
+     "n": 652,
+     "brier": 0.1414529141104296,
+     "reliability": 0.009014150263534141,
+     "resolution": 0.027940813856443168,
+     "uncertainty": 0.16037957770333863,
+     "base_rate": 0.6748466257668712,
+     "skill": 0.35535806603773523
+    }
+   },
+   "calibration_resolved": {
+    "<0.5": {
+     "n": 57,
+     "mean_p": 0.373,
+     "observed": 0.623
+    },
+    "0.5-0.7": {
+     "n": 250,
+     "mean_p": 0.569,
+     "observed": 0.752
+    },
+    "0.7-0.85": {
+     "n": 176,
+     "mean_p": 0.744,
+     "observed": 0.844
+    },
+    "0.85-0.95": {
+     "n": 67,
+     "mean_p": 0.878,
+     "observed": 0.903
+    },
+    ">=0.95": {
+     "n": 9,
+     "mean_p": 0.964,
+     "observed": 0.833
+    }
+   },
+   "confirmed_share_resolved": {
+    "valid": true,
+    "n": 559,
+    "n_eff": 559,
+    "mean": 0.7871198568872988,
+    "lo": 0.7512512663366779,
+    "hi": 0.8190094365248923
+   }
+  }
+ },
+ "research": {
+  "R1_quote_fidelity": {
+   "quotes": 10236,
+   "outcomes": {
+    "matched_exact": 9748,
+    "matched_tolerant_ws_case": 189,
+    "capture_unreadable": 81,
+    "not_found": 151,
+    "matched_tolerant_punct": 25,
+    "no_capture_id": 42
+   },
+   "matched": {
+    "valid": true,
+    "n": 10113,
+    "n_eff": 10113,
+    "mean": 0.9850687234252942,
+    "lo": 0.9825125850224237,
+    "hi": 0.9872514731026356
+   },
+   "exact": {
+    "valid": true,
+    "n": 10113,
+    "n_eff": 10113,
+    "mean": 0.9639078413922674,
+    "lo": 0.9600909847006529,
+    "hi": 0.9673675500691248
+   }
+  },
+  "R2_completed_vs_coverage": {
+   "final_reports": 725,
+   "stop_reasons": {
+    "completed": 441,
+    "run_completed": 27,
+    "interrupted_by_restart": 14,
+    "run_failed": 242,
+    "run_cancelled": 1
+   },
+   "sampled_completed_rounds": 120,
+   "questions_judged": 400,
+   "answers": {
+    "partial": 147,
+    "answered": 188,
+    "unanswered": 65
+   },
+   "coverage": {
+    "valid": true,
+    "n": 400,
+    "n_eff": 400,
+    "mean": 0.65375,
+    "lo": 0.6058175572155386,
+    "hi": 0.6987107028182462
+   }
+  }
+ },
+ "texture": {
+  "T1_citation_support": {
+   "citations": 3483,
+   "judgement": {
+    "failed": 30,
+    "supported": 1800,
+    "pending": 1653
+   },
+   "quote_state": {
+    "tolerant": 134,
+    "exact": 3280,
+    "pending": 69
+   },
+   "supported": {
+    "valid": true,
+    "n": 1830,
+    "n_eff": 1830,
+    "mean": 0.9836065573770492,
+    "lo": 0.9766921785948184,
+    "hi": 0.9884682074020816
+   }
+  }
+ },
+ "score_the_scorer_M1": {
+  "scorer": "openai-codex/gpt-6-luna",
+  "hypotheses": 98,
+  "exact_agreement": 0.592,
+  "binary_agreement_confirmed_or_qualified": 0.918,
+  "luna_outcomes": {
+   "confirmed": 33,
+   "qualified": 49,
+   "contradicted": 6,
+   "unresolved": 10
+  },
+  "gemini_outcomes_same_items": {
+   "qualified": 25,
+   "confirmed": 59,
+   "contradicted": 4,
+   "unresolved": 10
+  },
+  "brier": {
+   "desk_p_under_gemini": {
+    "valid": true,
+    "n": 98,
+    "brier": 0.10756734693877544,
+    "reliability": 0.02053756478781989,
+    "resolution": 0.04648229614975242,
+    "uncertainty": 0.13351207830070796,
+    "base_rate": 0.7295918367346939,
+    "skill": 0.45476880854994095
+   },
+   "desk_p_under_luna": {
+    "valid": true,
+    "n": 98,
+    "brier": 0.11777142857142854,
+    "reliability": 0.031552506478781994,
+    "resolution": 0.031258170785320935,
+    "uncertainty": 0.11747709287796751,
+    "base_rate": 0.5867346938775511,
+    "skill": 0.5142987439613528
+   }
+  }
+ },
+ "self_scores": {
+  "research_completed_claim": {
+   "valid": true,
+   "n": 400,
+   "brier": 0.254375,
+   "reliability": 0.11988906249999996,
+   "resolution": 0,
+   "uncertainty": 0.13448593750000004,
+   "base_rate": 0.65375,
+   "skill": -0.12375837814331403
+  },
+  "research_verbatim_quote_claim": {
+   "valid": true,
+   "n": 10113,
+   "brier": 0.014931276574705825,
+   "reliability": 0.0002229430201503591,
+   "resolution": 0,
+   "uncertainty": 0.014708333554555473,
+   "base_rate": 0.9850687234252942,
+   "skill": -0.015157598875727318
+  },
+  "texture_citation_supports_claim": {
+   "valid": true,
+   "n": 1830,
+   "brier": 0.01639344262295082,
+   "reliability": 0.0002687449610319812,
+   "resolution": 0,
+   "uncertainty": 0.016124697661918857,
+   "base_rate": 0.9836065573770492,
+   "skill": -0.016666666666665497
+  },
+  "explicit_self_scores_on_records": {
+   "report_settled": 0,
+   "resolve": 0,
+   "scores": 0,
+   "note": "no desk settles or scores its own records on the paper; self-scores here are implied (p=1) by the desk's own claims"
+  }
+ },
+ "engineering": {
+  "assignments": 0,
+  "note": "no engineering runs or assignments on the paper computer; E6a for engineering needs a computer that runs engineering work"
+ }
+}

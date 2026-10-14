@@ -1,0 +1,762 @@
+{
+ "schema": "claims_e0.results.v1",
+ "computed_at": "2026-10-14T19:24:27.106067+00:00",
+ "evalset_manifest_sha256": "fd5286c87d0be5aa63050423fcb50b3142f7f86cff03b8501ab9a1bda2ee6d60",
+ "matcher": "qm1+nt1",
+ "labels": {
+  "labeller": "google-antigravity/gemini-3.8-flash",
+  "captures": 50,
+  "pass_a_retained": 626,
+  "pass_b_retained": 590,
+  "consensus": 541,
+  "material_consensus": 472,
+  "self_agreement_f1": 0.89,
+  "status": "model-assisted; needs human audit (protocol §5)",
+  "omp_reported_usd_per_capture_two_passes": 0.01795
+ },
+ "extractors": {
+  "gpt-6-luna": {
+   "captures": 200,
+   "parse_ok": 199,
+   "claims_attempted": 1074,
+   "claims_retained": 1066,
+   "retained_rate": 0.9926,
+   "tiers": {
+    "exact": 1047,
+    "tolerant_ws_case": 10,
+    "tolerant_punct": 9
+   },
+   "not_retained": {
+    "not_found": 6,
+    "over_cap": 2
+   },
+   "hint_mismatch_share": 0.002,
+   "captures_over_cap": 7,
+   "claims_per_capture": 5.37,
+   "retained_by_lang": {
+    "de": {
+     "attempted": 79,
+     "retained": 78,
+     "rate": 0.987
+    },
+    "en": {
+     "attempted": 488,
+     "retained": 486,
+     "rate": 0.996
+    },
+    "es": {
+     "attempted": 110,
+     "retained": 110,
+     "rate": 1.0
+    },
+    "fr": {
+     "attempted": 103,
+     "retained": 102,
+     "rate": 0.99
+    },
+    "it": {
+     "attempted": 31,
+     "retained": 30,
+     "rate": 0.968
+    },
+    "ja": {
+     "attempted": 78,
+     "retained": 78,
+     "rate": 1.0
+    },
+    "latin": {
+     "attempted": 112,
+     "retained": 109,
+     "rate": 0.973
+    },
+    "pt": {
+     "attempted": 41,
+     "retained": 41,
+     "rate": 1.0
+    },
+    "ru/uk": {
+     "attempted": 4,
+     "retained": 4,
+     "rate": 1.0
+    },
+    "zh": {
+     "attempted": 28,
+     "retained": 28,
+     "rate": 1.0
+    }
+   },
+   "modalities": {
+    "assertion": 773,
+    "forecast": 96,
+    "commitment": 35,
+    "opinion": 45,
+    "intent": 78,
+    "attribution": 39
+   },
+   "attribution_basis": {
+    "own_voice": 481,
+    "paraphrase": 350,
+    "verbatim_first_party": 64,
+    "direct_quote": 148,
+    "reportedly": 3,
+    "relay": 9,
+    "anonymous": 10,
+    "verb​atim_first_party": 1
+   },
+   "hedged_share": 0.194,
+   "multi_reading_share": 0.002,
+   "p_attr_below_0.6_share": 0.003,
+   "mentions_per_capture": 7.11,
+   "cost": {
+    "omp_reported_usd_per_capture": 0.00081,
+    "list_usd_per_capture_net_of_harness": 0.000699,
+    "net_input_tokens_mean": 1526,
+    "output_tokens_mean": 1093,
+    "seconds_median": 29.5,
+    "list_usd_per_day_at_1700_captures": 1.19
+   },
+   "vs_gold": {
+    "captures": 50,
+    "recall_consensus": 0.418,
+    "recall_material": 0.464,
+    "precision_vs_union_of_passes": 0.919,
+    "gold_consensus": 541,
+    "gold_material": 472,
+    "predicted": 259
+   },
+   "judge": {
+    "captures": 74,
+    "claims_judged": 452,
+    "correct_modality": {
+     "assertion": 315,
+     "attribution": 20,
+     "opinion": 52,
+     "forecast": 23,
+     "commitment": 12,
+     "intent": 30
+    },
+    "settle_route": {
+     "independent_sources": 48,
+     "primary_record": 292,
+     "not_settleable": 74,
+     "actor_action": 27,
+     "deadline_event": 11
+    },
+    "speaker_unclear": 4,
+    "commitments_per_100_captures": 16.2,
+    "checkable_commitments_per_100_captures": 16.2,
+    "checkable_commitment_share": 1.0,
+    "forecasts_per_100_captures": 31.1,
+    "checkable_forecasts_per_100_captures": 25.7
+   },
+   "rates": {
+    "assertion_count_settleable": {
+     "valid": true,
+     "n": 315,
+     "n_eff": 315,
+     "mean": 0.94,
+     "lo": 0.908,
+     "hi": 0.961
+    },
+    "assertion_primary_record": {
+     "valid": true,
+     "n": 315,
+     "n_eff": 315,
+     "mean": 0.81,
+     "lo": 0.762,
+     "hi": 0.849
+    },
+    "is_claim": {
+     "valid": true,
+     "n": 452,
+     "n_eff": 452,
+     "mean": 0.976,
+     "lo": 0.957,
+     "hi": 0.986
+    },
+    "modality_correct": {
+     "valid": true,
+     "n": 452,
+     "n_eff": 452,
+     "mean": 0.79,
+     "lo": 0.75,
+     "hi": 0.825
+    },
+    "readings_ok": {
+     "valid": true,
+     "n": 452,
+     "n_eff": 452,
+     "mean": 0.987,
+     "lo": 0.971,
+     "hi": 0.994
+    },
+    "recall_material": {
+     "valid": true,
+     "n": 472,
+     "n_eff": 472,
+     "mean": 0.464,
+     "lo": 0.419,
+     "hi": 0.509
+    },
+    "retained": {
+     "valid": true,
+     "n": 1074,
+     "n_eff": 1074,
+     "mean": 0.993,
+     "lo": 0.985,
+     "hi": 0.996
+    },
+    "speaker_correct": {
+     "valid": true,
+     "n": 452,
+     "n_eff": 452,
+     "mean": 0.834,
+     "lo": 0.797,
+     "hi": 0.865
+    },
+    "specific": {
+     "valid": true,
+     "n": 452,
+     "n_eff": 452,
+     "mean": 0.808,
+     "lo": 0.769,
+     "hi": 0.841
+    }
+   },
+   "wikidata_guess": {
+    "distinct_guesses": 627,
+    "exists": 588,
+    "label_or_alias_match": 190,
+    "precision": 0.303
+   }
+  },
+  "deepseek-v4.1-flash": {
+   "captures": 103,
+   "parse_ok": 103,
+   "claims_attempted": 398,
+   "claims_retained": 386,
+   "retained_rate": 0.9698,
+   "tiers": {
+    "exact": 377,
+    "tolerant_ws_case": 8,
+    "tolerant_punct": 1
+   },
+   "not_retained": {
+    "not_found": 12
+   },
+   "hint_mismatch_share": 0.0,
+   "captures_over_cap": 0,
+   "claims_per_capture": 3.86,
+   "retained_by_lang": {
+    "en": {
+     "attempted": 360,
+     "retained": 353,
+     "rate": 0.981
+    },
+    "latin": {
+     "attempted": 38,
+     "retained": 33,
+     "rate": 0.868
+    }
+   },
+   "modalities": {
+    "assertion": 241,
+    "forecast": 25,
+    "attribution": 68,
+    "commitment": 19,
+    "opinion": 21,
+    "intent": 12
+   },
+   "attribution_basis": {
+    "own_voice": 219,
+    "paraphrase": 76,
+    "verbatim_first_party": 56,
+    "relay": 4,
+    "direct_quote": 23,
+    "reportedly": 5,
+    "anonymous": 3
+   },
+   "hedged_share": 0.163,
+   "multi_reading_share": 0.192,
+   "p_attr_below_0.6_share": 0.021,
+   "mentions_per_capture": 5.8,
+   "cost": {
+    "omp_reported_usd_per_capture": 0.001315,
+    "list_usd_per_capture_net_of_harness": 0.002773,
+    "net_input_tokens_mean": 1127,
+    "output_tokens_mean": 2029,
+    "seconds_median": 33.4,
+    "list_usd_per_day_at_1700_captures": 4.71
+   },
+   "vs_gold": {
+    "captures": 35,
+    "recall_consensus": 0.482,
+    "recall_material": 0.534,
+    "precision_vs_union_of_passes": 0.933,
+    "gold_consensus": 220,
+    "gold_material": 191,
+    "predicted": 119
+   },
+   "judge": {
+    "captures": 47,
+    "claims_judged": 206,
+    "correct_modality": {
+     "assertion": 159,
+     "attribution": 9,
+     "opinion": 25,
+     "forecast": 10,
+     "intent": 3
+    },
+    "settle_route": {
+     "independent_sources": 22,
+     "primary_record": 137,
+     "not_settleable": 41,
+     "actor_action": 3,
+     "deadline_event": 3
+    },
+    "speaker_unclear": 3,
+    "commitments_per_100_captures": 0.0,
+    "checkable_commitments_per_100_captures": 0.0,
+    "checkable_commitment_share": null,
+    "forecasts_per_100_captures": 21.3,
+    "checkable_forecasts_per_100_captures": 10.6
+   },
+   "rates": {
+    "assertion_count_settleable": {
+     "valid": true,
+     "n": 159,
+     "n_eff": 159,
+     "mean": 0.931,
+     "lo": 0.88,
+     "hi": 0.961
+    },
+    "assertion_primary_record": {
+     "valid": true,
+     "n": 159,
+     "n_eff": 159,
+     "mean": 0.818,
+     "lo": 0.75,
+     "hi": 0.87
+    },
+    "is_claim": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.937,
+     "lo": 0.895,
+     "hi": 0.963
+    },
+    "modality_correct": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.699,
+     "lo": 0.633,
+     "hi": 0.758
+    },
+    "readings_ok": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.951,
+     "lo": 0.913,
+     "hi": 0.973
+    },
+    "recall_material": {
+     "valid": true,
+     "n": 191,
+     "n_eff": 191,
+     "mean": 0.534,
+     "lo": 0.463,
+     "hi": 0.603
+    },
+    "retained": {
+     "valid": true,
+     "n": 398,
+     "n_eff": 398,
+     "mean": 0.97,
+     "lo": 0.948,
+     "hi": 0.983
+    },
+    "speaker_correct": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.917,
+     "lo": 0.872,
+     "hi": 0.948
+    },
+    "specific": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.786,
+     "lo": 0.725,
+     "hi": 0.837
+    }
+   },
+   "wikidata_guess": {
+    "distinct_guesses": 187,
+    "exists": 182,
+    "label_or_alias_match": 93,
+    "precision": 0.497
+   }
+  },
+  "gpt-6-luna@common": {
+   "captures": 103,
+   "parse_ok": 102,
+   "claims_attempted": 327,
+   "claims_retained": 326,
+   "retained_rate": 0.9969,
+   "tiers": {
+    "exact": 324,
+    "tolerant_ws_case": 2
+   },
+   "not_retained": {
+    "not_found": 1
+   },
+   "hint_mismatch_share": 0.0,
+   "captures_over_cap": 2,
+   "claims_per_capture": 3.17,
+   "retained_by_lang": {
+    "en": {
+     "attempted": 301,
+     "retained": 300,
+     "rate": 0.997
+    },
+    "latin": {
+     "attempted": 26,
+     "retained": 26,
+     "rate": 1.0
+    }
+   },
+   "modalities": {
+    "assertion": 252,
+    "forecast": 30,
+    "commitment": 6,
+    "opinion": 8,
+    "intent": 19,
+    "attribution": 11
+   },
+   "attribution_basis": {
+    "own_voice": 185,
+    "paraphrase": 74,
+    "verbatim_first_party": 49,
+    "direct_quote": 15,
+    "reportedly": 2,
+    "relay": 1
+   },
+   "hedged_share": 0.144,
+   "multi_reading_share": 0.006,
+   "p_attr_below_0.6_share": 0.006,
+   "mentions_per_capture": 4.42,
+   "cost": {
+    "omp_reported_usd_per_capture": 0.000551,
+    "list_usd_per_capture_net_of_harness": 0.000436,
+    "net_input_tokens_mean": 1100,
+    "output_tokens_mean": 653,
+    "seconds_median": 27.3,
+    "list_usd_per_day_at_1700_captures": 0.74
+   },
+   "vs_gold": {
+    "captures": 35,
+    "recall_consensus": 0.455,
+    "recall_material": 0.503,
+    "precision_vs_union_of_passes": 0.89,
+    "gold_consensus": 220,
+    "gold_material": 191,
+    "predicted": 118
+   },
+   "judge": {
+    "captures": 47,
+    "claims_judged": 196,
+    "correct_modality": {
+     "assertion": 147,
+     "attribution": 9,
+     "opinion": 21,
+     "forecast": 10,
+     "commitment": 4,
+     "intent": 5
+    },
+    "settle_route": {
+     "independent_sources": 23,
+     "primary_record": 130,
+     "not_settleable": 29,
+     "actor_action": 10,
+     "deadline_event": 4
+    },
+    "speaker_unclear": 2,
+    "commitments_per_100_captures": 8.5,
+    "checkable_commitments_per_100_captures": 8.5,
+    "checkable_commitment_share": 1.0,
+    "forecasts_per_100_captures": 21.3,
+    "checkable_forecasts_per_100_captures": 12.8
+   },
+   "rates": {
+    "assertion_count_settleable": {
+     "valid": true,
+     "n": 147,
+     "n_eff": 147,
+     "mean": 0.946,
+     "lo": 0.896,
+     "hi": 0.972
+    },
+    "assertion_primary_record": {
+     "valid": true,
+     "n": 147,
+     "n_eff": 147,
+     "mean": 0.81,
+     "lo": 0.738,
+     "hi": 0.865
+    },
+    "is_claim": {
+     "valid": true,
+     "n": 196,
+     "n_eff": 196,
+     "mean": 0.974,
+     "lo": 0.942,
+     "hi": 0.989
+    },
+    "modality_correct": {
+     "valid": true,
+     "n": 196,
+     "n_eff": 196,
+     "mean": 0.786,
+     "lo": 0.723,
+     "hi": 0.837
+    },
+    "readings_ok": {
+     "valid": true,
+     "n": 196,
+     "n_eff": 196,
+     "mean": 0.985,
+     "lo": 0.956,
+     "hi": 0.994
+    },
+    "recall_material": {
+     "valid": true,
+     "n": 191,
+     "n_eff": 191,
+     "mean": 0.503,
+     "lo": 0.432,
+     "hi": 0.573
+    },
+    "retained": {
+     "valid": true,
+     "n": 327,
+     "n_eff": 327,
+     "mean": 0.997,
+     "lo": 0.983,
+     "hi": 0.999
+    },
+    "speaker_correct": {
+     "valid": true,
+     "n": 196,
+     "n_eff": 196,
+     "mean": 0.827,
+     "lo": 0.767,
+     "hi": 0.873
+    },
+    "specific": {
+     "valid": true,
+     "n": 196,
+     "n_eff": 196,
+     "mean": 0.806,
+     "lo": 0.745,
+     "hi": 0.855
+    }
+   }
+  },
+  "deepseek-v4.1-flash@common": {
+   "captures": 103,
+   "parse_ok": 103,
+   "claims_attempted": 398,
+   "claims_retained": 386,
+   "retained_rate": 0.9698,
+   "tiers": {
+    "exact": 377,
+    "tolerant_ws_case": 8,
+    "tolerant_punct": 1
+   },
+   "not_retained": {
+    "not_found": 12
+   },
+   "hint_mismatch_share": 0.0,
+   "captures_over_cap": 0,
+   "claims_per_capture": 3.86,
+   "retained_by_lang": {
+    "en": {
+     "attempted": 360,
+     "retained": 353,
+     "rate": 0.981
+    },
+    "latin": {
+     "attempted": 38,
+     "retained": 33,
+     "rate": 0.868
+    }
+   },
+   "modalities": {
+    "assertion": 241,
+    "forecast": 25,
+    "attribution": 68,
+    "commitment": 19,
+    "opinion": 21,
+    "intent": 12
+   },
+   "attribution_basis": {
+    "own_voice": 219,
+    "paraphrase": 76,
+    "verbatim_first_party": 56,
+    "relay": 4,
+    "direct_quote": 23,
+    "reportedly": 5,
+    "anonymous": 3
+   },
+   "hedged_share": 0.163,
+   "multi_reading_share": 0.192,
+   "p_attr_below_0.6_share": 0.021,
+   "mentions_per_capture": 5.8,
+   "cost": {
+    "omp_reported_usd_per_capture": 0.001315,
+    "list_usd_per_capture_net_of_harness": 0.002773,
+    "net_input_tokens_mean": 1127,
+    "output_tokens_mean": 2029,
+    "seconds_median": 33.4,
+    "list_usd_per_day_at_1700_captures": 4.71
+   },
+   "vs_gold": {
+    "captures": 35,
+    "recall_consensus": 0.482,
+    "recall_material": 0.534,
+    "precision_vs_union_of_passes": 0.933,
+    "gold_consensus": 220,
+    "gold_material": 191,
+    "predicted": 119
+   },
+   "judge": {
+    "captures": 47,
+    "claims_judged": 206,
+    "correct_modality": {
+     "assertion": 159,
+     "attribution": 9,
+     "opinion": 25,
+     "forecast": 10,
+     "intent": 3
+    },
+    "settle_route": {
+     "independent_sources": 22,
+     "primary_record": 137,
+     "not_settleable": 41,
+     "actor_action": 3,
+     "deadline_event": 3
+    },
+    "speaker_unclear": 3,
+    "commitments_per_100_captures": 0.0,
+    "checkable_commitments_per_100_captures": 0.0,
+    "checkable_commitment_share": null,
+    "forecasts_per_100_captures": 21.3,
+    "checkable_forecasts_per_100_captures": 10.6
+   },
+   "rates": {
+    "assertion_count_settleable": {
+     "valid": true,
+     "n": 159,
+     "n_eff": 159,
+     "mean": 0.931,
+     "lo": 0.88,
+     "hi": 0.961
+    },
+    "assertion_primary_record": {
+     "valid": true,
+     "n": 159,
+     "n_eff": 159,
+     "mean": 0.818,
+     "lo": 0.75,
+     "hi": 0.87
+    },
+    "is_claim": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.937,
+     "lo": 0.895,
+     "hi": 0.963
+    },
+    "modality_correct": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.699,
+     "lo": 0.633,
+     "hi": 0.758
+    },
+    "readings_ok": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.951,
+     "lo": 0.913,
+     "hi": 0.973
+    },
+    "recall_material": {
+     "valid": true,
+     "n": 191,
+     "n_eff": 191,
+     "mean": 0.534,
+     "lo": 0.463,
+     "hi": 0.603
+    },
+    "retained": {
+     "valid": true,
+     "n": 398,
+     "n_eff": 398,
+     "mean": 0.97,
+     "lo": 0.948,
+     "hi": 0.983
+    },
+    "speaker_correct": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.917,
+     "lo": 0.872,
+     "hi": 0.948
+    },
+    "specific": {
+     "valid": true,
+     "n": 206,
+     "n_eff": 206,
+     "mean": 0.786,
+     "lo": 0.725,
+     "hi": 0.837
+    }
+   }
+  }
+ },
+ "common_captures": 103,
+ "routing_diagnostic": {
+  "n_items": 47,
+  "n_pairs": 77,
+  "event_structured": {
+   "different_event|same_story_hand_read|apart": 10,
+   "same_event|judge_cross_outlet|apart": 2,
+   "same_event|judge_cross_outlet|merged": 44,
+   "same_event|same_story_hand_read|apart": 5,
+   "same_event|same_story_hand_read|merged": 16
+  },
+  "titles_only": {
+   "different_event|same_story_hand_read|apart": 5,
+   "different_event|same_story_hand_read|merged": 5,
+   "same_event|judge_cross_outlet|merged": 46,
+   "same_event|same_story_hand_read|apart": 5,
+   "same_event|same_story_hand_read|merged": 16
+  },
+  "control_management": {
+   "different_event|same_story_hand_read|merged": 10,
+   "same_event|judge_cross_outlet|apart": 38,
+   "same_event|judge_cross_outlet|merged": 8,
+   "same_event|same_story_hand_read|merged": 21
+  }
+ }
+}

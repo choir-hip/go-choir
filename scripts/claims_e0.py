@@ -344,7 +344,7 @@ def cmd_judge(args):
     sample = set(judge_sample())
     for m in EXTRACTORS:
         f = f"extract-{short(m)}.json"
-        rows = [r for r in json.load(open(os.path.join(E0, f))) if r["capture_id"] in sample and "error" not in r]
+        rows = [r for r in json.load(open(os.path.join(E0, f))) if "error" not in r and r["capture_id"] in sample]
 
         def one(r):
             cap = caps[r["capture_id"]]
@@ -499,11 +499,17 @@ def cmd_score(args):
                          "self_agreement_f1": round(2 * n_c / (n_a + n_b), 3) if n_a + n_b else None,
                          "status": "model-assisted; needs human audit (protocol §5)"},
               "extractors": {}}
-    judge_ids = set(judge_sample())
     rate_groups = {}
-    for m in EXTRACTORS:
+    # every extractor on its whole run, and on the captures all extractors
+    # completed (deepseek's account ran out of funds part way, so the paired
+    # comparison is the fair one)
+    done = [{r["capture_id"] for r in json.load(open(os.path.join(E0, f"extract-{short(m)}.json"))) if "error" not in r} for m in EXTRACTORS]
+    common = set.intersection(*done)
+    result["common_captures"] = len(common)
+    runs = [(m, short(m), None) for m in EXTRACTORS] + [(m, short(m) + "@common", common) for m in EXTRACTORS]
+    for m, name, keep in runs:
         f = f"extract-{short(m)}.json"
-        rows = [r for r in json.load(open(os.path.join(E0, f))) if "error" not in r]
+        rows = [r for r in json.load(open(os.path.join(E0, f))) if "error" not in r and (keep is None or r["capture_id"] in keep)]
         e = {"captures": len(rows), "parse_ok": sum(1 for r in rows if r.get("parse_ok"))}
         attempted = retained = over_cap_captures = 0
         tiers, reasons, hint_mm = collections.Counter(), collections.Counter(), 0
@@ -558,7 +564,7 @@ def cmd_score(args):
                            "net_input_tokens_mean": round(sum(tin) / len(rows)), "output_tokens_mean": round(sum(tout) / len(rows)),
                            "seconds_median": sorted(secs)[len(secs) // 2],
                            "list_usd_per_day_at_1700_captures": round(1700 * sum(cost_net) / len(rows), 2)}})
-        rate_groups[f"{short(m)}|retained"] = {"w": [1] * attempted, "y": [1.0] * retained + [0.0] * (attempted - retained)}
+        rate_groups[f"{name}|retained"] = {"w": [1] * attempted, "y": [1.0] * retained + [0.0] * (attempted - retained)}
         # recall against gold on the label split
         items_all, items_mat, items_union = [], [], []
         for r in rows:
@@ -577,14 +583,14 @@ def cmd_score(args):
         e["vs_gold"] = {"captures": len(items_all), "recall_consensus": round(ma["recall"], 3), "recall_material": round(mm["recall"], 3),
                         "precision_vs_union_of_passes": round(mu["precision"], 3), "gold_consensus": ma["total"]["gold"],
                         "gold_material": mm["total"]["gold"], "predicted": ma["total"]["predicted"]}
-        rate_groups[f"{short(m)}|recall_material"] = {"w": [1] * mm["total"]["gold"], "y": [1.0] * mm["total"]["true_positives"] + [0.0] * (mm["total"]["gold"] - mm["total"]["true_positives"])}
+        rate_groups[f"{name}|recall_material"] = {"w": [1] * mm["total"]["gold"], "y": [1.0] * mm["total"]["true_positives"] + [0.0] * (mm["total"]["gold"] - mm["total"]["true_positives"])}
         # validity and feasibility from the blind judge
         jpath = os.path.join(E0, f"judge-{short(m)}.json")
         verdicts = []
         if os.path.exists(jpath):
             ext_by = {r["capture_id"]: r for r in rows}
             for j in json.load(open(jpath)):
-                if not j.get("verdicts"):
+                if not j.get("verdicts") or j["capture_id"] not in ext_by:
                     continue
                 cl = [c for c in (ext_by[j["capture_id"]].get("extraction") or {}).get("claims") or [] if isinstance(c, dict)]
                 vs = {int(v.get("n", 0)): v for v in j["verdicts"] if isinstance(v, dict)}
@@ -595,10 +601,10 @@ def cmd_score(args):
             return [1.0 if v.get(key) is val or v.get(key) == val else 0.0 for v in verdicts]
         for key in ("is_claim", "speaker_correct", "modality_correct", "readings_ok", "specific"):
             ys = share(key)
-            rate_groups[f"{short(m)}|{key}"] = {"w": [1] * len(ys), "y": ys}
+            rate_groups[f"{name}|{key}"] = {"w": [1] * len(ys), "y": ys}
         assertions = [v for v in verdicts if v.get("correct_modality") == "assertion"]
-        rate_groups[f"{short(m)}|assertion_count_settleable"] = {"w": [1] * len(assertions), "y": [1.0 if v.get("settle_route") in ("primary_record", "independent_sources") else 0.0 for v in assertions]}
-        rate_groups[f"{short(m)}|assertion_primary_record"] = {"w": [1] * len(assertions), "y": [1.0 if v.get("settle_route") == "primary_record" else 0.0 for v in assertions]}
+        rate_groups[f"{name}|assertion_count_settleable"] = {"w": [1] * len(assertions), "y": [1.0 if v.get("settle_route") in ("primary_record", "independent_sources") else 0.0 for v in assertions]}
+        rate_groups[f"{name}|assertion_primary_record"] = {"w": [1] * len(assertions), "y": [1.0 if v.get("settle_route") == "primary_record" else 0.0 for v in assertions]}
         judged_caps = len({v["capture_id"] for v in verdicts}) or 1
         commits = [v for v in verdicts if v.get("correct_modality") == "commitment"]
         forecasts = [v for v in verdicts if v.get("correct_modality") == "forecast"]
@@ -611,7 +617,7 @@ def cmd_score(args):
                       "checkable_commitment_share": round(sum(1 for v in commits if v.get("specific") is True) / len(commits), 3) if commits else None,
                       "forecasts_per_100_captures": round(100 * len(forecasts) / judged_caps, 1),
                       "checkable_forecasts_per_100_captures": round(100 * sum(1 for v in forecasts if v.get("specific") is True) / judged_caps, 1)}
-        result["extractors"][short(m)] = e
+        result["extractors"][name] = e
     rates = L.claimslab("rate", {"groups": rate_groups})
     for k, v in rates.items():
         m, metric = k.split("|")

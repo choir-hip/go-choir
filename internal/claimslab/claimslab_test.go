@@ -33,6 +33,9 @@ func TestCheckQuoteRejectsEmptyAndOverCap(t *testing.T) { // failure mode 4
 	if got := CheckQuote(string(long), "", []quotematch.Block{{ID: "b0", Text: string(long)}}); got.Retained || got.Reason != ReasonOverCap {
 		t.Fatalf("over cap: %+v", got)
 	}
+	if got := CheckQuoteCap(string(long), "", []quotematch.Block{{ID: "b0", Text: string(long)}}, 0); !got.Retained {
+		t.Fatalf("no cap must retain a long matching quote: %+v", got)
+	}
 }
 
 func TestCheckQuoteReportsTolerantTier(t *testing.T) { // failure mode 1
