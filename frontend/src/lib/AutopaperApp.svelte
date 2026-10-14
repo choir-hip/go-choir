@@ -1,9 +1,16 @@
 <!--
-  AutopaperApp — the Autopaper front list.
+  AutopaperApp — the Autopaper front page, laid out like a broadsheet's.
 
-  One row per story, newest first: title, dek, an "Updated" marker when the
-  story has more than one version, when it was updated, and its version
-  count. A story is not read here: it opens in the Texture app's read-only
+  A masthead (the nameplate over a double rule, then the edition line: the
+  reader's date, the tagline, when the paper last moved), then the stories
+  in front-page order (rankFrontStories in autopaper.ts): the lead with the
+  largest headline and its dek, the top tier with deks, briefs as headlines
+  only, and the rest as a compact list of more stories, with older stories
+  paged in below. Columns follow the width of this component, not of the
+  screen, so the same layout serves the public /autopaper page and a
+  desktop window: one column on a phone, two on a tablet, four when wide.
+
+  A story is not read here: it opens in the Texture app's read-only
   published mode, the same Texture UI as a user's own documents. On the
   desktop that is a Texture window; on the public /autopaper page it is the
   standalone story page (the parent page owns the URL).
@@ -12,11 +19,13 @@
 -->
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
+  import AutopaperStory from './AutopaperStory.svelte';
   import {
+    editionTime,
     fetchFrontPage,
     formatWhen,
-    parsePublicationRoute,
-    storyPath,
+    layoutFrontPage,
+    rankFrontStories,
     storyTextureContext,
     type FrontStory,
   } from './autopaper';
@@ -25,19 +34,36 @@
   export let standalone = false;
   export let windowId = '';
 
+  /** The Autopaper tagline, as the app registry describes it. */
+  const TAGLINE = 'Living stories with checked sources';
+
   const dispatch = createEventDispatcher();
 
-  let stories: FrontStory[] = [];
+  // The first page is the front page; older pages extend "More stories" in
+  // the order the server returns them, so paging never reshuffles the front.
+  let frontStories: FrontStory[] = [];
+  let olderStories: FrontStory[] = [];
   let nextCursor = '';
   let status: 'loading' | 'ready' | 'error' = 'loading';
   let loadingMore = false;
+  let today = new Date();
+
+  $: layout = layoutFrontPage(rankFrontStories(frontStories));
+  $: moreStories = [...layout.more, ...olderStories];
+  $: storyCount = frontStories.length + olderStories.length;
+  $: edition = editionTime(frontStories);
+  $: editionISO = Number.isFinite(edition) ? new Date(edition).toISOString() : '';
+  $: todayLabel = today.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  $: todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   async function loadFront() {
     status = 'loading';
     try {
       const page = await fetchFrontPage();
-      stories = page.stories;
+      frontStories = page.stories;
+      olderStories = [];
       nextCursor = page.next_cursor || '';
+      today = new Date();
       status = 'ready';
     } catch (_err) {
       status = 'error';
@@ -49,8 +75,8 @@
     loadingMore = true;
     try {
       const page = await fetchFrontPage(nextCursor);
-      const seen = new Set(stories.map((s) => s.publication_id));
-      stories = [...stories, ...page.stories.filter((s) => !seen.has(s.publication_id))];
+      const seen = new Set([...frontStories, ...olderStories].map((s) => s.publication_id));
+      olderStories = [...olderStories, ...page.stories.filter((s) => !seen.has(s.publication_id))];
       nextCursor = page.next_cursor || '';
     } catch (_err) {
       // Keep what is shown; the button stays for a retry.
@@ -59,10 +85,10 @@
     }
   }
 
-  function openStory(event: MouseEvent, row: FrontStory) {
+  function openStory(event: MouseEvent, row: FrontStory, route: string) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!route) return;
     event.preventDefault();
-    const route = row.route?.bare || '';
     if (standalone) {
       dispatch('openstory', { route, title: row.title });
       return;
@@ -81,147 +107,364 @@
 </script>
 
 <div class="autopaper" class:standalone data-autopaper data-autopaper-window-id={windowId || undefined}>
-  <section class="ap-front" data-autopaper-front aria-labelledby="ap-front-title">
-    <h1 id="ap-front-title" class="ap-front-title">Latest stories</h1>
-    {#if status === 'loading' && stories.length === 0}
-      <p class="ap-status" data-autopaper-status>Loading stories…</p>
-    {:else if status === 'error'}
-      <p class="ap-status ap-error" data-autopaper-error>Could not load stories. Try again shortly.</p>
-    {:else if stories.length === 0}
-      <p class="ap-status" data-autopaper-empty>No stories are published yet.</p>
-    {:else}
-      <ol class="ap-rows">
-        {#each stories as row (row.publication_id)}
-          <li class="ap-row" data-autopaper-story-row data-version-count={row.version_count} data-publication-route={row.route?.bare}>
-            <a class="ap-row-link" href={storyPath(parsePublicationRoute(row.route?.bare).slug)} on:click={(e) => openStory(e, row)}>
-              <h2 class="ap-row-title">{row.title}</h2>
-              {#if row.dek}
-                <p class="ap-row-dek">{row.dek}</p>
-              {/if}
-              <p class="ap-row-meta">
-                {#if row.version_count > 1}
-                  <span class="ap-updated" data-updated-marker>Updated</span>
-                {/if}
-                <time datetime={row.updated_at}>{formatWhen(row.updated_at)}</time>
-                <span aria-hidden="true">·</span>
-                <span>{row.version_count} {row.version_count === 1 ? 'version' : 'versions'}</span>
-              </p>
-            </a>
-          </li>
-        {/each}
-      </ol>
-      {#if nextCursor}
-        <button class="ap-more" type="button" on:click={loadMore} disabled={loadingMore} data-autopaper-more>
-          {loadingMore ? 'Loading…' : 'More stories'}
-        </button>
+  <div class="ap-sheet">
+    <header class="ap-masthead" data-autopaper-masthead>
+      {#if $$slots.ear}
+        <div class="ap-ear"><slot name="ear" /></div>
       {/if}
-    {/if}
-  </section>
+      <h1 class="ap-nameplate">Autopaper</h1>
+      <p class="ap-edition" data-autopaper-edition>
+        <time class="ap-edition-date" datetime={todayISO}>{todayLabel}</time>
+        <span class="ap-tagline">{TAGLINE}</span>
+        {#if editionISO}
+          <span class="ap-edition-updated" data-autopaper-updated>
+            Updated <time datetime={editionISO}>{formatWhen(editionISO)}</time>
+          </span>
+        {/if}
+      </p>
+    </header>
+
+    <section class="ap-front" data-autopaper-front aria-label="Front page" aria-busy={status === 'loading'}>
+      {#if status === 'loading' && storyCount === 0}
+        <p class="ap-status" role="status" data-autopaper-status>Loading the front page…</p>
+      {:else if status === 'error'}
+        <p class="ap-status ap-error" role="alert" data-autopaper-error>Could not load stories. Try again shortly.</p>
+      {:else if storyCount === 0}
+        <p class="ap-status" data-autopaper-empty>No stories yet.</p>
+      {:else}
+        <div class="ap-grid" data-autopaper-grid>
+          {#if layout.lead}
+            <div class="ap-cell ap-cell-lead" data-autopaper-lead>
+              <AutopaperStory story={layout.lead} tier="lead" rank={0} onOpen={openStory} />
+            </div>
+          {/if}
+          {#each layout.top as story, i (story.publication_id)}
+            <div class="ap-cell ap-cell-top">
+              <AutopaperStory {story} tier="top" rank={i + 1} onOpen={openStory} />
+            </div>
+          {/each}
+          {#if layout.briefs.length}
+            <section class="ap-cell ap-cell-briefs" aria-label="In brief" data-autopaper-briefs>
+              <p class="ap-label" aria-hidden="true">In brief</p>
+              <ul class="ap-briefs">
+                {#each layout.briefs as story, i (story.publication_id)}
+                  <li>
+                    <AutopaperStory {story} tier="brief" rank={1 + layout.top.length + i} onOpen={openStory} />
+                  </li>
+                {/each}
+              </ul>
+            </section>
+          {/if}
+        </div>
+
+        {#if moreStories.length || nextCursor}
+          <section class="ap-more-section" aria-label="More stories" data-autopaper-more-stories>
+            <p class="ap-label" aria-hidden="true">More stories</p>
+            {#if moreStories.length}
+              <ol class="ap-more-list">
+                {#each moreStories as story, i (story.publication_id)}
+                  <li>
+                    <AutopaperStory
+                      {story}
+                      tier="more"
+                      rank={1 + layout.top.length + layout.briefs.length + i}
+                      onOpen={openStory}
+                    />
+                  </li>
+                {/each}
+              </ol>
+            {/if}
+            {#if nextCursor}
+              <button class="ap-older" type="button" on:click={loadMore} disabled={loadingMore} data-autopaper-more>
+                {loadingMore ? 'Loading…' : 'Older stories'}
+              </button>
+            {/if}
+          </section>
+        {/if}
+      {/if}
+    </section>
+  </div>
 </div>
 
 <style>
+  /* Paper and ink map to the theme's document surface and text, so the
+     page is ink on paper in a light theme and inverts with a dark one.
+     Inside a desktop window the shell recolors every p and a under
+     .app-content with !important; the few !important colors here keep the
+     window and the public page the same paper. */
   .autopaper {
+    --ap-paper: var(--choir-surface-document, var(--choir-bg));
+    --ap-ink: var(--choir-text-primary, var(--choir-fg));
+    --ap-ink-soft: color-mix(in srgb, var(--ap-ink) 84%, var(--ap-paper));
+    --ap-ink-muted: var(--choir-text-muted, var(--ap-ink));
+    --ap-rule: color-mix(in srgb, var(--ap-ink) 22%, transparent);
+    --ap-serif: 'Iowan Old Style', 'Charter', 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, 'Times New Roman', serif;
+    container: autopaper / inline-size;
     width: 100%;
     height: 100%;
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
-    background: var(--choir-bg);
-    color: var(--choir-text-primary, var(--choir-fg));
+    background: var(--ap-paper);
+    color: var(--ap-ink);
     font-family: var(--choir-font-ui, inherit);
   }
 
-  .ap-front {
-    width: min(760px, calc(100% - 2rem));
-    margin: 1rem auto 2.5rem;
+  .ap-sheet {
+    --ap-gap-x: 1.75rem;
+    --ap-gap-y: 1.5rem;
+    width: 100%;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 16px 3rem;
   }
 
+  /* ---- masthead ---- */
+
+  .ap-masthead {
+    padding-top: 1.1rem;
+    text-align: center;
+  }
+
+  .ap-ear {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.25rem;
+  }
+
+  .ap-nameplate {
+    margin: 0;
+    padding: 0.2rem 0 0.7rem;
+    border-bottom: 3px double var(--ap-ink);
+    color: var(--ap-ink);
+    font-family: var(--ap-serif);
+    font-size: clamp(2.6rem, 13vw, 5.4rem);
+    font-size: clamp(2.6rem, 13cqi, 5.4rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+
+  .ap-edition {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    gap: 0.15rem 1rem;
+    margin: 0;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--ap-rule);
+    color: var(--ap-ink-muted);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+
+  .ap-edition-date {
+    color: var(--ap-ink);
+    font-weight: 600;
+  }
+
+  .ap-tagline {
+    font-family: var(--ap-serif);
+    font-size: 0.86rem;
+    font-style: italic;
+    letter-spacing: 0;
+  }
+
+  /* ---- states ---- */
+
   .ap-status {
-    padding: 1rem 0;
-    color: var(--choir-text-muted);
+    margin: 0;
+    padding: 2.5rem 0;
+    color: var(--ap-ink-muted);
+    font-family: var(--ap-serif);
+    font-size: 1.1rem;
+    font-style: italic;
+    text-align: center;
   }
 
   .ap-error {
-    color: var(--choir-status-danger);
+    color: var(--choir-status-danger, var(--ap-ink)) !important;
   }
 
-  .ap-front-title {
-    margin: 0.5rem 0 1rem;
-    font-family: var(--choir-font-display, inherit);
-    font-size: clamp(1.4rem, 3vw, 2rem);
-    line-height: 1.1;
+  /* ---- the front grid ----
+     Each cell draws a hairline to its left and above it, half a gap out.
+     The grid clips at its own edge, so first-column and first-row rules
+     fall outside and only the rules between columns and rows show, like a
+     printed page. A few pixels of vertical padding keep tall glyphs in the
+     first row unclipped; story links mark focus inside their own box. */
+
+  .ap-front {
+    padding-top: 1.25rem;
   }
 
-  .ap-rows {
-    list-style: none;
+  .ap-grid {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-flow: row dense;
+    gap: var(--ap-gap-y) var(--ap-gap-x);
+    margin: -4px 0;
+    padding: 4px 0;
+    overflow: hidden;
   }
 
-  .ap-row-link {
-    display: block;
-    padding: clamp(0.85rem, 2.5vw, 1.25rem);
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-pane);
-    color: inherit;
-    text-decoration: none;
+  .ap-cell {
+    position: relative;
+    min-width: 0;
   }
 
-  .ap-row-link:hover,
-  .ap-row-link:focus-visible {
-    border-color: var(--choir-border-strong);
-    background: var(--choir-state-hover);
-    outline: none;
+  .ap-cell::before,
+  .ap-cell::after {
+    content: '';
+    position: absolute;
+    pointer-events: none;
   }
 
-  .ap-row-link:focus-visible {
-    outline: 2px solid var(--choir-accent);
-    outline-offset: 2px;
+  .ap-cell::before {
+    top: 0;
+    bottom: 0;
+    left: calc(var(--ap-gap-x) / -2);
+    border-left: 1px solid var(--ap-rule);
   }
 
-  .ap-row-title {
-    font-family: var(--choir-font-display, inherit);
-    font-size: clamp(1.1rem, 2.4vw, 1.35rem);
-    line-height: 1.2;
-    overflow-wrap: anywhere;
+  .ap-cell::after {
+    top: calc(var(--ap-gap-y) / -2);
+    left: calc(var(--ap-gap-x) / -2);
+    right: calc(var(--ap-gap-x) / -2);
+    border-top: 1px solid var(--ap-rule);
   }
 
-  .ap-row-dek {
-    margin-top: 0.4rem;
-    color: var(--choir-text-primary);
-    font-size: 1rem;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
+  .ap-cell-lead {
+    padding-bottom: 0.25rem;
   }
 
-  .ap-row-meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-    margin-top: 0.5rem;
-    color: var(--choir-text-muted);
-    font-size: 0.78rem;
-  }
-
-  .ap-updated {
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    background: var(--choir-status-warning-soft, var(--choir-surface-control));
-    color: var(--choir-text-primary);
+  .ap-label {
+    margin: 0 0 0.6rem;
+    padding-top: 0.35rem;
+    border-top: 2px solid var(--ap-ink);
+    color: var(--ap-ink) !important;
+    font-size: 0.7rem;
     font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
   }
 
-  .ap-more {
-    margin-top: 1rem;
+  .ap-briefs,
+  .ap-more-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ap-briefs li,
+  .ap-more-list li {
+    break-inside: avoid;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--ap-rule);
+  }
+
+  .ap-briefs li:first-child,
+  .ap-more-list li:first-child {
+    padding-top: 0.1rem;
+  }
+
+  .ap-briefs {
+    column-gap: var(--ap-gap-x);
+    column-rule: 1px solid var(--ap-rule);
+  }
+
+  /* ---- more stories ---- */
+
+  .ap-more-section {
+    margin-top: 2.25rem;
+  }
+
+  .ap-more-list {
+    column-gap: var(--ap-gap-x);
+    column-rule: 1px solid var(--ap-rule);
+  }
+
+  .ap-older {
+    display: block;
     min-height: 2.5rem;
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--choir-border);
-    border-radius: 8px;
-    background: var(--choir-surface-control);
-    color: var(--choir-text-primary);
+    margin: 1.5rem auto 0;
+    padding: 0.5rem 1.4rem;
+    border: 1px solid var(--ap-ink);
+    border-radius: 0;
+    background: transparent;
+    color: var(--ap-ink);
     font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
     cursor: pointer;
+  }
+
+  .ap-older:hover {
+    background: var(--ap-ink);
+    color: var(--ap-paper);
+  }
+
+  .ap-older:focus-visible {
+    outline: 2px solid var(--choir-accent);
+    outline-offset: 3px;
+  }
+
+  .ap-older:disabled {
+    cursor: progress;
+    opacity: 0.7;
+  }
+
+  /* ---- tablet: two columns ---- */
+
+  @container autopaper (min-width: 641px) {
+    .ap-sheet {
+      padding-inline: clamp(1.5rem, 4cqi, 2.5rem);
+    }
+
+    .ap-edition {
+      justify-content: space-between;
+    }
+
+    .ap-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ap-cell-lead,
+    .ap-cell-briefs {
+      grid-column: span 2;
+    }
+
+    .ap-briefs,
+    .ap-more-list {
+      columns: 2;
+    }
+  }
+
+  /* ---- wide: four columns, the lead over three with a rail beside it ---- */
+
+  @container autopaper (min-width: 1100px) {
+    .ap-sheet {
+      --ap-gap-x: 2rem;
+    }
+
+    .ap-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .ap-cell-lead {
+      grid-column: span 3;
+      grid-row: span 2;
+    }
+
+    .ap-cell-briefs {
+      grid-column: span 2;
+    }
+
+    .ap-more-list {
+      columns: 3;
+    }
   }
 </style>

@@ -8,7 +8,9 @@
 // documents), read from GET /api/platform/publications/resolve. Its bare
 // link serves the latest version in place; /v<n> serves version n. The
 // public pages mirror those links under /autopaper/<slug> and
-// /autopaper/<slug>/v<n>.
+// /autopaper/<slug>/v<n>. The front page is laid out like a broadsheet's:
+// rankFrontStories orders the stories and layoutFrontPage cuts them into
+// the lead, the top tier, the briefs, and more stories.
 
 export const AUTOPAPER_BASE = '/autopaper';
 const PUBLIC_TEXTURE_PREFIX = '/pub/texture/';
@@ -110,6 +112,91 @@ export async function fetchFrontPage(cursor = '', limit = 20): Promise<FrontPage
   if (!res.ok) throw new Error(`front list returned ${res.status}`);
   const page = await res.json();
   return { stories: Array.isArray(page?.stories) ? page.stories : [], next_cursor: page?.next_cursor || '' };
+}
+
+// ---- front-page rank ----
+//
+// How prominent a story is on the front page. The base order is recency:
+// the later a story's last update, the higher it sits. A living story that
+// is still moving earns a lift: when its last update falls within the fresh
+// window of the edition (the newest update on the page), every version past
+// its first counts as one lift of extra recency, up to a cap. So a story in
+// its third version updated an hour before a one-version story leads it,
+// while a much-revised story from yesterday never outranks today's news.
+// Ties fall to the later update, then to the publication id. The rank reads
+// no clock, only the list itself, so the same list ranks the same way on
+// every reader's screen.
+
+/** How close to the edition an update must be for versions to lift it. */
+export const FRONT_FRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
+/** The recency one extra version is worth inside the fresh window. */
+export const FRONT_VERSION_LIFT_MS = 45 * 60 * 1000;
+/** The most extra versions that lift a story. */
+export const FRONT_MAX_LIFTED_VERSIONS = 4;
+
+function updatedMs(story: FrontStory): number {
+  const ms = Date.parse(story?.updated_at || '');
+  return Number.isFinite(ms) ? ms : Number.NEGATIVE_INFINITY;
+}
+
+/** The newest update among the stories: the edition time of the page. */
+export function editionTime(stories: FrontStory[]): number {
+  let newest = Number.NEGATIVE_INFINITY;
+  for (const story of stories || []) newest = Math.max(newest, updatedMs(story));
+  return newest;
+}
+
+/** A story's prominence against an edition time: recency plus its version lift. */
+export function frontProminence(story: FrontStory, edition: number): number {
+  const updated = updatedMs(story);
+  if (!Number.isFinite(updated)) return updated;
+  const extraVersions = Math.max(0, Math.floor(Number(story.version_count) || 0) - 1);
+  const fresh = Number.isFinite(edition) && edition - updated <= FRONT_FRESH_WINDOW_MS;
+  const lift = fresh ? Math.min(extraVersions, FRONT_MAX_LIFTED_VERSIONS) * FRONT_VERSION_LIFT_MS : 0;
+  return updated + lift;
+}
+
+/** The stories in front-page order, most prominent first. Pure and stable. */
+export function rankFrontStories(stories: FrontStory[]): FrontStory[] {
+  const list = Array.isArray(stories) ? stories : [];
+  const edition = editionTime(list);
+  return list
+    .map((story) => ({ story, score: frontProminence(story, edition), updated: updatedMs(story) }))
+    .sort((a, b) => {
+      if (a.score !== b.score) return b.score > a.score ? 1 : -1;
+      if (a.updated !== b.updated) return b.updated > a.updated ? 1 : -1;
+      const ida = String(a.story.publication_id || '');
+      const idb = String(b.story.publication_id || '');
+      return ida < idb ? -1 : ida > idb ? 1 : 0;
+    })
+    .map((entry) => entry.story);
+}
+
+/** How many stories after the lead carry a dek, and how many run as briefs. */
+export const FRONT_TOP_COUNT = 4;
+export const FRONT_BRIEF_COUNT = 6;
+
+export type FrontLayout = {
+  lead: FrontStory | null;
+  top: FrontStory[];
+  briefs: FrontStory[];
+  more: FrontStory[];
+};
+
+/**
+ * The front page cut from ranked stories: the lead, the top tier (headline
+ * and dek), the briefs (headline only), and the rest as more stories.
+ */
+export function layoutFrontPage(ranked: FrontStory[]): FrontLayout {
+  const list = Array.isArray(ranked) ? ranked : [];
+  const topEnd = 1 + FRONT_TOP_COUNT;
+  const briefEnd = topEnd + FRONT_BRIEF_COUNT;
+  return {
+    lead: list[0] || null,
+    top: list.slice(1, topEnd),
+    briefs: list.slice(topEnd, briefEnd),
+    more: list.slice(briefEnd),
+  };
 }
 
 export function formatWhen(iso: string): string {

@@ -1,7 +1,8 @@
 <!--
   AutopaperRoute — the public, logged-out /autopaper pages.
 
-  /autopaper is the front list (AutopaperApp). /autopaper/<slug> and
+  /autopaper is the front page (AutopaperApp), which carries its own
+  masthead, so the slim header bar shows only on story pages. /autopaper/<slug> and
   /autopaper/<slug>/v<n> are a story read in the Texture app's published
   mode, standalone: the same Texture published view a desktop window shows,
   without the desktop around it. This shell owns the URL through the
@@ -78,17 +79,21 @@
 </script>
 
 <div class="autopaper-route" data-autopaper-route data-autopaper-view={location.kind}>
-  <header class="ap-header">
-    <a class="ap-brand" href={AUTOPAPER_BASE} on:click={home} data-autopaper-home>Autopaper</a>
-    {#if location.kind === 'story' && storyTitle}
-      <span class="ap-story-title" data-autopaper-story-title>{storyTitle}</span>
-    {/if}
-    <a class="ap-header-link" href="/">Choir</a>
-  </header>
+  {#if location.kind !== 'front'}
+    <header class="ap-header">
+      <a class="ap-brand" href={AUTOPAPER_BASE} on:click={home} data-autopaper-home>Autopaper</a>
+      {#if location.kind === 'story' && storyTitle}
+        <span class="ap-story-title" data-autopaper-story-title>{storyTitle}</span>
+      {/if}
+      <a class="ap-header-link" href="/">Choir</a>
+    </header>
+  {/if}
 
   <main class="ap-main">
     {#if location.kind === 'front'}
-      <AutopaperApp standalone on:openstory={handleOpenStory} />
+      <AutopaperApp standalone on:openstory={handleOpenStory}>
+        <a slot="ear" class="ap-header-link" href="/">Choir</a>
+      </AutopaperApp>
     {:else if location.kind === 'story' && storyContext}
       {#if TextureEditor}
         <div class="ap-texture" data-texture-app data-autopaper-story>

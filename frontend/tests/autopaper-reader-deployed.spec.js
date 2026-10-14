@@ -9,7 +9,9 @@
  *   - the logged-out home opens the Autopaper window with the front list, and
  *     a story clicked there opens as a published Texture window titled with
  *     the story title;
- *   - /autopaper lists each story once, newest first, marked "Updated" when a
+ *   - the front list route returns each story once, newest first; /autopaper
+ *     lays them out as a front page in rank order (rankFrontStories: recency
+ *     lifted by versions), each marked "Updated" when a
  *     story has more than one version, and a story clicked there opens at
  *     /autopaper/<slug> as the standalone Texture published view;
  *   - the text carries only numbered citation markers; the numbered source
@@ -30,10 +32,13 @@
 import fs from 'node:fs';
 import nodePath from 'node:path';
 import { expect, test } from '@playwright/test';
+import { rankFrontStories } from '../src/lib/autopaper.ts';
 
 const BASE_URL = (process.env.CHOIR_DEPLOYED_BASE_URL || 'https://choir.news').replace(/\/+$/, '');
 const MAX_STORIES = Number(process.env.AUTOPAPER_MAX_STORIES || 8);
 const SHOT_DIR = process.env.AUTOPAPER_SCREENSHOT_DIR || '';
+// The front page shows the first page of the front list (20 stories), ranked.
+const FRONT_PAGE_SIZE = 20;
 const CHECK_STATES = new Set(['exact', 'tolerant', 'pending', 'unread', 'failed']);
 
 test.use({ viewport: { width: 375, height: 812 }, storageState: { cookies: [], origins: [] } });
@@ -133,12 +138,13 @@ test('logged-out home opens Autopaper; a story opens as a published Texture wind
   await expect(firstRow).toBeVisible({ timeout: 30_000 });
   await shoot(page, testInfo, 'home-autopaper-window');
 
-  await firstRow.locator('a').click();
+  const lead = rankFrontStories(stories.slice(0, FRONT_PAGE_SIZE))[0];
+  await firstRow.locator('[data-autopaper-headline] a').click();
   const reader = page.locator('[data-texture-app] [data-texture-published-reader]').last();
   await expect(reader).toBeVisible({ timeout: 30_000 });
-  await expect(reader).toHaveAttribute('data-publication-route', stories[0].route.bare);
+  await expect(reader).toHaveAttribute('data-publication-route', lead.route.bare);
   const storyWindow = page.locator('[data-window]').filter({ has: reader });
-  await expect(storyWindow.locator('[data-window-titlebar]')).toContainText(stories[0].title.trim().slice(0, 24));
+  await expect(storyWindow.locator('[data-window-titlebar]')).toContainText(lead.title.trim().slice(0, 24));
   await expectReadOnly(reader, page, 'home story window');
   await expectNoHorizontalScroll(page, 'home story window');
   await shoot(page, testInfo, 'home-story-texture-window');
@@ -161,22 +167,24 @@ test('Autopaper front list and stories as Texture published views, logged out at
   await expect(page.locator('[data-autopaper-front]')).toBeVisible({ timeout: 30_000 });
   const rows = page.locator('[data-autopaper-story-row]');
   await expect(rows.first()).toBeVisible({ timeout: 30_000 });
-  const shown = Math.min(stories.length, 20);
+  const shown = Math.min(stories.length, FRONT_PAGE_SIZE);
+  const ranked = rankFrontStories(stories.slice(0, shown));
   await expect(rows).toHaveCount(shown);
-  const titles = await rows.locator('.ap-row-title').allInnerTexts();
-  expect(titles.map((t) => t.trim())).toEqual(stories.slice(0, shown).map((s) => s.title.trim()));
+  await expect(page.locator('[data-autopaper] h2')).toHaveCount(1);
+  const titles = await rows.locator('[data-autopaper-headline]').allInnerTexts();
+  expect(titles.map((t) => t.trim())).toEqual(ranked.map((s) => s.title.trim()));
   const updatedRows = stories.slice(0, shown).filter((s) => s.version_count > 1).length;
   await expect(page.locator('[data-updated-marker]')).toHaveCount(updatedRows);
   await expectNoHorizontalScroll(page, 'front list');
   await shoot(page, testInfo, 'autopaper-front', '[data-autopaper]');
 
-  // A row opens the story as the Texture published view.
-  await rows.first().locator('a').click();
-  await expect(page).toHaveURL(new RegExp(`/autopaper/${slugOf(stories[0].route.bare)}$`));
+  // The lead's headline opens the story as the Texture published view.
+  await rows.first().locator('[data-autopaper-headline] a').click();
+  await expect(page).toHaveURL(new RegExp(`/autopaper/${slugOf(ranked[0].route.bare)}$`));
   const opened = page.locator('[data-texture-published-reader]');
   await expect(opened).toBeVisible({ timeout: 30_000 });
-  await expectServesLatest(opened, stories[0].latest_revision, 'first row');
-  await expect(page.locator('[data-autopaper-story-title]')).toHaveText(stories[0].title.trim());
+  await expectServesLatest(opened, ranked[0].latest_revision, 'lead story');
+  await expect(page.locator('[data-autopaper-story-title]')).toHaveText(ranked[0].title.trim());
 
   // Each story: numbered sources, quotes in their source blocks, badges, embeds.
   const checked = [];
