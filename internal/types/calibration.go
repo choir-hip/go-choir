@@ -29,7 +29,8 @@ const (
 )
 
 // Scorer methods, in governing order rule > owner > independent > self
-// (docs/precommitment-predictions-and-scoring-design-2026-10-11.md §4.3).
+// (docs/precommitment-records.md §5; first stated in
+// docs/archive/precommitment/precommitment-predictions-and-scoring-design-2026-10-11.md §4.3).
 const (
 	CalibrationScorerRule        = "rule"
 	CalibrationScorerOwner       = "owner"

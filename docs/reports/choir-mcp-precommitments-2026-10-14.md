@@ -14,16 +14,22 @@ these scores aren't limited to our development repo [...] now we get to
 run the experiment to prove or provide evidence against the notion that
 you can improve calibration with in-context reinforcement learning."
 
-Related designs: [Precommitment Records — Engineering
-Memo](../Precommitment%20Records%20—%20Engineering%20Memo.md) (record
-schema, scoring, calibration),
-[precommitment protocol](../precommitment-protocol-design-2026-10-11.md)
-§10 (one schema across computers),
-[predictions and scoring](../precommitment-predictions-and-scoring-design-2026-10-11.md)
-§4 (separate the answer from the score; one score record per scorer),
+Related designs: [precommitment records](../precommitment-records.md)
+(the merged design: §2 the record, §4.6 one schema across computers, §5
+scoring, multi-scorers, self never governs), and its archived sources
+[predictions and scoring](../archive/precommitment/precommitment-predictions-and-scoring-design-2026-10-11.md)
+§4 (separate the answer from the score; one score record per scorer);
 [claims E0/E6a results](claims-e0-e6a-results-2026-10-14.md) §5 (the
-feedback loop), [owner notes](owner-notes-2026-10-14.md) §1 and §3 (PSA as
+feedback loop); [owner notes](owner-notes-2026-10-14.md) §1 and §3 (PSA as
 in-context RL; multi-scoring; calibrated self-scoring).
+
+**Status (2026-10-14, branch `calibration-level2`, not pushed or
+deployed):** built as designed: the routes, the scopes, the CLI, the
+import and the MCP server (§8 has the day-to-day use). One change from
+the first draft: a claim settled only by its claimant counts in the
+summary as the agent's own learning signal, and the summary says how many
+are self-only, because self never governs oversight
+(precommitment-records §5.2).
 
 ## 1. What an agent does
 
@@ -297,7 +303,55 @@ durable Dolt objects; nothing is in memory. Fate-sharing: a write needs
 proxy, vmctl routing and the guest runtime (R3). No-SSH operability: the
 whole surface is the CLI under a scoped key.
 
-## 8. Residuals
+## 8. Day to day: how the lead (Claude Code) uses it
+
+Once deployed, the owner mints one key per computer with only the
+precommit scopes (Settings, or
+`choir api-key create --scopes precommit:read,precommit:write --computer <id>`),
+stored mode 0600. The lead's session sets its identity once:
+
+```sh
+export CHOIR_AGENT=claude-code/lead CHOIR_MODEL=claude-opus-5-5 \
+       CHOIR_SESSION=<session id> CHOIR_PROJECT=go-choir CHOIR_COMPUTER=<id>
+```
+
+Subagents get `CHOIR_AGENT=claude-code/subagent` (and their own model),
+with a `--tag` naming their task.
+
+1. **Start of session:** `choir precommit calibration --text` and paste the
+   output into working context; `choir precommit list --status overdue`
+   to see what is owed.
+2. **Before a checkable claim** ("tests pass", "the fix is live", "no
+   behaviour change", "the drill reaches Freeze"): `choir precommit add
+   --claim ... --p ... --criterion ... [--deadline ...]`. The ledger's
+   rule stands: an unqualified "ready" claim is 0.95 unless stated
+   otherwise, and the track record is where that number gets corrected.
+3. **When the evidence lands** (CI run, staging check, trace): `choir
+   precommit settle <id> --outcome ... --evidence ...`. The lead settling
+   a subagent's claim is recorded as independent; settling its own, as
+   self. A rule (CI itself) can settle with `--method rule --scorer ci`.
+4. **Once:** `choir precommit import-ledger --model claude-opus-5-5
+   --apply` brings the level-1 rows in (settled rows as reconstructed, so
+   they count only with `--include-reconstructed`).
+5. **With MCP instead of shell:** register `choir mcp` as in §5; the same
+   four tools, and `calibration_summary`'s first text block is the paste.
+
+What the imported level-1 ledger renders today, for the lead (from the
+end-to-end test; four resolved claims, so the text itself says it is too
+early to read):
+
+```text
+Calibration track record (agent=claude-code/lead; scorer: governing; includes 4 claims reconstructed after the fact).
+Settled 4 (4 resolved, 0 unresolvable); open 6, of which 0 past deadline.
+Brier 0.553 (0 is perfect; always saying 0.5 scores 0.250); strict Brier 0.553 (unresolvable counted as false).
+Overconfidence +0.61: mean confidence in the stated direction 0.86, hit rate 0.25.
+By stated p: 0.9-1.0 n=3 held 33%; 0.7-0.8 n=1 held 0%;
+4 of the 4 settled claims are settled only by yourself: a learning signal, not independent evidence.
+Largest misses: "'the search fix is live' (said before CI finished)" (p 0.95, false); ...
+Only 4 resolved: too few to read calibration; keep recording.
+```
+
+## 9. Residuals
 
 - **R1. Agent identity is declared.** Any holder of a `precommit:write`
   key can write as any agent name. Next step: bind the agent name to the
@@ -316,3 +370,12 @@ whole surface is the CLI under a scoped key.
 - **R6. Scale.** Reads join up to 10,000 records in memory per request.
   Fine for one agent's history; a paged index is needed for an
   organisation's.
+- **R7. Import typing.** The level-1 table has no type column, so the
+  import types settled rows as assertions and open rows as forecasts (a
+  stated rule, not a per-row guess). Rows 7, 10, 11 and 12 were really
+  forecasts. The generated goal ledger (`docs/calibration/goal-ledger.md`,
+  `scripts/goal_precommitments.py`) is a second level-1 source an import
+  could read.
+- **R8. Staging proof owed.** Nothing here is deployed; the acceptance is
+  a claim written, settled and summarised through `choir.news` with a
+  `precommit:*` key, and a `write:runtime`-only key refused.

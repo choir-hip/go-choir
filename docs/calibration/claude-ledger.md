@@ -18,6 +18,11 @@ Rules:
 - Scoring: Brier score per claim (p - outcome)^2; reported per agent kind
   and per claim type, with counts.
 
+Level 2 (`choir precommit`, `choir mcp`):
+[docs/reports/choir-mcp-precommitments-2026-10-14.md](../reports/choir-mcp-precommitments-2026-10-14.md).
+`choir precommit import-ledger` reads the two tables below, so keep their
+columns as they are.
+
 ## Settled claims, 2026-10-14 (reconstructed the same day from the session)
 
 | # | Who | Claim | p | Outcome | Evidence |
