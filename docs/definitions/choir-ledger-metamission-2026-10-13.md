@@ -135,6 +135,27 @@ metamission:
         automatic store compaction; engine lock; S3 snapshots; store split.
         Residual for 10-14/15: Autopaper across several computers on one
         host.
+    - id: LU
+      path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
+      readiness: drafted
+      status: working
+      depends_on: [L1]
+      note: >-
+        Guest updates (owner 2026-10-14: "I want to be pushing safe updates
+        out to guest computers ... this is going to relate to the
+        self-development system"; "Yes, this all makes sense as a new
+        station"). Pull, not push: a deploy changes the target, vmctl's
+        sweep offers each pending computer its update at every pass, the
+        guest restarts at a quiet moment or after a bounded drain that
+        holds new work and is never forced. Slices: LU1 pending + quiet
+        moment + drain; LU2 work-state migrations (an epoch bump stays a
+        planned boot; before C1e's next bump); LU3 health, automatic
+        rollback to the retained previous image, rings test -> paper ->
+        owner (needs L1c and L1b); LU4 binary-only runtime swap through the
+        guest updater; LU5 one apply path shared with self-development.
+        Specification: docs/reports/lu-guest-updates-design-2026-10-14.md.
+        Cause: the paper is never idle and updated only by an owner act
+        (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
     - id: L3
       path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
       readiness: intent
@@ -404,9 +425,10 @@ now:
     - The newspaper front page, the logged-out home straight to
       Autopaper, London Salmon default.
     In flight: management delegation to sub-RLMs (design note, owner
-    direction); research searching the corpus first. Open for the owner:
-    Go module route, how an always-busy paper takes updates, snapshot max
-    age, SP0 host and key backups.
+    direction); research searching the corpus first; station LU, guest
+    updates (owner-approved 10-14; drafted, panel next), which answers how
+    an always-busy paper takes updates. Open for the owner: Go module
+    route, LU's O1-O8, snapshot max age, SP0 host and key backups.
   source_ref: 0257fac3
   deploy_identity: staging ce59d406 (deployed 07:46 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -474,6 +496,9 @@ settles after it, and shows its work, at a cost that lets coverage grow.
   and re-drives per external event, then a visible hold.
 - **L2** bounds attention: captures are observations with a recorded
   disposition, not duties a desk must answer one by one.
+- **LU** makes platform updates reach every guest computer safely: pull
+  with a bounded drain, planned boots across epoch changes, health and
+  automatic rollback, staged rings, one apply path with self-development.
 - **L3** settles and scores hypotheses as separate records, with an
   off-host copy of the ledger.
 - **L4** is the first vertical, Taiwan and East Asia, as standing questions

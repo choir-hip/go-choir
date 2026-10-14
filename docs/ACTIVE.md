@@ -53,6 +53,13 @@ searching the corpus first. Residual for 10-14/15: Autopaper across
 several computers on one host
 ([analysis](reports/cost-track-sa-s3-sp-investigation-2026-10-14.md)).
 
+**New station LU, guest updates** (owner-approved 2026-10-14; drafted):
+[station file](definitions/choir-ledger-lu-guest-updates-2026-10-14.md),
+[design note](reports/lu-guest-updates-design-2026-10-14.md). Pull with a
+bounded drain instead of a once-per-deploy push, so the always-busy paper
+updates by itself; planned boots across epoch changes; health, rollback
+and rings; one apply path with self-development.
+
 ## Next (2026-10-13): ledger metamission (reviewed)
 
 The [ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md)

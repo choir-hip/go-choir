@@ -1710,3 +1710,18 @@ nodes:
       Owner 2026-10-13: "we should really do our resource efficiency and
       cost mission tonight", after the paper computer was reclaimed.
       Specification: docs/reports/resource-efficiency-memory-assessment-2026-10-13.md.
+  - id: choir-ledger-lu-guest-updates-2026-10-14
+    title: LU — guest updates (pull with a bounded drain, planned boots across epochs, health and rollback, rings, one apply path with self-development)
+    path: docs/definitions/choir-ledger-lu-guest-updates-2026-10-14.md
+    ledger: ''
+    status: working  # drafted 2026-10-14; convergent panel on the file and design note first; LU1 is the first build slice
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: [choir-ledger-l1-restart-2026-10-13]
+    enables: [choir-ledger-metamission-2026-10-13]
+    note: >-
+      Owner 2026-10-14: "I want to be pushing safe updates out to guest
+      computers ... this is going to relate to the self-development
+      system"; "Yes, this all makes sense as a new station".
+      Specification: docs/reports/lu-guest-updates-design-2026-10-14.md.
