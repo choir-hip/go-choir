@@ -858,6 +858,42 @@ in
     };
   };
 
+  # Nix store retention between the daily sweeps. Every deploy adds a system
+  # generation whose closure roots a new 3.26 GB guest image; at ~20 deploys a
+  # day the daily sweep let 25 generations (~80 GB of images) pile up
+  # (docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md). Keep the
+  # newest 4 system generations (current, the deploy rollback target
+  # recorded in deploy-receipt-previous.json, and two spares) and collect
+  # unrooted paths every 4 hours. Builder release and prebuild out-links
+  # stay GC roots. Only Nix state is touched: no VM, journal or vmctl work.
+  # Rollback: remove this unit and timer (the daily sweep remains).
+  systemd.services.go-choir-nix-gc = {
+    description = "go-choir Nix generation and store retention";
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+      ExecStart = pkgs.writeShellScript "go-choir-nix-gc" ''
+        set -euo pipefail
+        export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.nix ]}:$PATH"
+        df -h /
+        nix-env -p /nix/var/nix/profiles/system --delete-generations +4
+        nix store gc
+        df -h /
+      '';
+    };
+  };
+
+  systemd.timers.go-choir-nix-gc = {
+    description = "go-choir Nix generation and store retention every 4 hours";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "*-*-* 00/4:30:00";
+      RandomizedDelaySec = "15m";
+      Persistent = true;
+    };
+  };
+
   systemd.services.go-choir-platform-dolt-history-audit = {
     description = "go-choir platform dolt commit-history growth audit";
     after = [ "go-choir-platform-dolt.service" ];
