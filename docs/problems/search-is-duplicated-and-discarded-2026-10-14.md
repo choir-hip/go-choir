@@ -212,3 +212,30 @@ in one durable, indexed store — the object graph — with provenance.
   unmeasurable.
 - introduced: none (documentation).
 - repaired: none yet.
+
+## Fix on the branch (after this record; not pushed, not deployed)
+
+- 035592faa `red(searchplane)`: design §1. `searchplane.Cache` (result
+  cache + in-flight join, per-computer scope, TTL 30 min / 10 min for
+  time-sensitive queries, 64 MiB, kill switch
+  `CHOIR_SEARCH_CACHE_TTL_SECONDS=0`); additive `cached_at` on the stream's
+  start line; the search log line gains
+  `served=miss|hit|joined|off results=N unique=M seen=K`. Tests:
+  `searchplane/cache_test.go` (failure modes 1–6, 8–10),
+  `gateway/search_cache_test.go` (3, 7, 9, 11, seen counter).
+  `go test -race ./internal/gateway/... ./internal/search/` pass;
+  `check-decode-roots.sh`, `check-v1-writer-purity.sh` pass.
+
+Repaired once deployed: repeat searches within the TTL (measured 2.6% of
+searches per computer, 3.8% shared) and identical in-flight searches; the
+journal then measures result duplication (`seen=`). Not repaired: the
+fan-out to every provider (budget router, owner decision), reformulations
+(design §3), discarding results (design §2), corpus search over titles of
+the newest 1,000 captures (design §3). Failure mode 12 belongs to §2.
+
+Behaviour change to note: with the cache on, a caller that disconnects no
+longer cancels its search's provider calls (a joiner may need them); the
+calls run to their own timeout and their outcomes are the provider's own.
+
+After deploy, re-measure from the journal: share of `served=hit|joined`,
+and `seen/unique` per search (result duplication per computer per day).
