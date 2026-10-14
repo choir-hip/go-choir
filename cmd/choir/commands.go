@@ -565,20 +565,6 @@ func buildRegistry() []*command {
 			handler: func(x *call) (any, error) { return getRaw(x, selfDevPath(x.str("computer"), "head")) },
 		},
 		{
-			path: []string{"self-dev", "start"}, summary: "Propose a change (--prompt, --idempotency-key)",
-			params: []param{
-				computerParam().orSay(selfDevUsage),
-				pStr("prompt", "What the computer should change about itself").req(),
-				idempotencyParam("Unique idempotency key (a retry with the same key replays)").req(),
-			},
-			usage:  "--prompt and --idempotency-key are required",
-			scopes: []string{"computer:self_development:propose"}, idempotent: true, openWorld: true,
-			handler: func(x *call) (any, error) {
-				body := map[string]any{"idempotency_key": x.trim("idempotency_key"), "prompt": x.str("prompt")}
-				return sendRaw(x, http.MethodPost, selfDevPath(x.str("computer"), "operations"), body)
-			},
-		},
-		{
 			path: []string{"self-dev", "wait"}, summary: "Poll an operation until it reaches --state",
 			params: []param{
 				computerParam(), pStr("operation", "Operation ID").req(),

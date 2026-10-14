@@ -495,7 +495,6 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"self_dev_list":                    {cli: []string{"self-dev", "list", "--computer", "c1", "--state", "applied,failed"}, mcp: `{"computer":"c1","state":["applied","failed"]}`},
 		"self_dev_show":                    {cli: []string{"self-dev", "show", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`},
 		"self_dev_head":                    {cli: []string{"self-dev", "head", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
-		"self_dev_start":                   {cli: []string{"self-dev", "start", "--computer", "c1", "--prompt", "add a clock", "--idempotency-key", "k"}, mcp: `{"computer":"c1","prompt":"add a clock","idempotency_key":"k"}`},
 		"self_dev_reject":                  {cli: []string{"self-dev", "reject", "--computer", "c1", "--operation", "op-1", "--reason", "no"}, mcp: `{"computer":"c1","operation":"op-1","reason":"no"}`, reply: approval},
 		"self_dev_mode_get":                {cli: []string{"self-dev", "mode", "get", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
 		"precommit_add":                    {cli: []string{"precommit", "add", "--claim", "tests pass", "--p", "0.8", "--tag", "a,b", "--key", "k"}, mcp: `{"claim":"tests pass","p":0.8,"tags":["a","b"],"idempotency_key":"k"}`},

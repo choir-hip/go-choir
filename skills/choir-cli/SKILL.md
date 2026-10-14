@@ -23,7 +23,7 @@ bound to that computer needs the matching scope:
 | Step | CLI surface | Durable evidence |
 | --- | --- | --- |
 | Arm proposals | `choir self-dev mode set --mode=propose_only --expected-generation=N --idempotency-key=K` | generation-CAS `ModeReceipt` |
-| Start a proposal | `choir self-dev start --prompt=... --idempotency-key=K` | operation id |
+| Start a change | `choir run start --idempotency-key=K "<the change, with its deterministic check>"` (on a computer the owner armed with `self-dev mode set --mode propose_only`; engineering's Freeze opens the operation) | trajectory id, doc id |
 | Find candidates | `choir self-dev list [--state=awaiting_approval]` | operations, newest first |
 | Observe | `choir self-dev wait --operation=ID --state=awaiting_approval` | operation once it reaches the state; exits 1 if it settles elsewhere |
 | Read the binding | `choir self-dev head` | canonical/desired/effective heads and state commitments |
