@@ -5,23 +5,16 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Pre-demo hold (2026-10-14, 12:20 UTC; owner demos about 14:10 UTC)
+## Pre-demo deploy (2026-10-14, 12:45 UTC; owner demos about 14:10 UTC)
 
-Owner: "let's be safe about it [...] I definitely don't want to break it."
-Until the demos end, only one deploy may go out: LF0, model-judged
-front-page importance ([intent and evidence](reports/autopaper-ranking-and-contributions-intent-2026-10-14.md)),
-pushed by 13:15 UTC at the latest so a revert could still deploy before
-the demos. A frontend change is a guest-boot-contract deploy (vmctl
-restart, idle computers refreshed, snapshots rejected on wake). Held
-until after the demos, all tested and staged:
-- S2a management delegation, snapshot budget by real bytes, cached-token
-  measurement (worktree `go-choir-s2a`, branch `deploy-s2a`);
-- the artifact-store GC fix (branch `fix/artifact-store-gc`; diagnosis in
-  [the problem doc](problems/artifact-store-grows-12gb-a-day-2026-10-14.md));
-  red class, deletion gated on a dry-run report;
-- the paper refresh for S2a.
-No load tests and no host-wide disk scans before the demos: they caused a
-pressure reclaim of a real user's computer this morning
+Owner overruled a proposed hold: "we have time before the demos. Don't
+hold anything back." One combined deploy carries LF0 (model-judged
+front-page importance), S2a management delegation, snapshot budget by real
+bytes, cached-token measurement, the artifact GC fix (still dry-run; active
+deletion waits on the dry-run report) and the Nix store retention timer.
+Rollback: revert the deploy commits; LF0 alone: delete
+/var/lib/go-choir/front-importance/scores.json. No load tests and no
+host-wide disk scans before the demos
 ([problem](problems/pressure-reclaim-wedged-a-user-computer-2026-10-14.md)).
 
 ## Now (2026-10-14, 07:00 UTC): what landed overnight, what is next
