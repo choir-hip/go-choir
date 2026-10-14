@@ -30,6 +30,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -544,18 +545,13 @@ type SearchResult struct {
 	MatchSource string    `json:"match_source"` // "title" or "content"
 }
 
-// SearchDocuments searches the Texture corpus by title and revision content.
-// It returns documents matching the query terms, ordered by relevance.
-// Searches across all owners when ownerID is empty.
-func (s *Store) SearchPublishedDocuments(ctx context.Context, query string, ownerID string, limit int) ([]SearchResult, error) {
-	return s.searchDocuments(ctx, query, ownerID, limit, true)
-}
-
+// SearchDocuments searches the Texture corpus by title and head revision
+// content, title matches first. Searches across all owners when ownerID is
+// empty. Lifecycle documents (stories) are searched too, their heads read
+// through the lifecycle getter (L2a R2-8: the earlier "published" filter
+// tested revision metadata no revision carries, and the document list
+// skipped every story, so the search found nothing of the paper's own).
 func (s *Store) SearchDocuments(ctx context.Context, query string, ownerID string, limit int) ([]SearchResult, error) {
-	return s.searchDocuments(ctx, query, ownerID, limit, false)
-}
-
-func (s *Store) searchDocuments(ctx context.Context, query string, ownerID string, limit int, publishedOnly bool) ([]SearchResult, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -573,22 +569,9 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 		terms = terms[:8]
 	}
 
-	// Load all documents from OG. Use a large limit to avoid truncation
-	// for workspaces with many documents.
-	docs, err := s.ListAllTextureDocumentsOG(ctx, 100000)
+	docs, err := s.searchableTextureDocuments(ctx, strings.TrimSpace(ownerID))
 	if err != nil {
 		return nil, fmt.Errorf("search texture documents: load docs: %w", err)
-	}
-
-	// Filter by owner if specified.
-	if ownerID != "" {
-		filtered := docs[:0]
-		for _, d := range docs {
-			if d.OwnerID == ownerID {
-				filtered = append(filtered, d)
-			}
-		}
-		docs = filtered
 	}
 
 	// Helper: check if all terms match a string.
@@ -602,26 +585,11 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 		return true
 	}
 
-	// Helper: check if a revision is published.
-	isPublished := func(rev types.Revision) bool {
-		metaJSON := string(rev.Metadata)
-		return strings.Contains(metaJSON, "corpusd_route_path") || strings.Contains(metaJSON, "platformd_route_path")
-	}
-
 	seen := map[string]bool{}
 	var results []SearchResult
 
 	// Phase 1: title matching.
 	for _, doc := range docs {
-		if publishedOnly {
-			if doc.CurrentRevisionID == "" {
-				continue
-			}
-			rev, err := s.GetTextureRevisionOG(ctx, doc.OwnerID, doc.CurrentRevisionID)
-			if err != nil || !isPublished(rev) {
-				continue
-			}
-		}
 		if matchesAllTerms(doc.Title) {
 			seen[doc.DocID] = true
 			results = append(results, SearchResult{
@@ -645,17 +613,14 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 		if doc.CurrentRevisionID == "" {
 			continue
 		}
-		rev, err := s.GetTextureRevisionOG(ctx, doc.OwnerID, doc.CurrentRevisionID)
+		rev, err := s.searchHeadRevision(ctx, doc)
 		if err != nil {
-			continue
-		}
-		if publishedOnly && !isPublished(rev) {
 			continue
 		}
 		if matchesAllTerms(rev.Content) {
 			snippet := rev.Content
 			if len(snippet) > 200 {
-				snippet = snippet[:200]
+				snippet = strings.ToValidUTF8(snippet[:200], "")
 			}
 			seen[doc.DocID] = true
 			results = append(results, SearchResult{
@@ -673,6 +638,38 @@ func (s *Store) searchDocuments(ctx context.Context, query string, ownerID strin
 	}
 
 	return results, nil
+}
+
+// searchableTextureDocuments lists the Texture documents a search reads,
+// lifecycle documents included, for one owner (or, ownerID "", all), newest
+// first.
+func (s *Store) searchableTextureDocuments(ctx context.Context, ownerID string) ([]types.Document, error) {
+	objs, err := s.ogListAllObjectsByKind(ctx, ogKindTexDoc)
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]types.Document, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.Document
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if ownerID != "" && rec.OwnerID != ownerID {
+			continue
+		}
+		docs = append(docs, rec)
+	}
+	sort.Slice(docs, func(i, j int) bool { return docs[i].UpdatedAt.After(docs[j].UpdatedAt) })
+	return docs, nil
+}
+
+// searchHeadRevision reads a document's head revision: through the
+// lifecycle getter for a lifecycle document, the legacy getter otherwise.
+func (s *Store) searchHeadRevision(ctx context.Context, doc types.Document) (types.Revision, error) {
+	if strings.TrimSpace(doc.ComputerID) != "" || strings.TrimSpace(doc.TrajectoryID) != "" {
+		return s.GetLifecycleRevision(ctx, doc.OwnerID, doc.ComputerID, doc.CurrentRevisionID)
+	}
+	return s.GetTextureRevisionOG(ctx, doc.OwnerID, doc.CurrentRevisionID)
 }
 
 // UpdateDocument updates an existing document record.
