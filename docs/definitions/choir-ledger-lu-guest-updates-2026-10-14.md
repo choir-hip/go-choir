@@ -33,13 +33,19 @@ definition_version: 4
 # the station no longer depends on L1 as a whole. Acceptance gains the
 # final-call recovery, grandchild and cross-trajectory, downgrade and
 # failed-migration cases.
+# Round 4: the round-3 panel on 7ccc5ded (claude, gemini, glm accept with
+# repairs; deepseek, gpt-6-luna send_back; muse timed out), adjudicated as
+# T1-T26: LU2 seeds an absent epoch from the marker or from 1 (never the
+# binary); the final call commits at the marker write and the host
+# resolves by reachability; LU1a boots the image it resolved and narrows
+# its claim; drains keep their image.
 readiness: drafted
 
 review:
-  reviewer: agentic-consensus convergent round 2 on cca944f7 (claude, omp-gemini38, omp-glm53-flash, omp-deepseek-v41-flash accept with repairs; omp-muse-spark, omp-gpt6-luna send_back); round 1 on 346d968c (5 accept with repairs, 1 send_back)
-  frozen_ref: commit cca944f7 (round 2); round 3 (this file) not yet reviewed
+  reviewer: agentic-consensus convergent round 3 on 7ccc5ded (claude, omp-gemini38, omp-glm53-flash accept with repairs; omp-deepseek-v41-flash, omp-gpt6-luna send_back; omp-muse-spark timed out); round 2 on cca944f7 (4 accept with repairs, 2 send_back); round 1 on 346d968c (5 accept with repairs, 1 send_back)
+  frozen_ref: commit 7ccc5ded (round 3); round 4 (this file) not yet reviewed
   verdict: send_back
-  evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md, sections "Round 2" and earlier (raw outputs in the session scratchpad panel-lu/ and panel-lu/round2/)
+  evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md, sections "Round 3" and earlier (raw outputs in the session scratchpad panel-lu/, panel-lu/round2/, panel-lu/round3/)
 
 start:
   captured_at: 2026-10-14T10:47:00Z
@@ -127,17 +133,19 @@ finish:
         while a minted test computer is busy, then let it go quiet. Read
         `vmctl list` update state, the guest's restart.kind on
         /api/runtime/obligations, and the sweep log.
-      proves: the computer is refreshed at its first quiet moment after the deploy (vmctl's idle test, desk mutations included), not at the next deploy; restart kind planned; exactly one driver attempted it; its booted-image record names the target store path; other sweep passes ran on time during the refresh
+      proves: the computer is refreshed at its first quiet moment after the deploy (vmctl's idle test as a filter; today's endpoint and its F4 race unchanged), not at the next deploy; restart kind planned; exactly one driver attempted it; its booted-image record names the store path it actually booted, also when a host activation moves the symlink during the launch; no warm, reconcile, idle-stop or reclaim pass acted on it during its refresh, and those passes ran on time for other computers; a launch whose identity cannot be resolved boots and records `unknown` with an alert
       evidence_class: deployed proof
     - action: >-
         LU2. On a minted test computer with queued wakes, actor-log
         occurrences of a changed kind and an active schedule, deploy a
         fixture build that bumps the work-state epoch with a registered
         migration; separately, wake a hibernated test computer onto that
-        build; then kill the guest mid-migration once; then boot an older
-        fixture binary on the migrated store, and a build whose migration
-        fails.
-      proves: the planned boot stays planned and a work_state_migrated record names exactly what it closed in both databases; the queued wakes are delivered; the markerless wake runs the migration before closure; the killed migration re-runs on the next boot and the epoch advanced only after it; the downgrade and the failed migration hold the runtime with no admission and no closure, visible on /health
+        build; then kill the guest mid-migration once, including right
+        after the actor-log part; then boot an older fixture binary on the
+        migrated store, and a build whose migration fails; then boot a
+        store that never ran an LU2-era binary, markerless, onto the bump
+        build.
+      proves: the planned boot stays planned and a work_state_migrated record names exactly what it closed in both databases; the queued wakes are delivered; the markerless wake runs the migration before closure; the killed migration re-runs on the next boot with no double effect and the epoch advanced only with the step's Dolt commit; the downgrade and the failed migration hold the runtime with no admission and no closure, visible on /health; the never-LU2 store seeds from 1 and runs every step
       evidence_class: deployed proof
     - action: >-
         LU1b. Deploy a same-epoch guest change while the live paper is
@@ -160,14 +168,15 @@ finish:
         mailbox; a new capture, a schedule tick and a self-development
         retry for an idle operation arrive during the drain; one
         occurrence's lineage lookup is made to fail.
-      proves: the child, grandchild and their results are admitted without delay; the new work, the retry and the failed-lookup occurrence are deferred (not blocked, not poisoned, defer counts unchanged in the poison budget); the run finishes; the boot is planned with the deferred work delivered after it
+      proves: the child, grandchild and their results are admitted without delay; the new work, the retry and the failed-lookup occurrence are deferred (not blocked, not poisoned, defer counts unchanged in the poison budget, backoff 10 s not 500 ms); an owner approval committed mid-drain starts no apply; a deferred dispatch whose run was cancelled meanwhile is a no-op; the run finishes; the boot is planned with the deferred work delivered after it
       evidence_class: deployed proof
     - action: >-
         LU1b. On a minted test computer, a fixture activation outlives the
-        drain deadline; separately, the final call is made to fail before
-        its 200; separately, vmctl is restarted between the final call's
-        200 and the kill.
-      proves: the drain times out and admission reopens with no marker; a failed final call leaves no marker, no update_final and no kill; after the vmctl restart the sweep completes the kill and the boot is planned; attempts are recorded and retried; after K timeouts the "update stuck" signal shows
+        drain deadline; then the final call is exercised against the LU1b
+        state table: an error before the commit point, a response lost
+        after it, a call timeout, vmctl restarted after the commit and
+        kept down past 15 minutes, and a guest without the drain endpoint.
+      proves: every cell of the state table reaches its expected fate; the drain times out and admission reopens with no marker; an error before the commit leaves no marker, no update_final and no kill; a lost response or timeout after the commit still ends in the kill and a planned boot; a stale marker ends in a recorded crash boot with an alert, never a stranded computer; a guest without the endpoint falls back to quiet-moment retries and is never counted stuck; after K timeouts the "update stuck" signal shows
       evidence_class: deployed proof
     - action: >-
         LU3a. A deliberately bad build (fixture: /health never reaches
@@ -231,7 +240,8 @@ boundaries:
     - no automatic path restarts a guest before its final call succeeded; busy is never forced
     - held work is deferred and delivered later, never blocked into a slot, dropped or poisoned; update holds do not spend the poison budget
     - an unreadable or newer work-state epoch, or a failed migration, holds the runtime; nothing runs on state it cannot read
-    - a host final-call record exists before every final call, so a vmctl restart never strands a computer
+    - a host final-call record exists before every final call and is never cleared while the guest is unreachable, so neither a vmctl restart nor a lost response strands a computer
+    - the guest's final call commits at the marker write; it aborts only before that point
     - schedules (standing intents) survive every update
     - no automatic rollback across a work-state epoch or store-schema version (U7)
     - one automatic rollback per computer and image; a refused image is never re-applied automatically
@@ -287,7 +297,7 @@ boundaries:
 standing_questions:
   q1_who_settled: >-
     The station and its six-point direction: owner, 2026-10-14 in session.
-    The design's defaults (O1-O3b, O5, O7-O9) are orchestrator proposals
+    The design's defaults (O1-O3b, O5, O7-O10) are orchestrator proposals
     until the owner rules; U7 (forward-only across state) is a technical
     constraint, not a preference.
   q2_conformance: >-
@@ -300,8 +310,10 @@ standing_questions:
     for up to D, which the CLAUDE.md sentence does not describe; O8 is
     deferred to the owner.
   q3_deletion_citers: >-
-    LU1a removes CI's per-computer refresh loop; its citer is the workflow
-    contract test, updated in the same commit. LU1b replaces the hibernate
+    LU1a removes CI's per-computer refresh loop; its citers are
+    .github/scripts/deploy-workflow-contract-test and the receipt mapping
+    recorded in docs/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md,
+    both updated in the same commit. LU1b replaces the hibernate
     fence's single flag with reasons; citers are hibernate.go, the actor
     handler and their tests. LU2 replaces the marker's epoch check; citers
     are planned_restart.go, its tests and the problem doc above (annotated,
@@ -363,12 +375,12 @@ standing_questions:
 now:
   status: working
   slice: >-
-    Definition, round 3: the design note and this file are amended from the
-    round-2 panel (adjudication S1-S31; round 1 R1-R39). A round-3
+    Definition, round 4: the design note and this file are amended from the
+    round-3 panel (adjudication T1-T26; earlier S1-S31, R1-R39). A round-4
     convergent panel on this digest decides `reviewed`. The first build
     slices are LU1a (host-only retry with one driver) and LU2 (persisted
     epoch and migrations).
-  source_ref: branch docs/lu-guest-updates-2026-10-14 (round-3 commit) on main cca944f7
+  source_ref: branch docs/lu-guest-updates-2026-10-14 (round-4 commit) on main 7ccc5ded
   deploy_identity: staging 97d7a573
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
@@ -395,7 +407,7 @@ now:
     kind: operational
     status: proposal
     evidence_ref: docs/reports/lu-guest-updates-adjudication-2026-10-14.md
-    owner_ratification_ref: "owner 2026-10-14 in session approved the station and its six-point direction; O1-O3b, O5, O7-O9 open"
+    owner_ratification_ref: "owner 2026-10-14 in session approved the station and its six-point direction; O1-O3b, O5, O7-O10 open"
   belief:
     believed_state: >-
       Deploys push once and defer busy computers; the paper had quiet
@@ -412,7 +424,7 @@ now:
     part most likely to draw further findings.
     Until management's work is bounded (delegation S1, S2), paper drains
     may time out; the stuck signal makes that visible rather than forced.
-  next_action: run the round-3 convergent panel on this file and the design note at the round-3 commit
+  next_action: run the round-4 convergent panel on this file and the design note at the round-4 commit
 
 receipts: []
 ---

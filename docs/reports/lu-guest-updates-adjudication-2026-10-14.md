@@ -149,7 +149,7 @@ LU1a needs no owner act.
 | S26 | A repeated drain request after a vmctl restart (luna) | design | **Adopt.** It reuses the active drain and its deadline; it never extends it |
 | S27 | The skip-unknown-lifecycle-action change should ride the first guest image (claude) | `lifecycle_receipts.go:28-33` | **Adopt.** It ships with LU2 |
 | S28 | LU2 lands through LU1a's sweep: parallel in development, not in landing (deepseek) | — | **Adopt** |
-| S29 | The lag report should include the owner's computer (claude); O2 needs an owner opt-out (luna) | — | **Adopt** in O7 and O2 |
+| S29 | The lag report should include the owner's computer (claude); O2 needs an owner opt-out (luna) | — | **Adopt** in O7; the opt-out is **posed** in O2 as an open owner question with the default "no opt-out" (corrected in round 3, T22: not an adoption of the opt-out) |
 | S30 | Nix store exhaustion before the 3-image alert (gemini) | — | **Adopt.** The alert also fires on a disk floor |
 | S31 | LU1a cannot start because the graph blocks LU on L1 (luna) | — | **Resolved by S21**, not by waiting for L1 |
 
@@ -162,3 +162,70 @@ deferral class (S9). LU2 orders its epoch write and covers the actor log
 and downgrades (S10-S14). LU1a's interfaces are named (S16, S17, S20).
 Rings pin the image (S15, S19, S24). Next: a round-3 panel on the amended
 files.
+
+# Round 3
+
+Reviewed: the round-3 design note and station file at 7ccc5ded. Same
+runner, mode and members. Raw outputs: the session scratchpad,
+`panel-lu/round3/`. The prompt allowed a finding that only matters for a
+later slice to be recorded as an implementation-gate obligation instead of
+a send_back, when it can be named precisely now.
+
+## Verdicts
+
+| Panelist | Verdict | Confidence |
+| --- | --- | --- |
+| claude (opus) | accept with repairs (gates G1-G6 for later slices; R1, R2 for LU1a) | medium-high |
+| gemini-3.8-flash | accept with repairs | high |
+| glm-5.3-flash | accept with repairs (R-a, R-b gate LU1b; R-c LU2; R-d LU1a) | medium |
+| deepseek-v4.1-flash | send_back (N1 in LU2, N2 in LU1b) | high on code, medium-high on verdict |
+| gpt-6-luna | send_back | high |
+| muse-spark | timed out (1200 s), no output | — |
+
+All five who answered found the round-2 blockers repaired in direction.
+**Outcome: send_back for round 3.** Two findings are mechanism defects in
+text that must ship correct, both verified: LU2's first-boot seeding can
+skip migrations (T1; LU2 is a first build slice, so it cannot be deferred
+to an implementation gate), and the final call's record and abort rules
+can still strand a computer (T2; three of the accepting panelists named
+the same hole as their own LU1b gate). Every finding below is adopted or
+answered and written into round 4. The station stays `drafted`.
+
+## Findings
+
+| ID | Finding (panelists) | Verified | Disposition |
+| --- | --- | --- | --- |
+| T1 | **LU2 seeding skips migrations**: an absent epoch with no marker seeds from the binary, so a computer that never ran an LU2-era binary (a hibernated computer's markerless cold wake, or one deferred across the LU2 and bump releases) takes the bump image, seeds the new epoch, and runs no migration (deepseek, luna; claude as a residual) | The epoch exists only in markers today (`planned_restart.go:35,64,133-136`); a deploy invalidates every snapshot (S3 note, failure 7) | **Adopt.** No persisted epoch and a marker: seed from the marker. No persisted epoch and no marker: seed from 1, the first tracked epoch (Cut 1), so every registered step runs. A `crash` step on a markerless boot is satisfied by the crash closure that boot runs anyway (today's D7 behavior); the epoch advances past it after closure. LU2's acceptance adds a store that never booted an LU2-era binary, booting markerless onto a fixture bump |
+| T2 | **The final call can still strand a computer**: the host clears its record on a call error (a lost 200 or a 20 s client timeout against a longer guest barrier), and clears a record older than 15 min while the guest is unreachable; the guest's abort after it has stopped the dispatcher and closed stores cannot be built (deepseek, luna, glm R-a, gemini, claude G1) | `deploy_refresh.go:72` (20 s client), `:87-101` (any transport error is "unavailable"); `ownership.go:3100-3106`; `planned_restart.go:26` | **Adopt.** The marker's durable write is the guest's commit point: refusals and re-checks run first and may abort; after the marker, no abort; a later failure exits non-zero (a crash boot, recorded). The host resolves its record only by reachability, never by the call's result: guest answering with no update in progress, clear; unreachable for 60 s, kill and boot whatever the record's age (a fresh marker boots planned, a stale one crash-boots and alerts); never clear while unreachable. Each final call carries an idempotency id the guest reports on `GET update-drain`. Timeouts ordered: guest barrier budget < host call timeout < host stop-wait |
+| T3 | **The runtime cannot see the updater's request files**: `/run/choir-updater-control` is inaccessible to the runtime unit; there are two bridges, `restart` and `recover` (glm R-b, deepseek N3, claude) | `autoputer-vm.nix:483-493,497-511,851` | **Adopt.** The final call refuses while any updater operation journal is non-terminal (`/mnt/persistent/choir-updater/operations/*.json`, readable to the runtime, `autoputer-vm.nix:850`); the runtime's restart-handoff endpoint, which the updater calls before a restart (`autoputer-vm.nix:713`), refuses while `update_final` is set. That covers both bridges |
+| T4 | **Direct HTTP mutators bypass the actor gate**: the source schedule routes write the store outside actor admission, and other handlers could hit closed stores (luna, claude) | `source_schedule.go:73-145,444-487` | **Adopt.** The barrier first closes mutating API admission (those routes answer 503 with Retry-After) and waits for in-flight mutators, then stops the dispatcher and closes stores |
+| T5 | **The pinned image is not bound to the boot**: launches read the stable symlink paths, so a host activation between pinning and launch boots a different image than the record says (luna, claude R2) | `node-b.nix:725-729,1006-1013`; refresh rebuilds from config, `manager.go:1436-1459`; overrides exist, `:1462-1500` | **Adopt in LU1a.** Each launch resolves the image root once and passes every artifact path from it through the per-boot overrides; the recorded identity is the one booted. A launch that cannot resolve an identity boots from the stable paths, records `unknown` and alerts, rather than failing the boot (claude, glm) |
+| T6 | **LU1a's desk-mutation check is a time-of-check race**: vmctl's idle read and the guest's marker write are separate (luna) | `ownership.go:3088-3125`; `planned_restart.go:321-336,395-415` | **Adopt by narrowing.** LU1a claims only what today's endpoint guarantees (the F4 race remains until LU1b's guest-side final call, which checks desk mutations under the gate); the vmctl idle read is a filter that lowers the odds, not a guarantee. LU1a's acceptance wording changed accordingly |
+| T7 | **The per-computer claim has no exclusion set**: reconcile, warm, idle stop, pressure reclaim and the operator refresh can act on a computer mid-refresh once the refresh runs off `sweepMu` (claude R1; glm on persistence) | `ownership.go:965-990` | **Adopt.** Every one of those paths checks the claim and skips a claimed computer. Claims are in memory; the final-call record is the only durable part. Acceptance line added |
+| T8 | **The drain snapshot is not atomic with activation completion** (luna) | `runtime.go:406-420,848-855` | **Adopt.** The gate reason and the snapshot are taken under the runtime's running-set lock. A run that finishes first leaves its queued work deferred, which is safe (a timeout, never a cut). Race test added |
+| T9 | **The reconcile trigger bypasses the gate**: post-commit observers reach `TriggerSelfDevelopmentReconcile` directly, so an approval committed mid-drain can start an apply; an admitted retry reconciles globally (claude G2, deepseek) | `self_development_materializer.go:45-69`; `handler.go:244-251` | **Adopt.** While an update hold is set, the reconcile trigger starts no new apply (it may advance an operation that was already mid-transaction when the drain began) and re-arms when the hold lifts |
+| T10 | **The uncounted deferral class hot-loops**: backoff is computed from `defer_count`, so a class that does not count it stays at 500 ms (claude G3) | `dispatcher.go:18-27,394-406`; `log_sqlite.go:143-172` | **Adopt.** Update-hold deferrals use a fixed 10 s backoff, capped at the hold's deadline; the test asserts no 500 ms churn |
+| T11 | **`continue` gives up FIFO in a mailbox**: an admitted cancel can run before a deferred dispatch it cancels (claude G4) | `dispatcher.go:433` | **Adopt.** Handlers re-check run state when a deferred occurrence finally runs (a dispatch for a cancelled run is a no-op); acceptance case added |
+| T12 | **Starvation under hourly deploys**: aborting a drain on every target move and restarting Q can keep a busy paper from ever updating (claude G5) | design | **Adopt.** A drain or final call keeps the image it started with while that image is still admitted to the computer's ring; Q is measured from `pending_since`, not from `target_first_seen`. The record's image is GC-rooted and booted through the overrides (T5) |
+| T13 | **`restorePrior` checks store schema but not the work-state epoch** (claude G6) | `updater.go:943-994` | **Adopt** as an LU3b/LU5 gate: the updater refuses a restore across a work-state epoch (U7) |
+| T14 | **Probation has no guest-side backstop** if vmctl dies (deepseek) | `hibernate.go:39` precedent | **Adopt** as an LU3b gate: probation has a guest TTL; on expiry the guest lifts the hold and reports `probation_expired`, and the host treats the update as unvalidated (no automatic rollback after work ran) |
+| T15 | **Mixed fleet during LU1b's rollout**: guests without the drain endpoint answer 404 (deepseek) | — | **Adopt.** A 404 falls back to LU1a's quiet-moment path and never counts toward "stuck" |
+| T16 | **Two-database migration crash** after the actor-log step commits (luna, gemini) | `adapter.go:100-115` | **Adopt.** Acceptance injects a failure after the actor-log step; the re-run is idempotent |
+| T17 | **Where the epoch lives**: the store-schema epoch is a workspace file, which cannot join a Dolt transaction (glm R-c) | `store.go:678-682` | **Adopt.** The work-state epoch is a row in the Dolt store, advanced in the step's Dolt transaction |
+| T18 | **The kick and the deploy receipt**: whether the sweep route is synchronous, and what the deploy receipt says for pending computers (glm R-d) | `ci.yml:1520-1545`; `docs/problems/deploy-refresh-all-deferred-fails-deploy-2026-10-13.md` | **Adopt.** The route is a kick (202); pending is not a deploy failure; q3 names `.github/scripts/deploy-workflow-contract-test` and the receipt mapping |
+| T19 | **Refused or stuck computers would never hibernate** under the F27 rule (glm) | design | **Adopt.** F27 applies only while an attempt is in progress; an idle refused or stuck computer hibernates normally |
+| T20 | **Ring 0 canary minting can fail** (gemini) | design | **Adopt.** A failed mint halts ring 0 and alerts; it never advances |
+| T21 | **A target collected by Nix GC before vmctl roots it** (gemini) | `node-b.nix:1006-1013` | **Rejected.** The guest image is part of the active system closure (the activation script interpolates `${guestImage}`), so the system profile roots the target before the symlink moves |
+| T22 | **O2's opt-out vs S29** (luna, deepseek, glm) | adjudication S29 | **Adopt.** S29's wording corrected above: the opt-out is posed, not adopted |
+| T23 | **Missing owner decision: may the sweep wake a hibernated pending computer to update it?** (deepseek) | — | **Adopt** as O10, default no (it updates at its next wake) |
+| T24 | **The paper waiting behind a drain while the owner posts** (claude) | — | **Answered** under O3: on the platform tier the owner's messages are deferred up to D; no new decision |
+| T25 | **LU1b accepted against a state table** (deepseek) | — | **Adopt** as an LU1b gate: its acceptance enumerates every final-call state against each failure edge |
+| T26 | **Small fixes**: the record carries the image identity (claude); `update_final`'s deadline applies only up to the commit point (glm); the S2 residual should say a phantom restart consumes the marker (glm); `now.source_ref` (claude); a host crash differs from a vmctl restart for record durability (luna, R31) | — | **Adopt** |
+
+## What changes in round 4
+
+LU2's seeding (T1, T16, T17) and the final call's commit point and
+record resolution (T2-T4, T8, T9) are rewritten; LU1a binds the booted
+image and narrows its claim (T5-T7); the deferral class gets a fixed
+backoff (T10, T11); starvation is closed (T12); later-slice gates T13,
+T14, T25 are named. Next: a round-4 panel on the amended files.
