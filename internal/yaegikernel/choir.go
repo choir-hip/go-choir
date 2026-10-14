@@ -286,14 +286,15 @@ var deskModuleSets = map[string][]string{
 	// the filesystem (mutation is capsule-bound under engineering). It alone
 	// judges citation support (Judge, decisions §12.7). It reads the captures
 	// a capture arrival names (ReadCapture) to open and feed stories (Cut 2
-	// 2b); it never fetches the world.
+	// 2b); it never fetches the world. It verifies an engineering
+	// assignment's frozen candidate (Verify, C1e step 4).
 	"management": {"Cast", "Ask", "Note", "Reply",
 		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"ProductAPI", "Judge", "ReadCapture", "Stories", "Feed", "Decline"},
-	// Engineering mutates inside its capsule and reports fate.
-	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit",
-		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
-		"Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement"},
+		"ProductAPI", "Judge", "ReadCapture", "Stories", "Feed", "Decline", "Verify"},
+	// Engineering mutates inside its capsule, converses with management on
+	// records (C1e B1: Report, Ask, Reply, Note into its one conversation),
+	// and ends its assignment with Complete, freezing a candidate first.
+	"engineering": {"WriteFile", "Exec", "Complete", "Freeze", "Report", "Ask", "Reply", "Note"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
 	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
@@ -315,22 +316,19 @@ var deskModuleSets = map[string][]string{
 }
 
 // legacyObservation gates the observation verbs of the packet transports
-// (Cut 1 L6). Texture, research and management converse on records and read
-// choir.Records. Inbox and Emits read the retired Message and Emit mail, and
-// Updates reads update packets: engineering keeps all three until its
-// conversation moves onto records (C1e), and Texture and management keep
-// Updates for the terminal outcomes still delivered as packets.
+// (Cut 1 L6). Every desk converses on records and reads choir.Records
+// (engineering since C1e B1), so no desk reads the retired Message and Emit
+// mail (Inbox, Emits). Updates reads update packets: Texture and management
+// keep it for the terminal outcomes still delivered as packets.
 func (s *ChoirScope) legacyObservation(name string) bool {
 	if s == nil {
-		return true
+		return false
 	}
 	switch s.desk {
 	case "texture", "management":
 		return name == "Updates"
-	case "research", SessionRoleResearchChild:
-		return false
 	default:
-		return true
+		return false
 	}
 }
 
@@ -360,21 +358,12 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Pack":     reflect.ValueOf(s.Pack),
 		"Help":     reflect.ValueOf(s.Help),
 	}
-	if s.legacyObservation("Inbox") {
-		exports["Inbox"] = reflect.ValueOf(s.Inbox)
-	}
 	if s.legacyObservation("Updates") {
 		exports["Updates"] = reflect.ValueOf(s.Updates)
-	}
-	if s.legacyObservation("Emits") {
-		exports["Emits"] = reflect.ValueOf(s.Emits)
 	}
 	verbs := map[string]func() reflect.Value{
 		"WriteFile":        func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
 		"Exec":             func() reflect.Value { return reflect.ValueOf(s.Exec) },
-		"Assign":           func() reflect.Value { return reflect.ValueOf(s.Assign) },
-		"Message":          func() reflect.Value { return reflect.ValueOf(s.Message) },
-		"Emit":             func() reflect.Value { return reflect.ValueOf(s.Emit) },
 		"Complete":         func() reflect.Value { return reflect.ValueOf(s.Complete) },
 		"Freeze":           func() reflect.Value { return reflect.ValueOf(s.Freeze) },
 		"Cast":             func() reflect.Value { return reflect.ValueOf(s.Cast) },
@@ -411,6 +400,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Stories":          func() reflect.Value { return reflect.ValueOf(s.Stories) },
 		"Feed":             func() reflect.Value { return reflect.ValueOf(s.Feed) },
 		"Decline":          func() reflect.Value { return reflect.ValueOf(s.Decline) },
+		"Verify":           func() reflect.Value { return reflect.ValueOf(s.Verify) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -424,7 +414,6 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		exports[name] = mint()
 	}
 	if s != nil && s.slot == "verifier" {
-		exports["Verify"] = reflect.ValueOf(s.Verify)
 		exports["InspectBundle"] = reflect.ValueOf(s.InspectBundle)
 	}
 	if s != nil {
@@ -877,22 +866,23 @@ func (s *ChoirScope) Freeze(buildRecipeRef string, testReceipts, dependencyToolc
 	return s.tray.Freeze(buildRecipeRef, testReceipts, dependencyToolchainRefs)
 }
 
-// Verify stages the independent verifier decision for the mounted frozen
-// bundle. Verifier-slot activations only; the reducer records it against the
-// exact mounted bundle on cell return. At most one verify per cell;
-// requires a bound cell. bundleDigest is the content_digest InspectBundle
-// returned; the reducer asserts it equals the operation's durable digest.
-func (s *ChoirScope) Verify(decision string, verifierRefs []string, bundleDigest string) error {
+// Verify stages management's verdict on the candidate an engineering
+// assignment froze (C1e step 4). assignmentID names the assignment (an
+// engineering Report's evidence_refs carry "assignment:<id>" and
+// "bundle:<digest>"); the reducer resolves the assignment's own operation
+// and asserts bundleDigest equals its durable digest. At most one verify per
+// cell; requires a bound cell.
+func (s *ChoirScope) Verify(assignmentID, decision string, verifierRefs []string, bundleDigest string) error {
 	if err := s.mutateDenied("Verify"); err != nil {
 		return err
 	}
-	if s.slot != "verifier" {
-		return fmt.Errorf("choir: verify is restricted to the co-super verifier slot")
+	if !s.deskModule("Verify") {
+		return fmt.Errorf("choir: verify is management's")
 	}
 	if s.tray == nil {
 		return fmt.Errorf("choir: verify requires a bound cell")
 	}
-	return s.tray.Verify(decision, verifierRefs, bundleDigest)
+	return s.tray.Verify(assignmentID, decision, verifierRefs, bundleDigest)
 }
 
 // InspectBundle synchronously verifies the mounted frozen self-development

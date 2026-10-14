@@ -385,11 +385,9 @@ func TestPromptTaughtVerbsMatchExports(t *testing.T) {
 			t.Fatalf("scope %s: %v", deskRole, err)
 		}
 		exports := scope.ChoirExports()["choir/choir"]
-		// Slot-conditional exports: the engineering prompt teaches these under
-		// an explicit "Verifier Slot Only" guard — they exist only when the
-		// activation carries slot=verifier. Verify the conditional export
-		// separately instead of failing on the base scope.
-		slotConditional := map[string]bool{"Verify": true, "InspectBundle": true}
+		// Slot-conditional exports exist only when the activation carries
+		// slot=verifier. Verify is management's since C1e step 4.
+		slotConditional := map[string]bool{"InspectBundle": true}
 		for path, text := range promptSources {
 			// core.yaml composes into every desk's prompt — check it against
 			// each desk's surface; desk-specific files match on role name.

@@ -29,8 +29,8 @@ func TestRefusedVerbIsShownInTheCellResult(t *testing.T) {
 		return out
 	}
 
-	out := cell(`choir.ReportPacket("texture", map[string]any{"kind":"bogus"}, "r")`)
-	if !strings.Contains(out.Stdout, "choir.ReportPacket refused:") || !strings.Contains(out.Stdout, "packet shape") {
+	out := cell(`choir.Note("", "x")`)
+	if !strings.Contains(out.Stdout, "choir.Note refused:") || !strings.Contains(out.Stdout, "destination") {
 		t.Fatalf("refused verb not shown: %q", out.Stdout)
 	}
 	if out := cell(`x := 1

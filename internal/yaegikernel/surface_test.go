@@ -175,8 +175,11 @@ func TestDeskSurfacePromptBlock(t *testing.T) {
 			t.Errorf("texture surface block lists %s:\n%s", retired, block)
 		}
 	}
-	if verifier := DeskSurface("engineering", "verifier", false); !strings.Contains(verifier, "choir.Verify(") || !strings.Contains(verifier, "choir.InspectBundle()") {
+	if verifier := DeskSurface("engineering", "verifier", false); !strings.Contains(verifier, "choir.InspectBundle()") {
 		t.Errorf("verifier surface omits its slot functions:\n%s", verifier)
+	}
+	if management := DeskSurface("management", "", false); !strings.Contains(management, "choir.Verify(") {
+		t.Errorf("management surface omits Verify (C1e step 4):\n%s", management)
 	}
 }
 

@@ -178,25 +178,28 @@ func TestFreezeVerifyStaging(t *testing.T) {
 	if err := tray.Freeze("x", []string{"y"}, []string{"z"}); err == nil {
 		t.Fatal("second freeze must be rejected")
 	}
-	if err := tray.Verify("pass", []string{"ref-1"}, "sha256:abc"); err != nil {
+	if err := tray.Verify("assignment:a-1", "pass", []string{"ref-1"}, "sha256:abc"); err != nil {
 		t.Fatal(err)
 	}
-	if err := tray.Verify("fail", []string{"ref-2"}, "sha256:abc"); err == nil {
+	if err := tray.Verify("a-1", "fail", []string{"ref-2"}, "sha256:abc"); err == nil {
 		t.Fatal("second verify must be rejected")
 	}
 	staged := tray.Drain()
 	if len(staged) != 2 || staged[0].Kind != IntentFreeze || staged[1].Kind != IntentVerify {
 		t.Fatalf("staged = %+v", staged)
 	}
-	if staged[0].BuildRecipeRef != "capsule-exec:sha256:aa" || staged[1].Decision != "pass" || staged[1].BundleDigest != "sha256:abc" {
+	if staged[0].BuildRecipeRef != "capsule-exec:sha256:aa" || staged[1].Decision != "pass" || staged[1].BundleDigest != "sha256:abc" || staged[1].TargetRef != "a-1" {
 		t.Fatalf("staged fields = %+v", staged)
 	}
 	var bad Tray
-	if err := bad.Verify("maybe", nil, "sha256:abc"); err == nil {
+	if err := bad.Verify("a-1", "maybe", nil, "sha256:abc"); err == nil {
 		t.Fatal("invalid decision must be rejected at staging")
 	}
-	if err := bad.Verify("pass", []string{"ref"}, ""); err == nil {
+	if err := bad.Verify("a-1", "pass", []string{"ref"}, ""); err == nil {
 		t.Fatal("missing bundle digest must be rejected at staging")
+	}
+	if err := bad.Verify("", "pass", []string{"ref"}, "sha256:abc"); err == nil {
+		t.Fatal("a verify that names no assignment must be rejected at staging")
 	}
 }
 
@@ -256,13 +259,17 @@ func TestVerifierSlotExports(t *testing.T) {
 		t.Fatal(err)
 	}
 	vexp := verifier.ChoirExports()["choir/choir"]
-	for _, name := range []string{"Verify", "InspectBundle", "Freeze"} {
+	for _, name := range []string{"InspectBundle", "Freeze"} {
 		if _, ok := vexp[name]; !ok {
 			t.Errorf("verifier exports missing %q", name)
 		}
 	}
-	if err := scope.Verify("pass", []string{"ref"}, "sha256:abc"); err == nil {
-		t.Error("implementation Verify must be denied")
+	// Verify is management's (C1e step 4): no engineering scope carries it.
+	if _, ok := vexp["Verify"]; ok {
+		t.Error("engineering verifier exports must not carry Verify")
+	}
+	if err := scope.Verify("a-1", "pass", []string{"ref"}, "sha256:abc"); err == nil {
+		t.Error("engineering Verify must be denied")
 	}
 	if _, err := scope.InspectBundle(); err == nil {
 		t.Error("implementation InspectBundle must be denied")

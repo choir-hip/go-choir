@@ -179,8 +179,20 @@ type InboxRecord struct {
 	// Labels is Jev's label on each capture of a captures record, by
 	// capture id, when intake labels are on (L2a A2 / R2-6). It is joined
 	// at read time, never stored on the record.
-	Labels    map[string]CaptureLabelView `json:"labels,omitempty"`
-	CreatedAt time.Time                   `json:"created_at"`
+	Labels map[string]CaptureLabelView `json:"labels,omitempty"`
+	// ParentID, RelatedIDs and EvidenceRefs are the record's links (C1e
+	// D9): a Cast's parent request, the records a Reply answers, and the
+	// evidence a Report names (an engineering Report names its assignment,
+	// so management's Verify can name it).
+	ParentID     string   `json:"parent_id,omitempty"`
+	RelatedIDs   []string `json:"related_ids,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	// ParentConversationID and ParentRound name, on an engineering
+	// Report, the Texture request its assignment serves (from the
+	// assignment's binding), so management can answer that Texture.
+	ParentConversationID string    `json:"parent_conversation_id,omitempty"`
+	ParentRound          int       `json:"parent_round,omitempty"`
+	CreatedAt            time.Time `json:"created_at"`
 }
 
 // CaptureLabelView is Jev's label on one capture as management sees it:
@@ -361,13 +373,17 @@ func (t *Tray) Freeze(buildRecipeRef string, testReceipts, dependencyToolchainRe
 	return err
 }
 
-// Verify stages the independent verifier decision for the mounted frozen
-// bundle. At most one verify per cell; the reducer records it on cell
-// return. decision is pass or fail; verifierRefs are the verifier's evidence.
-// bundleDigest is the exact content digest the cell inspected; the reducer
-// asserts it equals the operation's durable bundle digest, so a decision can
-// never land on a bundle other than the one the cell examined.
-func (t *Tray) Verify(decision string, verifierRefs []string, bundleDigest string) error {
+// Verify stages a verdict on an assignment's frozen candidate. At most one
+// verify per cell; the reducer records it on cell return. assignmentID
+// rides TargetRef; decision is pass or fail; verifierRefs are the evidence.
+// bundleDigest is the exact digest the verdict is about; the reducer asserts
+// it equals the operation's durable bundle digest, so a decision can never
+// land on a bundle other than the one named.
+func (t *Tray) Verify(assignmentID, decision string, verifierRefs []string, bundleDigest string) error {
+	assignmentID = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(assignmentID), "assignment:"))
+	if assignmentID == "" {
+		return fmt.Errorf("tray: verify names the assignment whose candidate it judges")
+	}
 	switch decision {
 	case "pass", "fail":
 	default:
@@ -381,7 +397,7 @@ func (t *Tray) Verify(decision string, verifierRefs []string, bundleDigest strin
 			return fmt.Errorf("tray: at most one verify per cell")
 		}
 	}
-	_, err := t.stage(StagedIntent{Kind: IntentVerify, Decision: decision, VerifierRefs: verifierRefs, BundleDigest: bundleDigest})
+	_, err := t.stage(StagedIntent{Kind: IntentVerify, TargetRef: assignmentID, Decision: decision, VerifierRefs: verifierRefs, BundleDigest: bundleDigest})
 	return err
 }
 

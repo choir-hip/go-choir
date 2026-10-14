@@ -338,6 +338,9 @@ func TestChoirImportPathsMinMaxAndSearchTotal(t *testing.T) {
 // real field.
 func TestRecordAndUpdateIDAndFieldHint(t *testing.T) {
 	_, _, scope, _ := testChoirFixture(t)
+	// Updates is a Texture and management observation (engineering reads
+	// records since C1e B1).
+	scope.desk = "management"
 	sess, err := NewSession(NewAllowlist(DefaultSafeStdlibPackagesList()...), scope.ChoirExports())
 	if err != nil {
 		t.Fatal(err)
