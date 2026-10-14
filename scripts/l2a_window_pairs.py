@@ -6,9 +6,14 @@ pairs among the window's captures, as grouped by the registered judge
 (docs/evidence/l2a-judge-registration-2026-10-14.md): gemini-3.8-flash
 through the owner's omp CLI, two shuffled calls per block, a pair counts
 only when both calls group it. The numerator: those pairs whose two
-captures management put into the same story (the cast that opened it or a
-Note that fed it). Pairs in one story that the judge never grouped are
-listed as false-merge candidates, to be read by hand.
+captures management put into a shared story (the cast that opened it or a
+Note that fed it). Stories are found beyond the 50-document list cap
+(story_doc_ids). Pairs in one story that the judge never grouped are
+listed as false-merge candidates, to be read by hand. Also reported: Jev's
+label coverage of the window's polls, re-captures of known pages, and the
+production ratios behind the owner's principle that more sources should
+mean only marginally more articles (captures and new stories per hour,
+captures per new story, intake outlets per story).
 
 Credentials come from a JSON file with api_key and computer_id; the key is
 never printed.
@@ -16,6 +21,7 @@ never printed.
 usage: l2a_window_pairs.py --cred FILE --start ISO --end ISO --out FILE
 """
 import argparse
+import datetime as dt
 import itertools
 import json
 import random
@@ -91,6 +97,11 @@ class Client:
                     time.sleep(15)
                     continue
                 raise
+            except (urllib.error.URLError, TimeoutError):
+                # A busy computer can stall one read; reading ~300 story
+                # inboxes meets that.
+                time.sleep(15)
+                continue
         raise RuntimeError("unavailable: " + path)
 
 
@@ -99,41 +110,130 @@ def norm_id(capture_id):
     return capture_id[4:] if capture_id.startswith("obj:") else capture_id
 
 
-def stories_by_capture(c):
-    """Which story each capture went into, read from each story's Texture
-    inbox: the Cast that opened it (cast.captures) or a Feed disposition
-    (disposition.captures), both sent by management. Older records name
-    captures only in the directive text, so that is read too."""
-    story_of = {}
+RECEIPT_STORY = re.compile(r"rlm:[a-z_]+:\d+ to texture:(" + r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" + r")")
+RECEIPT_TASK = re.compile(r"rlm:delegate:\d+ to (management-task:[A-Za-z0-9:_\-.]+)")
+# Story doc ids are name-based (v5) UUIDs; run, loop and event ids are not.
+DOC_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+
+
+def paged(c, path, key):
+    """Every item of a route paged by after/next_after."""
+    out, after = [], 0
+    sep = "&" if "?" in path else "?"
+    while True:
+        page = c.get(f"{path}{sep}limit=500&after={after}")
+        out += page.get(key) or []
+        nxt = int(page.get("next_after") or 0)
+        if nxt <= after:
+            return out
+        after = nxt
+
+
+def story_doc_ids(c, start=None, end=None):
+    """Every story document management (or its tasks) may have disposed a
+    capture into. GET /api/texture/documents lists only the 50 most recently
+    updated documents, so a window scored an hour later loses most of its
+    stories that way (docs/problems/l2a-merge-recall-on-the-paper-2026-10-14.md,
+    finding 1). The list is joined with every texture:<doc> in the receipts
+    of management's runs and its tasks' runs, and every story id their cells
+    and outputs name (a Note's receipt names no inbox). Without a window,
+    every listed run is read."""
     docs = c.get("/api/texture/documents?limit=500")
-    docs = docs.get("documents") or docs.get("items") or docs
-    for d in docs:
-        doc_id = d.get("doc_id") or d.get("id")
-        recs = c.get("/api/inboxes/" + urllib.parse.quote("texture:" + doc_id, safe="") + "/records?limit=500").get("records") or []
+    ids = {d.get("doc_id") or d.get("id") for d in (docs.get("documents") or docs.get("items") or [])}
+    owner = None
+    for st in c.get("/api/computer-settings").get("settings") or []:
+        owner = owner or st.get("owner_id")
+    if not owner:
+        return {i for i in ids if i}
+
+    def scan(runs):
+        tasks = set()
+        for r in runs:
+            created, finished = r.get("created_at") or "", r.get("finished_at") or ""
+            if start and finished and finished[:19] + "Z" < start:
+                continue
+            if end and created[:19] + "Z" > end:
+                continue
+            for e in paged(c, "/api/runs/" + urllib.parse.quote(r["run_id"], safe="") + "/events", "events"):
+                if e.get("kind") not in ("tool.invoked", "tool.result"):
+                    continue
+                text = json.dumps(e.get("payload") or {})
+                ids.update(RECEIPT_STORY.findall(text))
+                ids.update(DOC_UUID.findall(text))
+                tasks.update(RECEIPT_TASK.findall(text))
+        return tasks
+
+    mgmt = urllib.parse.quote("management:" + owner, safe="")
+    tasks = scan(c.get(f"/api/runs?channel_id={mgmt}&limit=500").get("runs") or [])
+    for task in sorted(tasks):
+        scan(c.get("/api/runs?channel_id=" + urllib.parse.quote(task, safe="") + "&limit=5").get("runs") or [])
+    return {i for i in ids if i}
+
+
+def story_sets_by_capture(c, start=None, end=None, opened=None):
+    """Every story each capture went into, read from each story's Texture
+    inbox: the Cast that opened it (cast.captures) or a Feed disposition
+    (disposition.captures), sent by management or one of its tasks. Older
+    records name captures only in the directive text, so that is read too.
+    Returns {capture id: {doc id: first committed_at}}; when opened is a
+    dict, it is filled with {doc id: committed_at of its opening Cast}."""
+    stories = {}
+    for doc_id in sorted(story_doc_ids(c, start, end)):
+        recs = paged(c, "/api/inboxes/" + urllib.parse.quote("texture:" + doc_id, safe="") + "/records", "records")
         for r in recs:
             sender = str(r.get("sender_inbox") or (r.get("provenance") or {}).get("agent_id") or "")
-            if not sender.startswith("management:"):
+            if not (sender.startswith("management:") or sender.startswith("management-task:")):
                 continue
+            at = (r.get("provenance") or {}).get("committed_at") or ""
+            if opened is not None and r.get("cast") is not None and r.get("inbox_seq") == 1:
+                opened[doc_id] = at
             found = list((r.get("cast") or {}).get("captures") or [])
             disp = r.get("disposition") or {}
             if disp.get("kind") == "feed":
                 found += disp.get("captures") or []
             found += CAPTURE_ID.findall(json.dumps(r.get("directive") or {}))
             for cid in found:
-                story_of.setdefault(norm_id(cid), doc_id)
-    return story_of
+                if not str(cid).strip():
+                    continue
+                seen = stories.setdefault(norm_id(cid), {})
+                if doc_id not in seen or at < seen[doc_id]:
+                    seen[doc_id] = at
+    return stories
+
+
+def stories_by_capture(c, start=None, end=None):
+    """The first story each capture went into (by commit time)."""
+    return {cid: min(docs, key=docs.get) for cid, docs in story_sets_by_capture(c, start, end).items() if docs}
+
+
+def label_coverage(c, start, end):
+    """Jev's label coverage of the window's polls, from the schedules route."""
+    out = {"polls": 0, "new": 0, "labelled": 0, "unlabelled": 0}
+    scheds = c.get("/api/autopaper/sources/schedules")
+    if isinstance(scheds, dict):
+        scheds = scheds.get("schedules") or scheds.get("items") or []
+    for sched in scheds or []:
+        for u in sched.get("recent") or []:
+            if start <= (u.get("at") or "")[:19] + "Z" < end:
+                out["polls"] += 1
+                for k in ("new", "labelled", "unlabelled"):
+                    out[k] += int(u.get(k) or 0)
+    return out
 
 
 def window_arrivals(c, start, end):
     """The intake arrivals in [start, end): every source poll's captures
     record in management's inbox (sender source:<id>), paged by inbox seq.
     /api/captures lists only the newest 500 captures, research re-captures
-    included, so it cannot serve an older window or count intake alone."""
+    included, so it cannot serve an older window or count intake alone.
+    An item whose URL an earlier arrival already named is marked recapture:
+    a capture's identity is URL + text hash, so a feed whose item text
+    churns (HN points and comments, live blogs) re-captures one page."""
     owner = None
     for st in c.get("/api/computer-settings").get("settings") or []:
         owner = owner or st.get("owner_id")
     inbox = urllib.parse.quote("management:" + owner, safe="")
-    caps, after = {}, 0
+    caps, after, seen_urls = {}, 0, set()
     while True:
         page = c.get(f"/api/inboxes/{inbox}/records?limit=500&after={after}")
         recs = page.get("records") or []
@@ -143,11 +243,12 @@ def window_arrivals(c, start, end):
             if not str(r.get("sender_inbox", "")).startswith("source:"):
                 continue
             at = (r.get("provenance") or {}).get("committed_at") or ""
-            if not (start <= at[:19] + "Z" < end):
-                continue
+            in_window = start <= at[:19] + "Z" < end
             for item in (r.get("captures") or {}).get("items") or []:
-                if item.get("capture_id") and item.get("title"):
-                    caps[item["capture_id"]] = dict(item, created_at=at)
+                url = item.get("url") or ""
+                if in_window and item.get("capture_id") and item.get("title"):
+                    caps[item["capture_id"]] = dict(item, created_at=at, recapture=url in seen_urls, source=r.get("sender_inbox"))
+                seen_urls.add(url)
         nxt = int(page.get("next_after") or 0)
         if nxt <= after:
             break
@@ -238,34 +339,72 @@ def main():
         start += BLOCK - OVERLAP
     disputed -= agreed
 
-    story_of = stories_by_capture(c)
+    # Stories are read for runs up to two hours past the window, so a
+    # capture disposed late in the window still counts.
+    grace_end = (dt.datetime.fromisoformat(args.end.replace("Z", "+00:00")) + dt.timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    opened = {}
+    stories = story_sets_by_capture(c, args.start, grace_end, opened)
+    first = {cid: min(docs, key=docs.get) for cid, docs in stories.items() if docs}
+
+    def shared(a, b):
+        return set(stories.get(ids[a]) or {}) & set(stories.get(ids[b]) or {})
 
     cross = [(a, b) for a, b in agreed if registered_domain(items[a].get("url", "")) != registered_domain(items[b].get("url", ""))]
-    merged = [(a, b) for a, b in cross if story_of.get(ids[a]) and story_of.get(ids[a]) == story_of.get(ids[b])]
+    # A pair is merged when its captures share a story. A capture fed into
+    # two stories (a roundup of two events) is in both.
+    merged = [(a, b) for a, b in cross if shared(a, b)]
+    merged_first = [(a, b) for a, b in cross if first.get(ids[a]) and first.get(ids[a]) == first.get(ids[b])]
     grouped = {i for p in agreed | disputed for i in p}
     by_story = {}
     for i, cid in enumerate(ids):
-        if cid in story_of:
-            by_story.setdefault(story_of[cid], []).append(i)
+        for doc in stories.get(cid) or {}:
+            by_story.setdefault(doc, []).append(i)
     false_candidates = []
     for doc, members in by_story.items():
         for a, b in itertools.combinations(sorted(members), 2):
             if (a, b) not in agreed and (a, b) not in disputed:
-                false_candidates.append({"doc_id": doc, "a": lines[a], "b": lines[b]})
+                false_candidates.append({"doc_id": doc, "a": lines[a], "b": lines[b], "a_id": ids[a], "b_id": ids[b]})
+
+    # Production ratios (owner 2026-10-14: more sources should mean only
+    # marginally more articles; sources per story is a crude proxy of
+    # quality). Intake outlets count the window's captures only, not
+    # research's citations.
+    hours = (dt.datetime.fromisoformat(args.end.replace("Z", "+00:00")) - dt.datetime.fromisoformat(args.start.replace("Z", "+00:00"))).total_seconds() / 3600
+    new_stories = [d for d, at in opened.items() if args.start <= at[:19] + "Z" < args.end]
+    outlets = {}
+    for i, cid in enumerate(ids):
+        for doc in stories.get(cid) or {}:
+            outlets.setdefault(doc, set()).add(registered_domain(items[i].get("url", "")))
+    production = {
+        "captures_per_hour": round(len(items) / hours, 1),
+        "new_stories_per_hour": round(len(new_stories) / hours, 1),
+        "captures_per_new_story": round(len(items) / len(new_stories), 2) if new_stories else None,
+        "pages_per_new_story": round(len({x.get("url") for x in items}) / len(new_stories), 2) if new_stories else None,
+        "source_schedules": len({x.get("source") for x in items} - {None}),
+        "stories_receiving_captures": len(outlets),
+        "intake_outlets_per_story": round(sum(len(v) for v in outlets.values()) / len(outlets), 2) if outlets else None,
+        "share_of_stories_with_2_plus_intake_outlets": round(sum(1 for v in outlets.values() if len(v) >= 2) / len(outlets), 3) if outlets else None,
+    }
 
     result = {
         "window": {"start": args.start, "end": args.end},
         "judge": {"model": MODEL, "registration": "docs/evidence/l2a-judge-registration-2026-10-14.md", "calls_not_served_by_registered_model": misrouted},
         "captures": len(items),
-        "captures_with_story": sum(1 for cid in ids if cid in story_of),
+        "recaptures": sum(1 for x in items if x.get("recapture")),
+        "production": production,
+        "labels": label_coverage(c, args.start, args.end),
+        "captures_with_story": sum(1 for cid in ids if stories.get(cid)),
+        "story_documents_read": len({d for docs in stories.values() for d in docs}),
         "captures_grouped_by_judge": len(grouped),
         "same_event_pairs": len(agreed),
         "disputed_pairs": len(disputed),
         "cross_outlet_same_event_pairs": len(cross),
         "merged_cross_outlet_pairs": len(merged),
         "merge_recall": round(len(merged) / len(cross), 3) if cross else None,
+        "merge_recall_first_story": round(len(merged_first) / len(cross), 3) if cross else None,
         "false_merge_candidates": len(false_candidates),
-        "pairs": [{"a": lines[a], "b": lines[b], "same_story": (a, b) in set(merged)} for a, b in sorted(cross)],
+        "pairs": [{"a": lines[a], "b": lines[b], "a_id": ids[a], "b_id": ids[b], "same_story": (a, b) in set(merged),
+                   "a_stories": sorted(stories.get(ids[a]) or {}), "b_stories": sorted(stories.get(ids[b]) or {})} for a, b in sorted(cross)],
         "false_merge_candidate_pairs": false_candidates,
     }
     json.dump(result, open(args.out, "w"), indent=1, ensure_ascii=False)
