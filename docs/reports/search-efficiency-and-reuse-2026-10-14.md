@@ -410,3 +410,6 @@ marginal returns with our Dolt versioned SQL object graph." Embeddings
 the next retrieval work is structured and full-text retrieval over the
 object graph (claims, entities, events, captures, search-result pointers),
 measured until its gains flatten.
+
+First pass of that project, with a local benchmark at 1M captures / 10M
+edges / 5M claims: [object-graph-retrieval-research-2026-10-14.md](object-graph-retrieval-research-2026-10-14.md).
