@@ -14,6 +14,14 @@ const (
 	Research    = "research"
 	Texture     = "texture"
 	Email       = "email"
+	// ManagementTask is the run role of a management task (management
+	// delegation S2a, design round 2 R2-1): a bounded sub-RLM of the
+	// management desk with its own run, session and inbox
+	// (management-task:<id>). Its run profile stays Management; the role
+	// selects its narrow verb set, prompt and model. It is a role, not a
+	// desk anyone addresses: IsLive is false, so no Cast, Note or message
+	// names it; management reaches a task only through choir.Delegate.
+	ManagementTask = "management_task"
 )
 
 // Policy is the canonical capability and message policy for an agent profile.
@@ -91,7 +99,7 @@ func (e UnknownProfileError) Error() string {
 func Canonical(profile string) (string, error) {
 	normalized := strings.ToLower(strings.TrimSpace(profile))
 	switch normalized {
-	case Management, Engineering, Research, Texture, Conductor, Email,
+	case Management, Engineering, Research, Texture, Conductor, Email, ManagementTask,
 		"processor", "reconciler", "verifier":
 		return normalized, nil
 	case "verifier-multimodal", "verifier_multimodal":

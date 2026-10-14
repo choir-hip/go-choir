@@ -106,6 +106,14 @@ const SessionRoleResearch = "research"
 // parent cell as a value.
 const SessionRoleResearchChild = "research_child"
 
+// SessionRoleManagementTask is a management task (management delegation
+// S2a, design round 2 R2-1/R2-2): a bounded sub-RLM of the management desk
+// that disposes of the captures its lease names. It reads records and
+// captures and stages Cast, Note, Feed, Decline and Done; it has no
+// filesystem, assignment, message, product API or ledger authority. The
+// spelling is agentprofile.ManagementTask's.
+const SessionRoleManagementTask = "management_task"
+
 // NewChoirScope mints a session-scoped handle for exactly the file, assign,
 // and message actions and returns the scope the choir symbols close over.
 // The caller (worker session setup) owns the broker lifetime.
@@ -116,13 +124,26 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	if issuer == nil {
 		return nil, fmt.Errorf("choir: handle issuer is required")
 	}
+	desk := normalizeDeskRole(role)
 	readOnly := role == SessionRoleResearch || role == SessionRoleResearchChild
 	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit}
-	if role == SessionRoleResearchChild {
+	switch {
+	case desk == "":
+		// An unknown role fails closed (R2-2): observation only. Before
+		// S2a it resolved to the engineering surface.
+		readOnly = true
+		actions = []BrokerAction{ActionReadFile, ActionListDir}
+	case desk == SessionRoleManagementTask:
+		// A task reads its records, captures and the story library; its
+		// acts are records the host reduces. No filesystem, assignment,
+		// message or product API authority.
+		readOnly = true
+		actions = []BrokerAction{ActionReadFile, ActionListDir, ActionReadCapture, ActionStories}
+	case role == SessionRoleResearchChild:
 		actions = []BrokerAction{ActionReadFile, ActionListDir,
 			ActionSearchStart, ActionRead, ActionReadCapture, ActionSearchWireCorpus,
 			ActionReadEvidence, ActionListEvidence}
-	} else if readOnly {
+	case readOnly:
 		// Research is read-only on the filesystem but owns the host-mediated
 		// egress verbs (search_start/read/read_capture/search_wire_corpus/
 		// poll_source + evidence/run-memory) — the handle
@@ -134,14 +155,14 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	}
 	// SMG: the management desk's product API call rides the broker like the
 	// research egress verbs — the typed product_api_request tool is deleted.
-	if normalizeDeskRole(role) == "management" {
+	if desk == "management" {
 		actions = append(actions, ActionProductAPI, ActionReadCapture, ActionStories)
 	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, sessionHandleTTL)
 	if err != nil {
 		return nil, fmt.Errorf("choir: issue session handle: %w", err)
 	}
-	scope := &ChoirScope{broker: broker, issuer: issuer, actions: actions, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: normalizeDeskRole(role), slot: slot, searches: newSearchStore()}
+	scope := &ChoirScope{broker: broker, issuer: issuer, actions: actions, computerID: computerID, epoch: epoch, activationID: activationID, readOnly: readOnly, desk: desk, slot: slot, searches: newSearchStore()}
 	scope.handleRef.Store(&handleRef)
 	return scope, nil
 }
@@ -166,15 +187,17 @@ var sessionHandleTTL = time.Hour
 func (s *ChoirScope) HandleRef() string { return *s.handleRef.Load() }
 
 // normalizeDeskRole maps a session role to the desk profile whose module set
-// applies. The four desks are management, engineering, research, texture;
-// co-super and unknown roles resolve to the engineering surface so the
-// generalized carrier never under-provisions a working desk.
+// applies: the four desks (management, engineering, research, texture), a
+// research child and a management task. Any other role, the empty one
+// included, is no desk and gets no module verbs (management delegation
+// R2-2): it used to resolve to engineering, so a role the kernel did not
+// know silently received WriteFile, Exec, Complete and Freeze.
 func normalizeDeskRole(role string) string {
 	switch role {
-	case "management", "engineering", "research", "texture", SessionRoleResearchChild:
+	case "management", "engineering", "research", "texture", SessionRoleResearchChild, SessionRoleManagementTask:
 		return role
 	}
-	return "engineering"
+	return ""
 }
 
 // BindCell binds one cell: installs the inbox snapshot and a fresh tray,
@@ -293,9 +316,18 @@ var deskModuleSets = map[string][]string{
 	// a capture arrival names (ReadCapture) to open and feed stories (Cut 2
 	// 2b); it never fetches the world. It verifies an engineering
 	// assignment's frozen candidate (Verify, C1e step 4).
+	// It delegates capture intake to management tasks (Delegate) and may
+	// cancel one (CancelTask), management delegation S2a.
 	"management": {"Cast", "Ask", "Note", "Reply",
 		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"ProductAPI", "ReadCapture", "Stories", "Feed", "Decline", "Verify"},
+		"ProductAPI", "ReadCapture", "Stories", "Feed", "Decline", "Verify", "Delegate", "CancelTask"},
+	// A management task (S2a) disposes of the captures its lease names: it
+	// opens a story (Cast to texture:new), feeds one (Feed, or a Cast or
+	// Note to texture:<doc>), declines (Decline), and ends with Done. It
+	// sends outward as management, with the task named in provenance. It
+	// cannot cast engineering, verify, call the product API, delegate, or
+	// commit ledger acts: one level of delegation, as research children.
+	SessionRoleManagementTask: {"Cast", "Note", "ReadCapture", "Stories", "Feed", "Decline", "Done"},
 	// Engineering mutates inside its capsule, converses with management on
 	// records (C1e B1: Report, Ask, Reply, Note into its one conversation),
 	// and ends its assignment with Complete, freezing a candidate first.
@@ -406,6 +438,8 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"Feed":             func() reflect.Value { return reflect.ValueOf(s.Feed) },
 		"Decline":          func() reflect.Value { return reflect.ValueOf(s.Decline) },
 		"Verify":           func() reflect.Value { return reflect.ValueOf(s.Verify) },
+		"Delegate":         func() reflect.Value { return reflect.ValueOf(s.Delegate) },
+		"CancelTask":       func() reflect.Value { return reflect.ValueOf(s.CancelTask) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -744,6 +778,111 @@ func (s *ChoirScope) Decline(captureIDs any, reason string) (string, error) {
 	return strings.Join(refs, ","), nil
 }
 
+// Delegate hands capture intake to management tasks (management delegation
+// S2a, R2-14) and returns at once: nothing waits on a task. refs are the
+// record ids of captures records from choir.Records(); grouping is
+// "per_record" (or "" or nil: one task per record) or a list of groups,
+// each a list of those record ids given to one task, at most
+// MaxTaskCaptures captures per task; a ref no group names gets its own
+// task. Each task's outcome comes back later as a record from
+// management-task:<id>.
+func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any) (string, error) {
+	t, err := s.boundTray("delegate")
+	if err != nil {
+		return "", err
+	}
+	switch kind = strings.TrimSpace(kind); kind {
+	case TaskKindIntake:
+	case TaskKindAnswer:
+		return "", fmt.Errorf("choir: Delegate: answer tasks are not open yet; answer the Texture yourself")
+	default:
+		return "", fmt.Errorf("choir: Delegate: kind is %q (one captures record or more per task)", TaskKindIntake)
+	}
+	ids, err := captureIDsArg(refs)
+	if err != nil {
+		return "", fmt.Errorf("choir: Delegate: refs are record ids from choir.Records(): %w", err)
+	}
+	captures := map[string]int{}
+	for _, r := range s.records {
+		if r.Captures != nil && len(r.Captures.Items) > 0 {
+			captures[r.RecordID] = len(r.Captures.Items)
+		}
+	}
+	for _, id := range ids {
+		if _, ok := captures[id]; !ok {
+			return "", fmt.Errorf("choir: Delegate: %s is not a captures record of this turn (pass r.RecordID of a record whose r.Captures is set)", id)
+		}
+	}
+	var groups [][]string
+	grouped := map[string]bool{}
+	switch g := grouping.(type) {
+	case nil:
+	case string:
+		if g = strings.TrimSpace(g); g != "" && g != "per_record" {
+			return "", fmt.Errorf("choir: Delegate: grouping is \"per_record\" or a list of groups of record ids, not %q", g)
+		}
+	default:
+		raw, err := json.Marshal(g)
+		if err != nil {
+			return "", fmt.Errorf("choir: Delegate: grouping: %w", err)
+		}
+		if err := json.Unmarshal(raw, &groups); err != nil {
+			return "", fmt.Errorf("choir: Delegate: grouping is \"per_record\" or a list of groups of record ids ([][]string)")
+		}
+	}
+	inRefs := map[string]bool{}
+	for _, id := range ids {
+		inRefs[id] = true
+	}
+	var out [][]string
+	for i, group := range groups {
+		var kept []string
+		n := 0
+		for _, id := range group {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if !inRefs[id] {
+				return "", fmt.Errorf("choir: Delegate: group %d names %s, which is not in refs", i+1, id)
+			}
+			if grouped[id] {
+				return "", fmt.Errorf("choir: Delegate: %s is in two groups; each record goes to one task", id)
+			}
+			grouped[id] = true
+			kept = append(kept, id)
+			n += captures[id]
+		}
+		if n > MaxTaskCaptures {
+			return "", fmt.Errorf("choir: Delegate: group %d holds %d captures; a task takes at most %d", i+1, n, MaxTaskCaptures)
+		}
+		if len(kept) > 0 {
+			out = append(out, kept)
+		}
+	}
+	for _, id := range ids {
+		if !grouped[id] {
+			out = append(out, []string{id})
+		}
+	}
+	if strings.TrimSpace(objective) == "" {
+		objective = "Open, feed or decline every capture these records name."
+	}
+	return t.Delegate(DelegateSpec{Kind: kind, Objective: strings.TrimSpace(objective), Groups: out})
+}
+
+// CancelTask cancels a management task (R2-20): a running task's run is
+// cancelled, a queued task's round is closed. Either way its final Report
+// lists the captures it left, which you may delegate again. taskID is the
+// id or its inbox (management-task:<id>).
+func (s *ChoirScope) CancelTask(taskID, reason string) (string, error) {
+	t, err := s.boundTray("cancel_task")
+	if err != nil {
+		return "", err
+	}
+	return t.CancelTask(strings.TrimPrefix(strings.TrimSpace(taskID), "management-task:"), reason)
+}
+
 // captureIDsArg reads a list of capture ids: a []string, a list of
 // strings, or one id.
 func captureIDsArg(v any) ([]string, error) {
@@ -990,7 +1129,18 @@ func (s *ChoirScope) Write(edits, why string) (string, error) {
 
 // Done says the requested work is complete. With a Write in the same cell
 // the revision completes it; alone it completes it at the current revision.
+// On a management task it ends the task: the cell's acts commit, then the
+// host sends management the task's final Report, listing what each leased
+// capture became and, with why as their reason, the captures left
+// undisposed.
 func (s *ChoirScope) Done(why string) (string, error) {
+	if s != nil && s.desk == SessionRoleManagementTask {
+		t, err := s.boundTray("done")
+		if err != nil {
+			return "", err
+		}
+		return t.TaskDone(why)
+	}
 	return s.closeTurn("done", why, func(turn *TextureTurn, why string) error {
 		switch {
 		case turn.Done != "":

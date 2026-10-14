@@ -71,6 +71,35 @@ const (
 	// ApplyTextureTurn transaction; it is not a semantic act and mints no
 	// mailbox envelope — the commit lands on the lifecycle/document head.
 	IntentTextureTurn = "texture_turn"
+	// IntentDelegate is management's batch delegation (management
+	// delegation S2a, R2-14): its Body is a DelegateSpec. The reducer opens
+	// one management task per group, each with a Cast into a new
+	// management-task:<id> inbox, in the cell's one records transaction.
+	IntentDelegate = "delegate"
+	// IntentCancelTask cancels one management task (R2-20); TargetRef is
+	// the task id, Body the reason.
+	IntentCancelTask = "cancel_task"
+	// IntentTaskDone ends a management task (R2-8); Body is its note. The
+	// host then mints the task's final Report from its durable
+	// dispositions.
+	IntentTaskDone = "task_done"
+)
+
+// DelegateSpec is the body of a Delegate intent: the task kind, the
+// objective each task is given, and the groups of record ids, one task per
+// group.
+type DelegateSpec struct {
+	Kind      string     `json:"kind"`
+	Objective string     `json:"objective"`
+	Groups    [][]string `json:"groups"`
+}
+
+// Management task kinds and the coalescing cap (design §3.2, O7).
+const (
+	TaskKindIntake = "intake"
+	TaskKindAnswer = "answer"
+	// MaxTaskCaptures is the most captures one intake task is given.
+	MaxTaskCaptures = 12
 )
 
 // TextureTurn is the body of a Texture cell's turn. A cell sets Write,
@@ -447,6 +476,37 @@ func (t *Tray) Dispose(toDesk, disposition string, captureIDs []string, reason s
 	}
 	body := reason + "\n\n" + verb + " captures: " + strings.Join(captureIDs, ", ")
 	return t.stage(StagedIntent{Kind: IntentNote, ToDesk: toDesk, Body: body, Disposition: disposition, Captures: append([]string(nil), captureIDs...), Reason: reason})
+}
+
+// Delegate stages a batch delegation (management delegation S2a): one
+// management task per group of spec.Groups.
+func (t *Tray) Delegate(spec DelegateSpec) (string, error) {
+	if len(spec.Groups) == 0 {
+		return "", fmt.Errorf("tray: delegate requires at least one group of records")
+	}
+	raw, err := json.Marshal(spec)
+	if err != nil {
+		return "", fmt.Errorf("tray: encode delegate: %w", err)
+	}
+	return t.stage(StagedIntent{Kind: IntentDelegate, Objective: spec.Objective, Body: string(raw)})
+}
+
+// CancelTask stages the cancellation of one management task.
+func (t *Tray) CancelTask(taskID, reason string) (string, error) {
+	if strings.TrimSpace(taskID) == "" {
+		return "", fmt.Errorf("tray: cancel_task requires the task id")
+	}
+	return t.stage(StagedIntent{Kind: IntentCancelTask, TargetRef: strings.TrimSpace(taskID), Body: strings.TrimSpace(reason)})
+}
+
+// TaskDone stages the end of a management task, once per cell.
+func (t *Tray) TaskDone(note string) (string, error) {
+	for _, in := range t.intents {
+		if in.Kind == IntentTaskDone {
+			return "", fmt.Errorf("tray: Done once per cell")
+		}
+	}
+	return t.stage(StagedIntent{Kind: IntentTaskDone, Body: strings.TrimSpace(note)})
 }
 
 // Reply answers a staged Ask; targetRef is the Ask's correlation id.

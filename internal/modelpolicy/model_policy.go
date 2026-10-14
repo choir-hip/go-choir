@@ -150,6 +150,11 @@ func (m *Manager) EnrichMetadata(ctx context.Context, ownerID, role string, meta
 	thread := ThreadKey(metadata)
 	spec := SpecOf(selection)
 	selection, fallbacks, assignment := Assign(selection, thread)
+	if NormalizeRole(role) == ManagementTaskRole {
+		// A pinned task never fails over to a pool member (R2-9): a
+		// failover could land on a free model the pin exists to avoid.
+		fallbacks = nil
+	}
 	metadata[MetadataSpec] = spec
 	metadata[MetadataAssignment] = assignment
 	metadata[MetadataThread] = thread
@@ -266,9 +271,38 @@ func fnv32(key string) uint32 {
 	return hash
 }
 
+// The management task model (management delegation S2a, design round 2
+// R2-9 and O5): a task has a 10-minute deadline, so it runs on one
+// non-preview model with bounded latency (run 305a582d on this model
+// averaged 29 s a call), never on a pool that assigns a free model per
+// thread. The owner may name another provider and model for the role; a
+// pool, a free model or a preview model is not honoured.
+const (
+	ManagementTaskRole     = agentprofile.ManagementTask
+	ManagementTaskProvider = "opencode-go"
+	ManagementTaskModel    = "deepseek-v4.1-flash"
+)
+
+func managementTaskSelection(p Policy) provideriface.LLMSelection {
+	pin := provideriface.LLMSelection{Provider: ManagementTaskProvider, Model: ManagementTaskModel, ReasoningEffort: "high", Source: "management_task_pin"}
+	selection, ok := p.Roles[ManagementTaskRole]
+	if !ok {
+		return pin
+	}
+	model := strings.ToLower(strings.TrimSpace(selection.Model))
+	if strings.HasPrefix(model, modelcatalog.PoolSpecPrefix) || strings.TrimSpace(selection.Provider) == "" ||
+		strings.HasSuffix(model, "-free") || strings.Contains(model, "preview") {
+		return pin
+	}
+	return fillSelection(selection, p.Defaults)
+}
+
 // Resolve returns the effective selection for role.
 func (p Policy) Resolve(role string) provideriface.LLMSelection {
 	normalized := NormalizeRole(role)
+	if normalized == ManagementTaskRole {
+		return managementTaskSelection(p)
+	}
 	if p.Roles != nil {
 		if selection, ok := p.Roles[normalized]; ok {
 			return fillSelection(selection, p.Defaults)
@@ -319,7 +353,7 @@ func NormalizeRole(role string) string {
 	normalized := strings.TrimSpace(strings.ToLower(role))
 	switch normalized {
 	case agentprofile.Management, agentprofile.Engineering, agentprofile.Research,
-		agentprofile.Conductor, agentprofile.Texture, agentprofile.Email, VerifierRole:
+		agentprofile.Conductor, agentprofile.Texture, agentprofile.Email, VerifierRole, agentprofile.ManagementTask:
 		return normalized
 	case MultimodalVerifierRole, "verifier-multimodal":
 		// One canonical spelling: the hyphenated form normalizes to the
