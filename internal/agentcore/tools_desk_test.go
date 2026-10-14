@@ -43,7 +43,19 @@ func deskEvalExecCtx(t *testing.T) toolregistry.ExecutionContext {
 var (
 	deskTestWorkerBinOnce sync.Once
 	deskTestWorkerBinErr  error
+	deskTestWorkerBinDir  string
 )
+
+// TestMain removes the per-process desk worker binary directory: each one
+// holds a ~170 MB autoputer, and without cleanup every agentcore test run
+// left one in the temp dir (283 of them, ~48 GB, on 2026-10-14).
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if deskTestWorkerBinDir != "" {
+		_ = os.RemoveAll(deskTestWorkerBinDir)
+	}
+	os.Exit(code)
+}
 
 func deskTestWorkerBin(t *testing.T) {
 	t.Helper()
@@ -56,6 +68,7 @@ func deskTestWorkerBin(t *testing.T) {
 			deskTestWorkerBinErr = fmt.Errorf("desk worker bin dir: %v", err)
 			return
 		}
+		deskTestWorkerBinDir = dir
 		bin := filepath.Join(dir, "autoputer")
 		cmd := exec.Command("go", "build", "-o", bin, "../../cmd/autoputer")
 		if out, err := cmd.CombinedOutput(); err != nil {
