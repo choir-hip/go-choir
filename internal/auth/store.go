@@ -1215,12 +1215,34 @@ func (s *Store) CreateRecoveryToken(ctx context.Context, userID, email, emailHas
 		ExpiresAt: now.Add(RecoveryTokenTTL),
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("create recovery token: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// A new link supersedes the account's older unused links, so at most one
+	// recovery token per account is live. Superseded rows are marked used
+	// (not deleted) so the per-email and per-IP rate-limit counts, which read
+	// created_at, keep seeing them.
+	if userID != "" {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE recovery_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL",
+			now, userID,
+		); err != nil {
+			return "", fmt.Errorf("create recovery token: supersede older tokens: %w", err)
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx,
 		"INSERT INTO recovery_tokens (id, user_id, email, email_hash, ip_hash, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		rt.ID, rt.UserID, rt.Email, rt.EmailHash, rt.IPHash, rt.TokenHash, rt.CreatedAt, rt.ExpiresAt,
-	)
-	if err != nil {
+	); err != nil {
 		return "", fmt.Errorf("create recovery token: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("create recovery token: commit: %w", err)
 	}
 
 	return token, nil
@@ -1276,10 +1298,18 @@ func (s *Store) ConsumeRecoveryToken(ctx context.Context, token string) (*Recove
 		return nil, errors.New("recovery token has no associated user")
 	}
 
-	// Mark as used (single-use enforcement).
+	// Mark as used (single-use enforcement). The update is conditional on
+	// used_at still being NULL, so of two concurrent consumers only one can
+	// change the row; the other sees zero rows affected and is refused.
 	now := time.Now().UTC()
-	if _, err := tx.ExecContext(ctx, "UPDATE recovery_tokens SET used_at = ? WHERE id = ?", now, rt.ID); err != nil {
+	res, err := tx.ExecContext(ctx, "UPDATE recovery_tokens SET used_at = ? WHERE id = ? AND used_at IS NULL", now, rt.ID)
+	if err != nil {
 		return nil, fmt.Errorf("mark recovery token used: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return nil, fmt.Errorf("mark recovery token used: %w", err)
+	} else if n != 1 {
+		return nil, errors.New("recovery token already used")
 	}
 
 	if err := tx.Commit(); err != nil {

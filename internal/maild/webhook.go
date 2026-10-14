@@ -69,6 +69,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/api/email/messages", h.HandleMessages)
 	s.HandleFunc("/api/email/messages/", h.HandleMessages)
 	s.HandleFunc("/api/notifications/email-risk-alert", h.HandleRiskAlert)
+	s.HandleFunc(AuthRecoveryLinkPath, h.HandleAuthRecoveryLink)
 }
 
 // HandleResendWebhook verifies and stores Resend webhook metadata.

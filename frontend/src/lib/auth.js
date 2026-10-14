@@ -98,7 +98,19 @@ export async function registerPasskey(email) {
     throw new Error(err.error || `Registration begin failed (${beginRes.status})`);
   }
 
-  const creationOptions = await beginRes.json();
+  return createPasskeyFromOptions(await beginRes.json());
+}
+
+/**
+ * Runs navigator.credentials.create() for server-issued creation options and
+ * posts the result to /auth/register/finish, which stores the passkey and
+ * issues the session. Used by account creation and by account recovery
+ * (where /auth/recovery/verify issues the options for the existing account).
+ *
+ * @param {object} creationOptions - JSON from /auth/register/begin or /auth/recovery/verify
+ * @returns {Promise<{ok: boolean, user?: object}>}
+ */
+export async function createPasskeyFromOptions(creationOptions) {
   const publicKey = creationOptions.publicKey || creationOptions;
 
   // Decode base64url fields for the WebAuthn API.
@@ -150,6 +162,77 @@ export async function registerPasskey(email) {
   }
 
   return finishRes.json();
+}
+
+// ---------------------------------------------------------------------------
+// Account recovery (lost passkey)
+// ---------------------------------------------------------------------------
+
+/**
+ * Error from a recovery endpoint, carrying the HTTP status.
+ */
+export class RecoveryRequestError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = 'RecoveryRequestError';
+    this.status = status;
+  }
+}
+
+/**
+ * Asks Choir to email a recovery link. The server answers the same way
+ * whether or not the address has an account.
+ *
+ * @param {string} email
+ * @returns {Promise<{ok: true}>}
+ */
+export async function requestRecoveryEmail(email) {
+  const res = await fetch('/auth/recovery/request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new RecoveryRequestError(err.error || `Recovery request failed (${res.status})`, res.status);
+  }
+  return { ok: true };
+}
+
+/**
+ * Redeems a recovery link token (single use) and returns WebAuthn creation
+ * options for a new passkey on the same account. Pass the options to
+ * createPasskeyFromOptions; they stay valid for a few minutes, so a cancelled
+ * prompt can be retried without a new email.
+ *
+ * @param {string} token
+ * @returns {Promise<object>}
+ */
+export async function beginRecoveryPasskey(token) {
+  const res = await fetch('/auth/recovery/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new RecoveryRequestError(err.error || `Recovery verify failed (${res.status})`, res.status);
+  }
+  return res.json();
+}
+
+/**
+ * Reads a recovery token from a /recover#token=... URL fragment.
+ *
+ * @param {string} hash - window.location.hash
+ * @returns {string}
+ */
+export function recoveryTokenFromHash(hash) {
+  const raw = String(hash || '').replace(/^#/, '');
+  const value = new URLSearchParams(raw).get('token') || '';
+  return /^choir_rt_[A-Za-z0-9_-]{16,}$/.test(value) ? value : '';
 }
 
 // ---------------------------------------------------------------------------

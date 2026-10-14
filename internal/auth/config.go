@@ -50,6 +50,12 @@ type Config struct {
 	// token can still be used to return the rotated session, preventing concurrent
 	// requests (e.g. multi-tab) from being signed out.
 	RotationGraceTTL time.Duration
+
+	// MaildURL is the host-local maild base URL used to deliver account
+	// recovery links (AUTH_MAILD_URL). Empty disables recovery mail: the
+	// request endpoint still answers identically and logs that no mailer is
+	// configured.
+	MaildURL string
 }
 
 const (
@@ -80,6 +86,9 @@ const (
 
 	// DefaultAuthPort is the default auth service port.
 	DefaultAuthPort = "8081"
+
+	// DefaultMaildURL is the loopback maild endpoint on the host.
+	DefaultMaildURL = "http://127.0.0.1:8087"
 )
 
 // LoadConfig resolves a Config from AUTH_* environment variables.
@@ -98,6 +107,7 @@ func LoadConfig() (*Config, error) {
 		RefreshTokenTTL:   envDuration("AUTH_REFRESH_TOKEN_TTL", DefaultRefreshTokenTTL),
 		RotationGraceTTL:  envDuration("AUTH_ROTATION_GRACE_TTL", 15*time.Second),
 		CookieSecure:      envBool("AUTH_COOKIE_SECURE", false),
+		MaildURL:          envOr("AUTH_MAILD_URL", DefaultMaildURL),
 	}
 
 	originsStr := envOr("AUTH_RP_ORIGINS", DefaultRPOrigins)
