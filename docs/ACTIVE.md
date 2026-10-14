@@ -29,6 +29,12 @@ health probes 200 throughout):
 - L2a fixture passes (merge recall 1.0, 0 false merges); next is the
   paper's enable.
 
+**Owner priorities (2026-10-14):** Autopaper scaling first; the data
+model (object graph on Dolt) always; app packages (station LP: S6 then S7,
+existing apps converted first in S7-0) before building any new app; guest
+updates (station LU) and the capsule Go module proxy alongside. Puter
+review for app agents: `docs/research/puter-everything-2026-10-14/README.md`.
+
 **Waiting on the owner:** the Go-module route for capsules (A, B or C);
 SP0's host, recovery targets, and whether the escrow custodian key and
 platform signing seed have an offline copy; the 12 h snapshot maximum

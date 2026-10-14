@@ -124,7 +124,8 @@ value:
 
 homotopy:
   realism_axis: >-
-    Package completeness: manifest-listed frontend-only module, then the same
+    Package completeness: (owner 2026-10-14) every existing first-party app
+    converted to a package first, then a manifest-listed frontend-only module, then the same
     module dynamically loaded from its manifest, then an optional backend
     service, then persistent app data with a compatible migration, then
     reboot/resume/restore and interrupted-migration recovery, then
@@ -330,3 +331,21 @@ data-flow rule are defined once in S4 ("Egress capability model"). S7 adds:
 - re-approval with a visible diff when an upgrade widens a grant;
 - renewal;
 - operation contracts for `visible-write` endpoints.
+
+## Owner direction, 2026-10-14: convert the existing apps first
+
+"We need to do the app packages upgrade even before we build anything new.
+We need to apply that to all the existing apps that we have." So S7's first
+slice (S7-0) converts Choir's first-party apps, today compiled into one SPA
+through the static registry (`frontend/src/lib/apps/registry.ts`), into
+packages under the same manifest, release and data-compatibility contract
+this file defines: Texture, Mail, Calendar, Files, Autopaper, Web Lens and
+every other registry entry. New apps (the rebuild candidates in
+`docs/research/puter-everything-2026-10-14/README.md`) come only after
+S7-0. Each package's app-data migration should target the shared
+object-graph kinds named in that review (one generic app-document kind,
+`choir.party`, `choir.calendar_event`, ...), and package bytes are fetched
+on demand from a host content-addressed cache (the same pattern as the
+capsule Go module proxy) and distributed by station LU (guest updates).
+Sequencing: in the ledger metamission, S6 and S7 come after the Autopaper
+scaling work (owner priority), not before.

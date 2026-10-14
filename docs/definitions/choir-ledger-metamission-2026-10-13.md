@@ -172,6 +172,19 @@ metamission:
         structured settlement end to end. A 14-day live soak is observed,
         not gating. Telegram out pending the owner; CNA and UDN out if
         Autopaper counts as commercial.
+    - id: LP
+      path: docs/definitions/choir-appdev-s7-app-packages-2026-10-01.md
+      readiness: reviewed
+      status: pending
+      depends_on: [L2a, LR, LU]
+      note: >-
+        App packages, pulled in from the supervised app-development
+        metamission (S6 commit gate, then S7 app packages; owner
+        2026-10-14). First slice S7-0 converts every existing first-party
+        app into a package before any new app is built. After the
+        Autopaper scaling work (owner priority); data model work on the
+        object graph and Dolt continues alongside. S6:
+        docs/definitions/choir-appdev-s6-commit-gate-full-release-2026-10-01.md.
     - id: L5
       path: docs/definitions/choir-ledger-l5-read-models-2026-10-13.md
       readiness: intent
