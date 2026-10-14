@@ -82,6 +82,11 @@ type BootTimeline struct {
 	// Caller-set summary the receipts key off.
 	FirstHealthyOffsetMS int64 `json:"first_healthy_offset_ms,omitempty"`
 
+	// Snapshot is the S3 hibernate/wake section: fence, pause and snapshot
+	// times and bytes on a hibernate record; load and wake-to-healthy times
+	// and the outcome (snapshot | kill | fallback_cold) with its reason.
+	Snapshot *SnapshotTimeline `json:"snapshot,omitempty"`
+
 	start time.Time
 }
 
@@ -288,6 +293,11 @@ func guestMarkPresent(body []byte, phase string) bool {
 
 // persist writes the receipt to the VM's state directory, atomically.
 func (t *BootTimeline) persist(stateDir string) error {
+	return t.persistAs(stateDir, "boot-timeline.json")
+}
+
+// persistAs writes the receipt under name in the VM's state directory.
+func (t *BootTimeline) persistAs(stateDir, name string) error {
 	if t == nil || stateDir == "" {
 		return nil
 	}
@@ -301,7 +311,7 @@ func (t *BootTimeline) persist(stateDir string) error {
 	if err := os.MkdirAll(dir, 0750); err != nil {
 		return err
 	}
-	final := filepath.Join(dir, "boot-timeline.json")
+	final := filepath.Join(dir, name)
 	tmp := final + ".tmp"
 	if err := os.WriteFile(tmp, data, 0640); err != nil {
 		return err

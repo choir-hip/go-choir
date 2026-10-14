@@ -1,0 +1,528 @@
+package vmmanager
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+// Hibernate and wake by Firecracker memory snapshot (S3). The pure parts
+// (metadata, validation, budget, guest and API clients) are in snapshot.go
+// and fcapi.go; this file sequences them on the VM lifecycle.
+
+const (
+	snapshotPingTimeout     = 2 * time.Second
+	snapshotPrepareTimeout  = 90 * time.Second
+	snapshotPauseTimeout    = 10 * time.Second
+	snapshotCreateTimeout   = 15 * time.Minute
+	snapshotAPIReadyTimeout = 5 * time.Second
+	snapshotLoadTimeout     = 2 * time.Minute
+	snapshotResumedTimeout  = 30 * time.Second
+	// snapshotStateOverheadBytes covers the vmstate file beside the memory
+	// file in the budget.
+	snapshotStateOverheadBytes = int64(64) << 20
+)
+
+// hibernateVMSnapshot fences the guest, captures a full snapshot and stops
+// Firecracker. Any failure takes the kill path, so the VM always ends
+// stopped, which is what vmctl records.
+func (m *Manager) hibernateVMSnapshot(vmID string) error {
+	unlock := m.lockVMOperation(vmID)
+	defer unlock()
+
+	m.mu.Lock()
+	inst, ok := m.vms[vmID]
+	if !ok {
+		m.mu.Unlock()
+		return fmt.Errorf("vm %s not found", vmID)
+	}
+	if inst.State != StateRunning {
+		state := inst.State
+		m.mu.Unlock()
+		return fmt.Errorf("vm %s is not running (state=%s)", vmID, state)
+	}
+	cfg := inst.Config
+	hostURL := inst.HostURL
+	m.mu.Unlock()
+
+	tl := newBootTimeline(vmID, "hibernate_snapshot")
+	tl.Kind = "vm_hibernate_timeline"
+	tl.ComputerID = cfg.ComputerID
+	tl.Epoch = cfg.Epoch
+	tl.MemSizeMiB = cfg.MachineMemSizeMib
+	tl.VCPUCount = cfg.MachineCPUCount
+	tl.HostURL = hostURL
+	snap := &SnapshotTimeline{Mode: HibernateModeSnapshot}
+	tl.Snapshot = snap
+	tl.mark("hibernate_begin")
+
+	meta, stopped, reason, err := m.captureSnapshot(vmID, cfg, hostURL, tl, snap)
+	if reason == "" {
+		snap.Outcome = "snapshot"
+		snap.Bytes = meta.Bytes
+		snap.CreatedAt = meta.CreatedAt.UTC().Format(time.RFC3339Nano)
+		if !meta.ResumeDeadline.IsZero() {
+			snap.ResumeDeadline = meta.ResumeDeadline.UTC().Format(time.RFC3339Nano)
+		}
+		tl.finish("hibernated", nil)
+		m.persistHibernateTimeline(tl)
+		log.Printf("vmmanager: hibernated VM %s by snapshot (fence=%dms pause=%dms snapshot=%dms bytes=%d resume_deadline=%s)",
+			vmID, snap.FenceMS, snap.PauseMS, snap.SnapshotMS, snap.Bytes, snap.ResumeDeadline)
+		return nil
+	}
+
+	// Kill path: today's hibernate. The next wake cold boots, which is a crash
+	// boot (no planned-restart marker is written by hibernate).
+	m.discardSnapshotFiles(vmID)
+	tl.BootKind = "hibernate_kill"
+	snap.Outcome = "kill"
+	snap.Reason = reason
+	log.Printf("vmmanager: snapshot hibernate of VM %s not possible (%s: %v); using the kill path", vmID, reason, err)
+	var killErr error
+	if stopped {
+		m.mu.Lock()
+		if current := m.vms[vmID]; current != nil {
+			current.State = StateHibernated
+			current.Healthy = false
+		}
+		m.mu.Unlock()
+	} else {
+		killErr = m.hibernateVMKill(vmID)
+	}
+	tl.finish("killed", err)
+	m.persistHibernateTimeline(tl)
+	return killErr
+}
+
+// captureSnapshot runs the fence, pause, snapshot, stop and commit steps.
+// reason is empty on success; otherwise it names why the kill path must be
+// used, and stopped reports whether Firecracker was already stopped.
+func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl *BootTimeline, snap *SnapshotTimeline) (*SnapshotMeta, bool, string, error) {
+	sock := m.apiSocketPath(vmID)
+	if _, err := os.Stat(sock); err != nil {
+		return nil, false, snapshotReasonNoAPISocket, err
+	}
+	api := newFCAPIClient(sock)
+	pingCtx, cancel := context.WithTimeout(context.Background(), snapshotPingTimeout)
+	err := api.Ping(pingCtx)
+	cancel()
+	if err != nil {
+		return nil, false, snapshotReasonNoAPISocket, err
+	}
+	hostPort, ok := m.hostPortFromHostURL(hostURL)
+	if !ok {
+		return nil, false, snapshotReasonIdentity, fmt.Errorf("host URL %q names no host port", hostURL)
+	}
+	launchConfig, err := os.ReadFile(filepath.Join(m.vmStateDir(vmID), "fc-config.json"))
+	if err != nil {
+		return nil, false, snapshotReasonLaunchConfig, err
+	}
+	need := int64(cfg.MachineMemSizeMib)<<20 + snapshotStateOverheadBytes
+	if !m.ensureSnapshotRoom(vmID, need) {
+		return nil, false, snapshotReasonDiskBudget, fmt.Errorf("no room for %d bytes within budget %d", need, m.snapshotBudgetBytes())
+	}
+	tl.mark("budget_ok")
+
+	// Fence: the guest closes run admission, confirms nothing is running and
+	// syncs. A busy guest answers 409 and reopens admission itself.
+	fenceStart := time.Now()
+	prepareCtx, cancel := context.WithTimeout(context.Background(), snapshotPrepareTimeout)
+	prepared, reason, err := guestHibernatePrepare(prepareCtx, hostURL)
+	cancel()
+	snap.FenceMS = time.Since(fenceStart).Milliseconds()
+	if reason != "" {
+		return nil, false, reason, err
+	}
+	tl.markDetail("guest_fenced", fmt.Sprintf("capability_expires_at=%s", prepared.CapabilityExpiresAt.UTC().Format(time.RFC3339)))
+
+	pauseStart := time.Now()
+	pauseCtx, cancel := context.WithTimeout(context.Background(), snapshotPauseTimeout)
+	err = api.Pause(pauseCtx)
+	cancel()
+	snap.PauseMS = time.Since(pauseStart).Milliseconds()
+	if err != nil {
+		return nil, false, snapshotReasonPauseFailed, err
+	}
+	tl.mark("vm_paused")
+
+	partial := m.snapshotPartialDir(vmID)
+	if err := os.RemoveAll(partial); err != nil {
+		return nil, false, snapshotReasonCreateFailed, err
+	}
+	if err := os.MkdirAll(partial, 0o700); err != nil {
+		return nil, false, snapshotReasonCreateFailed, err
+	}
+	if err := os.Chmod(partial, 0o700); err != nil {
+		return nil, false, snapshotReasonCreateFailed, err
+	}
+	statePath := filepath.Join(partial, snapshotStateName)
+	memPath := filepath.Join(partial, snapshotMemName)
+	createStart := time.Now()
+	createCtx, cancel := context.WithTimeout(context.Background(), snapshotCreateTimeout)
+	err = api.CreateFullSnapshot(createCtx, statePath, memPath)
+	cancel()
+	snap.SnapshotMS = time.Since(createStart).Milliseconds()
+	if err != nil {
+		return nil, false, snapshotReasonCreateFailed, err
+	}
+	tl.mark("snapshot_created")
+
+	// Stop Firecracker. Its memory now lives in the snapshot; the guest is
+	// paused, so nothing runs between capture and stop.
+	m.mu.Lock()
+	if current := m.vms[vmID]; current != nil {
+		m.killFirecrackerProcess(current, "hibernate-snapshot")
+		current.State = StateHibernated
+		current.Healthy = false
+	}
+	m.mu.Unlock()
+	tl.mark("firecracker_stopped")
+
+	meta, err := m.commitSnapshot(vmID, cfg, hostURL, hostPort, launchConfig, prepared, snap)
+	if err != nil {
+		return nil, true, snapshotReasonCommitFailed, err
+	}
+	tl.mark("snapshot_committed")
+	return meta, true, "", nil
+}
+
+// commitSnapshot makes the captured files resumable: root-only modes, fsync,
+// disk identities taken after Firecracker stopped, metadata, then one rename
+// of snapshot.partial/ to snapshot/. An interrupted commit leaves only the
+// partial dir, which is never loaded.
+func (m *Manager) commitSnapshot(vmID string, cfg VMConfig, hostURL string, hostPort int, launchConfig []byte, prepared guestHibernatePrepareResponse, snap *SnapshotTimeline) (*SnapshotMeta, error) {
+	partial := m.snapshotPartialDir(vmID)
+	for _, name := range []string{snapshotStateName, snapshotMemName} {
+		path := filepath.Join(partial, name)
+		if err := os.Chmod(path, 0o600); err != nil {
+			return nil, err
+		}
+		if err := syncRegularFile(path); err != nil {
+			return nil, err
+		}
+	}
+	disks := make([]SnapshotDiskIdentity, 0, 3)
+	for _, path := range m.writableDiskPaths(vmID, cfg) {
+		id, err := diskIdentity(path)
+		if err != nil {
+			return nil, fmt.Errorf("writable disk %s: %w", path, err)
+		}
+		disks = append(disks, id)
+	}
+	now := time.Now().UTC()
+	meta := &SnapshotMeta{
+		Version:            snapshotMetaVersion,
+		VMID:               vmID,
+		ComputerID:         cfg.ComputerID,
+		Epoch:              cfg.Epoch,
+		HostPort:           hostPort,
+		HostURL:            hostURL,
+		FirecrackerVersion: firecrackerBuildVersion(m.cfg.FirecrackerBinPath),
+		HostKernelRelease:  hostKernelRelease(),
+		LaunchConfigSHA256: sha256Hex(launchConfig),
+		Config:             snapshotStoredConfig(cfg),
+		CredentialDiskPath: cfg.credentialDiskPath,
+		Disks:              disks,
+		MemSizeMiB:         cfg.MachineMemSizeMib,
+		VCPUCount:          cfg.MachineCPUCount,
+		GuestBuild:         prepared.GuestBuild,
+		CreatedAt:          now,
+		ResumeDeadline:     resumeDeadlineFrom(prepared.CapabilityExpiresAt),
+		Bytes:              dirLogicalBytes(partial),
+		FenceMS:            snap.FenceMS,
+		PauseMS:            snap.PauseMS,
+		SnapshotMS:         snap.SnapshotMS,
+	}
+	if meta.FirecrackerVersion == "" || meta.HostKernelRelease == "" {
+		return nil, fmt.Errorf("firecracker version or host kernel release unknown")
+	}
+	if err := writeSnapshotMeta(partial, meta); err != nil {
+		return nil, err
+	}
+	final := m.snapshotDir(vmID)
+	if err := os.RemoveAll(final); err != nil {
+		return nil, err
+	}
+	if err := os.Rename(partial, final); err != nil {
+		return nil, err
+	}
+	if err := syncDirectory(m.vmStateDir(vmID)); err != nil {
+		return nil, err
+	}
+	m.reserveSnapshotPort(vmID, hostPort)
+	return meta, nil
+}
+
+// ResumeVMFromSnapshot wakes a hibernated VM from its snapshot, at most once.
+// expect carries what vmctl would cold boot now (machine shape, hold,
+// computer id); any difference from the snapshot's launch is a refusal. On
+// success the VM runs with the snapshot's epoch: no new realization, no new
+// credentials, no restart pass in the guest. Every refusal or failure
+// returns *SnapshotFallbackError and the caller cold boots, which is a crash
+// boot under the restart rule.
+func (m *Manager) ResumeVMFromSnapshot(vmID string, expect VMConfig) (*VMInstance, error) {
+	unlock := m.lockVMOperation(vmID)
+	defer unlock()
+
+	noSnapshot := &SnapshotFallbackError{VMID: vmID, Reason: snapshotReasonNoSnapshot}
+	fallback := func(reason string, err error) (*VMInstance, error) {
+		m.discardSnapshotFiles(vmID)
+		m.setSnapshotFallback(vmID, reason)
+		log.Printf("vmmanager: snapshot resume of VM %s not used (%s): %v", vmID, reason, err)
+		return nil, &SnapshotFallbackError{VMID: vmID, Reason: reason, Err: err}
+	}
+
+	dir := m.snapshotDir(vmID)
+	meta, err := readSnapshotMeta(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		// An interrupted capture is never resumable.
+		_ = os.RemoveAll(m.snapshotPartialDir(vmID))
+		return nil, noSnapshot
+	}
+	if err != nil {
+		return fallback(snapshotReasonUnreadable, err)
+	}
+	if m.hibernateMode() != HibernateModeSnapshot {
+		// Rolled back to kill mode: never load.
+		return fallback(snapshotReasonModeKill, nil)
+	}
+
+	m.mu.Lock()
+	prev := m.vms[vmID]
+	if prev != nil && (prev.State == StateRunning || prev.State == StatePending) {
+		// A running computer's disks have moved past the snapshot.
+		m.mu.Unlock()
+		m.discardSnapshotFiles(vmID)
+		return prev, nil
+	}
+	if prev == nil && m.liveFirecrackerForVMLocked(vmID) {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("%w: vm %s", ErrLiveUnmanaged, vmID)
+	}
+	m.mu.Unlock()
+
+	tl := newBootTimeline(vmID, "snapshot_resume")
+	tl.mark("boot_begin")
+	tl.FirecrackerBin = m.cfg.FirecrackerBinPath
+	tl.FirecrackerVer = firecrackerBuildVersion(m.cfg.FirecrackerBinPath)
+	tl.HostKernelRelease = hostKernelRelease()
+	snap := &SnapshotTimeline{
+		Mode:       HibernateModeSnapshot,
+		FenceMS:    meta.FenceMS,
+		PauseMS:    meta.PauseMS,
+		SnapshotMS: meta.SnapshotMS,
+		Bytes:      meta.Bytes,
+		CreatedAt:  meta.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	if !meta.ResumeDeadline.IsZero() {
+		snap.ResumeDeadline = meta.ResumeDeadline.UTC().Format(time.RFC3339Nano)
+	}
+	tl.Snapshot = snap
+
+	if reason := m.validateSnapshot(dir, meta, snapshotValidation{
+		Now:                time.Now(),
+		FirecrackerVersion: tl.FirecrackerVer,
+		HostKernelRelease:  tl.HostKernelRelease,
+		Expect:             expect,
+	}); reason != "" {
+		return fallback(reason, nil)
+	}
+	tl.mark("snapshot_validated")
+	cfg, _ := m.expectedLaunchConfig(meta, expect)
+	cfg.Epoch = meta.Epoch
+	cfg.BootKind = "snapshot_resume"
+	tl.ComputerID = cfg.ComputerID
+	tl.Epoch = cfg.Epoch
+	tl.KernelImagePath = cfg.KernelImagePath
+	tl.InitrdPath = cfg.InitrdPath
+	tl.StoreDiskPath = cfg.StoreDiskPath
+	tl.MemSizeMiB = cfg.MachineMemSizeMib
+	tl.VCPUCount = cfg.MachineCPUCount
+	tl.HostURL = meta.HostURL
+	tl.GuestIP, _ = m.guestAndHostIP(meta.HostPort)
+
+	m.mu.Lock()
+	for id, other := range m.vms {
+		if id != vmID && other.HostURL == meta.HostURL && (other.State == StateRunning || other.State == StatePending) {
+			m.mu.Unlock()
+			return fallback(snapshotReasonSubnetTaken, fmt.Errorf("VM %s routes %s", id, meta.HostURL))
+		}
+	}
+	if !m.reclaimHostPortIfStale(vmID, meta.HostPort) {
+		m.mu.Unlock()
+		return fallback(snapshotReasonSubnetTaken, fmt.Errorf("a live interface holds the subnet of %s", meta.HostURL))
+	}
+	// One-shot: durable before any load. From here a crash leads to a cold
+	// boot, never a second load.
+	if err := consumeSnapshot(dir, meta, time.Now()); err != nil {
+		m.mu.Unlock()
+		return fallback(snapshotReasonConsumeFailed, err)
+	}
+	tl.mark("snapshot_consumed")
+	m.reserveHostURLLocked(meta.HostURL)
+	inst := &VMInstance{
+		Config:       cfg,
+		State:        StatePending,
+		HostURL:      meta.HostURL,
+		StartedAt:    time.Now(),
+		done:         make(chan struct{}),
+		BootTimeline: tl,
+	}
+	m.vms[vmID] = inst
+	m.mu.Unlock()
+
+	restoreFailed := func(reason string, err error) (*VMInstance, error) {
+		m.mu.Lock()
+		m.killFirecrackerProcess(inst, "snapshot-resume-failed")
+		if prev != nil {
+			m.vms[vmID] = prev
+		} else {
+			delete(m.vms, vmID)
+		}
+		m.mu.Unlock()
+		snap.Outcome = "fallback_cold"
+		snap.Reason = reason
+		tl.finish("failed", err)
+		if perr := tl.persist(m.cfg.StateDir); perr != nil {
+			log.Printf("vmmanager: warning: could not persist snapshot resume timeline for VM %s: %v", vmID, perr)
+		}
+		return fallback(reason, err)
+	}
+
+	sock, ok := m.prepareAPISocket(vmID)
+	if !ok {
+		return restoreFailed(snapshotReasonSpawnFailed, fmt.Errorf("API socket unavailable"))
+	}
+	m.mu.Lock()
+	m.prepareVMNetwork(vmID, meta.HostPort, cfg.GuestPort)
+	err = m.startFirecrackerProcess(vmID, firecrackerRestoreArgs(vmID, sock))
+	m.mu.Unlock()
+	if err != nil {
+		return restoreFailed(snapshotReasonSpawnFailed, err)
+	}
+	tl.mark("firecracker_spawned")
+
+	api := newFCAPIClient(sock)
+	readyCtx, cancel := context.WithTimeout(context.Background(), snapshotAPIReadyTimeout)
+	err = api.WaitReady(readyCtx)
+	cancel()
+	if err != nil {
+		return restoreFailed(snapshotReasonSpawnFailed, err)
+	}
+	loadStart := time.Now()
+	loadCtx, cancel := context.WithTimeout(context.Background(), snapshotLoadTimeout)
+	err = api.LoadSnapshot(loadCtx, filepath.Join(dir, snapshotStateName), filepath.Join(dir, snapshotMemName))
+	cancel()
+	snap.LoadMS = time.Since(loadStart).Milliseconds()
+	if err != nil {
+		return restoreFailed(snapshotReasonLoadFailed, err)
+	}
+	tl.mark("snapshot_loaded")
+
+	// The guest steps its clock (stale since the snapshot), refreshes
+	// process-local state, and reopens run admission.
+	resumedCtx, cancel := context.WithTimeout(context.Background(), snapshotResumedTimeout)
+	resumed, err := guestHibernateResumed(resumedCtx, meta.HostURL, time.Now())
+	cancel()
+	if err != nil {
+		return restoreFailed(snapshotReasonGuestResumed, err)
+	}
+	snap.ClockStepMS = resumed.ClockStepMS
+	tl.markDetail("guest_resumed", fmt.Sprintf("clock_step_ms=%d", resumed.ClockStepMS))
+
+	alive := func() bool {
+		m.mu.Lock()
+		pid := inst.PID
+		m.mu.Unlock()
+		if pid <= 0 {
+			return true
+		}
+		return processExists(pid)
+	}
+	if err := m.waitForGuestReady(meta.HostURL, tl, alive); err != nil {
+		return restoreFailed(snapshotReasonHealthFailed, err)
+	}
+	m.mu.Lock()
+	inst.State = StateRunning
+	inst.Healthy = true
+	inst.LastHealthCheck = time.Now()
+	inst.LastHealthyAt = inst.LastHealthCheck
+	m.mu.Unlock()
+	tl.firstHealthy()
+	snap.Outcome = "snapshot"
+	snap.WakeToHealthyMS = tl.FirstHealthyOffsetMS
+
+	// The resumed VM maps the memory file MAP_PRIVATE for its whole life.
+	// Removing the names is safe (the mapping holds the inode); the blocks are
+	// freed when this Firecracker exits.
+	m.discardSnapshotFiles(vmID)
+	tl.finish("healthy", nil)
+	if perr := tl.persist(m.cfg.StateDir); perr != nil {
+		log.Printf("vmmanager: warning: could not persist snapshot resume timeline for VM %s: %v", vmID, perr)
+	}
+	log.Printf("vmmanager: resumed VM %s from snapshot (host=%s epoch=%d load=%dms wake_to_healthy=%dms clock_step=%dms)",
+		vmID, meta.HostURL, cfg.Epoch, snap.LoadMS, snap.WakeToHealthyMS, snap.ClockStepMS)
+	return inst, nil
+}
+
+// setSnapshotFallback remembers why a wake did not use a snapshot so the
+// cold boot that follows records it.
+func (m *Manager) setSnapshotFallback(vmID, reason string) {
+	m.snapshotPortMu.Lock()
+	defer m.snapshotPortMu.Unlock()
+	if m.snapshotFallback == nil {
+		m.snapshotFallback = map[string]string{}
+	}
+	m.snapshotFallback[vmID] = reason
+}
+
+func (m *Manager) takeSnapshotFallback(vmID string) string {
+	m.snapshotPortMu.Lock()
+	defer m.snapshotPortMu.Unlock()
+	reason := m.snapshotFallback[vmID]
+	delete(m.snapshotFallback, vmID)
+	return reason
+}
+
+// recordSnapshotFallbackOnBoot discards any snapshot before a cold boot and
+// marks the boot timeline with why the snapshot was not used.
+func (m *Manager) recordSnapshotFallbackOnBoot(vmID string, tl *BootTimeline) {
+	reason := m.takeSnapshotFallback(vmID)
+	if m.discardSnapshotFiles(vmID) && reason == "" {
+		reason = snapshotReasonColdBoot
+	}
+	if reason == "" {
+		return
+	}
+	log.Printf("vmmanager: cold boot of VM %s after snapshot fallback (%s)", vmID, reason)
+	if tl != nil {
+		tl.markDetail("snapshot_fallback", "reason="+reason)
+		tl.mu.Lock()
+		tl.Snapshot = &SnapshotTimeline{Mode: m.hibernateMode(), Outcome: "fallback_cold", Reason: reason}
+		tl.mu.Unlock()
+	}
+}
+
+func (m *Manager) persistHibernateTimeline(tl *BootTimeline) {
+	if err := tl.persistAs(m.cfg.StateDir, hibernateTimelineName); err != nil {
+		log.Printf("vmmanager: warning: could not persist hibernate timeline for VM %s: %v", tl.VMID, err)
+	}
+}
+
+// HibernateTimelineForVM returns the VM's most recent hibernate record.
+func (m *Manager) HibernateTimelineForVM(vmID string) (*BootTimeline, error) {
+	data, err := os.ReadFile(filepath.Join(m.cfg.StateDir, vmID, hibernateTimelineName))
+	if err != nil {
+		return nil, err
+	}
+	var t BootTimeline
+	if err := json.Unmarshal(data, &t); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}

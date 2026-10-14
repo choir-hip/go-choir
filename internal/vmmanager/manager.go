@@ -298,6 +298,18 @@ type ManagerConfig struct {
 	// BalloonStatsPollingIntervalS is the balloon statistics interval in
 	// seconds; 0 disables statistics. Only meaningful with the balloon on.
 	BalloonStatsPollingIntervalS int
+
+	// HibernateMode selects hibernate behavior (VM_HIBERNATE_MODE):
+	// "kill" (default) stops Firecracker and cold boots on wake; "snapshot"
+	// launches with an API socket and hibernates by memory snapshot, falling
+	// back to kill (snapshot.go; S3).
+	HibernateMode string
+	// SnapshotBudgetGiB bounds the logical bytes of all committed snapshots
+	// (VM_SNAPSHOT_BUDGET_GIB, default DefaultSnapshotBudgetGiB).
+	SnapshotBudgetGiB int
+	// SnapshotMaxAge bounds how long a snapshot stays resumable
+	// (VM_SNAPSHOT_MAX_AGE, default DefaultSnapshotMaxAge).
+	SnapshotMaxAge time.Duration
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -336,6 +348,16 @@ type Manager struct {
 	// receiptMaxBytes bounds the receipt file (0 = default).
 	receiptMu       sync.Mutex
 	receiptMaxBytes int64
+
+	// snapshotPortMu guards snapshot host-port reservations and the pending
+	// snapshot-fallback reasons recorded for the next cold boot (S3).
+	snapshotPortMu   sync.Mutex
+	snapshotPorts    map[int]string
+	snapshotFallback map[string]string
+
+	// firecrackerStarter replaces the process start in tests; nil runs the
+	// real binary.
+	firecrackerStarter func(vmID string, args []string) error
 }
 
 func (m *Manager) StateDir() string {
@@ -436,6 +458,11 @@ func (m *Manager) allocateHostPortLocked(vmID string) (int, error) {
 	for i := 0; i < maxAttempts; i++ {
 		hostPort := m.nextPort
 		m.nextPort++
+		// A hibernated VM's snapshot holds this subnet's IP and MAC in guest
+		// memory; never hand it to another VM (S3).
+		if m.snapshotPortHeldByOther(vmID, hostPort) {
+			continue
+		}
 		if m.reclaimHostPortIfStale(vmID, hostPort) {
 			return hostPort, nil
 		}
@@ -510,8 +537,9 @@ func (m *Manager) Start() {
 	m.healthDone = make(chan struct{})
 	m.mu.Unlock()
 
+	m.loadSnapshotReservations()
 	go m.healthCheckLoop()
-	log.Printf("vmmanager: started with state_dir=%s base_port=%d", m.cfg.StateDir, m.cfg.HostBasePort)
+	log.Printf("vmmanager: started with state_dir=%s base_port=%d hibernate_mode=%s", m.cfg.StateDir, m.cfg.HostBasePort, m.hibernateMode())
 }
 
 // Stop shuts down all managed VMs and stops the health checker.
@@ -706,6 +734,10 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	}
 	tl := newBootTimeline(cfg.VMID, bootKind)
 	tl.mark("boot_begin")
+	// Any cold boot moves the disks past a memory snapshot: discard it first,
+	// so it can never be loaded over them (S3). A wake that tried the
+	// snapshot and fell back names why.
+	m.recordSnapshotFallbackOnBoot(cfg.VMID, tl)
 	tl.FirecrackerBin = m.cfg.FirecrackerBinPath
 	tl.FirecrackerVer = firecrackerBuildVersion(m.cfg.FirecrackerBinPath)
 	tl.HostKernelRelease = hostKernelRelease()
@@ -749,30 +781,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	tl.markDetail("boot_epoch", fmt.Sprintf("epoch=%d", cfg.Epoch))
 
 	// Apply defaults from manager config.
-	if cfg.KernelImagePath == "" {
-		cfg.KernelImagePath = m.cfg.KernelImagePath
-	}
-	if cfg.InitrdPath == "" {
-		cfg.InitrdPath = m.cfg.InitrdPath
-	}
-	if cfg.RootfsPath == "" {
-		cfg.RootfsPath = m.cfg.RootfsPath
-	}
-	if cfg.StoreDiskPath == "" {
-		cfg.StoreDiskPath = m.cfg.StoreDiskPath
-	}
-	if cfg.KernelParams == "" {
-		cfg.KernelParams = m.cfg.KernelParams
-	}
-	if cfg.GuestPort == 0 {
-		cfg.GuestPort = m.cfg.GuestPort
-	}
-	if cfg.MachineCPUCount == 0 {
-		cfg.MachineCPUCount = m.cfg.MachineCPUCount
-	}
-	if cfg.MachineMemSizeMib == 0 {
-		cfg.MachineMemSizeMib = m.cfg.MachineMemSizeMib
-	}
+	m.applyLaunchDefaults(&cfg)
 
 	// Prepare the per-VM mutable data image.
 	if cfg.StoreDiskPath != "" {
@@ -917,6 +926,35 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	return inst, nil
 }
 
+// applyLaunchDefaults fills empty launch fields from the manager config. A
+// snapshot's expected launch config is rebuilt with the same rules.
+func (m *Manager) applyLaunchDefaults(cfg *VMConfig) {
+	if cfg.KernelImagePath == "" {
+		cfg.KernelImagePath = m.cfg.KernelImagePath
+	}
+	if cfg.InitrdPath == "" {
+		cfg.InitrdPath = m.cfg.InitrdPath
+	}
+	if cfg.RootfsPath == "" {
+		cfg.RootfsPath = m.cfg.RootfsPath
+	}
+	if cfg.StoreDiskPath == "" {
+		cfg.StoreDiskPath = m.cfg.StoreDiskPath
+	}
+	if cfg.KernelParams == "" {
+		cfg.KernelParams = m.cfg.KernelParams
+	}
+	if cfg.GuestPort == 0 {
+		cfg.GuestPort = m.cfg.GuestPort
+	}
+	if cfg.MachineCPUCount == 0 {
+		cfg.MachineCPUCount = m.cfg.MachineCPUCount
+	}
+	if cfg.MachineMemSizeMib == 0 {
+		cfg.MachineMemSizeMib = m.cfg.MachineMemSizeMib
+	}
+}
+
 // StopVM cleanly stops a running VM.
 func (m *Manager) StopVM(vmID string) error {
 	m.mu.Lock()
@@ -943,11 +981,19 @@ func (m *Manager) StopVM(vmID string) error {
 // later, restoring the same user state from the persistent directory
 // (VAL-CROSS-116).
 //
-// Note: Full memory snapshot/restore is a future Firecracker feature.
-// For now, hibernate is semantically equivalent to stop with the
-// persistent directory preserved, and resume reboots the VM with the
-// same persistent data.
+// In snapshot mode (VM_HIBERNATE_MODE=snapshot) the guest is fenced and its
+// memory is captured as a Firecracker snapshot that a later wake loads once
+// (snapshot_lifecycle.go). Every failure there, and kill mode, take the path
+// below: Firecracker is killed and the next wake cold boots from the
+// persistent directory, which is a crash boot under the restart rule.
 func (m *Manager) HibernateVM(vmID string) error {
+	if m.hibernateMode() == HibernateModeSnapshot {
+		return m.hibernateVMSnapshot(vmID)
+	}
+	return m.hibernateVMKill(vmID)
+}
+
+func (m *Manager) hibernateVMKill(vmID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -995,6 +1041,8 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 
 	// Clean up the old process.
 	m.forceCleanup(vmID, "resume")
+	// This path cold boots: a memory snapshot can no longer be loaded (S3).
+	m.recordSnapshotFallbackOnBoot(vmID, nil)
 
 	// Assign a new host port/subnet (old one may be reused if it is actually
 	// free, but stale linkdown taps from failed boots must not capture routing).
@@ -1288,6 +1336,7 @@ func (m *Manager) DestroyVMState(vmID string) error {
 	if err := os.RemoveAll(stateDir); err != nil {
 		return fmt.Errorf("destroy VM state %s: %w", vmID, err)
 	}
+	m.releaseSnapshotPort(vmID)
 	log.Printf("vmmanager: destroyed stale VM state %s (%s)", vmID, stateDir)
 	return nil
 }
@@ -1837,11 +1886,6 @@ func consoleLogPath(stateDir, vmID string) string {
 // hostPort is the host port assigned for this VM, used for setting up
 // networking. guestPort is the port the guest autoputer listens on.
 func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}, hostPort int, guestPort int) error {
-	bin := m.cfg.FirecrackerBinPath
-	if bin == "" {
-		bin = "firecracker"
-	}
-
 	// Write the config to a temp file.
 	configData, err := json.Marshal(fcConfig)
 	if err != nil {
@@ -1858,6 +1902,23 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 		return fmt.Errorf("write firecracker config: %w", err)
 	}
 
+	m.prepareVMNetwork(vmID, hostPort, guestPort)
+
+	// Build the Firecracker command.
+	// --no-api disables the Firecracker API socket (kill hibernate mode);
+	// snapshot mode serves the API on <state>/<vm>/api/fc.sock instead
+	// (firecrackerLaunchArgs, S3).
+	// --enable-pci matches the upstream microvm runner so the guest sees the
+	// expected Firecracker device model.
+	// --id sets the VM identifier.
+	// --config-file provides the VM configuration.
+	return m.startFirecrackerProcess(vmID, m.firecrackerLaunchArgs(vmID, configPath))
+}
+
+// prepareVMNetwork creates the VM's tap and host-side routing for its /30
+// subnet. Boot and snapshot restore share it: a restored guest keeps the IP
+// and MAC it had, so the tap must be exactly the one it was launched with.
+func (m *Manager) prepareVMNetwork(vmID string, hostPort int, guestPort int) {
 	// Create the tap device for VM networking.
 	// Firecracker requires the tap device to exist before launching.
 	// The tap name comes from the config's host_dev_name field.
@@ -1873,6 +1934,19 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 	if err := m.setupHostNetworking(tapName, hostIP, hostPort, guestIP, guestPort); err != nil {
 		log.Printf("vmmanager: warning: host networking setup failed for %s: %v", tapName, err)
 	}
+}
+
+// startFirecrackerProcess starts Firecracker with args, retains its serial
+// console, records its PID on the tracked instance, and watches its exit.
+// Boot and snapshot restore share it.
+func (m *Manager) startFirecrackerProcess(vmID string, args []string) error {
+	if m.firecrackerStarter != nil {
+		return m.firecrackerStarter(vmID, args)
+	}
+	bin := m.cfg.FirecrackerBinPath
+	if bin == "" {
+		bin = "firecracker"
+	}
 
 	// Firecracker v1.15.1 does not deserialize serial_out_path from its
 	// --no-api config file. The kernel's ttyS0 output is instead written to
@@ -1886,18 +1960,7 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 		return fmt.Errorf("open console sink for VM %s: %w", vmID, err)
 	}
 
-	// Build the Firecracker command.
-	// --no-api disables the Firecracker API socket (we use config file).
-	// --enable-pci matches the upstream microvm runner so the guest sees the
-	// expected Firecracker device model.
-	// --id sets the VM identifier.
-	// --config-file provides the VM configuration.
-	cmd := exec.Command(bin,
-		"--no-api",
-		"--enable-pci",
-		"--id", vmID,
-		"--config-file", configPath,
-	)
+	cmd := exec.Command(bin, args...)
 	cmd.Stdout = console
 	cmd.Stderr = os.Stderr
 

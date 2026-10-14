@@ -111,6 +111,21 @@ func LoadConfigFromEnv() ManagerConfig {
 			cfg.BalloonStatsPollingIntervalS = n
 		}
 	}
+	// S3 snapshot hibernate (snapshot.go). Default kill: rollback is unsetting
+	// VM_HIBERNATE_MODE.
+	if v := strings.TrimSpace(os.Getenv("VM_HIBERNATE_MODE")); v != "" {
+		cfg.HibernateMode = strings.ToLower(v)
+	}
+	if v := os.Getenv("VM_SNAPSHOT_BUDGET_GIB"); v != "" {
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n > 0 {
+			cfg.SnapshotBudgetGiB = n
+		}
+	}
+	if v := os.Getenv("VM_SNAPSHOT_MAX_AGE"); v != "" {
+		if d, err := time.ParseDuration(strings.TrimSpace(v)); err == nil && d > 0 {
+			cfg.SnapshotMaxAge = d
+		}
+	}
 
 	if v := os.Getenv("VM_SOURCE_SEED_REPO"); v != "" {
 		cfg.SourceSeedRepoPath = strings.TrimSpace(v)
