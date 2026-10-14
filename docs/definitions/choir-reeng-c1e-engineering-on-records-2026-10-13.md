@@ -233,43 +233,28 @@ boundaries:
 now:
   status: working
   slice: >-
-    2026-10-14 01:50 UTC: B1 steps 1-4 are built on branch c1e-b1 (base
-    7d218d6f; fb042089, 6a9ad2cb, 510b110b red, b2e93fae, 69d4d0b5,
-    1512aa59; net -3,710 lines). Failure items 1-12 are tested, and four
-    deliberate breaks each failed their test. Store, runtime shards,
-    build and vet all pass locally. The open points the build named:
-    - the store cancel cannot stop a live loop, so a new
-      stopCancelledAssignmentRun stops it (trajectory cancel still relies
-      on the trajectory command);
-    - the reconcile and the run-end settle can each mint the final
-      Report, exactly one, with a reason that depends on which ran first;
-    - leftover dead code (verifier InspectBundle, unexported
-      Inbox/Emits/Assign/Message/Emit,
-      ListRunsBySelfDevelopmentOperation, two legacy reads in
-      texture_controller.go) goes to a follow-up deletion;
-    - the packet-world cancel tests were deleted with the packet path;
-    - a successful Cast and Verify need staging, through the
-      engineering drill.
-    Next: rebase onto main after L2a lands, tag reeng-c1e-pre-b1, record
-    the paper's publications, deploy, then run the engineering drill and
-    a paper run. Earlier:
-    B0 landed and deployed at 19e56c54 (CI 38481001401). Contents:
-    - the wire-neutral rename CoagentSourcePacketPayload -> SourcePacket
-      (5766c87c);
-    - the C1E gate row in report mode (90f8b94e), baseline 2,011, now 2,004;
-    - GET /api/runtime/census (291ad648);
-    - the trace bundle's census layer, I7 read from the census, I2 and I3
-      on records, and --require so a required rule that does not pass
-      exits 1 (86e7ea0f);
-    - the tracer off work_items (86e7ea0f).
-    The first B0 CI (86e7ea0f) failed on a data race in L1a's crash-settle
-    test, not caused by B0. It was documented (bce3d7bd) and fixed: the
-    post-commit observer is now an atomic pointer (19e56c54). The step-7
-    uncertainty is answered on the code read
-    (docs/reports/c1e-management-packet-reads-2026-10-13.md); see belief.
-    Next: B1
-  source_ref: 19e56c54
-  deploy_identity: staging 19e56c54
+    2026-10-14 05:25 UTC: B1 is deployed (e9d727a7 with the homepage
+    change; CI 38509908096 success; 549 of 549 health probes 200 through
+    the deploy; rollback tag reeng-c1e-pre-b1 = bf7e855f). Acceptance:
+    - paper scenario: first run (arxiv:cs_ai) fetched 0 items because
+      arXiv's cs.AI feed was empty at 04:22 UTC (environmental, read
+      directly); rerun on rss:hn_frontpage passed: 3 stories opened and
+      published in auto mode, public routes resolve (receipt
+      ~/.config/choir-qa/traces/c1e-b1-paper-hn-0438/).
+    - engineering drill (scenario authored tonight, 0f398fd2): FAILED.
+      Management Casts engineering on records with the right parent, but
+      each assignment ends with a cancel report about 10 s later and
+      engineering never freezes (three Casts, drill timed out). Problem
+      doc docs/problems/c1e-b1-engineering-assignments-cancelled-on-arrival-2026-10-14.md
+      (a60591f5); diagnosis from the trace is in progress.
+    Earlier (B1 build): steps 1-4 on branch c1e-b1, rebased onto main
+    with L2a (no semantic clash; management has Stories, Feed, Decline
+    and Verify), net about -3,700 lines; open points: the store cancel
+    cannot stop a live loop (stopCancelledAssignmentRun); the reconcile
+    and the run-end settle can each mint the final Report; leftover dead
+    code goes to a follow-up deletion.
+  source_ref: e9d727a7
+  deploy_identity: staging e9d727a7
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: C1e-1
@@ -333,6 +318,17 @@ now:
     counts).
 
 receipts:
+  - id: c1e-b1
+    batch: B1
+    pushed_commit: e9d727a7
+    commits: [4a3ef2f2, 2caafead, ceef3a5e, 811bedc5, 37bb2c6b, 363b9645]
+    ci: "38509908096 success"
+    deploy: staging deployed_commit e9d727a7, 2026-10-14 about 04:20 UTC
+    rollback_ref: reeng-c1e-pre-b1 (bf7e855f)
+    deployed_acceptance: >-
+      paper scenario on rss:hn_frontpage: pass (c1e-b1-paper-hn-0438).
+      Engineering drill: fail (c1e-b1-engineering-0444): assignments end
+      cancelled about 10 s after the Cast; see the problem doc.
   - id: c1e-b0
     batch: B0
     pushed_commit: 19e56c54
