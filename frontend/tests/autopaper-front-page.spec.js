@@ -17,13 +17,16 @@
  *     /autopaper/<slug>/v<n>, and a headline click opens the story page;
  *   - "Older stories" appears with next_cursor and pages in the rest;
  *   - the empty and error states sit under the masthead;
- *   - the in-desktop Autopaper window renders the same front page.
+ *   - the logged-out home opens straight to Autopaper: no intro deck, the
+ *     Autopaper window open on the desktop, in the London Salmon default
+ *     theme (owner request 2026-10-14); the window renders the same front
+ *     page.
  * The rank rule itself (rankFrontStories in src/lib/autopaper.ts) is checked
  * directly in the first describe block; the repo has no TS unit runner, and
  * Playwright loads the TypeScript module as is.
  *
- * Screenshots at 1280px and 390px, in the dark default theme and the light
- * London Salmon theme, are written to AUTOPAPER_UI_SHOT_DIR when set (else
+ * Screenshots at 1280px and 390px, in the London Salmon default theme and
+ * the dark Futuristic Noir theme, are written to AUTOPAPER_UI_SHOT_DIR when set (else
  * the test output dir) and attached to the report.
  *
  *   cd frontend && npm run build && npx vite preview --port 4173 --strictPort &
@@ -317,7 +320,7 @@ test.describe('Autopaper front page', () => {
     expect(focus).toContain('inset');
     await page.locator('[data-autopaper-lead] h2 a').blur();
 
-    await shoot(page, testInfo, 'autopaper-front-1280-dark');
+    await shoot(page, testInfo, 'autopaper-front-1280-default');
 
     // Older stories pages in the rest, below More stories.
     const older = page.locator('[data-autopaper-more]');
@@ -351,23 +354,23 @@ test.describe('Autopaper front page', () => {
     await expectNoHorizontalOverflow(page, '390px');
     await expect(page.locator('[data-autopaper-more]')).toBeVisible();
 
-    await shoot(page, testInfo, 'autopaper-front-390-dark');
+    await shoot(page, testInfo, 'autopaper-front-390-default');
   });
 
-  test('light theme screenshots map paper and ink to the theme', async ({ page }, testInfo) => {
+  test('dark theme screenshots map paper and ink to the theme', async ({ page }, testInfo) => {
     const fx = fixture();
-    await openFront(page, { width: 1280, height: 900 }, fx, 'london-salmon');
-    await expect(page.locator('[data-theme-id]').first()).toHaveAttribute('data-theme-id', 'london-salmon');
+    await openFront(page, { width: 1280, height: 900 }, fx, 'futuristic-noir');
+    await expect(page.locator('[data-theme-id]').first()).toHaveAttribute('data-theme-id', 'futuristic-noir');
     const colors = await page.locator('[data-autopaper]').evaluate((el) => {
       const style = getComputedStyle(el);
       return { paper: style.backgroundColor, ink: style.color };
     });
     expect(colors.paper).not.toBe(colors.ink);
-    await shoot(page, testInfo, 'autopaper-front-1280-light');
+    await shoot(page, testInfo, 'autopaper-front-1280-dark');
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expectNoHorizontalOverflow(page, '390px light');
-    await shoot(page, testInfo, 'autopaper-front-390-light');
+    await expectNoHorizontalOverflow(page, '390px dark');
+    await shoot(page, testInfo, 'autopaper-front-390-dark');
   });
 
   test('two columns at tablet width', async ({ page }) => {
@@ -394,14 +397,17 @@ test.describe('Autopaper front page', () => {
     await expect(page.locator('[data-autopaper-masthead] h1')).toHaveText('Autopaper');
   });
 
-  test('the in-desktop Autopaper window renders the same front page', async ({ page }, testInfo) => {
+  test('the logged-out home opens straight to the Autopaper window, no intro deck', async ({ page }, testInfo) => {
     const fx = fixture();
     const ranked = rankFrontStories(fx.first);
     await page.setViewportSize({ width: 1280, height: 900 });
     await mockFront(page, fx);
-    await page.goto(`${BASE_URL}/?intro=0`);
+    await page.goto(`${BASE_URL}/`);
     const win = page.locator('[data-window][data-window-id="public-preview-autopaper"]');
     await expect(win).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('[data-landing-intro]')).toHaveCount(0);
+    await expect(page.locator('.app-root')).toHaveAttribute('data-theme-id', 'london-salmon');
+    expect(await page.locator('[data-window]').count()).toBe(1);
     await expect(win.locator('[data-autopaper-masthead] h1')).toHaveText('Autopaper');
     await expect(win.locator('[data-autopaper-grid]')).toBeVisible({ timeout: 20_000 });
     await expect(win.locator('h2')).toHaveCount(1);
@@ -415,6 +421,14 @@ test.describe('Autopaper front page', () => {
           .map((a) => a.finished.catch(() => {})),
       ),
     );
-    await shoot(page, testInfo, 'autopaper-desktop-window-1280-dark');
+    await shoot(page, testInfo, 'autopaper-desktop-window-1280-default');
+
+    // At phone width the home is the same: the Autopaper window, no deck.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE_URL}/`);
+    await expect(win.locator('[data-autopaper-grid]')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('[data-landing-intro]')).toHaveCount(0);
+    await expectNoHorizontalOverflow(page, '390px home');
+    await page.screenshot({ path: nodePath.join(SHOT_DIR || testInfo.outputDir, 'autopaper-home-390-default.png') });
   });
 });

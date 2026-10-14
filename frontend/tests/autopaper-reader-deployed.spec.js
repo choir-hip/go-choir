@@ -125,7 +125,7 @@ async function expectReadOnly(reader, page, label) {
 test('logged-out home opens Autopaper; a story opens as a published Texture window', async ({ page, request }, testInfo) => {
   const stories = await publishedStories(request);
 
-  await page.goto(`${BASE_URL}/?intro=0`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
+  await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded', timeout: 45_000 });
   await expect(page.locator('[data-desktop]')).toHaveAttribute('data-authenticated', 'false', { timeout: 30_000 });
   const home = page.locator('[data-window][data-window-id="public-preview-autopaper"]');
   await expect(home).toBeVisible({ timeout: 30_000 });

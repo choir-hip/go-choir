@@ -80,7 +80,6 @@ export const FUTURISTIC_NOIR: ChoirTheme = {
     fieldNodeMid: 'rgba(109,141,255,0.66)',
     fieldNodeNear: 'rgba(69,215,255,0.9)',
     fieldHalo: 'rgba(109,141,255,0.05)',
-    introGrain: 'rgba(247,250,255,0.5)',
     deskTexture: '#6D8DFF',
     deskManagement: '#45D7FF',
     deskEngineering: '#20D686',
@@ -115,7 +114,6 @@ export const CARBON_FIBER_KINTSUGI: ChoirTheme = {
     fieldNodeMid: 'rgba(255,216,107,0.6)',
     fieldNodeNear: 'rgba(255,241,188,0.86)',
     fieldHalo: 'rgba(255,216,107,0.045)',
-    introGrain: 'rgba(242,239,231,0.42)',
     deskTexture: '#FFD86B',
     deskManagement: '#FFF1BC',
     deskEngineering: '#55C27A',
@@ -150,7 +148,6 @@ export const LONDON_SALMON: ChoirTheme = {
     fieldNodeMid: 'rgba(156,88,82,0.6)',
     fieldNodeNear: 'rgba(36,79,74,0.82)',
     fieldHalo: 'rgba(156,88,82,0.05)',
-    introGrain: 'rgba(58,21,23,0.32)',
     deskTexture: '#9C5852',
     deskManagement: '#244F4A',
     deskEngineering: '#1D6E45',
@@ -172,7 +169,7 @@ export const LONDON_SALMON: ChoirTheme = {
   },
 };
 
-export const DEFAULT_THEME = FUTURISTIC_NOIR;
+export const DEFAULT_THEME = LONDON_SALMON;
 export const THEME_PRESETS = [FUTURISTIC_NOIR, CARBON_FIBER_KINTSUGI, LONDON_SALMON];
 const PRESET_IDS = new Set(THEME_PRESETS.map((theme) => theme.id));
 const THEME_GROUPS = ['colors', 'radii', 'motion', 'fonts', 'effects'] as const;
@@ -346,7 +343,6 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-field-node-mid': c.fieldNodeMid,
     '--choir-field-node-near': c.fieldNodeNear,
     '--choir-field-halo': c.fieldHalo,
-    '--choir-intro-grain': c.introGrain,
     '--choir-desk-texture': c.deskTexture,
     '--choir-desk-management': c.deskManagement,
     '--choir-desk-engineering': c.deskEngineering,

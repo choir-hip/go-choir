@@ -1,5 +1,5 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   --choir-prompt-surface-size: 64px;
   --choir-prompt-surface-top-offset: 0px;
   --choir-prompt-surface-bottom-offset: 64px;
@@ -13,8 +13,8 @@
   }
 }
 
-:root[data-theme-id='london-salmon'] {
-  color-scheme: light;
+:root:is([data-theme-id='futuristic-noir'], [data-theme-id='carbon-fiber-kintsugi']) {
+  color-scheme: dark;
 }
 
 body {

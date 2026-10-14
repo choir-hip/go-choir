@@ -76,10 +76,10 @@ test('Trace and Settings stay product-safe while app and theme metadata come fro
       promptSurfaceSize: style.getPropertyValue('--choir-prompt-surface-size').trim(),
     };
   });
-  expect(rootTheme.id).toBe('futuristic-noir');
-  expect(rootTheme.bg).toBe('#050912');
-  expect(rootTheme.panel).toBe('#0D1628');
-  expect(rootTheme.border).toBe('rgba(133, 159, 211, 0.22)');
+  expect(rootTheme.id).toBe('london-salmon');
+  expect(rootTheme.bg).toBe('#FDF1EE');
+  expect(rootTheme.panel).toBe('#FFFCFA');
+  expect(rootTheme.border).toBe('rgba(156, 88, 82, 0.1)');
   expect(rootTheme.promptSurfaceSize).toMatch(/^\d+px$/);
   expect(Number.parseInt(rootTheme.promptSurfaceSize, 10)).toBeGreaterThanOrEqual(56);
 
