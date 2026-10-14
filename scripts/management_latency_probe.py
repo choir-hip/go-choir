@@ -26,7 +26,14 @@ reports, as one JSON document:
   - AC10 (estimate): per parent run, the records committed to
     management's inbox since the previous parent run started, by sender
     class. The route does not say which records a run read, so this is an
-    estimate.
+    estimate. A management task's final Report counts as
+    task_report_clean or task_report_residual; a parent start whose new
+    records are only clean Reports is counted (it must be 0, R2-3).
+  - Management tasks (S2): each task inbox the parent's receipts name
+    ("rlm:delegate:N to management-task:<id>"), with its opening Cast, run
+    (GET /api/runs?channel_id=<task inbox>) and final Report: AC9's clean
+    and deadline shares, closures by reason, residual captures, the queue
+    depth and oldest queued age now, queue waits and task durations.
 
 Routes: GET /api/computer-settings (owner id), GET
 /api/inboxes/<inbox>/records?after=&limit=500 (paged by next_after),
@@ -61,7 +68,7 @@ import urllib.request
 
 DEFAULT_HOST = "https://choir.news"
 CAPTURE_ID = re.compile(r"(?:obj:)?choir\.web_capture:[A-Za-z0-9:_\-]+")
-RECEIPT_INBOX = re.compile(r"rlm:[a-z_]+:\d+ to ((?:texture|source):[A-Za-z0-9:_\-.]+)")
+RECEIPT_INBOX = re.compile(r"rlm:[a-z_]+:\d+ to ((?:texture|source|management-task):[A-Za-z0-9:_\-.]+)")
 UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 STORY_REF = re.compile(r"texture:(" + UUID + r")|doc_?[iI][dD]\W{1,6}(" + UUID + r")")
 PAGE = 500
@@ -169,7 +176,15 @@ def sender_class(rec):
         return "captures" if rec.get("captures") else "source_other"
     if head == "texture":
         return "texture_" + str(rec.get("kind") or "record")
+    if head == "management-task":
+        # A management task's final Report (S2): a clean one must not wake
+        # the parent (R2-3), so the two are counted apart.
+        outcome = rec.get("task_outcome") or {}
+        return "task_report_clean" if outcome.get("clean") else "task_report_residual"
     return head or "unknown"
+
+
+TASK_REPORTS = {"task_report_clean", "task_report_residual"}
 
 
 def owner_of(c):
@@ -264,6 +279,7 @@ def main():
     overlapping = [r for r in runs if r["_created"] < end and (r["_finished"] or end) > start]
 
     story_inboxes = set()
+    task_inboxes = set()
     turn_rows, cell_ms, cell_rows = [], [], []
     for r in overlapping:
         events = c.events(r["run_id"])
@@ -272,6 +288,9 @@ def main():
             if e.get("kind") in ("tool.result", "tool.invoked"):
                 text = json.dumps(e.get("payload") or {})
                 for inbox in RECEIPT_INBOX.findall(text):
+                    if inbox.startswith("management-task:"):
+                        task_inboxes.add(inbox)
+                        continue
                     (story_inboxes if inbox.startswith("texture:") else sources).add(inbox)
                 # A Note's receipt names no inbox, so the stories a cell
                 # names or reads (texture:<doc>, doc_id <doc>) are read too.
@@ -316,7 +335,12 @@ def main():
             k = sender_class(rec)
             kinds[k] = kinds.get(k, 0) + 1
         row["woke_by_estimate"] = kinds
-        row["intake_only_estimate"] = bool(kinds) and set(kinds) == {"captures"}
+        # Intake-only (S2 exit, R2-11): the new records are capture arrivals
+        # and task Reports alone.
+        row["intake_only_estimate"] = bool(kinds) and set(kinds) <= ({"captures"} | TASK_REPORTS)
+        # AC10: a parent start whose new records are only clean task
+        # Reports means a clean Report woke the parent.
+        row["started_by_clean_reports_only"] = bool(kinds) and set(kinds) == {"task_report_clean"}
 
     # Dispositions, read from every story inbox and every source inbox.
     docs = c.get("/api/texture/documents?limit=500")
@@ -402,6 +426,53 @@ def main():
                               if any(s <= a[1] < e for s, e in spans))
     arrival_records = len({v["seq"] for v in arrivals.values()})
 
+    # Management tasks (S2): each task inbox the parent's receipts named,
+    # its opening Cast, its run and its final Report in management's inbox.
+    reports = {sender_of(r): r for r in mrecs if sender_of(r).startswith("management-task:") and r.get("final")}
+    task_rows = []
+    for inbox in sorted(task_inboxes):
+        recs = c.records(inbox)
+        opened = committed_at(recs[0]) if recs else None
+        if opened is None or not (start <= opened < end):
+            continue
+        q = urllib.parse.quote(inbox, safe="")
+        task_runs = c.get(f"/api/runs?channel_id={q}&limit=5").get("runs") or []
+        run = min(task_runs, key=lambda r: r.get("created_at") or "") if task_runs else None
+        rep = reports.get(inbox)
+        outcome = (rep or {}).get("task_outcome") or {}
+        started = parse_ts(run.get("created_at")) if run else None
+        closed = committed_at(rep) if rep else None
+        task_rows.append({
+            "task_inbox": inbox, "opened_at": iso(opened), "started_at": iso(started), "closed_at": iso(closed),
+            "queue_wait_s": round((started - opened).total_seconds(), 1) if started else None,
+            "duration_s": round((closed - started).total_seconds(), 1) if started and closed else None,
+            "reason": outcome.get("reason") or ((rep or {}).get("report") or {}).get("stop_reason"),
+            "clean": bool(outcome.get("clean")),
+            "residuals": len(outcome.get("residuals") or []),
+            "dispositions": len(outcome.get("dispositions") or []),
+            "model": ((run or {}).get("metadata") or {}).get("llm_model"),
+        })
+    closed_tasks = [t for t in task_rows if t["closed_at"]]
+    open_tasks = [t for t in task_rows if not t["closed_at"]]
+    queued_now = [t for t in open_tasks if not t["started_at"]]
+    reasons = {}
+    for t in closed_tasks:
+        reasons[t["reason"] or "unknown"] = reasons.get(t["reason"] or "unknown", 0) + 1
+    tasks_out = {
+        "delegated": len(task_rows),
+        "closed": len(closed_tasks),
+        "by_reason": reasons,
+        "ac9_clean_share": round(sum(1 for t in closed_tasks if t["clean"]) / len(closed_tasks), 3) if closed_tasks else None,
+        "ac9_deadline_share": round(reasons.get("deadline", 0) / len(closed_tasks), 3) if closed_tasks else None,
+        "residual_captures": sum(t["residuals"] for t in closed_tasks),
+        "open_now": len(open_tasks),
+        "queue_depth_now": len(queued_now),
+        "oldest_queued_age_s": round(max((end - parse_ts(t["opened_at"])).total_seconds() for t in queued_now), 1) if queued_now else None,
+        "queue_wait_s": dist([t["queue_wait_s"] for t in task_rows if t["queue_wait_s"] is not None]),
+        "duration_s": dist([t["duration_s"] for t in closed_tasks if t["duration_s"] is not None]),
+        "models": sorted({t["model"] for t in task_rows if t["model"]}),
+    }
+
     done = [t["duration_s"] for t in turn_rows if not t["open"]]
     intake_only = [t["duration_s"] for t in turn_rows if not t["open"] and t["intake_only_estimate"]]
     p99_cell = pct(cell_ms, 99)
@@ -469,10 +540,12 @@ def main():
             k: sum(1 for r in inbox_in_window if sender_class(r) == k)
             for k in sorted({sender_class(r) for r in inbox_in_window})
         },
-        "queue": "n/a until management tasks exist (S2)",
+        "ac10_parent_starts_by_clean_reports_only": sum(1 for t in turn_rows if t.get("started_by_clean_reports_only")),
+        "tasks": tasks_out,
     }
     if not args.counts_only:
         out["turns"] = turn_rows
+        out["task_rows"] = task_rows
         out["captures"] = sorted(cap_rows, key=lambda x: x["arrived_at"])
         out["slow_cells"] = sorted([x for x in cell_rows if x["ms"] > 60000], key=lambda x: -x["ms"])
     text = json.dumps(out, indent=1, sort_keys=False)
