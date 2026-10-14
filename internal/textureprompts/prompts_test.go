@@ -77,3 +77,27 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 		t.Errorf("prompt core is %d characters; the budget is about 3.5k", n)
 	}
 }
+
+// A cite renders as a number only (docs/problems/prompt-bar-research-slow-
+// unsynthesized-mangled-2026-10-14.md): Texture wrote "Anthropic says
+// running it costs {{cite r1.c3 "...75% less to run."}} than Haiku 4.5" and
+// "at an introductory price of {{cite ...}}", so the reader saw "costs ①
+// than" with the quoted words missing; and the revision listed findings by
+// category with no inference. Ways it can fail: the core still reads as if
+// a cite's quote were shown; it gives no example of a sentence that reads
+// whole without its cite; it does not ask for the inference before the
+// facts; the rule is restated so long the core blows its budget.
+func TestPromptCoreTeachesCitesAreNumbersAndInferenceFirst(t *testing.T) {
+	prompt := DefaultSystemPrompt()
+	for _, want := range []string{
+		"A cite shows as a number, never its quote",
+		"the sentence must read whole without it",
+		`"costs 75% less {{cite ...}}", not "costs {{cite ...}}"`,
+		"Lead with what the evidence adds up to",
+		"A list of findings is not an answer.",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt core lacks %q", want)
+		}
+	}
+}
