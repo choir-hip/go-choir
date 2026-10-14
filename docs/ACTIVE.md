@@ -5,30 +5,43 @@ corpus and does not make an unverified graph status into a live work claim.
 The mission roadmap is [`world-wire-mission-stack-2026-09-22.md`](world-wire-mission-stack-2026-09-22.md);
 the mission format is throughline (`skills/throughline/SKILL.md`).
 
-## Now (2026-10-14): L2a synthesis intake
+## Now (2026-10-14, 07:00 UTC): what landed overnight, what is next
 
-Owner 2026-10-14: "intake redesign, very important. until then we are
-just copying." The live paper opens one story per capture (47 of 50).
-[L2a](definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md) makes
-one story per real-world event across languages, written from the
-convergence and conflicts of its sources. Owner rulings on the roadmap:
-[owner-roadmap-rulings-2026-10-14.md](reports/owner-roadmap-rulings-2026-10-14.md).
-Mission order: L2a; C1e B1; LR lever 6; L1 (schedules survive crashes,
-harness, L1b); C1e B2-B5; L2b; LR memory levers; sources; L3-L5. Levers 1
-and 2 and L1b-0 are live at 6c6bc1aa.
+**Deployed tonight** (staging 9ace75e5; every deploy kept the site up,
+health probes 200 throughout):
+- C1e B1, engineering on records (e9d727a7), with the logged-out home
+  opening straight to Autopaper and London Salmon as the default theme.
+  The capsule-gate fix (bc09dcc1) and the Freeze fixes (9874ebc5,
+  96b82cec) followed; the engineering drill still cannot reach Freeze
+  because capsules cannot fetch Go modules
+  ([decision for the owner](reports/capsule-go-modules-decision-2026-10-14.md)).
+- LR: lever 6 (cell output out of the transcript), lever 7 (prices;
+  `/api/costs` reports dollars), LongCat out of the default pool (too
+  slow: [evidence](evidence/model-latency-paper-2026-10-14.md)), Jev
+  judges citation support off management's turn, the research-prompt
+  renderer and prompt fixes, the balloon (free page reporting) and soft
+  Go memory limits.
+- S3 real hibernation: a memory snapshot instead of a kill; wake to
+  healthy in 103 ms against 9.7 s cold, open work kept
+  ([evidence](evidence/s3-snapshot-hibernate-staging-2026-10-14.md)); the
+  credential window (resume past the guest capability's expiry, up to
+  12 h) deployed in 9ace75e5, proof in progress.
+- L2a fixture passes (merge recall 1.0, 0 false merges); next is the
+  paper's enable.
 
-**Cost track (owner 2026-10-14):** the deferred SA (agent density) and S3
-(fast resume) stations are accelerated into LR's cost track; SP
-(production infrastructure) stays deferred for building, investigated for
-the owner. Investigation and order:
-[cost-track-sa-s3-sp-investigation-2026-10-14.md](reports/cost-track-sa-s3-sp-investigation-2026-10-14.md).
-Named residual for 10-14/15: when Autopaper should span several computers
-on one host (starting analysis in that report). Waiting on the owner:
-model prices, SP0's host, recovery targets, and confirmation that the
-escrow custodian key and platform signing seed have an offline copy.
-Queued with B1's deploy: the logged-out home opens straight to Autopaper
-(intro deck deleted) and London Salmon is the default theme (branch
-`retire-landing-intro`, `78c274fe`).
+**Waiting on the owner:** the Go-module route for capsules (A, B or C);
+SP0's host, recovery targets, and whether the escrow custodian key and
+platform signing seed have an offline copy; the 12 h snapshot maximum
+age; the reader spec decision.
+
+**Next:** enable intake.labels on the paper after an idle refresh and
+measure against baseline A; management delegating to sub-RLMs (owner
+direction; design first); the balloon's return measured after desk
+workers exit; the daemon's store memory (the real density lever:
+[split](evidence/guest-memory-split-balloon-2026-10-14.md)); research
+searching the corpus first. Residual for 10-14/15: Autopaper across
+several computers on one host
+([analysis](reports/cost-track-sa-s3-sp-investigation-2026-10-14.md)).
 
 ## Next (2026-10-13): ledger metamission (reviewed)
 
