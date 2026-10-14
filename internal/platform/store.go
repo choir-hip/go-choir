@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -25,6 +26,12 @@ type Store struct {
 	// artifactsRoot is the filesystem CAS root for externalized og_objects
 	// bodies (Move 3). Empty disables externalization — bodies stay inline.
 	artifactsRoot string
+	// casReuseMu orders CAS object reuse against artifact GC unlinks. A
+	// writer that creates, replaces or reuses (refreshes) a content-addressed
+	// object holds it shared; the GC holds it exclusively only to re-check
+	// and unlink one candidate, so a reused object is never deleted between
+	// the sweep's live-set read and the writer's reference commit.
+	casReuseMu sync.RWMutex
 }
 
 // SetArtifactsRoot configures the filesystem CAS root used to externalize

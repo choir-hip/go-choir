@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func fileCASChunkRef(computerID, digest string) (string, error) {
@@ -71,36 +73,56 @@ func (s *Service) getFileManifest(computerID, root string) ([]byte, error) {
 	return s.readBlob(ref)
 }
 
+// writeFileCASImmutable stores a content-addressed file CAS object. An
+// identical existing object is reused and refreshed (mtime) so the artifact
+// GC's grace window protects it until the writer's reference commits. A
+// different existing object under the same name is torn or corrupt (the
+// caller verified data's address), so it is replaced atomically. New bytes
+// land through a temp file and rename: a crash never leaves a partial object
+// under its final name.
 func (s *Service) writeFileCASImmutable(storageRef string, data []byte) error {
 	path, err := s.artifactPath(storageRef)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("file cas: create artifact directory: %w", err)
 	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o640)
-	if errors.Is(err, os.ErrExist) {
-		info, statErr := os.Stat(path)
-		if statErr != nil {
-			return fmt.Errorf("file cas: stat existing artifact: %w", statErr)
-		}
-		if info.Size() != int64(len(data)) {
-			return fmt.Errorf("file cas: immutable artifact size mismatch")
+	if s.store != nil {
+		s.store.casReuseMu.RLock()
+		defer s.store.casReuseMu.RUnlock()
+	}
+	existing, err := os.ReadFile(path)
+	if err == nil && bytes.Equal(existing, data) {
+		now := time.Now()
+		if err := os.Chtimes(path, now, now); err != nil {
+			return fmt.Errorf("file cas: refresh reused artifact: %w", err)
 		}
 		return nil
 	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("file cas: read existing artifact: %w", err)
+	}
+	tmp, err := os.CreateTemp(dir, ".tmp-filecas-*")
 	if err != nil {
-		return fmt.Errorf("file cas: create immutable artifact: %w", err)
+		return fmt.Errorf("file cas: create temp artifact: %w", err)
 	}
-	if _, err = file.Write(data); err == nil {
-		err = file.Sync()
+	tmpName := tmp.Name()
+	if _, err = tmp.Write(data); err == nil {
+		err = tmp.Chmod(0o640)
 	}
-	if closeErr := file.Close(); err == nil {
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
 		err = closeErr
 	}
+	if err == nil {
+		err = os.Rename(tmpName, path)
+	}
 	if err != nil {
-		_ = os.Remove(path)
+		_ = os.Remove(tmpName)
 		return fmt.Errorf("file cas: write immutable artifact: %w", err)
 	}
 	return nil

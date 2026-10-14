@@ -46,16 +46,21 @@ func main() {
 	// CORPUSD_AUTOPAPER_OWNERS is set; every owner's when unset.
 	svc.SetAutopaperOwners(platform.ParseAutopaperOwners(cfg.AutopaperOwnersRaw))
 	// Periodic platform-artifacts reachability GC (dry-run unless explicitly
-	// activated). The on-demand endpoint /internal/platform/artifact-gc admits
-	// the same sweep on demand for the deployed-proof report.
+	// activated). The on-demand endpoint /internal/platform/artifact-gc runs
+	// the same sweep, clamped to this policy.
 	gcGrace, _ := time.ParseDuration(cfg.ArtifactGCGrace)
 	gcInterval, _ := time.ParseDuration(cfg.ArtifactGCInterval)
 	gcMax, _ := strconv.Atoi(cfg.ArtifactGCMaxDeletes)
-	platform.NewGCRunner(svc, platform.ArtifactGCConfig{
-		Mode:       cfg.ArtifactGCMode,
-		Grace:      gcGrace,
-		MaxDeletes: gcMax,
-	}, gcInterval).Start(context.Background())
+	gcMaxBytes, _ := strconv.ParseInt(cfg.ArtifactGCMaxBytes, 10, 64)
+	gcPolicy := platform.ArtifactGCConfig{
+		Mode:             cfg.ArtifactGCMode,
+		Grace:            gcGrace,
+		MaxDeletes:       gcMax,
+		MaxBytes:         gcMaxBytes,
+		ActiveNamespaces: platform.ParseArtifactGCNamespaces(cfg.ArtifactGCNamespaces),
+	}
+	svc.SetArtifactGCPolicy(gcPolicy)
+	platform.NewGCRunner(svc, gcPolicy, gcInterval).Start(context.Background())
 	handler := platform.NewHandler(svc)
 	if cfg.VmctlURL != "" {
 		if err := handler.ConfigureGuestBinding(vmctl.NewClient(cfg.VmctlURL)); err != nil {

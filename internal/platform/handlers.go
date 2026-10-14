@@ -426,10 +426,12 @@ func (h *Handler) HandleInternalGetTextureRevision(w http.ResponseWriter, r *htt
 }
 
 // HandleArtifactGC runs one platform-artifacts reachability sweep on demand.
-// POST {"mode":"dry-run"|"active"} — internal only. Dry-run returns the
-// report without deleting; active applies the same reachability + grace and
-// deletes. Used to admit the storage lifecycle (observe the report, then
-// collect) without a second deploy.
+// POST {"mode":"dry-run"|"active", "grace", "max_deletes", "max_bytes"} —
+// internal only. The request is clamped to the configured policy
+// (SetArtifactGCPolicy): active only when the policy is active (409
+// otherwise), grace never below the policy window, caps never above the
+// policy caps, and the policy's namespace allowlist. Dry-run returns the
+// full eligible report without deleting.
 func (h *Handler) HandleArtifactGC(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -443,7 +445,12 @@ func (h *Handler) HandleArtifactGC(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 	}
-	report, err := h.service.RunArtifactGC(r.Context(), req)
+	cfg, err := h.service.clampArtifactGCRequest(req)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+	report, err := h.service.RunArtifactGC(r.Context(), cfg)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return

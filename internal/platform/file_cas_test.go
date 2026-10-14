@@ -124,9 +124,10 @@ func TestGCFileChunksPreservesReachableAndNamespaces(t *testing.T) {
 	if err := os.WriteFile(otherPath, stale, 0o640); err != nil {
 		t.Fatal(err)
 	}
-	removed, err := service.GCFileChunks(context.Background(), computerID, time.Hour)
-	if err != nil || removed != 1 {
-		t.Fatalf("GC = %d, %v", removed, err)
+	ensureGCRouteTables(t, store)
+	report, err := service.RunArtifactGC(context.Background(), ArtifactGCConfig{Mode: ArtifactGCModeActive, Grace: time.Hour})
+	if err != nil || report.Namespaces["file-cas-chunks"].Deleted != 1 {
+		t.Fatalf("GC = %+v, %v", report.Namespaces["file-cas-chunks"], err)
 	}
 	if _, err := service.GetFileChunk(context.Background(), computerID, liveDigest); err != nil {
 		t.Fatalf("live chunk removed: %v", err)

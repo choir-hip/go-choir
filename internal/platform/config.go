@@ -25,6 +25,10 @@ type Config struct {
 	ArtifactGCGrace       string
 	ArtifactGCInterval    string
 	ArtifactGCMaxDeletes  string
+	ArtifactGCMaxBytes    string
+	// ArtifactGCNamespaces is PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES: the
+	// comma list an active run may delete from (ParseArtifactGCNamespaces).
+	ArtifactGCNamespaces string
 	// AutopaperOwnersRaw is CORPUSD_AUTOPAPER_OWNERS: comma-separated owner
 	// ids whose auto stories the front list shows; unset shows every
 	// owner's (ParseAutopaperOwners).
@@ -45,6 +49,8 @@ func LoadConfig() (*Config, error) {
 		ArtifactGCGrace:       os.Getenv("PLATFORM_ARTIFACT_GC_GRACE"),
 		ArtifactGCInterval:    os.Getenv("PLATFORM_ARTIFACT_GC_INTERVAL"),
 		ArtifactGCMaxDeletes:  os.Getenv("PLATFORM_ARTIFACT_GC_MAX_DELETES"),
+		ArtifactGCMaxBytes:    os.Getenv("PLATFORM_ARTIFACT_GC_MAX_BYTES"),
+		ArtifactGCNamespaces:  os.Getenv("PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES"),
 		AutopaperOwnersRaw:    os.Getenv("CORPUSD_AUTOPAPER_OWNERS"),
 	}
 	if err := cfg.validate(); err != nil {

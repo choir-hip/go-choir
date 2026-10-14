@@ -592,14 +592,24 @@ in
         # computer's owner (Cut 2 2b; docs/reports/reeng-autopaper-paper-computer-2026-10-13.md),
         # so tracer test computers' stories stay off choir.news's front page.
         "CORPUSD_AUTOPAPER_OWNERS=e5962310-8767-4624-87e5-a9b93a4e1db1"
-        # Platform-artifacts reachability GC: dry-run reporting by default so
-        # the live set can be observed before the storage lifecycle deletes.
-        # Active collection stays an explicit operation via the internal
-        # /internal/platform/artifact-gc endpoint (S0-1 storage lifecycle).
+        # Platform-artifacts reachability GC
+        # (docs/problems/artifact-store-grows-12gb-a-day-2026-10-14.md).
+        # Keeps everything a current computer, restore point (pin) or route
+        # receipt (rollback ref) names, plus every unreferenced object younger
+        # than GRACE. Each run deletes at most MAX_DELETES objects and
+        # MAX_BYTES bytes, logs an intent record before every unlink to
+        # platform-artifacts/artifact-gc-log/<day>.jsonl, and the report
+        # (journal: "artifact gc:") lists the full eligible set per namespace.
+        # og is outside ACTIVE_NAMESPACES (owner step: the pre-teardown corpus
+        # bodies). Rollback: MODE=dry-run (report only) or MODE=off.
+        # The on-demand /internal/platform/artifact-gc endpoint is clamped to
+        # this policy.
         "PLATFORM_ARTIFACT_GC_MODE=dry-run"
-        "PLATFORM_ARTIFACT_GC_GRACE=30m"
+        "PLATFORM_ARTIFACT_GC_GRACE=168h"
         "PLATFORM_ARTIFACT_GC_INTERVAL=1h"
-        "PLATFORM_ARTIFACT_GC_MAX_DELETES=10000"
+        "PLATFORM_ARTIFACT_GC_MAX_DELETES=50000"
+        "PLATFORM_ARTIFACT_GC_MAX_BYTES=34359738368"
+        "PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=projection-base,platform-update,file-cas-roots,file-cas-chunks"
       ];
     };
   };

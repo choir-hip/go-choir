@@ -1,9 +1,11 @@
 package platform
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -25,22 +27,56 @@ const (
 	ArtifactGCModeOff    = "off"
 )
 
+const (
+	// artifactGCLogDir holds the append-only deletion log, one JSONL file per
+	// UTC day, beside (not inside) the swept sha256/ tree.
+	artifactGCLogDir = "artifact-gc-log"
+	// artifactGCLogBatch is how many intent records are made durable (fsync)
+	// before any of their unlinks run.
+	artifactGCLogBatch = 256
+	// DefaultArtifactGCMaxBytes caps the bytes one run may delete.
+	DefaultArtifactGCMaxBytes int64 = 32 << 30
+)
+
 // ArtifactGCConfig configures one sweep over the content-addressed artifact
 // namespaces that have a database-derived live set.
 type ArtifactGCConfig struct {
 	Mode       string        `json:"mode"`
 	Grace      time.Duration `json:"grace"`
 	MaxDeletes int           `json:"max_deletes"`
+	// MaxBytes caps the bytes one run deletes. A candidate that would carry
+	// the run past the cap is deferred whole, never partially taken.
+	MaxBytes int64 `json:"max_bytes"`
+	// ActiveNamespaces lists the namespaces a run may delete from; the rest
+	// are swept report-only. Empty means every swept namespace.
+	ActiveNamespaces []string `json:"active_namespaces,omitempty"`
 }
 
 // ArtifactGCNamespaceReport records one namespace's observed vs deleted set.
 type ArtifactGCNamespaceReport struct {
-	Scanned      int   `json:"scanned"`
-	Live         int   `json:"live"`
-	Unreachable  int   `json:"unreachable"`
-	InGrace      int   `json:"in_grace"`
-	Deleted      int   `json:"deleted"`
-	BytesDeleted int64 `json:"bytes_deleted"`
+	// Mode is the namespace's effective mode: active, or dry-run when the
+	// run is a dry-run or the namespace is report-only.
+	Mode        string `json:"mode"`
+	Scanned     int    `json:"scanned"`
+	Live        int    `json:"live"`
+	Unreachable int    `json:"unreachable"`
+	InGrace     int    `json:"in_grace"`
+	// Unproven entries are kept because their liveness could not be
+	// established (unreadable manifest, computer with no recorded root).
+	Unproven int `json:"unproven"`
+	// Eligible is every unreachable, past-grace entry, uncapped: the report
+	// an owner reads before admitting deletion.
+	Eligible      int   `json:"eligible"`
+	EligibleBytes int64 `json:"eligible_bytes"`
+	// Deleted is what this run removed (active) or would remove under the
+	// same caps (dry-run).
+	Deleted       int   `json:"deleted"`
+	BytesDeleted  int64 `json:"bytes_deleted"`
+	DeferredByCap int   `json:"deferred_by_cap"`
+	// KeptOnRecheck counts candidates a writer refreshed (reused) or removed
+	// between classification and the locked unlink.
+	KeptOnRecheck int `json:"kept_on_recheck"`
+	Errors        int `json:"errors"`
 }
 
 // ArtifactGCReport is the deployed-proof receipt for one sweep.
@@ -61,27 +97,68 @@ func validHexDigest(s string) bool {
 	return hexDigestRE.MatchString(strings.ToLower(strings.TrimSpace(s)))
 }
 
-// sweepNamespaces are the reachability-GC'd namespaces. The event tape
-// (computer-event, computer-event-payload, pin-receipts) is excluded: its live
-// set is the retained append-receipt chain (a chain-retention policy, not a
-// refcount sweep) and is handled by a separate S0 slice.
+// artifactGCNamespaces are the reachability-GC'd namespaces, in sweep order:
+// a few large objects first, so a capped run is not spent inside the chunk
+// store before it reaches them. The event tape (computer-event,
+// computer-event-payload, pin-receipts) is excluded: its live set is the
+// retained append-receipt chain (a chain-retention policy, not a refcount
+// sweep).
 var artifactGCNamespaces = []string{
-	"file-cas-chunks",
-	"file-cas-roots",
 	"projection-base",
 	"platform-update",
+	"file-cas-roots",
+	"file-cas-chunks",
 	"og",
 }
 
+// DefaultArtifactGCActiveNamespaces is the deletion allowlist when
+// PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES is unset. og is excluded: the
+// pre-teardown corpus bodies are unreferenced since 2026-10-09 and their
+// collection is an explicit owner step (the corpus dump may still name them).
+var DefaultArtifactGCActiveNamespaces = []string{"projection-base", "platform-update", "file-cas-roots", "file-cas-chunks"}
+
+// ParseArtifactGCNamespaces reads a comma list. Empty selects the default
+// allowlist; "all" selects every swept namespace.
+func ParseArtifactGCNamespaces(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return append([]string(nil), DefaultArtifactGCActiveNamespaces...)
+	}
+	if raw == "all" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	if len(out) == 0 {
+		// A list of only separators names nothing: delete nothing rather
+		// than fall back to everything.
+		return []string{"none"}
+	}
+	return out
+}
+
+type gcCandidate struct {
+	ns    string
+	rel   string // slash path relative to the artifacts root
+	path  string
+	size  int64
+	mtime time.Time
+}
+
 // RunArtifactGC performs one reachability sweep across the GC'd artifact
-// namespaces. For each namespace it computes the live set from the authoritative
-// DB reference surface, then deletes every on-disk entry that is both
-// unreachable and older than the grace cutoff. Dry-run reports without
-// deleting. It never deletes a file newer than the grace cutoff, so an
-// in-flight write/append/apply that has not yet committed its DB reference is
-// never collected.
+// namespaces. For each namespace it computes the live set from the
+// authoritative DB reference surface, classifies every on-disk entry, and
+// (active) deletes entries that are both unreachable and older than the grace
+// cutoff, within the run's count and byte caps. Every deletion is preceded by
+// a durable intent record in the deletion log and re-checked under the CAS
+// reuse lock. Dry-run reports the full eligible set without deleting.
 func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (ArtifactGCReport, error) {
 	started := time.Now()
+	cfg = normalizeArtifactGCConfig(cfg)
 	report := ArtifactGCReport{
 		Mode:       cfg.Mode,
 		Grace:      cfg.Grace.String(),
@@ -97,41 +174,80 @@ func (s *Service) RunArtifactGC(ctx context.Context, cfg ArtifactGCConfig) (Arti
 	// holding writeMu timed out credential issuance and failed VM boots).
 	s.artifactGCMu.Lock()
 	defer s.artifactGCMu.Unlock()
-	cfg = normalizeArtifactGCConfig(cfg)
 	if cfg.Mode == ArtifactGCModeOff {
-		report.Mode = ArtifactGCModeOff
 		return report, nil
 	}
 	cutoff := started.UTC().Add(-cfg.Grace)
-	deleted := 0
-	var bytesDeleted int64
-	remaining := func() int { return cfg.MaxDeletes - deleted }
 
-	// Compute each namespace's live set once per sweep. A live set that fails
-	// to load aborts the whole sweep — sweeping with a missing set deletes
-	// live artifacts (s0-gc-og-wrong-store-deletion, 2026-10-05).
+	// A live set that fails to load aborts the whole sweep — sweeping with a
+	// missing set deletes live artifacts (s0-gc-og-wrong-store-deletion,
+	// 2026-10-05).
 	live, warnings := s.artifactGCLiveSets(ctx)
 	report.Warnings = append(report.Warnings, warnings...)
 	if live == nil {
 		report.DurationMs = time.Since(started).Milliseconds()
 		return report, fmt.Errorf("artifact gc: live set unavailable: %s", strings.Join(warnings, "; "))
 	}
-	for _, ns := range artifactGCNamespaces {
-		if remaining() <= 0 {
-			break
-		}
-		nsReport, err := s.sweepArtifactNamespace(ctx, ns, live[ns], cfg, cutoff, remaining())
-		if err != nil {
-			report.Warnings = append(report.Warnings, fmt.Sprintf("%s: %v", ns, err))
-		}
-		report.Namespaces[ns] = nsReport
-		deleted += nsReport.Deleted
-		bytesDeleted += nsReport.BytesDeleted
+
+	allowed := map[string]bool{}
+	for _, ns := range cfg.ActiveNamespaces {
+		allowed[ns] = true
 	}
-	report.Deleted = deleted
-	report.BytesDeleted = bytesDeleted
+	var selected []gcCandidate
+	deletedCount := 0
+	var deletedBytes int64
+	for _, ns := range artifactGCNamespaces {
+		if err := ctx.Err(); err != nil {
+			report.DurationMs = time.Since(started).Milliseconds()
+			return report, err
+		}
+		rep := ArtifactGCNamespaceReport{}
+		candidates, nsWarnings, err := s.classifyArtifactNamespace(ctx, ns, live[ns], cutoff, &rep)
+		report.Warnings = append(report.Warnings, nsWarnings...)
+		participates := len(cfg.ActiveNamespaces) == 0 || allowed[ns]
+		if err != nil {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("%s: %v (namespace not swept)", ns, err))
+			participates = false
+		}
+		// An empty live set beside old unreachable files is the wrong-store
+		// signature (2026-10-05). Report it; never sweep on it. file-cas-chunks
+		// liveness is per computer and guarded there.
+		if ns != "file-cas-chunks" && len(live[ns]) == 0 && rep.Eligible > 0 {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("%s: live set is empty but %d old entries exist (namespace not swept)", ns, rep.Eligible))
+			participates = false
+		}
+		rep.Mode = ArtifactGCModeDryRun
+		if participates && cfg.Mode == ArtifactGCModeActive {
+			rep.Mode = ArtifactGCModeActive
+		}
+		if participates {
+			for _, c := range candidates {
+				if deletedCount >= cfg.MaxDeletes || deletedBytes+c.size > cfg.MaxBytes {
+					rep.DeferredByCap++
+					continue
+				}
+				deletedCount++
+				deletedBytes += c.size
+				selected = append(selected, c)
+				if cfg.Mode != ArtifactGCModeActive {
+					rep.Deleted++
+					rep.BytesDeleted += c.size
+				}
+			}
+		}
+		report.Namespaces[ns] = rep
+	}
+
+	var runErr error
+	if cfg.Mode == ArtifactGCModeActive {
+		runErr = s.deleteArtifactCandidates(ctx, started, selected, cutoff, &report)
+	}
+	for _, rep := range report.Namespaces {
+		report.Deleted += rep.Deleted
+		report.BytesDeleted += rep.BytesDeleted
+	}
 	report.DurationMs = time.Since(started).Milliseconds()
-	return report, nil
+	return report, runErr
 }
 
 func normalizeArtifactGCConfig(cfg ArtifactGCConfig) ArtifactGCConfig {
@@ -149,13 +265,66 @@ func normalizeArtifactGCConfig(cfg ArtifactGCConfig) ArtifactGCConfig {
 	if cfg.MaxDeletes <= 0 {
 		cfg.MaxDeletes = 10000
 	}
+	if cfg.MaxBytes <= 0 {
+		cfg.MaxBytes = DefaultArtifactGCMaxBytes
+	}
 	return cfg
+}
+
+// errArtifactGCActiveNotConfigured refuses an on-demand active run on a
+// service whose configured policy is not active.
+var errArtifactGCActiveNotConfigured = errors.New("artifact gc: active collection is not enabled (PLATFORM_ARTIFACT_GC_MODE)")
+
+// SetArtifactGCPolicy records the configured GC policy. The on-demand
+// endpoint may narrow it but never exceed it.
+func (s *Service) SetArtifactGCPolicy(cfg ArtifactGCConfig) {
+	if s == nil {
+		return
+	}
+	cfg = normalizeArtifactGCConfig(cfg)
+	s.artifactGCPolicyMu.Lock()
+	s.artifactGCPolicy = &cfg
+	s.artifactGCPolicyMu.Unlock()
+}
+
+// clampArtifactGCRequest bounds an on-demand request by the configured
+// policy: no active run unless the policy is active, no grace below the
+// policy's window, no caps above its caps, and the policy's namespaces.
+func (s *Service) clampArtifactGCRequest(req ArtifactGCConfig) (ArtifactGCConfig, error) {
+	policy := normalizeArtifactGCConfig(ArtifactGCConfig{})
+	s.artifactGCPolicyMu.Lock()
+	if s.artifactGCPolicy != nil {
+		policy = *s.artifactGCPolicy
+	}
+	s.artifactGCPolicyMu.Unlock()
+	out := normalizeArtifactGCConfig(ArtifactGCConfig{Mode: req.Mode})
+	if out.Mode == ArtifactGCModeOff {
+		out.Mode = ArtifactGCModeDryRun
+	}
+	if out.Mode == ArtifactGCModeActive && policy.Mode != ArtifactGCModeActive {
+		return out, errArtifactGCActiveNotConfigured
+	}
+	out.Grace = policy.Grace
+	if req.Grace > policy.Grace {
+		out.Grace = req.Grace
+	}
+	out.MaxDeletes = policy.MaxDeletes
+	if req.MaxDeletes > 0 && req.MaxDeletes < policy.MaxDeletes {
+		out.MaxDeletes = req.MaxDeletes
+	}
+	out.MaxBytes = policy.MaxBytes
+	if req.MaxBytes > 0 && req.MaxBytes < policy.MaxBytes {
+		out.MaxBytes = req.MaxBytes
+	}
+	out.ActiveNamespaces = policy.ActiveNamespaces
+	return out, nil
 }
 
 // artifactGCLiveSets returns, per namespace, the set of live on-disk entry
 // names (the basename under the namespace dir). A namespace's live set is the
 // union of every name the authoritative DB reference surface still names; the
-// sweep deletes only names absent from it and older than grace.
+// sweep deletes only names absent from it and older than grace. Any query
+// error returns nil: a live set we could not load is not an empty live set.
 func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string]struct{}, []string) {
 	live := map[string]map[string]struct{}{}
 	warnings := []string{}
@@ -165,54 +334,38 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 
 	// file-cas-roots: every manifest_ref row is live (the current root table
 	// retains all committed roots). file-cas-chunks liveness is resolved per
-	// computer inside sweepFileCASChunks because it depends on manifest parses.
-	if roots, err := s.store.db.QueryContext(ctx, `SELECT manifest_ref FROM computer_file_roots`); err != nil {
-		// A live-set we could not load is not an empty live set — sweeping
-		// with it would delete live artifacts. Fail closed.
+	// computer during classification because it depends on manifest parses.
+	if err := scanStrings(ctx, s.store.db, `SELECT manifest_ref FROM computer_file_roots`, func(ref string) {
+		live["file-cas-roots"][filepath.Base(ref)] = struct{}{}
+	}); err != nil {
 		return nil, append(warnings, "file-cas-roots live set: "+err.Error())
-	} else {
-		for roots.Next() {
-			var ref string
-			if err := roots.Scan(&ref); err == nil {
-				live["file-cas-roots"][filepath.Base(ref)] = struct{}{}
-			}
-		}
-		roots.Close()
 	}
 
-	// projection-base: the advertised watermark base_ref (blob) is live; its
-	// .descriptor.json sidecar is protected by pairing inside the sweep.
-	if wm, err := s.store.db.QueryContext(ctx, `SELECT base_ref FROM computer_replay_watermarks`); err != nil {
+	// projection-base: the advertised watermark base_ref, explicit pins
+	// (restore points), each computer's latest two bases, and in-flight job
+	// seeds. A live blob keeps its .descriptor.json sidecar.
+	addBase := func(ref string) {
+		digest := filepath.Base(ref)
+		live["projection-base"][digest] = struct{}{}
+		live["projection-base"][digest+".descriptor.json"] = struct{}{}
+	}
+	if err := scanStrings(ctx, s.store.db, `SELECT base_ref FROM computer_replay_watermarks`, addBase); err != nil {
 		return nil, append(warnings, "projection-base live set: "+err.Error())
-	} else {
-		for wm.Next() {
-			var ref string
-			if err := wm.Scan(&ref); err == nil {
-				digest := filepath.Base(ref)
-				live["projection-base"][digest] = struct{}{}
-				live["projection-base"][digest+".descriptor.json"] = struct{}{}
-			}
-		}
-		wm.Close()
 	}
 	pins, err := s.store.projectionBasePins(ctx)
 	if err != nil {
 		return nil, append(warnings, "projection-base pins: "+err.Error())
 	}
 	for ref := range pins {
-		digest := filepath.Base(ref)
-		live["projection-base"][digest] = struct{}{}
-		live["projection-base"][digest+".descriptor.json"] = struct{}{}
+		addBase(ref)
 	}
 
-	// platform-update: every route-table-referenced payload digest. Union of
-	// current route slots, all transition-receipt old/new refs (rollback walks
-	// history — any receipt's version may be a rollback target), and
-	// authorization evidence. The code/program JSON carries artifact+sha256
-	// URIs whose path basename under /sha256/platform-update/ is the digest.
-	updateRefs, warn := s.platformUpdateLiveDigests(ctx)
-	if warn != "" {
-		warnings = append(warnings, "platform-update live set: "+warn)
+	// platform-update: every route-table-referenced payload digest (current
+	// slots, every transition receipt's old/new refs — the rollback refs —
+	// and authorization evidence).
+	updateRefs, err := s.platformUpdateLiveDigests(ctx)
+	if err != nil {
+		return nil, append(warnings, "platform-update live set: "+err.Error())
 	}
 	for d := range updateRefs {
 		live["platform-update"][d] = struct{}{}
@@ -222,90 +375,103 @@ func (s *Service) artifactGCLiveSets(ctx context.Context) (map[string]map[string
 	// body_ref rows live in Store B (corpus) — reading Store A here made every
 	// externalized corpus body unreachable and the sweep mass-deleted live
 	// bodies on 2026-10-05 (s0-gc-og-wrong-store-deletion).
-	og, err := s.store.corpus().QueryContext(ctx, `SELECT body_ref FROM og_objects WHERE body_ref <> ''`)
-	if err != nil {
+	if err := scanStrings(ctx, s.store.corpus(), `SELECT body_ref FROM og_objects WHERE body_ref <> ''`, func(ref string) {
+		live["og"][filepath.Base(ref)] = struct{}{}
+	}); err != nil {
 		return nil, append(warnings, "og live set: "+err.Error())
 	}
-	for og.Next() {
-		var ref string
-		if err := og.Scan(&ref); err == nil {
-			live["og"][filepath.Base(ref)] = struct{}{}
+	return live, warnings
+}
+
+// scanStrings runs a one-column query and reports any query, scan or
+// iteration error: a partial result must never pass for a complete one.
+func scanStrings(ctx context.Context, db *sql.DB, query string, add func(string), args ...any) error {
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var value sql.NullString
+		if err := rows.Scan(&value); err != nil {
+			return err
+		}
+		if value.Valid {
+			add(value.String)
 		}
 	}
-	og.Close()
-	return live, warnings
+	return rows.Err()
 }
 
 // platformUpdateLiveDigests resolves the set of platform-update payload
 // digests still named by any route-table record: current route slots, every
 // transition-receipt old/new code+program ref, and authorization evidence.
 // Conservative over-retention is deliberate — a rollback may reach any
-// receipt's version.
-func (s *Service) platformUpdateLiveDigests(ctx context.Context) (map[string]struct{}, string) {
+// receipt's version. Any query error fails the whole set.
+func (s *Service) platformUpdateLiveDigests(ctx context.Context) (map[string]struct{}, error) {
 	live := map[string]struct{}{}
-	collect := func(query string, arg ...interface{}) {
-		rows, err := s.store.db.QueryContext(ctx, query, arg...)
-		if err != nil {
-			return
+	addClosure := func(closureJSON string) {
+		var closure struct {
+			Artifacts []struct {
+				URI    string `json:"uri"`
+				SHA256 string `json:"sha256"`
+			} `json:"artifacts"`
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var closureJSON, programJSON sql.NullString
-			if err := rows.Scan(&closureJSON, &programJSON); err != nil {
-				continue
-			}
-			var closure struct {
-				Artifacts []struct {
-					URI    string `json:"uri"`
-					SHA256 string `json:"sha256"`
-				} `json:"artifacts"`
-			}
-			_ = json.Unmarshal([]byte(closureJSON.String), &closure)
-			for _, a := range closure.Artifacts {
-				live[platformUpdateDigestFromURI(a.URI)] = struct{}{}
-				if validHexDigest(a.SHA256) {
-					live[a.SHA256] = struct{}{}
-				}
-			}
-			var program struct {
-				Entries []struct {
-					ArtifactURI   string `json:"artifact_uri"`
-					ContentSHA256 string `json:"content_sha256"`
-				} `json:"entries"`
-			}
-			_ = json.Unmarshal([]byte(programJSON.String), &program)
-			for _, e := range program.Entries {
-				live[platformUpdateDigestFromURI(e.ArtifactURI)] = struct{}{}
-				if validHexDigest(e.ContentSHA256) {
-					live[e.ContentSHA256] = struct{}{}
-				}
+		_ = json.Unmarshal([]byte(closureJSON), &closure)
+		for _, a := range closure.Artifacts {
+			live[platformUpdateDigestFromURI(a.URI)] = struct{}{}
+			if validHexDigest(a.SHA256) {
+				live[a.SHA256] = struct{}{}
 			}
 		}
 	}
-	// Current slots + all transition receipts + evidence: gather the union of
-	// every code/program ref the route tables can still name.
+	addProgram := func(programJSON string) {
+		var program struct {
+			Entries []struct {
+				ArtifactURI   string `json:"artifact_uri"`
+				ContentSHA256 string `json:"content_sha256"`
+			} `json:"entries"`
+		}
+		_ = json.Unmarshal([]byte(programJSON), &program)
+		for _, e := range program.Entries {
+			live[platformUpdateDigestFromURI(e.ArtifactURI)] = struct{}{}
+			if validHexDigest(e.ContentSHA256) {
+				live[e.ContentSHA256] = struct{}{}
+			}
+		}
+	}
 	refRows, err := s.store.db.QueryContext(ctx, `
 		SELECT DISTINCT current_code_ref, current_artifact_program_ref FROM computer_version_route_slots
 		UNION SELECT DISTINCT new_code_ref, new_artifact_program_ref FROM computer_version_route_transition_receipts
 		UNION SELECT DISTINCT old_code_ref, old_artifact_program_ref FROM computer_version_route_transition_receipts
 		UNION SELECT DISTINCT code_ref, artifact_program_ref FROM computer_version_route_authorization_evidence`)
 	if err != nil {
-		return live, "list route refs: " + err.Error()
+		return nil, fmt.Errorf("list route refs: %w", err)
 	}
 	type refs struct{ code, program string }
 	var list []refs
 	for refRows.Next() {
-		var r refs
-		if err := refRows.Scan(&r.code, &r.program); err == nil {
-			list = append(list, r)
+		var code, program sql.NullString
+		if err := refRows.Scan(&code, &program); err != nil {
+			refRows.Close()
+			return nil, fmt.Errorf("scan route refs: %w", err)
 		}
+		list = append(list, refs{code.String, program.String})
+	}
+	if err := refRows.Err(); err != nil {
+		refRows.Close()
+		return nil, fmt.Errorf("iterate route refs: %w", err)
 	}
 	refRows.Close()
 	for _, r := range list {
-		collect(`SELECT closure_json, (SELECT program_json FROM computer_version_artifact_programs WHERE artifact_program_ref = ?) FROM computer_version_code_closures WHERE code_ref = ?`, r.program, r.code)
-		collect(`SELECT NULL, program_json FROM computer_version_artifact_programs WHERE artifact_program_ref = ?`, r.program)
+		if err := scanStrings(ctx, s.store.db, `SELECT closure_json FROM computer_version_code_closures WHERE code_ref = ?`, addClosure, r.code); err != nil {
+			return nil, fmt.Errorf("code closure %s: %w", r.code, err)
+		}
+		if err := scanStrings(ctx, s.store.db, `SELECT program_json FROM computer_version_artifact_programs WHERE artifact_program_ref = ?`, addProgram, r.program); err != nil {
+			return nil, fmt.Errorf("artifact program %s: %w", r.program, err)
+		}
 	}
-	return live, ""
+	return live, nil
 }
 
 // platformUpdateDigestFromURI extracts the payload digest from a canonical
@@ -318,58 +484,52 @@ func platformUpdateDigestFromURI(uri string) string {
 	return filepath.Base(strings.TrimPrefix(uri, "artifact+sha256://"))
 }
 
-// sweepArtifactNamespace removes unreachable, past-grace entries in one
-// namespace. file-cas-chunks is handled separately (per-computer manifests).
-func (s *Service) sweepArtifactNamespace(ctx context.Context, ns string, live map[string]struct{}, cfg ArtifactGCConfig, cutoff time.Time, maxDelete int) (ArtifactGCNamespaceReport, error) {
-	rep := ArtifactGCNamespaceReport{}
+// classifyArtifactNamespace walks one namespace and returns its deletion
+// candidates (unreachable and past grace), filling rep's counts.
+func (s *Service) classifyArtifactNamespace(ctx context.Context, ns string, live map[string]struct{}, cutoff time.Time, rep *ArtifactGCNamespaceReport) ([]gcCandidate, []string, error) {
 	if ns == "file-cas-chunks" {
-		return s.sweepFileCASChunks(ctx, cfg, cutoff, maxDelete)
+		return s.classifyFileCASChunks(ctx, cutoff, rep)
 	}
 	dir, err := s.artifactPath(filepath.Join("sha256", ns))
 	if err != nil {
-		return rep, err
+		return nil, nil, err
 	}
+	var out []gcCandidate
 	// file-cas-roots is nested one level deep by computerID
 	// (<ns>/<computerID>/<root>.json); the other namespaces are flat.
 	if ns == "file-cas-roots" {
 		computers, err := os.ReadDir(dir)
 		if os.IsNotExist(err) {
-			return rep, nil
+			return nil, nil, nil
 		}
 		if err != nil {
-			return rep, err
+			return nil, nil, err
 		}
 		for _, c := range computers {
-			if maxDelete <= 0 {
-				break
-			}
 			if c == nil || !c.IsDir() {
 				continue
 			}
-			if maxDelete, err = s.sweepFlatArtifactDir(filepath.Join(dir, c.Name()), live, cfg, cutoff, maxDelete, &rep); err != nil {
-				return rep, err
+			if err := s.classifyFlatDir(ns, filepath.Join(dir, c.Name()), live, cutoff, rep, &out); err != nil {
+				return nil, nil, err
 			}
 		}
-		return rep, nil
+		return out, nil, nil
 	}
-	_, err = s.sweepFlatArtifactDir(dir, live, cfg, cutoff, maxDelete, &rep)
-	return rep, err
+	if err := s.classifyFlatDir(ns, dir, live, cutoff, rep, &out); err != nil {
+		return nil, nil, err
+	}
+	return out, nil, nil
 }
 
-// sweepFlatArtifactDir sweeps one flat directory and returns the remaining
-// delete budget.
-func (s *Service) sweepFlatArtifactDir(dir string, live map[string]struct{}, cfg ArtifactGCConfig, cutoff time.Time, maxDelete int, rep *ArtifactGCNamespaceReport) (int, error) {
+func (s *Service) classifyFlatDir(ns, dir string, live map[string]struct{}, cutoff time.Time, rep *ArtifactGCNamespaceReport, out *[]gcCandidate) error {
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
-		return maxDelete, nil
+		return nil
 	}
 	if err != nil {
-		return maxDelete, err
+		return err
 	}
 	for _, entry := range entries {
-		if maxDelete <= 0 {
-			break
-		}
 		if entry == nil || !entry.Type().IsRegular() {
 			continue
 		}
@@ -388,68 +548,119 @@ func (s *Service) sweepFlatArtifactDir(dir string, live map[string]struct{}, cfg
 			rep.InGrace++
 			continue
 		}
-		if cfg.Mode == ArtifactGCModeActive {
-			if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
-				return maxDelete, fmt.Errorf("delete %s: %w", name, err)
-			}
-		}
-		rep.Deleted++
-		rep.BytesDeleted += info.Size()
-		maxDelete--
+		s.addCandidate(ns, filepath.Join(dir, name), info, rep, out)
 	}
-	return maxDelete, nil
+	return nil
 }
 
-// sweepFileCASChunks runs the existing per-computer reachability GC across
-// every file-cas-chunks/<computerID> dir, honoring grace + the shared delete
-// budget. It reuses GCFileChunks' latest-plus-recent-root reachability.
-func (s *Service) sweepFileCASChunks(ctx context.Context, cfg ArtifactGCConfig, cutoff time.Time, maxDelete int) (ArtifactGCNamespaceReport, error) {
-	rep := ArtifactGCNamespaceReport{}
+func (s *Service) addCandidate(ns, path string, info fs.FileInfo, rep *ArtifactGCNamespaceReport, out *[]gcCandidate) {
+	rel, err := filepath.Rel(s.artifactsRoot, path)
+	if err != nil {
+		return
+	}
+	rep.Eligible++
+	rep.EligibleBytes += info.Size()
+	*out = append(*out, gcCandidate{ns: ns, rel: filepath.ToSlash(rel), path: path, size: info.Size(), mtime: info.ModTime()})
+}
+
+// classifyFileCASChunks classifies every file-cas-chunks/<computerID> dir.
+// A chunk is live when the computer's latest root or any root recorded inside
+// the grace window names it. A computer whose liveness cannot be proven — no
+// recorded root, or any manifest that cannot be read or verified — keeps all
+// of its chunks (Unproven) and is reported.
+func (s *Service) classifyFileCASChunks(ctx context.Context, cutoff time.Time, rep *ArtifactGCNamespaceReport) ([]gcCandidate, []string, error) {
 	dir, err := s.artifactPath(filepath.Join("sha256", "file-cas-chunks"))
 	if err != nil {
-		return rep, err
+		return nil, nil, err
 	}
 	computers, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
-		return rep, nil
+		return nil, nil, nil
 	}
 	if err != nil {
-		return rep, err
+		return nil, nil, err
 	}
+	var out []gcCandidate
+	var warnings []string
+	rootless := 0
 	for _, c := range computers {
-		if maxDelete <= 0 {
-			break
+		if err := ctx.Err(); err != nil {
+			return nil, warnings, err
 		}
 		if c == nil || !c.IsDir() || !safeFileCASComponent(c.Name()) {
 			continue
 		}
-		before := rep.Deleted
-		if err := s.gcFileChunksForComputer(ctx, c.Name(), cfg, cutoff, maxDelete, &rep); err != nil {
-			return rep, err
+		computerID := c.Name()
+		reachable, reason, err := s.fileCASReachableChunks(ctx, computerID, cutoff)
+		if err != nil {
+			return nil, warnings, fmt.Errorf("roots for %s: %w", computerID, err)
 		}
-		maxDelete -= rep.Deleted - before
+		if reason == "no recorded root" {
+			rootless++
+		} else if reason != "" {
+			warnings = append(warnings, fmt.Sprintf("file-cas-chunks: %s: %s; its chunks are kept", computerID, reason))
+		}
+		walkErr := filepath.WalkDir(filepath.Join(dir, computerID), func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || !entry.Type().IsRegular() || !validFileCASDigest(entry.Name()) {
+				return nil
+			}
+			rep.Scanned++
+			if reachable == nil {
+				rep.Unproven++
+				return nil
+			}
+			if _, keep := reachable[entry.Name()]; keep {
+				rep.Live++
+				return nil
+			}
+			rep.Unreachable++
+			info, err := entry.Info()
+			if err != nil {
+				return nil
+			}
+			if !info.ModTime().Before(cutoff) {
+				rep.InGrace++
+				return nil
+			}
+			s.addCandidate("file-cas-chunks", path, info, rep, &out)
+			return nil
+		})
+		if walkErr != nil && !os.IsNotExist(walkErr) {
+			return nil, warnings, walkErr
+		}
 	}
-	return rep, nil
+	if rootless > 0 {
+		warnings = append(warnings, fmt.Sprintf("file-cas-chunks: %d computers have chunks but no recorded root; their chunks are kept", rootless))
+	}
+	return out, warnings, nil
 }
 
-// gcFileChunksForComputer deletes stale chunks for one computer under the
-// shared delete budget. Mirrors GCFileChunks' reachability but honors
-// dry-run + a global budget. Counts fold into rep; the caller tracks the
-// shared delete budget via rep.Deleted.
-func (s *Service) gcFileChunksForComputer(ctx context.Context, computerID string, cfg ArtifactGCConfig, cutoff time.Time, maxDelete int, rep *ArtifactGCNamespaceReport) error {
-	roots, rerr := s.fileCASRootsForGC(ctx, computerID, cutoff)
-	if rerr != nil {
-		return fmt.Errorf("file cas: roots for %s: %w", computerID, rerr)
+// fileCASReachableChunks returns the chunk digests named by the computer's
+// latest root and every root recorded after cutoff. A nil set with a reason
+// means liveness could not be proven and nothing may be collected.
+func (s *Service) fileCASReachableChunks(ctx context.Context, computerID string, cutoff time.Time) (map[string]struct{}, string, error) {
+	roots, err := s.fileCASRootsForGC(ctx, computerID, cutoff)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(roots) == 0 {
+		return nil, "no recorded root", nil
 	}
 	reachable := make(map[string]struct{})
 	for _, root := range roots {
 		manifestData, err := s.readBlob(root.ManifestRef)
 		if err != nil {
-			continue // conservative: an unreadable manifest keeps its chunks
+			return nil, fmt.Sprintf("root %s manifest unreadable (%v)", root.Root, err), nil
 		}
 		manifest, err := filecas.ParseManifest(manifestData)
-		if err != nil || manifest.ComputerID != computerID {
-			continue
+		if err != nil {
+			return nil, fmt.Sprintf("root %s manifest invalid (%v)", root.Root, err), nil
+		}
+		if manifest.ComputerID != computerID || manifest.Root != root.Root {
+			return nil, fmt.Sprintf("root %s manifest belongs elsewhere", root.Root), nil
 		}
 		for _, entry := range manifest.Files {
 			for _, digest := range entry.Chunks {
@@ -457,82 +668,199 @@ func (s *Service) gcFileChunksForComputer(ctx context.Context, computerID string
 			}
 		}
 	}
-	prefix, err := s.artifactPath(filepath.Join("sha256", "file-cas-chunks", computerID))
-	if err != nil {
-		return err
+	return reachable, "", nil
+}
+
+type artifactGCLogRecord struct {
+	At        string `json:"at"`
+	Run       string `json:"run"`
+	Op        string `json:"op"` // intent | deleted | kept_refreshed | gone | error | aborted
+	Namespace string `json:"ns,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Bytes     int64  `json:"bytes,omitempty"`
+	ModTime   string `json:"mtime,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// deleteArtifactCandidates removes the selected candidates. For each batch it
+// first makes an intent record per candidate durable, then re-checks and
+// unlinks each one under the CAS reuse lock and records the outcome. A crash
+// at any point leaves every unlinked path named by an intent record; the next
+// run re-classifies from scratch, so a partial run is simply resumed.
+func (s *Service) deleteArtifactCandidates(ctx context.Context, started time.Time, candidates []gcCandidate, cutoff time.Time, report *ArtifactGCReport) error {
+	if len(candidates) == 0 {
+		return nil
 	}
-	walkErr := filepath.WalkDir(prefix, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil || maxDelete <= 0 {
-			return walkErr
+	logDir := filepath.Join(s.artifactsRoot, artifactGCLogDir)
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
+		return fmt.Errorf("artifact gc: deletion log unavailable, nothing deleted: %w", err)
+	}
+	logFile, err := os.OpenFile(filepath.Join(logDir, started.UTC().Format("2006-01-02")+".jsonl"), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return fmt.Errorf("artifact gc: deletion log unavailable, nothing deleted: %w", err)
+	}
+	defer logFile.Close()
+	writer := bufio.NewWriter(logFile)
+	runID := started.UTC().Format("20060102T150405.000000000Z")
+	record := func(rec artifactGCLogRecord) {
+		rec.At = time.Now().UTC().Format(time.RFC3339Nano)
+		rec.Run = runID
+		line, _ := json.Marshal(rec)
+		_, _ = writer.Write(append(line, '\n'))
+	}
+	flush := func() error {
+		if err := writer.Flush(); err != nil {
+			return err
 		}
-		if entry.IsDir() || !entry.Type().IsRegular() || !validFileCASDigest(entry.Name()) {
-			return nil
+		return logFile.Sync()
+	}
+	for start := 0; start < len(candidates); start += artifactGCLogBatch {
+		end := start + artifactGCLogBatch
+		if end > len(candidates) {
+			end = len(candidates)
 		}
-		rep.Scanned++
-		if _, keep := reachable[entry.Name()]; keep {
-			rep.Live++
-			return nil
+		batch := candidates[start:end]
+		for _, c := range batch {
+			record(artifactGCLogRecord{Op: "intent", Namespace: c.ns, Path: c.rel, Bytes: c.size, ModTime: c.mtime.UTC().Format(time.RFC3339Nano)})
 		}
-		rep.Unreachable++
-		info, err := entry.Info()
-		if err != nil {
-			return nil
+		if err := flush(); err != nil {
+			return fmt.Errorf("artifact gc: deletion log write failed, batch not deleted: %w", err)
 		}
-		if !info.ModTime().Before(cutoff) {
-			rep.InGrace++
-			return nil
-		}
-		if cfg.Mode == ArtifactGCModeActive {
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		for _, c := range batch {
+			if hook := s.artifactGCBeforeUnlink; hook != nil {
+				hook(c.rel)
+			}
+			if err := ctx.Err(); err != nil {
+				record(artifactGCLogRecord{Op: "aborted", Error: err.Error()})
+				_ = flush()
 				return err
 			}
+			op, size, unlinkErr := s.unlinkIfStillUnreachable(c, cutoff)
+			rec := artifactGCLogRecord{Op: op, Namespace: c.ns, Path: c.rel, Bytes: size}
+			nsRep := report.Namespaces[c.ns]
+			switch op {
+			case "deleted":
+				nsRep.Deleted++
+				nsRep.BytesDeleted += size
+			case "error":
+				nsRep.Errors++
+				rec.Error = unlinkErr.Error()
+			default:
+				nsRep.KeptOnRecheck++
+			}
+			report.Namespaces[c.ns] = nsRep
+			record(rec)
 		}
-		rep.Deleted++
-		rep.BytesDeleted += info.Size()
-		maxDelete--
-		return nil
-	})
-	if os.IsNotExist(walkErr) {
-		return nil
+		if err := flush(); err != nil {
+			return fmt.Errorf("artifact gc: deletion log write failed: %w", err)
+		}
 	}
-	return walkErr
+	return nil
+}
+
+// unlinkIfStillUnreachable re-checks a candidate under the CAS reuse lock and
+// removes it only if it is still a regular file older than the cutoff. A
+// writer that reused (refreshed) it since classification wins.
+func (s *Service) unlinkIfStillUnreachable(c gcCandidate, cutoff time.Time) (string, int64, error) {
+	s.store.casReuseMu.Lock()
+	defer s.store.casReuseMu.Unlock()
+	info, err := os.Lstat(c.path)
+	if os.IsNotExist(err) {
+		return "gone", 0, nil
+	}
+	if err != nil {
+		return "error", 0, err
+	}
+	if !info.Mode().IsRegular() || !info.ModTime().Before(cutoff) {
+		return "kept_refreshed", info.Size(), nil
+	}
+	if err := os.Remove(c.path); err != nil {
+		if os.IsNotExist(err) {
+			return "gone", 0, nil
+		}
+		return "error", 0, err
+	}
+	return "deleted", info.Size(), nil
+}
+
+// fileCASRootsForGC returns the computer's latest root plus every root
+// recorded after cutoff.
+func (s *Service) fileCASRootsForGC(ctx context.Context, computerID string, cutoff time.Time) ([]FileRootRecord, error) {
+	latest, err := s.store.LatestFileRoots(ctx, computerID, 1)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.store.db.QueryContext(ctx, `SELECT computer_id,root,manifest_ref,head_sequence,created_at FROM computer_file_roots WHERE computer_id=? AND created_at>? ORDER BY created_at DESC, root DESC`, computerID, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("file cas: list recent roots: %w", err)
+	}
+	defer rows.Close()
+	byRoot := make(map[string]FileRootRecord, len(latest))
+	for _, root := range latest {
+		byRoot[root.Root] = root
+	}
+	for rows.Next() {
+		var root FileRootRecord
+		if err := rows.Scan(&root.ComputerID, &root.Root, &root.ManifestRef, &root.HeadSequence, &root.CreatedAt); err != nil {
+			return nil, err
+		}
+		byRoot[root.Root] = root
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]FileRootRecord, 0, len(byRoot))
+	for _, root := range byRoot {
+		out = append(out, root)
+	}
+	return out, nil
 }
 
 // GCRunner periodically runs the artifact GC when enabled.
 type GCRunner struct {
-	service  *Service
-	config   ArtifactGCConfig
-	interval time.Duration
+	service      *Service
+	config       ArtifactGCConfig
+	interval     time.Duration
+	initialDelay time.Duration
 }
 
 // NewGCRunner builds a periodic artifact-GC runner. interval<=0 -> hourly.
+// The first pass runs after min(interval, 10m): corpusd restarts on every
+// deploy, and a first pass a full interval out ran 9 times in 26 h on a
+// deploy-heavy day (2026-10-14).
 func NewGCRunner(service *Service, cfg ArtifactGCConfig, interval time.Duration) *GCRunner {
 	if interval <= 0 {
 		interval = time.Hour
 	}
-	return &GCRunner{service: service, config: normalizeArtifactGCConfig(cfg), interval: interval}
+	delay := 10 * time.Minute
+	if interval < delay {
+		delay = interval
+	}
+	return &GCRunner{service: service, config: normalizeArtifactGCConfig(cfg), interval: interval, initialDelay: delay}
 }
 
 // Start runs the sweep on the interval until ctx is done; disabled when mode
-// is off. It logs a receipt for every pass (dry-run and active alike).
+// is off. It logs the full report (per namespace) for every pass.
 func (r *GCRunner) Start(ctx context.Context) {
 	if r == nil || r.service == nil || r.config.Mode == ArtifactGCModeOff {
 		return
 	}
 	go func() {
-		ticker := time.NewTicker(r.interval)
-		defer ticker.Stop()
+		timer := time.NewTimer(r.initialDelay)
+		defer timer.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-timer.C:
 				report, err := r.service.RunArtifactGC(ctx, r.config)
+				summary, _ := json.Marshal(report)
 				if err != nil {
-					log.Printf("artifact gc: %v", err)
-					continue
+					log.Printf("artifact gc: error: %v report=%s", err, summary)
+				} else {
+					log.Printf("artifact gc: mode=%s deleted=%d bytes=%d warnings=%d report=%s", report.Mode, report.Deleted, report.BytesDeleted, len(report.Warnings), summary)
 				}
-				log.Printf("artifact gc: mode=%s deleted=%d bytes=%d warnings=%d", report.Mode, report.Deleted, report.BytesDeleted, len(report.Warnings))
+				timer.Reset(r.interval)
 			}
 		}
 	}()

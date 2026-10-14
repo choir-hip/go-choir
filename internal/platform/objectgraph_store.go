@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
@@ -49,7 +50,16 @@ func (o *ObjectGraphStore) externalizeBody(body []byte) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return "", fmt.Errorf("platform objectgraph: cas dir: %w", err)
 	}
+	// Reuse and creation hold the CAS reuse lock shared: the artifact GC
+	// re-checks and unlinks under it exclusively, so a reused body is
+	// refreshed (mtime) before the GC can collect it as unreferenced.
+	o.store.casReuseMu.RLock()
+	defer o.store.casReuseMu.RUnlock()
 	if _, err := os.Stat(path); err == nil {
+		now := time.Now()
+		if err := os.Chtimes(path, now, now); err != nil {
+			return "", fmt.Errorf("platform objectgraph: refresh reused body: %w", err)
+		}
 		return ref, nil // content-addressed: already present
 	}
 	tmp := path + ".tmp-" + shortID(id("ogbody"))

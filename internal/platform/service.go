@@ -40,7 +40,13 @@ type Service struct {
 	// explicit projection-base pins only. It must never be writeMu: a sweep
 	// lasts minutes and would block credential issuance and VM boots.
 	artifactGCMu sync.Mutex
-	graphStore   *PublicationGraphStore // graph-native dual-write target
+	// artifactGCPolicy is the configured GC policy; the on-demand endpoint
+	// may narrow it but never exceed it.
+	artifactGCPolicyMu sync.Mutex
+	artifactGCPolicy   *ArtifactGCConfig
+	// artifactGCBeforeUnlink is a test hook run before each locked unlink.
+	artifactGCBeforeUnlink func(rel string)
+	graphStore             *PublicationGraphStore // graph-native dual-write target
 	// captureBodies reads cited captures' blocks at publish, to pin them.
 	captureBodies *CaptureBodyStore
 	// overlay supplies the live check overlay served beside a version.

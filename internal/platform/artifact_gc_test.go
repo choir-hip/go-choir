@@ -18,6 +18,7 @@ import (
 // grace. A live ref, an in-grace file, and a dry-run all must leave the file.
 func TestRunArtifactGCDryRunAndActive(t *testing.T) {
 	store, root := openTestPlatformStore(t)
+	ensureGCRouteTables(t, store)
 	artifactsRoot := filepath.Join(root, "artifacts")
 	service := NewService(store, artifactsRoot, "")
 	ctx := context.Background()
@@ -101,6 +102,7 @@ func TestRunArtifactGCDryRunAndActive(t *testing.T) {
 // unreachable — pin-before-CAS safety.
 func TestRunArtifactGCKeepsInGraceUnreachable(t *testing.T) {
 	store, root := openTestPlatformStore(t)
+	ensureGCRouteTables(t, store)
 	artifactsRoot := filepath.Join(root, "artifacts")
 	service := NewService(store, artifactsRoot, "")
 	ctx := context.Background()
@@ -131,6 +133,7 @@ func TestRunArtifactGCKeepsInGraceUnreachable(t *testing.T) {
 // ref on Store B — the live file must survive an active sweep.
 func TestRunArtifactGCOGLiveSetReadsCorpus(t *testing.T) {
 	store, root := openTestPlatformStore(t)
+	ensureGCRouteTables(t, store)
 	artifactsRoot := filepath.Join(root, "artifacts")
 	ctx := context.Background()
 	old := time.Now().Add(-2 * time.Hour)
@@ -230,6 +233,7 @@ func TestRunArtifactGCOGLiveSetReadsCorpus(t *testing.T) {
 // an empty set.
 func TestRunArtifactGCFailsClosedOnLiveSetError(t *testing.T) {
 	store, root := openTestPlatformStore(t)
+	ensureGCRouteTables(t, store)
 	artifactsRoot := filepath.Join(root, "artifacts")
 	ctx := context.Background()
 	old := time.Now().Add(-2 * time.Hour)
