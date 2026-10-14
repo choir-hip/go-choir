@@ -204,6 +204,15 @@ tier; a metered provider joins when the free tier returns fewer than
 is skipped as `budget`. Without this, refilled credits will drain at the
 current volume within days.
 
+Update (2026-10-14, owner: "efficiency before scaling"): the budget-aware
+router is built on a branch (fa69be74b, not pushed, not deployed). Brave
+is in the free tier within its pacing; a capped provider is skipped with
+reason `capped` (not `budget`). Design, defaults, tuning, the ops note on
+the daily counts and the rollback switch (`CHOIR_SEARCH_ROUTING=fanout`,
+`CHOIR_SEARCH_PROVIDER_DAILY_CAPS=none`) are in
+docs/reports/search-efficiency-and-reuse-2026-10-14.md §4.1. It should
+land before any paid account is refilled.
+
 ## Failure modes the fix must not have
 
 1. A bench stops being set at all (a real 402 must still bench).

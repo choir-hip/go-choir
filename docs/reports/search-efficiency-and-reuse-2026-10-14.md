@@ -244,6 +244,78 @@ search handler and its log line; one guest tolerance change (below).
 11. Shared state (route, counts) races between the coordinator, the cache
     joiners and the handler.
 
+#### Slice 4 on the branch (not pushed, not deployed)
+
+- fa69be74b `red(searchplane)`: the router, caps, stream fields, log
+  line and health route above. Code: `searchplane/router.go` (one
+  coordinator goroutine per search; `Route` is the shared record),
+  `searchplane/counter.go` + `sqlite_health.go` (`provider_daily_calls`),
+  `searchplane/config.go` (tiers, caps, thresholds),
+  `gateway/search_plane.go`, `gateway/handlers.go`. Tests:
+  `searchplane/budget_test.go` (failure modes 1–7, 9–11),
+  `gateway/search_budget_test.go` (5, 7, 8, log line, health route).
+- ab0f82bc6 `fix(yaegikernel)`: an escalated provider joins N in the
+  worker's search store. Old guests keep working without it.
+
+**Defaults** (all from `ConfigFromEnv`; nothing new is needed in the env):
+
+| Setting | Env | Default |
+|---|---|---|
+| Routing | `CHOIR_SEARCH_ROUTING` | `budget` (`fanout` = every eligible provider at once) |
+| Tiers and costs | `CHOIR_SEARCH_PROVIDER_TIERS` (merged over default) | keenable, searxng, brave `free`; serper `paid:1`, parallel `paid:5`, exa `paid:6`, tavily `paid:8`, serpapi `paid:15`; chatgpt `constrained`; unknown → paid at 1000 |
+| Daily caps | `CHOIR_SEARCH_PROVIDER_DAILY_CAPS` (merged; `name=none` lifts one; `none` lifts all) | serper, parallel, exa, tavily 150; serpapi 100; chatgpt 50; free providers none |
+| Enough results | `CHOIR_SEARCH_MIN_RESULTS` / `CHOIR_SEARCH_DEEP_MIN_RESULTS` | 10 / 30 distinct URLs (never above the request's `max_results`) |
+| Paid per search | `CHOIR_SEARCH_MAX_PAID` / `CHOIR_SEARCH_DEEP_MAX_PAID` | 2 / 4 (`-1`: no paid provider; `0`: the default) |
+| Step deadline | `CHOIR_SEARCH_ESCALATE_AFTER_MS` | 8000 |
+| Escalation window | `CHOIR_SEARCH_ESCALATE_WINDOW_MS` | 20000 (the stream bound becomes 30 + 20 + 5 s) |
+
+Worst case at the caps, list prices: 150 × ($0.001 + $0.005 + $0.006 +
+$0.008) + 100 × $0.015 ≈ **$4.50/day (~$135/month)**, plus ChatGPT's 50
+calls against the subscription limit. Expected, with every account
+refilled and ~10% of searches short: ~400–500 paid calls/day, mostly
+Serper, **≈ $1–3/day** against ~$155/day for today's fan-out (the table
+in §4). Today the four paid accounts are spent, so the immediate change
+is no spend; the saving applies from the first refill.
+
+**Tuning.** Escalation rate too high (most lines `escalated=short…`):
+lower `CHOIR_SEARCH_MIN_RESULTS` or check what Keenable returns for those
+queries. Important stories thin: raise `CHOIR_SEARCH_MAX_PAID` or a
+provider's cap, or have the guest send `depth: "deep"` for them (the
+guest does not send it yet: `internal/search` would add it to the request
+body, and the desk would choose it). Cheaper or better provider first:
+change its cost in `CHOIR_SEARCH_PROVIDER_TIERS`. Stop one provider
+spending without removing its key: `CHOIR_SEARCH_PROVIDER_DAILY_CAPS=tavily=0`.
+
+**Ops: reading the daily counts.** On Node B loopback,
+`curl -s -H 'X-Internal-Caller: true' http://127.0.0.1:8084/provider/v1/search/health | jq .daily_calls`
+returns `daily_calls`: per provider `{day, calls, cap, tier}` for the
+current UTC day (`cap` −1 = no cap). The journal's per-search line ends
+`routing=budget escalated=short(3):serper paid_calls=1 today=[keenable=812 serper=14/150]`:
+`escalated=no` means the free tier was enough; `reason(unique)` is why and
+at how many distinct URLs it escalated; `paid_calls` is paid calls this
+request caused (0 for a cache hit or a join; the leader's line counts
+them); `today` is the day's running count for each provider this search
+called or skipped as capped. A day's paid spend is the sum of
+`paid_calls`, or the `calls` of paid providers on the health route. A
+capped provider shows `skipped=[… serper=capped]` until UTC midnight. The
+counts live in `/var/lib/go-choir/gateway/search-health.db`, table
+`provider_daily_calls` (provider, day, calls), kept 40 days.
+
+**Not built: the per-run soft budget.** The guest sends only `query` and
+`max_results`; the gateway sees the computer, not the run. It needs the
+guest's `startSearch` to send the owning desk run's id (`run_id`) in the
+request body; the gateway would then count searches per (computer, run)
+and, past 12, add `budget_exceeded: {searches, budget}` to the start and
+final lines, which the guest shows in the cell's search stub. No hard
+refusal.
+
+Residuals: `SearchClient.ensurePlane` is unsynchronized for the first
+concurrent searches after a gateway start (pre-existing); the escalation
+threshold (10 distinct URLs) is a guess until the journal shows the
+escalation rate; a pacing slot booked for a provider that is then capped
+is not returned (it only delays that provider's next call by its
+interval).
+
 ## 5. Horizon: local embeddings and a retrieval index over the graph
 
 The owner wants local embeddings (no cloud dependency) and "Hadoop"-scale
