@@ -189,95 +189,119 @@ func projectCapture(obj objectgraph.Object) (captureProjection, bool) {
 	return p, true
 }
 
-// indexCaptures writes the projection of each capture among objs. It never
-// fails the caller: an error is counted, logged, and left to the reconciler.
-func (s *Store) indexCaptures(ctx context.Context, objs ...objectgraph.Object) {
+// indexCaptures writes the projection of the captures among objs, in one
+// transaction. fresh says the captures were just inserted (no projection
+// rows can exist), which saves the deletes. It never fails the caller: an
+// error is counted, logged, and left to the reconciler, woken now.
+func (s *Store) indexCaptures(ctx context.Context, fresh bool, objs ...objectgraph.Object) {
 	if s == nil || !s.retrievalState.captureIndexReady.Load() {
 		return
 	}
+	var captures []objectgraph.Object
 	for _, obj := range objs {
-		if obj.ObjectKind != objectgraph.WebCaptureObjectKind {
-			continue
+		if obj.ObjectKind == objectgraph.WebCaptureObjectKind {
+			captures = append(captures, obj)
 		}
-		done := s.retrievalTimer(retrievalCaptureIndexWrite)
-		err := s.writeCaptureProjection(ctx, obj)
-		if err != nil {
-			// The projection misses one capture until the reconciler,
-			// woken now, repairs it; search stays on (the guest's URL
-			// lookup still checks the window on a miss).
-			s.retrievalState.captureIndexDirty.Store(true)
-			s.kickReconcile()
-		}
-		done("inline", 1, err)
 	}
-}
-
-// writeCaptureProjection replaces one capture's projection rows in one
-// transaction. A capture that is not projectable has its rows removed.
-func (s *Store) writeCaptureProjection(ctx context.Context, obj objectgraph.Object) error {
-	tx, err := s.corpus().BeginTx(ctx, nil)
+	if len(captures) == 0 {
+		return
+	}
+	done := s.retrievalTimer(retrievalCaptureIndexWrite)
+	err := s.writeCaptureProjections(ctx, fresh, captures)
 	if err != nil {
-		return err
+		// The projection misses these captures until the reconciler
+		// repairs it; search stays on (the guest's URL lookup still checks
+		// the window on a miss).
+		s.retrievalState.captureIndexDirty.Store(true)
+		s.kickReconcile()
 	}
-	defer func() { _ = tx.Rollback() }()
-	if err := writeCaptureProjectionTx(ctx, tx, obj); err != nil {
-		return err
-	}
-	return tx.Commit()
+	done("inline", len(captures), err)
 }
 
-// writeCaptureProjections replaces the projection rows of several captures
-// in one transaction (a backfill page).
-func (s *Store) writeCaptureProjections(ctx context.Context, objs []objectgraph.Object) error {
+// Multi-row statement bounds (placeholders per statement stay far below
+// the protocol's 65,535).
+const (
+	captureIndexRowsPerInsert = 200
+	captureTermRowsPerInsert  = 1000
+)
+
+// writeCaptureProjections replaces the projection rows of captures in one
+// transaction with multi-row statements: a capture that is not projectable
+// has its rows removed. On a Dolt sql-server every statement costs a round
+// trip and every transaction a commit, so a backfill page is a handful of
+// statements, not three per capture.
+func (s *Store) writeCaptureProjections(ctx context.Context, fresh bool, objs []objectgraph.Object) error {
 	if len(objs) == 0 {
 		return nil
 	}
+	var rows []captureProjection
+	var clear []any
+	for _, obj := range objs {
+		p, ok := projectCapture(obj)
+		if ok {
+			rows = append(rows, p)
+		}
+		if !fresh || !ok {
+			clear = append(clear, obj.CanonicalID)
+		}
+	}
 	tx, err := s.corpus().BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	for _, obj := range objs {
-		if err := writeCaptureProjectionTx(ctx, tx, obj); err != nil {
-			return fmt.Errorf("project %s: %w", obj.CanonicalID, err)
+	if len(clear) > 0 {
+		in := strings.TrimSuffix(strings.Repeat("?, ", len(clear)), ", ")
+		if _, err := tx.ExecContext(ctx, `DELETE FROM proj_capture_terms WHERE capture_id IN (`+in+`)`, clear...); err != nil {
+			return fmt.Errorf("clear capture terms: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM proj_capture_index WHERE capture_id IN (`+in+`)`, clear...); err != nil {
+			return fmt.Errorf("clear capture index: %w", err)
 		}
 	}
-	return tx.Commit()
-}
-
-func writeCaptureProjectionTx(ctx context.Context, tx *sql.Tx, obj objectgraph.Object) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM proj_capture_terms WHERE capture_id = ?`, obj.CanonicalID); err != nil {
-		return fmt.Errorf("clear capture terms: %w", err)
+	for start := 0; start < len(rows); start += captureIndexRowsPerInsert {
+		chunk := rows[start:min(start+captureIndexRowsPerInsert, len(rows))]
+		args := make([]any, 0, 16*len(chunk))
+		for _, p := range chunk {
+			args = append(args, p.id, p.owner, p.computer, p.urlKey, p.canonicalKey, p.url, p.canonicalURL, p.host, p.source, p.itemID,
+				p.language, p.title, p.hasBlocks, p.fetched, p.published, p.updated)
+		}
+		values := strings.TrimSuffix(strings.Repeat("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?), ", len(chunk)), ", ")
+		if _, err := tx.ExecContext(ctx, `REPLACE INTO proj_capture_index
+			(capture_id, owner_id, computer_id, url_key, canonical_key, url, canonical_url, host, source_id, item_id, language, title, has_blocks, fetched_at, published_at, updated_at)
+			VALUES `+values, args...); err != nil {
+			return fmt.Errorf("write capture index: %w", err)
+		}
 	}
-	p, ok := projectCapture(obj)
-	if !ok {
-		_, err := tx.ExecContext(ctx, `DELETE FROM proj_capture_index WHERE capture_id = ?`, obj.CanonicalID)
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `REPLACE INTO proj_capture_index
-		(capture_id, owner_id, computer_id, url_key, canonical_key, url, canonical_url, host, source_id, item_id, language, title, has_blocks, fetched_at, published_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.id, p.owner, p.computer, p.urlKey, p.canonicalKey, p.url, p.canonicalURL, p.host, p.source, p.itemID,
-		p.language, p.title, p.hasBlocks, p.fetched, p.published, p.updated); err != nil {
-		return fmt.Errorf("write capture index: %w", err)
-	}
-	if len(p.terms) == 0 {
+	var termArgs []any
+	n := 0
+	flushTerms := func() error {
+		if n == 0 {
+			return nil
+		}
+		values := strings.TrimSuffix(strings.Repeat("(?, ?, ?, ?, ?), ", n), ", ")
+		_, err := tx.ExecContext(ctx, `INSERT IGNORE INTO proj_capture_terms (owner_id, computer_id, term, capture_id, fetched_at) VALUES `+values, termArgs...)
+		termArgs, n = termArgs[:0], 0
+		if err != nil {
+			return fmt.Errorf("write capture terms: %w", err)
+		}
 		return nil
 	}
-	var b strings.Builder
-	b.WriteString(`INSERT IGNORE INTO proj_capture_terms (owner_id, computer_id, term, capture_id, fetched_at) VALUES `)
-	args := make([]any, 0, 5*len(p.terms))
-	for i, term := range p.terms {
-		if i > 0 {
-			b.WriteString(", ")
+	for _, p := range rows {
+		for _, term := range p.terms {
+			termArgs = append(termArgs, p.owner, p.computer, term, p.id, p.fetched)
+			n++
+			if n == captureTermRowsPerInsert {
+				if err := flushTerms(); err != nil {
+					return err
+				}
+			}
 		}
-		b.WriteString("(?, ?, ?, ?, ?)")
-		args = append(args, p.owner, p.computer, term, p.id, p.fetched)
 	}
-	if _, err := tx.ExecContext(ctx, b.String(), args...); err != nil {
-		return fmt.Errorf("write capture terms: %w", err)
+	if err := flushTerms(); err != nil {
+		return err
 	}
-	return nil
+	return tx.Commit()
 }
 
 // unindexCapture removes a deleted capture's projection rows.
@@ -383,18 +407,27 @@ func (s *Store) reconcileCaptureIndex(ctx context.Context) (int, error) {
 			s.retrievalState.captureIndexDirty.Store(true)
 			return written, err
 		}
-		var todo []objectgraph.Object
+		// Missing rows of projectable captures are written fresh; rows of
+		// captures that can no longer be projected are removed.
+		var missing, stale []objectgraph.Object
 		for _, obj := range objs {
 			_, projectable := projectCapture(obj)
-			if have[obj.CanonicalID] != projectable {
-				todo = append(todo, obj)
+			switch {
+			case projectable && !have[obj.CanonicalID]:
+				missing = append(missing, obj)
+			case !projectable && have[obj.CanonicalID]:
+				stale = append(stale, obj)
 			}
 		}
-		if err := s.writeCaptureProjections(ctx, todo); err != nil {
+		if err := s.writeCaptureProjections(ctx, true, missing); err != nil {
 			s.retrievalState.captureIndexDirty.Store(true)
 			return written, err
 		}
-		written += len(todo)
+		if err := s.writeCaptureProjections(ctx, false, stale); err != nil {
+			s.retrievalState.captureIndexDirty.Store(true)
+			return written, err
+		}
+		written += len(missing) + len(stale)
 		if len(objs) < captureBackfillPage {
 			break
 		}

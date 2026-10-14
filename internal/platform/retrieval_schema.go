@@ -366,7 +366,11 @@ func (s *Store) backfillLookupKeys(ctx context.Context, kind string) (int, error
 	if err != nil {
 		return 0, err
 	}
-	var todo []objectgraph.Object
+	// Missing keys are inserted in multi-row statements (one round trip
+	// per lookupKeysPerInsert on a sql-server); a stale or unreadable one
+	// is replaced row by row (rare: the keyed fields are ids).
+	var missing []any
+	var stale []objectgraph.Object
 	for rows.Next() {
 		obj := objectgraph.Object{ObjectKind: objectgraph.ObjectKind(kind)}
 		var metadata string
@@ -377,20 +381,33 @@ func (s *Store) backfillLookupKeys(ctx context.Context, kind string) (int, error
 		obj.Metadata = json.RawMessage(metadata)
 		key, ok := objectLookupKey(kind, obj.Metadata)
 		current, present := have[obj.CanonicalID]
-		if ok == present && (!ok || key == current) {
-			continue
+		switch {
+		case ok == present && (!ok || key == current):
+		case ok && !present:
+			missing = append(missing, kind, key, obj.CanonicalID)
+		default:
+			stale = append(stale, obj)
 		}
-		todo = append(todo, obj)
 	}
 	err = rows.Err()
 	_ = rows.Close()
 	if err != nil {
 		return 0, err
 	}
-	for _, obj := range todo {
+	for start := 0; start < len(missing); start += 3 * lookupKeysPerInsert {
+		chunk := missing[start:min(start+3*lookupKeysPerInsert, len(missing))]
+		values := strings.TrimSuffix(strings.Repeat("(?, ?, ?), ", len(chunk)/3), ", ")
+		if _, err := s.corpus().ExecContext(ctx, `INSERT IGNORE INTO og_lookup_keys (object_kind, lookup_key, canonical_id) VALUES `+values, chunk...); err != nil {
+			return 0, err
+		}
+	}
+	for _, obj := range stale {
 		if err := s.writeLookupKey(ctx, s.corpus(), obj); err != nil {
 			return 0, err
 		}
 	}
-	return len(todo), nil
+	return len(missing)/3 + len(stale), nil
 }
+
+// lookupKeysPerInsert bounds one backfill statement.
+const lookupKeysPerInsert = 500
