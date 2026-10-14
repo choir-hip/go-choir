@@ -58,6 +58,7 @@ EXEMPT=(
   "internal/capsule/executor.go:CapsuleFateReceipt:capsule-local receipt types, outside Event/CASRequest/DurableEvent scope:&receipt"
   "internal/maild/webhook.go:resendWebhookEvent:webhook event, not a charter type:&event"
   "internal/provider/provider.go:ContentBlock:provider message events, distinct namespace:&event"
+  "internal/frontimportance/scorer.go:frontStory:corpusd front list page, not a charter type:&page"
 )
 FAIL=0
 while IFS= read -r line; do
