@@ -9,14 +9,85 @@ has landed: `choir.Judge` is gone from the kernel
 `support_pairs` record reached management after 05:xx UTC on the live
 paper. This note covers the other half: management delegating.
 
-Status: design only. Nothing here is implemented, pushed or deployed. An
-agentic-consensus panel comes before code, as the problem doc says.
-The note is green. The work it describes is **red** (management runtime,
-records routes and inbox authority, run admission, gateway model-call
-spacing, restart closures).
+Status: design only, **round 2**. Nothing here is implemented, pushed or
+deployed. A six-member agentic-consensus panel reviewed round 1: five voted
+"accept with amendments" and one "revise". The adjudication is
+[management-delegation-adjudication-2026-10-14](management-delegation-adjudication-2026-10-14.md).
+Every round-2 amendment below rests on a finding the adjudication verified
+against code. The note is green. The work it describes is **red**
+(management runtime, records routes and inbox authority, run admission,
+gateway model-call spacing, restart closures).
+
+Round 2 changelog (amendment: the adjudication finding behind it):
+- **R2-1** §3.1a: a task identity table. It gives the run profile and role,
+  the reader inbox, two senders, and every profile-keyed switch S2 changes.
+  It also corrects the round-1 citation for the inbox spelling (B1, B2).
+- **R2-2** §3.1a: the task role is registered in one commit everywhere it
+  is keyed. The task's action list excludes Exec, WriteFile, Assign and
+  ProductAPI. A reverse-parity test covers it (B3).
+- **R2-3** §5: one wake predicate, used by both `inboxRecordWakes` and the
+  post-turn re-check (B4).
+- **R2-4** §4.2 and §6.4: the lease is a store precondition checked under
+  the commit lock, not a reducer check. A per-capture disposition object
+  refuses a second disposition (B5).
+- **R2-5** §6.1: the library head is carried on the intent and checked in
+  the store, for the parent's `texture:new` too (B6).
+- **R2-6** §7: a durable slot starter. A queued task is an open round with
+  no run, started by an outbox wake of a restart work kind (B7).
+- **R2-7** §3.1: a `management_task` row with its own validation. It reuses
+  the assignment row's patterns, not the engineering binding type (B8).
+- **R2-8** §5: the host mints the task's final Report and computes its
+  residuals from durable dispositions, so "clean" is not the model's claim
+  (B9).
+- **R2-9** §9 and §13: the task model is pinned in S2 to a non-preview,
+  bounded-latency model with a per-call timeout. The 10-minute deadline
+  stays (B10).
+- **R2-10** §12: acceptance that cannot be gamed:
+  - declines cannot satisfy latency (AC1 counts opens and feeds; AC8 checks
+    the disposition mix);
+  - crash-closed captures are bounded at 2%;
+  - AC10 asserts that serialization is gone;
+  - duplicates are counted across the whole window;
+  - AC7 pins the model mix;
+  - AC9 measures task completion (B11).
+- **R2-11** §13: S2's exit criteria. AC2 on intake-only parent turns
+  gates S2, and the full AC2 gates S3, the slice that moves Ask turns. The
+  full AC1 gates S4 (B12).
+- **R2-12** §8: a running task's fate at a planned boot. It gets the
+  ended-run closure with residuals. Queued tasks start once. A busy
+  computer is never forced (B13).
+- **R2-13** §8 and §13: an answer task holds its Texture round against the
+  parent's ended-run closure and D6. This is S3's first test (B14).
+- **R2-14** §3.3: batch `choir.Delegate` (B15).
+- **R2-15** §12: AC3 plants a task that stalls until its deadline (not "20
+  minutes"). S3 repeats it with K answer tasks. Failure mode 13 moves to
+  S3 (B16).
+- **R2-16** §4.1 and §4.3: the lease on a Texture record is the right to
+  Reply or send the final Report. Feeds that name the task's own leased
+  captures go to any story (N1).
+- **R2-17** §8: a capture interrupted by two crashes is closed with that
+  cause and is never re-delegated (N2).
+- **R2-18** §7: from S3, 2 of the K slots are reserved for intake (N3).
+- **R2-19** §13 S1: the cell deadline is independent of delegation. Its
+  default comes from S0's cell durations, max(300 s, 2 × p99), and every
+  kill is logged with the worker's exit cause (N4).
+- **R2-20** §4.1: CancelTask semantics (N6).
+- **R2-21** §13: the slices are split into S2a and S2b and run in the order
+  S2, S4, S3 (N7, N8).
+- **R2-22** §1 and §9: deterministic intake is named as the proposed
+  destination, conditional on the owner's O3 (N9).
+- **R2-23** §15: O2 is settled by the code. Each open decision is marked
+  settled or the owner's (N10).
+- **R2-24** §3.2: coalescing is a further Cast into the queued round, with
+  a cap of 12 (N11).
+- **R2-25** §16: H6, story-open Reports still wake the parent (N12).
+- **R2-26** §13 rollback: the S4 setting off drains, and an S2 revert waits
+  until no task round is open (N14). Also AC6 asserts task runs (N15), the
+  §6.2 wording (N16), and fixtures need intake.labels on (N13).
 
 Evidence classes used below:
-- **code**: file:line on this branch (base `0257fac3`);
+- **code**: file:line on this branch (round 1 base `0257fac3`; round-2
+  citations re-checked on `380ad9a19`);
 - **live**: product routes on the live paper (computer
   `computer-1355b83b…`), read 08:30 UTC with the paper credential
   (`/api/runs?channel_id=management:<owner>`, `/api/runs/<id>/events`,
@@ -43,10 +114,19 @@ Evidence classes used below:
   API, commitments and escalation stay with the parent.
 - Later, capture arrivals go straight to intake tasks through a standing
   route, so the paper's arrival path never touches management's turn.
-- Acceptance: on the live paper, capture arrival to first disposition
-  p95 at most 5 minutes and max at most 15 minutes over 6 hours; no
-  parent turn over 10 minutes (p95 at most 2 minutes); the same holds
-  while a planted 20-minute task runs.
+- Acceptance on the live paper, over 6 hours:
+  - capture arrival to first open or feed: p95 at most 5 minutes, max at
+    most 15 minutes. Declines do not count toward latency, and the
+    disposition mix stays near the baseline;
+  - no parent turn over 10 minutes, and p95 at most 2 minutes;
+  - parent turns start only for records that need the parent;
+  - the bounds hold while a task stalls to its deadline (R2-10, R2-15).
+- Separate from delegation, S1 gives every management cell a host
+  deadline (R2-19).
+- Proposed destination after S4, if the owner rules O3 in: same-event
+  feeds that Jev labels with high probability go in as system acts with no
+  model call, and intake tasks handle only new and uncertain captures
+  (R2-22).
 
 ## 2. What management does serially today
 
@@ -164,13 +244,11 @@ engineering assignment without a capsule:
   opens with the delegating Cast and closes with the task's final Report
   or a system closure, by the existing round rules (`store/inbox.go:236-240`
   and the C1e records model). The task's own cursor reads its own inbox.
-  Exact inbox spelling is an implementation choice; it must not parse as
-  `management:<subject>`, because `recordsRoute` checks that subject
-  against the owner (`inbox_records.go:66-68`, `:95`). The records route
-  also requires the reduction scope's desk agent id to name the run's
-  profile (`inbox_records.go:427`), so a task's scope carries two ids:
-  `management:<owner>` as the sender (§4.2) and the task inbox as the
-  reader whose cursor advances.
+  The inbox must not be spelled `management:<anything>`:
+  `WakeRecordsInbox` never wakes a management id other than the
+  persistent one (`inbox_records.go:642-645`). (Round 1 cited `:66-68`
+  and `:95` here; those lines check sends *to* management.) The full
+  identity is in §3.1a (R2-1).
 - **Not parent/child.** Control, liveness, cancellation and recovery hang
   on the task's round and run, never on the parent run
   (`docs/choir-doctrine.md:323-325`, I3). `requested_by_run_id` is
@@ -191,14 +269,63 @@ engineering assignment without a capsule:
   10 minutes, like `researchCallWindow`, `research_children.go:46`), and a
   host cell deadline (slice S1).
 
-Reuse, not a third mechanism: engineering assignments already have the
-pieces (an assignment row bound to a parent round, a run started on the
-Cast, the closing record, crash and ended-run closures,
-`internal/agentcore/engineering_assignment_runtime.go:163`,
-`inbox_records.go:565-590`, `:800-905`). Recommendation: generalize that
-row to a kind (`engineering` | `management_task`) rather than build a
-parallel table. L5 (sub-researchers as runs) should land on the same
-substrate.
+Reuse the patterns, not the type (R2-7). Engineering assignments already
+have the pieces:
+- an assignment row bound to a parent round;
+- a run started on the Cast, with a spawn wake of a restart work kind;
+- the closing record;
+- crash and ended-run closures.
+
+(`internal/agentcore/engineering_assignment_runtime.go:163`,
+`inbox_records.go:565-590`, `:800-905`.)
+
+Round 1 proposed generalizing that row to a kind. That does not work
+as stated: `EngineeringAssignmentBinding.Validate` requires a trajectory,
+a runtime-derived parent decision, a control id and an assigned agent
+(`internal/types/engineering_assignment.go:119-139`), and an intake task
+has no trajectory or capsule. So a `management_task` row lives in the same
+store family with its own `Validate`. Its fields: owner, computer, task id,
+kind, parent run, task conversation, parent conversation and round (answer
+tasks only), deadline, leased refs, state. It uses the same wake kinds and
+closures. L5 (sub-researchers as runs) should land on the same row.
+
+### 3.1a Task identity (R2-1, R2-2)
+
+| | value |
+|---|---|
+| run profile | `management`. This keeps the profile-keyed behaviour: label overrides (`inbox_records.go:551-556`), the ended-run closure case (`:810-813`) and `recordsDesk` (`:32-38`). One exception: marker-boot passivation makes a spawned work item for any management run (`runtime.go:1492-1500`, `:2491`). A task-role run is excluded from that, and gets the §8 closure instead, because tasks are not resumed. |
+| run role | a new role, `management_task`, carrying the task kind in run metadata |
+| reader inbox and cursor | `management-task:<id>` |
+| sender of acts to `texture:<doc>`, `texture:new`, `source:<id>` | `management:<owner>`, plus host-derived `acting_task` and run id. Forced by the code: `story_open.go:68-71` (only management opens a story) and `store/inbox.go:238-240` (only the caster of an open round may Cast into it). |
+| sender of the task's closing Report to the parent | `management-task:<id>`. Only the round's recipient closes it (`store/inbox.go:232-234`). The host mints this Report (§5). |
+
+`ReductionScope` gains a reader inbox separate from its sender. Every site
+below changes in S2a, with a test through the real reduce and commit path:
+
+- `recordsRoute` (`inbox_records.go:48-103`): routes from a task-role run
+  to `texture:<doc>`, `texture:new` and `source:<id>` as management, and
+  to `management:<owner>` (the closing Report only, minted by the host);
+- `commitRecordsRoute`'s desk check (`:427`): accept the task reader inbox
+  for a task-role run;
+- `inboxRecordForIntent`'s sender (`:309`): the outward sender, not the
+  reader;
+- `WakeRecordsInbox` (`:631-686`): a `management-task:` prompt, the task
+  row instead of an agent record, and the slot starter (§7) instead of a
+  direct start;
+- `closeRoundsOfEndedRun` (`:800-866`): close the task round, then mint
+  the residual Report (§5);
+- `recheckRecordsInbox` (`:708-748`): runs for task runs too, using the
+  shared predicate (§5);
+- the vocabulary, in one commit: `agentprofile.Canonical`
+  (`agentprofile.go:91-103`, because `resolveRunIdentity` canonicalizes the
+  role, `runtime.go:599`), `normalizeDeskRole` (`choir.go:172-178`,
+  which today **fails open to engineering**), `deskModuleSets`
+  (`choir.go:288-298`), and `NewChoirScope`'s action list
+  (`choir.go:119-139`, which today gives every non-research role Exec,
+  WriteFile and Assign). The task's action list keeps ReadCapture and
+  Stories and excludes Exec, WriteFile, Assign and ProductAPI. A
+  reverse-parity test asserts both the module set and the handle's
+  actions.
 
 ### 3.2 Task kinds
 
@@ -210,18 +337,28 @@ substrate.
 
 Unit of intake: one arrival record (one poll; 475 / 133 = 3.6 captures
 on average). Jev already marks same-event siblings inside a poll
-(L2a R2-3), so a poll is a natural unit. A queued intake task that has
-not started yet absorbs later arrivals, up to 20 captures, so a burst
-becomes fewer, larger tasks and same-event captures from different
-sources are more often decided together.
+(L2a R2-3), so a poll is a natural unit. From S4, a queued intake task
+that has not started yet absorbs later arrivals, up to 12 captures
+(R2-24; round 1 said 20). A burst then becomes fewer, larger tasks, and
+same-event captures from different sources are more often decided
+together. Absorption is a further Cast into the queued task's open round
+by the same caster, which the round rules accept
+(`store/inbox.go:236-241`). Records are immutable, so the lease is every
+capture named by the round's Casts, not only the opening one.
 
 ### 3.3 How a task is opened
 
 Two routes, landing in this order:
 
-1. **Parent-directed.** `choir.Delegate(kind, objective, refs)` on
-   management's surface stages a Cast to a new task inbox. `refs` are
-   record ids from the parent's `choir.Records()`. The Cast copies the
+1. **Parent-directed, batched (R2-14).** `choir.Delegate(kind, objective,
+   refs, grouping)` on management's surface stages one Cast per new task
+   inbox. `refs` are record ids from the parent's `choir.Records()`.
+   `grouping` is either `per_record` (one intake task per arrival, the
+   default) or explicit groups up to the coalescing cap. One cell commits
+   every task Cast and the cursor advance. The prompt delegates the whole
+   backlog in at most two cells. One Delegate per cell would not do: at
+   305a582d's 29 s per model call, 27 arrivals would cost about 13
+   minutes of delegation alone. The Cast copies the
    records' captures (items and the label version shown) or the Texture
    record into its body, so the task's `choir.Records()` shows them as a
    captures record or a Texture record and the existing kernel checks
@@ -248,7 +385,7 @@ Two routes, landing in this order:
 | ReadCapture | yes until S5 (O9) | yes | yes |
 | Feed, Decline | until S5 | yes, leased captures only | no |
 | Cast `texture:new` | until S5 | yes, leased captures only; library check (§6) | no |
-| Note or Cast to `texture:<doc>` | yes | yes, naming leased captures | Note to the leased conversation |
+| Note or Cast to `texture:<doc>` | yes | yes, to any story, naming only its leased captures (R2-16) | Note to the leased conversation |
 | Reply, ReportPacket to a Texture | yes | no | yes, leased conversation only; a final Report only when the round has no engineering assignment (D6, `inbox_records.go:565-590`) |
 | Delegate, CancelTask | yes | no (one level, as research children: owner PD1) | no |
 | Cast engineering, CancelAssignment, Verify | yes | no | no |
@@ -258,48 +395,106 @@ Two routes, landing in this order:
 The parent keeps what changes computer-wide coherence: admitting
 engineering, verifying a candidate, the owner's product routes
 (schedules, settings, run acceptances), commitments on the ledger,
-escalation to the owner, delegation and cancelling tasks. A task changes
-only the stories and conversations its lease names.
+escalation to the owner, delegation and cancelling tasks. A task disposes
+only the captures its lease names, and answers only the Texture round its
+lease names.
+
+**CancelTask (R2-20).** It calls the existing `CancelRun`
+(`runtime.go:1604`) on the task's run. The ended-run closure (§8) then
+closes the task round `run_cancelled` and mints the residual Report.
+A commit the cancelled task had in flight fails the §4.2 precondition. A
+queued task, which has no run, is cancelled by a system closure of its
+round. The parent may re-delegate the residuals in the same or a later
+cell.
 
 ### 4.2 Delegated sender
 
-A task's outward records carry `SenderInbox = management:<owner>`, so a
-Texture keeps one conversation with management
-(`management.yaml:15`: "You hold one conversation with every Texture of
-your owner") and round rules see one caster. Provenance adds
-`acting_task: <task_id>` and the task's run id. Choir.Pack shows the act
-as management's, with the task named.
+A task's records addressed to a Texture, to `texture:new` or to a source
+carry `SenderInbox = management:<owner>`. A Texture therefore keeps one
+conversation with management (`management.yaml:15`: "You hold one
+conversation with every Texture of your owner"), and the round rules see
+one caster. Provenance adds `acting_task: <task_id>` and the task's run
+id. The host derives both from the run; the model does not supply them.
+The store requires them on every record committed from a task-role
+scope. Choir.Pack shows the act as management's, with the task named. The
+task's closing Report to the parent is the one record sent from
+`management-task:<id>` (§3.1a).
 
-The reducer, not the store, checks the lease: a task's act is accepted
-only if every capture it names and every conversation it addresses is in
-its open round's Cast. The store keeps validating well-formedness only
-(`store/inbox.go:57-58`).
+**The store, not the reducer, checks the lease (R2-4).** Round 1 put this
+check in the reducer. That races: `commitRecordsRoute` reads conversation
+state (`inbox_records.go:476`) well before it commits (`:534`). A deadline
+or cancel closure can commit in between, and a feed Note into
+`texture:<doc>` is in a different conversation from the task round, so
+`stepConversation` would not catch it. So every commit from a task-role
+scope carries a precondition: "round N of
+`management:<owner>|management-task:<id>` is open, and every capture this
+commit disposes is leased by it". The store checks it under `trajectoryMu`
+(`store/inbox.go:578`), as conditions in the same `PutBatchConditional`
+(`:587`), the way the cursor compare-and-set already works. A failed
+precondition refuses the whole cell. This is a check on state the store
+already holds (round heads and the disposition objects of §6.4), so the
+store still scores nothing.
 
 ### 4.3 The lease is the open round
 
 There is no lease table. A capture or Texture record is leased to a task
 exactly while the task's round that names it is open (single authority,
-standing question 5). Consequences:
+standing question 5). The task row's leased refs are written in the same
+commit as the round's Casts and are never edited apart from them. What a
+lease grants (R2-16):
 
-- delegating a record already leased is refused at the parent's reduce;
-- the parent's own act on a leased record is refused until the round
-  closes or the parent cancels the task;
+- a leased **capture**: the sole right to dispose of it (open, feed,
+  decline);
+- a leased **Texture record**: the sole right to Reply and to send the
+  final Report in that round. Round 1 made a lease exclusive over the
+  whole conversation. That contradicted §4.1, where an intake task feeds
+  any story, and it would have blocked intake feeds into a Texture whose
+  Ask was being answered. Feeds that name the feeding task's own leased
+  captures go to any Texture. A Note after a round closes is a legal
+  round-0 note (`store/inbox.go:245-253`).
+
+Consequences:
+
+- delegating a record already leased is refused by the store precondition
+  (§4.2);
+- the parent's own disposition of a leased capture, or its final Report
+  into a leased round, is refused until the round closes or the parent
+  cancels the task;
 - a closed round (final Report, crash closure, deadline, cancel) frees
   the lease with no extra write.
 
 ## 5. How results return
 
-- A task ends with one final Report to `management:<owner>`, closing its
-  round. The body lists what it committed (record ids per capture), its
-  residuals (captures or requests it did not settle, each with a reason),
-  its error if any, and its tokens.
-- **A clean final Report does not wake the parent**: a Report with
-  `work_disposition: completed` and no residual is recorded and stays
-  unread until the parent's next turn, like a support pass writing only
-  its memo. A Report with residuals, a failure, or a deadline closure
-  wakes the parent. This needs one rule in `inboxRecordWakes`
-  (`store/inbox.go:209-219`). Without it, every task would wake a parent
-  turn and the serial queue would come back (failure mode 2).
+- **The host mints the task's final Report (R2-8).** The model ends a task
+  with a staged `choir.Done(note)`. If it does not, the deadline, a
+  cancel, or the run's end does. The host then mints one final Report from
+  `management-task:<id>` to `management:<owner>`, which closes the task
+  round. This is how engineering's Complete already mints its final Report
+  (`inbox_records.go:325-331`). The body lists:
+  - the record ids committed per capture;
+  - **residuals = leased refs minus durable dispositions**, computed from
+    §6.4's disposition objects, each with the model's reason if it gave
+    one;
+  - the error, if any, and the tokens used.
+
+  The crash boot closure carries no capture list
+  (`types/commitment.go:442-456`), so AC5's join uses the same
+  computation: the round's leased refs minus their dispositions.
+- **A clean final Report does not wake the parent.** A Report is clean
+  when its residual set is empty and the task had no error. The host
+  computes that; the model does not claim it. A clean Report is recorded
+  and stays unread until the parent's next turn, like a support pass that
+  writes only its memo. A Report with residuals, a failure, or a deadline
+  closure wakes the parent.
+- **One wake predicate (R2-3).** Round 1 put the rule only in
+  `inboxRecordWakes` (`store/inbox.go:209-219`). The post-turn re-check
+  starts another turn for *any* unread record committed after the ending
+  turn began (`inbox_records.go:735-742`), so clean Reports landing
+  mid-turn would still re-arm the parent. Both paths call one predicate,
+  `recordWakesReader(rec)`. Without it, every task would wake a parent
+  turn and the serial queue would come back (failure mode 2). Test: three
+  clean Reports land during a parent turn and no new turn starts; one
+  residual Report starts exactly one turn.
 - The parent reads residuals in a later turn and acts: re-delegates,
   casts engineering for an answer task's "needs engineering", or
   escalates.
@@ -308,37 +503,70 @@ standing question 5). Consequences:
 
 1. **Two tasks open a story for the same event.** Example: two sources'
    polls report one new event in the same minute, and both intake tasks
-   cast `texture:new`. Guard: an optimistic check on the story library.
-   The store keeps a library head (count of story opens), advanced in the
-   commit of a `texture:new` Cast. A task's session remembers the head
-   its last `choir.Stories()` read. A `texture:new` Cast from a task whose
-   seen head is behind is refused with the stories opened since (headline,
-   captures). The task re-decides: feed one of them, or cast again with
-   `distinct_from: [doc ids]`, which commits and is recorded as an
-   override for Jev's examples (L2a A3). With 4 tasks and about 27
-   arrivals in the busiest hour, refusals should be rare (hypothesis H5,
-   measured by AC4).
+   cast `texture:new`. Guard: an optimistic check on the story library
+   (R2-5). Today `planStoryOpenings` opens a story for each `texture:new`
+   Cast, conditioned only on its new ids being absent
+   (`store/story_open.go:56-95`), so the check needs plumbing:
+   - the store keeps a computer-scoped library head (a count of story
+     opens), advanced in the commit of each `texture:new` Cast;
+   - the host records the head per run when it serves `choir.Stories()`,
+     as `recordsRunShown` works, and stamps it on every `texture:new`
+     intent. A run that never read `Stories()` has seen head 0;
+   - the store compares the stamped head with the current head under the
+     commit lock. If the stamped head is behind, it refuses the whole cell
+     with the stories opened since (headline, captures);
+   - the check applies to the parent's `texture:new` too, until S5.
+     Otherwise a parent and a task can still open duplicates.
+
+   The task re-decides in its next cell: feed one of the listed stories,
+   or cast again with `distinct_from: [doc ids]`. That commits, and is
+   recorded as an override for Jev's examples (L2a A3) and counted by AC4.
+   The task prompt teaches "read Stories() before opening". With 4 tasks
+   and about 27 arrivals in the busiest hour, refusals should be rare.
+   Hypothesis H5 is measured at the minute of a burst, not averaged over
+   the hour. The store does not judge whether two captures report the same
+   event; that is a judgement, and the store scores nothing.
 2. **Two tasks feed the same story.** Feeds are Notes or Casts into
    `texture:<doc>`. Each record takes the next sequence in that inbox
-   inside its own commit, so they serialize and the Texture reads both in
-   one turn. A Cast into an open round is accepted from the same caster
+   inside its own commit, so they serialize, and the Texture reads both in
+   one or more turns. A Cast into an open round is accepted from the same caster
    (`store/inbox.go:236-240`); both tasks send as `management:<owner>`.
    Tasks may add hypotheses but not withdraw them, so one task cannot
    withdraw another's.
 3. **One capture in two tasks.** Impossible while the lease is the open
    round (§4.3).
 4. **A capture disposed twice** (a late commit racing a closure and a
-   re-delegation). A second disposition of a capture is refused at reduce
-   unless it is the parent's explicit re-disposition, which is recorded as
-   an override.
+   re-delegation). Guard (R2-4): a computer-scoped disposition object,
+   keyed by capture id, written in the batch that carries the disposition
+   record and conditioned on being absent. A second disposition fails the
+   condition under the commit lock. The parent's explicit re-disposition
+   replaces the object conditionally on the old version and is recorded as
+   an override. The object indexes the disposition record, which stays the
+   content; the two commit atomically, so there is one authority. The
+   object also feeds AC1's join and the residual computation (§5).
 5. **The store's single writer.** Every commit serializes on the engine
    lock (`internal/objectgraph/engine_mutex.go:10-14` already records
    wait and hold time per caller). Tasks hold no lock across a model call;
    a commit is milliseconds. Hypothesis H3: at K=4, lock waits stay small;
    the engine-mutex metrics measure it, and the read/write lock (SA slice
    4) waits on that measure.
-6. **Parent and task on one Texture conversation.** Excluded by the lease;
-   the parent acts after the round closes or after CancelTask.
+6. **Parent and task on one Texture conversation.** Only the lease holder
+   may Reply or send the final Report in a leased round (§4.3). Others may
+   send Notes. The parent finalizes after the round closes or after
+   CancelTask.
+7. **The parent's run ends while an answer task holds a Texture round
+   (R2-13; S3).** Today, when a management run ends,
+   `closeRoundsOfEndedRun` closes every round where management is the
+   recipient. Only engineering assignments hold a round open
+   (`inbox_records.go:836-842`, `childAssignmentsHoldRound` `:869-899`).
+   Once the parent delegates an Ask and ends its turn, the Texture round
+   would close `run_completed`, and the task's answer would then be
+   refused, because the round is no longer open
+   (`store/inbox.go:229-230`). Guard: the answer-task row binds the
+   Texture round it serves (parent conversation and round).
+   `childAssignmentsHoldRound` and D6's `requireChildOutcomesRead`
+   (`:565-590`) cover open task rows as well as engineering rows. This is
+   S3's first test.
 
 ## 7. Concurrency and admission
 
@@ -348,6 +576,27 @@ standing question 5). Consequences:
   (`internal/agentcore/intake_labels.go:44`). A queued task is a
   committed round whose run waits for a slot; its records are leased and
   visible as queued.
+- **The slot starter is durable and derived (R2-6).** Today
+  `WakeRecordsInbox` starts a run for any desk with unread records and no
+  active run (`inbox_records.go:656-665`). Nothing counts slots, so a
+  burst would start one run and one worker per task. The starter works
+  like this:
+  - a queued task is an open task round with no run. It is not an
+    in-memory queue;
+  - its start is an outbox wake of a kind listed in `RestartWorkKinds`
+    (`planned_restart.go:161-173`), modelled on engineering's
+    `delegated_assignment_spawn_deadline`. A crash boot therefore
+    interrupts it; a marker boot delivers it once. Boot itself delivers
+    nothing (`runtime.go:793-797`);
+  - the starter takes a slot when one is free, and runs again when a task
+    run ends and on each such wake. No run and no worker exist until a
+    slot is held.
+
+  S0's script reports the queue depth and the oldest queued age, from the
+  open task rounds.
+- **Intake reserve (R2-18, from S3).** Two of the K slots are reserved for
+  intake tasks, so answer tasks on a slow model cannot starve the paper's
+  arrival path.
 - **Little's law (estimate).** The busiest hour had 27 arrivals (0.45 a
   minute). At about 2 minutes per intake task, about 1 task runs on
   average, so K = 4 leaves room for answer tasks and bursts.
@@ -372,26 +621,48 @@ standing question 5). Consequences:
   (`internal/agentcore/planned_restart.go:161-173`), so a crash boot
   starts no task. The boot closure closes every open round, task rounds
   included, as `interrupted_by_restart`, and wakes no one
-  (`inbox_records.go:756-795`). Leases free with the rounds. Captures a
-  crashed task had not disposed keep the visible fate "interrupted by a
-  restart" in the closure record in management's inbox. They are not
-  re-delegated at boot. The parent's next live turn reads the closure and
-  may re-delegate them; that is new work by a live turn. The standing
-  intent (the source schedule) survives; the occurrence does not.
+  (`inbox_records.go:756-795`). Pre-boot task runs close with the same
+  fate (`closePreBootRunsAfterCrash`, `runtime.go:768`). Leases free with
+  the rounds. Captures a crashed task had not disposed keep the visible
+  fate "interrupted by a restart". The closure record lists no captures,
+  so that fate is derived as leased refs minus dispositions (§5). They
+  are not re-delegated at boot. The parent's next live turn reads the
+  closure and may re-delegate them; that is new work by a live turn. The
+  standing intent (the source schedule) survives; the occurrence does not.
+- **Crash budget per capture (R2-17).** A capture whose task round was
+  crash-closed twice is closed with that cause and is never re-delegated,
+  as a source schedule whose tick crashes the computer twice is closed
+  (CLAUDE.md, "Restarts End Work"). Otherwise a capture that kills the
+  guest would crash it once per poll tick, through live re-delegation.
+  The count is a field on the capture's disposition object (§6.4).
 - **Run ends without a final Report** (failed, deadline, cancelled). The
   ended-run closure gives the round a system final Report and wakes the
   caster (`inbox_records.go:800-868`). For a task the caster is the
   parent; the closure lists the leased records still unsettled.
-- **Planned restart.** Recommendation for v1: tasks are not resumed.
-  Before a planned restart the runtime drains: it stops starting queued
-  tasks, lets running tasks finish within their deadline (at most 10
-  minutes), then restarts with no task running. Queued tasks are
-  delivered after a boot that consumed the marker, once, which the rule
-  allows. This gives an always-busy paper a bounded way to become idle,
-  which the open problem in
+- **Planned restart (R2-12).** Tasks are not resumed in v1.
+  - **Drain.** Before a planned restart the runtime stops starting queued
+    tasks and lets running tasks finish within their deadline (at most 10
+    minutes). The host writes the marker and restarts only once no task
+    is running. The drain never forces a restart on a busy computer:
+    deploys update idle computers and leave busy ones to their next idle
+    moment (CLAUDE.md, "Restarts End Work").
+  - **A task that is running anyway at a marker boot.** This happens on a
+    drain timeout or a restart requested outside the drain. Today such a
+    run would be passivated with its round open and no wake: a marker boot
+    passivates and closes no rounds (`runtime.go:765-770`, `:2481-2511`).
+    So at a marker boot, a passivated task run gets the ended-run closure
+    (`run_passivated`), and the host mints its residual Report (§5),
+    which wakes the parent. The consumed marker permits that one wake.
+    The task itself is not resumed.
+  - **Queued tasks** start once through §7's outbox wake after a marker
+    boot. If that boot then crashes, the crash boot closes them.
+
+  This gives an always-busy paper a bounded way to become idle, which the
+  open problem in
   `docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md`
   ("how an always-busy computer takes updates") needs. Who requests the
-  drain (the deploy's refresh) is outside this note. Open decision O6.
+  drain (the deploy's refresh) is the owner's deploy-shape decision (O6).
+  S2 does not depend on it.
 
 ## 9. Cost
 
@@ -414,11 +685,25 @@ standing question 5). Consequences:
   settled "labels are advice, management decides"
   (`docs/reports/l2a-synthesis-intake-design-2026-10-14.md:73-77`, "Labels are
   advice; management decides"), so it
-  is the owner's call (O3) and not in the slices.
-- **Model for tasks.** Bounded intake wants a fast model. A free preview
-  model with 5- to 9-minute calls would eat a task's 10-minute deadline.
-  Open decision O5 (a `management_task` role in the model policy,
-  defaulting to management's).
+  is the owner's call (O3) and not in the slices. If the owner rules it in,
+  it is the proposed destination after S4 (R2-22). S4's standing route is
+  designed label-first, so the route can send high-probability same-event
+  captures to a system feed and only new and uncertain captures to intake
+  tasks.
+- **Model for tasks (R2-9, an S2 deliverable).** Bounded intake needs a
+  fast model. The problem doc records free-preview calls taking "from
+  seconds to nine minutes per call" (problem doc, line 53). One such call
+  would use most of a 10-minute task deadline, and the re-delegations that
+  followed would thrash. Run 305a582d on deepseek-v4.1-flash averaged 29 s
+  a call. So S2 adds a `management_task` role to the model policy:
+  - pinned to a non-preview, bounded-latency model; the proposed default
+    is deepseek-v4.1-flash;
+  - with a per-call timeout below the task deadline;
+  - a free preview model cannot be selected for it.
+
+  The owner may override the model (O5; model routing is red). The
+  deadline stays at 10 minutes. Raising it would hold leases longer and
+  hide a slow model; AC9 measures how often the deadline fires.
 
 ## 10. How the parent turn stays short
 
@@ -431,7 +716,9 @@ standing question 5). Consequences:
 3. **Clean task Reports do not wake it** (§5), so the parent turns over
    for residuals, Texture Casts and engineering, not for every task.
 4. **A host cell deadline** (S1) bounds any one cell, closing the
-   14-minute stuck cell seen in 305a582d.
+   14-minute stuck cell seen in 305a582d. It does not bound a model call
+   between cells. So AC2's maximum is measured, not guaranteed: it also
+   depends on the model's latency, which S0 records per turn.
 5. **The prompt says triage.** "Answer all of them in this turn"
    (`management.yaml:24`) becomes: delegate captures and Texture requests,
    act on residuals, engineering and the computer, end the turn.
@@ -450,10 +737,11 @@ structure above is what keeps the turn short. AC2 measures it.
 3. Duplicate stories from concurrent opens. Guard: the library check
    (§6.1); measured by AC4.
 4. Two tasks lease one capture, or the parent acts on a leased record.
-   Guard: the lease is the open round; refused at reduce; tested.
+   Guard: the lease is the open round; refused by the store
+   precondition (§4.2); tested.
 5. A task acts outside its lease (other captures, other conversations,
-   engineering, ProductAPI). Guard: the task module sets plus the reduce
-   check; reverse parity test (as `choir_parity_test.go:422-449`) for
+   engineering, ProductAPI). Guard: the task module sets plus the store
+   precondition; reverse parity test (as `choir_parity_test.go:422-449`) for
    both task kinds.
 6. A task's acts look like the parent's with no attribution. Guard:
    `acting_task` and the run id on every record; Pack shows them.
@@ -469,9 +757,9 @@ structure above is what keeps the turn short. AC2 measures it.
 11. A task hangs (stuck cell, slow model) and holds its lease. Guard: the
     task deadline closes the round, frees the lease and returns the
     captures to the parent as residuals; the host cell deadline.
-12. A capture is disposed twice (late commit after a closure). Guard: a
-    second disposition is refused unless the parent re-disposes it
-    explicitly.
+12. A capture is disposed twice (late commit after a closure). Guard: the
+    disposition object (§6.4) refuses a second disposition under the
+    commit lock unless the parent re-disposes it explicitly.
 13. An answer task closes a Texture round that has an engineering
     assignment. Guard: D6 (`inbox_records.go:565-590`) applies to tasks
     unchanged; tasks cannot cast engineering.
@@ -482,141 +770,275 @@ structure above is what keeps the turn short. AC2 measures it.
     the parent and its prompts; parity test.
 16. A crash-closed task's captures are never disposed. Accepted by the
     restart rule; they stay visible as interrupted and are counted
-    separately in AC5. The parent may re-delegate them on a live turn.
+    separately in AC5 and bounded by AC1 (at most 2%). The parent may
+    re-delegate them on a live turn, at most once more (R2-17).
 17. Tasks cost more than the serial turn. Guard: AC7; tokens per task
     recorded as runs.
 18. The owner cannot see the tasks. Guard: tasks are runs in
     `/api/runs`; open task rounds show in the inbox route's
     `open_rounds`.
+19. A task run is not recognized by a profile-keyed switch: it gets no
+    route, no wake, no ended-run closure or no re-check. Guard: the §3.1a
+    site list, each tested through the real reduce and commit path (R2-1).
+20. The task role falls open to engineering's module set and filesystem
+    actions (`choir.go:172-178`). Guard: one commit registering the role
+    everywhere, and a reverse-parity test on the handle's actions (R2-2).
+21. The post-turn re-check re-arms the parent on clean Reports. Guard: one
+    wake predicate (§5, R2-3).
+22. A late commit lands after the closure that freed the lease. Guard: the
+    store precondition (§4.2, R2-4).
+23. A burst starts unbounded runs. Guard: the durable slot starter (§7,
+    R2-6).
+24. A running task is stranded passivated at a marker boot. Guard: the
+    `run_passivated` closure with residuals (§8, R2-12).
+25. The parent's run end closes a Texture round an answer task holds.
+    Guard: task rows hold the round (§6.7, R2-13; S3).
+26. A capture crashes the guest on every re-delegation. Guard: the crash
+    budget (§8, R2-17).
+27. The task model is too slow for the deadline, and tasks thrash. Guard:
+    the pinned model (§9, R2-9) and AC9.
 
-## 12. Acceptance
+Failure mode 13 (D6 on answer tasks) and failure mode 25 are tested in S3,
+not S2 (R2-15).
 
-Measured, on the product path:
+## 12. Acceptance (round 2: R2-10, R2-11, R2-15)
 
-- **AC1 latency.** Live paper, 14 sources at 15-minute intervals,
-  intake.labels on, 6-hour window: for every capture, arrival (arrival
-  record `committed_at`) to first disposition (first record whose
-  `Disposition.Captures` names it, or a `texture:new` Cast whose spec
-  names it). **p95 at most 5 minutes, max at most 15 minutes.**
-  Crash-closed captures are counted separately. Baseline (§2.3,
-  estimated): p95 about 21-25 minutes, max about 35.
-- **AC2 short parent.** Same window: **no management parent turn longer
-  than 10 minutes; p95 at most 2 minutes.** Baseline: p95 812 s, max
-  3,601 s.
-- **AC3 long-task drill.** Minted test computer with the paper fixture:
-  a planted answer task held for 20 minutes (a model fake that stalls)
-  runs while 4 sources poll. AC1's and AC2's bounds hold during it.
-- **AC4 coherence.** Fixture stories-per-event no worse than the serial
-  baseline, and no two stories for one judge-scored event opened within
-  10 minutes of each other by two tasks (`scripts/l2a_paper_window.py`
-  pairs).
-- **AC5 completeness.** Every capture has exactly one disposition or the
-  visible fate "interrupted by a restart".
-- **AC6 crash.** Kill the guest with at least 2 tasks running: the boot
-  starts no task, closes their rounds `interrupted_by_restart`, frees
-  their leases; the next poll's arrivals get new tasks.
-- **AC7 cost and memory.** Input tokens per disposed capture at most 1.2
-  times the window before S2; peak concurrent task workers at most K.
+The criteria are measured on the product path, by S0's script over
+`/api/runs`, `/api/runs/<id>/events` and the inbox routes. Round 1's
+criteria could be met by declining quickly. Its crash exclusion was
+unbounded. Nothing in it asserted that the parent stopped serializing.
 
-## 13. Slices, in order
+- **AC1 latency (opens and feeds).** Live paper, 14 sources at 15-minute
+  intervals, intake.labels on, a 6-hour window. For every capture, the
+  latency runs from arrival (the arrival record's `committed_at`) to its
+  first effective disposition (from §6.4's disposition object). It is
+  reported per kind: open, feed, decline. **The bound holds for opens and
+  feeds alone: p95 at most 5 minutes, max at most 15 minutes.** Declines
+  cannot satisfy it. **Crash-closed captures are at most 2% of the
+  window's captures**, and every crash in the window is named with its
+  cause. Baseline (§2.3, estimated): p95 about 21-25 minutes, max about
+  35.
+- **AC2 short parent.** Same window. Only parent runs count: agent id
+  `management:<owner>`, not task-role runs. **No parent turn longer than
+  10 minutes; p95 at most 2 minutes.** Each turn is reported with its
+  model, call count and call durations, so a miss can be attributed (the
+  cell deadline does not bound a model call, §10). Baseline: p95 812 s,
+  max 3,601 s.
+- **AC3 stalled-task drill.** Minted test computer with the paper
+  fixture, 4 sources polling. In S2, an intake task's model fake stalls
+  until the task deadline (10 minutes). The deadline closes the round,
+  frees the lease and returns residuals, which the parent re-delegates.
+  AC1 (opens and feeds), AC2 (intake-only turns) and AC10 hold
+  throughout. In S3 the drill repeats with K stalled answer tasks, which
+  also tests the intake reserve. (Round 1's "held for 20 minutes"
+  contradicted the 10-minute deadline.)
+- **AC4 coherence.** On the fixture, stories per event are no worse than
+  the serial baseline. **No two stories for one judge-scored event across
+  the whole window** (`scripts/l2a_paper_window.py` pairs), except
+  recorded `distinct_from` overrides. Those are counted and judge-scored
+  separately.
+- **AC5 completeness.** Every capture has exactly one effective
+  disposition, or the visible fate "interrupted by a restart", or "closed
+  after two crashes" (R2-17). A parent re-disposition counts as the
+  effective disposition and is listed separately as an override.
+  Unsettled captures are derived as leased refs minus dispositions (§5).
+- **AC6 crash.** Kill the guest with at least 2 tasks running and 1
+  queued. The boot starts no task. It closes their rounds and their runs
+  `interrupted_by_restart`, wakes no one, and frees their leases. The
+  next poll's arrivals get new tasks.
+- **AC7 cost and memory.** Parent plus task input tokens per disposed
+  capture is at most 1.2 times the S0 baseline window, **on the same
+  pinned model mix** (or reported per model when the mix differs). Total
+  task tokens and cost are reported. Peak concurrent task workers is at
+  most K.
+- **AC8 disposition mix (new).** Opens, feeds and declines per arrival
+  each stay within ±10 percentage points of the S0 baseline window. A
+  judge-scored sample of 30 declines finds no more wrong declines than the
+  same sample from the baseline.
+- **AC9 task completion (new).** At least 90% of tasks end with a clean
+  Report. Deadline closures, cancels and failures are reported per kind.
+  A deadline-closure rate over 10% fails the model choice (§9), not the
+  deadline.
+- **AC10 no serialization (new).** Parent run starts in the window are at
+  most the number of records that wake the parent (Texture requests,
+  residual or failed task Reports, engineering, owner), and fewer than
+  the number of tasks. Each parent start is reported with the record
+  kinds that woke it. Clean task Reports appear in that breakdown zero
+  times. After S4: **no captures record is ever addressed to
+  `management:<owner>`.**
 
-Each slice is its own commit series, pushed, CI'd, deployed and run on
-the paper before the next (the Landing Loop).
+Fixtures and the paper need intake.labels on, or Feed and Decline are
+refused (`inbox_records.go:432-439`).
+
+## 13. Slices, in order (round 2: R2-11, R2-19, R2-21)
+
+Order: **S0, S1, S2a, S2b, S4, S3, S5.** Each slice is its own commit
+series, pushed, CI'd, deployed and run on the paper before the next (the
+Landing Loop).
 
 - **S0, instruments (yellow).** The 860 s stuck cell is already recorded
-  in the problem doc (this commit; problem documentation first). S0 adds
-  the exact AC1 join and the AC2 turn statistics as a script over product
-  routes, extending `scripts/l2a_paper_window.py`. Take the baseline
-  window.
-- **S1, host cell deadline (red, small).** A default deadline on
-  management cells when `timeout_ms` is unset (start: 120 s; management
-  has no SearchWait). A cell that hits it is killed with its session, as
-  a model-chosen timeout is today (`tools_desk.go:475-485`).
-- **S2, the task substrate and intake tasks, parent-directed (red).** The
-  assignment row generalized to `management_task`; `choir.Delegate`; the
-  task run with its own session; task module sets; delegated sender and
-  lease check; the library check; the clean-Report wake rule; K slots and
-  the shared spacer; crash, deadline and ended-run closures. Tests for
-  failure modes 1-13 first. Prompt: delegate captures. Paper run; AC1 and
-  AC2 read.
-- **S3, answer tasks (red).** A Texture's Asks and Notes go to answer
-  tasks; "needs engineering" comes back as a residual. Paper run.
-- **S4, standing intake route (red).** `management.intake_tasks` setting;
-  arrivals addressed to intake tasks with coalescing; the parent stops
-  receiving capture arrivals. Fixture first, then the paper; AC1-AC7.
-- **S5, cutover (red).** The parent loses Feed, Decline and `texture:new`
-  (and ReadCapture if O9 says so); prompts rewritten; parity tests. Closes
-  the dual path.
-- Not scheduled: `verify` tasks (O4); Jev auto-feeds (O3); L5 research
-  children moving onto the same substrate (cut 1 L5, C1e step 5).
+  in the problem doc (problem documentation first). S0 extends
+  `scripts/l2a_paper_window.py` into a script over product routes that
+  reports:
+  - the exact AC1 join, per disposition kind;
+  - AC2 split into all parent turns and intake-only turns, with model,
+    call count and call durations per turn;
+  - the AC8 mix;
+  - the AC10 wake breakdown;
+  - the cell-duration distribution (p50, p99, max) of management cells;
+  - queue depth and oldest queued age, once tasks exist.
 
-Rollback: each slice reverts whole. S4 rolls back by turning the setting
-off; arrivals then go to `management:<owner>` again and the parent
-handles them with the S2 path.
+  Then it takes the baseline window. S0 needs no owner decision.
+- **S1, host cell deadline (red, small; independent of delegation).** A
+  default deadline on management cells when `timeout_ms` is unset.
+  - The default is **max(300 s, 2 × S0's p99 cell duration)**, tightened
+    later on evidence. Round 1's 120 s could kill legitimate parent cells,
+    and a kill takes the worker and the session's values
+    (`internal/yaegikernel/desk_session_worker.go:367-369`).
+  - It is applied as `evalCtx`'s deadline (`tools_desk.go:442-446`).
+    `armCellTerminalDeadline` keys on the outer context
+    (`continuation_schedule.go:91-107`), so the deadline goes on the eval
+    context, with the existing timeout handling (`tools_desk.go:475-485`).
+  - Every kill is logged with the worker's exit cause, which settles H1.
+
+  S1 closes the 14-minute stuck cell of 305a582d whether or not S2 lands.
+  It needs no owner decision. Rollback: revert.
+- **S2a, the task substrate at K = 1 (red).**
+  - the `management_task` row (§3.1);
+  - the identity and every switch in §3.1a;
+  - the task role registered everywhere, with the reverse-parity test;
+  - batch `choir.Delegate`;
+  - the task run with its own session;
+  - the outward sender and the host-minted closing Report;
+  - the store lease precondition and the disposition objects;
+  - one wake predicate for the store and the re-check;
+  - crash, deadline, cancel, ended-run and marker-boot closures;
+  - the crash budget per capture;
+  - the pinned `management_task` model role.
+
+  K = 1 means no concurrent opens yet. Tests first: failure modes 1-12,
+  14-24, 26 and 27. Prompt: delegate captures, in at most two cells.
+  Paper run.
+- **S2b, concurrency (red).** K = 4, the durable slot starter and queue
+  metrics, the library head (for the parent's opens too), and the shared
+  spacer. Paper run. **S2's exit (S2a and S2b):** AC2 on intake-only parent
+  turns, plus AC4, AC5, AC8, AC9 and AC10 on the paper, and the S2 AC3
+  drill on a minted computer. AC1 is measured and reported but does not
+  gate S2: in S2 the arrival still waits for a parent turn
+  (`capture_arrival.go:59-65` addresses it to `management:<owner>`).
+- **S4, standing intake route (red).** The `management.intake_tasks`
+  setting (off by default; set by an owner act). With it on:
+  - `capture_arrival.go` addresses arrivals to intake task inboxes, and
+    queued tasks coalesce up to 12 captures (§3.2);
+  - the route is designed label-first, so O3 can plug in (§9);
+  - the parent stops receiving capture arrivals.
+
+  Fixture first, then the paper. **The full AC1 and AC10's "no captures
+  record to the parent" gate S4.** S4 comes before S3 because the paper's
+  arrival path is the problem doc's live symptom, and S4 depends only on
+  S2.
+- **S3, answer tasks (red).** A Texture's Asks and Notes go to answer
+  tasks. "Needs engineering" comes back as a residual. First test: an
+  answer task holds its Texture round against the parent's ended-run
+  closure and D6 (§6.7, R2-13). Failure modes 13 and 25 are tested here.
+  From S3, two slots are reserved for intake. The S3 AC3 drill uses K
+  stalled answer tasks. **The full AC2 gates S3**, since Ask turns are
+  what still run long after S2.
+- **S5, cutover (red).** The parent loses Feed, Decline and `texture:new`.
+  It keeps ReadCapture, read-only (O9). Prompts are rewritten and covered
+  by parity tests. This closes the dual path.
+- Not scheduled: `verify` tasks (O4); Jev auto-feeds (O3, the owner's);
+  L5 research children moving onto the same row (cut 1 L5, C1e step 5).
+
+Rollback: each slice reverts whole.
+- **S4** rolls back by turning the setting off. New arrivals then go to
+  `management:<owner>` and the parent handles them with the S2 path. Open
+  task rounds run to completion or to their deadline; they are not
+  stranded.
+- **An S2 revert** is a marker boot, which closes no rounds. So before
+  reverting S2, turn S4's setting off, stop delegation in the prompt, and
+  wait until no task round is open (`open_rounds` on the inbox route).
+  Only then revert.
 
 ## 14. Ceremony (red)
 
 - **Conjecture delta.** Before: management's coherence role required
   that one serial turn do every piece of management work. After:
   coherence needs the parent to hold admission, commitments and the
-  computer's settings; disposition of captures and answering a Texture's
-  requests are bounded tasks that run in parallel under leases.
-  Falsified if concurrent tasks fragment stories (AC4 fails) or the
-  parent cannot keep coherence from task Reports.
-- **Protected surfaces.** `internal/agentcore/inbox_records.go`
-  (routes, wake, cursor, closures), `engineering_assignment_runtime.go`
-  (the assignment row), `tools_desk.go` (sessions, cell deadline),
-  `research_children.go` (spacer), `internal/store/inbox.go` (wake rule,
-  library head), `internal/yaegikernel/choir.go` and `surface.go`
-  (module sets, Delegate), management prompts and overlay, gateway call
-  pacing.
-- **Admissible evidence.** Local store-backed tests through real reduce
-  and commit paths with model fakes, for the failure modes. Acceptance
-  only from deployed proof: the paper's records and runs through product
-  routes (AC1, AC2, AC5, AC7) and a minted test computer for the drills
-  (AC3, AC4, AC6).
-- **Rollback.** Revert per slice; S4's setting off.
-- **Heresy delta.** Discovered: management is a concurrency limiter,
-  against I26; a management cell can run 14 minutes with no host bound;
-  research children are not runs and block their parent cell (already
-  named by cut 1 L5). Introduced (risk, intended none): a delegated
-  sender, where `management:<owner>` acts that a task authored, mitigated
-  by `acting_task` provenance on every record. Repaired (when S2-S5 land):
-  management stops being the paper's concurrency limit; the parent's
-  intake dual path is deleted.
+  computer's settings. Disposing of captures and answering a Texture's
+  requests are bounded tasks that run in parallel under leases the store
+  enforces. Falsified if:
+  - concurrent tasks fragment stories (AC4 fails);
+  - tasks meet latency only by declining (AC8 fails);
+  - the parent keeps serializing on task Reports (AC10 fails);
+  - the parent cannot keep coherence from task Reports.
+- **Protected surfaces.**
+  - `internal/agentcore/inbox_records.go`: routes, the reader and sender
+    split, wake, re-check, cursor, closures, D5 and D6;
+  - `engineering_assignment_runtime.go` (the patterns reused) and the new
+    `management_task` row;
+  - `tools_desk.go`: sessions, the cell deadline;
+  - `research_children.go`: the spacer;
+  - `runtime.go`: marker-boot passivation, `CancelRun`;
+  - `planned_restart.go`: the slot-start wake kind;
+  - `internal/store/inbox.go`: the wake predicate, the lease
+    precondition, disposition objects;
+  - `internal/store/story_open.go`: the library head;
+  - `capture_arrival.go`: the S4 address;
+  - `internal/agentprofile`: the role token;
+  - `internal/yaegikernel/choir.go` and `surface.go`: the role, module
+    sets, handle actions, Delegate;
+  - the model policy: the `management_task` role;
+  - management prompts and the overlay;
+  - gateway call pacing.
+- **Admissible evidence.** Local store-backed tests through the real
+  reduce and commit paths with model fakes, for the failure modes.
+  Acceptance comes only from deployed proof: the paper's records and runs
+  through product routes (AC1, AC2, AC5, AC7, AC8, AC9, AC10), and a
+  minted test computer for the drills (AC3, AC4, AC6).
+- **Rollback.** Revert per slice. S4's setting off. An S2 revert waits for
+  no open task round (§13).
+- **Heresy delta.**
+  - **Discovered:**
+    - management is a concurrency limiter, against I26;
+    - a management cell can run 14 minutes with no host bound;
+    - research children are not runs and block their parent cell (already
+      named by cut 1 L5);
+    - `normalizeDeskRole` fails open to the engineering module set
+      (`choir.go:172-178`);
+    - the post-turn re-check ignores the wake predicate
+      (`inbox_records.go:735-742`).
+  - **Introduced** (a risk; the intended count is none): a delegated
+    sender, where `management:<owner>` makes acts that a task authored.
+    Mitigated by host-derived `acting_task` provenance, which the store
+    requires on every task-scope record.
+  - **Repaired** (when S2-S5 land): management stops being the paper's
+    concurrency limit, and the parent's intake dual path is deleted.
 
-Standing questions, briefly: (1) the direction is the owner's, 03:55
-UTC; (2) it follows the settled records model, the restart rule and L2a,
-except O3, which would change L2a; (5) the lease is the open round, with
-no second table; (6) success is measured from records and runs, not
-narration; (8) tasks hold nothing durable beyond records, and a crash
-closes them.
+Standing questions, briefly (numbered as in
+`docs/standing-questions.md`):
+- (1) The direction is the owner's, 03:55 UTC.
+- (2) It follows the settled records model, the restart rule and L2a,
+  except O3, which would change L2a.
+- (5) The lease is the open round. The disposition object indexes a
+  record in the same commit, so it is not a second authority.
+- (6) Success is measured from records and runs, not narration.
+- (8) Tasks hold nothing durable beyond records and their row. A crash
+  closes them.
 
-## 15. Open decisions
+## 15. Open decisions (round 2: adjudicated)
 
-- **O1 Routes.** Parent-directed delegation only, or also the standing
-  intake route? Recommended: both, standing for captures (the 24/7 path),
-  parent-directed for the rest.
-- **O2 Sender.** Tasks send as `management:<owner>` with `acting_task`
-  (recommended), or from their own inbox, which would split a Texture's
-  conversation with management into one per task.
-- **O3 Jev auto-feed.** Feed high-probability same-event labels by a
-  system act with no model call. It changes L2a's "labels are advice".
-  Owner's call.
-- **O4 Verify.** Delegate Verify to a task? Recommended: no. Verify is in
-  the self-development acceptance chain, and once intake runs in tasks a
-  long Verify no longer blocks the paper.
-- **O5 Model and pacing.** Which model tasks use, and how the 60
-  calls-a-minute budget splits between root desks, research children and
-  tasks.
-- **O6 Planned restart.** Drain then restart (recommended), or resume
-  tasks once on a marker.
-- **O7 Numbers.** K = 4, a 10-minute task deadline, a 120 s cell
-  deadline, coalescing up to 20 captures: starting values, to be measured.
-- **O8 Clean Reports.** Confirm that a clean task Report does not wake
-  the parent.
-- **O9 ReadCapture.** Does the parent keep ReadCapture after S5 to check
-  coherence?
+| | answer | whose call |
+|---|---|---|
+| O1 Routes | Both. The standing route carries captures (S4), the 24/7 path. Delegate carries Texture requests, residuals and re-delegation. Parent-directed intake is the S2 canary, and after S4 only a way to recover residuals. | settled |
+| O2 Sender | Outward acts go as `management:<owner>` with host-derived `acting_task`. The closing Report goes from `management-task:<id>`. Forced by the code (`story_open.go:68-71`, `store/inbox.go:232-240`). | settled |
+| O3 Jev auto-feed | Not in this mission. It is the proposed destination after S4, and it changes L2a's settled "labels are advice; management decides". | **owner** |
+| O4 Verify | Verify stays with the parent. | settled |
+| O5 Model and pacing | A `management_task` role pinned in S2 to a non-preview, bounded-latency model (proposed: deepseek-v4.1-flash), with a per-call timeout. Tasks join the shared sub-RLM spacer (40 a minute), leaving about 20 a minute for root desks. A reserved task share waits for S0 to show 429s. | default proceeds; **owner may override the model** |
+| O6 Planned restart | Drain, then restart, with no task resume in v1. A task passivated anyway gets a residual closure that wakes the parent. Queued tasks start once. A busy computer is never forced (§8). | Mechanism settled. **Owner:** who requests the drain and how a deploy waits for an always-busy paper (deploy shape). S2 does not depend on it. |
+| O7 Numbers | K = 4 (S2a K = 1). From S3, 2 slots reserved for intake. Task deadline 10 minutes. Cell deadline max(300 s, 2 × S0 p99). Coalescing cap 12. All are starting values, to be measured. | settled as starting values |
+| O8 Clean Reports | A clean Report does not wake the parent. "Clean" is computed by the host, and one predicate serves both wake paths. | settled |
+| O9 ReadCapture | The parent keeps it, read-only. Revisit if AC2 fails after S3. | settled |
 
 ## 16. Hypotheses in this note
 
@@ -629,3 +1051,10 @@ closes them.
 - H4: the arrival-wait estimates in §2.3 bracket the true latency. S0's
   exact join replaces them.
 - H5: library-check refusals are rare at the paper's arrival rate.
+- H6 (R2-25): story opens and Cast feeds by tasks still wake the parent,
+  through each Texture's final Report to `management:<owner>` (a desk
+  record always wakes its recipient, `store/inbox.go:215-217`). Parent
+  turns get shorter, but they may not get fewer. AC10's wake breakdown
+  measures it. If these wakes dominate, the wake predicate is extended to
+  a Texture Report answering a task-authored Cast, which would be read on
+  the parent's next turn.
