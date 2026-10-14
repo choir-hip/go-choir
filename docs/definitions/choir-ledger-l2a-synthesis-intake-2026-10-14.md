@@ -308,13 +308,14 @@ now:
     lossless: items left over are taken on the next poll and recorded as
     skipped, never dropped; check this in S0.
   next_action: >-
-    Fixture run 1 passes (docs/evidence/l2a-fixture-run-1-2026-10-14.md):
-    27 of 27 captured, one story per event, merge recall 1.0, 0 false
-    merges, 0 undisposed. The citation-language clause was removed by the
-    owner (a test bar, not a production rule). Next: after C1e B1 lands,
-    refresh the paper computer when idle, read its effective build back,
-    turn on intake.labels, and measure the after-window against baseline
-    A with scripts/l2a_window_pairs.py under the tripwire.
+    intake.labels is ON on the live paper since 2026-10-14T06:50:58Z
+    (paper on build 9ace75e5, refreshed by the deploy and read back; its
+    schedules were restored at about 06:49 after a deploy refresh closed
+    them, docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
+    Next: the after-window 06:51-12:51 UTC, scored with
+    scripts/l2a_window_pairs.py and compared with baseline A (15:00-21:00
+    UTC 10-13) under the tripwire; watch that a deploy refresh does not
+    close the schedules again until that fix lands.
 
 receipts: []
 ---

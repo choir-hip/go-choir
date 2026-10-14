@@ -1,16 +1,16 @@
 # A Planned Deploy Refresh Closed the Live Paper's Schedules
 
-Date: 2026-10-14, 07:05 UTC. Found while preparing L2a's paper enable.
+Date: 2026-10-14, about 06:50 UTC. Found while preparing L2a's paper enable.
 Computer: the live paper, computer-1355b83bced1613eb048ee28d66688a8
 (owner e5962310…), now on build 9ace75e5. Status: documented;
-schedules restored by the owner act at 07:05; cause not yet established.
+schedules restored by the owner act at about 06:49; cause not yet established.
 
 ## What happened
 
 - At 07:00 all 14 of the paper's source schedules read
   `interrupted_by_restart`, generation 8, `updated_at` 2026-10-14T05:48:47Z.
   The paper's last run was created at 05:44:30. So no story was opened or
-  revised from about 05:48 to 07:05 (about 77 minutes).
+  revised from about 05:48 to 06:49 (about an hour).
 - vmctl's journal for the balloon deploy (11a94193): vmctl restarted at
   05:47:58; then `POST /internal/vmctl/deploy-refresh caller=ci.deploy-refresh`;
   at 05:48:10 a destructive kill of `vm-1669020adcece51c2f5ff9b6df399ef5`
@@ -20,7 +20,7 @@ schedules restored by the owner act at 07:05; cause not yet established.
   `restart: {kind: planned, reason: platform update}`. That is the latest
   boot; the paper was refreshed again by the 06:03 and 06:37 deploys,
   while its schedules were already closed.
-- Restored at 07:05 by the owner act (`POST /api/autopaper/sources/schedules`
+- Restored at about 06:49 by the owner act (`POST /api/autopaper/sources/schedules`
   for each source with its previous interval and max_items): 14 of 14
   active. The pre-restore list is saved at
   `~/.config/choir-qa/traces/paper-schedules-before-restore-0705.json`.
