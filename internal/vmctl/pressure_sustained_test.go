@@ -3,6 +3,7 @@ package vmctl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -52,7 +53,11 @@ func (m *blockingHibernateManager) HibernateVM(vmID string) error {
 		m.started <- vmID
 	}
 	if m.release != nil {
-		<-m.release
+		select {
+		case <-m.release:
+		case <-time.After(30 * time.Second):
+			return fmt.Errorf("blockingHibernateManager: release not signalled within 30s")
+		}
 	}
 	m.hmu.Lock()
 	m.hibernated = append(m.hibernated, vmID)
