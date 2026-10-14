@@ -155,6 +155,23 @@ root is F13, out of scope here.
    them, `ProtectHome`, tighten the inner state modes, and leave the
    user migration as the next, separately staged step.
 
+## Pre-deploy baseline of the verifier
+
+`scripts/verify-host-hardening.py` (read-only; run on Node B as root:
+`ssh node-b python3 - --expect-internal observe --expect-dolt users <
+scripts/verify-host-hardening.py`), at origin/main 980ffaf4e, about 21:00
+UTC: 30 passed, 44 failed. Every internal probe answered 200 without a
+credential (vmctl list and pprof, gateway breakers and search health,
+corpusd control key and pprof, maild drafts for a made-up owner); root
+services hold `CapBnd=000001fff7fcffff`; every `go-choir-*` filter still
+allows `bpf chroot acct setuid capset`; proxy, vmctl and gateway see the
+JWT private key at mode 600 in their mount namespaces; both Dolt servers
+accept root with an empty password; `auth/` 755, `auth.db` 644,
+`vm-state/`, `platform-dolt/`, `corpus-dolt/`, `platform-artifacts/` 755,
+`corpus-dsn.env` and `sandbox-gateway-token.env` 644. After each rollout
+step the same command, with the stage's expectations, is the acceptance
+check.
+
 ## Residuals the repair does not close
 
 - **F1 still wins.** The VMMs are root in vmctl's mount namespace. vmctl
