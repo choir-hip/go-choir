@@ -4,9 +4,10 @@ Date: 2026-10-14, 03:50 UTC. Found by the owner ("Noticed last article is
 28 minutes old. Is autopaper down?"). Computer: the live paper,
 computer-1355b83bced1613eb048ee28d66688a8, build 66fe0917. Status:
 documented; owner direction recorded. The Jev half (support judgement
-leaves management) is implemented on a branch, not yet deployed:
-[design note](../reports/support-judgement-to-jev-design-2026-10-14.md).
-Management delegating to sub-RLMs is not started.
+leaves management) landed in `d5139fd6` and is live on the paper's build
+9ace75e5: [design note](../reports/support-judgement-to-jev-design-2026-10-14.md).
+Management delegating to sub-RLMs is designed, not built:
+[design note](../reports/management-delegation-design-2026-10-14.md).
 
 ## What happened
 
@@ -68,6 +69,31 @@ So, two changes, both substrate rather than prompt tuning:
   activations, as `choir.Research` children already are for research)
   and stays free for dispositions. A design note and a panel come
   before code; it touches the management runtime (red).
+
+## After Jev took support judgement (08:30 UTC read)
+
+Management is still serial with support judgement gone. Run
+`305a582d-85c9-44ae-8a31-ef63084769c0` (07:12-07:40 UTC,
+deepseek-v4.1-flash, 1,680 s) spent its first turn on one Texture Ask
+(seq 469), then disposed of the captures that had waited. Its first act
+committed 22.6 minutes into the run. 58 model calls, 4.1 M input tokens.
+
+**New problem: a management cell can run 14 minutes with no host bound.**
+In that run, cell 6 (a string search over `choir.Pack()`) ran 860,565 ms
+and ended `frame: read header: EOF`: the worker died, and nothing timed
+it out. A cell has a deadline only when the model sets `timeout_ms`
+(`internal/agentcore/tools_desk.go:442-444`). Hypothesis, not
+confirmed: the cell's hand-written index loop did not advance and grew
+memory until the worker died; the exit cause was not recorded.
+
+Window counts (management inbox seq 1-514, 10-13 15:22 to 10-14 08:23
+UTC): 154 management runs, duration p95 812 s, max 3,601 s; management
+in a run 46% of the time; 105 of 132 capture arrivals found it busy;
+arrival-to-disposition estimated from run boundaries at p95 about 21-25
+minutes. In the 02, 03 and 04 UTC hours the inbox has only 1, 0 and 1
+capture arrivals, so during the 38-minute run what waited was mostly
+Texture requests. Details and the design:
+[management-delegation-design-2026-10-14](../reports/management-delegation-design-2026-10-14.md) §2.
 
 ## Related
 
