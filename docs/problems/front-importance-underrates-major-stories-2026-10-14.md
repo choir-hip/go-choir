@@ -64,13 +64,24 @@ ties broken by the answer's expected value.
 | C. Jev isolated, B + the day's 100 titles in state | 0.94 | 0.57 | 0.44 | 8 | 26 | 10 | 84 | $0.0123 |
 | D. deepseek-v4.1-flash listwise, one call (rank) | 0.92 | 0.36 | 0.27 | 7 | 27 | 9 | 87 | 1 call, 7k in / 21k out, 146 s |
 | D. same, rank mapped to 1-10 tiers | 0.88 | 0.35 | 0.28 | 6 | 27 | 12.5 | 82 | same |
+| D, second sample (rank) | 0.83 | 0.61 | 0.46 | 6 | 26 | 5 | 92 | 7k in / 21k out, 146 s |
+| D, second sample (tiers) | 0.89 | 0.63 | 0.52 | 6 | 26 | 4.5 | 82.5 | same |
+
+D is noisy: its two samples differ more from each other on the top 30
+(τ 0.27 vs 0.46) than B differs from the reference, and it never beats B
+on top-10 overlap.
 
 Front-page effect (frontend formula over the live rows' depth and age):
 the bugging story moves from 23rd under A to **9th** under B; the Codex
 story stays near the bottom (72nd → 77th). Under B the two broken-dek
 stories are no longer promo (drones importance 6, Badenoch 1). B is
 stable: a second run of all 100 gave identical importance for 92 and
-identical promo for 99, and the bugging story 7 both times.
+identical promo for 99, and the bugging story 7 both times. The shipped
+scorer prompt (B plus the section question, called through
+`scoreStory` and `gateway.JevTransport`) gave: bugging 7, not promo,
+tech_ai; Codex 2, promo; Ukraine power loss 8; Mauritius riots 8;
+drones 1 and Badenoch 3, neither promo (their broken deks now score low
+instead of being labelled promo).
 
 Hypotheses:
 

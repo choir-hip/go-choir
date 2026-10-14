@@ -15,6 +15,10 @@ package frontimportance
 //     four sections; an answer outside them is written; rows scored before
 //     sections existed are never rescored (the section switcher stays
 //     hidden forever), or are rescored past the per-run call bound.
+//  8. Criteria versions (LF, 2026-10-14): a row judged under older
+//     criteria is never rescored (the old, miscalibrated score stays
+//     forever), a row at the current criteria is rescored every run, or a
+//     failed rescore drops the old score instead of keeping it.
 
 import (
 	"context"
@@ -110,10 +114,10 @@ func TestScorerScoresKeepsAndPrunes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "scores.json")
 	writePrev := scoresFile{Version: 1, Scores: map[string]scoreRow{
-		"pub-a":    {Revision: 2, Importance: 7, Section: "world"}, // current: kept, no call
-		"pub-b":    {Revision: 1, Importance: 6},                   // revised: rescored
-		"pub-c":    {Revision: 1, Importance: 5},                   // revised, Jev fails: old kept
-		"pub-gone": {Revision: 1, Importance: 9},                   // off the front: pruned
+		"pub-a":    {Revision: 2, Importance: 7, Section: "world", Criteria: scoringCriteria}, // current: kept, no call
+		"pub-b":    {Revision: 1, Importance: 6},                                              // revised: rescored
+		"pub-c":    {Revision: 1, Importance: 5},                                              // revised, Jev fails: old kept
+		"pub-gone": {Revision: 1, Importance: 9},                                              // off the front: pruned
 	}}
 	if err := writeScores(path, writePrev); err != nil {
 		t.Fatal(err)
@@ -265,5 +269,62 @@ func TestScorerFillsSectionsWithinTheCallBound(t *testing.T) {
 		if got[id].Section != "world" {
 			t.Fatalf("%s = %+v, want a section after the second run", id, got[id])
 		}
+	}
+}
+
+func TestScorerRescoresRowsUnderOlderCriteria(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "scores.json")
+	prev := scoresFile{Version: 1, Scores: map[string]scoreRow{
+		// Current revision and section, judged before criteria versions.
+		"pub-a": {Revision: 1, Importance: 5, Section: "tech_ai"},
+		// The same, but Jev fails: the old score is kept.
+		"pub-b": {Revision: 1, Importance: 6, Section: "world"},
+		// Already under the current criteria: kept without a call.
+		"pub-c": {Revision: 1, Importance: 8, Section: "world", Criteria: scoringCriteria},
+	}}
+	if err := writeScores(path, prev); err != nil {
+		t.Fatal(err)
+	}
+	stories := []frontStory{
+		{PublicationID: "pub-a", Title: "A", LatestRevision: 1},
+		{PublicationID: "pub-b", Title: "B", LatestRevision: 1},
+		{PublicationID: "pub-c", Title: "C", LatestRevision: 1},
+	}
+	jev := &fakeJev{answers: map[string]string{"A": "7", "C": "2"}, section: map[string]string{"A": "tech_ai"}}
+	srv := frontServer(t, http.StatusOK, stories)
+	cfg := testConfig(srv.URL, path)
+	stats, err := run(context.Background(), cfg, srv.Client(), jev, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := readScores(path).Scores
+	if a := got["pub-a"]; a.Importance != 7 || a.Criteria != scoringCriteria || a.Section != "tech_ai" {
+		t.Fatalf("pub-a = %+v, want rescored to 7 under the current criteria", a)
+	}
+	if b := got["pub-b"]; b.Importance != 6 || b.Criteria != 0 {
+		t.Fatalf("pub-b = %+v, want its old score kept after a failed rescore", b)
+	}
+	if c := got["pub-c"]; c.Importance != 8 {
+		t.Fatalf("pub-c = %+v, want kept", c)
+	}
+	for _, title := range jev.calls {
+		if title == "C" {
+			t.Fatalf("row under the current criteria was rescored")
+		}
+	}
+	if stats.Scored != 1 || stats.Failed != 1 || stats.Kept != 1 {
+		t.Fatalf("stats = %+v", stats)
+	}
+	// The failed row is retried next run; the rescored one is not.
+	jev.calls = nil
+	jev.answers["B"] = "4"
+	if _, err := run(context.Background(), cfg, srv.Client(), jev, time.Now); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(jev.calls, ",") != "B" {
+		t.Fatalf("second run calls = %v, want only B", jev.calls)
+	}
+	if b := readScores(path).Scores["pub-b"]; b.Importance != 4 || b.Criteria != scoringCriteria {
+		t.Fatalf("pub-b after retry = %+v", b)
 	}
 }

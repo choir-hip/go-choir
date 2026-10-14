@@ -50,7 +50,17 @@ type scoreRow struct {
 	// rows scored before sections existed, which the next runs rescore.
 	Section  string `json:"section,omitempty"`
 	ScoredAt string `json:"scored_at"`
+	// Criteria is the scoringCriteria version the row was judged under;
+	// absent in rows judged before versions existed. A row under older
+	// criteria is rescored. corpusd does not read it.
+	Criteria int `json:"criteria,omitempty"`
 }
+
+// scoringCriteria versions the judgement prompt in scoreStory. Bump it when
+// the criteria change so every row is rescored under the new text (within
+// the per-run call bound). 2: general editorial criteria for seriousness
+// and promotion (docs/problems/front-importance-underrates-major-stories-2026-10-14.md).
+const scoringCriteria = 2
 
 // frontStory is the part of a front row the scorer reads.
 type frontStory struct {
@@ -134,7 +144,7 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 			continue
 		}
 		old, had := previous.Scores[id]
-		if had && old.Revision == story.LatestRevision && old.Section != "" {
+		if had && old.Revision == story.LatestRevision && old.Section != "" && old.Criteria == scoringCriteria {
 			next.Scores[id] = old
 			stats.Kept++
 			continue
@@ -277,30 +287,38 @@ func scoreStory(ctx context.Context, jev decider, story frontStory) (scoreRow, e
 	}
 	importance, _ := json.Marshal(map[string]any{
 		"type": "choice",
-		"instructions": "How important is state.story as news, from 1 (not news) to 10 (major news)? Weigh its consequence for many people, " +
-			"public interest, and novelty. Real reported news of public consequence scores high. Promotional or marketing copy, " +
-			"a product or feature announcement, or a story whose title is an internal instruction (for example one that starts " +
-			"\"Open a story on\") is not news and scores 1 or 2.",
+		"instructions": "How important is state.story as news, from 1 (not news) to 10 (major news)? Judge as the editor of a serious " +
+			"newspaper's front page would. Weigh: consequence for many people; public interest and how widely it will be talked about; " +
+			"novelty and surprise; and seriousness - crime, espionage or security breaches, corruption, abuse of power, scandal or " +
+			"wrongdoing at a major institution, government or company, deaths, violence, war, disasters and institutional failure " +
+			"all raise importance. A criminal charge, arrest, leak or investigation involving a powerful institution is serious news " +
+			"even when few people are directly affected. Routine company updates rank low. A company's own announcement, case study, " +
+			"customer success story, product or feature launch, advocacy or marketing post is promotional and scores 1 to 3, " +
+			"however large the company. A story whose title is an internal instruction (for example one that starts \"Open a story on\" " +
+			"or \"Write the story of\") is not news and scores 1.",
 		"criteria": map[string]string{
 			"1":  "Not news: an internal instruction or placeholder, or pure marketing.",
-			"2":  "Promotional: a product, feature or company announcement with little public consequence.",
-			"3":  "Minor news of narrow interest.",
+			"2":  "Promotional: a company's own product, feature, case study or advocacy announcement.",
+			"3":  "Minor news of narrow interest, trivia, or a routine company update.",
 			"4":  "Routine news of modest interest.",
 			"5":  "Ordinary news of some public interest.",
-			"6":  "Notable news with real consequence for a sizable group.",
-			"7":  "Important news with broad public interest.",
-			"8":  "Major news with consequence for many people.",
+			"6":  "Notable news: real consequence for a sizable group, or a serious incident at a known institution.",
+			"7":  "Important news with broad public interest: a major scandal, crime or security breach at a powerful institution, a significant policy or political development.",
+			"8":  "Major news with consequence for many people or a story the whole country or industry will talk about.",
 			"9":  "Very major news with wide consequence and high novelty.",
 			"10": "Historic news of the highest consequence.",
 		},
 		"choices": importanceChoices,
 	})
 	promo, _ := json.Marshal(map[string]any{
-		"type":         "choice",
-		"instructions": "Is state.story promotional rather than news: marketing copy, a product or feature announcement, or an internal instruction or placeholder (such as a title starting \"Open a story on\")?",
+		"type": "choice",
+		"instructions": "Is state.story promotional rather than news? Promotional means it is written from a company's own announcement to " +
+			"promote it: marketing copy, a product or feature launch, a customer case study, or an advocacy post; or the title is an internal " +
+			"instruction or placeholder (such as one starting \"Open a story on\"). Reporting about conflict, politics, crime or public " +
+			"affairs is news even if it mentions technology or the dek is weak.",
 		"criteria": map[string]string{
-			"yes": "Promotional, a product announcement, or an internal instruction or placeholder.",
-			"no":  "Reported news.",
+			"yes": "Promotional, a company's own announcement or case study, or an internal instruction or placeholder.",
+			"no":  "Reported news, including reporting on war, politics, crime and public affairs.",
 		},
 		"choices": []string{"yes", "no"},
 	})
@@ -338,7 +356,7 @@ func scoreStory(ctx context.Context, jev decider, story frontStory) (scoreRow, e
 	if err != nil || n < 1 || n > 10 {
 		return scoreRow{}, fmt.Errorf("Jev importance %q is not 1..10", decision.Answers["importance"].Choice)
 	}
-	row := scoreRow{Revision: story.LatestRevision, Importance: n}
+	row := scoreRow{Revision: story.LatestRevision, Importance: n, Criteria: scoringCriteria}
 	switch strings.TrimSpace(decision.Answers["promo"].Choice) {
 	case "yes":
 		row.Promo = true
