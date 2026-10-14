@@ -14,11 +14,15 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
+// engineeringAssignmentStoreFixture is the records authority (C1e D4) the
+// assignment command tests open against: a live trajectory, the Texture's
+// document naming it, and the Texture's Cast that opened round
+// seed.ParentRound of management's conversation with it.
 type engineeringAssignmentStoreFixture struct {
-	ownerID, computerID, trajectoryID                 string
-	parentAgentID, parentRunID, parentWorkID          string
-	parentDecisionID, parentControlID                 string
-	assignedAgentIDs, assignedWorkIDs, assignedRunIDs []string
+	seed                              EngineeringAssignmentSeed
+	ownerID, computerID, trajectoryID string
+	parentAgentID, parentRunID        string
+	assignedRunIDs                    []string
 }
 
 func installEngineeringAssignmentAuthority(t *testing.T, s *Store, count int) engineeringAssignmentStoreFixture {
@@ -28,75 +32,91 @@ func installEngineeringAssignmentAuthority(t *testing.T, s *Store, count int) en
 		t.Fatal(err)
 	}
 	return engineeringAssignmentStoreFixture{
-		ownerID: seed.OwnerID, computerID: seed.ComputerID, trajectoryID: seed.TrajectoryID,
-		parentAgentID: seed.ParentAgentID, parentRunID: seed.ParentRunID, parentWorkID: seed.ParentWorkID,
-		parentDecisionID: seed.ParentDecisionID, parentControlID: seed.ParentControlID,
-		assignedAgentIDs: seed.AssignedAgentIDs, assignedWorkIDs: seed.AssignedWorkIDs, assignedRunIDs: seed.AssignedRunIDs,
+		seed: seed, ownerID: seed.OwnerID, computerID: seed.ComputerID, trajectoryID: seed.TrajectoryID,
+		parentAgentID: seed.ParentAgentID, parentRunID: seed.ParentRunID, assignedRunIDs: seed.AssignedRunIDs,
 	}
 }
-func engineeringOpenRequest(f engineeringAssignmentStoreFixture, index int, assignmentID string, attempt uint64, kind types.EngineeringAssignmentKind, writable bool, capability, capsuleID string) types.OpenEngineeringAssignmentRequest {
-	binding := types.EngineeringAssignmentBinding{
-		OwnerID: f.ownerID, ComputerID: f.computerID, TrajectoryID: f.trajectoryID,
-		ParentAgentID: f.parentAgentID, ParentRunID: f.parentRunID,
-		ParentDecisionID: f.parentDecisionID, ParentControlID: f.parentControlID,
-		ParentWorkItemID: f.parentWorkID, AssignedWorkItemID: f.assignedWorkIDs[index], AssignedAgentID: f.assignedAgentIDs[index],
-		Kind: kind, Attempt: attempt, ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-		CapabilityDigest: DigestEngineeringOpaqueCapability(capability), ExecutionHandleDigest: objectgraph.SHA256([]byte(capability)),
-		SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-		SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-		Writable:          writable, CapsuleID: capsuleID,
-		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-	}
-	if kind == types.EngineeringAssignmentVerification {
-		binding.SourceCandidateID = "candidate-source-" + assignmentID
-		binding.SourceArtifactRef = "capsule-subject:" + binding.SubjectDigest
-	}
-	req := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID + fmt.Sprintf("-%d", attempt), AssignmentID: assignmentID, Binding: binding,
-		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
-		AssignedWork: types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID,
-			Objective: "bounded delegated assignment"},
-	}
-	req.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(req)
+
+// engineeringOpenRequest builds the records open of assignmentID: management's
+// Cast to engineering:<assignmentID>, serving the fixture's Texture round, with
+// the capability digest of capability and capsule capsuleID.
+func engineeringOpenRequest(f engineeringAssignmentStoreFixture, assignmentID, capability, capsuleID string) types.OpenEngineeringAssignmentRequest {
+	seed := f.seed
+	seed.AssignmentIDs = []string{assignmentID}
+	seed.AssignedAgentIDs = []string{"engineering:" + assignmentID}
+	req := SeedEngineeringOpenRequest(seed, 0, capability)
+	req.Binding.CapsuleID = capsuleID
+	redigestEngineeringOpen(&req)
 	return req
 }
 
+func redigestEngineeringOpen(req *types.OpenEngineeringAssignmentRequest) {
+	req.Records.CommandDigest, _ = ComputeCommitInboxRecordsDigest(req.Records)
+	req.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(*req)
+}
+
+// recastEngineeringOpen is a fresh Cast of the same assignment: a new open
+// command, a new cell records command and a new Cast record id.
+func recastEngineeringOpen(open types.OpenEngineeringAssignmentRequest, suffix string) types.OpenEngineeringAssignmentRequest {
+	recast := open
+	recast.CommandID = open.CommandID + "-" + suffix
+	recast.Records.CommandID = open.Records.CommandID + "-" + suffix
+	recast.Records.Records = append([]types.CommitmentRecord(nil), open.Records.Records...)
+	recast.Records.Records[0].RecordID = open.Binding.ParentControlID + "-" + suffix
+	recast.Binding.ParentControlID = recast.Records.Records[0].RecordID
+	redigestEngineeringOpen(&recast)
+	return recast
+}
+
 func bindEngineeringRequest(open types.OpenEngineeringAssignmentRequest, runID, capability string) types.BindEngineeringAssignmentRequest {
-	run := types.RunRecord{
-		RunID: runID, AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-		RequestedByRunID: open.Binding.ParentRunID, TrajectoryID: open.Binding.TrajectoryID,
-		AgentProfile: "engineering", AgentRole: "engineering", OwnerID: open.Binding.OwnerID, ComputerID: open.Binding.ComputerID,
-		State: types.RunPending, Prompt: open.AssignedWork.Objective,
-		Metadata: map[string]any{
-			"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-			"requested_by_agent_id": open.Binding.ParentAgentID, "requested_by_profile": "management",
-			"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
-			"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": open.Binding.ParentWorkItemID,
-			"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-			"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-			"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-			"subject_digest":      open.Binding.SubjectDigest,
-			"source_artifact_ref": open.Binding.SourceArtifactRef, "source_candidate_id": open.Binding.SourceCandidateID,
-			"coordination_contract_id":     open.Binding.CoordinationContractID,
-			"coordination_contract_digest": open.Binding.CoordinationContractDigest,
-		},
-	}
-	req := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-" + open.AssignmentID + fmt.Sprintf("-%d", open.Binding.Attempt),
-		OwnerID:   open.Binding.OwnerID, ComputerID: open.Binding.ComputerID, AssignmentID: open.AssignmentID,
-		Attempt: open.Binding.Attempt, ExpectedLifecycleVersion: 1, RunID: runID, Run: run,
-		OpaqueCapability: capability, CapsuleID: open.Binding.CapsuleID,
+	req := SeedEngineeringBindRequest(open, runID, capability)
+	if open.Binding.CoordinationContractID != "" {
+		req.Run.Metadata["coordination_contract_id"] = open.Binding.CoordinationContractID
+		req.Run.Metadata["coordination_contract_digest"] = open.Binding.CoordinationContractDigest
 	}
 	req.CommandDigest, _ = ComputeBindEngineeringAssignmentDigest(req)
 	return req
+}
+
+// engineeringReportsToManagement returns the Report records an assignment's
+// engineering inbox sent management (C1e D3), in management's inbox order.
+func engineeringReportsToManagement(t *testing.T, s *Store, f engineeringAssignmentStoreFixture, open types.OpenEngineeringAssignmentRequest) []types.CommitmentRecord {
+	t.Helper()
+	records, err := s.ListInboxRecords(context.Background(), f.ownerID, f.computerID, f.parentAgentID, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []types.CommitmentRecord
+	for _, rec := range records {
+		if rec.SenderInbox == open.Binding.AssignedAgentID && rec.Kind == types.CommitmentKindReport {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// requireFinalEngineeringReport asserts management's inbox holds exactly
+// count Reports from the assignment and the last is the final Report minted
+// from reportID with stop reason disposition.
+func requireFinalEngineeringReport(t *testing.T, s *Store, f engineeringAssignmentStoreFixture, open types.OpenEngineeringAssignmentRequest, count int, reportID string, disposition types.EngineeringAssignmentDisposition) types.CommitmentRecord {
+	t.Helper()
+	reports := engineeringReportsToManagement(t, s, f, open)
+	if len(reports) != count {
+		t.Fatalf("management holds %d Reports from %s, want %d: %+v", len(reports), open.Binding.AssignedAgentID, count, reports)
+	}
+	last := reports[len(reports)-1]
+	if !last.Final || last.RecordID != EngineeringOutcomeRecordID(reportID) || last.Report == nil || last.Report.StopReason != string(disposition) ||
+		last.ConversationID != open.Binding.AssignedConversationID {
+		t.Fatalf("final Report = %+v, want final %s stop %s in %s", last, EngineeringOutcomeRecordID(reportID), disposition, open.Binding.AssignedConversationID)
+	}
+	return last
 }
 
 func TestListEngineeringAssignmentsForComputerFindsBoundAssignment(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 2)
-	open := engineeringOpenRequest(f, 0, "assignment-computer-list", 1, types.EngineeringAssignmentImplementation, true, "cap-computer-list", "capsule-computer-list")
+	open := engineeringOpenRequest(f, "assignment-computer-list", "cap-computer-list", "capsule-computer-list")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +148,7 @@ func TestListEngineeringAssignmentsForComputerIndependentOfRunStateIndex(t *test
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-legacy-index", 1, types.EngineeringAssignmentImplementation, true, "cap-legacy-index", "capsule-legacy-index")
+	open := engineeringOpenRequest(f, "assignment-legacy-index", "cap-legacy-index", "capsule-legacy-index")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -198,11 +218,24 @@ func TestEngineeringAssignmentCommandsReplayAndDigestConflict(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-command-contract", 1, types.EngineeringAssignmentImplementation, true, "cap-command-contract", "capsule-command-contract")
-	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+	open := engineeringOpenRequest(f, "assignment-command-contract", "cap-command-contract", "capsule-command-contract")
+	opened, err := s.OpenEngineeringAssignment(ctx, open)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if replay, err := s.OpenEngineeringAssignment(ctx, open); err != nil || !replay.Replay {
+	if opened.Records == nil {
+		t.Fatalf("open returned no records receipt: %+v", opened)
+	}
+	castOpened := false
+	for _, row := range opened.Records.Records {
+		if row.RecordID == open.Binding.ParentControlID {
+			castOpened = row.OpenedRound && row.Round == 1 && row.ConversationID == open.Binding.AssignedConversationID
+		}
+	}
+	if !castOpened {
+		t.Fatalf("management's Cast did not open round 1 of %s: %+v", open.Binding.AssignedConversationID, opened.Records)
+	}
+	if replay, err := s.OpenEngineeringAssignment(ctx, open); err != nil || !replay.Replay || replay.Records == nil {
 		t.Fatalf("open replay: %+v, %v", replay, err)
 	}
 	openConflict := open
@@ -279,14 +312,16 @@ func TestEngineeringAssignmentCommandsReplayAndDigestConflict(t *testing.T) {
 	}
 }
 
-func TestEngineeringAssignmentsAllowManyParallelAttemptsAndReplay(t *testing.T) {
+// Many assignments may serve one Texture round: each management Cast opens
+// its own engineering conversation, concurrently, and a second Cast of the
+// same assignment is refused.
+func TestEngineeringAssignmentsAllowManyParallelAssignmentsAndReplay(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	f := installEngineeringAssignmentAuthority(t, s, 13)
+	f := installEngineeringAssignmentAuthority(t, s, 12)
 	requests := make([]types.OpenEngineeringAssignmentRequest, 12)
 	for i := range requests {
-		requests[i] = engineeringOpenRequest(f, i, fmt.Sprintf("assignment-%02d", i), 1, types.EngineeringAssignmentImplementation, true,
-			fmt.Sprintf("opaque-capability-%02d", i), fmt.Sprintf("capsule-%02d", i))
+		requests[i] = engineeringOpenRequest(f, f.seed.AssignmentIDs[i], fmt.Sprintf("opaque-capability-%02d", i), fmt.Sprintf("capsule-%02d", i))
 	}
 	first := requests[0]
 	var wg sync.WaitGroup
@@ -311,29 +346,13 @@ func TestEngineeringAssignmentsAllowManyParallelAttemptsAndReplay(t *testing.T) 
 	for err := range errs {
 		t.Fatalf("concurrent many-assignment open: %v", err)
 	}
-	// v1 correction rule: attempt 2 carries the tuple naming a recorded prior
-	// report. Bind the first attempt and record partial progress first.
-	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(first, f.assignedRunIDs[0], "opaque-capability-00")); err != nil {
-		t.Fatal(err)
-	}
-	priorPartial := assignmentReportRequest(first, 2, "report-parallel-prior", first.Binding.SubjectDigest, types.EngineeringResultPartial, types.EngineeringVerdictNone)
-	recorded, err := s.RecordEngineeringAssignmentReport(ctx, priorPartial)
-	if err != nil || recorded.Report == nil {
-		t.Fatalf("prior partial: %+v err=%v", recorded, err)
-	}
-	attemptTwo := engineeringOpenRequest(f, 12, first.AssignmentID, 2, types.EngineeringAssignmentVerification, true, "opaque-attempt-two", "capsule-attempt-two")
-	attemptTwo.Supersedes = &types.EngineeringSupersedeTuple{
-		SupersedesAssignmentID: first.AssignmentID, SupersedesAttempt: 1,
-		PriorReceiptRef: recorded.Report.ReportID, SupersedeKind: types.EngineeringSupersedeRetryAfterBlock,
-		ReasonEnum: "parallel_attempt_supersession", DeltaDigest: objectgraph.SHA256([]byte("parallel-delta")),
-	}
-	attemptTwo.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(attemptTwo)
-	if _, err := s.OpenEngineeringAssignment(ctx, attemptTwo); err != nil {
-		t.Fatalf("open second attempt: %v", err)
-	}
 	assignments, err := s.ListEngineeringAssignments(ctx, f.ownerID, f.computerID, f.trajectoryID)
-	if err != nil || len(assignments) != 13 {
+	if err != nil || len(assignments) != 12 {
 		t.Fatalf("many assignment list = %d, %v", len(assignments), err)
+	}
+	byRound, err := s.ListEngineeringAssignmentsByParentRound(ctx, f.ownerID, f.computerID, f.seed.ParentConversationID, f.seed.ParentRound)
+	if err != nil || len(byRound) != 12 {
+		t.Fatalf("assignments by parent round = %d, %v", len(byRound), err)
 	}
 	replay, err := s.OpenEngineeringAssignment(ctx, first)
 	if err != nil || !replay.Replay || replay.Assignment.AssignmentID != first.AssignmentID {
@@ -345,138 +364,158 @@ func TestEngineeringAssignmentsAllowManyParallelAttemptsAndReplay(t *testing.T) 
 	if _, err := s.OpenEngineeringAssignment(ctx, conflict); !errors.Is(err, ErrEngineeringAssignmentCommandConflict) {
 		t.Fatalf("command conflict = %v", err)
 	}
+	// The same cell records under a new open command: the records already
+	// committed with their assignment.
 	duplicate := first
 	duplicate.CommandID = "command-open-duplicate-attempt"
 	duplicate.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(duplicate)
-	if _, err := s.OpenEngineeringAssignment(ctx, duplicate); !errors.Is(err, ErrConcurrentStateChange) {
-		t.Fatalf("duplicate assignment attempt = %v, want CAS conflict", err)
+	if _, err := s.OpenEngineeringAssignment(ctx, duplicate); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
+		t.Fatalf("duplicate open of committed records = %v, want invalid", err)
+	}
+	// A fresh Cast of an assignment whose conversation exists: a retry is a
+	// new assignment, never a second round of the old one.
+	if _, err := s.OpenEngineeringAssignment(ctx, recastEngineeringOpenOf(first)); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
+		t.Fatalf("second Cast of an existing engineering conversation = %v, want invalid", err)
 	}
 }
 
+func recastEngineeringOpenOf(open types.OpenEngineeringAssignmentRequest) types.OpenEngineeringAssignmentRequest {
+	return recastEngineeringOpen(open, "recast")
+}
+
+// D4 admission: an open commits only management's exact Cast to
+// engineering:<assignment>, naming a Texture's Cast whose round of
+// management's conversation is the binding's open parent round, on the
+// trajectory the Texture's document names. A pre-records binding opens
+// nothing.
 func TestEngineeringAssignmentRejectsCrossScopeAndAuthorityMismatches(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	f := installEngineeringAssignmentAuthority(t, s, 3)
-	base := engineeringOpenRequest(f, 0, "assignment-scope", 1, types.EngineeringAssignmentImplementation, true, "opaque-scope", "capsule-scope")
+	f := installEngineeringAssignmentAuthority(t, s, 2)
+	base := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "opaque-scope", "capsule-scope")
 	for name, mutate := range map[string]func(*types.OpenEngineeringAssignmentRequest){
 		"owner": func(r *types.OpenEngineeringAssignmentRequest) {
 			r.Binding.OwnerID, r.Binding.ParentAgentID = "other-owner", "management:other-owner"
 		},
-		"computer":       func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.ComputerID = "other-computer" },
-		"trajectory":     func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.TrajectoryID = "other-trajectory" },
-		"decision":       func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.ParentDecisionID = "other-decision" },
-		"control":        func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.ParentControlID = "other-control" },
-		"parent work":    func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.ParentWorkItemID = f.assignedWorkIDs[1] },
-		"assigned work":  func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.AssignedWorkItemID = f.assignedWorkIDs[1] },
-		"assigned agent": func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.AssignedAgentID = f.assignedAgentIDs[1] },
+		"computer":   func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.ComputerID = "other-computer" },
+		"trajectory": func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.TrajectoryID = "other-trajectory" },
+		"decision":   func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.ParentDecisionID = "other-decision" },
+		"control":    func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.ParentControlID = "other-control" },
+		"assigned agent": func(r *types.OpenEngineeringAssignmentRequest) {
+			r.Binding.AssignedAgentID = f.seed.AssignedAgentIDs[1]
+			r.Binding.AssignedConversationID = types.InboxConversationID(r.Binding.ParentAgentID, r.Binding.AssignedAgentID)
+			r.AssignedAgent.AgentID = r.Binding.AssignedAgentID
+		},
+		"parent round": func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.ParentRound++ },
+		"parent conversation": func(r *types.OpenEngineeringAssignmentRequest) {
+			r.Binding.ParentConversationID = types.InboxConversationID(r.Binding.ParentAgentID, "texture:other-document")
+		},
+		"work item":        func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.AssignedWorkItemID = "work-legacy" },
+		"legacy authority": func(r *types.OpenEngineeringAssignmentRequest) { r.Binding.CastAuthority = "" },
+		"parent cast missing": func(r *types.OpenEngineeringAssignmentRequest) {
+			r.Records.Records[0].ParentID = "texture-cell:Cast:never-minted"
+		},
+		"foreign caster": func(r *types.OpenEngineeringAssignmentRequest) {
+			r.Records.Records[0].SenderInbox = "research:" + f.ownerID
+			r.Records.Records[0].Provenance.AgentID = "research:" + f.ownerID
+		},
+		"no cast": func(r *types.OpenEngineeringAssignmentRequest) { r.Records.Records = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := base
-			candidate.CommandID = "command-invalid-" + name
+			candidate.CommandID = "command-invalid-" + strings.ReplaceAll(name, " ", "-")
+			candidate.Records.Records = append([]types.CommitmentRecord(nil), base.Records.Records...)
 			mutate(&candidate)
-			candidate.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(candidate)
+			redigestEngineeringOpen(&candidate)
 			if _, err := s.OpenEngineeringAssignment(ctx, candidate); err == nil {
 				t.Fatal("cross-scope assignment accepted")
 			}
 		})
 	}
+	// Every refusal wrote nothing: the unmutated Cast still opens.
+	if _, err := s.OpenEngineeringAssignment(ctx, base); err != nil {
+		t.Fatalf("base open after refused mutations: %v", err)
+	}
 }
 
-func TestEngineeringAssignmentAcceptsPassivatedPersistentManagementControlRun(t *testing.T) {
+// docs/problems/delegated-cast-authority-dies-with-the-caster-turn-2026-10-10.md,
+// under records authority: management casts and ends its turn within
+// seconds; the deferred spawn binds after. Live authority rests on the live
+// trajectory, so neither the casting turn completing nor a newer management
+// turn revokes the assignment.
+func TestRecordsAuthorityOutlivesTheCastingTurn(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	run, err := s.GetRunByOwnerOG(ctx, f.ownerID, f.parentRunID)
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-turn", "capsule-turn")
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatalf("admission during the casting turn: %v", err)
+	}
+	run, err := s.GetRun(ctx, f.parentRunID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run.State = types.RunPassivated
-	run.UpdatedAt = time.Now().UTC()
-	if err := s.UpdateRunOG(ctx, run); err != nil {
+	finished := time.Now().UTC()
+	run.State, run.UpdatedAt, run.FinishedAt = types.RunCompleted, finished, &finished
+	if err := s.UpdateRun(ctx, run); err != nil {
 		t.Fatal(err)
 	}
-	req := engineeringOpenRequest(f, 0, "assignment-passivated-parent", 1, types.EngineeringAssignmentVerification, true, "cap-passivated", "capsule-passivated")
-	if _, err := s.OpenEngineeringAssignment(ctx, req); err != nil {
-		t.Fatalf("passivated persistent Management control run should remain exact authority: %v", err)
+	agentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, f.ownerID, f.computerID, f.parentAgentID)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestEngineeringAssignmentRejectsGenericLifecycleManagementSubstitute(t *testing.T) {
-	t.Run("lifecycle run", func(t *testing.T) {
-		s := openTestStore(t)
-		ctx := context.Background()
-		f := installEngineeringAssignmentAuthority(t, s, 1)
-		persistentRunObj, err := s.getRunObjectByOwnerOG(ctx, f.ownerID, f.parentRunID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := s.ogStore.DeleteObject(ctx, persistentRunObj.CanonicalID); err != nil {
-			t.Fatal(err)
-		}
-		now := time.Now().UTC()
-		lifecycleRun := types.RunRecord{
-			RunID: f.parentRunID, AgentID: f.parentAgentID, TrajectoryID: f.trajectoryID,
-			AgentProfile: "management", AgentRole: "management", OwnerID: f.ownerID, ComputerID: f.computerID,
-			State: types.RunRunning, CreatedAt: now, UpdatedAt: now,
-			Metadata: map[string]any{"assignment_trajectory_id": f.trajectoryID, "parent_work_item_id": f.parentWorkID,
-				"parent_decision_id": f.parentDecisionID, "parent_control_id": f.parentControlID},
-		}
-		obj, err := lifecycleObject(ogKindRun, f.ownerID, f.computerID, f.parentRunID, lifecycleRun,
-			map[string]any{"run_id": f.parentRunID, "computer_id": f.computerID, "trajectory_id": f.trajectoryID}, now, now)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := s.ogStore.PutObject(ctx, obj); err != nil {
-			t.Fatal(err)
-		}
-		req := engineeringOpenRequest(f, 0, "assignment-lifecycle-super-run", 1, types.EngineeringAssignmentImplementation, true, "cap", "capsule")
-		if _, err := s.OpenEngineeringAssignment(ctx, req); err == nil {
-			t.Fatal("generic lifecycle Management run substituted for persistent Management authority")
-		}
-	})
-	t.Run("lifecycle agent", func(t *testing.T) {
-		s := openTestStore(t)
-		ctx := context.Background()
-		f := installEngineeringAssignmentAuthority(t, s, 1)
-		agentObj, err := s.lifecycleGetObject(ctx, ogKindAgent, f.ownerID, f.computerID, f.parentAgentID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		agent, err := decodeLifecycleObject[types.AgentRecord](agentObj)
-		if err != nil {
-			t.Fatal(err)
-		}
-		agent.LifecycleVersion = 1
-		updated, err := lifecycleObject(ogKindAgent, f.ownerID, f.computerID, f.parentAgentID, agent,
-			map[string]any{"agent_id": f.parentAgentID, "computer_id": f.computerID, "trajectory_id": f.trajectoryID}, agentObj.CreatedAt, time.Now().UTC())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := s.ogStore.PutObject(ctx, updated); err != nil {
-			t.Fatal(err)
-		}
-		req := engineeringOpenRequest(f, 0, "assignment-lifecycle-super-agent", 1, types.EngineeringAssignmentImplementation, true, "cap", "capsule")
-		if _, err := s.OpenEngineeringAssignment(ctx, req); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
-			t.Fatalf("lifecycle Management agent error = %v", err)
-		}
-	})
+	agent, err := decodeLifecycleObject[types.AgentRecord](agentObj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent.ActiveRunID = "run-management-next-turn"
+	nextTurn, err := lifecycleObject(ogKindAgent, f.ownerID, f.computerID, f.parentAgentID, agent,
+		map[string]any{"agent_id": f.parentAgentID, "computer_id": f.computerID}, agent.CreatedAt, finished)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{nextTurn}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.requireEngineeringParentAuthority(ctx, open.Binding); err != nil {
+		t.Fatalf("live authority died with the casting turn: %v", err)
+	}
+	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[0], "cap-turn")); err != nil {
+		t.Fatalf("bind after the casting turn ended: %v", err)
+	}
+	partial := assignmentReportRequest(open, 2, "report-after-turn", open.Binding.SubjectDigest, types.EngineeringResultPartial, types.EngineeringVerdictNone)
+	if result, err := s.RecordEngineeringAssignmentReport(ctx, partial); err != nil || result.Report == nil || result.Report.Late {
+		t.Fatalf("timely report after the casting turn ended: %+v %v", result, err)
+	}
+	// A binding minted before C1e has no live authority.
+	legacy := open.Binding
+	legacy.CastAuthority = ""
+	legacy.ParentConversationID, legacy.AssignedConversationID, legacy.ParentRound = "", "", 0
+	legacy.ParentWorkItemID, legacy.AssignedWorkItemID = "work-legacy-parent", "work-legacy-assigned"
+	if _, err := s.requireEngineeringParentAuthority(ctx, legacy); err == nil {
+		t.Fatal("pre-records binding granted live authority")
+	}
+	if _, err := s.requireEngineeringHistoricalParentAuthority(ctx, legacy); err != nil {
+		t.Fatalf("pre-records binding lost historical authority: %v", err)
+	}
 }
 
 func TestEngineeringAssignmentBindClaimsCapabilityAndCapsuleUniquely(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 6)
+	ids := f.seed.AssignmentIDs
 	opens := []types.OpenEngineeringAssignmentRequest{
-		engineeringOpenRequest(f, 0, "assignment-bind-0", 1, types.EngineeringAssignmentImplementation, true, "shared-capability", "shared-capsule"),
-		engineeringOpenRequest(f, 1, "assignment-bind-1", 1, types.EngineeringAssignmentImplementation, true, "shared-capability", "capsule-one"),
-		engineeringOpenRequest(f, 2, "assignment-bind-2", 1, types.EngineeringAssignmentImplementation, true, "capability-two", "shared-capsule"),
-		engineeringOpenRequest(f, 3, "assignment-bind-3", 1, types.EngineeringAssignmentImplementation, true, "capability-three", "capsule-three"),
-		engineeringOpenRequest(f, 4, "assignment-bind-4", 1, types.EngineeringAssignmentImplementation, true, "capability-four", "capsule-four"),
-		engineeringOpenRequest(f, 5, "assignment-bind-5", 1, types.EngineeringAssignmentImplementation, true, "capability-five", "capsule-five"),
+		engineeringOpenRequest(f, ids[0], "shared-capability", "shared-capsule"),
+		engineeringOpenRequest(f, ids[1], "shared-capability", "capsule-one"),
+		engineeringOpenRequest(f, ids[2], "capability-two", "shared-capsule"),
+		engineeringOpenRequest(f, ids[3], "capability-three", "capsule-three"),
+		engineeringOpenRequest(f, ids[4], "capability-four", "capsule-four"),
+		engineeringOpenRequest(f, ids[5], "capability-five", "capsule-five"),
 	}
 	opens[2].Binding.CoordinationContractID = "coordination-future-only"
 	opens[2].Binding.CoordinationContractDigest = objectgraph.SHA256([]byte("coordination-future-only"))
-	opens[2].CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(opens[2])
+	redigestEngineeringOpen(&opens[2])
 	for _, open := range opens {
 		if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 			t.Fatalf("open %s: %v", open.AssignmentID, err)
@@ -505,6 +544,12 @@ func TestEngineeringAssignmentBindClaimsCapabilityAndCapsuleUniquely(t *testing.
 	wrongRun.CommandDigest, _ = ComputeBindEngineeringAssignmentDigest(wrongRun)
 	if _, err := s.BindEngineeringAssignment(ctx, wrongRun); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
 		t.Fatalf("cross-assignment run error = %v", err)
+	}
+	workRun := bindEngineeringRequest(opens[4], f.assignedRunIDs[4], "capability-four")
+	workRun.Run.Metadata["lifecycle_work_item_id"] = "work-legacy"
+	workRun.CommandDigest, _ = ComputeBindEngineeringAssignmentDigest(workRun)
+	if _, err := s.BindEngineeringAssignment(ctx, workRun); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
+		t.Fatalf("records run carrying a work item error = %v", err)
 	}
 	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(opens[5], f.assignedRunIDs[3], "capability-five")); !errors.Is(err, ErrConcurrentStateChange) {
 		t.Fatalf("duplicate run claim error = %v", err)
@@ -540,28 +585,25 @@ func assignmentReportRequest(open types.OpenEngineeringAssignmentRequest, versio
 	return req
 }
 
-func TestVerificationSubjectChangeCreatesCandidateAndCannotCertifyOriginal(t *testing.T) {
+// An implementation report that changed the subject mints an
+// assignment-scoped candidate and never certifies (or rewrites) the
+// original subject.
+func TestImplementationSubjectChangeCreatesAssignmentScopedCandidate(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	f := installEngineeringAssignmentAuthority(t, s, 3)
-	immutable := engineeringOpenRequest(f, 0, "assignment-verify-immutable", 1, types.EngineeringAssignmentVerification, true, "verify-capability-0", "capsule-verify-0")
-	changed := engineeringOpenRequest(f, 1, "assignment-verify-changed", 1, types.EngineeringAssignmentVerification, true, "verify-capability-1", "capsule-verify-1")
-	changedSameBytes := engineeringOpenRequest(f, 2, "assignment-verify-changed-same-bytes", 1, types.EngineeringAssignmentVerification, true, "verify-capability-2", "capsule-verify-2")
-	for index, open := range []types.OpenEngineeringAssignmentRequest{immutable, changed, changedSameBytes} {
+	f := installEngineeringAssignmentAuthority(t, s, 2)
+	changed := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "change-capability-0", "capsule-change-0")
+	changedSameBytes := engineeringOpenRequest(f, f.seed.AssignmentIDs[1], "change-capability-1", "capsule-change-1")
+	for index, open := range []types.OpenEngineeringAssignmentRequest{changed, changedSameBytes} {
 		if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[index], fmt.Sprintf("verify-capability-%d", index))); err != nil {
+		if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[index], fmt.Sprintf("change-capability-%d", index))); err != nil {
 			t.Fatal(err)
 		}
 	}
-	passReq := assignmentReportRequest(immutable, 2, "report-immutable", immutable.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
-	pass, err := s.RecordEngineeringAssignmentReport(ctx, passReq)
-	if err != nil || pass.Report == nil || !pass.Report.CertifiesOriginalSubject || pass.Candidate != nil {
-		t.Fatalf("immutable verification result: %+v, %v", pass, err)
-	}
 	newDigest := objectgraph.SHA256([]byte("changed subject bytes"))
-	changedReq := assignmentReportRequest(changed, 2, "report-changed", newDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
+	changedReq := assignmentReportRequest(changed, 2, "report-changed", newDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
 	changedReq.Report.CertifiesOriginalSubject = true // authored claim must be ignored by the reducer
 	changedReq.Report.Mutations = []types.EngineeringRecordedMutation{{
 		MutationID: "subject-mutation", Kind: "subject_bytes", BeforeDigest: changed.Binding.SubjectDigest,
@@ -571,16 +613,16 @@ func TestVerificationSubjectChangeCreatesCandidateAndCannotCertifyOriginal(t *te
 	result, err := s.RecordEngineeringAssignmentReport(ctx, changedReq)
 	if err != nil || result.Report == nil || result.Report.CertifiesOriginalSubject || result.Candidate == nil ||
 		result.Candidate.SubjectDigest != newDigest || result.Report.CandidateID == "" {
-		t.Fatalf("changed verification result: %+v, %v", result, err)
+		t.Fatalf("changed implementation result: %+v, %v", result, err)
 	}
 	if result.Assignment.Binding.SubjectDigest != changed.Binding.SubjectDigest {
-		t.Fatal("changed verification rewrote original subject identity")
+		t.Fatal("changed implementation rewrote original subject identity")
 	}
 	replay, err := s.RecordEngineeringAssignmentReport(ctx, changedReq)
 	if err != nil || !replay.Replay || replay.Candidate == nil || replay.Candidate.CandidateID != result.Candidate.CandidateID {
 		t.Fatalf("changed report replay: %+v, %v", replay, err)
 	}
-	sameBytesReq := assignmentReportRequest(changedSameBytes, 2, "report-changed-same-bytes", newDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
+	sameBytesReq := assignmentReportRequest(changedSameBytes, 2, "report-changed-same-bytes", newDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
 	sameBytesReq.Report.Mutations = []types.EngineeringRecordedMutation{{
 		MutationID: "subject-mutation-same-bytes", Kind: "subject_bytes", BeforeDigest: changedSameBytes.Binding.SubjectDigest,
 		AfterDigest: newDigest, EvidenceRef: "receipt:mutation-same-bytes", SubjectBytesChanged: true,
@@ -593,11 +635,11 @@ func TestVerificationSubjectChangeCreatesCandidateAndCannotCertifyOriginal(t *te
 	}
 }
 
-func TestCancelledAssignmentAcceptsLateResultWithoutReopeningOrCertifying(t *testing.T) {
+func TestCancelledAssignmentAcceptsLateResultWithoutReopening(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-cancel-late", 1, types.EngineeringAssignmentVerification, true, "late-capability", "capsule-late")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "late-capability", "capsule-late")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -611,15 +653,18 @@ func TestCancelledAssignmentAcceptsLateResultWithoutReopeningOrCertifying(t *tes
 	}
 	cancel.CommandDigest, _ = ComputeCancelEngineeringAssignmentDigest(cancel)
 	cancelled, err := s.CancelEngineeringAssignment(ctx, cancel)
-	if err != nil || cancelled.Assignment.Disposition != types.EngineeringAssignmentCancelled {
+	if err != nil || cancelled.Assignment.Disposition != types.EngineeringAssignmentCancelled || cancelled.Report == nil {
 		t.Fatalf("cancel: %+v, %v", cancelled, err)
 	}
-	lateReq := assignmentReportRequest(open, 3, "report-late", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
+	requireFinalEngineeringReport(t, s, f, open, 1, cancelled.Report.ReportID, types.EngineeringAssignmentCancelled)
+	lateReq := assignmentReportRequest(open, 3, "report-late", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
 	late, err := s.RecordEngineeringAssignmentReport(ctx, lateReq)
 	if err != nil || late.Report == nil || !late.Report.Late || late.Report.CertifiesOriginalSubject ||
 		late.Assignment.Disposition != types.EngineeringAssignmentCancelled || late.Assignment.TerminalAt == nil {
 		t.Fatalf("late result: %+v, %v", late, err)
 	}
+	// Late evidence mints no Report: the engineering round already closed.
+	requireFinalEngineeringReport(t, s, f, open, 1, cancelled.Report.ReportID, types.EngineeringAssignmentCancelled)
 	stored, err := s.GetEngineeringAssignment(ctx, f.ownerID, f.computerID, open.AssignmentID, 1)
 	if err != nil || stored.Disposition != types.EngineeringAssignmentCancelled || stored.LifecycleVersion != 4 {
 		t.Fatalf("stored late assignment: %+v, %v", stored, err)
@@ -630,7 +675,7 @@ func TestCapsuleFreezeAcknowledgementPermitsBoundTerminalReport(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-freeze-only", 1, types.EngineeringAssignmentVerification, true, "cap-freeze-only", "capsule-freeze-only")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-freeze-only", "capsule-freeze-only")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -654,12 +699,13 @@ func TestCapsuleFreezeAcknowledgementPermitsBoundTerminalReport(t *testing.T) {
 	if err != nil || result.Assignment.CapsuleDisposition != types.EngineeringCapsuleFrozen || result.Assignment.Disposition != types.EngineeringAssignmentBound {
 		t.Fatalf("freeze-only assignment: %+v, %v", result, err)
 	}
-	delayed := assignmentReportRequest(open, 4, "report-after-freeze", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
+	delayed := assignmentReportRequest(open, 4, "report-after-freeze", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
 	reported, err := s.RecordEngineeringAssignmentReport(ctx, delayed)
-	if err != nil || reported.Report == nil || reported.Report.Late || !reported.Report.CertifiesOriginalSubject ||
+	if err != nil || reported.Report == nil || reported.Report.Late ||
 		reported.Assignment.Disposition != types.EngineeringAssignmentCompleted || reported.Assignment.CapsuleDisposition != types.EngineeringCapsuleFrozen {
-		t.Fatalf("frozen terminal report did not preserve exact certification: %+v, %v", reported, err)
+		t.Fatalf("frozen terminal report was not timely: %+v, %v", reported, err)
 	}
+	requireFinalEngineeringReport(t, s, f, open, 1, reported.Report.ReportID, types.EngineeringAssignmentCompleted)
 }
 
 func TestAssignmentOutcomeAndCapsuleFateRemainSeparateAcrossRestart(t *testing.T) {
@@ -672,10 +718,11 @@ func TestAssignmentOutcomeAndCapsuleFateRemainSeparateAcrossRestart(t *testing.T
 	}
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 3)
+	ids := f.seed.AssignmentIDs
 	opens := []types.OpenEngineeringAssignmentRequest{
-		engineeringOpenRequest(f, 0, "assignment-complete-freeze", 1, types.EngineeringAssignmentImplementation, true, "cap-freeze", "capsule-freeze"),
-		engineeringOpenRequest(f, 1, "assignment-cancel-revoke", 1, types.EngineeringAssignmentImplementation, true, "cap-revoke", "capsule-revoke"),
-		engineeringOpenRequest(f, 2, "assignment-failed-active", 1, types.EngineeringAssignmentImplementation, true, "cap-failed", "capsule-failed"),
+		engineeringOpenRequest(f, ids[0], "cap-freeze", "capsule-freeze"),
+		engineeringOpenRequest(f, ids[1], "cap-revoke", "capsule-revoke"),
+		engineeringOpenRequest(f, ids[2], "cap-failed", "capsule-failed"),
 	}
 	caps := []string{"cap-freeze", "cap-revoke", "cap-failed"}
 	for index, open := range opens {
@@ -786,11 +833,14 @@ func TestAssignmentOutcomeAndCapsuleFateRemainSeparateAcrossRestart(t *testing.T
 	}
 }
 
+// A Cast cancelled at spawn, before any engineering run bound (capsule
+// cleanup intent and ack first), closes the engineering round with a final
+// Report that names no run.
 func TestOpenedAssignmentCapsuleCleanupIntentAckBeforeCancel(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-prebind-cleanup", 1, types.EngineeringAssignmentImplementation, true, "cap", "capsule-prebind")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap", "capsule-prebind")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -813,8 +863,16 @@ func TestOpenedAssignmentCapsuleCleanupIntentAckBeforeCancel(t *testing.T) {
 	cancel := types.CancelEngineeringAssignmentRequest{CommandID: "cancel-prebind", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 3, Reason: "mint failed"}
 	cancel.CommandDigest, _ = ComputeCancelEngineeringAssignmentDigest(cancel)
 	cancelled, err := s.CancelEngineeringAssignment(ctx, cancel)
-	if err != nil || cancelled.Assignment.Disposition != types.EngineeringAssignmentCancelled || cancelled.Assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked {
+	if err != nil || cancelled.Assignment.Disposition != types.EngineeringAssignmentCancelled || cancelled.Assignment.CapsuleDisposition != types.EngineeringCapsuleRevoked || cancelled.Report == nil {
 		t.Fatalf("cancel: %+v %v", cancelled, err)
+	}
+	if cancelled.Report.RunID != "" {
+		t.Fatalf("runless cancel report names run %q", cancelled.Report.RunID)
+	}
+	requireFinalEngineeringReport(t, s, f, open, 1, cancelled.Report.ReportID, types.EngineeringAssignmentCancelled)
+	closing, found, err := s.EngineeringClosingRecord(ctx, cancelled.Assignment)
+	if err != nil || !found || closing.RecordID != EngineeringOutcomeRecordID(cancelled.Report.ReportID) {
+		t.Fatalf("closing record = %+v found=%v err=%v", closing, found, err)
 	}
 }
 
@@ -822,14 +880,14 @@ func TestReplayRecordedReportAfterRevokeReturnsOriginalReceipt(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-report-replay", 1, types.EngineeringAssignmentVerification, true, "cap", "capsule")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap", "capsule")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[0], "cap")); err != nil {
 		t.Fatal(err)
 	}
-	req := assignmentReportRequest(open, 2, "report-replay", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
+	req := assignmentReportRequest(open, 2, "report-replay", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
 	changedCAS := req
 	changedCAS.ExpectedLifecycleVersion = 99
 	changedDigest, _ := ComputeRecordEngineeringAssignmentReportDigest(changedCAS)
@@ -865,7 +923,7 @@ func TestPartialAssignmentReportPreservesActiveCapsuleThenTerminalFreezes(t *tes
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-partial-terminal", 1, types.EngineeringAssignmentImplementation, true, "cap-partial", "capsule-partial")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-partial", "capsule-partial")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -909,11 +967,14 @@ func TestPartialAssignmentReportPreservesActiveCapsuleThenTerminalFreezes(t *tes
 	}
 }
 
-func TestEngineeringReturnLoopCommitsExactPacketsAndTerminalProjection(t *testing.T) {
+// C1e D3: every timely report commits engineering's Report to management in
+// the row's batch, a progress Report until the row turns terminal and then
+// the final Report that closes the engineering round; replays mint nothing.
+func TestEngineeringReportsCommitRecordsWithTheRowAndTerminalProjection(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-upward-loop", 1, types.EngineeringAssignmentImplementation, true, "cap-upward-loop", "capsule-upward-loop")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-upward-loop", "capsule-upward-loop")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -930,42 +991,62 @@ func TestEngineeringReturnLoopCommitsExactPacketsAndTerminalProjection(t *testin
 			firstPartial = req
 		}
 		result, err := s.RecordEngineeringAssignmentReport(ctx, req)
-		if err != nil || result.Update == nil || result.Replay || result.Update.Direction != types.LifecyclePacketDirectionProducerReport ||
-			result.Update.ControlBindingID != f.parentControlID || result.Update.ProducerWorkItemID != open.Binding.AssignedWorkItemID ||
-			result.Update.TargetWorkItemID != f.parentWorkID || result.Update.DeliveredToRunID != f.parentRunID || result.Update.DeliveredAt == nil {
+		if err != nil || result.Replay || result.Report == nil {
 			t.Fatalf("partial return %d = %+v err=%v", index, result, err)
 		}
+		reports := engineeringReportsToManagement(t, s, f, open)
+		if len(reports) != index+1 {
+			t.Fatalf("partial %d: management holds %d Reports, want %d", index, len(reports), index+1)
+		}
+		last := reports[index]
+		if last.Final || last.RecordID != EngineeringOutcomeRecordID(req.Report.ReportID) || last.ConversationID != open.Binding.AssignedConversationID ||
+			last.Inbox != f.parentAgentID || last.Report == nil || len(last.Report.Claims) != 1 || last.Report.Claims[0].Text != req.Report.Summary {
+			t.Fatalf("partial %d Report = %+v", index, last)
+		}
 		replay, err := s.RecordEngineeringAssignmentReport(ctx, req)
-		if err != nil || !replay.Replay || replay.Update == nil || replay.Update.UpdateID != result.Update.UpdateID {
+		if err != nil || !replay.Replay || replay.Report == nil || replay.Report.ReportID != req.Report.ReportID {
 			t.Fatalf("partial replay %d = %+v err=%v", index, replay, err)
+		}
+		if got := len(engineeringReportsToManagement(t, s, f, open)); got != index+1 {
+			t.Fatalf("partial replay %d minted a Report: %d", index, got)
 		}
 	}
 	terminal := assignmentReportRequest(open, 4, "report-terminal", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
 	terminal.Report.Summary = "implementation complete"
+	terminal.OutcomeRefs = []string{"candidate:outcome-ref"}
 	terminal.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(terminal)
 	result, err := s.RecordEngineeringAssignmentReport(ctx, terminal)
-	if err != nil || result.Update == nil || result.Assignment.Disposition != types.EngineeringAssignmentCompleted {
+	if err != nil || result.Assignment.Disposition != types.EngineeringAssignmentCompleted {
 		t.Fatalf("terminal = %+v err=%v", result, err)
 	}
+	final := requireFinalEngineeringReport(t, s, f, open, 3, terminal.Report.ReportID, types.EngineeringAssignmentCompleted)
+	wantRefs := map[string]bool{"assignment:" + open.AssignmentID: false, "assignment-report:" + terminal.Report.ReportID: false, "candidate:outcome-ref": false}
+	for _, ref := range final.EvidenceRefs {
+		if _, ok := wantRefs[ref]; ok {
+			wantRefs[ref] = true
+		}
+	}
+	for ref, seen := range wantRefs {
+		if !seen {
+			t.Fatalf("final Report evidence refs %v missing %s", final.EvidenceRefs, ref)
+		}
+	}
+	closing, found, err := s.EngineeringClosingRecord(ctx, result.Assignment)
+	if err != nil || !found || closing.RecordID != final.RecordID {
+		t.Fatalf("closing record = %+v found=%v err=%v", closing, found, err)
+	}
 	priorReplay, err := s.RecordEngineeringAssignmentReport(ctx, firstPartial)
-	if err != nil || !priorReplay.Replay || priorReplay.Update == nil || priorReplay.Update.ProducerUpdateID != firstPartial.Report.ReportID {
+	if err != nil || !priorReplay.Replay || priorReplay.Report == nil || priorReplay.Report.ReportID != firstPartial.Report.ReportID {
 		t.Fatalf("prior partial replay after terminal = %+v err=%v", priorReplay, err)
 	}
-	work, err := s.GetLifecycleWorkItem(ctx, f.ownerID, f.computerID, open.Binding.AssignedWorkItemID)
-	if err != nil || work.Status != types.WorkItemCompleted || work.ResultRef != terminal.Report.ReportID {
-		t.Fatalf("terminal work = %+v err=%v", work, err)
-	}
+	requireFinalEngineeringReport(t, s, f, open, 3, terminal.Report.ReportID, types.EngineeringAssignmentCompleted)
 	run, err := s.GetLifecycleRun(ctx, f.ownerID, f.computerID, f.assignedRunIDs[0])
-	if err != nil || run.State != types.RunCompleted || run.FinishedAt == nil {
+	if err != nil || run.State != types.RunCompleted || run.FinishedAt == nil || run.Result != terminal.Report.ReportID {
 		t.Fatalf("terminal run = %+v err=%v", run, err)
 	}
 	agent, err := s.GetAgentByScope(ctx, f.ownerID, f.computerID, open.Binding.AssignedAgentID)
 	if err != nil || agent.ActiveRunID != "" {
 		t.Fatalf("terminal agent = %+v err=%v", agent, err)
-	}
-	packets, err := s.ListLifecycleControlsDeliveredToRun(ctx, f.ownerID, f.computerID, f.trajectoryID, f.parentAgentID, f.parentRunID, 10)
-	if err != nil || len(packets) != 3 {
-		t.Fatalf("parent delivered reports = %+v err=%v", packets, err)
 	}
 	if legacy, err := s.ListCoagentMailboxBacklog(ctx, f.ownerID, f.parentAgentID, 10); err != nil || len(legacy) != 0 {
 		t.Fatalf("legacy mailbox rows = %+v err=%v", legacy, err)
@@ -976,7 +1057,7 @@ func TestEngineeringCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *t
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-cancel-return", 1, types.EngineeringAssignmentImplementation, true, "cap-cancel-return", "capsule-cancel-return")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-cancel-return", "capsule-cancel-return")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -986,14 +1067,15 @@ func TestEngineeringCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *t
 	cancel := types.CancelEngineeringAssignmentRequest{CommandID: "cancel-return", OwnerID: f.ownerID, ComputerID: f.computerID, AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 2, Reason: "capsule authority missing"}
 	cancel.CommandDigest, _ = ComputeCancelEngineeringAssignmentDigest(cancel)
 	cancelled, err := s.CancelEngineeringAssignment(ctx, cancel)
-	if err != nil || cancelled.Update == nil || cancelled.Report == nil || !cancelled.Report.Late {
+	if err != nil || cancelled.Report == nil || !cancelled.Report.Late {
 		t.Fatalf("cancel = %+v err=%v", cancelled, err)
 	}
+	requireFinalEngineeringReport(t, s, f, open, 1, cancelled.Report.ReportID, types.EngineeringAssignmentCancelled)
 	retry := cancel
 	retry.ExpectedLifecycleVersion = cancelled.Assignment.LifecycleVersion
 	retry.CommandDigest, _ = ComputeCancelEngineeringAssignmentDigest(retry)
 	replayed, err := s.CancelEngineeringAssignment(ctx, retry)
-	if err != nil || !replayed.Replay || replayed.Update == nil {
+	if err != nil || !replayed.Replay || replayed.Report == nil || replayed.Report.ReportID != cancelled.Report.ReportID {
 		t.Fatalf("cancel replay = %+v err=%v", replayed, err)
 	}
 	conflict := retry
@@ -1002,16 +1084,7 @@ func TestEngineeringCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *t
 	if _, err := s.CancelEngineeringAssignment(ctx, conflict); !errors.Is(err, ErrEngineeringAssignmentCommandConflict) {
 		t.Fatalf("cancel conflict = %v", err)
 	}
-	packets, err := s.ListLifecycleControlsDeliveredToRun(ctx, f.ownerID, f.computerID, f.trajectoryID, f.parentAgentID, f.parentRunID, 10)
-	if err != nil || len(packets) != 1 {
-		t.Fatalf("cancel obligations before parent terminal = %+v err=%v", packets, err)
-	}
-	settleParent := types.SettleLifecycleWorkRequest{OwnerID: f.ownerID, ComputerID: f.computerID, CommandID: "settle-parent-before-late", TrajectoryID: f.trajectoryID,
-		WorkItemID: f.parentWorkID, ActingAgentID: f.parentAgentID, ResultRef: "parent-result:cancelled-child"}
-	settleParent.CommandDigest, _ = ComputeSettleLifecycleWorkDigest(settleParent)
-	if _, err := s.SettleLifecycleWork(ctx, settleParent); err != nil {
-		t.Fatalf("settle parent before late evidence: %v", err)
-	}
+	requireFinalEngineeringReport(t, s, f, open, 1, cancelled.Report.ReportID, types.EngineeringAssignmentCancelled)
 	parentRun, err := s.GetRunByOwner(ctx, f.ownerID, f.parentRunID)
 	if err != nil {
 		t.Fatal(err)
@@ -1045,12 +1118,12 @@ func TestEngineeringCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *t
 	late.Report.ExecutorReceiptRefs = []string{"capsule-exec:sha256:persisted-raw"}
 	late.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(late)
 	lateResult, err := s.RecordEngineeringAssignmentReport(ctx, late)
-	if err != nil || lateResult.Report == nil || !lateResult.Report.Late || lateResult.Update != nil || lateResult.Candidate != nil || lateResult.Report.CandidateID != "" || lateResult.Assignment.Disposition != types.EngineeringAssignmentCancelled ||
+	if err != nil || lateResult.Report == nil || !lateResult.Report.Late || lateResult.Candidate != nil || lateResult.Report.CandidateID != "" || lateResult.Assignment.Disposition != types.EngineeringAssignmentCancelled ||
 		len(lateResult.Report.ExecutorReceiptRefs) != 1 || lateResult.Report.ExecutorReceiptRefs[0] != "capsule-exec:sha256:persisted-raw" {
 		t.Fatalf("late = %+v err=%v", lateResult, err)
 	}
 	lateReplay, err := s.RecordEngineeringAssignmentReport(ctx, late)
-	if err != nil || !lateReplay.Replay || lateReplay.Update != nil || lateReplay.Candidate != nil {
+	if err != nil || !lateReplay.Replay || lateReplay.Candidate != nil {
 		t.Fatalf("late exact replay = %+v err=%v", lateReplay, err)
 	}
 	lateReword := late
@@ -1066,16 +1139,18 @@ func TestEngineeringCancellationQueuesOneFailureAndLateResultIsEvidenceOnly(t *t
 	latePartial.Report.Summary = "in-flight partial result arrived after revoke"
 	latePartial.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(latePartial)
 	partialResult, err := s.RecordEngineeringAssignmentReport(ctx, latePartial)
-	if err != nil || partialResult.Report == nil || !partialResult.Report.Late || partialResult.Update != nil || partialResult.Assignment.Disposition != types.EngineeringAssignmentCancelled {
+	if err != nil || partialResult.Report == nil || !partialResult.Report.Late || partialResult.Assignment.Disposition != types.EngineeringAssignmentCancelled {
 		t.Fatalf("late partial = %+v err=%v", partialResult, err)
 	}
+	// Late evidence never reaches management's inbox.
+	requireFinalEngineeringReport(t, s, f, open, 1, cancelled.Report.ReportID, types.EngineeringAssignmentCancelled)
 }
 
 func TestLifecycleCancellationIntentSurvivesAssignmentFateAndPreservesCallerCASIdentity(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-cancel-intent", 1, types.EngineeringAssignmentVerification, true, "cap-cancel-intent", "capsule-cancel-intent")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-cancel-intent", "capsule-cancel-intent")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1102,18 +1177,21 @@ func TestLifecycleCancellationIntentSurvivesAssignmentFateAndPreservesCallerCASI
 	if _, err := s.SetEngineeringCapsuleDisposition(ctx, freezeAfterIntent); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
 		t.Fatalf("freeze after cancellation intent error = %v", err)
 	}
-	// Once cancellation intent is durable, even a terminal Pass report that
-	// wins the process scheduling race is historical evidence only.
+	// Once cancellation intent is durable, even a terminal report that wins
+	// the process scheduling race is historical evidence only.
 	changedDigest := objectgraph.SHA256([]byte("report-after-cancellation-intent"))
-	lateReport := assignmentReportRequest(open, 2, "report-after-cancellation-intent", changedDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
+	lateReport := assignmentReportRequest(open, 2, "report-after-cancellation-intent", changedDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
 	lateResult, err := s.RecordEngineeringAssignmentReport(ctx, lateReport)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lateResult.Report == nil || !lateResult.Report.Late || lateResult.Report.Verdict != types.EngineeringVerdictAbstain ||
-		lateResult.Report.CandidateID != "" || lateResult.Candidate != nil || lateResult.Update != nil ||
+	if lateResult.Report == nil || !lateResult.Report.Late || lateResult.Report.Verdict != types.EngineeringVerdictNone ||
+		lateResult.Report.CandidateID != "" || lateResult.Candidate != nil ||
 		lateResult.Assignment.Disposition != types.EngineeringAssignmentBound {
 		t.Fatalf("report after cancellation intent retained lifecycle authority: %+v", lateResult)
+	}
+	if reports := engineeringReportsToManagement(t, s, f, open); len(reports) != 0 {
+		t.Fatalf("late evidence minted Reports to management: %+v", reports)
 	}
 	conflict := cancel
 	conflict.RequestedLifecycleVersion++
@@ -1156,7 +1234,7 @@ func TestCancelAssignmentWithAlreadyCompletedRun(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-completed-run", 1, types.EngineeringAssignmentImplementation, true, "cap-completed-run", "capsule-completed-run")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-completed-run", "capsule-completed-run")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1197,7 +1275,7 @@ func TestCancelAssignmentWithAlreadyCompletedRun(t *testing.T) {
 	if err := s.UpdateRun(ctx, run); err != nil {
 		t.Fatal(err)
 	}
-	agent, err := s.GetAgentByScope(ctx, f.ownerID, f.computerID, f.assignedAgentIDs[0])
+	agent, err := s.GetAgentByScope(ctx, f.ownerID, f.computerID, open.Binding.AssignedAgentID)
 	if err != nil || agent.ActiveRunID != "" {
 		t.Fatalf("agent after completed run: %+v %v", agent, err)
 	}
@@ -1222,7 +1300,7 @@ func TestSystemAssignmentCancellationAfterTrajectoryProjectionUsesHistoricalAuth
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-historical-system-cancel", 1, types.EngineeringAssignmentImplementation, true, "cap-historical", "capsule-historical")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-historical", "capsule-historical")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1273,9 +1351,9 @@ func TestSystemAssignmentCancellationAfterTrajectoryProjectionUsesHistoricalAuth
 	if err != nil || run.State != types.RunCancelled {
 		t.Fatalf("terminal run: %+v %v", run, err)
 	}
-	work, err := s.GetLifecycleWorkItem(ctx, f.ownerID, f.computerID, open.Binding.AssignedWorkItemID)
-	if err != nil || work.Status != types.WorkItemCancelled {
-		t.Fatalf("terminal work: %+v %v", work, err)
+	agent, err := s.GetAgentByScope(ctx, f.ownerID, f.computerID, open.Binding.AssignedAgentID)
+	if err != nil || agent.ActiveRunID != "" {
+		t.Fatalf("terminal agent: %+v %v", agent, err)
 	}
 }
 
@@ -1382,7 +1460,7 @@ func TestTerminalSlotReplayAndConflict(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-terminal-slot", 1, types.EngineeringAssignmentImplementation, true, "cap-slot", "capsule-slot")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-slot", "capsule-slot")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1409,9 +1487,9 @@ func TestTerminalSlotReplayAndConflict(t *testing.T) {
 	if retry.Assignment.LifecycleVersion != first.Assignment.LifecycleVersion {
 		t.Fatalf("replay advanced lifecycle %d -> %d", first.Assignment.LifecycleVersion, retry.Assignment.LifecycleVersion)
 	}
+	requireFinalEngineeringReport(t, s, f, open, 1, first.Report.ReportID, types.EngineeringAssignmentCompleted)
 	// A different proposition on the completed slot conflicts: the slot is
-	// reserved, and corrections proceed only as a new attempt carrying the
-	// supersede tuple.
+	// reserved; a correction is a new Cast, never a second outcome.
 	changedReq := assignmentReportRequest(open, first.Assignment.LifecycleVersion, "report-slot-b", open.Binding.SubjectDigest, types.EngineeringResultFailed, types.EngineeringVerdictNone)
 	changedReq.Report.Outputs[0].Digest = objectgraph.SHA256([]byte("changed-output"))
 	changedReq.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(changedReq)
@@ -1445,7 +1523,7 @@ func TestTerminalSlotPartialNeverOccupies(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-partial-slot", 1, types.EngineeringAssignmentImplementation, true, "cap-partial", "capsule-partial")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-partial", "capsule-partial")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1464,80 +1542,11 @@ func TestTerminalSlotPartialNeverOccupies(t *testing.T) {
 	}
 }
 
-// TestOpenSupersedeTuple (settlement gate item 3, v1): attempt 1 never carries
-// the tuple; attempt > 1 always does, naming a recorded prior report of the
-// same assignment's earlier attempt with a valid kind, reason, and delta.
-func TestOpenSupersedeTuple(t *testing.T) {
-	s := openTestStore(t)
-	ctx := context.Background()
-	f := installEngineeringAssignmentAuthority(t, s, 2)
-	open := engineeringOpenRequest(f, 0, "assignment-supersede", 1, types.EngineeringAssignmentImplementation, true, "cap-sup-0", "capsule-sup-0")
-	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[0], "cap-sup-0")); err != nil {
-		t.Fatal(err)
-	}
-	priorReq := assignmentReportRequest(open, 2, "report-supersede-prior", open.Binding.SubjectDigest, types.EngineeringResultPartial, types.EngineeringVerdictNone)
-	prior, err := s.RecordEngineeringAssignmentReport(ctx, priorReq)
-	if err != nil || prior.Report == nil {
-		t.Fatalf("prior partial: %+v err=%v", prior, err)
-	}
-	validTuple := func() *types.EngineeringSupersedeTuple {
-		return &types.EngineeringSupersedeTuple{
-			SupersedesAssignmentID: open.AssignmentID, SupersedesAttempt: 1,
-			PriorReceiptRef: prior.Report.ReportID, SupersedeKind: types.EngineeringSupersedeCorrection,
-			ReasonEnum: "proposition_conflict", DeltaDigest: objectgraph.SHA256([]byte("structured-delta")),
-		}
-	}
-	attempt2 := engineeringOpenRequest(f, 1, "assignment-supersede", 2, types.EngineeringAssignmentImplementation, true, "cap-sup-1", "capsule-sup-1")
-	bare := attempt2
-	bare.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(bare)
-	if _, err := s.OpenEngineeringAssignment(ctx, bare); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
-		t.Fatalf("attempt 2 without tuple = %v, want invalid", err)
-	}
-	badKind := attempt2
-	badKind.Supersedes = validTuple()
-	badKind.Supersedes.SupersedeKind = "reword"
-	badKind.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(badKind)
-	if _, err := s.OpenEngineeringAssignment(ctx, badKind); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
-		t.Fatalf("bad kind = %v, want invalid", err)
-	}
-	badReceipt := attempt2
-	badReceipt.Supersedes = validTuple()
-	badReceipt.Supersedes.PriorReceiptRef = "report:unknown"
-	badReceipt.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(badReceipt)
-	if _, err := s.OpenEngineeringAssignment(ctx, badReceipt); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
-		t.Fatalf("unknown receipt = %v, want invalid", err)
-	}
-	badDelta := attempt2
-	badDelta.Supersedes = validTuple()
-	badDelta.Supersedes.DeltaDigest = "not-a-digest"
-	badDelta.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(badDelta)
-	if _, err := s.OpenEngineeringAssignment(ctx, badDelta); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
-		t.Fatalf("bad delta = %v, want invalid", err)
-	}
-	good := attempt2
-	good.Supersedes = validTuple()
-	good.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(good)
-	second, err := s.OpenEngineeringAssignment(ctx, good)
-	if err != nil || second.Assignment.Binding.Attempt != 2 {
-		t.Fatalf("correction attempt = %+v err=%v", second, err)
-	}
-	first := engineeringOpenRequest(f, 0, "assignment-supersede-fresh", 1, types.EngineeringAssignmentImplementation, true, "cap-sup-f", "capsule-sup-f")
-	first.Supersedes = validTuple()
-	first.Supersedes.SupersedesAssignmentID = "assignment-supersede-fresh"
-	first.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(first)
-	if _, err := s.OpenEngineeringAssignment(ctx, first); !errors.Is(err, ErrEngineeringAssignmentInvalid) {
-		t.Fatalf("attempt 1 with tuple = %v, want invalid", err)
-	}
-}
-
 func TestEngineeringPendingProposalDurabilityAndAtomicRevokeFinality(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-pending-saga", 1, types.EngineeringAssignmentImplementation, true, "cap-saga", "capsule-saga")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-saga", "capsule-saga")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1642,6 +1651,7 @@ func TestEngineeringPendingProposalDurabilityAndAtomicRevokeFinality(t *testing.
 	if final.Assignment.PendingProposal != nil {
 		t.Fatalf("pending proposal not cleared after final settlement: %+v", final.Assignment.PendingProposal)
 	}
+	requireFinalEngineeringReport(t, s, f, open, 1, reportReq.Report.ReportID, types.EngineeringAssignmentCompleted)
 }
 
 // A committed capsule disposition that leaves pending fate work mints an
@@ -1653,7 +1663,7 @@ func TestPendingFateCapsuleDispositionCommitsActorWakeOutbox(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-fate-wake", 1, types.EngineeringAssignmentImplementation, true, "cap-fate-wake", "capsule-fate-wake")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-fate-wake", "capsule-fate-wake")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1714,7 +1724,7 @@ func TestRecordEngineeringOrphanObservation(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 2)
-	open := engineeringOpenRequest(f, 0, "assignment-orphan-1", 1, types.EngineeringAssignmentImplementation, true, "cap-orphan-1", "capsule-orphan-1")
+	open := engineeringOpenRequest(f, f.seed.AssignmentIDs[0], "cap-orphan-1", "capsule-orphan-1")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
@@ -1740,9 +1750,10 @@ func TestRecordEngineeringOrphanObservation(t *testing.T) {
 	if result.Report == nil || result.Report.Result != types.EngineeringResultFailed || result.Report.Verdict != types.EngineeringVerdictNone {
 		t.Fatalf("orphan report = %+v", result.Report)
 	}
+	requireFinalEngineeringReport(t, s, f, open, 1, result.Report.ReportID, types.EngineeringAssignmentFailed)
 
 	// 2. An in-flight pending proposal rejects orphan disposition
-	openPending := engineeringOpenRequest(f, 1, "assignment-orphan-pending", 1, types.EngineeringAssignmentImplementation, true, "cap-orphan-p", "capsule-orphan-p")
+	openPending := engineeringOpenRequest(f, f.seed.AssignmentIDs[1], "cap-orphan-p", "capsule-orphan-p")
 	if _, err := s.OpenEngineeringAssignment(ctx, openPending); err != nil {
 		t.Fatal(err)
 	}
@@ -1794,242 +1805,5 @@ func TestRecordEngineeringOrphanObservation(t *testing.T) {
 	if !retry.Replay || retry.Report == nil || retry.Report.ReportID != result.Report.ReportID {
 		t.Fatalf("orphan retry replay = %+v, want replay of report %s", retry, result.Report.ReportID)
 	}
-}
-
-// seedDocCastEngineeringAuthority installs the document-parent authority the
-// engineering desk binds against: a live trajectory carrying doc_id, the
-// engineering:<doc> desk agent, an owner-authored revision (the parent
-// control), and the desk's open work item. Returns the binding inputs a
-// doc-cast OpenEngineeringAssignmentRequest needs.
-func seedDocCastEngineeringAuthority(t *testing.T, s *Store, ownerID, computerID string) (trajectoryID, docID, revisionID, deskAgentID, deskWorkID string) {
-	t.Helper()
-	ctx := context.Background()
-	now := time.Now().UTC()
-	trajectoryID, docID, revisionID = "trajectory-doc-cast", "doc-cast-doc", "revision-doc-cast"
-	deskAgentID, deskWorkID = "engineering:"+docID, "work-engineering-doc-cast"
-	trajectory := types.TrajectoryRecord{
-		TrajectoryID: trajectoryID, OwnerID: ownerID, ComputerID: computerID,
-		Kind: types.TrajectoryKindTask, Status: types.TrajectoryLive,
-		SubjectRefs:      map[string]string{"doc_id": docID},
-		LifecycleVersion: 1, ReducerSeq: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	document := types.Document{DocID: docID, OwnerID: ownerID, ComputerID: computerID, Title: "Doc-cast authority", CurrentRevisionID: revisionID, CreatedAt: now, UpdatedAt: now}
-	revision := types.Revision{RevisionID: revisionID, DocID: docID, OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID, AuthorKind: types.AuthorUser, AuthorLabel: "owner", Content: "owner revision", CreatedAt: now}
-	deskAgent := types.AgentRecord{
-		AgentID: deskAgentID, OwnerID: ownerID, ComputerID: computerID,
-		Profile: "engineering", Role: "engineering", ChannelID: docID,
-		LifecycleVersion: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	deskWork := types.WorkItemRecord{
-		WorkItemID: deskWorkID, TrajectoryID: trajectoryID, OwnerID: ownerID, ComputerID: computerID,
-		Objective: "desk supervision", AuthorityProfile: "engineering", Status: types.WorkItemOpen,
-		AssignedAgentID: deskAgentID, LifecycleVersion: 1, CreatedAt: now, UpdatedAt: now,
-	}
-	trajObj, err := lifecycleObject(ogKindTrajectory, ownerID, computerID, trajectoryID, trajectory, lifecycleMetadata("trajectory_id", trajectoryID, computerID, trajectoryID, 1), now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	docObj, err := lifecycleObject(ogKindTexDoc, ownerID, computerID, docID, document, map[string]any{"doc_id": docID, "computer_id": computerID}, now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	revObj, err := lifecycleObject(ogKindTexRev, ownerID, computerID, revisionID, revision, map[string]any{"revision_id": revisionID, "doc_id": docID, "computer_id": computerID}, now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	agentObj, err := lifecycleObject(ogKindAgent, ownerID, computerID, deskAgentID, deskAgent, lifecycleMetadata("agent_id", deskAgentID, computerID, trajectoryID, 1), now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	workObj, err := lifecycleObject(ogKindWorkItem, ownerID, computerID, deskWorkID, deskWork, lifecycleMetadata("work_item_id", deskWorkID, computerID, trajectoryID, 1), now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.ogStore.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{trajObj, docObj, revObj, agentObj, workObj}}); err != nil {
-		t.Fatal(err)
-	}
-	return trajectoryID, docID, revisionID, deskAgentID, deskWorkID
-}
-
-func docCastEngineeringOpenRequest(ownerID, computerID, trajectoryID, revisionID, deskAgentID, deskWorkID, assignmentID string) types.OpenEngineeringAssignmentRequest {
-	binding := types.EngineeringAssignmentBinding{
-		OwnerID: ownerID, ComputerID: computerID, TrajectoryID: trajectoryID,
-		ParentAgentID: deskAgentID, ParentRunID: "",
-		ParentDecisionID: "decision:" + objectgraph.SHA256([]byte("decision-"+assignmentID)),
-		ParentControlID:  revisionID,
-		ParentWorkItemID: deskWorkID, AssignedWorkItemID: "work-cast-" + assignmentID, AssignedAgentID: "engineering:" + assignmentID,
-		Kind: types.EngineeringAssignmentImplementation, Attempt: 1,
-		ScopeDigest: objectgraph.SHA256([]byte("scope:" + assignmentID)), RequestDigest: objectgraph.SHA256([]byte("request:" + assignmentID)),
-		CapabilityDigest: DigestEngineeringOpaqueCapability("cap-" + assignmentID), ExecutionHandleDigest: objectgraph.SHA256([]byte("cap-" + assignmentID)),
-		SubjectDigest:     objectgraph.SHA256([]byte("subject:" + assignmentID)),
-		SourceArtifactRef: "capsule-source-git:commit:" + objectgraph.SHA256([]byte("subject:"+assignmentID)),
-		Writable:          true, CapsuleID: "capsule-" + assignmentID,
-		NetworkMode:    types.EngineeringCapsuleNetworkForbidden,
-		FilesystemMode: types.EngineeringCapsuleFilesystemAssignmentLocalWritableOverlay,
-	}
-	req := types.OpenEngineeringAssignmentRequest{
-		CommandID: "command-open-" + assignmentID, AssignmentID: assignmentID, Binding: binding,
-		AssignedAgent: types.AgentRecord{AgentID: binding.AssignedAgentID},
-		AssignedWork:  types.WorkItemRecord{WorkItemID: binding.AssignedWorkItemID, AssignedAgentID: binding.AssignedAgentID, Objective: "doc-cast assignment"},
-	}
-	req.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(req)
-	return req
-}
-
-// TestDocCastEngineeringReportMintsTextureSubject pins the supervision surface
-// for document casts: the report packet is retargeted to the document's
-// Texture agent and work item, and both are minted in the same commit so the
-// producer-report occurrence path resolves.
-func TestDocCastEngineeringReportMintsTextureSubject(t *testing.T) {
-	s := openTestStore(t)
-	ctx := context.Background()
-	ownerID, computerID := "owner-doc-cast", "computer-doc-cast"
-	trajectoryID, docID, revisionID, deskAgentID, deskWorkID := seedDocCastEngineeringAuthority(t, s, ownerID, computerID)
-	if trajectoryID == "" || docID == "" || revisionID == "" || deskAgentID == "" || deskWorkID == "" {
-		t.Fatal("seed returned empty identity")
-	}
-
-	open := docCastEngineeringOpenRequest(ownerID, computerID, trajectoryID, revisionID, deskAgentID, deskWorkID, "assignment-doc-cast")
-	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
-		t.Fatalf("open doc-cast assignment: %v", err)
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-doc-cast", OwnerID: ownerID, ComputerID: computerID,
-		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
-		RunID: "run-doc-cast",
-		Run: types.RunRecord{
-			RunID: "run-doc-cast", AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-			RequestedByRunID: "", TrajectoryID: trajectoryID,
-			AgentProfile: "engineering", AgentRole: "engineering", OwnerID: ownerID, ComputerID: computerID,
-			State: types.RunPending, Prompt: open.AssignedWork.Objective,
-			Metadata: map[string]any{
-				"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-				"requested_by_agent_id": deskAgentID, "requested_by_profile": "engineering",
-				"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
-				"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": deskWorkID,
-				"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-				"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-				"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-				"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-			},
-		},
-		OpaqueCapability: "cap-" + open.AssignmentID, CapsuleID: open.Binding.CapsuleID,
-	}
-	bind.CommandDigest, _ = ComputeBindEngineeringAssignmentDigest(bind)
-	if _, err := s.BindEngineeringAssignment(ctx, bind); err != nil {
-		t.Fatalf("bind doc-cast assignment: %v", err)
-	}
-
-	report := assignmentReportRequest(open, 2, "report-doc-cast", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
-	if _, err := s.RecordEngineeringAssignmentReport(ctx, report); err != nil {
-		t.Fatalf("record doc-cast report: %v", err)
-	}
-
-	textureAgentID := "texture:" + docID
-	agent, err := s.GetAgentByScope(ctx, ownerID, computerID, textureAgentID)
-	if err != nil {
-		t.Fatalf("texture subject missing after report: %v", err)
-	}
-	if agent.Profile != "texture" || agent.ChannelID != docID || agent.LifecycleVersion <= 0 {
-		t.Fatalf("minted texture subject malformed: %+v", agent)
-	}
-	work, err := s.GetLifecycleWorkItem(ctx, ownerID, computerID, "work:texture-supervision:"+docID)
-	if err != nil {
-		t.Fatalf("texture supervision work missing after report: %v", err)
-	}
-	if work.AssignedAgentID != textureAgentID || work.AuthorityProfile != "texture" || work.Status != types.WorkItemOpen {
-		t.Fatalf("minted supervision work malformed: %+v", work)
-	}
-	updates, err := s.ListAllPendingLifecycleUpdates(ctx, ownerID, computerID, textureAgentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(updates) != 1 {
-		t.Fatalf("pending texture updates = %d, want 1", len(updates))
-	}
-	update := updates[0]
-	if update.TargetAgentID != textureAgentID || update.TargetWorkItemID != work.WorkItemID ||
-		update.ChannelID != docID || update.TrajectoryID != trajectoryID || update.AgentID != open.Binding.AssignedAgentID {
-		t.Fatalf("retargeted update malformed: %+v", update)
-	}
-}
-
-// TestDocCastProgressObservation emits the derivable progress-overdue
-// observation on a bound, silent doc-cast assignment: the packet retargets to
-// the texture subject, replay dedupes, and a superseded silence anchor skips.
-func TestDocCastProgressObservation(t *testing.T) {
-	s := openTestStore(t)
-	ctx := context.Background()
-	ownerID, computerID := "owner-doc-cast", "computer-doc-cast"
-	trajectoryID, docID, revisionID, deskAgentID, deskWorkID := seedDocCastEngineeringAuthority(t, s, ownerID, computerID)
-
-	open := docCastEngineeringOpenRequest(ownerID, computerID, trajectoryID, revisionID, deskAgentID, deskWorkID, "assignment-obs")
-	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	bind := types.BindEngineeringAssignmentRequest{
-		CommandID: "command-bind-obs", OwnerID: ownerID, ComputerID: computerID,
-		AssignmentID: open.AssignmentID, Attempt: 1, ExpectedLifecycleVersion: 1,
-		RunID: "run-obs",
-		Run: types.RunRecord{
-			RunID: "run-obs", AgentID: open.Binding.AssignedAgentID, ChannelID: open.Binding.AssignedAgentID,
-			RequestedByRunID: "", TrajectoryID: trajectoryID,
-			AgentProfile: "engineering", AgentRole: "engineering", OwnerID: ownerID, ComputerID: computerID,
-			State: types.RunPending, Prompt: open.AssignedWork.Objective,
-			Metadata: map[string]any{
-				"work_item_ids": []string{open.Binding.AssignedWorkItemID}, "lifecycle_work_item_id": open.Binding.AssignedWorkItemID,
-				"requested_by_agent_id": deskAgentID, "requested_by_profile": "engineering",
-				"assignment_id": open.AssignmentID, "assignment_attempt": open.Binding.Attempt, "assignment_kind": string(open.Binding.Kind),
-				"assigned_work_item_id": open.Binding.AssignedWorkItemID, "parent_work_item_id": deskWorkID,
-				"parent_decision_id": open.Binding.ParentDecisionID, "parent_control_id": open.Binding.ParentControlID,
-				"capsule_id": open.Binding.CapsuleID, "scope_digest": open.Binding.ScopeDigest, "request_digest": open.Binding.RequestDigest,
-				"capability_digest": open.Binding.CapabilityDigest, "execution_handle_digest": open.Binding.ExecutionHandleDigest,
-				"subject_digest": open.Binding.SubjectDigest, "source_artifact_ref": open.Binding.SourceArtifactRef,
-			},
-		},
-		OpaqueCapability: "cap-" + open.AssignmentID, CapsuleID: open.Binding.CapsuleID,
-	}
-	bind.CommandDigest, _ = ComputeBindEngineeringAssignmentDigest(bind)
-	bound, err := s.BindEngineeringAssignment(ctx, bind)
-	if err != nil {
-		t.Fatalf("bind: %v", err)
-	}
-
-	silenceSince := bound.Assignment.UpdatedAt.UnixNano()
-	emit := types.EmitEngineeringProgressObservationRequest{
-		CommandID: fmt.Sprintf("progress-overdue:%s:1:%d", open.AssignmentID, silenceSince),
-		OwnerID:   ownerID, ComputerID: computerID,
-		AssignmentID: open.AssignmentID, Attempt: 1, SilenceSinceUnixNano: silenceSince,
-	}
-	emit.CommandDigest, _ = ComputeEmitEngineeringProgressObservationDigest(emit)
-	result, err := s.EmitEngineeringProgressObservation(ctx, emit)
-	if err != nil {
-		t.Fatalf("emit: %v", err)
-	}
-	if result.Update == nil {
-		t.Fatal("emit returned no observation packet")
-	}
-	textureAgentID := "texture:" + docID
-	if result.Update.TargetAgentID != textureAgentID || result.Update.TargetWorkItemID != "work:texture-supervision:"+docID ||
-		result.Update.Direction != types.LifecyclePacketDirectionProducerReport || result.Update.Disposition != types.UpdatePending {
-		t.Fatalf("observation packet malformed: %+v", result.Update)
-	}
-
-	// Exact retry replays without minting a second packet.
-	replay, err := s.EmitEngineeringProgressObservation(ctx, emit)
-	if err != nil || !replay.Replay {
-		t.Fatalf("replay: %+v, %v", replay, err)
-	}
-	// A superseded silence anchor (fresher UpdatedAt) emits nothing.
-	stale := emit
-	stale.CommandID = fmt.Sprintf("progress-overdue:%s:1:%d", open.AssignmentID, silenceSince-1)
-	stale.SilenceSinceUnixNano = silenceSince - 1
-	stale.CommandDigest, _ = ComputeEmitEngineeringProgressObservationDigest(stale)
-	staleResult, err := s.EmitEngineeringProgressObservation(ctx, stale)
-	if err != nil {
-		t.Fatalf("stale emit: %v", err)
-	}
-	if staleResult.Update != nil {
-		t.Fatalf("stale anchor emitted packet %+v", staleResult.Update)
-	}
+	requireFinalEngineeringReport(t, s, f, open, 1, result.Report.ReportID, types.EngineeringAssignmentFailed)
 }

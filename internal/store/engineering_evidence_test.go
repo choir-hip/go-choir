@@ -15,7 +15,7 @@ import (
 func TestEngineeringCapsuleEvidenceOldRowsStayIncompleteAndDeterministic(t *testing.T) {
 	s := openTestStore(t)
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-evidence-old", 1, types.EngineeringAssignmentImplementation, true, "cap-evidence-old", "capsule-evidence-old")
+	open := engineeringOpenRequest(f, "assignment-evidence-old", "cap-evidence-old", "capsule-evidence-old")
 	if _, err := s.OpenEngineeringAssignment(context.Background(), open); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestEngineeringCapsuleEvidenceOldRowsStayIncompleteAndDeterministic(t *test
 func TestEngineeringGrantAttestationIsStampedValidatedAndDigested(t *testing.T) {
 	s := openTestStore(t)
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-evidence-grant", 1, types.EngineeringAssignmentImplementation, true, "cap-evidence-grant", "capsule-evidence-grant")
+	open := engineeringOpenRequest(f, "assignment-evidence-grant", "cap-evidence-grant", "capsule-evidence-grant")
 	if _, err := s.OpenEngineeringAssignment(context.Background(), open); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestEngineeringExecutionAndFateAttestationsFateShareAndRemainOrdered(t *tes
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-evidence-full", 1, types.EngineeringAssignmentImplementation, true, "cap-evidence-full", "capsule-evidence-full")
+	open := engineeringOpenRequest(f, "assignment-evidence-full", "cap-evidence-full", "capsule-evidence-full")
 	opened, err := s.OpenEngineeringAssignment(ctx, open)
 	if err != nil {
 		t.Fatal(err)
@@ -180,7 +180,7 @@ func TestEngineeringCapsuleEvidenceIsByteEqualAfterStoreReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-evidence-reopen", 1, types.EngineeringAssignmentImplementation, true, "cap-evidence-reopen", "capsule-evidence-reopen")
+	open := engineeringOpenRequest(f, "assignment-evidence-reopen", "cap-evidence-reopen", "capsule-evidence-reopen")
 	if _, err = s.OpenEngineeringAssignment(context.Background(), open); err != nil {
 		t.Fatal(err)
 	}

@@ -44,36 +44,33 @@ func fabricatedObject(t *testing.T, kind objectgraph.ObjectKind, ownerID, comput
 	return obj
 }
 
-// coManagementEvidenceScenario is the rich base used by the corruption table.
-// Implementation assignment A records a changed-subject report producing
-// candidate C; verification assignment V is then bound over that candidate
-// and records a certifying report. The evidence projection is requested for
-// V, so V's assignment/report/event are the direct tamper targets while the
-// candidate source lineage exercises A's report/event.
+// engineeringEvidenceScenario is the base used by the corruption table:
+// implementation assignment A (records authority admits implementation
+// only) records a changed-subject report producing candidate C. The
+// evidence projection is requested for A, so A's assignment/report/event
+// and the candidate's source lineage are the tamper targets.
 type engineeringEvidenceScenario struct {
 	ctx context.Context
 	s   *Store
 	f   engineeringAssignmentStoreFixture
 
-	verifyOpen     types.OpenEngineeringAssignmentRequest
-	verifyReportID string
-	verifyEventID  string
-
-	implOpen      types.OpenEngineeringAssignmentRequest
-	implReportID  string
-	implReportRef string
-	implEventID   string
-	candidateID   string
+	open        types.OpenEngineeringAssignmentRequest
+	reportID    string
+	reportRef   string
+	eventID     string
+	candidateID string
 }
+
+const corruptionAssignmentID = "assignment-corruption-impl"
 
 func buildEngineeringEvidenceScenario(t *testing.T) *engineeringEvidenceScenario {
 	t.Helper()
 	s := openTestStore(t)
 	ctx := context.Background()
-	f := installEngineeringAssignmentAuthority(t, s, 2)
+	f := installEngineeringAssignmentAuthority(t, s, 1)
 	sc := &engineeringEvidenceScenario{ctx: ctx, s: s, f: f}
 
-	impl := engineeringOpenRequest(f, 0, "assignment-corruption-impl", 1, types.EngineeringAssignmentImplementation, true, "cap-corruption-impl", "capsule-corruption-impl")
+	impl := engineeringOpenRequest(f, corruptionAssignmentID, "cap-corruption-impl", "capsule-corruption-impl")
 	if _, err := s.OpenEngineeringAssignment(ctx, impl); err != nil {
 		t.Fatal(err)
 	}
@@ -86,38 +83,18 @@ func buildEngineeringEvidenceScenario(t *testing.T) *engineeringEvidenceScenario
 	if err != nil || result.Candidate == nil || result.Report == nil || result.Report.CandidateID == "" {
 		t.Fatalf("impl changed report: %+v, %v", result, err)
 	}
-	sc.implOpen = impl
-	sc.implReportID = result.Report.ReportID
-	sc.implEventID = implReport.CommandID + ":1"
+	sc.open = impl
+	sc.reportID = result.Report.ReportID
+	sc.eventID = implReport.CommandID + ":1"
 	sc.candidateID = result.Candidate.CandidateID
-	sc.implReportRef = reportRefFor(t, s, ctx, f, impl, sc.implReportID)
-
-	verify := engineeringOpenRequest(f, 1, "assignment-corruption-verify", 1, types.EngineeringAssignmentVerification, true, "cap-corruption-verify", "capsule-corruption-verify")
-	verify.Binding.SubjectDigest = result.Candidate.SubjectDigest
-	verify.Binding.SourceCandidateID = result.Candidate.CandidateID
-	verify.Binding.SourceArtifactRef = "capsule-subject:" + result.Candidate.SubjectDigest
-	verify.CommandDigest, _ = ComputeOpenEngineeringAssignmentDigest(verify)
-	if _, err := s.OpenEngineeringAssignment(ctx, verify); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(verify, f.assignedRunIDs[1], "cap-corruption-verify")); err != nil {
-		t.Fatal(err)
-	}
-	verifyReport := assignmentReportRequest(verify, 2, "report-corruption-verify", verify.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
-	verifyResult, err := s.RecordEngineeringAssignmentReport(ctx, verifyReport)
-	if err != nil || verifyResult.Report == nil {
-		t.Fatalf("verify report: %+v, %v", verifyResult, err)
-	}
-	sc.verifyOpen = verify
-	sc.verifyReportID = verifyResult.Report.ReportID
-	sc.verifyEventID = verifyReport.CommandID + ":1"
+	sc.reportRef = reportRefFor(t, s, ctx, f, impl, sc.reportID)
 	return sc
 }
 
-// evidence reads the requested verify projection.
+// evidence reads the requested projection.
 func (sc *engineeringEvidenceScenario) evidence(t *testing.T) (EngineeringCapsuleEvidence, error) {
 	t.Helper()
-	return sc.s.GetEngineeringCapsuleEvidence(sc.ctx, sc.f.ownerID, sc.f.computerID, sc.f.trajectoryID, "assignment-corruption-verify", 1)
+	return sc.s.GetEngineeringCapsuleEvidence(sc.ctx, sc.f.ownerID, sc.f.computerID, sc.f.trajectoryID, corruptionAssignmentID, 1)
 }
 
 func (sc *engineeringEvidenceScenario) canonical(t *testing.T, kind objectgraph.ObjectKind, key string) string {
@@ -152,35 +129,32 @@ func isCorrupt(err error) bool {
 	return strings.Contains(err.Error(), ErrEngineeringEvidenceCorrupt.Error())
 }
 
-func TestEngineeringCapsuleEvidenceCrossAssignmentCandidateSourceLineage(t *testing.T) {
+func TestEngineeringCapsuleEvidenceCandidateSourceLineage(t *testing.T) {
 	sc := buildEngineeringEvidenceScenario(t)
 	ev, err := sc.evidence(t)
 	if err != nil {
-		t.Fatalf("verify evidence: %v", err)
+		t.Fatalf("evidence: %v", err)
 	}
 	if len(ev.Candidates) != 1 {
 		t.Fatalf("candidates = %d, want 1: %+v", len(ev.Candidates), ev.Candidates)
 	}
 	c := ev.Candidates[0]
-	if c.CandidateID != sc.candidateID || c.SourceReportID != sc.implReportID {
-		t.Fatalf("candidate join = %+v, want source %s from implementation report", c, sc.implReportID)
+	if c.CandidateID != sc.candidateID || c.SourceReportID != sc.reportID {
+		t.Fatalf("candidate join = %+v, want source %s from the implementation report", c, sc.reportID)
 	}
-	// The implementation source event must be joined from the cross-assignment
-	// scan (not from the verification's own report refs) with its seq.
+	// The source event is joined with its reducer seq.
 	if c.ReducerSeq <= 0 {
 		t.Fatalf("candidate reducer_seq=%d, want the implementation report event seq", c.ReducerSeq)
 	}
-	// The verifier contract reports that the candidate's source evidence came
-	// from an implementation assignment bind.
 	if ev.EvidenceComplete {
 		t.Fatalf("expected incomplete verifier contract")
 	}
 }
 
-func TestEngineeringCapsuleEvidenceRejectsTamperedVerifyAssignment(t *testing.T) {
+func TestEngineeringCapsuleEvidenceRejectsTamperedAssignment(t *testing.T) {
 	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s, f := sc.ctx, sc.s, sc.f
-	assignmentCanonical := sc.canonical(t, ogKindEngineeringAssignment, engineeringAttemptKey("assignment-corruption-verify", 1))
+	assignmentCanonical := sc.canonical(t, ogKindEngineeringAssignment, engineeringAttemptKey(corruptionAssignmentID, 1))
 	var a types.EngineeringAssignment
 	if err := json.Unmarshal(sc.body(t, assignmentCanonical), &a); err != nil {
 		t.Fatal(err)
@@ -207,15 +181,15 @@ func TestEngineeringCapsuleEvidenceRejectsTamperedVerifyAssignment(t *testing.T)
 	})
 	// Cross-owner and cross-computer reads must stay NotFound even after
 	// the scope is populated.
-	if _, err := s.GetEngineeringCapsuleEvidence(ctx, "other-owner", f.computerID, f.trajectoryID, "assignment-corruption-verify", 1); err != ErrNotFound {
+	if _, err := s.GetEngineeringCapsuleEvidence(ctx, "other-owner", f.computerID, f.trajectoryID, corruptionAssignmentID, 1); err != ErrNotFound {
 		t.Fatalf("cross owner = %v", err)
 	}
 }
 
-func TestEngineeringCapsuleEvidenceRejectsTamperedVerifyReport(t *testing.T) {
+func TestEngineeringCapsuleEvidenceRejectsTamperedReport(t *testing.T) {
 	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s, f := sc.ctx, sc.s, sc.f
-	reportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.verifyReportID)
+	reportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.reportID)
 	var r types.EngineeringAssignmentReport
 	if err := json.Unmarshal(sc.body(t, reportCanonical), &r); err != nil {
 		t.Fatal(err)
@@ -261,15 +235,15 @@ func TestEngineeringCapsuleEvidenceRejectsTamperedVerifyReport(t *testing.T) {
 	})
 }
 
-func TestEngineeringCapsuleEvidenceRejectsTamperedVerifyEvent(t *testing.T) {
+func TestEngineeringCapsuleEvidenceRejectsTamperedReportEvent(t *testing.T) {
 	sc := buildEngineeringEvidenceScenario(t)
 	ctx, s, f := sc.ctx, sc.s, sc.f
-	eventCanonical := sc.canonical(t, ogKindLifecycleEvent, sc.verifyEventID)
+	eventCanonical := sc.canonical(t, ogKindLifecycleEvent, sc.eventID)
 	var ev types.LifecycleEvent
 	if err := json.Unmarshal(sc.body(t, eventCanonical), &ev); err != nil {
 		t.Fatal(err)
 	}
-	reportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.verifyReportID)
+	reportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.reportID)
 	expect := func(name string, mutated types.LifecycleEvent) {
 		t.Helper()
 		t.Run(name, func(t *testing.T) {
@@ -334,11 +308,10 @@ func TestEngineeringCapsuleEvidenceRejectsTamperedCandidate(t *testing.T) {
 	}
 	t.Run("unjoined assignment candidate", func(t *testing.T) {
 		fake := c
-		// Scope the forged candidate to the requested (verification)
-		// assignment so the unjoined-candidate check fires; it is referenced
-		// by neither the verification binding nor any report.
-		fake.AssignmentID = sc.verifyOpen.AssignmentID
-		fake.Attempt = sc.verifyOpen.Binding.Attempt
+		// Scope the forged candidate to the requested assignment so the
+		// unjoined-candidate check fires; no report references it.
+		fake.AssignmentID = sc.open.AssignmentID
+		fake.Attempt = sc.open.Binding.Attempt
 		key := strings.Join([]string{sc.f.ownerID, sc.f.computerID, "fabricated", "candidate"}, "\x00")
 		fakeObj := fabricatedObject(t, ogKindEngineeringCandidate, sc.f.ownerID, sc.f.computerID, key, fake,
 			map[string]any{"candidate_id": fake.CandidateID, "computer_id": sc.f.computerID, "trajectory_id": sc.f.trajectoryID})
@@ -361,14 +334,14 @@ func TestEngineeringCapsuleEvidenceRejectsTamperedCandidate(t *testing.T) {
 		}
 	})
 	t.Run("referenced candidate missing", func(t *testing.T) {
-		verifyReportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.verifyReportID)
+		reportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.reportID)
 		var r types.EngineeringAssignmentReport
-		if err := json.Unmarshal(sc.body(t, verifyReportCanonical), &r); err != nil {
+		if err := json.Unmarshal(sc.body(t, reportCanonical), &r); err != nil {
 			t.Fatal(err)
 		}
 		bad := r
 		bad.CandidateID = "capsule-candidate:sha256:missing"
-		tamperObject(t, s, ctx, verifyReportCanonical, bad)
+		tamperObject(t, s, ctx, reportCanonical, bad)
 		if _, err := sc.evidence(t); !isCorrupt(err) {
 			t.Fatalf("referenced candidate missing: err = %v", err)
 		}
@@ -386,17 +359,6 @@ func TestEngineeringCapsuleEvidenceRejectsTamperedCandidateSource(t *testing.T) 
 	if err := json.Unmarshal(obj.Body, &c); err != nil {
 		t.Fatal(err)
 	}
-	// Wiring the implementation candidate's source to the verification's own
-	// report must fail closed on lineage: a verification report is not an
-	// implementation source.
-	t.Run("candidate source lineage", func(t *testing.T) {
-		bad := c
-		bad.SourceReportID = sc.verifyReportID
-		tamperObject(t, s, ctx, sc.candidateID, bad)
-		if _, err := sc.evidence(t); !isCorrupt(err) {
-			t.Fatalf("candidate source lineage: err = %v", err)
-		}
-	})
 	// A candidate whose source report exists nowhere must fail the report join.
 	t.Run("candidate report join missing source", func(t *testing.T) {
 		bad := c
@@ -409,34 +371,16 @@ func TestEngineeringCapsuleEvidenceRejectsTamperedCandidateSource(t *testing.T) 
 	// A candidate whose source report validates but carries a different
 	// candidate identity must fail closed.
 	t.Run("candidate report join identity", func(t *testing.T) {
-		implReportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.implReportID)
+		reportCanonical := sc.canonical(t, ogKindEngineeringReport, sc.reportID)
 		var rr types.EngineeringAssignmentReport
-		if err := json.Unmarshal(sc.body(t, implReportCanonical), &rr); err != nil {
+		if err := json.Unmarshal(sc.body(t, reportCanonical), &rr); err != nil {
 			t.Fatal(err)
 		}
 		bad := rr
 		bad.CandidateID = "capsule-candidate:sha256:other"
-		tamperObject(t, s, ctx, implReportCanonical, bad)
+		tamperObject(t, s, ctx, reportCanonical, bad)
 		if _, err := sc.evidence(t); !isCorrupt(err) {
 			t.Fatalf("candidate report join identity: err = %v", err)
 		}
 	})
-}
-
-func TestEngineeringCapsuleEvidenceRejectsTamperedImplEventSourceScope(t *testing.T) {
-	// The cross-assignment source event join must validate run/agent scope
-	// exactly like the direct report join.
-	sc := buildEngineeringEvidenceScenario(t)
-	ctx, s := sc.ctx, sc.s
-	implEventCanonical := sc.canonical(t, ogKindLifecycleEvent, sc.implEventID)
-	var ev types.LifecycleEvent
-	if err := json.Unmarshal(sc.body(t, implEventCanonical), &ev); err != nil {
-		t.Fatal(err)
-	}
-	runMismatch := ev
-	runMismatch.RunID = "run-other"
-	tamperObject(t, s, ctx, implEventCanonical, runMismatch)
-	if _, err := sc.evidence(t); !isCorrupt(err) {
-		t.Fatalf("impl event run scope: err = %v", err)
-	}
 }

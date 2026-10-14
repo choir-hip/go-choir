@@ -61,14 +61,14 @@ func TestReplayRecordedReportUsesRecordedLegacyCommandID(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	f := installEngineeringAssignmentAuthority(t, s, 1)
-	open := engineeringOpenRequest(f, 0, "assignment-legacy-report", 1, types.EngineeringAssignmentVerification, true, "cap", "capsule")
+	open := engineeringOpenRequest(f, "assignment-legacy-report", "cap", "capsule")
 	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.BindEngineeringAssignment(ctx, bindEngineeringRequest(open, f.assignedRunIDs[0], "cap")); err != nil {
 		t.Fatal(err)
 	}
-	req := assignmentReportRequest(open, 2, "report-legacy", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictPass)
+	req := assignmentReportRequest(open, 2, "report-legacy", open.Binding.SubjectDigest, types.EngineeringResultCompleted, types.EngineeringVerdictNone)
 	req.CommandID = "co-super-report:" + open.AssignmentID + ":report-legacy"
 	req.CommandDigest, _ = ComputeRecordEngineeringAssignmentReportDigest(req)
 	reported, err := s.RecordEngineeringAssignmentReport(ctx, req)
