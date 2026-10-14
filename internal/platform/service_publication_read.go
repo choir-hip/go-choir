@@ -544,6 +544,11 @@ func (s *Service) graphTransclusions(ctx context.Context, og *ObjectGraphStore, 
 	return transclusions
 }
 
+// provenanceEdgesSQL reads a version's consent, review and attestation
+// edges: a seek on (to_id, kind). The plan tests explain this text.
+const provenanceEdgesSQL = `SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
+		 FROM og_edges WHERE to_id = ? AND kind IN ('consent_for', 'reviews', 'attests_to') AND tombstone = FALSE ORDER BY created_at`
+
 // graphProvenanceSummary reads provenance summary from the object graph.
 func (s *Service) graphProvenanceSummary(ctx context.Context, og *ObjectGraphStore, versionID string) PublicationProvenanceSummary {
 	var out PublicationProvenanceSummary
@@ -551,13 +556,9 @@ func (s *Service) graphProvenanceSummary(ctx context.Context, og *ObjectGraphSto
 	rowCount := 0
 	var readErr error
 	defer func() { done("", rowCount, readErr) }()
-	// Find consent, review, and attestation objects via edges to this version.
-	// These are edges TO the version, so we need to query by to_id.
-	// Since our ObjectGraphStore doesn't have a ListEdgesTo method,
-	// we query og_edges directly.
-	rows, err := og.store.corpus().QueryContext(ctx,
-		`SELECT edge_id, from_id, to_id, kind, metadata, created_at, tombstone
-		 FROM og_edges WHERE to_id = ? AND tombstone = FALSE ORDER BY created_at`, versionID)
+	// Find consent, review, and attestation objects via edges to this
+	// version: a seek on (to_id, kind) for the three kinds read below.
+	rows, err := og.store.corpus().QueryContext(ctx, provenanceEdgesSQL, versionID)
 	if err != nil {
 		readErr = err
 		return out

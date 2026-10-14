@@ -54,6 +54,11 @@ func main() {
 		_ = store.Close()
 	}()
 
+	// Retrieval indexes and projections build beside the listener: corpusd
+	// serves on the old query shapes until each one reports live
+	// (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md).
+	store.StartRetrievalMigrations(context.Background(), 10*time.Minute)
+
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
 	// Published versions' check overlay reads quote checks and support
 	// verdicts from Store B, never from a paper computer (Cut 2 2b).

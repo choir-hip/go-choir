@@ -36,6 +36,9 @@ type Store struct {
 	// retrieval times and counts every Store B retrieval call (corpusd
 	// /health "retrieval").
 	retrieval *RetrievalMetrics
+	// retrievalState records which retrieval indexes and projections are
+	// live (retrieval_schema.go).
+	retrievalState retrievalSchemaState
 }
 
 // SetArtifactsRoot configures the filesystem CAS root used to externalize

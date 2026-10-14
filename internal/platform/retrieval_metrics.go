@@ -93,6 +93,8 @@ type RetrievalOpSnapshot struct {
 type RetrievalSnapshot struct {
 	Since string                         `json:"since"`
 	Ops   map[string]RetrievalOpSnapshot `json:"ops"`
+	// Live names the retrieval indexes and projections in use.
+	Live map[string]bool `json:"live,omitempty"`
 }
 
 func (m *RetrievalMetrics) record(op, shape string, elapsed time.Duration, rows int, err error) {
@@ -262,5 +264,7 @@ func (s *Store) RetrievalSnapshot() RetrievalSnapshot {
 	if s == nil {
 		return RetrievalSnapshot{Ops: map[string]RetrievalOpSnapshot{}}
 	}
-	return s.retrieval.Snapshot()
+	snap := s.retrieval.Snapshot()
+	snap.Live = s.RetrievalLive()
+	return snap
 }

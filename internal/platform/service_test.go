@@ -52,6 +52,11 @@ func openTestPlatformStore(t *testing.T) (*Store, string) {
 	if err := s.Bootstrap(context.Background()); err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
+	// Production runs these beside the listener; tests run them first so
+	// every store test reads through the retrieval indexes.
+	if err := s.MigrateRetrieval(context.Background()); err != nil {
+		t.Fatalf("migrate retrieval: %v", err)
+	}
 	t.Cleanup(func() {
 		_ = s.Close()
 		_ = dbConnector.Close()

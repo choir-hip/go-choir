@@ -338,11 +338,10 @@ type frontPublicationRow struct {
 	UpdatedAt   time.Time
 }
 
-// frontPublicationBatch reads up to n publications after the cursor,
-// newest updated first.
-func (s *Service) frontPublicationBatch(ctx context.Context, after *frontCursor, n int) (out []frontPublicationRow, err error) {
-	done := s.store.retrievalTimer(retrievalFrontPublication)
-	defer func() { done("unbounded", len(out), err) }()
+// frontPublicationWindowSQL is one window of the front list's publication
+// read: after the cursor, within the window, newest first, at most want
+// rows. The plan tests explain this text.
+func frontPublicationWindowSQL(after *frontCursor, w newestWindow, want int) (string, []any) {
 	query := `SELECT canonical_id, metadata, updated_at FROM og_objects
 		WHERE object_kind = 'choir.publication' AND tombstone = FALSE`
 	var args []any
@@ -351,25 +350,48 @@ func (s *Service) frontPublicationBatch(ctx context.Context, after *frontCursor,
 		query += ` AND (updated_at < ? OR (updated_at = ? AND canonical_id < ?))`
 		args = append(args, at, at, after.CanonicalID)
 	}
-	query += ` ORDER BY updated_at DESC, canonical_id DESC LIMIT ?`
-	args = append(args, n)
-	rows, err := s.store.corpus().QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("platform front: list publications: %w", err)
+	cond, condArgs := w.windowSQL("updated_at")
+	query += cond + ` ORDER BY updated_at DESC, canonical_id DESC LIMIT ?`
+	return query, append(append(args, condArgs...), want)
+}
+
+// frontPublicationBatch reads up to n publications after the cursor,
+// newest updated first.
+func (s *Service) frontPublicationBatch(ctx context.Context, after *frontCursor, n int) (out []frontPublicationRow, err error) {
+	done := s.store.retrievalTimer(retrievalFrontPublication)
+	shape := ""
+	defer func() { done(shape, len(out), err) }()
+	anchor := time.Now()
+	if after != nil {
+		anchor = time.Unix(after.UpdatedAt, 0).UTC()
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var row frontPublicationRow
-		var metadata string
-		if err := rows.Scan(&row.CanonicalID, &metadata, &row.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("platform front: scan publication: %w", err)
+	// Newest first, time-bounded from the cursor (retrieval_newest.go).
+	shape, err = readNewestWindows(ctx, anchor, n, func(w newestWindow, want int) (int, error) {
+		query, args := frontPublicationWindowSQL(after, w, want)
+		rows, err := s.store.corpus().QueryContext(ctx, query, args...)
+		if err != nil {
+			return 0, fmt.Errorf("platform front: list publications: %w", err)
 		}
-		row.Metadata = json.RawMessage(metadata)
-		row.UpdatedAt = row.UpdatedAt.UTC()
-		out = append(out, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("platform front: iterate publications: %w", err)
+		defer rows.Close()
+		got := 0
+		for rows.Next() {
+			var row frontPublicationRow
+			var metadata string
+			if err := rows.Scan(&row.CanonicalID, &metadata, &row.UpdatedAt); err != nil {
+				return got, fmt.Errorf("platform front: scan publication: %w", err)
+			}
+			row.Metadata = json.RawMessage(metadata)
+			row.UpdatedAt = row.UpdatedAt.UTC()
+			out = append(out, row)
+			got++
+		}
+		if err := rows.Err(); err != nil {
+			return got, fmt.Errorf("platform front: iterate publications: %w", err)
+		}
+		return got, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }

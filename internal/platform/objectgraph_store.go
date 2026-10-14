@@ -112,7 +112,8 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 	if bodyRef != "" {
 		inlineBody = nil
 	}
-	_, err = o.store.corpus().ExecContext(ctx, `INSERT INTO og_objects
+	_, err = o.execObjectWrite(ctx, obj, func(x sqlExecer) (bool, error) {
+		_, err := x.ExecContext(ctx, `INSERT INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE
@@ -128,10 +129,12 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 			updated_at = VALUES(updated_at),
 			tombstone = VALUES(tombstone),
 			superseded_by = VALUES(superseded_by)`,
-		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
-		obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
-		obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
-		obj.SupersededBy)
+			obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
+			obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
+			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
+			obj.SupersededBy)
+		return err == nil, err
+	})
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: put object: %w", err)
 	}
@@ -158,21 +161,24 @@ func (o *ObjectGraphStore) InsertObjectIfAbsent(ctx context.Context, obj objectg
 	if bodyRef != "" {
 		inlineBody = nil
 	}
-	res, err := o.store.corpus().ExecContext(ctx, `INSERT IGNORE INTO og_objects
+	inserted, err := o.execObjectWrite(ctx, obj, func(x sqlExecer) (bool, error) {
+		res, err := x.ExecContext(ctx, `INSERT IGNORE INTO og_objects
 		(canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
-		obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
-		obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
-		obj.SupersededBy)
+			obj.CanonicalID, string(obj.ObjectKind), obj.OwnerID, obj.ComputerID,
+			obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
+			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
+			obj.SupersededBy)
+		if err != nil {
+			return false, err
+		}
+		n, err := res.RowsAffected()
+		return n > 0, err
+	})
 	if err != nil {
 		return false, fmt.Errorf("platform objectgraph: insert object: %w", err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("platform objectgraph: insert object: %w", err)
-	}
-	if n == 0 {
+	if !inserted {
 		return false, nil
 	}
 	o.store.markCorpusDirty("objectgraph insert object " + obj.CanonicalID)
@@ -245,15 +251,43 @@ func (o *ObjectGraphStore) DeleteObject(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("platform objectgraph: delete object: %w", err)
 	}
+	if o.store.retrievalState.lookupKeysReady.Load() {
+		if _, err := o.store.corpus().ExecContext(ctx, `DELETE FROM og_lookup_keys WHERE canonical_id = ?`, id); err != nil {
+			return fmt.Errorf("platform objectgraph: delete lookup key: %w", err)
+		}
+	}
 	return nil
 }
 
-func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.ListFilter) (out []objectgraph.Object, err error) {
-	if o == nil || o.store == nil || o.store.db == nil {
-		return nil, fmt.Errorf("platform objectgraph: nil store")
+// execObjectWrite runs one object write. When the object's kind has a
+// lookup key (retrieval_schema.go) the write and the key row share one
+// transaction; write reports whether it changed the row.
+func (o *ObjectGraphStore) execObjectWrite(ctx context.Context, obj objectgraph.Object, write func(x sqlExecer) (bool, error)) (bool, error) {
+	if _, keyed := lookupKeyField(string(obj.ObjectKind)); !keyed || !o.store.retrievalState.lookupKeysReady.Load() {
+		return write(o.store.corpus())
 	}
-	done := o.store.retrievalTimer(retrievalListObjects)
-	defer func() { done("unbounded", len(out), err) }()
+	tx, err := o.store.corpus().BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	wrote, err := write(tx)
+	if err != nil {
+		return false, err
+	}
+	if wrote {
+		if err := o.store.writeLookupKey(ctx, tx, obj); err != nil {
+			return false, err
+		}
+	}
+	return wrote, tx.Commit()
+}
+
+// listObjectsWindowSQL is one window of ListObjects: the filter's
+// equalities, the window's updated_at bounds, newest first with
+// canonical_id breaking ties (so every window and the whole answer are
+// deterministic), at most want rows. The plan tests explain this text.
+func listObjectsWindowSQL(filter objectgraph.ListFilter, w newestWindow, want int) (string, []any) {
 	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by FROM og_objects WHERE 1=1`
 	var args []any
 	if filter.Kind != "" {
@@ -272,25 +306,47 @@ func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.L
 		query += ` AND tombstone = ?`
 		args = append(args, *filter.Tombstone)
 	}
-	query += ` ORDER BY updated_at DESC LIMIT ?`
-	args = append(args, objectgraph.NormalizedLimit(filter.Limit))
-	rows, err := o.store.corpus().QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("platform objectgraph: list objects: %w", err)
+	cond, condArgs := w.windowSQL("updated_at")
+	query += cond + ` ORDER BY updated_at DESC, canonical_id DESC LIMIT ?`
+	args = append(append(args, condArgs...), want)
+	return query, args
+}
+
+func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.ListFilter) (out []objectgraph.Object, err error) {
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, fmt.Errorf("platform objectgraph: nil store")
 	}
-	defer rows.Close()
-	for rows.Next() {
-		obj, bodyRef, err := scanObjectGraphObject(rows)
+	done := o.store.retrievalTimer(retrievalListObjects)
+	shape := ""
+	defer func() { done(shape, len(out), err) }()
+	// Newest first, time-bounded (retrieval_newest.go).
+	limit := objectgraph.NormalizedLimit(filter.Limit)
+	shape, err = readNewestWindows(ctx, time.Now(), limit, func(w newestWindow, want int) (int, error) {
+		query, qargs := listObjectsWindowSQL(filter, w, want)
+		rows, err := o.store.corpus().QueryContext(ctx, query, qargs...)
 		if err != nil {
-			return nil, err
+			return 0, fmt.Errorf("platform objectgraph: list objects: %w", err)
 		}
-		if err := o.hydrateBody(&obj, bodyRef); err != nil {
-			return nil, err
+		defer rows.Close()
+		n := 0
+		for rows.Next() {
+			obj, bodyRef, err := scanObjectGraphObject(rows)
+			if err != nil {
+				return n, err
+			}
+			if err := o.hydrateBody(&obj, bodyRef); err != nil {
+				return n, err
+			}
+			out = append(out, obj)
+			n++
 		}
-		out = append(out, obj)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("platform objectgraph: iterate objects: %w", err)
+		if err := rows.Err(); err != nil {
+			return n, fmt.Errorf("platform objectgraph: iterate objects: %w", err)
+		}
+		return n, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -369,6 +425,53 @@ func (o *ObjectGraphStore) Close() error {
 	return nil
 }
 
+// ogLookupKeyMaxIDs bounds the objects one key seek names.
+const ogLookupKeyMaxIDs = 1000
+
+// lookupKeySeekSQL names the objects holding one key. The plan tests
+// explain this text.
+const lookupKeySeekSQL = `SELECT canonical_id FROM og_lookup_keys WHERE object_kind = ? AND lookup_key = ? LIMIT ?`
+
+// metadataJSONEq is the metadata comparison every lookup by value applies.
+const metadataJSONEq = `JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?`
+
+// metadataPredicate is the WHERE clause of a lookup by metadata value. A
+// registered (kind, path) seeks og_lookup_keys once it is live and reads
+// the named rows by primary key; the JSON comparison stays as the deciding
+// filter, so a truncated key or a non-string value never changes the
+// answer. Any other pair scans the kind, as before. none is true when the
+// key names no object (the lookup finds nothing without a second query).
+func (o *ObjectGraphStore) metadataPredicate(ctx context.Context, kind, jsonPath, value string) (where string, args []any, shape string, none bool, err error) {
+	const jsonEq = metadataJSONEq
+	if !o.store.retrievalState.lookupKeyLive.Load() || !lookupKeyFor(kind, jsonPath) {
+		return `object_kind = ? AND ` + jsonEq, []any{kind, jsonPath, value}, "json_scan", false, nil
+	}
+	rows, err := o.store.corpus().QueryContext(ctx,
+		lookupKeySeekSQL,
+		kind, lookupKeyValue(value), ogLookupKeyMaxIDs)
+	if err != nil {
+		return "", nil, "lookup_key", false, fmt.Errorf("platform objectgraph: lookup key: %w", err)
+	}
+	defer rows.Close()
+	var ids []any
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return "", nil, "lookup_key", false, fmt.Errorf("platform objectgraph: lookup key: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return "", nil, "lookup_key", false, fmt.Errorf("platform objectgraph: lookup key: %w", err)
+	}
+	if len(ids) == 0 {
+		return "", nil, "lookup_key", true, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")
+	args = append(ids, kind, jsonPath, value)
+	return `canonical_id IN (` + placeholders + `) AND object_kind = ? AND ` + jsonEq, args, "lookup_key", false, nil
+}
+
 // GetObjectByMetadata finds a single object by kind + a metadata JSON path
 // equality check. Uses JSON_EXTRACT (supported by Dolt/MySQL).
 // Example: GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", "/pub/texture/foo")
@@ -377,12 +480,19 @@ func (o *ObjectGraphStore) GetObjectByMetadata(ctx context.Context, kind, jsonPa
 		return objectgraph.Object{}, fmt.Errorf("platform objectgraph: nil store")
 	}
 	done := o.store.retrievalTimer(retrievalGetByMetadata)
-	defer func() { done("json_scan", boolRows(err == nil), notFoundIsNil(err)) }()
+	where, args, shape, none, err := o.metadataPredicate(ctx, kind, jsonPath, value)
+	defer func() { done(shape, boolRows(err == nil), notFoundIsNil(err)) }()
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	if none {
+		return objectgraph.Object{}, objectgraph.ErrNotFound
+	}
 	obj, bodyRef, err := scanObjectGraphObject(o.store.corpus().QueryRowContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
-		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
-		 LIMIT 1`, kind, jsonPath, value))
+		 WHERE `+where+`
+		 LIMIT 1`, args...))
 	if err != nil {
 		return objectgraph.Object{}, err
 	}
@@ -399,13 +509,17 @@ func (o *ObjectGraphStore) ListObjectsByMetadata(ctx context.Context, kind, json
 		return nil, fmt.Errorf("platform objectgraph: nil store")
 	}
 	done := o.store.retrievalTimer(retrievalListByMetadata)
-	defer func() { done("json_scan", len(out), err) }()
+	where, args, shape, none, err := o.metadataPredicate(ctx, kind, jsonPath, value)
+	defer func() { done(shape, len(out), err) }()
+	if err != nil || none {
+		return nil, err
+	}
 	rows, err := o.store.corpus().QueryContext(ctx,
 		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
 		 FROM og_objects
-		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ?
+		 WHERE `+where+`
 		 ORDER BY updated_at DESC LIMIT ?`,
-		kind, jsonPath, value, objectgraph.NormalizedLimit(limit))
+		append(args, objectgraph.NormalizedLimit(limit))...)
 	if err != nil {
 		return nil, fmt.Errorf("platform objectgraph: list by metadata: %w", err)
 	}
@@ -529,6 +643,9 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 			obj.VersionID, obj.ContentHash, inlineBody, bodyRef, len(obj.Body), string(obj.Metadata),
 			obj.CreatedAt.UTC(), obj.UpdatedAt.UTC(), obj.Tombstone,
 			obj.SupersededBy); err != nil {
+			return fmt.Errorf("platform objectgraph: batch put object %s: %w", obj.CanonicalID, err)
+		}
+		if err := o.store.writeLookupKey(ctx, tx, obj); err != nil {
 			return fmt.Errorf("platform objectgraph: batch put object %s: %w", obj.CanonicalID, err)
 		}
 	}
