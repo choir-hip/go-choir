@@ -84,6 +84,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runSelfDevelopment(rest, stdout, stderr)
 	case "trace":
 		return runTrace(rest, stdout, stderr)
+	case "precommit":
+		return runPrecommit(rest, stdout, stderr)
+	case "mcp":
+		return runMCP(rest, stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, "choir v0 (Phase 1: existing /api/ routes)")
 		return 0
@@ -148,6 +152,18 @@ Commands:
   self-dev mode get|set  Read or generation-CAS the explicit computer mode
   trace export <trajectory> [--out file]  Write a trace bundle (product routes only;
                       default ~/.config/choir-qa/traces/<trajectory>.json, mode 0600)
+  precommit add --claim text --p 0.85 [--type forecast] [--criterion text] [--deadline t]
+                      Record a calibrated claim (needs precommit:write; identity from
+                      $CHOIR_AGENT, $CHOIR_MODEL, $CHOIR_SESSION or --agent/--model/--session)
+  precommit settle <claim-id> --outcome true|false|partial|unresolvable --evidence ref
+                      Append one scorer's settlement (scorer defaults to $CHOIR_AGENT)
+  precommit list [--status open|overdue|settled|all] [--all]  List claims
+  precommit calibration [--text] [--scorer s] [--group-by keys]  Calibration summary;
+                      --text prints the track record to paste into an agent's context
+  precommit import-ledger [--file docs/calibration/claude-ledger.md] [--model m --apply]
+                      Import the level-1 Markdown ledger (dry run unless --apply)
+  mcp                 Serve the precommit tools over stdio MCP (key from $CHOIR_API_KEY
+                      or $CHOIR_API_KEY_FILE)
   version             Print CLI version
   help                Print this usage
 

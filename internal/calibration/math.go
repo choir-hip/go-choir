@@ -137,6 +137,7 @@ type Summary struct {
 	Groups                []GroupStats `json:"groups"`
 	Misses                []Miss       `json:"largest_misses"`
 	ReconstructedExcluded int          `json:"reconstructed_excluded"`
+	ReconstructedIncluded int          `json:"reconstructed_included"`
 	Truncated             bool         `json:"truncated"`
 	Context               string       `json:"context"`
 }
@@ -217,7 +218,7 @@ func stats(items []scored) GroupStats {
 		}
 		conf += c
 		hits += hit
-		idx := int(p * 10)
+		idx := int(p*10 + 1e-9) // 0.7*10 must land in bin 7, not 6
 		if idx > 9 {
 			idx = 9
 		}
@@ -320,9 +321,12 @@ func Summarize(claims []ClaimView, opts SummaryOptions, now time.Time) Summary {
 	labels := map[string]GroupStats{}
 	var order []string
 	for _, c := range claims {
-		if c.Reconstructed && !opts.IncludeReconstructed {
-			sum.ReconstructedExcluded++
-			continue
+		if c.Reconstructed {
+			if !opts.IncludeReconstructed {
+				sum.ReconstructedExcluded++
+				continue
+			}
+			sum.ReconstructedIncluded++
 		}
 		it := scoreClaim(c, scorer, now)
 		all = append(all, it)
@@ -396,9 +400,12 @@ func ContextText(sum Summary) string {
 	if len(who) > 0 {
 		scope = strings.Join(who, " ")
 	}
-	basis := "prospective claims only"
-	if sum.ReconstructedExcluded == 0 {
-		basis = "all recorded claims"
+	basis := "prospective claims"
+	switch {
+	case sum.ReconstructedIncluded > 0:
+		basis = fmt.Sprintf("includes %d claims reconstructed after the fact", sum.ReconstructedIncluded)
+	case sum.ReconstructedExcluded > 0:
+		basis = fmt.Sprintf("prospective claims only; %d reconstructed excluded", sum.ReconstructedExcluded)
 	}
 	fmt.Fprintf(&b, "Calibration track record (%s; scorer: %s; %s).\n", scope, sum.Scorer, basis)
 	fmt.Fprintf(&b, "Settled %d (%d resolved, %d unresolvable); open %d, of which %d past deadline.\n",
@@ -418,16 +425,21 @@ func ContextText(sum Summary) string {
 		}
 		b.WriteString("\n")
 	}
-	if len(sum.Groups) > 1 {
-		b.WriteString("By group:")
-		for _, g := range sum.Groups {
-			label := strings.Trim(strings.Join([]string{g.Agent, g.Model, g.Type, g.Project}, "/"), "/")
-			for strings.Contains(label, "//") {
-				label = strings.ReplaceAll(label, "//", "/")
-			}
-			fmt.Fprintf(&b, " %s n=%d Brier %s;", label, g.Resolved, f3(g.Brier))
+	var scoredGroups []string
+	for _, g := range sum.Groups {
+		if g.Resolved == 0 {
+			continue
 		}
-		b.WriteString("\n")
+		var parts []string
+		for _, v := range []string{g.Agent, g.Model, g.Type, g.Project} {
+			if v != "" {
+				parts = append(parts, v)
+			}
+		}
+		scoredGroups = append(scoredGroups, fmt.Sprintf(" %s n=%d Brier %s overconfidence %+.2f;", strings.Join(parts, " "), g.Resolved, f3(g.Brier), *g.Overconfidence))
+	}
+	if len(scoredGroups) > 1 {
+		b.WriteString("By group:" + strings.Join(scoredGroups, "") + "\n")
 	}
 	if o.SelfGap != nil {
 		fmt.Fprintf(&b, "Self-scoring: of %d claims you and an independent scorer both settled, you agreed on %d and scored yourself more favourably on %d.\n",
@@ -439,7 +451,7 @@ func ContextText(sum Summary) string {
 			if i == 3 {
 				break
 			}
-			fmt.Fprintf(&b, " %q (p %.2f, %s);", clip(m.Claim, 90), m.P, m.Outcome)
+			fmt.Fprintf(&b, " \"%s\" (p %.2f, %s);", strings.ReplaceAll(clip(m.Claim, 90), `"`, "'"), m.P, m.Outcome)
 		}
 		b.WriteString("\n")
 	}

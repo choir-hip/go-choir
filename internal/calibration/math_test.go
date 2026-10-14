@@ -143,6 +143,23 @@ func TestSummaryMath(t *testing.T) {
 	}
 }
 
+// Each stated p of k/10 lands in bin k (1.0 in the last bin), whatever the
+// float rounding of p*10.
+func TestCalibrationBinEdges(t *testing.T) {
+	for k := 0; k <= 10; k++ {
+		p := float64(k) / 10
+		if k == 7 {
+			p = 0.7 // 0.7*10 is 7.000000000000001; 0.1*7 is 0.7000000000000001
+		}
+		c := settled("b", p, sv(types.CalibrationScorerRule, "r", types.CalibrationOutcomeTrue, "t"))
+		bins := Summarize([]ClaimView{c}, SummaryOptions{}, time.Now()).Overall.Bins
+		want := float64(min(k, 9)) / 10
+		if len(bins) != 1 || !near(bins[0].Lo, want) {
+			t.Fatalf("p=%v landed in %+v; want lo %v", p, bins, want)
+		}
+	}
+}
+
 func TestSummaryOfNothingIsNullNotNaN(t *testing.T) {
 	sum := Summarize(nil, SummaryOptions{}, time.Now())
 	if sum.Overall.Brier != nil || sum.Overall.Overconfidence != nil {
