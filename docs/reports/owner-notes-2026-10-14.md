@@ -89,6 +89,7 @@ Lead: recommend Apache-2.0 (permissive like MIT, plus an explicit patent
 grant and trademark carve-out), with a DCO sign-off for contributions;
 the name "Choir" protected by trademark rather than licence. Adding the
 LICENSE file waits for the owner's final pick (MIT vs Apache-2.0 vs dual).
+Update: the owner picked Apache-2.0; LICENSE and NOTICE landed (750bd259d).
 
 ## 8. Secrets vault
 
