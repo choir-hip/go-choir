@@ -3,6 +3,8 @@ package textureowner
 import (
 	"context"
 	"errors"
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -145,6 +147,12 @@ func storyWrite(t *testing.T, h *Handler, s *store.Store, rec *types.RunRecord, 
 	return head
 }
 
+// cited appends a sentence citing a captured source: a publish-auto story
+// publishes only revisions that cite one.
+func cited(text string) string {
+	return text + "\n\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}."
+}
+
 func revisionMetadataString(rev types.Revision, key string) string {
 	return metadataStringValue(decodeRevisionMetadata(rev.Metadata), key)
 }
@@ -163,7 +171,7 @@ func TestRevisionOfAPublishAutoStoryPublishesAsItsVersion(t *testing.T) {
 	rec := openStoryForTexture(t, h, s, "auto", types.CastPublishAuto)
 	seed := headOf(t, s, rec)
 
-	first := storyWrite(t, h, s, &rec, "write-1", "The harbor reopens Monday.")
+	first := storyWrite(t, h, s, &rec, "write-1", cited("The harbor reopens Monday."))
 	v := pub.next(t)
 	if v.DocID != rec.ChannelID || v.RevisionID != first.RevisionID || v.Revision != types.RevisionNumber(first.VersionNumber) || v.Revision != 2 || v.OwnerID != rec.OwnerID {
 		t.Fatalf("published %+v; want revision %s as v2 (the seed is revision 1)", v, first.RevisionID)
@@ -174,7 +182,7 @@ func TestRevisionOfAPublishAutoStoryPublishesAsItsVersion(t *testing.T) {
 	if role := revisionMetadataString(first, "revision_role"); role == types.StorySeedRole {
 		t.Fatalf("Texture's revision %s carries the seed's role %q", first.RevisionID, role)
 	}
-	second := storyWrite(t, h, s, &rec, "write-2", "The harbor reopens Monday. Ferries resume Tuesday.")
+	second := storyWrite(t, h, s, &rec, "write-2", cited("The harbor reopens Monday. Ferries resume Tuesday."))
 	if v := pub.next(t); v.RevisionID != second.RevisionID || v.Revision != 3 {
 		t.Fatalf("second publish = %+v; want v3", v)
 	}
@@ -188,21 +196,65 @@ func TestFailedStoryPublishLeavesAGapAndNothingRenumbers(t *testing.T) {
 
 	// The Write commits even though its publish fails: publishing is off
 	// the commit's path.
-	storyWrite(t, h, s, &rec, "write-1", "The harbor reopens Monday.")
+	storyWrite(t, h, s, &rec, "write-1", cited("The harbor reopens Monday."))
 	if v := pub.next(t); v.Revision != 2 {
 		t.Fatalf("first publish = %+v", v)
 	}
-	third := storyWrite(t, h, s, &rec, "write-2", "The harbor reopens Monday. Ferries resume.")
+	third := storyWrite(t, h, s, &rec, "write-2", cited("The harbor reopens Monday. Ferries resume."))
 	if v := pub.next(t); v.Revision != 3 || v.RevisionID != third.RevisionID {
 		t.Fatalf("after a failed v2, the next revision published as %+v; want v3 (v2 stays a gap)", v)
 	}
 	pub.none(t, "a failed publish (no retry)")
 }
 
+// With research failed, Texture wrote revisions that cite nothing and say
+// the claims are unverified, and auto publish published them as the
+// story's next version (docs/problems/free-model-429-opens-provider-
+// circuit-stub-stories-2026-10-14.md, cause 4). Ways the fix can fail: an
+// uncited revision still publishes; a cited one stops publishing; the held
+// revision leaves no reason anywhere; the next cited revision is
+// renumbered into the held slot; a story without publish auto starts
+// publishing.
+func TestUncitedRevisionIsHeldAndTheNextCitedOnePublishes(t *testing.T) {
+	_, h, s, pub := storySetup(t)
+	rec := openStoryForTexture(t, h, s, "uncited", types.CastPublishAuto)
+
+	var logs strings.Builder
+	log.SetOutput(&logs)
+	defer log.SetOutput(os.Stderr)
+
+	base := headOf(t, s, rec)
+	turn := turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID, Write: &yaegikernel.TextureWrite{
+		Edits: "@all\n# Harbor\n\nThe official page could not be retrieved, so the reopening is unverified.", Why: "research failed",
+	}})
+	out, err := h.CommitCellTextureAuthor(context.Background(), &rec, turn, "write-uncited")
+	if err != nil {
+		t.Fatalf("uncited Write: %v", err)
+	}
+	stub := headOf(t, s, rec)
+	if stub.RevisionID == base.RevisionID {
+		t.Fatal("the uncited Write committed nothing; it must commit and only not publish")
+	}
+	pub.none(t, "a revision that cites no captured source")
+	if !strings.Contains(logs.String(), "story publish: "+rec.ChannelID+" revision "+stub.RevisionID+" not published: it cites no captured source") {
+		t.Fatalf("no reason logged for the held revision; logs:\n%s", logs.String())
+	}
+	if !strings.Contains(out, `"publish_held"`) || !strings.Contains(out, "cites no captured source") {
+		t.Fatalf("turn result %s does not tell Texture the revision was held", out)
+	}
+
+	next := storyWrite(t, h, s, &rec, "write-cited", cited("The harbor reopens Monday."))
+	v := pub.next(t)
+	if v.RevisionID != next.RevisionID || v.Revision != types.RevisionNumber(next.VersionNumber) || v.Revision != 3 {
+		t.Fatalf("published %+v; want the cited revision %s as v3 (v2, the uncited one, stays a gap)", v, next.RevisionID)
+	}
+	pub.none(t, "after the cited revision")
+}
+
 func TestStoryWithoutPublishAutoPublishesNothing(t *testing.T) {
 	_, h, s, pub := storySetup(t)
 	rec := openStoryForTexture(t, h, s, "manual", "")
-	storyWrite(t, h, s, &rec, "write-1", "The harbor reopens Monday.")
+	storyWrite(t, h, s, &rec, "write-1", cited("The harbor reopens Monday."))
 	pub.none(t, "a story without publish auto")
 }
 
@@ -210,7 +262,7 @@ func TestCrashBootPublishesNothing(t *testing.T) {
 	core, h, s, pub := storySetup(t)
 	pub.fail[2] = true
 	rec := openStoryForTexture(t, h, s, "crash", types.CastPublishAuto)
-	storyWrite(t, h, s, &rec, "write-1", "The harbor reopens Monday.")
+	storyWrite(t, h, s, &rec, "write-1", cited("The harbor reopens Monday."))
 	if v := pub.next(t); v.Revision != 2 {
 		t.Fatalf("publish = %+v", v)
 	}

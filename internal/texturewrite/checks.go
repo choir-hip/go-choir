@@ -98,6 +98,28 @@ func Checks(doc texturedoc.StructuredTextureDoc, docID, revisionID string) ([]Qu
 	return checks, pairs
 }
 
+// CitesSource reports whether rev cites at least one source: a citation
+// in its body that carries a Write Ref (Write refuses a cite or embed of
+// anything not captured) or names one of the revision's source entities (a
+// citation made before Write). A revision that cites nothing has no
+// evidence a reader could check.
+func CitesSource(rev types.Revision) (bool, error) {
+	doc, entities, err := Base(rev)
+	if err != nil {
+		return false, err
+	}
+	known := make(map[string]bool, len(entities))
+	for _, e := range entities {
+		known[e.SourceEntityID] = true
+	}
+	for _, ref := range sourceRefs(doc.Doc) {
+		if _, ok := RefOf(ref); ok || known[stringAttr(ref, "source_entity_id")] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ChecksFrom reads the citation checks a revision recorded.
 func ChecksFrom(rev types.Revision) []QuoteCheck {
 	var meta map[string]json.RawMessage

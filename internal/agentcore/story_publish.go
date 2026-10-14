@@ -8,10 +8,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -143,33 +145,51 @@ func (rt *Runtime) storyPublishesAuto(ctx context.Context, ownerID, computerID, 
 // Every outcome logs one "story publish:" line, the decisions not to
 // publish included: a silent return is how B12 (every story revision
 // inherited the seed's role and none published) hid on staging.
-func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc types.Document, rev types.Revision) {
+//
+// A revision that cites no source is held: it stays committed on the
+// computer and its version is a gap, and the next revision that cites a
+// source publishes as its own number. With research failed, Texture
+// wrote one-paragraph "the claims are unverified" revisions and they
+// published as stories (docs/problems/free-model-429-opens-provider-
+// circuit-stub-stories-2026-10-14.md). An owner's publish is another
+// route and is not held. held is the reason when a publish-auto story's
+// revision was held for that, so the caller can say so; it is empty
+// otherwise.
+func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc types.Document, rev types.Revision) (held string) {
 	if rt == nil || rt.store == nil {
 		log.Printf("story publish: %s revision %s not considered: no runtime store", doc.DocID, rev.RevisionID)
-		return
+		return ""
 	}
 	if strings.TrimSpace(doc.TrajectoryID) == "" {
 		log.Printf("story publish: %s revision %s not published: the document has no trajectory, so it is no story", doc.DocID, rev.RevisionID)
-		return
+		return ""
 	}
 	trajectory, err := rt.store.GetLifecycleTrajectory(ctx, ownerID, doc.ComputerID, doc.TrajectoryID)
 	if err != nil {
 		log.Printf("story publish: %s revision %s is a gap: read trajectory %s: %v", doc.DocID, rev.RevisionID, doc.TrajectoryID, err)
-		return
+		return ""
 	}
 	if !types.StoryPublishesAuto(trajectory) {
 		log.Printf("story publish: %s revision %s not published: trajectory %s is kind %q with publish %q, not a publish-auto story", doc.DocID, rev.RevisionID, doc.TrajectoryID, trajectory.Kind, trajectory.SubjectRefs[types.StoryRefPublish])
-		return
+		return ""
 	}
 	if revisionRole(rev) == types.StorySeedRole {
 		log.Printf("story publish: %s revision %s not published: it is the story's seed", doc.DocID, rev.RevisionID)
-		return
+		return ""
 	}
 	v := StoryVersion{OwnerID: ownerID, ComputerID: doc.ComputerID, DocID: doc.DocID, RevisionID: rev.RevisionID, Revision: types.RevisionNumber(rev.VersionNumber)}
+	if cites, err := texturewrite.CitesSource(rev); err != nil || !cites {
+		held = "it cites no captured source, so v" + strconv.Itoa(v.Revision) + " stays a gap; the next revision that cites one publishes"
+		if err != nil {
+			held = "its citations could not be read (" + err.Error() + "), so v" + strconv.Itoa(v.Revision) + " stays a gap"
+		}
+		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
+		return held
+	}
 	publisher := rt.storyPublisher()
 	if publisher == nil {
 		log.Printf("story publish: %s v%d (revision %s) is a gap: no platform to publish to", v.DocID, v.Revision, v.RevisionID)
-		return
+		return ""
 	}
 	rt.enqueueStoryPublish("doc:"+ownerID+":"+doc.DocID, func(ctx context.Context) {
 		if err := publisher.PublishVersion(ctx, v); err != nil {
@@ -178,6 +198,7 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc 
 		}
 		log.Printf("story publish: %s published v%d (revision %s)", v.DocID, v.Revision, v.RevisionID)
 	})
+	return ""
 }
 
 func revisionRole(rev types.Revision) string {

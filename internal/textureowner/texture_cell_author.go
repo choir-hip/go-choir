@@ -376,19 +376,25 @@ func (h *Handler) commitTextureWrite(ctx context.Context, rec *types.RunRecord, 
 	h.emitTextureAgentEvent(ctx, rec, types.EventTextureAgentRevisionCompleted, events.CauseToolExecution, completed)
 	// A story opened with publish auto publishes this revision as its next
 	// version, after the commit and off its path (Cut 2 2b). A failed
-	// publish is a gap; nothing here waits for it.
+	// publish is a gap; nothing here waits for it. A revision that cites
+	// no source is held, and the turn's result says why.
+	publishHeld := ""
 	switch {
 	case !durableLifecycle:
 		log.Printf("story publish: %s revision %s not considered: the document is not a lifecycle document", doc.DocID, stored.RevisionID)
 	case h.Core == nil:
 		log.Printf("story publish: %s revision %s not considered: no runtime to publish through", doc.DocID, stored.RevisionID)
 	default:
-		h.Core.AutoPublishRevision(ctx, rec.OwnerID, doc, stored)
+		publishHeld = h.Core.AutoPublishRevision(ctx, rec.OwnerID, doc, stored)
 	}
-	out, _ := json.Marshal(map[string]any{
+	committed := map[string]any{
 		"turn": string(types.TextureTurnRevision), "doc_id": stored.DocID, "revision_id": stored.RevisionID,
 		"base_revision_id": stored.ParentRevisionID, "trajectory_id": stored.TrajectoryID,
 		"dropped_citations": len(result.Dropped), "done": turn.Done != "",
-	})
+	}
+	if publishHeld != "" {
+		committed["publish_held"] = "not published: " + publishHeld
+	}
+	out, _ := json.Marshal(committed)
 	return string(out), nil
 }
