@@ -21,9 +21,11 @@ const (
 	btrfsSearchMaxPages = 1 << 20
 )
 
-// measureFileDiskBytes reads a btrfs file's extent items (compression-aware;
-// needs CAP_SYS_ADMIN, which vmctl has as root) and falls back to
-// st_blocks*512 on any other filesystem or on any error.
+// measureFileDiskBytes measures a btrfs file by its extent items
+// (compression-aware; needs CAP_SYS_ADMIN, which vmctl's unit does not
+// have), else by the unprivileged FIEMAP bound, and falls back to
+// st_blocks*512 on any other filesystem or when both fail. Each fallback
+// reason is logged once (snapshot_disk.go).
 func measureFileDiskBytes(path string) (int64, string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -44,12 +46,49 @@ func measureFileDiskBytes(path string) (int64, string, error) {
 		return fallback, diskBytesMethodStBlocks, nil
 	}
 	n, err := btrfsFileDiskBytes(int(f.Fd()), uint64(st.Ino))
-	if err != nil || (n == 0 && info.Size() > 0) {
-		// No extents read for a non-empty file: trust st_blocks (zero for a
-		// fully sparse file, the uncompressed size otherwise).
-		return fallback, diskBytesMethodStBlocks, nil
+	if err == nil && !(n == 0 && info.Size() > 0) {
+		return n, diskBytesMethodBtrfs, nil
 	}
-	return n, diskBytesMethodBtrfs, nil
+	// The extent search failed (EPERM without CAP_SYS_ADMIN), or read no
+	// extents for a non-empty file.
+	noteDiskMeasureFallback(diskBytesMethodBtrfs, diskBytesMethodFiemapBound, err)
+	exts, ferr := fiemapFileExtents(int(f.Fd()))
+	if ferr == nil {
+		bound := fiemapBoundBytes(exts)
+		if !(bound == 0 && fallback > 0) {
+			return clampFiemapBound(bound, fallback), diskBytesMethodFiemapBound, nil
+		}
+	}
+	// FIEMAP failed, or reported no extents for allocated data: trust
+	// st_blocks (zero for a fully sparse file, the uncompressed size
+	// otherwise).
+	noteDiskMeasureFallback(diskBytesMethodFiemapBound, diskBytesMethodStBlocks, ferr)
+	return fallback, diskBytesMethodStBlocks, nil
+}
+
+// fsIocFiemap is _IOWR('f', 11, struct fiemap); struct fiemap is 32 bytes.
+const (
+	fsIocFiemap        = 0xC020660B
+	fiemapFlagSync     = 0x00000001
+	fiemapBatchExtents = 4096
+)
+
+// fiemapFileExtents reads every extent of the open file with FS_IOC_FIEMAP
+// (no privilege needed), syncing delayed allocation first.
+func fiemapFileExtents(fd int) ([]fiemapExtent, error) {
+	buf := make([]byte, fiemapHeaderSize+fiemapBatchExtents*fiemapExtentSize)
+	ne := binary.NativeEndian
+	return collectFiemapExtents(func(start uint64) ([]fiemapExtent, error) {
+		clear(buf)
+		ne.PutUint64(buf[0:], start)          // fm_start
+		ne.PutUint64(buf[8:], math.MaxUint64) // fm_length: to the end
+		ne.PutUint32(buf[16:], fiemapFlagSync)
+		ne.PutUint32(buf[24:], fiemapBatchExtents) // fm_extent_count
+		if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), fsIocFiemap, uintptr(unsafe.Pointer(&buf[0]))); errno != 0 {
+			return nil, errno
+		}
+		return parseFiemapExtents(buf)
+	})
 }
 
 // btrfsFileDiskBytes pages through the file's EXTENT_DATA items in its own

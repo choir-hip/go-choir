@@ -194,8 +194,8 @@ func TestHibernateRecordsLogicalAndDiskBytes(t *testing.T) {
 }
 
 // Item 40: the real measure on this host's filesystem returns a positive
-// size for written data. On btrfs without CAP_SYS_ADMIN, and on every other
-// filesystem, it is st_blocks*512.
+// size for written data. On btrfs without CAP_SYS_ADMIN it is the FIEMAP
+// bound; on every other filesystem, st_blocks*512.
 func TestFileDiskBytesMeasuresWrittenData(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mem")
 	data := make([]byte, 1<<20)
@@ -212,7 +212,7 @@ func TestFileDiskBytesMeasuresWrittenData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fileDiskBytes: %v", err)
 	}
-	if method != diskBytesMethodBtrfs && method != diskBytesMethodStBlocks {
+	if method != diskBytesMethodBtrfs && method != diskBytesMethodFiemapBound && method != diskBytesMethodStBlocks {
 		t.Fatalf("method = %q", method)
 	}
 	// Random data does not compress: on-disk is at least most of it.
