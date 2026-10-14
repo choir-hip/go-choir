@@ -46,7 +46,7 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && parts[2] == "decision" {
 		return strings.TrimSpace(decoded), "approve", true
 	}
-	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && parts[2] == "receipts" {
+	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && (parts[2] == "receipts" || parts[2] == "source-patch") {
 		return strings.TrimSpace(decoded), "read", true
 	}
 	return "", "", false
