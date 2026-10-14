@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -333,7 +334,7 @@ func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, f
 	}
 
 	keepRecentTokens := m.cfg.RunMemoryKeepRecentTokens
-	if force && reason == "context_overflow" && len(runMemoryMessageIndexes(entries)) <= 1 {
+	if force && reason == "context_overflow" && conversationMessageCount(entries) <= 1 {
 		keepRecentTokens = 0
 	}
 	plan, ok := planRunMemoryCompaction(entries, keepRecentTokens, reason)
@@ -582,6 +583,12 @@ func planRunMemoryCompaction(entries []types.RunMemoryEntry, keepRecentTokens in
 		}
 		keptMessages++
 	}
+	// Run-context turns are not folded into the summary or listed as raw
+	// entries: the compaction re-appends a fresh one (run_context.go). With
+	// nothing else to fold, there is nothing to compact.
+	summarized = slices.DeleteFunc(summarized, func(entry types.RunMemoryEntry) bool {
+		return isRunContextMessage(entry.Message)
+	})
 	if len(summarized) == 0 && strings.TrimSpace(previousSummary) == "" {
 		return runMemoryCompactionPlan{}, false
 	}
@@ -981,6 +988,18 @@ func runMemoryMessages(entries []types.RunMemoryEntry) []json.RawMessage {
 		}
 	}
 	return messages
+}
+
+// conversationMessageCount counts the stored messages that are conversation,
+// leaving out run-context turns (run_context.go).
+func conversationMessageCount(entries []types.RunMemoryEntry) int {
+	n := 0
+	for _, entry := range entries {
+		if entry.Kind == types.RunMemoryEntryMessage && len(entry.Message) > 0 && !isRunContextMessage(entry.Message) {
+			n++
+		}
+	}
+	return n
 }
 
 func runMemoryMessageIndexes(entries []types.RunMemoryEntry) []int {
