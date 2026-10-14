@@ -1,6 +1,7 @@
 # Account recovery creates a token and throws it away (2026-10-14)
 
-Status: open (documented before the fix). Station LA, slice 1.
+Status: slice 1 fixed on a branch (not pushed, not deployed); slice 2
+open. Station LA.
 Mutation class of the fix: **red** (auth/session). Found by the
 2026-10-14 sequencing report
 ([roadmap-sequencing-appdev-security-2026-10-14.md](../reports/roadmap-sequencing-appdev-security-2026-10-14.md)).
@@ -118,7 +119,84 @@ Token handling:
 
 ## Fix (red ceremony)
 
-See the slice-1 commit that follows this document.
+Slice 1 landed on a branch after this document (not pushed, not
+deployed):
+
+- **auth** (`internal/auth/recovery.go`, `recovery_mail.go`):
+  `HandleRecoveryRequest` keeps the token and, for a matched account
+  only, hands `<first RP origin>/recover#token=<token>` to a
+  `RecoveryMailer` addressed to `users.email`. Delivery runs in a
+  goroutine with a 30-second timeout after the response is decided; a
+  failure is logged (`operation=recovery_mail result=error`, no token)
+  and never changes the answer. `AUTH_MAILD_URL` (default
+  `http://127.0.0.1:8087`) selects maild; empty disables mail and logs
+  `reason=mailer_not_configured`.
+- **token store** (`internal/auth/store.go`): a new token marks the
+  account's older unused tokens used (superseded), in one transaction
+  with the insert; rows are kept so rate-limit counts still see them.
+  The consume update is now conditional (`used_at IS NULL`) and checks
+  the row count. The store already runs on one SQLite connection, so
+  concurrent consumes were serialized before; the condition makes
+  single-use hold without relying on that.
+- **maild** (`internal/maild/auth_mail.go`): new route
+  `POST /internal/maild/auth/recovery-link` takes
+  `{to_address, link, expires_minutes}`, refuses non-loopback callers,
+  requests without `X-Internal-Caller: true`, and requests carrying
+  `X-Authenticated-User`; validates the link (https on the primary domain
+  or localhost, path `/recover`, fragment `token=choir_rt_…`, no query or
+  userinfo); renders a fixed template from `Choir <updates@<primary
+  domain>>`, subject "Recover your Choir account"; logs only a recipient
+  hash and the provider message id.
+- **frontend**: "Lost your passkey?" in the sign-in view opens an email
+  form (`RecoveryRequestForm.svelte`) and then "Check your email"
+  (copy says "If … belongs to a Choir account"). `/recover`
+  (`RecoverRoute.svelte`, routed in `App.svelte` without a session check
+  or computer handoff) reads and strips the fragment, redeems the token
+  only on "Add a new passkey", runs the passkey creation through the
+  shared `createPasskeyFromOptions` (now also used by account creation),
+  retries a cancelled prompt with the same options, and offers a new link
+  for a used or expired one.
+
+Evidence: `go test ./internal/auth ./internal/maild ./cmd/auth` (new:
+`recovery_mail_test.go`, `auth_mail_test.go`, including one test that
+runs auth's mailer against a real maild handler and a fake Resend
+server); `frontend/tests/auth-recovery.spec.js` (6 tests, mocked
+`/auth/*`, phone width, virtual authenticator).
+
+## Slice 2 needs (magic-link sign-in, several passkeys, visible sessions)
+
+1. **Magic-link sign-in as a login method.** A second token purpose
+   (`sign_in`) beside `recovery`, or a `purpose` column on
+   `recovery_tokens`, so a sign-in link can never be replayed as a
+   recovery link or the reverse. Verify issues a session directly
+   (`issueSession`) instead of a registration challenge, and should mark
+   the session as email-authenticated (weaker than a passkey) so
+   sensitive actions (adding or deleting passkeys, API keys, ROOT unwrap)
+   can require a passkey or a fresh link. Decide whether a sign-in link
+   must be opened in the browser that asked for it (bind a short-lived
+   cookie at request time) to stop a forwarded link from signing in a
+   stranger.
+2. **Email ownership at sign-up.** Registration today never proves the
+   email address. Magic-link sign-in and recovery both trust it, so
+   sign-up should verify the address (or the first sign-in link proves
+   it) before recovery is offered for that account.
+3. **Several passkeys per account.** The backend has list, rename and
+   delete (`/auth/credentials`), with a last-credential guard. Missing:
+   an "add a passkey" begin route for a signed-in user, the Settings UI,
+   and naming a new passkey from its authenticator (AAGUID) and device.
+4. **Visible, revocable sessions.** `/auth/sessions` list and revoke
+   exist. Missing: the Settings UI, readable device labels from the user
+   agent, "sign out everywhere else", and revoking other sessions when a
+   recovery link is used (a recovered account may have a thief's session
+   alive).
+5. **Owner ROOT after recovery.** Decide the recovery protector for
+   PRF-wrapped data, or show plainly that recovered sign-in does not
+   restore encrypted data; request PRF on the recovery registration once
+   a re-wrap path exists.
+6. **Email canonicalization** (case) at registration and lookup.
+7. **A service-wide send cap** in maild for auth mail.
+8. **Staging proof** with a real inbox (or a Resend test address) and a
+   deployed Playwright run, after the owner confirms the sender setup.
 
 - **Conjecture delta.** Recovery is real when a lost-passkey owner can, on
   a phone, ask for a link, receive exactly one email, open it, and add a
@@ -135,5 +213,7 @@ See the slice-1 commit that follows this document.
 - **Rollback.** `git revert` the slice commits. The routes and schema are
   unchanged (no migration); reverting returns to the discard behavior.
 - **Heresy delta.** Discovered: recovery token discarded (this doc);
-  owner-root wraps not recoverable (residual). Introduced: none intended.
-  Repaired on landing: the discarded token; the non-conditional consume.
+  owner-root wraps not recoverable (residual); registration never proves
+  email ownership (slice 2). Introduced: none intended. Repaired on
+  landing: the discarded token. Hardened: single-use consume no longer
+  relies on the one-connection pool; older tokens are superseded.
