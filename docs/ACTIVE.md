@@ -70,8 +70,8 @@ several computers on one host
 [panel adjudication](reports/lu-guest-updates-adjudication-2026-10-14.md).
 Pull with a bounded drain instead of a once-per-deploy push, so the busy
 paper updates by itself; planned boots across epoch changes; rings,
-health and rollback; one apply path with self-development. Rounds 1 and
-2 sent back with repairs adopted; round 3 written; round-3 panel next.
+health and rollback; one apply path with self-development. Rounds 1-3
+sent back with repairs adopted; round 4 written; round-4 panel next.
 LU2 must land before C1e's next epoch bump.
 
 ## Next (2026-10-13): ledger metamission (reviewed)

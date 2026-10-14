@@ -156,8 +156,8 @@ metamission:
         binary-only swap only if measured downtime warrants it.
         Specification: docs/reports/lu-guest-updates-design-2026-10-14.md;
         panels adjudicated in
-        docs/reports/lu-guest-updates-adjudication-2026-10-14.md (rounds 1
-        and 2 send_back with repairs adopted; round 3 written). Only LU3b
+        docs/reports/lu-guest-updates-adjudication-2026-10-14.md (rounds 1-3
+        send_back with repairs adopted; round 4 written). Only LU3b
         depends on L1 (L1c, L1b).
         Cause: the paper is never idle and updated only by an owner act
         (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
@@ -437,7 +437,7 @@ now:
     direction); research searching the corpus first; station LU, guest
     updates (owner-approved 10-14; drafted, panel next), which answers how
     an always-busy paper takes updates. Open for the owner: Go module
-    route, LU's O1-O3b, O5, O7-O9, snapshot max age, SP0 host and key backups.
+    route, LU's O1-O3b, O5, O7-O10, snapshot max age, SP0 host and key backups.
   source_ref: 0257fac3
   deploy_identity: staging ce59d406 (deployed 07:46 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
