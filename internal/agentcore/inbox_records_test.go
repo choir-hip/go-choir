@@ -468,15 +468,18 @@ func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
 	if out := cell(`fmt.Println("looking elsewhere")`); cursor() != 0 {
 		t.Fatalf("(a) a cell that never called Records() advanced the cursor to %d: %s", cursor(), out)
 	}
-	if out := cell(`fmt.Println("read", len(choir.Records()))`); !strings.Contains(out, "read 1") || cursor() != 1 {
-		t.Fatalf("Records() showed the first record but cursor = %d: %s", cursor(), out)
+	// A management cell that only reads marks nothing: the turn's end
+	// does, so a turn that fails after reading leaves its records unread
+	// (captures-undisposed-after-failed-management-runs-2026-10-14).
+	if out := cell(`fmt.Println("read", len(choir.Records()))`); !strings.Contains(out, "read 1") || cursor() != 0 {
+		t.Fatalf("Records() showed the first record in a cell that only read, but cursor = %d: %s", cursor(), out)
 	}
 	note("mid-run", time.Now().UTC())
-	if out := cell(`fmt.Println("acting on what I read")`); cursor() != 1 {
-		t.Fatalf("(b) a mid-run record was marked read by a cell that did not look: cursor %d: %s", cursor(), out)
+	if out := cell(`fmt.Println(choir.Note("source:rss:test", "acting on what I read"))`); !strings.Contains(out, "rlm:note") || cursor() != 1 {
+		t.Fatalf("(b) an acting cell marked other than what the run was shown: cursor %d (want 1): %s", cursor(), out)
 	}
-	if out := cell(`fmt.Println("read", len(choir.Records()))`); !strings.Contains(out, "read 2") || cursor() != 2 {
-		t.Fatalf("(d) Records() showed both records but cursor = %d: %s", cursor(), out)
+	if out := cell(`fmt.Println("read", len(choir.Records()))`); !strings.Contains(out, "read 2") || cursor() != 1 {
+		t.Fatalf("(d) Records() showed both records in a cell that only read, but cursor = %d: %s", cursor(), out)
 	}
 
 	// (c) The post-turn re-check wakes the desk for a record that arrived
@@ -485,6 +488,9 @@ func TestCellMarksReadOnlyRecordsItShowed(t *testing.T) {
 	done := rec
 	done.State = types.RunCompleted
 	rt.recheckRecordsInbox(ctx, &done)
+	if cursor() != 2 {
+		t.Fatalf("(d) the completed turn did not mark read the records it was shown: cursor %d, want 2", cursor())
+	}
 	if len(woke) != 1 {
 		t.Fatalf("an unshown record that arrived mid-run did not start one more turn: %v", woke)
 	}

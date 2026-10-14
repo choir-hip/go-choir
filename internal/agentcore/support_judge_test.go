@@ -446,6 +446,10 @@ fmt.Println(rs[0].Body)`)
 	if v, found, _ := s.SupportVerdict(ctx, owner, computer, seeded.Pairs[0].Key); !found || v.Verdict != types.SupportUnsupported {
 		t.Fatalf("legacy pair verdict = %+v, %v; want it judged by Jev", v, found)
 	}
+	// Management's turn marks what it was shown when it completes
+	// (captures-undisposed-after-failed-management-runs-2026-10-14).
+	rt.recheckRecordsInbox(ctx, &types.RunRecord{RunID: "run-mgmt-support-" + owner, AgentID: management, OwnerID: owner, ComputerID: computer,
+		AgentProfile: agentprofile.Management, AgentRole: agentprofile.Management, State: types.RunCompleted})
 	if cursor, _ := s.ReaderCursor(ctx, owner, computer, management, management); cursor != 1 {
 		t.Fatalf("management cursor = %d; the closed record was not marked read", cursor)
 	}

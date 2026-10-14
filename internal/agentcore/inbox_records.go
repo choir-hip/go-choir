@@ -496,6 +496,13 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		localIDs = append(localIDs, in)
 	}
 	cursor := r.records.cursorAdvance()
+	if len(records) == 0 && deskProfile == agentprofile.Management {
+		// A management cell that only read marks nothing; its turn's end
+		// does (markTurnRecordsRead). A turn that read captures and then
+		// failed left them marked read and never disposed
+		// (captures-undisposed-after-failed-management-runs-2026-10-14).
+		cursor = nil
+	}
 	if len(records) == 0 && cursor == nil {
 		return rest, nil
 	}
@@ -696,16 +703,125 @@ func (rt *Runtime) InboxUnread(ctx context.Context, ownerID, computerID, deskAge
 	return rt.inboxUnread(ctx, ownerID, computerID, deskAgentID)
 }
 
+// Management's failed-turn retry
+// (captures-undisposed-after-failed-management-runs-2026-10-14): a failed
+// turn leaves the records it only read unread, and one durable wake is
+// scheduled for them after a backoff that doubles per failed turn in a row,
+// for at most failedRecordsTurnRetryLimit turns. Past the limit the records
+// wait for the next record to arrive, as before.
+const (
+	failedRecordsTurnRetryBase  = 2 * time.Minute
+	failedRecordsTurnRetryLimit = 4
+)
+
+// markTurnRecordsRead marks read what a management turn was shown, when
+// the turn completed or parked. Management's cells that only read mark
+// nothing (commitRecordsRoute), so a failed or cancelled turn leaves the
+// records it read and did not act on unread, for the next turn to be shown.
+// A cell that acts still marks what the run was shown with its acts. A
+// crash-closed run is never completed and marks nothing.
+func (rt *Runtime) markTurnRecordsRead(ctx context.Context, rec *types.RunRecord) {
+	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Management {
+		return
+	}
+	if rec.State != types.RunCompleted && rec.State != types.RunPassivated {
+		return
+	}
+	inbox := strings.TrimSpace(rec.AgentID)
+	if !strings.HasPrefix(inbox, agentprofile.Management+":") {
+		return
+	}
+	shown := rt.recordsShownMark(rec.RunID)
+	if shown <= 0 {
+		return
+	}
+	cursor, err := rt.store.ReaderCursor(ctx, rec.OwnerID, rec.ComputerID, inbox, inbox)
+	if err != nil {
+		log.Printf("runtime: records read mark after %s: cursor: %v", rec.RunID, err)
+		return
+	}
+	if shown <= cursor {
+		return
+	}
+	req := types.CommitInboxRecordsRequest{
+		OwnerID: rec.OwnerID, ComputerID: rec.ComputerID, CommandID: fmt.Sprintf("turn-records-read:%s:%d", rec.RunID, shown),
+		Cursor: &types.InboxCursorAdvance{ReaderAgentID: inbox, Inbox: inbox, ExpectedSeq: cursor, Seq: shown},
+	}
+	if req.CommandDigest, err = store.ComputeCommitInboxRecordsDigest(req); err != nil {
+		log.Printf("runtime: records read mark after %s: %v", rec.RunID, err)
+		return
+	}
+	if _, err := rt.store.CommitInboxRecords(ctx, req); err != nil {
+		log.Printf("runtime: records read mark after %s (%d -> %d): %v", rec.RunID, cursor, shown, err)
+	}
+}
+
+// failedRecordsTurns counts a management desk's failed turns in a row: a
+// failed turn adds one, a completed turn resets it, anything else leaves
+// it. It returns the count after this turn, or 0 for a turn that is not a
+// management failure.
+func (rt *Runtime) failedRecordsTurns(rec *types.RunRecord) int {
+	if agentProfileForRun(rec) != agentprofile.Management {
+		return 0
+	}
+	inbox := strings.TrimSpace(rec.AgentID)
+	switch rec.State {
+	case types.RunCompleted:
+		rt.recordsFailedTurns.Delete(inbox)
+	case types.RunFailed:
+		for {
+			prev, loaded := rt.recordsFailedTurns.LoadOrStore(inbox, 1)
+			if !loaded {
+				return 1
+			}
+			n, _ := prev.(int)
+			if rt.recordsFailedTurns.CompareAndSwap(inbox, prev, n+1) {
+				return n + 1
+			}
+		}
+	}
+	return 0
+}
+
+// scheduleFailedTurnRetry schedules one durable wake for a management
+// desk whose failed turn left records unread, after the backoff for its
+// failed turns in a row. A crash boot interrupts the wake like any
+// pre-boot inbox_record wake; it never resumes work.
+func (rt *Runtime) scheduleFailedTurnRetry(ctx context.Context, rec *types.RunRecord, failedTurns int) {
+	if failedTurns <= 0 {
+		return
+	}
+	if failedTurns > failedRecordsTurnRetryLimit {
+		log.Printf("runtime: %s failed %d turns in a row; its unread records wait for the next record", rec.AgentID, failedTurns)
+		return
+	}
+	if rt.scheduleActor == nil {
+		log.Printf("runtime: %s has unread records after failed run %s and no durable wakes to retry them", rec.AgentID, rec.RunID)
+		return
+	}
+	delay := failedRecordsTurnRetryBase << (failedTurns - 1)
+	content, _ := json.Marshal(map[string]any{"inbox": rec.AgentID, "retry_after_failed_run": rec.RunID, "failed_turns": failedTurns})
+	if err := rt.scheduleActor(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, "inbox_record", string(content), "", "", time.Now().UTC().Add(delay)); err != nil {
+		log.Printf("runtime: schedule records retry for %s after %s: %v", rec.AgentID, rec.RunID, err)
+		return
+	}
+	log.Printf("runtime: %s left unread records after failed run %s; retry in %s (failed turn %d of %d)", rec.AgentID, rec.RunID, delay, failedTurns, failedRecordsTurnRetryLimit)
+}
+
 // recheckRecordsInbox is the post-turn re-check (decision D4). A record that
 // arrived while the desk's run was active found the desk busy and woke
 // nobody. After any ended turn, an unread record committed after that turn
 // began starts one more turn. The records the turn already had stay unread
-// and re-arm nothing: after a failed turn, so a record that breaks the desk
-// is read again only when a new record arrives; after a completed one,
+// and do not start a turn at once: after a failed turn, so a record that
+// breaks the desk cannot loop it (management schedules one backed-off,
+// bounded retry instead, scheduleFailedTurnRetry); after a completed one,
 // because a turn marks read only what choir.Records() showed it
 // (autopaper-arrivals-unanswered-2026-10-13), so a desk that never reads
 // cannot wake itself in a loop. A crash closure re-arms nothing at all.
 func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord) {
+	// The read mark comes first: the round closure reads the cursor, and
+	// the run's shown mark is dropped below.
+	rt.markTurnRecordsRead(ctx, rec)
 	rt.closeRoundsOfEndedRun(ctx, rec)
 	// A parked run counts too (B7): its turn ended though the run did not.
 	parked := rec != nil && rec.State == types.RunPassivated
@@ -719,6 +835,7 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 	if !recordsDesk(agentProfileForRun(rec)) {
 		return
 	}
+	failedTurns := rt.failedRecordsTurns(rec)
 	cursor, err := rt.store.ReaderCursor(ctx, rec.OwnerID, rec.ComputerID, rec.AgentID, rec.AgentID)
 	if err != nil {
 		log.Printf("runtime: records re-check after %s: %v", rec.RunID, err)
@@ -740,6 +857,7 @@ func (rt *Runtime) recheckRecordsInbox(ctx context.Context, rec *types.RunRecord
 		}
 	}
 	if !late {
+		rt.scheduleFailedTurnRetry(ctx, rec, failedTurns)
 		return
 	}
 	content, _ := json.Marshal(map[string]string{"inbox": rec.AgentID, "recheck_after_run": rec.RunID})

@@ -68,6 +68,10 @@ type Runtime struct {
 	// in each running desk run returned (run id -> int64): a cell's commit
 	// marks read only through it.
 	recordsRunShown sync.Map
+	// recordsFailedTurns counts each management desk's failed turns in a
+	// row (inbox -> int), for the backoff of the wake that retries the
+	// records a failed turn left unread. In memory: a restart resets it.
+	recordsFailedTurns sync.Map
 
 	cfg         provideriface.Config
 	store       *store.Store

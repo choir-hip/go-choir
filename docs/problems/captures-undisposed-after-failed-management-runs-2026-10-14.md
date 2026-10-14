@@ -1,7 +1,8 @@
 # Captures a failed management run read are never disposed (2026-10-14)
 
-Status: documented; cause confirmed from the run trace. Fix follows on
-branch `captures-undisposed-after-failed-runs` (not pushed).
+Status: cause confirmed from the run trace; fixed on branch
+`captures-undisposed-after-failed-runs` (not pushed, not deployed). See
+"Fix" below.
 
 Found by the S0 probe of management delegation
 (`docs/problems/management-serial-turn-blocks-paper-2026-10-14.md`, section
@@ -122,3 +123,43 @@ turn has marked it read, it is gone.
   structured and disposes nothing.
 - **The probe's join** misses feeds into stories it does not discover
   (receipts of Feed and Note name no inbox).
+
+## Fix
+
+The read mark moves from management's read-only cells to the end of the
+turn, the way Texture's activation end already answers a trigger that no
+cell acted on (`tools_desk.go`, "rerun 12"):
+
+- `commitRecordsRoute`: a management cell that stages no records commits
+  no cursor advance. A cell that acts still commits its acts and the mark
+  over what the run was shown, in one transaction, as before.
+- `markTurnRecordsRead` (first step of `recheckRecordsInbox`): a
+  management turn that **completed or parked** marks read what its
+  `choir.Records()` calls showed it. A failed or cancelled turn marks
+  nothing; a crash-closed run is never completed and marks nothing.
+- `scheduleFailedTurnRetry`: after a **failed** management turn that left
+  records unread (and no record arrived during the turn, which wakes at
+  once as before), one durable `inbox_record` wake is scheduled with
+  `not_before` = now + 2 min x 2^(n-1), n the failed turns in a row
+  (reset by a completed turn), for n <= 4 (2, 4, 8, 16 min). Past that the
+  records wait for the next arrival. The counter is in memory; a restart
+  resets it. A crash boot interrupts a pre-boot `inbox_record` wake
+  (`RestartWorkKinds`), so the retry never resumes work after a crash.
+- Research, Texture and engineering are unchanged: their records carry
+  rounds, which a failed run's round closure already gives a fate.
+
+On the paper's 08:22 burst this would have left the cursor at 507 after
+a8081845 failed, scheduled a wake for 08:28:29, and shown records 508-514
+to the next turn.
+
+Tests: `TestManagementRecordsSurviveFailedTurn` (a real management run
+through the tool loop: a cell reads a captures record, then the scripted
+provider fails; before the fix the cursor was 1 after the failed turn, the
+live failure) and `TestManagementFailedTurnRetryIsBoundedAndBacksOff`
+(backoff, bound, reset, crash, research unaffected), in
+`internal/agentcore/records_failed_turn_test.go`;
+`TestCellMarksReadOnlyRecordsItShowed` and
+`TestLegacySupportPairsRecordIsShownClosedAndJudged` updated to the new
+mark (read at the turn's end, not at a read-only cell).
+
+The remaining error field above is unchanged by this fix.
