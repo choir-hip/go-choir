@@ -225,7 +225,7 @@ one (`docs/reports/autopaper-deepen-important-stories-2026-10-14.md`).
 **Reputation has been designed, but there is nothing to settle.** Protocol
 §10 and the scoring design say a source's record is "a view over settled
 claims with denominators"
-(`docs/precommitment-protocol-design-2026-10-11.md` §10;
+(`docs/precommitment-records.md` §10;
 `docs/definitions/choir-ledger-metamission-2026-10-13.md` must_preserve).
 No claim object exists to settle. The app design's R5 warns that "most
 news sentences are attributions, not predictions"
@@ -316,7 +316,7 @@ that a story can pin.
 ### 4.1 Claim is the precommitment
 
 A claim has the precommitment memo's required fields
-(`docs/Precommitment Records — Engineering Memo.md`, "Record schema"):
+(`docs/precommitment-records.md`, "Record schema"):
 
 | Memo field | Claim |
 |---|---|
@@ -994,7 +994,7 @@ point: an actor can do good and say good and still be misaligned, if
 what it does differs from what it says. The box score never folds say–do
 into a "goodness" or trust number. It sits beside whatever normative
 judgment the reader brings. This is the procedural surface of the five
-(`docs/prospective-self-alignment-2026-10-09.md` §4), kept separate from
+(`docs/precommitment-records.md` §4), kept separate from
 the normative one.
 
 ### 7.2 How the graph computes it
@@ -1639,7 +1639,7 @@ complete.
   - reading weights are frozen at T_commit by a blind judge;
   - "unscorable" applies to public actors only, while Choir's agents keep
     P4's "unresolvable counts as wrong". Verified against
-    `docs/precommitment-predictions-and-scoring-design-2026-10-11.md`
+    `docs/precommitment-records.md`
     §4.5;
   - the hedging argument is corrected: a hedge is a safe harbour, so it
     is countered by showing the hedge share, resolution and sharpness

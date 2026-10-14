@@ -20,7 +20,7 @@ Inputs: [Autopaper software design](autopaper-sw-design-2026-10-09.md)
 [W1](definitions/choir-autopaper-w1-content-in-the-graph-2026-10-11.md)
 (complete), [W2](definitions/choir-autopaper-w2-living-textures-2026-10-11.md)
 (blocked on the protocol), the
-[precommitment protocol design](precommitment-protocol-design-2026-10-11.md)
+[precommitment protocol design](precommitment-records.md)
 (§3 addressing, §4 predictions, mandatory since the owner's answer of
 2026-10-11, §10 one schema), and
 [P2d](definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md)

@@ -8,7 +8,7 @@ Gate 2 (tomorrow).
 
 Inputs:
 - *Choir — Canonical Project Context* (2026-10-08);
-- [Prospective Self-Alignment](prospective-self-alignment-2026-10-09.md);
+- [Prospective Self-Alignment](precommitment-records.md);
 - [Store B inventory](evidence/world-wire-store-b-inventory-2026-10-09.md);
 - [precommitment records memo](<Precommitment Records — Engineering Memo.md>).
 

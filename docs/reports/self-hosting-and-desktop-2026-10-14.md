@@ -178,7 +178,7 @@ carries no provider credentials and no signing keys.
   - auth ed25519 key
   - SearXNG secret
   - the corpusd platform signing key, which signs every receipt (see
-    [precommitment-signing-and-computer-keys-2026-10-11.md](../precommitment-signing-and-computer-keys-2026-10-11.md))
+    [precommitment-signing-and-computer-keys-2026-10-11.md](../precommitment-records.md))
   - the receipt signer's key (`receiptsigner.LoadOrCreateSigningKey`)
 - **Operator credentials:** `CHOIR_KEY_ESCROW_OPERATORS`. If absent, the
   unwrap gate stays closed with a 503.
@@ -555,7 +555,7 @@ concurrency model of the platform store. Treat it as a later step.
 
 ### 3.8 Identity and federation
 
-From [precommitment-signing-and-computer-keys-2026-10-11.md](../precommitment-signing-and-computer-keys-2026-10-11.md):
+From [precommitment-signing-and-computer-keys-2026-10-11.md](../precommitment-records.md):
 
 - One host-held Ed25519 **platform key** in corpusd signs every
   event-head receipt, checkpoint and credential envelope. Its public half

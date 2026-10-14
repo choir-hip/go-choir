@@ -24,20 +24,12 @@ documents:
     witnesses: [docs/signal-is-sparse-not-the-learner-2026-08-01.md, docs/choir-vision.md]
     refresh_triggers: [product_vision_change, doctrine_change]
 
-  - path: docs/Precommitment Records Theory and Implications.md
-    claim_scope: current
-    is_root: [entry]
-    is_evidence: false
-    annotations: {doc_role: mechanism_theory, authority: support, lifecycle: living}
-    witnesses: [docs/Precommitment Records Theory and Implications.md, docs/Precommitment Records — Engineering Memo.md, docs/choir-vision.md]
-    refresh_triggers: [product_vision_change, doctrine_change]
-
-  - path: docs/Precommitment Records — Engineering Memo.md
+  - path: docs/precommitment-records.md
     claim_scope: current
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: mechanism_spec, authority: support, lifecycle: living}
-    witnesses: [docs/Precommitment Records — Engineering Memo.md, docs/Precommitment Records Theory and Implications.md, docs/world-wire-mission-stack-2026-09-22.md]
+    witnesses: [docs/precommitment-records.md, docs/choir-vision.md, docs/choir-doctrine.md, docs/re-engineering-decisions-2026-10-12.md]
     refresh_triggers: [product_vision_change, doctrine_change]
 
   - path: docs/world-wire-mission-stack-2026-09-22.md
@@ -149,7 +141,7 @@ documents:
     is_root: []
     is_evidence: true
     annotations: {doc_role: assertion_register_ancestor, authority: historical_ancestor, lifecycle: frozen}
-    witnesses: [docs/conjecture-assertion-ledger-2026-06.md, "docs/Precommitment Records Theory and Implications.md", "docs/Precommitment Records — Engineering Memo.md"]
+    witnesses: [docs/conjecture-assertion-ledger-2026-06.md]
     refresh_triggers: []
 
   - path: docs/heresy-detectors.md
@@ -199,14 +191,6 @@ documents:
     annotations: {doc_role: operating_rationale, authority: support, lifecycle: living}
     witnesses: [docs/memo-problem-documentation-first.md, AGENTS.md]
     refresh_triggers: [problem_documentation_policy_change]
-
-  - path: docs/memo-predictive-icrl-delta-2026-09-10.md
-    claim_scope: current
-    is_root: []
-    is_evidence: false
-    annotations: {doc_role: research_delta, authority: support, lifecycle: living}
-    witnesses: [docs/memo-predictive-icrl-delta-2026-09-10.md, docs/choir-vision.md, docs/computer-ontology.md, docs/standing-questions.md]
-    refresh_triggers: [memo_revision, computer_ontology_change]
 
   - path: docs/memo-per-computer-frontend-2026-08-13.md
     claim_scope: current

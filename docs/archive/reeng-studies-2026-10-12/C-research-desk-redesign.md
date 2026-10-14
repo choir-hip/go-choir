@@ -2,8 +2,8 @@
 
 Read-only design research against `main` a401c878. No repo file changed.
 Inputs: the code below, `docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md`,
-`docs/precommitment-protocol-design-2026-10-11.md`,
-`docs/precommitment-predictions-and-scoring-design-2026-10-11.md`,
+`docs/precommitment-records.md`,
+`docs/precommitment-records.md`,
 `docs/archive/texture-directive-inbox-design-2026-10-11.md`. I did not read Node B
 journals: the prior root-cause record already holds the gateway evidence, and
 nothing here depends on new staging traces.
@@ -423,7 +423,7 @@ runtime stop rule exists.
   Ask fills `Hypothesis = question` with an empty distribution
   (`:1111-1124`).
 - The P3 proposal, `CommitmentExpectation` / `ExpectQuestion`
-  (`docs/precommitment-predictions-and-scoring-design-2026-10-11.md` §3.1;
+  (`docs/precommitment-records.md` §3.1;
   protocol design §4 `Expectation{Questions, By, Subject, Resolver}`), points
   the other way. It holds 1 to 4 yes/no count predicates with `p` and a
   deadline `By`: "Mistral's own site confirms Large 4, p=0.55", "≥2 new

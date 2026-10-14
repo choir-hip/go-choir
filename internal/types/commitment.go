@@ -9,7 +9,7 @@ import (
 // commitment ledger. A record is a typed prediction committed before the
 // evidence that resolves it, then scored on a verifiable outcome. The
 // accumulated log is the agent's world model and supervision surface.
-// Source: docs/Precommitment Records — Engineering Memo.md ("Record schema").
+// Source: docs/precommitment-records.md ("Record schema").
 //
 // The record persists as an objectgraph object (kind
 // choir.commitment_record), never a third store. Scalar scores are derived
@@ -252,8 +252,8 @@ type CommitmentRecord struct {
 	RetrievedByIDs []string `json:"retrieved_by_ids,omitempty"`
 
 	// EmitterKind, ComputerID and SubjectRefs are reserved for records that
-	// will be scored across computers (docs/precommitment-protocol-design-2026-10-11.md
-	// §10): who spoke (an agent, the owner, an edition or an outside
+	// will be scored across computers (docs/precommitment-records.md section 4.6):
+	// who spoke (an agent, the owner, an edition or an outside
 	// source), on which computer, and what the record is about. Topic
 	// scopes are derived from SubjectRefs when reputation is queried.
 	EmitterKind CommitmentEmitterKind `json:"emitter_kind,omitempty"`

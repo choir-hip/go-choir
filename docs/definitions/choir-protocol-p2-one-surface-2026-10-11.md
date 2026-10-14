@@ -3,7 +3,7 @@ definition_version: 4
 
 # P2 — one surface. Station of
 # definitions/choir-precommitment-protocol-metamission-2026-10-11.md;
-# design docs/precommitment-protocol-design-2026-10-11.md §2, §3, §7 P2.
+# design docs/precommitment-records.md §2, §3, §7 P2.
 readiness: reviewed
 
 review:
@@ -236,7 +236,7 @@ boundaries:
   mutation_class: red (lifecycle reducer, desk surface, Texture authority)
   authority_sources:
     - owner 2026-10-11 (protocol direction and plan approval)
-    - docs/precommitment-protocol-design-2026-10-11.md
+    - docs/precommitment-records.md
   must_preserve:
     - Texture is the sole writer of a document's revisions
     - a dispatch's record, agent, work item and packet commit with the turn or not at all

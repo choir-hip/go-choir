@@ -1,5 +1,11 @@
 # Desk-RLM Rectification Plan
 
+> **Status note (2026-10-14 prune):** the desk ontology in sections 1-10 is
+> still cited. Sections 11-12 (the R-series mission graph, the 09-29
+> overnight addendum) are a superseded record: the R-series landed and the
+> re-engineering metamission (`definitions/choir-reeng-metamission-2026-10-12.md`)
+> and `ACTIVE.md` replaced the graph. "World wire" below means Autopaper.
+
 **Date:** 2026-09-23 (v3 — adjudicated against a 9-agent consensus review,
 `.agentic-consensus/agentic-consensus-20260923-201519`; D1 and D4 ratified
 by owner same-day). **Revised 2026-09-25** — R2 closed on substrate; a
@@ -13,7 +19,7 @@ executable authority for the mission spine; it governs over §§1–10 where
 they conflict. §§1–10 remain the adjudicated base record.
 **Authority:** inherits `docs/choir-doctrine.md`, `docs/why-texture-2026-06-15.md`,
 `docs/texture-live-supervision-architecture.md`, `AGENTS.md`, and the
-precommitment-records direction (`docs/Precommitment Records — Engineering Memo.md`).
+precommitment-records direction (`docs/precommitment-records.md`).
 **Mutation class:** green (this document; the work it plans is orange/red).
 
 ## 0. Owner direction this plan encodes

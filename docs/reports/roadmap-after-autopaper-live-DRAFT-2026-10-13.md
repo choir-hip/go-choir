@@ -29,10 +29,10 @@ session on 2026-10-13.
 1. **Precommitment records are the throughline** ("the scientific core, the
    theoretical essence ... what turns it from a product to a platform to a
    network with defensibility"). See docs/Precommitment Records — Engineering
-   Memo.md, docs/precommitment-records-theory.md,
-   docs/precommitment-protocol-design-2026-10-11.md,
-   docs/precommitment-predictions-and-scoring-design-2026-10-11.md,
-   docs/precommitment-signing-and-computer-keys-2026-10-11.md. Apply to:
+   Memo.md, docs/precommitment-records.md,
+   docs/precommitment-records.md,
+   docs/precommitment-records.md,
+   docs/precommitment-records.md. Apply to:
    (a) the world's news sources: statistics and analytics of sources;
    entity extraction; attributing claims to sources within captures;
    updating the ledger as events change; (b) our own agents and computers in

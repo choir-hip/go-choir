@@ -3,7 +3,7 @@ definition_version: 4
 
 # P2d — texture addressing. Station of
 # definitions/choir-precommitment-protocol-metamission-2026-10-11.md;
-# design docs/precommitment-protocol-design-2026-10-11.md §3 (any desk may
+# design docs/precommitment-records.md §3 (any desk may
 # address texture:<doc>), §7 P2 and P5. Split from P2 at P2-review2.
 readiness: drafted
 
@@ -237,7 +237,7 @@ value:
   realism_axis: P2d1 gate on staging -> store, controller and turn tests -> fresh test computer with one owner-prompted management Cast -> W2's poll-driven feed (P5)
   mutation_class: red (lifecycle reducer, Texture controller, Texture wake authority)
   authority_sources:
-    - docs/precommitment-protocol-design-2026-10-11.md §3
+    - docs/precommitment-records.md §3
     - owner direction 2026-10-11 (all inter-agent communication through precommitment records)
   must_preserve:
     - only the Texture desk writes a Texture (P2b)

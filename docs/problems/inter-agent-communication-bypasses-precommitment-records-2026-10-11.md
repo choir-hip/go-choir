@@ -12,7 +12,7 @@ self-development reruns and the AI news demos S1d to S1h).
 The Autopaper design (docs/autopaper-sw-design-2026-10-09.md §2): "Records
 addressed to a Texture or a desk are deliveries that wake it. That is the
 whole communication protocol between Textures and desks." The engineering
-memo (docs/Precommitment Records — Engineering Memo.md) requires a
+memo (docs/precommitment-records.md) requires a
 prediction committed before the evidence that resolves it, resolved
 against a verifiable outcome.
 

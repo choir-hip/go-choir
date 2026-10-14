@@ -55,7 +55,7 @@ with them; existing goal files remain valid. The
 mission roadmap from here to World Wire live is
 [docs/world-wire-mission-stack-2026-09-22.md](docs/world-wire-mission-stack-2026-09-22.md);
 the product mechanism is precommitment records
-(`docs/Precommitment Records — Engineering Memo.md`). For multi-agent review
+(`docs/precommitment-records.md`). For multi-agent review
 panels used at definition or phase gates, see
 [skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those on demand.
 

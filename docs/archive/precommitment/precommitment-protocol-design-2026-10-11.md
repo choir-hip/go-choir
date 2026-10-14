@@ -1,16 +1,16 @@
 # One protocol between agents: precommitment records
 
-> **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): §4-5 are revised: a Cast carries hypotheses, open uncertainties and general hypotheses (not count questions with a deadline), and resolution or scoring is done by intelligence (a model, Jev or an RLM), not by runtime counting. Work becomes a fold over records, which absorbs P2d2.
+> **Revised 2026-10-12** ([re-engineering decisions](../../re-engineering-decisions-2026-10-12.md)): §4-5 are revised: a Cast carries hypotheses, open uncertainties and general hypotheses (not count questions with a deadline), and resolution or scoring is done by intelligence (a model, Jev or an RLM), not by runtime counting. Work becomes a fold over records, which absorbs P2d2.
 
 Draft for owner review, 2026-10-11. Owner direction (2026-10-11): "lock
 down the system so that all interagent comms are done through the
 precommitment records protocol. That's the real design ... Gotta bring the
 future forward." Problem record:
-[problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md](problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md).
-Theory: [Prospective Self-Alignment](prospective-self-alignment-2026-10-09.md)
+[problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md](../../problems/inter-agent-communication-bypasses-precommitment-records-2026-10-11.md).
+Theory: [Prospective Self-Alignment](../../precommitment-records.md)
 (working paper, October 9 revision; §2 the record and the loop, §4.1
 procedural fidelity, §7 reputation, §10 implementation status). Mechanism:
-[Precommitment Records — Engineering Memo](Precommitment%20Records%20—%20Engineering%20Memo.md).
+[Precommitment Records — Engineering Memo](../../precommitment-records.md).
 The paper's §10 lists the desk surface for commit, resolve and dispute as
 implemented. The code supports it, but the staging traces in the problem
 record show no desk calling `Precommit` or `Resolve`. This design makes it
@@ -214,12 +214,12 @@ flight drain on the old kinds (consumed, never re-armed). Nothing migrates.
 - Item 1: predictions are mandatory.
 - Item 2: the scorer is not settled; it is to be learned from iteration
   (self, the answering desk, or management, possibly with Jev). Design in
-  docs/precommitment-predictions-and-scoring-design-2026-10-11.md.
+  docs/precommitment-records.md.
 - Item 3: open; the owner asks whether Assign is a needless subsystem
   that can be simplified without changing its essence (review in
   docs/archive/protocol-review-assign-and-engineering-routing-2026-10-11.md).
 - Item 8: the owner trusts the recommendation and asks what blocks real
-  per-computer keys (docs/precommitment-signing-and-computer-keys-2026-10-11.md).
+  per-computer keys (docs/precommitment-records.md).
 - Addressing: management sends records and scores to a Texture desk and
   never modifies a Texture document. Engineering does not address a
   Texture; it goes through management, and management (with Jev) decides

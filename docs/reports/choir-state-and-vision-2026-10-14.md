@@ -170,10 +170,10 @@ what it *is* (`docs/choir-vision.md`, "The One Idea").
 | Four persistent desks | Texture, management, engineering, research as recursive language-model (RLM) desks running Go cells | **Built, verified on staging** | C1 authority cut landed 76ab40fd; C1e B1 engineering on records e9d727a7 (`docs/ACTIVE.md`) |
 | Autopaper (automatic newspaper) | Sources polled 24/7, stories synthesized by desks, published automatically at permalinks | **Built, live on staging since 2026-10-13; quality and synthesis partial** | `docs/evidence/c2-autopaper-live-2026-10-13.json`; live front page at `https://choir.news/api/platform/publications/front`; merge recall 0.174 live vs 1.0 on fixture (`docs/evidence/l2a-after-window-1-2026-10-14.md`) |
 | Supervised self-development | The computer proposes changes to its own code and state in capsules, frozen, verified, approved, released, reversible | **Partly built: one complete probe-driven episode on staging; the gate program not passed** | M11 rerun 13 satisfied all 17 legs on 2026-10-10 (17b97b8fe; `docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json`); since the C1e cutover the engineering drill stops before Freeze because capsules cannot fetch Go modules (`docs/reports/capsule-go-modules-decision-2026-10-14.md`; host module proxy 3c6347e8) |
-| Precommitment records | Typed predictions committed before evidence, then settled and scored | **Partly built**: record type, append-once persistence, desk verbs, derived views exist; nothing settles or scores yet | `internal/types/commitment.go`; `docs/prospective-self-alignment-2026-10-09.md` §10; station L3 is intent |
-| Prospective self-alignment (PSA) | The research theory: procedural fidelity, calibration, materiality, oversight without readable chain of thought | **Theory; experiments H1-H5 not run** | `docs/prospective-self-alignment-2026-10-09.md` §8-10 |
+| Precommitment records | Typed predictions committed before evidence, then settled and scored | **Partly built**: record type, append-once persistence, desk verbs, derived views exist; nothing settles or scores yet | `internal/types/commitment.go`; `docs/precommitment-records.md` §10; station L3 is intent |
+| Prospective self-alignment (PSA) | The research theory: procedural fidelity, calibration, materiality, oversight without readable chain of thought | **Theory; experiments H1-H5 not run** | `docs/precommitment-records.md` §8-10 |
 | Granular reputation | Track records per individual, agent, team, organization, institution, public figure, from settled records | **Designed** (claims, events and entities ontology and box scores, 14 Oct; no code) | `docs/reports/claims-events-entities-ontology-2026-10-14.md` (be8e0dabb, da9de233f); boundary "a source's record is a view over settled claims with denominators, never one reputation number" (`docs/definitions/choir-ledger-metamission-2026-10-13.md`) |
-| Learning economy, multiplayer intelligence | Many computers and people exchanging work, judgments and paid queries, with reputation routing demand | **Vision** | `docs/prospective-self-alignment-2026-10-09.md` §7; seed deck treatment `docs/deck/choir-seed-deck-treatment-2026-10-08.md` |
+| Learning economy, multiplayer intelligence | Many computers and people exchanging work, judgments and paid queries, with reputation routing demand | **Vision** | `docs/precommitment-records.md` §7; seed deck treatment `docs/deck/choir-seed-deck-treatment-2026-10-08.md` |
 | App agents ("every application as an app agent") | Each app is a window plus its own desk, a verb registry, an op log, versioned objects | **Designed (research)**; app windows exist without desks | `docs/research/puter-everything-2026-10-14/README.md`; station LP (S7 app packages) pending |
 | Contributions and op-eds | Readers bring sources, write op-eds citing pinned story versions, suggest edits | **Intent (station LC)**; needs accounts (LA) | `docs/reports/autopaper-ranking-and-contributions-intent-2026-10-14.md` |
 | Front-page ranking and personalization | Importance, not churn; learned by scored predictions; personal re-ranking on the reader's computer | **First slices live (LF0 importance, LF1 sections); rest intent** | Commit 1f84fa908; front API carries `importance` and `section` |
@@ -297,7 +297,7 @@ updated), and *alignment* (procedural fidelity: do actions and consequences
 match the commitments made beforehand).
 
 **Prospective self-alignment (PSA)** is the research theory around the
-records (`docs/prospective-self-alignment-2026-10-09.md`). Its loop is
+records (`docs/precommitment-records.md`). Its loop is
 commit, authorize, act, observe, resolve, score, revise, retrieve. It
 assesses five surfaces: epistemic (calibration), material (did predictions
 cover the consequences that matter), instrumental (did the action cause the
@@ -326,7 +326,7 @@ hypotheses committed before their evidence, half settled.
 
 **The idea.** Scored commitment histories become credentials: "which
 specialist has a reliable record on comparable problems at this level of
-difficulty?" (`docs/prospective-self-alignment-2026-10-09.md` §7). The brief
+difficulty?" (`docs/precommitment-records.md` §7). The brief
 extends this to individuals, agents, teams, organizations, institutions and
 public figures.
 
@@ -1860,7 +1860,7 @@ rather than a leak:
    sets what its answer is worth. The PSA paper's hypothesis H4 is exactly
    this: a temporally prior, domain-specific record predicts later
    performance better than popularity or ratings
-   (`docs/prospective-self-alignment-2026-10-09.md` §8). It is untested.
+   (`docs/precommitment-records.md` §8). It is untested.
 3. **Authority and boundaries.** Answers flow between computers only by
    publication or an authorized API call, never by direct access to
    another computer's data (`CLAUDE.md`, "Safety": results return to
@@ -2096,7 +2096,7 @@ each group.
 | Doctrine | `docs/choir-doctrine.md`, `docs/agent-product-doctrine.md` |
 | Computer ontology and store taxonomy | `docs/computer-ontology.md` |
 | Foundational argument | `docs/signal-is-sparse-not-the-learner-2026-08-01.md` |
-| Precommitment records | `docs/Precommitment Records — Engineering Memo.md`, `docs/prospective-self-alignment-2026-10-09.md` |
+| Precommitment records | `docs/precommitment-records.md`, `docs/precommitment-records.md` |
 | Autopaper design | `docs/autopaper-sw-design-2026-10-09.md` |
 | Current work view | `docs/ACTIVE.md`, `docs/mission-graph.yaml` |
 | Active goal | `docs/definitions/choir-ledger-metamission-2026-10-13.md` |

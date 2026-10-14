@@ -3,7 +3,7 @@ definition_version: 4
 
 # P1 — record-first controls. Station of
 # definitions/choir-precommitment-protocol-metamission-2026-10-11.md;
-# design docs/precommitment-protocol-design-2026-10-11.md §7 P1 and §10.
+# design docs/precommitment-records.md §7 P1 and §10.
 readiness: reviewed
 
 review:
@@ -126,7 +126,7 @@ boundaries:
   mutation_class: red (lifecycle reducer, evidence ledger)
   authority_sources:
     - owner 2026-10-11 (protocol direction and plan approval)
-    - docs/precommitment-protocol-design-2026-10-11.md
+    - docs/precommitment-records.md
   must_preserve:
     - a control commits its record, packet and work item together or not at all
     - a replayed command mints nothing new
@@ -160,7 +160,7 @@ now:
       match
     kind: architecture
     status: "settled for P1 (design §2 — Cast opens or continues work)"
-    evidence_ref: docs/precommitment-protocol-design-2026-10-11.md §2
+    evidence_ref: docs/precommitment-records.md §2
   belief:
     believed_state: every control since the deploy minted its cast record (one control, one record, all checks pass)
     main_uncertainty: the sample is one control, because research was down on the ChatGPT limit

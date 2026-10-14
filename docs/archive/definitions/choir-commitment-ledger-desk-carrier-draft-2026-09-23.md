@@ -131,7 +131,7 @@ boundaries:
   mutation_class: red
   authority_sources:
     - docs/desk-rlm-rectification-plan-2026-09-23.md
-    - docs/Precommitment Records — Engineering Memo.md
+    - docs/precommitment-records.md
     - docs/archive/choir-event-driven-rlm-ontology-minimal-2026-09-15.md
     - AGENTS.md
   must_preserve:

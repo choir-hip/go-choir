@@ -119,13 +119,13 @@ Then the smaller ones:
 ## Names and receipts
 
 - Staging: b172895b (CI 38170958509 green). Docs pushed through ba32e0cb.
-- Protocol goal files: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md; docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md (receipts P2a-deployed, P2c-deployed; landed); docs/definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md (P2d1 landed; P2d2 held; receipts P2d-review1 to P2d-review3); docs/definitions/choir-precommitment-protocol-metamission-2026-10-11.md; design docs/precommitment-protocol-design-2026-10-11.md (owner answers recorded in section 9).
+- Protocol goal files: docs/definitions/choir-protocol-p1-record-first-controls-2026-10-11.md; docs/definitions/choir-protocol-p2-one-surface-2026-10-11.md (receipts P2a-deployed, P2c-deployed; landed); docs/definitions/choir-protocol-p2d-texture-addressing-2026-10-11.md (P2d1 landed; P2d2 held; receipts P2d-review1 to P2d-review3); docs/definitions/choir-precommitment-protocol-metamission-2026-10-11.md; design docs/precommitment-records.md (owner answers recorded in section 9).
 - Research and design documents from tonight:
   - docs/problems/research-desk-structural-flaw-root-cause-2026-10-11.md
   - docs/archive/search-plane-design-fast-deep-broad-2026-10-11.md
   - docs/autopaper-app-design-2026-10-11.md
-  - docs/precommitment-predictions-and-scoring-design-2026-10-11.md
-  - docs/precommitment-signing-and-computer-keys-2026-10-11.md
+  - docs/precommitment-records.md
+  - docs/precommitment-records.md
   - docs/archive/protocol-review-assign-and-engineering-routing-2026-10-11.md
   - docs/problems/idle-test-computers-keep-old-builds-root-cause-2026-10-11.md
 - Other problem records: docs/problems/guest-search-timeout-equals-gateway-provider-timeout-2026-10-11.md (corrected); docs/problems/chatgpt-usage-limit-stops-research-and-management-2026-10-11.md; docs/problems/texture-raced-activation-refused-first-turn-2026-10-11.md.

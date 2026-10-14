@@ -6,7 +6,7 @@ until a throughline goal file authors them. Not legal advice (§5).
 
 Inherits: [claims, events and entities](../reports/claims-events-entities-ontology-2026-10-14.md)
 (the ontology, settlement by modality, five uncertainties, box score,
-say–do), the [precommitment memo](../Precommitment%20Records%20—%20Engineering%20Memo.md)
+say–do), the [precommitment memo](../precommitment-records.md)
 (prequential discipline, the hindsight problem), and
 [media and rights](autopaper-media-and-rights-2026-10-14/README.md).
 `docs/reports/object-graph-retrieval-research-2026-10-14.md` is not on

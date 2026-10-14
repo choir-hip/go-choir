@@ -1,7 +1,7 @@
 # Signing precommitment records, and what blocks real computer keys
 
 Research note, 2026-10-11. Answers the owner's question on
-[precommitment-protocol-design-2026-10-11.md](precommitment-protocol-design-2026-10-11.md)
+[precommitment-protocol-design-2026-10-11.md](../../precommitment-records.md)
 §9 item 8: "Signing, I trust your judgment. But what blocks 'real computer
 keys'?" Read-only investigation of code at `main@4b114e61` (staging at
 `b172895b`). Mutation class of anything recommended here: red (signer

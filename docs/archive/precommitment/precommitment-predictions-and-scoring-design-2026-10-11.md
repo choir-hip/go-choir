@@ -1,15 +1,15 @@
 # Predictions required and scoring: design for protocol stations P3 and P4
 
-> **Revised 2026-10-12** ([re-engineering decisions](re-engineering-decisions-2026-10-12.md)): Runtime scoring is withdrawn: scoring needs intelligence (Jev, a model or an RLM, often from several perspectives). The prediction shape is replaced by hypothesis-shaped Casts.
+> **Revised 2026-10-12** ([re-engineering decisions](../../re-engineering-decisions-2026-10-12.md)): Runtime scoring is withdrawn: scoring needs intelligence (Jev, a model or an RLM, often from several perspectives). The prediction shape is replaced by hypothesis-shaped Casts.
 
 Draft for owner review, 2026-10-11. Stations P3 (predictions required) and
 P4 (scoring) of
-[definitions/choir-precommitment-protocol-metamission-2026-10-11.md](definitions/choir-precommitment-protocol-metamission-2026-10-11.md).
+[definitions/choir-precommitment-protocol-metamission-2026-10-11.md](../../definitions/choir-precommitment-protocol-metamission-2026-10-11.md).
 Parent design:
-[precommitment-protocol-design-2026-10-11.md](precommitment-protocol-design-2026-10-11.md)
+[precommitment-protocol-design-2026-10-11.md](../../precommitment-records.md)
 (§4 the prediction, §5 resolution and scoring, §7 stations, §9 decisions,
 §10 one schema). Mechanism:
-[Precommitment Records — Engineering Memo](Precommitment%20Records%20—%20Engineering%20Memo.md).
+[Precommitment Records — Engineering Memo](../../precommitment-records.md).
 Mutation class for both stations: red (lifecycle reducer, desk surface,
 evidence ledger, scoring).
 
