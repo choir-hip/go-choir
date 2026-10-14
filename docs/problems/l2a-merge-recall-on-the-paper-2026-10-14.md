@@ -16,6 +16,36 @@ joined per capture. Each of the 46 judge pairs was mapped back to its two
 capture ids. Raw files are outside the repo (session scratchpad,
 `l2a/`). Nothing on the paper was changed.
 
+## The measure that matters: articles per source
+
+Owner, 2026-10-14 about 14:15 UTC: "we should be able to scale up the
+sources while only scaling up article production significantly
+sublinearly. More sources means only marginally more articles.
+Fundamentally, the ratio of sources to articles is a crude proxy of
+quality." The paper went from 14 to 20 schedules at 14:15 UTC, with 8
+more after the next deploy. So the target is: captures per new story and
+sources per story rise, and new stories per hour grow far slower than
+captures per hour.
+
+Baseline from this window (12 schedules delivered captures; intake
+counts only, not research's citations):
+
+| measure | 06:51-12:51 UTC |
+|---|---|
+| captures per hour | 70.8 (425) |
+| new stories opened per hour | 30.2 (181) |
+| captures per new story | 2.35 |
+| distinct pages per new story | 1.65 (298 pages; 146 captures re-capture a page) |
+| stories that received a window capture | 175 |
+| intake outlets per story | 1.09 (mean) |
+| stories with 2+ intake outlets | 7.4% (5.7% of the stories opened in the window) |
+
+Read plainly: almost every distinct page became its own story. One new
+story per 1.65 pages is near-linear production. (Published versions
+cite more outlets than this, because research widens each story from
+the web; baseline A measured a median of about 6. That is research per
+story, not intake merging.)
+
 ## Finding 1: the scorer read only the newest 50 documents
 
 `scripts/l2a_window_pairs.py` finds each capture's story by reading the
@@ -206,8 +236,22 @@ mechanism under test.
    and refusing a Cast whose capture id is empty.
 
 Then a second 6-hour window on the paper with the fixed scorer, read
-against this one: label coverage first (must be near 100%), then merge
-recall, false merges and the override rate.
+against this one, in this order:
+1. label coverage (labelled / new on the schedules route) near 100%, and
+   no "Jev bearer is not authorized" lines;
+2. the production ratios above: captures per new story and intake outlets
+   per story rise, new stories per hour grow far slower than captures per
+   hour (the paper now has 20 schedules, so captures per hour will rise;
+   new stories per hour should barely move);
+3. merge recall and the false merges read by hand (a rise in captures
+   per story bought with topic-level merges is the failure the owner's
+   ratio cannot see by itself);
+4. the override rate (management disagreeing with Jev).
+
+The labels alone may not move the ratio far: management still decides,
+and with S2a its tasks do. If labels arrive and new stories per hour
+stays near pages per hour, the next lever is the one already ruled (O3):
+Jev settles high-confidence feeds without a model call.
 
 ## Heresy delta
 
