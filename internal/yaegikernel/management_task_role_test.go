@@ -2,6 +2,8 @@ package yaegikernel
 
 import (
 	"crypto/rand"
+	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -150,6 +152,51 @@ func TestUnknownDeskRoleFailsClosed(t *testing.T) {
 		}
 		if normalizeDeskRole(desk) != desk {
 			t.Errorf("normalizeDeskRole(%q) = %q", desk, normalizeDeskRole(desk))
+		}
+	}
+}
+
+// The task's prompt teaches only what the task can call (prompt parity for
+// the new role): every choir.X in its overlay is a task export, and the
+// parent's verbs are not taught to it.
+func TestManagementTaskPromptTeachesOnlyTaskVerbs(t *testing.T) {
+	raw, err := os.ReadFile("../runtimeprompts/overlays/rlm_management_task_runtime.yaml")
+	if err != nil {
+		t.Fatalf("task overlay: %v", err)
+	}
+	broker, issuer := choirRoleFixture(t)
+	scope, err := NewChoirScope(broker, issuer, "computer-choir", "activation-task", 1, SessionRoleManagementTask, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exports := scope.ChoirExports()["choir/choir"]
+	taught := map[string]bool{}
+	for _, m := range regexp.MustCompile(`choir\.([A-Z][A-Za-z0-9_]*)`).FindAllStringSubmatch(string(raw), -1) {
+		taught[m[1]] = true
+		if _, ok := exports[m[1]]; !ok {
+			t.Errorf("the task overlay teaches choir.%s, which a task cannot call", m[1])
+		}
+	}
+	for _, verb := range []string{"Done", "Feed", "Decline", "Stories", "Records", "Cast"} {
+		if !taught[verb] {
+			t.Errorf("the task overlay does not teach choir.%s", verb)
+		}
+	}
+	// The parent's prompt teaches Delegate and CancelTask, which it exports.
+	parent, err := NewChoirScope(broker, issuer, "computer-choir", "activation-parent", 1, "management", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	overlay, err := os.ReadFile("../runtimeprompts/overlays/rlm_management_runtime.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, verb := range []string{"Delegate", "CancelTask"} {
+		if !strings.Contains(string(overlay), "choir."+verb+"(") {
+			t.Errorf("management's overlay does not teach choir.%s", verb)
+		}
+		if _, ok := parent.ChoirExports()["choir/choir"][verb]; !ok {
+			t.Errorf("management does not export choir.%s", verb)
 		}
 	}
 }
