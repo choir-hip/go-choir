@@ -68,3 +68,20 @@ Pick one:
 The self-hosting report also asks for a configurable base, so that guest
 subnets do not collide with LANs and VPNs on desktops and clouds. Any
 fix should derive the deny from the same constants.
+
+## Live check on Node B (lead, 2026-10-14 ~15:55 UTC, read-only)
+
+- Three guest taps exist (vm-dhdbzl4tzqi3, vm-vh3spxieztky,
+  vm-lackej5pmie2) with host addresses 10.200.112.1/30, 10.200.113.1/30
+  and 10.200.114.1/30. Each has its two DROP rules (destination
+  10.200.0.0/16; source other than its own guest) ahead of its ACCEPT
+  rules, so **today's guests are isolated**: all live addresses are inside
+  10.200.0.0/16. The gap is latent; it opens when an allocation reaches
+  10.201.0.0 or above.
+- Separately: FORWARD holds 122 stale ACCEPT rules for interfaces of an
+  older naming scheme (`vm-vm-<hash>-tap`), none of which exists now. They
+  match nothing today, but rules for vanished taps are never removed —
+  a hygiene leak to fix with the deny-range change (remove a tap's rules
+  when the tap is torn down; sweep orphans at vmctl start).
+- The FORWARD policy is ACCEPT, so isolation rests entirely on per-tap
+  rules.
