@@ -189,6 +189,20 @@ assert_contains "$tooling_scripts_output" "scripts/mail-resend-setup -> ignored 
 assert_contains "$tooling_scripts_output" "scripts/m11_selfdev_episode_probe.mjs -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
 assert_not_contains "$tooling_scripts_output" "unknown deployed path"
 
+# Operator harnesses and repo-served fixtures ship nowhere. They fell to the
+# conservative host+guest case and re-deployed on every push
+# (docs/problems/deploy-takes-staging-down-during-gateway-drain-2026-10-14.md).
+harness_output="$(
+  run_classifier \
+    "scripts/l2a_paper_window.py" \
+    "testdata/fixtures/l2a-multilingual-2026-10-14.xml" \
+    "docs/reports/some-report.md"
+)"
+assert_contains "$harness_output" "deploy_needed=false"
+assert_contains "$harness_output" "scripts/l2a_paper_window.py -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
+assert_contains "$harness_output" "testdata/fixtures/l2a-multilingual-2026-10-14.xml -> ignored (docs/workflow/test artifact)"
+assert_not_contains "$harness_output" "unknown deployed path"
+
 guest_signer_output="$(run_classifier "scripts/guest-signer-state-migrate")"
 assert_contains "$guest_signer_output" "deploy_needed=true"
 assert_contains "$guest_signer_output" "deploy_host_os=true"

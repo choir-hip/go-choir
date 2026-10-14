@@ -137,11 +137,11 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
-    scripts/check-*.sh|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs)
+    scripts/check-*.sh|scripts/m3_*|scripts/mail-*|scripts/*_probe.mjs|scripts/*.py)
       add_explanation "$path -> ignored (CI/local/operator tooling; not deployed to host or guest closures)"
       continue
       ;;
-    docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*)
+    docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*|testdata/*)
       add_explanation "$path -> ignored (docs/workflow/test artifact)"
       continue
       ;;
