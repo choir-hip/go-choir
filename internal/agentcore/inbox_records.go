@@ -1158,7 +1158,10 @@ func (rt *Runtime) closeRoundsOfEndedRun(ctx context.Context, rec *types.RunReco
 	if active, found, err := rt.activeRunByAgent(ctx, rec.OwnerID, inbox); err != nil || (found && active.RunID != rec.RunID) {
 		return
 	}
-	rounds, err := rt.store.OpenRounds(ctx, rec.OwnerID, rec.ComputerID, inbox)
+	// The open rounds addressed to this desk, read from the conversation
+	// heads: folding every record of the inbox at each run end was 44% of a
+	// busy computer's CPU (guest-cpu-is-unindexed-store-scans-2026-10-14).
+	rounds, err := rt.store.OpenRoundsAddressedTo(ctx, rec.OwnerID, rec.ComputerID, inbox)
 	if err != nil {
 		log.Printf("runtime: round closure after %s: %v", rec.RunID, err)
 		return

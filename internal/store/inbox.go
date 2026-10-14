@@ -902,6 +902,70 @@ func (s *Store) OpenRounds(ctx context.Context, ownerID, computerID, inbox strin
 	return open, nil
 }
 
+// OpenRoundsAddressedTo returns the open rounds whose recipient is inbox,
+// sorted by conversation id: OpenRounds filtered to RecipientInbox == inbox,
+// read from the conversation heads instead of folded from records.
+//
+// It is the run-end check's read (closeRoundsOfEndedRun). OpenRounds folds
+// every conversation the inbox ever joined from all of its records, so its
+// cost grew with the computer's history and ran at every desk run's end
+// (44% of the paper's CPU; docs/problems/guest-cpu-is-unindexed-store-
+// scans-2026-10-14.md). A conversation head is written by planInboxRecords
+// in the same compare-and-set batch as every record that changes it, and it
+// is what stepConversation validates a closure against, so the head is the
+// authority a closure commits under. VerifyInboxHeads checks the heads
+// against the fold. This read costs one header row per conversation of the
+// computer and one primary-key read per conversation of the inbox.
+func (s *Store) OpenRoundsAddressedTo(ctx context.Context, ownerID, computerID, inbox string) ([]types.ConversationHead, error) {
+	ownerID, computerID, inbox = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(inbox)
+	graph := s.ogReadStore
+	if graph == nil {
+		graph = s.ogStore
+	}
+	if graph == nil {
+		return nil, fmt.Errorf("open rounds: object graph not initialized")
+	}
+	refs, err := graph.ListAllObjectRefsByKindOwner(ctx, string(ogKindConversationHead), ownerID)
+	if err != nil {
+		return nil, err
+	}
+	var open []types.ConversationHead
+	for _, ref := range refs {
+		if ref.Tombstone || ref.ComputerID != computerID {
+			continue
+		}
+		// A conversation id is "conv:<a>|<b>" with a < b (InboxConversationID),
+		// so a conversation of inbox starts "conv:<inbox>|" or ends "|<inbox>".
+		// Metadata that does not name it is read whole rather than skipped.
+		var meta struct {
+			ConversationID string `json:"conversation_id"`
+		}
+		if json.Unmarshal(ref.Metadata, &meta) == nil && meta.ConversationID != "" &&
+			!strings.HasPrefix(meta.ConversationID, "conv:"+inbox+"|") && !strings.HasSuffix(meta.ConversationID, "|"+inbox) {
+			continue
+		}
+		obj, err := graph.GetObject(ctx, ref.CanonicalID)
+		if errors.Is(err, objectgraph.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if obj.Tombstone {
+			continue
+		}
+		head, err := decodeLifecycleObject[types.ConversationHead](obj)
+		if err != nil {
+			return nil, fmt.Errorf("conversation head decode %s: %w", obj.CanonicalID, err)
+		}
+		if head.Open && head.RecipientInbox == inbox {
+			open = append(open, head)
+		}
+	}
+	sort.Slice(open, func(i, j int) bool { return open[i].ConversationID < open[j].ConversationID })
+	return open, nil
+}
+
 // InboxFold is the work state rebuilt from records alone: each inbox's
 // head, each conversation's head, and any record that breaks the
 // sequence (a gap or a duplicate) or its derived conversation id.
