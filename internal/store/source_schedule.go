@@ -38,9 +38,12 @@ type SourcePollUsage struct {
 	New         int       `json:"new"`
 	Repeated    int       `json:"repeated"`
 	Skipped     int       `json:"skipped,omitempty"`
-	PollMS      int64     `json:"poll_ms"`
-	TotalMS     int64     `json:"total_ms"`
-	Error       string    `json:"error,omitempty"`
+	// Deferred counts items the poll left for the next one once it reached
+	// its limit (L2a A5, defect 1).
+	Deferred int    `json:"deferred,omitempty"`
+	PollMS   int64  `json:"poll_ms"`
+	TotalMS  int64  `json:"total_ms"`
+	Error    string `json:"error,omitempty"`
 }
 
 // SourcePollTotals are a schedule's running totals since it was created.

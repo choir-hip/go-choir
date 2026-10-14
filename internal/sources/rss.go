@@ -19,6 +19,17 @@ import (
 type RSSPoller struct {
 	Client    *http.Client
 	UserAgent string
+	// LazyReaderImport leaves each item's reader snapshot to the caller's
+	// EnrichItem, so a poll that writes only some of a feed's items reads
+	// only those articles (L2a A5, defect 1).
+	LazyReaderImport bool
+}
+
+// EnrichItem replaces a feed item's summary body with its article's reader
+// snapshot when the source's policy allows it. A poller with
+// LazyReaderImport leaves this to the caller.
+func (p *RSSPoller) EnrichItem(ctx context.Context, source *Source, item *Item) {
+	enrichItemWithReaderSnapshot(ctx, p.Client, p.UserAgent, source, item)
 }
 
 func NewRSSPoller(userAgent string) *RSSPoller {
@@ -88,6 +99,9 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 		return PollResult{Fetch: fetch}, fmt.Errorf("failed to parse feed: %w", err)
 	}
 
+	// maxItems bounds the items parsed from one response. poll_source sets it
+	// to its hard cap and applies its per-poll limit to new captures after
+	// the repeat check (L2a A5, defect 1).
 	maxItems := source.EffectiveMaxItemsPerPoll(100)
 	items := make([]Item, 0, minInt(len(feed.Items), maxItems))
 	for _, feedItem := range feed.Items {
@@ -120,7 +134,9 @@ func (p *RSSPoller) Poll(ctx context.Context, source *Source) (PollResult, error
 			EvidenceLevel: "source_feed",
 		}
 		item.ContentHash = ContentHash(item.Title, item.Body, item.CanonicalURL)
-		enrichItemWithReaderSnapshot(ctx, p.Client, p.UserAgent, source, &item)
+		if !p.LazyReaderImport {
+			enrichItemWithReaderSnapshot(ctx, p.Client, p.UserAgent, source, &item)
+		}
 		items = append(items, item)
 	}
 	fetch = FinishFetch(fetch, resp.StatusCode, body, nil)

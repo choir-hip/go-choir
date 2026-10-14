@@ -162,7 +162,7 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		usage = store.SourcePollUsage{
 			At: started, Status: report.Status, StatusCode: report.StatusCode, Fetched: report.Fetched,
 			NotModified: report.NotModified, ItemBytes: report.ItemBytes, New: report.New,
-			Repeated: report.Repeated, Skipped: report.Skipped, PollMS: report.PollMS,
+			Repeated: report.Repeated, Skipped: report.Skipped, Deferred: report.Deferred, PollMS: report.PollMS,
 			TotalMS: report.TotalMS, Error: report.Error,
 		}
 		if pollErr != nil {
