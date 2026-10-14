@@ -165,12 +165,23 @@ now:
     next_observation: vmctl list shows warmness_class test for example.com-owned computers after 6c6bc1aa deploys
   blocker_or_risk: lever 7 needs the per-token prices of deepseek-v4.1-flash, gpt-6-luna and longcat-2.5-preview-free from the owner or the provider; lever 6 changes every desk's cell contract
   next_action: >-
-    After procmem deploys, read the paper computer's per-process split
-    (main process, desk workers, page cache). Lever 6 deploys after L2a
-    and B1. After the overnight deploys land:
-    the source sweep, then the oversubscription probe. Candidate levers
-    to evaluate there: KSM page merging across identical guests, the
-    balloon, and the per-session yaegi footprint.
+    Owner 2026-10-14: SA (agent density) and S3 (fast resume) join this
+    station as one cost track; SP is investigated, not built
+    (docs/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md). Lever 6
+    deploys after B1. Then, in order: (1) a host sampler on Node B (per
+    guest host memory and CPU from the Firecracker PIDs, state-dir bytes,
+    procmem for active guests, the /api/costs delta, the pressure sample,
+    to JSONL) and prices in the cost record once the owner sends them;
+    (2) a balloon / free-page-reporting probe on a minted test computer
+    (the multiplier on every other memory lever: without it freed guest
+    memory never returns to the host); (3) a desk-worker memory budget
+    replacing deskSessionMaxIdle = 12 (an idle cache, not a concurrency
+    limit) plus an admission budget for busy workers, GOMEMLIMIT and Dolt
+    cache bounds, sized from procmem on the paper computer; (4) automatic
+    store compaction; (5) the engine lock after a contention measurement;
+    (6) S3 snapshots; (7) the store split. The source sweep adds
+    arrival-to-disposition wait and management busy fraction at each N,
+    for the multi-computer question (residual, owner 10-14/15).
 
 receipts:
   - id: LR-lever-2

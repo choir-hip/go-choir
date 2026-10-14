@@ -126,8 +126,15 @@ metamission:
         Resource efficiency and model cost (owner 2026-10-13/14): RAM,
         storage, CPU and tokens per task; agents per computer; spend
         tracked, never capped. Levers 1-2 landed; lever 6 (cell output out
-        of the transcript) next; then the balloon probe, store compaction,
-        and the deferred SA, S3 and SP0 work.
+        of the transcript) next. Owner 2026-10-14: SA and S3 are
+        accelerated into this cost track; SP stays deferred for building
+        and is investigated for the owner
+        (docs/reports/cost-track-sa-s3-sp-investigation-2026-10-14.md).
+        Order: host sampler and pricing; balloon / free-page-reporting
+        probe; desk-worker memory budget, GOMEMLIMIT and Dolt cache bounds;
+        automatic store compaction; engine lock; S3 snapshots; store split.
+        Residual for 10-14/15: Autopaper across several computers on one
+        host.
     - id: L3
       path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
       readiness: intent

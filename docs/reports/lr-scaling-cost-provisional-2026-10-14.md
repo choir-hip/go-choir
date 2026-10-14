@@ -31,8 +31,11 @@ near zero, but the report must state the price at list rates.
 - 5.6 GiB host RSS for the Firecracker process.
 - The guest's main process: Sys 1.46 GB, HeapInuse 1.05 GB. 77% of the
   sampled heap is under the event appender, mostly Dolt buffer pools.
-- About 4 GiB lies outside the main heap: yaegi desk-session workers (up
-  to 12 per computer, kept 30 minutes idle), other guest processes, and
+- About 4 GiB lies outside the main heap: yaegi desk-session workers
+  (at most 12 kept idle, each for at most 30 minutes; busy workers are
+  not counted, so the live count can exceed 12; see
+  [the cost-track investigation](cost-track-sa-s3-sp-investigation-2026-10-14.md)),
+  other guest processes, and
   the guest page cache from reading the store. With no balloon, the host
   never gets these pages back while the guest runs.
 - For comparison: small test computers hold 1.2 to 1.3 GiB, and the

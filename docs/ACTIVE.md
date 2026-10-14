@@ -17,6 +17,19 @@ Mission order: L2a; C1e B1; LR lever 6; L1 (schedules survive crashes,
 harness, L1b); C1e B2-B5; L2b; LR memory levers; sources; L3-L5. Levers 1
 and 2 and L1b-0 are live at 6c6bc1aa.
 
+**Cost track (owner 2026-10-14):** the deferred SA (agent density) and S3
+(fast resume) stations are accelerated into LR's cost track; SP
+(production infrastructure) stays deferred for building, investigated for
+the owner. Investigation and order:
+[cost-track-sa-s3-sp-investigation-2026-10-14.md](reports/cost-track-sa-s3-sp-investigation-2026-10-14.md).
+Named residual for 10-14/15: when Autopaper should span several computers
+on one host (starting analysis in that report). Waiting on the owner:
+model prices, SP0's host, recovery targets, and confirmation that the
+escrow custodian key and platform signing seed have an offline copy.
+Queued with B1's deploy: the logged-out home opens straight to Autopaper
+(intro deck deleted) and London Salmon is the default theme (branch
+`retire-landing-intro`, `78c274fe`).
+
 ## Next (2026-10-13): ledger metamission (reviewed)
 
 The [ledger metamission](definitions/choir-ledger-metamission-2026-10-13.md)
