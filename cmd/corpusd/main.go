@@ -162,6 +162,7 @@ func main() {
 		}
 	}
 	ogHandler.ConfigureCaptureBodies(platform.CaptureBodiesRoot(cfg.ArtifactsRoot))
+	ogHandler.ConfigureCaptureIndex(store)
 	platform.RegisterObjectGraphRoutes(s, ogHandler)
 
 	s.Start()

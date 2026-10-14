@@ -139,6 +139,7 @@ func (o *ObjectGraphStore) PutObject(ctx context.Context, obj objectgraph.Object
 		return fmt.Errorf("platform objectgraph: put object: %w", err)
 	}
 	o.store.markCorpusDirty("objectgraph put object " + obj.CanonicalID)
+	o.store.indexCaptures(ctx, obj)
 	return nil
 }
 
@@ -182,6 +183,7 @@ func (o *ObjectGraphStore) InsertObjectIfAbsent(ctx context.Context, obj objectg
 		return false, nil
 	}
 	o.store.markCorpusDirty("objectgraph insert object " + obj.CanonicalID)
+	o.store.indexCaptures(ctx, obj)
 	return true, nil
 }
 
@@ -256,6 +258,7 @@ func (o *ObjectGraphStore) DeleteObject(ctx context.Context, id string) error {
 			return fmt.Errorf("platform objectgraph: delete lookup key: %w", err)
 		}
 	}
+	o.store.unindexCapture(ctx, id)
 	return nil
 }
 
@@ -670,6 +673,7 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 		return fmt.Errorf("platform objectgraph: batch commit: %w", err)
 	}
 	o.store.markCorpusDirty(fmt.Sprintf("objectgraph batch: %d objects, %d edges", len(batch.Objects), len(batch.Edges)))
+	o.store.indexCaptures(ctx, batch.Objects...)
 	return nil
 }
 

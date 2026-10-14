@@ -56,7 +56,7 @@ func TestListObjectsWindowedEqualsUnbounded(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	ages := []time.Duration{
 		-2 * time.Hour, // a future row
-		0, 0, 0, // ties at now
+		0, 0, 0,        // ties at now
 		2 * time.Hour,
 		24*time.Hour - time.Second, 24 * time.Hour, 24*time.Hour + time.Second, // the first boundary
 		3 * 24 * time.Hour,

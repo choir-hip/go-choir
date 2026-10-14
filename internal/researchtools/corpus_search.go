@@ -22,14 +22,15 @@ import (
 // story headline the label ties it to), never over block text: a capture's
 // row carries no body, and reading every body would cost one corpusd read
 // per capture.
+// corpusCaptureScan is how many of the computer's newest captures the
+// window path reads from the shared store (the same bound Texture's URL
+// cite lookup uses). A variable so tests can shrink the window.
+var corpusCaptureScan = textureCaptureListLimit
+
 const (
-	// corpusCaptureScan is how many of the computer's newest captures one
-	// search reads from the shared store (the same bound Texture's URL cite
-	// lookup uses).
-	corpusCaptureScan = textureCaptureListLimit
 	// corpusLabelScan is how many of the computer's newest labels are read
 	// as hints; a relabel writes a second label object.
-	corpusLabelScan = 2 * corpusCaptureScan
+	corpusLabelScan = 2 * textureCaptureListLimit
 	// corpusDefaultLimit and corpusMaxLimit bound each result list.
 	corpusDefaultLimit = 10
 	corpusMaxLimit     = 25
@@ -138,8 +139,11 @@ func corpusLimit(limit int) int {
 
 // searchCaptures finds the computer's captures matching terms, ranked by
 // how many query words they match, then by how strongly (a title word
-// outweighs an outlet or label word), then newest first. A note says when
-// the capture store is not configured or the scan hit its bound.
+// outweighs an outlet or label word), then newest first. Candidates come
+// from corpusd's capture index over all of the computer's captures; when
+// the index refuses (or CHOIR_CORPUS_SEARCH=window), from the window of
+// its newest corpusCaptureScan captures. A note says which, and when the
+// capture store is not configured or a bound was hit.
 func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID string, terms []string, limit int) ([]CorpusCapture, string, error) {
 	if deps.Captures == nil {
 		return nil, "captures not searched: the shared capture store is not configured", nil
@@ -150,19 +154,67 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 	if len(terms) == 0 {
 		return nil, "captures not searched: the query has no search words", nil
 	}
-	objs, err := deps.Captures.ListCaptures(ctx, ownerID, computerID, corpusCaptureScan)
-	if err != nil {
-		return nil, "", err
-	}
 	labels := map[string]store.CaptureLabel{}
-	note := ""
+	var notes []string
 	if deps.Store != nil {
 		if got, err := deps.Store.RecentCaptureLabels(ctx, ownerID, computerID, corpusLabelScan); err == nil {
 			labels = got
 		} else {
-			note = "label hints not read: " + err.Error()
+			notes = append(notes, "label hints not read: "+err.Error())
 		}
 	}
+	var objs []objectgraph.Object
+	searched := false
+	if searcher, ok := deps.Captures.(CaptureSearcher); ok && corpusIndexEnabled() {
+		answer, err := searcher.SearchCaptures(ctx, CaptureSearchQuery{OwnerID: ownerID, ComputerID: computerID, Words: terms,
+			Need: corpusNeeded(len(terms)), Candidates: corpusIndexCandidates, IDs: labelMatchedCaptureIDs(labels, terms)})
+		if err == nil {
+			objs, searched = answer.Objects, true
+			if answer.Capped {
+				notes = append(notes, fmt.Sprintf("searched all %d captures of this computer; ranked the strongest, newest %d of the %d that match enough words", answer.Searched, corpusIndexCandidates, answer.Matched))
+			}
+		} else {
+			notes = append(notes, "capture index not used ("+err.Error()+")")
+		}
+	}
+	if !searched {
+		window, err := deps.Captures.ListCaptures(ctx, ownerID, computerID, corpusCaptureScan)
+		if err != nil {
+			return nil, "", err
+		}
+		objs = window
+		if len(objs) >= corpusCaptureScan {
+			notes = append(notes, fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan))
+		}
+	}
+	return rankCaptures(objs, labels, terms, limit), strings.Join(notes, "; "), nil
+}
+
+// corpusIndexCandidates bounds the candidates corpusd returns for ranking.
+const corpusIndexCandidates = 500
+
+// labelMatchedCaptureIDs are the captures whose labels hold a query word:
+// a capture can reach the needed words through its label alone, and the
+// index holds only the capture's own fields, so these are sent by id.
+func labelMatchedCaptureIDs(labels map[string]store.CaptureLabel, terms []string) []string {
+	var out []string
+	for id, label := range labels {
+		text := strings.ToLower(strings.Join([]string{label.Title, label.EventHeadline, label.TopicHeadline, label.Outlet, label.Language, label.Script}, "\n"))
+		for _, term := range terms {
+			if corpusTermIn(text, term) {
+				out = append(out, id)
+				break
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// rankCaptures matches terms against each capture's fields and its label,
+// keeps those matching enough words, and ranks them. objs is newest first
+// (the last tie-break).
+func rankCaptures(objs []objectgraph.Object, labels map[string]store.CaptureLabel, terms []string, limit int) []CorpusCapture {
 	type hit struct {
 		capture CorpusCapture
 		words   int
@@ -236,10 +288,7 @@ func searchCaptures(ctx context.Context, deps Dependencies, ownerID, computerID 
 	for _, h := range hits {
 		out = append(out, h.capture)
 	}
-	if len(objs) >= corpusCaptureScan {
-		note = strings.TrimLeft(note+"; ", "; ") + fmt.Sprintf("searched this computer's newest %d captures; older captures were not searched", corpusCaptureScan)
-	}
-	return out, note, nil
+	return out
 }
 
 // corpusHost is a URL's host without "www.".

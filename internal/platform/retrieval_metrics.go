@@ -32,17 +32,21 @@ const (
 	retrievalCaptureSearch    = "capture_search"
 	retrievalCaptureByURL     = "capture_by_url"
 	retrievalCaptureIndexSync = "capture_index_backfill"
+	// retrievalCaptureIndexWrite is a write, timed beside the reads: the
+	// projection's cost per capture.
+	retrievalCaptureIndexWrite = "capture_index_write"
 )
 
 // retrievalLogSlowOnly names operations that log only when slower than
 // retrievalSlowLog: they run many times per page and are primary-key or
 // single-index seeks.
 var retrievalLogSlowOnly = map[string]bool{
-	retrievalGetObject:       true,
-	retrievalGetEdge:         true,
-	retrievalListEdgesFrom:   true,
-	retrievalListEdgesByKind: true,
-	retrievalListEdgesTo:     true,
+	retrievalGetObject:         true,
+	retrievalGetEdge:           true,
+	retrievalListEdgesFrom:     true,
+	retrievalListEdgesByKind:   true,
+	retrievalListEdgesTo:       true,
+	retrievalCaptureIndexWrite: true,
 }
 
 const retrievalSlowLog = 100 * time.Millisecond

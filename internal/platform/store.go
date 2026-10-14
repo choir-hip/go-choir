@@ -285,7 +285,8 @@ func NewStore(db *sql.DB) *Store {
 	configureDB(db)
 	committer := doltbatch.New(db, "platform", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
 	return &Store{db: db, committer: committer, corpusDB: db, corpusCommitter: committer,
-		retrieval: &RetrievalMetrics{since: time.Now().UTC()}}
+		retrieval:      &RetrievalMetrics{since: time.Now().UTC()},
+		retrievalState: retrievalSchemaState{reconcileKick: make(chan struct{}, 1)}}
 }
 
 func configureDB(db *sql.DB) {

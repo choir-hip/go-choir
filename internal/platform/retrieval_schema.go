@@ -160,6 +160,21 @@ type retrievalSchemaState struct {
 	// lookupKeyLive: every registered object has its key row (lookups
 	// seek it).
 	lookupKeyLive atomic.Bool
+	// captureIndexReady: the capture projection tables exist (capture
+	// writes maintain them).
+	captureIndexReady atomic.Bool
+	// captureIndexComplete: every capture in og_objects is projected (the
+	// search and URL routes answer).
+	captureIndexComplete atomic.Bool
+	// captureIndexDirty: an inline projection write failed; the next
+	// reconcile pass repairs it.
+	captureIndexDirty atomic.Bool
+	// captureIndexGap is captures minus projection rows after the last
+	// full pass: captures that cannot be projected.
+	captureIndexGap atomic.Int64
+	// reconcileKick wakes the periodic reconciler after a failed inline
+	// projection write.
+	reconcileKick chan struct{}
 
 	migrateOnce sync.Once
 	reconcileMu sync.Mutex
@@ -184,11 +199,16 @@ func (s *Store) MigrateRetrieval(ctx context.Context) error {
 	note("objects_kind_owner_computer_updated", s.ensureCorpusIndex(ctx, "og_objects", idxObjectsKindOwnerComputerUpdated, "object_kind, owner_id, computer_id, updated_at"))
 	note("edges_to_kind", s.ensureCorpusIndex(ctx, "og_edges", idxEdgesToKind, "to_id, kind"))
 	note("lookup_keys", s.ensureLookupKeys(ctx))
+	note("capture_index_tables", s.ensureCaptureIndexTables(ctx))
+	if s.retrievalState.captureIndexReady.Load() {
+		note("capture_index_reconcile", s.ReconcileCaptureIndex(ctx))
+	}
 	return firstErr
 }
 
 // StartRetrievalMigrations runs MigrateRetrieval in the background beside
-// the listener, retrying failed steps with backoff. It returns at once.
+// the listener, retrying failed steps with backoff, then reconciles the
+// capture projection every interval. It returns at once.
 func (s *Store) StartRetrievalMigrations(ctx context.Context, interval time.Duration) {
 	if s == nil {
 		return
@@ -221,10 +241,29 @@ func (s *Store) StartRetrievalMigrations(ctx context.Context, interval time.Dura
 	})
 }
 
-// retrievalPeriodic runs the periodic retrieval upkeep until ctx ends.
+// retrievalPeriodic reconciles the capture projection every interval until
+// ctx ends: a projection write that failed, or a projection table lost,
+// is repaired without an operator.
 func (s *Store) retrievalPeriodic(ctx context.Context, interval time.Duration) {
-	_ = interval
-	<-ctx.Done()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		case <-s.retrievalState.reconcileKick:
+		}
+		if !s.retrievalState.captureIndexReady.Load() {
+			if err := s.ensureCaptureIndexTables(ctx); err != nil {
+				log.Printf("corpusd retrieval capture tables err=%v", err)
+				continue
+			}
+		}
+		if err := s.ReconcileCaptureIndex(ctx); err != nil {
+			log.Printf("corpusd retrieval reconcile err=%v", err)
+		}
+	}
 }
 
 // RetrievalLive reports which retrieval shapes are live (for /health and
@@ -234,7 +273,9 @@ func (s *Store) RetrievalLive() map[string]bool {
 		return map[string]bool{}
 	}
 	return map[string]bool{
-		"lookup_keys": s.retrievalState.lookupKeyLive.Load(),
+		"lookup_keys":            s.retrievalState.lookupKeyLive.Load(),
+		"capture_index":          s.retrievalState.captureIndexReady.Load(),
+		"capture_index_complete": s.retrievalState.captureIndexComplete.Load(),
 	}
 }
 

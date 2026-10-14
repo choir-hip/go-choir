@@ -35,6 +35,10 @@ func NewTextureCaptures(sink CaptureSink, computerID string) *TextureCaptures {
 // captures are searched for the URL.
 const textureCaptureListLimit = 1000
 
+// textureCaptureWindow is the window the URL lookup reads when the capture
+// index refuses or misses. A variable so tests can shrink it.
+var textureCaptureWindow = textureCaptureListLimit
+
 // textureCapturePageChars is one read's text budget; corpusd caps a read
 // below 1 MiB of characters.
 const textureCapturePageChars = 900_000
@@ -59,9 +63,18 @@ func (t *TextureCaptures) CaptureBlocks(ctx context.Context, ownerID, handle str
 }
 
 // newestCaptureOf finds the newest block capture of a URL among the
-// computer's captures.
+// computer's captures: through corpusd's capture index over all of them,
+// and, when the index refuses or misses (a capture written a moment ago
+// can precede its projection row), among the newest
+// textureCaptureListLimit, as before. CHOIR_CORPUS_SEARCH=window skips the
+// index.
 func (t *TextureCaptures) newestCaptureOf(ctx context.Context, ownerID, pageURL string) (string, error) {
-	objs, err := t.sink.ListCaptures(ctx, ownerID, t.computerID, textureCaptureListLimit)
+	if resolver, ok := t.sink.(CaptureURLResolver); ok && corpusIndexEnabled() {
+		if id, found, err := resolver.NewestCaptureOfURL(ctx, ownerID, t.computerID, pageURL, true); err == nil && found {
+			return id, nil
+		}
+	}
+	objs, err := t.sink.ListCaptures(ctx, ownerID, t.computerID, textureCaptureWindow)
 	if err != nil {
 		return "", fmt.Errorf("look up captures of %s: %w", pageURL, err)
 	}

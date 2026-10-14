@@ -22,6 +22,8 @@ func RegisterObjectGraphRoutes(s *server.Server, h *ObjectGraphHandler) {
 	s.HandleFunc("/internal/platform/edges", h.HandleEdges)
 	s.HandleFunc("/internal/platform/captures", h.HandleCaptures)
 	s.HandleFunc("/internal/platform/captures/bodies/", h.HandleCaptureBody)
+	s.HandleFunc("/internal/platform/captures/search", h.HandleCaptureSearch)
+	s.HandleFunc("/internal/platform/captures/by-url", h.HandleCaptureByURL)
 	s.HandleFunc("/internal/platform/captures/", h.HandleCaptureRead)
 }
 
@@ -31,6 +33,9 @@ type ObjectGraphHandler struct {
 	guestLookup guestOwnershipLookup
 	// captureBodies holds Autopaper capture bodies on host disk (W1b2).
 	captureBodies *CaptureBodyStore
+	// captureIndex is the platform store whose capture projection the
+	// search and URL lookup routes read (nil: they refuse).
+	captureIndex *Store
 }
 
 // NewObjectGraphHandler builds a handler that exposes both Service-level
