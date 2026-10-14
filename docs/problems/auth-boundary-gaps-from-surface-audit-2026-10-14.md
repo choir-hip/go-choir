@@ -3,8 +3,9 @@
 Date: 2026-10-14. Source: the surface audit
 (`docs/reports/surface-audit-cli-mcp-api-2026-10-14.md`, §2 "Latent", §3
 items 2 and 4, §4 FIX, §6 Risky), each finding re-read against the code at
-`origin/main` e9d85a71d. Status: documented; repair on branch
-`fix/auth-boundary-audit` (not pushed, not deployed). Mutation class of the
+`origin/main` e9d85a71d. Status: documented (7bb8a5b15); repaired on branch
+`fix/auth-boundary-audit` (not pushed, not deployed; see "Repair record"
+below). Mutation class of the
 repair: **red** (auth/session, Trace-adjacent owner acts, vmctl, corpusd key
 escrow, deployment script).
 
@@ -264,3 +265,42 @@ exploit found).
   intended; `CHOIR_GUEST_TRUST_LOOPBACK` is a new opt-in that must stay out
   of the guest image. Repaired: F1-F5, F6 a-c, on the branch only (not
   deployed).
+
+## Repair record (branch `fix/auth-boundary-audit`, not pushed)
+
+| Commit | Finding | What changed | Tests |
+|---|---|---|---|
+| 4e10028df | F3, F4 (auth) | key list scoped to the calling key without `manage:keys`/`admin`, `?limit` (100, max 500); empty scope lists refused; `owner:acts` issued only from the owner's session | `internal/auth/auth_boundary_test.go` |
+| 196f6294a | F1, F4, F5 (proxy) | ingress strip of identity and carrier headers; `/api/computers/*` refused in the generic forward; owner-act gate on mode set, approve, rollback, restore, rematerialize, bootstrap-chain; guest object list scoped, edges refused | `internal/proxy/auth_boundary_test.go`, `computer_bootstrap_chain_test.go` |
+| 1f67f0e0a | F5 (corpusd) | unwrap routes need host transport + host credential; object list bound to the caller's computer; edges host-only | `internal/platform/auth_boundary_test.go` |
+| 6f7bffb30 | F6 a, b | vmctl `autoputer-proxy` deleted; deploy preflight sends the host credential | vmctl package tests |
+| 7e9fd4451 | F2, F6 c | `server.AuthenticatedOwner` / `server.GuestHostCaller` replace every guest copy; internal runtime and textureowner internal routes host-only | `internal/server/guest_owner_test.go`, `internal/apihandler/in_guest_caller_test.go`, `internal/autoputer/terminal_test.go` |
+
+Callers changed: `scripts/qa_test_computer.mjs` (mints `owner:acts` from the
+owner's browser session, so `scripts/reeng_tracer.mjs` keeps its owner
+acts), `start-services.sh` (`CHOIR_GUEST_TRUST_LOOPBACK=1`), Settings
+(offers `owner:acts`), the CLI's owner-act commands and the choir-cli skill
+(declare it), `choir.ProductAPI` (explicit in-process RemoteAddr), and the
+agentcore/autoputer tests that drove guest handlers over a loopback test
+server (now presented as the host side).
+
+Deploy ordering risks:
+
+1. Keys minted before the deploy lack `owner:acts`. After the proxy
+   deploys, `choir self-dev approve`, `mode set`, `computer restore`,
+   `bootstrap-chain` and `rematerialize-from-tape` with an existing key,
+   `admin` included, return 403 until the owner mints a key with
+   `owner:acts` from Settings. A tracer run needs a fresh
+   `qa_test_computer.mjs` mint.
+2. Auth and the proxy share the auth DB and ship in one Node B activation;
+   no ordering gap between them.
+3. The guest change reaches each computer with its next base image. Until
+   then the proxy's ingress strip already closes the forged-binding path;
+   the loopback hole stays open on not-yet-refreshed computers.
+4. Any local stack started without `start-services.sh` (proxy and autoputer
+   on one host) must export `CHOIR_GUEST_TRUST_LOOPBACK=1`, or every guest
+   route answers 401.
+5. hostauth is `observe` on Node B, so the corpusd unwrap credential check
+   only logs until `enforce`; once enforced, an operator's unwrap curl must
+   send the header file.
+
