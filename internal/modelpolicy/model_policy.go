@@ -58,6 +58,9 @@ type ManagerConfig struct {
 	PolicyPath     string
 	ProviderConfig provideriface.Config
 	Provider       provideriface.Provider
+	// ImageStore holds images verification calls send by ref; nil keeps
+	// inline images inline and refuses refs.
+	ImageStore ImageStore
 }
 
 // Manager owns policy loading, overlays, and the last-valid policy cache.

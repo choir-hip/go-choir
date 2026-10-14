@@ -2,7 +2,9 @@ package agentcore
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -224,10 +226,52 @@ func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Req
 	})
 }
 
+// modelPolicyVerifyMaxBodyBytes admits one image at the gateway's
+// pre-resize limit, base64-encoded, plus the prompt.
+const modelPolicyVerifyMaxBodyBytes = 28 << 20
+
+// HandleModelPolicyVerify handles POST /api/model-policy/verify: one bounded
+// model call through this computer's gateway, optionally with one image
+// (image_base64, image_fixture or an image_ref in the computer's image
+// store), as the owner. An inline image is stored by content hash and the
+// call carries its ref; the response names the ref, never the bytes
+// (docs/problems/models-configured-text-only-2026-10-15.md).
+func (h *APIHandler) HandleModelPolicyVerify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, modelPolicyVerifyMaxBodyBytes))
+	if err != nil {
+		writeAPIJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: "request body too large"})
+		return
+	}
+	out, err := h.rt.modelPolicy.VerifyForOwner(r.Context(), ownerID, body)
+	if err != nil {
+		status := http.StatusBadRequest
+		var callErr *modelpolicy.ModelCallError
+		if errors.As(err, &callErr) {
+			status = http.StatusBadGateway
+		}
+		writeAPIJSON(w, status, apiError{Error: err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, out)
+}
+
 func (h *APIHandler) HandleModelPolicyRouter(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/api/model-policy/resolve":
 		h.HandleModelPolicyResolve(w, r)
+	case r.URL.Path == "/api/model-policy/verify":
+		h.HandleModelPolicyVerify(w, r)
 	default:
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "model policy route not found"})
 	}

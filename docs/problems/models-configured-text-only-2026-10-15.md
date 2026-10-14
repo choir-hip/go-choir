@@ -189,6 +189,37 @@ Not wired here (next slices): engineering's capture step writing the
 freeze bundle's `evidence/visual/` PNGs into the image store (report S1),
 and a `choir.LookAt` verb for desks without ProductAPI.
 
+## Fix (second commit)
+
+- `internal/modelcatalog`: `SupportedModels` fills `Modalities` from the
+  vision default; `TextOnlyModels()` is the one opt-out list (id to reason);
+  `SupportsImage`/`ImageRefusal` are the one rule. The provider gate and
+  the modelpolicy verifier both call it. The `kimi-k2p6` name special case
+  is deleted: an uncatalogued model is refused images.
+- Vision on: gpt-6-luna, deepseek-v4.1-flash, Claude Haiku 4.5, Sonnet 4.6,
+  Opus 4.6. Opted out: the three zai GLM models (believed text-only) and
+  the eight other opencode-go/zen models (UNVERIFIED).
+- `internal/provider/media.go`: `prepareMediaRequest` replaces
+  `validateMediaRequest` in every adapter: the capability check, the count,
+  byte and pixel caps, deterministic downscale to 1568 px, URL sources only
+  to chatgpt and fireworks, and a typed `MediaError`. The gateway answers a
+  `MediaError` with 400, the breaker does not count it, and the inference
+  log line carries `images=N image_bytes=N image_sha256=<12 hex>`.
+- The OpenAI-compatible route carries `image_url` parts as image blocks.
+- `internal/imageblob`: the computer's content-addressed image store at
+  `<RUNTIME_STORE_PATH>.image-blobs/sha256/<hex>` (on a guest
+  `/mnt/persistent/state.image-blobs`). `gatewayruntime` resolves
+  `artifact_ref` sources from it into the HTTP body to the gateway only.
+- `POST /api/model-policy/verify` on the computer, and on management's
+  ProductAPI allowlist (POST only).
+
+Cost: no pricing change; image tokens arrive in `usage.input_tokens` and
+`llmcost` prices them as input. Residuals: images inside `tool_result`
+blocks are not serialized; runtime context-pressure estimates do not count
+image tokens; the pool's failover order is not image-aware outside the
+verify path (a desk transcript carrying an image fails over to cat-jam-free
+only to be refused, loudly).
+
 ## Evidence after the fix
 
 - `go test ./internal/modelcatalog ./internal/provider ./internal/gateway

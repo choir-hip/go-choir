@@ -431,8 +431,9 @@ func (p *BedrockProvider) Stream(ctx context.Context, req LLMRequest, onChunk fu
 // because streaming uses binary EventStream, not SSE.
 func (p *BedrockProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	modelID := effectiveModel(req.Model, p.modelID)
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("bedrock: %w", err)
+	req, mediaErr := prepareMediaRequest("bedrock", modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("bedrock: %w", mediaErr)
 	}
 	endpoint := fmt.Sprintf(
 		"https://bedrock-runtime.%s.amazonaws.com/model/%s/invoke",
@@ -550,8 +551,9 @@ func (p *ZAIProvider) IsReal() bool { return true }
 func (p *ZAIProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	endpoint := p.baseURL + "/v1/messages"
 	modelID := effectiveModel(req.Model, p.modelID)
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("zai: %w", err)
+	req, mediaErr := prepareMediaRequest("zai", modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("zai: %w", mediaErr)
 	}
 
 	body := p.buildRequestBody(req, modelID)
@@ -584,8 +586,9 @@ func (p *ZAIProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, e
 func (p *ZAIProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	endpoint := p.baseURL + "/v1/messages"
 	modelID := effectiveModel(req.Model, p.modelID)
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("zai: %w", err)
+	req, mediaErr := prepareMediaRequest("zai", modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("zai: %w", mediaErr)
 	}
 
 	// Build streaming request.
@@ -707,8 +710,9 @@ func (p *FireworksProvider) IsReal() bool { return true }
 func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	endpoint := p.fireworksChatCompletionsEndpoint()
 	modelID := effectiveModel(req.Model, p.modelID)
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("fireworks: %w", err)
+	req, mediaErr := prepareMediaRequest("fireworks", modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("fireworks: %w", mediaErr)
 	}
 
 	body := p.buildChatCompletionsRequestBody(req, modelID)
@@ -736,8 +740,9 @@ func (p *FireworksProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespo
 func (p *FireworksProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	endpoint := p.fireworksChatCompletionsEndpoint()
 	modelID := effectiveModel(req.Model, p.modelID)
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("fireworks: %w", err)
+	req, mediaErr := prepareMediaRequest("fireworks", modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("fireworks: %w", mediaErr)
 	}
 
 	req.Stream = true
@@ -874,8 +879,9 @@ func (p *ChatGPTProvider) IsReal() bool { return true }
 func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMResponse, error) {
 	req.Stream = true
 	modelID := effectiveModel(req.Model, p.modelID)
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("chatgpt: %w", err)
+	req, mediaErr := prepareMediaRequest("chatgpt", modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("chatgpt: %w", mediaErr)
 	}
 	body := p.buildRequestBody(req, modelID)
 
@@ -892,8 +898,9 @@ func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 func (p *ChatGPTProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
 	req.Stream = true
 	modelID := effectiveModel(req.Model, p.modelID)
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("chatgpt: %w", err)
+	req, mediaErr := prepareMediaRequest("chatgpt", modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("chatgpt: %w", mediaErr)
 	}
 	body := p.buildRequestBody(req, modelID)
 	body.Stream = true
@@ -1119,8 +1126,9 @@ func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk fun
 	if err != nil {
 		return nil, err
 	}
-	if err := validateMediaRequest(modelID, req); err != nil {
-		return nil, fmt.Errorf("%s: %w", p.providerName, err)
+	req, mediaErr := prepareMediaRequest(p.providerName, modelID, req)
+	if mediaErr != nil {
+		return nil, fmt.Errorf("%s: %w", p.providerName, mediaErr)
 	}
 
 	var endpoint string
@@ -1912,68 +1920,6 @@ func openAIImageSource(source *MediaSource) string {
 		return ""
 	default:
 		return ""
-	}
-}
-
-func validateMediaRequest(modelID string, req LLMRequest) error {
-	hasImage := false
-	for _, msg := range req.Messages {
-		for _, block := range msg.Content {
-			if block.Type != "image" {
-				continue
-			}
-			hasImage = true
-			if block.Source == nil {
-				return fmt.Errorf("image block missing source")
-			}
-			switch strings.TrimSpace(block.Source.Kind) {
-			case "base64":
-				data := strings.TrimSpace(block.Source.Data)
-				if data == "" {
-					return fmt.Errorf("image block base64 source missing data")
-				}
-				if _, err := base64.StdEncoding.DecodeString(data); err != nil {
-					return fmt.Errorf("image block base64 source is not valid standard base64: %w", err)
-				}
-			case "url":
-				url := strings.TrimSpace(block.Source.URL)
-				if url == "" {
-					return fmt.Errorf("image block url source missing url")
-				}
-				if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
-					return fmt.Errorf("image block url source must be an absolute http(s) URL")
-				}
-			case "artifact_ref":
-				return fmt.Errorf("image artifact_ref %q requires gateway artifact resolver before provider call", block.Source.Ref)
-			default:
-				return fmt.Errorf("unsupported image source kind %q", block.Source.Kind)
-			}
-		}
-	}
-	if hasImage && !modelSupportsImage(modelID) {
-		return fmt.Errorf("model %q is text-only in Choir model catalog; image input requires a multimodal model policy", modelID)
-	}
-	return nil
-}
-
-func modelSupportsImage(modelID string) bool {
-	modelID = strings.TrimSpace(modelID)
-	for _, info := range SupportedModels() {
-		if info.ID != modelID {
-			continue
-		}
-		for _, modality := range info.Modalities {
-			if modality == "image" {
-				return true
-			}
-		}
-		return false
-	}
-	switch {
-	case strings.Contains(modelID, "kimi-k2p6"):
-		return true
-	default:
-		return false
 	}
 }
 

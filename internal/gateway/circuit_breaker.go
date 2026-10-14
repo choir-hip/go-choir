@@ -174,6 +174,11 @@ func providerFailureCounts(ctx context.Context, err error) bool {
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return false
 	}
+	// An image the gateway refused before the call says nothing about the
+	// upstream (problems/models-configured-text-only-2026-10-15.md, FM1).
+	if provider.IsMediaError(err) {
+		return false
+	}
 	if m := providerStatusPattern.FindStringSubmatch(err.Error()); m != nil {
 		code, _ := strconv.Atoi(m[1])
 		if code >= 400 && code < 500 && code != 408 && code != 429 {

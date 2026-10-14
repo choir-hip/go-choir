@@ -285,7 +285,7 @@ func convertOpenAIChatRequest(req openAIChatCompletionRequest) (ProviderRequest,
 		case "user":
 			gwReq.Messages = append(gwReq.Messages, provider.Message{
 				Role:    "user",
-				Content: []provider.Block{{Type: "text", Text: textFromOpenAIContent(msg.Content)}},
+				Content: userBlocksFromOpenAIContent(msg.Content),
 			})
 		case "assistant":
 			blocks := []provider.Block{}
@@ -324,6 +324,50 @@ func convertOpenAIChatRequest(req openAIChatCompletionRequest) (ProviderRequest,
 	}
 	gwReq.System = strings.Join(system, "\n\n")
 	return gwReq, nil
+}
+
+// userBlocksFromOpenAIContent keeps a user turn's text and its image_url
+// parts. Dropping an image here would let the model answer as if it had
+// seen it (problems/models-configured-text-only-2026-10-15.md, FM6). A
+// data: URL becomes a base64 source; an http(s) URL stays a URL, which the
+// adapter admits only where the upstream fetches URLs.
+func userBlocksFromOpenAIContent(raw json.RawMessage) []provider.Block {
+	var parts []struct {
+		Type     string `json:"type"`
+		Text     string `json:"text"`
+		ImageURL struct {
+			URL string `json:"url"`
+		} `json:"image_url"`
+	}
+	if err := json.Unmarshal(raw, &parts); err != nil {
+		return []provider.Block{{Type: "text", Text: textFromOpenAIContent(raw)}}
+	}
+	var blocks []provider.Block
+	for _, part := range parts {
+		switch part.Type {
+		case "text":
+			if part.Text != "" {
+				blocks = append(blocks, provider.Block{Type: "text", Text: part.Text})
+			}
+		case "image_url":
+			blocks = append(blocks, provider.Block{Type: "image", Source: mediaSourceFromImageURL(part.ImageURL.URL)})
+		}
+	}
+	if len(blocks) == 0 {
+		blocks = []provider.Block{{Type: "text", Text: ""}}
+	}
+	return blocks
+}
+
+func mediaSourceFromImageURL(url string) *provider.MediaSource {
+	url = strings.TrimSpace(url)
+	if rest, ok := strings.CutPrefix(url, "data:"); ok {
+		meta, data, found := strings.Cut(rest, ",")
+		if found && strings.HasSuffix(meta, ";base64") {
+			return &provider.MediaSource{Kind: "base64", MIMEType: strings.TrimSuffix(meta, ";base64"), Data: data}
+		}
+	}
+	return &provider.MediaSource{Kind: "url", URL: url}
 }
 
 func textFromOpenAIContent(raw json.RawMessage) string {

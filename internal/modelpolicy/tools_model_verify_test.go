@@ -3,6 +3,7 @@ package modelpolicy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -83,32 +84,90 @@ func TestVerifyModelCapabilitySchemaAndExplicitPayload(t *testing.T) {
 	}
 }
 
-func TestVerifyModelCapabilityRefusesImageWithoutMultimodalPolicy(t *testing.T) {
+// Owner 2026-10-15: vision is on by default (problems/models-configured-
+// text-only-2026-10-15.md). A pool-resolved image call lands on a member
+// that may see, never on the gated cat-jam-free (FM4).
+func TestVerifyModelCapabilityImageOnPoolLandsOnVisionMember(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		provider := &capturingModelVerifyProvider{}
+		manager := NewManager(ManagerConfig{
+			PolicyPath: filepath.Join(t.TempDir(), "System", "model-policy.toml"),
+			Provider:   provider,
+		})
+		tool := NewVerifyModelCapabilityTool(manager)
+		if _, err := tool.Func(verifierContext(), json.RawMessage(`{
+			"role":"verifier_multimodal",
+			"prompt":"describe this screenshot",
+			"image_fixture":"red_pixel_png"
+		}`)); err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+		if m := provider.request.Model; m != "deepseek-v4.1-flash" && m != "gpt-6-luna" {
+			t.Fatalf("image call assigned to %q, want a vision pool member", m)
+		}
+	}
+}
+
+// FM11: with the image store configured, the model call and the response
+// carry the image's ref, not its bytes.
+func TestVerifyModelCapabilityStoresInlineImageAndSendsRef(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
-	manager := NewManager(ManagerConfig{
-		PolicyPath: filepath.Join(t.TempDir(), "System", "model-policy.toml"),
-		Provider:   provider,
-	})
-	tool := NewVerifyModelCapabilityTool(manager)
-	_, err := tool.Func(verifierContext(), json.RawMessage(`{
-		"role":"verifier_multimodal",
-		"prompt":"describe this screenshot",
-		"image_url":"https://example.com/screen.png"
+	store := &memImageStore{blobs: map[string][]byte{}}
+	tool := NewVerifyModelCapabilityTool(NewManager(ManagerConfig{Provider: provider, ImageStore: store}))
+	out, err := tool.Func(verifierContext(), json.RawMessage(`{
+		"role":"verifier","provider":"chatgpt","model":"gpt-6-luna",
+		"prompt":"what colour?","image_base64":"`+verifierRedPixelPNGBase64+`"
 	}`))
-	if err == nil {
-		t.Fatalf("expected loud refusal: no funded multimodal model exists in the catalog")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "multimodal") {
-		t.Fatalf("refusal = %v, want a multimodal capability refusal", err)
+	sent := string(provider.request.Messages[0])
+	if strings.Contains(sent, verifierRedPixelPNGBase64[:20]) || !strings.Contains(sent, `"kind":"artifact_ref"`) {
+		t.Fatalf("model call message = %s", sent)
 	}
-	if provider.request.Provider != "" || provider.request.Model != "" {
-		t.Fatalf("refused role must not reach the provider: %+v", provider.request)
+	if strings.Contains(out, verifierRedPixelPNGBase64[:20]) || !strings.Contains(out, `"image_ref":"artifact:sha256:`) {
+		t.Fatalf("result = %s", out)
+	}
+	if len(store.blobs) != 1 {
+		t.Fatalf("store holds %d blobs", len(store.blobs))
+	}
+}
+
+type memImageStore struct{ blobs map[string][]byte }
+
+func (m *memImageStore) Put(data []byte) (string, string, error) {
+	ref := "artifact:sha256:" + strings.Repeat("0", 64)
+	m.blobs[ref] = data
+	return ref, "image/png", nil
+}
+
+func (m *memImageStore) Get(ref string) ([]byte, string, error) {
+	data, ok := m.blobs[ref]
+	if !ok {
+		return nil, "", fmt.Errorf("image %s is not in this computer's image store", ref)
+	}
+	return data, "image/png", nil
+}
+
+// FM2: the explicit opt-out list holds on an explicit model choice.
+func TestVerifyModelCapabilityRefusesImageOnOptedOutModel(t *testing.T) {
+	provider := &capturingModelVerifyProvider{}
+	tool := NewVerifyModelCapabilityTool(NewManager(ManagerConfig{Provider: provider}))
+	_, err := tool.Func(verifierContext(), json.RawMessage(`{
+		"role":"verifier","provider":"opencode-go","model":"cat-jam-free",
+		"prompt":"describe","image_fixture":"red_pixel_png"
+	}`))
+	if err == nil || !strings.Contains(err.Error(), "opted out") {
+		t.Fatalf("err = %v, want opt-out refusal", err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("provider calls = %d", provider.calls)
 	}
 }
 
 func TestVerifyModelCapabilityRefusesImageOnExplicitTextOnlyModel(t *testing.T) {
-	// The catalog no longer carries any funded multimodal model, so even an
-	// explicit provider/model payload must fail closed on image input.
+	// FM3: an uncatalogued model is not assumed to see, even when named
+	// explicitly.
 	provider := &capturingModelVerifyProvider{}
 	tool := NewVerifyModelCapabilityTool(NewManager(ManagerConfig{Provider: provider}))
 	_, err := tool.Func(verifierContext(), json.RawMessage(`{
@@ -136,9 +195,9 @@ func TestVerifyModelCapabilityRejectsBadImagesBeforeProvider(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "text-only model",
+			name:  "uncatalogued model",
 			input: `{"role":"verifier","provider":"fireworks","model":"accounts/fireworks/models/deepseek-v4-pro","prompt":"describe","image_url":"https://example.com/screen.png"}`,
-			want:  "text-only",
+			want:  "not in the Choir model catalog",
 		},
 		{
 			name:  "malformed base64",

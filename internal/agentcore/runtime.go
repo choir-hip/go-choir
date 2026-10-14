@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
+	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
@@ -294,6 +295,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 			PolicyPath:     cfg.ModelPolicyPath,
 			ProviderConfig: cfg,
 			Provider:       provider,
+			ImageStore:     imageblob.New(imageblob.DirForStorePath(cfg.StorePath)),
 		}),
 	}
 	for _, opt := range opts {

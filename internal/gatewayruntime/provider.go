@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,6 +31,51 @@ type Provider struct {
 	llmProvider     string
 	llmModel        string
 	reasoningEffort string
+	resolveImage    ImageResolver
+}
+
+// ImageResolver returns a stored image's bytes and media type by its
+// artifact:sha256 ref (imageblob.Store.Get).
+type ImageResolver func(ref string) ([]byte, string, error)
+
+// SetImageResolver lets transcripts carry image refs: each artifact_ref
+// image source is replaced by its bytes in the request body to the gateway
+// only, so the bytes never enter a transcript, run event or log
+// (docs/problems/models-configured-text-only-2026-10-15.md, FM11).
+func (p *Provider) SetImageResolver(resolve ImageResolver) { p.resolveImage = resolve }
+
+// resolveImageRefs returns req with artifact_ref image sources inlined as
+// base64, leaving the caller's messages untouched. Without a resolver the
+// refs pass through and the gateway refuses them by name.
+func (p *Provider) resolveImageRefs(req llmRequest) (llmRequest, error) {
+	if p.resolveImage == nil {
+		return req, nil
+	}
+	var messages []message
+	for i, msg := range req.Messages {
+		copied := false
+		for j, b := range msg.Content {
+			if b.Type != "image" || b.Source == nil || strings.TrimSpace(b.Source.Kind) != "artifact_ref" {
+				continue
+			}
+			data, mimeType, err := p.resolveImage(b.Source.Ref)
+			if err != nil {
+				return req, fmt.Errorf("gateway client: resolve image: %w", err)
+			}
+			if messages == nil {
+				messages = append([]message(nil), req.Messages...)
+			}
+			if !copied {
+				messages[i].Content = append([]block(nil), msg.Content...)
+				copied = true
+			}
+			messages[i].Content[j].Source = &mediaSource{Kind: "base64", MIMEType: mimeType, Data: base64.StdEncoding.EncodeToString(data)}
+		}
+	}
+	if messages != nil {
+		req.Messages = messages
+	}
+	return req, nil
 }
 
 const gatewayClientTimeout = 10*time.Minute + 30*time.Second
@@ -179,6 +225,10 @@ const (
 
 func (p *Provider) call(ctx context.Context, req llmRequest) (*llmResponse, error) {
 	req.Stream = false
+	req, err := p.resolveImageRefs(req)
+	if err != nil {
+		return nil, err
+	}
 	var lastErr error
 	rateLimitWaits := 0
 	for attempt := 0; attempt < 3; attempt++ {
@@ -260,6 +310,10 @@ func retryAfter(resp *http.Response) (time.Duration, bool) {
 
 func (p *Provider) stream(ctx context.Context, req llmRequest, onChunk func(streamChunk)) (*llmResponse, error) {
 	req.Stream = true
+	req, err := p.resolveImageRefs(req)
+	if err != nil {
+		return nil, err
+	}
 	httpResp, err := p.do(ctx, req, "text/event-stream")
 	if err != nil {
 		return nil, err

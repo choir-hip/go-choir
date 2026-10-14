@@ -202,6 +202,16 @@ func validateProductAPIRoute(method, requestURI string) error {
 	if method != http.MethodGet && (path == "/api/texture" || strings.HasPrefix(path, "/api/texture/")) {
 		return fmt.Errorf("product_api refuses %s %s: only the Texture desk writes a Texture; read it with GET, or address the Texture desk", method, path)
 	}
+	// Management scores visual evidence with one bounded model call that
+	// may carry an image ref (problems/models-configured-text-only-
+	// 2026-10-15.md, desk seam). Only the verify route: policy reads and
+	// writes stay owner acts.
+	if path == "/api/model-policy/verify" {
+		if method != http.MethodPost {
+			return fmt.Errorf("product_api refuses %s %s: the verify route takes POST", method, path)
+		}
+		return nil
+	}
 	for _, allowed := range []string{
 		"/api/prompt-bar",
 		"/api/texture/",

@@ -27,6 +27,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/gomemlimit"
 	"github.com/yusefmosiah/go-choir/internal/health"
+	"github.com/yusefmosiah/go-choir/internal/imageblob"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/projectionbase"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -240,6 +241,9 @@ func Run() {
 		}
 		bridge := gatewayruntime.New(gatewayURL, gatewayToken)
 		bridge.SetRuntimeLLMConfig(rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)
+		// Image refs in transcripts resolve from this computer's image
+		// store only in the body to the gateway.
+		bridge.SetImageResolver(imageblob.New(imageblob.DirForStorePath(rtCfg.StorePath)).Get)
 		rtProvider = bridge
 		log.Printf("autoputer: using gateway provider (url=%s provider=%s model=%s reasoning=%s)",
 			gatewayURL, rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)

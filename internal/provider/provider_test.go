@@ -644,61 +644,6 @@ func TestBedrockProviderCallWithMultipleToolUse(t *testing.T) {
 		}
 	}
 }
-func TestValidateMediaRequestRejectsTextOnlyModelImages(t *testing.T) {
-	req := LLMRequest{
-		Model: "accounts/fireworks/models/deepseek-v4-flash",
-		Messages: []Message{{
-			Role:    "user",
-			Content: []Block{{Type: "image", Source: &MediaSource{Kind: "url", URL: "https://example.com/screen.png"}}},
-		}},
-	}
-	err := validateMediaRequest(req.Model, req)
-	if err == nil || !strings.Contains(err.Error(), "text-only") {
-		t.Fatalf("error = %v, want text-only rejection", err)
-	}
-}
-
-func TestValidateMediaRequestRejectsUnresolvedArtifactRefs(t *testing.T) {
-	req := LLMRequest{
-		Model: "accounts/fireworks/models/kimi-k2p6",
-		Messages: []Message{{
-			Role:    "user",
-			Content: []Block{{Type: "image", Source: &MediaSource{Kind: "artifact_ref", Ref: "screenshot-1"}}},
-		}},
-	}
-	err := validateMediaRequest(req.Model, req)
-	if err == nil || !strings.Contains(err.Error(), "requires gateway artifact resolver") {
-		t.Fatalf("error = %v, want artifact resolver blocker", err)
-	}
-}
-
-func TestValidateMediaRequestRejectsMalformedBase64(t *testing.T) {
-	req := LLMRequest{
-		Model: "gpt-5.5",
-		Messages: []Message{{
-			Role:    "user",
-			Content: []Block{{Type: "image", Source: &MediaSource{Kind: "base64", MIMEType: "image/png", Data: "not standard base64"}}},
-		}},
-	}
-	err := validateMediaRequest(req.Model, req)
-	if err == nil || !strings.Contains(err.Error(), "valid standard base64") {
-		t.Fatalf("error = %v, want base64 validation blocker", err)
-	}
-}
-
-func TestValidateMediaRequestRejectsRelativeImageURL(t *testing.T) {
-	req := LLMRequest{
-		Model: "gpt-5.5",
-		Messages: []Message{{
-			Role:    "user",
-			Content: []Block{{Type: "image", Source: &MediaSource{Kind: "url", URL: "/local/screen.png"}}},
-		}},
-	}
-	err := validateMediaRequest(req.Model, req)
-	if err == nil || !strings.Contains(err.Error(), "absolute http(s) URL") {
-		t.Fatalf("error = %v, want absolute URL validation blocker", err)
-	}
-}
 func TestZAIProviderStreamError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)

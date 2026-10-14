@@ -390,8 +390,10 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		CacheKey:        req.CacheKey,
 	}
 
-	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v)",
-		computerID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream)
+	// Images are logged by count, size and short sha256, never by data
+	// (problems/models-configured-text-only-2026-10-15.md, FM11).
+	log.Printf("gateway: inference request from autoputer %s (provider=%s model=%s messages=%d tools=%d tool_choice=%s system_chars=%d max_tokens=%d reasoning=%s stream=%v %s)",
+		computerID, p.Name(), req.Model, len(req.Messages), len(req.Tools), req.ToolChoice, len(req.System), req.MaxTokens, req.ReasoningEffort, req.Stream, provider.SummarizeMedia(req.Messages))
 
 	ctx, cancel := context.WithTimeout(r.Context(), inferenceTimeout)
 	defer cancel()
@@ -410,7 +412,13 @@ func (h *Handler) HandleInference(w http.ResponseWriter, r *http.Request) {
 		sanitized := sanitizeError(err)
 		log.Printf("gateway: provider call failed for autoputer %s: %v (sanitized: %s)",
 			computerID, err, sanitized)
-		writeGatewayJSON(w, http.StatusBadGateway, ErrorResponse{Error: sanitized})
+		status := http.StatusBadGateway
+		if provider.IsMediaError(err) {
+			// A refused image is the caller's error: not retried as a
+			// provider outage.
+			status = http.StatusBadRequest
+		}
+		writeGatewayJSON(w, status, ErrorResponse{Error: sanitized})
 		return
 	}
 

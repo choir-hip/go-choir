@@ -1,6 +1,9 @@
 package modelcatalog
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	DefaultMaxOutputTokens     = 65536
@@ -26,21 +29,96 @@ type ModelInfo struct {
 	// window used for runtime pressure and compaction policy.
 	ContextWindowTokens int `json:"context_window_tokens,omitempty"`
 
-	// Modalities names upstream content modalities known for this model.
+	// Modalities names the input modalities Choir sends this model. It is
+	// filled by SupportedModels from the vision default and the text-only
+	// opt-out list (TextOnlyModels); catalog entries do not set it.
 	Modalities []string `json:"modalities,omitempty"`
 
-	// AdapterModalities names modalities Choir currently knows how to serialize
-	// for this provider adapter.
+	// AdapterModalities names modalities Choir's adapter for this provider
+	// serializes. Every adapter serializes text and images (user turns).
 	AdapterModalities []string `json:"adapter_modalities,omitempty"`
+
+	// TextOnlyReason is why the model is opted out of image input; empty
+	// for a vision model.
+	TextOnlyReason string `json:"text_only_reason,omitempty"`
 
 	// RecommendedFor names role/purpose hints for model policy UIs.
 	RecommendedFor []string `json:"recommended_for,omitempty"`
 }
 
+// Input modalities.
+const (
+	ModalityText  = "text"
+	ModalityImage = "image"
+)
+
+// TextOnlyModels is the explicit image opt-out list: catalogued model id to
+// the reason it may not receive an image. Owner 2026-10-15: vision is on by
+// default for every model the catalog configures; a model goes here only
+// when it is known text-only or its image support through our route is
+// UNVERIFIED. Delete a line once scripts/vision_probe.py --model <id>
+// passes on staging (docs/problems/models-configured-text-only-2026-10-15.md).
+func TextOnlyModels() map[string]string {
+	const zaiText = "believed text-only: Z.AI ships vision as separate GLM-*V models (UNVERIFIED for this version)"
+	const unverified = "UNVERIFIED: no doc or code confirms image input through OpenCode for this model"
+	return map[string]string{
+		"glm-5.2":                         zaiText,
+		"glm-5.1":                         zaiText,
+		"glm-5-turbo":                     zaiText,
+		"glm-5.3-flash":                   unverified,
+		"muse-spark-1.3-contributor":      unverified,
+		"muse-spark-1.3-contributor-free": unverified,
+		"hy3":                             unverified,
+		"qwen3.7-max":                     unverified,
+		"cat-jam-free":                    unverified,
+		"longcat-2.5-preview-free":        unverified,
+		"step-5-preview-free":             unverified,
+	}
+}
+
+// SupportsImage reports whether Choir may send an image to modelID: the
+// model is catalogued (configured) and not on the text-only opt-out list.
+// An uncatalogued id is refused: Choir knows nothing about it.
+func SupportsImage(modelID string) bool {
+	return ImageRefusal(modelID) == ""
+}
+
+// ImageRefusal explains why modelID may not receive an image, or "" when
+// it may.
+func ImageRefusal(modelID string) string {
+	modelID = strings.TrimSpace(modelID)
+	for _, model := range SupportedModels() {
+		if model.ID != modelID {
+			continue
+		}
+		if model.TextOnlyReason == "" {
+			return ""
+		}
+		return fmt.Sprintf("model %q is opted out of image input in the Choir model catalog (%s)", modelID, model.TextOnlyReason)
+	}
+	return fmt.Sprintf("model %q is not in the Choir model catalog; image input requires a catalogued model", modelID)
+}
+
+// withModalities applies the vision default and the opt-out list.
+func withModalities(models []ModelInfo) []ModelInfo {
+	textOnly := TextOnlyModels()
+	for i := range models {
+		models[i].AdapterModalities = []string{ModalityText, ModalityImage}
+		if reason, ok := textOnly[models[i].ID]; ok {
+			models[i].Modalities = []string{ModalityText}
+			models[i].TextOnlyReason = reason
+			continue
+		}
+		models[i].Modalities = []string{ModalityText, ModalityImage}
+	}
+	return models
+}
+
 // SupportedModels returns the list of models Choir knows how to route through
-// platform-owned providers.
+// platform-owned providers. A new entry takes images by default; opt a
+// text-only model out in TextOnlyModels.
 func SupportedModels() []ModelInfo {
-	return []ModelInfo{
+	return withModalities([]ModelInfo{
 		{
 			ID:              "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 			DisplayName:     "Claude Haiku 4.5",
@@ -65,8 +143,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "zai",
 			MaxOutputTokens:     131072,
 			ContextWindowTokens: 1_000_000,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 			RecommendedFor:      []string{"management", "engineering", "verifier"},
 		},
 		{
@@ -87,8 +163,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 			RecommendedFor:      []string{"engineering", "verifier"},
 		},
 		{
@@ -97,8 +171,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 			RecommendedFor:      []string{"engineering", "verifier"},
 		},
 		{
@@ -107,8 +179,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 			RecommendedFor:      []string{"engineering", "verifier"},
 		},
 		{
@@ -117,8 +187,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-zen",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 			RecommendedFor:      []string{"engineering", "verifier"},
 		},
 		{
@@ -127,8 +195,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 			RecommendedFor:      []string{"engineering"},
 		},
 		{
@@ -137,8 +203,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 			RecommendedFor:      []string{"engineering", "verifier"},
 		},
 		// Free opencode-go models (owner 2026-10-13: "add these to our pool,
@@ -150,8 +214,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: 262144,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 		},
 		{
 			ID:                  "longcat-2.5-preview-free",
@@ -159,8 +221,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 		},
 		{
 			ID:                  "step-5-preview-free",
@@ -168,8 +228,6 @@ func SupportedModels() []ModelInfo {
 			Provider:            "opencode-go",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 		},
 
 		{
@@ -178,10 +236,8 @@ func SupportedModels() []ModelInfo {
 			Provider:            "chatgpt",
 			MaxOutputTokens:     65536,
 			ContextWindowTokens: DefaultContextWindowTokens,
-			Modalities:          []string{"text"},
-			AdapterModalities:   []string{"text"},
 		},
-	}
+	})
 }
 
 // DefaultPool names the pool a spec without a model resolves to.
