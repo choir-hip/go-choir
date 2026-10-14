@@ -43,6 +43,9 @@ const (
 	// listed citation pairs are supported: management's choir.Judge (Cut 2
 	// 2a (v)).
 	ActionJudge BrokerAction = "judge"
+	// ActionStories pages the computer's story library, newest first:
+	// management's choir.Stories (L2a A2).
+	ActionStories BrokerAction = "stories"
 )
 
 // BrokerRequest is the flat DTO sent from an untrusted Yaegi activation to the broker.
@@ -203,6 +206,41 @@ type JudgePayload struct {
 	Pairs []types.CitationPair `json:"pairs"`
 }
 
+// StoriesPayload defines ActionStories: a page of at most Limit stories
+// updated before Before (RFC 3339; empty for the newest).
+type StoriesPayload struct {
+	Limit  int    `json:"limit,omitempty"`
+	Before string `json:"before,omitempty"`
+}
+
+// StoryEntry is one story of the library: its inbox (feed it there), its
+// headline, the first paragraph of its current version, when it last
+// changed and its version number.
+type StoryEntry struct {
+	DocID     string `json:"doc_id"`
+	Inbox     string `json:"inbox"`
+	Headline  string `json:"headline"`
+	Lede      string `json:"lede,omitempty"`
+	UpdatedAt string `json:"updated_at"`
+	Version   int    `json:"version"`
+}
+
+// StoriesPage is one page of stories, newest first. Next, when set, is the
+// Before of the next page.
+type StoriesPage struct {
+	Stories []StoryEntry `json:"stories"`
+	Next    string       `json:"next,omitempty"`
+}
+
+// String prints the page as JSON, so a cell that prints it reads it.
+func (p StoriesPage) String() string {
+	b, err := json.Marshal(p)
+	if err != nil {
+		return fmt.Sprintf("{stories:%d next:%s}", len(p.Stories), p.Next)
+	}
+	return string(b)
+}
+
 // ReadPayload defines ActionRead: a host-resolved fetch into a shared
 // capture; the cell receives the capture id and bounded blocks, never a
 // socket.
@@ -276,7 +314,7 @@ func (r *BrokerRequest) Validate() error {
 	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
-		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionJudge:
+		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionJudge, ActionStories:
 		return nil
 	default:
 		return fmt.Errorf("broker protocol: unsupported action %q", r.Action)

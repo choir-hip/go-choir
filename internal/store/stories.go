@@ -34,9 +34,11 @@ type StorySummary struct {
 const storyLedeMaxRunes = 400
 
 // ListStoryDocuments returns the computer's story documents (trajectory
-// kind story) updated strictly before before (zero: no bound), newest
-// first, at most limit (0: all).
-func (s *Store) ListStoryDocuments(ctx context.Context, ownerID, computerID string, before time.Time, limit int) ([]types.Document, error) {
+// kind story), newest first (ties by doc id), after the cursor (before,
+// beforeDoc): those updated strictly before before, or at before with a
+// doc id after beforeDoc. A zero before is no bound. At most limit (0:
+// all).
+func (s *Store) ListStoryDocuments(ctx context.Context, ownerID, computerID string, before time.Time, beforeDoc string, limit int) ([]types.Document, error) {
 	ownerID, computerID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID)
 	if ownerID == "" || computerID == "" {
 		return nil, fmt.Errorf("stories: owner_id and computer_id are required")
@@ -56,7 +58,7 @@ func (s *Store) ListStoryDocuments(ctx context.Context, ownerID, computerID stri
 		if strings.TrimSpace(doc.TrajectoryID) == "" || doc.ArchivedAt != nil {
 			continue
 		}
-		if !before.IsZero() && !doc.UpdatedAt.Before(before) {
+		if !before.IsZero() && (doc.UpdatedAt.After(before) || (doc.UpdatedAt.Equal(before) && doc.DocID <= beforeDoc)) {
 			continue
 		}
 		trajectory, err := s.GetLifecycleTrajectory(ctx, ownerID, computerID, doc.TrajectoryID)

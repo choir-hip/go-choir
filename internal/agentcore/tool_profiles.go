@@ -269,7 +269,11 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		// tool-loop overlay branch is dead and removed with the typed surface.
 		b.WriteString(runtimeprompts.RLMResearchOverlay())
 	}
-	if surface := deskSurfacePrompt(profile, rec); surface != "" {
+	var hidden []string
+	if profile == agentprofile.Management && (rec == nil || !rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)) {
+		hidden = yaegikernel.IntakeVerbs
+	}
+	if surface := deskSurfacePrompt(profile, rec, hidden...); surface != "" {
 		b.WriteString("\n\n")
 		b.WriteString(surface)
 	}
@@ -460,10 +464,12 @@ func (rt *Runtime) ToolRegistryForProfile(profile string) *toolregistry.ToolRegi
 
 // deskSurfacePrompt is the generated block naming the desk's exact choir
 // surface (trace review F13); empty for profiles without a REPL desk.
-func deskSurfacePrompt(profile string, rec *types.RunRecord) string {
+// Hidden names are left out (management's intake functions while the
+// computer's intake.labels setting is off).
+func deskSurfacePrompt(profile string, rec *types.RunRecord, hidden ...string) string {
 	switch profile {
 	case agentprofile.Texture, agentprofile.Management:
-		return yaegikernel.DeskSurface(profile, "", false)
+		return yaegikernel.DeskSurface(profile, "", false, hidden...)
 	case agentprofile.Research:
 		return yaegikernel.DeskSurface(profile, "", true)
 	case agentprofile.Engineering:

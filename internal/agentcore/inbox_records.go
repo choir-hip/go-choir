@@ -130,8 +130,20 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 	if err != nil {
 		return cellRecords{}, fmt.Errorf("records: list %s (%d, %d]: %w", inbox, after, head, err)
 	}
+	// Jev's labels join a captures record's view here, where the store is,
+	// and only when intake labels are on (L2a A2 / R2-6).
+	labelsOn, labelsRead := false, false
 	for _, rec := range recs {
-		out.view = append(out.view, inboxRecordView(rec))
+		view := inboxRecordView(rec)
+		if rec.Captures != nil && len(rec.Captures.Items) > 0 {
+			if !labelsRead {
+				labelsOn, labelsRead = rt.intakeLabelsEnabled(ctx, ownerID, computerID), true
+			}
+			if labelsOn {
+				view.Labels = rt.captureLabelViews(ctx, ownerID, computerID, rec.Captures.Items)
+			}
+		}
+		out.view = append(out.view, view)
 	}
 	return out, nil
 }

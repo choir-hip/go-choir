@@ -131,7 +131,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	// SMG: the management desk's product API call rides the broker like the
 	// research egress verbs — the typed product_api_request tool is deleted.
 	if normalizeDeskRole(role) == "management" {
-		actions = append(actions, ActionProductAPI, ActionJudge, ActionReadCapture)
+		actions = append(actions, ActionProductAPI, ActionJudge, ActionReadCapture, ActionStories)
 	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, sessionHandleTTL)
 	if err != nil {
@@ -289,7 +289,7 @@ var deskModuleSets = map[string][]string{
 	// 2b); it never fetches the world.
 	"management": {"Cast", "Ask", "Note", "Reply",
 		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"ProductAPI", "Judge", "ReadCapture"},
+		"ProductAPI", "Judge", "ReadCapture", "Stories"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
@@ -408,6 +408,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"RunMemoryEntry":   func() reflect.Value { return reflect.ValueOf(s.RunMemoryEntry) },
 		"ProductAPI":       func() reflect.Value { return reflect.ValueOf(s.ProductAPI) },
 		"Judge":            func() reflect.Value { return reflect.ValueOf(s.Judge) },
+		"Stories":          func() reflect.Value { return reflect.ValueOf(s.Stories) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -711,6 +712,17 @@ func (s *ChoirScope) Judge(pairs any) ([]types.SupportVerdict, error) {
 		if _, err := t.Judge(string(raw)); err != nil {
 			return nil, err
 		}
+	}
+	return out, nil
+}
+
+// Stories pages the computer's story library, newest first: limit stories
+// (0 means 50, at most 200) updated before before (RFC 3339; "" for the
+// newest). Pass the page's Next as before for the next page (L2a A2).
+func (s *ChoirScope) Stories(limit int, before string) (StoriesPage, error) {
+	var out StoriesPage
+	if err := s.call(ActionStories, StoriesPayload{Limit: limit, Before: strings.TrimSpace(before)}, &out); err != nil {
+		return StoriesPage{}, err
 	}
 	return out, nil
 }

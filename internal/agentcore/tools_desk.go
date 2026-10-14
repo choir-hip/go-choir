@@ -950,6 +950,9 @@ func (rt *Runtime) deskEgress(egrCtx context.Context, cellExec toolregistry.Exec
 	if action == yaegikernel.ActionJudge {
 		return rt.judgeSupportEgress(egrCtx, cellExec, payload)
 	}
+	if action == yaegikernel.ActionStories {
+		return rt.storiesEgress(egrCtx, cellExec, payload)
+	}
 	if action == yaegikernel.ActionResearch {
 		return rt.runResearchChildren(egrCtx, cellExec, payload)
 	}

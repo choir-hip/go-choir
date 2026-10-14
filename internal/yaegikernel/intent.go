@@ -175,8 +175,32 @@ type InboxRecord struct {
 	Support *types.CommitmentSupport `json:"support,omitempty"`
 	// Captures is a capture arrival's source and new captures (to
 	// management), Cut 2 2b.
-	Captures  *types.CommitmentCaptures `json:"captures,omitempty"`
-	CreatedAt time.Time                 `json:"created_at"`
+	Captures *types.CommitmentCaptures `json:"captures,omitempty"`
+	// Labels is Jev's label on each capture of a captures record, by
+	// capture id, when intake labels are on (L2a A2 / R2-6). It is joined
+	// at read time, never stored on the record.
+	Labels    map[string]CaptureLabelView `json:"labels,omitempty"`
+	CreatedAt time.Time                   `json:"created_at"`
+}
+
+// CaptureLabelView is Jev's label on one capture as management sees it:
+// advice, not a decision. Version names the label version shown, so a
+// later relabel or override never rewrites what management read.
+type CaptureLabelView struct {
+	Version int `json:"version,omitempty"`
+	// Says is the label in words: "Jev: same event as texture:<doc>
+	// '<headline>' (p 0.97)", "Jev: new; same topic as texture:<doc>
+	// '<headline>'", or "unlabelled".
+	Says string `json:"says"`
+	// Event is story, sibling or new; Story is the story's inbox
+	// (texture:<doc>) and SameEventAs the sibling capture's id.
+	Event         string  `json:"event,omitempty"`
+	Story         string  `json:"story,omitempty"`
+	Headline      string  `json:"headline,omitempty"`
+	SameEventAs   string  `json:"same_event_as,omitempty"`
+	P             float64 `json:"p,omitempty"`
+	TopicStory    string  `json:"topic_story,omitempty"`
+	TopicHeadline string  `json:"topic_headline,omitempty"`
 }
 
 // String prints a record as its JSON, so a cell that prints records sees

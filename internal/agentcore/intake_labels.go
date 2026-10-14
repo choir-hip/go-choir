@@ -180,7 +180,7 @@ func (rt *Runtime) labelCaptures(ctx context.Context, ownerID, computerID, sourc
 	budget, cancel := context.WithTimeout(ctx, intakeLabelPollBudget)
 	defer cancel()
 	lib := &intakeLibrary{rt: rt, summary: map[string]store.StorySummary{}}
-	if docs, err := rt.store.ListStoryDocuments(budget, ownerID, computerID, time.Time{}, 0); err != nil {
+	if docs, err := rt.store.ListStoryDocuments(budget, ownerID, computerID, time.Time{}, "", 0); err != nil {
 		log.Printf("intake labels: %s: list stories: %v; labelling against siblings only", sourceID, err)
 	} else {
 		lib.recent, lib.rest = intakeShortlistSplit(docs, time.Now().UTC())

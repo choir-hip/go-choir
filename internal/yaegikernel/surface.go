@@ -84,10 +84,16 @@ var choirFunctionDocs = map[string]FunctionDoc{
 	"ListEvidence":     {Args: []string{"agentID", "limit"}, Summary: "Lists recent saved evidence."},
 	"RunMemoryEntry":   {Args: []string{"entryID"}, Summary: "Reads one durable run-memory entry."},
 	"ProductAPI":       {Args: []string{"method", "path", "body"}, Summary: "Calls an allowlisted product API route as the owner (management only)."},
+	"Stories":          {Args: []string{"limit", "before"}, Summary: "Lists this computer's stories, newest first, with no cap: each story's doc_id, inbox (texture:<doc>, where you feed it), headline, lede (the first paragraph of its current version), updated_at and version. limit 0 means 50 (at most 200); pass the page's Next as before for older stories (management only).", Example: "p, err := choir.Stories(50, \"\")\nfor _, s := range p.Stories { fmt.Println(s.Inbox, s.Headline) }\nif p.Next != \"\" { older, _ := choir.Stories(50, p.Next); fmt.Println(len(older.Stories)) }"},
 	"Judge":            {Args: []string{"pairs"}, Summary: "Judges whether each citation pair's cited block supports the sentence citing it, and records the verdicts with the cell (management only). Pass the pairs a support_pairs record lists (r.Support.Pairs): Jev judges each from the committed sentence and the captured block. To judge pairs yourself, pass {\"key\": p.Key, \"verdict\": \"supported\" or \"unsupported\", \"why\": ...} maps instead (a failure needs why). A judged pair returns its recorded verdict (memo). A pass changes nothing; a failure goes to that document's Texture, which corrects it.", Example: "for _, r := range choir.Records() {\n  if r.Support != nil && len(r.Support.Pairs) > 0 {\n    vs, err := choir.Judge(r.Support.Pairs)\n    fmt.Println(vs, err)\n  }\n}"},
 }
 
 var choirScopeType = reflect.TypeOf((*ChoirScope)(nil))
+
+// IntakeVerbs are management's intake functions (L2a A2 / R2-5). The
+// prompt lists them only when the computer's intake.labels setting is on;
+// the host refuses them when it is off.
+var IntakeVerbs = []string{"Stories"}
 
 // choirSignature renders "choir.Name(arg type, ...) results" from the Go
 // method and the documented parameter names. A namespace export renders each
@@ -265,9 +271,20 @@ func (s *ChoirScope) Help(name ...string) string {
 }
 
 // DeskSurface is the generated prompt block naming a desk's exact surface.
-func DeskSurface(desk, slot string, readOnly bool) string {
+// Hidden names are left out of the block (a setting that is off).
+func DeskSurface(desk, slot string, readOnly bool, hidden ...string) string {
 	scope := &ChoirScope{desk: desk, slot: slot, readOnly: readOnly}
-	return "Your REPL interaction surface. The package choir is predeclared; always call its functions with the choir. prefix. These are the only choir functions this desk can call:\n" + renderSurface(scope.surfaceNames())
+	skip := map[string]bool{}
+	for _, name := range hidden {
+		skip[name] = true
+	}
+	var names []string
+	for _, name := range scope.surfaceNames() {
+		if !skip[name] {
+			names = append(names, name)
+		}
+	}
+	return "Your REPL interaction surface. The package choir is predeclared; always call its functions with the choir. prefix. These are the only choir functions this desk can call:\n" + renderSurface(names)
 }
 
 var (
