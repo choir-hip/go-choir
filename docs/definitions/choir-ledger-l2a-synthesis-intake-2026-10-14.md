@@ -14,6 +14,13 @@ definition_version: 4
 # docs/reports/owner-roadmap-rulings-2026-10-14.md. This station is the
 # first slice of L2 (bounded attention), pulled ahead of C1e B1-B5 by that
 # ruling. L2's digest-per-window and burst bounds remain for L2b.
+# Owner 2026-10-14, later in session, on the architecture: "we can use jev
+# for semantic dedup. just ask it if two articles in context are
+# fundamentally the same. but more generally we should give researchers
+# more power here. researchers should be researching the corpus. jev can
+# categorize captures as they come in, and mgmt then send content to
+# researchers that are already working on existing topics, as well as
+# research desk can spawn new researchers for new topics".
 readiness: drafted
 
 review:
@@ -152,16 +159,25 @@ now:
   conjecture:
     id: L2a-1
     claim: >-
-      The copying comes from what management and Texture can see and are
-      told, not from missing mechanism. Feeding by Note and casting into an
-      existing texture inbox both exist. Given a library view (what each
-      story says, its sources and languages, its last change) and a
-      synthesis contract, the desks route multilingual coverage of one
-      event into one story and write it from convergence and conflict,
-      with no new record kind.
-    test: the fixture run's stories-per-event and languages-per-story, then the live paper's multi-source share against 47/50
+      Synthesis comes from standing topic researchers that research the
+      corpus, not from one research run per story. The owner's
+      architecture, 2026-10-14:
+      (1) Jev categorizes each capture as it arrives. It assigns the
+      capture to an existing topic or marks it new, and says when two
+      captures are fundamentally the same article. These are labels, never
+      filters: a "same" capture stays visible as more coverage.
+      (2) Management routes the capture to the researcher already working
+      on that topic. For a new topic, the research desk spawns a new
+      researcher.
+      (3) That researcher reads the corpus (SearchWireCorpus, ReadCapture)
+      across languages and outlets, plus the web. It reports what
+      converges, what conflicts and how the new capture updates earlier
+      stories. Texture writes and revises the story from those reports.
+      With that, multilingual coverage of one event becomes one
+      synthesized story, and Texture remains the sole writer.
+    test: the fixture run's stories-per-event and languages-per-story, Jev's labels scored against the independent event labels, then the live paper's multi-source share against 47/50
     edge: frame_lock
-    delta_o: a labelled fixture with known event identity across languages, so merging is scored against truth rather than judged by the same desk
+    delta_o: a labelled fixture with known event identity across languages, so Jev's categories and the desks' merges are scored against truth rather than judged by the same models
     scope_if_supported: Autopaper's intake on every source class
     status: proposed
     evidence_refs: [docs/reports/owner-roadmap-rulings-2026-10-14.md]
@@ -184,7 +200,7 @@ now:
     main_uncertainty: whether same-window real feeds give at least 8 events covered in 2+ languages; if not, widen the window or add feeds before judging
     next_observation: the panel's verdict on this file; then the design note
   blocker_or_risk: cross-lingual matching by the model is unproven for zh/ja/ko against en; the fixture must include them before a grouping model is chosen (L2's 200-pair evaluation stays in L2b)
-  next_action: adjudicate the convergent panel on this file (running); then the S0 design note
+  next_action: adjudicate the convergent panel (running on the pre-architecture draft; keep its findings on acceptance and safety), then rerun it on this revision; then the S0 design note
 
 receipts: []
 ---
@@ -196,12 +212,25 @@ The owner's principle is the specification
 principle"). This file tracks the first slice.
 
 Slices, in order:
-- **S0, reconcile and design.** Observe semantic dedup and the fixture
-  path. Write the design note (the library view, the routing policy and
-  the synthesis contract) and run a panel on it.
-- **S1, build.** The library view on management's records surface and
-  the policy and contract in the prompt defaults. Retire semantic dedup if
-  it drops coverage a desk has not seen. Then push, CI and deploy.
+- **S0, reconcile and design.** Observe semantic dedup (dead code) and
+  the fixture path (same-window multilingual feeds already in the
+  registry). The design note answers:
+  - Jev's categorize call: per capture or per poll; against which topic
+    shortlist; and how a label is recorded so management can override
+    it;
+  - topic versus story: a topic researcher may feed several stories, one
+    per event;
+  - how a researcher is addressed per topic, and how the research desk
+    spawns one (today research is per document, opened by Texture);
+  - what a dormant topic researcher costs, and when it ends (station LR's
+    agents-per-computer measure);
+  - the synthesis contract Texture writes from.
+
+  Then a panel on the note.
+- **S1, build.** Jev categorization at arrival, management routing to
+  topic researchers, topic researchers on the corpus, and Texture's
+  synthesis contract. Delete the dead semantic dedup
+  (`qdrant_dedup.go`). Then push, CI and deploy.
 - **S2, prove.** The fixture run on a minted test computer, then 6 hours
   of the live paper. Optionally add a few non-English general-news feeds
   to the paper, chosen for licence (commercial use) and overlap with the
