@@ -1247,3 +1247,73 @@ where S2b exercises them at K > 1.
 - **A queued task at a marker boot with no task running** starts at the
   next delegation's wake or the next closure, as in S2a. Boot delivers
   nothing (§7).
+
+### 18.3 What S2b became in code
+
+| failure mode | code |
+|---|---|
+| FM23, FM29 | `startQueuedManagementTasks` reads K once per call (`managementTaskSlots`), counts running rows (a claimed row with no run yet is busy; a row whose run ended is closed first), then makes one pass over one listing of the queue: a refused claim or a failed start takes no slot and is not retried in that call. The starter's mutex and the claim's compare-and-set are S2a's. |
+| FM8 | Unchanged substrate: every non-crash closure mints a start wake for the oldest queued task in its own commit; one wake now fills every free slot. |
+| FM3 | Unchanged guard (the library head, S2a). The task prompt says other tasks run beside it and may open the same event. |
+| FM28 | `planStoryLibrary` returns the head after a checked open; `InboxCommitReceipt.StoryLibraryHead` carries it; the reduce sets the run's mark to it. An unchecked command's receipt carries 0. |
+| FM14 | `executeWithToolLoop` wraps a task run's provider (the tool loop and its compactor) in `spacedProvider` on `subRLMCallSpacer` (renamed from `researchChildSpacer`; the same spacer research children use, 1.5 s, 40 a minute). |
+| FM30 | `provideriface.Config.ManagementTaskSlots` from `RUNTIME_MANAGEMENT_TASK_SLOTS`, normalized by `NormalizeManagementTaskSlots` (below 1 → 4, above 8 → 8). |
+| FM31 | `store.SettingManagementSerialTasks` (`management.serial_tasks`, default off) in `KnownComputerSettings`; on → K = 1 at the next start. |
+| H3, queue | `/api/runtime/observability` gains `management_tasks` (slots in force, configured slots, serial flag, running, queued, oldest queued age) and `engine_mutex` (per call path since boot). Each task run's metadata carries `management_task_slots`. |
+
+### 18.4 Tests (through the real reduce and commit paths, real desk workers)
+
+- `internal/agentcore/management_tasks_s2b_test.go`:
+  `TestManagementTasksRunKAtOnceAndTheQueueDrains` (K = 3 from config;
+  six concurrent wakes start exactly three; their model calls are in flight
+  together; the queue drains through swept outbox wakes alone; peak running
+  ≤ K; task calls start at least half a spacer interval apart),
+  `TestConcurrentTasksOpenOneStoryForOneEvent` (default K = 4; two tasks
+  held at a barrier after reading the library, both cast; one open, one
+  refusal, one feed into the opened story; head + 1),
+  `TestATaskOpensTwoStoriesWithoutRefusingItself` (FM28; fails without the
+  receipt head), `TestSerialTasksSettingIsTheLiveRollback` (FM31, and the
+  observability block).
+- `TestManagementTasksAtACrashBootAndAPlannedBoot` now runs at K = 2 with
+  two tasks running and one queued (AC6 as written: the crash boot closes
+  both runs and all three rounds, wakes no one, starts nothing; the planned
+  boot closes both running tasks `run_passivated` with residual Reports and
+  leaves the queued task a start wake).
+- The S2a tests run at K = 1 (the fixture's default), which is also the
+  rollback's behaviour.
+- `internal/store/management_tasks_test.go`: the receipt head (FM28).
+- `internal/provideriface/config_test.go`: K's default, bounds and env.
+
+### 18.5 How the probe shows S2b working
+
+`scripts/management_latency_probe.py --cred <paper cred> --start <deploy+idle>`
+adds `tasks.concurrency`: `peak_running` and
+`share_of_window_2plus_running` against `slots_at_start` (K per task run),
+`library_refusals` and `tasks_with_a_refusal` (H5), `now` (K, running,
+queued from observability), and `engine_lock_since_boot_top5` (H3). The
+stderr line now ends with the queue wait p50/p95, peak running and K, and
+the undisposed count. S2b works on the paper when, at 28 sources:
+
+- `tasks.queue_wait_s` p50 and p95 fall well below the S2a window's 425 s
+  and 1,506 s, and `tasks.oldest_queued_age_s` stays bounded;
+- `ac1_latency_s.undisposed.n` and `older_than_900s` stop growing over the
+  window (S2a: 149 undisposed, 81 over 15 minutes after 34 minutes);
+- `peak_running` ≤ K and `share_of_window_2plus_running` > 0 (it ran
+  concurrently);
+- AC4 holds: `scripts/l2a_paper_window.py` pairs find no second story for
+  one event, and `library_refusals` are few (H5);
+- AC9 holds (`ac9_clean_share` ≥ 0.9, `ac9_deadline_share` ≤ 0.1) on the
+  pinned model, and `engine_lock_since_boot_top5` shows no commit path with
+  a max wait in seconds (H3).
+
+### 18.6 Rollback
+
+1. Live, no deploy: set `management.serial_tasks` on
+   (`POST /api/computer-settings {"key":"management.serial_tasks","value":true}`).
+   The next start holds K = 1, which is S2a's behaviour; running tasks
+   finish within their deadline.
+2. Then revert the S2b commits. The receipt field is additive
+   (`omitempty`), the setting key becomes unknown again (a stored row is
+   ignored), and the observability fields disappear. The S2a rollback note
+   (§13: an S2 revert waits for no open task round) still holds for
+   reverting S2a itself.
