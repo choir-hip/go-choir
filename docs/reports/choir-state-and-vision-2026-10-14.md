@@ -8,6 +8,12 @@ medium-to-long-term vision (owner, about 15:05 UTC), and today's claims,
 search-reuse, embedding and VM density designs folded in; staging then reported build
 bdc99643 (deployed 14:57 UTC).
 
+**Erratum (about 22:30 UTC):** every "merge recall 0.174" below is wrong.
+The scorer read only the newest 50 documents; the corrected live figure is
+**0.63 (29 of 46 cross-outlet pairs)** (commit 17820594e,
+`docs/evidence/l2a-after-window-1-2026-10-14.md`). The PDF copy predates
+this correction.
+
 ## How to read this report
 
 Choir is a large idea and a fast-moving codebase. To keep the two apart,
@@ -72,7 +78,7 @@ Autopaper taken live; restart, capacity and deploy safety substantially
 hardened; deploys cut from about 13 to 2.7 minutes with the site staying up.
 
 **What is not yet real.** Synthesis across sources is weak in production
-(merge recall 0.174 live against 1.0 on the test fixture); hypotheses are
+(merge recall 0.63 live (corrected; see the erratum above) against 1.0 on the test fixture); hypotheses are
 recorded but never settled or scored; app agents, contributions, op-eds,
 reputation, the learning economy and Autoradio are designed or vision.
 
@@ -168,7 +174,7 @@ what it *is* (`docs/choir-vision.md`, "The One Idea").
 |---|---|---|---|
 | Persistent computer per user | A Firecracker VM with stable identity, durable state, one event chain; survives restarts and disk loss | **Built, verified on staging** | Lose-the-disk proof 2026-10-09 (`docs/evidence/sh-lose-the-disk-2026-10-09T14-44-09-081Z.json`); S3 snapshot hibernation, wake in 103 ms (`docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md`) |
 | Four persistent desks | Texture, management, engineering, research as recursive language-model (RLM) desks running Go cells | **Built, verified on staging** | C1 authority cut landed 76ab40fd; C1e B1 engineering on records e9d727a7 (`docs/ACTIVE.md`) |
-| Autopaper (automatic newspaper) | Sources polled 24/7, stories synthesized by desks, published automatically at permalinks | **Built, live on staging since 2026-10-13; quality and synthesis partial** | `docs/evidence/c2-autopaper-live-2026-10-13.json`; live front page at `https://choir.news/api/platform/publications/front`; merge recall 0.174 live vs 1.0 on fixture (`docs/evidence/l2a-after-window-1-2026-10-14.md`) |
+| Autopaper (automatic newspaper) | Sources polled 24/7, stories synthesized by desks, published automatically at permalinks | **Built, live on staging since 2026-10-13; quality and synthesis partial** | `docs/evidence/c2-autopaper-live-2026-10-13.json`; live front page at `https://choir.news/api/platform/publications/front`; merge recall 0.63 live (corrected from 0.174) vs 1.0 on fixture (`docs/evidence/l2a-after-window-1-2026-10-14.md`) |
 | Supervised self-development | The computer proposes changes to its own code and state in capsules, frozen, verified, approved, released, reversible | **Partly built: one complete probe-driven episode on staging; the gate program not passed** | M11 rerun 13 satisfied all 17 legs on 2026-10-10 (17b97b8fe; `docs/evidence/m11-rerun-2026-10-10T14-46-02Z.json`); since the C1e cutover the engineering drill stops before Freeze because capsules cannot fetch Go modules (`docs/reports/capsule-go-modules-decision-2026-10-14.md`; host module proxy 3c6347e8) |
 | Precommitment records | Typed predictions committed before evidence, then settled and scored | **Partly built**: record type, append-once persistence, desk verbs, derived views exist; nothing settles or scores yet | `internal/types/commitment.go`; `docs/precommitment-records.md` §10; station L3 is intent |
 | Prospective self-alignment (PSA) | The research theory: procedural fidelity, calibration, materiality, oversight without readable chain of thought | **Theory; experiments H1-H5 not run** | `docs/precommitment-records.md` §8-10 |
@@ -1918,7 +1924,7 @@ each group.
 | Risk | Why it matters | Evidence | Mitigation in the plan |
 |---|---|---|---|
 | **One host** | Every durable home (Store A, Store B, content store, escrow, every computer) is on Node B. A disk or host failure loses the platform and possibly the only copy of the ledger | `docs/reports/roadmap-sequencing-appdev-security-2026-10-14.md`; platform keys copied offline only on 14 Oct (`docs/evidence/platform-key-backup-2026-10-14.md`) | SP0-lite encrypted backups on node-a; SP with a second host |
-| **Synthesis quality** | The product principle is one story per event; live merge recall is 0.174 and many stories still open from one capture | `docs/evidence/l2a-after-window-1-2026-10-14.md`; owner rulings observation (47 of 50 stories from one capture) | Adjudicate misses; L2a enable; S2a; corpus-first research |
+| **Synthesis quality** | The product principle is one story per event; live merge recall is 0.63 (corrected from 0.174) and many stories still open from one capture | `docs/evidence/l2a-after-window-1-2026-10-14.md`; owner rulings observation (47 of 50 stories from one capture) | Adjudicate misses; L2a enable; S2a; corpus-first research |
 | **Search providers** | Deepening and research depend on web search; 7-8 of 9 providers were cooling in every sampled run | `docs/problems/search-providers-cooling-most-of-the-time-2026-10-14.md`; ac5c17db | Backoff fix; paid accounts (owner) |
 | **Instruction text leaking into published titles** | At 14:20 UTC, 9 of the 20 front-page stories had titles that read as desk instructions ("Write the story of ...", "Open a story on ...") | Public front API, 14 Oct 14:20 UTC; "Open a story on" already named in the LF intent note | Needs a problem record and a trace before a fix (hypothesis: management task text used as title after S2a) |
 | **Lost publishes** | The guest's auto-publish queue is in memory; a publish lost to a crash is never retried, so a revision can exist without its public version | Code survey (`internal/agentcore/story_publish.go`) | None yet; candidate for the records substrate |
