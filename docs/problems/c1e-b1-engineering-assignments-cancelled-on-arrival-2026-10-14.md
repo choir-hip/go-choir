@@ -286,3 +286,16 @@ capsule root, pinned by a test to `capsule.ReleaseTreePrefix`).
   relative commands failed at seq 12 and 20, and the overlay's worked
   example `choir.Exec("go", {"test", "./internal/capsule/..."})` would
   fail the same way.
+
+## After the Freeze fixes (9ace75e5, drill 06:48 UTC)
+
+Label `c1e-d4-engineering-0648`, computer
+`computer-4687411d0a313c0a2c3b78e5c08a21b2` (stopped). Management Cast
+engineering five times; each assignment ended with a real final Report,
+`stop_reason: failed` (no more cancel reports), naming the one blocker:
+`go -C /workspace/platform build -o /var/lib/artifact/release/bin/autoputer
+./cmd/autoputer` fails because module zips redirect from proxy.golang.org
+to storage.googleapis.com and return 403. Engineering correctly did not
+Freeze. The engineering-on-records path works up to the release build;
+the build needs the owner's decision
+(docs/reports/capsule-go-modules-decision-2026-10-14.md).
