@@ -403,23 +403,3 @@ func callIntakeJudge(ctx context.Context, judge CandidateJudge, state json.RawMe
 		return nil, fmt.Errorf("Jev: %w", callCtx.Err())
 	}
 }
-
-// overrideDisposition says in words what management did instead.
-func overrideDisposition(o store.CaptureLabelOverride) string {
-	switch o.Disposition {
-	case captureDispositionFeed:
-		return "fed it into the story '" + o.Headline + "'"
-	case captureDispositionOpen:
-		return "opened a new story '" + o.Headline + "'"
-	case captureDispositionDecline:
-		return "declined it"
-	}
-	return o.Disposition
-}
-
-// Dispositions management gives a capture (L2a R2-5).
-const (
-	captureDispositionFeed    = "feed"
-	captureDispositionOpen    = "open"
-	captureDispositionDecline = "decline"
-)

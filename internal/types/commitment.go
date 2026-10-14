@@ -283,6 +283,11 @@ type CommitmentRecord struct {
 	// system record a source poll that wrote new captures sends
 	// management:<owner>, naming them.
 	Captures *CommitmentCaptures `json:"captures,omitempty"`
+	// Disposition is the structured body of management's choir.Feed and
+	// choir.Decline Notes (L2a R2-5): which captures it fed into the story
+	// (feed, to texture:<doc>) or declined (decline, to source:<id>), and
+	// why.
+	Disposition *CommitmentDisposition `json:"disposition,omitempty"`
 }
 
 // CastHypothesis is one hypothesis a Cast opens. The store assigns ID

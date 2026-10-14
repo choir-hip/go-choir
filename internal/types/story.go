@@ -51,6 +51,19 @@ type CommitmentCaptures struct {
 	Items    []CaptureArrival `json:"items"`
 }
 
+// Dispositions management gives captures (L2a R2-5).
+const (
+	DispositionFeed    = "feed"
+	DispositionDecline = "decline"
+)
+
+// CommitmentDisposition is a disposing Note's structured body.
+type CommitmentDisposition struct {
+	Kind     string   `json:"kind"`
+	Captures []string `json:"captures"`
+	Reason   string   `json:"reason,omitempty"`
+}
+
 // CaptureArrival names one new capture: its id (a Ref's doc), title, URL
 // and publish time. Never its body: management reads blocks with ReadDoc.
 type CaptureArrival struct {

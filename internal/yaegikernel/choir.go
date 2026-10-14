@@ -289,7 +289,7 @@ var deskModuleSets = map[string][]string{
 	// 2b); it never fetches the world.
 	"management": {"Cast", "Ask", "Note", "Reply",
 		"CancelAct", "CancelAssignment", "Escalate", "Precommit", "Report", "ReportPacket", "Resolve", "Disagreement",
-		"ProductAPI", "Judge", "ReadCapture", "Stories"},
+		"ProductAPI", "Judge", "ReadCapture", "Stories", "Feed", "Decline"},
 	// Engineering mutates inside its capsule and reports fate.
 	"engineering": {"WriteFile", "Exec", "Assign", "Message", "Emit",
 		"Complete", "Freeze", "Cast", "Ask", "Note", "Reply", "CancelAct",
@@ -409,6 +409,8 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		"ProductAPI":       func() reflect.Value { return reflect.ValueOf(s.ProductAPI) },
 		"Judge":            func() reflect.Value { return reflect.ValueOf(s.Judge) },
 		"Stories":          func() reflect.Value { return reflect.ValueOf(s.Stories) },
+		"Feed":             func() reflect.Value { return reflect.ValueOf(s.Feed) },
+		"Decline":          func() reflect.Value { return reflect.ValueOf(s.Decline) },
 	}
 	for name, mint := range verbs {
 		// A verb is exported only when the desk's module set admits it AND the
@@ -723,6 +725,103 @@ func (s *ChoirScope) Stories(limit int, before string) (StoriesPage, error) {
 	var out StoriesPage
 	if err := s.call(ActionStories, StoriesPayload{Limit: limit, Before: strings.TrimSpace(before)}, &out); err != nil {
 		return StoriesPage{}, err
+	}
+	return out, nil
+}
+
+// Feed feeds captures into an existing story (L2a R2-5): the same Note to
+// texture:<doc> a hand-written feed is, plus the structured list of
+// captures. doc is the story's doc id or its inbox; reason says what the
+// captures add, and why, when you feed elsewhere than Jev's label said.
+func (s *ChoirScope) Feed(doc string, captureIDs any, reason string) (string, error) {
+	t, err := s.boundTray("feed")
+	if err != nil {
+		return "", err
+	}
+	doc = strings.TrimPrefix(strings.TrimSpace(doc), "texture:")
+	if doc == "" || doc == "new" {
+		return "", fmt.Errorf("choir: Feed needs an existing story's doc id or inbox (texture:<doc>); open a new story with choir.Cast(\"texture:new\", headline, spec)")
+	}
+	ids, err := captureIDsArg(captureIDs)
+	if err != nil {
+		return "", fmt.Errorf("choir: Feed: %w", err)
+	}
+	return t.Dispose("texture:"+doc, DispositionFeed, ids, reason)
+}
+
+// Decline declines captures that open no story and feed none (L2a R2-5):
+// the same Note to their source a hand-written decline is, one per source,
+// plus the structured list of captures. Each id must be named by a
+// captures record of this turn.
+func (s *ChoirScope) Decline(captureIDs any, reason string) (string, error) {
+	t, err := s.boundTray("decline")
+	if err != nil {
+		return "", err
+	}
+	ids, err := captureIDsArg(captureIDs)
+	if err != nil {
+		return "", fmt.Errorf("choir: Decline: %w", err)
+	}
+	sourceOf := map[string]string{}
+	for _, r := range s.records {
+		if r.Captures == nil {
+			continue
+		}
+		for _, item := range r.Captures.Items {
+			sourceOf[item.CaptureID] = r.Captures.SourceID
+		}
+	}
+	bySource := map[string][]string{}
+	var sources []string
+	for _, id := range ids {
+		src, ok := sourceOf[id]
+		if !ok {
+			return "", fmt.Errorf("choir: Decline: capture %s is not named by a captures record of this turn (r.Captures.Items)", id)
+		}
+		if _, seen := bySource[src]; !seen {
+			sources = append(sources, src)
+		}
+		bySource[src] = append(bySource[src], id)
+	}
+	var refs []string
+	for _, src := range sources {
+		ref, err := t.Dispose(types.CaptureArrivalSenderInbox(src), DispositionDecline, bySource[src], reason)
+		if err != nil {
+			return strings.Join(refs, ","), err
+		}
+		refs = append(refs, ref)
+	}
+	return strings.Join(refs, ","), nil
+}
+
+// captureIDsArg reads a list of capture ids: a []string, a list of
+// strings, or one id.
+func captureIDsArg(v any) ([]string, error) {
+	var ids []string
+	switch t := v.(type) {
+	case string:
+		ids = []string{t}
+	case []string:
+		ids = t
+	default:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("capture ids: %w", err)
+		}
+		if err := json.Unmarshal(raw, &ids); err != nil {
+			return nil, fmt.Errorf("capture ids must be a list of strings (for example []string{c.CaptureID})")
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no capture ids")
 	}
 	return out, nil
 }

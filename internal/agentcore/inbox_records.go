@@ -269,6 +269,12 @@ func inboxRecordForIntent(scope ReductionScope, in yaegikernel.StagedIntent, toI
 		report, final := reportBodyFromPacket(in.Packet, in.Claim)
 		rec.Report = report
 		rec.Final = final && hasOpenRound
+	case yaegikernel.IntentNote:
+		// choir.Feed and choir.Decline (L2a R2-5): the Note a hand-written
+		// feed or decline is, plus the structured captures.
+		if in.Disposition != "" {
+			rec.Disposition = &types.CommitmentDisposition{Kind: in.Disposition, Captures: append([]string(nil), in.Captures...), Reason: strings.TrimSpace(in.Reason)}
+		}
 	}
 	return rec, nil
 }
@@ -373,6 +379,14 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			}
 		}
 	}
+	// choir.Feed and choir.Decline are refused while the computer's
+	// intake.labels setting is off (L2a A6): the whole cell commits
+	// nothing, and choir.Note does the same work.
+	for _, in := range intents {
+		if in.Disposition != "" && !rt.intakeLabelsEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
+			return nil, fmt.Errorf("reduce: %s: choir.Feed and choir.Decline are off on this computer (the owner's intake.labels setting); feed or decline with choir.Note, naming the capture ids", in.LocalID)
+		}
+	}
 	var localIDs []yaegikernel.StagedIntent
 	// Management's support verdicts (Cut 2 2a (v)) commit in the same
 	// transaction as its records and cursor.
@@ -451,6 +465,12 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 			}
 		}
 		receipt.Intents = append(receipt.Intents, ReducedIntent{LocalID: in.LocalID, Seq: uint64(seq), Kind: in.Kind, Inbox: opened})
+	}
+	// Management's dispositions are compared with Jev's labels; a mismatch
+	// is recorded as an override on the label (L2a A3 / R2-5). Best effort:
+	// the records are committed.
+	if strings.TrimSpace(r.rec.AgentProfile) == agentprofile.Management {
+		rt.recordLabelOverrides(ctx, r.scope.OwnerID, r.scope.ComputerID, records, committed.Records)
 	}
 	// Verdicts reach the published overlay of the stories they judge, off
 	// the commit's path (Cut 2 2b).

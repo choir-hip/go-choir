@@ -183,6 +183,15 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 	if rec.Inbox == types.StoryOpenInbox {
 		return inboxRefused("record %s is addressed to %s; only a management Cast committed through CommitInboxRecords opens a story", rec.RecordID, types.StoryOpenInbox)
 	}
+	if d := rec.Disposition; d != nil {
+		isNote := kind == types.CommitmentKindDirective && rec.Directive != nil && rec.Directive.Subtype == types.CommitmentDirectiveNote
+		toStory, toSource := strings.HasPrefix(rec.Inbox, "texture:"), strings.HasPrefix(rec.Inbox, "source:")
+		if !isNote || len(d.Captures) == 0 || !strings.HasPrefix(rec.SenderInbox, "management:") ||
+			(d.Kind == types.DispositionFeed && !toStory) || (d.Kind == types.DispositionDecline && !toSource) ||
+			(d.Kind != types.DispositionFeed && d.Kind != types.DispositionDecline) {
+			return inboxRefused("disposition %s must be management's Note feeding captures to texture:<doc> or declining them to source:<id>", rec.RecordID)
+		}
+	}
 	return nil
 }
 

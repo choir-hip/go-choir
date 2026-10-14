@@ -291,6 +291,12 @@ type StagedIntent struct {
 	// types.SourcePacket. Set by ReportPacket; empty for a thin
 	// claim-only Report.
 	Packet string `json:"packet,omitempty"`
+	// Disposition fields (management's choir.Feed and choir.Decline, L2a
+	// R2-5): a Note that disposes of captures carries which (feed or
+	// decline), the capture ids and management's reason.
+	Disposition string   `json:"disposition,omitempty"`
+	Captures    []string `json:"captures,omitempty"`
+	Reason      string   `json:"reason,omitempty"`
 }
 
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:
@@ -408,6 +414,28 @@ func (t *Tray) Note(toDesk, body string) (string, error) {
 		return "", fmt.Errorf("tray: note requires a destination desk")
 	}
 	return t.stage(StagedIntent{Kind: IntentNote, ToDesk: toDesk, Body: body})
+}
+
+// Disposition values of a disposing Note (L2a R2-5).
+const (
+	DispositionFeed    = types.DispositionFeed
+	DispositionDecline = types.DispositionDecline
+)
+
+// Dispose stages a Note that disposes of captures: fed into the story at
+// toDesk (texture:<doc>) or declined to their source (source:<id>). Its
+// body names the reason and the captures, as a hand-written Note would.
+func (t *Tray) Dispose(toDesk, disposition string, captureIDs []string, reason string) (string, error) {
+	reason = strings.TrimSpace(reason)
+	if toDesk == "" || len(captureIDs) == 0 || reason == "" {
+		return "", fmt.Errorf("tray: %s requires a destination, capture ids and a reason", disposition)
+	}
+	verb := "Fed"
+	if disposition == DispositionDecline {
+		verb = "Declined"
+	}
+	body := reason + "\n\n" + verb + " captures: " + strings.Join(captureIDs, ", ")
+	return t.stage(StagedIntent{Kind: IntentNote, ToDesk: toDesk, Body: body, Disposition: disposition, Captures: append([]string(nil), captureIDs...), Reason: reason})
 }
 
 // Reply answers a staged Ask; targetRef is the Ask's correlation id.
@@ -544,7 +572,8 @@ func (t *Tray) stage(in StagedIntent) (string, error) {
 	size := len(in.Body) + len(in.Objective) + len(in.Summary) + len(in.Verdict) + len(in.BuildRecipeRef) + len(in.Decision) +
 		len(in.TargetRef) + len(in.Claim) + len(in.ResolverID) + len(in.Question) + len(in.Answer) + len(in.Statement) +
 		len(in.Precommit) + len(in.Resolve) + len(in.Disagreement)
-	for _, refs := range [][]string{in.EvidenceRefs, in.ExecutionRefs, in.TestReceipts, in.DependencyToolchainRefs, in.VerifierRefs} {
+	size += len(in.Reason)
+	for _, refs := range [][]string{in.EvidenceRefs, in.ExecutionRefs, in.TestReceipts, in.DependencyToolchainRefs, in.VerifierRefs, in.Captures} {
 		for _, ref := range refs {
 			size += len(ref)
 		}
