@@ -253,3 +253,24 @@ Lead: recorded at the top of
 
 Recorded at the top of
 `docs/reports/selfdev-update-architecture-2026-10-15.md`.
+
+## 17. What is an agent's identity? The security boundary that can keep a key
+
+Owner: an agent's identity could be the model, the model family, a session
+trajectory, a pattern, or a document, filesystem or database. Maybe the
+answer is the security boundary that can maintain a cryptographic identity.
+
+Lead: this is the accountable identity, the one precommitments and a track
+record attach to.
+- **Descriptive attributes, not identities:** model, trajectory and pattern.
+  They are signed over inside records.
+- **Track records survive model swaps:** a desk's calibration survives a
+  change of model, and the model is a slice dimension.
+- **Boundaries nest, so certification nests:** a passkey in the secure
+  enclave; the computer in its VM; the desk, certified by the computer.
+- **Desk-cell confinement earns desks their keys:** it is what makes a desk a
+  real boundary. Without it, a desk key is only a label.
+
+Sent to the principal-identity design
+(`docs/reports/principal-identity-and-signed-acts-2026-10-15.md`, in
+progress).
