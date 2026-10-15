@@ -78,3 +78,41 @@ with a tracer run between batches:
 | Memory hotplug for class:test, wired to capsule jobs | land/memory-hotplug |
 
 The kernel reboot is moved to the morning with the owner.
+
+## Status at ~05:00 UTC
+
+Landed and deployed: batch 1 (restore head race, Claude seccomp, always-busy
+refresh), batch 2 (`a48e1b5ba`: raced Texture activation fix; Claude delegate
+off). Pushed: batch 3 (`e4cdc2ba6`: Keenable monthly pacing). The paper took
+two planned busy-refreshes (03:45, 04:45) and runs the online GC fix.
+
+Concurrency was cut to at most 7, then 4–5 agents (owner: the 16 GB M1 was
+pegged). Paused streams keep their work committed on their branches.
+
+### Landing order for the self-development stack (do not reorder)
+
+1. **S1** owner-act receipts (`feat/s1-owner-act-receipts`), observe mode.
+2. **P5** host build + layered apply (`feat/p5-host-build-layered-apply`),
+   only after the review's blocking fix: the recipe refusal must check the
+   paths git actually changed (a crafted `x/flake.nix` patch header bypassed
+   it), plus the 10-minute nix timeout, base drift, transient refusals,
+   restore-restart counter, and per-computer build quota.
+3. **P4** standing consensus (`feat/p4-standing-consensus`, built on S1). It
+   adds its own `corpusd host-builder` service (127.0.0.1:8089, own key) that
+   checks a patch applies; P5 adds `internal/hostbuild` in corpusd that builds
+   the release. Before landing, rebase P4 onto P5 and make the
+   capsule-verifier seat vote on the host-built release (P4's residual 1:
+   today it checks the declared patch, not the applied files). One host
+   builder, not two.
+4. **P6–P8** identity, release record, source adoption.
+
+### Held for review or owner
+
+- `fix/bound-guest-dolt-history`: squashes guest Dolt history online. Under
+  review for anything that reads old Dolt history before it lands.
+- `land/account-recovery`: builds recovery out, against the 10-14 ruling to
+  delete `auth/recovery/request` for now. Owner decides.
+- Exa: failing on our own request shape (`parse response: unexpected end of
+  JSON input`), not the key. Re-enabling a paid provider waits for the owner.
+- Keenable: demand is already ~4–5k/day, about the free pace; tripling needs
+  paid overflow (~$4 per 1,000). Owner decides.
