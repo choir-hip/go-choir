@@ -892,7 +892,7 @@ func (p *ChatGPTProvider) Call(ctx context.Context, req LLMRequest) (*LLMRespons
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	return parseOpenAIStream(resp.Body, modelID, "chatgpt", func(StreamChunk) {})
+	return parseOpenAIStreamLogged(resp.Body, modelID, "chatgpt", func(StreamChunk) {}, newCacheLogMeta(body))
 }
 
 func (p *ChatGPTProvider) Stream(ctx context.Context, req LLMRequest, onChunk func(StreamChunk)) (*LLMResponse, error) {
@@ -912,7 +912,7 @@ func (p *ChatGPTProvider) Stream(ctx context.Context, req LLMRequest, onChunk fu
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	return parseOpenAIStream(resp.Body, modelID, "chatgpt", onChunk)
+	return parseOpenAIStreamLogged(resp.Body, modelID, "chatgpt", onChunk, newCacheLogMeta(body))
 }
 
 func (p *ChatGPTProvider) doStreamRequestWithAuthRetry(ctx context.Context, body openAIRequest) (*http.Response, error) {
@@ -2572,6 +2572,12 @@ func responsesUsage(usage map[string]any) Usage {
 }
 
 func parseOpenAIStream(body io.Reader, modelID string, providerName string, onChunk func(StreamChunk)) (*LLMResponse, error) {
+	return parseOpenAIStreamLogged(body, modelID, providerName, onChunk, nil)
+}
+
+// parseOpenAIStreamLogged is parseOpenAIStream plus request cache metadata
+// (nil for none) appended to the per-call usage line.
+func parseOpenAIStreamLogged(body io.Reader, modelID string, providerName string, onChunk func(StreamChunk), meta *cacheLogMeta) (*LLMResponse, error) {
 	result := &LLMResponse{
 		Model:        modelID,
 		ProviderName: providerName,
@@ -2718,8 +2724,8 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 
 	onChunk(StreamChunk{Type: "message_stop", StopReason: result.StopReason})
 	RecordCacheUsage(providerName, result.Usage)
-	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d",
-		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls))
+	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d%s",
+		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls), meta.logFields())
 	return result, nil
 }
 
