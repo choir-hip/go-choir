@@ -270,6 +270,20 @@ modes the fixes answer:
   mid-transaction (no busy gate).
 - R6 `restart_scheduled` is reported before the marker is durable or the gate
   has passed.
+- H25 a derivation from a guest-authored tree builds on a remote builder.
+  Node B's nix config (read 2026-10-15) has `sandbox = true`,
+  `sandbox-fallback = false`, `max-jobs = 2` and
+  `builders = @/etc/nix/machines`, which names
+  `ssh-ng://root@node-a-builder` (x86_64-linux, big-parallel, kvm). node-a is
+  shared with another project and must never build guest-authored code. Fix:
+  every nix call the builder makes (build, eval, path-info) carries
+  `--option builders ''` (no remote builders), `--option max-jobs 2` (local
+  building stays on; with no remote builders, a future `max-jobs = 0` would
+  fail every build) and `--option sandbox true` (restating Node B's setting
+  so a config change cannot run a guest derivation unsandboxed). corpusd runs
+  as root, a trusted user, so the daemon honors the overrides; for an
+  untrusted client they could not weaken the daemon anyway. `nix-store
+  --export` builds nothing and is unchanged.
 
 ## Ceremony (red)
 

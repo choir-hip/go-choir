@@ -92,10 +92,28 @@ func runNix(ctx context.Context, args ...string) (string, error) {
 	return runNixWithin(ctx, nixTimeout, args...)
 }
 
+// hostNixOptions go on every nix call the builder makes. The builder
+// evaluates and builds guest-authored trees, so:
+//
+//   - an empty builders list disables remote building: Node B's /etc/nix/machines names
+//     node-a-builder, which is shared with another project and must never
+//     build guest-authored code. Every derivation builds on this host.
+//   - max-jobs 2 keeps local building on (with no remote builders, max-jobs
+//     0 would fail every build); 2 is Node B's configured value.
+//   - sandbox true restates Node B's setting so a future config change
+//     cannot run a guest derivation unsandboxed. corpusd runs as root, a
+//     trusted user, so the daemon honors these overrides.
+var hostNixOptions = []string{
+	"--option", "builders", "",
+	"--option", "max-jobs", "2",
+	"--option", "sandbox", "true",
+}
+
 // runNixWithin is runNix under an explicit bound.
 func runNixWithin(ctx context.Context, bound time.Duration, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
+	args = append(append([]string{}, hostNixOptions...), args...)
 	cmd := exec.CommandContext(ctx, "nix", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

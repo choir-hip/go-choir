@@ -271,11 +271,51 @@ func TestPatchedTreeMustEqualTheCommit(t *testing.T) {
 	}
 }
 
+// H25: every nix call in the host build path disables remote builders (so a
+// guest-authored derivation never builds on node-a-builder, which another
+// project shares), keeps local building on, and restates the sandbox.
+func TestEveryNixCallBuildsOnlyHereSandboxed(t *testing.T) {
+	bin := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "argv")
+	// One line per call; each argument wrapped in [] so an empty one shows.
+	script := "#!/bin/sh\nline=''\nfor a in \"$@\"; do line=\"$line[$a]\"; done\necho \"$line\" >> " + logPath +
+		"\necho /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-autoputer-0.1.0\n"
+	if err := os.WriteFile(filepath.Join(bin, "nix"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	if _, err := buildResult(ctx, ".#autoputer", filepath.Join(t.TempDir(), "result"), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evalDrvPath(ctx, ".#autoputer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pathInfoClosure(ctx, "/nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-autoputer-0.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(calls) < 4 { // build, eval outPath, eval drvPath, path-info
+		t.Fatalf("nix calls = %q", calls)
+	}
+	for _, call := range calls {
+		for _, want := range []string{"[--option][builders][]", "[--option][max-jobs][2]", "[--option][sandbox][true]"} {
+			if !strings.Contains(call, want) {
+				t.Errorf("nix call %s lacks %s", call, want)
+			}
+		}
+	}
+}
+
 // H18: the build step is bound by the build's own timeout, not by the
 // per-call nix bound for evaluations.
 func TestBuildStepIsBoundByTheBuildTimeout(t *testing.T) {
 	bin := t.TempDir()
-	script := "#!/bin/sh\nif [ \"$1\" = build ]; then sleep 1; fi\necho /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-autoputer-0.1.0\n"
+	script := "#!/bin/sh\nfor a in \"$@\"; do if [ \"$a\" = build ]; then sleep 1; fi; done\necho /nix/store/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-autoputer-0.1.0\n"
 	if err := os.WriteFile(filepath.Join(bin, "nix"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
