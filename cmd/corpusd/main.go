@@ -15,6 +15,10 @@ import (
 	"time"
 )
 
+// storeOpenTimeout bounds each attempt to open and bootstrap the platform
+// store (20 attempts below).
+const storeOpenTimeout = 60 * time.Second
+
 func main() {
 	// `corpusd front-importance` is the host timer's scoring pass
 	// (internal/frontimportance); it never starts the platform service.
@@ -32,7 +36,11 @@ func main() {
 	var store *platform.Store
 	var storeErr error
 	for attempt := 1; attempt <= 20; attempt++ {
-		store, storeErr = platform.OpenStore(cfg.DoltDSN, cfg.CorpusDoltDSN)
+		// Each attempt is bounded: a Dolt that accepts connections but never
+		// answers must not hold this process (and a deploy switch) forever.
+		openCtx, cancelOpen := context.WithTimeout(context.Background(), storeOpenTimeout)
+		store, storeErr = platform.OpenStore(openCtx, cfg.DoltDSN, cfg.CorpusDoltDSN)
+		cancelOpen()
 		if storeErr == nil {
 			break
 		}

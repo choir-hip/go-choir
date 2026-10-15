@@ -856,7 +856,13 @@ in
     serviceConfig = commonServiceHardening // {
       Type = "oneshot";
       ExecStart = "${serviceExec "checkpointd" goChoirPackages.checkpointd}";
-      TimeoutStartSec = "8h";
+      # A timer-started oneshot must not be able to hold a nixos switch: with
+      # 8h, a checkpointd stuck on a deadlocked Dolt blocked the P4 deploy for
+      # 30 minutes (docs/problems/platform-dolt-deadlock-hangs-checkpointd-
+      # and-crashloops-vmctl-2026-10-15.md). Rebuilds take 43-56 s (maximum
+      # over 65 publishes, 2026-10-01..15), so 10 minutes is about 10x slack.
+      # Rollback: restore "8h".
+      TimeoutStartSec = "10min";
       MemoryHigh = "4G";
       MemoryMax = "6G";
       MemorySwapMax = "0";

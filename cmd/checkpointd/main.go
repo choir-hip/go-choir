@@ -8,10 +8,16 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 	"github.com/yusefmosiah/go-choir/internal/platform"
 )
+
+// storeOpenTimeout bounds connecting to the platform Dolt servers. Observed
+// maintenance runs take under one second, so a minute is two orders of
+// magnitude of slack and still short of any unit timeout.
+const storeOpenTimeout = 60 * time.Second
 
 func main() {
 	// This is intentionally NOT a corpusd environment flag: the plaintext key
@@ -37,14 +43,18 @@ func main() {
 		log.Fatal(err)
 	}
 	defer clear(escrow[:])
-	store, err := platform.OpenStore(cfg.DoltDSN, cfg.CorpusDoltDSN)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	// The open is bounded; the worker keeps the signal context. checkpointd
+	// does not own the schema (corpusd bootstraps), so it applies no DDL.
+	openCtx, cancelOpen := context.WithTimeout(ctx, storeOpenTimeout)
+	store, err := platform.OpenStoreWithoutBootstrap(openCtx, cfg.DoltDSN, cfg.CorpusDoltDSN)
+	cancelOpen()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer store.Close()
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 	job, err := runCheckpointWorker(ctx, svc, store, escrow, filepath.Join(cfg.ArtifactsRoot, "checkpoint-scratch"), 15<<30)
 	if job != nil {
 		if encErr := json.NewEncoder(os.Stdout).Encode(job); encErr != nil {
