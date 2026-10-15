@@ -12,7 +12,7 @@ lanes and P6-P8 have not landed yet (see Skipped / pending).
 | 0 | `f704110ce` (code `da80c5fcc`, raced-activation fix 2) | Texture wake reads `agent.ActiveRunID` | `da80c5fcc` run: shard 6 hung in `internal/server TestHealthHandlerIncludesAddrAfterStart` (unrelated flake), rerun green, then SBOM accept failed because the docs-only `f704110ce` run had advanced the baseline; the `f704110ce` run was fully green and deployed the same code | staging `f704110ce` | tracer `selfdev-jobs-0654`: FAIL (see below), but `recovered raced activation` fired and no poison |
 | 0b | `73b14c327` | Autopaper cache routing: chatgpt session/conversation headers, `cached_in=` log field, `prompt_cache` on gateway `/health`. Owner ruling applied before merge: search trimming and run-memory elision are **off by default** (`6f7a764f4`, merged via branch `land/halving-append-only`, because `feat/autopaper-compute-halving` is checked out in another worktree) | green | `73b14c327`, 07:53Z | see cache table |
 | 1 | `9c62b209f` | S1 owner-act receipts, observe mode | green | `9c62b209f`, 08:05Z | proxy `owner-act key host-owner-act-4323d8e7e60998de loaded`; corpusd `owner acts: mode=observe`; proxy and corpusd active; `https://choir.news/` 200 |
-| 2 | `2eae77de6` | P5 host build and layered apply. The merge broke the build (`restoreRestartBusy` called the old `plannedRestartBusy` signature); fixed in the same push | green | `2eae77de6`, 08:23Z | corpusd `host build: enabled (source /opt/go-choir, installable .#autoputer)`; tracer `p5-go-served-0825` in progress at the time of writing |
+| 2 | `2eae77de6` | P5 host build and layered apply. The merge broke the build (`restoreRestartBusy` called the old `plannedRestartBusy` signature); fixed in the same push | green | `2eae77de6`, 08:23Z | corpusd `host build: enabled (source /opt/go-choir, installable .#autoputer)`; tracer `p5-go-served-0825` FAIL, did not reach apply (below) |
 
 ## Tracer results
 
@@ -26,9 +26,14 @@ lanes and P6-P8 have not landed yet (see Skipped / pending).
   `dispatcher: poison`, no `mutation authority mismatch`. Problem doc:
   `docs/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md`.
   Judged not a new failure class, so landing continued.
-- `p5-go-served-0825` (P5, build `2eae77de6`): still running when this was
-  written; first engineering assignment ended `failed`, Texture re-cast it
-  (round 5). Result is appended below if it finished.
+- `p5-go-served-0825` (P5, build `2eae77de6`): FAIL, `pass=false`,
+  `reached=engineering_final_report`. Three engineering assignments ended
+  `failed` with no bundle (Texture re-cast through round 5); no poison, no
+  broker timeout. P5's apply path was therefore not exercised; P5 is deployed
+  and dormant. Problem doc:
+  `docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md`.
+  Reasons for the failed assignments not read from the ledger (hypothesis:
+  jobs-0101 A1-A3 class).
 
 ## Cache ratio before and after 0b (paper VM, chatgpt vs opencode-go, cached/input per UTC hour)
 
@@ -55,8 +60,9 @@ deploy-time regressions seen.
 
 ## Skipped or pending (as of writing)
 
-- Section-page fix `fix/autopaper-section-pages`: queued next at the
-  coordinator's direction.
+- Section-page fix `fix/autopaper-section-pages` (backend commits only; the
+  branch's frontend edits were uncommitted in another worktree): merged as
+  `978a18d4e`, pushed with this briefing; proof below if filled in.
 - P4 standing consensus, memory hotplug (known conflict in
   `internal/agentcore/api.go`), Dolt compaction, patch lanes, P6-P8
   (known conflicts in `api.go`, `api_self_development.go`,
