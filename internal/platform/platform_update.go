@@ -142,6 +142,13 @@ func (h *Handler) HandlePlatformUpdateOfferMint(w http.ResponseWriter, r *http.R
 		return
 	}
 	offer.Authorization = receipt
+	// S1: the admission gate admits a platform-control:update acceptance
+	// only for an offer in this log, so an offer corpusd cannot log is not
+	// issued.
+	if err := recordPlatformUpdateOfferIssued(r.Context(), h.checkpointAuthority.cas.store.db, offer, offerDigest, time.Now().UTC()); err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusCreated, offer)
 }
 

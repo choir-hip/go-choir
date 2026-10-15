@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/owneract"
 )
 
 const (
@@ -87,6 +88,14 @@ type SelfDevelopmentModeCAS struct {
 	store      *Store
 	signingKey computerevent.SigningKey
 	now        func() time.Time
+	// ownerActs is the S1 owner-act policy; nil is the pre-S1 rule (a
+	// host-internal caller is the owner).
+	ownerActs *OwnerActAuthority
+}
+
+// ConfigureOwnerActs installs the S1 owner-act policy for owner writes.
+func (c *SelfDevelopmentModeCAS) ConfigureOwnerActs(authority *OwnerActAuthority) {
+	c.ownerActs = authority
 }
 
 func NewSelfDevelopmentModeCAS(store *Store, signingKey computerevent.SigningKey) (*SelfDevelopmentModeCAS, error) {
@@ -122,7 +131,7 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 	expired, err := c.set(ctx, computerID, SetSelfDevelopmentModeRequest{
 		Mode: SelfDevelopmentModeOff, ExpectedGeneration: mode.Generation,
 		IdempotencyKey: fmt.Sprintf("selfdev-mode-expiry-v1:%s:%d", computerID, mode.Generation),
-	}, ModeWriterCorpusdExpiry)
+	}, ModeWriterCorpusdExpiry, nil)
 	if err == nil {
 		return expired, nil
 	}
@@ -148,7 +157,13 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 // Set is the owner's mode write. Its only callers are host-internal: the
 // proxy, after it has authenticated the owner.
 func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error) {
-	return c.set(ctx, computerID, request, ModeWriterHostInternal)
+	return c.set(ctx, computerID, request, ModeWriterHostInternal, nil)
+}
+
+// SetAsOwner is the owner's mode write carrying the owner-act receipt the
+// handler verified (nil when it carried none and the policy observes).
+func (c *SelfDevelopmentModeCAS) SetAsOwner(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest, ownerAct *owneract.Verified) (SelfDevelopmentMode, error) {
+	return c.set(ctx, computerID, request, ModeWriterHostInternal, ownerAct)
 }
 
 // ConsumeAsGuest is the only mode write a guest capability may make: the
@@ -156,7 +171,7 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 // or qualified_consensus to propose_only, under the consumption key that
 // names the armed operation. Everything else is ErrSelfDevelopmentModeOwnerRequired.
 func (c *SelfDevelopmentModeCAS) ConsumeAsGuest(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error) {
-	return c.set(ctx, computerID, request, ModeWriterGuestConsumption)
+	return c.set(ctx, computerID, request, ModeWriterGuestConsumption, nil)
 }
 
 // guestConsumptionAllowed admits exactly the two consumption writes in
@@ -181,7 +196,7 @@ func guestConsumptionAllowed(current SelfDevelopmentMode, request SetSelfDevelop
 	return ok && computerevent.IsSHA256(digest)
 }
 
-func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest, writer string) (SelfDevelopmentMode, error) {
+func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest, writer string, ownerAct *owneract.Verified) (SelfDevelopmentMode, error) {
 	computerID = strings.TrimSpace(computerID)
 	request.Mode = strings.TrimSpace(request.Mode)
 	request.IdempotencyKey = strings.TrimSpace(request.IdempotencyKey)
@@ -215,8 +230,29 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 		current = SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}
 	}
 	switch writer {
-	case ModeWriterHostInternal, ModeWriterCorpusdExpiry:
+	case ModeWriterHostInternal:
+		if c.ownerActs != nil {
+			if ownerAct != nil {
+				replayed, replayErr := ownerActReplayed(ctx, tx, ownerAct)
+				if replayErr != nil {
+					return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: owner act lookup: %w", replayErr)
+				}
+				if replayed {
+					if refuseErr := c.ownerActs.refuse(ErrOwnerActRefused, "mode write", computerID, "owner-act receipt "+ownerAct.ReceiptID+" was already used"); refuseErr != nil {
+						return SelfDevelopmentMode{}, refuseErr
+					}
+					ownerAct = nil
+				}
+			} else if c.ownerActs.Enforcing() {
+				return SelfDevelopmentMode{}, fmt.Errorf("%w: no verified owner-act receipt", ErrOwnerActRefused)
+			}
+		} else {
+			ownerAct = nil
+		}
+	case ModeWriterCorpusdExpiry:
+		ownerAct = nil
 	case ModeWriterGuestConsumption:
+		ownerAct = nil
 		if !guestConsumptionAllowed(current, request) {
 			return SelfDevelopmentMode{}, ErrSelfDevelopmentModeOwnerRequired
 		}
@@ -257,6 +293,11 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 		"idempotency_key":                     request.IdempotencyKey, "request_commitment": requestCommitment,
 		"mode_writer": writer,
 	}
+	if ownerAct != nil {
+		fields["owner_act_receipt_digest"] = ownerAct.Digest
+		fields["owner_user_id"] = ownerAct.OwnerUserID
+		fields["owner_auth_method"] = ownerAct.AuthMethod
+	}
 	receipt, err := computerevent.NewSignedReceipt("ModeReceipt", "corpusd", fields, []computerevent.SigningKey{c.signingKey}, now)
 	if err != nil {
 		return SelfDevelopmentMode{}, err
@@ -280,6 +321,16 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 		if err != nil {
 			return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: insert: %w", err)
 		}
+	}
+	ownerActDigest := ""
+	if ownerAct != nil {
+		ownerActDigest = ownerAct.Digest
+		if err := recordOwnerAct(ctx, tx, ownerAct, computerevent.DigestBytes(receiptJSON), now); err != nil {
+			return SelfDevelopmentMode{}, err
+		}
+	}
+	if err := recordModeReceiptIssued(ctx, tx, computerID, current, next, writer, ownerActDigest, receiptJSON, now); err != nil {
+		return SelfDevelopmentMode{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: commit: %w", err)
@@ -350,6 +401,15 @@ func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request 
 	default:
 		return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: unknown mode %q", request.Mode)
 	}
+}
+
+// SelfDevelopmentModeRequestCommitment is the commitment a mode write is
+// idempotent on and the subject an owner-act receipt binds: the proxy and
+// corpusd compute it from this one function.
+func SelfDevelopmentModeRequestCommitment(computerID string, request SetSelfDevelopmentModeRequest) (string, error) {
+	request.Mode = strings.TrimSpace(request.Mode)
+	request.IdempotencyKey = strings.TrimSpace(request.IdempotencyKey)
+	return selfDevelopmentModeRequestCommitment(strings.TrimSpace(computerID), request)
 }
 
 func selfDevelopmentModeRequestCommitment(computerID string, request SetSelfDevelopmentModeRequest) (string, error) {
@@ -434,7 +494,7 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 	case http.MethodPost:
 		// A host-internal caller is the proxy carrying an authenticated
 		// owner act. A guest capability may only consume the armed grant.
-		write := h.selfDevelopmentModes.Set
+		var write func(context.Context, string, SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error)
 		if !internalCaller {
 			if h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:append") != nil {
 				writeJSON(w, http.StatusForbidden, apiError{Error: "self-development mode mutation capability refused"})
@@ -449,9 +509,28 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid mode request"})
 			return
 		}
+		if write == nil {
+			// S1: the owner's write must carry the proxy's owner-act
+			// receipt. In observe a missing or invalid one is logged.
+			var ownerAct *owneract.Verified
+			if authority := h.selfDevelopmentModes.ownerActs; authority != nil {
+				verified, verifyErr := authority.verifyModeWrite(r, computerID, request)
+				if verifyErr != nil {
+					if refuseErr := authority.refuse(ErrOwnerActRefused, "mode write", computerID, verifyErr.Error()); refuseErr != nil {
+						writeJSON(w, http.StatusForbidden, apiError{Error: refuseErr.Error()})
+						return
+					}
+				} else {
+					ownerAct = verified
+				}
+			}
+			write = func(ctx context.Context, computerID string, request SetSelfDevelopmentModeRequest) (SelfDevelopmentMode, error) {
+				return h.selfDevelopmentModes.SetAsOwner(ctx, computerID, request, ownerAct)
+			}
+		}
 		mode, err := write(r.Context(), computerID, request)
 		if err != nil {
-			if errors.Is(err, ErrSelfDevelopmentModeOwnerRequired) {
+			if errors.Is(err, ErrSelfDevelopmentModeOwnerRequired) || errors.Is(err, ErrOwnerActRefused) {
 				writeJSON(w, http.StatusForbidden, apiError{Error: err.Error()})
 				return
 			}
