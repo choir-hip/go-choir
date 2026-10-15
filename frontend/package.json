@@ -22,6 +22,6 @@
     "@chenglou/pretext": "^0.0.7",
     "ghostty-web": "^0.4.0",
     "jszip": "^3.10.1",
-    "pdfjs-dist": "^5.7.284"
+    "pdfjs-dist": "^6.4.299"
   }
 }

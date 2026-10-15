@@ -595,6 +595,51 @@ jobs:
       - name: Build frontend
         run: cd frontend && pnpm build
 
+  # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 4):
+  # advisories against package-lock.json, the lock the Nix build ships.
+  # Runtime dependencies are what users' browsers run; dev dependencies are
+  # listed separately. Never gates check; Patch Watch files the issues.
+  npm-audit:
+    name: npm audit (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: plan
+    if: needs.plan.outputs.frontend == 'true'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: npm audit (lock only, no install)
+        shell: bash
+        working-directory: frontend
+        run: |
+          set -uo pipefail
+          npm audit --package-lock-only --omit=dev --json > "$RUNNER_TEMP/npm-audit-runtime.json" || true
+          npm audit --package-lock-only --json > "$RUNNER_TEMP/npm-audit-all.json" || true
+          runtime_high=$(jq '[.vulnerabilities // {} | .[] | select(.severity == "high" or .severity == "critical")] | length' "$RUNNER_TEMP/npm-audit-runtime.json")
+          {
+            echo "## npm audit (frontend/package-lock.json)"
+            echo
+            echo "Report only: this job never gates CI."
+            echo
+            echo "### Runtime dependencies"
+            jq -r '.vulnerabilities // {} | .[] | "- \(.name) \(.range): \(.severity)"' "$RUNNER_TEMP/npm-audit-runtime.json"
+            echo
+            echo "### All dependencies (including dev)"
+            jq -r '.vulnerabilities // {} | .[] | "- \(.name) \(.range): \(.severity)"' "$RUNNER_TEMP/npm-audit-all.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${runtime_high:-0}" != "0" ]; then
+            echo "::warning title=npm audit::${runtime_high} high or critical runtime advisories (report only)"
+          fi
+          exit 0
+
   deploy-impact:
     name: Detect Staging Deploy Impact
     runs-on: ubuntu-latest
