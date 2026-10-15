@@ -121,6 +121,36 @@ Paper booted on `2eae77de6` (epoch after each deploy), `status=ready`,
 persistent disk 35.7% used (about 16 GiB dolt), below the 75% stop line; no
 deploy-time regressions seen.
 
+## Later landings (afternoon) and where it stopped
+
+| step | commit | result |
+|---|---|---|
+| main with P4 (rerun), patch lanes, hotplug, Exa | `3327ee047` | green, deployed, staging ok |
+| capsule broker re-dial + write-replace fix | `a64f28e1f` | green, deployed |
+| Dolt guardrails (checkpointd HOME, ctx open, vmctl ping retry, liveness probe) | `7b8944f03` | green, deployed; probe timer active, ok probes; checkpointd no longer panics and publishes checkpoints, but still exits 1 because one computer's replay stops at a commitment record with no verified identity formula (`docs/problems/checkpointd-replay-upcast-missing-identity-formula-2026-10-15.md`) |
+| cleanup/delete-choir-assign | within `3327ee047` | green |
+| account recovery | `13380efc7` | green, deployed; `POST /auth/recovery/request` for an unknown address returns 200 `{"ok":true}`, auth logs `user_not_found` and no token text |
+| Dolt compaction (paper only) | `c92746ed0` | **CI red**: heresy detector I4 (`CALL DOLT_RESET` in `internal/store/dolt_compaction.go`); not deployed (`docs/problems/dolt-compaction-trips-heresy-i4-ci-red-2026-10-15.md`) |
+
+Tracer `go-served-1143` (build `7b8944f03`): first full loop, 17 of 18 checks.
+Memory hotplug probe: refused ("computer is not selected for memory hotplug");
+the feature is flag-off by design, so there is no hotplug proof yet. Exa: still
+`exa=error` in the gateway search summary after the deploy (4 lines, from the
+tracer computer's searches); the failing step is not named in the summary line;
+cap 150 stays.
+
+**Open concern:** the paper made no inference calls after 10:56 (stories stop at
+10:55); see `docs/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md`.
+
+P6-P8 skipped: merging `feat/p6-p8-release-adopt` conflicts in six red files
+(`agentcore/api.go`, `api_self_development.go`, `platform/handlers.go`,
+`proxy/self_development.go`, `vmctl/handlers.go`, `scripts/reeng_tracer.mjs`)
+and, beyond textual conflicts, P5 and P6 both define a different
+`effective_release` block under the same JSON key and struct field in
+`/health` and observability (P5: startup release, `effectiveReleaseIdentity`;
+P6: live identity, `EffectiveRelease`); reconciling them is a design decision
+on a red surface.
+
 ## Skipped or pending (as of writing)
 
 - Re-run P4's deploy; then patch lanes + hotplug + exa (already on main),
