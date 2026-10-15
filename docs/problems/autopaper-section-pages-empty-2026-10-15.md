@@ -50,3 +50,25 @@ as the paper goes, with "Older stories" paging.
   passes `section` through.
 - Frontend: a section page fetches `?section=<id>` itself with cursor paging,
   instead of filtering the front page's rows.
+
+## Fix
+
+Branch `fix/autopaper-section-pages` (orange; rollback: git revert each commit).
+
+- `b6490f95b` scorer: `run` carries previous score rows for stories outside
+  the fetched window, dropping rows older than 14 days by `scored_at`
+  (`-retention` flag / `FRONT_IMPORTANCE_RETENTION`, default 14d) or with no
+  readable `scored_at`.
+- `44226829e` corpusd: `?section=` on the internal front list; invalid section
+  is 400; scans publication batches (100 at a time, at most 2000 per request),
+  `next_cursor` resumes after the last publication scanned, so a short or
+  empty page can carry a cursor. Unfiltered path unchanged.
+- `763e05ea9` proxy: passes `section` through.
+- `e15d7b3a8` frontend: a section page fetches `?section=<id>&limit=60` and
+  pages its own cursor; empty pages with a cursor are followed; the empty
+  state shows only when the server returns zero.
+
+Deploy: the scorer change ships in the corpusd binary (the timer runs
+`corpusd front-importance`), so restart/redeploy corpusd, proxy and the
+frontend. Sections of stories already past the newest 100 are not recovered
+(their rows are already gone); they refill only as stories are rescored.
