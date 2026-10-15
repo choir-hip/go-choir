@@ -132,7 +132,7 @@ func TestRLMEngineeringOverlayTeachesFreezeReceiptsAndExecLimits(t *testing.T) {
 	}
 	for _, want := range []string{
 		"do not run go build",
-		"npm ci", "npm run build", "cp -a dist/. /" + capsule.ReleaseTreePrefix + "frontend/", "rm -rf node_modules dist",
+		"npm ci", "npm run build", "cp -rf --no-preserve=mode,ownership,timestamps dist/. /" + capsule.ReleaseTreePrefix + "frontend/", "rm -rf node_modules dist",
 	} {
 		if !strings.Contains(overlay, want) {
 			t.Errorf("F1/F5: the no-Go build recipe does not say %q", want)
