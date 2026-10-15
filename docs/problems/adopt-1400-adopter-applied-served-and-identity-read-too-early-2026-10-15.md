@@ -46,3 +46,17 @@ Owed: rerun the adopt drill with `adopter_served` and `adopter_identity` polled
 (for example 90 s), or read them again before stopping the adopter.
 
 Heresy delta: discovered 0; introduced 0; repaired 0.
+
+## Plan (tracer only, no product change)
+
+In `adoptScenario`, after the adopter's operation reaches `applied`, poll
+`adopter_serves_the_change` (marker surface returns this run's token) and
+`identity_names_adoption` (`effective_release.adopted_release_id == release_id`,
+an `operation_id`, and the tree hash matching on the same base) every 5 s for
+up to about 120 s, which covers the planned restart and P6's 30 s identity
+retry (`effectiveTreeRetry`). On timeout the last observed served status and
+identity block are recorded as they were (`claim.served`, `claim.identity`) plus
+`claim.adopter_poll` with the attempt count and when each condition first held.
+Then rerun the adopt drill once under a new label with the adopt-1400 command.
+If both checks pass it is the first passing P6-P8 adopt loop; if they fail on
+the settled state, write up the trace and stop (no patch).
