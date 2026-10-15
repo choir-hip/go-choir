@@ -100,3 +100,44 @@ The review certifies the goal file only. It does not certify these:
 - that the witness precondition has passed;
 - that a guest read route for projection events exists (none does today);
 - any runtime behavior.
+
+## Witness (b) design (panel, 2026-10-15, at c7539911f)
+
+Prompt: `.agentic-consensus/l3-witness-b-design-2026-10-15/prompt.md`. It
+offered four candidates:
+- D1: a Store B first-insert sequence, with a watermark recorded on the
+  Cast;
+- D2: watermarks recorded on later arrivals;
+- D3: a host-attested anchor;
+- D4: only the paper's own first inserts count.
+
+**D3 as a per-computer causal anchor** (gpt-6.1-sol, gemini-3.8, codex):
+- corpusd reads the writing computer's committed canonical head *before*
+  the first insert, and stores a host-signed witness with the winning
+  insert only.
+- The ordering is: Cast committed → anchor head read → first insert →
+  CaptureArrival.
+- The Cast must be a strict ancestor of the anchor, and the writer must be
+  the paper.
+
+Points the three agreed on:
+- Reading the head after the insert is unsound. The sequence insert →
+  Cast → read → delayed arrival would admit old evidence.
+- Bare D4 (`created=true`) is insufficient for the same reason.
+- No platform-wide counter: it widens the red surface and needs
+  linearization across stores.
+- A capture write must never fail because the witness failed. The
+  capture is simply unscorable, and is never filled in later.
+- The witness is row data, so a Dolt squash does not touch it. It must be
+  immutable against `PutObject` upserts and `DeleteObject`, with
+  tombstones.
+- The off-host copy carries the signatures, the keys and the chain
+  artifacts.
+
+**Dissent** (gpt-6-luna): D1′, a Store B first-insert sequence plus a
+post-commit watermark anchor taken off the Cast path. It is sound only
+with a serialized Store B cut, and it adds contention on shared writes.
+
+**Adopted:** D3. It is the "record one at the corpusd write" fallback the
+reviewed contract already allows, so the file review stays bound to
+bdf232c5 for `finish`. The decision is recorded in the L3 now card.

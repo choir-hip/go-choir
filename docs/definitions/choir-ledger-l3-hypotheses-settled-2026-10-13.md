@@ -324,47 +324,40 @@ now:
       L3-1, planned in L3-3 (inline outcomes leave the scorer averages, and
       the settlement records stay).
   next_action: >-
-    The L3-1 precondition, read-only: the guest read route for projection
-    events by canonical id, then derive the Cast, CaptureArrival and Store
-    B witnesses for one existing paper Cast. Then L3-1, tests first, in a
-    worktree. Both reviewers flagged that the current corpusd created_at
-    (time.Now at the write) cannot serve as witness (b).
-    Design note for the precondition (2026-10-15, read from the code, not
-    yet reviewed).
-    - (a) needs no new table and no guest route. Inbox records are
-      written under a must-not-exist ObjectCondition, so each Cast and
-      CaptureArrival is in exactly one projection batch, and the first hit
-      is the witness.
-      - The host already walks a chain read-only:
-        projectionbase.DiskEventSource reads event artifacts from disk
-        along previous_head ancestry, as checkpointd does, with no SQL.
-      - A read-only host CLI on that source, matching ProjectionOp
-        CanonicalID, answers the precondition for one Cast.
-    - Do not add a derived first-sequence table to the guest projection
-      store.
-      - The state commitment hashes refs only, but the projectionbase
-        content witness extracts the whole texture database
-        (internal/projectionbase/witness.go).
-      - Genesis replay would fill such a table for all history, while live
-        stores fill it only from deploy onward. That is the same
-        live-versus-replay divergence as the open upcast-legacy-refs
-        checkpointd residual.
-      - Defer any index to L3-2 scale, and exclude it from the witness or
-        build it on the host.
-    - (b) has no existing witness.
-      - Store B's Dolt commits are debounced, not one per write
-        (internal/platform/store.go markDirty), and the weekly squash
-        would erase their order, so Dolt history cannot serve.
-      - corpusd created_at is time.Now, so it cannot serve either.
-      - The candidate: a monotonic Store B sequence assigned at first
-        insert only, plus a Store B watermark that bounds the commitment
-        from above. The watermark must be read after the commitment, and
-        reading it on the Cast path adds a call to the live paper's
-        critical path.
-      - Recording the watermark on later CaptureArrivals instead avoids
-        the Cast path, but races with concurrent polls.
-      - Unresolved. It needs a design review before L3-1 starts the
-        forecast cohort.
+    Witness (b) is decided by the design panel (3 of 4,
+    docs/evidence/l3-file-review-2026-10-15.md, section "Witness (b)
+    design"). It is a per-computer causal anchor recorded at the corpusd
+    write, which is the fallback this reviewed contract already allows.
+    - Before attempting a capture's first insert, corpusd reads the
+      writing computer's committed canonical event head (platform
+      computer_event_heads). It stores a host-signed
+      choir.capture_first_creation.v1 witness with the winning INSERT
+      only: capture id, doc hash, writer computer, anchor sequence, head
+      and receipt digest, key id and signature.
+    - The witness rides CapturedItem, the pending list and
+      CaptureArrival.
+    - A capture counts only when all of these hold:
+      - the Cast is a strict ancestor of the anchor on the paper's chain;
+      - the writer is the paper;
+      - the first arrival follows the Cast (witness a).
+    - A failed head read or signature still stores the capture, without
+      a witness: unscorable, and never filled in later.
+    - The witness is immutable against PutObject upserts and
+      DeleteObject. A tombstone stops a deleted capture from earning a
+      newer first witness.
+    - The off-host copy carries the signatures, the verification keys and
+      the chain artifacts.
+    Witness (a) needs no new table: a read-only host chain walk on
+    projectionbase.DiskEventSource, since Cast and CaptureArrival records
+    are written once. Never add a guest index: the content witness covers
+    the whole texture DB, so live and replay would diverge.
+    Next steps:
+    - a problem-first design doc for the corpusd witness (red: Store B
+      writes, host signing);
+    - then L3-1, tests first, in a worktree. L3-1 and the corpusd witness
+      ship before the forecast cohort starts.
+    Dissent kept: gpt-6-luna preferred a post-commit Store B watermark
+    anchor (D1'), which needs a serialized Store B sequence.
 
 receipts: []
 ---
