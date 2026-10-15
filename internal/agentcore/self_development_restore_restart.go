@@ -48,7 +48,7 @@ func (rt *Runtime) restoreExecChanged(restoredDigest string) bool {
 		return false
 	}
 	manifest, _, err := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, restoredDigest)
-	return restoredExecDiffers(rt.selfdevStartupRelease, manifest, err)
+	return restoredExecDiffers(rt.startupManifest().Release, manifest, err)
 }
 
 // restoreRestartIdlePoll and restoreRestartIdleWindow pace a restore restart

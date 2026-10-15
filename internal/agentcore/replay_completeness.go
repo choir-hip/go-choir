@@ -471,7 +471,7 @@ func (rt *Runtime) openProbeReplayStore(ctx context.Context, computerID, tempRoo
 }
 
 func replayCompletenessVersion(rt *Runtime, head *computerevent.Head) computerversion.ComputerVersion {
-	codeRef := strings.TrimSpace(rt.selfdevStartupReleaseDigest)
+	codeRef := strings.TrimSpace(rt.startupManifest().Digest)
 	if codeRef == "" {
 		codeRef = "runtime:" + strings.TrimSpace(rt.cfg.ComputerID)
 	}

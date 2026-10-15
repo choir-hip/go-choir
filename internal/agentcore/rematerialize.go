@@ -627,14 +627,47 @@ func (rt *Runtime) ensureServingBaseline(ctx context.Context, computerID, baseli
 	return manifest, nil
 }
 
-func (rt *Runtime) recordStartupManifest(manifest updater.ReleaseManifest) {
-	if rt == nil {
-		return
-	}
+// startupManifestFacts is one consistent read of the startup-manifest fields.
+type startupManifestFacts struct {
+	Marker      string
+	Digest      string
+	EventSchema uint64
+	Reducer     uint64
+	Release     *effectiveReleaseIdentity
+}
+
+// setStartupManifest records the manifest this computer serves. release is
+// P5's private boot-time identity (restoredExecDiffers compares the restored
+// layer with it); nil leaves it as it was, because a restore restages
+// `current` but the process still runs the layer it booted with.
+func (rt *Runtime) setStartupManifest(manifest updater.ReleaseManifest, release *effectiveReleaseIdentity) {
+	rt.selfdevStartupMu.Lock()
+	defer rt.selfdevStartupMu.Unlock()
 	rt.selfdevStartupMarker = manifest.Marker
 	rt.selfdevStartupReleaseDigest = manifest.ContentDigest
 	rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
 	rt.selfdevStartupReducer = manifest.ReducerVersion
+	if release != nil {
+		rt.selfdevStartupRelease = release
+	}
+}
+
+// startupManifest reads the startup-manifest fields under one lock.
+func (rt *Runtime) startupManifest() startupManifestFacts {
+	rt.selfdevStartupMu.RLock()
+	defer rt.selfdevStartupMu.RUnlock()
+	return startupManifestFacts{
+		Marker: rt.selfdevStartupMarker, Digest: rt.selfdevStartupReleaseDigest,
+		EventSchema: rt.selfdevStartupEventSchema, Reducer: rt.selfdevStartupReducer,
+		Release: rt.selfdevStartupRelease,
+	}
+}
+
+func (rt *Runtime) recordStartupManifest(manifest updater.ReleaseManifest) {
+	if rt == nil {
+		return
+	}
+	rt.setStartupManifest(manifest, nil)
 	// P6: a restore or rematerialize changed what this computer serves.
 	rt.reportEffectiveReleaseAsync("restaged")
 }

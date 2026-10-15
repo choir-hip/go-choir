@@ -129,8 +129,8 @@ func TestEnsureServingBaselineImportsImmutableBaselineWhenCurrentMissing(t *test
 	if importCalls.Load() != 1 {
 		t.Fatalf("baseline import calls=%d, want 1", importCalls.Load())
 	}
-	if manifest.ContentDigest == "" || rt.selfdevStartupReleaseDigest != manifest.ContentDigest {
-		t.Fatalf("startup manifest was not recorded: manifest=%q startup=%q", manifest.ContentDigest, rt.selfdevStartupReleaseDigest)
+	if startup := rt.startupManifest(); manifest.ContentDigest == "" || startup.Digest != manifest.ContentDigest {
+		t.Fatalf("startup manifest was not recorded: manifest=%q startup=%q", manifest.ContentDigest, startup.Digest)
 	}
 	served, err := os.ReadFile(filepath.Join(updaterRoot, "current", "frontend", "index.html"))
 	if err != nil {

@@ -276,7 +276,13 @@ type Runtime struct {
 	// wakeAuditInterval overrides actorWakeAuditInterval (tests only).
 	wakeAuditInterval time.Duration
 	// wakeRetries bounds failed actor wake dispatches (SL slice 2).
-	wakeRetries                 wakeRetryTracker
+	wakeRetries wakeRetryTracker
+	// selfdevStartupMu guards the startup-manifest fields below:
+	// recordStartupManifest rewrites them after a restore or rematerialize
+	// while /health and the effective-release report read them from other
+	// goroutines (docs/problems/p6-effective-release-report-data-race-ci-red-2026-10-15.md).
+	// Read them through startupManifest(), write through setStartupManifest().
+	selfdevStartupMu            sync.RWMutex
 	selfdevStartupReleaseDigest string
 	selfdevStartupRelease       *effectiveReleaseIdentity
 	selfdevStartupEventSchema   uint64
@@ -770,11 +776,7 @@ func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realiz
 		rt.selfdevComputerID = strings.TrimSpace(computerID)
 		rt.selfdevRealizationID = strings.TrimSpace(realizationID)
 		if manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot); err == nil {
-			rt.selfdevStartupMarker = manifest.Marker
-			rt.selfdevStartupReleaseDigest = manifest.ContentDigest
-			rt.selfdevStartupRelease = effectiveReleaseFromManifest(manifest)
-			rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
-			rt.selfdevStartupReducer = manifest.ReducerVersion
+			rt.setStartupManifest(manifest, effectiveReleaseFromManifest(manifest))
 		}
 	}
 }

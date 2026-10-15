@@ -46,7 +46,9 @@ func TestEffectiveReleaseNamesTheAppliedOperationTreeHeadAndCodeRef(t *testing.T
 	// Startup saw a base release; then a self-development apply swapped
 	// current without a restart yet (I1).
 	baseDigest := writeCurrentRelease(t, updaterRoot, computerID, "base", nil)
+	rt.selfdevStartupMu.Lock()
 	rt.selfdevStartupReleaseDigest = baseDigest
+	rt.selfdevStartupMu.Unlock()
 	bundle := releaseFrozenBundle(t, updaterRoot, computerID, "op-applied", base, patch)
 	applied := writeCurrentRelease(t, updaterRoot, computerID, "selfdev-op-applied", func(m *updater.ReleaseManifest) {
 		m.CodeRef = "code:sha256:" + strings.Repeat("5", 64)

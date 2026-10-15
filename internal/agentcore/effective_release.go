@@ -117,7 +117,7 @@ func (rt *Runtime) EffectiveRelease(ctx context.Context) EffectiveRelease {
 	if rt == nil {
 		return out
 	}
-	out.ServingReleaseDigest = rt.selfdevStartupReleaseDigest
+	out.ServingReleaseDigest = rt.startupManifest().Digest
 	out.BuildCommit = rt.buildCommit()
 	if root := strings.TrimSpace(rt.selfdevUpdaterRoot); root != "" {
 		if manifest, err := readCurrentManifestIdentity(root); err == nil {

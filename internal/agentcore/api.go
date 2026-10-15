@@ -671,10 +671,11 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("autoputer"),
 	}
-	resp.SelfDevelopmentMarker = h.rt.selfdevStartupMarker
-	resp.EventSchemaVersion = h.rt.selfdevStartupEventSchema
-	resp.ReducerVersion = h.rt.selfdevStartupReducer
-	resp.ReleaseDigest = h.rt.selfdevStartupReleaseDigest
+	startup := h.rt.startupManifest()
+	resp.SelfDevelopmentMarker = startup.Marker
+	resp.EventSchemaVersion = startup.EventSchema
+	resp.ReducerVersion = startup.Reducer
+	resp.ReleaseDigest = startup.Digest
 	// Guard trip (computed above, before WriteHeader) marks the response.
 	if guard != "" {
 		resp.Status = "layering_bootguard"
