@@ -159,6 +159,9 @@ func runCheckpointWorker(ctx context.Context, svc *platform.Service, store *plat
 		verifier:        computerevent.EventHeadReceiptVerifier{Keys: svc.ControlKeyResolver()},
 	}
 	scratch := filepath.Join(scratchRoot, fmt.Sprintf("%s-%d", j.ComputerID, j.Generation))
+	if removed := pruneSupersededScratch(scratchRoot, j.ComputerID, j.Generation); len(removed) > 0 {
+		log.Printf("checkpoint scratch pruned computer=%s superseded=%d", j.ComputerID, len(removed))
+	}
 	if err := os.MkdirAll(scratch, 0700); err != nil {
 		return fail("failed", err)
 	}
