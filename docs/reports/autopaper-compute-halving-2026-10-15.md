@@ -135,15 +135,15 @@ billing pages). Research is 53% of raw input.
 | # | Lever | Raw input | Cache-weighted | Risk | Status |
 |---|---|---|---|---|---|
 | 1 | chatgpt cache routing (session headers, hit rate 29% to about 85–90%) | 0 | **−44%** (chatgpt 81M to about 23M of 133M) | none to quality; provider request shape (red) | implemented |
-| 2 | Rolling elision of old tool results, batched (N=6, B=24) | −18 to −19% of all (−34 to −36% of research) | −11 to −17% of research at 0.1x, −23 to −27% at 0.2x | medium: the model may need an elided result | implemented, default on at a high threshold |
-| 3 | Search hits in context: 15 results, 500-character snippets, each hit printed once | −6% of all (−12% of research) | −6% of all | low | implemented |
+| 2 | Rolling elision of old tool results, batched (shipped N=8 verbatim, B=24) | −17 to −18% of all (66–68% of research) | 85–91% of research at 0.1x (−2 to −8% of all), 75–79% at 0.2x (−11 to −13% of all) | medium: the model may need an elided result; it can read it back | implemented, default on, research only |
+| 3 | Search hits in context: 12 results, 300-character snippets (a hit is ~200 characters of title and URL plus snippet, so a print is ≤6k characters against the 8k cap; typical hit measured 83 + 120 + 316) | about −7% of research (−4% of all) | same | low: fewer candidates per search | implemented, default on |
 | 4 | Bound research runs: about 90 iterations per run, top 5 runs are half of research input; turn or token budget per run | up to −13% of all at the p90 | similar | quality: cut-off research | not implemented, needs a measured cap |
 | 5 | Importance triage before research (about 35% of scored stories are 1–3 yet each costs the same 1.3M) | −10 to −15% if the lowest third skip research | same | quality: needs a pre-research score; the 10-minute scorer runs after publication | not implemented |
 | 6 | Texture wake coalescing (273 runs in 3 h, 32% of input) | −5 to −10% | same | medium | not implemented |
 
 Reading: **cost** (cache-weighted) can be roughly halved by #1 plus #2 and
-#3 (about −50%); **raw tokens** need #4 and #5 as well, because #2 and #3
-together give about −22% raw. The stories are all still ingested (no change
+#3 (about −50% if #1 reaches 85–90%); **raw tokens** need #4 and #5 as
+well, because #2 and #3 together give about −21% raw. The stories are all still ingested (no change
 to polling, capture or dedupe), and the most important stories get the same
 research as before: #1 to #3 change cost per call, not what a story is given.
 
@@ -190,22 +190,55 @@ research as before: #1 to #3 change cost per call, not what a story is given.
   5. Gate story opens on importance (the intake labels path already makes
      a Jev call per capture).
 
-## 4. Next steps (for the successor)
+## 5. What was implemented (branch `feat/autopaper-compute-halving`, not pushed)
 
-1. Per-turn growth of a big research run: `GET /api/runs/{id}/events` on
-   the guest (from Node B: `curl -H "X-Authenticated-User: <owner>"
-   http://<guest-ip>:8085/...`; guest IP from `journalctl -u
-   go-choir-vmctl | grep 'booted VM vm-1669020a'`). Runs to read:
-   `e7955dc9-f42a-492a-a5de-49bd0f665d96`, `64a3a0c6-6657-46ea-9f8f-b49f739e6724`.
-   Split each call's input into system prompt, history replay and cell/tool
-   results (search text).
-2. Map stages in code: `internal/agentcore/source_schedule.go`,
-   `capture_arrival.go`, `research_children.go`, `story_publish.go`,
-   `internal/frontimportance`; prompt assembly and history replay in the
-   desk loop; search result shaping (`desk_search.go`, `internal/search`,
-   yaegikernel search store).
-3. Count stories/day published, started-but-dropped, merged, duplicates.
-4. Confirm the lever ranking with that arithmetic, then implement the top
-   1–2 behind flags (orange), failure modes listed before tests.
+| Commit | Class | Flag, default, rollback |
+|---|---|---|
+| chatgpt `session_id` and `conversation_id` headers equal to `prompt_cache_key`; `cached_in=` and `cache_reported=` on provider log lines; `GET /health` `prompt_cache` per provider | red (provider request shape) | `CHOIR_CHATGPT_SESSION_HEADERS` on the gateway; default on (ignorable metadata equal to the key already sent); `=0` removes |
+| Desk searches: 12 results, 300-character snippets | orange | `CHOIR_DESK_SEARCH_MAX_RESULTS=12`, `CHOIR_DESK_SEARCH_SNIPPET_CHARS=300`; `=40` and `=0` restore; guest runtime |
+| Research old-tool-result elision | orange | `CHOIR_RUN_MEMORY_ELISION=1` (`0` off), `_KEEP=8`, `_BATCH=24`, `_MIN_CHARS=1200`; guest runtime |
 
-Rollback: docs only; `git revert`.
+Not done, with reasons: **coarser run-context time** (first calls are 7% of
+luna calls and the run-context turn carries run-unique facts, so a coarser
+time would not make two runs share it); **run bounding (#4)**, **triage
+before research (#5)** and **wake coalescing (#6)** change what a story is
+given and need their own measured design.
+
+Residual risks: the chatgpt headers are a hypothesis (§3C); if the
+after-measurement does not move luna's hit rate, the next suspects are
+`chatgpt-account-id` and `OpenAI-Beta`, which Codex also sends, and a
+per-run key (the 15 requests per minute per prefix-and-key overflow the
+OpenAI API documents). Elision can make a research run re-run a cell it
+could have read; the quality proxy below watches for it.
+
+## 6. Staging measurement plan (24 h before and after the deploy)
+
+Same computer (`vm-1669020a…`), windows of 24 h starting at the deploy, a
+control window of the 24 h before it (cache on since 2026-10-14 13:00 UTC).
+Pull `GET /api/costs?detail=1&limit=20000&from=…` (read inside python, key
+never printed) and the front.
+
+1. **Input tokens/day**, raw and cache-weighted (cached at 0.1x, also 0.2x),
+   per provider, per desk. Target: cache-weighted −50%, raw −21%.
+2. **Cached %** per provider and per hour. chatgpt target ≥ 85% from 29%.
+   Cheap hourly read without the guest: sample gateway `GET /health`
+   `prompt_cache.chatgpt` twice and subtract; or on Node B
+   `journalctl -u go-choir-gateway | grep 'provider: chatgpt stream complete'`
+   and sum `cached_in=` over `tokens_in=` per hour. If chatgpt stays near
+   40% after the deploy, the headers were not the cause (§5 residuals).
+3. **Calls/day** (baseline ~26.8k): elision must not raise it; a rise in
+   research calls per run means the model is re-reading.
+4. **Stories/day** (front, `updated_at` in window; baseline ~410) and
+   **published, not revised** count: must not fall.
+5. **Quality proxy**, same stories before and after: median `source_count`
+   (2) and revisions (3) per story, words (192), the share of stories with
+   0 sources (6%), the importance of the top-20 stories (unchanged set), and
+   research runs per story ending without a report. Also the number of
+   `run_memory_elision` progress events per research run (expect ~3) and
+   `choir.RunMemoryEntry` calls per run (a high count means stubs are being
+   read back).
+6. **Rollback triggers**: stories/day −10%, mean source_count −0.3, or
+   research calls per run +25%: set the three flags off (elision, search
+   limits, chatgpt headers only if 4xx appear) and compare again.
+
+Rollback of this report: `git revert`.
