@@ -403,6 +403,19 @@ now:
     and captures at about one per minute. The trace shows no refusal, so
     the likelier cause is the news cycle (more existing stories to feed).
     Re-measure over a full hour against the hour before.
+    Re-measured 23:38 from the management inbox's task final reports
+    (task_outcome.dispositions), which count every capture's disposition,
+    over two equal 69-minute windows:
+    - before (21:20-22:29): 65 captures arrived, 11 opens, 29 feeds;
+    - after (22:29-23:38): 58 captures arrived, 7 opens, 35 feeds.
+    Throughput held (40 against 42 dispositions), and 11 against 7 opens
+    is within Poisson noise. The dip is not supported; there is no
+    evidence L3-1 harms intake. All 8 new opens carry kind "assertion";
+    there are no forecasts yet.
+    (The earlier texture-inbox count undercounts older windows: it only
+    sees inboxes in the newest runs.)
+    Next observation: the kinded share and the forecast share over a
+    day, which decides when kind becomes required.
 
 receipts: []
 ---
