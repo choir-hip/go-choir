@@ -19,6 +19,8 @@ no `/internal/*`.
 
 Status: documented. This commit is evidence only; fixes follow in separate
 commits on branch `fix/selfdev-go-drill-0101` (not pushed, not deployed).
+Item 1 (checkpoint head race) is repaired separately on
+`fix/checkpoint-head-race` (not pushed, not deployed).
 
 ## Outcome
 
@@ -241,6 +243,85 @@ not prove the staging timing).
 Rollback: `git revert` of the fix commit restores the old binding (busy
 checkpoints silently unrestorable again; no data migration, no format
 change: the checkpoint request shape is unchanged).
+
+### Repair (branch `fix/checkpoint-head-race`, not pushed, not deployed)
+
+Code: `internal/agentcore/checkpoint_restore_bindings.go`
+(`bindCheckpointAtHead`, `advanceCheckpointReplay`,
+`rebindCheckpointWitness`; `checkpointRestoreBindings` deleted).
+`replay_completeness.go`: `ReplayCompleteness` is now `openReplayProbe` +
+close, so the replay store can stay open for the tail. The three publish
+sites build their request inside the held closure from the binding's head:
+`rematerialize.go` (owner recovery; the bind report gains
+`bound_event_head` and `caught_up_events`), `self_development_materializer.go`
+(post-apply), `platform_update.go` (platform-follow). `restore_base.go`:
+the base pin takes the bound head.
+
+Tests (`internal/agentcore/checkpoint_head_binding_test.go`, a platform fake
+that enforces the authority's current-head equality and signs with the
+platform-control key; the product route `BindCheckpointRestoreSet`, then
+`RematerializeFromTape` on the published checkpoint):
+
+| test | failure mode | before the fix | after |
+|---|---|---|---|
+| `TestCheckpointBindBusyComputerPublishesRestorableHead` | C1, C7 | FAIL: `restore to the busy checkpoint refused: rematerialize: reconstructed content root does not match checkpoint` (the drill's message); base pinned under `checkpoint:<H1>` while the checkpoint names H2 | PASS: published head = live head after the append, witness matched |
+| `TestCheckpointBindIdleComputerBindsCapturedHead` | C6 | PASS | PASS (same head, key `owner-recovery-<H>`, witness = probe's, one publish request) |
+| `TestCheckpointBindRefusesLiveOnlyStateWrittenAfterCapture` | C2 | FAIL: published over the live-only table | PASS: refused at the bound head ("… (at bound sequence N)"), nothing published |
+| `TestCheckpointBindCatchesUpBeforeTheHold` | C4, C8 | (new API) | PASS: 2 events caught up, 0 replayed under the hold, bind-only binding names the live head |
+| `TestCheckpointBindFailsLoudlyWhenPlatformHeadKeepsMoving` | C5 | FAIL: 1 attempt | PASS: 3 attempts, then "refused the bound head on all 3 attempts" |
+
+C3 (deadlock) is covered by the busy test completing: the tail replay and
+the publish run inside `HoldAppends`.
+
+Runs: `go build ./...` ok; `go vet ./internal/agentcore` ok;
+`go test ./internal/agentcore -run 'Checkpoint|Restore|Rematerialize'` ok
+(64.9 s); `go test ./internal/agentcore -run 'SelfDev|PlatformUpdate|ReplayCompleteness|Materializ|Rollback|Hibernate'`
+ok (94.6 s). `internal/platform` and checkpointd are not touched.
+
+Found while rewriting the post-apply site: the old retry loop set
+`published = true` on any publish error other than "head CAS conflict" and
+fell through with a zero checkpoint (`checkpointRef` of an empty digest)
+instead of returning the error. The rewrite returns every publish error.
+
+Tracer restore leg (`scripts/reeng_tracer.mjs` on `fix/selfdev-go-drill-0101`,
+`restore_to_pre_apply_head`): it requires the restore report's
+`checkpoint_digest` to equal the published pre-apply checkpoint's,
+`witness_matched` and `frontend_restaged`, and the checkpoint's
+`effective_event_head` to equal the head read at the decision boundary.
+None of these change: the accepted head may be later than the tracer's
+pre-checkpoint read (it already was), the effective head moves only on
+materialization, rollback or research-update events. No tracer change
+needed. Rerun expectation: the checkpoint POST answers 200 with
+`bound_event_head` = `published_checkpoint.checkpoint.request.accepted_event_head`
+and `caught_up_events` > 0 when a desk worked during it; the restore
+answers 200 with `witness_matched: true`. A research update between the
+boundary read and the checkpoint would still fail the effective-head clause
+(pre-existing, not this bug).
+
+Ceremony (red):
+
+- Conjecture delta: "a busy computer cannot get a restorable checkpoint"
+  becomes "a checkpoint's head and witness are one state by construction;
+  busy costs one tail replay and two extracts under the append hold".
+- Protected surfaces touched: checkpoint publish (owner-recovery,
+  post-apply, platform-follow), base pin reference, append hold time.
+  Untouched: corpusd checkpoint authority, restore, route projection.
+- Admissible evidence: the focused tests above (local, guest-side).
+  Staging proof is the `--change go` tracer rerun on a build carrying this
+  commit; local tests prove nothing about staging timing (extract cost on a
+  large store under the hold).
+- Rollback: `git revert` of the fix commit; no format or data change.
+- Heresy delta: discovered: the post-apply retry loop fell through on
+  non-CAS publish errors. Introduced: the publish's platform round trip now
+  runs under the append hold (appends already make three platform round
+  trips under it; a hung platform delays appends for at most the 15 s
+  credential client timeout per attempt). Repaired: checkpoint witness/head
+  skew at all three sites (R1); the post-apply fall-through.
+
+Residual R1b: hold time on a large store. The held section adds one live
+extract and one replay extract when the head moved (the probe already
+extracts live under the hold). Measure on the rerun (the bind report's
+`caught_up_events`; guest log timing) before tuning.
 
 ## 2. `go_build_job_done`, `go_test_job_done`: tracer saw jobs count=1, done=0
 
@@ -512,7 +593,9 @@ Landed on the branch (unit evidence only; not pushed, not deployed):
 ## Residuals
 
 - R1 restore on a busy computer (item 1), and the same skew in the
-  post-apply and platform-update checkpoints.
+  post-apply and platform-update checkpoints. Repaired on
+  `fix/checkpoint-head-race` (not deployed); staging proof pending the
+  tracer rerun. R1b: hold time on a large store, unmeasured.
 - R2 job end digest at observation time.
 - R3 `choir.Start` returns an id for a start the reduce refuses; the refusal
   is only in `job_results`.
@@ -527,5 +610,7 @@ Landed on the branch (unit evidence only; not pushed, not deployed):
 
 - discovered: checkpoint witness/head skew (R1); capsule RPC desync after a
   timeout; tracer checks stale for multi-round stories and verified bundles.
-- introduced: none.
-- repaired: none in this commit.
+- introduced: none in the evidence commit; the R1 repair runs one platform
+  round trip under the append hold (see item 1, Repair).
+- repaired: none in the evidence commit; R1 (and the post-apply
+  fall-through found with it) on `fix/checkpoint-head-race`.

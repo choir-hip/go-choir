@@ -215,15 +215,49 @@ func differingReplayRunMemoryFields(live, replay map[string]string) []string {
 // returns the exact deterministic diff. No event is appended and the live
 // store is never used as the replay projection.
 func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (ReplayCompletenessReport, error) {
+	probe, err := rt.openReplayProbe(ctx, computerID)
+	if err != nil {
+		return ReplayCompletenessReport{}, err
+	}
+	probe.close()
+	return probe.report, nil
+}
+
+// replayProbe is a completed replay-completeness probe whose disposable
+// replay store is still open, so a checkpoint can advance it past the
+// captured head by the tail only (bindCheckpointAtHead). close discards it.
+type replayProbe struct {
+	report      ReplayCompletenessReport
+	replayStore *choirstore.Store
+	tempRoot    string
+}
+
+func (p *replayProbe) close() {
+	if p == nil {
+		return
+	}
+	if p.replayStore != nil {
+		_ = p.replayStore.Close()
+		p.replayStore = nil
+	}
+	if p.tempRoot != "" {
+		_ = os.RemoveAll(p.tempRoot)
+		p.tempRoot = ""
+	}
+}
+
+// openReplayProbe runs the probe and keeps its replay store open. The caller
+// closes the returned probe.
+func (rt *Runtime) openReplayProbe(ctx context.Context, computerID string) (*replayProbe, error) {
 	if rt == nil || rt.store == nil || rt.eventAppender == nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("%w: event projection authority is not configured", ErrReplayCompletenessUnavailable)
+		return nil, fmt.Errorf("%w: event projection authority is not configured", ErrReplayCompletenessUnavailable)
 	}
 	computerID = strings.TrimSpace(computerID)
 	if computerID == "" || computerID != strings.TrimSpace(rt.cfg.ComputerID) {
-		return ReplayCompletenessReport{}, fmt.Errorf("%w: computer binding does not match runtime", ErrReplayCompletenessUnavailable)
+		return nil, fmt.Errorf("%w: computer binding does not match runtime", ErrReplayCompletenessUnavailable)
 	}
 	if err := ctx.Err(); err != nil {
-		return ReplayCompletenessReport{}, err
+		return nil, err
 	}
 
 	// Capture the head and the live state together: appends wait while the
@@ -251,7 +285,7 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 		}
 		return nil
 	}); err != nil {
-		return ReplayCompletenessReport{}, err
+		return nil, err
 	}
 	if rt.replayProbeAfterCapture != nil {
 		rt.replayProbeAfterCapture()
@@ -259,17 +293,23 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 
 	tempRoot, err := os.MkdirTemp("", "choir-replay-completeness-")
 	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: create disposable workspace: %w", err)
+		return nil, fmt.Errorf("replay completeness: create disposable workspace: %w", err)
 	}
-	defer os.RemoveAll(tempRoot)
+	probe := &replayProbe{tempRoot: tempRoot}
+	opened := false
+	defer func() {
+		if !opened {
+			probe.close()
+		}
+	}()
 	replayStore, baseSequence, baseBlob, targetSequence, observer, err := rt.openProbeReplayStore(ctx, computerID, tempRoot, liveHead)
 	if err != nil {
-		return ReplayCompletenessReport{}, err
+		return nil, err
 	}
-	defer replayStore.Close()
+	probe.replayStore = replayStore
 	depositMode, err := matchLiveDepositMode(rt.store, replayStore)
 	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: %w", err)
+		return nil, fmt.Errorf("replay completeness: %w", err)
 	}
 	rt.eventAppender.SetReplayObserver(observer)
 	var reconstructErr error
@@ -280,28 +320,28 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 	}
 	rt.eventAppender.SetReplayObserver(nil)
 	if reconstructErr != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: reconstruct event chain: %w", reconstructErr)
+		return nil, fmt.Errorf("replay completeness: reconstruct event chain: %w", reconstructErr)
 	}
 	tailApplied := 0
 	if targetSequence > 0 {
 		tailApplied, err = observer.tailReceipt(baseSequence, targetSequence)
 		if err != nil {
-			return ReplayCompletenessReport{}, err
+			return nil, err
 		}
 	}
 	replayHead, err := replayStore.Head(ctx, computerID)
 	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: read replay event head: %w", err)
+		return nil, fmt.Errorf("replay completeness: read replay event head: %w", err)
 	}
 	replayExtractor := replayDoltStateExtractor(replayStore.TexturePath())
 	replay, err := replayExtractor.Extract(ctx, computerversion.ExtractRequest{Name: "event-replay-projection", Version: version})
 	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: extract replay Dolt state: %w", err)
+		return nil, fmt.Errorf("replay completeness: extract replay Dolt state: %w", err)
 	}
 
 	replayRunMemory, err := replayStore.ListRunMemoryEntryFingerprints(ctx)
 	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: fingerprint replay run memory: %w", err)
+		return nil, fmt.Errorf("replay completeness: fingerprint replay run memory: %w", err)
 	}
 	runMemory := compareReplayRunMemory(liveRunMemory, replayRunMemory)
 
@@ -339,10 +379,12 @@ func (rt *Runtime) ReplayCompleteness(ctx context.Context, computerID string) (R
 	}
 	raw, err := computerevent.CanonicalJSON(report)
 	if err != nil {
-		return ReplayCompletenessReport{}, fmt.Errorf("replay completeness: encode report: %w", err)
+		return nil, fmt.Errorf("replay completeness: encode report: %w", err)
 	}
 	report.ProbeDigest = computerevent.DigestBytes(raw)
-	return report, nil
+	probe.report = report
+	opened = true
+	return probe, nil
 }
 
 // openProbeReplayStore builds the disposable replay projection for the probe.

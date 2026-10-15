@@ -421,7 +421,12 @@ type CheckpointBindReport struct {
 	ReleaseDigest         string                                `json:"release_digest"`
 	VMLocalContentWitness selfdevprotocol.VMLocalContentWitness `json:"vm_local_content_witness"`
 	FrontendIdentity      selfdevprotocol.FrontendIdentity      `json:"frontend_identity"`
-	PublishedCheckpoint   *selfdevprotocol.CheckpointResponse   `json:"published_checkpoint,omitempty"`
+	// BoundEventHead is the head the witness was taken at (and, when
+	// published, the checkpoint's accepted head). CaughtUpEvents counts the
+	// events desks appended while the checkpoint replayed.
+	BoundEventHead      string                              `json:"bound_event_head,omitempty"`
+	CaughtUpEvents      uint64                              `json:"caught_up_events,omitempty"`
+	PublishedCheckpoint *selfdevprotocol.CheckpointResponse `json:"published_checkpoint,omitempty"`
 }
 
 func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID string) (CheckpointBindReport, error) {
@@ -437,24 +442,25 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 	if err != nil {
 		return report, err
 	}
-	witness, frontend, err := rt.checkpointRestoreBindings(ctx, computerID, manifest.ContentDigest, manifest.Files)
+	// No platform control credential wired: this remains a bind report.
+	var publish checkpointPublishFunc
+	if rt.ownerRecoveryControl != nil {
+		publish = func(ctx context.Context, binding checkpointBinding) (selfdevprotocol.CheckpointResponse, error) {
+			return rt.publishOwnerRecoveryCheckpoint(ctx, computerID, manifest, binding)
+		}
+	}
+	binding, published, err := rt.bindCheckpointAtHead(ctx, computerID, manifest.ContentDigest, manifest.Files, publish)
 	if err != nil {
 		return report, err
 	}
 	report.ComputerID = computerID
 	report.CheckpointEligible = true
 	report.ReleaseDigest = manifest.ContentDigest
-	report.VMLocalContentWitness = witness
-	report.FrontendIdentity = frontend
-	if rt.ownerRecoveryControl == nil {
-		// No platform control credential is wired: this remains a bind report.
-		return report, nil
-	}
-	published, err := rt.publishOwnerRecoveryCheckpoint(ctx, computerID, manifest, witness, frontend)
-	if err != nil {
-		return report, err
-	}
-	report.PublishedCheckpoint = &published
+	report.VMLocalContentWitness = binding.Witness
+	report.FrontendIdentity = binding.Frontend
+	report.BoundEventHead = headDigest(binding.Head)
+	report.CaughtUpEvents = binding.CaughtUpEvents
+	report.PublishedCheckpoint = published
 	return report, nil
 }
 
@@ -464,10 +470,11 @@ func (rt *Runtime) BindCheckpointRestoreSet(ctx context.Context, computerID stri
 // The VM-local witness is attested here; restore-time tape reconstruction
 // enforces that it is true. Idempotency is head-scoped so the same head can be
 // re-published (lookup replays the stored response) but a moved head cannot
-// overwrite the record.
-func (rt *Runtime) publishOwnerRecoveryCheckpoint(ctx context.Context, computerID string, manifest updater.ReleaseManifest, witness selfdevprotocol.VMLocalContentWitness, frontend selfdevprotocol.FrontendIdentity) (selfdevprotocol.CheckpointResponse, error) {
-	head, err := rt.store.Head(ctx, computerID)
-	if err != nil || head == nil {
+// overwrite the record. It runs under bindCheckpointAtHead's append hold and
+// names the binding's head, the one its witness was taken at.
+func (rt *Runtime) publishOwnerRecoveryCheckpoint(ctx context.Context, computerID string, manifest updater.ReleaseManifest, binding checkpointBinding) (selfdevprotocol.CheckpointResponse, error) {
+	head, witness, frontend := binding.Head, binding.Witness, binding.Frontend
+	if head == nil {
 		return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("self-development checkpoint: live projection head unavailable")
 	}
 	headEvent, found, err := rt.store.EventByDigest(ctx, computerID, head.CanonicalEventHead)

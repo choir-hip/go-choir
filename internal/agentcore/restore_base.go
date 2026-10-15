@@ -152,11 +152,11 @@ func newestPinnedBaseAtOrBelow(ctx context.Context, src projectionbase.BaseSourc
 }
 
 // pinCheckpointBase retains the base a checkpoint's replay started from, so
-// a later restore to that checkpoint can install it. A replay from genesis
-// has no base to pin.
-func (rt *Runtime) pinCheckpointBase(ctx context.Context, computerID string, report ReplayCompletenessReport) error {
-	baseRef := strings.TrimSpace(report.BaseBlobSHA256)
-	if baseRef == "" || report.LiveHead == nil {
+// a later restore to that checkpoint can install it, under the reference of
+// the head the checkpoint binds. A replay from genesis has no base to pin.
+func (rt *Runtime) pinCheckpointBase(ctx context.Context, computerID, baseRef, checkpointHead string) error {
+	baseRef = strings.TrimSpace(baseRef)
+	if baseRef == "" || strings.TrimSpace(checkpointHead) == "" {
 		return nil
 	}
 	src, err := rt.resolveRestoreBaseSource()
@@ -167,7 +167,7 @@ func (rt *Runtime) pinCheckpointBase(ctx context.Context, computerID string, rep
 	if !ok {
 		return fmt.Errorf("checkpoint base pin: base source cannot pin")
 	}
-	return pins.PinBase(ctx, computerID, baseRef, projectionbase.CheckpointPinReference(report.LiveHead.CanonicalEventHead))
+	return pins.PinBase(ctx, computerID, baseRef, projectionbase.CheckpointPinReference(checkpointHead))
 }
 
 // installStagedBase installs the verified base for targetHead into stagingRoot

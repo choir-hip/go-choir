@@ -349,13 +349,8 @@ func (rt *Runtime) commitPlatformUpdateApplied(ctx context.Context, offer selfde
 // second mint under the same key produces a conflicting request commitment).
 func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevprotocol.PlatformUpdateOffer, offerDigest, acceptedDigest string, result updater.ApplyResult, appliedEventHead, operationID string, report PlatformUpdateReport) (PlatformUpdateReport, error) {
 	computerID := offer.ComputerID
-	head, err := rt.store.Head(ctx, computerID)
-	if err != nil || head == nil {
+	if head, err := rt.store.Head(ctx, computerID); err != nil || head == nil {
 		return report, fmt.Errorf("platform update: post-apply head unavailable")
-	}
-	headReceipt, found, err := rt.store.EventReceiptByDigest(ctx, computerID, head.CanonicalEventHead)
-	if err != nil || !found {
-		return report, fmt.Errorf("platform update: canonical head event receipt unavailable")
 	}
 
 	version := computerversion.ComputerVersion{CodeRef: offer.CodeClosure.Ref, ArtifactProgramRef: offer.ArtifactProgram.Ref}
@@ -382,36 +377,45 @@ func (rt *Runtime) drivePlatformUpdateTail(ctx context.Context, offer selfdevpro
 		// platform-signed offer + the applied event on the tape — there is no
 		// verifier run for a tracking fast-forward. The checkpoint binds the
 		// applied head, the apply receipt, the release, and the live witness;
-		// corpusd verifies head/receipt/event-kind joins server-side.
-		reconstructionDigest, digestErr := selfdevprotocol.Digest(struct {
-			Version       computerversion.ComputerVersion `json:"computer_version"`
-			EffectiveHead string                          `json:"effective_event_head"`
-			ReleaseDigest string                          `json:"release_digest"`
-		}{version, head.EffectiveEventHead, result.ReleaseDigest})
-		if digestErr != nil {
-			return report, digestErr
-		}
+		// corpusd verifies head/receipt/event-kind joins server-side. The
+		// head and the witness are read and published while appends are held
+		// (bindCheckpointAtHead), so the checkpoint names the head its
+		// witness was taken at.
 		pinned, _, readErr := updater.ReadPinnedManifest(rt.selfdevUpdaterRoot, result.ReleaseDigest)
 		if readErr != nil {
 			return report, fmt.Errorf("platform update: applied release unavailable: %w", readErr)
 		}
-		witness, frontend, bindErr := rt.checkpointRestoreBindings(ctx, computerID, result.ReleaseDigest, pinned.Files)
-		if bindErr != nil {
-			return report, bindErr
-		}
-		published, publishErr := rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
-			ComputerID: computerID, IdempotencyKey: checkpointKey,
-			ComputerVersion: version, AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
-			EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: headReceipt.ReceiptID,
-			ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
-			MaterializationReceiptDigest: receiptDigest,
-			PlatformFollow:               true, ReducerVersion: head.ReducerVersion,
-			VMLocalContentWitness: witness, FrontendIdentity: frontend,
+		_, published, bindErr := rt.bindCheckpointAtHead(ctx, computerID, result.ReleaseDigest, pinned.Files, func(ctx context.Context, binding checkpointBinding) (selfdevprotocol.CheckpointResponse, error) {
+			head := binding.Head
+			if head == nil {
+				return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("platform update: post-apply head unavailable")
+			}
+			headReceipt, found, err := rt.store.EventReceiptByDigest(ctx, computerID, head.CanonicalEventHead)
+			if err != nil || !found {
+				return selfdevprotocol.CheckpointResponse{}, fmt.Errorf("platform update: canonical head event receipt unavailable")
+			}
+			reconstructionDigest, err := selfdevprotocol.Digest(struct {
+				Version       computerversion.ComputerVersion `json:"computer_version"`
+				EffectiveHead string                          `json:"effective_event_head"`
+				ReleaseDigest string                          `json:"release_digest"`
+			}{version, head.EffectiveEventHead, result.ReleaseDigest})
+			if err != nil {
+				return selfdevprotocol.CheckpointResponse{}, err
+			}
+			return rt.selfdevControl.PublishCheckpoint(ctx, selfdevprotocol.CheckpointRequest{
+				ComputerID: computerID, IdempotencyKey: checkpointKey,
+				ComputerVersion: version, AcceptedEventHead: head.CanonicalEventHead, EffectiveEventHead: head.EffectiveEventHead,
+				EffectiveStateCommitment: head.EffectiveStateCommitment, EventHeadReceiptID: headReceipt.ReceiptID,
+				ReleaseDigest: result.ReleaseDigest, ReconstructionDigest: reconstructionDigest,
+				MaterializationReceiptDigest: receiptDigest,
+				PlatformFollow:               true, ReducerVersion: head.ReducerVersion,
+				VMLocalContentWitness: binding.Witness, FrontendIdentity: binding.Frontend,
+			})
 		})
-		if publishErr != nil {
-			return report, fmt.Errorf("platform update: checkpoint refused: %w", publishErr)
+		if bindErr != nil {
+			return report, fmt.Errorf("platform update: checkpoint refused: %w", bindErr)
 		}
-		checkpoint = published
+		checkpoint = *published
 	}
 	report.VerifierCertificateDigest = verifierDigest
 	report.CheckpointDigest = checkpoint.Checkpoint.Digest
