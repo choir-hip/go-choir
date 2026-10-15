@@ -5,9 +5,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +36,24 @@ import (
 //	FH10 A compaction decision is invisible off the guest.
 //	FH11 The kill switches are ignored.
 //	FH12 A store-size gate turns compaction off for a large store.
+//
+// Added at the review gate, written before the code:
+//
+//	FH14 A compaction killed mid-run (planned refresh of the always-busy
+//	     paper, OOM, VM kill) compacts again on the next boot instead of
+//	     backing off.
+//	FH15 Boot storm: compaction runs on the first tick after boot (before
+//	     rt.Start, so boot writes wait out a full GC), or every enabled
+//	     computer compacts at the same moment after a deploy.
+//	FH16 Fleet exposure: compaction runs on a computer the host did not
+//	     enable (default must be off; the journal GC stays fleet-wide).
+//	FH17 A content change the light witness (heads, counts) cannot see
+//	     passes: row contents must match a full content witness taken on
+//	     a second session, and a mismatch fails closed, visibly, with the
+//	     backoff.
+//	FH18 The squash target is picked by date, so clock skew or equal
+//	     timestamps pick the wrong commit; the root is the parentless
+//	     commit, and more than one refuses.
 
 func compactionInputs(availBytes, storeBytes, baselineBytes uint64) doltCompactionInputs {
 	total := uint64(48 * gibBytes)
@@ -232,7 +253,13 @@ func TestDoltCompactionCrashAfterSoftResetKeepsRows(t *testing.T) {
 	heads := runbookHeads(t, s, computerID)
 	index := countRows(t, s, "computer_event_index")
 	var root string
-	if err := s.textureHandle().QueryRowContext(ctx, doltRootCommitQuery).Scan(&root); err != nil {
+	rootConn, err := s.textureHandle().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err = doltRootCommit(ctx, rootConn)
+	_ = rootConn.Close()
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.textureHandle().ExecContext(ctx, "CALL DOLT_RESET('--soft', ?)", root); err != nil {
@@ -266,7 +293,9 @@ func TestMaybeCompactDoltHistoryRecordsAndResetsBaseline(t *testing.T) {
 	ctx := context.Background()
 	s := openProjectStore(t)
 	s.doltCheckpointEvery = 3
-	bindCompactionTape(t, s, "computer-compaction-record")
+	const computerID = "computer-compaction-record"
+	bindCompactionTape(t, s, computerID)
+	enableCompactionFor(t, computerID)
 	appendMemoryEntries(t, s, 0, 30)
 	// The journal GC runs first on every tick and promotes history out of
 	// the journal; only then is it counted.
@@ -277,19 +306,20 @@ func TestMaybeCompactDoltHistoryRecordsAndResetsBaseline(t *testing.T) {
 	defer stubHistoryBudget(64 << 10)()
 	defer stubDiskUsage(smallDiskUsage())()
 
-	if err := s.MaybeCompactDoltHistory(ctx, dir); err != nil {
+	if err := s.MaybeCompactDoltHistory(ctx, dir, computerID); err != nil {
 		t.Fatalf("compaction: %v", err)
 	}
 	got := readCompactionRecord(t, dir)
-	if got.Outcome != "ran" || got.CommitsAfter > 2 || got.BaselineBytes == 0 || got.HeadsDigest == "" || got.EventIndexCount != 31 {
-		t.Fatalf("record = %+v, want ran with a baseline and the witness", got)
+	if got.Outcome != "ran" || got.CommitsAfter > 2 || got.BaselineBytes == 0 || got.HeadsDigest == "" || got.EventIndexCount != 31 ||
+		got.ContentRoot == "" || !got.WitnessMatch || got.LastFailureAt != "" || got.Degraded != "" {
+		t.Fatalf("record = %+v, want ran with a baseline, both witnesses matched, no failure", got)
 	}
 	var served map[string]any
 	if raw := ReadDoltCompactionRecord(dir); raw == nil || json.Unmarshal(raw, &served) != nil {
 		t.Fatalf("record not readable for /health: %s", raw)
 	}
 
-	if err := s.MaybeCompactDoltHistory(ctx, dir); err != nil {
+	if err := s.MaybeCompactDoltHistory(ctx, dir, computerID); err != nil {
 		t.Fatalf("second tick: %v", err)
 	}
 	if again := readCompactionRecord(t, dir); again.Outcome != "noop" || again.BaselineBytes != got.BaselineBytes {
@@ -301,7 +331,7 @@ func TestMaybeCompactDoltHistoryRecordsAndResetsBaseline(t *testing.T) {
 	for _, env := range []string{"RUNTIME_DOLT_COMPACT_DISABLED", "RUNTIME_DOLT_GC_DISABLED"} {
 		t.Run(env, func(t *testing.T) {
 			t.Setenv(env, "1")
-			if err := s.MaybeCompactDoltHistory(ctx, dir); err != nil {
+			if err := s.MaybeCompactDoltHistory(ctx, dir, computerID); err != nil {
 				t.Fatal(err)
 			}
 			if rec := readCompactionRecord(t, dir); rec.Outcome != "skipped_disabled" {
@@ -314,11 +344,15 @@ func TestMaybeCompactDoltHistoryRecordsAndResetsBaseline(t *testing.T) {
 	}
 }
 
-// FH1: the periodic loop compacts, not only collects the journal.
+// FH1: the periodic loop compacts, not only collects the journal (on a
+// later tick: the first never compacts).
 func TestStartPeriodicDoltGCCompactsHistory(t *testing.T) {
 	s := openProjectStore(t)
 	s.doltCheckpointEvery = 3
-	bindCompactionTape(t, s, "computer-compaction-periodic")
+	const computerID = "computer-compaction-periodic"
+	bindCompactionTape(t, s, computerID)
+	enableCompactionFor(t, computerID)
+	defer stubCompactionJitter(0)()
 	appendMemoryEntries(t, s, 0, 24)
 	if err := s.runOnlineDoltGC(context.Background()); err != nil {
 		t.Fatal(err)
@@ -328,12 +362,12 @@ func TestStartPeriodicDoltGCCompactsHistory(t *testing.T) {
 	defer stubDiskUsage(smallDiskUsage())()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	StartPeriodicDoltGC(ctx, s, dir, time.Hour)
+	StartPeriodicDoltGC(ctx, s, dir, computerID, 200*time.Millisecond)
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		if raw := ReadDoltCompactionRecord(dir); raw != nil {
 			var rec doltCompactionRecord
-			if json.Unmarshal(raw, &rec) == nil && rec.Outcome == "ran" {
+			if json.Unmarshal(raw, &rec) == nil && rec.LastSuccessAt != "" {
 				break
 			}
 		}
@@ -343,6 +377,247 @@ func TestStartPeriodicDoltGCCompactsHistory(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	cancel()
+}
+
+// FH15: the first tick after boot never compacts, even when everything
+// else says run; the computer is still starting.
+func TestPeriodicDoltGCNeverCompactsOnFirstTick(t *testing.T) {
+	s := openProjectStore(t)
+	s.doltCheckpointEvery = 3
+	const computerID = "computer-compaction-first-tick"
+	bindCompactionTape(t, s, computerID)
+	enableCompactionFor(t, computerID)
+	defer stubCompactionJitter(0)()
+	appendMemoryEntries(t, s, 0, 24)
+	if err := s.runOnlineDoltGC(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	commits := countRows(t, s, "dolt_log")
+	dir := t.TempDir()
+	defer stubHistoryBudget(64 << 10)()
+	defer stubDiskUsage(smallDiskUsage())()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	StartPeriodicDoltGC(ctx, s, dir, computerID, time.Hour) // only the first tick fires
+	deadline := time.Now().Add(30 * time.Second)
+	var rec doltCompactionRecord
+	for {
+		if raw := ReadDoltCompactionRecord(dir); raw != nil && json.Unmarshal(raw, &rec) == nil && rec.Outcome != "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("first tick wrote no compaction record")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	if rec.Outcome != "boot_wait" {
+		t.Fatalf("first tick record = %+v, want boot_wait", rec)
+	}
+	if after := countRows(t, s, "dolt_log"); after != commits {
+		t.Fatalf("commits %d -> %d on the first tick", commits, after)
+	}
+}
+
+// FH15: jitter spreads the first eligible compaction over 0-30 minutes, and
+// a tick before it waits.
+func TestDoltCompactionJitterDelaysFirstEligibleTick(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		if j := defaultDoltCompactionStartJitter(); j < 0 || j >= doltCompactionMaxStartJitter {
+			t.Fatalf("jitter %s outside [0, %s)", j, doltCompactionMaxStartJitter)
+		}
+	}
+	s := openProjectStore(t)
+	const computerID = "computer-compaction-jitter"
+	bindCompactionTape(t, s, computerID)
+	enableCompactionFor(t, computerID)
+	dir := t.TempDir()
+	defer stubHistoryBudget(1)()
+	defer stubDiskUsage(smallDiskUsage())()
+	now := time.Now()
+	if err := s.maybeCompactDoltHistory(context.Background(), dir, doltCompactionTick{ComputerID: computerID, Now: now, EligibleAt: now.Add(10 * time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	if rec := readCompactionRecord(t, dir); rec.Outcome != "boot_wait" || !strings.Contains(rec.Detail, "eligible at") {
+		t.Fatalf("record before the jittered start = %+v, want boot_wait", rec)
+	}
+}
+
+// FH16: off unless the host lists this computer; the list names computers,
+// so another computer's entry does not enable this one.
+func TestDoltCompactionDisabledByDefault(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	s.doltCheckpointEvery = 3
+	const computerID = "computer-compaction-default-off"
+	bindCompactionTape(t, s, computerID)
+	appendMemoryEntries(t, s, 0, 12)
+	if err := s.runOnlineDoltGC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	commits := countRows(t, s, "dolt_log")
+	dir := t.TempDir()
+	defer stubHistoryBudget(1)()
+	defer stubDiskUsage(smallDiskUsage())()
+	for _, list := range []string{"", "computer-someone-else", " computer-a, computer-b "} {
+		t.Setenv(doltCompactComputersEnv, list)
+		if err := s.MaybeCompactDoltHistory(ctx, dir, computerID); err != nil {
+			t.Fatal(err)
+		}
+		if rec := readCompactionRecord(t, dir); rec.Outcome != "not_enabled" {
+			t.Fatalf("list %q: record = %+v, want not_enabled", list, rec)
+		}
+		if after := countRows(t, s, "dolt_log"); after != commits {
+			t.Fatalf("list %q: commits %d -> %d while not enabled", list, commits, after)
+		}
+	}
+	if err := s.MaybeCompactDoltHistory(ctx, dir, ""); err != nil {
+		t.Fatal(err)
+	}
+	if rec := readCompactionRecord(t, dir); rec.Outcome != "not_enabled" {
+		t.Fatalf("empty computer id: record = %+v, want not_enabled", rec)
+	}
+	t.Setenv(doltCompactComputersEnv, "computer-a,"+computerID)
+	if err := s.MaybeCompactDoltHistory(ctx, dir, computerID); err != nil {
+		t.Fatal(err)
+	}
+	if rec := readCompactionRecord(t, dir); rec.Outcome != "ran" {
+		t.Fatalf("listed computer: record = %+v, want ran", rec)
+	}
+}
+
+// FH14: the record says in_progress, with the failure time set, before the
+// compaction starts. A guest killed mid-run therefore boots into the
+// backoff instead of compacting again.
+func TestDoltCompactionInterruptedRunBacksOffAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	s.doltCheckpointEvery = 3
+	const computerID = "computer-compaction-killed"
+	bindCompactionTape(t, s, computerID)
+	enableCompactionFor(t, computerID)
+	appendMemoryEntries(t, s, 0, 24)
+	if err := s.runOnlineDoltGC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	defer stubHistoryBudget(1)()
+	defer stubDiskUsage(smallDiskUsage())()
+
+	// The kill: snapshot the record after the full GC but before the run
+	// finishes, then put that snapshot back as if the process died there.
+	var midRun []byte
+	defer stubCompactionAfterGCHook(func(context.Context, *sql.Conn) error {
+		midRun, _ = os.ReadFile(filepath.Join(dir, doltCompactionRecordFileName))
+		return nil
+	})()
+	if err := s.MaybeCompactDoltHistory(ctx, dir, computerID); err != nil {
+		t.Fatal(err)
+	}
+	var during doltCompactionRecord
+	if err := json.Unmarshal(midRun, &during); err != nil || during.Outcome != "in_progress" || during.LastFailureAt == "" {
+		t.Fatalf("record during the run = %s (%v), want in_progress with last_failure_at", midRun, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, doltCompactionRecordFileName), midRun, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	appendMemoryEntries(t, s, 24, 36)
+	if err := s.runOnlineDoltGC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	commits := countRows(t, s, "dolt_log")
+	if err := s.MaybeCompactDoltHistory(ctx, dir, computerID); err != nil {
+		t.Fatal(err)
+	}
+	rec := readCompactionRecord(t, dir)
+	if rec.Outcome != "backoff" || !strings.Contains(rec.Detail, "interrupted") || rec.LastFailureAt != during.LastFailureAt {
+		t.Fatalf("record after the restart = %+v, want backoff naming the interrupted run", rec)
+	}
+	if after := countRows(t, s, "dolt_log"); after != commits {
+		t.Fatalf("commits %d -> %d during the backoff", commits, after)
+	}
+}
+
+// FH17: a content change that keeps every count and head (the light
+// witness) is caught by the full content witness on the read pool. The
+// compaction fails closed: degraded on /health, the backoff set.
+func TestDoltCompactionContentWitnessMismatchDegrades(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	s.doltCheckpointEvery = 3
+	const computerID = "computer-compaction-mismatch"
+	bindCompactionTape(t, s, computerID)
+	enableCompactionFor(t, computerID)
+	appendMemoryEntries(t, s, 0, 18)
+	if err := s.runOnlineDoltGC(ctx); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	defer stubHistoryBudget(1)()
+	defer stubDiskUsage(smallDiskUsage())()
+	defer stubCompactionAfterGCHook(func(ctx context.Context, conn *sql.Conn) error {
+		_, err := conn.ExecContext(ctx, "UPDATE run_memory_entries SET summary='changed under the compaction' WHERE entry_id='memory-0003'")
+		return err
+	})()
+
+	err := s.MaybeCompactDoltHistory(ctx, dir, computerID)
+	if err == nil || !strings.Contains(err.Error(), "content witness") {
+		t.Fatalf("compaction with changed content: err=%v, want a content witness failure", err)
+	}
+	rec := readCompactionRecord(t, dir)
+	if rec.Outcome != "degraded" || !strings.Contains(rec.Degraded, "run_memory_entries") || rec.LastFailureAt == "" {
+		t.Fatalf("record = %+v, want degraded naming the table, with the backoff", rec)
+	}
+	if err := s.MaybeCompactDoltHistory(ctx, dir, computerID); err != nil {
+		t.Fatal(err)
+	}
+	if again := readCompactionRecord(t, dir); again.Outcome != "backoff" || again.Degraded == "" {
+		t.Fatalf("next tick = %+v, want backoff that keeps the degraded reason", again)
+	}
+}
+
+// FH18: the squash target is the store's only parentless commit.
+func TestDoltRootCommitIsParentless(t *testing.T) {
+	ctx := context.Background()
+	s := openProjectStore(t)
+	s.doltCheckpointEvery = 2
+	bindCompactionTape(t, s, "computer-compaction-root")
+	appendMemoryEntries(t, s, 0, 8)
+	conn, err := s.textureHandle().Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	root, err := doltRootCommit(ctx, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parents int
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM dolt_commit_ancestors WHERE commit_hash = ? AND parent_hash IS NOT NULL", root).Scan(&parents); err != nil || parents != 0 {
+		t.Fatalf("root %s has %d parents (%v)", root, parents, err)
+	}
+	var message string
+	if err := conn.QueryRowContext(ctx, "SELECT message FROM dolt_log WHERE commit_hash = ?", root).Scan(&message); err != nil || message == "" {
+		t.Fatalf("root %s not in dolt_log: %v", root, err)
+	}
+}
+
+func enableCompactionFor(t *testing.T, computerID string) {
+	t.Helper()
+	t.Setenv(doltCompactComputersEnv, computerID)
+}
+
+func stubCompactionJitter(d time.Duration) func() {
+	previous := doltCompactionStartJitter
+	doltCompactionStartJitter = func() time.Duration { return d }
+	return func() { doltCompactionStartJitter = previous }
+}
+
+func stubCompactionAfterGCHook(hook func(context.Context, *sql.Conn) error) func() {
+	previous := doltCompactionAfterGCHook
+	doltCompactionAfterGCHook = hook
+	return func() { doltCompactionAfterGCHook = previous }
 }
 
 func stubHistoryBudget(bytes uint64) func() {

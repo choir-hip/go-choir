@@ -417,25 +417,32 @@ func maybeRunDoltGC(persistentDir, workspacePath, mode string, maxJournalBytes u
 
 // StartPeriodicDoltGC runs the online GC once at start (collecting what a boot
 // deferred) and then on a timer while the computer runs, so the journal is
-// collected between boots. Each tick then considers an online history
-// compaction (squash + full GC) once history passes its budget. It returns immediately; the loop
-// runs until ctx is cancelled, so ctx must live as long as the store. (Until
-// 2026-10-15 the only caller cancelled ctx as soon as this returned, so the
-// loop exited before its first tick and GC ran only at boot.)
-func StartPeriodicDoltGC(ctx context.Context, s *Store, persistentDir string, interval time.Duration) {
+// collected between boots. The journal GC is fleet-wide. Each tick then
+// considers an online history compaction (squash + full GC), which runs only
+// on computers listed in CHOIR_DOLT_COMPACT_COMPUTERS, never on the first
+// tick (it fires before the runtime starts), and not before a random 0-30
+// minute delay after boot (dolt_compaction.go). It returns immediately; the
+// loop runs until ctx is cancelled, so ctx must live as long as the store.
+// (Until 2026-10-15 the only caller cancelled ctx as soon as this returned,
+// so the loop exited before its first tick and GC ran only at boot.)
+func StartPeriodicDoltGC(ctx context.Context, s *Store, persistentDir, computerID string, interval time.Duration) {
 	if doltGCDisabled() || s == nil {
 		return
 	}
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
+	eligibleAt := time.Now().Add(doltCompactionStartJitter())
+	first := true
 	tick := func() {
 		if err := s.MaybeRunOnlineDoltGC(ctx, persistentDir); err != nil {
 			log.Printf("store: periodic dolt gc: %v", err)
 		}
 		// History compaction runs after the journal GC, in the same
-		// goroutine, so the two never overlap (dolt_compaction.go).
-		if err := s.MaybeCompactDoltHistory(ctx, persistentDir); err != nil {
+		// goroutine, so the two never overlap.
+		t := doltCompactionTick{ComputerID: computerID, First: first, EligibleAt: eligibleAt, Now: time.Now()}
+		first = false
+		if err := s.maybeCompactDoltHistory(ctx, persistentDir, t); err != nil {
 			log.Printf("store: periodic dolt compaction: %v", err)
 		}
 	}
