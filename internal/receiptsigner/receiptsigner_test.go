@@ -75,6 +75,34 @@ func TestVerifierSignerCannotSignUpdaterReceipt(t *testing.T) {
 	}
 }
 
+// P4: the guest-core signer signs management's independent-reviewer ballot
+// and nothing else of the consensus kind; the capsule-verifier seat is
+// corpusd's vote on its host build, so the guest cannot even produce that
+// ballot here.
+func TestGuestSignerSignsOnlyTheReviewerBallot(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	handler := testHandler(t, ModeGuestCore, now)
+	ballot := func(seat, desk, issuer string) SignReceiptRequest {
+		return SignReceiptRequest{ReceiptKind: "ConsensusBallot", Issuer: issuer, IssuedAt: now.Format(time.RFC3339Nano), KindFields: map[string]any{
+			"computer_id": "computer-1", "seat": seat, "desk": desk, "policy_digest": strings.Repeat("a", 64),
+			"subject_digest": strings.Repeat("b", 64), "vote": "accept", "operation_id": "op-1",
+		}}
+	}
+	if response := invoke(t, handler, "/v1/sign-receipt", ballot("independent-reviewer", "management", "choir-management")); response.Code != http.StatusOK {
+		t.Fatalf("reviewer ballot refused: %d %s", response.Code, response.Body.String())
+	}
+	for name, request := range map[string]SignReceiptRequest{
+		"capsule-verifier seat":   ballot("capsule-verifier", "management", "choir-management"),
+		"engineering as reviewer": ballot("independent-reviewer", "engineering", "choir-management"),
+		"host build issuer":       ballot("independent-reviewer", "management", "choir-host-build"),
+		"updater issuer":          ballot("independent-reviewer", "management", "choir-updater"),
+	} {
+		if response := invoke(t, handler, "/v1/sign-receipt", request); response.Code != http.StatusBadRequest {
+			t.Fatalf("%s: %d", name, response.Code)
+		}
+	}
+}
+
 func testHandler(t *testing.T, mode string, now time.Time) *Handler {
 	t.Helper()
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)

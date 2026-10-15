@@ -506,6 +506,18 @@ func Run() {
 	} else if ok {
 		coreOpts = append(coreOpts, opt)
 		log.Printf("autoputer: self-development verifier authority wired; mode remains off")
+		// P4: the guest-core signer signs management's reviewer ballot for
+		// corpusd's decision poster; it acts only under an owner's
+		// standing_consensus arm (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md).
+		socket := strings.TrimSpace(os.Getenv("CHOIR_GUEST_SIGNER_SOCKET"))
+		if socket == "" {
+			socket = "/run/choir-signers/guest-core/signer.sock"
+		}
+		if ballots, ballotErr := receiptsigner.NewClient(socket, receiptsigner.ModeGuestCore); ballotErr != nil {
+			log.Printf("autoputer: standing consensus ballot signer unavailable: %v", ballotErr)
+		} else {
+			coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentBallotSigner(ballots))
+		}
 	}
 	var rtOpts []actorruntime.RuntimeOption
 	// Ontology kernel cutover: the dispatcher is the sole delivery authority.

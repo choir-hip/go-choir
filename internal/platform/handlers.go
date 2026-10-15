@@ -22,6 +22,7 @@ type Handler struct {
 	eventArtifacts       *EventArtifactService
 	eventAuth            EventCapabilityAuthorizer
 	selfDevelopmentModes *SelfDevelopmentModeCAS
+	consensus            *ConsensusActuator
 	checkpointAuthority  *CheckpointAuthority
 	keyEscrow            *keyEscrowRuntime
 	guestLookup          guestOwnershipLookup
@@ -470,6 +471,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/credentials/renew", h.HandleComputerCredentialRenew)
 	s.HandleFunc("/internal/computers/lifecycle/control", h.HandleComputerLifecycleControl)
 	s.HandleFunc("/internal/computers/self-development/mode", h.HandleSelfDevelopmentMode)
+	s.HandleFunc("/internal/computers/self-development/consensus", h.HandleSelfDevelopmentConsensus)
 	s.HandleFunc("/internal/computers/events/head", h.HandleComputerEventHead)
 	s.HandleFunc("/internal/computers/events/pin", h.HandleComputerEventPin)
 	s.HandleFunc("/internal/computers/events/append", h.HandleComputerEventAppend)

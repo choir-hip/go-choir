@@ -77,7 +77,9 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "typed guest receipt refused"})
 		return
 	}
-	validIssuer := (request.ReceiptKind == "ExecutionIdentity" && request.Issuer == "choir-autoputer") || (request.ReceiptKind != "ExecutionIdentity" && request.Issuer == "choir-updater")
+	validIssuer := (request.ReceiptKind == "ExecutionIdentity" && request.Issuer == "choir-autoputer") ||
+		(request.ReceiptKind == consensusBallotKind && request.Issuer == consensusBallotIssuer && guestBallotSeatAllowed(request.KindFields)) ||
+		(request.ReceiptKind != "ExecutionIdentity" && request.ReceiptKind != consensusBallotKind && request.Issuer == "choir-updater")
 	if !validIssuer || !allowedGuestReceipt(request.ReceiptKind) || fmt.Sprint(request.KindFields["computer_id"]) != h.computerID {
 		log.Printf("receipt signer: refused kind=%q issuer=%q computer_id=%q want_computer_id=%q valid_issuer=%v", request.ReceiptKind, request.Issuer, fmt.Sprint(request.KindFields["computer_id"]), h.computerID, validIssuer)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "typed guest receipt refused"})
@@ -101,11 +103,27 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 
 func allowedGuestReceipt(kind string) bool {
 	switch kind {
-	case "HealthReceipt", "MaterializationReceipt", "UpdaterRecoveryReceipt", "KernelCapabilityReceipt", "ExecutionIdentity":
+	case "HealthReceipt", "MaterializationReceipt", "UpdaterRecoveryReceipt", "KernelCapabilityReceipt", "ExecutionIdentity", consensusBallotKind:
 		return true
 	default:
 		return false
 	}
+}
+
+// The guest-core key signs exactly one ballot seat (P4 / S2,
+// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md): management's
+// independent-reviewer verdict. The capsule-verifier seat is corpusd's vote
+// on its own host build (platform-control); this signer refuses it so a guest
+// cannot even produce the wrong-domain ballot corpusd would refuse.
+const (
+	consensusBallotKind   = "ConsensusBallot"
+	consensusBallotIssuer = "choir-management"
+)
+
+func guestBallotSeatAllowed(fields map[string]any) bool {
+	seat, _ := fields["seat"].(string)
+	desk, _ := fields["desk"].(string)
+	return seat == "independent-reviewer" && desk == "management"
 }
 
 func (h *Handler) signVerifierCertificate(w http.ResponseWriter, r *http.Request) {

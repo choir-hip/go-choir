@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,7 +15,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/platform"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
+
+// errStandingAutonomyTier refuses a standing_consensus arm on a computer
+// that is not test-tier (P4; owner ruling: autonomy only on test computers
+// until desk-cell confinement lands).
+var errStandingAutonomyTier = errors.New("standing autonomy is allowed only on test-tier computers")
 
 func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool) {
 	const prefix = "/api/computers/"
@@ -202,9 +210,13 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		}
 		// S1: the proxy authenticated the owner above; it now signs that
 		// statement over this exact write, for corpusd to verify.
-		ownerActHeader, err = h.mintModeOwnerAct(authResult, computerID, body)
+		ownerActHeader, err = h.mintModeOwnerAct(r.Context(), authResult, computerID, body)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+			status := http.StatusBadRequest
+			if errors.Is(err, errStandingAutonomyTier) {
+				status = http.StatusForbidden
+			}
+			writeJSON(w, status, errorResponse{Error: err.Error()})
 			return
 		}
 		upstreamBody = bytes.NewReader(body)
@@ -245,17 +257,36 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 // owner's approval of one operation and bundle), selfdev.mode.set
 // otherwise, over the write's request commitment. With no key loaded it
 // returns "" and the write goes without a receipt, as before S1.
-func (h *Handler) mintModeOwnerAct(authResult *AuthResult, computerID string, body []byte) (string, error) {
+//
+// P4: arming standing_consensus (act selfdev.autonomy.arm) is allowed only
+// on a test-tier computer. The proxy reads the tier from vmctl, the same
+// authority that proves ownership, refuses any other tier, and signs
+// computer_tier into the act so corpusd can require it.
+func (h *Handler) mintModeOwnerAct(ctx context.Context, authResult *AuthResult, computerID string, body []byte) (string, error) {
 	var request platform.SetSelfDevelopmentModeRequest
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
 		return "", fmt.Errorf("invalid mode request")
 	}
+	tier := ""
+	if strings.TrimSpace(request.Mode) == platform.SelfDevelopmentModeStandingConsensus {
+		if h.vmctlClient == nil {
+			return "", fmt.Errorf("%w: computer tier authority unavailable", errStandingAutonomyTier)
+		}
+		ownership, err := h.vmctlClient.LookupComputerContext(ctx, authResult.UserID, computerID)
+		if err != nil || ownership == nil || ownership.ComputerID != computerID {
+			return "", fmt.Errorf("%w: computer tier unavailable", errStandingAutonomyTier)
+		}
+		if ownership.WarmnessClass != string(vmctl.WarmnessClassTest) {
+			return "", fmt.Errorf("%w: computer %s is %q", errStandingAutonomyTier, computerID, ownership.WarmnessClass)
+		}
+		tier = platform.ComputerTierTest
+	}
 	if h.ownerActSigner == nil {
 		return "", nil
 	}
-	subject, err := platform.OwnerActModeSubject(computerID, request)
+	subject, err := platform.OwnerActModeSubjectWithTier(computerID, request, tier)
 	if err != nil {
 		return "", fmt.Errorf("invalid mode request")
 	}

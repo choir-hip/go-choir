@@ -325,6 +325,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, ownerActSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap owner-act schema: %w", err)
 	}
+	if _, err := s.db.ExecContext(ctx, consensusSchemaDDL); err != nil {
+		return fmt.Errorf("platform store: bootstrap consensus schema: %w", err)
+	}
 	if _, err := s.db.ExecContext(ctx, fileCASSchemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap file CAS schema: %w", err)
 	}

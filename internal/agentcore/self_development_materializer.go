@@ -332,8 +332,21 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	// working); a failed build fails the operation and changes nothing. A
 	// crash-boot settlement reads the journal only and never asks the host
 	// (G9).
+	//
+	// P4 (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md §5): an
+	// operation a consensus decision accepted applies only as the host build
+	// corpusd voted on, frontend-only or not; the capsule's files are never
+	// its release.
 	var hostBuilt *hostBuiltRelease
-	if !journalOnly && len(selfDevelopmentBundleBinaryInputs(bundle)) > 0 {
+	hostBuildRequired := false
+	if !journalOnly {
+		consensusDecided, decidedErr := rt.selfDevelopmentDecidedByConsensus(ctx, operation)
+		if decidedErr != nil {
+			return decidedErr
+		}
+		hostBuildRequired = consensusDecided || len(selfDevelopmentBundleBinaryInputs(bundle)) > 0
+	}
+	if hostBuildRequired {
 		built, buildErr := rt.selfDevelopmentHostBuild(ctx, operation, bundle)
 		var failure hostBuildFailure
 		switch {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
 )
 
@@ -21,7 +22,25 @@ const (
 	SelfDevelopmentModeProposeOnly        = "propose_only"
 	SelfDevelopmentModeAcceptOnce         = "accept_once"
 	SelfDevelopmentModeQualifiedConsensus = "qualified_consensus"
+	// SelfDevelopmentModeStandingConsensus is the P4 standing autonomous
+	// mode: bound to a computer, one policy and an expiry, never to an
+	// operation, and never consumed by the guest. Only an owner act arms
+	// it, only on a test-tier computer, for at most
+	// StandingConsensusMaxWindow (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md).
+	SelfDevelopmentModeStandingConsensus = "standing_consensus"
 )
+
+// StandingConsensusMaxWindow bounds a standing arm's expiry.
+const StandingConsensusMaxWindow = 24 * time.Hour
+
+// ComputerTierTest is the one tier a standing arm may name: vmctl's
+// warmness class for a computer of a test account.
+const ComputerTierTest = "test"
+
+// lazyExpiringMode reports a mode corpusd turns off once its expiry passes.
+func lazyExpiringMode(mode string) bool {
+	return mode == SelfDevelopmentModeAcceptOnce || mode == SelfDevelopmentModeQualifiedConsensus || mode == SelfDevelopmentModeStandingConsensus
+}
 
 var ErrSelfDevelopmentModeConflict = errors.New("self-development mode CAS conflict")
 
@@ -118,7 +137,7 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 		return SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}, nil
 	}
 	hydrateSelfDevelopmentModeBindings(&mode)
-	if mode.Mode != SelfDevelopmentModeAcceptOnce && mode.Mode != SelfDevelopmentModeQualifiedConsensus {
+	if !lazyExpiringMode(mode.Mode) {
 		return mode, nil
 	}
 	expiresAt, err := time.Parse(time.RFC3339Nano, mode.ExpiresAt)
@@ -145,7 +164,7 @@ func (c *SelfDevelopmentModeCAS) Get(ctx context.Context, computerID string) (Se
 	if !found {
 		return SelfDevelopmentMode{ComputerID: computerID, Mode: SelfDevelopmentModeOff}, nil
 	}
-	if current.Mode == SelfDevelopmentModeAcceptOnce || current.Mode == SelfDevelopmentModeQualifiedConsensus {
+	if lazyExpiringMode(current.Mode) {
 		currentExpiry, parseErr := time.Parse(time.RFC3339Nano, current.ExpiresAt)
 		if parseErr != nil || !c.now().Before(currentExpiry) {
 			return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: expired one-shot mode reconciliation conflicted")
@@ -259,6 +278,14 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 	default:
 		return SelfDevelopmentMode{}, ErrSelfDevelopmentModeOwnerRequired
 	}
+	if request.Mode == SelfDevelopmentModeStandingConsensus {
+		// P4: a new authority starts fail-closed. Only the owner arms it,
+		// with a verified owner act whatever CHOIR_OWNER_ACT_MODE says,
+		// and only on a computer the proxy attested is test-tier.
+		if err := standingArmRefusal(writer, computerID, ownerAct); err != nil {
+			return SelfDevelopmentMode{}, err
+		}
+	}
 	if current.Generation != request.ExpectedGeneration {
 		return SelfDevelopmentMode{}, fmt.Errorf("%w: generation changed", ErrSelfDevelopmentModeConflict)
 	}
@@ -297,6 +324,9 @@ func (c *SelfDevelopmentModeCAS) set(ctx context.Context, computerID string, req
 		fields["owner_act_receipt_digest"] = ownerAct.Digest
 		fields["owner_user_id"] = ownerAct.OwnerUserID
 		fields["owner_auth_method"] = ownerAct.AuthMethod
+	}
+	if next.Mode == SelfDevelopmentModeStandingConsensus {
+		fields["computer_tier"] = ComputerTierTest
 	}
 	receipt, err := computerevent.NewSignedReceipt("ModeReceipt", "corpusd", fields, []computerevent.SigningKey{c.signingKey}, now)
 	if err != nil {
@@ -397,6 +427,30 @@ func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request 
 		next.ExpiresAt = request.ExpiresAt
 		next.PolicyDigest = request.PolicyDigest
 		next.ConsensusReceiptDigest = request.ConsensusReceiptDigest
+		return next, expiresAt.UTC(), nil
+	case SelfDevelopmentModeStandingConsensus:
+		// Bound to a policy and an expiry; the one-operation subject
+		// binding lives in each ballot and decision, never in the mode.
+		if request.ExpectedPendingTransitionRef != nil || strings.TrimSpace(request.ConsensusReceiptDigest) != "" {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus binds no operation or consensus receipt")
+		}
+		for _, value := range ordinaryBindings[:6] {
+			if strings.TrimSpace(value) != "" {
+				return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus binds no operation or consensus receipt")
+			}
+		}
+		if !decisionpolicy.StandingPolicyAllowed(request.PolicyDigest) {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus arms only %s", decisionpolicy.PolicyIDReversibleSelfDevV1)
+		}
+		expiresAt, err := time.Parse(time.RFC3339Nano, request.ExpiresAt)
+		if err != nil || expiresAt.Location() != time.UTC || expiresAt.Format(time.RFC3339Nano) != request.ExpiresAt || !expiresAt.After(now.UTC()) {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus requires a future canonical UTC expiry")
+		}
+		if expiresAt.Sub(now.UTC()) > StandingConsensusMaxWindow {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: standing_consensus expiry is more than %s ahead", StandingConsensusMaxWindow)
+		}
+		next.PolicyDigest = request.PolicyDigest
+		next.ExpiresAt = request.ExpiresAt
 		return next, expiresAt.UTC(), nil
 	default:
 		return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: unknown mode %q", request.Mode)

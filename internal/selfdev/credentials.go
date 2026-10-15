@@ -357,6 +357,15 @@ func GuestCredentialsWithCapability(baseURL, computerID, token string, expiresAt
 	return credentials
 }
 
+// GuestCredentialsWithPlatformKey is GuestCredentialsWithCapability with the
+// platform-control key id the envelope exchange would have bound, so signed
+// mode receipts and decisions verify (in-process end-to-end tests).
+func GuestCredentialsWithPlatformKey(baseURL, computerID, token string, expiresAt time.Time, keyID string, platformPublicKey ed25519.PublicKey) *GuestCredentials {
+	credentials := GuestCredentialsWithCapability(baseURL, computerID, token, expiresAt, platformPublicKey)
+	credentials.keyID = strings.TrimSpace(keyID)
+	return credentials
+}
+
 func (g *GuestCredentials) SelfDevelopmentMode(ctx context.Context) (platform.SelfDevelopmentMode, error) {
 	if g == nil {
 		return platform.SelfDevelopmentMode{}, fmt.Errorf("guest credential: mode authority unavailable")
@@ -413,6 +422,65 @@ func (g *GuestCredentials) SetSelfDevelopmentMode(ctx context.Context, change pl
 		return platform.SelfDevelopmentMode{}, fmt.Errorf("guest credential: mode mutation refused")
 	}
 	return mode, nil
+}
+
+// RequestConsensusDecision asks corpusd's decision poster for a decision on
+// one operation under the standing_consensus arm (P4,
+// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md). It returns
+// the HTTP status with the response: 200 a decision, 409 a dissent or a
+// pending host build (the response says which) or stale heads, 403 a
+// refusal, 503 no host build service.
+func (g *GuestCredentials) RequestConsensusDecision(ctx context.Context, request platform.ConsensusRequest) (platform.ConsensusResponse, int, error) {
+	if g == nil || request.Subject.ComputerID != g.computerID {
+		return platform.ConsensusResponse{}, 0, fmt.Errorf("guest credential: consensus computer binding mismatch")
+	}
+	body, err := json.Marshal(request)
+	if err != nil {
+		return platform.ConsensusResponse{}, 0, err
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/internal/computers/self-development/consensus?computer_id="+url.QueryEscape(g.computerID), bytes.NewReader(body))
+	if err != nil {
+		return platform.ConsensusResponse{}, 0, err
+	}
+	token, err := g.Capability(ctx)
+	if err != nil {
+		return platform.ConsensusResponse{}, 0, err
+	}
+	httpRequest.Header.Set("Authorization", "Bearer "+token)
+	httpRequest.Header.Set("Content-Type", "application/json")
+	// The poster reads a finished host build and reduces two ballots; it
+	// never waits on the build. Two minutes covers a slow Dolt commit.
+	client := hostlink.NewClient(2 * time.Minute)
+	response, err := client.Do(httpRequest)
+	if err != nil {
+		return platform.ConsensusResponse{}, 0, err
+	}
+	defer response.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if err != nil {
+		return platform.ConsensusResponse{}, response.StatusCode, err
+	}
+	var out platform.ConsensusResponse
+	if response.StatusCode == http.StatusOK || response.StatusCode == http.StatusConflict {
+		_ = json.Unmarshal(raw, &out)
+	}
+	if response.StatusCode != http.StatusOK {
+		var failure struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(raw, &failure)
+		if out.Dissent {
+			return out, response.StatusCode, fmt.Errorf("guest credential: consensus dissent: %s", out.Reason)
+		}
+		if out.Pending {
+			return out, response.StatusCode, fmt.Errorf("guest credential: consensus pending: %s", out.Reason)
+		}
+		return out, response.StatusCode, fmt.Errorf("guest credential: consensus refused (%d): %s", response.StatusCode, failure.Error)
+	}
+	if out.Decision == nil || out.DecisionDigest == "" {
+		return out, response.StatusCode, fmt.Errorf("guest credential: consensus response carries no decision")
+	}
+	return out, response.StatusCode, nil
 }
 
 func (g *GuestCredentials) PublishCheckpoint(ctx context.Context, checkpoint selfdevprotocol.CheckpointRequest) (selfdevprotocol.CheckpointResponse, error) {
