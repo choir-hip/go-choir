@@ -1306,6 +1306,20 @@ in
         # is first in the provider list, so this absorbs the majority of
         # search load. Paid providers (Tavily, Brave, etc.) act as fallback.
         "SEARXNG_URL=http://127.0.0.1:8888"
+        # Keenable free plan (owner, 2026-10-15): 100,000 requests a month,
+        # renewing on the 5th, 10 requests/s, no payment method on file.
+        # The gateway paces it: each UTC day's cap is (90% of the allowance
+        # minus the period's use) / days left, and calls are held to 8/s
+        # (default CHOIR_SEARCH_PROVIDER_RPS brave=1,keenable=8). These are
+        # the code defaults, written out so the plan is visible here.
+        # PERIOD_USED seeds the 10-05..11-05 period with the billing page's
+        # count (10,776 used at 10-15 03:40Z): the daily counts began
+        # 10-14, so they never saw most of it. It is ignored from 11-05 on;
+        # drop it then. docs/problems/search-throughput-keenable-underused-2026-10-15.md
+        "CHOIR_SEARCH_KEENABLE_MONTHLY_ALLOWANCE=100000"
+        "CHOIR_SEARCH_KEENABLE_RENEW_DAY=5"
+        "CHOIR_SEARCH_KEENABLE_MONTHLY_TARGET_PCT=90"
+        "CHOIR_SEARCH_KEENABLE_PERIOD_USED=10776@2026-10-15"
         internalAuthEnv
       ];
     };

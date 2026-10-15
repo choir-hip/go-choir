@@ -25,6 +25,11 @@ type Router struct {
 	config    Config
 	pace      *pacer
 	now       func() time.Time
+
+	// monthly memoizes each monthly-quota provider's pace for its day
+	// (monthly.go): the period's earlier days do not change.
+	monthlyMu sync.Mutex
+	monthly   map[string]MonthlyPace
 }
 
 // NewRouter creates a search router.
@@ -66,7 +71,7 @@ func NewRouter(providers []Provider, store HealthStore, config Config) *Router {
 	if !ok {
 		counter = newMemoryCallCounter()
 	}
-	return &Router{providers: providers, store: store, counter: counter, config: config, pace: &pacer{next: map[string]time.Time{}}, now: time.Now}
+	return &Router{providers: providers, store: store, counter: counter, config: config, pace: &pacer{next: map[string]time.Time{}}, now: time.Now, monthly: map[string]MonthlyPace{}}
 }
 
 // HealthStore exposes the underlying store for ops endpoints.
@@ -91,12 +96,85 @@ func (r *Router) TierOf(provider string) ProviderTier {
 	return ProviderTier{Tier: TierPaid, Cost: UnknownProviderCost}
 }
 
-// capOf is a provider's daily cap, or NoCap.
-func (r *Router) capOf(provider string) int {
+// capOf is a provider's daily cap, or NoCap: the configured DailyCaps
+// entry and, for a provider with a monthly quota, the day's pace cap,
+// whichever is lower.
+func (r *Router) capOf(provider string, now time.Time) int {
+	limit := NoCap
 	if n, ok := r.config.DailyCaps[provider]; ok {
-		return n
+		limit = n
 	}
-	return NoCap
+	if pace, ok := r.monthlyPace(provider, now); ok && (limit < 0 || pace.Cap < limit) {
+		limit = pace.Cap
+	}
+	return limit
+}
+
+// MonthlyPaceDayStart is how much of a monthly-quota provider's day cap
+// is open at UTC midnight; the rest accrues evenly through the day.
+const MonthlyPaceDayStart = time.Hour
+
+// limitAt is the call limit a provider is held to at now, and when that
+// limit next grows. For a monthly-quota provider the day's cap accrues
+// through the day (an hour's share at midnight, all of it by the end), so
+// a morning burst cannot leave the rest of the day without the provider
+// (docs/problems/search-throughput-keenable-underused-2026-10-15.md). A
+// plain daily cap is open all day.
+func (r *Router) limitAt(provider string, now time.Time) (limit int, until time.Time) {
+	limit = r.capOf(provider, now)
+	until = nextUTCDay(now)
+	if limit <= 0 {
+		return limit, until
+	}
+	if _, ok := r.monthlyPace(provider, now); !ok {
+		return limit, until
+	}
+	const daySec = int64(24 * 60 * 60)
+	midnight := nextUTCDay(now).AddDate(0, 0, -1)
+	elapsed := int64((now.Sub(midnight) + MonthlyPaceDayStart) / time.Second)
+	if elapsed >= daySec {
+		return limit, until
+	}
+	accrued := int(int64(limit) * elapsed / daySec)
+	// The limit next grows when the accrual reaches accrued+1.
+	nextSec := (int64(accrued+1)*daySec + int64(limit) - 1) / int64(limit)
+	return accrued, midnight.Add(time.Duration(nextSec)*time.Second - MonthlyPaceDayStart)
+}
+
+// monthlyPace is the provider's pace for now's UTC day, computed once a
+// day from the durable daily counts (so a restart recomputes the same
+// pace). ok is false for a provider without a monthly quota. A counting
+// error falls back to the even pace (target / period days) and is not
+// memoized.
+func (r *Router) monthlyPace(provider string, now time.Time) (MonthlyPace, bool) {
+	q, ok := r.config.MonthlyQuotas[provider]
+	if !ok || q.Allowance <= 0 {
+		return MonthlyPace{}, false
+	}
+	day := DayOf(now)
+	r.monthlyMu.Lock()
+	defer r.monthlyMu.Unlock()
+	if p, ok := r.monthly[provider]; ok && p.Day == day {
+		return p, true
+	}
+	p, err := q.pace(now, func(d string) (int, error) {
+		calls, err := r.counter.CallsOn(d)
+		return calls[provider], err
+	})
+	if err != nil {
+		start, end := q.Period(now)
+		periodDays := int(end.Sub(start).Hours()/24 + 0.5)
+		if periodDays < 1 {
+			periodDays = 1
+		}
+		p.Cap = p.Target / periodDays
+		log.Printf("searchplane: %s monthly pace: count error, even pace %d today: %v", provider, p.Cap, err)
+		return p, true
+	}
+	r.monthly[provider] = p
+	log.Printf("searchplane: %s monthly pace day=%s period=%s..%s used=%d target=%d days_left=%d day_cap=%d",
+		provider, p.Day, p.PeriodStart, p.PeriodEnd, p.Used, p.Target, p.DaysLeft, p.Cap)
+	return p, true
 }
 
 // DailyCount is one provider's calls on one UTC day.
@@ -107,12 +185,16 @@ type DailyCount struct {
 	// Cap is the daily cap, or NoCap.
 	Cap  int
 	Tier ProviderTier
+	// Monthly is the day's monthly pace, for a provider with a monthly
+	// quota.
+	Monthly *MonthlyPace
 }
 
 // DailyCounts returns today's (UTC) count, cap and tier for every
 // registered provider, in registration order.
 func (r *Router) DailyCounts() ([]DailyCount, error) {
-	day := DayOf(r.now())
+	now := r.now()
+	day := DayOf(now)
 	calls, err := r.counter.CallsOn(day)
 	if err != nil {
 		return nil, err
@@ -120,7 +202,11 @@ func (r *Router) DailyCounts() ([]DailyCount, error) {
 	out := make([]DailyCount, 0, len(r.providers))
 	for _, p := range r.providers {
 		name := p.Name()
-		out = append(out, DailyCount{Provider: name, Day: day, Calls: calls[name], Cap: r.capOf(name), Tier: r.TierOf(name)})
+		count := DailyCount{Provider: name, Day: day, Calls: calls[name], Cap: r.capOf(name, now), Tier: r.TierOf(name)}
+		if pace, ok := r.monthlyPace(name, now); ok {
+			count.Monthly = &pace
+		}
+		out = append(out, count)
 	}
 	return out, nil
 }
@@ -345,7 +431,7 @@ func (r *Router) admit(p Provider, now time.Time, route *Route) (launch, *Coolin
 		}
 	}
 	day := DayOf(now)
-	limit := r.capOf(name)
+	limit, until := r.limitAt(name, now)
 	calls, ok, err := r.counter.ReserveCall(name, day, limit)
 	if err != nil {
 		log.Printf("searchplane: count call for %s: %v", name, err)
@@ -354,9 +440,9 @@ func (r *Router) admit(p Provider, now time.Time, route *Route) (launch, *Coolin
 		}
 		ok = true
 	}
-	route.noteCount(DailyCount{Provider: name, Day: day, Calls: calls, Cap: limit, Tier: tier})
+	route.noteCount(DailyCount{Provider: name, Day: day, Calls: calls, Cap: r.capOf(name, now), Tier: tier})
 	if !ok {
-		return launch{}, &Cooling{Provider: name, State: StateCapped, Until: nextUTCDay(now), Reason: string(StateCapped)}
+		return launch{}, &Cooling{Provider: name, State: StateCapped, Until: until, Reason: string(StateCapped)}
 	}
 	return launch{provider: p, slot: slot, paid: tier.Tier != TierFree, at: now}, nil
 }
@@ -409,9 +495,9 @@ func (r *Router) StartRequest(ctx context.Context, req Request) (*Stream, error)
 			continue
 		}
 		if budget && r.TierOf(name).Tier != TierFree {
-			if limit := r.capOf(name); limit >= 0 && todays[name] >= limit {
-				route.noteCount(DailyCount{Provider: name, Day: DayOf(now), Calls: todays[name], Cap: limit, Tier: r.TierOf(name)})
-				stream.Cooling = append(stream.Cooling, Cooling{Provider: name, State: StateCapped, Until: nextUTCDay(now), Reason: string(StateCapped)})
+			if limit, until := r.limitAt(name, now); limit >= 0 && todays[name] >= limit {
+				route.noteCount(DailyCount{Provider: name, Day: DayOf(now), Calls: todays[name], Cap: r.capOf(name, now), Tier: r.TierOf(name)})
+				stream.Cooling = append(stream.Cooling, Cooling{Provider: name, State: StateCapped, Until: until, Reason: string(StateCapped)})
 				continue
 			}
 			reserve = append(reserve, p)
@@ -664,6 +750,14 @@ func (r *Router) call(ctx context.Context, provider Provider, query string, maxR
 	}
 	if err != nil {
 		arrival.Error = truncateSummary(err.Error())
+		if !callerGone {
+			// The journal's skip reason says only the class ("exa=error");
+			// the failing stage and HTTP status say why. Never the key, never
+			// the body (FailureFields).
+			status, stage := FailureFields(err)
+			log.Printf("searchplane: %s call failed class=%s http_status=%s stage=%s latency_ms=%d",
+				name, class, status, stage, arrival.LatencyMs)
+		}
 	} else {
 		for i := range hits {
 			hits[i].Provider = name

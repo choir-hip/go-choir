@@ -263,3 +263,34 @@ func TestSearchClient_StreamBoundGrowsByTheEscalationWindow(t *testing.T) {
 		t.Fatalf("fan-out bound = %v, want today's", got)
 	}
 }
+
+// Keenable's monthly pace on the operator route
+// (docs/problems/search-throughput-keenable-underused-2026-10-15.md): the
+// route shows the period, its use before today, the target and today's
+// cap, so the owner can read the pace against the billing page.
+func TestHandleSearchHealth_ReportsKeenableMonthlyPace(t *testing.T) {
+	client := budgetSearchClient([]SearchProvider{answering("keenable", 0, results("k", 12)...)}, nil)
+	client.planeConfig.MonthlyQuotas = map[string]searchplane.MonthlyQuota{"keenable": {Allowance: 100000, RenewDay: 5, TargetPct: 90}}
+	readLines(t, budgetPoster(t, client)(SearchRequest{Query: "q", MaxResults: 40}))
+	h := &Handler{searchClient: client}
+	req := httptest.NewRequest(http.MethodGet, "/provider/v1/search/health", nil)
+	req.RemoteAddr = "127.0.0.1:41000"
+	req.Header.Set(internalCallerHeader, "true")
+	rec := httptest.NewRecorder()
+	h.HandleSearchHealth(rec, req)
+	var body struct {
+		DailyCalls map[string]SearchDailyCalls `json:"daily_calls"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	got := body.DailyCalls["keenable"]
+	m := got.Monthly
+	if m == nil || got.Calls != 1 || m.Target != 90000 || m.UsedBeforeToday != 0 || m.DaysLeft < 1 || m.DayCap != 90000/m.DaysLeft || got.Cap != m.DayCap {
+		t.Fatalf("keenable = %+v monthly = %+v", got, m)
+	}
+	start, err := time.Parse("2006-01-02", m.PeriodStart)
+	if err != nil || start.Day() != 5 || !strings.HasSuffix(m.PeriodEnd, "-05") {
+		t.Fatalf("period %s..%s", m.PeriodStart, m.PeriodEnd)
+	}
+}

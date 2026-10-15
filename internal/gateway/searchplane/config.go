@@ -43,6 +43,10 @@ type Config struct {
 	// DailyCaps caps each named provider's calls per UTC day; a provider
 	// not named has no cap. Calls are counted whether or not capped.
 	DailyCaps map[string]int
+	// MonthlyQuotas paces a provider's monthly free allowance: each UTC
+	// day's cap is the period's remaining target over the days left
+	// (monthly.go), lowered further by any DailyCaps entry.
+	MonthlyQuotas map[string]MonthlyQuota
 	// MinResults is how many distinct URLs a search wants before it stops
 	// escalating (bounded by its max_results); DeepMinResults for a deep
 	// search.
@@ -131,8 +135,10 @@ func EscalationWindow(cfg Config) time.Duration {
 	return cfg.EscalateWindow
 }
 
-// DefaultProviderRPS paces Brave to its Free AI plan's one request a second.
-const DefaultProviderRPS = "brave=1"
+// DefaultProviderRPS paces Brave to its Free AI plan's one request a second
+// and Keenable to 8 a second, under its plan's 10
+// (docs/problems/search-throughput-keenable-underused-2026-10-15.md).
+const DefaultProviderRPS = "brave=1,keenable=8"
 
 // DefaultPaceWait is the default PaceWait.
 const DefaultPaceWait = 3 * time.Second
@@ -147,8 +153,9 @@ const (
 )
 
 // ConfigFromEnv loads router settings from environment variables.
-// CHOIR_SEARCH_PROVIDER_RPS ("brave=1,tavily=5"; rate 0 disables) replaces
-// DefaultProviderRPS when set. CHOIR_SEARCH_CACHE_TTL_SECONDS=0 turns the
+// CHOIR_SEARCH_PROVIDER_RPS ("brave=1,tavily=5"; rate 0 removes that
+// provider's pacing) is merged over DefaultProviderRPS, so setting one
+// provider's rate never drops another's. CHOIR_SEARCH_CACHE_TTL_SECONDS=0 turns the
 // result cache and in-flight join off; CHOIR_SEARCH_CACHE_SCOPE=shared
 // shares answers across computers.
 //
@@ -160,11 +167,15 @@ const (
 // CHOIR_SEARCH_DEEP_MIN_RESULTS, CHOIR_SEARCH_MAX_PAID,
 // CHOIR_SEARCH_DEEP_MAX_PAID, CHOIR_SEARCH_ESCALATE_AFTER_MS and
 // CHOIR_SEARCH_ESCALATE_WINDOW_MS tune escalation.
+//
+// Keenable's monthly pace: CHOIR_SEARCH_KEENABLE_MONTHLY_ALLOWANCE (free
+// requests a period, default 100000; 0 turns the pace off),
+// CHOIR_SEARCH_KEENABLE_RENEW_DAY (day of month the period starts, UTC,
+// default 5), CHOIR_SEARCH_KEENABLE_MONTHLY_TARGET_PCT (share of the
+// allowance to spend, default 90) and CHOIR_SEARCH_KEENABLE_PERIOD_USED
+// ("N@YYYY-MM-DD": N calls made earlier in that day's period that the
+// daily counts never saw, from the billing page).
 func ConfigFromEnv() Config {
-	rps := strings.TrimSpace(os.Getenv("CHOIR_SEARCH_PROVIDER_RPS"))
-	if rps == "" {
-		rps = DefaultProviderRPS
-	}
 	routing := RoutingBudget
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("CHOIR_SEARCH_ROUTING")), RoutingFanout) {
 		routing = RoutingFanout
@@ -180,13 +191,60 @@ func ConfigFromEnv() Config {
 		EscalateAfter:  time.Duration(envInt("CHOIR_SEARCH_ESCALATE_AFTER_MS", int(DefaultEscalateAfter/time.Millisecond))) * time.Millisecond,
 		EscalateWindow: time.Duration(envInt("CHOIR_SEARCH_ESCALATE_WINDOW_MS", int(DefaultEscalateWindow/time.Millisecond))) * time.Millisecond,
 		RequestTimeout: time.Duration(envInt("CHOIR_SEARCH_REQUEST_TIMEOUT_SECONDS", 30)) * time.Second,
-		MinInterval:    parseProviderRPS(rps),
+		MinInterval:    providerRPSFromEnv(),
+		MonthlyQuotas:  monthlyQuotasFromEnv(),
 		PaceWait:       time.Duration(envInt("CHOIR_SEARCH_PACE_WAIT_MS", int(DefaultPaceWait/time.Millisecond))) * time.Millisecond,
 		CacheTTL:       time.Duration(envInt("CHOIR_SEARCH_CACHE_TTL_SECONDS", int(DefaultCacheTTL/time.Second))) * time.Second,
 		CacheFreshTTL:  time.Duration(envInt("CHOIR_SEARCH_CACHE_FRESH_TTL_SECONDS", int(DefaultCacheFreshTTL/time.Second))) * time.Second,
 		CacheMaxBytes:  int64(envInt("CHOIR_SEARCH_CACHE_MAX_MB", DefaultCacheMaxMB)) << 20,
 		CacheShared:    strings.EqualFold(strings.TrimSpace(os.Getenv("CHOIR_SEARCH_CACHE_SCOPE")), "shared"),
 	}
+}
+
+// providerRPSFromEnv merges CHOIR_SEARCH_PROVIDER_RPS over
+// DefaultProviderRPS; an entry with rate <= 0 removes that provider's pacing.
+func providerRPSFromEnv() map[string]time.Duration {
+	out := parseProviderRPS(DefaultProviderRPS)
+	for _, part := range strings.Split(os.Getenv("CHOIR_SEARCH_PROVIDER_RPS"), ",") {
+		name, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+		name = strings.TrimSpace(name)
+		if !ok || name == "" {
+			continue
+		}
+		rate, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil {
+			continue
+		}
+		if rate <= 0 {
+			delete(out, name)
+			continue
+		}
+		out[name] = time.Duration(float64(time.Second) / rate)
+	}
+	return out
+}
+
+// monthlyQuotasFromEnv is Keenable's monthly quota from the environment
+// (ConfigFromEnv); none when the allowance is 0.
+func monthlyQuotasFromEnv() map[string]MonthlyQuota {
+	q := MonthlyQuota{
+		Allowance: envInt("CHOIR_SEARCH_KEENABLE_MONTHLY_ALLOWANCE", DefaultKeenableMonthlyAllowance),
+		RenewDay:  envInt("CHOIR_SEARCH_KEENABLE_RENEW_DAY", DefaultKeenableRenewDay),
+		TargetPct: envInt("CHOIR_SEARCH_KEENABLE_MONTHLY_TARGET_PCT", DefaultKeenableTargetPct),
+	}
+	if q.Allowance <= 0 {
+		return map[string]MonthlyQuota{}
+	}
+	if q.RenewDay < 1 || q.RenewDay > 31 {
+		q.RenewDay = DefaultKeenableRenewDay
+	}
+	if q.TargetPct < 1 || q.TargetPct > 100 {
+		q.TargetPct = DefaultKeenableTargetPct
+	}
+	if used, day, ok := ParseQuotaSeed(os.Getenv("CHOIR_SEARCH_KEENABLE_PERIOD_USED")); ok {
+		q.SeedUsed, q.SeedDay = used, day
+	}
+	return map[string]MonthlyQuota{"keenable": q}
 }
 
 // parseProviderRPS reads "name=rate,..." into per-provider call intervals.
@@ -282,6 +340,23 @@ func FormatDailyCaps(caps map[string]int) string {
 	parts := make([]string, len(names))
 	for i, name := range names {
 		parts[i] = name + "=" + strconv.Itoa(caps[name])
+	}
+	return strings.Join(parts, ",")
+}
+
+// FormatProviderRPS renders pacing intervals as "name=rate,..." in name
+// order (logs).
+func FormatProviderRPS(intervals map[string]time.Duration) string {
+	names := make([]string, 0, len(intervals))
+	for name := range intervals {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		if d := intervals[name]; d > 0 {
+			parts = append(parts, name+"="+strconv.FormatFloat(float64(time.Second)/float64(d), 'g', 4, 64))
+		}
 	}
 	return strings.Join(parts, ",")
 }
