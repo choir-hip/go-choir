@@ -124,3 +124,21 @@ func TestChatGPTUsageLineCarriesCacheKeyAndPrefixHashes(t *testing.T) {
 		t.Fatal("system prompt drift not reflected in the prefix hash")
 	}
 }
+
+func TestLoggableCacheKeyLabelsFailoverKeys(t *testing.T) {
+	cases := []struct{ key, label string }{
+		{"choir-management-abc123-def456", "management"},
+		{"choir-management-abc123-def456-failover", "management+failover"},
+		{"choir-research_child-abc123-def456-failover2", "research_child+failover2"},
+		{"conversation-1234", "-"},
+	}
+	for _, c := range cases {
+		got, label := loggableCacheKey(c.key)
+		if label != c.label {
+			t.Errorf("loggableCacheKey(%q) label = %q, want %q", c.key, label, c.label)
+		}
+		if c.label == "-" && !strings.HasPrefix(got, "h:") {
+			t.Errorf("loggableCacheKey(%q) = %q, want an h: hash", c.key, got)
+		}
+	}
+}

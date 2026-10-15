@@ -88,7 +88,14 @@ func loggableCacheKey(key string) (string, string) {
 		return "-", "-"
 	}
 	if rest, ok := strings.CutPrefix(key, "choir-"); ok {
-		if parts := strings.Split(rest, "-"); len(parts) == 3 && parts[0] != "" {
+		parts := strings.Split(rest, "-")
+		// A model failover appends "-failover" or "-failover<N>"
+		// (toolregistry tool loop); the label carries the suffix so failover
+		// calls are counted apart from keyless ones.
+		if n := len(parts); n == 4 && strings.HasPrefix(parts[3], "failover") && parts[0] != "" {
+			return key, parts[0] + "+" + parts[3]
+		}
+		if len(parts) == 3 && parts[0] != "" {
 			return key, parts[0]
 		}
 	}
