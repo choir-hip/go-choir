@@ -55,6 +55,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  castOnRecords, completingInbox, doneJobs, isGoBuildOfAutoputer, isGoTest, reportNamesBundle, verifiedNamedBundle,
+} from './reeng_tracer_checks.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = (process.env.CHOIR_DEPLOYED_BASE_URL || process.env.CHOIR_HOST || 'https://choir.news').replace(/\/$/, '');
@@ -1169,7 +1172,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     phase('gap', { step, route, detail });
   };
   const claim = {
-    mode_propose_only: null, texture_cast_to_management: null, engineering_casts: [], engineering_final_reports: [],
+    mode_propose_only: null, texture_cast_to_management: null, texture_casts_to_management: [], engineering_casts: [], engineering_final_reports: [],
     operation: null, operation_states: [], verify: null, decision_boundary: null,
     pre_apply_checkpoint: null, owner_approval: null, boots: [], unreachable: [], applied: null, route_receipt: null,
     restore: null, served: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
@@ -1204,7 +1207,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   const noteOpState = (op) => {
     if (!op?.state || seenStates.has(op.state)) return;
     seenStates.add(op.state);
-    const row = { state: op.state, at: iso(), updated_at: op.updated_at || null, bundle_digest: op.bundle_digest || null, verifier_refs: op.verifier_refs || [], last_intent_error: op.last_intent_error || null, error: op.error || null };
+    const row = { operation_id: op.operation_id || null, state: op.state, at: iso(), updated_at: op.updated_at || null, bundle_digest: op.bundle_digest || null, verifier_refs: op.verifier_refs || [], last_intent_error: op.last_intent_error || null, error: op.error || null };
     claim.operation_states.push(row);
     phase('operation_state', { operation_id: op.operation_id, ...row });
   };
@@ -1259,12 +1262,19 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
       if (!ownerID) { await sleep(5_000); continue; }
     }
     const m = await inbox(mgmtInbox());
-    if (!claim.texture_cast_to_management) {
-      const cast = (m?.records || []).find((r) => r.sender_inbox === textureInbox && r.directive?.subtype === 'cast');
-      if (cast) {
-        claim.texture_cast_to_management = { record_id: cast.record_id, round: cast.round, seq: cast.inbox_seq, at: cast.provenance?.committed_at || null };
-        phase('texture_cast_to_management', claim.texture_cast_to_management);
+    // Every Texture Cast to management: a story whose engineering fails is
+    // re-cast in later rounds, and management's engineering Cast names the
+    // round it answers.
+    for (const cast of (m?.records || []).filter((r) => r.sender_inbox === textureInbox && r.directive?.subtype === 'cast')) {
+      if (claim.texture_casts_to_management.some((x) => x.record_id === cast.record_id)) continue;
+      const row = { record_id: cast.record_id, round: cast.round, seq: cast.inbox_seq, at: cast.provenance?.committed_at || null };
+      claim.texture_casts_to_management.push(row);
+      if (!claim.texture_cast_to_management) {
+        claim.texture_cast_to_management = row;
+        phase('texture_cast_to_management', row);
         at('texture_cast_to_management');
+      } else {
+        phase('texture_recast_to_management', row);
       }
     }
     // Engineering runs are named engineering:<assignment> (D1); the Cast that
@@ -1334,17 +1344,24 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   }
   claim.verify = { verifier_refs: op.verifier_refs || [], bundle_digest: op.bundle_digest, last_intent_error: op.last_intent_error || null };
   claim.decision_boundary = { at: iso(), operation_id: op.operation_id };
-  // Capsule jobs (--change go): the engineering inbox holds one job record
-  // per job that ended, from job:<id>, with its state and receipt.
-  const engInbox = claim.engineering_casts[0]?.inbox;
-  if (engInbox) {
-    const e = await inbox(engInbox);
-    if (!e) gap('jobs', 'GET /api/inboxes/{id}/records', `engineering inbox ${engInbox} unreadable`);
-    claim.jobs = (e?.records || []).filter((r) => r.job).map((r) => ({
+  // Capsule jobs (--change go): each engineering inbox holds one job record
+  // per job that ended, from job:<id>, with its state and receipt. The
+  // bundle's jobs are the completing assignment's; earlier assignments'
+  // jobs are kept for the record.
+  claim.jobs_by_inbox = {};
+  for (const cast of claim.engineering_casts) {
+    const e = await inbox(cast.inbox);
+    if (!e) gap('jobs', 'GET /api/inboxes/{id}/records', `engineering inbox ${cast.inbox} unreadable`);
+    claim.jobs_by_inbox[cast.inbox] = (e?.records || []).filter((r) => r.job).map((r) => ({
       job_id: r.job.job_id, state: r.job.state, exit_code: r.job.exit_code ?? null, argv: r.job.argv || [], receipt_ref: r.job.receipt_ref || null,
       started_at: r.job.started_at || null, finished_at: r.job.finished_at || null,
     }));
-    phase('jobs', { count: claim.jobs.length, done: claim.jobs.filter((j) => j.state === 'done').length });
+  }
+  const jobsInbox = completingInbox(claim, claim.engineering_final_reports.find((x) => x.stop_reason === 'completed' && x.operation_id) || null);
+  if (jobsInbox) {
+    claim.jobs_inbox = jobsInbox;
+    claim.jobs = claim.jobs_by_inbox[jobsInbox] || [];
+    phase('jobs', { inbox: jobsInbox, count: claim.jobs.length, done: claim.jobs.filter((j) => j.state === 'done').length });
   }
   phase('decision_boundary', { operation_id: op.operation_id, bundle_digest: op.bundle_digest, verifier_refs: op.verifier_refs });
   at('decision_boundary');
@@ -1513,11 +1530,15 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
   const rr = claim.route_receipt || {};
   const checks = {
     texture_cast_to_management: Boolean(claim.texture_cast_to_management),
-    management_cast_engineering_on_records: Boolean(cast?.record_id && claim.texture_cast_to_management && cast.parent_id === claim.texture_cast_to_management.record_id),
+    // A Cast that answers any Texture round is on records (a failed
+    // assignment is re-cast in a later round).
+    management_cast_engineering_on_records: castOnRecords(claim, cast),
     frozen: claim.operation_states.some((s) => opAtLeast(s.state, 'frozen') && s.bundle_digest),
-    final_report_names_bundle: Boolean(report && op && report.operation_id === op.operation_id && report.bundle_digest && report.bundle_digest === op.bundle_digest),
+    // The Report names the digest Freeze gave the operation; Verify then
+    // finalizes the bundle under a new digest (finalizeVerifiedCapsuleBundle).
+    final_report_names_bundle: reportNamesBundle(claim, report, op),
     operation_on_request_trajectory: Boolean(op?.trajectory_matches),
-    verified_against_named_bundle: Boolean(claim.verify && (claim.verify.verifier_refs || []).length > 0 && report && claim.verify.bundle_digest === report.bundle_digest),
+    verified_against_named_bundle: verifiedNamedBundle(claim, report, op),
     owner_approved: Boolean(claim.owner_approval && (claim.owner_approval.decision_status === 200 || ['accepted', 'materializing', 'applied'].includes(claim.applied?.state))),
     applied: claim.applied?.state === 'applied',
     one_planned_restart: Boolean(boot && boot.restart_kind === 'planned' && boot.restart_reason === 'self_development_apply' && boot.crash_lines.length === 0),
@@ -1528,11 +1549,11 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
       && claim.applied?.effective_head !== preHead.effective_event_head),
   };
   if (CHANGE === 'go') {
-    // The bundle's build and test evidence came from capsule jobs that ended
-    // done: a build of bin/autoputer and a go test.
-    const done = (claim.jobs || []).filter((j) => j.state === 'done' && j.receipt_ref);
-    checks.go_build_job_done = done.some((j) => j.argv.includes('build') && j.argv.some((a) => a.includes('autoputer')));
-    checks.go_test_job_done = done.some((j) => j.argv.includes('test'));
+    // The completing assignment ran capsule jobs that ended done: a build
+    // of bin/autoputer and a go test (direct or through sh -c).
+    const done = doneJobs(claim.jobs);
+    checks.go_build_job_done = done.some(isGoBuildOfAutoputer);
+    checks.go_test_job_done = done.some(isGoTest);
   }
   const servedOK = claim.served.pre_apply?.served === false && claim.served.post_apply?.served === true && claim.served.post_restore?.served === false;
   if (REQUIRE_SERVED) checks.served_change_then_restored = servedOK;
