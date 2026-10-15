@@ -65,6 +65,12 @@ type Executor struct {
 	// token and binary (claude_delegate.go); empty dir means no delegate.
 	claudeDelegateDir string
 	claudeBinary      string
+	// jobs are the capsule jobs this process started (jobs.go); jobDone is
+	// the runtime's completion handler and jobAdmission the memory-lease
+	// seam.
+	jobs         map[string]*capsuleJob
+	jobDone      func(JobCompletion)
+	jobAdmission JobAdmission
 }
 
 // SetClaudeDelegateSource names the credential directory holding the Claude
@@ -160,6 +166,7 @@ func NewExecutorWithArtifacts(stateDir, artifactDir, lowerDir, sourceDir, broker
 		revokedCaps:       make(map[string]bool),
 		executionReceipts: make(map[string]ExecutionReceipt),
 		grantedReceipts:   make(map[string]GrantedExecutionReceipt),
+		jobs:              make(map[string]*capsuleJob),
 		stateDir:          filepath.Clean(stateDir),
 		artifactDir:       filepath.Clean(artifactDir),
 		lowerDir:          filepath.Clean(lowerDir),
@@ -174,6 +181,8 @@ func NewExecutorWithArtifacts(stateDir, artifactDir, lowerDir, sourceDir, broker
 	}
 	e.publicKey, e.privateKey = publicKey, privateKey
 	e.brokerDigest, e.initErr = digestRegularFile(e.brokerPath)
+	// Restart rule: jobs open before this boot ended with their capsules.
+	e.closeInterruptedJobs()
 	return e
 }
 
@@ -881,6 +890,8 @@ func (e *Executor) GoEval(ctx context.Context, agentRunID, handle string, reques
 	// ran, even when it failed. WorktreeDigest is the post-evaluation subject:
 	// freeze/grant certifies that exact frozen tree, matching Exec.
 	sourceDigest := computerevent.DigestBytes([]byte(request.Source))
+	// The cell reads the run's jobs through choir.Poll (jobs.go).
+	request.Jobs = e.JobViews(agentRunID)
 
 	result, evalErr := caps.GoEval(ctx, capability, request)
 	exitCode := 0

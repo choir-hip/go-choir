@@ -9,6 +9,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/capsulejob"
 )
 
 type capsuleCgroup interface {
@@ -98,6 +100,21 @@ func (c *Capsule) GoEval(ctx context.Context, cap *Capability, req GoEvalRequest
 	defer c.releaseOp()
 
 	return c.broker.GoEval(ctx, cap, req)
+}
+
+// Job runs one job verb in the capsule via the broker (jobs.go).
+func (c *Capsule) Job(ctx context.Context, cap *Capability, verb string, params JobParams) (capsulejob.Status, error) {
+	if !cap.AgentRole.HasVerb(verb) {
+		return capsulejob.Status{}, fmt.Errorf("role %s does not allow %s", cap.AgentRole, verb)
+	}
+	if err := VerifyCapabilityWithKey(cap, c.broker.publicKey, c.revokedCaps); err != nil {
+		return capsulejob.Status{}, fmt.Errorf("capability verification failed: %w", err)
+	}
+	if err := c.acquireOp(); err != nil {
+		return capsulejob.Status{}, err
+	}
+	defer c.releaseOp()
+	return c.broker.Job(ctx, verb, cap, params)
 }
 
 // Quiesce closes operation admission, drains all broker RPCs, and freezes the

@@ -62,7 +62,7 @@ func TestRLMEngineeringOverlayNamesTheReleaseRootFreezeReads(t *testing.T) {
 	if !strings.Contains(overlay, "at the capsule root, "+root) {
 		t.Fatalf("overlay does not name the capsule-root release tree %s: %q", root, overlay)
 	}
-	if !strings.Contains(overlay, "go build -o "+root+"bin/autoputer") {
+	if !strings.Contains(overlay, `"go", "build", "-o", "`+root+`bin/autoputer"`) {
 		t.Fatalf("overlay does not build bin/autoputer into %s", root)
 	}
 	if strings.Contains(overlay, capsule.ReleaseTreePrefix+" inside /workspace/platform") {
@@ -126,7 +126,7 @@ func TestRLMEngineeringOverlayTeachesBinaryReuseForNonGoChanges(t *testing.T) {
 func TestRLMEngineeringOverlayTeachesFreezeReceiptsAndExecLimits(t *testing.T) {
 	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
 
-	decide, goBuild := strings.Index(overlay, "touches no Go input"), strings.Index(overlay, "go build -o ")
+	decide, goBuild := strings.Index(overlay, "touches no Go input"), strings.Index(overlay, `"go", "build", "-o"`)
 	if decide < 0 || goBuild < 0 || decide > goBuild {
 		t.Errorf("F1: the Go-input decision does not come before the Go build instruction")
 	}
@@ -155,7 +155,7 @@ func TestRLMEngineeringOverlayTeachesFreezeReceiptsAndExecLimits(t *testing.T) {
 	if strings.Contains(overlay, `choir.Exec("go", []string{"test", "./`) {
 		t.Errorf("F6: the worked example runs a relative go test from /")
 	}
-	if !strings.Contains(overlay, `choir.Exec("go", []string{"-C", "/workspace/platform", "test"`) {
+	if !strings.Contains(overlay, `choir.Exec("go", []string{"-C", "/workspace/platform"`) {
 		t.Errorf("F6: the worked example does not name the module directory")
 	}
 
@@ -163,13 +163,70 @@ func TestRLMEngineeringOverlayTeachesFreezeReceiptsAndExecLimits(t *testing.T) {
 		t.Errorf("F7: the overlay has no retry rule for a refused Freeze")
 	}
 
-	if !strings.Contains(overlay, "</dev/null >/dev/null 2>&1 &") {
-		t.Errorf("F8: the overlay does not give the detached build form")
+	// F8 is closed by capsule jobs (TestRLMEngineeringOverlayTeachesCapsuleJobs):
+	// a long build is a job, never a backgrounded shell.
+	if strings.Contains(overlay, "</dev/null >/dev/null 2>&1 &") {
+		t.Errorf("F8: the overlay still teaches the detached shell build")
 	}
 
 	bound := fmt.Sprintf("killed after %d seconds", int(yaegikernel.DefaultExecTimeout/time.Second))
 	if !strings.Contains(overlay, bound) || !strings.Contains(overlay, "exit code -1") {
 		t.Errorf("F9: the overlay does not state the broker's exec bound (%q) and its exit code", bound)
+	}
+}
+
+// Capsule jobs (docs/design/capsule-long-exec-2026-10-15.md): Go builds and
+// tests outlast choir.Exec's 30 s, so the overlay teaches them as jobs.
+// Failure modes the overlay must close:
+//
+//   - J1: a Go build or go test still runs through choir.Exec (killed at
+//     30 s) or a backgrounded shell.
+//   - J2: the desk polls a job in a loop instead of ending its turn.
+//   - J3: the desk cites a failed or timed-out job's receipt, or does not
+//     know a job's receipt is citable in Freeze's slots.
+//   - J4: the desk starts two jobs at once, or Freezes while one runs.
+//   - J5: the no-Go path changes (the frontend build stays one cell).
+//   - J6: the overlay names a job option or verb the kernel does not have.
+func TestRLMEngineeringOverlayTeachesCapsuleJobs(t *testing.T) {
+	overlay := RLMEngineeringOverlay(RLMEngineeringOverlayOptions{HasSelfDevelopmentOperation: true})
+	for _, want := range []string{
+		`choir.Start([]string{"go", "build", "-o", "/var/lib/artifact/release/bin/autoputer"`,
+		`choir.Start([]string{"go", "test"`,
+		"never a choir.Exec and never a backgrounded shell",
+	} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("J1: the overlay does not say %q", want)
+		}
+	}
+	for _, want := range []string{"end your turn", "you are woken", "Do not poll a job in a loop"} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("J2: the overlay does not say %q", want)
+		}
+	}
+	for _, want := range []string{"a job is one, with its own receipt_ref", "the bin/autoputer build job for a Go change",
+		"a job whose state is failed, timeout or stopped", "during which the workspace changed"} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("J3: the overlay does not say %q", want)
+		}
+	}
+	for _, want := range []string{"One job runs at a time", "Freeze is refused while a job runs"} {
+		if !strings.Contains(overlay, want) {
+			t.Errorf("J4: the overlay does not say %q", want)
+		}
+	}
+	noGo := overlay[strings.Index(overlay, "touches no Go input"):strings.Index(overlay, "A change that touches a Go input")]
+	if strings.Contains(noGo, "choir.Start") || !strings.Contains(noGo, "It fits within one choir.Exec") {
+		t.Errorf("J5: the no-Go path changed: %q", noGo)
+	}
+	for _, verb := range []string{"Start", "Poll", "Stop"} {
+		if !strings.Contains(yaegikernel.DeskSurface("engineering", "implementation", false), "choir."+verb+"(") {
+			t.Errorf("J6: the kernel documents no choir.%s", verb)
+		}
+	}
+	for _, opt := range []string{`"cwd"`, `"minutes"`} {
+		if !strings.Contains(overlay, opt) {
+			t.Errorf("J6: the overlay does not name the option %s", opt)
+		}
 	}
 }
 

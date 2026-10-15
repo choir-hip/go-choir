@@ -321,7 +321,7 @@ func inboxRecordView(rec types.CommitmentRecord) yaegikernel.InboxRecord {
 	view := yaegikernel.InboxRecord{
 		Seq: rec.InboxSeq, RecordID: rec.RecordID, Kind: inboxRecordKind(rec), From: rec.SenderInbox,
 		ConversationID: rec.ConversationID, Round: rec.Round, Final: rec.Final,
-		Cast: rec.Cast, Report: rec.Report, Support: rec.Support, Captures: rec.Captures, TaskOutcome: rec.TaskOutcome,
+		Cast: rec.Cast, Report: rec.Report, Support: rec.Support, Captures: rec.Captures, TaskOutcome: rec.TaskOutcome, Job: rec.Job,
 		ParentID: rec.ParentID, RelatedIDs: rec.RelatedIDs, EvidenceRefs: rec.EvidenceRefs,
 	}
 	if t, err := time.Parse(time.RFC3339Nano, rec.Provenance.CommittedAt); err == nil {
@@ -349,6 +349,8 @@ func inboxRecordKind(rec types.CommitmentRecord) string {
 		return "captures"
 	case rec.TaskOutcome != nil:
 		return "task_report"
+	case rec.Job != nil:
+		return "job"
 	case rec.EmitterKind == types.CommitmentEmitterSystem:
 		return "closure"
 	case rec.Directive != nil:

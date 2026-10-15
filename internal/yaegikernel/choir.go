@@ -50,6 +50,9 @@ type ChoirScope struct {
 	// owns binding lifetime: exactly one cell binds at a time.
 	tray  *Tray
 	inbox []IncomingMessage
+	// jobs is the cell-start snapshot of this run's capsule jobs, read by
+	// Poll (jobs.go).
+	jobs []JobView
 	// doc is the cell-start texture document snapshot (R3d) a texture cell
 	// reads via ReadDoc(): the bound doc's current revision id + content.
 	doc *DocSnapshot
@@ -213,6 +216,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.updates = append([]PendingUpdate(nil), frame.Updates...)
 			s.emits = append([]PendingEmit(nil), frame.Emits...)
 			s.records = append([]InboxRecord(nil), frame.Records...)
+			s.jobs = append([]JobView(nil), frame.Jobs...)
 			s.recordsShown.Store(0)
 			s.takeRefusals()
 		},
@@ -228,6 +232,7 @@ func (s *ChoirScope) BindCell() CellHooks {
 			s.updates = nil
 			s.emits = nil
 			s.records = nil
+			s.jobs = nil
 			return out
 		},
 		Refusals:     s.takeRefusals,
@@ -334,7 +339,9 @@ var deskModuleSets = map[string][]string{
 	// precommits what it expects with rule-settled Precommits, which the
 	// runtime settles from its Freeze, management's Verify and the
 	// assignment's end (types/commitment_rules.go).
-	"engineering": {"WriteFile", "Exec", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Note"},
+	// It runs long builds and tests as capsule jobs (Start, Poll, Stop;
+	// docs/design/capsule-long-exec-2026-10-15.md).
+	"engineering": {"WriteFile", "Exec", "Start", "Poll", "Stop", "Complete", "Freeze", "Precommit", "Report", "Ask", "Reply", "Note"},
 	// Research observes the world read-only but has full message authority —
 	// read-only world access is not read-only messaging.
 	"research": {"Cast", "Ask", "Note", "Reply", "CancelAct",
@@ -405,6 +412,9 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 	verbs := map[string]func() reflect.Value{
 		"WriteFile":        func() reflect.Value { return reflect.ValueOf(s.WriteFile) },
 		"Exec":             func() reflect.Value { return reflect.ValueOf(s.Exec) },
+		"Start":            func() reflect.Value { return reflect.ValueOf(s.Start) },
+		"Poll":             func() reflect.Value { return reflect.ValueOf(s.Poll) },
+		"Stop":             func() reflect.Value { return reflect.ValueOf(s.Stop) },
 		"Complete":         func() reflect.Value { return reflect.ValueOf(s.Complete) },
 		"Freeze":           func() reflect.Value { return reflect.ValueOf(s.Freeze) },
 		"Cast":             func() reflect.Value { return reflect.ValueOf(s.Cast) },
@@ -450,7 +460,7 @@ func (s *ChoirScope) ChoirExports() interp.Exports {
 		if !s.deskModule(name) {
 			continue
 		}
-		if s.readOnly && (name == "WriteFile" || name == "Exec") {
+		if s.readOnly && (name == "WriteFile" || name == "Exec" || name == "Start" || name == "Stop") {
 			continue
 		}
 		exports[name] = mint()

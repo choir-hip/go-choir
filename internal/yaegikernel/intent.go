@@ -214,6 +214,9 @@ type InboxRecord struct {
 	// the captures it left, which management may delegate again by this
 	// record's id.
 	TaskOutcome *types.CommitmentTaskOutcome `json:"task_outcome,omitempty"`
+	// Job is a capsule job's end (jobs.go): its state, exit code, receipt
+	// and output tail, from job:<id>.
+	Job *types.CommitmentJob `json:"job,omitempty"`
 	// ParentID, RelatedIDs and EvidenceRefs are the record's links (C1e
 	// D9): a Cast's parent request, the records a Reply answers, and the
 	// evidence a Report names (an engineering Report names its assignment,
@@ -343,6 +346,13 @@ type StagedIntent struct {
 	Disposition string   `json:"disposition,omitempty"`
 	Captures    []string `json:"captures,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
+	// Job fields (IntentJob, jobs.go): the operation, the job id the cell
+	// minted, and a start's argv, cwd and wall clock.
+	JobOp       string   `json:"job_op,omitempty"`
+	JobID       string   `json:"job_id,omitempty"`
+	Argv        []string `json:"argv,omitempty"`
+	Cwd         string   `json:"cwd,omitempty"`
+	WallClockMS int64    `json:"wall_clock_ms,omitempty"`
 }
 
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:
@@ -390,6 +400,9 @@ func (t *Tray) Complete(result, verdict, summary string, evidenceRefs, execution
 			return fmt.Errorf("tray: at most one complete per cell")
 		}
 	}
+	if t.hasJobIntent() {
+		return fmt.Errorf("tray: complete cannot share a cell with a job start or stop")
+	}
 	_, err := t.stage(StagedIntent{Kind: IntentComplete, Result: result, Verdict: verdict, Summary: summary, EvidenceRefs: evidenceRefs, ExecutionRefs: executionRefs})
 	return err
 }
@@ -402,6 +415,9 @@ func (t *Tray) Freeze(buildRecipeRef string, testReceipts, dependencyToolchainRe
 		if in.Kind == IntentFreeze {
 			return fmt.Errorf("tray: at most one freeze per cell")
 		}
+	}
+	if t.hasJobIntent() {
+		return fmt.Errorf("tray: freeze cannot share a cell with a job start or stop")
 	}
 	_, err := t.stage(StagedIntent{Kind: IntentFreeze, BuildRecipeRef: buildRecipeRef, TestReceipts: testReceipts, DependencyToolchainRefs: dependencyToolchainRefs})
 	return err
@@ -643,8 +659,8 @@ func (t *Tray) stage(in StagedIntent) (string, error) {
 	size := len(in.Body) + len(in.Objective) + len(in.Summary) + len(in.Verdict) + len(in.BuildRecipeRef) + len(in.Decision) +
 		len(in.TargetRef) + len(in.Claim) + len(in.ResolverID) + len(in.Question) + len(in.Answer) + len(in.Statement) +
 		len(in.Precommit) + len(in.Resolve) + len(in.Disagreement)
-	size += len(in.Reason)
-	for _, refs := range [][]string{in.EvidenceRefs, in.ExecutionRefs, in.TestReceipts, in.DependencyToolchainRefs, in.VerifierRefs, in.Captures} {
+	size += len(in.Reason) + len(in.JobOp) + len(in.JobID) + len(in.Cwd)
+	for _, refs := range [][]string{in.EvidenceRefs, in.ExecutionRefs, in.TestReceipts, in.DependencyToolchainRefs, in.VerifierRefs, in.Captures, in.Argv} {
 		for _, ref := range refs {
 			size += len(ref)
 		}

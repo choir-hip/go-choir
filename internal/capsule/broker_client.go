@@ -11,6 +11,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/capsulejob"
 )
 
 // BrokerClient communicates with a capsule's exec-broker via JSON-RPC
@@ -150,6 +152,19 @@ func (b *BrokerClient) GoEval(ctx context.Context, cap *Capability, req GoEvalRe
 		return GoEvalResult{}, fmt.Errorf("failed to unmarshal go_eval result: %w", err)
 	}
 	return result, nil
+}
+
+// Job sends one job verb (job_start, job_status, job_stop) to the broker.
+func (b *BrokerClient) Job(ctx context.Context, verb string, cap *Capability, params JobParams) (capsulejob.Status, error) {
+	resp, err := b.call(ctx, verb, cap, params)
+	if err != nil {
+		return capsulejob.Status{}, err
+	}
+	var status capsulejob.Status
+	if err := json.Unmarshal(resp.Result, &status); err != nil {
+		return capsulejob.Status{}, fmt.Errorf("failed to unmarshal %s result: %w", verb, err)
+	}
+	return status, nil
 }
 
 // ReadFile reads a file from the capsule via the broker.

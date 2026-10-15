@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 func stubErr(operation string) error {
@@ -140,6 +142,20 @@ func (e *Executor) PersistRevocationReceipt(string, string, string, string) (Cap
 }
 
 func (e *Executor) HasCapsule(string) bool { return false }
+
+// Capsule jobs (jobs.go) need the Linux guest.
+func (e *Executor) SetJobCompletionHandler(func(JobCompletion)) {}
+func (e *Executor) SetJobAdmission(JobAdmission)                {}
+func (e *Executor) StartJob(context.Context, string, string, JobRequest) (yaegikernel.JobView, error) {
+	return yaegikernel.JobView{}, stubErr("start job")
+}
+func (e *Executor) StopJob(context.Context, string, string, string) (yaegikernel.JobView, error) {
+	return yaegikernel.JobView{}, stubErr("stop job")
+}
+func (e *Executor) RunningJob(string) (yaegikernel.JobView, time.Time, bool) {
+	return yaegikernel.JobView{}, time.Time{}, false
+}
+func (e *Executor) JobViews(string) []yaegikernel.JobView { return nil }
 func (e *Executor) InspectCapsuleRaw(string) (*CapsuleDiagnostics, error) {
 	return nil, stubErr("inspect")
 }

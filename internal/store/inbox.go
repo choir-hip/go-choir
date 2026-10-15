@@ -179,6 +179,9 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 	if rec.Final && (kind != types.CommitmentKindReport || rec.Report == nil || strings.TrimSpace(rec.Report.StopReason) == "") {
 		return inboxRefused("final record %s must be a report with a stop_reason", rec.RecordID)
 	}
+	if rec.Job != nil && (rec.EmitterKind != types.CommitmentEmitterSystem || strings.TrimSpace(rec.Job.JobID) == "" || rec.SenderInbox != types.JobSenderInbox(rec.Job.JobID)) {
+		return inboxRefused("job record %s must be a system record from job:<id> naming its job", rec.RecordID)
+	}
 	if rec.Captures != nil && (rec.EmitterKind != types.CommitmentEmitterSystem || strings.TrimSpace(rec.Captures.SourceID) == "" || len(rec.Captures.Items) == 0) {
 		return inboxRefused("capture arrival %s must be a system record naming its source and at least one capture", rec.RecordID)
 	}

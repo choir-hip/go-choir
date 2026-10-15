@@ -308,6 +308,11 @@ type CommitmentRecord struct {
 	// (management delegation R2-8), minted by the host from the task inbox
 	// to management:<owner>.
 	TaskOutcome *CommitmentTaskOutcome `json:"task_outcome,omitempty"`
+	// Job is the body of a capsule job's end record
+	// (docs/design/capsule-long-exec-2026-10-15.md): the system record the
+	// runtime sends engineering:<assignment> from job:<id> when a job it
+	// started ends.
+	Job *CommitmentJob `json:"job,omitempty"`
 	// Calibration is the body of an agent calibration record (level 2,
 	// docs/reports/choir-mcp-precommitments-2026-10-14.md): a claim an agent
 	// wrote through /api/precommit (Kind precommit) or one scorer's

@@ -41,6 +41,10 @@ type ToolLoopCompletionGuardResult struct {
 	Continue    bool
 	Reason      string
 	Instruction string
+	// Waited says the guard waited for an outside event (a capsule job's
+	// end) and Instruction reports it: the turn resumes, and the wait is
+	// not a retry of the guard's reminder (bounded by maxCompletionGuardWaits).
+	Waited bool
 }
 
 type ToolLoopCompletionGuardFunc func(ctx context.Context, state ToolLoopCompletionState) (ToolLoopCompletionGuardResult, error)
@@ -112,6 +116,10 @@ const maxRequiredNextToolRetries = 2
 const maxTokenContinuationRetries = 3
 
 const maxCompletionGuardRetries = 2
+
+// maxCompletionGuardWaits bounds the guard's waits for outside events in
+// one run (a desk that starts a job per turn).
+const maxCompletionGuardWaits = 32
 
 const maxToolLoopParkResumes = 16
 
@@ -324,6 +332,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	var requiredNextTool *pendingRequiredTool
 	var maxTokenContinuationAttempts int
 	var completionGuardAttempts int
+	var completionGuardWaits int
 	var parkAttempts int
 	var partialTextFragments []string
 
@@ -882,9 +891,16 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 					return "", totalUsage, fmt.Errorf("tool loop completion guard: %w", err)
 				}
 				if guardResult.Continue {
-					completionGuardAttempts++
-					if completionGuardAttempts > maxCompletionGuardRetries {
-						return "", totalUsage, fmt.Errorf("tool loop: completion guard %q was not satisfied after %d retries", strings.TrimSpace(guardResult.Reason), maxCompletionGuardRetries)
+					if guardResult.Waited {
+						completionGuardWaits++
+						if completionGuardWaits > maxCompletionGuardWaits {
+							return "", totalUsage, fmt.Errorf("tool loop: completion guard waited %d times", maxCompletionGuardWaits)
+						}
+					} else {
+						completionGuardAttempts++
+						if completionGuardAttempts > maxCompletionGuardRetries {
+							return "", totalUsage, fmt.Errorf("tool loop: completion guard %q was not satisfied after %d retries", strings.TrimSpace(guardResult.Reason), maxCompletionGuardRetries)
+						}
 					}
 					if err := appendAssistantText(resp.Text, resp.ReasoningContent); err != nil {
 						return "", totalUsage, fmt.Errorf("tool loop persist guarded assistant final message: %w", err)

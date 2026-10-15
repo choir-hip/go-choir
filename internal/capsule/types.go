@@ -145,6 +145,9 @@ type GoEvalRequest struct {
 	// in (cursor, head] at cell start, read through choir.Records() (Cut 1
 	// L3b-2).
 	Records []yaegikernel.InboxRecord `json:"records,omitempty"`
+	// Jobs carries the run's capsule jobs at cell start, read through
+	// choir.Poll; the executor fills it (jobs.go).
+	Jobs []yaegikernel.JobView `json:"jobs,omitempty"`
 }
 
 // GoEvalResult is the result of evaluating Go source in the capsule. Intents
@@ -172,6 +175,9 @@ type GoEvalResult struct {
 	// returned.
 	FreezeResult map[string]any `json:"freeze_result,omitempty"`
 	VerifyResult map[string]any `json:"verify_result,omitempty"`
+	// JobResults carries what became of the cell's job starts and stops
+	// (started, or refused and why), set by guest core after reduction.
+	JobResults []map[string]any `json:"job_results,omitempty"`
 	// Reuse carries the session reuse disposition for a failed cell
 	// (preserve: heap intact, worker alive). DiagKind carries the
 	// diagnostic kind with the message verbatim. Settlement-gate item 1.
@@ -193,6 +199,22 @@ type ExecutionReceipt struct {
 	WorktreeDigest         string `json:"worktree_digest"`
 	SourceTreeDigest       string `json:"source_tree_digest"`
 	OccurredAt             string `json:"occurred_at"`
+	// Job fields: set only on a capsule job's receipt (jobs.go), omitted
+	// otherwise, so a cell or exec receipt keeps its canonical bytes and
+	// digest. Argv and EnvDigest bind exactly what ran; JobState says how
+	// it ended (done, failed, timeout, stopped); StartWorktreeDigest is the
+	// tree the job started on (WorktreeDigest is the tree it ended with);
+	// StdoutDigest is the stored log's sha256, LogRef its content address.
+	JobID               string   `json:"job_id,omitempty"`
+	JobState            string   `json:"job_state,omitempty"`
+	Argv                []string `json:"argv,omitempty"`
+	EnvDigest           string   `json:"env_digest,omitempty"`
+	StartedAt           string   `json:"started_at,omitempty"`
+	DurationMS          int64    `json:"duration_ms,omitempty"`
+	OutputBytes         int64    `json:"output_bytes,omitempty"`
+	OutputTruncated     bool     `json:"output_truncated,omitempty"`
+	StartWorktreeDigest string   `json:"start_worktree_digest,omitempty"`
+	LogRef              string   `json:"log_ref,omitempty"`
 }
 
 // ChangeKind describes the type of filesystem change.

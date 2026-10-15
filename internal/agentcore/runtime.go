@@ -73,6 +73,12 @@ type Runtime struct {
 	// row (inbox -> int), for the backoff of the wake that retries the
 	// records a failed turn left unread. In memory: a restart resets it.
 	recordsFailedTurns sync.Map
+	// jobWakes holds each engineering run's capsule-job wake (run id ->
+	// chan struct{}): a job's end signals it (capsule_jobs.go).
+	jobWakes sync.Map
+	// jobTable overrides the executor's job view for the completion guard
+	// (tests).
+	jobTable capsuleJobTable
 	// storyLibraryShown holds the story-library head each running desk run
 	// last read with choir.Stories() (run id -> int64), stamped on its
 	// texture:new commits (management delegation R2-5).
@@ -707,6 +713,9 @@ func WithCapsuleExecutor(executor *capsule.Executor) RuntimeOption {
 		rt.assignmentReceiptResolver = executor
 		if executor != nil {
 			rt.capsuleBuilder = transaction.NewTransactionBuilder(transaction.NewClassifier())
+			// A capsule job's end commits its record and wakes its run
+			// (capsule_jobs.go).
+			executor.SetJobCompletionHandler(rt.handleCapsuleJobDone)
 		}
 	}
 }
@@ -3584,6 +3593,11 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithCompletionGuard(func(ctx context.Context, state toolregistry.ToolLoopCompletionState) (toolregistry.ToolLoopCompletionGuardResult, error) {
 			if engineeringOverlayTerminalFateCommitted(state.Messages) {
 				return toolregistry.ToolLoopCompletionGuardResult{}, nil
+			}
+			// A turn that ends while its capsule runs a job waits for the
+			// job and resumes with its outcome (capsule_jobs.go).
+			if waited, ok := rt.engineeringJobWait(ctx, rec); ok {
+				return waited, nil
 			}
 			return toolregistry.ToolLoopCompletionGuardResult{
 				Continue:    true,

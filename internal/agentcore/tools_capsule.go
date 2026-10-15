@@ -158,6 +158,13 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 	if toolCtx.TransactionBuilder == nil || toolCtx.EventAppender == nil || toolCtx.ComputerID == "" {
 		return nil, fmt.Errorf("capsule event authority unavailable")
 	}
+	// A running job writes the tree and the release Freeze would capture,
+	// and Freeze's quiesce would pause it (design F10).
+	if toolCtx.Executor != nil {
+		if job, _, running := toolCtx.Executor.RunningJob(toolCtx.AgentRunID); running {
+			return nil, fmt.Errorf("job %s is still running; Freeze waits until it ends (or choir.Stop it): it writes the tree and release Freeze would capture", job.ID)
+		}
+	}
 	trajectoryID := trajectoryIDForRun(rec)
 	if toolCtx.OperationStore == nil || toolCtx.EventProjection == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" || trajectoryID == "" {
 		return nil, fmt.Errorf("self-development freeze authority unavailable")
@@ -238,6 +245,11 @@ func freezeCapsuleEffectBundle(ctx context.Context, toolCtx *CapsuleToolCtx, rec
 			return nil, slotsErr
 		}
 		return nil, fmt.Errorf("%s", freezeDistinctReceiptsRequired)
+	}
+	// A receipt of a failed, timed-out or stopped execution is not evidence
+	// that its slot's work succeeded (design F11, F12).
+	if err := freezeReceiptOutcomesError(buildRecipeRef, testReceipts, dependencyToolchainRefs, executionReceipts); err != nil {
+		return nil, err
 	}
 	record, err := toolCtx.TransactionBuilder.BuildBundleFromDiff(capsuleID, changes)
 	if err != nil {
@@ -645,6 +657,7 @@ func newCapsuleGoEvalTool(rt *Runtime) toolregistry.Tool {
 				result.FateTerminal = reduction.fateTerminal
 				result.FreezeResult = reduction.freezeResult
 				result.VerifyResult = reduction.verifyResult
+				result.JobResults = reduction.jobResults
 			}
 			return toolregistry.ResultJSON(result)
 		},
@@ -739,6 +752,42 @@ func freezeReceiptSlotsError(buildRecipeRef string, testReceipts, dependencyTool
 	}
 	return fmt.Errorf("%s: %s; cite three different cells — build_recipe_ref: the cell that built the release tree; test_receipts: the cell that ran the tests or checks, after your last write; dependency_toolchain_refs: a cell that recorded the toolchain (go version, node --version, npm --version)",
 		freezeDistinctReceiptsRequired, strings.Join(shared, "; "))
+}
+
+const freezeFailedReceipts = "a cited execution receipt records an execution that did not succeed"
+
+// freezeReceiptOutcomesError refuses Freeze evidence whose recorded outcome
+// is a failure: a non-zero exit code (a failed or killed command, a cell
+// that panicked), a job that did not end done, and, in the build and test
+// slots, a job whose workspace changed while it ran
+// (docs/design/capsule-long-exec-2026-10-15.md, F11/F12). nil when every
+// cited receipt records a success.
+func freezeReceiptOutcomesError(buildRecipeRef string, testReceipts, dependencyToolchainRefs []string, receipts []capsule.ExecutionReceipt) error {
+	byRef := make(map[string]capsule.ExecutionReceipt, len(receipts))
+	for _, receipt := range receipts {
+		byRef[receipt.ReceiptRef] = receipt
+	}
+	var problems []string
+	check := func(ref, slot string, buildOrTest bool) {
+		receipt, ok := byRef[strings.TrimSpace(ref)]
+		if !ok {
+			return
+		}
+		if why := capsule.JobReceiptOutcomeRefusal(receipt, buildOrTest); why != "" {
+			problems = append(problems, slot+" cites "+receipt.ReceiptRef+": "+why)
+		}
+	}
+	check(buildRecipeRef, "build_recipe_ref", true)
+	for i, ref := range testReceipts {
+		check(ref, fmt.Sprintf("test_receipts[%d]", i), true)
+	}
+	for i, ref := range dependencyToolchainRefs {
+		check(ref, fmt.Sprintf("dependency_toolchain_refs[%d]", i), false)
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s: %s; cite work that succeeded: a cell that ran its check without panicking, or a job whose state is done", freezeFailedReceipts, strings.Join(problems, "; "))
 }
 
 func firstString(values []string) string {

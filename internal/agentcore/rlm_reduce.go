@@ -152,6 +152,10 @@ func validateCellIntents(scope ReductionScope, intents []yaegikernel.StagedInten
 			if strings.TrimSpace(in.BuildRecipeRef) == "" || len(in.TestReceipts) == 0 || len(in.DependencyToolchainRefs) == 0 {
 				return fmt.Errorf("reduce: freeze %s requires build recipe, test receipts, and dependency/toolchain refs", in.LocalID)
 			}
+		case yaegikernel.IntentJob:
+			if err := validateJobIntent(fromDesk, in); err != nil {
+				return err
+			}
 		case yaegikernel.IntentVerify:
 			if in.Decision != "pass" && in.Decision != "fail" {
 				return fmt.Errorf("reduce: verify %s decision %q invalid", in.LocalID, in.Decision)
@@ -637,6 +641,8 @@ type rlmCallReduction struct {
 	// tools returned.
 	freezeResult map[string]any
 	verifyResult map[string]any
+	// jobResults carry what became of the cell's job starts and stops.
+	jobResults []map[string]any
 }
 
 // rlmReductionForCall assembles the cell-start inbox snapshot from the durable
@@ -952,6 +958,10 @@ func (r *rlmCallReduction) commitTray(ctx context.Context, intents []yaegikernel
 			if err == nil {
 				r.freezeResult = out
 			}
+		case yaegikernel.IntentJob:
+			// A job start or stop runs after the cell's acts; a refusal is
+			// reported, never fatal to the cell (capsule_jobs.go).
+			r.jobResults = append(r.jobResults, r.commitJobIntent(ctx, in))
 		case yaegikernel.IntentVerify:
 			var out map[string]any
 			out, err = r.commitVerifyIntent(ctx, in)
