@@ -233,7 +233,7 @@ windows, and the call returns 1,000 full rows; the unbounded text on the
 same index stays 3-6× slower and grows with the range. Each capture write
 pays ~10-20 ms more for its projection (a second transaction).
 
-## Landing reconciliation (rebase onto main 133de45fa)
+## Landing reconciliation (rebase onto main 3a5084fea)
 
 The branch was rebased as `land/store-b-retrieval` (not pushed). The
 rebase had no textual conflicts. Each of main's changes was then checked
@@ -318,6 +318,41 @@ the deploy. Store B's migration does not have that shape:
   the one to use in operation.
 - Schema: revert the commits. The indexes and tables can stay; without
   the code they do nothing.
+
+### Staging proof (after the deploy reports the landed SHA)
+
+Run on Node B (`ssh node-b`). The host credential header comes from
+the root-only header file, so the secret never appears on a command line.
+The owner is the paper computer's owner (`CORPUSD_AUTOPAPER_OWNERS`).
+
+```sh
+H=/var/lib/go-choir/secrets/internal-service-token.header
+C=http://127.0.0.1:8086
+OWNER=e5962310-8767-4624-87e5-a9b93a4e1db1
+# 1. identity, and the migration live (wait for capture_index_complete)
+curl -fsS $C/health | jq '{commit:.build.commit, live:.retrieval.live}'
+journalctl -u go-choir-corpusd --since -2h | grep -E 'corpusd retrieval migrate (index|lookup_keys|done)'
+# 2. a capture older than the old 1,000-row window, found by URL over all history
+OLD=$(curl -fsS -H @$H -H 'X-Internal-Caller: true' "$C/internal/platform/objects?kind=choir.web_capture&owner=$OWNER&limit=3000" | jq -c '.[-1] | {id:.canonical_id, computer:.computer_id, url:.metadata.url}')
+COMP=$(echo "$OLD" | jq -r .computer); URL=$(echo "$OLD" | jq -r .url)
+curl -fsS -G -H @$H -H 'X-Internal-Caller: true' "$C/internal/platform/captures/by-url" \
+  --data-urlencode owner=$OWNER --data-urlencode computer=$COMP --data-urlencode "url=$URL" | jq .
+#    expect found=true and capture_id equal to $(echo "$OLD" | jq -r .id)
+# 3. search over all history; searched equals the computer's projected captures
+curl -fsS -H @$H -H 'X-Internal-Caller: true' -X POST $C/internal/platform/captures/search \
+  -d "{\"owner_id\":\"$OWNER\",\"computer_id\":\"$COMP\",\"words\":[\"ai\"],\"need\":1,\"candidates\":5}" \
+  | jq '{searched, matched, n:(.objects|length)}'
+# 4. owner scope: another owner on the same computer id finds nothing
+curl -fsS -H @$H -H 'X-Internal-Caller: true' -X POST $C/internal/platform/captures/search \
+  -d "{\"owner_id\":\"not-$OWNER\",\"computer_id\":\"$COMP\",\"words\":[\"ai\"],\"need\":1}" | jq '.objects|length'   # expect 0
+# 5. the guest uses it: corpus-search lines from the paper computer after its next research run
+#    (capture_ids no longer bounded to the newest 1,000), and corpusd timing per call
+journalctl -u go-choir-corpusd --since -1h | grep -E 'corpusd retrieval op=capture_(search|by_url)' | tail
+curl -fsS $C/health | jq '.retrieval.ops | with_entries(select(.key|test("capture")))'
+```
+
+Step 2 needs a computer with more than 1,000 captures. The paper
+computer has about 4,500 a day.
 
 ## Residuals
 
