@@ -715,6 +715,70 @@ type guestObservabilityResponse struct {
 	// (P5): a layered release's code_commit equals build.commit when the
 	// host-built binary is the one serving.
 	EffectiveRelease *effectiveReleaseIdentity `json:"effective_release,omitempty"`
+	// Memory is the guest's /proc/meminfo view, read per request: a memory
+	// hotplug lease changes MemTotal, and the staging probe reads it here
+	// instead of over SSH (docs/reports/memory-hotplug-controller-design-2026-10-14.md).
+	Memory *guestMemoryObservability `json:"memory,omitempty"`
+}
+
+// guestMemoryObservability is the guest's own memory as the kernel reports it.
+type guestMemoryObservability struct {
+	MemTotalBytes     uint64 `json:"mem_total_bytes"`
+	MemAvailableBytes uint64 `json:"mem_available_bytes"`
+	MemFreeBytes      uint64 `json:"mem_free_bytes"`
+	// VirtioMemLoaded and VirtioMemBound say whether the virtio_mem driver
+	// is in the kernel and has a device: a hotplugged computer can be
+	// resized only when both are true (docs/reports/memory-hotplug-
+	// controller-design-2026-10-14.md section 9.1).
+	VirtioMemLoaded bool `json:"virtio_mem_loaded"`
+	VirtioMemBound  bool `json:"virtio_mem_bound"`
+}
+
+// guestVirtioMemState reads the virtio_mem driver's state under a sysfs
+// root: loaded when /sys/module/virtio_mem exists, bound when its driver
+// directory lists a virtio device.
+func guestVirtioMemState(sysRoot string) (loaded, bound bool) {
+	if _, err := os.Stat(filepath.Join(sysRoot, "module", "virtio_mem")); err == nil {
+		loaded = true
+	}
+	entries, err := os.ReadDir(filepath.Join(sysRoot, "bus", "virtio", "drivers", "virtio_mem"))
+	if err != nil {
+		return loaded, false
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "virtio") {
+			return true, true
+		}
+	}
+	return loaded, false
+}
+
+// parseGuestMeminfo reads MemTotal, MemAvailable and MemFree (kB) from
+// /proc/meminfo text; nil when MemTotal is missing.
+func parseGuestMeminfo(data string) *guestMemoryObservability {
+	var out guestMemoryObservability
+	for _, line := range strings.Split(data, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		kib, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		switch fields[0] {
+		case "MemTotal:":
+			out.MemTotalBytes = kib << 10
+		case "MemAvailable:":
+			out.MemAvailableBytes = kib << 10
+		case "MemFree:":
+			out.MemFreeBytes = kib << 10
+		}
+	}
+	if out.MemTotalBytes == 0 {
+		return nil
+	}
+	return &out
 }
 
 // HandleGuestObservability handles GET /api/runtime/observability: the guest's
@@ -737,6 +801,12 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		RecentLog:  h.rt.RecentBootLog(),
 
 		EffectiveRelease: h.rt.selfdevStartupRelease,
+	}
+	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
+		resp.Memory = parseGuestMeminfo(string(raw))
+		if resp.Memory != nil {
+			resp.Memory.VirtioMemLoaded, resp.Memory.VirtioMemBound = guestVirtioMemState("/sys")
+		}
 	}
 	if h.rt.store != nil {
 		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())

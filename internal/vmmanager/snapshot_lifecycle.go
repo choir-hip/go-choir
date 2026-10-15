@@ -155,6 +155,15 @@ func (m *Manager) captureSnapshot(vmID string, cfg VMConfig, hostURL string, tl 
 	}
 	tl.markDetail("guest_fenced", fmt.Sprintf("capability_expires_at=%s", prepared.CapabilityExpiresAt.UTC().Format(time.RFC3339)))
 
+	// Shrink a hotplugged computer to its base before the snapshot, so it
+	// does not carry a browser's pages (memory_hotplug.go). Bounded; the
+	// snapshot proceeds with whatever the guest could not unplug.
+	if launchConfigHasMemoryHotplug(launchConfig) {
+		if detail := unplugBeforeSnapshot(api, vmID, cfg.MachineMemSizeMib, snapshotUnplugTimeout); detail != "" {
+			tl.markDetail("hotplug_unplug", detail)
+		}
+	}
+
 	pauseStart := time.Now()
 	pauseCtx, cancel := context.WithTimeout(context.Background(), snapshotPauseTimeout)
 	err = api.Pause(pauseCtx)

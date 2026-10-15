@@ -146,6 +146,7 @@ func (e *Executor) HasCapsule(string) bool { return false }
 // Capsule jobs (jobs.go) need the Linux guest.
 func (e *Executor) SetJobCompletionHandler(func(JobCompletion)) {}
 func (e *Executor) SetJobAdmission(JobAdmission)                {}
+func (e *Executor) SetLiveMemoryBudget(func() int64)            {}
 func (e *Executor) StartJob(context.Context, string, string, JobRequest) (yaegikernel.JobView, error) {
 	return yaegikernel.JobView{}, stubErr("start job")
 }

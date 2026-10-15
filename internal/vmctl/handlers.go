@@ -116,6 +116,18 @@ type ownershipResponse struct {
 	// admission estimates the next start from it.
 	MemoryPeakRSSBytes uint64 `json:"memory_peak_rss_bytes,omitempty"`
 	MemoryMeasuredAt   string `json:"memory_measured_at,omitempty"`
+	// Current memory, read without SSH: the latest host RSS sample, the
+	// base size, and with a hotplug device the plugged and requested
+	// totals and the lease (memory_hotplug.go). From the controller cache;
+	// the list never calls Firecracker.
+	MemoryRSSBytes        uint64 `json:"memory_rss_bytes,omitempty"`
+	MemoryBaseMiB         int    `json:"memory_base_mib,omitempty"`
+	MemoryCurrentMiB      int    `json:"memory_current_mib,omitempty"`
+	MemoryRequestedMiB    int    `json:"memory_requested_mib,omitempty"`
+	MemoryPluggedMiB      int    `json:"memory_plugged_mib,omitempty"`
+	MemoryHotplugPhase    string `json:"memory_hotplug_phase,omitempty"`
+	MemoryLeaseExpiresAt  string `json:"memory_lease_expires_at,omitempty"`
+	MemoryHotplugSelected bool   `json:"memory_hotplug_selected,omitempty"`
 }
 
 type reclaimResponse struct {
@@ -926,6 +938,7 @@ func (h *Handler) listOwnershipResponses(ctx context.Context) ([]ownershipRespon
 
 	ownerships := h.registry.ListOwnerships()
 	result := make([]ownershipResponse, 0, len(ownerships))
+	rss := h.registry.latestVMResidentBytes()
 	for _, own := range ownerships {
 		var constructionVersion *computerversion.ComputerVersion
 		var diskReceiptID string
@@ -971,6 +984,7 @@ func (h *Handler) listOwnershipResponses(ctx context.Context) ([]ownershipRespon
 			MemoryPeakRSSBytes:        own.MemoryPeakRSSBytes,
 			MemoryMeasuredAt:          own.MemoryMeasuredAt,
 		})
+		h.fillMemoryFields(&result[len(result)-1], own, rss)
 	}
 	return result, nil
 }
@@ -1236,6 +1250,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
 	s.HandleFunc(HostBootStatePath, h.HandleHostBootState)
 	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
+	s.HandleFunc("/internal/vmctl/memory", h.HandleMemory)
+	s.HandleFunc("/internal/vmctl/memory/guest", h.HandleGuestMemory)
 }
 
 // attributedLifecycle logs who asked for a lifecycle call that can stop,

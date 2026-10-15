@@ -61,8 +61,9 @@ func (j JobView) String() string {
 }
 
 // jobOptions reads choir.Start's options: cwd (absolute, default
-// /workspace/platform) and minutes (wall clock, default 20, at most 45).
-func jobOptions(opts map[string]any) (cwd string, wallMS int64, err error) {
+// /workspace/platform), minutes (wall clock, default 20, at most 45) and
+// memory_mib (memory the job needs beyond its capsule, whole MiB).
+func jobOptions(opts map[string]any) (cwd string, wallMS int64, memoryMiB int, err error) {
 	keys := make([]string, 0, len(opts))
 	for k := range opts {
 		keys = append(keys, k)
@@ -74,30 +75,51 @@ func jobOptions(opts map[string]any) (cwd string, wallMS int64, err error) {
 		case "cwd":
 			s, ok := v.(string)
 			if !ok {
-				return "", 0, fmt.Errorf("choir.Start option cwd must be a string, not %T", v)
+				return "", 0, 0, fmt.Errorf("choir.Start option cwd must be a string, not %T", v)
 			}
 			cwd = s
 		case "minutes":
-			var m float64
-			switch n := v.(type) {
-			case int:
-				m = float64(n)
-			case int64:
-				m = float64(n)
-			case float64:
-				m = n
-			default:
-				return "", 0, fmt.Errorf("choir.Start option minutes must be a number, not %T", v)
-			}
-			if m <= 0 || math.IsNaN(m) || math.IsInf(m, 0) {
-				return "", 0, fmt.Errorf("choir.Start option minutes must be positive")
+			m, err := jobNumber("minutes", v)
+			if err != nil {
+				return "", 0, 0, err
 			}
 			wallMS = int64(m * float64(time.Minute/time.Millisecond))
+		case "memory_mib":
+			m, err := jobNumber("memory_mib", v)
+			if err != nil {
+				return "", 0, 0, err
+			}
+			if m != math.Trunc(m) {
+				return "", 0, 0, fmt.Errorf("choir.Start option memory_mib must be a whole number of MiB")
+			}
+			if m > capsulejob.MaxMemoryMiB {
+				return "", 0, 0, fmt.Errorf("choir.Start option memory_mib %v is above the %d MiB a job may ask for", m, capsulejob.MaxMemoryMiB)
+			}
+			memoryMiB = int(m)
 		default:
-			return "", 0, fmt.Errorf("choir.Start has no option %q (cwd, minutes)", k)
+			return "", 0, 0, fmt.Errorf("choir.Start has no option %q (cwd, minutes, memory_mib)", k)
 		}
 	}
-	return cwd, wallMS, nil
+	return cwd, wallMS, memoryMiB, nil
+}
+
+// jobNumber reads a positive number option.
+func jobNumber(name string, v any) (float64, error) {
+	var m float64
+	switch n := v.(type) {
+	case int:
+		m = float64(n)
+	case int64:
+		m = float64(n)
+	case float64:
+		m = n
+	default:
+		return 0, fmt.Errorf("choir.Start option %s must be a number, not %T", name, v)
+	}
+	if m <= 0 || math.IsNaN(m) || math.IsInf(m, 0) {
+		return 0, fmt.Errorf("choir.Start option %s must be positive", name)
+	}
+	return m, nil
 }
 
 // JobStart stages a job start. At most one per cell, and not in a cell
@@ -111,7 +133,7 @@ func (t *Tray) JobStart(spec capsulejob.Spec) (string, error) {
 			return "", fmt.Errorf("tray: a job cannot start in a cell that stages %s", in.Kind)
 		}
 	}
-	return t.stage(StagedIntent{Kind: IntentJob, JobOp: JobOpStart, JobID: spec.ID, Argv: append([]string(nil), spec.Argv...), Cwd: spec.Cwd, WallClockMS: spec.WallClockMS})
+	return t.stage(StagedIntent{Kind: IntentJob, JobOp: JobOpStart, JobID: spec.ID, Argv: append([]string(nil), spec.Argv...), Cwd: spec.Cwd, WallClockMS: spec.WallClockMS, MemoryMiB: spec.MemoryMiB})
 }
 
 // JobStop stages a job stop.
@@ -139,7 +161,8 @@ func (t *Tray) hasJobIntent() bool {
 // returns; when it ends you are woken, its record arrives in
 // choir.Records(), and choir.Poll(id) shows its exit code, output tail and
 // receipt. opts: "cwd" (default /workspace/platform), "minutes" (wall
-// clock, default 20, at most 45). One job runs at a time in a capsule.
+// clock, default 20, at most 45), "memory_mib" (memory the job needs
+// beyond its capsule). One job runs at a time in a capsule.
 func (s *ChoirScope) Start(argv []string, opts map[string]any) (string, error) {
 	if err := s.mutateDenied("Exec"); err != nil {
 		return "", err
@@ -150,11 +173,11 @@ func (s *ChoirScope) Start(argv []string, opts map[string]any) (string, error) {
 	if s.tray == nil {
 		return "", fmt.Errorf("choir: Start requires a bound cell")
 	}
-	cwd, wallMS, err := jobOptions(opts)
+	cwd, wallMS, memoryMiB, err := jobOptions(opts)
 	if err != nil {
 		return "", err
 	}
-	spec, err := capsulejob.Spec{ID: capsulejob.NewID(), Argv: argv, Cwd: cwd, WallClockMS: wallMS}.Normalize()
+	spec, err := capsulejob.Spec{ID: capsulejob.NewID(), Argv: argv, Cwd: cwd, WallClockMS: wallMS, MemoryMiB: memoryMiB}.Normalize()
 	if err != nil {
 		return "", fmt.Errorf("choir.Start: %w", err)
 	}

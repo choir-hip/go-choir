@@ -64,7 +64,7 @@ func validateJobIntent(fromDesk string, in yaegikernel.StagedIntent) error {
 	}
 	switch in.JobOp {
 	case yaegikernel.JobOpStart:
-		if _, err := (capsulejob.Spec{ID: in.JobID, Argv: in.Argv, Cwd: in.Cwd, WallClockMS: in.WallClockMS}).Normalize(); err != nil {
+		if _, err := (capsulejob.Spec{ID: in.JobID, Argv: in.Argv, Cwd: in.Cwd, WallClockMS: in.WallClockMS, MemoryMiB: in.MemoryMiB}).Normalize(); err != nil {
 			return fmt.Errorf("reduce: job %s: %w", in.LocalID, err)
 		}
 	case yaegikernel.JobOpStop:
@@ -93,13 +93,10 @@ func (r *rlmCallReduction) commitJobIntent(ctx context.Context, in yaegikernel.S
 	var view yaegikernel.JobView
 	switch in.JobOp {
 	case yaegikernel.JobOpStart:
-		view, err = toolCtx.Executor.StartJob(jobCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, capsule.JobRequest{
-			ID: in.JobID, Argv: in.Argv, Cwd: in.Cwd, WallClockMS: in.WallClockMS,
-			Notify: map[string]string{
-				jobNotifyOwner: r.scope.OwnerID, jobNotifyComputer: r.scope.ComputerID,
-				jobNotifyInbox: r.scope.DeskAgentID, jobNotifyRun: r.scope.RunID,
-			},
-		})
+		view, err = toolCtx.Executor.StartJob(jobCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, jobStartRequest(in, map[string]string{
+			jobNotifyOwner: r.scope.OwnerID, jobNotifyComputer: r.scope.ComputerID,
+			jobNotifyInbox: r.scope.DeskAgentID, jobNotifyRun: r.scope.RunID,
+		}))
 	default:
 		view, err = toolCtx.Executor.StopJob(jobCtx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, in.JobID)
 	}
@@ -117,6 +114,12 @@ func (r *rlmCallReduction) commitJobIntent(ctx context.Context, in yaegikernel.S
 		}
 	}
 	return out
+}
+
+// jobStartRequest is the executor's start request for a staged job start,
+// carrying the cell's declared memory need.
+func jobStartRequest(in yaegikernel.StagedIntent, notify map[string]string) capsule.JobRequest {
+	return capsule.JobRequest{ID: in.JobID, Argv: in.Argv, Cwd: in.Cwd, WallClockMS: in.WallClockMS, MemoryMiB: in.MemoryMiB, Notify: notify}
 }
 
 // jobEndRecordRequest builds the inbox command for a job's end record: a

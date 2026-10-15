@@ -347,12 +347,13 @@ type StagedIntent struct {
 	Captures    []string `json:"captures,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
 	// Job fields (IntentJob, jobs.go): the operation, the job id the cell
-	// minted, and a start's argv, cwd and wall clock.
+	// minted, and a start's argv, cwd, wall clock and declared memory need.
 	JobOp       string   `json:"job_op,omitempty"`
 	JobID       string   `json:"job_id,omitempty"`
 	Argv        []string `json:"argv,omitempty"`
 	Cwd         string   `json:"cwd,omitempty"`
 	WallClockMS int64    `json:"wall_clock_ms,omitempty"`
+	MemoryMiB   int      `json:"memory_mib,omitempty"`
 }
 
 // Tray stages one cell's outbound intents. It is not safe for concurrent use:

@@ -1082,6 +1082,14 @@ in
         # computer's next cold boot. Rollback: delete this line
         # (docs/reports/lr-guest-memory-return-2026-10-14.md).
         "VM_BALLOON_FREE_PAGE_REPORTING=1"
+        # Memory hotplug (virtio-mem) for test computers only: a selected
+        # computer boots with a 4 GiB unplugged region and grows under
+        # admitted, TTL-bound leases (capsule jobs that declare memory_mib).
+        # Takes effect at each test computer's next cold boot. Rollback:
+        # delete both lines (new boots get no device; leases end at their
+        # TTL) (docs/reports/memory-hotplug-controller-design-2026-10-14.md).
+        "VM_MEMORY_HOTPLUG=on"
+        "VM_MEMORY_HOTPLUG_ONLY=class:test"
         # S3 snapshot hibernate (docs/reports/s3-snapshot-hibernate-design-
         # 2026-10-14.md): an idle hibernate fences the guest and writes a
         # Firecracker memory snapshot; the next wake loads it once instead of

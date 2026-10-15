@@ -22,7 +22,10 @@ type JobRequest struct {
 	Argv        []string
 	Cwd         string
 	WallClockMS int64
-	Notify      map[string]string
+	// MemoryMiB is the job's declared memory need beyond its capsule
+	// (capsulejob.Spec.MemoryMiB).
+	MemoryMiB int
+	Notify    map[string]string
 }
 
 // JobParams are the broker's job verb parameters.
@@ -44,9 +47,11 @@ type JobCompletion struct {
 	Receipt    *ExecutionReceipt
 }
 
-// JobAdmission is the seam for memory leases (virtio-mem, branch
-// feat/memory-hotplug): called before a job starts; release runs when it
-// ends. A non-nil error refuses the start.
+// JobAdmission is the seam for memory leases (virtio-mem,
+// docs/reports/memory-hotplug-controller-design-2026-10-14.md section 9):
+// called before a job starts; release runs when its memory is returned
+// (the job's end, or its capsule's when the boost was retained). A
+// non-nil error refuses the start.
 type JobAdmission func(capsuleID string, spec capsulejob.Spec) (release func(), err error)
 
 // JobReceiptInput is everything a job's receipt binds. The status is the

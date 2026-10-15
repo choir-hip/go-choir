@@ -245,7 +245,12 @@ in
   # virtio_balloon (=m in the guest kernel) carries free page reporting
   # (CONFIG_PAGE_REPORTING=y) when vmctl adds the balloon device; udev would
   # load it by modalias, this makes it explicit. Inert without the device.
-  boot.kernelModules = [ "overlay" "virtio_balloon" ];
+  # virtio_mem (=m) serves vmctl's memory leases on computers launched with
+  # a hotplug region; Firecracker refuses a resize until the driver binds
+  # (docs/reports/memory-hotplug-controller-design-2026-10-14.md). The
+  # onlining policy (memhp_default_state=online_movable) is on the command
+  # line of those computers only. Inert without the device.
+  boot.kernelModules = [ "overlay" "virtio_balloon" "virtio_mem" ];
 
   # ── microvm configuration ────────────────────────────────────────────
   microvm = {

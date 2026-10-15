@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -120,6 +121,10 @@ func main() {
 		registry.SetRetentionShadowPruneConfig(cfg)
 		log.Printf("vmctl: retention shadow prune mode=dry-run requested_mode=%s ephemeral_domains=%s ephemeral_user_prefixes=%s max_deletes=%d max_bytes=%d", cfg.Mode, strings.Join(cfg.EphemeralEmailDomains, ","), strings.Join(cfg.EphemeralUserIDPrefixes, ","), cfg.MaxDeletes, cfg.MaxBytes)
 	}
+	memoryHotplug := vmctl.MemoryHotplugConfigFromEnv()
+	registry.SetMemoryHotplugConfig(memoryHotplug)
+	log.Printf("vmctl: memory hotplug enabled=%t only=%s region_mib=%d lease_max_mib=%d ttl=%s max_ttl=%s grow_max_psi=%.2f",
+		memoryHotplug.Enabled, strings.Join(memoryHotplug.Only, ","), memoryHotplug.RegionMiB, memoryHotplug.LeaseMaxMiB, memoryHotplug.DefaultTTL, memoryHotplug.MaxTTL, memoryHotplug.GrowMaxPSI)
 	warmnessPolicy, err := warmnessPolicyConfigFromEnv()
 	if err != nil {
 		log.Fatalf("vmctl: computer tiers: %v", err)
@@ -242,6 +247,8 @@ func main() {
 	// The pressure monitor samples host pressure and VM memory; under the
 	// sustained signal it also runs the gated reclaim. Off with reclaim off.
 	registry.StartPressureMonitor(context.Background(), handler.AuthorizeComputerVersionRoute)
+	// Memory leases end on their TTL even after the flag is turned off.
+	registry.StartMemoryHotplugController(context.Background())
 	startUniversalWirePlatformComputer(registry, handler.AuthorizeComputerVersionRoute)
 
 	s := server.NewServer("vmctl", port)
@@ -291,6 +298,7 @@ func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 		GuestPort:                  cfg.GuestPort,
 		MachineCPUCount:            cfg.MachineCPUCount,
 		MachineMemSizeMib:          cfg.MachineMemSizeMib,
+		MemoryHotplugMiB:           cfg.MemoryHotplugMiB,
 		PersistentDir:              cfg.PersistentDir,
 		GatewayToken:               cfg.GatewayToken,
 		ComputerCredentialEnvelope: cfg.ComputerCredentialEnvelope,
@@ -395,6 +403,37 @@ func (a *vmManagerAdapter) SetVMOOMScoreAdj(vmID string, adj int) error {
 
 // VMResidentBytes implements vmctl's VM memory reader (measured admission).
 func (a *vmManagerAdapter) VMResidentBytes() map[string]uint64 { return a.mgr.VMResidentBytes() }
+
+// MemoryHotplugStatus and SetMemoryHotplugRequestedMiB serve vmctl's
+// memory lease controller (internal/vmctl/memory_hotplug.go).
+func (a *vmManagerAdapter) MemoryHotplugStatus(vmID string) (vmctl.MemoryHotplugStatus, error) {
+	st, err := a.mgr.MemoryHotplugStatus(vmID)
+	if err != nil {
+		return vmctl.MemoryHotplugStatus{}, mapMemoryHotplugErr(err)
+	}
+	return vmctl.MemoryHotplugStatus{
+		BaseMiB: st.BaseMiB, TotalMiB: st.TotalMiB, BlockMiB: st.BlockMiB, SlotMiB: st.SlotMiB,
+		PluggedMiB: st.PluggedMiB, RequestedMiB: st.RequestedMiB,
+	}, nil
+}
+
+func (a *vmManagerAdapter) SetMemoryHotplugRequestedMiB(vmID string, requestedMiB int) error {
+	return mapMemoryHotplugErr(a.mgr.SetMemoryHotplugRequestedMiB(vmID, requestedMiB))
+}
+
+func mapMemoryHotplugErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, vmmanager.ErrMemoryHotplugBusy):
+		return fmt.Errorf("%w: %v", vmctl.ErrMemoryHotplugBusy, err)
+	case errors.Is(err, vmmanager.ErrMemoryHotplugUnavailable):
+		return fmt.Errorf("%w: %v", vmctl.ErrMemoryHotplugUnavailable, err)
+	case errors.Is(err, vmmanager.ErrMemoryHotplugRejected):
+		return fmt.Errorf("%w: %v", vmctl.ErrMemoryHotplugRejected, err)
+	}
+	return err
+}
 
 func (a *vmManagerAdapter) CheckHealth(vmID string) (bool, error) {
 	return a.mgr.CheckHealth(vmID)
