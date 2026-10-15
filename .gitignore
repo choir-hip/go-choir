@@ -76,3 +76,6 @@ specs/states/
 .agentic-consensus/
 /choir-updater
 /choir-builder
+
+# Operator-local tools (OVH API, token install); kept off the public repo.
+/ops-local/

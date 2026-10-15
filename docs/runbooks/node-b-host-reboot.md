@@ -264,23 +264,23 @@ Node B is `ns106285.ip-147-135-70.us` on OVHcloud US
 operator `.env` keys `OVH_APPLICATION_KEY`, `OVH_APPLICATION_SECRET` and
 `OVH_CONSUMER_KEY`. That consumer key has full account access
 (`GET/PUT/POST/DELETE /*`) and no expiry: scope it to this server later.
-`scripts/ovh_node_b.py` wraps the calls. It is read-only unless given
+`ops-local/ovh_node_b.py (operator-local, gitignored)` wraps the calls. It is read-only unless given
 `--execute`.
 
-- **Status:** `python3 scripts/ovh_node_b.py status`. Boot options: harddisk
+- **Status:** `python3 ops-local/ovh_node_b.py (operator-local, gitignored) status`. Boot options: harddisk
   (id 1), rescue `rescue12-customer` (id 218949), poweroff.
 - **Planned reboot,** when SSH `reboot` is unavailable or hangs:
-  `python3 scripts/ovh_node_b.py reboot --execute`. It returns a task id;
+  `python3 ops-local/ovh_node_b.py (operator-local, gitignored) reboot --execute`. It returns a task id;
   poll it with `... task <id>`.
 - **If the host does not come back** (no SSH within ~10 minutes of a
   reboot):
-  1. `python3 scripts/ovh_node_b.py boot-rescue --execute` sets the next
+  1. `python3 ops-local/ovh_node_b.py (operator-local, gitignored) boot-rescue --execute` sets the next
      boot to OVH rescue and reboots. The rescue root password is emailed to
      the OVH account (rescueMail is unset).
   2. In rescue, assemble the RAID1 (`mdadm --assemble --scan`), mount the
      root and `/boot`, and point the boot default at the known-good entry
      (the fallback 6.18.16 entry, if it was added before the reboot).
-  3. `python3 scripts/ovh_node_b.py boot-disk --execute`, then reboot. The
+  3. `python3 ops-local/ovh_node_b.py (operator-local, gitignored) boot-disk --execute`, then reboot. The
      next boot is from disk again.
 - Always leave the boot setting on harddisk (bootId 1) when done; a server
   left on rescue boots rescue on every reboot.
