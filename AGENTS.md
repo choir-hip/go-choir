@@ -97,8 +97,15 @@ marker is consumed before resuming, a resume that crashes the computer
 leads to a markerless boot that closes the work: one resume per planned
 restart, so no loop.
 
-Deploys never restart a busy computer: they update idle computers and
-leave busy ones to their next idle moment. The persistent computer tier
+Deploys update idle computers and retry busy ones at their next idle
+moment (vmctl's deferred-refresh sweep). Always-busy computers are the
+exception (owner, 2026-10-15: "we need to update the autopaper computer
+even when it is busy, because it's always going to be busy"):
+`critical_protected` and `public_platform` computers take a planned,
+marker-backed refresh while busy and resume their work. Even these are
+never restarted mid self-development apply or while an engineering capsule
+is live (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
+The persistent computer tier
 exists so computers stay on. Later: real hibernate and wake (a computer
 with a pending update boots fresh instead of resuming memory), then a
 deliberate management-owned resume subsystem. Do not add boot-time
