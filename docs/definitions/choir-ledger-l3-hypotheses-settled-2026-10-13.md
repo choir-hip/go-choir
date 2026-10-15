@@ -329,6 +329,21 @@ now:
     B witnesses for one existing paper Cast. Then L3-1, tests first, in a
     worktree. Both reviewers flagged that the current corpusd created_at
     (time.Now at the write) cannot serve as witness (b).
+    Design note for the read path (2026-10-15, from the code, not yet
+    reviewed).
+    - The guest's computer_event_index holds event envelopes only. The
+      projection ops that carry canonical ids sit in payload artifacts on
+      the host, fetched over HTTP and decrypted per privacy class
+      (internal/computerevent/payload_resolver.go).
+    - Deriving canonical id -> sequence after the fact therefore means
+      fetching every projection payload, as checkpointd replay does.
+    - The cheap shape is a derived index (canonical id, first sequence,
+      event digest), written inside finalizeBatch
+      (internal/store/computer_events.go), where the ops are in hand, and
+      rebuilt on replay.
+    - That touches the projection store, a red surface. Check first that a
+      new table does not enter the state commitment, or replay parity with
+      checkpointd.
 
 receipts: []
 ---
