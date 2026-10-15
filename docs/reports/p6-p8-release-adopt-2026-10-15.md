@@ -375,3 +375,36 @@ change.
   is P9.
 - One host holds the only copy of the registry (SP).
 - The release list has no pagination cursor beyond `limit`.
+
+## Landed on this branch (not pushed, not deployed)
+
+| Commit | Class | What | Failure modes closed in tests |
+|---|---|---|---|
+| ab39e9638, 7fe60fe69 | orange | cherry-picks of c8db35df5, 17fbe5171 (patch export route and `choir self-dev patch`) | (their own) |
+| a73fe2e5d | green | this design | — |
+| bbba80efe | red | `internal/release`; corpusd `hostContentStore`, `/internal/platform/releases`, `choir.software_release` | R1, R2, R3, R4, R7, R8, R9, R10, A3, I3, A5, A7 |
+| 8e110c88b | red | `EffectiveRelease` on `/health` and observability; release draft; adoption; `choir.release_adoption`; capsule `/selfdev/adoption`; `SubmitOwnerPrompt` | I1, I2, I4, I5, R5, R6, A1-A10, A12 |
+| cb17b0268 | red | proxy publish, `/api/releases`, adoption classifier and owner-act gate | R1-R4, A11 |
+| a4ff7619c | red | vmctl `reported_release` and the guest's report | I6, I7, I8 |
+| b72c847f0 | orange | `choir release list|show|adoptions|publish|adopt` | A1 at the client |
+| dbc528300 | yellow | tracer `--scenario adopt` | the deployed probe |
+
+Not exercised locally (darwin): the capsule's `/selfdev/adoption` bind mount
+(linux-only code, compiled with `GOOS=linux`), corpusd against the deployed
+corpus-dolt server, vmctl's tap binding on a real tap, and the desks
+carrying an adoption request. Those are the deployed probe's job.
+
+Residuals found while building, added to the list above:
+
+- A computer whose updater root has no `current` (no release ever staged)
+  reports no `release_digest` and so sends vmctl no report.
+- The adoption does not check B's self-development mode first; an
+  adoption on an unarmed computer reaches the desks and stalls at Freeze
+  (visible in the adoption read as no operation).
+- The proxy reads a single release from corpusd as the host with
+  `computer_id=host`, because corpusd binds every single-release read to a
+  computer name.
+- `effective_release.tree_hash` for a self-developed computer is the
+  operation's base plus patch; a second self-development change on top of
+  an applied one is pinned at the source repository's HEAD (P13), so its
+  tree omits the first change.
