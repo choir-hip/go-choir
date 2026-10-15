@@ -68,3 +68,31 @@ whole checkpoint unit); introduced none; repaired none.
   - The next step is to read the live object id of one refused record,
     on a running test computer through the product route. Then add the
     formula with a replay-equals-live test.
+
+## Leading hypothesis, from code (2026-10-15 20:30 UTC; ledger not read)
+
+- `vocab_upcast_deposit.go`: a from-scratch replay upcasts every
+  `object_recorded` deposit through the frozen vocabulary rules. The
+  live finalize path keeps the writer's spelling ("a live writer's own
+  spelling stays authoritative").
+- f95311775 (2026-10-10) found engineering writers minting legacy
+  `co-super-*` ids that the live store kept and replay rewrote. It named
+  the residuals `vocab-guard-ids`, `vocab-recovery-prefix` and
+  `upcast-legacy-refs`.
+- So the likely shape: a commitment record on these demo computers holds
+  a legacy desk-spelled ID-shaped leaf. The record_id itself, or a
+  reference such as an inbox, parent or evidence ref, written by a
+  pre-fix writer. `identityFieldMigrated()` is true, and no formula
+  verifies, so the replay refuses.
+- **Consequence for the fix.** A scoped `record_id` formula would let
+  replay continue. But if only a reference leaf changed, the replayed row
+  still differs from live in its bytes and content hash: live never
+  migrated it. This is the `upcast-legacy-refs` residual, not a missing
+  formula alone.
+- The honest repair belongs with that residual. Either replay keeps a
+  pre-fix record's legacy leaves (a typed, versioned exception), or the
+  live store gets the same one-time migration. Both are red, and both
+  need the refused record's actual leaves first.
+- Next probe: from a published base or the demo computer's tape through
+  `choir trace export`, read which leaves of
+  `obj:choir.commitment_record:…key-27d40897…` the frozen rule rewrites.
