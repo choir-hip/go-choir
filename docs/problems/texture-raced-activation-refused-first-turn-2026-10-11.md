@@ -221,3 +221,40 @@ deploy, guest consoles that log "recovered raced activation" show no
 "mutation authority mismatch" or poisoned initial_dispatch for that doc.
 The `delivery_failed` visible-fate handler remains a residual (see Root
 cause).
+
+## After the wake-scope fix (2026-10-15, 05:00Z): the race still poisons
+
+Deployed `e4cdc2ba6` (contains 41cdcb94c, the handoff holding
+`lockTextureWakeScope`). Tracer `selfdev-jobs-0458`, guest
+vm-241980cd810414f23a06b6399adf121b (computer-d7c52c2bb443f461ad666f06309f090b):
+
+```
+05:00:20 texture api: recovered raced activation for doc 61e04b82-… run f80d052d-…
+… validate Texture initial_dispatch: validate Texture activation:
+  mutation authority mismatch   (×7)
+05:00:20 dispatcher: poison 078dd8aa-…
+05:00:20 actorruntime: handler: unknown update kind "delivery_failed"
+05:02:25 texture api: recovered raced activation for doc 61e04b82-… run f80d052d-…
+```
+
+So the confirmed mechanism (the handoff not holding the wake scope) was real
+but not the only path: with the handoff now serialized, a raced activation
+still leaves the recovered run's mutation un-pending and the first dispatch
+is still refused and poisoned. The guest kept making model calls (52 by
+05:05), so a later activation may carry the story; the tracer's result will
+say whether the first turn was lost.
+
+Belief update: a second writer stales or never creates the winner's
+mutation, outside the two submit paths now locked. Not yet identified.
+Candidates to check from the trace and code: the `initial_dispatch`
+occurrence's own reconcile (`reconcileAgentWakeLocked`'s stale-unbound loop)
+running for a *different* wake kind than the one the lock covers; the
+records-route activation; and whether `recoverRacedTextureActivation`
+returns a run whose mutation was never created (no row at all, rather than
+a stale one). The distinguishing observation is the mutation row state for
+run f80d052d after the poison (read from the stopped guest's store copy, or
+add a log line naming the row state on refusal).
+
+This is the second fix iteration on this problem; per Convergence Before
+Patching, the next step is a trace read and, if it does not converge, a
+structural assessment instead of a third patch.
