@@ -63,13 +63,6 @@ const (
 	// semantic routing.
 	DefaultOllamaEmbeddingModel = "batiai/qwen3-embedding:0.6b"
 
-	// DefaultQdrantDedupThreshold is the cosine similarity score at which a
-	// newly ingested capture is treated as a semantic duplicate of an
-	// existing capture and dropped before processor dispatch. Spike 5
-	// measured ~0.7862 as the clean-separation midpoint for 25 headlines;
-	// it is a tunable baseline, not a universal constant.
-	DefaultQdrantDedupThreshold = 0.7862
-
 	// DefaultManagementTaskSlots is K (management delegation O7, S2b): four
 	// tasks at once, as research children and intake labels. Each task is
 	// a desk worker (about 17 MiB) and shares the sub-RLM call spacer.
@@ -139,7 +132,6 @@ func LoadConfig() Config {
 		QdrantURL:            envOr("QDRANT_URL", DefaultQdrantURL),
 		OllamaURL:            envOr("OLLAMA_URL", DefaultOllamaURL),
 		OllamaEmbeddingModel: envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
-		QdrantDedupThreshold: float32Or("QDRANT_DEDUP_THRESHOLD", DefaultQdrantDedupThreshold),
 		ManagementTaskSlots:  intOr("RUNTIME_MANAGEMENT_TASK_SLOTS", DefaultManagementTaskSlots),
 	})
 }
@@ -171,10 +163,6 @@ func NormalizeConfig(cfg Config) Config {
 		cfg.OllamaEmbeddingModel = DefaultOllamaEmbeddingModel
 	}
 	cfg.ManagementTaskSlots = NormalizeManagementTaskSlots(cfg.ManagementTaskSlots)
-	// QdrantDedupThreshold is intentionally not normalized here: a zero value
-	// means semantic dedup is disabled (the default for test configs that do
-	// not opt in). LoadConfig applies the production default via envOr when
-	// QDRANT_DEDUP_THRESHOLD is unset; an explicit "0" disables the pass.
 	return cfg
 }
 
@@ -268,18 +256,6 @@ func boolOr(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
-}
-
-func float32Or(key string, fallback float32) float32 {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return fallback
-	}
-	n, err := strconv.ParseFloat(v, 32)
-	if err != nil {
-		return fallback
-	}
-	return float32(n)
 }
 
 // GatewayToken resolves the per-computer autoputer credential used to

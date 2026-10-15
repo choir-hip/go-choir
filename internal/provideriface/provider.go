@@ -271,13 +271,6 @@ type Config struct {
 	// OllamaEmbeddingModel is the model name for Ollama embeddings.
 	OllamaEmbeddingModel string
 
-	// QdrantDedupThreshold is the cosine similarity score at which a newly
-	// ingested capture is treated as a semantic duplicate of an existing
-	// capture and dropped before processor dispatch. Defaults to the spike-5
-	// baseline (0.7862); tune via QDRANT_DEDUP_THRESHOLD. A threshold of 0
-	// disables semantic dedup.
-	QdrantDedupThreshold float32
-
 	// ManagementTaskSlots is K, how many management tasks run at once on a
 	// computer; the rest queue, never refused (management delegation O7,
 	// S2b). Unset or below 1 is DefaultManagementTaskSlots; it is capped at

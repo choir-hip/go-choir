@@ -48,21 +48,15 @@ func TestLoadConfigReadsObscuraCDPScreenshots(t *testing.T) {
 	}
 }
 
-func TestNormalizeConfigPreservesExplicitZeroAndDerivesDefaults(t *testing.T) {
+func TestNormalizeConfigDerivesDefaults(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "runtime.db")
-	cfg := NormalizeConfig(Config{
-		StorePath:            storePath,
-		QdrantDedupThreshold: 0,
-	})
+	cfg := NormalizeConfig(Config{StorePath: storePath})
 
 	if cfg.PromptRoot != filepath.Join(filepath.Dir(storePath), "prompts") {
 		t.Fatalf("prompt_root = %q", cfg.PromptRoot)
 	}
 	if cfg.ActivationBudget != DefaultActivationBudget {
 		t.Fatalf("activation_budget = %s, want %s", cfg.ActivationBudget, DefaultActivationBudget)
-	}
-	if cfg.QdrantDedupThreshold != 0 {
-		t.Fatalf("qdrant_dedup_threshold = %f, want explicit zero", cfg.QdrantDedupThreshold)
 	}
 }
 
@@ -87,15 +81,6 @@ func TestManagementTaskSlotsDefaultEnvAndBounds(t *testing.T) {
 	t.Setenv("RUNTIME_MANAGEMENT_TASK_SLOTS", "2")
 	if got := LoadConfig().ManagementTaskSlots; got != 2 {
 		t.Fatalf("env slots = %d, want 2", got)
-	}
-}
-
-func TestLoadConfigPreservesExplicitZeroDedupThreshold(t *testing.T) {
-	t.Setenv("QDRANT_DEDUP_THRESHOLD", "0")
-
-	cfg := LoadConfig()
-	if cfg.QdrantDedupThreshold != 0 {
-		t.Fatalf("qdrant_dedup_threshold = %f, want explicit zero", cfg.QdrantDedupThreshold)
 	}
 }
 

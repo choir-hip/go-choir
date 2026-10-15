@@ -824,7 +824,6 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		QdrantURL:                       rtRuntimeCfg.QdrantURL,
 		OllamaURL:                       rtRuntimeCfg.OllamaURL,
 		OllamaEmbeddingModel:            rtRuntimeCfg.OllamaEmbeddingModel,
-		QdrantDedupThreshold:            rtRuntimeCfg.QdrantDedupThreshold,
 		LLMProvider:                     rtRuntimeCfg.LLMProvider,
 		LLMModel:                        rtRuntimeCfg.LLMModel,
 		LLMReasoningEffort:              rtRuntimeCfg.LLMReasoningEffort,
