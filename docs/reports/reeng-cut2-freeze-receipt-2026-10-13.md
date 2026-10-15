@@ -227,3 +227,36 @@ citations are never re-addressed by tuning.
   publishes, so a story's first public version is v2; version n is always
   Texture revision n, and nothing renumbers. Orchestrator decision under
   the owner's delegation (§12), recorded here.
+
+## Compatible extensions after the freeze
+
+Each entry is appended. The FINAL tables above are never rewritten.
+
+### 2026-10-15: L3-1, hypothesis kind and clock
+
+Three optional fields on `CastHypothesis` (and on the folded
+`HypothesisState`):
+- `kind`, either `assertion` or `forecast`;
+- `criterion`;
+- `resolves_by`, RFC 3339.
+
+The station is
+docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md (L3-1).
+
+| Declaration | File | Digest at the freeze | Digest after |
+|---|---|---|---|
+| `CastHypothesis` | internal/types/commitment.go | sha256:7758c7736068920db028973a567b80fbcd708322f45a1b40449d8044904e43de | sha256:70e5e7cc7dde1a9bfea21f593c0105447d94975ba0c3f6dfe124c113bc90841a |
+
+`CommitmentCast`, `CastRevision` and every other declaration above are
+unchanged. Their digests were recomputed with the same method, which
+reproduces the frozen `CastHypothesis` value from the parent commit.
+
+Why this is compatible:
+- The fields are `omitempty`. A record committed without them serializes,
+  hashes and replays byte-identically, so existing command digests and
+  record bodies are unchanged.
+- No existing record is backfilled.
+- Admission validates the fields on new Casts only. The fold, replay and
+  `VerifyInboxHeads` never run the time check.
+- Heads decode with unknown fields ignored, so a revert still reads heads
+  written with the fields.

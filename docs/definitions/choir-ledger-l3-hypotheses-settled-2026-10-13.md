@@ -382,6 +382,15 @@ now:
     - Rollback: git revert. Heads decode with unknown fields ignored (K9).
     - Conjecture delta: a hypothesis can state how it settles.
     - Heresy delta: discovered none, introduced none, repaired none.
+    - Code review (gpt-6.1-sol and codex, both "ship"):
+      .agentic-consensus/l3-1-code-review-2026-10-15/.
+    - Residual named by that review: the checks are on the inbox
+      planner, which every live path uses (management, tasks, Texture
+      turns, engineering assignments). Two legacy writers,
+      AppendCommitmentRecord (internal/store/commitment.go) and
+      lifecycle_commit_act.go, can still store a typed Cast unchecked. No
+      live producer uses them for hypotheses. Guard or exclude them before
+      L3-3 scoring relies on "every new hypothesis was checked".
 
 receipts: []
 ---

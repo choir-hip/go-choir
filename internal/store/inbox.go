@@ -202,6 +202,69 @@ func validateInboxRecordShape(rec types.CommitmentRecord) error {
 
 func validProbability(p float64) bool { return p >= 0 && p <= 1 }
 
+// openHypothesisState is a newly opened hypothesis as the head holds it.
+// Admission (stepConversation) and the fold (foldConversation) both build
+// it here, so a rebuilt head matches the live one.
+func openHypothesisState(h types.CastHypothesis, openedBy string, round int) types.HypothesisState {
+	return types.HypothesisState{ID: h.ID, OpenedBy: openedBy, OpenedRound: round, Statement: h.Statement,
+		Probability: h.Probability, General: h.General, Kind: h.Kind, Criterion: h.Criterion, ResolvesBy: h.ResolvesBy,
+		Status: types.HypothesisOpen}
+}
+
+// checkHypothesisKind is L3-1's shape check at admission. A hypothesis
+// without a kind is legacy and passes unchanged. An assertion needs a
+// criterion and takes no resolves_by; a forecast needs both. The refusal
+// names the hypothesis and the field, so the desk can correct and retry.
+func checkHypothesisKind(recordID string, i int, h types.CastHypothesis) error {
+	criterion := strings.TrimSpace(h.Criterion) != ""
+	resolvesBy := strings.TrimSpace(h.ResolvesBy) != ""
+	switch h.Kind {
+	case "":
+		if criterion || resolvesBy {
+			return inboxRefused("cast %s hypothesis %d has a criterion or resolves_by but no kind; kind is %q or %q", recordID, i, types.HypothesisKindAssertion, types.HypothesisKindForecast)
+		}
+	case types.HypothesisKindAssertion:
+		if !criterion {
+			return inboxRefused("cast %s hypothesis %d is an assertion with no criterion: name the check that corroborates it", recordID, i)
+		}
+		if resolvesBy {
+			return inboxRefused("cast %s hypothesis %d is an assertion with a resolves_by; only a forecast takes one", recordID, i)
+		}
+	case types.HypothesisKindForecast:
+		if !criterion {
+			return inboxRefused("cast %s hypothesis %d is a forecast with no criterion: name the event that settles it", recordID, i)
+		}
+		if !resolvesBy {
+			return inboxRefused("cast %s hypothesis %d is a forecast with no resolves_by (RFC 3339, within 7 days)", recordID, i)
+		}
+	default:
+		return inboxRefused("cast %s hypothesis %d has kind %q; kind is %q or %q", recordID, i, h.Kind, types.HypothesisKindAssertion, types.HypothesisKindForecast)
+	}
+	return nil
+}
+
+// checkHypothesisClock is L3-1's time check, run only when a Cast is first
+// admitted, against the store's commit clock. A forecast's resolves_by is
+// RFC 3339, after the commit and at most HypothesisForecastHorizon past
+// it. The fold, replay and VerifyInboxHeads never run it: a committed
+// forecast's resolves_by passes, and its record must still fold unchanged.
+func checkHypothesisClock(recordID string, i int, h types.CastHypothesis, now time.Time) error {
+	if h.Kind != types.HypothesisKindForecast || strings.TrimSpace(h.ResolvesBy) == "" {
+		return nil
+	}
+	at, err := time.Parse(time.RFC3339, strings.TrimSpace(h.ResolvesBy))
+	if err != nil {
+		return inboxRefused("cast %s hypothesis %d has resolves_by %q; it must be RFC 3339, such as %s", recordID, i, h.ResolvesBy, now.UTC().Add(72*time.Hour).Format(time.RFC3339))
+	}
+	if !at.After(now) {
+		return inboxRefused("cast %s hypothesis %d has resolves_by %s, not after the commit at %s", recordID, i, at.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339))
+	}
+	if at.Sub(now) > types.HypothesisForecastHorizon {
+		return inboxRefused("cast %s hypothesis %d has resolves_by %s, more than 7 days after the commit at %s", recordID, i, at.UTC().Format(time.RFC3339), now.UTC().Format(time.RFC3339))
+	}
+	return nil
+}
+
 // inboxRecordWakes reports whether a record mints a wake row for its
 // recipient: RecordWakesReader, the one predicate the runtime's post-turn
 // re-check also asks (management delegation R2-3). A desk's record wakes.
@@ -354,14 +417,16 @@ func stepConversation(head *types.ConversationHead, rec *types.CommitmentRecord)
 			if h.ID != "" || strings.TrimSpace(h.Statement) == "" || !validProbability(h.Probability) {
 				return false, false, nil, inboxRefused("cast %s hypothesis %d needs a statement, a probability in [0,1] and no id", rec.RecordID, i)
 			}
+			if err := checkHypothesisKind(rec.RecordID, i, h); err != nil {
+				return false, false, nil, err
+			}
 			head.HypothesisCount++
 			h.ID = "H" + strconv.Itoa(head.HypothesisCount)
 			cast.Hypotheses[i] = h
 			if head.Hypotheses == nil {
 				head.Hypotheses = map[string]types.HypothesisState{}
 			}
-			head.Hypotheses[h.ID] = types.HypothesisState{ID: h.ID, OpenedBy: sender, OpenedRound: round, Statement: h.Statement,
-				Probability: h.Probability, General: h.General, Status: types.HypothesisOpen}
+			head.Hypotheses[h.ID] = openHypothesisState(h, sender, round)
 			ids = append(ids, h.ID)
 		}
 		rec.Cast = &cast
@@ -443,6 +508,13 @@ func (s *Store) planInboxRecords(ctx context.Context, ownerID, computerID string
 			}
 			conversation.value.ConversationID = rec.ConversationID
 			conversations[rec.ConversationID] = conversation
+		}
+		if rec.Cast != nil {
+			for i, h := range rec.Cast.Hypotheses {
+				if err := checkHypothesisClock(rec.RecordID, i, h, now); err != nil {
+					return nil, nil, receipt, err
+				}
+			}
 		}
 		before, _ := json.Marshal(conversation.value)
 		opened, closed, ids, err := stepConversation(&conversation.value, &rec)
@@ -849,8 +921,7 @@ func foldConversation(conversationID string, records []types.CommitmentRecord) t
 			if head.Hypotheses == nil {
 				head.Hypotheses = map[string]types.HypothesisState{}
 			}
-			head.Hypotheses[h.ID] = types.HypothesisState{ID: h.ID, OpenedBy: rec.SenderInbox, OpenedRound: rec.Round,
-				Statement: h.Statement, Probability: h.Probability, General: h.General, Status: types.HypothesisOpen}
+			head.Hypotheses[h.ID] = openHypothesisState(h, rec.SenderInbox, rec.Round)
 		}
 	}
 	for _, rec := range sorted {

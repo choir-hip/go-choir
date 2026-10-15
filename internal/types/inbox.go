@@ -119,6 +119,9 @@ type HypothesisState struct {
 	Statement   string           `json:"statement"`
 	Probability float64          `json:"probability"`
 	General     string           `json:"general,omitempty"`
+	Kind        string           `json:"kind,omitempty"`
+	Criterion   string           `json:"criterion,omitempty"`
+	ResolvesBy  string           `json:"resolves_by,omitempty"`
 	Status      HypothesisStatus `json:"status"`
 	Outcome     string           `json:"outcome,omitempty"`
 	Reason      string           `json:"reason,omitempty"`

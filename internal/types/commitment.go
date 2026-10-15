@@ -3,6 +3,7 @@ package types
 import (
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Commitment records (precommitment records): the durable unit of the
@@ -325,6 +326,14 @@ type CommitmentRecord struct {
 // (H1, H2, ... per conversation); a caller leaves it empty. A general
 // hypothesis (decisions §3.1) names its seed in General and the
 // operational meaning of its key word in Meaning.
+//
+// Kind says how it settles (L3-1, docs/precommitment-records.md §5.5): an
+// assertion by later corroboration, a forecast by an event on or before
+// ResolvesBy (RFC 3339, at most HypothesisForecastHorizon after the
+// commit). Criterion is the check that settles either kind. A hypothesis
+// without Kind is legacy: never backfilled, outside the forecast cohort.
+// The three fields are a compatible extension of the Cut 2 freeze
+// (docs/reports/reeng-cut2-freeze-receipt-2026-10-13.md).
 type CastHypothesis struct {
 	ID          string  `json:"id,omitempty"`
 	Statement   string  `json:"statement"`
@@ -333,7 +342,21 @@ type CastHypothesis struct {
 	Crux        string  `json:"crux,omitempty"`
 	General     string  `json:"general,omitempty"`
 	Meaning     string  `json:"meaning,omitempty"`
+	Kind        string  `json:"kind,omitempty"`
+	Criterion   string  `json:"criterion,omitempty"`
+	ResolvesBy  string  `json:"resolves_by,omitempty"`
 }
+
+// Hypothesis kinds (CastHypothesis.Kind), the vocabulary of
+// CalibrationClaimAssertion and CalibrationClaimForecast.
+const (
+	HypothesisKindAssertion = "assertion"
+	HypothesisKindForecast  = "forecast"
+)
+
+// HypothesisForecastHorizon bounds a forecast's ResolvesBy after its
+// commit.
+const HypothesisForecastHorizon = 7 * 24 * time.Hour
 
 // CastUncertainty is an open question with no hypothesis yet, weighted by
 // how much it matters.
