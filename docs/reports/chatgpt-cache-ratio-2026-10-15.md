@@ -361,3 +361,37 @@ against `choir-` calls once a day of data exists, by grouping on
 - **Decision:** no code change. The logging blind spot (a 4-part key shown
   as `h:`) is worth a one-line fix later (label the failover suffix) so
   the next measurement separates failover from keyless calls; not made here.
+
+### 7.3 Root cause found: OpenCode Go out of funds, failover keys shard the cache (coordinator, about 17:45 UTC)
+
+- **Evidence (after b5c2bcaa5 labelled failover keys):** in 8 minutes of
+  paper chatgpt calls there were **no keyless calls**. Failover share:
+  - research: 35 primary-key, 28 `+failover`, 41 `+failover2`;
+  - texture: 57 primary-key, 13 `+failover`, 16 `+failover2`;
+  - management: 11 primary-key, 8 `+failover`, 15 `+failover2`.
+
+  About 55% of chatgpt calls are failovers.
+- **Evidence (gateway, 30 min):**
+  - 99 calls failed with `provider opencode-go model deepseek-v4.1-flash:
+    circuit open`;
+  - 88 with `opencode-go: every OpenCode key is parked (out of funds or
+    rate limited)`;
+  - 54 with `cat-jam-free: circuit open`;
+  - 14 with upstream 429, and 2 with
+    `402 … Insufficient account funds`.
+
+  The paper's primary and secondary models are on OpenCode Go, whose
+  account is out of funds.
+- **Mechanism (hypothesis, strong):** `toolloop.go:583-588` appends an
+  ordinal suffix (`-failover`, `-failover2`) to the cache key. Which
+  ordinal chatgpt gets depends on which earlier models are open at that
+  moment, so one desk thread's chatgpt calls are spread over 2–3 keys and
+  later calls often land on a cold key. That is the "mid-thread misses"
+  of §3, so this is our side, not backend routing.
+- **Repairs:**
+  1. Key failover by the serving provider and model, not by ordinal, so
+     every chatgpt call of a thread shares one key.
+  2. While a model's circuit is open, skip it without a call.
+  3. **Owner decision: top up OpenCode Go** (402 insufficient funds), or
+     change the paper's model policy to put chatgpt first while OpenCode
+     is unfunded.
