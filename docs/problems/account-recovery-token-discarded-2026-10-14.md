@@ -1,7 +1,9 @@
 # Account recovery creates a token and throws it away (2026-10-14)
 
-Status: slice 1 fixed on a branch (not pushed, not deployed); slice 2
-open. Station LA.
+Status: slice 1 fixed and rebased for landing on `land/account-recovery`
+(not pushed, not deployed); slice 2 open. Station LA. On landing, slice 1
+supersedes the owner's "delete `auth/recovery/request` for now" ruling;
+see "Landing reconciliation" below.
 Mutation class of the fix: **red** (auth/session). Found by the
 2026-10-14 sequencing report
 ([roadmap-sequencing-appdev-security-2026-10-14.md](../reports/roadmap-sequencing-appdev-security-2026-10-14.md)).
@@ -162,6 +164,64 @@ Evidence: `go test ./internal/auth ./internal/maild ./cmd/auth` (new:
 runs auth's mailer against a real maild handler and a fake Resend
 server); `frontend/tests/auth-recovery.spec.js` (6 tests, mocked
 `/auth/*`, phone width, virtual authenticator).
+
+## Landing reconciliation (rebase onto main, 2026-10-14/15)
+
+Main moved about 150 commits while slice 1 waited. Three things changed
+what landing means.
+
+**The sender is verified.** The slice waited on the owner verifying
+`choir.news` as a Resend sending domain. The owner reports it verified,
+with sending and receiving enabled (checked 2026-10-15). The staging
+proof (slice 2 item 8) is no longer blocked on sender setup.
+
+**The owner's "delete for now" ruling.** The surface audit
+([auth-boundary-gaps-from-surface-audit-2026-10-14.md](auth-boundary-gaps-from-surface-audit-2026-10-14.md)
+F6 row g) found `POST /auth/recovery/request` to be an unauthenticated
+write that mints a token nobody can use, and asked the owner to choose
+between deleting it and building the UI. The owner chose "deleted for
+now" ([owner-notes-2026-10-14.md](../reports/owner-notes-2026-10-14.md)
+§19). That ruling has not been carried out: on `origin/main` at 133de45fa
+both routes are still registered (`cmd/auth/main.go:77-78`), and no branch
+deletes them. Slice 1 is the other branch of that choice. It keeps the
+route and gives it a destination: the token is mailed to the account's
+stored address, a `/recover` page redeems it, and abuse is bounded by the
+existing per-email and per-IP limits (unknown addresses write an unusable
+row and get no mail). The DoS concern in row g still holds in part:
+an unauthenticated caller can still write rate-limited rows, and there is
+no service-wide send cap (residual below, slice 2 item 7). **On landing,
+slice 1 supersedes the deletion ruling. Do not also land a deletion of
+`/auth/recovery/*`.** If the owner prefers deletion after all, revert the
+slice commits and delete the routes; the two outcomes are exclusive.
+
+**Host-internal credential.** Main added `internal/hostauth` (44656ef90):
+maild's internal routes require loopback *and* the host-internal token
+(observe on Node B now, enforce after a clean day). Slice 1's maild route
+checked loopback and `X-Internal-Caller` only, and auth's mailer sent only
+the marker. Without a fix, recovery mail would stop the day hostauth
+enforces. The rebase adds:
+
+- maild `HandleAuthRecoveryLink` calls `hostauth.Authorize` after the
+  transport check, as the other maild internal routes do;
+- auth's mailer calls `hostauth.MarkInternal`, which attaches the token
+  only to a loopback internal-service port (maild 8087);
+- `nix/node-b.nix`: `go-choir-auth` gets `LoadCredential =
+  internalTokenCredential`, `CHOIR_INTERNAL_AUTH_MODE`, and an explicit
+  `AUTH_MAILD_URL=http://127.0.0.1:8087`;
+- tests: maild refuses the route in enforce with no or a wrong
+  credential; auth's mailer, run against a real maild server in enforce,
+  is refused when the credential is withheld and delivers when it is
+  attached.
+
+The proxy's reserved-header stripping (fe21ef2b2) does not touch this
+path: Caddy sends `/auth/*` straight to auth on 8081, and `/recover` is a
+signed-out GET that the proxy answers with the host platform shell.
+
+Residual from the routing: a browser that is still signed in gets `/recover`
+from its own computer's frontend, which carries the recovery page only
+after that computer's next base-image refresh. A person who has lost
+every passkey is normally signed out, so this affects only a person who
+opens the link on a device that still has a session.
 
 ## Slice 2 needs (magic-link sign-in, several passkeys, visible sessions)
 
