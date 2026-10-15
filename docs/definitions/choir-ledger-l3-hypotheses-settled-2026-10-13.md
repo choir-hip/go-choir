@@ -126,20 +126,35 @@ finish:
     - A settlement record with settler identity and evidence refs,
       admissible after its round closes, still never by the opener.
     - The ordering witness, comparable across inboxes, for a commitment
-      and each capture its settlement cites. It is the computer event
-      chain's Sequence: the first EventProjectionBatchRecorded event on the
-      paper's chain whose ProjectionOp.CanonicalID is the object
-      (internal/store/projection_tape.go interceptOG;
-      internal/computerevent/event.go Sequence, PreviousHead). Every
-      production object-graph write goes through that chain, inbox records
-      and captures alike.
-      - The earliest projection counts, never a later update or relay.
+      and each capture its settlement cites. Two stores are involved.
+      - The commitment is an inbox record on the paper's computer event
+        chain. Its witness is the chain's Sequence: the first
+        EventProjectionBatchRecorded event whose ProjectionOp.CanonicalID
+        is the record (internal/store/projection_tape.go interceptOG;
+        internal/computerevent/event.go Sequence, PreviousHead).
+      - Captures are not on that chain. They are shared content written
+        to Store B through corpusd (internal/agentcore/tool_profiles.go
+        CorpusdCaptureSink; internal/platform/captures.go). The paper's
+        chain holds only the CaptureArrival record naming each CaptureID
+        (internal/agentcore/capture_arrival.go), which is a later
+        announcement, not the first capture.
+      - So a capture counts as after the commitment only when both hold:
+        - (a) the first CaptureArrival naming it projects after the
+          commitment on the paper's chain;
+        - (b) a capture-bound first-creation witness on the Store B path
+          places the capture's first write after the commitment.
+        The L3-1 precondition establishes which witness exists for (b).
+        If none is trustworthy, L3-1 records one at the corpusd write.
+      - Timestamps may exclude evidence, never admit it. A capture whose
+        publisher published_at precedes the commitment is not resolving
+        evidence, whatever its capture order.
       - Unprovable order fails closed: not admissible for scoring. That
-        covers equal or missing sequences, objects first projected on
-        another computer's chain, and order shown only by timestamps
-        (fetched_at, OccurredAt, CommittedAt).
-      - The settlement record carries both witnesses (sequence and event
-        head), so scoring survives a later truncation of the chain.
+        covers equal or missing sequences, a missing arrival or Store B
+        witness, and evidence that reached the paper only through another
+        computer.
+      - The settlement record carries every witness it relied on
+        (sequences, event heads, the Store B witness), so scoring survives
+        a later truncation of the chain.
     - Score records per scorer, model-version pinned. Every eligible
       settlement gets the committing agent's self-score (non-governing) and
       at least two independent scorers, with coverage denominators (scored,
@@ -246,11 +261,16 @@ now:
       records replay unchanged.
     - The management overlays ask for the kinds, with the exact format.
     - No change to settlement or scoring yet.
-    - Precondition, read-only: derive the ordering witness for one
-      existing paper Cast and one capture it could cite, from the paper's
-      event chain. That shows the witness is derivable for the L3-1
-      cohort without recording anything new. If it is not derivable,
-      L3-1 also records the witness at commit.
+    - Precondition, read-only: for one existing paper Cast and one
+      capture it could cite, derive (a) both chain sequences (the Cast,
+      and the first CaptureArrival naming the capture), and (b) the
+      capture's first-creation witness on the Store B path.
+      - No API route exposes the chain today. The events are pinned
+        artifacts indexed in the guest's computer_event_index. The read
+        path is a guest route that lists projection events by canonical
+        id, never platform SQL or the guest's block device.
+      - Whatever is not derivable, L3-1 records at write time (the Cast
+        and the corpusd write), before the forecast cohort starts.
   source_ref: 1f4ed5055
   deploy_identity: staging b244507f4
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -330,10 +350,12 @@ Slices, in order:
    recoverable.
    - A settlement carries settler identity and evidence refs, and is
      admissible after its round closes. The opener still never settles.
-   - The ordering witness is the event chain's `Sequence` (see
-     finish.artifact), never `InboxSeq` or a timestamp. It must show the
-     commitment's first projection preceding the earliest capture a
-     settlement cites. If not, or if the order is unprovable, the
+   - The ordering witness (see finish.artifact) has two parts: the
+     paper's event-chain `Sequence` for the commitment and the
+     `CaptureArrival`, plus a first-creation witness on the Store B path
+     for the capture itself. It is never `InboxSeq`, and never a
+     timestamp. It must show the commitment preceding the earliest
+     capture a settlement cites. If not, or if the order is unprovable, the
      settlement is recorded as not admissible for scoring. The settlement
      record keeps both sequences and event heads.
    - A deadline passing is not a contradiction: a forecast past its
