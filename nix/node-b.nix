@@ -848,6 +848,12 @@ in
         # until the corpus store is populated; corpusd then shares the
         # Store A pool for corpus tables.
         "-/var/lib/go-choir/corpus-dsn.env"
+        # Retrieval rollback switch, flippable without a deploy
+        # (docs/problems/corpus-retrieval-windowed-unindexed-untimed-2026-10-14.md):
+        # write CORPUSD_CAPTURE_SEARCH=off here and restart corpusd; the
+        # search and URL routes refuse and every guest falls back to the
+        # window of its newest captures. Absent: the routes answer.
+        "-/var/lib/go-choir/corpusd-retrieval.env"
       ];
       Environment = [
         "SERVER_HOST=0.0.0.0"

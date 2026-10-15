@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 )
 
@@ -206,6 +207,96 @@ func TestCaptureIndexRoutesScopeAndSwitch(t *testing.T) {
 	store.retrievalState.captureIndexComplete.Store(false)
 	if rec := post("10.200.1.2", req); rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("incomplete projection: search answered %d", rec.Code)
+	}
+}
+
+// TestCaptureIndexRoutesFollowTheGuestListRule pins the new routes to the
+// rule main applies to GET /internal/platform/objects
+// (docs/problems/auth-boundary-gaps-from-surface-audit-2026-10-14.md F5): a
+// bound guest names exactly the owner and computer vmctl binds it to, and
+// a loopback caller needs the host credential once hostauth enforces. The
+// SQL scope holds for a host caller too: owner B's search never returns
+// owner A's capture on the same computer id.
+func TestCaptureIndexRoutesFollowTheGuestListRule(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	og := NewObjectGraphStore(store)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	capture := testCapture(t, "owner-a", "computer-a", "scope-1", "Harbor reopens", "https://example.com/harbor", now)
+	if err := og.PutBatch(ctx, objectgraph.Batch{Objects: []objectgraph.Object{capture}}); err != nil {
+		t.Fatal(err)
+	}
+	h := NewObjectGraphHandler(objectgraph.NewService(objectgraph.Config{Durable: og}), og)
+	if err := h.ConfigureGuestBinding(fakeGuestLookup{
+		"10.200.1.2": {Found: true, UserID: "owner-a", ComputerID: "computer-a"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.ConfigureCaptureIndex(store)
+	search := func(from, owner, computer string, mark func(*http.Request)) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(CaptureSearchRequest{OwnerID: owner, ComputerID: computer, Words: []string{"harbor"}, Need: 1})
+		r := httptest.NewRequest(http.MethodPost, "/internal/platform/captures/search", bytes.NewReader(raw))
+		r.RemoteAddr = from + ":40000"
+		if mark != nil {
+			mark(r)
+		}
+		rec := httptest.NewRecorder()
+		hostauth.Middleware(http.HandlerFunc(h.HandleCaptureSearch)).ServeHTTP(rec, r)
+		return rec
+	}
+	byURL := func(from, owner, computer string, mark func(*http.Request)) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, "/internal/platform/captures/by-url?owner="+owner+"&computer="+computer+"&url=https://example.com/harbor", nil)
+		r.RemoteAddr = from + ":40000"
+		if mark != nil {
+			mark(r)
+		}
+		rec := httptest.NewRecorder()
+		hostauth.Middleware(http.HandlerFunc(h.HandleCaptureByURL)).ServeHTTP(rec, r)
+		return rec
+	}
+
+	// A bound guest naming any owner or computer but its own is refused.
+	for _, c := range []struct{ owner, computer string }{
+		{"owner-a", "computer-other"},
+		{"owner-other", "computer-a"},
+		{"owner-other", "computer-other"},
+	} {
+		if rec := search("10.200.1.2", c.owner, c.computer, nil); rec.Code != http.StatusForbidden {
+			t.Fatalf("bound guest searched %s/%s: %d %s", c.owner, c.computer, rec.Code, rec.Body)
+		}
+		if rec := byURL("10.200.1.2", c.owner, c.computer, nil); rec.Code != http.StatusForbidden {
+			t.Fatalf("bound guest looked up a URL for %s/%s: %d %s", c.owner, c.computer, rec.Code, rec.Body)
+		}
+	}
+	// An unbound tap address is refused even for a real owner and computer.
+	if rec := search("10.200.7.7", "owner-a", "computer-a", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("unbound guest searched: %d %s", rec.Code, rec.Body)
+	}
+
+	// Loopback with the marker but without the host credential: refused in
+	// enforce; with it: answered, and scoped by SQL to the named owner.
+	const token = "capture-index-scope-token-0123456789abcdef0123"
+	restore := hostauth.SetForTesting(hostauth.ModeEnforce, token)
+	defer restore()
+	marker := func(r *http.Request) { r.Header.Set("X-Internal-Caller", "true") }
+	withCredential := func(r *http.Request) { marker(r); r.Header.Set(hostauth.Header, token) }
+	if rec := search("127.0.0.1", "owner-a", "computer-a", marker); rec.Code != http.StatusForbidden {
+		t.Fatalf("loopback without credential searched in enforce: %d %s", rec.Code, rec.Body)
+	}
+	if rec := byURL("127.0.0.1", "owner-a", "computer-a", marker); rec.Code != http.StatusForbidden {
+		t.Fatalf("loopback without credential looked up a URL in enforce: %d %s", rec.Code, rec.Body)
+	}
+	var resp CaptureSearchResponse
+	if rec := search("127.0.0.1", "owner-a", "computer-a", withCredential); rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &resp) != nil || len(resp.Objects) != 1 {
+		t.Fatalf("host caller with credential: %d %s", rec.Code, rec.Body)
+	}
+	resp = CaptureSearchResponse{}
+	if rec := search("127.0.0.1", "owner-other", "computer-a", withCredential); rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &resp) != nil || len(resp.Objects) != 0 {
+		t.Fatalf("host search for another owner on the same computer id returned owner-a's capture: %d %s", rec.Code, rec.Body)
+	}
+	var found CaptureByURLResult
+	if rec := byURL("127.0.0.1", "owner-other", "computer-a", withCredential); rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &found) != nil || found.Found {
+		t.Fatalf("host URL lookup for another owner found owner-a's capture: %d %s", rec.Code, rec.Body)
 	}
 }
 
