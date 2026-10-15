@@ -392,3 +392,29 @@ research, fewer and shorter search results in context, per-turn context
 compaction, cache-friendly prefixes, cheaper triage models); implement the
 safest behind flags. Report: docs/reports/autopaper-compute-halving-2026-10-15.md,
 branch `feat/autopaper-compute-halving`.
+
+## 23. Morning rulings (2026-10-15, ~10:00 UTC)
+
+- **D1 ratified (app packages).** Whether a package is installed is a fact
+  on the computer's tape, not part of its release closure. Conditions: at
+  install time, check the API version the package declares; and until
+  there is a sandboxed frame, install only from the host-built catalog
+  (R1, the same-origin risk). Follow-ups: update the S7 definition text
+  and add installed packages to the P6 identity report.
+- **Account recovery: land it.** This replaces the earlier "delete" ruling.
+  `/auth/recovery/*` stays.
+- **Exa: fix it.** Root cause: a 256 KiB read cap truncated full-text
+  results (ab8617970, fix e672c7a58).
+- **Keenable: keep to the free tier's pace** (100k a month, renews Nov 5).
+  Pacing is live at 3,772 a day and 8 rps.
+- **GitHub private vulnerability reporting: on.**
+- **PATCH_BOT_TOKEN** is a repository Actions secret, created by the owner.
+- **Agent models.** The owner was at 94% of their rate limit, so
+  subagents run on Sonnet or Haiku only.
+- **Host reboot approved** ("reboot go"). The owner is used to receiving
+  the OVH rescue password by email. A GRUB one-shot fallback was rejected:
+  `/boot` is md RAID1, so GRUB can't clear `next_entry` and a hard reset
+  would boot the new kernel again. Instead, the server's OVH `rescueSshKey`
+  is set to the operator's Node B public key, so recovery is OVH rescue
+  netboot plus ssh, with no emailed password and no console. The IPMI
+  console was not verified before the reboot; the reboot record says so.
