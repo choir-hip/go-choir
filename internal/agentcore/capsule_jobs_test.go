@@ -94,6 +94,20 @@ func TestValidateJobIntents(t *testing.T) {
 	if err := validateCellIntents(ReductionScope{FromRole: "engineering"}, []yaegikernel.StagedIntent{bad}); err == nil {
 		t.Fatal("a bad job id passed")
 	}
+	// A declared memory need is checked again at the trust boundary (J13).
+	bad = start
+	bad.MemoryMiB = 1 << 20
+	if err := validateCellIntents(ReductionScope{FromRole: "engineering"}, []yaegikernel.StagedIntent{bad}); err == nil || !strings.Contains(err.Error(), "memory") {
+		t.Fatalf("an out-of-range memory need passed: %v", err)
+	}
+	ok := start
+	ok.MemoryMiB = 768
+	if err := validateCellIntents(ReductionScope{FromRole: "engineering"}, []yaegikernel.StagedIntent{ok}); err != nil {
+		t.Fatalf("a 768 MiB need refused: %v", err)
+	}
+	if req := jobStartRequest(ok, nil); req.MemoryMiB != 768 || req.ID != "job-abc" {
+		t.Fatalf("job request = %+v, want the need carried", req)
+	}
 }
 
 // A job's end commits one system record from job:<id> into the engineering

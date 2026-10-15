@@ -74,6 +74,10 @@ const (
 	// WaitMaxSeconds keeps one wait under choir.Exec's 30 s bound (the
 	// Claude delegate's `choir-delegate wait`).
 	WaitMaxSeconds = 25
+	// MaxMemoryMiB bounds a job's declared memory need: the default hotplug
+	// region (docs/reports/memory-hotplug-controller-design-2026-10-14.md
+	// section 9).
+	MaxMemoryMiB = 4096
 
 	maxArgs      = 256
 	maxArgvBytes = 16 << 10
@@ -89,6 +93,12 @@ type Spec struct {
 	Argv        []string `json:"argv"`
 	Cwd         string   `json:"cwd,omitempty"`
 	WallClockMS int64    `json:"wall_clock_ms,omitempty"`
+	// MemoryMiB is the memory the job needs beyond its capsule's own size
+	// (a browser capture, a large Go link); 0 is none. The executor admits
+	// it against the guest's live capsule budget and raises the capsule's
+	// cgroup by it; on a hotplug computer a memory lease raises that budget
+	// first.
+	MemoryMiB int `json:"memory_mib,omitempty"`
 }
 
 // WallClock is the spec's wall clock.
@@ -124,6 +134,9 @@ func (s Spec) Normalize() (Spec, error) {
 		return s, fmt.Errorf("job %s cwd %q must be an absolute, clean path", s.ID, s.Cwd)
 	}
 	s.Cwd = cwd
+	if s.MemoryMiB < 0 || s.MemoryMiB > MaxMemoryMiB {
+		return s, fmt.Errorf("job %s memory_mib %d is outside [0, %d]", s.ID, s.MemoryMiB, MaxMemoryMiB)
+	}
 	switch wall := s.WallClock(); {
 	case s.WallClockMS == 0:
 		s.WallClockMS = DefaultWallClock.Milliseconds()

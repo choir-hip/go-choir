@@ -34,6 +34,9 @@ import (
 var jobPollInterval = 2 * time.Second
 
 type capsuleJob struct {
+	// boosted says the job's memory need raised its capsule: its lease
+	// share (release) then belongs to that boost, returned by endJobMemory.
+	boosted     bool
 	agentRunID  string
 	handle      string
 	capsuleID   string
@@ -86,7 +89,7 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 	if capability.AgentRole != RoleEngineering {
 		return yaegikernel.JobView{}, fmt.Errorf("capsule jobs are engineering's")
 	}
-	spec, err := capsulejob.Spec{ID: req.ID, Owner: agentRunID, Argv: req.Argv, Cwd: req.Cwd, WallClockMS: req.WallClockMS}.Normalize()
+	spec, err := capsulejob.Spec{ID: req.ID, Owner: agentRunID, Argv: req.Argv, Cwd: req.Cwd, WallClockMS: req.WallClockMS, MemoryMiB: req.MemoryMiB}.Normalize()
 	if err != nil {
 		return yaegikernel.JobView{}, err
 	}
@@ -117,17 +120,24 @@ func (e *Executor) StartJob(ctx context.Context, agentRunID, handle string, req 
 		e.mu.Lock()
 		delete(e.jobs, spec.ID)
 		e.mu.Unlock()
-		if job.release != nil {
-			job.release()
-		}
+		e.returnJobMemory(job)
 		return yaegikernel.JobView{}, err
 	}
+	// A memory need takes the job's lease share first (the hook; it may
+	// raise the live budget), then raises the capsule against that budget
+	// (docs/reports/memory-hotplug-controller-design-2026-10-14.md section 9).
 	if admit != nil {
 		release, err := admit(caps.ID, spec)
 		if err != nil {
 			return abandon(fmt.Errorf("job %s not admitted: %w", spec.ID, err))
 		}
 		job.release = release
+	}
+	if spec.MemoryMiB > 0 {
+		if err := e.boostJobMemory(caps.ID, spec.ID, int64(spec.MemoryMiB)<<20, job.release); err != nil {
+			return abandon(fmt.Errorf("job %s not admitted: %w; start it without memory_mib to run within the capsule's own size", spec.ID, err))
+		}
+		job.boosted = true
 	}
 	if job.startDigest, err = digestCapsuleWorktree(ctx, caps); err != nil {
 		return abandon(fmt.Errorf("job %s: digest the workspace: %w", spec.ID, err))
@@ -304,15 +314,28 @@ func (e *Executor) finishJob(job *capsuleJob, caps *Capsule, state, reason strin
 	handler := e.jobDone
 	view := jobView(st, job.receiptRef, job.logRef)
 	e.mu.Unlock()
+	// Memory first, while the job still reads as running: no next job in
+	// the capsule can raise the cgroup while this one is lowered.
+	e.returnJobMemory(job)
 	close(job.done)
-	if job.release != nil {
-		job.release()
-	}
 	e.persistJobRecord(job)
 	// A job closed with its capsule has no receipt; the runtime still learns
 	// it ended, so a turn waiting on it is released.
 	if handler != nil {
 		handler(JobCompletion{AgentRunID: job.agentRunID, CapsuleID: job.capsuleID, Notify: job.notify, View: view, Status: st, Receipt: receipt})
+	}
+}
+
+// returnJobMemory returns a job's memory: its capsule boost (which then
+// releases the lease share) or, unboosted, its lease share directly. Once.
+func (e *Executor) returnJobMemory(job *capsuleJob) {
+	if job.boosted {
+		e.endJobMemory(job.capsuleID, job.spec.ID)
+		return
+	}
+	if release := job.release; release != nil {
+		job.release = nil
+		release()
 	}
 }
 

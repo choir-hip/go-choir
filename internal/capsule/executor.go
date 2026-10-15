@@ -55,6 +55,11 @@ type Executor struct {
 	initErr           error
 	vmMemoryTotal     int64
 	vmMemoryUsed      int64
+	// memoryTotalFn reads the capsule budget live (SetLiveMemoryBudget);
+	// nil keeps vmMemoryTotal. cgroupMemoryFor replaces a capsule's cgroup
+	// memory controls in tests (job_memory_linux.go).
+	memoryTotalFn   func() int64
+	cgroupMemoryFor func(*Capsule) cgroupMemory
 	// goModuleProxy is where L2 capsules' GoProxyRouteHost goes; invalid
 	// (unset) leaves the route out of the policy.
 	goModuleProxy netip.AddrPort
@@ -98,11 +103,12 @@ func (e *Executor) claudeDelegateTokenLocked() (string, ClaudeDelegateStatus) {
 	return ReadClaudeDelegate(e.claudeDelegateDir, e.claudeBinary, time.Now())
 }
 
-// MemoryBudget is the guest's capsule memory admission budget in bytes.
+// MemoryBudget is the guest's capsule memory admission budget in bytes,
+// read live when SetLiveMemoryBudget set a reader.
 func (e *Executor) MemoryBudget() int64 {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return e.vmMemoryTotal
+	return e.memoryBudgetLocked()
 }
 
 func (e *Executor) currentRunningBinary() (RunningBinary, error) {
@@ -283,8 +289,8 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	if _, exists := e.capsules[spec.CapsuleID]; exists {
 		return nil, fmt.Errorf("capsule %s already exists", spec.CapsuleID)
 	}
-	if e.vmMemoryTotal <= 0 || e.vmMemoryUsed+spec.MemoryMax > e.vmMemoryTotal {
-		return nil, fmt.Errorf("capsule memory budget exceeded: used=%d requested=%d total=%d", e.vmMemoryUsed, spec.MemoryMax, e.vmMemoryTotal)
+	if err := e.admitCapsuleMemoryLocked(spec.MemoryMax); err != nil {
+		return nil, err
 	}
 	if digest, err := digestRegularFile(e.brokerPath); err != nil || digest != e.brokerDigest {
 		if err != nil {
@@ -734,6 +740,11 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 	caps.State = StateDestroyed
 	delete(e.capsules, id)
 	e.vmMemoryUsed -= caps.MemoryMax
+	// Job memory boosts end with the capsule (J8): returned to the budget
+	// here, their lease shares released off the executor lock.
+	for _, release := range e.returnMemoryBoostsLocked(caps) {
+		go release()
+	}
 	return nil
 }
 

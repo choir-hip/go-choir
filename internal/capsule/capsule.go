@@ -60,6 +60,10 @@ type Capsule struct {
 
 	// revokedCaps is the guest-core revocation set mirrored for local checks.
 	revokedCaps map[string]bool
+
+	// memoryBoosts are the job memory raises this capsule's cgroup holds,
+	// by job id (job_memory_linux.go); guarded by the executor's lock.
+	memoryBoosts map[string]*jobMemoryBoost
 }
 
 // Exec executes a command in the capsule via the broker.

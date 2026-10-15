@@ -76,12 +76,16 @@ func TestJobStartRefusals(t *testing.T) {
 		{[]string{"go"}, map[string]any{"cwd": "workspace"}, "absolute"},
 		{[]string{"go"}, map[string]any{"dir": "/x"}, `no option "dir"`},
 		{[]string{"go"}, map[string]any{"minutes": "ten"}, "must be a number"},
+		{[]string{"go"}, map[string]any{"memory_mib": "lots"}, "must be a number"},
+		{[]string{"go"}, map[string]any{"memory_mib": 0}, "positive"},
+		{[]string{"go"}, map[string]any{"memory_mib": 1.5}, "whole"},
+		{[]string{"go"}, map[string]any{"memory_mib": 9000}, "memory"},
 	} {
 		if _, err := scope.Start(tc.argv, tc.opts); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("Start(%v, %v) = %v, want %q", tc.argv, tc.opts, err, tc.want)
 		}
 	}
-	id, err := scope.Start([]string{"go", "test", "./..."}, map[string]any{"minutes": 2.5, "cwd": "/workspace/platform/frontend"})
+	id, err := scope.Start([]string{"go", "test", "./..."}, map[string]any{"minutes": 2.5, "cwd": "/workspace/platform/frontend", "memory_mib": 768})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +99,7 @@ func TestJobStartRefusals(t *testing.T) {
 		t.Fatal("Complete beside a job start")
 	}
 	in := hooks.End()
-	if len(in) != 1 || in[0].JobID != id || in[0].WallClockMS != 150000 || in[0].Cwd != "/workspace/platform/frontend" {
+	if len(in) != 1 || in[0].JobID != id || in[0].WallClockMS != 150000 || in[0].Cwd != "/workspace/platform/frontend" || in[0].MemoryMiB != 768 {
 		t.Fatalf("intents: %+v", in)
 	}
 
