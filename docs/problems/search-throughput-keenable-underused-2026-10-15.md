@@ -107,7 +107,7 @@ Measured demand: 136 paper research runs in 4 hours, 9.1 searches a run
 follow source arrivals through management → Texture → research.
 
 So there is no demand-side limit to raise, and raising demand is not
-safe: findings 1 says today's demand already meets the free pace.
+safe: finding 1 says today's demand already meets the free pace.
 
 ### 3. The `today=` counter is durable, not in memory
 
@@ -168,6 +168,45 @@ Failure modes the fix must not have:
    year end).
 7. The error log line carries a key or a response body.
 8. A provider without a monthly quota changes behavior.
+
+## Fix (branch `feat/keenable-throughput`, 37f9c5ac3; not pushed, not deployed)
+
+- `searchplane/monthly.go` with the router changes: the monthly pace above.
+  The day's cap is computed once per UTC day from `provider_daily_calls`,
+  logged as `searchplane: keenable monthly pace day= period= used= target=
+  days_left= day_cap=`, and shown on the health route as
+  `daily_calls.keenable.monthly`. The cap accrues through the day (an
+  hour's share open at UTC midnight, all of it by 23:00). A capped Keenable
+  is skipped as `capped` with `until` = when the next call opens.
+- `DefaultProviderRPS` is `brave=1,keenable=8`; `CHOIR_SEARCH_PROVIDER_RPS`
+  now merges over the defaults (rate 0 removes one provider's pacing).
+- Each failing provider call logs `searchplane: <p> call failed class=
+  http_status= stage=` (for example `stage=parse_response` for Exa if the
+  10-14 hypothesis holds).
+- `nix/node-b.nix` writes out the defaults and seeds this period with
+  `CHOIR_SEARCH_KEENABLE_PERIOD_USED=10776@2026-10-15`. The seed already
+  includes 10-15's first 3h40m, which the 10-15 count also includes. That
+  double count (several hundred calls) errs on the safe side. Drop the
+  seed after 11-05; the code ignores it outside its period anyway.
+- Routing preference: unchanged and already as asked. Keenable is free
+  tier, so it starts on every budget search while it has budget, and the
+  paid providers wait in reserve (test
+  `TestMonthlyPace_KeenableFirstThenEscalatesWhenCapped`).
+
+Tests (failure modes listed in the header of `searchplane/monthly_test.go`):
+the pace never passes the target at any demand level (pure pace and
+through the router with a restart every day), a restart mid-day keeps the
+day's count, concurrent searches never pass the cap, period boundaries,
+the seed, the accrual, 8/s under concurrent searches, the env knobs, and a
+failure log line with no key, query or body.
+
+Expected volume after deploy (if deployed about 10-16): period use
+≈ 10,776 + about 5,000 (10-15) ≈ 15,800. Target 90,000. That leaves
+≈ 74,000 over 20 days, **≈ 3,700 Keenable calls a day**, rising if demand
+dips. Demand of about 5,000 a day means about 1,300 searches a day find
+Keenable capped. Those searches fall to Brave (free tier, when it is not
+quota-limited) or come back empty. That is the price of having Keenable
+every day until 11-05 instead of losing it from about 11-01.
 
 ## Owner decisions left open
 
