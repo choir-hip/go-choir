@@ -279,3 +279,13 @@ route no longer returns the nonce and the build commit is the base's again.
   B until a deploy.
 - A transport failure to corpusd keeps the operation `accepted` and retries
   every 60 s with no deadline.
+- Found while building: `/api/acceptance/execution-identity` refuses when
+  `build.commit != build.deployed_commit`, so it answers 503 on a computer
+  running a host-built layer (its commit is the synthetic one). Identity for
+  a layered computer is `effective_release` on `/health` and
+  `/api/runtime/observability` until P6 joins them.
+- Freeze still requires a capsule-built `bin/autoputer` for a Go change
+  (about 10 minutes in the capsule); the host build makes it a test artifact
+  only. Dropping that requirement is the next cut on the guest side.
+- `cmd/choir-updater` (linux-only, cgo) was not compiled locally; CI builds
+  it.
