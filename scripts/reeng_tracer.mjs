@@ -65,7 +65,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  castOnRecords, completingInbox, doneJobs, isGoBuildOfAutoputer, isGoTest, reportNamesBundle, verifiedNamedBundle,
+  castOnRecords, completingInbox, doneJobs, goTestCells, isGoBuildOfAutoputer, isGoTest, reportNamesBundle, verifiedNamedBundle,
 } from './reeng_tracer_checks.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -348,6 +348,21 @@ async function cellInFlight(c, rid) {
     after = next;
   }
   return { served: true, inFlight: open > 0 };
+}
+
+// All events of one run, paged; null when the route does not answer.
+async function runEvents(c, rid) {
+  const events = [];
+  let after = 0;
+  for (let page = 0; page < 20; page++) {
+    const res = await c.api(`/api/runs/${encodeURIComponent(rid)}/events?after=${after}&limit=1000`);
+    if (res.status !== 200 || !Array.isArray(res.body?.events)) return page === 0 ? null : events;
+    events.push(...res.body.events);
+    const next = Number(res.body.next_after || 0);
+    if (res.body.events.length === 0 || !(next > after)) break;
+    after = next;
+  }
+  return events;
 }
 
 async function deskRevisions(c, doc) {
@@ -1475,6 +1490,19 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, optio
     claim.jobs_inbox = jobsInbox;
     claim.jobs = claim.jobs_by_inbox[jobsInbox] || [];
     phase('jobs', { inbox: jobsInbox, count: claim.jobs.length, done: claim.jobs.filter((j) => j.state === 'done').length });
+    if (GO_CHANGE) {
+      // The requested go test may run as a check cell, not a job; Freeze
+      // admits either. Read the completing assignment's run events for it.
+      const { ofTrajectory } = await trajectoryRuns(c, out.trajectory_id, '');
+      const events = [];
+      for (const r of ofTrajectory.filter((x) => (x.agent_id || x.metadata?.agent_id) === jobsInbox)) {
+        const got = await runEvents(c, runID(r));
+        if (got === null) gap('jobs', 'GET /api/runs/{id}/events', `engineering run ${runID(r)} events unreadable`);
+        else events.push(...got);
+      }
+      claim.go_test_cells = goTestCells(events, jobsInbox);
+      phase('go_test_cells', { inbox: jobsInbox, passed: claim.go_test_cells.length });
+    }
   }
   phase('decision_boundary', { operation_id: op.operation_id, bundle_digest: op.bundle_digest, verifier_refs: op.verifier_refs });
   at('decision_boundary');
@@ -1996,11 +2024,14 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
       && claim.pre_apply_checkpoint?.checkpoint_digest && claim.restore.checkpoint_digest === claim.pre_apply_checkpoint.checkpoint_digest);
   }
   if (GO_CHANGE) {
-    // The completing assignment ran capsule jobs that ended done: a build
-    // of bin/autoputer and a go test (direct or through sh -c).
+    // The completing assignment built bin/autoputer as a job that ended
+    // done, and ran the requested go test, as a done job (direct or through
+    // sh -c) or as a passing check cell.
     const done = doneJobs(claim.jobs);
     checks.go_build_job_done = done.some(isGoBuildOfAutoputer);
-    checks.go_test_job_done = done.some(isGoTest);
+    const testJob = done.some(isGoTest);
+    checks.go_test_passed = testJob || (claim.go_test_cells || []).length > 0;
+    claim.go_test_evidence = testJob ? 'job' : ((claim.go_test_cells || []).length > 0 ? 'cell' : null);
   }
   const servedOK = claim.served.pre_apply?.served === false && claim.served.post_apply?.served === true && claim.served.post_restore?.served === false;
   if (REQUIRE_SERVED) checks.served_change_then_restored = servedOK;

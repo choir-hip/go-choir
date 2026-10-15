@@ -58,6 +58,41 @@ const argvText = (job) => (Array.isArray(job?.argv) ? job.argv.join(' ') : '');
 export const isGoBuildOfAutoputer = (job) => /\bgo\s+build\b/.test(argvText(job)) && argvText(job).includes('autoputer');
 export const isGoTest = (job) => /\bgo\s+test\b/.test(argvText(job));
 
+// goTestCells returns the passing go test check cells of one engineering
+// inbox, from its run events: a capsule_go_eval cell whose source runs go
+// test through choir.Exec and panics when it fails, and whose result exited
+// 0 with a capsule-go-eval receipt. The engineering prompt and Freeze admit
+// such a cell as test evidence beside a test job.
+const parsePayload = (p) => {
+  if (typeof p !== 'string') return p || {};
+  try { return JSON.parse(p); } catch { return {}; }
+};
+const GO_TEST_SOURCE = [
+  /choir\.Exec\(\s*"sh"[\s\S]*\bgo\s+test\b/,
+  /choir\.Exec\(\s*"go"\s*,\s*\[\]string\{[^}]*"test"/,
+];
+export const isGoTestCellSource = (src) => GO_TEST_SOURCE.some((re) => re.test(src)) && /\bpanic\(/.test(src);
+
+export function goTestCells(events, inbox) {
+  const sources = new Map();
+  const passed = [];
+  for (const e of events || []) {
+    if (e?.agent_id !== inbox) continue;
+    const p = parsePayload(e.payload);
+    if (p.tool !== 'capsule_go_eval' || !p.call_id) continue;
+    if (e.kind === 'tool.invoked') {
+      sources.set(p.call_id, String(p.arguments?.source || ''));
+      continue;
+    }
+    if (e.kind !== 'tool.result' || !isGoTestCellSource(sources.get(p.call_id) || '')) continue;
+    const result = parsePayload(p.output);
+    const receipt = String(result.receipt_ref || '');
+    if (p.is_error || result.error || result.exit_code !== 0 || !receipt.startsWith('capsule-go-eval:sha256:')) continue;
+    passed.push({ call_id: p.call_id, receipt_ref: receipt });
+  }
+  return passed;
+}
+
 // doneJobs keeps the jobs that ended done with a receipt.
 export const doneJobs = (jobs) => (jobs || []).filter((j) => j?.state === 'done' && j.receipt_ref);
 
