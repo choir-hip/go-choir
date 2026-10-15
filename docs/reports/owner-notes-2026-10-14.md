@@ -452,3 +452,14 @@ branch `feat/autopaper-compute-halving`.
   out of credit or quota). Source ingestion scales up 2026-10-16; search
   gets revisited later, maybe next week. Exa and searxng come back on
   their own once the stale-cooldown clamp (84d507204) deploys.
+- **Model pool: a weighted dual pool** (owner, ~18:10 UTC). "cat jam
+  should be taken off default pool, OpenCode Go … DeepSeek should be
+  working. I have credits. And I have gpt credits too. So we should go
+  gpt-6-luna and DeepSeek-v4.1-flash dual pool … 3/4 gpt, with DeepSeek
+  only for 1/4 of runs." Cause found: an OpenCode key is parked for every
+  model after any 429 (internal/provider/provider.go `p.keys.park`), so
+  cat-jam-free's free-tier 429s parked the keys deepseek uses, and about
+  55% of paper calls failed over (chatgpt-cache-ratio report §7.3). The
+  default pool is now deepseek-v4.1-flash (weight 1) and gpt-6-luna
+  (weight 3); thread assignment is a weighted stable hash, and each member
+  is the other's fallback. cat-jam-free stays in the catalog.
