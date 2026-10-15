@@ -38,6 +38,10 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 		return strings.TrimSpace(decoded), "rollback", true
 	case "kernel-capabilities":
 		return strings.TrimSpace(decoded), "read", true
+	case "adoptions":
+		// P8: GET lists (read); POST adopts a published release (the
+		// owner's act). The method picks the action.
+		return strings.TrimSpace(decoded), "adoptions", true
 	}
 	parts := strings.Split(strings.Trim(after, "/"), "/")
 	if len(parts) == 2 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" {
@@ -46,7 +50,10 @@ func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool)
 	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && parts[2] == "decision" {
 		return strings.TrimSpace(decoded), "approve", true
 	}
-	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && (parts[2] == "receipts" || parts[2] == "source-patch") {
+	if len(parts) == 3 && parts[0] == "operations" && strings.TrimSpace(parts[1]) != "" && (parts[2] == "receipts" || parts[2] == "source-patch" || parts[2] == "release-draft") {
+		return strings.TrimSpace(decoded), "read", true
+	}
+	if len(parts) == 2 && parts[0] == "adoptions" && strings.TrimSpace(parts[1]) != "" {
 		return strings.TrimSpace(decoded), "read", true
 	}
 	return "", "", false
@@ -63,6 +70,8 @@ func selfDevelopmentGuestMethodAllowed(method, action string) bool {
 		return method == http.MethodPost
 	case "read":
 		return method == http.MethodGet
+	case "adoptions":
+		return method == http.MethodGet || method == http.MethodPost
 	default:
 		return false
 	}
@@ -351,7 +360,18 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
+	if action == "adoptions" {
+		action = "read"
+		if r.Method == http.MethodPost {
+			action = "adopt"
+		}
+	}
 	requiredScope := "computer:self_development:" + action
+	if action == "adopt" {
+		// Adopting a release is an approval-class act (P8): the approve
+		// scope plus the owner-act gate below.
+		requiredScope = releasePublishScope
+	}
 	if authResult.AuthMethod == "api_key" {
 		if !hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, requiredScope) {
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "missing required scope: " + requiredScope})
@@ -372,6 +392,10 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 		}
 	case "rollback":
 		if !authorizeOwnerAct(w, authResult, "self-development rollback") {
+			return
+		}
+	case "adopt":
+		if !authorizeOwnerAct(w, authResult, "release adoption") {
 			return
 		}
 	}
@@ -415,7 +439,7 @@ func (h *Handler) HandleSelfDevelopmentGuest(w http.ResponseWriter, r *http.Requ
 	}
 	u.RawQuery = r.URL.RawQuery
 	maxBody := int64(64 << 10)
-	if action == "approve" {
+	if action == "approve" || action == "adopt" {
 		maxBody = 1 << 20
 	}
 	upstream, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), http.MaxBytesReader(w, r.Body, maxBody))
