@@ -142,7 +142,7 @@ cap 150 stays.
 **Open concern:** the paper made no inference calls after 10:56 (stories stop at
 10:55); see `docs/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md`.
 
-P6-P8 skipped: merging `feat/p6-p8-release-adopt` conflicts in six red files
+P6-P8 (earlier note, now resolved as above): merging `feat/p6-p8-release-adopt` conflicts in six red files
 (`agentcore/api.go`, `api_self_development.go`, `platform/handlers.go`,
 `proxy/self_development.go`, `vmctl/handlers.go`, `scripts/reeng_tracer.mjs`)
 and, beyond textual conflicts, P5 and P6 both define a different
@@ -150,6 +150,22 @@ and, beyond textual conflicts, P5 and P6 both define a different
 `/health` and observability (P5: startup release, `effectiveReleaseIdentity`;
 P6: live identity, `EffectiveRelease`); reconciling them is a design decision
 on a red surface.
+
+## Final landings (evening)
+
+| step | commit | result |
+|---|---|---|
+| paper lost-wake fix | `964c598ca` | green, deployed 13:14Z; paper booted planned; probe timer active with ok lines; 28 schedules active and 0 overdue; paper inference continuous |
+| P6-P8 merge (option (a)) | `ff01e0a2f` | CI red: data race in the startup-manifest fields (`docs/problems/p6-effective-release-report-data-race-ci-red-2026-10-15.md`) |
+| startup-manifest mutex | `e485b1966` | green incl. race shards, deployed 13:59Z; `/health` on the paper shows the P6 `effective_release` (serving_release_digest, event_head, code_ref, build_commit) |
+
+Tracer `adopt-1400` (build `e485b1966`): publisher applied; tampered and
+unpublished records refused unchanged; adoption named release and trajectory;
+adopter applied after one planned restart; `adopter_serves_the_change` and
+`identity_names_adoption` read false 0.15 s after applied, probably too early
+(`docs/problems/adopt-1400-adopter-applied-served-and-identity-read-too-early-2026-10-15.md`).
+Note: the paper's identity block carries `tree_error: commit e485b19… not in the
+source repository` (the paper has no checkout of the new commit).
 
 ## Skipped or pending (as of writing)
 
