@@ -155,3 +155,27 @@ semantics are unchanged.
     paper that is legitimately quiet (feeds with no new items make no model
     call) or on a paper that is mid-deploy. Guard: it alerts on "no inference
     for 30 minutes", logs to the journal only, and does not restart anything.
+
+## Fix status (branch `fix/paper-schedule-lost-wake`, not landed)
+
+1. Planned-boot re-arm: a schedule more than the 15-minute grace overdue is
+   re-armed as a new tick (generation+1, `next_due = now + i*15s`).
+2. Runtime sweep: every 5 minutes, same repair for an active overdue schedule
+   with no live poll; backs off to hourly while the store fails.
+3. `delivery_failed` / `delivery_invalid` dead-letter once with a log line
+   naming the failed update and mailbox. **Open question:** the poisoned
+   source-poll wake itself is not re-armed by the sink (the sink must not
+   touch the store, which is what is down). The sweep is the single recovery
+   owner. Whether `HandleSourcePollDue` should also re-arm on error is left
+   open; it cannot help while the store is down.
+4. Detection: `go-choir-paper-liveness-probe` timer (every 5 minutes) alerts at
+   journal priority err when the paper made no inference call for 30 minutes;
+   `verify-host-hardening.py` check `paper-probe`. The paper's vm id is
+   resolved from the platform computer in `computer-tiers.json` through
+   vmctl's `ownerships.json` (the class itself is not stored in
+   `ownerships.json`: the paper's row there says `primary`). Not covered by
+   the probe: the overdue-schedule count needs the paper credential, so it
+   stays a manual Landing Loop step (runbook `node-b-host-reboot.md`).
+   Residual: a paper that is legitimately quiet for 30 minutes (every feed
+   unchanged) would alert; at the observed 400 to 600 calls per hour that
+   has not happened.

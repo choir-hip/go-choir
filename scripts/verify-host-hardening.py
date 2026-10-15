@@ -253,6 +253,21 @@ def check_dolt_probe():
         record("dolt-probe", f"{unit} stop timeout is 20s", got == "20s", f"TimeoutStopUSec={got}")
 
 
+def check_paper_probe():
+    """The paper liveness probe (scripts/paper-liveness-probe.py) must be
+    scheduled, able to see the paper, and silent: docs/problems/
+    paper-silent-since-10-56-after-host-reboot-2026-10-15.md. Read-only."""
+    timer = systemctl_show("go-choir-paper-liveness-probe.timer", ["ActiveState"])
+    record("paper-probe", "paper liveness probe timer is active", timer.get("ActiveState") == "active",
+           f"ActiveState={timer.get('ActiveState')}")
+    svc = systemctl_show("go-choir-paper-liveness-probe.service", ["Result"])
+    record("paper-probe", "paper liveness probe last run succeeded (it can resolve the paper vm and read the journal)",
+           svc.get("Result") in ("success", ""), f"Result={svc.get('Result')}")
+    alerts = journal_lines("go-choir-paper-liveness-probe.service", "ALERT", since="-15min")
+    record("paper-probe", "paper made an inference call within 30 minutes (no ALERT in the last 15 minutes)", not alerts,
+           alerts[-1][-200:] if alerts else "none")
+
+
 def mysql_read_packet(sock):
     header = b""
     while len(header) < 4:
@@ -646,6 +661,7 @@ def main():
     check_units()
     check_dolt(args.expect_dolt, args.with_credential)
     check_dolt_probe()
+    check_paper_probe()
     check_modes()
     check_boot(args.allow_reboot_pending)
     if args.json:
