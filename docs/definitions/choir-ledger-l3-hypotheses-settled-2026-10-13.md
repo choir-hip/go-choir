@@ -329,21 +329,42 @@ now:
     B witnesses for one existing paper Cast. Then L3-1, tests first, in a
     worktree. Both reviewers flagged that the current corpusd created_at
     (time.Now at the write) cannot serve as witness (b).
-    Design note for the read path (2026-10-15, from the code, not yet
-    reviewed).
-    - The guest's computer_event_index holds event envelopes only. The
-      projection ops that carry canonical ids sit in payload artifacts on
-      the host, fetched over HTTP and decrypted per privacy class
-      (internal/computerevent/payload_resolver.go).
-    - Deriving canonical id -> sequence after the fact therefore means
-      fetching every projection payload, as checkpointd replay does.
-    - The cheap shape is a derived index (canonical id, first sequence,
-      event digest), written inside finalizeBatch
-      (internal/store/computer_events.go), where the ops are in hand, and
-      rebuilt on replay.
-    - That touches the projection store, a red surface. Check first that a
-      new table does not enter the state commitment, or replay parity with
-      checkpointd.
+    Design note for the precondition (2026-10-15, read from the code, not
+    yet reviewed).
+    - (a) needs no new table and no guest route. Inbox records are
+      written under a must-not-exist ObjectCondition, so each Cast and
+      CaptureArrival is in exactly one projection batch, and the first hit
+      is the witness.
+      - The host already walks a chain read-only:
+        projectionbase.DiskEventSource reads event artifacts from disk
+        along previous_head ancestry, as checkpointd does, with no SQL.
+      - A read-only host CLI on that source, matching ProjectionOp
+        CanonicalID, answers the precondition for one Cast.
+    - Do not add a derived first-sequence table to the guest projection
+      store.
+      - The state commitment hashes refs only, but the projectionbase
+        content witness extracts the whole texture database
+        (internal/projectionbase/witness.go).
+      - Genesis replay would fill such a table for all history, while live
+        stores fill it only from deploy onward. That is the same
+        live-versus-replay divergence as the open upcast-legacy-refs
+        checkpointd residual.
+      - Defer any index to L3-2 scale, and exclude it from the witness or
+        build it on the host.
+    - (b) has no existing witness.
+      - Store B's Dolt commits are debounced, not one per write
+        (internal/platform/store.go markDirty), and the weekly squash
+        would erase their order, so Dolt history cannot serve.
+      - corpusd created_at is time.Now, so it cannot serve either.
+      - The candidate: a monotonic Store B sequence assigned at first
+        insert only, plus a Store B watermark that bounds the commitment
+        from above. The watermark must be read after the commitment, and
+        reading it on the Cast path adds a call to the live paper's
+        critical path.
+      - Recording the watermark on later CaptureArrivals instead avoids
+        the Cast path, but races with concurrent polls.
+      - Unresolved. It needs a design review before L3-1 starts the
+        forecast cohort.
 
 receipts: []
 ---
