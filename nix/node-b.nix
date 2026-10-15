@@ -71,6 +71,19 @@ let
   internalTokenHeaderFile = "${internalTokenFile}.header";
   internalAuthEnv = "CHOIR_INTERNAL_AUTH_MODE=${internalAuthMode}";
   internalTokenCredential = [ "choir-internal-token:${internalTokenFile}" ];
+  # S1 owner-act receipts (internal/owneract;
+  # docs/problems/effect-accepted-admitted-without-authority-2026-10-15.md).
+  # The proxy signs, with its own Ed25519 key (signer domain
+  # host-owner-act), that it authenticated the owner of one computer for one
+  # act; corpusd verifies that signature before an owner mode write and
+  # traces every effect_accepted to it (or to an offer corpusd minted).
+  # Both files are root 0600, generated once at activation; the private key
+  # reaches only the proxy and the public key only corpusd, each through
+  # LoadCredential=. Rollout: "observe" logs "owner-act: observe: would
+  # refuse"; flip to "enforce" after a clean window. Rollback: "observe".
+  ownerActMode = "observe";
+  ownerActKeyFile = "/var/lib/go-choir/secrets/owner-act-signing-key";
+  ownerActPublicKeyFile = "${ownerActKeyFile}.pub";
   # Dolt SQL authentication (internal/dbcred;
   # docs/problems/loopback-is-a-credential-2026-10-14.md). Both Dolt servers
   # accepted root with an empty password from any local process. Staged so
@@ -579,7 +592,7 @@ in
       Restart = "on-failure";
       RestartSec = 3;
       EnvironmentFile = "-/var/lib/go-choir/deploy.env";
-      LoadCredential = internalTokenCredential;
+      LoadCredential = internalTokenCredential ++ [ "choir-owner-act-key:${ownerActKeyFile}" ];
       # Proxy reads only the public key (PROXY_AUTH_PUBLIC_KEY_PATH) and the
       # auth DB (SQLite needs write access for its -wal/-shm). It never
       # writes auth-signing/ and never reads the private key.
@@ -776,7 +789,7 @@ in
       StateDirectoryMode = "0750";
       ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/host-build" ];
       InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
-      LoadCredential = internalTokenCredential ++ doltClientCredential;
+      LoadCredential = internalTokenCredential ++ doltClientCredential ++ [ "choir-owner-act-public-key:${ownerActPublicKeyFile}" ];
       # Track K two-approval operator credentials live in a deploy-created
       # file outside git (same trust class as gateway credentials):
       # CHOIR_KEY_ESCROW_OPERATORS="name:token,..." — the unwrap gate stays
@@ -796,6 +809,7 @@ in
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"
       ] ++ doltClientEnv ++ [
         "CORPUSD_VMCTL_URL=http://127.0.0.1:8083"
+        "CHOIR_OWNER_ACT_MODE=${ownerActMode}"
         # The public Autopaper front list shows only the designated paper
         # computer's owner (Cut 2 2b; docs/reports/reeng-autopaper-paper-computer-2026-10-13.md),
         # so tracer test computers' stories stay off choir.news's front page.
@@ -1357,6 +1371,28 @@ in
         mv -f ${internalTokenHeaderFile}.next ${internalTokenHeaderFile} )
     fi
     chmod 0600 ${internalTokenHeaderFile}
+  '';
+
+  # S1 owner-act key (ownerActMode). Ed25519, generated once, PEM, root
+  # 0600, never printed. The public key is re-derived whenever it is missing.
+  # Rotate by deleting both files and redeploying; the proxy and corpusd
+  # must both restart (every deploy restarts them). A key that cannot be
+  # generated leaves the proxy minting no receipts, which observe allows.
+  system.activationScripts.go-choir-owner-act-key = ''
+    install -d -m 0700 -o root -g root /var/lib/go-choir/secrets
+    if [ ! -s ${ownerActKeyFile} ]; then
+      ( umask 077
+        ${pkgs.openssl}/bin/openssl genpkey -algorithm ed25519 -out ${ownerActKeyFile}.next \
+          && mv -f ${ownerActKeyFile}.next ${ownerActKeyFile} ) || rm -f ${ownerActKeyFile}.next
+      rm -f ${ownerActPublicKeyFile}
+      echo "go-choir owner-act signing key generated"
+    fi
+    if [ -s ${ownerActKeyFile} ] && [ ! -s ${ownerActPublicKeyFile} ]; then
+      ( umask 077
+        ${pkgs.openssl}/bin/openssl pkey -in ${ownerActKeyFile} -pubout -out ${ownerActPublicKeyFile}.next \
+          && mv -f ${ownerActPublicKeyFile}.next ${ownerActPublicKeyFile} ) || rm -f ${ownerActPublicKeyFile}.next
+    fi
+    chmod 0600 ${ownerActKeyFile} ${ownerActPublicKeyFile} 2>/dev/null || true
   '';
 
   # Dolt passwords (doltAuthStage). Hex, generated once, 0600, never printed.

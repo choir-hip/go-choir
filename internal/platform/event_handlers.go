@@ -252,6 +252,9 @@ func (h *Handler) HandleComputerEventAppend(w http.ResponseWriter, r *http.Reque
 		if errors.Is(err, ErrComputerEventCASConflict) {
 			status = http.StatusConflict
 		}
+		if errors.Is(err, ErrEffectAdmissionRefused) {
+			status = http.StatusForbidden
+		}
 		writeJSON(w, status, apiError{Error: err.Error()})
 		return
 	}

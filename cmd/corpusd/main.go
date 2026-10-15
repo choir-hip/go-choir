@@ -82,6 +82,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("corpusd computer event runtime: %v", err)
 	}
+	// S1 owner-act receipts and the effect_accepted admission gate
+	// (docs/problems/effect-accepted-admitted-without-authority-2026-10-15.md).
+	// CHOIR_OWNER_ACT_MODE: observe (default) logs "would refuse"; enforce refuses.
+	ownerActs := platform.LoadOwnerActAuthorityFromEnv()
+	log.Printf("corpusd: owner acts: %s", ownerActs.Status())
+	eventCAS.ConfigureEffectAdmission(ownerActs)
 	if err := handler.ConfigureComputerEvents(eventCAS, eventArtifacts, eventAuth); err != nil {
 		log.Fatalf("corpusd computer event routes: %v", err)
 	}
@@ -89,6 +95,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("corpusd self-development mode runtime: %v", err)
 	}
+	modeCAS.ConfigureOwnerActs(ownerActs)
 	if err := handler.ConfigureSelfDevelopmentModes(modeCAS); err != nil {
 		log.Fatalf("corpusd self-development mode routes: %v", err)
 	}
