@@ -21,9 +21,19 @@ import (
 //
 // Before killing a VM for a deploy, vmctl asks the guest to write its own
 // planned-restart marker (POST /internal/runtime/planned-restart). The guest
-// refuses while busy, and vmctl leaves that computer for the next deploy. The
+// refuses while busy; vmctl records the computer as pending and its retry
+// sweep asks again until the computer takes the update (CLAUDE.md: busy
+// computers update at their next idle moment, not at the next deploy). The
 // operator refresh (/internal/vmctl/refresh) stays a forced, markerless
 // (crash-boot) refresh for explicit owner/operator requests.
+//
+// Owner ruling 2026-10-15 ("we need to update the Autopaper computer even
+// when it is busy, because it's always going to be busy";
+// docs/problems/always-busy-computer-never-updates-2026-10-15.md): for an
+// always-on platform computer vmctl asks with allow_busy, and the guest
+// writes the marker with runs running (they resume once on the planned
+// boot). The guest still refuses while a self-development apply is in
+// flight or a capsule is live.
 
 const plannedRestartGuestPath = "/internal/runtime/planned-restart"
 
@@ -32,7 +42,7 @@ type guestMarkOutcome int
 const (
 	// guestMarkWritten: the guest's marker is durable; refresh now.
 	guestMarkWritten guestMarkOutcome = iota + 1
-	// guestMarkBusy: the guest refused (409); defer to the next deploy.
+	// guestMarkBusy: the guest refused (409); defer and retry.
 	guestMarkBusy
 	// guestMarkUnsupported: the guest predates the endpoint (404/405).
 	guestMarkUnsupported
@@ -55,7 +65,7 @@ func (o guestMarkOutcome) String() string {
 }
 
 type guestPlannedRestartMarker interface {
-	mark(ctx context.Context, own VMOwnership, target string) (guestMarkOutcome, string)
+	mark(ctx context.Context, own VMOwnership, target string, allowBusy bool) (guestMarkOutcome, string)
 	clear(ctx context.Context, own VMOwnership)
 }
 
@@ -74,13 +84,20 @@ func (m httpGuestMarker) httpClient() *http.Client {
 	return &http.Client{Timeout: 20 * time.Second}
 }
 
-func (m httpGuestMarker) mark(ctx context.Context, own VMOwnership, target string) (guestMarkOutcome, string) {
+func (m httpGuestMarker) mark(ctx context.Context, own VMOwnership, target string, allowBusy bool) (guestMarkOutcome, string) {
 	base := strings.TrimRight(strings.TrimSpace(own.ComputerURL), "/")
 	if base == "" {
 		return guestMarkUnavailable, "computer has no URL"
 	}
 	body, _ := json.Marshal(map[string]string{"target": target})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+plannedRestartGuestPath, bytes.NewReader(body))
+	url := base + plannedRestartGuestPath
+	if allowBusy {
+		// A query parameter, not a body field: guests built before it decode
+		// the body with DisallowUnknownFields and would answer 400; they
+		// ignore the parameter and keep their busy refusal.
+		url += "?allow_busy=1"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return guestMarkUnavailable, err.Error()
 	}
@@ -152,12 +169,15 @@ type deployRefreshResponse struct {
 	Outcome        string `json:"outcome"`
 	Reason         string `json:"reason,omitempty"`
 	PlannedRestart bool   `json:"planned_restart"`
-	VMID           string `json:"vm_id,omitempty"`
-	ComputerID     string `json:"computer_id,omitempty"`
-	UserID         string `json:"user_id,omitempty"`
-	DesktopID      string `json:"desktop_id,omitempty"`
-	ComputerURL    string `json:"computer_url,omitempty"`
-	State          string `json:"state,omitempty"`
+	// BusyAllowed: vmctl asked the guest with allow_busy (an always-on
+	// platform computer), so running runs did not defer the refresh.
+	BusyAllowed bool   `json:"busy_allowed,omitempty"`
+	VMID        string `json:"vm_id,omitempty"`
+	ComputerID  string `json:"computer_id,omitempty"`
+	UserID      string `json:"user_id,omitempty"`
+	DesktopID   string `json:"desktop_id,omitempty"`
+	ComputerURL string `json:"computer_url,omitempty"`
+	State       string `json:"state,omitempty"`
 }
 
 type deployRefreshCandidate struct {
@@ -174,6 +194,22 @@ type deployRefreshCandidate struct {
 type deployRefreshPlan struct {
 	Candidates []deployRefreshCandidate `json:"candidates"`
 	Skipped    []deployRefreshCandidate `json:"skipped"`
+	// Pending lists the deferred computers the retry sweep is still asking.
+	Pending []deployRefreshPendingEntry `json:"pending"`
+}
+
+// deployRefreshAllowsBusy is vmctl's policy for refreshing a computer whose
+// guest has runs running (owner ruling 2026-10-15). Only the computer-level
+// platform classes qualify: the paper is critical_protected and is never
+// idle at a deploy. A paid account's always-on computer and every other
+// computer still defer while busy; the retry sweep reaches them at their next
+// idle moment.
+func deployRefreshAllowsBusy(class WarmnessClass) bool {
+	switch class {
+	case WarmnessClassCriticalProtected, WarmnessClassPublicPlatform:
+		return true
+	}
+	return false
 }
 
 // selectDeployRefresh picks the computers a deploy refreshes: every active
@@ -227,7 +263,9 @@ func (h *Handler) HandleDeployRefresh(w http.ResponseWriter, r *http.Request) {
 			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: err.Error()})
 			return
 		}
-		writeVMCTLJSON(w, http.StatusOK, selectDeployRefresh(ownerships))
+		plan := selectDeployRefresh(ownerships)
+		plan.Pending = h.pendingDeployRefreshes()
+		writeVMCTLJSON(w, http.StatusOK, plan)
 		return
 	}
 
@@ -247,9 +285,7 @@ func (h *Handler) HandleDeployRefresh(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
-	resp, status := h.deployRefresh(r.Context(), req)
-	log.Printf("vmctl: deploy refresh user=%s desktop=%s vm=%s target=%s outcome=%s planned_restart=%v reason=%q",
-		req.UserID, req.DesktopID, resp.VMID, req.Target, resp.Outcome, resp.PlannedRestart, resp.Reason)
+	resp, status := h.trackedDeployRefresh(r.Context(), req, "deploy")
 	writeVMCTLJSON(w, status, resp)
 }
 
@@ -259,11 +295,22 @@ func (h *Handler) deployRefresh(ctx context.Context, req deployRefreshRequest) (
 		return deployRefreshResponse{Outcome: deployRefreshSkipped, Reason: "no computer", UserID: req.UserID, DesktopID: req.DesktopID}, http.StatusNotFound
 	}
 	own := *existing
-	base := deployRefreshResponse{VMID: own.VMID, ComputerID: own.ComputerID, UserID: own.UserID, DesktopID: own.DesktopID, ComputerURL: own.ComputerURL, State: string(own.State)}
+	allowBusy := deployRefreshAllowsBusy(h.registry.WarmnessClassForOwnership(&own))
+	base := deployRefreshResponse{VMID: own.VMID, ComputerID: own.ComputerID, UserID: own.UserID, DesktopID: own.DesktopID, ComputerURL: own.ComputerURL, State: string(own.State), BusyAllowed: allowBusy}
 	reply := func(outcome, reason string, status int) (deployRefreshResponse, int) {
 		base.Outcome, base.Reason = outcome, reason
 		return base, status
 	}
+	// One deploy refresh per computer at a time (the CI deploy and the retry
+	// sweep can meet). A second caller must not reach the guest: its marker
+	// request would succeed and RefreshVMForDesktop would then fail "already
+	// in progress", whose failure path clears the marker the first refresh
+	// is about to boot on.
+	release, ok := h.deployRefreshState().begin(own.UserID, own.DesktopID)
+	if !ok {
+		return reply(deployRefreshDeferred, deployRefreshInFlightReason, http.StatusConflict)
+	}
+	defer release()
 	switch {
 	case own.IsHeld():
 		return reply(deployRefreshSkipped, "held", http.StatusConflict)
@@ -276,7 +323,7 @@ func (h *Handler) deployRefresh(ctx context.Context, req deployRefreshRequest) (
 	}
 
 	marker := h.plannedRestartMarker()
-	outcome, detail := marker.mark(ctx, own, req.Target)
+	outcome, detail := marker.mark(ctx, own, req.Target, allowBusy)
 	planned := false
 	switch outcome {
 	case guestMarkWritten:
@@ -310,6 +357,7 @@ func (h *Handler) deployRefresh(ctx context.Context, req deployRefreshRequest) (
 	resp := deployRefreshResponse{
 		Outcome:        deployRefreshRefreshed,
 		PlannedRestart: planned,
+		BusyAllowed:    allowBusy,
 		VMID:           refreshed.VMID,
 		ComputerID:     stableComputerID(refreshed.UserID, refreshed.DesktopID, refreshed.ComputerID),
 		UserID:         refreshed.UserID,

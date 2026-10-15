@@ -1,0 +1,339 @@
+package vmctl
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
+)
+
+// Deploy refresh retry (CLAUDE.md "Restarts End Work (Crash) Or Resume It
+// (Planned Update)": deploys leave busy computers "to their next idle
+// moment"; docs/problems/always-busy-computer-never-updates-2026-10-15.md).
+// Until this, a deferred computer waited for the next deploy. Every deferral
+// is recorded here, and a vmctl sweep asks again until the computer takes the
+// update. Bounds:
+//   - a refreshed computer is forgotten: one refresh per deferral, so a
+//     layered computer (which keeps serving its release commit) is never
+//     refreshed again for the same target;
+//   - a failed refresh is forgotten too (logged): retrying a refresh that
+//     fails would be a kill loop; the next deploy records it again;
+//   - held, stopped, divergent or vanished computers are forgotten, as the
+//     deploy skips them; a stopped computer boots the current image when it
+//     next starts.
+
+// DeployRefreshRetryInterval is how often the sweep asks deferred computers
+// again. A guest refusal is cheap (a run count and two indexed lists), and a
+// self-development apply that deferred a platform computer usually settles
+// within minutes.
+const DeployRefreshRetryInterval = time.Minute
+
+// deployRefreshInFlightReason defers a second deploy refresh of a computer
+// whose refresh is running; it is not recorded (the running one settles it).
+const deployRefreshInFlightReason = "a deploy refresh of this computer is already in flight"
+
+// deployRefreshPendingEntry is one deferred computer.
+type deployRefreshPendingEntry struct {
+	UserID          string    `json:"user_id"`
+	DesktopID       string    `json:"desktop_id"`
+	VMID            string    `json:"vm_id,omitempty"`
+	ComputerID      string    `json:"computer_id,omitempty"`
+	Target          string    `json:"target"`
+	FirstDeferredAt time.Time `json:"first_deferred_at"`
+	LastAttemptAt   time.Time `json:"last_attempt_at"`
+	Attempts        int       `json:"attempts"`
+	LastReason      string    `json:"last_reason,omitempty"`
+	BusyAllowed     bool      `json:"busy_allowed,omitempty"`
+}
+
+type deployRefreshTracker struct {
+	mu       sync.Mutex
+	path     string
+	pending  map[string]deployRefreshPendingEntry
+	inFlight map[string]struct{}
+}
+
+func newDeployRefreshTracker() *deployRefreshTracker {
+	return &deployRefreshTracker{pending: map[string]deployRefreshPendingEntry{}, inFlight: map[string]struct{}{}}
+}
+
+func (h *Handler) deployRefreshState() *deployRefreshTracker {
+	h.deployRefreshMu.Lock()
+	defer h.deployRefreshMu.Unlock()
+	if h.deployRefreshTracker == nil {
+		h.deployRefreshTracker = newDeployRefreshTracker()
+	}
+	return h.deployRefreshTracker
+}
+
+// SetDeployRefreshPendingPath makes the pending set durable at path and loads
+// what an earlier vmctl left there. A missing file is an empty set.
+func (h *Handler) SetDeployRefreshPendingPath(path string) error {
+	t := h.deployRefreshState()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.path = strings.TrimSpace(path)
+	if t.path == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(t.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("deploy refresh pending: read %s: %w", t.path, err)
+	}
+	var entries []deployRefreshPendingEntry
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return fmt.Errorf("deploy refresh pending: decode %s: %w", t.path, err)
+	}
+	for _, entry := range entries {
+		if entry.UserID == "" || entry.Target == "" {
+			continue
+		}
+		entry.DesktopID = normalizeDesktopID(entry.DesktopID)
+		t.pending[ownershipKey(entry.UserID, entry.DesktopID)] = entry
+	}
+	return nil
+}
+
+// begin takes the computer's in-flight slot; ok is false while another deploy
+// refresh of it runs.
+func (t *deployRefreshTracker) begin(userID, desktopID string) (release func(), ok bool) {
+	key := ownershipKey(userID, normalizeDesktopID(desktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, busy := t.inFlight[key]; busy {
+		return func() {}, false
+	}
+	t.inFlight[key] = struct{}{}
+	return func() {
+		t.mu.Lock()
+		delete(t.inFlight, key)
+		t.mu.Unlock()
+	}, true
+}
+
+// settle records a deploy refresh's outcome: deferred keeps (or adds) the
+// computer, anything else forgets it.
+func (t *deployRefreshTracker) settle(req deployRefreshRequest, resp deployRefreshResponse, now time.Time) {
+	key := ownershipKey(req.UserID, normalizeDesktopID(req.DesktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	entry, known := t.pending[key]
+	if resp.Outcome != deployRefreshDeferred {
+		if known {
+			delete(t.pending, key)
+			t.saveLocked()
+		}
+		return
+	}
+	if !known {
+		entry = deployRefreshPendingEntry{UserID: req.UserID, DesktopID: normalizeDesktopID(req.DesktopID), FirstDeferredAt: now}
+	}
+	entry.Target = req.Target
+	entry.VMID, entry.ComputerID = resp.VMID, resp.ComputerID
+	entry.LastAttemptAt, entry.LastReason, entry.BusyAllowed = now, resp.Reason, resp.BusyAllowed
+	entry.Attempts++
+	t.pending[key] = entry
+	t.saveLocked()
+}
+
+func (t *deployRefreshTracker) forget(userID, desktopID string) {
+	key := ownershipKey(userID, normalizeDesktopID(desktopID))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, known := t.pending[key]; known {
+		delete(t.pending, key)
+		t.saveLocked()
+	}
+}
+
+func (t *deployRefreshTracker) list() []deployRefreshPendingEntry {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]deployRefreshPendingEntry, 0, len(t.pending))
+	for _, entry := range t.pending {
+		out = append(out, entry)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].FirstDeferredAt.Equal(out[j].FirstDeferredAt) {
+			return out[i].FirstDeferredAt.Before(out[j].FirstDeferredAt)
+		}
+		return ownershipKey(out[i].UserID, out[i].DesktopID) < ownershipKey(out[j].UserID, out[j].DesktopID)
+	})
+	return out
+}
+
+// saveLocked writes the pending set atomically. A write failure is logged:
+// the in-memory set still drives the sweep, and the next deploy re-records
+// every deferral.
+func (t *deployRefreshTracker) saveLocked() {
+	if t.path == "" {
+		return
+	}
+	entries := make([]deployRefreshPendingEntry, 0, len(t.pending))
+	for _, entry := range t.pending {
+		entries = append(entries, entry)
+	}
+	raw, err := json.MarshalIndent(entries, "", "  ")
+	if err == nil {
+		err = writeFileDurably(t.path, raw)
+	}
+	if err != nil {
+		log.Printf("vmctl: deploy refresh pending: save %s: %v", t.path, err)
+	}
+}
+
+func writeFileDurably(path string, raw []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(raw); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	if dir, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = dir.Sync()
+		_ = dir.Close()
+	}
+	return nil
+}
+
+func (h *Handler) pendingDeployRefreshes() []deployRefreshPendingEntry {
+	return h.deployRefreshState().list()
+}
+
+// trackedDeployRefresh runs one deploy refresh and records its outcome in the
+// pending set. An "already in flight" deferral is not recorded: the refresh
+// in flight settles the computer.
+func (h *Handler) trackedDeployRefresh(ctx context.Context, req deployRefreshRequest, caller string) (deployRefreshResponse, int) {
+	resp, status := h.deployRefresh(ctx, req)
+	log.Printf("vmctl: deploy refresh caller=%s user=%s desktop=%s vm=%s target=%s outcome=%s planned_restart=%v busy_allowed=%v reason=%q",
+		caller, req.UserID, req.DesktopID, resp.VMID, req.Target, resp.Outcome, resp.PlannedRestart, resp.BusyAllowed, resp.Reason)
+	if resp.Outcome == deployRefreshDeferred && resp.Reason == deployRefreshInFlightReason {
+		return resp, status
+	}
+	if resp.Outcome == deployRefreshFailed {
+		log.Printf("vmctl: deploy refresh of %s failed; not retried until the next deploy: %s", resp.VMID, resp.Reason)
+	}
+	h.deployRefreshState().settle(req, resp, time.Now().UTC())
+	return resp, status
+}
+
+// SweepDeployRefreshPending asks every deferred computer again, one at a
+// time.
+func (h *Handler) SweepDeployRefreshPending(ctx context.Context) {
+	for _, entry := range h.pendingDeployRefreshes() {
+		if ctx.Err() != nil {
+			return
+		}
+		own := h.registry.GetOwnershipForDesktop(entry.UserID, entry.DesktopID)
+		if own == nil {
+			log.Printf("vmctl: deploy refresh retry: user=%s desktop=%s has no computer; forgotten", entry.UserID, entry.DesktopID)
+			h.deployRefreshState().forget(entry.UserID, entry.DesktopID)
+			continue
+		}
+		eligible := !own.IsHeld() && own.State == VMStateActive && own.DivergenceStatus != "divergent"
+		if eligible {
+			if err := h.requireComputerVersionRoute(ctx, entry.UserID, entry.DesktopID); err != nil {
+				log.Printf("vmctl: deploy refresh retry: user=%s desktop=%s route refused, kept: %v", entry.UserID, entry.DesktopID, err)
+				continue
+			}
+			if served := h.servedCommit(ctx, *own); served != "" && served == entry.Target {
+				log.Printf("vmctl: deploy refresh retry: %s already serves %s; forgotten", own.VMID, entry.Target)
+				h.deployRefreshState().forget(entry.UserID, entry.DesktopID)
+				continue
+			}
+		}
+		// Ineligible computers go through the same path, which answers
+		// "skipped" without contacting the guest and forgets them.
+		h.trackedDeployRefresh(ctx, deployRefreshRequest{UserID: entry.UserID, DesktopID: entry.DesktopID, Target: entry.Target}, "retry-sweep")
+	}
+}
+
+// StartDeployRefreshRetry runs the sweep every interval until ctx ends.
+func (h *Handler) StartDeployRefreshRetry(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = DeployRefreshRetryInterval
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.SweepDeployRefreshPending(ctx)
+			}
+		}
+	}()
+}
+
+func (h *Handler) servedCommit(ctx context.Context, own VMOwnership) string {
+	if h.guestServedCommit != nil {
+		return h.guestServedCommit(ctx, own)
+	}
+	return httpGuestServedCommit(ctx, own)
+}
+
+// httpGuestServedCommit reads build.commit from the guest's /health (what CI
+// compares after a refresh). Any failure answers "", which never matches a
+// target.
+func httpGuestServedCommit(ctx context.Context, own VMOwnership) string {
+	base := strings.TrimRight(strings.TrimSpace(own.ComputerURL), "/")
+	if base == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/health", nil)
+	if err != nil {
+		return ""
+	}
+	hostauth.MarkInternal(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var health struct {
+		Build struct {
+			Commit string `json:"commit"`
+		} `json:"build"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&health); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(health.Build.Commit)
+}

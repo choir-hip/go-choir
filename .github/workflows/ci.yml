@@ -1448,9 +1448,16 @@ jobs:
               # computer versions and premium_always_on ones included — except
               # held ones, then per computer asks the guest to write its
               # planned-restart marker. A busy guest (running runs or a
-              # self-development operation in flight) refuses and is deferred
-              # to the next deploy; an idle one restarts as a planned boot that
-              # resumes its parked work once. The manual dispatch input
+              # self-development operation in flight) refuses and is deferred;
+              # vmctl records it and its retry sweep asks again every minute
+              # until it takes the update. A critical_protected or
+              # public_platform computer (the paper) is asked with allow_busy
+              # (owner ruling 2026-10-15): its running runs park for the
+              # planned boot's one resume, and only a self-development apply
+              # or a live capsule defers it
+              # (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
+              # An idle one restarts as a planned boot that resumes its parked
+              # work once. The manual dispatch input
               # refresh_active_computers=true additionally force-restarts the
               # deferred ones through the operator refresh (crash boot).
               echo "==> Refreshing active interactive computers onto deployed VM boot contract (planned restart)"
@@ -1509,13 +1516,14 @@ jobs:
                     refresh_reason=$(jq -r '.reason // empty' "$refresh_body" 2>/dev/null || true)
                     if [[ "$refresh_http_status" =~ ^2[0-9][0-9]$ ]] && [ "$refresh_outcome" = "refreshed" ]; then
                       refresh_planned=$(jq -r '.planned_restart // false' "$refresh_body")
-                      echo "    Refreshed ${refresh_vm_id} (planned_restart=${refresh_planned}${refresh_reason:+; ${refresh_reason}})"
+                      refresh_busy_allowed=$(jq -r '.busy_allowed // false' "$refresh_body")
+                      echo "    Refreshed ${refresh_vm_id} (planned_restart=${refresh_planned} busy_allowed=${refresh_busy_allowed}${refresh_reason:+; ${refresh_reason}})"
                     elif [ "$refresh_outcome" = "skipped" ]; then
                       echo "    Skipped ${refresh_vm_id}: ${refresh_reason}"
                       echo "skipped" > "${refresh_outcomes_dir}/${refresh_vm_id}"
                       exit 0
                     elif [ "$refresh_outcome" = "deferred" ] && [ "${REFRESH_ACTIVE_COMPUTERS}" != "true" ]; then
-                      echo "    Deferred ${refresh_vm_id} to the next deploy: ${refresh_reason}"
+                      echo "    Deferred ${refresh_vm_id} (vmctl retries it every minute until it updates): ${refresh_reason}"
                       echo "deferred" > "${refresh_outcomes_dir}/${refresh_vm_id}"
                       exit 0
                     elif [ "$refresh_outcome" = "deferred" ]; then
@@ -1577,7 +1585,7 @@ jobs:
                 deferred_json=$(printf '%s\n' "${deferred_vms[@]}" | jq -R . | jq -sc 'map(select(length > 0))')
                 echo "    Deploy refresh summary: refreshed=${refreshed_count} already_current=${current_count} deferred=${#deferred_vms[@]} skipped=${#skipped_interactive[@]}"
                 if [ "${#deferred_vms[@]}" -gt 0 ]; then
-                  echo "    Deferred (busy) computers are retried at the next deploy: ${deferred_vms[*]}"
+                  echo "    Deferred computers are retried by vmctl's deploy refresh sweep until they update (GET /internal/vmctl/deploy-refresh lists them as pending): ${deferred_vms[*]}"
                 fi
                 if [ "$refreshed_count" -gt 0 ]; then
                   record_receipt_artifact autoputer "$DEPLOY_COMMIT" active

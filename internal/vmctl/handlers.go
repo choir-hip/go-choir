@@ -139,6 +139,12 @@ type Handler struct {
 	// guestMarker asks a guest to write its planned-restart marker before a
 	// deploy refresh (nil: the HTTP client).
 	guestMarker guestPlannedRestartMarker
+	// deployRefreshMu guards the lazily built deploy refresh tracker (the
+	// pending set the retry sweep works through, and the in-flight guard).
+	deployRefreshMu      sync.Mutex
+	deployRefreshTracker *deployRefreshTracker
+	// guestServedCommit reads the build a guest serves (nil: its /health).
+	guestServedCommit func(context.Context, VMOwnership) string
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.

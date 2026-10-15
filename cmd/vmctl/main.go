@@ -220,6 +220,25 @@ func main() {
 		registry.StartIdleSweeper(context.Background(), idleSweepInterval, handler.AuthorizeComputerVersionRoute)
 		log.Printf("vmctl: route-gated idle sweeper interval set to %s", idleSweepInterval)
 	}
+	// Deferred deploy refreshes are retried until each computer takes the
+	// update (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
+	// The pending set lives beside the ownership state so a vmctl restart
+	// keeps it.
+	{
+		pendingPath := ""
+		stateDir := strings.TrimSpace(os.Getenv("VM_STATE_DIR"))
+		if ownershipPath := strings.TrimSpace(os.Getenv("VMCTL_OWNERSHIP_PATH")); ownershipPath != "" {
+			stateDir = filepath.Dir(ownershipPath)
+		}
+		if stateDir != "" {
+			pendingPath = filepath.Join(stateDir, "deploy-refresh-pending.json")
+		}
+		if err := handler.SetDeployRefreshPendingPath(pendingPath); err != nil {
+			log.Printf("vmctl: deploy refresh pending set not loaded (starting empty): %v", err)
+		}
+		handler.StartDeployRefreshRetry(context.Background(), vmctl.DeployRefreshRetryInterval)
+		log.Printf("vmctl: deploy refresh retry every %s (pending=%q)", vmctl.DeployRefreshRetryInterval, pendingPath)
+	}
 	// The pressure monitor samples host pressure and VM memory; under the
 	// sustained signal it also runs the gated reclaim. Off with reclaim off.
 	registry.StartPressureMonitor(context.Background(), handler.AuthorizeComputerVersionRoute)

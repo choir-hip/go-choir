@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -67,15 +68,17 @@ type fakeGuestMarker struct {
 	outcome         guestMarkOutcome
 	detail          string
 	marks           []string
+	allowBusy       []bool
 	clears          int
 	refreshesAtMark []int
 	mgr             *mockVMManager
 }
 
-func (f *fakeGuestMarker) mark(_ context.Context, own VMOwnership, target string) (guestMarkOutcome, string) {
+func (f *fakeGuestMarker) mark(_ context.Context, own VMOwnership, target string, allowBusy bool) (guestMarkOutcome, string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.marks = append(f.marks, own.VMID+"@"+target)
+	f.allowBusy = append(f.allowBusy, allowBusy)
 	if f.mgr != nil {
 		f.mgr.mu.Lock()
 		f.refreshesAtMark = append(f.refreshesAtMark, len(f.mgr.refreshes))
@@ -102,6 +105,7 @@ func newDeployRefreshFixture(t *testing.T, user string) (*Handler, *mockVMManage
 	h := NewHandler(reg)
 	fake := &fakeGuestMarker{mgr: mgr}
 	h.guestMarker = fake
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "" }
 	return h, mgr, fake
 }
 
@@ -232,9 +236,10 @@ func TestHTTPGuestMarkerClassifiesGuestAnswers(t *testing.T) {
 		{http.StatusServiceUnavailable, guestMarkUnavailable},
 		{http.StatusForbidden, guestMarkUnavailable},
 	} {
-		var gotPath, gotTarget string
+		var gotPath, gotTarget, gotQuery string
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotPath = r.Method + " " + r.URL.Path
+			gotQuery = r.URL.RawQuery
 			var body struct {
 				Target string `json:"target"`
 			}
@@ -243,14 +248,245 @@ func TestHTTPGuestMarkerClassifiesGuestAnswers(t *testing.T) {
 			w.WriteHeader(c.status)
 			_, _ = w.Write([]byte(`{}`))
 		}))
-		outcome, _ := httpGuestMarker{client: server.Client()}.mark(context.Background(), VMOwnership{ComputerURL: server.URL}, "761d94c5")
+		outcome, _ := httpGuestMarker{client: server.Client()}.mark(context.Background(), VMOwnership{ComputerURL: server.URL}, "761d94c5", false)
+		if outcome != c.want || gotPath != "POST /internal/runtime/planned-restart" || gotTarget != "761d94c5" || gotQuery != "" {
+			t.Fatalf("status %d: outcome=%v path=%q query=%q target=%q, want %v", c.status, outcome, gotPath, gotQuery, gotTarget, c.want)
+		}
+		// allow_busy travels as a query parameter: a guest built before it
+		// ignores the parameter (its body decoder rejects unknown fields).
+		outcome, _ = httpGuestMarker{client: server.Client()}.mark(context.Background(), VMOwnership{ComputerURL: server.URL}, "761d94c5", true)
 		server.Close()
-		if outcome != c.want || gotPath != "POST /internal/runtime/planned-restart" || gotTarget != "761d94c5" {
-			t.Fatalf("status %d: outcome=%v path=%q target=%q, want %v", c.status, outcome, gotPath, gotTarget, c.want)
+		if outcome != c.want || gotQuery != "allow_busy=1" || gotTarget != "761d94c5" {
+			t.Fatalf("status %d allow_busy: outcome=%v query=%q target=%q, want %v with allow_busy=1", c.status, outcome, gotQuery, gotTarget, c.want)
 		}
 	}
-	outcome, _ := httpGuestMarker{}.mark(context.Background(), VMOwnership{ComputerURL: "http://127.0.0.1:1"}, "761d94c5")
+	outcome, _ := httpGuestMarker{}.mark(context.Background(), VMOwnership{ComputerURL: "http://127.0.0.1:1"}, "761d94c5", false)
 	if outcome != guestMarkUnavailable {
 		t.Fatalf("unreachable guest outcome = %v, want unavailable", outcome)
+	}
+}
+
+// Owner ruling 2026-10-15: "we need to update the Autopaper computer even
+// when it is busy, because it's always going to be busy"
+// (docs/problems/always-busy-computer-never-updates-2026-10-15.md). Ways this
+// could fail, written first:
+//   - a busy always-on platform computer (the paper, critical_protected) is
+//     still deferred, so it never updates;
+//   - a busy ordinary computer is refreshed (the ruling covers platform
+//     computers, not every user's running turn);
+//   - a guest refusal while busy-allowed (a self-development apply or a live
+//     capsule) is refreshed anyway, or waits for the next deploy;
+//   - a deferred computer waits for the next deploy instead of being retried
+//     until it takes the update;
+//   - the retry refreshes a computer twice, or keeps killing one whose
+//     refresh fails;
+//   - the retry and a deploy refresh the same computer at once, and the
+//     loser's failure path clears the winner's marker;
+//   - a vmctl restart loses the deferred set.
+
+func makePlatformComputer(t *testing.T, h *Handler, user string) *VMOwnership {
+	t.Helper()
+	own := h.registry.GetOwnershipForDesktop(user, PrimaryDesktopID)
+	if own == nil {
+		t.Fatalf("no ownership for %s", user)
+	}
+	h.registry.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PlatformComputerIDs: map[string]bool{own.ComputerID: true}})
+	if got := h.registry.WarmnessClassForOwnership(own); got != WarmnessClassCriticalProtected {
+		t.Fatalf("fixture class = %s, want critical_protected", got)
+	}
+	return own
+}
+
+func setFakeOutcome(f *fakeGuestMarker, outcome guestMarkOutcome) {
+	f.mu.Lock()
+	f.outcome = outcome
+	f.mu.Unlock()
+}
+
+func TestDeployRefreshAllowsBusyForCriticalProtectedComputer(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "paper")
+	makePlatformComputer(t, h, "paper")
+	fake.outcome, fake.detail = guestMarkWritten, `{"interrupted_running_runs":2}`
+	code, resp := postDeployRefresh(t, h, `{"user_id":"paper","desktop_id":"primary","target":"761d94c5"}`)
+	if code != http.StatusOK || resp.Outcome != deployRefreshRefreshed || !resp.PlannedRestart || !resp.BusyAllowed {
+		t.Fatalf("busy paper: %d %+v, want 200 refreshed, planned, busy_allowed", code, resp)
+	}
+	if len(fake.allowBusy) != 1 || !fake.allowBusy[0] {
+		t.Fatalf("allow_busy sent = %v, want true for a critical_protected computer", fake.allowBusy)
+	}
+	if len(mgr.refreshes) != 1 {
+		t.Fatalf("refreshes = %v, want one", mgr.refreshes)
+	}
+	if pending := h.pendingDeployRefreshes(); len(pending) != 0 {
+		t.Fatalf("refreshed computer left pending: %+v", pending)
+	}
+}
+
+func TestDeployRefreshBusyOrdinaryComputerStillDefersAndIsRecorded(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "ordinary")
+	fake.outcome, fake.detail = guestMarkBusy, `{"outcome":"busy","running_runs":1}`
+	code, resp := postDeployRefresh(t, h, `{"user_id":"ordinary","desktop_id":"primary","target":"761d94c5"}`)
+	if code != http.StatusConflict || resp.Outcome != deployRefreshDeferred || resp.BusyAllowed {
+		t.Fatalf("busy ordinary: %d %+v, want 409 deferred, busy not allowed", code, resp)
+	}
+	if len(fake.allowBusy) != 1 || fake.allowBusy[0] {
+		t.Fatalf("allow_busy sent = %v, want false for a primary computer", fake.allowBusy)
+	}
+	if len(mgr.refreshes) != 0 {
+		t.Fatalf("busy ordinary computer refreshed: %v", mgr.refreshes)
+	}
+	pending := h.pendingDeployRefreshes()
+	if len(pending) != 1 || pending[0].UserID != "ordinary" || pending[0].Target != "761d94c5" {
+		t.Fatalf("pending = %+v, want the deferred computer recorded for retry", pending)
+	}
+}
+
+// The guest refuses even with allow_busy while a self-development apply is in
+// flight or a capsule is live; vmctl defers and the retry sweep tries again
+// shortly, not at the next deploy.
+func TestDeployRefreshSelfDevelopmentApplyDefersEvenWhenBusyIsAllowed(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "paper-selfdev")
+	makePlatformComputer(t, h, "paper-selfdev")
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "0ld" }
+	fake.outcome, fake.detail = guestMarkBusy, `{"outcome":"busy","allow_busy":true,"selfdev_active_operations":1}`
+	code, resp := postDeployRefresh(t, h, `{"user_id":"paper-selfdev","desktop_id":"primary","target":"761d94c5"}`)
+	if code != http.StatusConflict || resp.Outcome != deployRefreshDeferred || !strings.Contains(resp.Reason, "selfdev_active_operations") {
+		t.Fatalf("selfdev in flight: %d %+v, want 409 deferred naming the guest's reason", code, resp)
+	}
+	if len(mgr.refreshes) != 0 {
+		t.Fatalf("a self-development apply was cut: %v", mgr.refreshes)
+	}
+	if pending := h.pendingDeployRefreshes(); len(pending) != 1 {
+		t.Fatalf("pending = %+v, want it recorded for the short retry", pending)
+	}
+	// Once the apply settles, the sweep refreshes it.
+	setFakeOutcome(fake, guestMarkWritten)
+	h.SweepDeployRefreshPending(context.Background())
+	if len(mgr.refreshes) != 1 {
+		t.Fatalf("sweep after the apply settled: refreshes=%v, want one", mgr.refreshes)
+	}
+}
+
+func TestDeployRefreshSweepRetriesDeferredComputerUntilItUpdatesThenStops(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "retry")
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "0ld" }
+	fake.outcome = guestMarkBusy
+	if code, resp := postDeployRefresh(t, h, `{"user_id":"retry","desktop_id":"primary","target":"761d94c5"}`); resp.Outcome != deployRefreshDeferred {
+		t.Fatalf("setup: %d %+v, want deferred", code, resp)
+	}
+	// Still busy: the sweep asks again and keeps it.
+	h.SweepDeployRefreshPending(context.Background())
+	if len(mgr.refreshes) != 0 || len(h.pendingDeployRefreshes()) != 1 || len(fake.marks) != 2 {
+		t.Fatalf("busy sweep: refreshes=%v pending=%+v marks=%v, want asked again and kept", mgr.refreshes, h.pendingDeployRefreshes(), fake.marks)
+	}
+	if got := h.pendingDeployRefreshes()[0].Attempts; got != 2 {
+		t.Fatalf("attempts = %d, want 2 (the deploy and one sweep)", got)
+	}
+	// Idle at last: refreshed once, then forgotten.
+	setFakeOutcome(fake, guestMarkWritten)
+	h.SweepDeployRefreshPending(context.Background())
+	if len(mgr.refreshes) != 1 || len(h.pendingDeployRefreshes()) != 0 {
+		t.Fatalf("idle sweep: refreshes=%v pending=%+v, want one refresh and nothing pending", mgr.refreshes, h.pendingDeployRefreshes())
+	}
+	// A layered computer keeps serving its release commit after a refresh;
+	// the sweep must not refresh it again.
+	h.SweepDeployRefreshPending(context.Background())
+	if len(mgr.refreshes) != 1 {
+		t.Fatalf("refreshed twice: %v", mgr.refreshes)
+	}
+}
+
+func TestDeployRefreshSweepDropsComputerAlreadyOnTarget(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "current")
+	fake.outcome = guestMarkBusy
+	postDeployRefresh(t, h, `{"user_id":"current","desktop_id":"primary","target":"761d94c5"}`)
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "761d94c5" }
+	setFakeOutcome(fake, guestMarkWritten)
+	h.SweepDeployRefreshPending(context.Background())
+	if len(mgr.refreshes) != 0 || len(h.pendingDeployRefreshes()) != 0 {
+		t.Fatalf("current computer: refreshes=%v pending=%+v, want dropped without a refresh", mgr.refreshes, h.pendingDeployRefreshes())
+	}
+}
+
+func TestDeployRefreshSweepDropsFailedRefreshInsteadOfRetryingIt(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "failing")
+	h.guestServedCommit = func(context.Context, VMOwnership) string { return "" }
+	fake.outcome = guestMarkBusy
+	postDeployRefresh(t, h, `{"user_id":"failing","desktop_id":"primary","target":"761d94c5"}`)
+	setFakeOutcome(fake, guestMarkWritten)
+	mgr.mu.Lock()
+	mgr.refreshError = errors.New("firecracker refused")
+	mgr.mu.Unlock()
+	h.SweepDeployRefreshPending(context.Background())
+	h.SweepDeployRefreshPending(context.Background())
+	if marks := len(fake.marks); marks != 2 || len(h.pendingDeployRefreshes()) != 0 {
+		t.Fatalf("failed refresh: marks=%d pending=%+v, want one refresh attempt after the deploy and nothing pending", marks, h.pendingDeployRefreshes())
+	}
+	if fake.clears != 1 {
+		t.Fatalf("clears = %d, want the failed refresh's marker cleared once", fake.clears)
+	}
+}
+
+func TestDeployRefreshSweepDropsHeldComputer(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "held-later")
+	fake.outcome = guestMarkBusy
+	postDeployRefresh(t, h, `{"user_id":"held-later","desktop_id":"primary","target":"761d94c5"}`)
+	own := h.registry.GetOwnershipForDesktop("held-later", PrimaryDesktopID)
+	if err := h.registry.SetHold(own.ComputerID, "maintenance", "recovery"); err != nil {
+		t.Fatal(err)
+	}
+	h.SweepDeployRefreshPending(context.Background())
+	if len(mgr.refreshes) != 0 || len(h.pendingDeployRefreshes()) != 0 {
+		t.Fatalf("held computer: refreshes=%v pending=%+v, want skipped and dropped", mgr.refreshes, h.pendingDeployRefreshes())
+	}
+}
+
+// A refresh already in flight for a computer answers "deferred" before
+// touching the guest: otherwise the second call's failure path ("refresh is
+// already in progress") would clear the marker the first refresh relies on.
+func TestDeployRefreshConcurrentRefreshDoesNotTouchTheMarker(t *testing.T) {
+	h, mgr, fake := newDeployRefreshFixture(t, "concurrent")
+	fake.outcome = guestMarkWritten
+	release, ok := h.deployRefreshState().begin("concurrent", PrimaryDesktopID)
+	if !ok {
+		t.Fatal("could not take the in-flight slot")
+	}
+	code, resp := postDeployRefresh(t, h, `{"user_id":"concurrent","desktop_id":"primary","target":"761d94c5"}`)
+	release()
+	if code != http.StatusConflict || resp.Outcome != deployRefreshDeferred || !strings.Contains(resp.Reason, "in flight") {
+		t.Fatalf("concurrent: %d %+v, want 409 deferred in flight", code, resp)
+	}
+	if len(fake.marks) != 0 || fake.clears != 0 || len(mgr.refreshes) != 0 {
+		t.Fatalf("concurrent call touched the guest: marks=%v clears=%d refreshes=%v", fake.marks, fake.clears, mgr.refreshes)
+	}
+}
+
+func TestDeployRefreshPendingSurvivesVMCTLRestartAndKeepsNewestTarget(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "deploy-refresh-pending.json")
+	h, _, fake := newDeployRefreshFixture(t, "durable")
+	if err := h.SetDeployRefreshPendingPath(path); err != nil {
+		t.Fatal(err)
+	}
+	fake.outcome = guestMarkBusy
+	postDeployRefresh(t, h, `{"user_id":"durable","desktop_id":"primary","target":"aaaa1111"}`)
+	postDeployRefresh(t, h, `{"user_id":"durable","desktop_id":"primary","target":"bbbb2222"}`)
+
+	h2 := NewHandler(h.registry)
+	if err := h2.SetDeployRefreshPendingPath(path); err != nil {
+		t.Fatal(err)
+	}
+	pending := h2.pendingDeployRefreshes()
+	if len(pending) != 1 || pending[0].Target != "bbbb2222" || pending[0].Attempts != 2 {
+		t.Fatalf("reloaded pending = %+v, want one entry for the newest target with 2 attempts", pending)
+	}
+
+	// The selection lists it, so an operator sees it without SSH.
+	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/deploy-refresh", nil)
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+	h2.HandleDeployRefresh(rec, req)
+	var plan deployRefreshPlan
+	if err := json.Unmarshal(rec.Body.Bytes(), &plan); err != nil || len(plan.Pending) != 1 || plan.Pending[0].UserID != "durable" {
+		t.Fatalf("GET plan = %s (%v), want the pending computer listed", rec.Body.String(), err)
 	}
 }
