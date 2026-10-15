@@ -52,14 +52,21 @@ type runMemoryManager struct {
 	// refreshTurn after a compaction. Nil appends nothing.
 	resumeTurn  func() json.RawMessage
 	refreshTurn func() json.RawMessage
+	// elision replaces old tool results in the context sent to the provider
+	// (run_memory_elision.go). The zero value sends the plain context.
+	elision runMemoryElision
+	// elidedThrough is how many results the last sent context had elided,
+	// so a batch step is announced once.
+	elidedThrough int
 }
 
 func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg provideriface.Config, emit provideriface.EventEmitFunc) *runMemoryManager {
 	return &runMemoryManager{
-		store: store,
-		rec:   rec,
-		cfg:   provideriface.NormalizeConfig(cfg),
-		emit:  emit,
+		store:   store,
+		rec:     rec,
+		cfg:     provideriface.NormalizeConfig(cfg),
+		emit:    emit,
+		elision: newRunMemoryElision(rec),
 	}
 }
 
@@ -293,7 +300,7 @@ func (m *runMemoryManager) contextMessages(ctx context.Context) ([]json.RawMessa
 	if err != nil {
 		return nil, err
 	}
-	return buildRunMemoryContext(entries), nil
+	return m.sentContext(entries), nil
 }
 
 func (m *runMemoryManager) compactIfNeeded(ctx context.Context, reason string, force bool) (bool, error) {
@@ -639,7 +646,7 @@ func (m *runMemoryManager) effectiveContextThresholdTokens() int {
 }
 
 func (m *runMemoryManager) estimatePromptPressureTokens(entries []types.RunMemoryEntry) int {
-	return estimateRawMessagesTokens(buildRunMemoryContext(entries)) +
+	return estimateRawMessagesTokens(m.elision.apply(entries)) +
 		m.promptOverheadTokens +
 		provideriface.DefaultRunMemoryPromptReserveTokens
 }
@@ -949,6 +956,22 @@ func cleanCheckpointStrings(values []string) []string {
 }
 
 func buildRunMemoryContext(entries []types.RunMemoryEntry) []json.RawMessage {
+	items := buildRunMemoryContextItems(entries)
+	messages := make([]json.RawMessage, len(items))
+	for i, item := range items {
+		messages[i] = item.msg
+	}
+	return messages
+}
+
+// runMemoryContextItem is one message of the provider context and the
+// run-memory entry it came from ("" for a compaction summary).
+type runMemoryContextItem struct {
+	entryID string
+	msg     json.RawMessage
+}
+
+func buildRunMemoryContextItems(entries []types.RunMemoryEntry) []runMemoryContextItem {
 	latestCompactionIdx := -1
 	for i := range entries {
 		if entries[i].Kind == types.RunMemoryEntryCompaction {
@@ -956,11 +979,17 @@ func buildRunMemoryContext(entries []types.RunMemoryEntry) []json.RawMessage {
 		}
 	}
 	if latestCompactionIdx == -1 {
-		return runMemoryMessages(entries)
+		items := make([]runMemoryContextItem, 0, len(entries))
+		for _, entry := range entries {
+			if entry.Kind == types.RunMemoryEntryMessage && len(entry.Message) > 0 {
+				items = append(items, runMemoryContextItem{entryID: entry.EntryID, msg: cloneRawMessage(entry.Message)})
+			}
+		}
+		return items
 	}
 
 	latest := entries[latestCompactionIdx]
-	messages := []json.RawMessage{compactionSummaryMessage(latest.Summary, latest.TokensBefore)}
+	items := []runMemoryContextItem{{msg: compactionSummaryMessage(latest.Summary, latest.TokensBefore)}}
 	if latest.FirstKeptEntryID != "" {
 		keep := false
 		for i := 0; i < latestCompactionIdx; i++ {
@@ -968,16 +997,16 @@ func buildRunMemoryContext(entries []types.RunMemoryEntry) []json.RawMessage {
 				keep = true
 			}
 			if keep && entries[i].Kind == types.RunMemoryEntryMessage && len(entries[i].Message) > 0 {
-				messages = append(messages, cloneRawMessage(entries[i].Message))
+				items = append(items, runMemoryContextItem{entryID: entries[i].EntryID, msg: cloneRawMessage(entries[i].Message)})
 			}
 		}
 	}
 	for i := latestCompactionIdx + 1; i < len(entries); i++ {
 		if entries[i].Kind == types.RunMemoryEntryMessage && len(entries[i].Message) > 0 {
-			messages = append(messages, cloneRawMessage(entries[i].Message))
+			items = append(items, runMemoryContextItem{entryID: entries[i].EntryID, msg: cloneRawMessage(entries[i].Message)})
 		}
 	}
-	return messages
+	return items
 }
 
 func runMemoryMessages(entries []types.RunMemoryEntry) []json.RawMessage {
