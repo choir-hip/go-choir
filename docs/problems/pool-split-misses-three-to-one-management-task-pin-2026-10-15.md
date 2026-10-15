@@ -123,3 +123,18 @@ Source: the gateway journal, 17:46–18:06, and `/api/runs` on the paper
 or 1/4 of compute? If compute, the levers are a lower DeepSeek weight
 (1:5 or 1:7), or a check of why DeepSeek runs make more calls. No change
 until a multi-hour window confirms the call ratio.
+
+## Longer window (about 20:10 UTC)
+
+- **Gateway calls, 17:46–20:10 (2 h 24 min):** chatgpt 2,121 and
+  opencode-go 1,573, so DeepSeek takes 43% of all paper calls. Before
+  the fix it took 54%. The window spans planned restarts at 18:20 and
+  19:16.
+- **`/api/runs` (the route returns its newest 100 runs, here from
+  19:31):**
+  - Hashed runs: 28 of 90 on DeepSeek (31%).
+  - Threads: 14 of 52 (27%).
+  - Explicit management task runs: 10, all on chatgpt.
+- **Reading:** threads and runs sit near the 25% target. Calls stay
+  higher (43%) because a DeepSeek run makes more calls than a ChatGPT
+  run. The owner's question (runs or compute) stands. No code change.
