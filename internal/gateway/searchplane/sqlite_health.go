@@ -3,6 +3,7 @@ package searchplane
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,53 @@ func OpenFileHealthStore(path string) (*FileHealthStore, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := store.clampStoredCooldowns(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return store, nil
+}
+
+// clampStoredCooldowns applies the current policy's bounds to every
+// persisted deadline once at open, rewriting rows written under an older,
+// longer policy and logging one line per clamped provider. Reads clamp too
+// (clampRecord), so a row is never served past the policy.
+func (s *FileHealthStore) clampStoredCooldowns() error {
+	rows, err := s.db.Query(`SELECT provider, state, cooldown_until, strike_count, window_attempts, window_successes, window_results_total, last_failure_class, last_error_summary, updated_at FROM provider_health`)
+	if err != nil {
+		return err
+	}
+	var recs []ProviderHealth
+	for rows.Next() {
+		rec, err := scanHealthRow(rows)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		recs = append(recs, rec)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	for _, rec := range recs {
+		clamped, changed := s.policy.ClampCooldown(rec)
+		if !changed {
+			continue
+		}
+		log.Printf("search health: clamped stale cooldown provider=%s class=%s was_until=%s now_until=%s",
+			rec.Provider, rec.LastFailureClass, rec.CooldownUntil.UTC().Format(time.RFC3339), clamped.CooldownUntil.UTC().Format(time.RFC3339))
+		if err := s.upsert(clamped); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *FileHealthStore) clampRecord(rec ProviderHealth) ProviderHealth {
+	clamped, _ := s.policy.ClampCooldown(rec)
+	return clamped
 }
 
 func (s *FileHealthStore) migrate() error {
@@ -133,7 +180,7 @@ func (s *FileHealthStore) Snapshot() (map[string]ProviderHealth, error) {
 		if err != nil {
 			return nil, err
 		}
-		out[rec.Provider] = normalizeExpiredLocked(rec, time.Now())
+		out[rec.Provider] = normalizeExpiredLocked(s.clampRecord(rec), time.Now())
 	}
 	return out, rows.Err()
 }
@@ -147,7 +194,7 @@ func (s *FileHealthStore) Get(provider string) (ProviderHealth, error) {
 	if err != nil {
 		return ProviderHealth{}, err
 	}
-	return normalizeExpiredLocked(rec, time.Now()), nil
+	return normalizeExpiredLocked(s.clampRecord(rec), time.Now()), nil
 }
 
 func (s *FileHealthStore) RecordOutcome(outcome Outcome) (ProviderHealth, error) {

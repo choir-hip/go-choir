@@ -114,6 +114,33 @@ func (p BackoffPolicy) CooldownDuration(class OutcomeClass, strikeCount int) tim
 	return d
 }
 
+// ClampCooldown bounds a stored deadline by the policy in force: at most
+// UpdatedAt plus MaxByClass of the row's last failure class, and overall
+// at most UpdatedAt plus MaxCooldown. A deadline persisted under an older,
+// longer policy otherwise outlives the policy change that shortened it
+// (docs/problems/search-stale-cooldowns-outlive-policy-2026-10-15.md).
+// It never lengthens a deadline, and a class with no MaxByClass entry
+// (auth_error) is bounded by MaxCooldown only. UpdatedAt can be later than
+// the moment the bench was set, which only loosens the clamp.
+func (p BackoffPolicy) ClampCooldown(rec ProviderHealth) (ProviderHealth, bool) {
+	if rec.CooldownUntil == nil || rec.UpdatedAt.IsZero() {
+		return rec, false
+	}
+	limit := p.MaxCooldown
+	if c, ok := p.MaxByClass[OutcomeClass(rec.LastFailureClass)]; ok && c > 0 && (limit <= 0 || c < limit) {
+		limit = c
+	}
+	if limit <= 0 {
+		return rec, false
+	}
+	ceiling := rec.UpdatedAt.Add(limit)
+	if !rec.CooldownUntil.After(ceiling) {
+		return rec, false
+	}
+	rec.CooldownUntil = &ceiling
+	return rec, true
+}
+
 // ClassifyCall maps an error and result count to an outcome class.
 func ClassifyCall(err error, resultCount int) OutcomeClass {
 	if err == nil {
