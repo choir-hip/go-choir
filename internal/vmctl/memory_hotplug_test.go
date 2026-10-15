@@ -684,3 +684,33 @@ func TestWithGuestMemoryLease(t *testing.T) {
 		t.Fatalf("refused lease = %v ran=%t", err, ran)
 	}
 }
+
+// The guest reads its own memory (its base, for the lease set's target)
+// by the same tap identity; a loopback caller is refused.
+func TestGuestMemoryRouteReadsOwnView(t *testing.T) {
+	f := newMemoryFixture(t, nil)
+	f.addComputer("vm-m", "computer-memory-m", "10.200.3.2")
+	f.addComputer("vm-n", "computer-memory-n", "10.200.3.6")
+	rec := serveThroughHostauth(f.h.HandleGuestMemory, http.MethodGet, "/internal/vmctl/memory/guest", "10.200.3.6:41000", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("guest GET = %d %s", rec.Code, rec.Body.String())
+	}
+	var view MemoryHotplugView
+	_ = json.Unmarshal(rec.Body.Bytes(), &view)
+	if view.VMID != "vm-n" || view.BaseMiB != 4096 || view.CurrentMiB != 4096 {
+		t.Fatalf("guest view = %+v", view)
+	}
+	if rec := serveThroughHostauth(f.h.HandleGuestMemory, http.MethodGet, "/internal/vmctl/memory/guest", "127.0.0.1:5000", "", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("loopback guest GET = %d", rec.Code)
+	}
+	if rec := serveThroughHostauth(f.h.HandleGuestMemory, http.MethodGet, "/internal/vmctl/memory/guest", "10.200.9.9:41000", "", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("unbound guest GET = %d", rec.Code)
+	}
+	if rec := serveThroughHostauth(f.h.HandleGuestMemory, http.MethodDelete, "/internal/vmctl/memory/guest", "10.200.3.6:41000", "", nil); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("guest DELETE = %d", rec.Code)
+	}
+	f.reg.SetMemoryHotplugConfig(MemoryHotplugConfig{})
+	if rec := serveThroughHostauth(f.h.HandleGuestMemory, http.MethodGet, "/internal/vmctl/memory/guest", "10.200.3.6:41000", "", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("guest GET with hotplug off = %d", rec.Code)
+	}
+}

@@ -14,6 +14,7 @@ import (
 //	POST /internal/vmctl/memory        host only: {vm_id|computer_id, target_mib, ttl_seconds?, wait_seconds?}
 //	GET  /internal/vmctl/memory[?vm_id=|computer_id=]  host only
 //	POST /internal/vmctl/memory/guest  guest only: {target_mib, ttl_seconds?, wait_seconds?}
+//	GET  /internal/vmctl/memory/guest  guest only: its own view (base, lease)
 //
 // target_mib is the total guest memory; at or below the base it releases.
 // A guest's computer is the one its tap source address binds to; it can
@@ -125,9 +126,10 @@ func (h *Handler) HandleMemory(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleGuestMemory serves a guest's lease request for its own computer.
+// HandleGuestMemory serves a guest's lease request for its own computer,
+// and its read of its own memory (the base its lease set adds needs to).
 func (h *Handler) HandleGuestMemory(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
 		return
 	}
@@ -141,6 +143,10 @@ func (h *Handler) HandleGuestMemory(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "caller " + srcHost + " is not bound to a live computer"})
 		return
 	}
+	if r.Method == http.MethodGet {
+		h.serveGuestMemoryView(w, own)
+		return
+	}
 	body, ok := decodeMemoryRequest(w, r)
 	if !ok {
 		return
@@ -150,6 +156,30 @@ func (h *Handler) HandleGuestMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.serveMemoryRequest(w, r, own, body, MemoryLeaseHolderGuest)
+}
+
+// serveGuestMemoryView answers a guest's read of its own memory with the
+// same disabled (404) and not-selected (409) answers a grow gets.
+func (h *Handler) serveGuestMemoryView(w http.ResponseWriter, own *VMOwnership) {
+	if !h.registry.memoryHotplugConfig().Enabled {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "memory hotplug is disabled"})
+		return
+	}
+	if h.registry.memoryHotplugMiBFor(own) == 0 {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "computer " + own.ComputerID + " is not selected for memory hotplug"})
+		return
+	}
+	view, err := h.registry.ObserveMemory(own)
+	if err != nil {
+		status := http.StatusInternalServerError
+		var reqErr *MemoryRequestError
+		if errors.As(err, &reqErr) {
+			status = reqErr.Status
+		}
+		writeVMCTLJSON(w, status, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, view)
 }
 
 // MemoryEndpoint returns the host memory endpoint for a vmctl base URL.
