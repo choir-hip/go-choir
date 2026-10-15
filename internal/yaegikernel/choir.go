@@ -98,7 +98,7 @@ type verbRefusal struct {
 }
 
 // SessionRoleResearch is the read-only role: sessions bound to it observe
-// files and directories but cannot write, execute, assign, or message. The
+// files and directories but cannot write, execute, or message. The
 // role arrives on a trusted worker flag from the verified outer capability,
 // never from model input. Any other role string means full engineering scope.
 const SessionRoleResearch = "research"
@@ -117,7 +117,7 @@ const SessionRoleResearchChild = "research_child"
 // spelling is agentprofile.ManagementTask's.
 const SessionRoleManagementTask = "management_task"
 
-// NewChoirScope mints a session-scoped handle for exactly the file, assign,
+// NewChoirScope mints a session-scoped handle for exactly the file
 // and message actions and returns the scope the choir symbols close over.
 // The caller (worker session setup) owns the broker lifetime.
 func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationID string, epoch uint64, role, slot string) (*ChoirScope, error) {
@@ -129,7 +129,7 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	}
 	desk := normalizeDeskRole(role)
 	readOnly := role == SessionRoleResearch || role == SessionRoleResearchChild
-	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit}
+	actions := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit}
 	switch {
 	case desk == "":
 		// An unknown role fails closed (R2-2): observation only. Before
@@ -311,7 +311,7 @@ func (s *ChoirScope) call(action BrokerAction, payload any, result any) error {
 // the yaegi carrier generalized to per-desk module sets). Every desk shares
 // the observation tier (ReadFile/ListDir/Context/Inbox); the semantic-act
 // verbs are grouped so messaging authority is separable from world mutation.
-// "file" = ReadFile+ListDir+WriteFile+Exec; "delegate" = Assign+Cast;
+// "file" = ReadFile+ListDir+WriteFile+Exec; "delegate" = Cast;
 // "commit" = Complete+Freeze; "epistemic" = the full semantic-act surface.
 var deskModuleSets = map[string][]string{
 	// Management delegates engineering work and reports; it does not touch
@@ -530,18 +530,6 @@ func (s *ChoirScope) Exec(command string, args []string) (ExecResult, error) {
 	var result ExecResult
 	if err := s.call(ActionExec, ExecPayload{Command: command, Args: args}, &result); err != nil {
 		return ExecResult{}, err
-	}
-	return result, nil
-}
-
-// Assign records a subagent/worker assignment and returns its receipt.
-func (s *ChoirScope) Assign(taskID, actorProfile, instruction string) (AssignResult, error) {
-	if err := s.mutateDenied("Assign"); err != nil {
-		return AssignResult{}, err
-	}
-	var result AssignResult
-	if err := s.call(ActionAssign, AssignPayload{TaskID: taskID, ActorProfile: actorProfile, Instruction: instruction}, &result); err != nil {
-		return AssignResult{}, err
 	}
 	return result, nil
 }

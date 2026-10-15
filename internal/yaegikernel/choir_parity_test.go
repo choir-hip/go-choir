@@ -83,18 +83,10 @@ func TestChoirParityJailbreakRefused(t *testing.T) {
 	}
 }
 
-// TestChoirParityAssignMessageReceipts is corpus cell 5: assignment and
-// messaging record with receipts on both surfaces.
-func TestChoirParityAssignMessageReceipts(t *testing.T) {
-	broker, issuer, scope, _ := testChoirFixture(t)
-	assigned, err := scope.Assign("task-1", "research", "do it")
-	if err != nil || assigned.AssignmentID == "" || assigned.Status != "dispatched" {
-		t.Fatalf("symbol assign = %+v, %v", assigned, err)
-	}
-	resp := dtoCall(t, broker, issuer, ActionAssign, AssignPayload{TaskID: "task-2", ActorProfile: "research", Instruction: "do it"})
-	if !resp.Success {
-		t.Fatalf("dto assign: %s", resp.Error)
-	}
+// TestChoirParityMessageRetired is corpus cell 5: the retired Message verb
+// refuses on the symbol surface (the dead Assign verb is deleted).
+func TestChoirParityMessageRetired(t *testing.T) {
+	_, _, scope, _ := testChoirFixture(t)
 	// Message is retired (protocol P2c): the symbol still resolves and
 	// refuses, naming the acts to use.
 	if _, err := scope.Message("activation-choir", "note", "hi"); err == nil || !strings.Contains(err.Error(), "choir.ReportPacket") {
@@ -209,8 +201,8 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	exports := scope.ChoirExports()["choir/choir"]
-	// World mutation is absent: research cannot write, exec, or assign.
-	for _, sym := range []string{"WriteFile", "Exec", "Assign"} {
+	// World mutation is absent: research cannot write or exec.
+	for _, sym := range []string{"WriteFile", "Exec"} {
 		if _, ok := exports[sym]; ok {
 			t.Fatalf("researcher exports world-mutation %s", sym)
 		}
@@ -267,9 +259,6 @@ func TestChoirResearchScopeIsReadOnly(t *testing.T) {
 	}
 	if _, err := scope.Exec("echo", nil); err == nil {
 		t.Fatal("researcher Exec allowed")
-	}
-	if _, err := scope.Assign("t", "p", "i"); err == nil {
-		t.Fatal("researcher Assign allowed")
 	}
 	// Messaging is NOT denied for research: Emit must reach the broker (failing
 	// on the nil host handler), never the read-only gate — the gap that
