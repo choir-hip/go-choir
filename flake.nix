@@ -128,8 +128,8 @@
         "x86_64-linux"
       ];
       forDevSystems = nixpkgs.lib.genAttrs devSystems;
-      # nixpkgs tracks nixos-unstable; the locked revision ships Go >= 1.26.2,
-      # which the Dolt v2 graph (driver/v2 v2.2.0 go.mod directive) requires.
+      # nixpkgs tracks nixos-unstable; choirGo (above) is >= 1.26.9, which
+      # clears the Dolt v2 graph's floor (driver/v2 v2.4.1 go.mod: go 1.26.5).
       importPkgs = system:
         import nixpkgs { inherit system; };
       mkDevShell = devSystem:
@@ -163,7 +163,7 @@
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
-        vendorHash = "sha256-aC9g7xO+TmLKCOmmS6TkrtAhMBCYtEY3tgqWgZkv6WI=";
+        vendorHash = "sha256-Odhx6ccFIO3H63WsXaX/WU2PBkZrf1S76RAMJhwpIgM=";
         nativeBuildInputs = [ pkgs.pkg-config ];
         buildInputs = [ pkgs.icu ];
         ldflags = [
