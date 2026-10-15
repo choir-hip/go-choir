@@ -311,6 +311,10 @@ type StagedRelease struct {
 	SourcePatchSHA   string
 	SourceBaseCommit string
 	TemporaryRoot    string
+	// Visual is the capsule's visual evidence, staged beside release/ under
+	// <TemporaryRoot>/evidence/visual/; nil when the capsule captured none
+	// (docs/design/visual-evidence-slice-2026-10-15.md).
+	Visual *VisualEvidence
 }
 
 // FileManifest is a snapshot of a file's metadata at commit time.
