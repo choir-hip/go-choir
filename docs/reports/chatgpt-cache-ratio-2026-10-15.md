@@ -240,3 +240,31 @@ runs, not from a better cache.
 Mutation class of this document: green. Heresy delta: discovered (the
 problem doc's restart hypothesis is not supported by the journal; the journal
 lacks the cache key), introduced none, repaired none.
+
+## 6. Lever 1 implementation (2026-10-15)
+
+Mutation class: orange (a log line in the provider stream parser; no request
+or routing change). Rollback: revert the commit; the log line returns to its
+old shape. Branch: `feat/gateway-cache-key-logging`, not pushed.
+
+The per-call usage line is the `provider: chatgpt stream complete` line in
+`internal/provider/provider.go` (`parseOpenAIStream`). On the chatgpt route it
+gains these fields, after the existing ones:
+
+| field | meaning |
+|---|---|
+| `cache_key` | the `prompt_cache_key` sent. `toolregistry.PromptCacheKey` builds it as `choir-<label>-<sha256(scope)[:n]>-<sha256(system+tools)[:n]>`: the label is a sanitised desk label, both other parts are hashes, no owner, computer or agent id appears. When the caller names no key the sent key falls back to the run's conversation id; a key that does not start with `choir-` is logged as `h:<short sha256>` instead, so an id never reaches the log |
+| `cache_label` | the label part of a `choir-` key (`-` otherwise) |
+| `input_messages` | number of Responses input items sent |
+| `prefix_hash` | short SHA-256 (16 hex chars) of the full request input: instructions, tool definitions, then every input item as JSON, in order. This is what the next call of the thread must extend |
+| `prefix_hash_prev` | the same hash over the input with the last appended turn removed (`-` when there is no earlier model output, i.e. the first call). The last appended turn is the trailing run of non-model items (tool outputs, user messages) plus the model-output block before it (function calls, assistant messages) |
+
+Check for analysis: for a thread, `prefix_hash_prev` of call N must equal
+`prefix_hash` of call N-1. Equal and still a cache miss: the backend routed
+away (lever 2). Unequal: our bytes drifted (lever 3). Hashes only; no prompt
+text, tool output, or argument value is logged. Cost: one SHA-256 pass over the
+request bytes per call (items are marshalled once more for hashing), a few
+thousand calls an hour.
+
+Heresy delta: discovered none, introduced none, repaired none (measurement
+only). Next step is section 5 item 2 after a deploy and two quiet hours.
