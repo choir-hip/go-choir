@@ -130,6 +130,8 @@ func TestLoggableCacheKeyLabelsFailoverKeys(t *testing.T) {
 		{"choir-management-abc123-def456", "management"},
 		{"choir-management-abc123-def456-failover", "management+failover"},
 		{"choir-research_child-abc123-def456-failover2", "research_child+failover2"},
+		{"choir-management-abc123-def456-m1a2b3c", "management+m1a2b3c"},
+		{"choir-texture-abc123-def456-m1a2b3g", "-"},
 		{"conversation-1234", "-"},
 	}
 	for _, c := range cases {

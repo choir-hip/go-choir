@@ -89,10 +89,11 @@ func loggableCacheKey(key string) (string, string) {
 	}
 	if rest, ok := strings.CutPrefix(key, "choir-"); ok {
 		parts := strings.Split(rest, "-")
-		// A model failover appends "-failover" or "-failover<N>"
-		// (toolregistry tool loop); the label carries the suffix so failover
+		// A model failover appends "-m<6 hex>", the tag of the serving
+		// provider/model (toolregistry failoverCacheKey); older builds
+		// appended "-failover<N>". The label carries the suffix so failover
 		// calls are counted apart from keyless ones.
-		if n := len(parts); n == 4 && strings.HasPrefix(parts[3], "failover") && parts[0] != "" {
+		if n := len(parts); n == 4 && parts[0] != "" && (strings.HasPrefix(parts[3], "failover") || isModelTag(parts[3])) {
 			return key, parts[0] + "+" + parts[3]
 		}
 		if len(parts) == 3 && parts[0] != "" {
@@ -101,6 +102,19 @@ func loggableCacheKey(key string) (string, string) {
 	}
 	sum := sha256.Sum256([]byte(key))
 	return "h:" + shortHashSum(sum[:]), "-"
+}
+
+// isModelTag reports whether s is a failover model tag: "m" and six hex digits.
+func isModelTag(s string) bool {
+	if len(s) != 7 || s[0] != 'm' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // logFields renders the extra fields for the usage line; empty for a nil meta.
