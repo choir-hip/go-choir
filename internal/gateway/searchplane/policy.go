@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -206,4 +207,39 @@ func envFloat(name string, fallback float64) float64 {
 		return fallback
 	}
 	return v
+}
+
+// failureStatusPattern finds the HTTP status the adapters put in an error
+// ("status 402 Payment Required: ...").
+var failureStatusPattern = regexp.MustCompile(`\bstatus (\d{3})\b`)
+
+// failureStagePattern is an adapter's failing stage: the lowercase words
+// before the first colon ("parse response", "http request").
+var failureStagePattern = regexp.MustCompile(`^([a-z]+(?: [a-z]+){0,2}):`)
+
+// FailureFields names why a provider call failed for the gateway log: the
+// HTTP status ("-" when none was received) and the adapter stage that
+// failed ("http_status" for a non-2xx answer, "parse_response",
+// "http_request", "timeout", ... or "other"). Both come from a fixed
+// shape (lowercase words, three digits), so the log line never carries a
+// key, a query or a response body.
+func FailureFields(err error) (status, stage string) {
+	if err == nil {
+		return "-", "none"
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return "-", "timeout"
+	}
+	msg := err.Error()
+	status = "-"
+	if m := failureStatusPattern.FindStringSubmatch(msg); m != nil {
+		status = m[1]
+	}
+	if strings.HasPrefix(msg, "status ") && status != "-" {
+		return status, "http_status"
+	}
+	if m := failureStagePattern.FindStringSubmatch(msg); m != nil {
+		return status, strings.ReplaceAll(m[1], " ", "_")
+	}
+	return status, "other"
 }

@@ -148,7 +148,8 @@ func (c *SearchClient) ensurePlane() error {
 		// window after it began; that call needs its own timeout.
 		Bound: c.plane.RequestTimeout() + paceWait + c.plane.EscalationWindow() + time.Second,
 	})
-	log.Printf("gateway: search routing=%s caps=[%s]", c.plane.Routing(), searchplane.FormatDailyCaps(cfg.DailyCaps))
+	log.Printf("gateway: search routing=%s caps=[%s] monthly=[%s] rps=[%s]", c.plane.Routing(), searchplane.FormatDailyCaps(cfg.DailyCaps),
+		searchplane.FormatMonthlyQuotas(cfg.MonthlyQuotas), searchplane.FormatProviderRPS(cfg.MinInterval))
 	c.cacheShared = cfg.CacheShared
 	c.seen = newSearchURLSeen(24*time.Hour, searchSeenPerComputer)
 	return nil

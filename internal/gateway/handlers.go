@@ -975,7 +975,11 @@ func (h *Handler) HandleSearchHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	daily := map[string]SearchDailyCalls{}
 	for _, c := range counts {
-		daily[c.Provider] = SearchDailyCalls{Day: c.Day, Calls: c.Calls, Cap: c.Cap, Tier: string(c.Tier.Tier)}
+		entry := SearchDailyCalls{Day: c.Day, Calls: c.Calls, Cap: c.Cap, Tier: string(c.Tier.Tier)}
+		if m := c.Monthly; m != nil {
+			entry.Monthly = &SearchMonthlyPace{PeriodStart: m.PeriodStart, PeriodEnd: m.PeriodEnd, UsedBeforeToday: m.Used, Target: m.Target, DaysLeft: m.DaysLeft, DayCap: m.Cap}
+		}
+		daily[c.Provider] = entry
 	}
 	writeGatewayJSON(w, http.StatusOK, map[string]any{"provider_health": out, "daily_calls": daily})
 }
@@ -987,6 +991,22 @@ type SearchDailyCalls struct {
 	Calls int    `json:"calls"`
 	Cap   int    `json:"cap"`
 	Tier  string `json:"tier"`
+	// Monthly is the provider's monthly-allowance pace (Keenable), which
+	// sets Cap. Additive.
+	Monthly *SearchMonthlyPace `json:"monthly,omitempty"`
+}
+
+// SearchMonthlyPace is a monthly-quota provider's pace for today: the
+// billing period, the calls counted in it before today, the period's
+// target and today's cap, (target - used) / days_left
+// (docs/problems/search-throughput-keenable-underused-2026-10-15.md).
+type SearchMonthlyPace struct {
+	PeriodStart     string `json:"period_start"`
+	PeriodEnd       string `json:"period_end"`
+	UsedBeforeToday int    `json:"used_before_today"`
+	Target          int    `json:"target"`
+	DaysLeft        int    `json:"days_left"`
+	DayCap          int    `json:"day_cap"`
 }
 
 type searchHealthResetRequest struct {
