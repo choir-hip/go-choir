@@ -138,8 +138,9 @@ What this means for us:
   [E, `grep -rnE "INDEX[^;]*DESC"` over `internal/`, `cmd/`, `scripts/`: only
   `internal/store/texture.go`]. A 2.4.2 server running our existing platform
   and corpus DDL writes the same bytes an old one does. Downgrade to 2.1.9 is
-  expected to work. **Not empirically verified against 2.1.9 itself** (upstream
-  tests start at v2.0.0; a local round trip is recorded in section 9).
+  expected to work. **Not verified against the 2.1.9 server itself** (upstream
+  tests start at v2.0.0; the local round trip in section 9 covers the embedded
+  module pair, not the server binary).
 - **Guest embedded stores.** `internal/store/texture.go` creates
   `idx_texture_revs_doc_created`, `idx_agent_evidence_owner_agent`,
   `idx_agent_evidence_owner_created` and `idx_texture_revs_doc_version` with
@@ -275,11 +276,71 @@ version and then downgrading is the repair path.
 5. Later, separately: `dolt_squash_history` in place of the hand-rolled
    squash, more than one embedded connection, a timeout in `config.yaml`.
 
-## 9. Local verification (recorded after Phase 2)
+## 9. Local verification (Phase 2, branch `ops/dolt-upgrade`) [E]
 
-Appended in a follow-up commit: build result, focused tests, and the local
-old/new round trip (a database created by the pinned module read by the new
-module, and the reverse, with and without a `DESC` index).
+Commits on the branch, in order: the research doc; the Nix lane for the
+server binary; guest indexes made ascending; the embedded module bump.
+
+**Nix (evaluation only, nothing built).** `nix eval` on
+`nixosConfigurations.go-choir-b`: `pkgs.dolt.version = 2.4.2`,
+`src.rev = refs/tags/v2.4.2`, `go-choir-platform-dolt` ExecStart is
+`/nix/store/h6amjbl3...-dolt-2.4.2/bin/dolt sql-server ...`. The source hash
+was re-derived independently (`nix flake prefetch github:dolthub/dolt/v2.4.2`,
+narHash equal). The vendor hash is confirmed by the fixed-output path
+`dolt-2.4.2-go-modules`, which exists in cache.nixos.org (Hydra built it from
+the same hash). The override retires itself when the base nixpkgs reaches
+2.4.2 (`versionAtLeast` guard, same pattern as `choirGo`).
+
+**Go build.** `GOMAXPROCS=2 GOFLAGS=-p=2 go build ./...` is clean after
+`go get ...@9c835f4dc797 driver/v2@v2.4.1` and `go mod tidy`; no source change
+was needed. The bump also moves non-Dolt direct dependencies because Dolt's own
+`go.mod` requires them: `x/crypto` 0.52 to 0.55, `x/net` 0.55 to 0.58, `x/sys`
+0.45 to 0.47, `x/text` 0.37 to 0.41 (auth, proxy and others compile against the
+new ones), plus grpc 1.79 to 1.83 and the OpenTelemetry/Google Cloud
+indirects. `go.mod`'s `go` line is now 1.26.5.
+
+**Vendor hash.** `commonGoArgs.vendorHash` had to change. Method: reproduce the
+filtered source tree of `goServicesSrc` (cmd services plus `internal`, no
+`*_test.go`), run `go mod vendor`, and `nix hash path --type sha256 --sri` the
+vendor directory. On the pre-bump `go.mod`/`go.sum` this printed
+`sha256-aC9g7xO+TmLKCOmmS6TkrtAhMBCYtEY3tgqWgZkv6WI=`, exactly the committed
+value, so the method is sound; on the new files it prints
+`sha256-Odhx6ccFIO3H63WsXaX/WU2PBkZrf1S76RAMJhwpIgM=` (committed). Not built
+under Nix here; the first CI run is the confirmation (the "fix the hash from
+the first Nix build error" fallback applies).
+
+**Focused tests (new module, Mac, one package at a time), all passing:**
+`internal/store` (`Texture|ListEvidence`, then
+`DoltGC|PeriodicDoltGC|GraphStore|Fresh|Migration|Fingerprint|ScanCost`),
+`internal/objectgraph` (whole package, covers the STORED generated columns over
+`JSON_EXTRACT`), `internal/doltbatch`, `internal/gomemlimit`,
+`internal/computerversion`, `internal/projectionbase` (whole package, includes
+the `DOLT_GC('--full')` compaction), `internal/platform`
+(`TestRunArtifactGCDryRunAndActive`, `TestRunArtifactGCOGLiveSetReadsCorpus`),
+`internal/agentcore`
+(`TestStandingConsensusEndToEndFreezeVerifyAcceptApplyWithoutPerCandidateOwnerAct`).
+Not run: the full `internal/agentcore` and `internal/textureowner` packages
+(per the repo rule), and anything against Node B or a real Dolt server.
+
+**Round trip between the pinned and the new embedded module** (a throwaway
+program, deleted after use, built twice with `-modfile` and run on copies of
+the data directories; the same DDL shapes as `texture.go`):
+
+| Test | Result |
+|---|---|
+| store created by OLD (DESC DDL), read, written and re-`CREATE INDEX IF NOT EXISTS ... DESC` by NEW | works; `SHOW CREATE TABLE` still shows ascending keys, the statements are no-ops |
+| the same store then read by OLD after NEW wrote to it | works (the written row is visible) |
+| OLD printing `SHOW CREATE TABLE` for its own DESC DDL | prints the keys **without** `DESC`: confirms older Dolt silently dropped `DESC` |
+| store created by NEW with the old DESC DDL | `SHOW CREATE TABLE` shows ``(`doc_id`,`created_at` DESC)``; NEW reads and writes it |
+| that NEW-created DESC store read by OLD | **fails: `Error 1105: table has unknown fields`** (the one-way door, confirmed) |
+| store created by NEW with the ascending DDL (this branch), read and written by OLD, then read by NEW | works both ways |
+| OLD-created store: `DOLT_COMMIT`, `DOLT_GC()`, `DOLT_GC('--full')` by NEW, then read by OLD | works |
+| NEW-created store: the same maintenance by OLD, then read by NEW | works |
+
+The server binary was not run locally (no 2.1.9 CLI on the Mac); the embedded
+module pair exercises the same storage code (`go/store/nbs`, `go/store/prolly`,
+schema serialization). The remaining unchecked path is the actual 2.1.9 server
+reading a 48 GB store written by 2.4.2; the backup is the answer to that.
 
 ## Residual unknowns
 
@@ -288,8 +349,8 @@ module, and the reverse, with and without a `DESC` index).
 - Open-time cost of the 48 GB Store A on 2.4.2.
 - Whether upstream's #11775 (`dolt fsck` panic on a broken index) is fixed in
   a release after 2.4.2; it was still open at the time of writing.
-- 2.1.9 to 2.4.2 round trip with the actual 2.1.9 binary (the local check uses
-  the embedded module pair; see section 9).
+- 2.1.9 to 2.4.2 round trip with the actual 2.1.9 server binary on real data
+  (the local check uses the embedded module pair; see section 9).
 
 ## Heresy delta
 
