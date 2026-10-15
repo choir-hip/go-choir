@@ -40,7 +40,7 @@
 // Scenarios: story (default) | crash | management | research | paper |
 // engineering. The engineering scenario is C1e's cut-1 self-development
 // drill (see engineeringScenario); its flags:
-//   --scenario engineering [--change static|go] [--timeout-min 15] [--apply-min 10]
+//   --scenario engineering [--change static|go|go-served] [--timeout-min 15] [--apply-min 10]
 //     [--restore-min 12] [--require-served] [--skip-export] [--keep-computer]
 //
 // Exit: 0 bundle kept with the load present (or the scenario's claim held);
@@ -87,7 +87,7 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // "crash" proves restart closure only: crash at the first run in flight,
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
-const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go]';
+const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served]';
 if (flag('help')) {
   console.log(USAGE);
   process.exit(0);
@@ -100,12 +100,21 @@ if (!['story', 'crash', 'management', 'research', 'paper', 'engineering'].includ
 // --change (engineering scenario): static asks for a static frontend file,
 // which touches no Go input; go asks for a Go file and its test, so Freeze
 // must build bin/autoputer and the desk must run the build and the test as
-// capsule jobs (docs/design/capsule-long-exec-2026-10-15.md §7).
+// capsule jobs (docs/design/capsule-long-exec-2026-10-15.md §7). go-served
+// is Station A's probe (P5, docs/reports/p5-host-build-layered-apply-2026-10-15.md):
+// a guest route GET /api/selfdev-probe that answers the run's nonce, which
+// only a binary built from the patched source can serve. The claim adds:
+// the route does not serve the nonce before apply, serves it after apply
+// from a layered release whose code_commit is the serving build's commit,
+// and stops serving it after the restore (the restore restarts into the
+// pre-apply release).
 const CHANGE = arg('change', 'static');
-if (!['static', 'go'].includes(CHANGE)) {
-  console.error(`unknown --change ${CHANGE} (static | go)`);
+if (!['static', 'go', 'go-served'].includes(CHANGE)) {
+  console.error(`unknown --change ${CHANGE} (static | go | go-served)`);
   process.exit(2);
 }
+const GO_CHANGE = CHANGE === 'go' || CHANGE === 'go-served';
+const PROBE_ROUTE = '/api/selfdev-probe';
 // The engineering scenario's bounded waits (fast-loop defaults): the
 // conversation through the owner-decision boundary is bounded by
 // --timeout-min; the apply (approval to applied, with its planned restart)
@@ -116,8 +125,8 @@ if (!['static', 'go'].includes(CHANGE)) {
 const APPLY_MIN = Number(arg('apply-min', '10'));
 const RESTORE_MIN = Number(arg('restore-min', '12'));
 const REQUIRE_SERVED = flag('require-served');
-if (REQUIRE_SERVED && CHANGE === 'go') {
-  console.error('--require-served checks a static file; a --change go drill serves none');
+if (REQUIRE_SERVED && GO_CHANGE) {
+  console.error('--require-served checks a static file; a --change go drill serves none (go-served checks its own route)');
   process.exit(2);
 }
 const CRASH_QUIET_MS = Number(arg('quiet-s', '150')) * 1000;
@@ -1111,6 +1120,23 @@ const OP_ORDER = ['requested', 'executing', 'frozen', 'verified', 'awaiting_appr
 const opAtLeast = (state, floor) => OP_ORDER.indexOf(state) >= OP_ORDER.indexOf(floor);
 
 function engineeringStory(token) {
+  if (CHANGE === 'go-served') {
+    const pkg = 'internal/selfdevprobe';
+    return [
+      `Change this computer itself: add a guest HTTP route GET ${PROBE_ROUTE} that answers 200 with the JSON object {"nonce":"${token}"}.`,
+      `Add one Go package ${pkg} to the platform workspace: ${pkg}/selfdevprobe.go declares package selfdevprobe, const Nonce = "${token}",`,
+      'and func Handle(w http.ResponseWriter, r *http.Request) that writes {"nonce": Nonce} as application/json (405 for any method but GET);',
+      `${pkg}/selfdevprobe_test.go is a test that fails unless Handle answers 200 with that nonce.`,
+      `Register the route in internal/apihandler/routes.go next to /api/runtime/observability: s.HandleFunc("${PROBE_ROUTE}", selfdevprobe.Handle).`,
+      'Change nothing else. Deterministic checks, to run in the capsule before freezing, from /workspace/platform:',
+      `go test ./${pkg}/ and go vet ./internal/apihandler/.`,
+      'This change touches Go, so the release tree needs bin/autoputer built from the workspace source as well as the frontend.',
+      'Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision,',
+      'and incorporate management\'s answer when it arrives.',
+      'Management: Cast it to engineering; engineering makes the change, runs the check, builds the release tree, freezes the candidate with choir.Freeze and completes;',
+      'then Verify the frozen bundle that engineering\'s final Report names, and answer this request.',
+    ].join(' ');
+  }
   if (CHANGE === 'go') {
     const pkg = 'internal/drillmark';
     return [
@@ -1175,7 +1201,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     mode_propose_only: null, texture_cast_to_management: null, texture_casts_to_management: [], engineering_casts: [], engineering_final_reports: [],
     operation: null, operation_states: [], verify: null, decision_boundary: null,
     pre_apply_checkpoint: null, owner_approval: null, boots: [], unreachable: [], applied: null, route_receipt: null,
-    restore: null, served: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
+    restore: null, served: {}, probe: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
   };
   out.drill = { label: out.label, scenario: 'engineering', change: CHANGE, token, claim, gaps, note: [] };
   let reached = 'mint';
@@ -1194,6 +1220,22 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     const r = await c.surface(markerPath);
     claim.served[tag] = { at: iso(), status: r.status, served: r.status === 200 && r.text.trim() === token, error: r.error || null };
     phase('served_check', { tag, ...claim.served[tag] });
+  };
+  // probe (go-served): the new guest route and the effective release, read
+  // through product routes. served means 200 with this run's nonce; layered
+  // means the running release is a layered one whose code_commit is the
+  // serving build's commit (the host-built binary is the one answering).
+  const probe = async (tag) => {
+    const r = await c.api(PROBE_ROUTE, 'GET', undefined, 20_000);
+    const obs = await c.api('/api/runtime/observability', 'GET', undefined, 15_000);
+    const eff = obs.body?.effective_release || null;
+    const build = obs.body?.build?.commit || null;
+    claim.probe[tag] = {
+      at: iso(), status: r.status, served: r.status === 200 && r.body?.nonce === token, error: r.body?.error || r.error || null,
+      build, effective_release: eff, layered_serving: Boolean(eff?.layered && eff.code_commit && eff.code_commit === build),
+    };
+    phase('probe_check', { tag, ...claim.probe[tag] });
+    return claim.probe[tag];
   };
   const inbox = async (id) => {
     const r = await c.api(`/api/inboxes/${encodeURIComponent(id)}/records?limit=1000`);
@@ -1241,6 +1283,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   phase('mode_propose_only', claim.mode_propose_only);
   at('mode');
   await served('pre_apply');
+  if (CHANGE === 'go-served') await probe('pre_apply');
 
   const story = await submitPrompt(c, engineeringStory(token), 'engineering', deadline);
   out.trajectory_id = story.body.trajectory_id;
@@ -1470,6 +1513,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   await readObligations('post_apply');
   claim.build_post_apply = (await c.api('/api/runtime/observability', 'GET', undefined, 15_000)).body?.build?.commit || null;
   await served('post_apply');
+  if (CHANGE === 'go-served') await probe('post_apply');
   const census = await c.api('/api/runtime/census', 'GET', undefined, 30_000);
   claim.census = census.status === 200 ? { counts: census.body?.counts || {}, objects: (census.body?.objects || []).length, truncated: Boolean(census.body?.truncated) } : { status: census.status };
 
@@ -1512,6 +1556,19 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     claim.restore.operation_state_after = after?.state || null;
     claim.build_post_restore = (await c.api('/api/runtime/observability', 'GET', undefined, 15_000)).body?.build?.commit || null;
     await served('post_restore');
+    if (CHANGE === 'go-served') {
+      // The restore restarts the runtime into the restored release a few
+      // seconds after it answers (restart_scheduled); wait for the probe to
+      // stop serving the nonce, through the unreachable window.
+      claim.restore.exec_changed = r?.body?.exec_changed === true;
+      claim.restore.restart_scheduled = r?.body?.restart_scheduled === true;
+      const probeDeadline = Date.now() + RESTORE_MIN * 60_000;
+      let p = await probe('post_restore');
+      while (Date.now() < probeDeadline && (p.served || p.status === 0 || p.status >= 500)) {
+        await sleep(5_000);
+        p = await probe('post_restore');
+      }
+    }
     gap('restore', 'none', 'no product route serves the computer\'s projection head after a restore; corpusd\'s head is append-only (a restore is a forward event), so the landing is read from the restore report\'s checkpoint binding');
   } else if (op.state === 'applied') {
     gap('restore', 'POST /api/computers/{id}/lifecycle/restore', 'not attempted: no pre-apply checkpoint to restore to');
@@ -1550,7 +1607,7 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
       && preHead?.effective_event_head && claim.pre_apply_checkpoint.effective_event_head === preHead.effective_event_head
       && claim.applied?.effective_head !== preHead.effective_event_head),
   };
-  if (CHANGE === 'go') {
+  if (GO_CHANGE) {
     // The completing assignment ran capsule jobs that ended done: a build
     // of bin/autoputer and a go test (direct or through sh -c).
     const done = doneJobs(claim.jobs);
@@ -1559,6 +1616,17 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
   }
   const servedOK = claim.served.pre_apply?.served === false && claim.served.post_apply?.served === true && claim.served.post_restore?.served === false;
   if (REQUIRE_SERVED) checks.served_change_then_restored = servedOK;
+  if (CHANGE === 'go-served') {
+    // Station A: the route exists only in the host-built binary; it serves
+    // after apply from a layered release whose binary is the one answering,
+    // and the restore takes it away again.
+    checks.probe_absent_before_apply = claim.probe.pre_apply?.served === false && claim.probe.pre_apply?.status !== 0;
+    checks.probe_served_after_apply = claim.probe.post_apply?.served === true;
+    checks.layered_release_serving = claim.probe.post_apply?.layered_serving === true;
+    checks.restore_restarted_into_pre_apply = claim.restore?.restart_scheduled === true;
+    checks.probe_gone_after_restore = claim.probe.post_restore?.served === false && claim.probe.post_restore?.status !== 0
+      && claim.probe.post_restore?.effective_release?.layered !== true;
+  }
   out.acceptance = {
     scenario: 'engineering',
     claim: 'management Casts engineering on records; engineering Freezes; management Verifies the bundle digest engineering\'s final Report names; the owner approves; the materializer applies through one planned restart that resumes once; a restore lands on the pre-apply checkpoint',
