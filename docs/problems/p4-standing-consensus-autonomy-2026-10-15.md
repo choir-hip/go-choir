@@ -7,7 +7,10 @@ Date: 2026-10-15. Source: P4 of
 (§3.2, §6 S2). Built on S1
 ([effect-accepted-admitted-without-authority-2026-10-15.md](effect-accepted-admitted-without-authority-2026-10-15.md),
 branch `feat/s1-owner-act-receipts`, 890fd42d6 and 8a71922a7), whose
-corpusd gate refuses `qualified-consensus:` "until S2".
+corpusd gate refuses `qualified-consensus:` "until S2", and on P5
+([p5-host-build-layered-apply-2026-10-15.md](../reports/p5-host-build-layered-apply-2026-10-15.md),
+branch `feat/p5-host-build-layered-apply`, head e5a199bb7), whose corpusd
+host build service builds the release a computer applies.
 
 Owner rulings this design follows:
 
@@ -22,9 +25,18 @@ Owner rulings this design follows:
 - **The proxy signs owner acts** (owner notes §19): the standing arm is an
   S1 owner-act receipt.
 
-Status: **design and failure modes recorded; build follows on branch
-`feat/p4-standing-consensus`** (not pushed, not deployed). This commit is
-docs only; the code commit cites it.
+Status: **reworked on P5** (2026-10-15, landing order S1 → P5 → P4 →
+P6-P8). The first build (branch `feat/p4-standing-consensus`, 5ceead609)
+added a second host service, `corpusd host-builder` on 127.0.0.1:8089 with
+its own key, that only checked the declared patch applies; the release the
+computer applied was still the capsule's. This rework, on branch
+`feat/p4-standing-consensus-on-p5` (P5 with S1 merged in), drops that
+service: the `capsule-verifier` seat is cast by corpusd itself, on the P5
+host build of the operation, so the vote binds the bytes the computer
+applies. One host builder, not two. Sections 2, 3 and 5 below and the
+failure modes, tests, ceremony and residuals are the reworked design; the
+"Build" section, added with the code, names every change against the first
+build. This commit is docs only; the code commit cites it.
 
 ## The problem
 
@@ -60,11 +72,12 @@ trusted:
    today, given 3 and 4, and it means the consensus path is closed in
    enforce and unaccountable in observe.
 
-## Design (P4 as built)
+## Design (P4 on P5)
 
 Mutation class **red**: run acceptance (canonical `effect_accepted`
-admission), approval authority (a standing owner grant), a new host key and
-signing surface (the host builder's ballot signer), Trace/evidence (signed
+admission), approval authority (a standing owner grant), a new use of the
+platform-control key (the host's ballot on its own build), the order and
+choice of the P5 host build under a standing arm, Trace/evidence (signed
 ballots and decision receipts).
 
 ### 1. The standing mode: `standing_consensus`
@@ -108,24 +121,44 @@ corpusd, nonce, not_after}`. Domain separation is by (`receipt_kind`,
 
 | seat | signer domain | issuer | boundary |
 |---|---|---|---|
-| `capsule-verifier` | `host-builder` | `choir-builder` | a host service outside every guest |
+| `capsule-verifier` | `platform-control` | `choir-host-build` | corpusd's P5 host build service, outside every guest |
 | `independent-reviewer` | `guest-core` | `choir-management` | the computer's guest-core realization key, `desk: management` |
 
 So the guest can sign at most one of the two seats the policy's quorum
 needs, and the guest alone cannot reach quorum.
 
-- **The `capsule-verifier` seat (outside the guest).** A new host service,
-  the host builder's ballot signer (`internal/hostbuilder`, run as
-  `corpusd host-builder`, its own systemd unit and its own Ed25519 key under
-  `LoadCredential=`; corpusd holds only the public key). It receives the
-  frozen bundle's bytes and its `source.patch`, and checks, itself: the
-  bundle's digest is the subject's `bundle_digest`; the bundle names a
-  source patch whose sha256 is the patch's; the patch applies cleanly at
-  the bundle's base commit on the host's own copy of the platform history
-  (fetched from the platform's git remote, never from the guest); then the
-  declared check command, if one is configured, passes in that patched tree.
-  It votes `accept` only when every check passes, `reject` otherwise, and
-  signs the ballot with the evidence refs it checked.
+- **The `capsule-verifier` seat (outside the guest): the host's vote on
+  its own build.** corpusd casts this ballot itself, in process, from the
+  P5 host build job of this operation, and signs it with its
+  platform-control key (signer domain `platform-control`, issuer
+  `choir-host-build`, kind `ConsensusBallot`). No guest holds that key (a
+  guest holds only its public half, to verify modes, offers and host
+  builds), and the guest-core signer cannot sign that domain. The job is
+  named by P5's own identity, derived by corpusd, not taken from the
+  guest: computer (the route's), operation (the request's), bundle digest
+  (the subject's, checked against the bundle bytes), base commit and source
+  patch sha256 (read from those bundle bytes), and the booted base image
+  digest (the request's; the host build refused any base that was not its
+  deployed image). The vote:
+  - job `done` and its result verifies under platform-control
+    (`hostbuild.VerifyJob`): `accept`, with evidence refs naming the job
+    id, the result digest, the closure digest, the builder receipt digest
+    and the code commit;
+  - job `failed` (any P5 reason code: recipe refused, patch does not apply,
+    build failed or timed out, base moved, not admitted, interrupted by a
+    host restart): `reject`, with the reason code. P5 fails the operation
+    for every one of these under an owner decision too;
+  - job `queued` or `running`: no ballot yet; the poster answers
+    "pending" and mints nothing;
+  - no job, or a job for another operation, bundle, patch or base: no
+    ballot; the poster refuses.
+
+  Every standing-consensus candidate is host-built, frontend-only ones
+  included (P5's G2 keeps frontend-only candidates off the host builder
+  under owner decisions; under a standing arm the host must build what it
+  votes on, so G2 does not apply). A candidate with no source patch cannot
+  be host-built and so cannot be accepted autonomously; the owner's
+  `accept_once` still can.
 - **The `independent-reviewer` seat (inside the guest).** Management's
   Verify verdict, which is what moves an operation to `awaiting_approval`.
   The guest runtime signs it through the guest-core signer
@@ -152,8 +185,10 @@ it after management's Verify passes, under a standing mode. corpusd:
    sha256 of the bundle bytes the request carries;
 3. verifies the reviewer ballot (guest-core, pinned key, `desk:
    management`, this subject, this policy, accept or reject);
-4. asks the host builder for the `capsule-verifier` ballot and verifies it
-   against the pinned `host-builder` key;
+4. reads this operation's P5 host build job (identity derived as in §2)
+   from its own host build service, casts the `capsule-verifier` ballot on
+   it, signs it with platform-control, and verifies it like any other
+   ballot (pending: answers 409 `pending: true`, mints nothing);
 5. builds the `ConsensusBundle` (seat manifest from the policy, the subject,
    a `PolicySelectionReceipt` bound to the standing arm's ModeReceipt digest
    and generation, the two attestations) and reduces it with
@@ -162,11 +197,13 @@ it after management's Verify passes, under a standing mode. corpusd:
    platform-control: `{computer_id, operation_id, subject, subject_digest,
    policy_id, policy_digest, qualified_consensus_receipt (the reducer's),
    ballot_receipt_digests, standing_mode_receipt_digest,
-   standing_generation, computer_tier, not_after}`, with `not_after` the
+   standing_generation, computer_tier, host_build: {job_id,
+   result_digest, closure_digest, builder_receipt_digest, code_commit},
+   not_after}`, with `not_after` the
    earlier of the policy's 30-minute decision window and the standing
    expiry; records it in `consensus_decisions`; returns it;
-7. on a signed `reject` (dissent), returns 409 with `dissent: true` and the
-   ballot digests, and mints nothing.
+7. on a signed `reject` (dissent: the host build failed), returns 409 with
+   `dissent: true`, the reason and the ballot digests, and mints nothing.
 
 **Why the poster does not append the event itself.** The guest's appender
 is the single writer of its chain projection (standing question 5: one
@@ -207,26 +244,53 @@ and observe would admit exactly the forgery this station exists to stop.
 
 After management's Verify reduction moves an operation to
 `awaiting_approval` (`internal/agentcore/rlm_reduce.go`, the Verify
-intent), the runtime starts one bounded attempt in the background: read the
-mode (standing, verified), read the head, build the subject, sign the
-reviewer ballot, POST the poster with the bundle and its patch, and on a
-decision run the ordinary decision path with the decision receipt (a new
-`consensus_decision` field on the decision request and a
-`standing_consensus` case in the handler). On `dissent: true` it appends
-`effect_rejected` with the dissent as the reason (rejection is always
-allowed under a standing mode). On any other failure it records the reason
-on the operation and stops: **no boot-time or reconcile-time resumer** (the
-CLAUDE.md restart rule). A crash mid-attempt leaves the operation at
-`awaiting_approval`, where the owner's `accept_once` still works.
+intent), the runtime starts one bounded attempt in the background (90
+minutes: P5's 20-minute queue deadline plus its 40-minute build timeout,
+with margin):
+
+1. read the mode (standing, verified under platform-control);
+2. **submit the P5 host build now, before any decision** (P5 builds after
+   an owner's accept; under a standing arm the host's vote is on the build,
+   so the build comes first), through the same guest path the materializer
+   uses (`selfDevelopmentHostBuild`), and poll it until it is terminal. A
+   done build is verified and staged where the materializer will find it;
+3. if the guest could not get a host-recorded outcome (no source patch,
+   quota exhausted, host builder unconfigured, a done build the guest
+   cannot verify or stage), stop with the reason on the operation; the
+   operation stays at `awaiting_approval` for the owner;
+4. otherwise (done, or failed with a host reason) read the head, build the
+   subject, sign the reviewer ballot, POST the poster with the bundle bytes,
+   the booted base digest and the job id; on a decision run the ordinary
+   decision path with the decision receipt (a `consensus_decision` field on
+   the decision request and a `standing_consensus` case in the handler); on
+   `dissent: true` append `effect_rejected` with
+   `AuthorityRef: consensus-dissent:<host ballot digest>`; on `pending`
+   wait and ask again; on a moved head re-read and ask again.
+
+**The materializer applies only the decided build.** An operation whose
+decision is a consensus decision is applied only as the P5 host-built
+layered release, Go-touching or not. The materializer derives the same job
+request from the bundle and the booted base, so it names the same
+deterministic job id the poster voted on, and P5's `VerifyJob` and blob
+re-hash bind what it stages to that signed result. It never falls back to
+the capsule-built runtime files for a consensus decision: no host build, no
+apply (the operation fails, as P5's G3).
+
+No **boot-time or reconcile-time resumer** (the CLAUDE.md restart rule). A
+crash mid-attempt leaves the operation at `awaiting_approval`, where the
+owner's `accept_once` still works (a host build already done is reused by
+its job id).
 
 ## Failure modes the build must handle
 
 The guest cannot forge quorum:
 
 1. a `capsule-verifier` ballot signed by guest-core (or any domain but
-   `host-builder`) is refused;
-2. a `host-builder` ballot signed by a key other than the pinned one, or
-   unsigned, or with a broken signature, is refused;
+   `platform-control`, or with an issuer other than `choir-host-build`) is
+   refused, and the guest-core signer refuses to sign that seat at all;
+2. a `capsule-verifier` ballot signed by a key other than corpusd's
+   platform-control key, or unsigned, or with a broken signature, is
+   refused;
 3. a reviewer ballot signed by a guest-core key other than the pinned one
    is refused;
 4. a ballot whose subject digest, policy digest, computer or operation is
@@ -234,14 +298,15 @@ The guest cannot forge quorum:
 5. a ballot past `not_after`, or for another audience, is refused;
 6. two ballots for one seat, or a ballot for the author seat, does not
    count toward quorum (the reducer's recusal and duplicate rules);
-7. the host builder's `reject` is dissent: no decision is minted;
+7. the host's `reject` (a failed host build) is dissent: no decision is
+   minted, and the guest records a rejection citing the host ballot;
 8. an `effect_accepted` with `qualified-consensus:<d>` where `d` is a
    guest-reduced receipt, a random digest, or a decision for another
    operation, bundle, head or computer, is refused at append;
 9. a decision used twice (two events) is refused the second time;
 10. the request's bundle bytes do not hash to the subject's bundle digest,
-    or the patch's sha256 is not the one the bundle names, or the bundle
-    names no patch: the host builder refuses (no accept ballot).
+    or the bundle names no source patch or base commit: the poster refuses
+    (no host ballot).
 
 An expired window stops autonomy:
 
@@ -271,39 +336,70 @@ Other authority:
     mode needs a decision receipt whose standing digest is the current
     ModeReceipt's.
 
+The host's vote binds the applied bytes (rework on P5):
+
+24. no host build job for the identity corpusd derives (computer, operation,
+    bundle, the bundle's base commit and patch sha, booted base): no host
+    ballot, the poster refuses; a job id the guest names that is not the
+    derived one is refused;
+25. a job for another computer is invisible (P5's H13), so a guest cannot
+    point the poster at another computer's build;
+26. a job built from a patch other than the bundle's, or for another
+    operation or bundle, never matches the derived identity;
+27. a queued or running job yields no ballot and no decision (`pending`);
+28. a failed job yields a signed `reject` with its P5 reason code
+    (dissent), never an accept;
+29. a done job whose result does not verify under platform-control is
+    refused (no ballot);
+30. the decision names the job and its result digest; the guest refuses to
+    record a decision whose host build job is not the one it built;
+31. the materializer applies a consensus-decided operation only as the host
+    build of that job (same deterministic job id, P5 `VerifyJob`, blob
+    re-hash), frontend-only candidates included; with no host build it
+    fails the operation and never applies the capsule-built files;
+32. there is no second host service, no host-builder key and no port 8089:
+    hostauth's internal ports are what P5 and S1 left;
+33. host build quota (P5 H21) bounds autonomy too: a rejected or failed
+    standing candidate still spent one of the computer's daily builds.
+
 Still allowed (no regression):
 
 21. `accept_once` arm, consume and admission (S1);
 22. platform update offers (S1);
-23. the S1 owner-act observe/enforce behavior for every other mode.
+23. the S1 owner-act observe/enforce behavior for every other mode;
+34. P5 under owner decisions: Go-touching candidates build after the
+    accept, frontend-only candidates stay on the plain path (G2).
 
 ## Tests (written before the code they test)
 
 - `internal/decisionpolicy`: signed ballot mint and verify; failure modes
-  1-5 at the verifier.
-- `internal/hostbuilder`: the patch checker on a real temporary git repo
-  (applies at base; refuses a patch that does not apply; refuses a bundle
-  digest or patch digest mismatch; refuses a bundle with no patch), and the
-  service signs `accept` and `reject` ballots that verify against its key.
+  1-5 at the verifier, with the `capsule-verifier` seat admitting only
+  `platform-control` / `choir-host-build`.
 - `internal/platform`: standing arm rules (14-19), expiry (11), the poster
-  (quorum, 1-7, 10), the gate (8, 9, 12, 13, 17), on the embedded Dolt
-  store, as S1's tests do.
+  (quorum on a done host build, 1-7, 10, 24-29), the gate (8, 9, 12, 13,
+  17), on the embedded Dolt store with an in-memory job table standing in
+  for P5's service.
 - `internal/proxy`: a standing arm on a non-test computer is refused (15);
   on a test computer the receipt's subject carries the tier.
+- `internal/receiptsigner`: guest-core signs only the reviewer seat (1).
 - `internal/agentcore`, end to end in one process: the guest runtime wired
   as production (store, appender, real updater engine, verifier, route
-  ledger) against real corpusd components on embedded Dolt (mode CAS, event
-  CAS with the gate, the poster, the host builder's service with its git
-  checker on a real repository). The owner arms once; a candidate is frozen
-  into the updater store with a real `source.patch`; management's Verify
-  runs (`recordSelfDevelopmentVerdict`, real finalization); the driver asks
-  the poster; corpusd admits the `effect_accepted`; the materializer
-  applies with one planned restart. Assertions: the decision event's
-  authority is `qualified-consensus:<d>` with `d` a row corpusd minted, no
-  `external-owner:` anywhere, the operation reaches `applied`. A second
-  candidate in the same window applies with no further owner act. Then the
-  negative legs: a guest-forged `effect_accepted` is refused; after the
-  window expires the poster refuses.
+  ledger) against real corpusd components on embedded Dolt: mode CAS with
+  S1 owner acts in enforce, event CAS with the gate, the poster, and P5's
+  real `hostbuild.Service` behind its real corpusd routes (job records,
+  admission, platform-update blob store, platform-control signing) with a
+  stand-in nix build (it checks the patch applies at the base with real
+  git and emits a layered closure). The owner arms once; a frontend-only
+  candidate is frozen with a real `source.patch`; management's Verify runs;
+  the driver submits the host build, waits, asks the poster; corpusd admits
+  the `effect_accepted`; the materializer applies the host-built layered
+  release with one planned restart (31). Assertions: the decision cites a
+  decision corpusd minted that names the host build job, no
+  `external-owner:` anywhere, `current` is that job's layer. A second
+  candidate in the same window applies with no further owner act. Negative
+  legs: a guest-forged `effect_accepted` is refused; after the window
+  expires the driver does nothing; a patch that does not apply at the base
+  fails the host build and the guest records a dissent rejection (28).
 - `scripts/reeng_tracer.mjs --autonomous`: arm the standing mode once
   (the only owner act), expect `applied` with no `owner_approval` step and a
   `qualified-consensus:` decision actor.
@@ -313,22 +409,28 @@ Still allowed (no regression):
 - **Conjecture delta.** Before: an `effect_accepted` is admitted only
   through an owner act (S1) or a platform offer; consensus is refused.
   After: it is also admitted through a decision corpusd minted from two
-  signed ballots, one of which only a host service outside the guest can
-  sign, under an owner's standing arm limited to a test computer and a
-  window. Conjecture: because the `capsule-verifier` seat's key never
-  enters a guest and corpusd mints the decision, a guest acting alone (all
-  of its desks, its runtime and guest root) cannot cause an acceptance
-  without the host builder's own check passing; and because the arm is an
-  owner act with a tier and an expiry, no autonomy exists outside a test
-  computer and a window the owner chose. Falsifier: an `effect_accepted`
-  admitted with `qualified-consensus:` whose decision is absent from
-  `consensus_decisions`, or whose ballots do not include a valid
-  `host-builder` signature, or on a computer whose arm is not test-tier or
-  is expired.
+  signed ballots, one of which only corpusd can sign (its vote on the P5
+  host build of the candidate), under an owner's standing arm limited to a
+  test computer and a window. Conjecture: because the `capsule-verifier`
+  seat's key never enters a guest and corpusd mints the decision, a guest
+  acting alone (all of its desks, its runtime and guest root) cannot cause
+  an acceptance without the host having built the candidate's source
+  itself; because the decision names that build and the materializer
+  applies only it, the bytes the computer runs are the bytes the host
+  voted on; and because the arm is an owner act with a tier and an expiry,
+  no autonomy exists outside a test computer and a window the owner chose.
+  Falsifier: an `effect_accepted` admitted with `qualified-consensus:`
+  whose decision is absent from `consensus_decisions`, or names no done
+  host build, or whose ballots do not include a valid platform-control
+  `capsule-verifier` signature, or on a computer whose arm is not
+  test-tier or is expired; or a consensus-decided operation applied with
+  a release that is not the decided build's layer.
 - **Protected surfaces touched.** Run acceptance (the gate), approval
-  authority (a new mode, owner-only), a new host key and a new host
-  service (host builder ballot signer), Trace/evidence (signed ballots,
-  decision receipts, the guest-core key pin), the guest-core signer's kind
+  authority (a new mode, owner-only), the platform-control key's uses (it
+  now also signs the host's ballot), the P5 host build's ordering (built
+  before the decision under a standing arm) and the materializer's apply
+  choice for consensus decisions, Trace/evidence (signed ballots, decision
+  receipts, the guest-core key pin), the guest-core signer's kind
   allowlist. Not touched: Texture canonical writes, checkpoint/route
   projection, vmctl lifecycle, gateway/provider calls, auth/session
   issuance, the replay reducer, deployment routing.
@@ -336,41 +438,42 @@ Still allowed (no regression):
   where every decision of this design is made), the in-process end-to-end
   test above, and after the Landing Loop a staging tracer run
   (`--autonomous`) on a fresh test computer. Local proof is not claimed for
-  the host builder's git fetch from GitHub, the systemd credential wiring,
-  or the vmctl test-tier classification on staging.
+  a real nix host build of a standing candidate (P5's own staging proof
+  covers the build), or the vmctl test-tier classification on staging.
 - **Rollback.** The owner disarms (any other mode); the window expiring
   disarms by itself; `git revert` of the code commit. Tables
   (`consensus_decisions`, `consensus_guest_core_keys`) and the new
   ModeReceipt field are additive; the gate's consensus branch returns to
-  refusing when reverted. Stopping the `go-choir-host-builder` unit stops
-  every new decision (no host ballot, no quorum).
+  refusing when reverted. Unsetting `CORPUSD_HOST_BUILD_SOURCE_DIR` (P5's
+  switch) stops every new decision (no host build, no host ballot, no
+  quorum).
 - **Heresy delta.**
   - discovered: ballots are hashes anyone can compute; the only consensus
     reduction runs inside the subject; `qualified_consensus` cannot be
     autonomous (per-operation arm and a pre-known receipt digest); the
     policy still names the retired `CoSuper` profiles.
   - introduced: a second authority branch in the gate (consensus) beside
-    owner acts and offers; a host service that runs `git apply` on
-    guest-authored patches (unprivileged unit, no secrets but its own key,
-    its own state directory).
+    owner acts and offers; a second use of the platform-control key (the
+    host ballot, kind-separated); host builds of candidates that are not
+    yet accepted (under a standing arm only; bounded by P5's quota).
   - repaired: acceptance without a per-candidate owner act exists, and its
     authority is verified outside the guest; ballots are signatures; a
     `ConsensusBundle` is built by a non-test caller.
 
 ## Residuals
 
-- **The host seat checks the source, not the applied bytes.** Until P5 (the
-  host build service and layered release), the materializer applies the
-  bundle's capsule-built runtime files, while the host builder checks the
-  source patch the bundle declares. A guest that declares a benign patch
-  and ships different runtime files gets an accept. Accepted on test
-  computers only (owner ruling); P5 closes it by making the host build the
-  release it votes on.
-- **The host check is shallow in the first slice.** It proves the patch
-  applies at the named base on the platform's own history and runs the
-  configured check command, if any. No check command is configured on
-  Node B in this slice (whether the Go tests fit the builder's sandbox and
-  timeout is the S2 UNVERIFIED claim); the declared test run comes with P5.
+- **corpusd does not watch the apply.** The decision names the host build
+  and the guest's materializer applies only that build, but corpusd's gate
+  does not yet check that the `materialization_applied` event's release is
+  the decided build's layer. A guest root can run anything on itself; what
+  it cannot do is get a consensus acceptance on the chain for a candidate
+  the host did not build. Closing it is a gate check on the applied
+  release's closure digest (with P6's restore identity).
+- **The host's vote is "it builds", not "it passes tests".** P5 builds
+  `.#autoputer` from the base plus the patch (recipe and schema changes
+  refused); the host does not run the candidate's tests. The reviewer seat
+  is management's Verify verdict, which ran the capsule checks inside the
+  guest.
 - **Seat independence inside the guest is attribution only.** The reviewer
   ballot is signed by guest-core, reachable by guest root and, before
   confinement, by any desk cell. That is why autonomy is test-tier only.
@@ -380,8 +483,8 @@ Still allowed (no regression):
 - **No resume.** A crash between Verify and the decision leaves the
   operation at `awaiting_approval` with no autonomous retry; the owner's
   `accept_once` remains the fallback.
+- **Builds before acceptance.** Under a standing arm every verified
+  candidate costs a host build, accepted or not (P5's per-computer daily
+  quota, default 8, is the bound).
 - **The policy text still names `CoSuper`.** Renaming changes
   `reversible-selfdev-v1`'s frozen digest; left for a `-v2` policy.
-- **The host builder key is generated on the host and not backed up**, like
-  the S1 key; losing it stops autonomy until a new key is generated and
-  both units restart.
