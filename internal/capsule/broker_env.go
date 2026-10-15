@@ -3,6 +3,7 @@ package capsule
 import (
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/visualcapture"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -22,4 +23,19 @@ func BrokerProcessEnv(lookup func(string) (string, bool)) []string {
 	}
 	env := []string{"PATH=" + brokerPath + ":/bin:/usr/bin", "HOME=/root", "TMPDIR=/tmp"}
 	return append(env, yaegikernel.BuildToolchainCarry(lookup)...)
+}
+
+// CaptureJobEnv is what a broker adds to its jobs' environment for visual
+// capture: the Chromium and fontconfig paths the executor gave it, and only
+// those, when it gave them (a granted computer;
+// docs/design/visual-evidence-slice-2026-10-15.md V1). Cells and direct exec
+// build their environments without them.
+func CaptureJobEnv(lookup func(string) (string, bool)) []string {
+	var env []string
+	for _, key := range []string{visualcapture.BrowserEnv, visualcapture.FontconfigEnv} {
+		if v, ok := lookup(key); ok && strings.TrimSpace(v) != "" && !strings.ContainsAny(v, "\x00\n") {
+			env = append(env, key+"="+strings.TrimSpace(v))
+		}
+	}
+	return env
 }

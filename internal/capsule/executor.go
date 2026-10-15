@@ -76,6 +76,11 @@ type Executor struct {
 	jobs         map[string]*capsuleJob
 	jobDone      func(JobCompletion)
 	jobAdmission JobAdmission
+	// visualCaptureDir, captureBrowser and captureFontconfig locate the
+	// visual capture grant and the image's Chromium (visual_capture_linux.go).
+	visualCaptureDir  string
+	captureBrowser    string
+	captureFontconfig string
 }
 
 // SetClaudeDelegateSource names the credential directory holding the Claude
@@ -596,6 +601,9 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	cmd := exec.Command("/run/capsule/broker", args...)
 	cmd.ExtraFiles = []*os.File{inheritedListener}
 	cmd.Env = BrokerProcessEnv(os.LookupEnv)
+	// Visual capture: the Chromium path for capture jobs, on a granted
+	// computer only (visual_capture_linux.go).
+	cmd.Env = append(cmd.Env, e.visualCaptureBrokerEnvLocked()...)
 	if claudeToken != "" {
 		// Claude delegate (claude mode only): the broker reads the token
 		// once, removes it from its environment and hands it to the claude
@@ -734,6 +742,13 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 		_ = caps.Cgroup.Kill()
 		if err := caps.Cgroup.WaitEmpty(ctx); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
+		} else if teardownReclaimEnabled() {
+			// Return the capsule's page cache before removal reparents it
+			// (visual evidence slice V27); every capsule, since builds
+			// leave cache too.
+			if report := caps.Cgroup.TeardownReclaim(caps.MemoryMax); report != "" {
+				log.Printf("capsule %s teardown memory: %s", id, report)
+			}
 		}
 		if err := caps.Cgroup.Delete(); err != nil {
 			cleanupErr = errors.Join(cleanupErr, err)
@@ -1786,8 +1801,15 @@ func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, 
 	if err != nil {
 		return nil, err
 	}
+	// Visual evidence (docs/design/visual-evidence-slice-2026-10-15.md):
+	// captures bound to this release's frontend, beside release/.
+	visual, err := e.stageVisualEvidence(ctx, rootFD, agentRunID, changes, temporary, files)
+	if err != nil {
+		return nil, err
+	}
 	cleanup = false
 	return &StagedRelease{
+		Visual:           visual,
 		Files:            files,
 		Binary:           binary,
 		SourcePatch:      patch,

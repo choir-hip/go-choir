@@ -156,6 +156,70 @@ func (c *CgroupManager) WaitEmpty(ctx context.Context) error {
 	}
 }
 
+// TeardownReclaim returns the page cache an emptied capsule cgroup still
+// holds before it is removed: removal would reparent it to the parent cgroup
+// instead of freeing it, and the guest never frees clean cache on its own,
+// so free page reporting would never return it to the host
+// (docs/reports/playwright-in-capsules-memory-2026-10-15.md §1.1, measured:
+// 0.19-0.43 GiB left by one browser run; docs/design/visual-evidence-slice-2026-10-15.md V27).
+// It writes amount bytes to memory.reclaim (EAGAIN, a partial reclaim, is
+// not an error) and reports memory.peak and the file and anon charge before
+// and after, for the log.
+func (c *CgroupManager) TeardownReclaim(amount int64) string {
+	if c == nil || c.path == "" || amount <= 0 {
+		return ""
+	}
+	root := filepath.Join("/sys/fs/cgroup", strings.TrimPrefix(c.path, "/"))
+	peak := readCgroupInt(filepath.Join(root, "memory.peak"))
+	beforeFile, beforeAnon := readMemoryStatFileAnon(filepath.Join(root, "memory.stat"))
+	start := time.Now()
+	err := os.WriteFile(filepath.Join(root, "memory.reclaim"), []byte(fmt.Sprint(amount)), 0o200)
+	took := time.Since(start)
+	afterFile, afterAnon := readMemoryStatFileAnon(filepath.Join(root, "memory.stat"))
+	result := "ok"
+	if err != nil {
+		if errors.Is(err, syscall.EAGAIN) {
+			result = "partial"
+		} else {
+			result = "error: " + err.Error()
+		}
+	}
+	return fmt.Sprintf("peak=%dMiB file=%dMiB->%dMiB anon=%dMiB->%dMiB reclaim=%s in %s",
+		peak>>20, beforeFile>>20, afterFile>>20, beforeAnon>>20, afterAnon>>20, result, took.Round(time.Millisecond))
+}
+
+func readCgroupInt(path string) int64 {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return -1
+	}
+	var v int64
+	_, _ = fmt.Sscan(strings.TrimSpace(string(raw)), &v)
+	return v
+}
+
+func readMemoryStatFileAnon(path string) (file, anon int64) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return -1, -1
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		var v int64
+		_, _ = fmt.Sscan(fields[1], &v)
+		switch fields[0] {
+		case "file":
+			file = v
+		case "anon":
+			anon = v
+		}
+	}
+	return file, anon
+}
+
 // Path returns the cgroup path.
 func (c *CgroupManager) Path() string {
 	return c.path

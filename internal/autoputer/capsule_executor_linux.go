@@ -86,5 +86,13 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	if status := executor.ClaudeDelegateStatus(); status.Available {
 		log.Printf("capsule executor: claude delegate %s", status.Reason)
 	}
+	// Visual capture (docs/design/visual-evidence-slice-2026-10-15.md): the
+	// grant is on the credential disk only for computers the host granted.
+	captureDir := strings.TrimSpace(os.Getenv("CHOIR_VISUAL_CAPTURE_CREDENTIAL_DIR"))
+	if captureDir == "" {
+		captureDir = capsule.DefaultClaudeDelegateCredentialDir
+	}
+	executor.SetVisualCaptureSource(captureDir, os.Getenv("CHOIR_CAPTURE_BROWSER_BIN"), os.Getenv("CHOIR_CAPTURE_FONTCONFIG_FILE"))
+	log.Printf("capsule executor: visual capture: %s", executor.VisualCaptureStatus().Reason)
 	return executor, true, nil
 }

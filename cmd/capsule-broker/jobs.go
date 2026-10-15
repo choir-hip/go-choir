@@ -48,6 +48,9 @@ func supervisedCommand(brokerBin string, resultFD int, argv ...string) *exec.Cmd
 // variables.
 func newJobManager(brokerBin string, egress bool) *capsulejob.Manager {
 	env := directExecEnvFrom(os.LookupEnv, nil)
+	// Visual capture: Chromium's path reaches jobs only, and only when the
+	// executor gave it to this broker (a granted computer).
+	env = append(env, capsule.CaptureJobEnv(os.LookupEnv)...)
 	if egress {
 		env = append(env, capsule.EgressProxyEnv()...)
 	}
