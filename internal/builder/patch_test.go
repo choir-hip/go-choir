@@ -92,6 +92,65 @@ func TestPatchedFlakeRefAppliesAndCommitsPatch(t *testing.T) {
 	}
 }
 
+// H12: the synthetic commit depends only on the base commit and the patch,
+// never on wall time or the calling user's git identity, so code_commit (and
+// the flake's self.rev and lastModifiedDate) is reproducible.
+func TestPatchedFlakeRefCommitIsReproducible(t *testing.T) {
+	dir := t.TempDir()
+	run := func(env []string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), env...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	run(nil, "init", "-q")
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(nil, "add", "-A")
+	run([]string{"GIT_AUTHOR_DATE=2026-10-01T12:00:00Z", "GIT_COMMITTER_DATE=2026-10-01T12:00:00Z"},
+		"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base")
+	base := run(nil, "rev-parse", "HEAD")
+	patchPath := filepath.Join(t.TempDir(), "source.patch")
+	patch := "--- a/main.go\n+++ b/main.go\n@@ -1,3 +1,4 @@\n package main\n \n+// patched\n func main() {}\n"
+	if err := os.WriteFile(patchPath, []byte(patch), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	build := func(env map[string]string) (string, string) {
+		t.Helper()
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		ref, commit, _, cleanup, err := patchedFlakeRef(context.Background(), dir, patchPath, "#autoputer", base)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cleanup()
+		repo := strings.TrimPrefix(ref, "git+file://")
+		repo = repo[:strings.Index(repo, "#")]
+		cmd := exec.Command("git", "log", "-1", "--format=%an <%ae> %aI | %cn <%ce> %cI")
+		cmd.Dir = repo
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return commit, strings.TrimSpace(string(out))
+	}
+	first, firstMeta := build(map[string]string{"GIT_AUTHOR_DATE": "2030-01-01T00:00:00Z", "GIT_AUTHOR_NAME": "someone"})
+	second, secondMeta := build(map[string]string{"GIT_COMMITTER_DATE": "2031-01-01T00:00:00Z", "GIT_COMMITTER_EMAIL": "x@y"})
+	if first != second {
+		t.Fatalf("synthetic commit not reproducible: %s (%s) != %s (%s)", first, firstMeta, second, secondMeta)
+	}
+	if !strings.Contains(firstMeta, "2026-10-01T12:00:00Z") || !strings.Contains(firstMeta, "choir-builder <builder@choir.local>") {
+		t.Fatalf("synthetic commit metadata = %q, want the builder identity at the base commit's date", firstMeta)
+	}
+}
+
 func TestPatchedFlakeRefRequiresBaseCommit(t *testing.T) {
 	if _, _, _, _, err := patchedFlakeRef(context.Background(), t.TempDir(), "x.patch", "#x", ""); err == nil ||
 		!strings.Contains(err.Error(), "base commit") {

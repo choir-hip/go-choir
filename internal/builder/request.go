@@ -133,6 +133,16 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 	baseSet := map[string]bool{}
 	for _, p := range basePaths {
 		baseSet[p] = true
+		// The manifest names only the base's top-level store paths. Their
+		// runtime closures (glibc, icu, ...) are in the booted EROFS store
+		// too; when the host store holds them (it built the image), count
+		// them as base so the exported delta is only what the base lacks.
+		// Best effort: an unknown path keeps the larger, still-correct delta.
+		if closure, closureErr := pathInfoClosure(ctx, p); closureErr == nil {
+			for _, q := range closure {
+				baseSet[q] = true
+			}
+		}
 	}
 	// S2-c: the builder is the authority on what it built. Derive the code
 	// commit from the source checkout rather than trusting the caller.
@@ -149,7 +159,7 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		sourceDirty = dirty
 	}
 	installable := req.Installable
-	patchSHA, patchBase := "", ""
+	patchSHA, patchBase, flakeLock := "", "", ""
 	if req.SourcePatch != "" {
 		// S2-f: the release is built from the patch's pinned base plus the
 		// diff, never the caller's live tree. Worktree-isolate the patch,
@@ -166,6 +176,11 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		defer cleanup()
 		installable = patchedRef
 		patchSHA = sha
+		if repo, _, ok := strings.Cut(strings.TrimPrefix(patchedRef, "git+file://"), "#"); ok {
+			if lock, lockErr := fileSHA256(filepath.Join(repo, "flake.lock")); lockErr == nil {
+				flakeLock = lock
+			}
+		}
 		codeCommit, codeCommitSource, sourceDirty = patchedCommit, "derived-patch", false
 	}
 	// 2. Build/eval the app-layer installable.
@@ -211,6 +226,7 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		SourceDirty:           sourceDirty,
 		SourcePatchSHA256:     patchSHA,
 		SourcePatchBaseCommit: patchBase,
+		FlakeLockSHA256:       flakeLock,
 		StoreSchemaVersion:    storeschema.Version,
 		BuiltAt:               nowRFC3339(),
 	}

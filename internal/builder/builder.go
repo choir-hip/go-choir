@@ -67,6 +67,11 @@ type ClosureResult struct {
 	// applied to. Empty for unpatched builds.
 	SourcePatchSHA256     string `json:"source_patch_sha256,omitempty"`
 	SourcePatchBaseCommit string `json:"source_patch_base_commit,omitempty"`
+	// FlakeLockSHA256 is the sha256 of the built tree's flake.lock: the
+	// pinned toolchain and every flake input the build evaluated against.
+	// Recorded for patched builds, whose recipe the host never lets a patch
+	// change, so it is the base commit's own lock.
+	FlakeLockSHA256 string `json:"flake_lock_sha256,omitempty"`
 }
 
 // nixTimeout caps a single nix invocation. Eval and export on a warm store

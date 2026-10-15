@@ -76,13 +76,16 @@ func patchedFlakeRef(ctx context.Context, sourceDir, patchPath, installable, bas
 	run := func(dir string, args ...string) error {
 		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = dir
+		cmd.Env = syntheticGitEnv()
 		out, runErr := cmd.CombinedOutput()
 		if runErr != nil {
 			return fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), runErr, strings.TrimSpace(string(out)))
 		}
 		return nil
 	}
-	if err := run(sourceDir, "clone", "--local", sourceDir, tmp); err != nil {
+	// The host's deployed checkout is owned by the deploy user; name it safe
+	// for this one command instead of trusting every repository.
+	if err := run(sourceDir, "-c", "safe.directory="+sourceDir, "clone", "--local", sourceDir, tmp); err != nil {
 		cleanup()
 		return "", "", "", nil, err
 	}
@@ -99,11 +102,24 @@ func patchedFlakeRef(ctx context.Context, sourceDir, patchPath, installable, bas
 		return "", "", "", nil, err
 	}
 	// Commit as a synthetic revision so the build receipt names a concrete
-	// commit and the flake's self.rev is non-dirty, non-"local".
-	commitMsg := "choir-builder source patch " + patchSHA[:12]
-	if err := run(tmp, "-c", "user.name=choir-builder", "-c", "user.email=builder@choir.local", "commit", "-m", commitMsg); err != nil {
+	// commit and the flake's self.rev is non-dirty, non-"local". The commit
+	// is reproducible (H12): a fixed identity at the base commit's own
+	// committer date, so it depends only on the base and the patch, and so
+	// do self.rev and self.lastModifiedDate, which the build stamps.
+	baseDate, err := runGitOut(ctx, tmp, "show", "-s", "--format=%cI", baseCommit)
+	if err != nil {
 		cleanup()
-		return "", "", "", nil, err
+		return "", "", "", nil, fmt.Errorf("read base commit date: %w", err)
+	}
+	commitMsg := "choir-builder source patch " + patchSHA[:12]
+	commitCmd := exec.CommandContext(ctx, "git", "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", commitMsg)
+	commitCmd.Dir = tmp
+	commitCmd.Env = append(syntheticGitEnv(),
+		"GIT_AUTHOR_NAME=choir-builder", "GIT_AUTHOR_EMAIL=builder@choir.local", "GIT_AUTHOR_DATE="+baseDate,
+		"GIT_COMMITTER_NAME=choir-builder", "GIT_COMMITTER_EMAIL=builder@choir.local", "GIT_COMMITTER_DATE="+baseDate)
+	if out, commitErr := commitCmd.CombinedOutput(); commitErr != nil {
+		cleanup()
+		return "", "", "", nil, fmt.Errorf("git commit: %w: %s", commitErr, strings.TrimSpace(string(out)))
 	}
 	head, err := runGitOut(ctx, tmp, "rev-parse", "HEAD")
 	if err != nil {
@@ -120,9 +136,25 @@ func patchedFlakeRef(ctx context.Context, sourceDir, patchPath, installable, bas
 	return "git+file://" + tmp + attr, strings.TrimSpace(head), patchSHA, cleanup, nil
 }
 
+// syntheticGitEnv is the environment the patch path runs git in: the process
+// environment without any git identity, date or config override, so nothing
+// the caller or the host user's git config sets changes the synthetic commit.
+func syntheticGitEnv() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(key, "GIT_") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_TERMINAL_PROMPT=0")
+}
+
 func runGitOut(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
+	cmd.Env = syntheticGitEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
