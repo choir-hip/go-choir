@@ -129,6 +129,9 @@ func (rt *Runtime) actorObligationsSection(ctx context.Context, now time.Time) (
 type obligationsRestart struct {
 	Kind   string `json:"kind"`
 	Reason string `json:"reason,omitempty"`
+	// Target is what the planned restart was for, as its marker names it
+	// (the self-development operation id for an apply).
+	Target string `json:"target,omitempty"`
 }
 
 type obligationsWakes struct {
@@ -168,7 +171,7 @@ func (h *APIHandler) HandleObligations(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	resp := obligationsResponse{ComputerID: rt.TextureComputerID(), GeneratedAt: time.Now().UTC(), Runs: map[string]int{}}
 	if marker, planned := rt.BootWasPlannedRestart(); planned {
-		resp.Restart = obligationsRestart{Kind: "planned", Reason: marker.Reason}
+		resp.Restart = obligationsRestart{Kind: "planned", Reason: marker.Reason, Target: marker.Target}
 	} else {
 		resp.Restart = obligationsRestart{Kind: "crash_or_stop"}
 	}

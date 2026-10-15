@@ -108,3 +108,42 @@ func TestObligationsSurfaceReportsActorTape(t *testing.T) {
 		t.Fatalf("actor read error hidden: code=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+// Drill selfdev-jobs-0101 gap: the apply's restart marker names the
+// operation it restarted for, and the surface dropped it. Failure modes
+// pinned: M1 a planned boot's marker target is dropped; M2 a crash boot
+// serves a target.
+func TestObligationsSurfaceServesPlannedRestartTarget(t *testing.T) {
+	rt, _ := testRuntime(t)
+	read := func() obligationsRestart {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/runtime/obligations", nil)
+		req.RemoteAddr = ""
+		req.Header.Set("X-Authenticated-User", "owner-restart-target")
+		rec := httptest.NewRecorder()
+		NewAPIHandler(rt).HandleObligations(rec, req)
+		var body struct {
+			Restart struct {
+				Kind   string `json:"kind"`
+				Reason string `json:"reason"`
+				Target string `json:"target"`
+			} `json:"restart"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		return obligationsRestart{Kind: body.Restart.Kind, Reason: body.Restart.Reason, Target: body.Restart.Target}
+	}
+
+	rt.bootRestart = PlannedRestart{Reason: PlannedRestartSelfDevelopmentApply, Target: "selfdev-op-1"}
+	rt.bootRestartPlanned = true
+	if got := read(); got.Kind != "planned" || got.Reason != PlannedRestartSelfDevelopmentApply || got.Target != "selfdev-op-1" {
+		t.Fatalf("planned boot restart = %+v, want the marker's reason and target", got)
+	}
+
+	rt.bootRestart = PlannedRestart{Target: "stale-target"}
+	rt.bootRestartPlanned = false
+	if got := read(); got.Kind != "crash_or_stop" || got.Target != "" || got.Reason != "" {
+		t.Fatalf("crash boot restart = %+v, want no reason or target", got)
+	}
+}

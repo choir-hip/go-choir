@@ -1436,7 +1436,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
         const o = await obligations(c);
         const lines = obs.body.recent_log || [];
         const row = {
-          observed_at: iso(), ...bootInstant(obs.body, claim.owner_approval.at, iso()), restart_kind: o?.restart?.kind || null, restart_reason: o?.restart?.reason || null,
+          observed_at: iso(), ...bootInstant(obs.body, claim.owner_approval.at, iso()), restart_kind: o?.restart?.kind || null, restart_reason: o?.restart?.reason || null, restart_target: o?.restart?.target || null,
           crash_lines: lines.filter((l) => CRASH_LINE.test(l)).slice(0, 5), operation_state_before: op.state, build: obs.body?.build?.commit || null,
         };
         claim.boots.push(row);
@@ -1516,7 +1516,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   } else if (op.state === 'applied') {
     gap('restore', 'POST /api/computers/{id}/lifecycle/restore', 'not attempted: no pre-apply checkpoint to restore to');
   }
-  if (claim.boots.length) gap('apply_restart', 'GET /api/runtime/obligations', 'the restart marker\'s target (the operation id) is not served; only its kind and reason are');
+  if (claim.boots.length && !claim.boots.some((b) => b.restart_target)) gap('apply_restart', 'GET /api/runtime/obligations', 'the restart marker\'s target (the operation id) is not served; only its kind and reason are');
   return finish();
 }
 
@@ -1541,7 +1541,9 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
     verified_against_named_bundle: verifiedNamedBundle(claim, report, op),
     owner_approved: Boolean(claim.owner_approval && (claim.owner_approval.decision_status === 200 || ['accepted', 'materializing', 'applied'].includes(claim.applied?.state))),
     applied: claim.applied?.state === 'applied',
-    one_planned_restart: Boolean(boot && boot.restart_kind === 'planned' && boot.restart_reason === 'self_development_apply' && boot.crash_lines.length === 0),
+    // A served marker target must name this operation (older guests serve none).
+    one_planned_restart: Boolean(boot && boot.restart_kind === 'planned' && boot.restart_reason === 'self_development_apply' && boot.crash_lines.length === 0
+      && (!boot.restart_target || boot.restart_target === op?.operation_id)),
     route_receipt: Boolean(rr.materialization_receipt && rr.checkpoint_ref && rr.route_certificate),
     restore_to_pre_apply_head: Boolean(claim.restore?.status === 200 && claim.restore.witness_matched && claim.restore.frontend_restaged
       && claim.pre_apply_checkpoint?.checkpoint_digest && claim.restore.checkpoint_digest === claim.pre_apply_checkpoint.checkpoint_digest
