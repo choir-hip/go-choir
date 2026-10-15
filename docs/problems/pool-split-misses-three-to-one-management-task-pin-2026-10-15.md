@@ -1,0 +1,89 @@
+# Pool split misses 3:1: the management task pin sends a fifth of the paper's calls to DeepSeek (2026-10-15)
+
+Status: documented; fix follows in a separate commit.
+Mutation class of the fix: orange (provider/model routing). Rollback: git
+revert of the fix commit.
+
+## Owner intent
+
+Owner, 2026-10-15 (owner-notes §23): "try to configure 3/4 gpt, with
+DeepSeek only for 1/4 of runs". 7b4585cfc made the default pool
+gpt-6-luna weight 3 : deepseek-v4.1-flash weight 1.
+
+## Evidence
+
+The paper (vm-1669…) restarted onto 7b4585cfc at 17:10:50. Gateway
+journal on Node B, paper requests only, grouped by provider, model,
+system-prompt size and reasoning effort.
+
+Last 15 min, at about 17:35 UTC:
+
+| provider/model | system_chars | reasoning | calls |
+|---|---|---|---|
+| chatgpt/gpt-6-luna | 11922 | high | 108 |
+| chatgpt/gpt-6-luna | 19638 | low | 93 |
+| opencode-go/deepseek-v4.1-flash | **8238** | high | **92** |
+| opencode-go/deepseek-v4.1-flash | 19638 | low | 90 |
+| opencode-go/deepseek-v4.1-flash | 11922 | high | 61 |
+| opencode-go/deepseek-v4.1-flash | 25449 | high | 42 |
+| chatgpt/gpt-6-luna | 25449 | high | 40 |
+
+Over 30 min, the 8238-char class was 240 of 240 on DeepSeek. No other
+class is single-provider. No cat-jam-free calls after the restart. No
+ChatGPT call failed in the window, so failover did not cause the split.
+
+DeepSeek share: 285 of 526 calls (54%) overall; 193 of 434 (44%) when the
+8238 class is left out.
+
+## Two causes
+
+1. **A hard pin outside the pool.**
+   - `modelpolicy.managementTaskSelection` resolves the `management_task`
+     role to opencode-go/deepseek-v4.1-flash, whatever the pool says. See
+     `internal/modelpolicy/model_policy.go`, the `ManagementTask*`
+     constants.
+   - This is management delegation S2a, design R2-9 and O5
+     (docs/reports/management-delegation-design-2026-10-14.md §9). R2-9
+     requires a non-preview, bounded-latency model, because a task has a
+     10-minute deadline. It named deepseek-v4.1-flash as the *proposed*
+     default.
+   - The 8238-char, reasoning-high class matches this pin. It is the only
+     class with no ChatGPT calls, and the pin sets reasoning high.
+   - This attribution is inferred from the gateway shape, not read from
+     the run ledger. It is falsifiable: if the pin moves, that class must
+     move with it.
+2. **Per-trajectory hashing is lumpy.**
+   - `modelpolicy.Assign` hashes the thread key onto a member. The key is
+     the Texture agent for a Texture run, otherwise the trajectory.
+   - The owner said 1/4 of *runs*, and the hash gives that in expectation.
+     The share of *calls* follows whichever heavy trajectories land on
+     DeepSeek.
+   - A 15-minute window has few trajectories, so the 44% sits within the
+     variance. A longer window is needed before calling it a defect.
+
+## Side condition
+
+OpenCode Go is still flaky for the pinned role: 10 parked, circuit-open,
+429 or 402 lines per 10 min after the restart. The pin has no model
+failover (R2-9 table), so a parked key fails the task call outright.
+
+## Decision (no blocking ask; conservative option stated)
+
+- Keep R2-9's properties: one pinned model, non-preview, bounded latency,
+  and the 3-minute per-call timeout.
+- Change the pinned default from opencode-go/deepseek-v4.1-flash to
+  chatgpt/gpt-6-luna. gpt-6-luna is the fastest and cheapest GPT-6 tier,
+  and it already serves three quarters of the pool with no failures in
+  the window.
+- The owner override (O5: an explicit provider and model in the computer's
+  model policy) is unchanged.
+- Leave the per-trajectory hash alone. Re-measure the pool-only share over
+  hours, not minutes.
+
+## Acceptance for the fix
+
+- After the deploy, the 8238-char class appears on chatgpt/gpt-6-luna, not
+  opencode-go.
+- Management tasks keep closing inside the 10-minute deadline. No task
+  closes `deadline_exceeded` that would not have before.
+- The paper stays healthy on all four checks.
