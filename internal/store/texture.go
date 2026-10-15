@@ -43,6 +43,15 @@ import (
 )
 
 // textureSchemaDDL creates the texture tables if they do not already exist.
+//
+// No index here declares DESC. Dolt before 2.3.3 accepted DESC and stored an
+// ascending index; from 2.3.3 a DESC column is a real descending index, and a
+// table that has one cannot be read by an older Dolt at all ("table has
+// unknown fields"). That would make every store created on a newer embedded
+// module a one-way door for the guest image. ASC reproduces exactly what the
+// older engine stored, and the planner scans it backwards for ORDER BY ... DESC
+// (docs/reports/dolt-upgrade-compat-2026-10-15.md, section 3). Do not add DESC
+// here until older embedded modules are out of rollback range.
 const textureSchemaDDL = `
 CREATE TABLE IF NOT EXISTS texture_revisions (
 	revision_id         VARCHAR(255) PRIMARY KEY,
@@ -107,7 +116,7 @@ CREATE TABLE IF NOT EXISTS texture_document_aliases (
 
 CREATE INDEX IF NOT EXISTS idx_texture_revs_doc ON texture_revisions(doc_id);
 CREATE INDEX IF NOT EXISTS idx_texture_revs_owner ON texture_revisions(owner_id);
-CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_created ON texture_revisions(doc_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_created ON texture_revisions(doc_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_texture_source_entities_owner ON texture_source_entities(owner_id);
 CREATE INDEX IF NOT EXISTS idx_texture_source_refs_revision ON texture_source_refs(owner_id, doc_id, texture_revision_id);
 CREATE INDEX IF NOT EXISTS idx_texture_source_refs_source ON texture_source_refs(source_entity_canonical_id, source_entity_version_id);
@@ -141,8 +150,8 @@ CREATE TABLE IF NOT EXISTS agent_evidence (
 	created_at     DATETIME NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_agent ON agent_evidence(owner_id, agent_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_created ON agent_evidence(owner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_agent ON agent_evidence(owner_id, agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_evidence_owner_created ON agent_evidence(owner_id, created_at);
 
 `
 
@@ -403,7 +412,7 @@ func (s *Store) bootstrapTexture() error {
 	if err := s.ensureTextureDocumentAliasDocIndex(); err != nil {
 		return err
 	}
-	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number DESC)`); err != nil {
+	if _, err := s.textureHandle().Exec(`CREATE INDEX IF NOT EXISTS idx_texture_revs_doc_version ON texture_revisions(doc_id, owner_id, version_number)`); err != nil {
 		return fmt.Errorf("create texture revision version index: %w", err)
 	}
 	if err := s.backfillTextureRevisionVersionNumbers(); err != nil {
