@@ -466,8 +466,8 @@ now:
     - D1 app packages are ratified.
     Open for the owner: DeepSeek at 1/4 of runs (met in expectation) or
     1/4 of compute (it takes about 64% of calls).
-  source_ref: bb83f3a7e
-  deploy_identity: staging bb83f3a7e (deployed 19:17:02 UTC)
+  source_ref: b244507f4
+  deploy_identity: staging b244507f4 (deployed 21:03:45 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LG-1
@@ -506,7 +506,10 @@ now:
     (c) re-measure the pool split over hours;
     (d) after the soak (2026-10-17), the Dolt squash, the module bump and
     re-landing compaction;
-    (e) source ingestion scale-up with the owner, 2026-10-16.
+    (e) source ingestion scale-up with the owner, 2026-10-16. L0 parallel
+    items done today: the registry repairs (aa8ea3f2e) and the last
+    qdrant_dedup remnant (1beb2a7ab). Store B retrieval is rebased (local
+    ba12a1e0c) and lands after the soak.
     The earlier plan follows. Overnight 2026-10-14 (owner: "we should do this redesign then optimize
     resources. thats our overnight work, alongside b1"). Rule: design,
     panels, measurement and code in separate worktrees run concurrently;
