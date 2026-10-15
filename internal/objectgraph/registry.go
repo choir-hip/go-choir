@@ -155,6 +155,10 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.publication_resolved_blocks", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.resolvedBlocksDoc"},
 		{Kind: "choir.publication_check", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.publicationCheck"},
 		{Kind: "choir.support_judgement", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.supportJudgement"},
+		// A published software release record (P7,
+		// docs/reports/p6-p8-release-adopt-2026-10-15.md): source only, never
+		// executable bytes; the patch lives in the host content store.
+		{Kind: "choir.software_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "release.Record"},
 	} {
 		r.RegisterKind(k)
 	}
