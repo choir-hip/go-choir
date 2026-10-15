@@ -987,7 +987,7 @@ func (p *ChatGPTProvider) buildRequestBody(req LLMRequest, modelID string) openA
 // per-model API wire shapes. Every request carries the durable run identity
 // OpenCode requires for session affinity.
 type OpenCodeProvider struct {
-	apiKey       string
+	keys         *openCodeKeyPool
 	modelID      string
 	baseURL      string
 	providerName string
@@ -1000,6 +1000,9 @@ type OpenCodeConfig struct {
 	BaseURL      string
 	ModelID      string
 	ProviderName string
+	// keys, when set, is the pool the provider draws from (the shared
+	// environment pool); APIKey is then only the presence check.
+	keys *openCodeKeyPool
 }
 
 type openCodeWireShape uint8
@@ -1030,8 +1033,12 @@ func NewOpenCodeProvider(cfg OpenCodeConfig) (*OpenCodeProvider, error) {
 	if providerName == "" {
 		providerName = "opencode"
 	}
+	keys := cfg.keys
+	if keys == nil {
+		keys = newOpenCodeKeyPool([]openCodeKey{{name: "api_key", value: apiKey}})
+	}
 	return &OpenCodeProvider{
-		apiKey:       apiKey,
+		keys:         keys,
 		modelID:      modelID,
 		baseURL:      baseURL,
 		providerName: providerName,
@@ -1049,6 +1056,7 @@ func NewOpenCodeGoProviderFromEnv(modelID string) (*OpenCodeProvider, error) {
 		BaseURL:      baseURL,
 		ModelID:      modelID,
 		ProviderName: "opencode-go",
+		keys:         sharedOpenCodeKeyPool(),
 	})
 }
 
@@ -1062,14 +1070,17 @@ func NewOpenCodeZenProviderFromEnv(modelID string) (*OpenCodeProvider, error) {
 		BaseURL:      baseURL,
 		ModelID:      modelID,
 		ProviderName: "opencode-zen",
+		keys:         sharedOpenCodeKeyPool(),
 	})
 }
 
+// openCodeAPIKeyFromEnv is the first configured key, the presence check
+// for the env constructors; calls draw from sharedOpenCodeKeyPool.
 func openCodeAPIKeyFromEnv() string {
-	if key := strings.TrimSpace(os.Getenv("OPENCODE_API_KEY")); key != "" {
-		return key
+	if keys := openCodeKeysFromEnv(); len(keys) > 0 {
+		return keys[0].value
 	}
-	return strings.TrimSpace(os.Getenv("OPENCODE_GO_API_KEY"))
+	return ""
 }
 
 func (p *OpenCodeProvider) Name() string { return p.providerName }
@@ -1140,25 +1151,53 @@ func (p *OpenCodeProvider) call(ctx context.Context, req LLMRequest, onChunk fun
 		return nil, fmt.Errorf("%s: unsupported OpenCode wire shape", p.providerName)
 	}
 
-	httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
-	if err != nil {
-		return nil, fmt.Errorf("%s: build request: %w", p.providerName, err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", accept)
-	httpReq.Header.Set("User-Agent", "choir-gateway/0.1")
-	httpReq.Header.Set("x-opencode-session", session)
-	if shape == openCodeMessages {
-		httpReq.Header.Set("x-api-key", p.apiKey)
-		httpReq.Header.Set("anthropic-version", "2023-06-01")
-	} else {
-		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
-	}
+	// Draw a key per attempt. A 402 or 429 parks that key and the request
+	// is retried on another healthy key; no body has been read yet, so the
+	// retry cannot duplicate output.
+	var resp *http.Response
+	tried := map[string]bool{}
+	var lastStatus string
+	for attempt := 0; attempt < p.keys.size(); attempt++ {
+		key, ok := p.keys.pick(session, tried)
+		if !ok {
+			break
+		}
+		tried[key.name] = true
+		httpReq, err := newJSONRequest(ctx, http.MethodPost, endpoint, body)
+		if err != nil {
+			return nil, fmt.Errorf("%s: build request: %w", p.providerName, err)
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Accept", accept)
+		httpReq.Header.Set("User-Agent", "choir-gateway/0.1")
+		httpReq.Header.Set("x-opencode-session", session)
+		if shape == openCodeMessages {
+			httpReq.Header.Set("x-api-key", key.value)
+			httpReq.Header.Set("anthropic-version", "2023-06-01")
+		} else {
+			httpReq.Header.Set("Authorization", "Bearer "+key.value)
+		}
 
-	log.Printf("provider: %s call model=%s", p.providerName, modelID)
-	resp, err := p.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("%s: http call: %w", p.providerName, err)
+		log.Printf("provider: %s call model=%s key=%s", p.providerName, modelID, key.name)
+		r, err := p.httpClient.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("%s: http call: %w", p.providerName, err)
+		}
+		if p.keys.park(key.name, r.StatusCode) {
+			logRejectedRequest(p.providerName, r)
+			_ = r.Body.Close()
+			lastStatus = r.Status
+			log.Printf("provider: %s key=%s parked after status %d", p.providerName, key.name, r.StatusCode)
+			continue
+		}
+		resp = r
+		break
+	}
+	if resp == nil {
+		if lastStatus != "" {
+			return nil, fmt.Errorf("%s: status %s on every OpenCode key (sanitized)", p.providerName, lastStatus)
+		}
+		return nil, fmt.Errorf("%s: every OpenCode key is parked (out of funds or rate limited)", p.providerName)
 	}
 	defer func() { _ = resp.Body.Close() }()
 

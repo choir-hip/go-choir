@@ -1,0 +1,142 @@
+package provider
+
+import (
+	"hash/fnv"
+	"net/http"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+// OpenCode key pool (docs/problems/opencode-key-exhausted-no-failover-2026-10-15.md).
+// The gateway may hold several OpenCode accounts: OPENCODE_API_KEY (or the
+// older OPENCODE_GO_API_KEY) and OPENCODE_API_KEY_ALT_<n>. A key that answers
+// 402 (out of funds) is parked for hours; one that answers 429 is parked for
+// a minute. A session keeps one healthy key while it stays healthy, so
+// OpenCode's per-session upstream routing keeps its prompt cache. Keys are
+// named by their variable, never by value.
+
+const (
+	openCodeFundsPark     = 6 * time.Hour
+	openCodeRateLimitPark = 60 * time.Second
+	openCodeAltKeyPrefix  = "OPENCODE_API_KEY_ALT_"
+)
+
+type openCodeKey struct {
+	name  string
+	value string
+}
+
+type openCodeKeyPool struct {
+	mu     sync.Mutex
+	keys   []openCodeKey
+	parked map[string]time.Time
+	now    func() time.Time
+}
+
+func newOpenCodeKeyPool(keys []openCodeKey) *openCodeKeyPool {
+	return &openCodeKeyPool{keys: keys, parked: map[string]time.Time{}, now: time.Now}
+}
+
+var (
+	envOpenCodeKeysOnce sync.Once
+	envOpenCodeKeys     *openCodeKeyPool
+)
+
+// sharedOpenCodeKeyPool is the process-wide pool from the environment, shared
+// by every OpenCode Go and Zen provider so a parked key is parked for all.
+func sharedOpenCodeKeyPool() *openCodeKeyPool {
+	envOpenCodeKeysOnce.Do(func() { envOpenCodeKeys = newOpenCodeKeyPool(openCodeKeysFromEnv()) })
+	return envOpenCodeKeys
+}
+
+// openCodeKeysFromEnv returns the configured keys in order: the primary,
+// then ALT_0, ALT_1, ..., with duplicate values dropped.
+func openCodeKeysFromEnv() []openCodeKey {
+	var keys []openCodeKey
+	seen := map[string]bool{}
+	add := func(name string) {
+		value := strings.TrimSpace(os.Getenv(name))
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		keys = append(keys, openCodeKey{name: name, value: value})
+	}
+	add("OPENCODE_API_KEY")
+	add("OPENCODE_GO_API_KEY")
+	type alt struct {
+		n    int
+		name string
+	}
+	var alts []alt
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if !strings.HasPrefix(name, openCodeAltKeyPrefix) {
+			continue
+		}
+		if n, err := strconv.Atoi(strings.TrimPrefix(name, openCodeAltKeyPrefix)); err == nil && n >= 0 {
+			alts = append(alts, alt{n, name})
+		}
+	}
+	sort.Slice(alts, func(i, j int) bool { return alts[i].n < alts[j].n })
+	for _, a := range alts {
+		add(a.name)
+	}
+	return keys
+}
+
+func (p *openCodeKeyPool) size() int {
+	if p == nil {
+		return 0
+	}
+	return len(p.keys)
+}
+
+// pick returns the healthy key for session, skipping names in exclude. The
+// choice is stable for a session over the current healthy set.
+func (p *openCodeKeyPool) pick(session string, exclude map[string]bool) (openCodeKey, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := p.now()
+	var healthy []openCodeKey
+	for _, k := range p.keys {
+		if exclude[k.name] {
+			continue
+		}
+		if until, ok := p.parked[k.name]; ok {
+			if now.Before(until) {
+				continue
+			}
+			delete(p.parked, k.name)
+		}
+		healthy = append(healthy, k)
+	}
+	if len(healthy) == 0 {
+		return openCodeKey{}, false
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(session))
+	return healthy[int(h.Sum32()%uint32(len(healthy)))], true
+}
+
+// park benches a key after a quota status. It reports whether the status is
+// one that parks (and so may be retried on another key).
+func (p *openCodeKeyPool) park(name string, status int) bool {
+	var d time.Duration
+	switch status {
+	case http.StatusPaymentRequired:
+		d = openCodeFundsPark
+	case http.StatusTooManyRequests:
+		d = openCodeRateLimitPark
+	default:
+		return false
+	}
+	p.mu.Lock()
+	p.parked[name] = p.now().Add(d)
+	p.mu.Unlock()
+	return true
+}
