@@ -170,8 +170,10 @@ metamission:
       depends_on: [L0]
       note: >-
         Hypotheses settled and scored. Entry criterion: a recoverable
-        off-host copy of the ledger. Cast hypotheses carry resolves_by (7
-        days or less) and a criterion; settlement (outcome and evidence
+        off-host copy of the ledger (it gates L3-2; the clock-only L3-1 may
+        start before it). Cast hypotheses carry a kind (assertion or
+        forecast) and a criterion; forecasts also carry resolves_by (7
+        days or less); settlement (outcome and evidence
         refs, by the designated settler) is separate from scoring (a record
         with scorer identity, from Jev or a model; two scorers can
         disagree); a score uses the committed version and its original
