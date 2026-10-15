@@ -125,3 +125,84 @@ empty computer id, or not at all. Unconfirmed until the mutation row is read.
 
 Status: still documented, not fixed. Fix work moves to branch
 `fix/texture-raced-activation-mutation`.
+
+## Root cause (2026-10-15, from code)
+
+Confirmed from code; the staging mutation rows have not been read, so the
+trace-level confirmation is the next observation (expected: the recovered
+run's row in `stale_activation`, `completed_at` a few ms after its
+`created_at`, and a second `stale_activation` row for the wake's own run).
+
+The two activators of a fresh Texture document do not share a lock, and the
+wake's cleanup stales a pending mutation that belongs to the other one.
+
+1. `ensureConductorTextureRoute` (texture_handoff.go) calls
+   `StartLifecycle`, then `submitTextureAgentRevisionRun` → agentcore
+   `createRunWithMetadata` → `persistLifecycleSubmittedRun`. That writes the
+   handoff run's (H) `texture_agent_mutations` row as `pending` **first**
+   and commits H's activation (`ReplaceLifecycleActivation`) **second**. It
+   does not take `lockTextureWakeScope`.
+2. `StartLifecycle` also assigns the initial work item, which wakes the
+   Texture mailbox (`lifecycle_work_assigned`). The actor goroutine runs
+   `ReconcileAgentWake`, which takes `lockTextureWakeScope` — but nothing
+   else that activates this document holds it, so the lock excludes
+   nothing here.
+3. `reconcileAgentWakeLocked` (texture_controller.go) checks
+   `TextureActiveRunByAgent` (store-backed). If H's activation has not
+   committed yet, it finds nothing and goes on. A dozen store reads later
+   (pending updates, snapshot, stranded deliveries, breaker streak, inbox,
+   runs by channel, reactivation), it runs the "stale unbound pending
+   Texture mutation" loop: `GetPendingAgentMutationByDoc` selects by
+   **document**, not run, and `MarkAgentMutationStale` moves every pending
+   row for the doc to `stale_activation`. If H's row was written by then,
+   **H's mutation is staled**.
+4. The wake then submits its own run W. W's activation fails with
+   `ErrLifecycleInvalidTransition` because H is now active; W's rollback
+   stales W's own row (keyed by run, correctly), and
+   `recoverRacedTextureActivation` returns H ("recovered raced activation
+   for doc … run H").
+5. H is the doc's active run with a `stale_activation` mutation. Its
+   `initial_dispatch` fails `ValidateActivationAuthority` ("mutation
+   authority mismatch") eight times and is poisoned; any occurrence for it
+   fails `ValidateOccurrenceActivationAuthority` ("Texture occurrence/run
+   mutation mismatch"). Nothing ever moves H, and the dead letter has no
+   handler.
+
+The bad interleaving is: wake's active-run check < H's activation commit,
+and H's mutation insert < wake's stale loop. When the wake wins instead (W
+commits first), the handoff loses, stales only its own row, recovers W, and
+W's row is pending — that is the 15 of 19 races that recovered cleanly. The
+one-in-five rate is the fraction of races where the handoff's two writes
+straddle the wake's read window.
+
+What the code rules out:
+
+- `agentMutationComputerID` is not the cause: both runs come from
+  `submitTextureAgentRevisionRun`, which refuses to submit without
+  `lifecycle_work_item_id` (unless records route), so both rows are scoped
+  to the computer id the validators expect.
+- The loser's rollback in `persistLifecycleSubmittedRun` is keyed by its own
+  run id; it never stales the winner. Hypothesis 2 above is refuted.
+- Hypothesis 1 is right in kind: the winner's row moved out of `pending`
+  before the check — staled by the concurrent wake, not by a read-visibility
+  lag.
+
+Substrate: two activators for one Texture desk that are not serialized.
+Fix shape: every caller that activates a document's Texture desk holds that
+document's wake scope (`lockTextureWakeScope`), as the wake already does.
+The handoff (`ensureConductorTextureRoute`) and the frozen coagent route
+(`ensureCoagentTextureRevisionRoute`) are the two unlocked callers of
+`submitTextureAgentRevisionRun`. Under the lock, whichever activator runs
+second sees the first one's committed activation (the wake returns early on
+a valid active run; the handoff loses the activation and recovers the
+wake's run), and the stale loop only ever sees rows whose activation failed
+or crashed.
+
+Residual: `delivery_failed` (and `delivery_invalid`) reach the
+`delivery-poison` sink with only the poisoned update id as content and fall
+through to the "unknown update kind" default. Giving them a visible fate
+(failing the run the poisoned `initial_dispatch` named, with a reason the
+owner and desks can see) needs the poisoned update's kind and content on the
+dead letter or a log lookup by update id; neither exists today, so it is not
+a small change and is left as a named residual for the protocol's
+observation records (P2 or later).
