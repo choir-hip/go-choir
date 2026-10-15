@@ -416,6 +416,21 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	return result, failure
 }
 
+// RestartCurrent restarts the runtime into whatever `current` names, without
+// staging or swapping anything. A tape restore restages the pinned release
+// pointer in place; when that changes the exec identity (a layered release
+// restored to a plain one, or the reverse), the running binary is the wrong
+// one until the runtime restarts (P5 R1). The caller writes its
+// planned-restart marker first. It waits for any apply in flight.
+func (u *Updater) RestartCurrent(ctx context.Context) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if _, err := os.Stat(filepath.Join(u.root, "current", "release-manifest.json")); err != nil {
+		return fmt.Errorf("updater: restart current: no current release: %w", err)
+	}
+	return u.service.Restart(ctx)
+}
+
 // checkStateCompatibility enforces a release's declared state-compat window
 // before Apply mutates anything: the guest persistent store's schema epoch
 // must satisfy [min_store_schema_version, store_schema_version], and a
