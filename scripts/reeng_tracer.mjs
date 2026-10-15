@@ -40,7 +40,7 @@
 // Scenarios: story (default) | crash | management | research | paper |
 // engineering. The engineering scenario is C1e's cut-1 self-development
 // drill (see engineeringScenario); its flags:
-//   --scenario engineering [--timeout-min 15] [--apply-min 10]
+//   --scenario engineering [--change static|go] [--timeout-min 15] [--apply-min 10]
 //     [--restore-min 12] [--require-served] [--skip-export] [--keep-computer]
 //
 // Exit: 0 bundle kept with the load present (or the scenario's claim held);
@@ -84,7 +84,7 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // "crash" proves restart closure only: crash at the first run in flight,
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
-const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served]';
+const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go]';
 if (flag('help')) {
   console.log(USAGE);
   process.exit(0);
@@ -92,6 +92,15 @@ if (flag('help')) {
 const SCENARIO = arg('scenario', 'story');
 if (!['story', 'crash', 'management', 'research', 'paper', 'engineering'].includes(SCENARIO)) {
   console.error(`unknown --scenario ${SCENARIO} (story | crash | management | research | paper | engineering)`);
+  process.exit(2);
+}
+// --change (engineering scenario): static asks for a static frontend file,
+// which touches no Go input; go asks for a Go file and its test, so Freeze
+// must build bin/autoputer and the desk must run the build and the test as
+// capsule jobs (docs/design/capsule-long-exec-2026-10-15.md §7).
+const CHANGE = arg('change', 'static');
+if (!['static', 'go'].includes(CHANGE)) {
+  console.error(`unknown --change ${CHANGE} (static | go)`);
   process.exit(2);
 }
 // The engineering scenario's bounded waits (fast-loop defaults): the
@@ -104,6 +113,10 @@ if (!['story', 'crash', 'management', 'research', 'paper', 'engineering'].includ
 const APPLY_MIN = Number(arg('apply-min', '10'));
 const RESTORE_MIN = Number(arg('restore-min', '12'));
 const REQUIRE_SERVED = flag('require-served');
+if (REQUIRE_SERVED && CHANGE === 'go') {
+  console.error('--require-served checks a static file; a --change go drill serves none');
+  process.exit(2);
+}
 const CRASH_QUIET_MS = Number(arg('quiet-s', '150')) * 1000;
 // The paper scenario's sources and schedule (Cut 2 2b): the owner act that
 // starts Autopaper on a computer is POST /api/autopaper/sources/schedules.
@@ -1095,6 +1108,19 @@ const OP_ORDER = ['requested', 'executing', 'frozen', 'verified', 'awaiting_appr
 const opAtLeast = (state, floor) => OP_ORDER.indexOf(state) >= OP_ORDER.indexOf(floor);
 
 function engineeringStory(token) {
+  if (CHANGE === 'go') {
+    const pkg = 'internal/drillmark';
+    return [
+      `Change this computer itself: add one Go package ${pkg} to the platform workspace, with two files.`,
+      `${pkg}/drillmark.go declares package drillmark and const Token = "${token}". ${pkg}/drillmark_test.go is a test that fails unless Token equals "${token}".`,
+      'Change nothing else. Deterministic check, to run in the capsule before freezing: go test ./internal/drillmark/ from /workspace/platform.',
+      'This change touches Go, so the release tree needs bin/autoputer built from the workspace source as well as the frontend.',
+      'Only engineering can change this computer: Cast this request to management verbatim in your first cell, with a one-paragraph plan revision,',
+      'and incorporate management\'s answer when it arrives.',
+      'Management: Cast it to engineering; engineering makes the change, runs the check, builds the release tree, freezes the candidate with choir.Freeze and completes;',
+      'then Verify the frozen bundle that engineering\'s final Report names, and answer this request.',
+    ].join(' ');
+  }
   return [
     `Change this computer itself: add one static file to its web frontend so that it is served at /choir-drill/${token}.txt.`,
     `The file is frontend/public/choir-drill/${token}.txt in the platform workspace and contains exactly one line: ${token}`,
@@ -1148,7 +1174,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     pre_apply_checkpoint: null, owner_approval: null, boots: [], unreachable: [], applied: null, route_receipt: null,
     restore: null, served: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
   };
-  out.drill = { label: out.label, scenario: 'engineering', token, claim, gaps, note: [] };
+  out.drill = { label: out.label, scenario: 'engineering', change: CHANGE, token, claim, gaps, note: [] };
   let reached = 'mint';
   const at = (name) => { if (REACHED.indexOf(name) > REACHED.indexOf(reached)) reached = name; };
   const readHead = async (tag) => {
@@ -1308,6 +1334,18 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   }
   claim.verify = { verifier_refs: op.verifier_refs || [], bundle_digest: op.bundle_digest, last_intent_error: op.last_intent_error || null };
   claim.decision_boundary = { at: iso(), operation_id: op.operation_id };
+  // Capsule jobs (--change go): the engineering inbox holds one job record
+  // per job that ended, from job:<id>, with its state and receipt.
+  const engInbox = claim.engineering_casts[0]?.inbox;
+  if (engInbox) {
+    const e = await inbox(engInbox);
+    if (!e) gap('jobs', 'GET /api/inboxes/{id}/records', `engineering inbox ${engInbox} unreadable`);
+    claim.jobs = (e?.records || []).filter((r) => r.job).map((r) => ({
+      job_id: r.job.job_id, state: r.job.state, exit_code: r.job.exit_code ?? null, argv: r.job.argv || [], receipt_ref: r.job.receipt_ref || null,
+      started_at: r.job.started_at || null, finished_at: r.job.finished_at || null,
+    }));
+    phase('jobs', { count: claim.jobs.length, done: claim.jobs.filter((j) => j.state === 'done').length });
+  }
   phase('decision_boundary', { operation_id: op.operation_id, bundle_digest: op.bundle_digest, verifier_refs: op.verifier_refs });
   at('decision_boundary');
   await readHead('decision_boundary');
@@ -1489,6 +1527,13 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
       && preHead?.effective_event_head && claim.pre_apply_checkpoint.effective_event_head === preHead.effective_event_head
       && claim.applied?.effective_head !== preHead.effective_event_head),
   };
+  if (CHANGE === 'go') {
+    // The bundle's build and test evidence came from capsule jobs that ended
+    // done: a build of bin/autoputer and a go test.
+    const done = (claim.jobs || []).filter((j) => j.state === 'done' && j.receipt_ref);
+    checks.go_build_job_done = done.some((j) => j.argv.includes('build') && j.argv.some((a) => a.includes('autoputer')));
+    checks.go_test_job_done = done.some((j) => j.argv.includes('test'));
+  }
   const servedOK = claim.served.pre_apply?.served === false && claim.served.post_apply?.served === true && claim.served.post_restore?.served === false;
   if (REQUIRE_SERVED) checks.served_change_then_restored = servedOK;
   out.acceptance = {
