@@ -87,3 +87,35 @@ failover (R2-9 table), so a parked key fails the task call outright.
 - Management tasks keep closing inside the 10-minute deadline. No task
   closes `deadline_exceeded` that would not have before.
 - The paper stays healthy on all four checks.
+
+## After the fix (77633ecdc, paper refreshed 17:44:37)
+
+Source: the gateway journal, 17:46–18:06, and `/api/runs` on the paper
+(run metadata `llm_assignment`, `llm_provider`, `llm_thread`).
+
+- **Pin moved.** The 8238-char class ran 44 calls on chatgpt/gpt-6-luna
+  and 0 on DeepSeek. Runs since 17:45: 10 management task runs, all
+  `explicit` chatgpt/gpt-6-luna. Inferred cause 1 is confirmed.
+- **The hash is exact.** I recomputed FNV-1a(`llm_thread`) mod 4 for
+  every pooled run since 17:11; slot 0 is DeepSeek. All 90 runs used the
+  predicted provider.
+- **The run and thread split is variance, not a defect.**
+  - Threads: 16 of 46 on DeepSeek (35%). At p = 0.25 that is z ≈ 1.5.
+  - Runs: 37 of 87 hashed runs since 17:45 on DeepSeek (43%). Texture
+    threads are long-lived (one per document), so a few DeepSeek-hashed
+    documents carry many runs.
+- **Calls are not runs.**
+  - Pooled calls in the 20-minute window: 464 DeepSeek and 259 ChatGPT
+    (64% DeepSeek), against 43% of runs.
+  - So a DeepSeek run made about 2.4× the calls of a ChatGPT run in this
+    window. This comes from call counts, not a per-run join, so it's a
+    hypothesis until a per-run call count confirms it.
+  - The owner's wording ("1/4 of runs") is met in expectation. A 1/4
+    share of *compute* is not, and per-thread hashing cannot give it.
+- OpenCode failures: 0 in the window. ChatGPT cache ratio: 75.4% (the
+  restart lowers it; earlier windows were 78%).
+
+**Open, for the owner:** is the target 1/4 of runs (met in expectation)
+or 1/4 of compute? If compute, the levers are a lower DeepSeek weight
+(1:5 or 1:7), or a check of why DeepSeek runs make more calls. No change
+until a multi-hour window confirms the call ratio.
