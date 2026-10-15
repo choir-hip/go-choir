@@ -231,3 +231,77 @@ expect a new failure family only after engineering can freeze.
 
 discovered: A (existing-file edit has never worked in an engineering
 capsule), B, D; introduced: none; repaired: none.
+
+## Failure modes considered for the fix
+
+Written before the code (repo testing rule). Scope: root cause A only
+(existing lower files cannot be edited) plus the unimplemented granted verbs.
+Class red (capsule filesystem contract). Rollback: git revert of the fix
+commit. Chosen fix: when `write_file` hits a permission error on an existing
+regular file, write a temp file in the same directory and `rename` it over the
+target. The lower tree and `makeSubjectTreeReadOnly` stay as they are
+(`0444` files, `0777` directories, the 2026-08-21 invariant).
+
+Confirmation of the cause from code (read, not yet on a Linux overlay): the
+write the cell issues lands in `Broker.handleWriteFile`
+(`internal/yaegikernel/broker.go`, `os.WriteFile(cleanPath, ...)`; the ledger
+error text `write file failed: open ...: permission denied` is this
+function's), and the host-side `capsule` broker has a second copy
+(`cmd/capsule-broker/main.go`, `handleWriteFile`). Both call `os.WriteFile`,
+which opens the existing `0444` lower file for writing.
+
+Ways the fix could fail, and the intended handling:
+
+1. **Existing read-only file** (the bug): the fallback replaces it. Test:
+   `0444` file in a `0777` dir, written as non-root: before the fix `EACCES`,
+   after the fix new content and the old inode untouched.
+2. **Writable existing file keeps its semantics.** The fallback runs only on
+   a permission error, so ordinary writes (and hardlinks, ownership) behave as
+   before. Test: a `0644` file is rewritten in place (same inode).
+3. **Target is a symlink.** Renaming over it would replace the link, not its
+   target. The fallback refuses symlinks and returns the original error.
+   Test.
+4. **Target is a directory.** `os.WriteFile` fails with `EISDIR`, not a
+   permission error, so the fallback is not entered. Test.
+5. **Parent directory not writable.** The temp file cannot be created; the
+   original permission error is returned and the target is untouched.
+   (Lower directories are `0777` by design, so this is the abnormal case.)
+6. **Failure between temp create and rename** (write error, rename error,
+   crash). The temp is removed on error; a crash could leave a
+   `.choir-write-*` file, which would appear in the capsule's source patch.
+   Accepted: same-directory temp is what keeps the rename atomic, and a
+   crashed capsule is destroyed.
+7. **Mode.** A replaced `0555` file must stay executable and the result must be
+   writable by its owner, so later writes take the plain path. With no
+   explicit mode the new file takes `existing perm | 0200`; an explicit mode is
+   honoured. Test both.
+8. **Rename across layers.** Source and target are in the same merged
+   directory; overlayfs renames an upper-only file over a lower file without a
+   whiteout for the target. Needs a Linux overlay to prove; the environment
+   cannot, so this is staging evidence (below), with a Linux-container check
+   when available.
+9. **Landlock/seccomp.** The workload Landlock domain grants `MAKE_REG`,
+   `REMOVE_FILE` and `REFER` on the merged dir (`internal/capsule/landlock.go`)
+   and the seccomp allowlist has `rename`, `renameat`, `renameat2`, `fchmod`
+   (`internal/capsule/seccomp.go:18`). No new permission is needed. Not run
+   under real Landlock here.
+10. **Path confinement.** `resolveSafePath`/`resolveWithin` still validate the
+    path; the temp name is a fixed prefix plus random digits created in the
+    validated file's own directory, so it cannot escape.
+11. **Two implementations drift.** Both write handlers must share one helper.
+    Put it in `internal/yaegikernel` (which `capsule` and the broker already
+    import) and call it from both.
+12. **Granted but unimplemented verbs.** `roles.go` grants `edit_file`,
+    `rename`, `chmod` to engineering and no handler exists, so a capability
+    for them passes the role check and then fails `unknown verb`. No prompt or
+    Go surface teaches them (`choir.Rename/Chmod/EditFile` do not exist;
+    repo-wide search found no use outside `roles.go` and its test).
+    Decision: remove the three from the grant rather than implement them (the
+    replace-write plus `Exec` cover the need). The other granted-but-
+    unimplemented verbs (`lstat`, `readlink`, `mkdir_all`, `remove_all`,
+    `symlink`, `truncate`, `file_hash`) are left as a named residual. Test:
+    `roles_test.go` asserts the three are absent.
+13. **Tests run as root.** Root bypasses mode bits, so the permission tests
+    skip when `os.Geteuid()==0`.
+14. **Not addressed (separate causes):** spec-by-reference casts (B), `cp -a`
+    and seccomp release-copy hostility (C), no owner escalation target (D).

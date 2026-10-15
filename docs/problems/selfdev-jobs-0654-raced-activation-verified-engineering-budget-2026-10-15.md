@@ -142,3 +142,55 @@ by this and by the engineering-capsule defects in
 
 discovered: stale descriptor path in the re-dialing broker client; introduced:
 none in this doc (the regression is in `b4f778552`); repaired: none.
+
+## Failure modes considered for the fix
+
+Written before the code (repo testing rule). The fix: the broker client keeps
+the **real** socket path and derives the short `/proc/self/fd/<N>/...` address
+on every dial (open the directory, dial, close), instead of storing an address
+whose descriptor the caller closed. Class red (capsule broker). Rollback: git
+revert of the fix commit.
+
+Ways the system could fail, and what the fix and tests do about each:
+
+1. **Re-dial through a closed descriptor** (the bug). The stored address
+   names a descriptor that is closed or reused, so `connect` fails with
+   `ENOTDIR`/`ENOENT` for the rest of the capsule's life. Fix: no stored fd
+   path. Test: a socket path longer than 107 bytes, a dropped connection
+   (injected read timeout), then a successful call, plus a cycle of closing
+   and reusing low descriptors between the calls to prove no dependence on a
+   particular fd number.
+2. **Descriptor leak.** Deriving the address per dial opens a directory each
+   time; the readiness loop and every re-dial would leak one fd if the release
+   is skipped on a failed dial. Test: the count of `/proc/self/fd` entries is
+   unchanged after many failed and successful dials.
+3. **Descriptor reuse during the dial.** The directory fd is held open until
+   `connect` returns, so nothing can reuse its number while the kernel
+   resolves the path. The derivation is per call, so concurrent dials each
+   hold their own fd (connections are serialized by `connMu` anyway).
+4. **Short paths regress.** A path of 107 bytes or fewer must still be used
+   verbatim (the common test path). Existing tests keep covering it.
+5. **Name too long even through a descriptor.** `unixSocketAddress` returns
+   an error; the dial error must say so and not panic.
+6. **The capsule is gone (socket directory removed).** The dial must fail
+   with an error naming the real socket path, not an fd path, so the next
+   ledger shows the actual cause. Test asserts the error text has no
+   `/proc/self/fd`.
+7. **Keep-the-fd-open alternative.** Holding one directory fd for the
+   capsule's life would also work, but leaks if any teardown path (failed
+   spawn, `Destroy` without a broker) forgets to close it, and ties the
+   client's validity to a descriptor again. Rejected in favour of per-dial
+   derivation.
+8. **Concurrent `Close`/`Connect`.** Unchanged semantics: a closed client
+   never re-dials; the existing client tests keep covering this.
+9. **Test-only coverage gap that hid the bug.** The `b4f778552` tests used
+   short temp-dir sockets, so the descriptor branch never ran. The new test
+   uses a deep path on purpose and asserts its premise (a plain dial of the
+   path fails with `EINVAL`/`ENAMETOOLONG`).
+10. **Platform.** `/proc/self/fd` and `unixSocketAddress` are linux-only
+    (`//go:build linux`); the new test is a linux test. On a darwin
+    workstation it can be compiled (`GOOS=linux go vet`) but not run; run it
+    in a Linux container.
+
+Not changed here, by design: the 30 s per-call broker deadline, and the
+busy-polling aggravator (an engineering-prompt problem, noted above).
