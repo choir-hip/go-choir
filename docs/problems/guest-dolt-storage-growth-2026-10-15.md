@@ -286,4 +286,6 @@ memory-heavy and needs real free space. Hence:
     2.6–9.6 GB/h.
 - Remaining work (the next station): bound history. Options are an automated
   squash plus full GC (projection-compact, today offline only) or a sparser
-  checkpoint cadence.
+  checkpoint cadence. Taken up in
+  [`guest-dolt-history-bound-2026-10-15`](guest-dolt-history-bound-2026-10-15.md):
+  an online squash plus full GC on a history budget.
