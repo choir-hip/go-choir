@@ -413,6 +413,11 @@ type VMManagerConfig struct {
 	// OfflineMaintenance runs on a refresh between the kill and the boot,
 	// with the data image path (store_compaction.go). Refresh only.
 	OfflineMaintenance func(dataImagePath string) error
+
+	// WarmnessClass is the computer's class at this boot ("test" for a
+	// test account's computer): the visual capture grant reads it
+	// (docs/design/visual-evidence-slice-2026-10-15.md).
+	WarmnessClass string
 }
 
 // ErrOfflineMaintenanceUnbootable marks an OfflineMaintenance failure that
@@ -1037,6 +1042,25 @@ func (r *OwnershipRegistry) refreshTestAccounts() {
 	r.mu.Unlock()
 }
 
+// bootWarmnessClass is a computer's class for a boot's inputs (the visual
+// capture grant reads "test"; docs/design/visual-evidence-slice-2026-10-15.md
+// V2). The test tier is refreshed by the idle sweep, so a test account
+// minted moments ago may not be in it yet: on a primary answer for an
+// account the tier does not know, the tier is reloaded once from the auth
+// DB. A failed reload keeps the previous set, so the answer fails closed.
+// Callers must not hold r.mu.
+func (r *OwnershipRegistry) bootWarmnessClass(own *VMOwnership) WarmnessClass {
+	if own == nil {
+		return ""
+	}
+	class := warmnessClassForOwnership(own, r.warmnessPolicySnapshot())
+	if class != WarmnessClassPrimary {
+		return class
+	}
+	r.refreshTestAccounts()
+	return warmnessClassForOwnership(own, r.warmnessPolicySnapshot())
+}
+
 func (r *OwnershipRegistry) setPressureSamplerForTest(sampler hostPressureSampler) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1334,6 +1358,7 @@ func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken 
 	corpusdURL := r.corpusdURL
 	r.mu.Unlock()
 
+	cfg.WarmnessClass = string(r.bootWarmnessClass(own))
 	cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
 	if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
 		return VMManagerConfig{}, fmt.Errorf("realization credential unavailable")
@@ -2179,6 +2204,7 @@ func (r *OwnershipRegistry) resolveDesktopContext(ctx context.Context, userID, d
 				ComputerKind:               "active",
 				OwnerID:                    userID,
 				DesktopID:                  desktopID,
+				WarmnessClass:              string(r.bootWarmnessClass(own)),
 			})
 		}
 		if err != nil {

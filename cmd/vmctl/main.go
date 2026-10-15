@@ -329,6 +329,7 @@ func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 		RecoveryReplayOnly:         cfg.RecoveryReplayOnly,
 		BootKind:                   cfg.BootKind,
 		OfflineMaintenance:         toManagerOfflineMaintenance(cfg.OfflineMaintenance),
+		WarmnessClass:              cfg.WarmnessClass,
 	}
 }
 

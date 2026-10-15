@@ -182,6 +182,11 @@ type VMConfig struct {
 	// fails; the boot happens either way. Refresh takes it from the overrides
 	// only and never stores it in an instance config.
 	OfflineMaintenance func(dataImagePath string) error `json:"-"`
+
+	// WarmnessClass is the class vmctl booted the computer under ("test"
+	// for a test account's computer). It is a boot input only: the visual
+	// capture grant reads it (visual_capture.go).
+	WarmnessClass string
 }
 
 // ErrOfflineMaintenanceUnbootable is returned (wrapped) by an
@@ -354,6 +359,11 @@ type ManagerConfig struct {
 	// and slot sizes (VM_MEMORY_HOTPLUG_BLOCK_MIB/_SLOT_MIB; 0 = 2 and 128).
 	MemoryHotplugBlockMiB int
 	MemoryHotplugSlotMiB  int
+
+	// VisualCapture is the visual capture grant switch
+	// (CHOIR_VISUAL_CAPTURE_COMPUTERS; empty by default). See
+	// visual_capture.go.
+	VisualCapture VisualCaptureConfig
 }
 
 // DefaultManagerConfig returns a sensible default configuration.
@@ -913,6 +923,18 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		delegateFiles, delegateStatus := m.cfg.ClaudeDelegate.claudeDelegateMaterial(cfg.ComputerID, time.Now())
 		if delegateStatus != "" {
 			log.Printf("vmmanager: claude delegate for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, delegateStatus)
+		}
+		// Visual capture: a granted computer's disk carries the launch
+		// grant (docs/design/visual-evidence-slice-2026-10-15.md).
+		captureFiles, captureStatus := m.cfg.VisualCapture.visualCaptureMaterial(cfg.ComputerID, cfg.WarmnessClass, time.Now())
+		if captureStatus != "" {
+			log.Printf("vmmanager: visual capture for computer %s (VM %s): %s", cfg.ComputerID, cfg.VMID, captureStatus)
+		}
+		for name, content := range captureFiles {
+			if delegateFiles == nil {
+				delegateFiles = map[string][]byte{}
+			}
+			delegateFiles[name] = content
 		}
 		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope, cfg.GatewayToken, delegateFiles)
 		if err != nil {
@@ -1651,6 +1673,9 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	// not erase a label the adapter already set (recover/refresh).
 	if overrides.BootKind != "" {
 		cfg.BootKind = overrides.BootKind
+	}
+	if overrides.WarmnessClass != "" {
+		cfg.WarmnessClass = overrides.WarmnessClass
 	}
 	return cfg
 }

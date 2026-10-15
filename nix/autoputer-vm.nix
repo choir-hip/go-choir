@@ -40,6 +40,13 @@ let
   # computer. Upgrading it is a reviewed image change (flags are pinned to
   # this version in internal/claudedelegate).
   claudeCode = pkgs.claude-code;
+  # visual capture (docs/design/visual-evidence-slice-2026-10-15.md): full
+  # Chromium (nixpkgs has no headless shell) in the store of every guest but
+  # on no PATH. Only a capture job in a capsule of a computer the host granted
+  # gets its path (CHOIR_CAPTURE_BROWSER, set by the capsule broker); the
+  # fontconfig file names DejaVu so text renders without /etc/fonts.
+  captureBrowser = pkgs.chromium;
+  captureFontsConf = pkgs.makeFontsConf { fontDirectories = [ pkgs.dejavu_fonts ]; };
   guestImageManifest = pkgs.writeText "choir-immutable-guest-image-manifest" ''
     contract=choir-guest-image-v1
     build_commit=${buildCommit}
@@ -47,6 +54,7 @@ let
     updater=${goChoirPackages.updater}
     capsule_broker=${goChoirPackages.capsuleBroker}
     claude_code=${claudeCode}
+    capture_browser=${captureBrowser}
     kernel=${config.boot.kernelPackages.kernel}
     kernel_config=${config.boot.kernelPackages.kernel.configfile}
   '';
@@ -882,6 +890,12 @@ EOF
       # allowlisted computer only.
       CHOIR_CLAUDE_CODE_BIN = "${claudeCode}/bin/claude";
       CHOIR_CLAUDE_DELEGATE_CREDENTIAL_DIR = "/run/choir-bootstrap";
+      # visual capture: the Chromium and fontconfig a granted computer's
+      # capture jobs use. The grant itself is on the credential disk
+      # (visual-capture.json), written by vmctl for granted computers only.
+      CHOIR_CAPTURE_BROWSER_BIN = "${captureBrowser}/bin/chromium";
+      CHOIR_CAPTURE_FONTCONFIG_FILE = "${captureFontsConf}";
+      CHOIR_VISUAL_CAPTURE_CREDENTIAL_DIR = "/run/choir-bootstrap";
       # Capsule overlay uppers and /tmp live on the data volume: package
       # installs do not fit in guest RAM. The executor scopes it per boot.
       CHOIR_CAPSULE_STATE_DIR = "/mnt/persistent/capsule-state";
@@ -963,6 +977,9 @@ EOF
     # claude delegate: the cell-side client (it holds no credential; in a
     # capsule without the delegate it reports "unavailable").
     goChoirPackages.choirDelegate
+    # visual capture: the capsule job's tool (it holds no browser path; without
+    # the grant it exits 3, "not granted").
+    goChoirPackages.choirCapture
   ];
 
   # claude delegate: admit exactly one unfree package.
