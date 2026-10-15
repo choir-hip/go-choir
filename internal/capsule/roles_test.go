@@ -27,6 +27,24 @@ func TestRoleVerbSets(t *testing.T) {
 		}
 	}
 
+	// Every granted verb is one the broker serves: its verb switch in
+	// cmd/capsule-broker/main.go (a main package, so listed here). lstat,
+	// readlink, mkdir_all, remove_all, symlink, truncate and file_hash were
+	// granted with no handler (docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md,
+	// residual 12); exec covers each of them.
+	brokerVerbs := map[string]bool{
+		"exec": true, "read_file": true, "write_file": true, "list_dir": true, "stat": true,
+		"mkdir": true, "remove": true, "kill_session": true, "go_eval": true,
+		"init_session": true, "close_session": true, "job_start": true, "job_status": true, "job_stop": true,
+	}
+	for role, verbs := range RoleVerbSets {
+		for verb := range verbs {
+			if !brokerVerbs[verb] {
+				t.Errorf("%s is granted %s, which the broker does not implement", role, verb)
+			}
+		}
+	}
+
 	// Research should have read_file but not exec or write_file.
 	research := RoleVerbSets[RoleResearch]
 	if !research["read_file"] {
