@@ -59,7 +59,7 @@ for pattern in \
   'needs: plan' \
   'Reuse semantic inventories or build changed packages' \
   'Bind candidate to this workflow run' \
-  'actions/setup-go@v6' \
+  'uses: actions/setup-go@' \
   'Upload unaccepted SBOM candidate' \
   'name: sbom-candidate-${{ github.run_id }}-${{ github.sha }}' \
   'overwrite: true' \
@@ -82,14 +82,14 @@ for pattern in \
   'needs: [plan, check, sbom-candidate]' \
   "needs.check.result == 'success'" \
   "needs.sbom-candidate.result == 'success'" \
-  'actions/download-artifact@v8' \
+  'uses: actions/download-artifact@' \
   'Download SBOM candidate from this workflow run' \
   'name: sbom-candidate-${{ github.run_id }}-${{ github.sha }}' \
   'Restore accepted baseline for differential verification' \
-  'actions/setup-go@v6' \
-  'DeterminateSystems/nix-installer-action@v20' \
+  'uses: actions/setup-go@' \
+  'uses: DeterminateSystems/nix-installer-action@' \
   'verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$RUNNER_TEMP/sbom-baseline"' \
-  'actions/cache/save@v6' \
+  'uses: actions/cache/save@' \
   'Upload accepted SBOM artifact'; do
   grep -Fq -- "$pattern" <<<"$finalizer_segment" || {
     echo "SBOM finalizer contract missing: $pattern" >&2
@@ -98,7 +98,7 @@ for pattern in \
 done
 
 verify_line="$(grep -nF 'verify-sbom-candidate sboms' <<<"$finalizer_segment" | cut -d: -f1)"
-cache_line="$(grep -nF 'actions/cache/save@v6' <<<"$finalizer_segment" | cut -d: -f1)"
+cache_line="$(grep -nF 'uses: actions/cache/save@' <<<"$finalizer_segment" | cut -d: -f1)"
 upload_line="$(grep -nF 'Upload accepted SBOM artifact' <<<"$finalizer_segment" | cut -d: -f1)"
 if [[ -z "$verify_line" || -z "$cache_line" || -z "$upload_line" || "$cache_line" -le "$verify_line" || "$upload_line" -le "$verify_line" ]]; then
   echo "SBOM accepted cache and artifact must follow candidate verification" >&2
@@ -147,7 +147,7 @@ fi
 # Heavy caches must have independent workloads and a refreshable source key.
 cache_action="$root/.github/actions/setup-go-build-cache/action.yml"
 require "$cache_action" 'cache: false'
-require "$cache_action" 'uses: actions/cache@v6'
+require "$cache_action" 'uses: actions/cache@'
 require "$cache_action" '${{ steps.go.outputs.go-version }}-${{ inputs.lane }}'
 require "$cache_action" "hashFiles('**/*.go'"
 require "$cache_action" 'restore-keys:'
@@ -160,5 +160,20 @@ require "$ci" 'lane: scale-standard'
 require "$race" 'lane: runtime-race'
 require "$race" 'lane: non-runtime-race-'
 reject "$race" 'go-build-v2-'
+
+# Every third-party action is pinned by full commit SHA with its release tag
+# in a comment (docs/reports/patch-lanes-plan-2026-10-15.md, slice 6). A tag
+# or branch ref updates without review; on a job that holds a deploy key or
+# can mint OIDC tokens, that is code reaching Node B unreviewed. Local
+# actions (./...) are part of this repository and exempt.
+unpinned="$(grep -nE '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]' \
+    "$root"/.github/workflows/*.yml "$root"/.github/actions/*/action.yml |
+  grep -vE 'uses:[[:space:]]+\./' |
+  grep -vE 'uses:[[:space:]]+[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+@[0-9a-f]{40}[[:space:]]+#[[:space:]]+v[0-9][^[:space:]]*[[:space:]]*$' || true)"
+if [[ -n "$unpinned" ]]; then
+  echo "third-party actions must be pinned by commit SHA with the tag in a comment (uses: owner/repo@<40-hex> # vX.Y.Z):" >&2
+  echo "${unpinned//$root\//}" >&2
+  exit 1
+fi
 
 echo "ci-workflow-contract: all tests passed"
