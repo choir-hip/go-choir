@@ -416,6 +416,22 @@ now:
     sees inboxes in the newest runs.)
     Next observation: the kinded share and the forecast share over a
     day, which decides when kind becomes required.
+    Witness (a) precondition: met, 2026-10-15 ~23:55 UTC.
+    - The tool is cmd/ledger-witness (internal/ledgerwitness, tests W1-W6
+      written first). It walks back from the head along previous_head over
+      the host's event and payload artifacts, matching projected
+      choir.commitment_record objects by record_id. It is read-only: no
+      SQL, no guest, capped, and anything unproven is reported missing.
+    - Run on Node B at nice 19, idle IO. Head: from GET
+      /api/computers/{id}/self-development/head, sequence 704145. It
+      walked 14,255 events in 2.0 s.
+      - capture-arrival:rss:thehill_news:6aadebd4… is at sequence 689891
+        (event 605e10fa…).
+      - Story-opening Cast cell:53fac871…:cast:tray-3 (kind assertion) is
+        at sequence 689953 (event e318e279…).
+    - So the arrival precedes the Cast on one chain. That is correct for
+      an opening: the capture that opened a story cannot settle that
+      story's hypothesis, and the witness shows it.
 
 receipts: []
 ---
