@@ -19,7 +19,6 @@ import (
 // over a Unix domain socket. The broker runs inside the capsule's
 // namespace; the Executor connects to the socket from outside.
 type BrokerClient struct {
-	conn       net.Conn
 	socketPath string
 	publicKey  ed25519.PublicKey // injected at spawn, used for capability verification
 
@@ -29,6 +28,18 @@ type BrokerClient struct {
 	// caller reads the other's response. Operation admission (acquireOp) counts
 	// inflight work for quiesce but does not serialize this stream.
 	connMu sync.Mutex
+
+	// stateMu guards the connection fields, so Close can interrupt an
+	// exchange in flight without waiting for connMu.
+	stateMu sync.Mutex
+	conn    net.Conn
+	// dec is the connection's one decoder: a per-call decoder drops bytes it
+	// buffered past the frame it decoded.
+	dec *json.Decoder
+	// dialed is set by the first Connect; a connection dropped after a
+	// transport error is re-dialed by the next call.
+	dialed bool
+	closed bool
 }
 
 // BrokerRPCRequest is the wire format for broker RPCs.
@@ -59,24 +70,78 @@ func (b *BrokerClient) Connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to broker socket %s: %w", b.socketPath, err)
 	}
-	b.conn = conn
+	b.stateMu.Lock()
+	if b.closed {
+		b.stateMu.Unlock()
+		_ = conn.Close()
+		return fmt.Errorf("broker client is closed")
+	}
+	old := b.conn
+	b.conn, b.dec, b.dialed = conn, json.NewDecoder(conn), true
+	b.stateMu.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
 	return nil
 }
 
-// Close closes the broker connection.
+// Close closes the broker connection. An exchange in flight fails, and no
+// later call re-dials.
 func (b *BrokerClient) Close() error {
-	if b.conn == nil {
+	b.stateMu.Lock()
+	conn := b.conn
+	b.conn, b.dec, b.closed = nil, nil, true
+	b.stateMu.Unlock()
+	if conn == nil {
 		return nil
 	}
-	return b.conn.Close()
+	return conn.Close()
 }
 
-// call sends a broker RPC and returns the response.
-func (b *BrokerClient) call(ctx context.Context, verb string, cap *Capability, params interface{}) (*BrokerRPCResponse, error) {
-	if b.conn == nil {
-		return nil, fmt.Errorf("not connected to broker")
+// connection returns the live connection and its decoder, re-dialing one a
+// transport error dropped. The caller holds connMu.
+func (b *BrokerClient) connection(ctx context.Context) (net.Conn, *json.Decoder, error) {
+	b.stateMu.Lock()
+	if b.conn != nil && b.dec == nil {
+		b.dec = json.NewDecoder(b.conn) // a client built around an open conn
 	}
+	conn, dec, dialed, closed := b.conn, b.dec, b.dialed, b.closed
+	b.stateMu.Unlock()
+	switch {
+	case closed:
+		return nil, nil, fmt.Errorf("broker client is closed")
+	case conn != nil:
+		return conn, dec, nil
+	case !dialed:
+		return nil, nil, fmt.Errorf("not connected to broker")
+	}
+	if err := b.Connect(ctx); err != nil {
+		return nil, nil, err
+	}
+	b.stateMu.Lock()
+	defer b.stateMu.Unlock()
+	if b.conn == nil {
+		return nil, nil, fmt.Errorf("broker client is closed")
+	}
+	return b.conn, b.dec, nil
+}
 
+// drop discards a connection whose stream can no longer be trusted: an
+// answer that missed its deadline still arrives on it, and a frame read in
+// part leaves the rest behind, so the next exchange would read another
+// call's answer (docs/problems/selfdev-go-drill-jobs-0101-2026-10-15.md).
+func (b *BrokerClient) drop(conn net.Conn) {
+	b.stateMu.Lock()
+	if b.conn == conn {
+		b.conn, b.dec = nil, nil
+	}
+	b.stateMu.Unlock()
+	_ = conn.Close()
+}
+
+// call sends a broker RPC and returns the response. A transport or framing
+// error drops the connection; the next call dials a fresh one.
+func (b *BrokerClient) call(ctx context.Context, verb string, cap *Capability, params interface{}) (*BrokerRPCResponse, error) {
 	capBytes, err := cap.MarshalForTransport()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal capability: %w", err)
@@ -98,24 +163,31 @@ func (b *BrokerClient) call(ctx context.Context, verb string, cap *Capability, p
 	b.connMu.Lock()
 	defer b.connMu.Unlock()
 
-	if deadline, ok := ctx.Deadline(); ok {
-		b.conn.SetWriteDeadline(deadline)
-	} else {
-		b.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	conn, dec, err := b.connection(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := json.NewEncoder(b.conn).Encode(&req); err != nil {
+	if deadline, ok := ctx.Deadline(); ok {
+		conn.SetWriteDeadline(deadline)
+	} else {
+		conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	}
+
+	if err := json.NewEncoder(conn).Encode(&req); err != nil {
+		b.drop(conn)
 		return nil, fmt.Errorf("failed to send broker RPC: %w", err)
 	}
 
 	if deadline, ok := ctx.Deadline(); ok {
-		b.conn.SetReadDeadline(deadline)
+		conn.SetReadDeadline(deadline)
 	} else {
-		b.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 	}
 
 	var resp BrokerRPCResponse
-	if err := json.NewDecoder(b.conn).Decode(&resp); err != nil {
+	if err := dec.Decode(&resp); err != nil {
+		b.drop(conn)
 		return nil, fmt.Errorf("failed to read broker response: %w", err)
 	}
 
