@@ -167,6 +167,12 @@ adopter applied after one planned restart; `adopter_serves_the_change` and
 Note: the paper's identity block carries `tree_error: commit e485b19… not in the
 source repository` (the paper has no checkout of the new commit).
 
+Tracer `adopt-1418` (same build, polling tracer): not a passing adopt loop. The
+publisher applied and both negative cases were refused unchanged, but the
+adopter's desks never opened an operation (one engineering assignment failed in
+about 2 minutes, Texture closed `done`), so the polled checks never mattered
+(`docs/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md`).
+
 ## Skipped or pending (as of writing)
 
 - Re-run P4's deploy; then patch lanes + hotplug + exa (already on main),
