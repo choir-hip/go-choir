@@ -156,6 +156,11 @@ let
     fi
     rm -rf "$HOME"
   '';
+  # Query-level liveness probe for both Dolt servers
+  # (scripts/dolt-liveness-probe.sh; tests: scripts/test-dolt-liveness-probe.sh;
+  # docs/problems/dolt-clustering-assessment-2026-10-15.md sections 4 and 7).
+  doltLivenessProbe = pkgs.writeShellScript "go-choir-dolt-liveness-probe"
+    (builtins.readFile ../scripts/dolt-liveness-probe.sh);
   doltUsersUnit = doltUnit: port: db: {
     description = "go-choir Dolt users and grants for ${doltUnit} (${db})";
     wantedBy = [ "multi-user.target" "${doltUnit}.service" ];
@@ -708,8 +713,15 @@ in
       StateDirectoryMode = "0750";
       ReadWritePaths = [ platformDoltDir ];
       InaccessiblePaths = hiddenSecretsExcept [ ];
+      # The default 90 s stop timeout made the 2026-10-15 recovery wait for
+      # SIGKILL; the liveness probe also relies on a bounded stop.
+      TimeoutStopSec = "20s";
+      # No core dump of a multi-GB process when the probe sends SIGABRT:
+      # GOTRACEBACK=all prints every goroutine to the journal and exits 2.
+      LimitCORE = 0;
       Environment = [
         "HOME=${platformDoltDir}"
+        "GOTRACEBACK=all"
       ];
     };
   };
@@ -748,8 +760,15 @@ in
       StateDirectoryMode = "0750";
       ReadWritePaths = [ corpusDoltDir ];
       InaccessiblePaths = hiddenSecretsExcept [ ];
+      # The default 90 s stop timeout made the 2026-10-15 recovery wait for
+      # SIGKILL; the liveness probe also relies on a bounded stop.
+      TimeoutStopSec = "20s";
+      # No core dump of a multi-GB process when the probe sends SIGABRT:
+      # GOTRACEBACK=all prints every goroutine to the journal and exits 2.
+      LimitCORE = 0;
       Environment = [
         "HOME=${corpusDoltDir}"
+        "GOTRACEBACK=all"
       ];
     };
   };
@@ -1281,6 +1300,46 @@ in
       OnCalendar = "daily";
       RandomizedDelaySec = "30m";
       Persistent = true;
+    };
+  };
+
+  # Platform (13306) and corpus (13307) Dolt liveness: SELECT 1 with a 5 s
+  # deadline every 30 s. Three consecutive timeouts or refusals on a unit that
+  # has been active for 2+ minutes journal /proc state, send SIGABRT (Go dumps
+  # all goroutines) and let Restart=on-failure bring Dolt back; a 10 minute
+  # cooldown bounds signals per unit. The app user's password arrives via
+  # LoadCredential (the file the dolt-users units use) and is never printed.
+  # Dry run by hand (sends nothing): systemd-run --wait -p Type=oneshot
+  #   -p LoadCredential=dolt-app-password:<file> -E PROBE_DRY_RUN=1 <ExecStart>
+  # Rollback: remove this service and timer; the Dolt unit changes
+  # (TimeoutStopSec, LimitCORE, GOTRACEBACK) are independent.
+  systemd.services.go-choir-dolt-liveness-probe = {
+    description = "go-choir Dolt liveness probe (platform :13306, corpus :13307)";
+    path = [ pkgs.coreutils pkgs.dolt pkgs.systemd pkgs.gnugrep pkgs.gnused pkgs.gawk pkgs.util-linux ];
+    serviceConfig = commonServiceHardening // {
+      Type = "oneshot";
+      ExecStart = doltLivenessProbe;
+      TimeoutStartSec = "2min";
+      RuntimeDirectory = "go-choir-dolt-liveness";
+      RuntimeDirectoryMode = "0700";
+      RuntimeDirectoryPreserve = "yes";
+      LoadCredential = [ "dolt-app-password:${doltAppPasswordFile}" ];
+      InaccessiblePaths = hiddenSecretsExcept [ ];
+      # Reading /proc/<dolt pid>/{stack,io,wchan} for the evidence record can
+      # need ptrace access to another process under Yama.
+      CapabilityBoundingSet = [ "CAP_SYS_PTRACE" ];
+    };
+  };
+
+  systemd.timers.go-choir-dolt-liveness-probe = {
+    description = "Probe platform and corpus Dolt with SELECT 1 every 30 seconds";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      # Dolt and its users unit need a moment after boot; the script also
+      # skips any unit that has been active for under 2 minutes.
+      OnBootSec = "2min";
+      OnUnitActiveSec = "30s";
+      AccuracySec = "1s";
     };
   };
 

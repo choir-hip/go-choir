@@ -233,6 +233,26 @@ def check_units():
                f"mode inside the unit's namespace: {mode}")
 
 
+def check_dolt_probe():
+    """The query-level Dolt liveness probe (scripts/dolt-liveness-probe.sh)
+    must be scheduled and healthy: docs/problems/
+    dolt-clustering-assessment-2026-10-15.md section 7. Read-only."""
+    timer = systemctl_show("go-choir-dolt-liveness-probe.timer", ["ActiveState"])
+    record("dolt-probe", "dolt liveness probe timer is active", timer.get("ActiveState") == "active",
+           f"ActiveState={timer.get('ActiveState')}")
+    svc = systemctl_show("go-choir-dolt-liveness-probe.service", ["Result"])
+    # A probe-error run (credential or client fault) ends the oneshot non-zero.
+    record("dolt-probe", "dolt liveness probe last run succeeded", svc.get("Result") in ("success", ""),
+           f"Result={svc.get('Result')}")
+    errors = journal_lines("go-choir-dolt-liveness-probe.service", "probe-error", since="-15min")
+    record("dolt-probe", "dolt liveness probe reports no probe-error in the last 15 minutes", not errors,
+           errors[-1][-200:] if errors else "none")
+    for unit in ("go-choir-platform-dolt", "go-choir-corpus-dolt"):
+        info = systemctl_show(unit + ".service", ["TimeoutStopUSec"])
+        got = info.get("TimeoutStopUSec")
+        record("dolt-probe", f"{unit} stop timeout is 20s", got == "20s", f"TimeoutStopUSec={got}")
+
+
 def mysql_read_packet(sock):
     header = b""
     while len(header) < 4:
@@ -625,6 +645,7 @@ def main():
     check_credential_delivery(args.expect_internal)
     check_units()
     check_dolt(args.expect_dolt, args.with_credential)
+    check_dolt_probe()
     check_modes()
     check_boot(args.allow_reboot_pending)
     if args.json:

@@ -495,3 +495,33 @@ nothing alerted (no `OnFailure=`, section 4.1).
   (log the action, send no signal) and a fake-command test harness covering
   the strike, reset, cooldown, skip-while-activating and credential-error
   cases, written before the script.
+
+### 7.3 What was built, and what only a staging deploy can prove
+
+Built (branch fix/dolt-guardrails): checkpointd HOME and preflight;
+`OpenStore(ctx, ...)` and `OpenStoreWithoutBootstrap`, 10 minute
+`TimeoutStartSec`; vmctl `retryWithBackoff`; `scripts/dolt-liveness-probe.sh`
+with its timer and service in `nix/node-b.nix`, `TimeoutStopSec=20s`,
+`LimitCORE=0` and `GOTRACEBACK=all` on both Dolt units, and
+`check_dolt_probe` in `scripts/verify-host-hardening.py`.
+
+Tests that ran locally (no real Dolt, no credentials): the checkpointd preflight
+(Go), the three context-deadline tests against a TCP listener that never
+answers (Go), the vmctl retry tests (Go), the probe harness
+`scripts/test-dolt-liveness-probe.sh` (30 cases: strikes, reset, cooldown,
+skip while activating, grace, credential error, dry run, wrong pid, restart
+escalation, canary secret never echoed; a mutation that removes the cooldown
+fails 3 of them), and `scripts/test_verify_dolt_probe.py`.
+
+Only staging (Node B) can prove: that Dolt is satisfied by a `HOME` under
+`/var/lib/go-choir/checkpointd` and the projection backlog drains; that the
+probe's sandbox (`commonServiceHardening` plus `CAP_SYS_PTRACE`) lets
+`systemctl show/kill` and the `/proc` reads work and that `dolt sql` as `choir`
+with the credential succeeds; that SIGABRT with `GOTRACEBACK=all` prints a
+goroutine dump into the Dolt unit's journal and Dolt restarts within the start
+limit; that the deploy switch restarts the Dolt units cleanly when their unit
+files change; and the vmctl wait-and-recover path against a real stalled Dolt.
+Suggested staging proof: after the deploy, `verify-host-hardening.py` shows the
+`dolt-probe` section passing; a dry run of the probe by hand
+(`PROBE_DRY_RUN=1`) logs two `unit=... ` lines and no strikes; do not stall the
+production Dolt to test the ABRT path.
