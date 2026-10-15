@@ -81,9 +81,12 @@ CI run 38717028854 deploy job failed: nixos switch took about 29 min under load
 10:45:43 on `ping ComputerVersion route database: context deadline exceeded`
 (7 restarts, start-limit-hit); a start at 10:47:44 was healthy. Staging
 `/health` was `degraded` / 502 for about 5 minutes and is `ok` now; the paper
-computer kept running and was reattached. Not a P4 code failure. Problem doc:
-`docs/problems/deploy-97e0231-vmctl-route-db-ping-crash-loop-2026-10-15.md`.
-Suggested: rerun the failed job after the reboot.
+computer kept running and was reattached. Not a P4 code failure: the platform
+Dolt server had deadlocked from about 09:49 (0% CPU, queries never returned),
+which hung checkpointd, held the switch, and made vmctl's ping time out; the
+coordinator restarted it at 10:47:27. Problem doc:
+`docs/problems/platform-dolt-deadlock-hangs-checkpointd-and-crashloops-vmctl-2026-10-15.md`.
+After the reboot the deploy is rerun for all of main.
 
 ## Locally validated, not yet deployed
 
