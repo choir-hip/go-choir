@@ -41,22 +41,20 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	if err := os.Chmod(artifact, 0o700); err != nil {
 		return nil, false, fmt.Errorf("secure capsule artifact directory: %w", err)
 	}
+	// The capsule budget is 3/4 of MemTotal, read again at every admission
+	// so a memory lease that plugged memory raises it (job_memory.go; F18
+	// in docs/reports/memory-hotplug-controller-design-2026-10-14.md). This
+	// boot reading is the floor check and the fallback.
 	memoryTotal := int64(0)
+	staticBudget := false
 	if raw := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_MEMORY_TOTAL_BYTES")); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || parsed <= 0 {
 			return nil, false, fmt.Errorf("CHOIR_CAPSULE_MEMORY_TOTAL_BYTES must be positive")
 		}
-		memoryTotal = parsed
-	} else if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
-		for _, line := range strings.Split(string(raw), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 && fields[0] == "MemTotal:" {
-				kb, _ := strconv.ParseInt(fields[1], 10, 64)
-				memoryTotal = kb * 1024 * 3 / 4
-				break
-			}
-		}
+		memoryTotal, staticBudget = parsed, true
+	} else {
+		memoryTotal = capsule.LiveMemoryBudget(nil)()
 	}
 	if memoryTotal < int64(1<<30) {
 		return nil, false, fmt.Errorf("capsule executor memory admission budget is unavailable")
@@ -65,6 +63,7 @@ func configuredCapsuleExecutor() (*capsule.Executor, bool, error) {
 	if err := executor.InitializationError(); err != nil {
 		return nil, false, err
 	}
+	configureJobMemory(executor, staticBudget)
 	// L2 capsules reach the host Go module proxy through a fixed egress
 	// route; the address is the guest's tap peer unless set explicitly
 	// (docs/reports/capsule-go-module-proxy-design-2026-10-14.md).
