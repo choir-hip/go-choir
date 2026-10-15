@@ -60,13 +60,14 @@
 
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   castOnRecords, completingInbox, doneJobs, goTestCells, isGoBuildOfAutoputer, isGoTest, reportNamesBundle, verifiedNamedBundle,
 } from './reeng_tracer_checks.mjs';
+import { inProgressReceipt, interruptedReceipt, signalExitCode, strandedTracerComputers } from './reeng_tracer_receipt.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = (process.env.CHOIR_DEPLOYED_BASE_URL || process.env.CHOIR_HOST || 'https://choir.news').replace(/\/$/, '');
@@ -410,6 +411,7 @@ async function attempt(n, out) {
     const row = { name, at: iso(), ...extra };
     out.phases.push(row);
     log(`${name} ${JSON.stringify(extra)}`);
+    persistReceipt();
   };
 
   if (EXPECT_SHA) {
@@ -423,6 +425,10 @@ async function attempt(n, out) {
   out.timings.mint_breakdown = minted.timings || null;
   out.computer_id = minted.computer_id;
   out.guest_build_commit = minted.guest_build_commit || null;
+  // Bound to the attempt before any phase, so an interrupt from here on
+  // stops this computer.
+  const c = new MintedComputer(minted);
+  out.stopComputer = () => stopMinted(c, label);
   phase('mint', { computer_id: minted.computer_id, mint_ms: out.timings.mint_ms, build: out.guest_build_commit });
   out.contamination = [];
   const fenceBuild = (where, commit) => {
@@ -433,8 +439,6 @@ async function attempt(n, out) {
     }
   };
   fenceBuild('mint', out.guest_build_commit);
-  const c = new MintedComputer(minted);
-  out.stopComputer = () => stopMinted(c, label);
 
   const t0 = Date.now();
   const deadline = t0 + TIMEOUT_MIN * 60_000;
@@ -2100,10 +2104,65 @@ async function waitForQuietDeploy() {
 mkdirSync(TRACE_DIR, { recursive: true, mode: 0o700 });
 chmodSync(TRACE_DIR, 0o700);
 const receipt = { schema: 'choir.reeng_tracer_receipt.v1', label: LABEL, host: HOST, started_at: iso(), attempts: [] };
+if (KEEP_COMPUTER) receipt.keep_computer = true;
+const RECEIPT_PATH = join(TRACE_DIR, 'receipt.json');
+
+// The receipt goes to disk as each phase happens, marked in_progress, so a
+// kill (even SIGKILL) leaves the minted computer and the phases
+// (docs/problems/tracer-killed-leaves-computer-running-2026-10-15.md).
+function persistReceipt() {
+  try {
+    writePrivate(RECEIPT_PATH, `${JSON.stringify(inProgressReceipt(receipt, iso()), null, 2)}\n`);
+  } catch (err) {
+    log(`receipt write failed (the run continues): ${err?.message || err}`);
+  }
+}
+
+// Report, never stop, computers that earlier killed or interrupted runs
+// left running: a tracer acts only on the computer it minted.
+try {
+  const root = dirname(TRACE_DIR);
+  const entries = readdirSync(root, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== LABEL && existsSync(join(root, d.name, 'receipt.json')))
+    .map((d) => {
+      try { return { label: d.name, receipt: JSON.parse(readFileSync(join(root, d.name, 'receipt.json'), 'utf8')) }; } catch { return { label: d.name, receipt: null }; }
+    });
+  for (const s of strandedTracerComputers(entries)) {
+    log(`stranded: tracer ${s.label} left ${s.computer_id} (${s.reason}, since ${s.since}); stop it through POST /api/computers/{id}/lifecycle/stop if it is still running`);
+  }
+} catch (err) {
+  log(`stranded-computer report skipped: ${err?.message || err}`);
+}
+
+// SIGINT, SIGTERM and SIGHUP stop the minted computer, close the receipt as
+// interrupted, and exit 128 + the signal number. A second signal exits at
+// once; the stop is bounded so a hung API cannot hold the exit.
+let currentResult = null;
+let interrupting = false;
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, async () => {
+    if (interrupting) process.exit(signalExitCode(signal));
+    interrupting = true;
+    log(`${signal}: stopping the minted computer and closing the receipt`);
+    let stop = null;
+    if (currentResult?.stopComputer) {
+      stop = await Promise.race([currentResult.stopComputer().catch(() => null), sleep(90_000).then(() => null)]);
+    }
+    try {
+      writePrivate(RECEIPT_PATH, `${JSON.stringify(interruptedReceipt(receipt, signal, iso(), stop), null, 2)}\n`);
+    } catch (err) {
+      log(`interrupted receipt write failed: ${err?.message || err}`);
+    }
+    process.exit(signalExitCode(signal));
+  });
+}
+
 let exitCode = 1;
 for (let n = 1; n <= ATTEMPTS; n++) {
   const result = { attempt: n };
   receipt.attempts.push(result);
+  currentResult = result;
+  persistReceipt();
   try {
     await attempt(n, result);
     if (result.stopComputer) result.computer_stop = await result.stopComputer();
@@ -2141,9 +2200,11 @@ Object.assign(receipt, {
   timings: last.timings || null,
   I5_load: last.load?.I5_load || (last.export ? 'unknown' : null),
   attempt_count: receipt.attempts.length,
+  in_progress: false,
   exit_code: exitCode,
 });
-writePrivate(join(TRACE_DIR, 'receipt.json'), `${JSON.stringify(receipt, null, 2)}\n`);
+currentResult = null;
+writePrivate(RECEIPT_PATH, `${JSON.stringify(receipt, null, 2)}\n`);
 for (const a of receipt.attempts) {
   if (a.timings) log(`timings a${a.attempt}: ${JSON.stringify({ mint_ms: a.timings.mint_ms, first_prompt_accepted_ms: a.timings.first_prompt_accepted_ms, submit_to_first_revision_ms: a.timings.submit_to_first_revision_ms, restart_to_ready_ms: a.timings.restart_to_ready_ms })}`);
 }
