@@ -78,10 +78,11 @@ code; nothing was changed.
   `src` and `cargoHash`, or the upstream static release binary) in its own
   change. The Firecracker version is part of snapshot validity, so the
   bump also turns every hibernated computer's next wake into a cold boot.
-- **A release-branch kernel doesn't evaluate here.** `linuxPackages_6_18`
+- **A release-branch kernel doesn't evaluate as-is.** `linuxPackages_6_18`
   from nixos-26.05 (6.18.56) fails under the main input's NixOS modules
-  (`attribute 'buildDTBs' missing`). The kernel input has to be the same
-  branch as main, at a newer revision.
+  (`attribute 'buildDTBs' missing`, then `target`). A passthru-only shim
+  fixes that without changing the kernel derivation; see the status
+  below.
 
 ## Why it matters (from the ladder report; CVE details there)
 
@@ -97,28 +98,98 @@ code; nothing was changed.
 - **SMT** leaves cross-tenant side channels open (VMScape names Coffee
   Lake).
 
-## What the fix needs (not yet done)
+## What the fix needs: status (2026-10-15, branch `ops/kernel-6.18-security`, not pushed)
 
-1. **A kernel at or above 6.18.45 in the host configuration.** Pin
-   `boot.kernelPackages` or bump nixpkgs. The guest kernel (flake.nix
-   guestKernel) needs the same.
-2. **`kvm_intel nested=0`** (`boot.extraModprobeConfig`) and a decision on
-   SMT (`nosmt`). Turning SMT off costs host threads (6 cores / 12 threads
-   → 6), which matters for density.
-3. **A host reboot.** The kernel and the KVM module parameters only take
-   effect at boot. A reboot stops every computer, the paper included. It
-   needs a maintenance window: planned-restart markers for running
-   computers (CLAUDE.md, "Restarts end work or resume it") and an owner
-   decision on timing. Deploys never restart a busy computer; a host
-   reboot does.
+1. **A kernel at or above 6.18.45 for host and guest: prepared.**
+   - A new flake input, `nixpkgs-kernel` (nixos-26.05 @ `a033e66`), is
+     used only for `boot.kernelPackages = linuxPackagesFor linux_6_18`
+     on `go-choir-b` and `go-choir-autoputer-vm`. Both evaluate to
+     **6.18.56**, the current 6.18.x. Main nixpkgs is untouched.
+   - Main's NixOS modules read `kernel.buildDTBs` and `kernel.target`.
+     A passthru-only shim supplies them (false, bzImage) and survives
+     NixOS's `.override`. The kernel's out path is identical to Hydra's,
+     and the kernel, `-dev` (the guest vmlinux) and config are all in
+     cache.nixos.org. `nix build --dry-run` builds only the module
+     closure and the initrds.
+   - Fallback: nixos-unstable (`7fd4004`, 6.18.55) evaluates without the
+     shim.
+   - An assertion holds the floor at 6.18.45. That covers Copy Fail
+     (6.18.22), CVE-2026-53266 (6.18.36), CVE-2026-53362 and Januscape
+     (6.18.38), and Vghost (6.18.45).
+   - The guest kernel config differs from 6.18.37 in 14 lines: gcc 15.3,
+     DEBUG_LIST, CXL_RAS, ACPI_PLATFORM_PROFILE=y, and EROFS deflate and
+     zstd off. The guest store disk is LZ4 only. Every option the guest
+     kernel capability probe and Firecracker boot need is unchanged:
+     overlay=m, Landlock in CONFIG_LSM, namespaces, the seccomp filter,
+     virtio blk/net/mmio/balloon, PAGE_REPORTING, erofs and ext4.
+   - Not built locally: this Mac has only an aarch64-linux builder. The
+     6.18.56 bzImage was substituted and checked (`file`: 6.18.56). Node B
+     builds the rest at deploy, as usual.
+   - The guest half lands at deploy, through the deploy refresh. Busy
+     computers stay on 6.18.37 until the next deploy or the reboot.
+2. **`kvm_intel nested=0`: prepared** (`boot.extraModprobeConfig` in
+   `nix/node-b.nix`). A grep found no Choir code that needs nested
+   virtualization: Firecracker runs only on the host, and no guest
+   module, service or test uses `/dev/kvm` or VMX.
+   **SMT: owner decision; not changed.** `nosmt=force` is in
+   `nix/node-b.nix` as a comment. The cost:
+   - 6 cores / 12 threads become 6 threads. Today 3 always-on 4-vCPU
+     guests exactly fill 12 threads; with SMT off that is 2:1 vCPU
+     overcommit, and host builds (deploys) get half the threads.
+   - Real throughput loss is smaller than half. SMT usually adds about
+     15 to 30% throughput on mixed loads (estimate), so expect roughly a
+     20% loss for busy computers. By the CPU report's figure of about 1.2
+     cores per busy computer, that is about 5 busy computers instead of
+     6 to 7 (estimate).
+   - RAM binds first on this 32 GB host either way.
+   - The other route is core scheduling, one cookie per tenant. It keeps
+     the threads and costs development work.
+   - Recommendation: decide before strangers' computers run on Node B.
+     Today the tenants are the owner and the platform.
+3. **A host reboot: prepared, not done.**
+   - Runbook: `docs/runbooks/node-b-host-reboot.md`. Script:
+     `scripts/node_b_host_reboot.py`. It is dry-run by default; `--execute`
+     also needs `--console-verified`.
+   - The script's dry run on Node B correctly refuses today: the staged
+     kernel is 6.18.37, nested=0 is not staged yet, and the guest image is
+     6.18.37.
+   - Marker policy: markers go only to idle computers, immediately before
+     the reboot, and the post-checks report each one's age and actual
+     boot kind. Busy computers are waited for, or the run aborts.
+     `--allow-crash-close` and `--no-markers` are the explicit
+     crash-semantics options.
+   - Main risk: the console. If ssh doesn't return, recovery needs the
+     OVH IPMI/KVM console, which nobody has verified. No GRUB entry is
+     known good, and this is the go-choir configuration's first cold
+     boot.
+4. **Firecracker 1.17.0: not in this branch.** No nixpkgs has it yet:
+   main and nixos-26.05 have 1.15.1, and nixos-unstable has 1.16.1.
+   - From the kernel input: no. It would only give 1.15.1 (26.05) or
+     1.16.1 (unstable).
+   - The easy route is an overlay on main's `firecracker` with the
+     1.17.0 `src` and `cargoHash`. The alternative is the upstream static
+     release binary from `fetchurl`.
+   - Cost: a Rust build on Node B, and one cold boot for every
+     hibernated computer, because the Firecracker version is part of
+     snapshot validity.
+   - Ship it with or right after the reboot window. Its effect doesn't
+     need a reboot; it needs VM restarts, which the deploy refresh
+     provides.
 
 ## Belief and remaining error
 
 - Belief: the host kernel is the weakest dated link under every computer
   boundary, and it ranks above the jailer and confinement work.
 - Remaining error:
-  - whether 6.18.45 or later is in the pinned nixpkgs (check before the
-    bump);
-  - whether every guest and service comes back cleanly after a reboot
-    after 216 days of uptime (boot path last exercised in March);
-  - the cost of nosmt for density.
+  - resolved: the main nixpkgs pin has only 6.18.37. A kernel-only input
+    gives 6.18.56 (status item 1);
+  - whether the host comes back at all. This is the go-choir
+    configuration's first cold boot, with a new systemd stage 1 on md
+    RAID, and no GRUB entry is known good. The boot path last ran in
+    March, under the choiros-rs system;
+  - whether the OVH IPMI/KVM console works for this server (the main
+    reboot risk);
+  - how long POST and boot take. That decides whether planned-restart
+    markers are still fresh (15-minute TTL);
+  - the cost of nosmt for density: estimated in status item 2, not
+    measured.
