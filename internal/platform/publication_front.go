@@ -163,12 +163,44 @@ func (s *Service) isAutopaperStory(meta frontPublicationMeta) bool {
 // rewrites; rows within a page are ordered by their latest version's
 // published_at (DATETIME holds seconds, published_at holds nanoseconds).
 func (s *Service) ListFrontStories(ctx context.Context, limit int, cursor string) (*FrontPage, error) {
+	return s.ListFrontStoriesInSection(ctx, limit, cursor, "")
+}
+
+// ErrInvalidFrontSection marks a section filter that names none of the four
+// sections.
+var ErrInvalidFrontSection = errors.New("invalid section")
+
+// Section-filtered listing reads publications in batches of
+// frontSectionBatchSize and gives up after scanning frontSectionScanMax of
+// them in one request, so a rare section cannot make one request walk the
+// whole paper; the page then carries a cursor and the client continues.
+// Variables so tests can shrink them.
+var (
+	frontSectionBatchSize = 100
+	frontSectionScanMax   = 2000
+)
+
+// ListFrontStoriesInSection is ListFrontStories restricted to stories whose
+// attached section (the host scores file) is section; an empty section is
+// the unfiltered front list. A section that is not one of frontSections is
+// ErrInvalidFrontSection.
+//
+// A filtered page is filled by reading further publication batches, at most
+// frontSectionScanMax publications per call. NextCursor is set whenever
+// publications remain past the last one scanned, so a filtered page may be
+// short, or empty, with a cursor: the client keeps following it. A page that
+// ends exactly at the last match can offer a cursor whose page is empty.
+func (s *Service) ListFrontStoriesInSection(ctx context.Context, limit int, cursor, section string) (*FrontPage, error) {
 	if s == nil || s.store == nil || s.store.db == nil {
 		return nil, fmt.Errorf("platform service unavailable")
 	}
 	og := s.ogStore()
 	if og == nil {
 		return nil, fmt.Errorf("platform service: object graph store unavailable")
+	}
+	section = strings.TrimSpace(section)
+	if section != "" && !frontSections[section] {
+		return nil, ErrInvalidFrontSection
 	}
 	if limit <= 0 {
 		limit = frontDefaultLimit
@@ -179,6 +211,9 @@ func (s *Service) ListFrontStories(ctx context.Context, limit int, cursor string
 	after, err := decodeFrontCursor(cursor)
 	if err != nil {
 		return nil, ErrInvalidFrontCursor
+	}
+	if section != "" {
+		return s.listFrontSection(ctx, og, limit, after, section)
 	}
 
 	page := &FrontPage{Stories: []FrontStory{}}
@@ -221,6 +256,71 @@ func (s *Service) ListFrontStories(ctx context.Context, limit int, cursor string
 		}
 		if !more {
 			break
+		}
+	}
+	sort.SliceStable(page.Stories, func(i, j int) bool {
+		return page.Stories[i].UpdatedAt.After(page.Stories[j].UpdatedAt)
+	})
+	s.attachFrontImportance(page.Stories)
+	return page, nil
+}
+
+// listFrontSection fills a page with the stories scored into section. The
+// scores file is the only source of a story's section, so a publication
+// whose score names another section is skipped before its row is built; a
+// publication whose metadata carries no publication id is built and checked
+// after. With no scores file nothing has a section and the page is empty.
+func (s *Service) listFrontSection(ctx context.Context, og *ObjectGraphStore, limit int, after *frontCursor, section string) (*FrontPage, error) {
+	page := &FrontPage{Stories: []FrontStory{}}
+	scores := s.frontImportance.load(time.Now())
+	if len(scores) == 0 {
+		return page, nil
+	}
+	inSection := func(id string) bool { return scores[id].Section == section }
+	batchSize := frontSectionBatchSize
+	if batchSize < 1 {
+		batchSize = 1
+	}
+	scanned := 0
+	for len(page.Stories) < limit && scanned < frontSectionScanMax {
+		n := batchSize
+		if left := frontSectionScanMax - scanned; n > left {
+			n = left
+		}
+		batch, err := s.frontPublicationBatch(ctx, after, n)
+		if err != nil {
+			return nil, err
+		}
+		if len(batch) == 0 {
+			break
+		}
+		for _, pub := range batch {
+			scanned++
+			after = &frontCursor{UpdatedAt: pub.UpdatedAt.Unix(), CanonicalID: pub.CanonicalID}
+			var meta frontPublicationMeta
+			if err := json.Unmarshal(pub.Metadata, &meta); err == nil && meta.PublicationID != "" && !inSection(meta.PublicationID) {
+				continue
+			}
+			row, ok, err := s.frontStory(ctx, og, pub)
+			if err != nil {
+				return nil, err
+			}
+			if !ok || !inSection(row.PublicationID) {
+				continue
+			}
+			page.Stories = append(page.Stories, row)
+			if len(page.Stories) == limit {
+				break
+			}
+		}
+	}
+	if after != nil {
+		rest, err := s.frontPublicationBatch(ctx, after, 1)
+		if err != nil {
+			return nil, err
+		}
+		if len(rest) > 0 {
+			page.NextCursor = encodeFrontCursor(*after)
 		}
 	}
 	sort.SliceStable(page.Stories, func(i, j int) bool {

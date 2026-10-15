@@ -104,6 +104,9 @@ func (h *Handler) HandlePlatformFrontStories(w http.ResponseWriter, r *http.Requ
 	if cursor := strings.TrimSpace(r.URL.Query().Get("cursor")); cursor != "" {
 		q.Set("cursor", cursor)
 	}
+	if section := strings.TrimSpace(r.URL.Query().Get("section")); section != "" {
+		q.Set("section", section)
+	}
 	u.RawQuery = q.Encode()
 	var out platform.FrontPage
 	status, err := h.getPlatformJSON(r, u.String(), &out)

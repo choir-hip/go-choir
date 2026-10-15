@@ -181,8 +181,9 @@ func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *htt
 }
 
 // HandleInternalFrontStories serves the Autopaper front list: one row per
-// story publication, newest first, paged by ?limit=&cursor=. It reads Store
-// B alone (Cut 2 unit 2b, Reader W3a).
+// story publication, newest first, paged by ?limit=&cursor=, optionally only
+// one section's stories (?section=world|us_politics|business|tech_ai). It
+// reads Store B alone (Cut 2 unit 2b, Reader W3a).
 func (h *Handler) HandleInternalFrontStories(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -201,8 +202,12 @@ func (h *Handler) HandleInternalFrontStories(w http.ResponseWriter, r *http.Requ
 		}
 		limit = n
 	}
-	page, err := h.service.ListFrontStories(r.Context(), limit, r.URL.Query().Get("cursor"))
+	page, err := h.service.ListFrontStoriesInSection(r.Context(), limit, r.URL.Query().Get("cursor"), r.URL.Query().Get("section"))
 	if err != nil {
+		if errors.Is(err, ErrInvalidFrontSection) {
+			writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid section"})
+			return
+		}
 		if errors.Is(err, ErrInvalidFrontCursor) {
 			writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid cursor"})
 			return

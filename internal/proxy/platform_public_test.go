@@ -143,7 +143,7 @@ func TestPlatformFrontStoriesIsPublicAndNeverCallsAComputer(t *testing.T) {
 		}
 		gotInternal = r.Header.Get("X-Internal-Caller")
 		gotQuery = r.URL.RawQuery
-		if r.URL.Query().Get("cursor") == "bad" {
+		if r.URL.Query().Get("cursor") == "bad" || r.URL.Query().Get("section") == "sports" {
 			http.Error(w, `{"error":"invalid cursor"}`, http.StatusBadRequest)
 			return
 		}
@@ -169,7 +169,7 @@ func TestPlatformFrontStoriesIsPublicAndNeverCallsAComputer(t *testing.T) {
 		t.Fatalf("NewHandler: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/platform/publications/front?limit=5&cursor=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/platform/publications/front?limit=5&cursor=abc&section=us_politics", nil)
 	w := httptest.NewRecorder()
 	h.HandleAPI(w, req)
 	if w.Code != http.StatusOK {
@@ -178,7 +178,7 @@ func TestPlatformFrontStoriesIsPublicAndNeverCallsAComputer(t *testing.T) {
 	if gotInternal != "true" {
 		t.Fatalf("missing internal caller header")
 	}
-	if gotQuery != "cursor=abc&limit=5" {
+	if gotQuery != "cursor=abc&limit=5&section=us_politics" {
 		t.Fatalf("corpusd query = %q", gotQuery)
 	}
 	var page platform.FrontPage
@@ -193,6 +193,11 @@ func TestPlatformFrontStoriesIsPublicAndNeverCallsAComputer(t *testing.T) {
 	h.HandleAPI(badW, httptest.NewRequest(http.MethodGet, "/api/platform/publications/front?cursor=bad", nil))
 	if badW.Code != http.StatusBadRequest {
 		t.Fatalf("bad cursor status: got %d", badW.Code)
+	}
+	badSectionW := httptest.NewRecorder()
+	h.HandleAPI(badSectionW, httptest.NewRequest(http.MethodGet, "/api/platform/publications/front?section=sports", nil))
+	if badSectionW.Code != http.StatusBadRequest {
+		t.Fatalf("bad section status: got %d", badSectionW.Code)
 	}
 	postW := httptest.NewRecorder()
 	h.HandleAPI(postW, httptest.NewRequest(http.MethodPost, "/api/platform/publications/front", nil))
