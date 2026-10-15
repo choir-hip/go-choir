@@ -358,6 +358,30 @@ now:
       ship before the forecast cohort starts.
     Dissent kept: gpt-6-luna preferred a post-commit Store B watermark
     anchor (D1'), which needs a serialized Store B sequence.
+    L3-1 rollout (2026-10-15, orchestrator decision, the conservative
+    option under No Blocking Asks): this first deploy validates kind,
+    criterion and resolves_by when present but does not yet require kind.
+    - A kind-less hypothesis commits as legacy and stays outside the
+      forecast cohort.
+    - Requiring kind on every new hypothesis, as now.slice says, waits
+      until the paper's Casts show the kinds reliably (about a day of
+      Casts, with a kinded share of 95% or more). This keeps a prompt the
+      model misreads from refusing story opens on the 24/7 paper.
+    - Rollback residual: a revert followed by a roll-forward leaves
+      conversations touched in between with stored heads that lack the
+      fields. VerifyInboxHeads would report those; re-folding them is the
+      repair.
+    L3-1 red ceremony:
+    - Mutation class: red.
+    - Protected surfaces: Cast admission and the inbox fold
+      (internal/store/inbox.go), CastHypothesis and HypothesisState, the
+      management overlays on the live paper, and the Cut 2 freeze receipt.
+    - Admissible evidence: focused store tests K1-K9 written first; then,
+      deployed, the paper's story Casts are still admitted and published,
+      and the kinds appear in new Casts.
+    - Rollback: git revert. Heads decode with unknown fields ignored (K9).
+    - Conjecture delta: a hypothesis can state how it settles.
+    - Heresy delta: discovered none, introduced none, repaired none.
 
 receipts: []
 ---
