@@ -463,3 +463,40 @@ branch `feat/autopaper-compute-halving`.
   default pool is now deepseek-v4.1-flash (weight 1) and gpt-6-luna
   (weight 3); thread assignment is a weighted stable hash, and each member
   is the other's fallback. cat-jam-free stays in the catalog.
+
+## 24. Night rulings: meta-journalism, two sources, ingestion, disk, panels (2026-10-16, ~00:00 UTC)
+
+Given by the owner before sleep. Quotes are the owner's words.
+
+- **Track media outlets in the object graph, separately from the sources
+  making claims.** "We should think about it as like we're doing meta
+  journalism. We need to keep statistics on the media outlets in addition
+  to the actual sources that are making claims and associate the two."
+  An outlet (the publisher of a capture) and a source (the person, body or
+  document making a claim inside it) are different objects, linked to
+  each other, and each has statistics.
+- **Never publish an article with only one source.** "We always should
+  have two, ideally more. We want to have as much diversity of
+  perspective as we can." This is a publishing rule: at least two sources,
+  and more and more diverse is better.
+- **Scale source ingestion, starting overnight; the owner takes over in
+  the morning.** "Increasing source ingestion shouldn't imply
+  significantly increasing the quantity of model calls, because the same
+  agent can process multiple different ingested captured sources. Indeed,
+  that's ideal." More sources must mean more captures per model call, not
+  more calls.
+- **Disk: free as much as possible, root out storage leaks, and prune by
+  mechanism.** "Disk is perennially a scarce resource, so we have to
+  really get efficient with disk and root out any storage leaks and build
+  systems to be pruning excess, useless storage regularly. Or if not on a
+  temporal schedule, on a mechanistic program." Read as consent to delete
+  the paper's two rollback images from 2026-10-15 (handoff §1). The Dolt
+  backup that the soak depends on, and the Node B quarantine images, stay.
+- **Panels: Devin and Gemini (antigravity), plus the orchestrating
+  Claude.** "You can just ignore Open Code Go for the panel … Don't use
+  codex for agentic consensus." Spend tokens on getting Autopaper work
+  done.
+- "Really think about most of the questions that you have right now":
+  decide routine questions without waiting for the owner. The signing
+  authority for witness (b) is a credential choice, so it still waits
+  for the owner.
