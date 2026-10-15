@@ -641,7 +641,16 @@ func parseBraveResults(data []byte) ([]SearchResult, error) {
 
 type ExaProvider struct {
 	httpClient *http.Client
+	endpoint   string // test seam; empty means the Exa API
 }
+
+const (
+	// exaMaxTextCharacters bounds the page text Exa returns per result.
+	exaMaxTextCharacters = 4000
+	// exaMaxResponseBytes fits 40 results at exaMaxTextCharacters plus JSON
+	// escaping and metadata with wide margin.
+	exaMaxResponseBytes = 4 * 1024 * 1024
+)
 
 func (p *ExaProvider) Name() string { return "exa" }
 
@@ -667,7 +676,9 @@ func (p *ExaProvider) Search(ctx context.Context, query string, maxResults int) 
 		"numResults": maxResults,
 		"type":       "auto",
 		"contents": map[string]any{
-			"text": true,
+			// Bounded text per result: "text": true returns whole pages
+			// and 40 of them overflowed the response read.
+			"text": map[string]any{"maxCharacters": exaMaxTextCharacters},
 		},
 	}
 
@@ -676,7 +687,11 @@ func (p *ExaProvider) Search(ctx context.Context, query string, maxResults int) 
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.exa.ai/search", strings.NewReader(string(bodyBytes)))
+	endpoint := p.endpoint
+	if endpoint == "" {
+		endpoint = "https://api.exa.ai/search"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(bodyBytes)))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -690,13 +705,19 @@ func (p *ExaProvider) Search(ctx context.Context, query string, maxResults int) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	bodyBytes, err = io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	// Read one byte past the limit so truncation is detected and reported
+	// as its own failure stage instead of surfacing as a JSON parse error.
+	bodyBytes, err = io.ReadAll(io.LimitReader(resp.Body, exaMaxResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("status %s: %s", resp.Status, truncateError(bodyBytes))
+	}
+
+	if len(bodyBytes) > exaMaxResponseBytes {
+		return nil, fmt.Errorf("response truncated: body exceeds %d bytes (numResults=%d, maxCharacters=%d)", exaMaxResponseBytes, maxResults, exaMaxTextCharacters)
 	}
 
 	return parseExaResults(bodyBytes)
