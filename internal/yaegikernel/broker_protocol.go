@@ -16,7 +16,6 @@ const (
 	ActionReadFile  BrokerAction = "read_file"
 	ActionWriteFile BrokerAction = "write_file"
 	ActionListDir   BrokerAction = "list_dir"
-	ActionAssign    BrokerAction = "assign"
 	ActionMessage   BrokerAction = "message"
 	ActionEmit      BrokerAction = "emit"
 	// ActionSearchStart starts an async search on the host; its arrivals come
@@ -112,19 +111,6 @@ type ListDirPayload struct {
 // ListDirResult defines the result for ActionListDir.
 type ListDirResult struct {
 	Entries []string `json:"entries"`
-}
-
-// AssignPayload defines the parameters for ActionAssign (spawning a subagent/worker).
-type AssignPayload struct {
-	TaskID       string `json:"task_id"`
-	ActorProfile string `json:"actor_profile"`
-	Instruction  string `json:"instruction"`
-}
-
-// AssignResult defines the result for ActionAssign.
-type AssignResult struct {
-	AssignmentID string `json:"assignment_id"`
-	Status       string `json:"status"`
 }
 
 // MessagePayload defines the parameters for ActionMessage (inter-agent typed message).
@@ -298,7 +284,7 @@ func (r *BrokerRequest) Validate() error {
 		return fmt.Errorf("broker protocol: action is required")
 	}
 	switch r.Action {
-	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionAssign, ActionMessage, ActionEmit,
+	case ActionExec, ActionReadFile, ActionWriteFile, ActionListDir, ActionMessage, ActionEmit,
 		ActionSearchStart, ActionRead, ActionSearchWireCorpus,
 		ActionSaveEvidence, ActionReadEvidence, ActionListEvidence, ActionGetRunMemoryEntry,
 		ActionProductAPI, ActionResearch, ActionPollSource, ActionReadCapture, ActionStories:

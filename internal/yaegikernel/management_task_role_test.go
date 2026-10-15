@@ -17,7 +17,7 @@ import (
 //   - normalizeDeskRole does not know the role and maps it to engineering,
 //     so a task gets WriteFile, Exec, Complete and Freeze (the round-2
 //     discovered heresy: unknown roles fail open to engineering);
-//   - NewChoirScope gives the task's handle Exec, WriteFile and Assign (every
+//   - NewChoirScope gives the task's handle Exec and WriteFile (every
 //     non-research role had them) or ProductAPI (management's), so a cell
 //     that bypassed the export map could still reach them;
 //   - the task exports the parent's verbs: engineering Cast admission,
@@ -59,7 +59,7 @@ func TestManagementTaskRoleReverseParity(t *testing.T) {
 	// past the export map is refused at the broker.
 	for _, action := range scope.actions {
 		switch action {
-		case ActionExec, ActionWriteFile, ActionAssign, ActionProductAPI, ActionMessage, ActionEmit, ActionResearch:
+		case ActionExec, ActionWriteFile, ActionProductAPI, ActionMessage, ActionEmit, ActionResearch:
 			t.Errorf("a management task's handle authorizes %s", action)
 		}
 	}

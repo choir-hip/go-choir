@@ -76,7 +76,7 @@ func TestBrokerExecAndPathSecurity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scopes := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionAssign, ActionMessage}
+	scopes := []BrokerAction{ActionExec, ActionReadFile, ActionWriteFile, ActionMessage}
 	handleRef, err := issuer.Issue("computer-test-1", "engineering", 1, scopes, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)

@@ -48,11 +48,10 @@ type BrokerConfig struct {
 
 // Broker executes authorized operations requested by untrusted Yaegi activations.
 type Broker struct {
-	mu          sync.Mutex
-	cfg         BrokerConfig
-	handles     *HandleIssuer
-	assignments map[string]AssignPayload
-	messages    map[string]MessagePayload
+	mu       sync.Mutex
+	cfg      BrokerConfig
+	handles  *HandleIssuer
+	messages map[string]MessagePayload
 }
 
 // NewBroker creates a new trusted broker instance.
@@ -77,10 +76,9 @@ func NewBroker(cfg BrokerConfig, handles *HandleIssuer) (*Broker, error) {
 	}
 
 	return &Broker{
-		cfg:         cfg,
-		handles:     handles,
-		assignments: make(map[string]AssignPayload),
-		messages:    make(map[string]MessagePayload),
+		cfg:      cfg,
+		handles:  handles,
+		messages: make(map[string]MessagePayload),
 	}, nil
 }
 
@@ -116,7 +114,7 @@ func (b *Broker) SetEmitRefused(refused bool) {
 	b.cfg.EmitRefused = refused
 }
 
-// DrainReceipts returns worker-local assign/message entries recorded since
+// DrainReceipts returns worker-local message entries recorded since
 // the last drain and clears them, so the session loop surfaces each receipt
 // to the host exactly once in SessionResult. Entries are host-reconciled,
 // never trusted as durable; undrained entries die with the worker.
@@ -127,10 +125,6 @@ func (b *Broker) DrainReceipts() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var out []string
-	for id, p := range b.assignments {
-		out = append(out, "assign/"+id+"/"+p.TaskID)
-		delete(b.assignments, id)
-	}
 	for id, p := range b.messages {
 		out = append(out, "message/"+id+"/"+p.Kind)
 		delete(b.messages, id)
@@ -169,8 +163,6 @@ func (b *Broker) HandleRequest(ctx context.Context, req *BrokerRequest) *BrokerR
 		return b.handleWriteFile(ctx, req, receiptID, start)
 	case ActionListDir:
 		return b.handleListDir(ctx, req, receiptID, start)
-	case ActionAssign:
-		return b.handleAssign(ctx, req, receiptID, start)
 	case ActionMessage:
 		return b.handleMessage(ctx, req, receiptID, start)
 	case ActionEmit:
@@ -342,29 +334,6 @@ func (b *Broker) handleListDir(ctx context.Context, req *BrokerRequest, receiptI
 	}
 
 	resp, err := NewSuccessResponse(req.RequestID, ListDirResult{Entries: names}, receiptID, time.Since(start))
-	if err != nil {
-		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
-	}
-	return resp
-}
-
-func (b *Broker) handleAssign(ctx context.Context, req *BrokerRequest, receiptID string, start time.Time) *BrokerResponse {
-	var payload AssignPayload
-	if err := json.Unmarshal(req.Payload, &payload); err != nil {
-		return NewErrorResponse(req.RequestID, fmt.Sprintf("unmarshal assign payload: %v", err), time.Since(start))
-	}
-
-	assignID := newReceiptID()
-	b.mu.Lock()
-	b.assignments[assignID] = payload
-	b.mu.Unlock()
-
-	result := AssignResult{
-		AssignmentID: assignID,
-		Status:       "dispatched",
-	}
-
-	resp, err := NewSuccessResponse(req.RequestID, result, receiptID, time.Since(start))
 	if err != nil {
 		return NewErrorResponse(req.RequestID, err.Error(), time.Since(start))
 	}
