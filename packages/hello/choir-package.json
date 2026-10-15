@@ -1,0 +1,23 @@
+{
+  "schema": "choir.app-package/v1",
+  "name": "hello",
+  "version": "0.1.0",
+  "display": {
+    "title": "Hello",
+    "icon": "👋",
+    "description": "S7-0a fixture package: a frontend module with package data"
+  },
+  "source": {
+    "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "frontend": {
+    "entry": "frontend/index.js",
+    "abi": "choir.app-frontend/v1",
+    "window": { "singleton": true, "width": 520, "height": 360 }
+  },
+  "backend": null,
+  "build": { "recipe": "static/v1", "outputs": ["frontend/index.js"] },
+  "data": { "store": "package_kv/v1", "schema_version": 1, "reads_schema_versions": [1] },
+  "restore": { "data_scope": "computer_tape", "on_purge": "delete_data" },
+  "grants": []
+}
