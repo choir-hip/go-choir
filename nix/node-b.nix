@@ -1072,7 +1072,8 @@ in
         # start; a snapshot resume keeps its old credential disk). The owner
         # puts the token at ${claudeDelegateTokenFile} (root, 0400).
         # Rollback: empty the list and deploy; revoke the token.
-        "CHOIR_CLAUDE_DELEGATE_COMPUTERS="
+        # 2026-10-15: one minted QA test computer (owner installed the token).
+        "CHOIR_CLAUDE_DELEGATE_COMPUTERS=computer-33594053a05f46e93d80e7e15ce8a0d2"
         "CHOIR_CLAUDE_DELEGATE_EXPIRES=2026-10-22T00:00:00Z"
         "CHOIR_CLAUDE_DELEGATE_TOKEN_FILE=${claudeDelegateTokenCopy}"
         # Keep personal computers resident while the host is under capacity.
