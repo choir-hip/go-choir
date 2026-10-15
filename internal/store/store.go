@@ -130,6 +130,7 @@ type Store struct {
 	doltCheckpointEvery     uint64
 	workerUpdateMu          sync.Mutex
 	runMemoryMu             sync.Mutex
+	appPackageMu            sync.Mutex // serializes app-package acts and datum writes (app_packages.go)
 	textureMutationMu       sync.Mutex
 	channelMsgMu            sync.Mutex
 	eventMu                 sync.Mutex

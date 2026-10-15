@@ -1,4 +1,5 @@
 import type { ComponentType } from 'svelte';
+import { getPackageAppDefinition } from './packages';
 
 export type AppPreviewPolicy = 'public-preview' | 'public-readonly' | 'private';
 export type AppSurfaceKind = 'standard' | 'document' | 'media' | 'terminal';
@@ -276,9 +277,12 @@ export const DESKTOP_ICON_APPS = APP_REGISTRY
 
 export const HEAVY_APP_IDS = new Set(APP_REGISTRY.filter((app) => app.window.heavy).map((app) => app.id));
 
+// The static registry is consulted first and always wins. App packages
+// (ids "package:<name>", which no static id can take) come from the
+// computer's installed set; see ./packages.ts.
 export function getAppDefinition(appId: string): ChoirAppDefinition | null {
   const canonicalAppId = normalizeAppId(appId);
-  return APP_REGISTRY.find((app) => app.id === canonicalAppId) || null;
+  return APP_REGISTRY.find((app) => app.id === canonicalAppId) || getPackageAppDefinition(canonicalAppId);
 }
 
 export function getAppIcon(appId: string): string {

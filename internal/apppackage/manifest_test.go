@@ -79,17 +79,20 @@ func TestManifestBackendShapeIsValid(t *testing.T) {
 
 func TestManifestRejects(t *testing.T) {
 	cases := map[string]func(*Manifest){
-		"schema":              func(m *Manifest) { m.Schema = "choir.app-package/v2" },
-		"name-empty":          func(m *Manifest) { m.Name = "" },
-		"name-shape":          func(m *Manifest) { m.Name = "Hello_World" },
-		"reserved-name":       func(m *Manifest) { m.Name = "texture" },
-		"version":             func(m *Manifest) { m.Version = "1.0" },
-		"title":               func(m *Manifest) { m.Display.Title = " " },
-		"icon-long":           func(m *Manifest) { m.Display.Icon = "123456789" },
-		"source-digest":       func(m *Manifest) { m.Source.Digest = "sha256:ABC" },
-		"entry-dotdot":        func(m *Manifest) { m.Frontend.Entry = "../index.js"; m.Build.Outputs = []string{"../index.js"} },
-		"entry-absolute":      func(m *Manifest) { m.Frontend.Entry = "/index.js"; m.Build.Outputs = []string{"/index.js"} },
-		"entry-backslash":     func(m *Manifest) { m.Frontend.Entry = `frontend\index.js`; m.Build.Outputs = []string{`frontend\index.js`} },
+		"schema":         func(m *Manifest) { m.Schema = "choir.app-package/v2" },
+		"name-empty":     func(m *Manifest) { m.Name = "" },
+		"name-shape":     func(m *Manifest) { m.Name = "Hello_World" },
+		"reserved-name":  func(m *Manifest) { m.Name = "texture" },
+		"version":        func(m *Manifest) { m.Version = "1.0" },
+		"title":          func(m *Manifest) { m.Display.Title = " " },
+		"icon-long":      func(m *Manifest) { m.Display.Icon = "123456789" },
+		"source-digest":  func(m *Manifest) { m.Source.Digest = "sha256:ABC" },
+		"entry-dotdot":   func(m *Manifest) { m.Frontend.Entry = "../index.js"; m.Build.Outputs = []string{"../index.js"} },
+		"entry-absolute": func(m *Manifest) { m.Frontend.Entry = "/index.js"; m.Build.Outputs = []string{"/index.js"} },
+		"entry-backslash": func(m *Manifest) {
+			m.Frontend.Entry = `frontend\index.js`
+			m.Build.Outputs = []string{`frontend\index.js`}
+		},
 		"entry-not-output":    func(m *Manifest) { m.Frontend.Entry = "frontend/other.js" },
 		"frontend-abi":        func(m *Manifest) { m.Frontend.ABI = "svelte4" },
 		"backend-kind":        func(m *Manifest) { m.Backend = &Backend{Kind: "daemon", Entry: "b", ABI: BackendABIV1} },

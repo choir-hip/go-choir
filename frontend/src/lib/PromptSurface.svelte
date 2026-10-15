@@ -2,6 +2,7 @@
   import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import TetraMark from './TetraMark.svelte';
   import DeskSheet from './DeskSheet.svelte';
+  import { packageApps } from './apps/packages';
   import {
     activeWindowId,
     openWindows,
@@ -34,7 +35,8 @@
   let removeLiveListener = () => {};
   let promptWasDisabled = promptDisabled;
 
-  const deskApps = DESK_APPS;
+  // Static desk apps first, then this computer's enabled app packages.
+  $: deskApps = [...DESK_APPS, ...$packageApps];
   const publicTicker = [
   ];
 

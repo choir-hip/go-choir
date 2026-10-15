@@ -552,6 +552,9 @@ func Run() {
 	})
 	RegisterFileRoutes(s, fileHandler)
 	RegisterFileSyncRoute(s, fileSyncService)
+	// S7-0a app packages: lifecycle and data are object-graph objects on
+	// this computer's tape; bytes come from the release-shipped catalog.
+	RegisterAppPackageRoutes(s, NewAppPackageServiceFromEnv(db, cfg.ComputerID, rtCfg.StorePath))
 	maildir, err := NewMaildir(filepath.Join(filesRoot, "mail"))
 	if err != nil {
 		log.Printf("autoputer: init maildir: %v", err)

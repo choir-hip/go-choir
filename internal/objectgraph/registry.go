@@ -99,6 +99,11 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.coagent_mailbox", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.source_schedule", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		// S7-0a app packages (docs/design/s7-0-app-packages-2026-10-14.md):
+		// hash-chained lifecycle events, folded by apppackage.Reduce, and
+		// package_kv/v1 data, tombstoned by a delete_data purge.
+		{Kind: "choir.app_package_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "apppackage.Event"},
+		{Kind: "choir.app_package_datum", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "apppackage.Datum"},
 		{Kind: "choir.capture_label", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.capture_label_override", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 

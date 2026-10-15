@@ -24,6 +24,7 @@
   import { tick } from 'svelte';
   import { fetchWithRenewal, AuthRequiredError, renewSession } from './auth.js';
   import { handoffToComputerSurfaceIfStale } from './computer-surface-handoff.js';
+  import { clearInstalledPackages, refreshInstalledPackages } from './apps/packages';
   import { submitConductorPrompt, waitForConductorDecision } from './conductor.js';
   import { fetchDesktopState, saveDesktopState } from './desktop.js';
   import { withDesktopSelector } from './desktop-selector.js';
@@ -163,6 +164,7 @@
       if (wasAuthenticated) {
         void flushDesktopState({ keepalive: true, allowSignedOutTransition: true });
       }
+      clearInstalledPackages();
       enterPublicDesktop();
     }
   }
@@ -311,7 +313,11 @@
       appendBootLine('Opening live channel');
       connectLiveChannel();
       appendBootLine('Restoring desktop state');
+      // App packages (S7-0a): read the installed set beside the desktop
+      // state, so restored package windows resolve; it never throws.
+      const packagesRefreshed = refreshInstalledPackages();
       await loadDesktopState();
+      await packagesRefreshed;
       desktopReady = bootstrapStable && stateLoaded;
       if (desktopReady) {
         promptStatus = '';

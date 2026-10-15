@@ -8,7 +8,7 @@
     "description": "S7-0a fixture package: a frontend module with package data"
   },
   "source": {
-    "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    "digest": "sha256:2be3e328e045ba9de98f87e0e08f3b4cee042e0c55e335033ae48b4a22d38be2"
   },
   "frontend": {
     "entry": "frontend/index.js",

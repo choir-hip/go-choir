@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import AppSurface from './apps/AppSurface.svelte';
   import { getAppDefinition, type ChoirAppDefinition } from './apps/registry';
+  import { installedPackages } from './apps/packages';
   import type { ComponentType } from 'svelte';
   import { handoffToComputerSurfaceIfStale, isDynamicImportError } from './computer-surface-handoff.js';
 
@@ -17,7 +18,8 @@
   let loadError = '';
   let loadToken = 0;
 
-  $: app = getAppDefinition(win?.appId || '');
+  // Re-resolve when the package inventory changes (package apps only).
+  $: app = ($installedPackages, getAppDefinition(win?.appId || ''));
   $: appContext = { ...(win?.appContext || {}), appId: win?.appId || '' };
   $: shellAttrs = app?.theme.shellDataAttr ? { [app.theme.shellDataAttr]: '' } : {};
   $: if (app && app.id !== loadedAppId) {
