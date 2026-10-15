@@ -145,6 +145,11 @@ Every command takes a required `computer`.
 | `self-dev reject` | `self_dev_reject` | GET op, GET head, POST decision | operation, idempotency_key, reason | W D I | :read, :approve |
 | `self-dev mode get` | `self_dev_mode_get` | GET `.../mode` | — | R | :read |
 | `self-dev mode set` | `self_dev_mode_set` | PUT `.../mode` (generation CAS) | mode, expected_generation, idempotency_key, and the accept_once / qualified_consensus binding fields | W D I | :mode |
+| `release list` | `release_list` | GET `/api/releases?limit=&publisher_computer_id=` | limit, publisher | R | :read |
+| `release show` | `release_show` | GET `/api/releases/{id}` | release; record verified against its id client-side | R | :read |
+| `release adoptions` | `release_adoptions` | GET `.../self-development/adoptions[/{aid}]` | adoption | R | :read |
+| `release publish` | CLI only (owner act) | POST `/api/computers/{id}/releases` | operation, test_command | W I | :approve, owner:acts |
+| `release adopt` | CLI only (owner act) | GET `/api/releases/{id}` (verified), POST `.../self-development/adoptions` | release | W I | :read, :approve, owner:acts |
 
 (`:read` is `computer:self_development:read`, and so on.)
 

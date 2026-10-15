@@ -35,6 +35,10 @@ which `admin` does not imply; reject stays an agent act.
 | Read the binding | `choir self-dev head` | canonical/desired/effective heads and state commitments |
 | Approve | `choir self-dev approve --operation=ID` | consumed `accept_once` ModeReceipt + decision event |
 | Reject | `choir self-dev reject --operation=ID --reason=...` | decision event |
+| Publish a release (owner) | `choir release publish --computer=A --operation=ID [--test-command=CMD]` (applied operation; source only) | release id, `choir.software_release` in Store B |
+| Find releases | `choir release list`, `choir release show --release=ID` (record verified against its id) | the release record |
+| Adopt as source (owner) | `choir release adopt --computer=B --release=ID` (B's own tree, B's desks and gate; refused before any change if it does not verify or apply) | `choir.release_adoption` on B's tape, B's operation on its trajectory |
+| Watch an adoption | `choir release adoptions --computer=B` | adoption with its operation and `patch_matches_release` |
 
 Self-development a Texture request opens (Texture -> management -> engineering
 freeze) creates its own operation; `list` is how to find it — do not derive the

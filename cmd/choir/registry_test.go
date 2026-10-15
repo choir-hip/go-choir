@@ -47,7 +47,9 @@ import (
 // reason in the registry and an entry here.
 var wantCLIOnly = []string{
 	"api-key create", "computer bootstrap-chain", "computer rematerialize-from-tape",
-	"computer restore", "help", "mcp", "precommit import-ledger", "self-dev approve",
+	"computer restore", "help", "mcp", "precommit import-ledger",
+	// Owner acts (P7/P8): publishing and adopting a release.
+	"release adopt", "release publish", "self-dev approve",
 	"self-dev mode set", "self-dev wait", "texture watch", "trace export", "version",
 }
 
@@ -498,6 +500,9 @@ func TestEveryToolMatchesItsCLICommand(t *testing.T) {
 		"self_dev_patch":                   {cli: []string{"self-dev", "patch", "--computer", "c1", "--operation", "op-1"}, mcp: `{"computer":"c1","operation":"op-1"}`, reply: sourcePatchReply("op-1", "c1", []byte(testSourcePatch), "")},
 		"self_dev_reject":                  {cli: []string{"self-dev", "reject", "--computer", "c1", "--operation", "op-1", "--reason", "no"}, mcp: `{"computer":"c1","operation":"op-1","reason":"no"}`, reply: approval},
 		"self_dev_mode_get":                {cli: []string{"self-dev", "mode", "get", "--computer", "c1"}, mcp: `{"computer":"c1"}`},
+		"release_list":                     {cli: []string{"release", "list", "--limit", "5", "--publisher", "c9"}, mcp: `{"limit":5,"publisher":"c9"}`},
+		"release_show":                     {cli: []string{"release", "show", "--release", testReleaseID(t)}, mcp: `{"release":"` + testReleaseID(t) + `"}`, reply: testReleaseReply(t)},
+		"release_adoptions":                {cli: []string{"release", "adoptions", "--computer", "c1", "--adoption", "adoption-1"}, mcp: `{"computer":"c1","adoption":"adoption-1"}`},
 		"precommit_add":                    {cli: []string{"precommit", "add", "--claim", "tests pass", "--p", "0.8", "--tag", "a,b", "--key", "k"}, mcp: `{"claim":"tests pass","p":0.8,"tags":["a","b"],"idempotency_key":"k"}`},
 		"precommit_settle": {cli: []string{"precommit", "settle", "calib:1", "--outcome", "true", "--evidence", "CI 1", "--evidence", "a, b"},
 			mcp: `{"claim_id":"calib:1","outcome":"true","evidence":["CI 1","a, b"]}`},
