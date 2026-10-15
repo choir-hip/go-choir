@@ -305,3 +305,40 @@ Ways the fix could fail, and the intended handling:
     skip when `os.Geteuid()==0`.
 14. **Not addressed (separate causes):** spec-by-reference casts (B), `cp -a`
     and seccomp release-copy hostility (C), no owner escalation target (D).
+
+## Residual 12, the seven granted verbs without handlers: decision (2026-10-15 19:20 UTC)
+
+Re-checked from code at 3024946a4.
+
+- Engineering is granted `lstat`, `readlink`, `mkdir_all`, `remove_all`,
+  `symlink`, `truncate` and `file_hash`. Research is granted `lstat`,
+  `readlink` and `file_hash`.
+- Neither broker handles any of them. The host broker's verb switch
+  (`cmd/capsule-broker/main.go`, `exec` through `job_*`) has no case for
+  them, and the guest broker (`internal/yaegikernel/broker.go`) has
+  handlers only for exec, read_file, write_file, list_dir, message, emit
+  and egress.
+- No Go or prompt surface names them outside `internal/capsule/roles.go`.
+  The other matches are syscall names in `seccomp.go` and file-type
+  strings.
+
+Decision, the same as for `edit_file`, `rename` and `chmod`: **delete the
+grants; don't implement the verbs.** `exec` (`ls -l`, `readlink`,
+`mkdir -p`, `rm -rf`, `ln -s`, `truncate`, `sha256sum`) covers every one
+of them, under the same capsule confinement.
+
+Ceremony (red: the capsule capability surface):
+
+- **Conjecture delta.** A capability names only verbs that can succeed.
+  Before, these grants turned a role check into a later `unknown verb`.
+  After, they are refused at the role check.
+- **Protected surfaces.** `internal/capsule/roles.go` `RoleVerbSets`
+  only. No broker, seccomp or executor change.
+- **Admissible evidence.** `roles_test.go` asserts that every granted
+  verb is in the set the brokers handle, and the focused capsule tests
+  pass. The deployed proof is a go-served tracer reaching restore, which
+  needs engineering's real verbs (exec, write_file, job_*, go_eval) to
+  keep working.
+- **Rollback.** git revert of the fix commit.
+- **Heresy delta.** Discovered: none new (the residual was named
+  earlier). Introduced: none. Repaired: grants without handlers.
