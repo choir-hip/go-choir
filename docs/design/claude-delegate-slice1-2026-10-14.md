@@ -181,7 +181,13 @@ revocation as the hard stop.
 ## 6. UNVERIFIED
 
 - Claude Code (Bun) runs under the capsule's seccomp allowlist and
-  Landlock (it may want a syscall the filter refuses).
+  Landlock (it may want a syscall the filter refuses). **Refuted on
+  staging 2026-10-15**: the filter refuses `timerfd_create`, so Bun
+  panics at start (`us_create_timer returned null`, exit 134), and
+  `rt_sigsuspend`, which JavaScriptCore's GC needs; and once that is
+  fixed, every Bash tool call fails in bwrap (the
+  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` sandbox needs `CAP_SYS_ADMIN`).
+  See [claude-delegate-bun-timer-seccomp-2026-10-15.md](../problems/claude-delegate-bun-timer-seccomp-2026-10-15.md).
 - Landlock's ptrace scoping blocks a sibling cell from reading
   `claude`'s `/proc/<pid>/environ` on the staging kernel (F13).
 - A token-holding headless run needs no host besides `api.anthropic.com`
