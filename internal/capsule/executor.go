@@ -553,12 +553,6 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	if err != nil {
 		return fmt.Errorf("capsule create parent broker listener: %w", err)
 	}
-	dialSocket, closeDialSocket, err := unixSocketAddress(hostSocket)
-	if err != nil {
-		_ = listener.Close()
-		return fmt.Errorf("capsule broker socket address: %w", err)
-	}
-	defer closeDialSocket()
 	caps.listener = listener
 	if err := os.Chmod(hostSocket, 0o600); err != nil {
 		return fmt.Errorf("capsule secure parent broker listener: %w", err)
@@ -625,7 +619,10 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule, claudeT
 	deadline := time.Now().Add(10 * time.Second)
 	var lastErr error
 	for {
-		client := NewBrokerClient(dialSocket, e.publicKey)
+		// The client keeps the real path and derives a dial address on each
+		// dial, so a re-dial after a transport error never uses a closed
+		// descriptor.
+		client := NewBrokerClient(hostSocket, e.publicKey)
 		if err := client.Connect(ctx); err != nil {
 			lastErr = err
 		} else if _, probeErr := client.Stat(ctx, readinessCapability, "."); probeErr != nil {
