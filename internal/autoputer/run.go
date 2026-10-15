@@ -644,7 +644,7 @@ func Run() {
 					log.Printf("autoputer: file tree hydrated %d files from CAS root %s", restored, root)
 				}
 			}
-			startPeriodicDoltGC(rtCfg.StorePath)
+			startPeriodicDoltGC(ctx, db, rtCfg.StorePath)
 			if err := rt.Start(ctx); err != nil {
 				return err
 			}
@@ -668,7 +668,7 @@ func Run() {
 		if err := db.EnsureObjectGraphIndexes(ctx, nil); err != nil {
 			log.Printf("autoputer: object graph record indexes deferred: %v", err)
 		}
-		startPeriodicDoltGC(rtCfg.StorePath)
+		startPeriodicDoltGC(ctx, db, rtCfg.StorePath)
 		if err := rt.Start(ctx); err != nil {
 			boot.fatalf("autoputer: runtime startup refused: %v", err)
 		}
@@ -678,15 +678,14 @@ func Run() {
 	s.Start()
 }
 
-// startPeriodicDoltGC starts the milestone-based Dolt garbage collector. It is
-// deferred until AFTER the tape replay completes so GC churn never looks like a
-// replay stall and never races the recovery working set (B11).
-func startPeriodicDoltGC(storePath string) {
-	go func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		store.StartPeriodicDoltGC(ctx, filepath.Dir(storePath), storePath, 5*time.Minute)
-	}()
+// startPeriodicDoltGC starts the online, journal-bounded Dolt garbage
+// collector on the open store. It is deferred until AFTER the tape replay
+// completes so GC churn never looks like a replay stall and never races the
+// recovery working set (B11). ctx must live as long as the store: the loop
+// stops when it is cancelled (a ctx cancelled on return stopped it before its
+// first tick until 2026-10-15).
+func startPeriodicDoltGC(ctx context.Context, db *store.Store, storePath string) {
+	store.StartPeriodicDoltGC(ctx, db, filepath.Dir(storePath), 5*time.Minute)
 }
 
 // runReplayPhase replays the computer event tape (30m resume quanta per B7),

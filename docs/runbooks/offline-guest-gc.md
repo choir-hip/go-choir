@@ -1,17 +1,25 @@
 # Runbook: Offline Guest Dolt GC (Node B, break-glass)
 
-When the guest's `.choir-dolt-gc-disposition.json` reports
-`outcome: skipped_size` and the store keeps growing, reclaim unreachable
-chunk history from the host with the VM stopped. Proven 2026-09-03
-(9.8 GB → 1.7 GB) and 2026-09-11 (18.6 GB journal → 2.1 GB store,
-heads/rows/branch history intact).
+Use this runbook when the guest's GC record (`/health` → `dolt_gc`, the same
+content as `.choir-dolt-gc-disposition.json`) reports `compaction_needed: true`,
+or `deferred_online` and the online GC cannot finish. Run it with the VM
+stopped to reclaim Dolt history or a huge journal from the host. Proven
+2026-09-03 (9.8 GB → 1.7 GB), 2026-09-11 (18.6 GB journal → 2.1 GB store,
+heads/rows/branch history intact) and 2026-10-03.
 
-Since 2026-09-11 the in-guest GC is journal-aware: the noms journal no longer
-counts toward the 5 GiB live-store guard, a journal ≥1 GiB
-(`RUNTIME_DOLT_GC_JOURNAL_GIB`) triggers routine GC, and the low-space
-emergency path bypasses the size guard entirely. `skipped_size` now means the
-*live* store (used minus journal) exceeds 5 GiB — a genuinely large working
-set, not journal bloat.
+Since 2026-10-15 the in-guest GC has no store-size guard. The old 5 GiB guard
+measured the old generation, which every default GC grows, so once history
+passed 5 GiB it switched GC off for good; `skipped_size` no longer exists.
+The GC now works like this:
+- an online GC runs on the open store every 5 minutes;
+- the boot GC runs only on journals up to 4 GiB;
+- either runs once the journal reaches min(1 GiB, free/4)
+  (`RUNTIME_DOLT_GC_JOURNAL_GIB`).
+
+That bounds the journal. A default GC never reclaims history or live data.
+When free space stays under 25% after a GC, the record says
+`compaction_needed`: squash plus `dolt gc --full` with `projection-compact`,
+which is this runbook's offline path.
 
 ## Preconditions
 

@@ -242,4 +242,48 @@ never live.
 
 ## Experiment results
 
-(Filled in by the fix commit when the throttled run finishes.)
+The throttled CLI `dolt gc` on the 27 GB-journal copy was stopped at the
+coordinator's request after 20 minutes, so that the real offline-GC runbook
+had Node B's IO to itself. It had not finished. Measured up to the stop:
+- Reads: over 50 GB. With the cgroup memory capped, chunks are re-read
+  through the page cache.
+- Disk: grew by **1.93 GB** before any journal byte was released. That is
+  the free space a GC needs for its output.
+- Memory: cgroup peak 8 GB, page cache included (1.5 GB swapped).
+- The scratch copies were deleted.
+
+Conclusion for the policy: a GC over a journal this large is slow,
+memory-heavy and needs real free space. Hence:
+- bound the journal at min(1 GiB, free/4);
+- cap boot GC at a 4 GiB journal;
+- collect an oversize journal left by an older binary offline (the runbook),
+  or with the online GC, which runs while the computer serves.
+
+## Fix (commit after this one)
+
+- **The periodic GC is live and online.**
+  - `StartPeriodicDoltGC(ctx, store, …)` uses the process-lifetime ctx.
+  - It runs once at start and then every 5 minutes.
+  - It runs `CALL DOLT_GC()` on the open store's own write connection,
+    serialized with checkpoint commits. It never opens a second engine.
+- **One policy for boot and online.**
+  - GC runs when the journal ≥ min(`RUNTIME_DOLT_GC_JOURNAL_GIB` (1 GiB),
+    free/4), floored at 64 MiB, or when free space ≤ 512 MiB (emergency).
+  - The 5 GiB store-size guard, milestones and `skipped_size` are deleted.
+- **Boot GC is capped at a 4 GiB journal.** A larger journal is recorded as
+  `deferred_online`, and the online GC collects it once the computer serves.
+  This keeps boot GC inside the wedge detector's 5-minute window.
+- **The record is visible.** The disposition is written on every decision
+  and served on guest `/health` as `dolt_gc`, with `mode`, `outcome`,
+  `journal_mib`, `threshold_mib`, `avail_mib`, `after_*` and `duration_ms`.
+  `compaction_needed` is set when free space stays under 25% after a GC,
+  meaning history or live data, not the journal, fills the disk.
+- Expected steady state on the paper:
+  - the journal stays at or below about 1–2 GiB;
+  - one GC of about 10–20 s every 6–25 minutes at 2.6–9.6 GB/h of journal
+    churn;
+  - the disk grows at the history-plus-live rate, about 6 GB/day, instead of
+    2.6–9.6 GB/h.
+- Remaining work (the next station): bound history. Options are an automated
+  squash plus full GC (projection-compact, today offline only) or a sparser
+  checkpoint cadence.

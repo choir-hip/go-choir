@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -149,6 +150,10 @@ type runtimeHealthResponse struct {
 	// mission's drain probe uses wait-vs-hold attribution to decide between
 	// read-pool separation and committed-state projection work.
 	EngineMutex map[string]objectgraph.EngineMutexOpStats `json:"engine_mutex,omitempty"`
+	// DoltGC is the guest store's last Dolt GC decision record
+	// (store.ReadDoltGCDisposition): outcome, journal and free space, and
+	// compaction_needed when GC alone cannot keep the disk free.
+	DoltGC json.RawMessage `json:"dolt_gc,omitempty"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
@@ -665,6 +670,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		status := persistentdisk.StatusFromGuestUsage(usage)
 		resp.PersistentDisk = &status
 	}
+	resp.DoltGC = store.ReadDoltGCDisposition(filepath.Dir(h.rt.cfg.StorePath))
 	resp.EngineMutex = h.rt.store.EngineMutexStats()
 	_ = json.NewEncoder(w).Encode(resp)
 }
