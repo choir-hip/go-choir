@@ -284,3 +284,33 @@ sites that leave `CacheKey` empty), and measure the hit rate of `h:` calls
 against `choir-` calls once a day of data exists, by grouping on
 `cache_label` and checking `prefix_hash_prev` against the previous
 `prefix_hash`.
+
+### 7.1 Which calls carry the fallback key (coordinator, about 17:00 UTC)
+
+- **Evidence:** the `cache_label=-` calls are multi-turn tool loops
+  (gpt-6-luna, about 11–12k input tokens, `stop=tool_use` then `end_turn`,
+  4–19 input messages). Their prefix chain is intact: each call's
+  `prefix_hash_prev` equals the previous call's `prefix_hash` (for example
+  ce2a779e… → next call's prev ce2a779e…), and that pair cached 10,752 of
+  11,957 tokens. So these loops are append-only and cache well within
+  their own conversation. They just don't share a desk thread key.
+- **Evidence:** only two tool-loop entry points exist,
+  `runtime.go:3689` (desks, with `promptCacheScope(rec)`, which never
+  returns an empty scope because `agentIDForRun` falls back to the RunID)
+  and `research_children.go:220` (research children, with
+  `researchChildCacheScope(parent)`, label `research_child`).
+  `PromptCacheKey` returns "" for an empty scope, and the provider then
+  uses the conversation id `research-child:<childKey>`, logged as `h:`.
+- **Hypothesis (leading):** the fallback calls are research children whose
+  `parent.AgentID` is empty, so `researchChildCacheScope` returns an empty
+  scope. No `cache_label=research_child` line appeared in 30 minutes,
+  which supports it. If so, each child is its own cache conversation and
+  siblings never share the system prompt and tools prefix. The first call
+  of every child is cold (§3: about 4.8M first-call tokens).
+- **Next check:** log or derive where the research child's `parent`
+  ExecutionContext is built (`runResearchChild`, `childExec := parent`)
+  and whether it carries AgentID. If it doesn't, scope children by the
+  parent's computer and desk agent, and fall back to the parent run id
+  rather than to nothing. Expected gain: sibling children would share
+  their first call's prefix (system prompt plus tools, about 3–6k tokens
+  each).
