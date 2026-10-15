@@ -342,3 +342,22 @@ Lead:
   Open item: where the OVH API credentials live (names only).
 - **API keys:** owner acts need the new `owner:acts` scope (live since
   0ebf254b3). The owner mints a new key from Settings.
+
+## 20. Use Keenable's free tier (2026-10-15, ~03:40 UTC)
+
+Owner: "Keenable has an extremely generous free tier, so we should take
+advantage of it. We basically hit the limits on everything else, but we
+could probably triple our Keenable throughput."
+
+The owner's billing page at that time: free plan plus pay-as-you-go,
+100,000 free requests a month, 89,224 left, renewing Nov 5 2026; then
+$4.00 per 1,000 requests (no payment method on file); 10 requests a second.
+That is about 1,000 requests a day used so far against about 4,200 a day of
+free headroom. Every other search provider was quota-limited or cooling at
+the time, and Exa had failed every call since at least Oct 14 14:56.
+
+Disposition: branch `feat/keenable-throughput` paces Keenable to the free
+monthly allowance (persisted across gateway restarts, never into
+pay-as-you-go), rate-limits it under 10 rps, routes to it first while it has
+budget, and raises whichever demand-side search limit binds. Problem doc:
+docs/problems/search-throughput-keenable-underused-2026-10-15.md.
