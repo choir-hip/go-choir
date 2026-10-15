@@ -222,6 +222,55 @@ Restore:
 - R2 a restore that does not change the exec identity restarts the computer;
 - R3 a restore restart without the planned marker reads as a crash.
 
+### Review findings (2026-10-15, written before the fixes)
+
+An independent review of the branch found that the recipe refusal (H2) was
+decided on a text parse of the patch that git does not share: `git apply -p1`
+strips any first path segment and unquotes C-style quoted names, while the
+host's parser stripped only a literal `a/` or `b/` and read quotes as bytes.
+Three patches the parser passed write a recipe file:
+`diff --git x/flake.nix y/flake.nix`; `--- foo/flake.nix` / `+++ bar/flake.nix`
+with no git header; `diff --git "a/nix/a.nix" "b/nix/a.nix"`. corpusd
+evaluates the tree as a nix trusted user, so a guest-controlled `flake.nix` or
+`nix/` file is guest control of host evaluation (a fixed-output derivation has
+network access on the host; eval-time fetchers run in corpusd). The failure
+modes the fixes answer:
+
+- H15 the admission check reads a different path than git writes (any first
+  segment, no git header, quoted names): the recipe refusal is bypassed.
+  Authority: the tree the builder actually commits, read with
+  `git diff --raw -z --no-renames <base> HEAD` in the builder's clone before
+  nix runs. The submit-time check uses git's own parser
+  (`git apply --numstat -z`), never a text parse.
+- H16 a patch creates or changes a symlink (mode 120000) or a gitlink
+  (160000), or a `.gitattributes` or `.gitmodules` file at any depth: the tree
+  means something to nix or git beyond its file bytes.
+- H17 the patched working tree holds files the commit does not (ignored or
+  untracked files `git apply` wrote): the tree nix reads is not the committed
+  one.
+- H18 every nix call is capped at the builder's 10-minute per-call bound, so
+  the 40-minute build bound is really 10 minutes and a slow build reports
+  `build_failed`, not `build_timeout`.
+- H19 a deploy lands while a job is queued or running: the job builds against
+  (and the result records) a base the computer did not boot.
+- H20 a transient refusal (`queue_full`, `computer_busy`) is recorded as a
+  terminal job under the deterministic job id, so the retry of the same
+  request fails permanently.
+- H21 one computer submits builds without bound (each a new operation id):
+  closures (100-200 MB each) fill the blob store.
+- H22 job records (refused ones especially) and the in-memory job map grow
+  without bound.
+- H23 a host build misconfiguration (an unwritable state dir) stops corpusd
+  instead of leaving the build service unconfigured.
+- H24 an interrupted job's stored patch stays on disk.
+- R4 the restore restart spends an apply-attempt count (limit 3), so the
+  fourth restore to the same checkpoint skips the restart while the restore
+  answer already said `restart_scheduled: true`.
+- R5 the restore restart cuts running runs and self-development operations
+  mid-transaction (no busy gate).
+- R6 `restart_scheduled` is reported before the marker is durable or the gate
+  has passed.
+
 ## Ceremony (red)
 
 - **Conjecture delta.** Before: "applied" for a Go change means source and
