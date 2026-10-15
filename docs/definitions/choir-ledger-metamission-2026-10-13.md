@@ -165,7 +165,7 @@ metamission:
         (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
     - id: L3
       path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
-      readiness: intent
+      readiness: drafted
       status: pending
       depends_on: [L0]
       note: >-

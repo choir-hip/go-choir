@@ -1262,6 +1262,16 @@ nodes:
       Executes the reviewed restart design v3
       (docs/restart-subsystem-design-2026-10-13.md §6, §9). Owner 2026-10-13:
       "we never get into a crash loop".
+  - id: choir-ledger-l3-hypotheses-settled-2026-10-13
+    title: L3 — hypotheses settled and scored (resolves_by and criterion, settler records, per-scorer scores, Brier per desk with denominators)
+    path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
+    ledger: ''
+    status: pending  # drafted 2026-10-15; review of the file next; entry criterion (off-host ledger copy) not built
+    kind: station
+    entrypoint: false
+    execution_mode: mission_orchestrator
+    depends_on: [choir-ledger-metamission-2026-10-13]
+    enables: [choir-ledger-metamission-2026-10-13]
   - id: choir-ledger-l2a-synthesis-intake-2026-10-14
     title: L2a — synthesis intake (one story per event across languages, written from convergence and conflict)
     path: docs/definitions/choir-ledger-l2a-synthesis-intake-2026-10-14.md
