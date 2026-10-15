@@ -55,7 +55,14 @@ func writeFileAtomic(path string, content []byte, mode os.FileMode) error {
 // source patches; the builder materializes the patched source it builds
 // rather than trusting a caller's live tree. The synthetic commit gives
 // the receipt a concrete, reproducible code_commit.
-func patchedFlakeRef(ctx context.Context, sourceDir, patchPath, installable, baseCommit string) (ref, patchedCommit, patchSHA string, cleanup func(), err error) {
+//
+// The admission is decided on the tree git committed, never on the patch
+// text (H15-H17 of docs/reports/p5-host-build-layered-apply-2026-10-15.md):
+// after the commit, the changes are read with `diff --raw --no-renames`
+// against the base, links and git metadata are refused, and admit (when set)
+// decides the rest; a file the apply wrote that the commit does not carry
+// (an ignored path) is refused too, so nix reads exactly the commit.
+func patchedFlakeRef(ctx context.Context, sourceDir, patchPath, installable, baseCommit string, admit func([]PatchedChange) error) (ref, patchedCommit, patchSHA string, cleanup func(), err error) {
 	if sourceDir == "" {
 		return "", "", "", nil, fmt.Errorf("builder: source patch requires --source-dir")
 	}
@@ -101,6 +108,18 @@ func patchedFlakeRef(ctx context.Context, sourceDir, patchPath, installable, bas
 		cleanup()
 		return "", "", "", nil, err
 	}
+	// H17: after `add -A` every file the apply wrote is staged unless it is
+	// ignored; an ignored file would sit in the tree nix reads without being
+	// in the commit the receipt names.
+	others, err := runGitOut(ctx, tmp, "ls-files", "-z", "--others")
+	if err != nil {
+		cleanup()
+		return "", "", "", nil, fmt.Errorf("list untracked files: %w", err)
+	}
+	if others = strings.Trim(others, "\x00"); others != "" {
+		cleanup()
+		return "", "", "", nil, &PatchRefusal{Path: strings.SplitN(others, "\x00", 2)[0], Detail: "the patch writes files the commit does not carry (not committed)"}
+	}
 	// Commit as a synthetic revision so the build receipt names a concrete
 	// commit and the flake's self.rev is non-dirty, non-"local". The commit
 	// is reproducible (H12): a fixed identity at the base commit's own
@@ -125,6 +144,27 @@ func patchedFlakeRef(ctx context.Context, sourceDir, patchPath, installable, bas
 	if err != nil {
 		cleanup()
 		return "", "", "", nil, err
+	}
+	// H15, H16: admit what git committed, not what the patch text says.
+	raw, err := runGitOut(ctx, tmp, "diff", "--raw", "-z", "--no-renames", "--no-abbrev", baseCommit, "HEAD")
+	if err != nil {
+		cleanup()
+		return "", "", "", nil, fmt.Errorf("read the committed changes: %w", err)
+	}
+	changes, err := parseRawDiff(raw)
+	if err != nil {
+		cleanup()
+		return "", "", "", nil, err
+	}
+	if err := RefuseTreeMetadata(changes); err != nil {
+		cleanup()
+		return "", "", "", nil, err
+	}
+	if admit != nil {
+		if err := admit(changes); err != nil {
+			cleanup()
+			return "", "", "", nil, fmt.Errorf("patched tree refused: %w", err)
+		}
 	}
 	// Re-anchor the installable attr onto the patched repo's flake.
 	attr := installable

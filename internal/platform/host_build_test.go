@@ -107,6 +107,14 @@ func TestHostBuildRoutes(t *testing.T) {
 	if code, _ := do(http.MethodPost, hostbuild.Route, "computer-a", bad); code != http.StatusBadRequest {
 		t.Fatalf("tampered = %d", code)
 	}
+	// H20 at the route: a busy computer is a 429 led by its reason code,
+	// with no job recorded, so the guest stays accepted and retries.
+	busy := req
+	busy.OperationID = "op-3"
+	if code, out := do(http.MethodPost, hostbuild.Route, "computer-a", busy); code != http.StatusTooManyRequests ||
+		!strings.HasPrefix(fmt.Sprint(out["error"]), hostbuild.ReasonComputerBusy) {
+		t.Fatalf("busy = %d %v", code, out)
+	}
 }
 
 func TestStorePlatformUpdateBlobFileVerifiesDigest(t *testing.T) {

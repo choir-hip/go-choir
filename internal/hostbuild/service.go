@@ -56,6 +56,16 @@ type Config struct {
 	MemoryFloorBytes   uint64
 	MaxMemorySomeAvg60 float64
 
+	// MaxBuildsPerComputerPerDay bounds the jobs one computer records in a
+	// rolling 24 hours (H21); each done build keeps a closure in the blob
+	// store.
+	MaxBuildsPerComputerPerDay int
+	// FailedRetention and DoneRetention are how long terminal job records
+	// stay; MaxJobRecords bounds the records kept at all (H22).
+	FailedRetention time.Duration
+	DoneRetention   time.Duration
+	MaxJobRecords   int
+
 	Build  BuildFunc
 	Sample Sampler
 	Sign   Signer
@@ -70,6 +80,11 @@ const (
 	defaultAdmitPoll          = 15 * time.Second
 	defaultMemoryFloorBytes   = 6 << 30
 	defaultMaxMemorySomeAvg60 = 10
+	defaultMaxBuildsPerDay    = 8
+	defaultFailedRetention    = 24 * time.Hour
+	defaultDoneRetention      = 7 * 24 * time.Hour
+	defaultMaxJobRecords      = 512
+	quotaWindow               = 24 * time.Hour
 	maxDetailBytes            = 2048
 )
 
@@ -112,6 +127,18 @@ func New(cfg Config) (*Service, error) {
 	if cfg.MaxMemorySomeAvg60 <= 0 {
 		cfg.MaxMemorySomeAvg60 = defaultMaxMemorySomeAvg60
 	}
+	if cfg.MaxBuildsPerComputerPerDay <= 0 {
+		cfg.MaxBuildsPerComputerPerDay = defaultMaxBuildsPerDay
+	}
+	if cfg.FailedRetention <= 0 {
+		cfg.FailedRetention = defaultFailedRetention
+	}
+	if cfg.DoneRetention <= 0 {
+		cfg.DoneRetention = defaultDoneRetention
+	}
+	if cfg.MaxJobRecords <= 0 {
+		cfg.MaxJobRecords = defaultMaxJobRecords
+	}
 	if cfg.Build == nil {
 		cfg.Build = builder.Build
 	}
@@ -147,13 +174,68 @@ func New(cfg Config) (*Service, error) {
 		if !job.Terminal() {
 			s.finish(&job, StateFailed, ReasonInterruptedByRestart, "the host build service restarted while this job was "+job.State+"; a restart ends a build, it never resumes it")
 			_ = os.RemoveAll(filepath.Join(cfg.StateDir, "work", job.JobID))
+			_ = os.Remove(s.patchPath(job.JobID)) // H24
 			if err := s.persist(&job); err != nil {
 				return nil, err
 			}
 		}
 		s.jobs[job.JobID] = &job
 	}
+	s.prune(s.cfg.Now())
 	return s, nil
+}
+
+// recordCount is the number of job records held (tests).
+func (s *Service) recordCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.jobs)
+}
+
+// prune drops terminal job records past their retention, then the oldest
+// terminal records beyond MaxJobRecords, from memory and disk (H22). The
+// caller holds s.mu (or owns s exclusively).
+func (s *Service) prune(now time.Time) {
+	var terminal []*Job
+	for id, job := range s.jobs {
+		if !job.Terminal() {
+			continue
+		}
+		retention := s.cfg.FailedRetention
+		if job.State == StateDone {
+			retention = s.cfg.DoneRetention
+		}
+		finished := job.CreatedAt
+		if job.FinishedAt != nil {
+			finished = *job.FinishedAt
+		}
+		if now.Sub(finished) > retention {
+			s.drop(id)
+			continue
+		}
+		terminal = append(terminal, job)
+	}
+	if excess := len(s.jobs) - s.cfg.MaxJobRecords; excess > 0 {
+		sort.Slice(terminal, func(i, j int) bool {
+			a, b := terminal[i].CreatedAt, terminal[j].CreatedAt
+			if terminal[i].FinishedAt != nil {
+				a = *terminal[i].FinishedAt
+			}
+			if terminal[j].FinishedAt != nil {
+				b = *terminal[j].FinishedAt
+			}
+			return a.Before(b)
+		})
+		for i := 0; i < excess && i < len(terminal); i++ {
+			s.drop(terminal[i].JobID)
+		}
+	}
+}
+
+func (s *Service) drop(jobID string) {
+	delete(s.jobs, jobID)
+	_ = os.Remove(filepath.Join(s.cfg.StateDir, "jobs", jobID+".json"))
+	_ = os.Remove(s.patchPath(jobID))
 }
 
 // Start runs the single build worker until ctx ends.
@@ -210,6 +292,13 @@ func (s *Service) Submit(req Request) (Job, error) {
 		s.mu.Unlock()
 		return job, nil
 	}
+	// H21: one computer records a bounded number of jobs a day, refused ones
+	// included; checked before the patch is read (and again under the lock
+	// that records the job). The refusal records nothing.
+	if err := s.quotaRefusal(req.ComputerID, s.cfg.Now()); err != nil {
+		s.mu.Unlock()
+		return Job{}, err
+	}
 	s.mu.Unlock()
 
 	patch, err := base64.StdEncoding.DecodeString(req.PatchBase64)
@@ -237,6 +326,12 @@ func (s *Service) Submit(req Request) (Job, error) {
 	if existing, ok := s.jobs[jobID]; ok {
 		return *existing, nil
 	}
+	s.prune(now)
+	if err := s.quotaRefusal(req.ComputerID, now); err != nil {
+		return Job{}, err
+	}
+	// H20: a full queue or a busy computer is transient. Nothing is recorded
+	// under the deterministic job id, so the retry of this request builds.
 	if !job.Terminal() {
 		active := 0
 		for _, other := range s.jobs {
@@ -245,12 +340,11 @@ func (s *Service) Submit(req Request) (Job, error) {
 			}
 			active++
 			if other.ComputerID == req.ComputerID {
-				s.finish(job, StateFailed, ReasonComputerBusy, "this computer already has host build "+other.JobID+" "+other.State+"; one build per computer at a time")
-				break
+				return Job{}, &RefusalError{Reason: ReasonComputerBusy, Retry: true, Detail: "this computer already has host build " + other.JobID + " " + other.State + "; one build per computer at a time"}
 			}
 		}
-		if !job.Terminal() && active >= s.cfg.MaxQueue {
-			s.finish(job, StateFailed, ReasonQueueFull, fmt.Sprintf("%d host builds are already queued or running", active))
+		if active >= s.cfg.MaxQueue {
+			return Job{}, &RefusalError{Reason: ReasonQueueFull, Retry: true, Detail: fmt.Sprintf("%d host builds are already queued or running", active)}
 		}
 	}
 	if !job.Terminal() {
@@ -262,6 +356,7 @@ func (s *Service) Submit(req Request) (Job, error) {
 		return Job{}, err
 	}
 	s.jobs[jobID] = job
+	s.prune(now)
 	if !job.Terminal() {
 		select {
 		case s.wake <- struct{}{}:
@@ -276,31 +371,46 @@ func (s *Service) refuse(req Request, patch []byte) (string, string) {
 	if len(patch) > MaxPatchBytes {
 		return ReasonPatchTooLarge, fmt.Sprintf("the patch is %d bytes; the host builds patches up to %d", len(patch), MaxPatchBytes)
 	}
+	// The early check, on git's own reading of the patch (H15). The
+	// authority is AdmitPatchedTree on the tree the builder commits.
 	paths, err := PatchPaths(patch)
 	if err != nil {
 		return ReasonPatchUnreadable, err.Error()
 	}
-	if reason, path := RefusePatchPaths(paths); reason != "" {
-		switch reason {
-		case ReasonRecipeChangeRefused:
-			return reason, "the patch changes the build recipe or the dependency set (" + path + "); the host builds only with the base commit's pinned recipe"
-		case ReasonStoreEpochRefused:
-			return reason, "the patch changes the store schema (" + path + "); an epoch-bumping release is refused until LU2"
-		default:
-			return reason, "the patch names a path outside the repository (" + path + ")"
-		}
+	if reason, detail := RefusePatchPaths(paths); reason != "" {
+		return reason, detail
 	}
+	return s.baseRefusal(req.BaseImageManifestDigest, req.BaseCommit)
+}
+
+// baseRefusal refuses a build whose booted base is not the host's deployed
+// guest image, or whose patch base is not that image's commit (H4, H19).
+func (s *Service) baseRefusal(bootedBase, baseCommit string) (string, string) {
 	raw, err := os.ReadFile(s.cfg.BaseManifestPath)
 	if err != nil {
 		return ReasonBaseMoved, "the host cannot read its deployed guest image manifest"
 	}
-	if hostBase := sha256Hex(raw); hostBase != req.BaseImageManifestDigest {
-		return ReasonBaseMoved, "the computer booted base " + req.BaseImageManifestDigest + "; the host's deployed guest image is " + hostBase + " (a deploy landed since the computer booted)"
+	if hostBase := sha256Hex(raw); hostBase != bootedBase {
+		return ReasonBaseMoved, "the computer booted base " + bootedBase + "; the host's deployed guest image is " + hostBase + " (a deploy landed since the computer booted)"
 	}
-	if commit := manifestBuildCommit(raw); commit != req.BaseCommit {
-		return ReasonBaseCommitMismatch, "the patch was authored against " + req.BaseCommit + "; the booted image was built from " + commit
+	if commit := manifestBuildCommit(raw); commit != baseCommit {
+		return ReasonBaseCommitMismatch, "the patch was authored against " + baseCommit + "; the booted image was built from " + commit
 	}
 	return "", ""
+}
+
+// quotaRefusal is H21's bound; the caller holds s.mu.
+func (s *Service) quotaRefusal(computerID string, now time.Time) error {
+	recent := 0
+	for _, other := range s.jobs {
+		if other.ComputerID == computerID && now.Sub(other.CreatedAt) < quotaWindow {
+			recent++
+		}
+	}
+	if recent >= s.cfg.MaxBuildsPerComputerPerDay {
+		return &RefusalError{Reason: ReasonBuildQuotaExhausted, Detail: fmt.Sprintf("this computer recorded %d host builds in the last 24 hours; the bound is %d", recent, s.cfg.MaxBuildsPerComputerPerDay)}
+	}
+	return nil
 }
 
 func (s *Service) worker(ctx context.Context) {
@@ -426,6 +536,11 @@ func (s *Service) run(ctx context.Context, jobID string) {
 }
 
 func (s *Service) build(ctx context.Context, job Job, workDir string) (*Result, string, string) {
+	// H19: a deploy may have landed while the job waited; build only against
+	// the base the computer booted.
+	if reason, detail := s.baseRefusal(job.BaseImageManifestDigest, job.BaseCommit); reason != "" {
+		return nil, reason, detail
+	}
 	if err := os.MkdirAll(workDir, 0o700); err != nil {
 		return nil, ReasonBuildFailed, "work dir: " + err.Error()
 	}
@@ -440,15 +555,27 @@ func (s *Service) build(ctx context.Context, job Job, workDir string) (*Result, 
 		SourceDir:             s.cfg.SourceDir,
 		SourcePatch:           s.patchPath(job.JobID),
 		SourcePatchBaseCommit: job.BaseCommit,
+		BuildTimeout:          s.cfg.BuildTimeout,
+		AdmitPatchedTree:      AdmitPatchedTree,
 	})
 	if err != nil {
-		if errors.Is(buildCtx.Err(), context.DeadlineExceeded) {
+		var refusal *RefusalError
+		var treeRefusal *builder.PatchRefusal
+		switch {
+		case errors.As(err, &refusal):
+			return nil, refusal.Reason, refusal.Detail
+		case errors.As(err, &treeRefusal):
+			return nil, ReasonPatchTreeRefused, treeRefusal.Error()
+		case errors.Is(buildCtx.Err(), context.DeadlineExceeded):
 			return nil, ReasonBuildTimeout, fmt.Sprintf("the build ran past %s", s.cfg.BuildTimeout)
 		}
 		return nil, ReasonBuildFailed, truncate(err.Error())
 	}
 	if res.SourcePatchSHA256 != job.SourcePatchSHA256 || res.SourcePatchBaseCommit != job.BaseCommit {
 		return nil, ReasonBuildFailed, "the builder built a different patch or base than the job names"
+	}
+	if res.Base.GuestImageManifestDigest != job.BaseImageManifestDigest {
+		return nil, ReasonBaseMoved, "the builder resolved base " + res.Base.GuestImageManifestDigest + "; the computer booted " + job.BaseImageManifestDigest + " (a deploy landed during the build)"
 	}
 	if !computerevent.IsSHA256(res.ExportedDigest) || strings.TrimSpace(res.RuntimePath) == "" {
 		return nil, ReasonBuildFailed, "the builder returned no closure"

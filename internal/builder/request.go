@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Request names the app-layer installable to build and the booted base it
@@ -47,6 +48,15 @@ type Request struct {
 	// (the capsule's pinned source snapshot). Required when SourcePatch is
 	// set; the builder checks out exactly this commit before applying.
 	SourcePatchBaseCommit string
+	// BuildTimeout bounds the `nix build` step (default 60 minutes). The
+	// caller's context bounds the whole build.
+	BuildTimeout time.Duration
+	// AdmitPatchedTree decides whether the committed patched tree may be
+	// evaluated. It sees the changes git actually committed (paths and
+	// modes, read in the clone before nix runs); its error stops the build
+	// and is wrapped, so a caller recovers its own type with errors.As.
+	// Links and git metadata are refused before it is called.
+	AdmitPatchedTree func([]PatchedChange) error
 }
 
 // parseBaseManifest reads the Nix-generated guest-image-manifest and returns
@@ -169,7 +179,7 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		if patchBase == "" {
 			return nil, fmt.Errorf("builder: source patch requires a base commit")
 		}
-		patchedRef, patchedCommit, sha, cleanup, patchErr := patchedFlakeRef(ctx, req.SourceDir, req.SourcePatch, req.Installable, patchBase)
+		patchedRef, patchedCommit, sha, cleanup, patchErr := patchedFlakeRef(ctx, req.SourceDir, req.SourcePatch, req.Installable, patchBase, req.AdmitPatchedTree)
 		if patchErr != nil {
 			return nil, fmt.Errorf("builder: apply source patch: %w", patchErr)
 		}
@@ -184,7 +194,7 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		codeCommit, codeCommitSource, sourceDirty = patchedCommit, "derived-patch", false
 	}
 	// 2. Build/eval the app-layer installable.
-	outputPath, err := buildResult(ctx, installable, req.ResultLink)
+	outputPath, err := buildResult(ctx, installable, req.ResultLink, req.BuildTimeout)
 	if err != nil {
 		return nil, err
 	}

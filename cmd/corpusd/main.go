@@ -94,14 +94,16 @@ func main() {
 	}
 	// P5 host build service: builds a computer's accepted Go change from its
 	// base commit plus the frozen patch. Off unless the source checkout is
-	// configured; the route then answers host_builder_unconfigured.
+	// configured; the route then answers host_builder_unconfigured. A
+	// misconfigured build service never stops corpusd (H23): it stays
+	// unconfigured, and Go-touching applies fail visibly.
 	if buildCfg, enabled := hostbuild.ConfigFromEnv(os.Getenv); enabled {
-		buildSvc, err := handler.ConfigureHostBuild(buildCfg)
-		if err != nil {
-			log.Fatalf("corpusd host build: %v", err)
+		if buildSvc, err := handler.ConfigureHostBuild(buildCfg); err != nil {
+			log.Printf("corpusd host build: disabled, configuration failed: %v", err)
+		} else {
+			buildSvc.Start(context.Background())
+			log.Printf("corpusd host build: enabled (source %s, installable %s)", buildCfg.SourceDir, buildCfg.Installable)
 		}
-		buildSvc.Start(context.Background())
-		log.Printf("corpusd host build: enabled (source %s, installable %s)", buildCfg.SourceDir, buildCfg.Installable)
 	}
 	escrowPrivateKey, err := keyescrow.LoadOrGeneratePrivateKey(cfg.KeyEscrowKeyPath)
 	if err != nil {

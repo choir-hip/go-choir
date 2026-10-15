@@ -193,6 +193,12 @@ func (f *fakeHostBuilder) Submit(_ context.Context, req hostbuild.Request) (host
 	if err != nil || computerevent.DigestBytes(patch) != req.SourcePatchSHA256 {
 		return hostbuild.Job{}, http.StatusBadRequest, fmt.Errorf("patch digest mismatch")
 	}
+	switch f.mode {
+	case "busy":
+		return hostbuild.Job{}, http.StatusTooManyRequests, errors.New("computer event client: corpusd returned 429: computer_busy: this computer already has host build x queued")
+	case "quota":
+		return hostbuild.Job{}, http.StatusTooManyRequests, errors.New("computer event client: corpusd returned 429: build_quota_exhausted: this computer recorded 8 host builds in the last 24 hours")
+	}
 	f.lastPatch = patch
 	id, _ := req.JobID()
 	job := f.shape(hostbuild.Job{
@@ -345,6 +351,25 @@ func TestSelfDevGoChangeWaitsAcceptedWhileHostBuilds(t *testing.T) {
 	}
 }
 
+// H20 (guest side): a busy host (429 computer_busy or queue_full) keeps the
+// operation accepted; the next pass submits again and builds.
+func TestSelfDevGoChangeBusyHostKeepsAccepted(t *testing.T) {
+	fx, host := newHostBuildFixture(t, "computer-p5-busy", "busy")
+	operation, bundleDigest, _ := fx.seedOperationToAwaitingApproval(t, "op-p5-busy")
+	fx.appendDecision(t, operation, bundleDigest, "decision-p5-busy")
+	accepted := fx.waitForState(t, operation.OperationID, selfdev.StateAccepted)
+	err := fx.rt.materializeSelfDevelopmentOperation(context.Background(), accepted, false)
+	if !errors.Is(err, errHostBuildPending) {
+		t.Fatalf("busy host pass = %v, want pending", err)
+	}
+	if kinds := fx.countEventKinds(); kinds[computerevent.EventMaterializationFailed] != 0 {
+		t.Fatalf("a busy host failed the operation: %v", kinds)
+	}
+	host.setMode("done")
+	fx.rt.reconcileSelfDevelopmentMaterialization(context.Background())
+	fx.waitForState(t, operation.OperationID, selfdev.StateApplied)
+}
+
 // G3, G4: a failed, forged or unconfigured host build fails the operation
 // with a visible reason, records materialization_failed, and never calls the
 // updater; the computer keeps its current release.
@@ -353,6 +378,7 @@ func TestSelfDevGoChangeHostBuildFailureFailsCleanly(t *testing.T) {
 		"failed":       "host build failed (build_failed)",
 		"forged":       "host build failed (receipt_refused)",
 		"unconfigured": "host build failed (host_builder_unconfigured)",
+		"quota":        "host build failed (build_quota_exhausted)",
 	} {
 		t.Run(mode, func(t *testing.T) {
 			fx, _ := newHostBuildFixture(t, "computer-p5-"+mode, mode)

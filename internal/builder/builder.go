@@ -74,16 +74,27 @@ type ClosureResult struct {
 	FlakeLockSHA256 string `json:"flake_lock_sha256,omitempty"`
 }
 
-// nixTimeout caps a single nix invocation. Eval and export on a warm store
-// are seconds; a cold eval against the daemon can take a few minutes.
-const nixTimeout = 10 * time.Minute
+// nixTimeout caps a single nix evaluation, path-info or export call. Eval
+// and export on a warm store are seconds; a cold eval against the daemon can
+// take a few minutes. The build step is bound by the build's own timeout,
+// not by this (buildResult).
+var nixTimeout = 10 * time.Minute
+
+// defaultBuildStepTimeout bounds `nix build` when the request names no build
+// timeout of its own.
+const defaultBuildStepTimeout = 60 * time.Minute
 
 var storePathRe = regexp.MustCompile(`^/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._?=-]+$`)
 
 // runNix invokes a nix subcommand and returns trimmed stdout. Nix 2.x puts
 // store/path-info/build under the `nix` CLI.
 func runNix(ctx context.Context, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, nixTimeout)
+	return runNixWithin(ctx, nixTimeout, args...)
+}
+
+// runNixWithin is runNix under an explicit bound.
+func runNixWithin(ctx context.Context, bound time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "nix", args...)
 	out, err := cmd.CombinedOutput()
@@ -119,9 +130,14 @@ func evalDrvPath(ctx context.Context, installable string) (string, error) {
 }
 
 // buildResult builds a flake installable to a result symlink and returns the
-// resolved store path. The result symlink lives outside the checkout.
-func buildResult(ctx context.Context, installable, resultLink string) (string, error) {
-	if _, err := runNix(ctx, "build", installable, "-o", resultLink); err != nil {
+// resolved store path. The result symlink lives outside the checkout. The
+// build is bound by bound (the caller's build timeout; the default when
+// zero), never by the shorter per-call evaluation bound (H18).
+func buildResult(ctx context.Context, installable, resultLink string, bound time.Duration) (string, error) {
+	if bound <= 0 {
+		bound = defaultBuildStepTimeout
+	}
+	if _, err := runNixWithin(ctx, bound, "build", installable, "-o", resultLink); err != nil {
 		return "", fmt.Errorf("build %s: %w", installable, err)
 	}
 	return evalOutputPath(ctx, installable)

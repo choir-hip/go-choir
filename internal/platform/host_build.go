@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -106,7 +107,14 @@ func (h *Handler) HandleHostBuilds(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		job, err := h.hostBuild.Submit(request)
-		if err != nil {
+		var refusal *hostbuild.RefusalError
+		switch {
+		case errors.As(err, &refusal):
+			// queue_full / computer_busy (retry) and build_quota_exhausted
+			// record no job; the reason code leads the error.
+			writeJSON(w, http.StatusTooManyRequests, apiError{Error: refusal.Error()})
+			return
+		case err != nil:
 			writeJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return
 		}

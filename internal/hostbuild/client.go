@@ -81,5 +81,8 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool) {
 	if n, err := strconv.ParseUint(get("CORPUSD_HOST_BUILD_MEMORY_FLOOR_BYTES", ""), 10, 64); err == nil {
 		cfg.MemoryFloorBytes = n
 	}
+	if n, err := strconv.Atoi(get("CORPUSD_HOST_BUILD_MAX_PER_COMPUTER_PER_DAY", "")); err == nil && n > 0 {
+		cfg.MaxBuildsPerComputerPerDay = n
+	}
 	return cfg, true
 }
