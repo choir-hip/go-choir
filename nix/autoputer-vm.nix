@@ -21,7 +21,7 @@
 # needs per-VM networking, port assignment, and lifecycle control.
 # buildCommit is the current deployment commit in the guest's signed executable
 # identity, not the independently versioned ComputerVersion route source.
-{ config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
+{ config, lib, pkgs, goChoirPackages, choirGo, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 
 let
   documentPython = pkgs.python3.withPackages (ps: with ps; [
@@ -777,7 +777,7 @@ EOF
         gnugrep
         gnumake
         gnused
-        go
+        choirGo # Go toolchain lane (flake.nix choirGo)
         jq
         nodejs
         gcc
@@ -888,7 +888,7 @@ EOF
     curl
     findutils
     git
-    go
+    choirGo # Go toolchain lane (flake.nix choirGo)
     jq
     gnutar
     gnumake

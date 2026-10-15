@@ -136,7 +136,7 @@ jobs:
         if: steps.classify.outputs.ci == 'true'
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.9'
 
       - name: Test CI classifiers and differential SBOM reuse
         if: steps.classify.outputs.ci == 'true'
@@ -280,6 +280,50 @@ jobs:
             echo "scale attempt $attempt failed; retrying once"
           done
           exit 1
+
+  # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 3):
+  # reachable vulnerabilities for the toolchain go.mod names (its toolchain
+  # directive, the production compiler) and the locked modules. Never gates
+  # check; the daily Patch Watch workflow files the issues.
+  govulncheck:
+    name: govulncheck (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go (go.mod toolchain)
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: govulncheck ./...
+        shell: bash
+        run: |
+          set -uo pipefail
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > "$RUNNER_TEMP/govulncheck.txt" 2>&1
+          status=$?
+          count=$(grep -c '^Vulnerability #' "$RUNNER_TEMP/govulncheck.txt" || true)
+          {
+            echo "## govulncheck ($(go version | awk '{print $3}'))"
+            echo
+            echo "exit ${status}; reachable findings: ${count:-0}. Report only: this job never gates CI."
+            echo
+            echo '```'
+            grep -E '^(Vulnerability #|    Found in:|    Fixed in:|  Standard library)' "$RUNNER_TEMP/govulncheck.txt" | head -200
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/govulncheck.txt"
+          if [ "${count:-0}" != "0" ]; then
+            echo "::warning title=govulncheck::${count} reachable vulnerabilities (report only)"
+          fi
+          exit 0
 
   doccheck:
     name: Docs Truth Check
@@ -425,7 +469,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install Nix
@@ -476,7 +520,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install Nix

@@ -2,6 +2,8 @@ module github.com/yusefmosiah/go-choir
 
 go 1.26.2
 
+toolchain go1.26.9
+
 require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/containerd/cgroups/v3 v3.1.3

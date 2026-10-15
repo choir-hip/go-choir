@@ -47,7 +47,7 @@ jobs:
             echo "host_kernel=$(ev .#nixosConfigurations.go-choir-b.config.boot.kernelPackages.kernel.version)"
             echo "guest_kernel=$(ev .#nixosConfigurations.go-choir-autoputer-vm.config.boot.kernelPackages.kernel.version)"
             echo "firecracker=$(ev .#nixosConfigurations.go-choir-b.pkgs.firecracker.version)"
-            echo "go=$(ev .#nixosConfigurations.go-choir-b.pkgs.go.version)"
+            echo "go=$(ev .#packages.x86_64-linux.choir-go.version)"
           } | tee -a "$GITHUB_OUTPUT"
 
       - name: Kernel - KEV entries vs kernel CNA fixed versions, and 6.18 lag
@@ -145,7 +145,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          go run golang.org/x/vuln/cmd/govulncheck@latest ./... > "$RUNNER_TEMP/govuln.txt" 2>&1
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > "$RUNNER_TEMP/govuln.txt" 2>&1
           status=$?
           count=$(grep -c '^Vulnerability #' "$RUNNER_TEMP/govuln.txt" || true)
           { echo "## Go (toolchain ${{ steps.declared.outputs.go }})"; echo; echo "- govulncheck exit ${status}, reachable findings: ${count}"; echo; } >> "$REPORT"
