@@ -461,6 +461,135 @@ const sourceScheduleOverdueGrace = 15 * time.Minute
 // one pass, so a paper with dozens of sources does not poll them all at once.
 const sourceScheduleRearmStagger = 15 * time.Second
 
+const (
+	// sourceScheduleSweepInterval is how often the runtime looks for an
+	// overdue schedule with no live poll. A pass is one list read; it polls
+	// nothing and makes no model call.
+	sourceScheduleSweepInterval = 5 * time.Minute
+	// sourceScheduleSweepMaxWait bounds the backoff while passes keep failing
+	// (the store is down): 5m, 10m, 20m, 40m, then hourly.
+	sourceScheduleSweepMaxWait = time.Hour
+	// sourcePollInFlightAbandoned is how old an in-flight mark must be before
+	// the sweep treats it as left behind (a panicked or hung handler) rather
+	// than a poll still running. A poll has bounded HTTP timeouts.
+	sourcePollInFlightAbandoned = time.Hour
+)
+
+// sourceScheduleNeedsRepair reports whether an active schedule is past the
+// overdue grace with no live poll: its wake was lost.
+func sourceScheduleNeedsRepair(sched store.SourceSchedule, now time.Time) bool {
+	if !sourceScheduleOverdue(sched, now) {
+		return false
+	}
+	return sched.PollInFlightSince.IsZero() || now.Sub(sched.PollInFlightSince) > sourcePollInFlightAbandoned
+}
+
+// sweepOverdueSourceSchedules re-arms every schedule whose wake was lost, as
+// rearmOverdueSourceSchedule does at a planned boot. It runs under
+// sourceScheduleMu, so it cannot interleave with a poll's in-flight mark or
+// result: a poll that started first is skipped (marked in flight), and a wake
+// that starts after is refused by the new generation. The first failure ends
+// the pass, so an outage costs one failed write, not one per schedule.
+func (rt *Runtime) sweepOverdueSourceSchedules(ctx context.Context, now time.Time) (int, error) {
+	if rt == nil || rt.store == nil || rt.scheduleActor == nil {
+		return 0, nil
+	}
+	sourceScheduleMu.Lock()
+	defer sourceScheduleMu.Unlock()
+	schedules, err := rt.store.ListSourceSchedules(ctx, "")
+	if err != nil {
+		return 0, fmt.Errorf("list schedules: %w", err)
+	}
+	repaired := 0
+	for _, sched := range schedules {
+		if !sourceScheduleNeedsRepair(sched, now) {
+			continue
+		}
+		if err := rt.rearmOverdueSourceSchedule(ctx, sched, now, repaired, "sweep"); err != nil {
+			return repaired, fmt.Errorf("re-arm %s: %w", sched.SourceID, err)
+		}
+		repaired++
+	}
+	return repaired, nil
+}
+
+// sourceScheduleSweepLoop runs sweep every base interval, doubling the wait
+// after each failed pass up to sourceScheduleSweepMaxWait and resetting it on
+// a clean pass. after is time.After in production.
+func sourceScheduleSweepLoop(ctx context.Context, stop <-chan struct{}, base time.Duration, sweep func() (int, error), after func(time.Duration) <-chan time.Time) {
+	failures := 0
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ctx.Done():
+			return
+		default:
+		}
+		select {
+		case <-stop:
+			return
+		case <-ctx.Done():
+			return
+		case <-after(sourceScheduleSweepWait(base, failures)):
+		}
+		_, err := func() (n int, err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("sweep panicked: %v", r)
+				}
+			}()
+			return sweep()
+		}()
+		if err != nil {
+			failures++
+			log.Printf("source schedule: sweep failed (%d in a row): %v; next pass in %s", failures, err, sourceScheduleSweepWait(base, failures))
+			continue
+		}
+		if failures > 0 {
+			log.Printf("source schedule: sweep recovered after %d failed passes", failures)
+		}
+		failures = 0
+	}
+}
+
+// sourceScheduleSweepWait is the wait before the next pass: base, doubled for
+// each failed pass in a row, at most sourceScheduleSweepMaxWait.
+func sourceScheduleSweepWait(base time.Duration, failures int) time.Duration {
+	wait := base
+	for i := 0; i < failures && wait < sourceScheduleSweepMaxWait; i++ {
+		wait *= 2
+	}
+	if wait > sourceScheduleSweepMaxWait {
+		wait = sourceScheduleSweepMaxWait
+	}
+	return wait
+}
+
+// startSourceScheduleSweep starts the periodic lost-wake sweep. It does
+// nothing without durable wakes. Stop ends it.
+func (rt *Runtime) startSourceScheduleSweep(ctx context.Context) {
+	if rt == nil || rt.store == nil || rt.scheduleActor == nil || rt.sourceSweepStop != nil {
+		return
+	}
+	stop := make(chan struct{})
+	rt.sourceSweepStop = stop
+	rt.wg.Add(1)
+	go func() {
+		defer rt.wg.Done()
+		sourceScheduleSweepLoop(ctx, stop, sourceScheduleSweepInterval, func() (int, error) {
+			return rt.sweepOverdueSourceSchedules(ctx, time.Now().UTC())
+		}, time.After)
+	}()
+}
+
+func (rt *Runtime) stopSourceScheduleSweep() {
+	if rt.sourceSweepStop != nil {
+		close(rt.sourceSweepStop)
+		rt.sourceSweepStop = nil
+	}
+}
+
 type sourceScheduleView struct {
 	store.SourceSchedule
 	Overdue bool `json:"overdue"`
