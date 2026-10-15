@@ -3,8 +3,9 @@
 Drill: `node scripts/reeng_tracer.mjs --label p5-go-served-0825 --scenario engineering --change go-served --expect-sha 2eae77de6… --timeout-min 60 --apply-min 30 --restore-min 12`
 on staging `2eae77de6` (P5 host build enabled in corpusd: `corpusd host build:
 enabled (source /opt/go-choir, installable .#autoputer)`). Test computer
-`computer-5c80f0f9e16061255bdc83a3ab52c0fa`, VM `vm-ae39488465e478796b0f68a903099efa`.
-Status: documented, evidence only.
+`computer-5c80f0f9e16061255bdc83a3ab52c0fa`, VM `vm-ae39488465e478796b0f68a903099efa`,
+trajectory `1ca501d5-e9b2-5602-9850-903a9bc7e9d9`.
+Status: **traced** (this revision reads the run ledger). Documentation only; no code change.
 
 Outcome: `pass=false`, `reached=engineering_final_report`; failed: frozen,
 final_report_names_bundle, operation_on_request_trajectory,
@@ -13,18 +14,220 @@ route_receipt, restore_to_pre_apply_head, go_build_job_done,
 go_test_job_done, probe_served_after_apply, layered_release_serving,
 restore_restarted_into_pre_apply, probe_gone_after_restore.
 
-Evidence: three engineering assignments (`7731751…` 08:25:37-08:26:37,
-`696f5d3…` ..08:29:25, `fb0e72a…` ..08:33:06) ended `stop_reason: failed`
-with no bundle; Texture re-cast to management through round 5; no
-`dispatcher: poison`, no `mutation authority mismatch`, no broker
-`i/o timeout` in the guest console. The reasons for the failed assignments
-were not read from the run ledger (hypothesis: the jobs-0101 A1-A3 class,
-desk judgment or capsule environment).
-
 Consequence: P5's apply path (host build, layered release, restore) has not
 been exercised on staging. P5 is deployed and dormant until an operation
-reaches `accepted`. Owed: a drill that freezes (needs the engineering desk
-failures understood first, see
-[selfdev-go-drill-jobs-0101](selfdev-go-drill-jobs-0101-2026-10-15.md) and
-[selfdev-jobs-0654](selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md)).
-Heresy delta: discovered none new, introduced none, repaired none.
+reaches `accepted`.
+
+## Evidence source
+
+The computer was stopped by the tracer (09:27:53) and its memory snapshot
+discarded, but its data disk (`/var/lib/go-choir/vm-state/<vm>/data.img`, ext4)
+was read **read-only** with `debugfs rdump` (stopped computer; no mount, no
+write). The runtime store is a Dolt repo under `state.texture/texture`;
+`og_objects` holds `choir.event` (568 rows, the run events with tool
+arguments and results), `choir.co_super_assignment` (3),
+`choir.co_super_assignment_report` (3). Extracts are kept outside the repo in
+`~/.config/choir-qa/traces/p5-go-served-0825/ledger/` (`events.json`,
+`assign.json`, `p5.timeline.txt`). Guest console: 540 lines, consistent.
+
+## What the ledger says (all times 2026-10-15 UTC)
+
+The change asked of engineering: add package `internal/selfdevprobe`
+(2 new files) **and edit the existing `internal/apihandler/routes.go`** to
+register the route; run `go test` and `go vet`; build `bin/autoputer` plus the
+frontend release tree; Freeze.
+
+All three engineering assignments ended `disposition: failed`,
+`capsule_disposition: revoked`. The word "failed" is the reducer's
+translation ("reducer-derived from report ...") of an engineering `Complete`
+with `result: blocked`, `verdict: none`. **No assignment crashed, timed out
+or was cancelled; each one chose to stop** and reported a blocker. No cell
+reached `choir.Freeze`.
+
+| # | assignment | window | cast round | network | Complete(blocked) summary (verbatim gist) | root cause |
+|---|---|---|---|---|---|---|
+| 1 | `assignment-7731751382d9de71391f8662` | 08:26:09-08:26:37 | 1 | ecosystem_proxy | "Cannot implement responsibly: management Cast supplies no exact Texture-requested package contract or route response semantics." | management's Cast carried a one-sentence objective and `{"parent": <texture cast id>, "plan_revision": ...}`; the spec was only in the **parent** record, which engineering cannot read |
+| 2 | `assignment-696f5d341caeb66519678ba4` | 08:28:17-08:29:25 | 3 | ecosystem_proxy | "WriteFile to /workspace/platform/internal/apihandler/routes.go was denied (permission denied) ... release copy failed because cp -a could not preserve permissions" | existing source files are read-only in the capsule overlay; `choir.WriteFile` on an existing file is `EACCES` |
+| 3 | `assignment-fb0e72a48aa0f6299215b383` | 08:32:43-08:33:06 | 4 | forbidden | "Blocked: current assignment capsule did not provide authorization confirmation for the requested routes.go write or release-copy permissions ... made no changes" | management turned #2's permission bug into an instruction ("if runtime cannot provide authorized permissions, stop and report blocker; do not use unauthorized workaround"); engineering obeyed, only read `routes.go`, asked management, completed |
+
+### Assignment 1 (event ids)
+
+- 08:26:11.95 `choir.Records()` shows exactly one record, management's cast
+  `cell:05d3d669...:call_bd744062...:cast:tray-1`: "Implement the
+  Texture-requested GET /api/selfdev-probe route and package **exactly as
+  specified** ..." plus `parent` = Texture's cast `cell:38049ed7...`. The
+  nonce, file names and `routes.go` instruction are only in Texture's cast.
+- 08:26:27 (`1aa3b907-de45-4175-b7a4-4143b41319d2`) engineering stages
+  `choir.Ask("management", "Cast has no exact ... specification ...")`.
+- 08:26:30.7 (`4dab3546-8aee-4d0e-b668-94c3fc049a99`) the completion guard
+  `engineering_overlay_terminal_fate_required` fires: an engineering turn may
+  not end without a terminal fate, so it cannot wait for the Ask's reply.
+- 08:26:36 (`c1c3afbe-385d-4a20-ad14-152a7602cc0b`) `choir.Complete("blocked")`.
+  Report `report:sha256:ff2cdd1f...`, 08:26:37. Management's concurrent run
+  `9bd37bfb` (the one that read the Ask) "ended without a final Report"
+  (console 08:26:51).
+
+### Assignment 2 (the first real capsule error)
+
+- 08:28:31.76 first write cell fails to *compile* (a raw-string backtick in the
+  cell source), nothing written.
+- 08:28:38.83 (`c9f87a90-98af-419d-a873-3f7cd35e01f1`)
+  `choir.WriteFile("/workspace/platform/internal/apihandler/routes.go", ...)` ->
+  `choir: write_file: write file failed: open /workspace/platform/internal/apihandler/routes.go: permission denied`
+  (exit 1, `receipt_ref capsule-go-eval:sha256:ced88e3b...`). `ReadFile` of the
+  same file had succeeded at 08:28:25.
+- 08:28:57-08:29:14 (`231360a4-8587-4dc4-9a65-bff5c423c873`) the prescribed
+  frontend cell (`npm ci && npm run build && mkdir -p
+  /var/lib/artifact/release/frontend && cp -a dist/. ... && rm -rf ...`)
+  returns `exit 1`; the 4 KB `error` field is dominated by hundreds of
+  `[mutex.cc : 955] RAW: pthread_getschedparam failed: 1` lines, which push the
+  actual stderr out of the model's view. 15 registry.npmjs.org CONNECTs in the
+  egress log show `npm ci` itself worked.
+- 08:29:18 (`d8aa85d8-8a96-4095-923b-599764470600`) `Complete(blocked)`;
+  assignment report `report:sha256:a9c5a2f4...`. Its candidate subject digest
+  `6622428f...` records an overlay change that is not the requested one (the
+  `routes.go` write was the first write and failed), so no bundle.
+
+### Assignment 3
+
+Management's cast (round 4) said "Previous capsule lacked permission to write
+routes.go and release copy. If runtime cannot provide authorized permissions,
+stop and report blocker; do not use unauthorized workaround." Engineering read
+`routes.go` (ok), noted `selfdevprobe.go` absent, never attempted a write,
+`Ask`ed management for "authorized writable capsule permissions"
+(`ff6d44de-7bce-4102-85e3-7c31a56c5efe`), and completed blocked
+(`c437d554-3b1e-45a9-a6d7-cb5cad93a0ae`) 08:33:05.
+
+### After the third report (why the story dead-ends)
+
+08:33:50 management tries `choir.Escalate("owner", ...)` and gets
+`tool_error: reduce: escalate tray-1 targets unknown desk "owner"`; it reports
+a blocker to Texture "pending explicit authorization" (round 5). Texture
+`Write` is refused (`r1.c1 is not a source in your frame`) and waits. No
+engineering assignment is cast after 08:33:06. The tracer waited out its
+60-minute budget. Nothing is wrong with the host or the P5 code path; the
+loop idles because the model layer believes an *owner authorization* is
+missing when the cause is a capsule file-permission defect.
+
+## Why Freeze was never called
+
+1. #1: engineering could not obtain the task (spec passed by reference).
+2. #2: it could not edit the one existing file the change requires
+   (`routes.go`), and its release copy cell exited non-zero.
+3. #3: it never tried, by management's instruction.
+4. Freeze requires a built release tree and the edit; none existed.
+
+## Root-cause analysis (hypothesis marked where not proven by the ledger)
+
+### A. Existing source files are not writable in an engineering capsule (primary; ledger + code)
+
+`copyImmutableCommitTree` writes the pinned commit into
+`<capsule>/source-lower/workspace/platform`; `makeSubjectTreeReadOnly`
+(`internal/capsule/source_snapshot.go:175`, asserted by
+`source_snapshot_test.go:79`) sets every regular file `0444` (`0555` if
+executable) and every directory `0777`. The lower tree is owned by host root;
+the broker runs in a user namespace mapping container uid 0 to host uid
+65534. `handleWriteFile` (`cmd/capsule-broker/main.go:667`) does
+`os.WriteFile(path, content, 0644)`, which `open(O_WRONLY|O_TRUNC)`s the
+lower 0444 file owned by an unmapped uid. `CAP_DAC_OVERRIDE` in a user
+namespace does not apply to an inode whose owner is unmapped, so the result is
+`EACCES`. New files work (directories are 0777 for copy-up creation, the
+2026-08-21 fix `013575843`, which only considered *creating* files).
+This matches every datum: `routes.go` read ok / write denied; selfdev-jobs-0101
+and selfdev-jobs-0654 changed only **new** files (`internal/drillmark/*`) and
+wrote them fine. The go-served drill is the **first** drill whose required
+change edits an existing file. No test covers editing an existing lower file;
+`choir.WriteFile` is the only write surface in the cell
+(`internal/yaegikernel/choir.go:505`; `choir.Rename/Chmod/EditFile` do not
+exist even though `roles.go` grants `edit_file/rename/chmod` and the broker
+switch implements none of them). Not yet verified on a real overlay (needs a
+Linux guest). Confidence: high (about 85%).
+
+### B. Passing a task by reference
+
+0101's A3 and P5's #1 both read only "parent: <record id>" and blocked. The
+engineering overlay's completion guard makes `Ask` unanswerable inside the
+assignment. #2 and #3 only had the spec because a later management turn
+pasted it in. This is an independent, intermittent blocker.
+
+### C. Release-copy hostility (aggravator, partly hypothesis)
+
+The overlay prompt prescribes `cp -a dist/. /var/lib/artifact/release/frontend/`
+and panics on non-zero exit. In 0101 A2 the first `cp -a` printed `preserving
+permissions ... Operation not permitted` and the retry `cp -R` then failed
+with `Permission denied` on files the first copy had created `0444`
+(vite copies source modes). Hypothesis: `cp -a` copies ACL/xattrs, the
+seccomp allowlist (`internal/capsule/seccomp.go`) has no `getxattr`
+family, default action is `EPERM`, so `cp -a` always exits 1 although the
+data is copied. Also `sched_getparam/sched_getscheduler` are absent, giving
+the `pthread_getschedparam failed: 1` flood from every Node process. In 0654
+the model recovered (`cp -r` after `rm -rf`, 06:57:03 ok); in #2 it did not
+retry.
+
+### D. No path to the owner
+
+`Escalate("owner")` is an unknown desk. A capsule defect looks like a missing
+authorization and parks the whole story.
+
+## Comparison with selfdev-jobs-0101 (build e83735f2a, 01:01)
+
+Data: `~/.config/choir-qa/traces/selfdev-jobs-0101/bundle-a1.json` (run events).
+Four engineering assignments, three of which blocked:
+
+- A1 `b621ea7d` 01:04:19-01:10:04 blocked: a second `go build/test` was
+  refused ("one job at a time"), no build evidence.
+- A2 `fb5e1706` 01:13:52-01:15:12 blocked: `cp -a` `Operation not permitted`
+  then `cp -R` `Permission denied` into `/var/lib/artifact/release/frontend`.
+- A3 `e5d37a29` 01:18:29-01:18:50 blocked: cast was a bare parent reference
+  ("No specified parent Texture build/copy actions were included in the Cast
+  body"); `/var/lib/artifact/release` absent, uid 65534.
+- A4 `3293a4d0` 01:22:11-01:34:28 **completed**: wrote the two new files,
+  `go build` job, `go test`, `choir.Freeze` (01:33:58), bundle
+  `ef28a69e...`.
+
+So 0101's success was the **fourth** attempt of a change that adds only new
+files, i.e. engineering-to-Freeze is intermittent (about 1 in 4 on the
+easiest change) and the P5 change (edit an existing file) hits blocker A
+deterministically. Between 0101 and today the code change that matters is
+`b4f778552` (see the 0654 doc); it makes timeouts fatal. The two failure
+families are different, so "something changed" is partly true (0654) and
+"intermittent" is partly true (0101); P5's failure is neither.
+
+## Proposed fix (not implemented)
+
+Substrate vs symptom: A is a **substrate** defect in the capsule filesystem
+contract (read-only immutable lower + broker-uid write verb); the prompt and
+management rules are symptoms of it. No unwired replacement exists for A
+(`edit_file`/`rename`/`chmod` are granted but unimplemented; the broker has a
+switch with no handler: connecting them is the only "replacement", and it is
+partial).
+
+1. Make existing lower files writable through the overlay: simplest is to
+   have `handleWriteFile` copy-up explicitly (write a temp file in the same
+   directory and `rename` over the target; directories are 0777 so rename is
+   permitted and the lower file is untouched) and implement `edit_file`
+   the same way. Alternative: stop chmod'ing lower files `0444` and let
+   `source patch` extraction decide what changed (the lower tree is
+   already outside any write path; the 2026-08-21 rationale was defensive).
+   Preferred: the temp+rename write in the broker (keeps the
+   `makeSubjectTreeReadOnly` invariant and its test). Red (capsule).
+2. Pass the Cast's referenced parent text into the engineering inbox
+   (inline the parent's body into the assignment record) so `Ask` is not
+   needed; or make the guard allow one answered Ask.
+3. Prompt/seccomp: change `cp -a` to `cp -R --no-preserve=mode,ownership`
+   (or `cp -r`), allow `sched_getparam/sched_getscheduler` and the xattr
+   family read calls, and cap the cell `error` field by the *last* 2 KB.
+4. Management: do not convert capsule error text into an "authorization"
+   escalation; give `Escalate` a valid owner target or stop with a visible
+   blocker on the operation list.
+
+Confidence: root cause A about 85% (needs one Linux-guest confirmation: a
+capsule test that `WriteFile` over a lower 0444 file fails, then passes with
+the temp+rename write); B high (seen in 2 of 7 engineering assignments across
+0101/0825); C medium. Ordering: fix 1, then 2/3, then re-run this drill;
+expect a new failure family only after engineering can freeze.
+
+## Heresy delta
+
+discovered: A (existing-file edit has never worked in an engineering
+capsule), B, D; introduced: none; repaired: none.
