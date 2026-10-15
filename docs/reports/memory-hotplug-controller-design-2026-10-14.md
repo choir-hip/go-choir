@@ -88,7 +88,7 @@ From `docs/memory-hotplug.md` "Prerequisites" and "Configuring the guest
 driver":
 
 - `CONFIG_VIRTIO_MEM`, with kernel 5.16 or later on x86_64. The guest
-  kernel (6.18.37) already builds `VIRTIO_MEM=m` and
+  kernel (6.18.37 then; 6.18.55 on main, section 9.1) already builds `VIRTIO_MEM=m` and
   `MEMORY_HOTREMOVE=y` (density report, section 2). No kernel config
   change is needed.
 - The driver must be bound before the host can `PATCH`
@@ -289,7 +289,7 @@ Each row names the handling and the test that pins it.
 | F15 | VM stops while leased | state and reservation dropped | controller: VM gone |
 | F16 | host sustained pressure while leases exist | leases revoked (shrink) | controller: revoke under floor |
 | F17 | malicious guest touches unplugged memory | Firecracker faults and may crash: only that computer's VMM dies (documented upstream trust model) | none (upstream guarantee) |
-| F18 | guest's `MemTotal`-derived limits read once at start (`internal/gomemlimit`, capsule budget at `internal/autoputer/capsule_executor_linux.go:56`) | a lease does not raise the capsule budget by itself; the capture step must size its capsule from the lease | residual (S1) |
+| F18 | guest's `MemTotal`-derived limits read once at start (`internal/gomemlimit`, capsule budget at `internal/autoputer/capsule_executor_linux.go:56`) | landing pass (section 9): the capsule budget is read live and a job's declared need raises its capsule's cgroup; `gomemlimit` stays a residual (J14) | section 9.4 |
 | F19 | snapshot taken under a different selection | launch-config hash differs; the snapshot is discarded and the computer cold boots | existing S3 rule |
 | F20 | the list endpoint blocks on a hung Firecracker | the list reads the controller cache only | list test |
 
@@ -323,3 +323,105 @@ vmctl reports as selected. It:
   per-computer max and admission).
 - **repaired:** none yet; the list field repairs the first discovery when
   the code lands.
+
+## 9. Landing: capsule jobs take leases (second pass, 2026-10-14)
+
+The branch was rebased onto main after main gained capsule jobs
+(`internal/capsulejob`, with a `SetJobAdmission` hook left for this
+controller), the Claude delegate, the hostauth boundary, the always-on
+planned refresh and Dolt GC. This section names what the landing adds and
+its failure modes before the code (CLAUDE.md, "Problem Documentation
+First"). Mutation class: **red** (vmctl selection turned on for test
+computers, a guest-to-host call on the job path, capsule cgroup limits).
+
+### 9.1 Guest kernel (verified on the built config)
+
+Main's guest kernel now comes from the `nixpkgs-kernel` input
+(nixos-unstable, rev `7fd4004d0511`), so section 3's "6.18.37" is stale.
+Evaluated from this tree on 2026-10-14:
+
+- `boot.kernelPackages.kernel.version` = **6.18.55**;
+- configfile `/nix/store/63z3i6xz2dw1v1gvbfqj0vkjjwyjdrp8-linux-config-6.18.55`
+  (fetched from cache.nixos.org): `CONFIG_VIRTIO_MEM=m`,
+  `CONFIG_MEMORY_HOTPLUG=y`, `CONFIG_MEMORY_HOTREMOVE=y`,
+  `CONFIG_MIGRATION=y`, `CONFIG_CONTIG_ALLOC=y`, `CONFIG_SPARSEMEM_VMEMMAP=y`,
+  `CONFIG_MHP_DEFAULT_ONLINE_TYPE_ONLINE_AUTO=y` (the
+  `memhp_default_state=online_movable` argument vmmanager adds to selected
+  computers overrides that default);
+- the module is shipped: `virtio_mem.ko.xz` is in
+  `/nix/store/14ph847b27s9cvmrz544mav0vbx9v1k6-linux-6.18.55-modules/lib/modules/6.18.55/kernel/drivers/virtio/`,
+  and `boot.kernelModules` lists `virtio_mem`.
+
+That the module **loads** on a live guest is not provable locally (no
+KVM). The guest now reports it: `GET /api/runtime/observability` →
+`memory.virtio_mem_loaded` (`/sys/module/virtio_mem` exists) and
+`memory.virtio_mem_bound` (`/sys/bus/virtio/drivers/virtio_mem` lists a
+device). The staging probe requires both on the test computer.
+
+### 9.2 Selection
+
+`nix/node-b.nix` sets `VM_MEMORY_HOTPLUG=on` and
+`VM_MEMORY_HOTPLUG_ONLY=class:test`. vmctl reads both; vmmanager reads the
+first. A test computer gets the device at its **next cold boot** (a
+snapshot restore keeps the launch it was taken with; the launch-config
+hash then differs, so the snapshot is discarded and the computer cold
+boots, F19). No other computer's launch changes.
+
+### 9.3 The job path
+
+1. A cell declares a job's memory need: `choir.Start(argv,
+   {"memory_mib": 768})`. The need is part of the job spec
+   (`capsulejob.Spec.MemoryMiB`, 1 to 4096) and is validated again at the
+   reducer.
+2. Before the job starts, the executor calls the admission hook. The guest
+   runtime installs one (`autoputer/job_memory.go`) that adds the need to
+   the computer's lease through `vmctl.GuestMemoryLeases`: one lease per
+   computer, target = base + the sum of live needs, renewed at half its
+   TTL while any need is live, waiting up to 60 s for the plug and then up
+   to 10 s for the guest's `MemTotal` to show it.
+3. The executor then admits the need against the **live** capsule budget
+   and raises that capsule's cgroup `memory.max` by the need. The budget is
+   3/4 of the guest's current `MemTotal`, read at every admission instead
+   of once at start (F18); `CHOIR_CAPSULE_MEMORY_TOTAL_BYTES` still pins it.
+4. When the job ends (done, failed, timed out, stopped, or its capsule
+   ended), the executor lowers the cgroup first, then the need leaves the
+   lease: the target steps down to base + the remaining needs, and at none
+   the lease is released.
+
+The lease is a raise of the budget, not a precondition: on a computer
+without hotplug the need is admitted against the budget it already has.
+
+### 9.4 Failure modes (written before the code)
+
+| # | failure | handling | test |
+|---|---|---|---|
+| J1 | hotplug off, computer not selected, no device, driver unbound, or no vmctl URL | "unavailable" (404, 409, no client): the job is admitted against the budget the guest already has, and refused only if it does not fit; the reason is logged | autoputer: unavailable lease falls back; capsule: budget refusal |
+| J2 | grow refused (host PSI, MemAvailable short, sample missing, over the per-computer max) | the job does not start; the refusal names vmctl's reason; nothing is boosted | autoputer: refusal refuses the job |
+| J3 | plug incomplete in the wait (slow or partial guest) | the lease stays; the live budget decides; a job that does not fit is refused and its need leaves the lease | capsule: partial plug refuses; lease released |
+| J4 | `MemTotal` lags `plugged` (onlining after plug) | the hook polls `MemTotal` up to 10 s for the plugged growth | autoputer: waits for MemTotal |
+| J5 | two memory jobs at once (two capsules) | one lease per computer with the summed target; one job's end steps the target down, it does not release the other's memory | vmctl: summed target, step down, release at zero |
+| J6 | the lease is released while the job's pages are still charged to the capsule | the cgroup is lowered before the need leaves the lease | capsule: lower before release (order test) |
+| J7 | lowering `memory.max` below usage would OOM-kill inside the capsule (its broker) | first `memory.reclaim` the excess; if usage is still above the base, the boost is **retained** (accounted, cgroup kept, need kept in the lease) until the capsule is destroyed | capsule: retained boost returned at destroy |
+| J8 | the capsule ends while its job is boosted | the destroy path returns every boost to the budget and releases its needs; the job watcher's later end is a no-op | capsule: destroy returns boosts once |
+| J9 | the release is lost (vmctl unreachable) | logged; the lease ends at its TTL because nothing renews a need that left | vmctl: no renewal after the last release |
+| J10 | the guest process restarts mid-job | jobs close as interrupted (restart rule); the new process releases any lease at start, so the budget never counts memory from before the restart for long | autoputer: release at start |
+| J11 | vmctl restarts mid-job (its leases end, the orphan scan shrinks) | the next renewal is a fresh grow, admitted again; between them the guest may be asked to unplug memory the job uses and cannot (it keeps it: unplug needs free movable memory). Residual | residual |
+| J12 | job memory and capsule spawns race on the budget | both are admitted under the executor's lock against one live reading | capsule: spawn sees the boost |
+| J13 | declared need out of range | spec validation refuses < 0 or > 4096 MiB at the cell and the reducer | capsulejob, yaegikernel: bounds |
+| J14 | `GOMEMLIMIT` and other `MemTotal`-derived limits in the guest daemon (`internal/gomemlimit`) stay at their boot value | the daemon does not run the job; leases are for capsule jobs. Residual | residual |
+
+### 9.5 The probe uses the memory
+
+Plugged memory the guest never touches never enters the firecracker
+process's RSS, so "RSS returns within 128 MiB" after a host-only grow and
+shrink proves nothing. The probe keeps the host grow and shrink as a
+device check (plug, guest sees it, unplug to 0), then runs the real check:
+a prompt-bar run asks engineering to start a capsule job with
+`memory_mib` 1024 that allocates and touches 768 MiB and holds it for two
+minutes. The probe samples while the job runs and passes only if:
+
+- vmctl shows a **guest** lease and plugged memory ≥ 768 MiB;
+- the firecracker RSS rose by at least 600 MiB over the last sample before
+  the lease (the guest used the memory);
+- after the job, plugged returns to 0 and the RSS returns within 128 MiB
+  of that pre-lease sample within 2 minutes.
