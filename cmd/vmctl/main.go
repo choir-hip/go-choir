@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -191,19 +193,37 @@ func main() {
 			log.Fatalf("vmctl: open ComputerVersion route database: %v", err)
 		}
 		defer func() { _ = routeDB.Close() }()
-		pingCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if err := routeDB.PingContext(pingCtx); err != nil {
-			log.Fatalf("vmctl: ping ComputerVersion route database: %v", err)
-		}
 		artifactVerifier := computerversion.NewLocalArtifactContentVerifier(os.Getenv("VMCTL_ARTIFACTS_ROOT"))
 		inputs := computerversion.NewSQLInputCatalog(routeDB, artifactVerifier)
-		if err := inputs.EnsureSchema(pingCtx); err != nil {
-			log.Fatalf("vmctl: initialize immutable input catalog: %v", err)
-		}
 		ledger := routeledger.NewSQLLedger(routeDB)
-		if err := ledger.EnsureSchema(pingCtx); err != nil {
-			log.Fatalf("vmctl: initialize ComputerVersion route ledger: %v", err)
+		// A slow or stalled route database must not crash-loop vmctl: on
+		// 2026-10-15 the old log.Fatalf on the first ping failure exited every
+		// 30 s, hit start-limit-hit after 10 restarts and left the host with no
+		// VM lifecycle until a manual reset-failed. Retry in-process with
+		// capped backoff, each attempt bounded at 30 s; the route authority
+		// stays unset (and routing fails closed) until the database answers.
+		// SIGTERM ends the wait so a unit stop is not delayed.
+		waitCtx, stopWait := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		err = retryWithBackoff(waitCtx, retryPolicy{
+			AttemptTimeout: 30 * time.Second,
+			Initial:        time.Second,
+			Max:            30 * time.Second,
+		}, "ComputerVersion route database", func(ctx context.Context) error {
+			if err := routeDB.PingContext(ctx); err != nil {
+				return fmt.Errorf("ping: %w", err)
+			}
+			if err := inputs.EnsureSchema(ctx); err != nil {
+				return fmt.Errorf("initialize immutable input catalog: %w", err)
+			}
+			if err := ledger.EnsureSchema(ctx); err != nil {
+				return fmt.Errorf("initialize route ledger: %w", err)
+			}
+			return nil
+		})
+		stopWait()
+		if err != nil {
+			log.Printf("vmctl: stopped while waiting for the ComputerVersion route database: %v", err)
+			return
 		}
 		authority, err := vmctl.NewRouteAuthority(ledger, inputs)
 		if err != nil {

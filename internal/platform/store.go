@@ -206,7 +206,26 @@ CREATE TABLE IF NOT EXISTS computer_key_escrow_transparency (
 // OpenStore opens the platform store. dsn is the canonical event/control
 // database (Store A); corpusDSN is the world-wire/corpus database (Store B).
 // An empty corpusDSN shares the Store A pool — the pre-split topology.
-func OpenStore(dsn, corpusDSN string) (*Store, error) {
+//
+// ctx bounds the whole open: every ping and every schema statement. A caller
+// that waits on a Dolt that accepts connections but never answers (the
+// 2026-10-15 deadlock) gets an error when ctx expires instead of hanging.
+// ctx only bounds the open; the returned Store does not keep it.
+func OpenStore(ctx context.Context, dsn, corpusDSN string) (*Store, error) {
+	return openStore(ctx, dsn, corpusDSN, true)
+}
+
+// OpenStoreWithoutBootstrap is OpenStore for a reader/maintainer that does not
+// own the schema: it connects and pings both pools but applies no DDL. The
+// owning service (corpusd) bootstraps; a maintainer that also ran the DDL on
+// every timer tick generated ~1,440 DDL batches a day against Store A and hung
+// on a deadlocked server
+// (docs/problems/dolt-clustering-assessment-2026-10-15.md section 7).
+func OpenStoreWithoutBootstrap(ctx context.Context, dsn, corpusDSN string) (*Store, error) {
+	return openStore(ctx, dsn, corpusDSN, false)
+}
+
+func openStore(ctx context.Context, dsn, corpusDSN string, bootstrap bool) (*Store, error) {
 	sharedPool := strings.TrimSpace(corpusDSN) == "" || strings.TrimSpace(corpusDSN) == strings.TrimSpace(dsn)
 	// The host's Dolt user and password (dbcred; never logged). Unset, the
 	// DSNs are used as configured.
@@ -224,7 +243,7 @@ func OpenStore(dsn, corpusDSN string) (*Store, error) {
 		return nil, fmt.Errorf("platform store: open mysql: %w", err)
 	}
 	configureDB(db)
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("platform store: ping mysql: %w", err)
 	}
@@ -236,7 +255,7 @@ func OpenStore(dsn, corpusDSN string) (*Store, error) {
 			return nil, fmt.Errorf("platform store: open corpus mysql: %w", err)
 		}
 		configureDB(corpusDB)
-		if err := corpusDB.Ping(); err != nil {
+		if err := corpusDB.PingContext(ctx); err != nil {
 			_ = corpusDB.Close()
 			_ = db.Close()
 			return nil, fmt.Errorf("platform store: ping corpus mysql: %w", err)
@@ -247,9 +266,11 @@ func OpenStore(dsn, corpusDSN string) (*Store, error) {
 		s.corpusDB = corpusDB
 		s.corpusCommitter = doltbatch.New(corpusDB, "platform-corpus", doltbatch.DebounceFromEnv("DOLT_SNAPSHOT_DEBOUNCE"))
 	}
-	if err := s.Bootstrap(context.Background()); err != nil {
-		_ = s.Close()
-		return nil, err
+	if bootstrap {
+		if err := s.Bootstrap(ctx); err != nil {
+			_ = s.Close()
+			return nil, err
+		}
 	}
 	return s, nil
 }
