@@ -418,3 +418,12 @@ branch `feat/autopaper-compute-halving`.
   is set to the operator's Node B public key, so recovery is OVH rescue
   netboot plus ssh, with no emailed password and no console. The IPMI
   console was not verified before the reboot; the reboot record says so.
+- **Platform Dolt (Store A) history: squash weekly** (owner, ~11:10 UTC).
+  The store keeps every commit: 92k commits and 24 GB of old history,
+  growing about 1.6 GB a day, and nothing reads it
+  ([assessment](../problems/dolt-clustering-assessment-2026-10-15.md)).
+  Ruling: after the Dolt liveness probe is live, back up the Dolt data
+  directory, then in a quiet window do one squash and a full GC. After
+  that, squash every week. Current rows and the event-tape rows are kept;
+  only Dolt's own version history of them is dropped. The squash can't be
+  undone, so the backup comes first.
