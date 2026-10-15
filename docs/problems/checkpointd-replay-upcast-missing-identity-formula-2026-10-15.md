@@ -36,3 +36,35 @@ failure terminal for that computer instead of the whole run.
 
 Heresy delta: discovered one (a single computer's replay failure fails the
 whole checkpoint unit); introduced none; repaired none.
+
+## Status at 2026-10-15 19:05 UTC
+
+- **The unit is green, but the problem is not fixed.** Since 12:16 every
+  run ends `success`.
+- The two refusing computers are now in the failed-job backoff
+  (`failedJobRetryBackoff`, 15 min doubling to 16 h), and nothing else is
+  due. A computer is due at a 2,500-event tail, or at 1,000 events and
+  24 h.
+- **Two computers refuse, not one:**
+  - `computer-c7f57b90…`: sequence 527, target 1307;
+  - `computer-84cc92fc…`: sequence 107, target 1166, at 12:16:09.
+
+  Both are QA demo test computers from 2026-10-11
+  (`~/.config/choir-qa/test-computers/demo-p2a-2026-10-11.json` and
+  `demo-p2c-…`), not user computers.
+- **Cause, from code:** `ogIdentityFormulas`
+  (`internal/store/vocab_migrate_og.go`) has no entry for
+  `choir.commitment_record`. Its canonical id is
+  `lifecycleCanonicalID(kind, owner, computer, record_id)`, the scoped
+  form. A record whose `record_id` was migrated has no formula that
+  verifies the old suffix, so the deposit upcast refuses it.
+- **Decision: residual, not fixed now.**
+  - The candidate fix is a scoped `record_id` formula. But replay
+    rekeying a commitment record must match how the live store keyed
+    that same record. Otherwise the checkpoint diverges from live: the
+    f95311775 class, "replay matches live".
+  - That is a red surface (checkpoint projection), and the evidence
+    covers only test computers.
+  - The next step is to read the live object id of one refused record,
+    on a running test computer through the product route. Then add the
+    formula with a replay-equals-live test.
