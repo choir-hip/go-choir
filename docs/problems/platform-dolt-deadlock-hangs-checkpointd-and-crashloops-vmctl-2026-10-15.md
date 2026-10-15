@@ -1,6 +1,6 @@
-# A hung checkpointd bootstrap blocks the deploy's NixOS switch (2026-10-15)
+# Platform Dolt deadlock hangs checkpointd, blocks the deploy switch and crash-loops vmctl (2026-10-15)
 
-Status: documented; not fixed. Mutation class of the fix: orange (a unit
+Status: documented. Recovered by restarting platform Dolt and vmctl by hand; not fixed. Mutation class of the fix: orange (a unit
 timeout and a bootstrap deadline). The service touches checkpoints, a
 protected surface.
 
@@ -30,16 +30,48 @@ protected surface.
   `dolt env.(*DoltCliConfig).createLocalConfigAt`, after
   `mkdir /root/.dolt: read-only file system`. Not investigated.
 
+## Root cause found (10:44–10:48 UTC): the platform Dolt server was deadlocked
+
+- `go-choir-platform-dolt` (pid 1404751, up since 2026-10-14 21:35) was
+  accepting connections but not answering queries. It sat at 0% CPU, in
+  state S, with no read/write I/O over 5 s. Its last non-connection log
+  line was at 09:49:02 (`error running query … nothing to commit`, for
+  connection 843).
+- vmctl's paper health checks have failed since 09:54. After the switch
+  restarted vmctl, vmctl exited every 30 s with
+  `ping ComputerVersion route database: context deadline exceeded`. It
+  restarted 10 times, hit `start-limit-hit` and stayed failed. Staging
+  `/health` still answered 200 the whole time.
+- P4's deploy (run 38717028854) failed. The switch exited with status 4
+  because checkpointd failed after the operator SIGQUIT, and the deploy's
+  vmctl health checks could not pass.
+- Dolt ignored SIGQUIT, so there is no goroutine dump. `systemctl restart`
+  timed out in stop-sigterm after 90 s and SIGKILLed it (10:45:56 →
+  10:47:27). The new Dolt answered immediately: the paper's `/health`
+  returned 200 at 10:47:35. `systemctl reset-failed` and `start` brought
+  vmctl back at 10:47:44 with 0 restarts, reattaching 3 VMs (the paper,
+  vm-48bc…, candidate-fleet-e15c…).
+
 ## Belief
 
-Hypothesis, not confirmed: the DDL `Exec` waited on a Dolt lock or
-server-side stall while the deploy was restarting the services that share
-Dolt. Nothing bounds it on the client side, and the unit's 8h start
+The checkpointd hang is a symptom. Its bootstrap DDL waited on the
+deadlocked server. Nothing bounds it on the client side, and the unit's 8h start
 timeout makes a timer-triggered oneshot able to hold any `nixos switch` for
 up to 8 hours. That is a fate-sharing defect: a maintenance tick can block
 the whole deploy.
 
 ## Remaining error
+
+- What deadlocked platform Dolt at about 09:49. Candidates: a transaction
+  left open by a client killed during the 09:4x deploy (P5, 2eae77de6), a
+  Dolt-internal lock, or a commit/GC interaction. No stack was captured;
+  next time, use `kill -ABRT` (Go dumps goroutines on SIGABRT) before
+  restarting.
+- Nothing monitors platform Dolt liveness. A query-level probe would have
+  caught this at 09:50 instead of 10:44.
+- vmctl exits when the database ping times out. A crash loop with a
+  start limit leaves the host with no VM lifecycle and needs a manual
+  `reset-failed`.
 
 - Which server-side lock or stall the DDL waited on was not captured.
 - Whether `Bootstrap` should run on every 90 ms maintenance tick at all
