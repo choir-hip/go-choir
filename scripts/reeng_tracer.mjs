@@ -1887,17 +1887,34 @@ async function adoptScenario(cA, out, n, deadline, phase, fenceBuild, label) {
   at('adopter_applied');
   const o = await obligations(cB);
   claim.restart = { kind: o?.restart?.kind || null, reason: o?.restart?.reason || null, target: o?.restart?.target || null };
-  const s = await cB.surface(markerPath);
-  claim.served = { status: s.status, served: s.status === 200 && s.text.trim() === token };
-  phase('adopter_served', claim.served);
-  // The effective release names B's operation and R (the tree is resolved in
-  // the background; give it a minute).
-  for (let i = 0; i < 12; i++) {
-    const obs = await cB.api('/api/runtime/observability', 'GET', undefined, 15_000);
-    claim.identity = obs.body?.effective_release || null;
-    if (claim.identity && !claim.identity.tree_pending) break;
+  // The planned restart and P6's 30 s identity retry (effectiveTreeRetry) make
+  // both reads settle after `applied`: poll every 5 s for up to ~120 s until
+  // the marker is served and the identity names the adoption. On timeout the
+  // last observed values stay in claim.served / claim.identity.
+  const identityNames = (idb) => Boolean(idb && idb.adopted_release_id === (claim.release || {}).release_id && idb.operation_id
+    && (!claim.adoption?.same_base || idb.tree_hash === (claim.release || {}).tree_hash));
+  const pollStart = Date.now();
+  claim.adopter_poll = { attempts: 0, served_after_ms: null, identity_after_ms: null, deadline_ms: 120_000 };
+  while (true) {
+    claim.adopter_poll.attempts += 1;
+    try {
+      const s = await cB.surface(markerPath);
+      claim.served = { status: s.status, served: s.status === 200 && s.text.trim() === token };
+    } catch (e) {
+      claim.served = { status: 0, served: false, error: String(e?.message || e) };
+    }
+    try {
+      const obs = await cB.api('/api/runtime/observability', 'GET', undefined, 15_000);
+      claim.identity = obs.body?.effective_release || null;
+    } catch (e) {
+      claim.identity = { error: String(e?.message || e) };
+    }
+    if (claim.served.served && claim.adopter_poll.served_after_ms === null) claim.adopter_poll.served_after_ms = Date.now() - pollStart;
+    if (identityNames(claim.identity) && claim.adopter_poll.identity_after_ms === null) claim.adopter_poll.identity_after_ms = Date.now() - pollStart;
+    if ((claim.served.served && identityNames(claim.identity)) || Date.now() - pollStart >= claim.adopter_poll.deadline_ms) break;
     await sleep(5_000);
   }
+  phase('adopter_served', { ...claim.served, poll: claim.adopter_poll });
   phase('adopter_identity', claim.identity || {});
   return finish();
 }
