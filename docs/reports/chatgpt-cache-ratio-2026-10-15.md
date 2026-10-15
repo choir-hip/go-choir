@@ -395,3 +395,16 @@ against `choir-` calls once a day of data exists, by grouping on
   3. **Owner decision: top up OpenCode Go** (402 insufficient funds), or
      change the paper's model policy to put chatgpt first while OpenCode
      is unfunded.
+
+- **Fix (branch fix/failover-cache-key-by-model, orange):** the failover
+  suffix now names the serving selection instead of the ordinal. A call
+  served by the primary selection keeps the base key; a failed-over call
+  uses `<base>-m<6 hex of sha256(provider/model)>`, so every call of a
+  thread served by chatgpt/gpt-6-luna shares one key whether chatgpt is
+  failover1 or failover2, while different models still get different keys.
+  The tag adds 8 characters, keeping a key at most 64 characters and free of
+  owner or computer ids. `loggableCacheKey` labels these `<desk>+m<tag>` and
+  still labels legacy `-failover<N>` keys. Expected gateway effect: the
+  `+failover` and `+failover2` chatgpt labels collapse into one
+  `+m<tag>` label per desk and the mid-thread cold-key misses stop. Rollback:
+  git revert the code commit.

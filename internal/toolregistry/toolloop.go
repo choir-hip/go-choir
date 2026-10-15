@@ -189,6 +189,28 @@ func PromptCacheKey(label, scope, system string, tools []provideriface.ToolDefin
 	return "choir-" + label + "-" + shortSHA256(scope) + "-" + shortSHA256(system, string(toolsJSON))
 }
 
+// failoverCacheKey is the cache key for a call served by active after a model
+// failover. The primary selection keeps the base key; any other selection
+// appends "-m" and six hex characters of sha256(provider/model), so every call
+// a thread gets from one model shares a key whatever its failover ordinal, and
+// different models never share one. The tag adds 8 characters to a key of at
+// most 56, within the 64 a provider accepts, and carries no owner or computer
+// id.
+func failoverCacheKey(base string, primary, active provideriface.LLMSelection) string {
+	if base == "" || sameServingSelection(primary, active) {
+		return base
+	}
+	return base + "-m" + shortSHA256(servingSelectionID(active))[:6]
+}
+
+func servingSelectionID(sel provideriface.LLMSelection) string {
+	return strings.ToLower(strings.TrimSpace(sel.Provider)) + "/" + strings.ToLower(strings.TrimSpace(sel.Model))
+}
+
+func sameServingSelection(a, b provideriface.LLMSelection) bool {
+	return servingSelectionID(a) == servingSelectionID(b)
+}
+
 func promptCacheLabel(label string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(strings.TrimSpace(label)) {
@@ -583,10 +605,10 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 				if baseCacheKey != "" {
 					// The key doubles as OpenCode's session: a failed-over
 					// thread leaves the session pinned to the failing route.
-					cacheKey = baseCacheKey + "-failover"
-					if nextFallback > 1 {
-						cacheKey += strconv.Itoa(nextFallback)
-					}
+					// It is keyed by the serving selection, not the failover
+					// ordinal, so a model that is failover1 on one call and
+					// failover2 on the next keeps one cache key.
+					cacheKey = failoverCacheKey(baseCacheKey, options.llmConfig, activeLLMConfig)
 				}
 				messages = stripProviderReplay(messages)
 				transientAttempts = 0

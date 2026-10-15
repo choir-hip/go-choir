@@ -95,8 +95,77 @@ func TestRunToolLoopSendsOneCacheKeyPerThreadAndMovesItOnFailover(t *testing.T) 
 		t.Fatalf("failover run: %v", err)
 	}
 	first, last := failing.requests[0], failing.requests[len(failing.requests)-1]
-	if first.CacheKey != want || last.CacheKey != want+"-failover" {
-		t.Fatalf("cache keys first %q last %q, want %q then %q", first.CacheKey, last.CacheKey, want, want+"-failover")
+	luna := failoverCacheKey(want, provideriface.LLMSelection{Provider: "opencode-go", Model: "deepseek-v4.1-flash"}, provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-6-luna"})
+	if first.CacheKey != want || last.CacheKey != luna || luna == want {
+		t.Fatalf("cache keys first %q last %q, want %q then %q", first.CacheKey, last.CacheKey, want, luna)
+	}
+}
+
+// A model's key must not depend on the failover ordinal: chatgpt served as
+// failover1 on one call and failover2 on the next (it depends on which earlier
+// models have an open circuit) is one cache thread.
+func TestFailoverCacheKeyIsPerServingModelNotOrdinal(t *testing.T) {
+	const scope = "owner\x00computer\x00texture:doc-1"
+	primary := provideriface.LLMSelection{Provider: "opencode-go", Model: "deepseek-v4.1-flash"}
+	catJam := provideriface.LLMSelection{Provider: "opencode-go", Model: "cat-jam-free"}
+	luna := provideriface.LLMSelection{Provider: "chatgpt", Model: "gpt-6-luna"}
+	down := fmt.Errorf("gateway: status 503 service unavailable")
+
+	run := func(fallbacks []provideriface.LLMSelection, failing ...string) []string {
+		fail := map[string]error{}
+		for _, m := range failing {
+			fail[m] = down
+		}
+		p := &modelFailingProvider{fail: fail}
+		if _, _, err := RunToolLoop(context.Background(), p, nil,
+			[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hello"}`)}, "system", 0, noEmit, nil,
+			WithToolLoopLLMConfig(primary),
+			WithToolLoopFallbackLLMConfigs(fallbacks),
+			WithToolLoopConversationID("run-1"),
+			WithToolLoopPromptCache("texture", scope)); err != nil {
+			t.Fatalf("run: %v", err)
+		}
+		keys := make([]string, 0, len(p.requests))
+		for _, r := range p.requests {
+			keys = append(keys, r.CacheKey)
+		}
+		return keys
+	}
+	base := PromptCacheKey("texture", scope, "system", []provideriface.ToolDefinition{})
+
+	asFailover1 := run([]provideriface.LLMSelection{luna}, primary.Model)
+	asFailover2 := run([]provideriface.LLMSelection{catJam, luna}, primary.Model, catJam.Model)
+	lunaOne, lunaTwo := asFailover1[len(asFailover1)-1], asFailover2[len(asFailover2)-1]
+	if lunaOne != lunaTwo {
+		t.Fatalf("chatgpt key as failover1 %q != as failover2 %q", lunaOne, lunaTwo)
+	}
+	if asFailover1[0] != base || asFailover2[0] != base {
+		t.Fatalf("primary-served calls = %q, %q, want base key %q", asFailover1[0], asFailover2[0], base)
+	}
+	if lunaOne == base {
+		t.Fatalf("failover key equals base key %q", base)
+	}
+	if strings.Contains(lunaOne, "failover") {
+		t.Fatalf("failover key %q still carries an ordinal", lunaOne)
+	}
+	if got := run([]provideriface.LLMSelection{catJam}, primary.Model); got[len(got)-1] == lunaOne {
+		t.Fatalf("cat-jam and luna share key %q", lunaOne)
+	}
+
+	// Same model, different provider; case and space insensitive; length.
+	a := failoverCacheKey(base, primary, luna)
+	if b := failoverCacheKey(base, primary, provideriface.LLMSelection{Provider: " ChatGPT", Model: "GPT-6-Luna "}); a != b {
+		t.Fatalf("selection not normalized: %q vs %q", a, b)
+	}
+	if b := failoverCacheKey(base, primary, provideriface.LLMSelection{Provider: "opencode-go", Model: "gpt-6-luna"}); a == b {
+		t.Fatalf("different providers share key %q", a)
+	}
+	if got := failoverCacheKey(base, primary, primary); got != base {
+		t.Fatalf("primary key = %q, want base %q", got, base)
+	}
+	long := PromptCacheKey(strings.Repeat("x", 40), scope, "system", nil)
+	if k := failoverCacheKey(long, primary, luna); len(k) > 64 {
+		t.Fatalf("failover key length %d > 64: %q", len(k), k)
 	}
 }
 
