@@ -132,6 +132,116 @@ post-apply checkpoint that rollback names has the same skew.
 (a) is the conservative first step; (b) is the substrate fix. Stopped here
 per the brief: the fix is a design choice on a red surface.
 
+### Repair design (decided 2026-10-14; red; branch `fix/checkpoint-head-race`)
+
+**Chosen: (b), bind the head and the witness in one held section.** The
+binding invariant: a published checkpoint's `AcceptedEventHead` and its
+`VMLocalContentWitness` describe the same projection state. The only way to
+hold it on a busy computer is to read the head, compare live with replay at
+that head, and publish that head while no event can be appended.
+
+Code evidence for the choice:
+
+- **(c) is not available without a platform redesign.**
+  `CheckpointAuthority.Publish` (`internal/platform/checkpoints.go`) locks
+  the one `computer_event_heads` row `FOR UPDATE` and requires
+  `CanonicalEventHead`, `EffectiveEventHead`, `EffectiveStateCommitment`
+  and `ReducerVersion` to equal the request. The row is the current head
+  only; an ancestor's effective head and state commitment are not kept
+  anywhere the authority reads (`EventResearchUpdate` and the
+  materialization events move the effective head, `reducer.go`). Accepting
+  an ancestor needs a per-sequence head history in corpusd, a new CAS
+  rule, and a platform deploy coupled to the guest change. The route
+  projection then joins `AcceptedOrRollbackEventDigest` from the checkpoint
+  (`self_development_materializer.go`), so the ancestor head would also
+  leak into the promotion evidence. Rejected: larger, crosses the host
+  trust boundary, and weakens "a checkpoint names the tip at publish".
+- **(a) alone never converges on a busy computer.** The slow part is the
+  replay to H1 (seconds to minutes: base install plus tail). The drill saw
+  68 events in 44 s; a "retry when idle" on a desk that is working fails
+  again on every attempt. It only turns a silent bad checkpoint into a
+  loud 409.
+- **(b) is cheap and guest-local.** `HoldAppends`
+  (`internal/computerevent/appender.go`) takes the appender mutex that every
+  append holds for its whole platform round trip (`appendLocked`: platform
+  `Head`, `PinEvent`, `CompareAndSwap`, projection finalize), so while it is
+  held the guest's head cannot move and one more platform round trip under
+  it is the existing lock discipline. The tail catch-up does not need that
+  lock: `replayInto` replays through a separate dry-run appender with its
+  own mutex, and `reconstruct` resumes from the projection's own head, so
+  the same disposable replay store advances H1 → H2 by the tail only
+  (no deadlock, no full replay). `ReplayCompleteness` already extracts
+  the live store under the hold, so the held section adds one tail replay
+  and one replay extract, and only when the head moved.
+
+Shape (one function, `bindCheckpointAtHead`, used by all three publish sites):
+
+1. Probe without the hold, as today: capture H1 + live state together,
+   replay the tape to H1 in a disposable store, check eligibility. The
+   replay store stays open.
+2. Pre-catch-up without the hold: if the live head moved, advance the
+   replay store to it, so the held tail is only what lands during this
+   step.
+3. Under `HoldAppends`: read the head H. If H = H1, the probe's witness is
+   H's (idle path, exactly as before). Otherwise extract live at H, advance
+   the replay store to H, extract replay, compare and check eligibility at
+   H, and derive the witness at H. Pin the replay base under H's checkpoint
+   reference. Call the site's publish closure with H (each site builds its
+   own request from H: receipt, reconstruction digest, idempotency key).
+4. Release. A refusal that says the platform head is not the request's
+   (a writer outside this guest's appender, or a pending transition) is
+   retried from step 2, at most 3 attempts, then fails loudly with the
+   attempt count. Any other refusal returns as is.
+
+The three call sites (all switch to it):
+
+- owner recovery: `BindCheckpointRestoreSet` → `publishOwnerRecoveryCheckpoint`
+  (`rematerialize.go`): witness at H1, head re-read at publish. Silent skew
+  on every busy checkpoint (the drill).
+- post-apply: `self_development_materializer.go`: head read before the
+  witness (a busy computer gets a 400 at the platform), and the retry loop
+  re-reads the head and republishes the H1 witness (silent skew on retry).
+- platform update: `drivePlatformUpdateTail` (`platform_update.go`): head
+  read before the witness; a busy computer gets a 400 at the platform.
+  Loud, never silent, but never succeeds while a desk works.
+
+Failure modes the fix must hold (written before the tests):
+
+- C1 an append between the witness capture and the publish leaves the
+  published head ahead of the witness; restore refuses "reconstructed
+  content root does not match checkpoint" (the drill).
+- C2 the rebound witness at H is not re-compared at H: a live-only row
+  written after H1 slips past eligibility and is attested.
+- C3 the held section deadlocks: the tail replay or a publish closure takes
+  the appender lock.
+- C4 the held tail is long (the whole probe's worth of events replayed
+  under the hold), stalling every desk.
+- C5 a head that keeps moving outside this guest's appends loops forever
+  instead of failing loudly and bounded.
+- C6 an idle checkpoint changes: different head, idempotency key, witness
+  or request bytes.
+- C7 the base pin names a head other than the published checkpoint's.
+- C8 the bind-only path (no platform credential) reports a witness for a
+  head it does not name.
+
+Protected surfaces: checkpoint publish and restore binding (red),
+`HoldAppends` hold time (every desk append waits on it). Not touched:
+corpusd checkpoint authority, restore (`RematerializeFromTape`), route
+projection, base selection.
+
+Admissible evidence: a focused agentcore test that drives the product
+checkpoint route (`BindCheckpointRestoreSet` through a platform fake that
+enforces the authority's head equality) with an append between capture and
+replay, then restores from the published checkpoint with
+`RematerializeFromTape`: before the fix, the restore refuses with the
+drill's message; after, the witness matches. Staging proof: the
+`--change go` tracer rerun's `restore_to_pre_apply_head` (local tests do
+not prove the staging timing).
+
+Rollback: `git revert` of the fix commit restores the old binding (busy
+checkpoints silently unrestorable again; no data migration, no format
+change: the checkpoint request shape is unchanged).
+
 ## 2. `go_build_job_done`, `go_test_job_done`: tracer saw jobs count=1, done=0
 
 ### Why the tracer saw one job, not done
@@ -385,7 +495,8 @@ crash boot serves a target.
 3. Obligations: serve the marker's target. Orange (read surface). Rollback:
    git revert.
 
-Not on this branch: item 1 (design choice above), the job end-digest timing
+Item 1 is repaired on its own branch, `fix/checkpoint-head-race` (design
+under "Repair design" in item 1). Not on this branch: the job end-digest timing
 (substrate 3, revisit after fix 1), the projection-head surface, desk
 behavior.
 
