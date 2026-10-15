@@ -287,10 +287,17 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 		}
 		decision.InitialLoopID = snapshot.Activation.RunID
 	} else {
-		initialRun, submitErr := h.submitTextureAgentRevisionRun(ctx, doc, rec.OwnerID, textureAgentRevisionRequest{
-			Intent: "initial_conductor_workflow",
-			Prompt: initialPrompt,
-		}, 0)
+		// StartLifecycle's work assignment wakes this desk concurrently. Hold
+		// the wake scope the wake holds, or its stale loop can stale this
+		// run's pending mutation between its active-run check and its own
+		// lost activation (texture-raced-activation-refused-first-turn-2026-10-11).
+		initialRun, submitErr := func() (*types.RunRecord, error) {
+			defer h.lockTextureWakeScope(rec.OwnerID, doc.ComputerID, doc.DocID)()
+			return h.submitTextureAgentRevisionRun(ctx, doc, rec.OwnerID, textureAgentRevisionRequest{
+				Intent: "initial_conductor_workflow",
+				Prompt: initialPrompt,
+			}, 0)
+		}()
 		if submitErr != nil {
 			return ConductorDecision{}, fmt.Errorf("start initial Texture agent revision: %w", submitErr)
 		}

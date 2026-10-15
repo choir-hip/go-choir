@@ -91,13 +91,18 @@ func (h *Handler) ensureCoagentTextureRevisionRoute(ctx context.Context, parentR
 		"ingestion_handoff_request_id":   metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
 		"ingestion_handoff_request_kind": metadataString(parentRec.Metadata, "ingestion_handoff_request_kind"),
 	}
-	rec, err := h.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent:           "universal_wire_" + callerProfile + "_article_revision",
-		Prompt:           prompt,
-		SourceEntities:   sourceEntities,
-		RequestedByRunID: parentRec.RunID,
-		Provenance:       provenance,
-	}, 0)
+	// Every Texture activator holds the document's wake scope, as the wake
+	// does (texture-raced-activation-refused-first-turn-2026-10-11).
+	rec, err := func() (*types.RunRecord, error) {
+		defer h.lockTextureWakeScope(ownerID, doc.ComputerID, doc.DocID)()
+		return h.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
+			Intent:           "universal_wire_" + callerProfile + "_article_revision",
+			Prompt:           prompt,
+			SourceEntities:   sourceEntities,
+			RequestedByRunID: parentRec.RunID,
+			Provenance:       provenance,
+		}, 0)
+	}()
 	if err != nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("start texture article revision: %w", err)
 	}
