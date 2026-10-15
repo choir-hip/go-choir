@@ -1,9 +1,12 @@
 # A Partial Host Deploy Blanks the Deployed Commit, and Later Deploys Skip
 
 Date: 2026-10-14. Found by the lead at ~20:15 UTC when the jailer slice
-(10e9f18e1) never reached staging. Status: fix on branch
-`fix/deploy-receipt-platform-commit` (see "Fix" below), not yet landed;
-workaround was a manual forced deploy (workflow_dispatch).
+(10e9f18e1) never reached staging. Status: **landed** in e7bb34f52 (from branch
+`fix/deploy-receipt-platform-commit`; see "Fix" below). The platform
+commit is `/health` `.platform.deployed_commit`. `build.deployed_commit`
+stays per service, so it is blank after a deploy that did not move the
+proxy, by design. Verified 2026-10-15 18:20 UTC: `.platform` =
+77633ecdc, source `receipt.deployed_commit`.
 
 ## Evidence
 
