@@ -21,7 +21,7 @@ review:
   evidence_ref: none
 
 start:
-  captured_at: 2026-10-15T21:30:00Z
+  captured_at: 2026-10-15T21:05:00Z
   source:
     canonical_ref: main 1f4ed5055
     deploy_identity: staging b244507f4 (deployed 2026-10-15T21:03:45Z)
@@ -85,7 +85,7 @@ start:
       (rlm_management_runtime.yaml:23-24); no overlay mentions a horizon,
       a resolving date or a criterion.
   corrections:
-    - at: 2026-10-15T22:30:00Z
+    - at: 2026-10-15T21:20:00Z
       by: review round 1 (gpt-6-luna, gpt-6.1-sol, gemini-3.8-flash)
       what: >-
         Observation 3, "Independent scoring exists", overstates the code:
@@ -97,13 +97,15 @@ start:
         internal/runtimeprompts/overlays/rlm_management_runtime.yaml:23-24.
         Observation 2's settlement has no settler or time of its own, but
         the enclosing Report record carries both.
-    - at: 2026-10-15T22:30:00Z
+    - at: 2026-10-15T21:20:00Z
       by: review round 1
       what: >-
         Sample behind now.belief: 38 hypotheses from the Cast records of the
         27 Texture inboxes in the paper's newest 100 runs (GET /api/runs,
         GET /api/inboxes/{id}/records), classified by a tense and date
         regex. It is a convenience sample, not a population estimate.
+        It was taken at about 21:11 UTC. f658017ce said 21:45 and the first
+        draft said captured 21:30; both were agent clock errors.
 
 finish:
   deliver: >-
