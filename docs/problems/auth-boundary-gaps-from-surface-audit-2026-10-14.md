@@ -228,7 +228,7 @@ exploit found).
 | d | corpusd event read admits any host-internal caller for any owner (`event_handlers.go:332`) | CONFIRMED | L once hostauth enforces | residual: depends on hostauth `enforce` |
 | e | maild treats loopback + marker + hostauth as the owner session (`maild/api.go:240-255`) | CONFIRMED | L once hostauth enforces | residual: depends on hostauth `enforce` |
 | f | hostauth is `observe` on Node B (`nix/node-b.nix:67`) | CONFIRMED | M | not flipped here (deploy-shape decision); item b removes the deploy blocker |
-| g | `POST /auth/recovery/request` is an unauthenticated write that mints a token (`auth/recovery.go`) | CONFIRMED | M (DoS) | deferred: the audit asks for an owner ruling (delete or build the UI) |
+| g | `POST /auth/recovery/request` is an unauthenticated write that mints a token (`auth/recovery.go`) | CONFIRMED | M (DoS) | owner ruled "delete for now" (owner-notes §19), not carried out; the account-recovery slice (`land/account-recovery`) builds the UI instead and supersedes the deletion on landing ([account-recovery-token-discarded-2026-10-14.md](account-recovery-token-discarded-2026-10-14.md), "Landing reconciliation") |
 | h | guest `POST /api/mail/inbound` (`autoputer/maildir.go:213`) lets a `write:runtime` key inject mail | CONFIRMED | L (own mailbox) | deferred to the dead-route sweep (audit §3 item 7) |
 | i | `/internal/self-development/restart-handoff` trusts loopback plus a forgeable `X-Internal-Updater` (`api_self_development.go:878`) | DISCOVERED | M | residual: needs the updater to authenticate by socket peer credential, not loopback |
 | j | management ProductAPI to `/api/computers/*` always 403 (audit Broken 4) | CONFIRMED (a bug, not a hole) | — | unchanged: the fail-closed side |

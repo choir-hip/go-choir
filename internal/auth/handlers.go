@@ -51,18 +51,28 @@ type Handler struct {
 	signer          ed25519.PrivateKey // loaded at startup for JWT signing
 	recentRotations map[string]rotatedGraceEntry
 	rotationsMu     sync.Mutex
+
+	// recoveryMailer delivers recovery links (nil: not configured).
+	recoveryMailer RecoveryMailer
+	// recoveryMailDispatch runs a delivery off the request path. nil means
+	// a goroutine; tests substitute a synchronous runner.
+	recoveryMailDispatch func(func())
 }
 
 // NewHandler creates a Handler with the given store, WebAuthn instance, and config.
 // The signer is the Ed25519 private key used for JWT signing.
 func NewHandler(store *Store, wa *webauthn.WebAuthn, cfg *Config, signer ed25519.PrivateKey) *Handler {
-	return &Handler{
+	h := &Handler{
 		store:           store,
 		webauthn:        wa,
 		config:          cfg,
 		signer:          signer,
 		recentRotations: make(map[string]rotatedGraceEntry),
 	}
+	if cfg != nil && strings.TrimSpace(cfg.MaildURL) != "" {
+		h.recoveryMailer = NewMaildRecoveryMailer(cfg.MaildURL, nil)
+	}
+	return h
 }
 func (h *Handler) rotationGraceTTL() time.Duration {
 	if h.config != nil && h.config.RotationGraceTTL > 0 {

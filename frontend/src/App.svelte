@@ -24,6 +24,7 @@
   import AuthEntry from './lib/AuthEntry.svelte';
   import Desktop from './lib/Desktop.svelte';
   import LegalDocument from './lib/LegalDocument.svelte';
+  import RecoverRoute from './lib/RecoverRoute.svelte';
   import { isAutopaperPath } from './lib/autopaper';
   import { registerPasskey, loginPasskey, passkeyErrorMessage, prewarmAuthenticatedComputer, getSession, TransientAuthError } from './lib/auth.js';
   import { handoffToComputerSurfaceIfStale } from './lib/computer-surface-handoff.js';
@@ -55,6 +56,8 @@
   let publicRoutePath = '';
   let legalDocumentKind: 'privacy' | 'terms' = 'privacy';
   let isLegalDocumentRoute = false;
+  /** /recover: landing page for an account-recovery email link. */
+  let isRecoverRoute = false;
   /**
    * The public Autopaper pages (/autopaper, /autopaper/<slug>[/v<n>]) are a
    * reading surface like the legal routes: they render at once, signed in or
@@ -422,6 +425,10 @@
     return pathname.startsWith('/pub/texture/');
   }
 
+  function isRecoverPath(pathname) {
+    return pathname === '/recover' || pathname === '/recover/';
+  }
+
   function legalDocumentKindFromPath(pathname): '' | 'privacy' | 'terms' {
     if (pathname === '/privacy' || pathname === '/privacy/') return 'privacy';
     if (pathname === '/terms' || pathname === '/terms/') return 'terms';
@@ -432,6 +439,7 @@
     const legalKind = legalDocumentKindFromPath(window.location.pathname);
     legalDocumentKind = legalKind || 'privacy';
     isLegalDocumentRoute = !!legalKind;
+    isRecoverRoute = isRecoverPath(window.location.pathname);
     isAutopaperRoute = isAutopaperPath(window.location.pathname);
     autopaperPath = isAutopaperRoute ? window.location.pathname : '';
     if (isAutopaperRoute) {
@@ -442,7 +450,10 @@
     publicRoutePath = isPublicTextureRoutePath(window.location.pathname) ? window.location.pathname : '';
     applyTheme(loadThemeBootCache(), false);
     const initialIntent = initialAppIntentFromURL();
-    checkSession().then(async (session) => {
+    // The recovery page stands alone: no session check, prewarm or
+    // computer-surface handoff (a handoff reload would drop the in-memory
+    // recovery token).
+    if (!isRecoverRoute) checkSession().then(async (session) => {
       if (session?.authenticated) {
         await prewarmAuthenticatedComputer().catch(() => {});
         if (await handoffToComputerSurfaceIfStale()) return;
@@ -505,6 +516,8 @@
 <div class="app-root" data-theme-id={currentTheme.id} data-auth-state={authState}>
   {#if isLegalDocumentRoute}
     <LegalDocument kind={legalDocumentKind} />
+  {:else if isRecoverRoute}
+    <RecoverRoute />
   {:else if isAutopaperRoute}
     {#if AutopaperReader}
       <svelte:component this={AutopaperReader} initialPath={autopaperPath} />

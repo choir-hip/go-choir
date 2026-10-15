@@ -149,7 +149,7 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 		log.Printf("[auth] operation=recovery_request email_hash=%s step=user_not_found", emailHash)
 	}
 
-	_, err = h.store.CreateRecoveryToken(ctx, userID, req.Email, emailHash, ipHash)
+	token, err := h.store.CreateRecoveryToken(ctx, userID, req.Email, emailHash, ipHash)
 	if err != nil {
 		log.Printf("[auth] operation=recovery_request email_hash=%s result=error step=create_token error=%q", emailHash, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create recovery token"})
@@ -157,6 +157,13 @@ func (h *Handler) HandleRecoveryRequest(w http.ResponseWriter, r *http.Request) 
 	}
 
 	log.Printf("[auth] operation=recovery_request email_hash=%s result=success step=token_created", emailHash)
+
+	// Only a real account gets mail, and only at its stored address. The
+	// dummy row for an unknown email exists for rate limiting alone. Delivery
+	// runs off the request path, so both cases answer alike and equally fast.
+	if user != nil && userID != "" {
+		h.sendRecoveryMail(user.Email, emailHash, userID, token)
+	}
 
 	writeJSON(w, http.StatusOK, recoveryResponse{OK: true})
 }

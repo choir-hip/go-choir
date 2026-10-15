@@ -20,6 +20,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount, tick } from 'svelte';
   import PretextInlineDisclosure from './PretextInlineDisclosure.svelte';
+  import RecoveryRequestForm from './RecoveryRequestForm.svelte';
 
   export let passkeyError = '';
   export let intentMessage = 'Open your private computer and keep working.';
@@ -29,7 +30,7 @@
 
   const dispatch = createEventDispatcher();
 
-  /** @type {'register' | 'login'} */
+  /** @type {'register' | 'login' | 'recover'} */
   let view = 'register';
 
   /** Email input for the current view. */
@@ -106,6 +107,7 @@
       <p>{intentMessage}</p>
     </div>
 
+    {#if view !== 'recover'}
     <div class="view-tabs" role="tablist" aria-label="Choose sign-in path">
       <button
         class="tab"
@@ -136,6 +138,7 @@
         Sign in
       </button>
     </div>
+    {/if}
 
     {#if view === 'register'}
       <div class="auth-view" id="register-panel" role="tabpanel" aria-labelledby="register-tab" data-register-view>
@@ -186,7 +189,7 @@
           <a href="/terms">Terms</a>
         </p>
       </div>
-    {:else}
+    {:else if view === 'login'}
       <div class="auth-view" id="login-panel" role="tabpanel" aria-labelledby="login-tab" data-login-view>
         <PretextInlineDisclosure
           prefix="Sign in with your "
@@ -234,14 +237,30 @@
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
         </p>
+        <button
+          type="button"
+          class="recovery-toggle"
+          data-recovery-toggle
+          on:click={() => switchView('recover')}
+          disabled={ceremonyInProgress}
+        >
+          Lost your passkey?
+        </button>
+      </div>
+    {:else}
+      <div class="auth-view" data-recovery-view>
+        <h2 class="recovery-title">Recover your account</h2>
+        <RecoveryRequestForm initialEmail={email.trim()} on:back={() => switchView('login')} />
       </div>
     {/if}
 
-    {#if displayError}
+    {#if displayError && view !== 'recover'}
       <p class="error" id="auth-error" role="alert" data-passkey-error>{displayError}</p>
     {/if}
 
-    <p class="next-step"><strong>Next:</strong> Your browser asks you to unlock the passkey. Then Choir returns you to the action above.</p>
+    {#if view !== 'recover'}
+      <p class="next-step"><strong>Next:</strong> Your browser asks you to unlock the passkey. Then Choir returns you to the action above.</p>
+    {/if}
   </div>
 </div>
 
@@ -481,6 +500,30 @@
   }
 
   .next-step strong {
+    color: var(--choir-text-primary);
+  }
+
+  .recovery-toggle {
+    margin-top: 0.55rem;
+    min-height: 2.5rem;
+    padding: 0.4rem 0;
+    background: none;
+    border: none;
+    color: var(--choir-text-accent, var(--choir-accent));
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .recovery-toggle:hover,
+  .recovery-toggle:focus-visible {
+    text-decoration: underline;
+  }
+
+  .recovery-title {
+    margin: 0 0 0.6rem;
+    font-size: 1.15rem;
+    font-weight: 780;
     color: var(--choir-text-primary);
   }
 
