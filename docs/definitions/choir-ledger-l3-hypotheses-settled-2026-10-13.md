@@ -125,11 +125,27 @@ finish:
     HypothesisState, projected by the inbox fold into ConversationHead.
     - A settlement record with settler identity and evidence refs,
       admissible after its round closes, still never by the opener.
-    - An ordering witness comparable across inboxes for a commitment and
-      each capture its settlement cites.
-    - Score records per scorer, model-version pinned; self-scores marked
-      non-governing; disagreement kept, never averaged away.
-    - Per-scorer track records against an adjudicated audit sample.
+    - The ordering witness, comparable across inboxes, for a commitment
+      and each capture its settlement cites. It is the computer event
+      chain's Sequence: the first EventProjectionBatchRecorded event on the
+      paper's chain whose ProjectionOp.CanonicalID is the object
+      (internal/store/projection_tape.go interceptOG;
+      internal/computerevent/event.go Sequence, PreviousHead). Every
+      production object-graph write goes through that chain, inbox records
+      and captures alike.
+      - The earliest projection counts, never a later update or relay.
+      - Unprovable order fails closed: not admissible for scoring. That
+        covers equal or missing sequences, objects first projected on
+        another computer's chain, and order shown only by timestamps
+        (fetched_at, OccurredAt, CommittedAt).
+      - The settlement record carries both witnesses (sequence and event
+        head), so scoring survives a later truncation of the chain.
+    - Score records per scorer, model-version pinned. Every eligible
+      settlement gets the committing agent's self-score (non-governing) and
+      at least two independent scorers, with coverage denominators (scored,
+      pending, failed). Disagreement is kept, never averaged away.
+    - Per-scorer track records against an adjudicated audit sample,
+      including the self-scorer's.
     - Per-desk analytics by kind, with denominators: settled, overdue,
       withdrawn and interrupted.
     - The spine's per-source analytics: lead time, independent
@@ -140,10 +156,10 @@ finish:
       proves: ten or more prospective forecasts (kind forecast, resolves_by of 7 days or less; re-dated assertions do not count) were committed before their resolving evidence by the ordering witness, and at least half are settled with evidence refs by a settler other than the committing desk. Ten is an operational floor, not calibration evidence
       evidence_class: deployed proof
     - action: GET the per-desk analytics view
-      proves: per desk and kind, Brier is shown against a stated base rate with n, settled, overdue, withdrawn and per-scorer counts; disagreements are listed, not averaged; assertions never enter forecast figures
+      proves: per desk, forecasts show Brier and skill against a stated base rate, and assertions show corroboration rate and lead time; each kind has its own denominators (n, settled, overdue, withdrawn, interrupted, per-scorer coverage); interrupted work is excluded from forecast error; disagreements are listed, not averaged; assertions never enter forecast figures
       evidence_class: deployed proof
     - action: GET per-scorer and per-source views; owner audit of a sample of settlements
-      proves: each scorer has its own track record against the audit labels with denominators, and per-source lead time, corroboration and corrections are shown
+      proves: each eligible settlement has a self-score and at least two independent pinned scorer records (or is counted pending or failed); each scorer, the self-scorer included, has its own track record against the audit labels with denominators; per-source lead time, corroboration and corrections are shown
       evidence_class: deployed proof
     - action: restore the ledger from the off-host copy into a scratch store and compare heads
       proves: the entry criterion holds (a recoverable off-host copy)
@@ -182,7 +198,8 @@ value:
 homotopy:
   realism_axis: >-
     type and fold unit tests -> a minted test computer with a fixture story
-    -> the paper with resolves_by only (clock started, nothing settled) ->
+    -> the paper with kind, criterion and resolves_by only (clock started,
+    nothing settled) ->
     settlement by the designated settler -> independent scorers (Jev, a
     second model) -> the analytics view over a week of the paper.
 
@@ -229,6 +246,11 @@ now:
       records replay unchanged.
     - The management overlays ask for the kinds, with the exact format.
     - No change to settlement or scoring yet.
+    - Precondition, read-only: derive the ordering witness for one
+      existing paper Cast and one capture it could cite, from the paper's
+      event chain. That shows the witness is derivable for the L3-1
+      cohort without recording anything new. If it is not derivable,
+      L3-1 also records the witness at commit.
   source_ref: 1f4ed5055
   deploy_identity: staging b244507f4
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
@@ -256,8 +278,8 @@ now:
     main_uncertainty: >-
       Whether management, asked for forecasts beside assertions, writes
       informative ones: future, dated, checkable and not scheduled facts.
-      The sample (start.corrections) found 32 of 38 assertions and 1 dated
-      forecast; 18 of 38 have p >= 0.85.
+      The sample (start.corrections) found 32 of 38 assertions and 6
+      forward-looking, only 1 of them dated; 18 of 38 have p >= 0.85.
     next_observation: >-
       After L3-1 deploys, the kind mix and the forecast share that name a
       checkable event within 7 days, on a week of new Casts.
@@ -268,15 +290,26 @@ now:
     - Live-paper risk in L3-1: the paper's management turns 24/7. A strict
       admission check with a prompt the model misreads could refuse story
       Casts and stop publishing. The guards are the per-field cell error,
-      the smoke check, and reverting the overlay without the schema.
+      the smoke check, and a coordinated rollback. The rollback reverts
+      the admission enforcement and the overlay together, to the last-good
+      contract. It keeps the schema readers, the fold and replay support,
+      and every committed record. After rollback, the smoke check must
+      see a story Cast admitted and a story published, not merely a cell
+      error.
     Red ceremony:
     - conjecture delta: a hypothesis states how it settles (kind,
       criterion, date);
     - heresy delta: discovered that inline settlements are averaged in as
-      scorer protocol:<inbox>; introduced none so far.
+      scorer protocol:<inbox>; introduced none so far; repaired: none in
+      L3-1, planned in L3-3 (inline outcomes leave the scorer averages, and
+      the settlement records stay).
   next_action: >-
-    Review round 2 on this repaired file. Round 1 sent it back; its
-    findings are adopted here. Then L3-1, tests first, in a worktree.
+    Review round 3, narrow: are round 2's blockers repaired here? Round 2
+    (gpt-6.1-sol and gpt-6-luna send_back, codex and gemini-3.8
+    accept_with_repairs) converged on four: the overlay-only rollback, the
+    unnamed ordering witness, scorer coverage per settlement with the
+    self-score, and the missing repaired leg of the heresy delta. Then
+    the witness precondition, then L3-1, tests first, in a worktree.
 
 receipts: []
 ---
@@ -297,17 +330,21 @@ Slices, in order:
    recoverable.
    - A settlement carries settler identity and evidence refs, and is
      admissible after its round closes. The opener still never settles.
-   - An ordering witness comparable across inboxes (not `InboxSeq`) must
-     show the commitment preceding the earliest capture a settlement cites.
-     If not, the settlement is recorded as not admissible for scoring.
+   - The ordering witness is the event chain's `Sequence` (see
+     finish.artifact), never `InboxSeq` or a timestamp. It must show the
+     commitment's first projection preceding the earliest capture a
+     settlement cites. If not, or if the order is unprovable, the
+     settlement is recorded as not admissible for scoring. The settlement
+     record keeps both sequences and event heads.
    - A deadline passing is not a contradiction: a forecast past its
      `resolves_by` with no settlement is counted as overdue.
    - Recaptured or syndicated copies cannot launder evidence that was
      already known.
 3. **L3-3, scorers and the views.**
    - Score records per scorer, pinned to the model version, against the
-     committed version (Jev and one other model first). Self-scores are
-     non-governing.
+     committed version. Every eligible settlement gets the self-score
+     (non-governing) and at least two independent scorers (Jev and one
+     other model first), with coverage denominators.
    - Inline outcomes stop being averaged in as `protocol:<inbox>` scores,
      without breaking the desk calibration digest injector. Disagreement
      is kept.
