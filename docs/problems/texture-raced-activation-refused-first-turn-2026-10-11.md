@@ -258,3 +258,82 @@ add a log line naming the row state on refusal).
 This is the second fix iteration on this problem; per Convergence Before
 Patching, the next step is a trace read and, if it does not converge, a
 structural assessment instead of a third patch.
+
+## Second path, from the trace and code (2026-10-15)
+
+### What the guest console shows (vm-241980cd, runtime lines 04:58:16–05:02:25)
+
+- 04:58:16 the computer boots on a fresh store.
+- 04:58:35 Texture run **88df194f** writes revision f7335bc5 on doc 61e04b82
+  (`texture cell authored turn`, `done:false`). **The first prompt was
+  answered.** This incident is not a lost first turn.
+- 04:58:48–05:00:31 management works the tracer (rounds, assignments,
+  capsules).
+- 05:00:19 Texture run **985d8cd7**, a second run, writes revision 16d146ba
+  (base f7335bc5, `done:false`).
+- 05:00:20, within one second: `recovered raced activation … run f80d052d`.
+  f80d052d is a **third** run. Its `initial_dispatch` (update 9625af45) fails
+  `validate Texture activation: mutation authority mismatch` eight times in
+  about 110 ms and is poisoned. The validator got as far as the mutation
+  check, so f80d052d's `current_revision_id` already equals the new head
+  16d146ba. It was minted after 985d8cd7's write.
+- 05:02:25 another wake: `recovered raced activation … run f80d052d` again.
+  Two minutes later, f80d052d is still the agent's active run (pending) and
+  its mutation is still not pending. Every later wake "recovers" it and does
+  nothing. The desk is wedged until something passivates f80d052d.
+
+No log line names who minted f80d052d (a successful submit does not log), and
+the mutation rows have not been read (the guest is running, so its disk is
+off limits).
+
+### The path
+
+The loser at 05:00:20 and 05:02:25 is a **locked** wake
+(`reconcileAgentWakeLocked`). After the wake-scope fix, every caller of
+`submitTextureAgentRevisionRun` holds the lock, so a locked wake that runs
+after f80d052d's activation committed should have found it active and
+returned. It did not, because its active-run check asks a different
+authority than the activation gate:
+
+- The activation gate (`projectLifecycleRun`, store/lifecycle.go) and
+  `recoverRacedTextureActivation` use **`agent.ActiveRunID`**: a new
+  activation is refused while that run is pending or running.
+- `TextureActiveRunByAgent` (agentcore/texture_lifecycle_api.go) calls
+  `GetLatestActiveLifecycleRunByAgent`, which lists the owner's run objects
+  `ORDER BY updated_at DESC`, takes the **first run of that agent**, and
+  returns `ErrNotFound` if *that* run is not active. Any later write to an
+  **older, inactive run of the same agent** (985d8cd7 passivating or
+  completing after its successor activated, or a metadata or run-memory
+  update to it) hides the active run.
+
+With the active run hidden, the locked wake does what the handoff race did:
+it passes the "no active run" check, its stale-unbound loop
+(`GetPendingAgentMutationByDoc`, picking by doc) stales **f80d052d's**
+pending mutation, its own submit loses with `ErrLifecycleInvalidTransition`,
+and recovery returns f80d052d with a `stale_activation` row. Both validators
+refuse it, and the dispatch is poisoned. Every later wake repeats the hidden
+check and recovers the same wedged run.
+
+This also fits the 2026-10-11 and 2026-10-15 02:23 incidents: the first
+desk run of a fresh doc races the handoff, and the previous run's late
+update is the same hiding mechanism.
+
+Candidates from the earlier section that the code rules out here:
+
+- **Records-route activation:** it goes through the same locked
+  `reconcileAgentWakeLocked`.
+- **A run with no mutation row:** `persistLifecycleSubmittedRun` writes the
+  row before the activation, and recovery only returns committed
+  activations, so a missing row would need a crash between them. A missing
+  row and a stale one fail with the same message; the path above produces a
+  stale one.
+
+Substrate: two state authorities for "the desk's active run" that disagree:
+`agent.ActiveRunID`, which the store enforces, and "latest-updated run",
+which the wake reads. Fix shape: `TextureActiveRunByAgent` reads
+`agent.ActiveRunID` first (the authority the gate and recovery use) and
+keeps the latest-run scan only as a fallback for agents without one. A run
+the gate would refuse a successor for is then always visible to the wake,
+so the stale loop never sees the active run's pending row.
+
+The `delivery_failed` residual is unchanged.
