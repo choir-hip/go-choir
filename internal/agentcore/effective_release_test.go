@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/updater"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 // P6 failure modes pinned here (docs/reports/p6-p8-release-adopt-2026-10-15.md):
@@ -130,5 +131,37 @@ func TestEffectiveReleaseOfABaseComputerIsTheBuildCommitTree(t *testing.T) {
 	lagging := waitEffectiveTree(t, rt2)
 	if lagging.TreeHash != "" || lagging.TreeError == "" {
 		t.Fatalf("lagging seed = %+v, want an empty tree with a reason", lagging)
+	}
+}
+
+// I6: vmctl learns the identity from the guest's own report, never a probe.
+func TestEffectiveReleaseIsReportedToVmctl(t *testing.T) {
+	const computerID = "computer-report"
+	rt, productStore, updaterRoot := releaseTestRuntime(t, computerID)
+	repo, base := releaseSourceRepo(t)
+	rt.releaseSourceDir = repo
+	rt.effectiveBuildCommit = func() string { return base }
+	digest := writeCurrentRelease(t, updaterRoot, computerID, "base", nil)
+	insertEventHead(t, productStore, computerID, 3, strings.Repeat("1", 64), strings.Repeat("2", 64))
+	got := make(chan vmctl.EffectiveReleaseReport, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var report vmctl.EffectiveReleaseReport
+		if r.URL.Path == "/internal/vmctl/computers/effective-release" && json.NewDecoder(r.Body).Decode(&report) == nil {
+			got <- report
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"recorded"}`))
+	}))
+	defer server.Close()
+	rt.selfdevRoute = vmctl.NewClient(server.URL)
+	rt.reportEffectiveReleaseAsync("test")
+	select {
+	case report := <-got:
+		if report.ComputerID != computerID || report.Release.ReleaseDigest != digest || report.Release.TreeHash != releaseGit(t, repo, "rev-parse", base+"^{tree}") ||
+			report.Release.EventHeadSequence != 3 || report.Release.EffectiveEventHead != strings.Repeat("2", 64) {
+			t.Fatalf("report = %+v", report)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("no report reached vmctl")
 	}
 }

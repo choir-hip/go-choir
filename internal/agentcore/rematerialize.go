@@ -612,6 +612,8 @@ func (rt *Runtime) recordStartupManifest(manifest updater.ReleaseManifest) {
 	rt.selfdevStartupReleaseDigest = manifest.ContentDigest
 	rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
 	rt.selfdevStartupReducer = manifest.ReducerVersion
+	// P6: a restore or rematerialize changed what this computer serves.
+	rt.reportEffectiveReleaseAsync("restaged")
 }
 func (rt *Runtime) verifyPinnedFrontend(checkpoint selfdevprotocol.Checkpoint) (string, error) {
 	if rt == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" {

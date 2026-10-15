@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/release"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/updater"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 // EffectiveRelease is what code this computer runs and at which head (P6,
@@ -314,3 +316,57 @@ const (
 	errBundleUnavailable = releaseIdentityError("the applied operation's bundle is not retained on this computer")
 	errNoSourcePatch     = releaseIdentityError("the applied operation changed no workspace/platform source")
 )
+
+// reportEffectiveReleaseAsync tells vmctl what this computer runs, so
+// `vmctl list` shows it without probing a guest (I6). It waits for the
+// release's tree (bounded), then posts; a failed post is retried a few
+// times and otherwise only logged: identity reporting never blocks boot,
+// apply or restore.
+func (rt *Runtime) reportEffectiveReleaseAsync(reason string) {
+	if rt == nil || rt.selfdevRoute == nil || strings.TrimSpace(rt.cfg.ComputerID) == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		var identity EffectiveRelease
+		for i := 0; i < 60; i++ {
+			identity = rt.EffectiveRelease(ctx)
+			if !identity.TreePending {
+				break
+			}
+			time.Sleep(2 * time.Second)
+		}
+		if !computerevent.IsSHA256(identity.ReleaseDigest) {
+			return
+		}
+		report := vmctl.ReportedRelease{
+			ReleaseDigest: identity.ReleaseDigest, CodeRef: identity.CodeRef, TreeHash: identity.TreeHash,
+			BuildCommit: identity.BuildCommit, OperationID: identity.OperationID, AdoptedReleaseID: identity.AdoptedReleaseID,
+			Layered: identity.Layered, CodeCommit: identity.CodeCommit,
+		}
+		if head := identity.EventHead; head != nil {
+			report.EventHeadSequence, report.CanonicalEventHead, report.EffectiveEventHead = head.Sequence, head.Canonical, head.Effective
+		}
+		for attempt := 1; attempt <= 3; attempt++ {
+			err := rt.selfdevRoute.ReportEffectiveRelease(ctx, rt.cfg.ComputerID, report)
+			if err == nil {
+				log.Printf("runtime: effective release reported to vmctl (%s): release %s tree %s", reason, shortDigest(report.ReleaseDigest), shortDigest(report.TreeHash))
+				return
+			}
+			log.Printf("runtime: effective release report (%s) attempt %d: %v", reason, attempt, err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(30 * time.Second):
+			}
+		}
+	}()
+}
+
+func shortDigest(value string) string {
+	if len(value) > 12 {
+		return value[:12]
+	}
+	return value
+}

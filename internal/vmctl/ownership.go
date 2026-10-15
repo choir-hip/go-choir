@@ -160,6 +160,9 @@ type VMOwnership struct {
 	MemoryPeakRSSBytes uint64 `json:"memory_peak_rss_bytes,omitempty"`
 	// MemoryMeasuredAt is when MemoryPeakRSSBytes was last sampled.
 	MemoryMeasuredAt string `json:"memory_measured_at,omitempty"`
+	// ReportedRelease is what the computer last reported it runs (P6):
+	// a report, never vmctl authority (reported_release.go).
+	ReportedRelease *ReportedRelease `json:"reported_release,omitempty"`
 }
 
 // IsReady returns true if the VM is in a state that can serve routed requests.

@@ -823,6 +823,8 @@ func (rt *Runtime) Start(ctx context.Context) {
 		bootPhase("close_open_rounds_after_crash", func() { rt.closeOpenRoundsAfterCrash(ctx) })
 	}
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
+	// P6: tell vmctl what this computer runs (background; never blocks boot).
+	rt.reportEffectiveReleaseAsync("boot")
 	bootPhase("platform_update_resume", func() {
 		// Spawn only — the sweep itself must not run inside Start: the resumed
 		// apply self-restarts this guest and the daemon health-probes /health,

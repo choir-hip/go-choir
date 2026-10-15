@@ -116,6 +116,10 @@ type ownershipResponse struct {
 	// admission estimates the next start from it.
 	MemoryPeakRSSBytes uint64 `json:"memory_peak_rss_bytes,omitempty"`
 	MemoryMeasuredAt   string `json:"memory_measured_at,omitempty"`
+	// ReportedRelease is the computer's last effective-release report (P6):
+	// release, tree, event head, CodeRef. Shown beside construction_version,
+	// never merged into it.
+	ReportedRelease *ReportedRelease `json:"reported_release,omitempty"`
 }
 
 type reclaimResponse struct {
@@ -964,6 +968,7 @@ func (h *Handler) listOwnershipResponses(ctx context.Context) ([]ownershipRespon
 			PlatformBaseRef:           own.PlatformBaseRef,
 			MemoryPeakRSSBytes:        own.MemoryPeakRSSBytes,
 			MemoryMeasuredAt:          own.MemoryMeasuredAt,
+			ReportedRelease:           own.ReportedRelease,
 		})
 	}
 	return result, nil
@@ -1216,6 +1221,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/stop", attributedLifecycle(h.HandleStop))
 	s.HandleFunc("/internal/vmctl/remove", attributedLifecycle(h.HandleRemove))
 	s.HandleFunc("/internal/vmctl/list", h.HandleList)
+	s.HandleFunc(effectiveReleaseReportPath, h.HandleEffectiveReleaseReport)
 	s.HandleFunc("/internal/vmctl/maintenance-serve", attributedLifecycle(h.HandleMaintenanceServe))
 	s.HandleFunc("/internal/vmctl/refresh", attributedLifecycle(h.HandleRefresh))
 	s.HandleFunc("/internal/vmctl/deploy-refresh", attributedLifecycle(h.HandleDeployRefresh))
