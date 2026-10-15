@@ -704,6 +704,31 @@ type guestMemoryObservability struct {
 	MemTotalBytes     uint64 `json:"mem_total_bytes"`
 	MemAvailableBytes uint64 `json:"mem_available_bytes"`
 	MemFreeBytes      uint64 `json:"mem_free_bytes"`
+	// VirtioMemLoaded and VirtioMemBound say whether the virtio_mem driver
+	// is in the kernel and has a device: a hotplugged computer can be
+	// resized only when both are true (docs/reports/memory-hotplug-
+	// controller-design-2026-10-14.md section 9.1).
+	VirtioMemLoaded bool `json:"virtio_mem_loaded"`
+	VirtioMemBound  bool `json:"virtio_mem_bound"`
+}
+
+// guestVirtioMemState reads the virtio_mem driver's state under a sysfs
+// root: loaded when /sys/module/virtio_mem exists, bound when its driver
+// directory lists a virtio device.
+func guestVirtioMemState(sysRoot string) (loaded, bound bool) {
+	if _, err := os.Stat(filepath.Join(sysRoot, "module", "virtio_mem")); err == nil {
+		loaded = true
+	}
+	entries, err := os.ReadDir(filepath.Join(sysRoot, "bus", "virtio", "drivers", "virtio_mem"))
+	if err != nil {
+		return loaded, false
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "virtio") {
+			return true, true
+		}
+	}
+	return loaded, false
 }
 
 // parseGuestMeminfo reads MemTotal, MemAvailable and MemFree (kB) from
@@ -755,6 +780,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 	}
 	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
 		resp.Memory = parseGuestMeminfo(string(raw))
+		if resp.Memory != nil {
+			resp.Memory.VirtioMemLoaded, resp.Memory.VirtioMemBound = guestVirtioMemState("/sys")
+		}
 	}
 	if h.rt.store != nil {
 		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())
