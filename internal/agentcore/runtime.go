@@ -281,6 +281,18 @@ type Runtime struct {
 	selfdevStartupRelease       *effectiveReleaseIdentity
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
+	// Release identity and source adoption (P6/P8,
+	// docs/reports/p6-p8-release-adopt-2026-10-15.md): the guest's source
+	// repository (CHOIR_CAPSULE_SOURCE_ROOT unless set), the per-release
+	// tree cache, the published-release reader and the owner-prompt
+	// submitter the adoption request goes through.
+	releaseSourceDir     string
+	effectiveTreeCompute func(ctx context.Context, repo, commit string, patch []byte) (string, error)
+	effectiveBuildCommit func() string
+	effectiveTreeMu      sync.Mutex
+	effectiveTrees       map[string]*effectiveTreeEntry
+	releaseSource        ReleaseSource
+	promptSubmitter      PromptSubmitter
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex
@@ -839,6 +851,8 @@ func (rt *Runtime) Start(ctx context.Context) {
 		bootPhase("close_open_rounds_after_crash", func() { rt.closeOpenRoundsAfterCrash(ctx) })
 	}
 	bootPhase("engineering_assignment_capsules", func() { rt.reconcileEngineeringAssignmentCapsulesAfterRestart(ctx) })
+	// P6: tell vmctl what this computer runs (background; never blocks boot).
+	rt.reportEffectiveReleaseAsync("boot")
 	bootPhase("platform_update_resume", func() {
 		// Spawn only — the sweep itself must not run inside Start: the resumed
 		// apply self-restarts this guest and the daemon health-probes /health,

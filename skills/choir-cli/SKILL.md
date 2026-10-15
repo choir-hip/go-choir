@@ -8,7 +8,9 @@ wraps the public `/api/` and `/auth/` HTTP routes with API key (Bearer
 trajectories, search, start runs, and manage API keys without a browser.
 
 **Status:** deployed self-development commands are `list`, `show`, `head`,
-`start`, `wait`, `approve`, `reject`, and `mode get|set` (2026-10-10). Genesis,
+`wait`, `approve`, `reject`, and `mode get|set` (2026-10-10); `patch` is
+landed on branch `selfdev-patch-export` and needs a platform deploy (guest and
+proxy) before it answers. Genesis,
 rollback and kernel-capability inspection are API-only (no CLI subcommand yet).
 `/goal` remains an external agent-harness invocation, not a CLI command.
 
@@ -16,7 +18,7 @@ rollback and kernel-capability inspection are API-only (no CLI subcommand yet).
 
 Every command targets an explicit stable `ComputerID` (`--computer`). A key
 bound to that computer needs the matching scope:
-`computer:self_development:read` (list, show, head, mode get, wait),
+`computer:self_development:read` (list, show, head, patch, mode get, wait),
 `:propose` (start), `:approve` plus `:mode` (approve), `:approve` (reject),
 `:mode` (mode set). Owner acts (approve, mode set, computer restore,
 bootstrap-chain, rematerialize-from-tape) also need `owner:acts`, which only
@@ -29,9 +31,14 @@ which `admin` does not imply; reject stays an agent act.
 | Start a change | `choir run start --idempotency-key=K "<the change, with its deterministic check>"` (on a computer the owner armed with `self-dev mode set --mode propose_only`; engineering's Freeze opens the operation) | trajectory id, doc id |
 | Find candidates | `choir self-dev list [--state=awaiting_approval]` | operations, newest first |
 | Observe | `choir self-dev wait --operation=ID --state=awaiting_approval` | operation once it reaches the state; exits 1 if it settles elsewhere |
+| Export the source patch | `choir self-dev patch --operation=ID --out=FILE` (frozen or later; MCP `self_dev_patch` inlines it up to 256 KiB) | sha256-verified `source.patch`, its base commit and bundle digest |
 | Read the binding | `choir self-dev head` | canonical/desired/effective heads and state commitments |
 | Approve | `choir self-dev approve --operation=ID` | consumed `accept_once` ModeReceipt + decision event |
 | Reject | `choir self-dev reject --operation=ID --reason=...` | decision event |
+| Publish a release (owner) | `choir release publish --computer=A --operation=ID [--test-command=CMD]` (applied operation; source only) | release id, `choir.software_release` in Store B |
+| Find releases | `choir release list`, `choir release show --release=ID` (record verified against its id) | the release record |
+| Adopt as source (owner) | `choir release adopt --computer=B --release=ID` (B's own tree, B's desks and gate; refused before any change if it does not verify or apply) | `choir.release_adoption` on B's tape, B's operation on its trajectory |
+| Watch an adoption | `choir release adoptions --computer=B` | adoption with its operation and `patch_matches_release` |
 
 Self-development a Texture request opens (Texture -> management -> engineering
 freeze) creates its own operation; `list` is how to find it — do not derive the

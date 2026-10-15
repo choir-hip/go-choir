@@ -565,6 +565,17 @@ func buildRegistry() []*command {
 			handler: func(x *call) (any, error) { return getRaw(x, selfDevPath(x.str("computer"), "head")) },
 		},
 		{
+			path:    []string{"self-dev", "patch"},
+			summary: "Read a frozen candidate's source patch, sha256-verified (--out writes it to a file)",
+			desc:    "Read a frozen self-development candidate's source patch (frozen or later) with its base commit and bundle digest. The sha256 is verified client-side; inline output is capped at 256 KiB.",
+			params: []param{
+				computerParam().orSay(selfDevUsage), pStr("operation", "Operation ID (frozen or later)").req(),
+				pStr("out", "Write the verified patch to this file instead of inlining it").onlyCLI("writes the caller's local filesystem; MCP returns the patch inline under a size cap (a hosted server has no local files, and a model must not pick local paths)"),
+			},
+			usage: "--operation is required", scopes: selfDevRead, readOnly: true,
+			handler: selfDevPatch,
+		},
+		{
 			path: []string{"self-dev", "wait"}, summary: "Poll an operation until it reaches --state",
 			params: []param{
 				computerParam(), pStr("operation", "Operation ID").req(),
@@ -776,7 +787,7 @@ func buildRegistry() []*command {
 			},
 		},
 	}
-	return cmds
+	return append(cmds, releaseCommands()...)
 }
 
 const cliVersion = "choir v0 (Phase 1: existing /api/ routes)"

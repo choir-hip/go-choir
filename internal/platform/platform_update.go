@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -289,7 +288,7 @@ func (h *Handler) platformUpdateBlobPath(digest string) (string, error) {
 	if !computerevent.IsSHA256(digest) {
 		return "", fmt.Errorf("platform update blob: digest required")
 	}
-	return h.service.artifactPath(filepath.Join("sha256", "platform-update", digest))
+	return h.contentStore(contentNamespacePlatformUpdate).path(digest)
 }
 
 // HandlePlatformUpdateBlob serves
@@ -316,45 +315,22 @@ func (h *Handler) HandlePlatformUpdateBlob(w http.ResponseWriter, r *http.Reques
 			writeJSON(w, http.StatusForbidden, apiError{Error: "platform update blob upload is not publicly accessible"})
 			return
 		}
-		path, err := h.platformUpdateBlobPath(digest)
-		if err != nil || h == nil || h.service == nil {
+		if h == nil || h.service == nil {
 			writeJSON(w, http.StatusInternalServerError, apiError{Error: "platform update blob store unavailable"})
 			return
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-			writeJSON(w, http.StatusInternalServerError, apiError{Error: "platform update blob: create dir"})
-			return
-		}
-		tmp := path + ".tmp-" + fmt.Sprintf("%d", time.Now().UnixNano())
-		out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o640)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, apiError{Error: "platform update blob: stage temp"})
-			return
-		}
-		hasher := sha256.New()
-		// Stream the body to disk and hash it in one pass (TeeReader), bounded.
-		if _, err := io.Copy(out, io.TeeReader(io.LimitReader(r.Body, 2<<30), hasher)); err != nil {
-			out.Close()
-			os.Remove(tmp)
-			writeJSON(w, http.StatusInternalServerError, apiError{Error: "platform update blob: read upload"})
-			return
-		}
-		if err := out.Close(); err != nil {
-			os.Remove(tmp)
-			writeJSON(w, http.StatusInternalServerError, apiError{Error: "platform update blob: write"})
-			return
-		}
-		if hex.EncodeToString(hasher.Sum(nil)) != digest {
-			os.Remove(tmp)
+		// Streamed into the host content store while hashing; installed only
+		// when the digest matches (content_store.go).
+		switch err := h.contentStore(contentNamespacePlatformUpdate).Put(digest, r.Body); {
+		case err == nil:
+			writeJSON(w, http.StatusCreated, map[string]string{"digest": digest})
+		case errors.Is(err, errContentDigestMismatch):
 			writeJSON(w, http.StatusBadRequest, apiError{Error: "platform update blob: digest mismatch"})
-			return
+		case errors.Is(err, errContentTooLarge):
+			writeJSON(w, http.StatusRequestEntityTooLarge, apiError{Error: "platform update blob: exceeds the 2 GiB cap"})
+		default:
+			writeJSON(w, http.StatusInternalServerError, apiError{Error: "platform update blob: write"})
 		}
-		if err := os.Rename(tmp, path); err != nil {
-			os.Remove(tmp)
-			writeJSON(w, http.StatusInternalServerError, apiError{Error: "platform update blob: install"})
-			return
-		}
-		writeJSON(w, http.StatusCreated, map[string]string{"digest": digest})
 	case http.MethodGet:
 		computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
 		if !h.authorizeFileCAS(r, computerID, "event:read") {

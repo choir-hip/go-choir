@@ -483,6 +483,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/platform-updates/blob/", h.HandlePlatformUpdateBlob)
 	s.HandleFunc(hostbuild.Route, h.HandleHostBuilds)
 	s.HandleFunc(hostbuild.Route+"/", h.HandleHostBuilds)
+	s.HandleFunc(releasesRoute, h.HandleReleases)
+	s.HandleFunc(releasesRoute+"/", h.HandleReleases)
 	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)
 	s.HandleFunc("/internal/computers/keys/escrow", h.HandleKeyEscrow)
 	s.HandleFunc("/internal/computers/keys/escrow/status", h.HandleKeyEscrowStatus)

@@ -138,12 +138,18 @@ Every command takes a required `computer`.
 | `self-dev list` | `self_dev_list` | GET `.../self-development/operations?state=` | state[] | R | :read |
 | `self-dev show` | `self_dev_show` | GET `.../operations/{op}` | operation | R | :read |
 | `self-dev head` | `self_dev_head` | GET `.../head` | — | R | :read |
+| `self-dev patch` | `self_dev_patch` | GET `.../operations/{op}/source-patch` | operation; `--out` CLI only (MCP inlines up to 256 KiB); sha256 verified client-side | R | :read |
 | ~~`self-dev start`~~ | ~~`self_dev_start`~~ | removed 2026-10-14: the route was deleted in C1e B1 (a06191f9e); a change starts with `run start` on an armed computer | | | |
 | `self-dev wait` | CLI only | polls GET `.../operations/{op}` | operation, state[], interval, deadline (2h) | R L | :read |
 | `self-dev approve` | `self_dev_approve` | GET op, GET head, GET mode, PUT mode (arm `accept_once`), POST `.../operations/{op}/decision` | operation, idempotency_key, window | W D I (applies the candidate) | :read, :mode, :approve |
 | `self-dev reject` | `self_dev_reject` | GET op, GET head, POST decision | operation, idempotency_key, reason | W D I | :read, :approve |
 | `self-dev mode get` | `self_dev_mode_get` | GET `.../mode` | — | R | :read |
 | `self-dev mode set` | `self_dev_mode_set` | PUT `.../mode` (generation CAS) | mode, expected_generation, idempotency_key, and the accept_once / qualified_consensus binding fields | W D I | :mode |
+| `release list` | `release_list` | GET `/api/releases?limit=&publisher_computer_id=` | limit, publisher | R | :read |
+| `release show` | `release_show` | GET `/api/releases/{id}` | release; record verified against its id client-side | R | :read |
+| `release adoptions` | `release_adoptions` | GET `.../self-development/adoptions[/{aid}]` | adoption | R | :read |
+| `release publish` | CLI only (owner act) | POST `/api/computers/{id}/releases` | operation, test_command | W I | :approve, owner:acts |
+| `release adopt` | CLI only (owner act) | GET `/api/releases/{id}` (verified), POST `.../self-development/adoptions` | release | W I | :read, :approve, owner:acts |
 
 (`:read` is `computer:self_development:read`, and so on.)
 

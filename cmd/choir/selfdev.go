@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -8,10 +11,70 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
+
+// selfDevPatchInlineMax caps a patch returned inline (MCP, or the CLI
+// without --out) so a large change does not flood a model's context; --out
+// takes any size the route serves.
+const selfDevPatchInlineMax = 256 << 10
+
+type selfDevSourcePatch struct {
+	OperationID           string `json:"operation_id"`
+	ComputerID            string `json:"computer_id"`
+	State                 string `json:"state"`
+	BundleDigest          string `json:"bundle_digest"`
+	SourcePatchSHA256     string `json:"source_patch_sha256"`
+	SourcePatchBaseCommit string `json:"source_patch_base_commit"`
+	PatchBytes            int    `json:"patch_bytes"`
+	PatchBase64           string `json:"patch_base64"`
+}
+
+// selfDevPatch reads a frozen candidate's source patch, verifies its sha256
+// client-side, and either writes it to --out (CLI) or returns it inline.
+// Nothing is written unless the bytes verify.
+func selfDevPatch(x *call) (any, error) {
+	operationID := x.trim("operation")
+	var resp selfDevSourcePatch
+	if err := x.c.do(http.MethodGet, selfDevPath(x.str("computer"), "operations/"+url.PathEscape(operationID)+"/source-patch"), nil, &resp); err != nil {
+		return nil, err
+	}
+	if resp.OperationID != operationID {
+		return nil, fmt.Errorf("route answered operation %q, not %q", resp.OperationID, operationID)
+	}
+	patch, err := base64.StdEncoding.DecodeString(resp.PatchBase64)
+	if err != nil {
+		return nil, fmt.Errorf("decode source patch: %w", err)
+	}
+	sum := sha256.Sum256(patch)
+	if got := hex.EncodeToString(sum[:]); got != strings.ToLower(resp.SourcePatchSHA256) || len(patch) != resp.PatchBytes {
+		return nil, fmt.Errorf("source patch sha256 mismatch: route recorded %s (%d bytes), received bytes hash to %s (%d bytes)", resp.SourcePatchSHA256, resp.PatchBytes, got, len(patch))
+	}
+	out := map[string]any{
+		"operation_id": resp.OperationID, "computer_id": resp.ComputerID, "state": resp.State,
+		"bundle_digest": resp.BundleDigest, "source_patch_sha256": resp.SourcePatchSHA256,
+		"source_patch_base_commit": resp.SourcePatchBaseCommit, "patch_bytes": len(patch), "sha256_verified": true,
+	}
+	if path := x.trim("out"); x.surface == "cli" && path != "" {
+		if err := os.WriteFile(path, patch, 0o600); err != nil {
+			return nil, err
+		}
+		out["out"] = path
+		return out, nil
+	}
+	if len(patch) > selfDevPatchInlineMax {
+		return nil, fmt.Errorf("source patch is %d bytes, over the inline cap of %d; use the CLI: choir self-dev patch --out <file>", len(patch), selfDevPatchInlineMax)
+	}
+	if !utf8.Valid(patch) {
+		return nil, errors.New("source patch is not UTF-8 text and cannot be returned inline without changing its bytes; use the CLI: choir self-dev patch --out <file>")
+	}
+	out["patch"] = string(patch)
+	return out, nil
+}
 
 // Operation states that never move again; wait stops at them.
 var selfDevSettledStates = []string{"applied", "rejected", "rolled_back", "failed"}

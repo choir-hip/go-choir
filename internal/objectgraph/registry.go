@@ -101,6 +101,9 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.capture_label", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.capture_label_override", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		// An owner-requested source adoption of a published release (P8,
+		// docs/reports/p6-p8-release-adopt-2026-10-15.md).
+		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.ReleaseAdoption"},
 
 		// --- VM store: written through PutBatch before the write gate
 		// existed (H-OG1, docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).
@@ -155,6 +158,10 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.publication_resolved_blocks", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.resolvedBlocksDoc"},
 		{Kind: "choir.publication_check", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.publicationCheck"},
 		{Kind: "choir.support_judgement", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "platform.supportJudgement"},
+		// A published software release record (P7,
+		// docs/reports/p6-p8-release-adopt-2026-10-15.md): source only, never
+		// executable bytes; the patch lives in the host content store.
+		{Kind: "choir.software_release", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerCorpusd, Schema: "release.Record"},
 	} {
 		r.RegisterKind(k)
 	}

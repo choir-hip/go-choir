@@ -85,49 +85,9 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		commandID = uuid.NewString()
 	}
 
-	requestedApp := agentprofile.Texture
-	var sourceURL, mediaType, appHint string
-	if classifiedApp, classifiedURL, classifiedMediaType, ok := contentowner.ClassifyPromptBarContentIntent(text); ok {
-		requestedApp, appHint = classifiedApp, classifiedApp
-		sourceURL, mediaType = classifiedURL, classifiedMediaType
-	}
-	title := provider.InitialTextureTitle(text, "")
-	metadata := map[string]any{
-		"agent_profile":          agentprofile.Conductor,
-		"agent_role":             agentprofile.Conductor,
-		"input_source":           "prompt_bar",
-		"requested_app":          requestedApp,
-		"seed_prompt":            text,
-		"initial_document_title": title,
-		"submission_surface":     "prompt_bar",
-		"lifecycle_command_id":   commandID,
-	}
-	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
-		metadata["owner_email"] = ownerEmail
-	}
-	if sourceURL != "" {
-		metadata["content_source_url"] = sourceURL
-		metadata["content_media_type"] = mediaType
-		metadata["content_app_hint"] = appHint
-	}
-	var handoff HandoffDecision
-	// The durable commit (conductor decision + texture handoff run mint) must
-	// outlive the HTTP request: the staging proxy's upstream timeout disconnects
-	// the client while the projection batch is still committing, and r.Context()
-	// cancels the in-flight write mid-batch. WithoutCancel + a bounded server
-	// timeout keeps the commit durable without making it unbounded.
 	commitCtx, commitCancel := context.WithTimeout(context.WithoutCancel(r.Context()), promptBarCommitTimeout)
 	defer commitCancel()
-	rec, err := h.Core.CompletePromptBarDecision(commitCtx, text, ownerID, metadata, agentcore.PromptBarDecisionSpec{
-		Action: "open_app", App: requestedApp, Title: title,
-		SourceURL: sourceURL, MediaType: mediaType, AppHint: appHint,
-	})
-	if err == nil && requestedApp == agentprofile.Texture {
-		handoff, err = h.EnsureTextureHandoff(commitCtx, rec, HandoffRequest{
-			Kind: HandoffKindUserPrompt, CallerProfile: agentprofile.Conductor,
-			Objective: text, Title: title,
-		})
-	}
+	rec, handoff, err := h.submitPromptBar(commitCtx, ownerID, authenticatedUserEmail(r), text, commandID, true)
 	if err != nil {
 		if errors.Is(err, agentcore.ErrPromptCommandConflict) || errors.Is(err, store.ErrLifecycleCommandConflict) || errors.Is(err, store.ErrConcurrentStateChange) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "command identity conflicts with the stored request"})
@@ -153,6 +113,69 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		SubjectID: handoff.Conductor.SubjectID, ObligationIDs: handoff.Conductor.ObligationIDs,
 		ReducerSeq: handoff.Conductor.ReducerSeq, SnapshotCursor: handoff.Conductor.SnapshotCursor,
 	})
+}
+
+// submitPromptBar records the conductor decision and, for Texture, the
+// handoff: the prompt bar's submit path. classify routes content links to
+// their apps; an owner request built by the computer itself (a release
+// adoption, P8) is always Texture's.
+func (h *Handler) submitPromptBar(ctx context.Context, ownerID, ownerEmail, text, commandID string, classify bool) (*types.RunRecord, HandoffDecision, error) {
+	requestedApp := agentprofile.Texture
+	var sourceURL, mediaType, appHint string
+	if classify {
+		if classifiedApp, classifiedURL, classifiedMediaType, ok := contentowner.ClassifyPromptBarContentIntent(text); ok {
+			requestedApp, appHint = classifiedApp, classifiedApp
+			sourceURL, mediaType = classifiedURL, classifiedMediaType
+		}
+	}
+	title := provider.InitialTextureTitle(text, "")
+	metadata := map[string]any{
+		"agent_profile":          agentprofile.Conductor,
+		"agent_role":             agentprofile.Conductor,
+		"input_source":           "prompt_bar",
+		"requested_app":          requestedApp,
+		"seed_prompt":            text,
+		"initial_document_title": title,
+		"submission_surface":     "prompt_bar",
+		"lifecycle_command_id":   commandID,
+	}
+	if ownerEmail != "" {
+		metadata["owner_email"] = ownerEmail
+	}
+	if sourceURL != "" {
+		metadata["content_source_url"] = sourceURL
+		metadata["content_media_type"] = mediaType
+		metadata["content_app_hint"] = appHint
+	}
+	var handoff HandoffDecision
+	rec, err := h.Core.CompletePromptBarDecision(ctx, text, ownerID, metadata, agentcore.PromptBarDecisionSpec{
+		Action: "open_app", App: requestedApp, Title: title,
+		SourceURL: sourceURL, MediaType: mediaType, AppHint: appHint,
+	})
+	if err == nil && requestedApp == agentprofile.Texture {
+		handoff, err = h.EnsureTextureHandoff(ctx, rec, HandoffRequest{
+			Kind: HandoffKindUserPrompt, CallerProfile: agentprofile.Conductor,
+			Objective: text, Title: title,
+		})
+	}
+	return rec, handoff, err
+}
+
+// SubmitOwnerPrompt submits a request the computer makes on its owner's
+// behalf, after the owner's act, through the prompt bar's own path (a
+// release adoption, P8: docs/reports/p6-p8-release-adopt-2026-10-15.md).
+// The commit outlives the caller's context like the prompt bar's does.
+func (h *Handler) SubmitOwnerPrompt(ctx context.Context, ownerID, text, commandID string) (agentcore.PromptSubmission, error) {
+	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promptBarCommitTimeout)
+	defer cancel()
+	rec, handoff, err := h.submitPromptBar(commitCtx, ownerID, "", strings.TrimSpace(text), strings.TrimSpace(commandID), false)
+	if err != nil {
+		return agentcore.PromptSubmission{}, err
+	}
+	if strings.TrimSpace(handoff.Conductor.TrajectoryID) == "" {
+		return agentcore.PromptSubmission{}, errors.New("prompt submit returned no trajectory")
+	}
+	return agentcore.PromptSubmission{SubmissionID: rec.RunID, TrajectoryID: handoff.Conductor.TrajectoryID, DocID: handoff.Conductor.DocID}, nil
 }
 
 // HandlePromptBarSubmission returns product-level state for one owner-scoped submission.

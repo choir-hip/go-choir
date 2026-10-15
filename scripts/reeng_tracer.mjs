@@ -38,13 +38,19 @@
 // longer is a finding about the desks, not a reason to wait.
 //
 // Scenarios: story (default) | crash | management | research | paper |
-// engineering. The engineering scenario is C1e's cut-1 self-development
+// engineering | adopt. The engineering scenario is C1e's cut-1 self-development
 // drill (see engineeringScenario); its flags:
 //   --scenario engineering [--change static|go|go-served] [--timeout-min 15] [--apply-min 10]
 //     [--restore-min 12] [--require-served] [--skip-export] [--keep-computer]
 //     [--autonomous [--autonomy-min 120] [--decide-min 75]]  (P4: arm standing_consensus once; no owner approval;
 //                                       the host builds every candidate before corpusd decides, so the decision
 //                                       wait covers P5's queue deadline and build timeout)
+// The adopt scenario is Station B minimal (P8, see adoptScenario): computer A
+// runs the engineering drill to applied (no restore), its owner publishes the
+// release, a second minted computer B refuses a tampered and an unpublished
+// record before any state change, then adopts the release as source through
+// its own desks and gate:
+//   --scenario adopt [--timeout-min 30] [--apply-min 10] [--expect-sha <sha>]
 //
 // Exit: 0 bundle kept with the load present (or the scenario's claim held);
 // 3 bundle(s) kept, load absent (I5 unknown); 4 export unavailable (drill
@@ -90,14 +96,14 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // "crash" proves restart closure only: crash at the first run in flight,
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
-const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served] [--autonomous] [--autonomy-min 120] [--decide-min 75]';
+const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering|adopt] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served] [--autonomous] [--autonomy-min 120] [--decide-min 75]';
 if (flag('help')) {
   console.log(USAGE);
   process.exit(0);
 }
 const SCENARIO = arg('scenario', 'story');
-if (!['story', 'crash', 'management', 'research', 'paper', 'engineering'].includes(SCENARIO)) {
-  console.error(`unknown --scenario ${SCENARIO} (story | crash | management | research | paper | engineering)`);
+if (!['story', 'crash', 'management', 'research', 'paper', 'engineering', 'adopt'].includes(SCENARIO)) {
+  console.error(`unknown --scenario ${SCENARIO} (story | crash | management | research | paper | engineering | adopt)`);
   process.exit(2);
 }
 // --change (engineering scenario): static asks for a static frontend file,
@@ -423,6 +429,7 @@ async function attempt(n, out) {
 
   if (SCENARIO === 'paper') return paperScenario(c, out, n, deadline, phase);
   if (SCENARIO === 'engineering') return engineeringScenario(c, out, n, deadline, phase, fenceBuild);
+  if (SCENARIO === 'adopt') return adoptScenario(c, out, n, deadline, phase, fenceBuild, label);
   // Story submit; the first accepted submit is the "first ready prompt bar".
   const story = await submitPrompt(c, SCENARIO === 'management' ? MANAGEMENT_STORY : SCENARIO === 'research' ? RESEARCH_STORY : STORY, 'story', deadline);
   out.timings.first_prompt_accepted_ms = Date.now() - t0;
@@ -1204,7 +1211,7 @@ const CRASH_LINE = /crash boot|treating boot as a crash/;
 // which accept_once requires (no fractional part, Z).
 const canonicalExpiry = (ms) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace(/\.000Z$/, 'Z');
 
-async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
+async function engineeringScenario(c, out, n, deadline, phase, fenceBuild, options = {}) {
   const cid = encodeURIComponent(c.computerID);
   const sd = (rest) => `/api/computers/${cid}/self-development/${rest}`;
   const lc = (rest) => `/api/computers/${cid}/lifecycle/${rest}`;
@@ -1223,6 +1230,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     standing_arm: null, consensus_decision: null, decision_calls: 0,
     restore: null, served: {}, probe: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
   };
+  claim.token = token;
   out.drill = { label: out.label, scenario: 'engineering', change: CHANGE, token, claim, gaps, note: [] };
   let reached = 'mint';
   const at = (name) => { if (REACHED.indexOf(name) > REACHED.indexOf(reached)) reached = name; };
@@ -1250,9 +1258,14 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     const obs = await c.api('/api/runtime/observability', 'GET', undefined, 15_000);
     const eff = obs.body?.effective_release || null;
     const build = obs.body?.build?.commit || null;
+    // P6 block (live manifest `current`): layered and code_commit come from
+    // the manifest, build_commit from the running binary; the same meaning as
+    // P5's startup block, but a restore flips layered when `current` is
+    // restaged, not at the restart. Falls back to build.commit on an older guest.
+    const serving = eff?.build_commit || build;
     claim.probe[tag] = {
       at: iso(), status: r.status, served: r.status === 200 && r.body?.nonce === token, error: r.body?.error || r.error || null,
-      build, effective_release: eff, layered_serving: Boolean(eff?.layered && eff.code_commit && eff.code_commit === build),
+      build, effective_release: eff, layered_serving: Boolean(eff?.layered && eff.code_commit && eff.code_commit === serving),
     };
     phase('probe_check', { tag, ...claim.probe[tag] });
     return claim.probe[tag];
@@ -1611,7 +1624,11 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   }
 
   // The restore to the pinned pre-apply checkpoint (P5, F7).
-  if (op.state === 'applied' && pinned) {
+  if (options.skipRestore && op.state === 'applied') {
+    // The adopt scenario publishes this operation; restoring first would
+    // make the publisher's effective release the pre-apply one.
+    phase('restore_skipped', { reason: options.skipRestore });
+  } else if (op.state === 'applied' && pinned) {
     const restoreDeadline = Date.now() + RESTORE_MIN * 60_000;
     let r = null;
     let tries = 0;
@@ -1656,6 +1673,262 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   }
   if (claim.boots.length && !claim.boots.some((b) => b.restart_target)) gap('apply_restart', 'GET /api/runtime/obligations', 'the restart marker\'s target (the operation id) is not served; only its kind and reason are');
   return finish();
+}
+
+// ---- adopt scenario (Station B minimal, P8) --------------------------------
+//
+// adoptScenario proves source adoption onto the adopter's own tree
+// (docs/reports/p6-p8-release-adopt-2026-10-15.md, "Station B tracer probe"):
+//   1. computer A (this attempt's mint) runs the engineering drill (static
+//      change) to applied, with no restore;
+//   2. A's owner publishes the applied operation as a release R
+//      (POST /api/computers/A/releases) and reads it back
+//      (GET /api/releases/R);
+//   3. a second fresh computer B is minted and armed propose_only;
+//   4. negative legs on B, each refused with B's event head, operation list
+//      and adoption list unchanged: R's record with one field altered and
+//      the id kept (release_digest_mismatch), and a self-consistent record
+//      that was never published (A's draft with another test command;
+//      release_not_published);
+//   5. B adopts R (POST .../self-development/adoptions), a repeat names the
+//      same adoption, B's desks carry it to awaiting_approval, B's owner
+//      approves, B applies.
+// Accepted when B's adoption names R and B's trajectory, B's frozen patch is
+// R's (same base), B applied through a planned self_development_apply
+// restart, B serves A's token file, and B's effective_release names B's
+// operation with adopted_release_id R and R's tree hash.
+//
+// Ways it could falsely pass, and what closes each:
+//   Q1. B's operation is a stale or unrelated one: it must be the operation
+//       on the adoption's trajectory, read from the adoption itself.
+//   Q2. B serves the token because A's bytes reached B: nothing but the
+//       release record and the patch crosses (the guest stages only those),
+//       and B's frozen patch is B's own diff (its sha equals R's only
+//       because the bases and the change are equal).
+//   Q3. A refusal changed state anyway: head, operations and adoptions are
+//       read before and after each negative leg.
+// Ways it could falsely fail: the desks decline or are slow (F1, F8 of the
+// engineering drill); the receipt names the last phase reached.
+
+const ADOPT_REACHED = ['publisher_applied', 'published', 'adopter_minted', 'adopter_armed', 'tamper_refused', 'unpublished_refused',
+  'adoption_requested', 'adopter_awaiting_approval', 'adopter_approved', 'adopter_applied'];
+
+async function adoptScenario(cA, out, n, deadline, phase, fenceBuild, label) {
+  const claim = { publisher: null, release: null, negative: {}, adoption: null, adoption_repeat: null, adopter_states: [], approval: null, applied: null, served: null, identity: null, restart: null };
+  out.drill = { label: out.label, scenario: 'adopt', claim, note: [] };
+  let reached = null;
+  const at = (name) => { if (ADOPT_REACHED.indexOf(name) > ADOPT_REACHED.indexOf(reached)) reached = name; };
+  const finish = () => acceptAdopt(out, claim, reached, phase);
+
+  // 1. A runs the engineering drill to applied, without the restore.
+  const pubOut = { label: `${out.label}-publisher`, phases: out.phases, timings: {} };
+  await engineeringScenario(cA, pubOut, n, deadline, phase, fenceBuild, { skipRestore: 'adopt publishes this operation' });
+  const pubClaim = pubOut.drill_claim || {};
+  const opA = pubClaim.operation?.operation_id || null;
+  claim.publisher = { computer_id: cA.computerID, operation_id: opA, state: pubClaim.applied?.state || null, token: pubClaim.token || null, reached: pubOut.acceptance?.reached || null };
+  phase('publisher', claim.publisher);
+  if (claim.publisher.state !== 'applied' || !opA) return finish();
+  at('publisher_applied');
+  const token = pubClaim.token;
+  const markerPath = `/choir-drill/${token}.txt`;
+  const testCommand = `test "$(cat frontend/public/choir-drill/${token}.txt)" = "${token}"`;
+
+  // 2. A's owner publishes; the release reads back verified by the CLI's rule.
+  const pub = await cA.api(`/api/computers/${encodeURIComponent(cA.computerID)}/releases`, 'POST', { operation_id: opA, test_command: testCommand }, 120_000);
+  const releaseID = pub.body?.release_id || null;
+  claim.release = { status: pub.status, release_id: releaseID, published: pub.body?.published ?? null, error: pub.body?.error || pub.error || null };
+  phase('release_published', claim.release);
+  if (![200, 201].includes(pub.status) || !releaseID) return finish();
+  const shown = await cA.api(`/api/releases/${releaseID}`);
+  const record = shown.body?.record || null;
+  Object.assign(claim.release, {
+    read_status: shown.status, operation_id: record?.operation?.operation_id || null, bundle_digest: record?.operation?.bundle_digest || null,
+    patch_sha256: record?.source?.patch_sha256 || null, base_commit: record?.source?.base_commit || null, tree_hash: record?.source?.tree_hash || null,
+    changed_paths: record?.source?.changed_paths || [], precommitments: (record?.precommitments || []).map((p) => ({ kind: p.kind, settled: p.settled || null })),
+    host_build: record?.host_build || null,
+  });
+  phase('release_read', claim.release);
+  if (shown.status !== 200 || !record) return finish();
+  at('published');
+
+  // A self-consistent record that was never published: A's own draft with
+  // another declared test command (a different release id).
+  const unpublishedDraft = await cA.api(`/api/computers/${encodeURIComponent(cA.computerID)}/self-development/operations/${encodeURIComponent(opA)}/release-draft?test_command=${encodeURIComponent('true')}`);
+
+  // 3. Mint B and arm it.
+  const mintedB = await runMint(`${label}-b`);
+  const cB = new MintedComputer(mintedB);
+  fenceBuild('mint_b', mintedB.guest_build_commit);
+  const stopA = out.stopComputer;
+  out.stopComputer = async () => ({ a: await stopA?.(), b: await stopMinted(cB, `${label}-b`) });
+  claim.adopter = { computer_id: cB.computerID, build: mintedB.guest_build_commit || null };
+  phase('adopter_minted', claim.adopter);
+  at('adopter_minted');
+  const sdB = (rest) => `/api/computers/${encodeURIComponent(cB.computerID)}/self-development/${rest}`;
+  let headB = await cB.api(sdB('head'), 'GET', undefined, 30_000);
+  if (headB.status !== 200) {
+    const boot = await cB.api(`/api/computers/${encodeURIComponent(cB.computerID)}/lifecycle/bootstrap-chain`, 'POST', {}, 120_000);
+    phase('adopter_bootstrap_chain', { status: boot.status });
+  }
+  const modeB = await cB.api(sdB('mode'));
+  if (!['propose_only', 'accept_once', 'qualified_consensus'].includes(modeB.body?.mode)) {
+    const armed = await cB.api(sdB('mode'), 'PUT', { mode: 'propose_only', expected_generation: modeB.body?.generation ?? 0, idempotency_key: `${out.label}-b-propose-only-${randomUUID()}` });
+    claim.adopter.mode = { status: armed.status, mode: armed.body?.mode || null, error: armed.body?.error || armed.error || null };
+    phase('adopter_mode', claim.adopter.mode);
+    if (armed.status !== 200) return finish();
+  }
+  at('adopter_armed');
+
+  // 4. Negative legs: refused, and nothing on B moved (Q3).
+  const stateOfB = async () => {
+    const h = await cB.api(sdB('head'), 'GET', undefined, 30_000);
+    const ops = await cB.api(sdB('operations'));
+    const ads = await cB.api(sdB('adoptions'));
+    return { head: h.body?.canonical_event_head || null, sequence: h.body?.sequence ?? null, operations: (ops.body?.operations || []).length, adoptions: (ads.body?.adoptions || []).length };
+  };
+  const negative = async (name, body, wantReason) => {
+    const before = await stateOfB();
+    const r = await cB.api(sdB('adoptions'), 'POST', body, 120_000);
+    const after = await stateOfB();
+    const row = { status: r.status, reason: r.body?.reason || null, error: r.body?.error || r.error || null, before, after,
+      refused: r.status >= 400 && r.body?.reason === wantReason, unchanged: JSON.stringify(before) === JSON.stringify(after) };
+    claim.negative[name] = row;
+    phase(`negative_${name}`, row);
+    return row.refused && row.unchanged;
+  };
+  const tampered = JSON.parse(JSON.stringify(record));
+  tampered.declarations = { ...(tampered.declarations || {}), test_command: 'true' };
+  if (await negative('tampered', { release_id: releaseID, record: tampered }, 'release_digest_mismatch')) at('tamper_refused');
+  if (unpublishedDraft.status === 200 && unpublishedDraft.body?.release_id && unpublishedDraft.body.release_id !== releaseID) {
+    if (await negative('unpublished', { release_id: unpublishedDraft.body.release_id, record: unpublishedDraft.body.record }, 'release_not_published')) at('unpublished_refused');
+  } else {
+    claim.negative.unpublished = { status: unpublishedDraft.status, error: 'no unpublished draft to offer' };
+  }
+
+  // 5. Adopt R on B.
+  const adopt = await cB.api(sdB('adoptions'), 'POST', { release_id: releaseID, record }, 180_000);
+  claim.adoption = { status: adopt.status, adoption_id: adopt.body?.adoption_id || null, trajectory_id: adopt.body?.trajectory_id || null,
+    same_base: adopt.body?.same_base ?? null, adopter_tree_hash: adopt.body?.adopter_tree_hash || null, reason: adopt.body?.reason || null, error: adopt.body?.error || adopt.error || null };
+  phase('adoption_requested', claim.adoption);
+  if (adopt.status !== 201 || !claim.adoption.adoption_id) return finish();
+  at('adoption_requested');
+  out.trajectory_id = claim.adoption.trajectory_id;
+  const repeat = await cB.api(sdB('adoptions'), 'POST', { release_id: releaseID, record }, 120_000);
+  claim.adoption_repeat = { status: repeat.status, adoption_id: repeat.body?.adoption_id || null };
+
+  // B's desks carry it to the decision boundary (Q1: the operation is the
+  // adoption's own).
+  const adoptionPath = sdB(`adoptions/${encodeURIComponent(claim.adoption.adoption_id)}`);
+  let view = null;
+  const seen = new Set();
+  while (Date.now() < deadline) {
+    const r = await cB.api(adoptionPath);
+    view = r.status === 200 ? r.body : view;
+    const st = view?.operation?.state;
+    if (st && !seen.has(st)) {
+      seen.add(st);
+      claim.adopter_states.push({ state: st, at: iso(), operation_id: view.operation.operation_id, patch_matches_release: view.patch_matches_release });
+      phase('adopter_operation_state', claim.adopter_states[claim.adopter_states.length - 1]);
+    }
+    if (st === 'awaiting_approval' || OP_SETTLED.has(st)) break;
+    await sleep(10_000);
+  }
+  const opB = view?.operation?.operation_id || null;
+  if (view?.operation?.state !== 'awaiting_approval' || !opB) return finish();
+  at('adopter_awaiting_approval');
+  claim.patch_matches_release = Boolean(view.patch_matches_release);
+
+  // B's owner approves (accept_once bound to the operation and the head).
+  let op = (await cB.api(sdB(`operations/${encodeURIComponent(opB)}`))).body;
+  for (let tryN = 1; tryN <= 3; tryN++) {
+    const head = (await cB.api(sdB('head'), 'GET', undefined, 30_000)).body;
+    const binding = {
+      bundle_digest: op.bundle_digest, expected_desired_event_head: head.desired_event_head, expected_effective_event_head: head.effective_event_head,
+      expected_pending_transition_ref: head.pending_transition_ref || '', expected_desired_state_commitment: head.desired_state_commitment,
+      expected_effective_state_commitment: head.effective_state_commitment,
+    };
+    const m0 = await cB.api(sdB('mode'));
+    const arm = await cB.api(sdB('mode'), 'PUT', {
+      mode: 'accept_once', expected_generation: m0.body?.generation ?? 0, idempotency_key: `${out.label}-b-accept-once-${tryN}-${opB}`,
+      operation_id: opB, expires_at: canonicalExpiry(Date.now() + 15 * 60_000), ...binding,
+    });
+    const d = arm.status === 200 ? await cB.api(sdB(`operations/${encodeURIComponent(opB)}/decision`), 'POST', {
+      decision: 'approve', idempotency_key: `${out.label}-b-approve-${tryN}-${opB}`, verifier_ref: (op.verifier_refs || [])[0] || '', ...binding,
+    }, 120_000) : { status: 0 };
+    claim.approval = { try: tryN, arm_status: arm.status, decision_status: d.status, error: d.body?.error || arm.body?.error || null };
+    phase('adopter_approval', claim.approval);
+    if (d.status === 200 || d.status === 409) {
+      const cur = (await cB.api(sdB(`operations/${encodeURIComponent(opB)}`))).body;
+      if (d.status === 200 || ['accepted', 'materializing', 'applied'].includes(cur?.state)) break;
+    } else {
+      break;
+    }
+  }
+  if (!(claim.approval?.decision_status === 200)) return finish();
+  at('adopter_approved');
+
+  // B applies (its own updater, a planned restart).
+  const applyDeadline = Date.now() + APPLY_MIN * 60_000;
+  while (Date.now() < applyDeadline) {
+    const cur = await cB.api(sdB(`operations/${encodeURIComponent(opB)}`), 'GET', undefined, 15_000);
+    if (cur.status === 200) {
+      op = cur.body;
+      if (!seen.has(op.state)) {
+        seen.add(op.state);
+        claim.adopter_states.push({ state: op.state, at: iso(), operation_id: opB });
+        phase('adopter_operation_state', { state: op.state });
+      }
+      if (OP_SETTLED.has(op.state)) break;
+    }
+    await sleep(3_000);
+  }
+  claim.applied = { state: op.state, error: op.error || null };
+  if (op.state !== 'applied') return finish();
+  at('adopter_applied');
+  const o = await obligations(cB);
+  claim.restart = { kind: o?.restart?.kind || null, reason: o?.restart?.reason || null, target: o?.restart?.target || null };
+  const s = await cB.surface(markerPath);
+  claim.served = { status: s.status, served: s.status === 200 && s.text.trim() === token };
+  phase('adopter_served', claim.served);
+  // The effective release names B's operation and R (the tree is resolved in
+  // the background; give it a minute).
+  for (let i = 0; i < 12; i++) {
+    const obs = await cB.api('/api/runtime/observability', 'GET', undefined, 15_000);
+    claim.identity = obs.body?.effective_release || null;
+    if (claim.identity && !claim.identity.tree_pending) break;
+    await sleep(5_000);
+  }
+  phase('adopter_identity', claim.identity || {});
+  return finish();
+}
+
+function acceptAdopt(out, claim, reached, phase) {
+  const r = claim.release || {};
+  const id = claim.identity || {};
+  const checks = {
+    publisher_applied: claim.publisher?.state === 'applied',
+    release_published_and_reads_back: Boolean(r.release_id && r.read_status === 200 && r.operation_id === claim.publisher?.operation_id && r.patch_sha256),
+    tampered_record_refused_unchanged: Boolean(claim.negative.tampered?.refused && claim.negative.tampered?.unchanged),
+    unpublished_record_refused_unchanged: Boolean(claim.negative.unpublished?.refused && claim.negative.unpublished?.unchanged),
+    adoption_names_release_and_trajectory: Boolean(claim.adoption?.status === 201 && claim.adoption.trajectory_id),
+    repeat_names_same_adoption: Boolean(claim.adoption_repeat?.status === 200 && claim.adoption_repeat.adoption_id === claim.adoption?.adoption_id),
+    frozen_patch_is_the_release: Boolean(claim.patch_matches_release),
+    adopter_applied: claim.applied?.state === 'applied',
+    planned_restart: claim.restart?.kind === 'planned' && claim.restart?.reason === 'self_development_apply',
+    adopter_serves_the_change: Boolean(claim.served?.served),
+    identity_names_adoption: Boolean(id.adopted_release_id === r.release_id && id.operation_id && (!claim.adoption?.same_base || id.tree_hash === r.tree_hash)),
+  };
+  out.acceptance = {
+    scenario: 'adopt',
+    claim: 'A publishes an applied change as a source release; B refuses a tampered and an unpublished record before any state change, adopts the release as source through its own desks and gate, applies it, serves it, and reports it as its effective release',
+    reached, checks, failed: Object.keys(checks).filter((k) => !checks[k]),
+    release_id: r.release_id || null, publisher: claim.publisher?.computer_id || null, adopter: claim.adopter?.computer_id || null,
+    pass: Object.values(checks).every(Boolean),
+  };
+  phase('acceptance', { pass: out.acceptance.pass, reached, failed: out.acceptance.failed });
+  out.drill_claim = claim;
+  delete out.drill;
+  return out;
 }
 
 // acceptEngineering turns what the drill saw into the claim and its verdict.

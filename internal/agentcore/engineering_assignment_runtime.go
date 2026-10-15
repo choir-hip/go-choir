@@ -459,6 +459,15 @@ func (rt *Runtime) spawnBindActivateAssignment(ctx context.Context, assignment t
 		SourceArtifactRef: preflight.ArtifactRef, ExpectedSubjectDigest: preflight.SubjectDigest,
 		Egress:         binding.NetworkMode == types.EngineeringCapsuleNetworkEcosystemProxy || claude,
 		ClaudeDelegate: claude}
+	// P8: the engineering assignment on a release adoption's trajectory
+	// gets the verified patch at /selfdev/adoption, re-verified now (A8);
+	// any other trajectory gets nothing (A9). Bytes that changed since
+	// verification refuse the spawn.
+	adoptionDir, adoptionErr := rt.adoptionInputDir(ctx, ownerID, computerID, binding.TrajectoryID)
+	if adoptionErr != nil {
+		return AssignedEngineeringStart{}, cancelOpen(fmt.Errorf("adoption input: %w", adoptionErr))
+	}
+	spec.AdoptionDir = adoptionDir
 	// One live assignment capsule at a time: prior capsules are reclaimed
 	// here, in the saga, so the open itself writes nothing but its own
 	// transaction (C1e D4).
