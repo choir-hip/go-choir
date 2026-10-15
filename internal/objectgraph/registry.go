@@ -101,6 +101,9 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.capture_label", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.capture_label_override", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		// An owner-requested source adoption of a published release (P8,
+		// docs/reports/p6-p8-release-adopt-2026-10-15.md).
+		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.ReleaseAdoption"},
 
 		// --- VM store: written through PutBatch before the write gate
 		// existed (H-OG1, docs/problems/object-graph-registration-and-anchor-gaps-2026-10-14.md).

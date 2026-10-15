@@ -262,6 +262,18 @@ type Runtime struct {
 	selfdevStartupReleaseDigest string
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
+	// Release identity and source adoption (P6/P8,
+	// docs/reports/p6-p8-release-adopt-2026-10-15.md): the guest's source
+	// repository (CHOIR_CAPSULE_SOURCE_ROOT unless set), the per-release
+	// tree cache, the published-release reader and the owner-prompt
+	// submitter the adoption request goes through.
+	releaseSourceDir     string
+	effectiveTreeCompute func(ctx context.Context, repo, commit string, patch []byte) (string, error)
+	effectiveBuildCommit func() string
+	effectiveTreeMu      sync.Mutex
+	effectiveTrees       map[string]*effectiveTreeEntry
+	releaseSource        ReleaseSource
+	promptSubmitter      PromptSubmitter
 	// managementReconcileMu serializes persistent-Management creation
 	// across every reconcile entry path (inbox continuation, boot rewarm).
 	managementReconcileMu sync.Mutex

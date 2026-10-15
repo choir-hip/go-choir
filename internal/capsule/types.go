@@ -39,6 +39,13 @@ type SpawnSpec struct {
 	VerifierBundleDir string
 	VerifierBinding   string
 
+	// AdoptionDir is a trusted-runtime input: the host-side directory of a
+	// verified release adoption (release.json and source.patch, re-verified
+	// by the runtime just before spawn) installed read-only at
+	// /selfdev/adoption for the engineering assignment on the adoption's
+	// trajectory (P8, docs/reports/p6-p8-release-adopt-2026-10-15.md).
+	AdoptionDir string
+
 	// Egress makes this an ecosystem_proxy (L2) capsule: the executor serves
 	// an egress proxy on EgressSocketPath and the broker forwards loopback
 	// TCP to it. It is a trusted-runtime input read from the durable

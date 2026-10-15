@@ -481,6 +481,8 @@ func Run() {
 			}, appender)
 		}
 		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher), agentcore.WithEventPayloadReader(eventClient))
+		// P8: published releases are read with this computer's own capability.
+		coreOpts = append(coreOpts, agentcore.WithReleaseSource(agentcore.NewCorpusdReleaseSource(eventClient)))
 		if credentials != nil {
 			credentials.StartBackgroundRenewal(context.Background())
 			coreOpts = append(coreOpts, guestControlOptions(credentials)...)
@@ -565,6 +567,9 @@ func Run() {
 	}
 
 	textureHandler := textureowner.NewHandler(rt.Runtime)
+	// P8: a release adoption reaches this computer's desks through the
+	// prompt bar's own submit path, as the owner's request.
+	rt.Runtime.SetPromptSubmitter(textureHandler.SubmitOwnerPrompt)
 	if err := rt.BindTextureOwner(textureHandler); err != nil {
 		boot.fatalf("autoputer: bind Texture lifecycle owner: %v", err)
 	}

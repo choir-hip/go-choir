@@ -154,6 +154,9 @@ type runtimeHealthResponse struct {
 	// (store.ReadDoltGCDisposition): outcome, journal and free space, and
 	// compaction_needed when GC alone cannot keep the disk free.
 	DoltGC json.RawMessage `json:"dolt_gc,omitempty"`
+	// EffectiveRelease is the release, tree, event head and CodeRef this
+	// computer runs (P6, docs/reports/p6-p8-release-adopt-2026-10-15.md).
+	EffectiveRelease *EffectiveRelease `json:"effective_release,omitempty"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
@@ -672,6 +675,8 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.DoltGC = store.ReadDoltGCDisposition(filepath.Dir(h.rt.cfg.StorePath))
 	resp.EngineMutex = h.rt.store.EngineMutexStats()
+	identity := h.rt.EffectiveRelease(r.Context())
+	resp.EffectiveRelease = &identity
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
@@ -693,6 +698,9 @@ type guestObservabilityResponse struct {
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
 	ClaudeDelegate *capsule.ClaudeDelegateStatus `json:"claude_delegate,omitempty"`
+	// EffectiveRelease is /health's identity block on the product path
+	// (P6): what the tracer and owners read without /internal/*.
+	EffectiveRelease *EffectiveRelease `json:"effective_release,omitempty"`
 }
 
 // HandleGuestObservability handles GET /api/runtime/observability: the guest's
@@ -722,6 +730,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		status := h.rt.capsuleExecutor.ClaudeDelegateStatus()
 		resp.ClaudeDelegate = &status
 	}
+	identity := h.rt.EffectiveRelease(r.Context())
+	resp.EffectiveRelease = &identity
 	writeAPIJSON(w, http.StatusOK, resp)
 }
 
