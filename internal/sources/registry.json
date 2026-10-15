@@ -247,33 +247,6 @@
       "official": true
     },
     {
-      "id": "official:who:news",
-      "type": "rss",
-      "name": "WHO News",
-      "url": "https://www.who.int/rss-feeds/news-english.xml",
-      "verticals": [
-        "health",
-        "public_health",
-        "policy"
-      ],
-      "languages": [
-        "en"
-      ],
-      "regions": [
-        "global"
-      ],
-      "poll_interval_seconds": 1800,
-      "max_items_per_poll": 100,
-      "rate_limit": "30m poll",
-      "conditional_request_mode": "etag_last_modified",
-      "tos_class": "official_public_feed",
-      "robots_policy": "rss_feed",
-      "auth_policy": "none",
-      "store_body_policy": "bounded_release_text",
-      "retention_days": 365,
-      "official": true
-    },
-    {
       "id": "official:ecb:press",
       "type": "rss",
       "name": "European Central Bank Press Releases",
@@ -1396,7 +1369,7 @@
       "id": "rss:koreaherald",
       "type": "rss",
       "name": "The Korea Herald",
-      "url": "https://www.koreaherald.com/rss/news.xml",
+      "url": "https://www.koreaherald.com/rss/kh_National",
       "verticals": [
         "conflict",
         "elections",
@@ -1557,8 +1530,8 @@
     {
       "id": "rss:nhk_world_en",
       "type": "rss",
-      "name": "NHK World Japan English",
-      "url": "https://www3.nhk.or.jp/rss/news/cat0.xml",
+      "name": "NHK News (Japanese)",
+      "url": "https://www.nhk.or.jp/rss/news/cat0.xml",
       "verticals": [
         "conflict",
         "elections",
@@ -1568,7 +1541,7 @@
         "culture"
       ],
       "languages": [
-        "en"
+        "ja"
       ],
       "regions": [
         "asia"
@@ -2286,33 +2259,6 @@
       "auth_policy": "none",
       "store_body_policy": "bounded_text",
       "retention_days": 30
-    },
-    {
-      "id": "rss:36kr",
-      "type": "rss",
-      "name": "36Kr",
-      "url": "https://36kr.com/feed",
-      "verticals": [
-        "technology",
-        "ai",
-        "startups",
-        "internet_culture"
-      ],
-      "languages": [
-        "zh"
-      ],
-      "regions": [
-        "asia"
-      ],
-      "poll_interval_seconds": 900,
-      "max_items_per_poll": 100,
-      "rate_limit": "15m poll",
-      "conditional_request_mode": "etag_last_modified",
-      "tos_class": "public_feed",
-      "robots_policy": "rss_feed",
-      "auth_policy": "none",
-      "store_body_policy": "excerpt_only",
-      "retention_days": 90
     },
     {
       "id": "rss:ars",
@@ -5231,33 +5177,6 @@
       ],
       "regions": [
         "global"
-      ],
-      "poll_interval_seconds": 900,
-      "max_items_per_poll": 100,
-      "rate_limit": "15m poll",
-      "conditional_request_mode": "etag",
-      "tos_class": "public_feed",
-      "robots_policy": "feed_allowed",
-      "auth_policy": "none",
-      "store_body_policy": "bounded_text",
-      "retention_days": 30
-    },
-    {
-      "id": "rss:agriculture_dive",
-      "type": "rss",
-      "name": "Agriculture Dive",
-      "url": "https://www.agriculturedive.com/feeds/news/",
-      "verticals": [
-        "agriculture",
-        "commodities",
-        "climate",
-        "industry"
-      ],
-      "languages": [
-        "en"
-      ],
-      "regions": [
-        "us"
       ],
       "poll_interval_seconds": 900,
       "max_items_per_poll": 100,
