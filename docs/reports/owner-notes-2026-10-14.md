@@ -361,3 +361,17 @@ monthly allowance (persisted across gateway restarts, never into
 pay-as-you-go), rate-limits it under 10 rps, routes to it first while it has
 budget, and raises whichever demand-side search limit binds. Problem doc:
 docs/problems/search-throughput-keenable-underused-2026-10-15.md.
+
+## 21. No Claude in Choir for now; fewer parallel agents (2026-10-15, ~04:00 UTC)
+
+- **Claude delegate off.** Owner: "Even though we set up Claude in capsule,
+  let's not use it. I'm at 87% of my token limit and have 17 hours to
+  reset." The delegate allowlist is emptied (431dc5d3b); the token file
+  stays installed. Agents also leave the local `claude` CLI out of
+  consensus panels (OMP anchors only).
+- **Concurrency.** Owner: "10 parallel agents is probably too much for my
+  16 GB M1 Mac … we need to serialize a bit." At most 7 concurrent agents.
+  At the time the Mac's load average was 56–98. Five streams were paused
+  with their work committed on branches (surface sweep, account recovery
+  and Store B rebases, visual evidence, S7-0 app packages, memory hotplug)
+  and resume one at a time as others finish.
