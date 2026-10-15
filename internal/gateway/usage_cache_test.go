@@ -66,3 +66,30 @@ func TestGatewayRelaysCachedInputTokens(t *testing.T) {
 		t.Fatalf("compat usage = %+v", resp.Usage)
 	}
 }
+
+// F6 (docs/reports/autopaper-compute-halving-2026-10-15.md): the cached share
+// per provider must be readable on staging from GET /health, so a deploy's
+// effect on the chatgpt hit rate is a counter delta, not a guest cost pull.
+func TestGatewayHealthReportsPromptCacheHitRatePerProvider(t *testing.T) {
+	provider.ResetCacheStats()
+	provider.RecordCacheUsage("chatgpt", provider.Usage{InputTokens: 1000, CachedInputTokens: 900, CacheReported: true})
+	provider.RecordCacheUsage("chatgpt", provider.Usage{InputTokens: 1000, CachedInputTokens: 100, CacheReported: true})
+	h, _, _ := setupHandler(t)
+	rec := httptest.NewRecorder()
+	h.HandleHealth(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	var got struct {
+		PromptCache map[string]struct {
+			Calls             int64   `json:"calls"`
+			InputTokens       int64   `json:"input_tokens"`
+			CachedInputTokens int64   `json:"cached_input_tokens"`
+			HitRate           float64 `json:"hit_rate"`
+		} `json:"prompt_cache"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	c := got.PromptCache["chatgpt"]
+	if c.Calls != 2 || c.InputTokens != 2000 || c.CachedInputTokens != 1000 || c.HitRate != 0.5 {
+		t.Fatalf("prompt_cache.chatgpt = %+v (body %s)", c, rec.Body.String())
+	}
+}
