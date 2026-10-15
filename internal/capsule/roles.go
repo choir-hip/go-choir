@@ -13,13 +13,18 @@ const (
 // but authorization always consults RoleVerbSets rather than trusting payload.
 type VerbSet map[string]bool
 
+// edit_file, rename and chmod are not granted: the broker has no handler for
+// them, no prompt or cell surface teaches them, and write_file replaces an
+// existing read-only file itself (yaegikernel.WriteFileReplacing). A grant
+// without a handler only turns a role check into "unknown verb"
+// (docs/problems/p5-go-served-0825-engineering-never-freezes-2026-10-15.md).
 var RoleVerbSets = map[AgentRole]VerbSet{
 	RoleManagement: {},
 	RoleEngineering: {
-		"exec": true, "read_file": true, "write_file": true, "edit_file": true,
+		"exec": true, "read_file": true, "write_file": true,
 		"list_dir": true, "stat": true, "lstat": true, "readlink": true,
 		"mkdir": true, "mkdir_all": true, "remove": true, "remove_all": true,
-		"rename": true, "chmod": true, "symlink": true, "truncate": true,
+		"symlink": true, "truncate": true,
 		"file_hash": true, "kill_session": true, "go_eval": true,
 		"init_session": true, "close_session": true,
 		"job_start": true, "job_status": true, "job_stop": true,

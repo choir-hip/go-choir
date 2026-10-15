@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -19,6 +20,12 @@ import (
 // over a Unix domain socket. The broker runs inside the capsule's
 // namespace; the Executor connects to the socket from outside.
 type BrokerClient struct {
+	// socketPath is the socket's real filesystem path, however deep. Connect
+	// derives a dialable address from it on every dial (unixSocketAddress),
+	// because a path past sun_path is reached through a /proc/self/fd/<N>
+	// directory descriptor that must be open only for the dial. A client that
+	// stored that address would re-dial through a closed, reused descriptor
+	// (docs/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md).
 	socketPath string
 	publicKey  ed25519.PublicKey // injected at spawn, used for capability verification
 
@@ -55,7 +62,8 @@ type BrokerRPCResponse struct {
 	Error  string          `json:"error,omitempty"`
 }
 
-// NewBrokerClient creates a new broker client for the given Unix socket path.
+// NewBrokerClient creates a new broker client for the broker socket at
+// socketPath, the real path (not a /proc/self/fd address).
 func NewBrokerClient(socketPath string, publicKey ed25519.PublicKey) *BrokerClient {
 	return &BrokerClient{
 		socketPath: socketPath,
@@ -65,9 +73,21 @@ func NewBrokerClient(socketPath string, publicKey ed25519.PublicKey) *BrokerClie
 
 // Connect establishes a connection to the broker's Unix socket.
 func (b *BrokerClient) Connect(ctx context.Context) error {
-	d := net.Dialer{Timeout: 5 * time.Second}
-	conn, err := d.DialContext(ctx, "unix", b.socketPath)
+	addr, release, err := unixSocketAddress(b.socketPath)
 	if err != nil {
+		return fmt.Errorf("failed to address broker socket %s: %w", b.socketPath, err)
+	}
+	d := net.Dialer{Timeout: 5 * time.Second}
+	conn, err := d.DialContext(ctx, "unix", addr)
+	release() // the descriptor is needed only while connect resolves the path
+	if err != nil {
+		// Name the real path: the net error carries the transient
+		// /proc/self/fd address, which means nothing once the descriptor is
+		// closed.
+		var opErr *net.OpError
+		if errors.As(err, &opErr) && opErr.Err != nil {
+			err = opErr.Err
+		}
 		return fmt.Errorf("failed to connect to broker socket %s: %w", b.socketPath, err)
 	}
 	b.stateMu.Lock()

@@ -297,7 +297,7 @@ func (b *Broker) handleWriteFile(ctx context.Context, req *BrokerRequest, receip
 		mode = os.FileMode(payload.Mode)
 	}
 
-	if err := os.WriteFile(cleanPath, []byte(payload.Content), mode); err != nil {
+	if err := WriteFileReplacing(cleanPath, []byte(payload.Content), mode, payload.Mode > 0); err != nil {
 		return NewErrorResponse(req.RequestID, fmt.Sprintf("write file failed: %v", err), time.Since(start))
 	}
 

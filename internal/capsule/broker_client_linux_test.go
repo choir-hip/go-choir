@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -43,6 +45,11 @@ func newFakeBroker(t *testing.T, slow time.Duration) (*fakeBroker, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return serveFakeBroker(t, listener, slow), socket
+}
+
+func serveFakeBroker(t *testing.T, listener net.Listener, slow time.Duration) *fakeBroker {
+	t.Helper()
 	fb := &fakeBroker{listener: listener, slow: slow}
 	t.Cleanup(func() { _ = listener.Close() })
 	go func() {
@@ -55,7 +62,7 @@ func newFakeBroker(t *testing.T, slow time.Duration) (*fakeBroker, string) {
 			go fb.serve(conn)
 		}
 	}()
-	return fb, socket
+	return fb
 }
 
 func (fb *fakeBroker) serve(conn net.Conn) {
@@ -208,5 +215,134 @@ func TestBrokerClientConcurrentCallsAfterReconnectGetTheirOwnResponses(t *testin
 	}
 	if len(all) > 0 {
 		t.Fatal(errors.Join(all...))
+	}
+}
+
+// Drill selfdev-jobs-0654 (docs/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md):
+// capsule state sits past sun_path, so the client dialed
+// /proc/self/fd/<N>/broker.sock through a directory descriptor that startBrokerLocked
+// closed; the first re-dial after a cell timeout failed with ENOTDIR for the
+// rest of the capsule's life. Failure modes pinned:
+//   - R1 a deep socket path cannot be re-dialed after a dropped connection;
+//   - R2 the re-dial leaks a descriptor per dial;
+//   - R3 a failed dial names an fd path instead of the real socket path;
+//   - R4 the re-dial depends on a particular descriptor number staying open.
+func deepBrokerSocket(t *testing.T) string {
+	t.Helper()
+	deep := filepath.Join(t.TempDir(), strings.Repeat("d", 60), "boot-84c9b456-9074-44cf-a582-5f0b7cbd59b7",
+		"capsule-7492efb9-70fa-5ca7-8819-2b0386d5e51b", "root", "run", "capsule")
+	if err := os.MkdirAll(deep, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	full := filepath.Join(deep, "broker.sock")
+	if len(full) <= maxUnixSocketPath {
+		t.Fatalf("test path is only %d bytes", len(full))
+	}
+	if conn, err := net.Dial("unix", full); err == nil {
+		_ = conn.Close()
+		t.Fatal("premise: a plain dial of the deep path succeeded")
+	} else if errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("premise: dial failed with %v, not a path-length error", err)
+	}
+	return full
+}
+
+func openFDCount(t *testing.T) int {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(entries)
+}
+
+func TestBrokerClientRedialsADeepSocketPathAfterATimeout(t *testing.T) {
+	full := deepBrokerSocket(t)
+	listener, err := listenUnixAt(full)
+	if err != nil {
+		t.Fatalf("listenUnixAt: %v", err)
+	}
+	fb := serveFakeBroker(t, listener, 300*time.Millisecond)
+
+	// Premise (the bug): an address taken through a directory descriptor that
+	// is then closed cannot be dialed.
+	staleAddr, releaseStale, err := unixSocketAddress(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseStale()
+	if err := NewBrokerClient(staleAddr, nil).Connect(context.Background()); err == nil {
+		t.Fatalf("premise: dialing %q after its descriptor closed succeeded", staleAddr)
+	}
+
+	// The way startBrokerLocked builds the client: the real path, connected
+	// once. Before the fix the stored address was a descriptor path whose
+	// descriptor the caller had already closed.
+	client := NewBrokerClient(full, nil)
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatalf("first connect: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	if got, err := brokerEcho(t, context.Background(), client, "echo", "first"); err != nil || got != "first" {
+		t.Fatalf("first call = %q, %v", got, err)
+	}
+
+	// R4: churn the low descriptor numbers, as a long-lived process does, so a
+	// path naming one particular descriptor would now name something else.
+	var churn []*os.File
+	for i := 0; i < 8; i++ {
+		f, err := os.Open("/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		churn = append(churn, f)
+	}
+	t.Cleanup(func() {
+		for _, f := range churn {
+			_ = f.Close()
+		}
+	})
+
+	before := openFDCount(t)
+	for round := 0; round < 3; round++ {
+		// R1: a cell times out, dropping the connection.
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+		_, err := brokerEcho(t, ctx, client, "slow", "late")
+		cancel()
+		if err == nil {
+			t.Fatal("slow call past its deadline succeeded")
+		}
+		time.Sleep(350 * time.Millisecond)
+		id := fmt.Sprintf("after-timeout-%d", round)
+		got, err := brokerEcho(t, context.Background(), client, "echo", id)
+		if err != nil {
+			t.Fatalf("round %d: call after a timeout on a deep path failed: %v", round, err)
+		}
+		if got != id {
+			t.Fatalf("round %d: read %q, want %q", round, got, id)
+		}
+	}
+	if n := fb.accepted.Load(); n != 4 {
+		t.Fatalf("broker accepted %d connections, want 1 + 3 re-dials", n)
+	}
+	// R2: three re-dials leave the descriptor table as they found it (the
+	// live connection replaced the dropped one).
+	if after := openFDCount(t); after > before {
+		t.Fatalf("re-dials leaked descriptors: %d open before, %d after", before, after)
+	}
+}
+
+func TestBrokerClientDialErrorNamesTheRealPathNotAnFDPath(t *testing.T) {
+	full := deepBrokerSocket(t) // the directory exists; no socket is listening
+	client := NewBrokerClient(full, nil)
+	err := client.Connect(context.Background())
+	if err == nil {
+		t.Fatal("connect to a missing socket succeeded")
+	}
+	if strings.Contains(err.Error(), "/proc/self/fd") {
+		t.Fatalf("R3: error names a descriptor path: %v", err)
+	}
+	if !strings.Contains(err.Error(), full) {
+		t.Fatalf("R3: error does not name the real socket path: %v", err)
 	}
 }
