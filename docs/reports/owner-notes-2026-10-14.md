@@ -427,3 +427,23 @@ branch `feat/autopaper-compute-halving`.
   that, squash every week. Current rows and the event-tape rows are kept;
   only Dolt's own version history of them is dropped. The squash can't be
   undone, so the backup comes first.
+- **Autopaper quality: think about it as a whole before building anything**
+  (owner, ~16:30 UTC, after phone screenshots of stub stories ranked high
+  in sections and on the front page). Owner: "The point isn't merely to
+  rank by quality, but to produce quality … more sources is better, but
+  that's a very coarse proxy. The point is not about a single article, but
+  building up a serious and reasonable gestalt world model … a current
+  events world model. If you actually are aware of what's going on in the
+  world, then you'll know what's important and what a high-quality article
+  is … We're going to only think about this. We're not really going to
+  build it yet because we have to expand our source ingestion to get more
+  coverage, both more breadth and depth, to really deliver on the quality
+  promise." Disposition: there will be no quality-ranking patch. The
+  measurement of stub prevalence is kept as a problem record
+  (docs/problems/autopaper-ranking-ignores-article-quality-2026-10-15.md).
+  Next comes the ingestion breadth and depth expansion. Quality and
+  importance should follow from the world model, not from per-article
+  proxies.
+- **There are no new desks.** "Story writer" and "triage" in a coordinator
+  prompt were the coordinator's mistake. There are four desks: Texture,
+  management, engineering and research.
