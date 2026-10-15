@@ -1266,7 +1266,7 @@ nodes:
     title: L3 — hypotheses settled and scored (resolves_by and criterion, settler records, per-scorer scores, Brier per desk with denominators)
     path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
     ledger: ''
-    status: pending  # drafted 2026-10-15; review of the file next; entry criterion (off-host ledger copy) not built
+    status: pending  # reviewed 2026-10-15 (four panel rounds, docs/evidence/l3-file-review-2026-10-15.md); next the read-only witness precondition, then L3-1; L3-2 gated on the off-host ledger copy
     kind: station
     entrypoint: false
     execution_mode: mission_orchestrator

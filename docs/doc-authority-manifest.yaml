@@ -696,6 +696,13 @@ documents:
     witnesses: [docs/ACTIVE.md]
     refresh_triggers: []
 
+  - path: docs/evidence/l3-file-review-2026-10-15.md
+    claim_scope: current
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: evidence, authority: independent_review, lifecycle: append_only, entrypoint: false}
+    superseded_by: []
+    depends_on: [docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md]
   - path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
     claim_scope: current
     is_root: []

@@ -165,7 +165,7 @@ metamission:
         (docs/problems/planned-refresh-closes-paper-schedules-2026-10-14.md).
     - id: L3
       path: docs/definitions/choir-ledger-l3-hypotheses-settled-2026-10-13.md
-      readiness: drafted
+      readiness: reviewed
       status: pending
       depends_on: [L0]
       note: >-
@@ -177,8 +177,11 @@ metamission:
         refs, by the designated settler) is separate from scoring (a record
         with scorer identity, from Jev or a model; two scorers can
         disagree); a score uses the committed version and its original
-        probability, never a later edit; the commitment's seq precedes the
-        earliest capture its settlement cites; per-source
+        probability, never a later edit; an ordering witness shows the
+        commitment preceding the earliest capture its settlement cites
+        (the paper's event-chain sequence for the commitment and the
+        CaptureArrival, plus a first-creation witness on the Store B
+        path; never InboxSeq or timestamps); per-source
         analytics views with denominators (lead time, independent
         corroboration by owner and lineage, corrections). Acceptance: ten or
         more short-horizon hypotheses committed before their resolving

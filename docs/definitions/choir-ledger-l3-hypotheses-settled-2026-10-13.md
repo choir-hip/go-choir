@@ -12,13 +12,13 @@ definition_version: 4
 # governance). This file encodes that design over the code observed on
 # 2026-10-15; it does not reopen it.
 # File name keeps the metamission's 2026-10-13 path; authored 2026-10-15.
-readiness: drafted
+readiness: reviewed
 
 review:
-  reviewer: none
-  frozen_ref: none
-  verdict: none
-  evidence_ref: none
+  reviewer: agentic-consensus convergent rounds 1 (f658017ce; gpt-6-luna send_back, gpt-6.1-sol and gemini-3.8 accept_with_repairs; deepseek and glm 402 out of funds), 2 (8650c8f74; gpt-6.1-sol and gpt-6-luna send_back, codex and gemini-3.8 accept_with_repairs), 3 (3d7630420; gpt-6.1-sol and gpt-6-luna send_back on the capture witness, gemini-3.8 accept_with_repairs, codex accept), 4 (7cb82e902, the capture witness only; gpt-6.1-sol and gpt-6-luna accept)
+  frozen_ref: git blob bdf232c5aee0e275cd872373d73c4687950937fb (this file at 7cb82e902)
+  verdict: accept
+  evidence_ref: docs/evidence/l3-file-review-2026-10-15.md; .agentic-consensus/l3-drafted-review-2026-10-15/, l3-review-round2-2026-10-15/, -round3-, -round4-
 
 start:
   captured_at: 2026-10-15T21:05:00Z
@@ -324,12 +324,11 @@ now:
       L3-1, planned in L3-3 (inline outcomes leave the scorer averages, and
       the settlement records stay).
   next_action: >-
-    Review round 3, narrow: are round 2's blockers repaired here? Round 2
-    (gpt-6.1-sol and gpt-6-luna send_back, codex and gemini-3.8
-    accept_with_repairs) converged on four: the overlay-only rollback, the
-    unnamed ordering witness, scorer coverage per settlement with the
-    self-score, and the missing repaired leg of the heresy delta. Then
-    the witness precondition, then L3-1, tests first, in a worktree.
+    The L3-1 precondition, read-only: the guest read route for projection
+    events by canonical id, then derive the Cast, CaptureArrival and Store
+    B witnesses for one existing paper Cast. Then L3-1, tests first, in a
+    worktree. Both reviewers flagged that the current corpusd created_at
+    (time.Now at the write) cannot serve as witness (b).
 
 receipts: []
 ---
