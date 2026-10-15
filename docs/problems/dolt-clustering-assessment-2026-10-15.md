@@ -331,3 +331,167 @@ all bt` if installed, or `eu-stack`). Record the `checkpointd` and
   the current store.
 - introduced: none (documentation only).
 - repaired: none.
+
+## 7. Guardrails implementation record (branch fix/dolt-guardrails)
+
+Written before any guardrail code, per the Testing rule ("write down all the
+ways it could fail, then write the code") and Problem Documentation First.
+Mutation classes: checkpointd HOME and deadlines orange; vmctl red; the probe
+red-adjacent (host ops). Nothing here was run against the real Dolt servers;
+the Node B evidence below is read-only `journalctl`, `ls` and `systemctl show`.
+
+### 7.1 New finding: the checkpointd panic loop has a one-line cause [E]
+
+The loop in section 1.2 is not a Dolt bug and not a crash-loop of the DDL
+path. It is the F3 hardening commit `fda386b47` (2026-10-14 15:35 -0400),
+which added `ProtectHome = "tmpfs"` to `commonServiceHardening`
+(`nix/node-b.nix:318`). That mounts `/root` as an empty read-only tmpfs.
+`go-choir-checkpointd` does need an embedded Dolt workspace: when a
+projection job is claimed, `projectionbase.Rebuilder` opens a scratch store
+(`internal/projectionbase/rebuilder.go:224,273`) through `store.Open`
+(`internal/store/store.go:630`, `openTextureWorkspaceDB` at
+`internal/store/texture.go:211`), and the embedded Dolt engine creates
+`$HOME/.dolt` (global config) on `CREATE DATABASE`. With `HOME` unset the
+unit's home is `/root`, so `mkdir /root/.dolt: read-only file system`, and
+Dolt then dereferences the nil config in `createLocalConfigAt`
+(`dolt/go/libraries/doltcore/env/config.go:143`).
+
+Evidence (Node B, read-only):
+
+- Before 23:07:19 on 10-14 every run was a 0.15-0.2 s no-op. The first
+  `store: open phase=workspace-open` line of the loop is 23:07:20, and the
+  panic follows in the same second. 568 `workspace-open` lines and 65
+  `checkpoint published` lines exist since 10-01; the published runs took
+  43-56 s (maximum 55.8 s). So the embedded workspace is legitimate and used,
+  and it worked until the hardening deployed.
+- `/root/.dolt` exists on the host (written by earlier, unsandboxed runs);
+  under `ProtectHome=tmpfs` the unit cannot see it.
+- Of the host units, only `checkpointd` runs the projection rebuilder.
+  `corpusd` sets `HOME` explicitly (`nix/node-b.nix:842`); the Dolt servers
+  set `HOME` to their data dirs.
+
+Consequence: a job is claimed every minute and the process dies before
+`FinishProjectionJob`, so that computer's checkpoint has not advanced since
+23:07 (the claim repeats; [H] that exactly one computer is affected, the
+journal does not name the computer). Correction to section 1.2: the
+per-minute connection and DDL come from `OpenStore`/`Bootstrap` on every run,
+as stated, but the panic is after the job claim, not in the DDL path. Heresy
+discovered: a security-hardening change broke a maintenance unit for 12 h and
+nothing alerted (no `OnFailure=`, section 4.1).
+
+### 7.2 Failure modes to design against
+
+**Commit 1: give checkpointd a writable home (orange).**
+
+- The new HOME directory is missing or not writable (StateDirectory creates
+  it root-owned 0750; the sandbox is `ProtectSystem=strict`). Design: use
+  `StateDirectory=go-choir/checkpointd` (writable by construction) and add a
+  preflight in `main` that creates `$HOME/.dolt` before the job claim, so a
+  future sandbox change fails fast with a clear line and without claiming a
+  job, instead of panicking after the claim.
+- Dolt needs more than `.dolt/` (a global user config). The scratch store
+  passes `commitname`/`commitemail` in its DSN (`texture.go:233`), so no
+  global identity is required. Only a staging run can prove the rest.
+- The fix un-wedges a 12 h backlog: the first run may rebuild immediately.
+  Resource limits are unchanged (`MemoryMax=6G`, `CPUQuota=100%`,
+  `OOMScoreAdjust=1000`) and the observed maximum duration is 56 s, which the
+  deadline in commit 2 must exceed with a wide margin.
+- Persistent `HOME` across runs accumulates state: it holds only a tiny
+  config file; the rebuild scratch stays under `platform-artifacts`.
+- Another unit hits the same wall: none found (see the evidence above).
+
+**Commit 2: client deadlines (orange).**
+
+- A 60 s open deadline is too short for a legitimately slow DDL on a loaded
+  Dolt, so `OpenStore` fails where it used to wait. `corpusd` already retries
+  20 times (now each attempt bounded), so its worst case becomes 20 x 60 s
+  plus backoff instead of unbounded; `checkpointd` fails and the timer
+  retries in a minute.
+- A cancelled multi-statement DDL leaves partial schema. The DDL is
+  `CREATE ... IF NOT EXISTS` and ensure-column, re-applied on the next run.
+- The client's cancel does not stop a hung Dolt session. Connections can pile
+  up server-side on a deadlocked server (24 open at 10:45). The deadline
+  bounds the client and the deploy; the probe (commit 4) addresses the server.
+- The open context must not become the worker's lifetime context. Only
+  `OpenStore` takes the 60 s context; the worker keeps the signal context.
+- `TimeoutStartSec` too small kills a legitimate rebuild every minute
+  forever. Observed maximum 56 s over 65 publishes; choose 10 minutes (about
+  10x), down from 8 h. A deploy switch can then be held at most 10 minutes by
+  a `checkpointd` start.
+- Dropping the DDL from `checkpointd` opens a skew window: a new
+  `checkpointd` binary may run against the previous schema until `corpusd`
+  restarts and bootstraps (the deploy restarts it right after the pointer
+  update; on a fresh Dolt, until `corpusd` first runs). Effect: a few failed
+  one-minute runs with an SQL error, healed by the next `corpusd` start.
+  Accepted, and recorded as the price of making `corpusd` the single schema
+  owner.
+
+**Commit 3: vmctl must not crash-loop on a slow ping (red).**
+
+- Retrying forever masks a permanent fault (bad DSN, bad password). Design:
+  log every attempt with the error and the next delay; the unit stays
+  `active` but vmctl does not serve, so deploy health checks fail visibly
+  instead of the unit hitting `start-limit-hit`.
+- vmctl serves nothing while it waits (no listener until the authority is
+  set). The route authority is a plain field read by reattach, the idle
+  sweeper and the handlers, and `RequireRouteAuthority` makes a nil authority
+  fail closed; attaching it later from a goroutine would be an unsynchronised
+  write and is not attempted. Not worse than today: a crashed vmctl serves
+  nothing either.
+- The wait must honour SIGTERM so a switch stop does not hang for the 90 s
+  stop timeout.
+- Backoff too tight hammers a sick Dolt: capped exponential, 1 s to 30 s,
+  each attempt bounded at 30 s.
+- A partial `EnsureSchema` followed by a retry: both DDLs are idempotent.
+- The unit's `StartLimit` (10 in 600 s, restart-subsystem L1a) stays: it is a
+  deliberate no-crash-loops policy, and in-process retry removes the exit
+  that fed it.
+
+**Commit 4: platform and corpus Dolt liveness probe (red-adjacent).**
+
+- False positive during a deploy switch or boot: skip unless the unit is
+  `active`, and skip for 120 s after `ActiveEnterTimestamp`. Any skip resets
+  the strike count.
+- False positive on a long GC or conjoin: the 09:23 stall lasted 4.5 minutes
+  and cleared by itself, so three strikes (about 90 s) would have restarted a
+  server that recovered. Accepted under the owner's 3-strike rule: a restart
+  costs seconds, a missed stall cost 40 minutes. Every strike is logged so a
+  GC correlation stays visible. Strikes and deadline are environment-tunable.
+- A probe fault must not kill a healthy server. Only a timeout (exit 124) or
+  a refused connection on an active, past-grace unit is a strike. "Access
+  denied", a missing client binary, an unreadable credential, or an
+  unrecognised error is logged as `probe-error`, is not a strike, and makes
+  the probe unit fail so the hardening check shows it.
+- SIGABRT storm: cooldown of at least 10 minutes per target after a signal,
+  kept in `/run` with `RuntimeDirectoryPreserve`. At most 6 signals an hour,
+  inside the Dolt unit's start limit (10 in 600 s). The evidence is journaled
+  before the signal.
+- Wrong pid: take `MainPID` from systemd and check `/proc/<pid>/comm` is
+  `dolt` before signalling, and signal with `systemctl kill --kill-whom=main`.
+- The dump may not reach the journal (the 10:46 SIGQUIT dump stalled after
+  three lines). `/proc` status, wchan, io and per-thread wchan are journaled
+  first.
+- A core dump of a 3.5 GB process delays the restart. SIGABRT's default
+  action is core; set `GOTRACEBACK=all` (prints all goroutines and exits 2,
+  no core) and `LimitCORE=0` on both Dolt units.
+- A process stuck in D state never takes the signal: if the pid is unchanged
+  20 s after the signal, `systemctl restart` (stop is bounded by
+  `TimeoutStopSec=20s`).
+- The restart loses in-flight work. A committed SQL transaction is durable
+  (the platform's own comment: SQL COMMIT is the durability, the snapshot
+  commit is bookkeeping); in-flight transactions roll back and clients retry.
+  The 10-15 SIGKILL recovery was clean, and SIGABRT is the same class of exit.
+- Changing the Dolt units (`TimeoutStopSec`, `LimitCORE`, `GOTRACEBACK`)
+  makes the next deploy switch restart both Dolt servers. That is a planned
+  restart inside a deploy, the same as any change to these units, noted for
+  the operator.
+- Overlapping runs: `flock` on a lock file in the runtime directory; the probe
+  bounds its own wall time (2 targets x 5 s plus kill grace).
+- Credentials: read from `$CREDENTIALS_DIRECTORY` (LoadCredential of the
+  existing `dolt-app-password`, the same source as the `dolt-users` unit),
+  exported only as `DOLT_CLI_PASSWORD` to the one child, never in `argv`,
+  never logged, no `set -x`, and stderr is classified, not echoed.
+- The probe cannot be tested against real Dolt here. It gets a dry-run mode
+  (log the action, send no signal) and a fake-command test harness covering
+  the strike, reset, cooldown, skip-while-activating and credential-error
+  cases, written before the script.
