@@ -166,6 +166,7 @@ func TestElisionChangesTheSentPrefixOnlyAtBatchSteps(t *testing.T) {
 }
 
 func TestElisionOffForOtherDesksAndWhenDisabled(t *testing.T) {
+	t.Setenv("CHOIR_RUN_MEMORY_ELISION", "1")
 	entries := elisionEntries(30, 3000)
 	plain := buildRunMemoryContext(entries)
 	for name, policy := range map[string]runMemoryElision{
@@ -227,6 +228,10 @@ func TestElisionDoesNotRewriteStoredEntriesAndPressureUsesTheSentView(t *testing
 func TestElisionPolicyFromEnvironmentDefaults(t *testing.T) {
 	research := &types.RunRecord{AgentID: "research:doc", AgentProfile: agentprofile.Research}
 	t.Setenv("CHOIR_RUN_MEMORY_ELISION", "")
+	if newRunMemoryElision(research).Enabled {
+		t.Fatalf("elision must be off when the flag is unset (owner ruling 2026-10-15)")
+	}
+	t.Setenv("CHOIR_RUN_MEMORY_ELISION", "1")
 	p := newRunMemoryElision(research)
 	if !p.Enabled || p.KeepRecent != defaultElisionKeepRecent || p.Batch != defaultElisionBatch || p.MinChars != defaultElisionMinChars || p.Retrieval != "choir.RunMemoryEntry" {
 		t.Fatalf("defaults = %+v", p)

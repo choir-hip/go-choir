@@ -31,7 +31,11 @@ import (
 // Defaults are conservative: 8 verbatim, steps of 24 (a run of 90 calls is
 // rewritten 3 times), results under 1,200 characters stay whole (a stub is
 // not shorter). Research only, the one desk that has the retrieval verb.
-// Rollback: CHOIR_RUN_MEMORY_ELISION=0 on the guest runtime.
+//
+// OFF BY DEFAULT (owner ruling 2026-10-15): elision rewrites already-cached
+// history bytes, which works against the >90% prompt-cache goal; the
+// append-only prompt pattern is kept. Opt in with CHOIR_RUN_MEMORY_ELISION=1
+// on the guest runtime.
 const (
 	defaultElisionKeepRecent = 8
 	defaultElisionBatch      = 24
@@ -55,15 +59,16 @@ func elisionIntEnv(name string, def int, min int) int {
 	return def
 }
 
-// newRunMemoryElision is the run's policy: on for desks that can read an
-// entry back, unless CHOIR_RUN_MEMORY_ELISION is 0, off or false.
+// newRunMemoryElision is the run's policy: off unless CHOIR_RUN_MEMORY_ELISION
+// is 1, on, true or yes, and then only for desks that can read an entry back.
 func newRunMemoryElision(rec *types.RunRecord) runMemoryElision {
-	retrieval := runMemoryRetrievalVerb(rec)
-	if retrieval == "" {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CHOIR_RUN_MEMORY_ELISION"))) {
+	case "1", "on", "true", "yes":
+	default:
 		return runMemoryElision{}
 	}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("CHOIR_RUN_MEMORY_ELISION"))) {
-	case "0", "off", "false", "no":
+	retrieval := runMemoryRetrievalVerb(rec)
+	if retrieval == "" {
 		return runMemoryElision{}
 	}
 	return runMemoryElision{

@@ -30,8 +30,8 @@ import (
 //   - F6. A bad flag value zeroes the cap (no results) or the snippet (no
 //     text). Garbage falls back to the default; 0 turns the limit off.
 //   - F7. The limit cannot be turned off if research quality drops.
-//     Rollback: CHOIR_DESK_SEARCH_MAX_RESULTS=40 and
-//     CHOIR_DESK_SEARCH_SNIPPET_CHARS=0.
+//     Trimming is opt-in (owner ruling 2026-10-15):
+//     CHOIR_DESK_SEARCH_MAX_RESULTS=12, CHOIR_DESK_SEARCH_SNIPPET_CHARS=300.
 
 func TestTrimSearchSnippet(t *testing.T) {
 	long := strings.Repeat("é", 900) + "tail"
@@ -62,9 +62,10 @@ func TestDeskSearchLimitsFromEnvironment(t *testing.T) {
 		wantResults, wantChars int
 	}{
 		{name: "defaults", wantResults: defaultDeskSearchMaxResults, wantChars: defaultDeskSearchSnippetChars},
-		{name: "explicit", results: "40", snippet: "0", wantResults: 40, wantChars: 0},
+		{name: "opt-in trimming", results: "12", snippet: "300", wantResults: 12, wantChars: 300},
 		{name: "garbage falls back", results: "lots", snippet: "-3", wantResults: defaultDeskSearchMaxResults, wantChars: defaultDeskSearchSnippetChars},
 		{name: "zero results falls back", results: "0", wantResults: defaultDeskSearchMaxResults, wantChars: defaultDeskSearchSnippetChars},
+		{name: "owner ruling: untrimmed by default", wantResults: 40, wantChars: 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("CHOIR_DESK_SEARCH_MAX_RESULTS", tc.results)
@@ -93,6 +94,8 @@ func (c recordingSearchClient) Stream(ctx context.Context, query string, maxResu
 }
 
 func TestDeskSearchAsksForFewerResultsAndTrimsOnlyTheSnippet(t *testing.T) {
+	t.Setenv("CHOIR_DESK_SEARCH_MAX_RESULTS", "12")
+	t.Setenv("CHOIR_DESK_SEARCH_SNIPPET_CHARS", "300")
 	client := recordingSearchClient{maxResults: make(chan int, 1)}
 	tool, ctx, _, _ := researchSearchTool(t, client)
 	out := evalDeskCell(t, tool, ctx, `s, _ := choir.SearchStart("q")
@@ -104,8 +107,8 @@ for _, h := range r.Results {
 	if out.Error != "" {
 		t.Fatalf("cell error: %s", out.Error)
 	}
-	if got := <-client.maxResults; got != defaultDeskSearchMaxResults {
-		t.Fatalf("max_results = %d, want %d", got, defaultDeskSearchMaxResults)
+	if got := <-client.maxResults; got != 12 {
+		t.Fatalf("max_results = %d, want 12", got)
 	}
 	if !strings.HasPrefix(out.Stdout, "Full title kept | https://example.test/a?x=1#frag | ") || !strings.Contains(out.Stdout, "| true") {
 		t.Fatalf("hit = %q", out.Stdout)

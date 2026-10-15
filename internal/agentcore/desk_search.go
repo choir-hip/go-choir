@@ -40,13 +40,14 @@ import (
 // characters fit in about 6k characters where 40 hits at full-page snippets
 // hit the cap.
 //
-// Defaults are the conservative middle: enough distinct candidates for the
-// ~9 searches of a run, snippets that still say what the page is about.
-// Rollback: CHOIR_DESK_SEARCH_MAX_RESULTS=40 and
-// CHOIR_DESK_SEARCH_SNIPPET_CHARS=0 restore the earlier behaviour.
+// Owner ruling (2026-10-15): do not economize on search; keep the
+// append-only prompt pattern so the provider prompt cache stays above 90%.
+// The defaults are therefore the earlier behaviour (40 results, snippets
+// whole). Opt in to trimming with CHOIR_DESK_SEARCH_MAX_RESULTS=12 and
+// CHOIR_DESK_SEARCH_SNIPPET_CHARS=300.
 const (
-	defaultDeskSearchMaxResults   = 12
-	defaultDeskSearchSnippetChars = 300
+	defaultDeskSearchMaxResults   = 40
+	defaultDeskSearchSnippetChars = 0
 	searchSnippetCutMarker        = "…"
 )
 

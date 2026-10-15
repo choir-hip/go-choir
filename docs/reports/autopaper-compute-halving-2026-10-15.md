@@ -8,6 +8,17 @@ Owner request (2026-10-15 ~05:20 UTC): halve the compute and token use of
 Autopaper, keep ingesting every source, keep the most important stories,
 and if possible raise quality at half the compute.
 
+## Owner ruling (2026-10-15): keep append-only prompts
+
+"Don't economize on search; maintain the append-only pattern for 90%+
+caching." Elision rewrites already-cached history bytes, which works against
+the cache-ratio goal, so it is **off by default**. Search trimming is also
+off by default (40 results, whole snippets). Only the cache-routing work is
+active: the chatgpt session/conversation headers, the `cached_in=` gateway
+log field and the `prompt_cache` field on gateway `/health`. The two
+economizing levers stay in the code as opt-in flags; the lever tables below
+describe what they do when switched on, not shipped behaviour.
+
 ## 1. Baseline (paper computer, Node B gateway journal)
 
 Paper guest `vm-1669020adcece51c2f5ff9b6df399ef5`, computer
@@ -135,8 +146,8 @@ billing pages). Research is 53% of raw input.
 | # | Lever | Raw input | Cache-weighted | Risk | Status |
 |---|---|---|---|---|---|
 | 1 | chatgpt cache routing (session headers, hit rate 29% to about 85–90%) | 0 | **−44%** (chatgpt 81M to about 23M of 133M) | none to quality; provider request shape (red) | implemented |
-| 2 | Rolling elision of old tool results, batched (shipped N=8 verbatim, B=24) | −17 to −18% of all (66–68% of research) | 85–91% of research at 0.1x (−2 to −8% of all), 75–79% at 0.2x (−11 to −13% of all) | medium: the model may need an elided result; it can read it back | implemented, default on, research only |
-| 3 | Search hits in context: 12 results, 300-character snippets (a hit is ~200 characters of title and URL plus snippet, so a print is ≤6k characters against the 8k cap; typical hit measured 83 + 120 + 316) | about −7% of research (−4% of all) | same | low: fewer candidates per search | implemented, default on |
+| 2 | Rolling elision of old tool results, batched (shipped N=8 verbatim, B=24) | −17 to −18% of all (66–68% of research) | 85–91% of research at 0.1x (−2 to −8% of all), 75–79% at 0.2x (−11 to −13% of all) | medium: the model may need an elided result; it can read it back | implemented, **default OFF (owner ruling 2026-10-15)**, research only; opt in with `CHOIR_RUN_MEMORY_ELISION=1` |
+| 3 | Search hits in context: 12 results, 300-character snippets (a hit is ~200 characters of title and URL plus snippet, so a print is ≤6k characters against the 8k cap; typical hit measured 83 + 120 + 316) | about −7% of research (−4% of all) | same | low: fewer candidates per search | implemented, **default OFF (owner ruling 2026-10-15)**: defaults are 40 results and whole snippets; opt in with `=12` and `=300` |
 | 4 | Bound research runs: about 90 iterations per run, top 5 runs are half of research input; turn or token budget per run | up to −13% of all at the p90 | similar | quality: cut-off research | not implemented, needs a measured cap |
 | 5 | Importance triage before research (about 35% of scored stories are 1–3 yet each costs the same 1.3M) | −10 to −15% if the lowest third skip research | same | quality: needs a pre-research score; the 10-minute scorer runs after publication | not implemented |
 | 6 | Texture wake coalescing (273 runs in 3 h, 32% of input) | −5 to −10% | same | medium | not implemented |
@@ -195,8 +206,8 @@ research as before: #1 to #3 change cost per call, not what a story is given.
 | Commit | Class | Flag, default, rollback |
 |---|---|---|
 | chatgpt `session_id` and `conversation_id` headers equal to `prompt_cache_key`; `cached_in=` and `cache_reported=` on provider log lines; `GET /health` `prompt_cache` per provider | red (provider request shape) | `CHOIR_CHATGPT_SESSION_HEADERS` on the gateway; default on (ignorable metadata equal to the key already sent); `=0` removes |
-| Desk searches: 12 results, 300-character snippets | orange | `CHOIR_DESK_SEARCH_MAX_RESULTS=12`, `CHOIR_DESK_SEARCH_SNIPPET_CHARS=300`; `=40` and `=0` restore; guest runtime |
-| Research old-tool-result elision | orange | `CHOIR_RUN_MEMORY_ELISION=1` (`0` off), `_KEEP=8`, `_BATCH=24`, `_MIN_CHARS=1200`; guest runtime |
+| Desk searches: 12 results, 300-character snippets | orange | opt-in only: `CHOIR_DESK_SEARCH_MAX_RESULTS=12`, `CHOIR_DESK_SEARCH_SNIPPET_CHARS=300`; unset = 40 and whole snippets; guest runtime |
+| Research old-tool-result elision | orange | opt-in only: `CHOIR_RUN_MEMORY_ELISION=1` (unset = off), `_KEEP=8`, `_BATCH=24`, `_MIN_CHARS=1200`; guest runtime |
 
 Not done, with reasons: **coarser run-context time** (first calls are 7% of
 luna calls and the run-context turn carries run-unique facts, so a coarser
