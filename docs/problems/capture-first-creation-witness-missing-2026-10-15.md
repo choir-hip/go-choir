@@ -97,6 +97,27 @@ declaration. It needs the full ceremony and a code review panel before it
 lands. The capture write path must stay available: a witness failure is
 never a capture failure.
 
+## Owner decision needed before building: the signing authority
+
+corpusd holds one signing key, the event CAS's `platform-control` key
+(`NewComputerEventCAS` requires `SignerDomain == "platform-control"`;
+`computerevent.SigningKey`, internal/computerevent/receipt.go). The
+witness needs a host signature. Two choices:
+
+- **(i) Reuse that key under a distinct statement domain**, such as
+  `capture-first-creation`, carried inside the signed bytes. That means no
+  new key material, but one key then attests two kinds of statement. A
+  verifier must check the domain, or one statement could pass for the
+  other.
+- **(ii) Mint a dedicated capture-witness key**, with its own key id and
+  rotation. That widens the trust surface less, but adds key material,
+  provisioning on Node B, and a public key to publish with the off-host
+  copy.
+
+This is a credential and authority choice, which the operating contract
+reserves for the owner. It blocks only witness (b)'s code. The L3-1 clock
+is already live, and the forecast cohort waits on witness (b) either way.
+
 ## Status
 
-Documented. Not built.
+Documented. Not built. Waiting on the signing-authority decision above.
