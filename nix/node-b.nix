@@ -759,13 +759,22 @@ in
     after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpus-dolt.service" ] ++ doltClientAfter;
     wants = [ "network-online.target" "go-choir-corpus-dolt.service" ] ++ doltClientAfter;
     requires = [ "go-choir-platform-dolt.service" ];
+    # P5 host build service (docs/reports/p5-host-build-layered-apply-2026-10-15.md):
+    # corpusd evaluates `.#autoputer` from the deployed checkout's object
+    # store at a computer's base commit plus its frozen patch; the build
+    # itself runs in the nix daemon's sandbox (remote builders included).
+    # The patch may not touch the recipe or the dependency set, so the
+    # evaluation is the base commit's own. Rollback: drop
+    # CORPUSD_HOST_BUILD_SOURCE_DIR (Go-touching applies then fail with
+    # host_builder_unconfigured and change nothing).
+    path = [ config.nix.package pkgs.git ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "corpusd" goChoirPackages.corpusd}";
       Restart = "on-failure";
       RestartSec = 3;
-      StateDirectory = "go-choir/platform-artifacts";
+      StateDirectory = [ "go-choir/platform-artifacts" "go-choir/host-build" ];
       StateDirectoryMode = "0750";
-      ReadWritePaths = [ platformArtifactsDir ];
+      ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/host-build" ];
       InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
       LoadCredential = internalTokenCredential ++ doltClientCredential;
       # Track K two-approval operator credentials live in a deploy-created
@@ -809,6 +818,15 @@ in
         "PLATFORM_ARTIFACT_GC_MAX_DELETES=50000"
         "PLATFORM_ARTIFACT_GC_MAX_BYTES=34359738368"
         "PLATFORM_ARTIFACT_GC_ACTIVE_NAMESPACES=projection-base,platform-update,file-cas-roots,file-cas-chunks"
+        # P5 host build service. The checkout is the deploy's /opt/go-choir
+        # (read only: its objects, never its worktree); the base is the
+        # deployed guest image a computer must have booted.
+        "CORPUSD_HOST_BUILD_SOURCE_DIR=/opt/go-choir"
+        "CORPUSD_HOST_BUILD_STATE_DIR=/var/lib/go-choir/host-build"
+        "CORPUSD_HOST_BUILD_BASE_MANIFEST=/var/lib/go-choir/guest/guest-image-manifest"
+        "CORPUSD_HOST_BUILD_BASE_STOREDISK=/var/lib/go-choir/guest/storedisk.erofs"
+        "HOME=/var/lib/go-choir/host-build"
+        "XDG_CACHE_HOME=/var/lib/go-choir/host-build/cache"
         internalAuthEnv
       ];
     };
