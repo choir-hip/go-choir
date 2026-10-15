@@ -36,9 +36,8 @@ const (
 	doltGCHeadroomDivisor = 4
 	// doltGCCompactionNeededPercent: when free space is still below this share
 	// of the disk after a GC, the growth is Dolt history or live data, which a
-	// default GC never reclaims (only squash + full GC: online in
-	// dolt_compaction.go, offline in docs/runbooks/offline-guest-gc.md).
-	// The disposition says so.
+	// default GC never reclaims (only squash + full GC, offline:
+	// docs/runbooks/offline-guest-gc.md). The disposition says so.
 	doltGCCompactionNeededPercent = 25
 	// doltGCBootMaxJournalBytes caps the journal a boot GC takes on. Boot GC
 	// runs before the HTTP listener, so a long one reads as refused
@@ -409,7 +408,7 @@ func maybeRunDoltGC(persistentDir, workspacePath, mode string, maxJournalBytes u
 	log.Printf("store: dolt gc (%s) complete in %s: journal %d MiB -> %d MiB, avail %d MiB -> %d MiB",
 		mode, time.Since(started).Round(time.Second), disposition.JournalMiB, disposition.AfterJournalMiB, disposition.AvailMiB, disposition.AfterAvailMiB)
 	if disposition.CompactionNeeded {
-		log.Printf("store: dolt gc (%s): avail %d MiB is under %d%% of the disk after gc; history or live data fills it, not the journal: compaction needed (online: dolt_compaction on /health; offline: docs/runbooks/offline-guest-gc.md)",
+		log.Printf("store: dolt gc (%s): avail %d MiB is under %d%% of the disk after gc; history or live data fills it, not the journal: compaction needed (docs/runbooks/offline-guest-gc.md)",
 			mode, disposition.AfterAvailMiB, doltGCCompactionNeededPercent)
 	}
 	return nil
@@ -417,45 +416,31 @@ func maybeRunDoltGC(persistentDir, workspacePath, mode string, maxJournalBytes u
 
 // StartPeriodicDoltGC runs the online GC once at start (collecting what a boot
 // deferred) and then on a timer while the computer runs, so the journal is
-// collected between boots. The journal GC is fleet-wide. Each tick then
-// considers an online history compaction (squash + full GC), which runs only
-// on computers listed in CHOIR_DOLT_COMPACT_COMPUTERS, never on the first
-// tick (it fires before the runtime starts), and not before a random 0-30
-// minute delay after boot (dolt_compaction.go). It returns immediately; the
-// loop runs until ctx is cancelled, so ctx must live as long as the store.
-// (Until 2026-10-15 the only caller cancelled ctx as soon as this returned,
-// so the loop exited before its first tick and GC ran only at boot.)
-func StartPeriodicDoltGC(ctx context.Context, s *Store, persistentDir, computerID string, interval time.Duration) {
+// collected between boots. It returns immediately; the loop
+// runs until ctx is cancelled, so ctx must live as long as the store. (Until
+// 2026-10-15 the only caller cancelled ctx as soon as this returned, so the
+// loop exited before its first tick and GC ran only at boot.)
+func StartPeriodicDoltGC(ctx context.Context, s *Store, persistentDir string, interval time.Duration) {
 	if doltGCDisabled() || s == nil {
 		return
 	}
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
-	eligibleAt := time.Now().Add(doltCompactionStartJitter())
-	first := true
-	tick := func() {
-		if err := s.MaybeRunOnlineDoltGC(ctx, persistentDir); err != nil {
-			log.Printf("store: periodic dolt gc: %v", err)
-		}
-		// History compaction runs after the journal GC, in the same
-		// goroutine, so the two never overlap.
-		t := doltCompactionTick{ComputerID: computerID, First: first, EligibleAt: eligibleAt, Now: time.Now()}
-		first = false
-		if err := s.maybeCompactDoltHistory(ctx, persistentDir, t); err != nil {
-			log.Printf("store: periodic dolt compaction: %v", err)
-		}
-	}
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		tick()
+		if err := s.MaybeRunOnlineDoltGC(ctx, persistentDir); err != nil {
+			log.Printf("store: periodic dolt gc: %v", err)
+		}
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				tick()
+				if err := s.MaybeRunOnlineDoltGC(ctx, persistentDir); err != nil {
+					log.Printf("store: periodic dolt gc: %v", err)
+				}
 			}
 		}
 	}()

@@ -1,10 +1,8 @@
 # Runbook: Offline Guest Dolt GC (Node B, break-glass)
 
-Use this runbook when the guest's history compaction record (`/health` →
-`dolt_compaction`, the same content as `.choir-dolt-compaction.json`) reports
-`deferred_space`, `refused`, `error` or `degraded`, or when the GC record (`/health` →
-`dolt_gc`, `.choir-dolt-gc-disposition.json`) reports `deferred_online` and
-the online GC cannot finish. Run it with the VM
+Use this runbook when the guest's GC record (`/health` → `dolt_gc`, the same
+content as `.choir-dolt-gc-disposition.json`) reports `compaction_needed: true`,
+or `deferred_online` and the online GC cannot finish. Run it with the VM
 stopped to reclaim Dolt history or a huge journal from the host. Proven
 2026-09-03 (9.8 GB → 1.7 GB), 2026-09-11 (18.6 GB journal → 2.1 GB store,
 heads/rows/branch history intact) and 2026-10-03.
@@ -19,58 +17,9 @@ The GC now works like this:
   (`RUNTIME_DOLT_GC_JOURNAL_GIB`).
 
 That bounds the journal. A default GC never reclaims history or live data.
-
-Since 2026-10-15 history can be bounded online too
-([`guest-dolt-history-bound-2026-10-15`](../problems/guest-dolt-history-bound-2026-10-15.md)).
-It is **off for the fleet**: only computers listed in
-`CHOIR_DOLT_COMPACT_COMPUTERS` (guest runtime environment,
-`nix/autoputer-vm.nix`) compact. Today that is the paper,
-`computer-1355b83bced1613eb048ee28d66688a8`. Every other computer records
-`not_enabled`. To enable or disable one, edit the list, deploy, and let the
-computer boot on the new image.
-
-On an enabled computer, after each journal GC tick, the guest compacts once
-the store has grown by the history budget since its last compaction:
-- never on the first tick after boot, and not before a random 0–30 minutes
-  after boot (`boot_wait`);
-- the budget is `RUNTIME_DOLT_HISTORY_BUDGET_MIB` (default 2,048 MiB),
-  lowered to a quarter of free space, with a 512 MiB floor;
-- the compaction is a squash to one commit over the root (the parentless
-  commit), then `DOLT_GC('--full')`, on the open store's write connection;
-- it is checked like step 6 below (the projection heads and the event index
-  count, plus every table's row count), and by a full content witness on
-  the read pool before and after;
-- the record is `in_progress` (with `last_failure_at` set) while it runs. A
-  guest killed mid-run therefore backs off 6 h after it reboots, and so does
-  any failure.
-
-A witness mismatch after the GC records `degraded`, with the changed
-table(s), and logs `DOLT COMPACTION DEGRADED`. The store can no longer be
-shown equal to its tape projection. Rebuild it from the tape (the
-rematerialize / projection-base path) or restore the pre-compaction backup
-if one exists. Do not re-enable compaction on that computer until it is
-rebuilt.
-
-**Acceptance on the paper after a deploy** (read-only, from Node B: `curl -s
-http://<guest tap ip>:8085/health`, the guest IP from `fc-config.json` boot
-args; counts and sizes only):
-- `dolt_compaction.outcome` goes `boot_wait`, then `noop` or `ran` within
-  about 35 minutes of boot;
-- after a run: `outcome = ran`, `witness_match = true`,
-  `commits_after <= 2`;
-- `gc_ms`, `witness_ms` and `peak_rss_mib` are recorded (the write stall
-  and the memory high-water mark);
-- `content_root`, `heads_digest` and `event_index_count` are present;
-- free space after GC is flat to within live growth over 24 h;
-- no `degraded`.
-
-It needs free space of at least store + journal + 512 MiB; with less, it
-records `deferred_space`. That case, a refusal (extra branch) or an error
-is what this runbook's offline path (`projection-compact`) is for.
-`compaction_needed` on `dolt_gc` still means free space stayed under 25%
-after a GC; with online compaction running, that is live data, not history.
-Kill switches: `RUNTIME_DOLT_COMPACT_DISABLED` (compaction only) or
-`RUNTIME_DOLT_GC_DISABLED` (both).
+When free space stays under 25% after a GC, the record says
+`compaction_needed`: squash plus `dolt gc --full` with `projection-compact`,
+which is this runbook's offline path.
 
 ## Preconditions
 

@@ -248,7 +248,7 @@ func TestStartPeriodicDoltGCTicks(t *testing.T) {
 	dir := t.TempDir()
 	defer stubDiskUsage(doltGCDiskUsage{TotalBytes: 32 * gibBytes, UsedBytes: 32*gibBytes - (100 << 20), AvailBytes: 100 << 20})()
 	ctx, cancel := context.WithCancel(context.Background())
-	StartPeriodicDoltGC(ctx, s, dir, "", 20*time.Millisecond)
+	StartPeriodicDoltGC(ctx, s, dir, 20*time.Millisecond)
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		if raw := ReadDoltGCDisposition(dir); raw != nil {

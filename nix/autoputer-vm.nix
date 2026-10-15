@@ -859,17 +859,6 @@ EOF
       RUNTIME_LLM_PROVIDER = "chatgpt";
       RUNTIME_LLM_MODEL = "gpt-6-luna";
       RUNTIME_LLM_REASONING_EFFORT = "low";
-      # Online Dolt history compaction (squash + full GC;
-      # docs/problems/guest-dolt-history-bound-2026-10-15.md). OFF for the
-      # fleet: only the ComputerIDs listed here compact; every guest compares
-      # its own CHOIR_COMPUTER_ID (kernel arg choir.computer_id). The journal
-      # GC stays fleet-wide. Listed: the always-on paper computer, VM slot
-      # vm-1669020adcece51c2f5ff9b6df399ef5 (owner e5962310-8767-4624-87e5-
-      # a9b93a4e1db1, desktop primary). Its id is the choir.computer_id in that
-      # slot's fc-config.json boot args. Rollback: empty the list and deploy;
-      # each guest stops at its next boot (RUNTIME_DOLT_COMPACT_DISABLED=1 also
-      # stops it).
-      CHOIR_DOLT_COMPACT_COMPUTERS = "computer-1355b83bced1613eb048ee28d66688a8";
     };
     serviceConfig = {
       ExecStartPre = "";
