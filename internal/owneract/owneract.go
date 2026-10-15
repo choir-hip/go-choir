@@ -69,6 +69,12 @@ const (
 	ActSelfDevApprove = "selfdev.approve"
 	// ActSelfDevModeSet is every other self-development mode write.
 	ActSelfDevModeSet = "selfdev.mode.set"
+	// ActSelfDevAutonomyArm is arming standing_consensus: the owner's
+	// standing grant of autonomous acceptance under one policy, on one
+	// test-tier computer, until an expiry (P4,
+	// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md). Its
+	// subject carries computer_tier, which the proxy reads from vmctl.
+	ActSelfDevAutonomyArm = "selfdev.autonomy.arm"
 )
 
 // Auth methods.

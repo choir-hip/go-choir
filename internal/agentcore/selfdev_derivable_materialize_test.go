@@ -52,13 +52,30 @@ type derivableChainCAS struct {
 	projection computerevent.ProjectionStore
 	mu         sync.Mutex
 	events     []computerevent.DurableEvent
+	// gate, when set, is corpusd's own CAS (with its admission gate): an
+	// append it refuses is refused here (P4 end-to-end test).
+	gate func(context.Context, computerevent.CASRequest) error
+}
+
+// installGate replays the chain so far into gate's store, then routes every
+// later append through it first.
+func (c *derivableChainCAS) installGate(ctx context.Context, gate func(context.Context, computerevent.CASRequest) error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, record := range c.events {
+		if err := gate(ctx, record.Request); err != nil {
+			return err
+		}
+	}
+	c.gate = gate
+	return nil
 }
 
 func (c *derivableChainCAS) Head(ctx context.Context, computerID string) (*computerevent.Head, error) {
 	return c.projection.Head(ctx, computerID)
 }
 
-func (c *derivableChainCAS) CompareAndSwap(_ context.Context, request computerevent.CASRequest) (computerevent.Receipt, error) {
+func (c *derivableChainCAS) CompareAndSwap(ctx context.Context, request computerevent.CASRequest) (computerevent.Receipt, error) {
 	receipt, err := computerevent.NewSignedReceipt(
 		"EventHeadReceipt", "corpusd",
 		map[string]any{"event_digest": request.EventDigest},
@@ -69,6 +86,11 @@ func (c *derivableChainCAS) CompareAndSwap(_ context.Context, request computerev
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.gate != nil {
+		if err := c.gate(ctx, request); err != nil {
+			return computerevent.Receipt{}, err
+		}
+	}
 	c.events = append(c.events, computerevent.DurableEvent{Request: request, Receipt: receipt})
 	return receipt, nil
 }
@@ -330,6 +352,11 @@ type derivableSelfDevFixture struct {
 	// workspace/platform Go effect, source.patch, and its sha and base
 	// commit (P5 host build tests).
 	goPatch []byte
+	// platformMux and platformURL are the fake platform-control server, so
+	// a test can mount real corpusd routes beside the fakes.
+	platformMux *http.ServeMux
+	platformURL string
+	sockDir     string
 }
 
 // shortSockDir makes a short-named temp dir because unix socket paths cap at
@@ -556,6 +583,7 @@ func newDerivableSelfDevFixture(t *testing.T, computerID string) *derivableSelfD
 	})
 	platformServer := httptest.NewServer(platformMux)
 	t.Cleanup(platformServer.Close)
+	fx.platformMux, fx.platformURL, fx.sockDir = platformMux, platformServer.URL, sockDir
 
 	// vmctl: a real route ledger behind the same two endpoints.
 	fx.ledger = routeledger.NewMemoryLedger()

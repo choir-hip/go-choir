@@ -38,11 +38,19 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 	}
 	ownerActor := strings.TrimPrefix(event.AuthorityRef, "external-owner:")
 	consensusDigest, consensusAuth := decisionpolicy.ReceiptDigestFromAuthority(event.AuthorityRef)
+	dissentDigest, dissentAuth := strings.CutPrefix(event.AuthorityRef, consensusDissentAuthorityPrefix)
 	authorityKind := "external-owner"
 	actor := ownerActor
 	if consensusAuth {
 		authorityKind = "qualified-consensus"
 		actor = consensusDigest
+	} else if dissentAuth {
+		// P4: a standing-consensus dissent may only reject.
+		if event.EventKind != computerevent.EventEffectRejected || !computerevent.IsSHA256(dissentDigest) {
+			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: consensus dissent authority mismatch")
+		}
+		authorityKind = "consensus-dissent"
+		actor = event.AuthorityRef
 	} else if actor == "" || actor == event.AuthorityRef {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: owner authority mismatch")
 	}
@@ -79,7 +87,7 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 		}
 		modeReceiptDigest = modeReceiptRef.Digest().String()
 	}
-	if authorityKind == "external-owner" {
+	if authorityKind == "external-owner" || authorityKind == "consensus-dissent" {
 		if len(event.InputArtifactRefs) != 1 {
 			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt cardinality mismatch")
 		}

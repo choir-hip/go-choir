@@ -104,13 +104,27 @@ func main() {
 	// configured; the route then answers host_builder_unconfigured. A
 	// misconfigured build service never stops corpusd (H23): it stays
 	// unconfigured, and Go-touching applies fail visibly.
+	var hostBuilds platform.HostBuildJobs
 	if buildCfg, enabled := hostbuild.ConfigFromEnv(os.Getenv); enabled {
 		if buildSvc, err := handler.ConfigureHostBuild(buildCfg); err != nil {
 			log.Printf("corpusd host build: disabled, configuration failed: %v", err)
 		} else {
 			buildSvc.Start(context.Background())
+			hostBuilds = buildSvc
 			log.Printf("corpusd host build: enabled (source %s, installable %s)", buildCfg.SourceDir, buildCfg.Installable)
 		}
+	}
+	// P4 decision poster (docs/problems/p4-standing-consensus-autonomy-2026-10-15.md):
+	// under an owner's standing arm it mints a ConsensusDecisionReceipt from
+	// the host's capsule-verifier ballot on this operation's P5 host build
+	// (signed here, platform-control) and the guest's signed reviewer
+	// ballot. Without the host build service it refuses every request.
+	consensus, err := svc.ConsensusActuatorRuntime(modeCAS, hostBuilds)
+	if err != nil {
+		log.Fatalf("corpusd consensus poster: %v", err)
+	}
+	if err := handler.ConfigureConsensusActuator(consensus); err != nil {
+		log.Fatalf("corpusd consensus poster routes: %v", err)
 	}
 	escrowPrivateKey, err := keyescrow.LoadOrGeneratePrivateKey(cfg.KeyEscrowKeyPath)
 	if err != nil {

@@ -38,6 +38,10 @@ var errHostBuildPending = errors.New("host build pending")
 type hostBuildFailure struct {
 	Reason string
 	Detail string
+	// HostRecorded marks a failure the host recorded as a failed job (the
+	// P4 poster votes reject on it); every other failure is the guest's own
+	// (no job, or a done job the guest could not verify or stage).
+	HostRecorded bool
 }
 
 func (f hostBuildFailure) Error() string {
@@ -120,14 +124,9 @@ func (rt *Runtime) selfDevelopmentHostBuild(ctx context.Context, operation selfd
 	if err != nil {
 		return hostBuiltRelease{}, hostBuildFailure{Reason: "patch_unavailable", Detail: err.Error()}
 	}
-	bootedBase, err := updater.DigestFile(rt.guestImageManifestPath())
+	request, err := rt.selfDevelopmentHostBuildRequest(operation, bundle)
 	if err != nil {
-		return hostBuiltRelease{}, hostBuildFailure{Reason: "base_unreadable", Detail: "the booted guest image manifest is unreadable: " + err.Error()}
-	}
-	request := hostbuild.Request{
-		ComputerID: operation.ComputerID, OperationID: operation.OperationID, BundleDigest: operation.BundleDigest,
-		BaseCommit: strings.ToLower(strings.TrimSpace(bundle.SourcePatchBaseCommit)), SourcePatchSHA256: bundle.SourcePatchSHA256,
-		BaseImageManifestDigest: bootedBase,
+		return hostBuiltRelease{}, err
 	}
 	jobID, err := request.JobID()
 	if err != nil {
@@ -173,7 +172,7 @@ func (rt *Runtime) selfDevelopmentHostBuild(ctx context.Context, operation selfd
 	case hostbuild.StateQueued, hostbuild.StateRunning:
 		return hostBuiltRelease{}, fmt.Errorf("%w: job %s %s %s", errHostBuildPending, jobID, job.State, job.Admission)
 	case hostbuild.StateFailed:
-		return hostBuiltRelease{}, hostBuildFailure{Reason: job.Reason, Detail: job.Detail}
+		return hostBuiltRelease{}, hostBuildFailure{Reason: job.Reason, Detail: job.Detail, HostRecorded: true}
 	case hostbuild.StateDone:
 	default:
 		return hostBuiltRelease{}, fmt.Errorf("host build %s: unknown state %q", jobID, job.State)
@@ -190,6 +189,21 @@ func (rt *Runtime) selfDevelopmentHostBuild(ctx context.Context, operation selfd
 		return hostBuiltRelease{}, fmt.Errorf("host build %s: stage: %w", jobID, err)
 	}
 	return staged, nil
+}
+
+// selfDevelopmentHostBuildRequest is P5's job identity for an operation,
+// without the patch bytes. corpusd's P4 decision poster derives the same
+// identity, so the job it votes on is the job this guest applies.
+func (rt *Runtime) selfDevelopmentHostBuildRequest(operation selfdev.Operation, bundle transaction.CapsuleEffectBundle) (hostbuild.Request, error) {
+	bootedBase, err := updater.DigestFile(rt.guestImageManifestPath())
+	if err != nil {
+		return hostbuild.Request{}, hostBuildFailure{Reason: "base_unreadable", Detail: "the booted guest image manifest is unreadable: " + err.Error()}
+	}
+	return hostbuild.Request{
+		ComputerID: operation.ComputerID, OperationID: operation.OperationID, BundleDigest: operation.BundleDigest,
+		BaseCommit: strings.ToLower(strings.TrimSpace(bundle.SourcePatchBaseCommit)), SourcePatchSHA256: bundle.SourcePatchSHA256,
+		BaseImageManifestDigest: bootedBase,
+	}, nil
 }
 
 // stageHostBuild fetches the closure and builder receipt, re-hashes both

@@ -42,6 +42,9 @@
 // drill (see engineeringScenario); its flags:
 //   --scenario engineering [--change static|go|go-served] [--timeout-min 15] [--apply-min 10]
 //     [--restore-min 12] [--require-served] [--skip-export] [--keep-computer]
+//     [--autonomous [--autonomy-min 120] [--decide-min 75]]  (P4: arm standing_consensus once; no owner approval;
+//                                       the host builds every candidate before corpusd decides, so the decision
+//                                       wait covers P5's queue deadline and build timeout)
 //
 // Exit: 0 bundle kept with the load present (or the scenario's claim held);
 // 3 bundle(s) kept, load absent (I5 unknown); 4 export unavailable (drill
@@ -87,7 +90,7 @@ const FENCE_MIN = Number(arg('fence-min', '30'));
 // "crash" proves restart closure only: crash at the first run in flight,
 // then a quiet window with no owner act, then export. Its acceptance is the
 // claim, not the I5 load.
-const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served]';
+const USAGE = 'usage: node scripts/reeng_tracer.mjs --label <label> [--scenario story|crash|management|research|paper|engineering] [--attempts 1] [--timeout-min 15] [--settle-min 3] [--quiesce-min 2] [--exporter <cmd>] [--skip-export] [--owner-publish] [--keep-computer] [--expect-sha <sha>] [--fence-min 30] [--quiet-s 150] [--sources arxiv:cs_ai] [--interval-min 10] [--max-items 6] [--apply-min 10] [--restore-min 12] [--require-served] [--change static|go|go-served] [--autonomous] [--autonomy-min 120] [--decide-min 75]';
 if (flag('help')) {
   console.log(USAGE);
   process.exit(0);
@@ -127,6 +130,21 @@ const RESTORE_MIN = Number(arg('restore-min', '12'));
 const REQUIRE_SERVED = flag('require-served');
 if (REQUIRE_SERVED && GO_CHANGE) {
   console.error('--require-served checks a static file; a --change go drill serves none (go-served checks its own route)');
+  process.exit(2);
+}
+// --autonomous (engineering scenario; P4,
+// docs/problems/p4-standing-consensus-autonomy-2026-10-15.md): the drill's
+// only owner act is arming standing_consensus once (reversible-selfdev-v1,
+// for --autonomy-min minutes, at most 24 h; test-tier computers only). There
+// is no owner_approval step: corpusd's decision poster decides from the host
+// builder's signed ballot and management's, and the drill expects applied
+// with a qualified-consensus decision actor and no decision call of its own.
+const AUTONOMOUS = flag('autonomous');
+const AUTONOMY_MIN = Number(arg('autonomy-min', '120'));
+const DECIDE_MIN = Number(arg('decide-min', '75'));
+const REVERSIBLE_SELFDEV_V1 = 'c34ddf073aecaacc307f375d6f2e398798350d7a48c8d3c2e7c6d10248b394d7';
+if (AUTONOMOUS && (SCENARIO !== 'engineering' || !(AUTONOMY_MIN > 0 && AUTONOMY_MIN <= 1440))) {
+  console.error('--autonomous needs --scenario engineering and 0 < --autonomy-min <= 1440');
   process.exit(2);
 }
 const CRASH_QUIET_MS = Number(arg('quiet-s', '150')) * 1000;
@@ -1113,8 +1131,9 @@ async function paperScenario(c, out, n, deadline, phase) {
 // 404 or 405 is recorded as a gap at the step that needed it.
 
 // The drill's phases in order; the receipt names the last one reached.
+// Under --autonomous the owner_approval phase is corpusd's consensus_decision.
 const REACHED = ['mint', 'mode', 'story_submitted', 'texture_cast_to_management', 'management_cast_engineering', 'operation_frozen',
-  'engineering_final_report', 'decision_boundary', 'owner_approval', 'applied', 'restore'];
+  'engineering_final_report', 'decision_boundary', AUTONOMOUS ? 'consensus_decision' : 'owner_approval', 'applied', 'restore'];
 const OP_SETTLED = new Set(['applied', 'rejected', 'rolled_back', 'failed', 'degraded']);
 const OP_ORDER = ['requested', 'executing', 'frozen', 'verified', 'awaiting_approval', 'accepted', 'materializing', 'applied'];
 const opAtLeast = (state, floor) => OP_ORDER.indexOf(state) >= OP_ORDER.indexOf(floor);
@@ -1201,6 +1220,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     mode_propose_only: null, texture_cast_to_management: null, texture_casts_to_management: [], engineering_casts: [], engineering_final_reports: [],
     operation: null, operation_states: [], verify: null, decision_boundary: null,
     pre_apply_checkpoint: null, owner_approval: null, boots: [], unreachable: [], applied: null, route_receipt: null,
+    standing_arm: null, consensus_decision: null, decision_calls: 0,
     restore: null, served: {}, probe: {}, heads: {}, obligations: {}, census: null, management_final_report_to_texture: null,
   };
   out.drill = { label: out.label, scenario: 'engineering', change: CHANGE, token, claim, gaps, note: [] };
@@ -1270,7 +1290,25 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     gap('mode', 'GET /api/computers/{id}/self-development/mode', `status ${mode.status}`);
     return finish();
   }
-  if (['propose_only', 'accept_once', 'qualified_consensus'].includes(mode.body?.mode)) {
+  if (AUTONOMOUS) {
+    // P4: the drill's one owner act. standing_consensus is a proposing
+    // mode too, so Freeze opens the candidate under it.
+    const armed = await c.api(sd('mode'), 'PUT', {
+      mode: 'standing_consensus', expected_generation: mode.body?.generation ?? 0, idempotency_key: `${out.label}-standing-${randomUUID()}`,
+      policy_digest: REVERSIBLE_SELFDEV_V1, expires_at: canonicalExpiry(Date.now() + AUTONOMY_MIN * 60_000),
+    });
+    claim.standing_arm = {
+      at: iso(), status: armed.status, from: mode.body?.mode || null, mode: armed.body?.mode || null, generation: armed.body?.generation ?? null,
+      expires_at: armed.body?.expires_at || null, computer_tier: armed.body?.receipt?.computer_tier || null,
+      owner_act_receipt_digest: armed.body?.receipt?.owner_act_receipt_digest || null, error: armed.body?.error || armed.error || null,
+    };
+    claim.mode_propose_only = { ...claim.standing_arm, armed_by_drill: true };
+    if (armed.status !== 200 || armed.body?.mode !== 'standing_consensus') {
+      phase('standing_arm_refused', claim.standing_arm);
+      return finish();
+    }
+    phase('standing_arm', claim.standing_arm);
+  } else if (['propose_only', 'accept_once', 'qualified_consensus'].includes(mode.body?.mode)) {
     claim.mode_propose_only = { at: iso(), mode: mode.body.mode, generation: mode.body.generation, armed_by_drill: false };
   } else {
     const armed = await c.api(sd('mode'), 'PUT', { mode: 'propose_only', expected_generation: mode.body?.generation ?? 0, idempotency_key: `${out.label}-propose-only-${randomUUID()}` });
@@ -1284,6 +1322,22 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   at('mode');
   await served('pre_apply');
   if (CHANGE === 'go-served') await probe('pre_apply');
+  const pinPreApplyCheckpoint = async () => {
+    const ck = await c.api(lc('checkpoint'), 'POST', {}, RESTORE_MIN * 60_000);
+    const checkpoint = ck.body?.published_checkpoint?.checkpoint || ck.body?.checkpoint || null;
+    claim.pre_apply_checkpoint = {
+      at: iso(), status: ck.status, checkpoint_digest: checkpoint?.checkpoint_digest || null,
+      accepted_event_head: checkpoint?.request?.accepted_event_head || null, effective_event_head: checkpoint?.request?.effective_event_head || null,
+      error: ck.body?.error || ck.error || null,
+    };
+    phase('pre_apply_checkpoint', claim.pre_apply_checkpoint);
+    if (!checkpoint) gap('pre_apply_checkpoint', 'POST /api/computers/{id}/lifecycle/checkpoint', `no published checkpoint (status ${ck.status}: ${claim.pre_apply_checkpoint.error || 'no body'})`);
+    return checkpoint;
+  };
+  // --autonomous: corpusd decides as soon as Verify passes, so the restore
+  // target and the boot baseline are taken before the request.
+  const autonomousPinned = AUTONOMOUS ? await pinPreApplyCheckpoint() : null;
+  const autonomousBootPrev = AUTONOMOUS ? bootSig(await c.observability()) : null;
 
   const story = await submitPrompt(c, engineeringStory(token), 'engineering', deadline);
   out.trajectory_id = story.body.trajectory_id;
@@ -1374,6 +1428,8 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
       // the row (D3), so a Report exists by now; acceptance checks it names
       // this operation.
       if (op.state === 'awaiting_approval' && claim.engineering_final_reports.length > 0) break;
+      // --autonomous: corpusd may decide between two polls.
+      if (AUTONOMOUS && ['accepted', 'materializing', 'applied'].includes(op.state) && claim.engineering_final_reports.length > 0) break;
     }
     await sleep(5_000);
   }
@@ -1381,7 +1437,8 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   const t = await inbox(textureInbox);
   const answer = (t?.records || []).find((r) => r.sender_inbox === mgmtInbox() && r.final);
   if (answer) claim.management_final_report_to_texture = { record_id: answer.record_id, stop_reason: answer.report?.stop_reason || null, at: answer.provenance?.committed_at || null };
-  if (!op || op.state !== 'awaiting_approval') {
+  const pastBoundary = AUTONOMOUS && ['accepted', 'materializing', 'applied'].includes(op?.state);
+  if (!op || (op.state !== 'awaiting_approval' && !pastBoundary)) {
     phase('decision_boundary_not_reached', { state: op?.state || null, last_intent_error: op?.last_intent_error || null });
     return finish();
   }
@@ -1413,24 +1470,43 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   // P8 / F6: the guest build is fenced up to here and only recorded after.
   const preObs = await c.observability();
   claim.build_pre_apply = preObs.body?.build?.commit || null;
-  fenceBuild('decision_boundary', preObs.body?.build);
+  // Past the boundary (--autonomous) the apply may already have changed
+  // the build on purpose (F6); the fence then stops at the request.
+  if (!pastBoundary) fenceBuild('decision_boundary', preObs.body?.build);
   await readObligations('pre_apply');
 
-  // The restore target: a checkpoint pinned at the pre-apply head.
-  const ck = await c.api(lc('checkpoint'), 'POST', {}, RESTORE_MIN * 60_000);
-  const pinned = ck.body?.published_checkpoint?.checkpoint || ck.body?.checkpoint || null;
-  claim.pre_apply_checkpoint = {
-    at: iso(), status: ck.status, checkpoint_digest: pinned?.checkpoint_digest || null,
-    accepted_event_head: pinned?.request?.accepted_event_head || null, effective_event_head: pinned?.request?.effective_event_head || null,
-    error: ck.body?.error || ck.error || null,
-  };
-  phase('pre_apply_checkpoint', claim.pre_apply_checkpoint);
-  if (!pinned) gap('pre_apply_checkpoint', 'POST /api/computers/{id}/lifecycle/checkpoint', `no published checkpoint (status ${ck.status}: ${claim.pre_apply_checkpoint.error || 'no body'})`);
+  // The restore target: a checkpoint pinned at the pre-apply head (under
+  // --autonomous it was pinned before the request, since corpusd decides
+  // as soon as Verify passes).
+  const pinned = AUTONOMOUS ? autonomousPinned : await pinPreApplyCheckpoint();
 
-  // The owner's approval act (P4, F4, F5), as `choir self-dev approve` does it.
-  let bootPrev = bootSig(await c.observability());
+  let bootPrev = AUTONOMOUS ? autonomousBootPrev : bootSig(await c.observability());
   let decided = null;
-  for (let tryN = 1; tryN <= 3 && !decided; tryN++) {
+  if (AUTONOMOUS) {
+    // P4: no owner act. The host builds the candidate (P5), then corpusd's
+    // poster decides on that build; the drill only watches the operation
+    // leave awaiting_approval and reads who decided.
+    const decideDeadline = Date.now() + Math.max(APPLY_MIN, DECIDE_MIN) * 60_000;
+    let cur = op;
+    while (Date.now() < decideDeadline && cur && cur.state === 'awaiting_approval') {
+      await sleep(3_000);
+      cur = (await getOp(op.operation_id)) || cur;
+    }
+    if (cur) { op = cur; noteOpState(op); }
+    claim.consensus_decision = {
+      at: iso(), state: cur?.state || null, decision_actor: cur?.decision_actor || null, decision_event: cur?.decision_event || null,
+      decision_receipt: cur?.decision_receipt || null, last_intent_error: cur?.last_intent_error || null,
+      consensus_actor: /^[0-9a-f]{64}$/.test(cur?.decision_actor || ''),
+    };
+    phase('consensus_decision', claim.consensus_decision);
+    if (cur && ['accepted', 'materializing', 'applied'].includes(cur.state) && claim.consensus_decision.consensus_actor) {
+      decided = { status: 200, autonomous: true, state: cur.state };
+      claim.heads.pre_apply = claim.heads.decision_boundary || claim.heads.start;
+      at('consensus_decision');
+    }
+  }
+  // The owner's approval act (P4, F4, F5), as `choir self-dev approve` does it.
+  for (let tryN = 1; tryN <= 3 && !decided && !AUTONOMOUS; tryN++) {
     const cur = await getOp(op.operation_id);
     if (cur && cur.state !== 'awaiting_approval') { if (['accepted', 'materializing', 'applied'].includes(cur.state)) decided = { status: 200, recovered: true, state: cur.state }; break; }
     const head = await readHead(`binding_${tryN}`);
@@ -1448,6 +1524,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
     });
     const row = { try: tryN, at: iso(), head: pickHead(head), arm_status: arm.status, arm_generation: arm.body?.generation ?? null, arm_error: arm.body?.error || arm.error || null };
     if (arm.status !== 200 || arm.body?.mode !== 'accept_once') { claim.owner_approval = row; phase('owner_approval_arm_refused', row); break; }
+    claim.decision_calls++;
     const d = await c.api(sd(`operations/${encodeURIComponent(op.operation_id)}/decision`), 'POST', {
       decision: 'approve', idempotency_key: `${out.label}-approve-${tryN}-${op.operation_id}`, verifier_ref: (op.verifier_refs || [])[0] || '', ...binding,
     }, 120_000);
@@ -1479,7 +1556,7 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
         const o = await obligations(c);
         const lines = obs.body.recent_log || [];
         const row = {
-          observed_at: iso(), ...bootInstant(obs.body, claim.owner_approval.at, iso()), restart_kind: o?.restart?.kind || null, restart_reason: o?.restart?.reason || null, restart_target: o?.restart?.target || null,
+          observed_at: iso(), ...bootInstant(obs.body, (claim.owner_approval || claim.standing_arm)?.at, iso()), restart_kind: o?.restart?.kind || null, restart_reason: o?.restart?.reason || null, restart_target: o?.restart?.target || null,
           crash_lines: lines.filter((l) => CRASH_LINE.test(l)).slice(0, 5), operation_state_before: op.state, build: obs.body?.build?.commit || null,
         };
         claim.boots.push(row);
@@ -1511,7 +1588,9 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
   }
   await readHead('post_apply');
   await readObligations('post_apply');
-  claim.build_post_apply = (await c.api('/api/runtime/observability', 'GET', undefined, 15_000)).body?.build?.commit || null;
+  const postApplyObs = (await c.api('/api/runtime/observability', 'GET', undefined, 15_000)).body;
+  claim.build_post_apply = postApplyObs?.build?.commit || null;
+  claim.effective_release_post_apply = postApplyObs?.effective_release || null;
   await served('post_apply');
   if (CHANGE === 'go-served') await probe('post_apply');
   const census = await c.api('/api/runtime/census', 'GET', undefined, 30_000);
@@ -1609,6 +1688,23 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
       && preHead?.effective_event_head && claim.pre_apply_checkpoint.effective_event_head === preHead.effective_event_head
       && claim.applied?.effective_head !== preHead.effective_event_head),
   };
+  if (AUTONOMOUS) {
+    // P4: one owner act (the standing arm, test tier), no owner_approval
+    // step and no decision call from the drill; the decision's actor is a
+    // consensus decision digest corpusd minted (an owner decision's actor
+    // is the owner's user id).
+    delete checks.owner_approved;
+    checks.standing_armed_test_tier = Boolean(claim.standing_arm?.status === 200 && claim.standing_arm.computer_tier === 'test' && claim.standing_arm.owner_act_receipt_digest);
+    checks.no_owner_approval_step = claim.owner_approval === null && claim.decision_calls === 0;
+    checks.consensus_accepted = Boolean(claim.consensus_decision?.consensus_actor && ['accepted', 'materializing', 'applied'].includes(claim.consensus_decision.state));
+    // P4 on P5: a consensus-accepted candidate runs only as the host build
+    // corpusd voted on, frontend-only or not: the serving release is layered
+    // and its binary is the host-built one.
+    const eff = claim.effective_release_post_apply;
+    checks.consensus_applied_host_build = Boolean(eff?.layered && eff.code_commit && eff.code_commit === claim.build_post_apply);
+    checks.restore_to_pre_apply_head = Boolean(claim.restore?.status === 200 && claim.restore.witness_matched && claim.restore.frontend_restaged
+      && claim.pre_apply_checkpoint?.checkpoint_digest && claim.restore.checkpoint_digest === claim.pre_apply_checkpoint.checkpoint_digest);
+  }
   if (GO_CHANGE) {
     // The completing assignment ran capsule jobs that ended done: a build
     // of bin/autoputer and a go test (direct or through sh -c).
@@ -1634,7 +1730,10 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
   }
   out.acceptance = {
     scenario: 'engineering',
-    claim: 'management Casts engineering on records; engineering Freezes; management Verifies the bundle digest engineering\'s final Report names; the owner approves; the materializer applies through one planned restart that resumes once; a restore lands on the pre-apply checkpoint',
+    claim: AUTONOMOUS
+      ? 'the owner arms standing_consensus once on a test computer; management Casts engineering on records; engineering Freezes; management Verifies; the host builds the candidate and corpusd decides from its own ballot on that build and management\'s signed ballot, with no owner approval; the materializer applies the host-built layered release through one planned restart; a restore lands on the pre-request checkpoint'
+      : 'management Casts engineering on records; engineering Freezes; management Verifies the bundle digest engineering\'s final Report names; the owner approves; the materializer applies through one planned restart that resumes once; a restore lands on the pre-apply checkpoint',
+    autonomous: AUTONOMOUS,
     reached, checks, failed: Object.keys(checks).filter((k) => !checks[k]),
     served_change_then_restored: servedOK, served_required: REQUIRE_SERVED,
     operation_id: op?.operation_id || null, bundle_digest: op?.bundle_digest || null, assignment_id: cast?.assignment_id || null,

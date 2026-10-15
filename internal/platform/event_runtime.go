@@ -58,6 +58,17 @@ func (s *Service) ControlKeyResolver() computerevent.KeyResolver {
 	return bootstrapControlKeyResolver{store: s.store, domain: "platform-control", keyID: s.signingKey.KeyID, publicKey: s.signingKey.Public}
 }
 
+// ConsensusActuatorRuntime builds the P4 decision poster, signing with the
+// same platform-control key as mode receipts, event heads and host builds.
+// hostBuilds is P5's host build service (nil: every request is refused as
+// unavailable).
+func (s *Service) ConsensusActuatorRuntime(modes *SelfDevelopmentModeCAS, hostBuilds HostBuildJobs) (*ConsensusActuator, error) {
+	if s == nil || s.store == nil || s.signingKey == nil {
+		return nil, fmt.Errorf("consensus actuator runtime: platform signer unavailable")
+	}
+	return NewConsensusActuator(s.store, modes, s.computerEventSigningKey(), hostBuilds)
+}
+
 func (s *Service) SelfDevelopmentModeRuntime() (*SelfDevelopmentModeCAS, error) {
 	if s == nil || s.store == nil || s.signingKey == nil {
 		return nil, fmt.Errorf("self-development mode runtime: platform signer unavailable")

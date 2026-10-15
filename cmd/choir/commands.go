@@ -613,10 +613,10 @@ func buildRegistry() []*command {
 			path: []string{"self-dev", "mode", "set"}, summary: "Generation-CAS the explicit computer mode",
 			params: []param{
 				computerParam(),
-				pStr("mode", "Computer mode").req().oneOf("off", "audit_only", "propose_only", "accept_once", "qualified_consensus"),
+				pStr("mode", "Computer mode").req().oneOf("off", "audit_only", "propose_only", "accept_once", "qualified_consensus", "standing_consensus"),
 				pInt("expected_generation", "Expected mode generation").dflt(0).atLeast(0),
 				idempotencyParam("Unique idempotency key").req(),
-				pStr("expires_at", "Canonical UTC expiry for accept_once or qualified_consensus"),
+				pStr("expires_at", "Canonical UTC expiry for accept_once, qualified_consensus or standing_consensus (at most 24 h ahead)"),
 				pStr("operation", "Exact operation ID for accept_once or qualified_consensus"),
 				pStr("expected_desired_head", "Expected desired event head for accept_once or qualified_consensus"),
 				pStr("expected_effective_head", "Expected effective event head for accept_once or qualified_consensus"),
@@ -624,7 +624,7 @@ func buildRegistry() []*command {
 				pStr("expected_desired_commitment", "Expected desired state commitment for accept_once or qualified_consensus"),
 				pStr("expected_effective_commitment", "Expected effective state commitment for accept_once or qualified_consensus"),
 				pStr("bundle", "Exact bundle digest for accept_once or qualified_consensus"),
-				pStr("policy_digest", "Frozen policy digest for qualified_consensus"),
+				pStr("policy_digest", "Frozen policy digest for qualified_consensus or standing_consensus"),
 				pStr("consensus_receipt_digest", "QualifiedConsensusReceipt digest for qualified_consensus"),
 			},
 			usage:  "--computer, --mode, and --idempotency-key are required; positional arguments are forbidden",
@@ -996,6 +996,12 @@ func selfDevModeSet(x *call) (any, error) {
 	if mode == "qualified_consensus" {
 		body["policy_digest"] = x.trim("policy_digest")
 		body["consensus_receipt_digest"] = x.trim("consensus_receipt_digest")
+	}
+	if mode == "standing_consensus" {
+		// P4: the owner's standing autonomous arm, test-tier computers only:
+		// a policy (reversible-selfdev-v1) and an expiry at most 24 h ahead.
+		body["policy_digest"] = x.trim("policy_digest")
+		body["expires_at"] = x.str("expires_at")
 	}
 	return sendRaw(x, http.MethodPut, selfDevPath(x.str("computer"), "mode"), body)
 }

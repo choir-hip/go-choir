@@ -184,8 +184,11 @@ func (a *OwnerActAuthority) refuse(sentinel error, what, computerID, reason stri
 // OwnerActKindForMode names the owner act a mode write is: arming
 // accept_once is the owner's approval of exactly one operation and bundle.
 func OwnerActKindForMode(mode string) string {
-	if strings.TrimSpace(mode) == SelfDevelopmentModeAcceptOnce {
+	switch strings.TrimSpace(mode) {
+	case SelfDevelopmentModeAcceptOnce:
 		return owneract.ActSelfDevApprove
+	case SelfDevelopmentModeStandingConsensus:
+		return owneract.ActSelfDevAutonomyArm
 	}
 	return owneract.ActSelfDevModeSet
 }
@@ -193,11 +196,17 @@ func OwnerActKindForMode(mode string) string {
 // OwnerActModeSubject is the subject the proxy signs for a mode write and
 // corpusd checks: the request commitment binds every field of the write.
 func OwnerActModeSubject(computerID string, request SetSelfDevelopmentModeRequest) (map[string]any, error) {
+	return OwnerActModeSubjectWithTier(computerID, request, "")
+}
+
+// OwnerActModeSubjectWithTier adds the computer tier the proxy read from
+// vmctl, which a standing_consensus arm must carry (P4).
+func OwnerActModeSubjectWithTier(computerID string, request SetSelfDevelopmentModeRequest, tier string) (map[string]any, error) {
 	commitment, err := SelfDevelopmentModeRequestCommitment(computerID, request)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
+	subject := map[string]any{
 		"mode":                     strings.TrimSpace(request.Mode),
 		"expected_generation":      request.ExpectedGeneration,
 		"operation_id":             request.OperationID,
@@ -205,7 +214,11 @@ func OwnerActModeSubject(computerID string, request SetSelfDevelopmentModeReques
 		"policy_digest":            request.PolicyDigest,
 		"consensus_receipt_digest": request.ConsensusReceiptDigest,
 		"request_commitment":       commitment,
-	}, nil
+	}
+	if tier = strings.TrimSpace(tier); tier != "" {
+		subject["computer_tier"] = tier
+	}
+	return subject, nil
 }
 
 // verifyModeWrite checks the owner-act receipt on a host-internal mode
@@ -314,19 +327,27 @@ func (r modeReceiptLogRow) field(name string) string {
 // event.
 func (a *OwnerActAuthority) admitEffectAccepted(ctx context.Context, tx *sql.Tx, event computerevent.Event, eventDigest string) error {
 	reason, mark, err := a.effectAcceptedRefusal(ctx, tx, event, eventDigest)
+	// P4: the consensus branch always enforces. There is no pre-P4
+	// consensus traffic to observe, and observe would admit exactly the
+	// guest-forged quorum the branch exists to stop.
+	enforce := a.Enforcing() || IsConsensusAuthority(event.AuthorityRef)
 	if err != nil {
-		if a.Enforcing() {
+		if enforce {
 			return fmt.Errorf("%w: authority lookup failed: %v", ErrEffectAdmissionRefused, err)
 		}
 		log.Printf("owner-act: observe: effect_accepted authority lookup failed computer=%s event=%s: %v", event.ComputerID, eventDigest, err)
 		return nil
 	}
 	if reason != "" {
+		if enforce && !a.Enforcing() {
+			log.Printf("owner-act: enforce (consensus): refused effect_accepted %s computer=%s: %s", eventDigest, event.ComputerID, reason)
+			return fmt.Errorf("%w: %s", ErrEffectAdmissionRefused, reason)
+		}
 		return a.refuse(ErrEffectAdmissionRefused, "effect_accepted "+eventDigest+" authority="+event.AuthorityRef, event.ComputerID, reason)
 	}
 	if mark != nil {
 		if err := mark(); err != nil {
-			if a.Enforcing() {
+			if enforce {
 				return fmt.Errorf("%w: record admission: %v", ErrEffectAdmissionRefused, err)
 			}
 			log.Printf("owner-act: observe: record admission failed computer=%s event=%s: %v", event.ComputerID, eventDigest, err)
@@ -345,7 +366,9 @@ func (a *OwnerActAuthority) effectAcceptedRefusal(ctx context.Context, tx *sql.T
 	case strings.HasPrefix(authority, AuthorityExternalOwner):
 		return a.externalOwnerRefusal(ctx, tx, event, eventDigest, strings.TrimPrefix(authority, AuthorityExternalOwner))
 	case strings.HasPrefix(authority, AuthorityQualifiedConsensus):
-		return "qualified-consensus authority is refused until S2 (signed ballots and a corpusd consensus decision receipt)", nil, nil
+		// P4: admitted only for a ConsensusDecisionReceipt corpusd's
+		// decision poster minted from signed ballots.
+		return consensusDecisionRefusal(ctx, tx, event, eventDigest, a.now())
 	case authority == "":
 		return "no authority_ref", nil, nil
 	default:

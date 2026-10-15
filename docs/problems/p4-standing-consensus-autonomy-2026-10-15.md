@@ -404,6 +404,50 @@ Still allowed (no regression):
   (the only owner act), expect `applied` with no `owner_approval` step and a
   `qualified-consensus:` decision actor.
 
+## Build
+
+What landed (red build, on P5's host build; no second host service):
+
+- corpusd casts the `capsule-verifier` ballot on the operation's P5 host
+  build, signed by platform-control, and mints the decision when it holds
+  two valid ballots under a live standing arm (`internal/platform`).
+- The guest driver host-builds every standing candidate before asking for
+  the decision, refuses a decision that names another build (failure mode
+  30, `runStandingConsensus`), and the materializer applies a
+  consensus-decided operation only as that build (failure mode 31).
+- `choir` can write the `standing_consensus` mode (policy digest and
+  expiry); the proxy signs the test-tier classification.
+
+Deploy notes:
+
+- **No new unit.** corpusd, the proxy and the guest image carry the change;
+  there is no port 8089 and no host-builder key.
+- **The decision poster needs P5's host build enabled:** set
+  `CORPUSD_HOST_BUILD_SOURCE_DIR` on corpusd (P5's switch; the other
+  `CORPUSD_HOST_BUILD_*` variables keep their defaults). Without it there is
+  no host build, no host ballot and no quorum, so no decision is ever
+  minted.
+- **Nothing is autonomous until the owner arms a test computer.** The new
+  mode is owner-only, test-tier only, bounded by an expiry of at most 24 h,
+  and defaults to off. A deploy changes no computer's behavior; production
+  and primary-tier computers refuse the arm.
+- **Staging proof**, on a fresh test computer, once the Landing Loop has
+  deployed the SHA:
+  `node scripts/reeng_tracer.mjs --label p4-autonomous --scenario engineering --change static --autonomous --autonomy-min 120 --decide-min 75`
+  (`--change go` / `go-served` exercise the Go-touching host build; the
+  decision wait covers P5's queue deadline and build timeout). The drill's
+  only owner act is the arm; it expects `applied` with a
+  `qualified-consensus:` decision actor and no decision call of its own.
+- **Rollback.** Disarm (any other mode) or let the window expire; unset
+  `CORPUSD_HOST_BUILD_SOURCE_DIR` to stop every new decision; `git revert`
+  the code commit (tables and the ModeReceipt field are additive).
+
+Local proof run before the commit: focused `internal/proxy`, `owneract`,
+`receiptsigner`, `decisionpolicy`, `platform`, `hostbuild`, `cmd/choir`
+and the `internal/agentcore` standing-consensus end-to-end tests, all
+passing. Local proof does not cover a real nix host build of a standing
+candidate or the vmctl test-tier classification (staging).
+
 ## Ceremony
 
 - **Conjecture delta.** Before: an `effect_accepted` is admitted only

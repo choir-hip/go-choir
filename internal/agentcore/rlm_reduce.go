@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/coagentpacket"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -1528,6 +1529,11 @@ func (r *rlmCallReduction) commitVerifyIntent(ctx context.Context, in yaegikerne
 		func(rule types.PrecommitRule) (types.RuleSettlement, bool) {
 			return types.SettleRuleOnVerify(rule, verdict)
 		})
+	// P4: under the owner's standing_consensus arm, a passed Verify asks
+	// corpusd's decision poster once (no-op under any other mode).
+	if state, _ := out["state"].(string); state == selfdev.StateAwaitingApproval {
+		rt.triggerStandingConsensus(operation.OperationID, r.scope.RunID)
+	}
 	return out, nil
 }
 

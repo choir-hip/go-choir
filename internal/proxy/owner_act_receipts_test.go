@@ -15,8 +15,10 @@ import (
 	"time"
 
 	embedded "github.com/dolthub/driver/v2"
+	"github.com/yusefmosiah/go-choir/internal/decisionpolicy"
 	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/platform"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 // S1: the proxy signs an owner-act receipt over every owner mode write it
@@ -214,5 +216,53 @@ func TestOwnerActEndToEndThroughCorpusdEnforce(t *testing.T) {
 	off := `{"mode":"off","expected_generation":1,"idempotency_key":"off-e2e"}`
 	if rec := env.send(t, http.MethodPut, "/api/computers/computer-a/self-development/mode", off, ""); rec.Code != http.StatusOK {
 		t.Fatalf("owner session off through the proxy: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// P4 failure mode 15: the proxy arms standing_consensus only on a computer
+// vmctl classes as test, and signs that tier into the owner act; through
+// corpusd's real mode route the test-tier arm lands with the tier recorded.
+func TestStandingArmThroughTheProxyIsTestTierOnly(t *testing.T) {
+	signer := testOwnerActSigner(t)
+	verifier, err := owneract.NewVerifier(signer.PublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	corpusd := openTestCorpusdModes(t, platform.NewOwnerActAuthority(platform.OwnerActEnforce, verifier))
+	env := newOwnerActEnv(t)
+	env.handler.cfg.CorpusdURL = corpusd.URL
+	env.handler.ownerActSigner = signer
+	class := "primary"
+	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"computer_id": "computer-a", "desktop_id": "primary", "user_id": env.user.ID,
+			"state": "active", "computer_url": "http://127.0.0.1:1", "vm_id": "vm-a", "warmness_class": class,
+		})
+	}))
+	defer ownership.Close()
+	env.handler.vmctlClient = vmctl.NewClient(ownership.URL)
+	expires := time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond).Format(time.RFC3339Nano)
+	body := fmt.Sprintf(`{"mode":"standing_consensus","expected_generation":0,"idempotency_key":"standing-proxy","policy_digest":%q,"expires_at":%q}`,
+		decisionpolicy.PolicyDigestReversibleSelfDevV1, expires)
+	key := env.key(t, "computer:self_development:mode", OwnerActsScope)
+
+	for _, refusedClass := range []string{"primary", "premium_always_on", "critical_protected", ""} {
+		class = refusedClass
+		if rec := env.send(t, http.MethodPut, "/api/computers/computer-a/self-development/mode", body, key); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "test-tier") {
+			t.Fatalf("class %q: %d %s", refusedClass, rec.Code, rec.Body.String())
+		}
+	}
+	class = "test"
+	rec := env.send(t, http.MethodPut, "/api/computers/computer-a/self-development/mode", body, key)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("test-tier arm: %d %s", rec.Code, rec.Body.String())
+	}
+	var mode platform.SelfDevelopmentMode
+	if err := json.Unmarshal(rec.Body.Bytes(), &mode); err != nil {
+		t.Fatal(err)
+	}
+	if mode.Mode != platform.SelfDevelopmentModeStandingConsensus || mode.Receipt.KindFields["computer_tier"] != platform.ComputerTierTest ||
+		mode.Receipt.KindFields["owner_act_receipt_digest"] == nil {
+		t.Fatalf("standing arm: %+v", mode)
 	}
 }

@@ -236,7 +236,14 @@ type Runtime struct {
 	// and resuming that update after the self-restart reads it back.
 	eventPayloadReader computerevent.ArtifactReader
 	selfdevVerifier    *receiptsigner.Client
-	selfdevControl     *selfdev.GuestCredentials
+	// selfdevBallotSigner is the guest-core signer the standing-consensus
+	// driver signs management's reviewer ballot with (P4); nil keeps the
+	// guest from ever asking corpusd's decision poster.
+	selfdevBallotSigner standingBallotSigner
+	// selfdevStandingPoll overrides how often the standing-consensus driver
+	// reads a queued or running host build (tests).
+	selfdevStandingPoll time.Duration
+	selfdevControl      *selfdev.GuestCredentials
 	// selfdevHostBuilder overrides the corpusd host build client (P5);
 	// nil derives it from eventPayloadReader. Tests inject a fake.
 	selfdevHostBuilder selfdevHostBuilder
@@ -761,6 +768,14 @@ func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realiz
 func WithSelfDevelopmentVerifier(client *receiptsigner.Client) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.selfdevVerifier = client
+	}
+}
+
+// WithSelfDevelopmentBallotSigner wires the guest-core signer for the
+// standing-consensus reviewer ballot (P4).
+func WithSelfDevelopmentBallotSigner(signer standingBallotSigner) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.selfdevBallotSigner = signer
 	}
 }
 

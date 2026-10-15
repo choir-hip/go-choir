@@ -87,7 +87,10 @@ func (rt *Runtime) selfDevelopmentProposalAuthorized(ctx context.Context) error 
 		return err
 	}
 	switch strings.TrimSpace(mode.Mode) {
-	case platform.SelfDevelopmentModeProposeOnly, platform.SelfDevelopmentModeAcceptOnce, platform.SelfDevelopmentModeQualifiedConsensus:
+	case platform.SelfDevelopmentModeProposeOnly, platform.SelfDevelopmentModeAcceptOnce, platform.SelfDevelopmentModeQualifiedConsensus,
+		// P4: a standing arm proposes too; its candidates are decided by
+		// corpusd's poster instead of an owner act.
+		platform.SelfDevelopmentModeStandingConsensus:
 		return nil
 	default:
 		return fmt.Errorf("mode is %q", mode.Mode)
