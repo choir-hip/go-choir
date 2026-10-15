@@ -1,0 +1,242 @@
+# ChatGPT prompt-cache ratio on the paper computer (2026-10-15)
+
+Status: green (docs only). Owner priority: the paper's chatgpt cache ratio
+above 90%, prompts append-only, no economizing on search. Companion to
+[autopaper-compute-halving-2026-10-15.md](autopaper-compute-halving-2026-10-15.md)
+and [the 72-76% problem doc](../problems/paper-chatgpt-cache-ratio-below-85-after-restarts-2026-10-15.md).
+
+Tags: **[E]** evidence read from the Node B gateway journal, **[C]** read from
+code, **[H]** hypothesis.
+
+## 0. What the journal can and cannot show
+
+[E] The gateway logs, per call, `vm`, `provider`, `model`, `messages=`,
+`tools=`, `system_chars=`, `tokens_in+out`, `cached_in`. It does **not** log
+the cache key, the `PromptCacheKey` label, the desk, or a run/thread id. So
+the label/key breakdown the task asked for cannot be read from the journal.
+The only desk-like discriminator is `system_chars`. For the paper's 5,303
+chatgpt calls since 07:00 UTC (all `gpt-6-luna`, `tools=1`) it takes exactly
+three values for the whole window: 11,922, 19,638 and 25,449. Below they are
+called **system A / B / C**. The label names the code can emit
+(`agentProfileForRun`, `management_task`, `research_child`, `run`) are in
+`promptCacheScope` / `researchChildCacheScope` [C]; mapping A/B/C onto them is
+not possible from the journal. [H] From prompt-file sizes plus the generated
+verb list, A is probably Texture, B research, C management, and B's share of
+input (49%) matches research's 53% share in the compute-halving report, but
+this is unconfirmed. Adding `cache_key` (a hash is enough) and the label to the
+`provider: ... stream complete` log line is the first lever (section 4).
+
+Method: 22,908 paper-VM gateway lines (07:00 to 16:xx UTC) parsed; request
+and success lines paired FIFO per (vm, provider); calls chained into threads
+by (same `system_chars`, `messages` +1..8, input not shrinking, under 1 h).
+Scratch scripts were in the session scratchpad, not committed. **Caveat:**
+the chaining is a reconstruction. 1,244 of 3,851 "later" calls report a cached
+count above their reconstructed parent's input, so some links are wrong
+(interleaved threads, or the backend caching more than the parent's input).
+Per-thread split numbers below are therefore +/- a few points; the aggregate
+hourly numbers are exact, and the isolated-call check (section 3b) is clean.
+
+## 1. Per hour (paper, chatgpt)
+
+[E] Hour = UTC. The paper was silent on chatgpt from about 10:56 to 12:40
+(host reboot, see `paper-silent-since-10-56-after-host-reboot-2026-10-15.md`),
+so there is no 11:xx row.
+
+| hour | calls | input tokens | cached | cached % | notes |
+|---|---|---|---|---|---|
+| 07 | 544 | 5.73M | 2.07M | 36.1 | cache-routing deploy 07:52:27 (gateway); ramp |
+| 08 | 728 | 9.70M | 7.25M | 74.7 | gateway restarts 08:05, 08:23 |
+| 09 | 343 | 7.61M | 6.63M | 87.1 | gateway restart 09:50 |
+| 10 | 110 | 1.37M | 0.94M | 68.7 | restarts 10:40, 10:49/10:50 (reboot) |
+| 12 | 407 | 4.89M | 3.71M | 75.8 | silent until ~12:40 |
+| 13 | 1,201 | 27.54M | 24.24M | 88.0 | restarts 13:14, 13:54 |
+| 14 | 997 | 12.16M | 9.27M | 76.2 | restart 14:56 |
+| 15 | 973 | 10.97M | 7.95M | 72.5 | restarts 15:16, 15:39 |
+
+Window total 07:00-16:00: 5,303 calls, 79.97M input, 62.04M cached = 77.6%.
+Steady state is about 81%: 08:30-10:59 = 81.2%, 12:40-16:00 = 81.3%.
+
+The 88% hour (13h) and the 87% hour (09h) are **composition**, not a better
+cache: 13h carries 27.5M tokens in 1,201 calls, with a few threads at
+100k-250k-token contexts that cache at 96-99%. The ratio is token-weighted, so
+a handful of huge, well-cached calls decides the hour.
+
+[E] Cached % by call size (all hours):
+
+| input tokens per call | calls | input | uncached | cached % |
+|---|---|---|---|---|
+| <5k | 309 | 1.3M | 0.82M | 38.5 |
+| 5-8k | 1,543 | 10.2M | 4.81M | 52.7 |
+| 8-12k | 1,533 | 14.8M | 5.39M | 63.6 |
+| 12-20k | 1,047 | 16.1M | 3.94M | 75.4 |
+| 20-40k | 594 | 15.8M | 2.31M | 85.3 |
+| 40-80k | 185 | 10.5M | 0.50M | 95.3 |
+| 80k+ | 92 | 11.3M | 0.16M | 98.6 |
+
+Calls under 12k tokens are 64% of calls, 33% of input and **61% of uncached
+tokens (11.0M of 17.9M)**. Thread length: 1,571 of the reconstructed threads'
+calls are in 2-3-call threads, 2,172 in 4-6-call threads; the median thread is
+about 3 calls, so most threads are short.
+
+### Restart effect
+
+[E] Cached % by minutes since the most recent deploy/boot (after 08:24, so the
+07:52 ramp is excluded): 0-5 min 70.3% (300 calls, 3.4M); 5-10 min 79.5%;
+10-20 min 87.2%; 20-40 min 76.1%; 40-90 min 81.6%. So the first ~5 minutes run
+about 10 points below steady state, and it is gone by minute 5-10. Those 5
+minutes hold about 4% of tokens, so restarts cost roughly **0.4 points** of the
+ratio, not 10. Per-event 20-min windows are mixed (13:14 +19 points because a
+huge cached thread ran; 13:54 -15; 14:56 -4; 15:16 -4; 15:39 +6). The problem
+doc's hypothesis "restarts keep it at 70-76%" is **not supported**: the same
+ratio (81%) holds in the long quiet window 08:30-10:59 and after 12:40. The
+ratio is low because of what happens inside threads, not because of restarts.
+
+## 2. Where the uncached tokens are
+
+[E] Total uncached 17.93M of 79.97M (22.4%).
+
+| system | calls | input | uncached | share of uncached | cached % |
+|---|---|---|---|---|---|
+| A (11,922 chars) | 1,870 | 22.1M | 6.74M | 37.6% | 69.5 |
+| B (19,638 chars) | 2,024 | 39.1M | 6.37M | 35.5% | 83.7 |
+| C (25,449 chars) | 1,409 | 18.7M | 4.82M | 26.9% | 74.2 |
+
+By call position (reconstructed): first call of a thread 1,452 calls, 4.84M
+uncached (27%); calls 2+ in a thread 3,851 calls, 13.1M uncached (73%).
+
+Decomposition of the 17.9M uncached, approximate (+/- a few points, see the
+chaining caveat):
+
+| part | tokens | % of all input | explanation |
+|---|---|---|---|
+| later calls, prefix not recovered ("mid-thread miss") | ~6.5M | 8.1 | cached count is below what the previous call of the thread should have left |
+| first calls (fresh run 1.4M + resumed activation 3.4M) | ~4.8M | 6.0 | unique content (run context, inbox, frame) after a static prefix; resumed activations replay history |
+| later calls, the appended delta and the 1,024 grid tail | ~6.6M | 8.3 | previous output plus tool result, rounded to the cache block; append-only makes this irreducible |
+
+Cached counts are always `512 + 1024k` (4,700 calls) or 0 (603 calls)
+[E]: the backend caches in 1,024-token blocks offset by 512, so each call loses
+0-1,023 tokens at the tail on top of the real delta. That matters for the
+short calls, which are most of the uncached volume.
+
+## 3. Why they are not cached
+
+### 3a. Candidates ruled out
+
+- **Prefix below the 1,024 minimum.** [E] Smallest first call is 3,469
+  tokens; the static prefix (system plus tools) alone is about 2.5k-5.6k.
+  Not the cause.
+- **Volatile content early in the prefix.** [C] `systemPromptForRun`
+  (`internal/agentcore/tool_profiles.go`) carries only stable text; the time
+  and ids are in the `Run context:` user turn (`run_context.go`). [E]
+  `system_chars` is constant per desk for 8+ hours and across 12 restarts. The
+  run-context turn holds a time to the second, but it is message 0 of a thread
+  and replayed byte-identically (the persisted turn is replayed, not
+  re-rendered); within one thread it is not a per-call change. Across threads it
+  only affects the unique tail, not the static prefix before it.
+- **Tool definitions reordered.** [E] `tools=1` on every call. [C]
+  `convertOpenAITools` keeps order and `InputSchema` is a map, which Go
+  marshals with sorted keys. `chatgpt_cache_stability_test.go` asserts that
+  consecutive requests share every byte up to the new turn. Not the cause on
+  our side, with the caveat that the test uses synthetic messages, not the live
+  run memory replay (`contextMessages` rebuilds the history from the store
+  every call).
+- **Cache TTL lapsing between calls.** [E] For later calls with a reliable
+  parent, full-hit share by gap since the parent finished: 0-2 s 62%, 3-10 s
+  64%, 11-30 s 65%, 31-60 s 64%, 1-2 min 67%, 2-5 min 62%, 5-10 min 54%,
+  10+ min 58%; prefix recovered 81-86% at every gap. The miss rate is flat in
+  time, so a 5-10 minute TTL does not explain the misses.
+- **Concurrency / too many concurrent calls on one prefix.** [E] Miss rate does
+  not rise with the number of in-flight same-system calls (42-52% at 1..6).
+- **Compaction.** [C] `compactIfNeeded` rewrites the prefix when a threshold is
+  crossed; the 40k+ calls cache at 95-99%, so it is not a visible share.
+- **Restarts.** [E] Section 1: about 0.4 points.
+
+### 3b. What is left: the backend does not find the previous call's cache
+
+[E] Cleanest evidence: 110 later calls with no other chatgpt call overlapping
+them or their parent (so the parent link is certain, gap about 1 s): 51 full
+hits, 44 partial, 15 zero, i.e. **54% miss**, even one second after the
+previous call finished. Example thread from the journal (12:10, system B,
+`messages` 2,4,6,8,10): input 4,713/cached 0; 5,266/4,608; 5,772/4,608;
+6,142/**0**; 6,667/5,632. A call that cached 4,608 is followed by a call that
+caches 0, then 5,632.
+
+[E] The miss values cluster on a few numbers (0, 2,560, 3,584, 4,608, 5,632
+...). The existing test file notes 2,560/3,584/5,632 are the three desks'
+static prefix sizes: a miss typically still hits the shared static prefix
+(system plus tools, identical across threads of a desk) but not the
+conversation after it. That is the signature of the request landing on a cache
+machine that has the static prefix but not this thread's earlier calls.
+
+[E] Before the 07:52 headers deploy the mid-thread miss rate was 87% (07h);
+afterwards 29-53% per hour. The headers helped a lot but did not make the
+routing sticky. The remaining ~45-50% miss rate does not depend on gap, time
+of day, size, desk or concurrency, and survived 12 restarts.
+
+[H] Root-cause verdict: the dominant remaining loss (about 8 points of the
+22) is **imperfect affinity on the ChatGPT backend** for a stable
+`prompt_cache_key` plus `session_id`/`conversation_id`, not anything in our
+prompt bytes (which the code and tests say are append-only). It is a
+hypothesis because the journal has no per-call prefix hash; confirming whether
+our bytes are identical is the first lever. Secondary [H] factors: the account
+is shared by 995 non-paper chatgpt calls in the same window (other computers
+and the search plane use the same Codex auth), so the backend's per-account
+load balancing may also fragment affinity; and a very small prefix is cheap
+for the backend to evict.
+
+### 3c. First calls (27% of uncached)
+
+[E] Fresh-run first calls cache 73% (5.28M in, 1.42M uncached); 77 of 452
+had cached = 0 although the static prefix is 3-6k tokens (the same
+mis-routing as 3b). Resumed activations (`messages` over 3 at the first call)
+cache 68% (10.6M in, 3.4M uncached). Resumed first calls by size: under 10k
+tokens 49.5% (817 calls), 10-30k 70.5%, 30-70k 89%, 70k+ 98%. By the time since
+the nearest earlier call of the same system with a smaller history (matching
+is heuristic): under 1 min 83%, 1-60 min 55-61%, over 60 min 63%. Most of this
+is the unique content (inbox records, the Texture frame with the document
+head, assignment text) that is new by construction, and it is a bigger share
+of a small call. Not reducible without dropping content.
+
+[C] Texture's frame is a separate new user turn appended after replayed
+history (`FrameHeader`, `internal/texturewrite/frame.go`), not a rewrite of an
+earlier turn, so it is already append-only.
+
+## 4. Levers, ranked
+
+Gains are on the 77.6% window average (81% steady); they are estimates from
+the decomposition above, with the chaining caveat.
+
+| rank | lever | expected gain | risk | notes |
+|---|---|---|---|---|
+| 1 | **Add `cache_key` (hash), label, and a prefix hash (instructions, tools, each input item boundary) to the gateway per-call log**, then re-run this analysis per key | 0 directly; decides whether levers 2-3 can work | low (green/yellow: log field) | the journal today cannot separate "our bytes drifted" from "the backend routed away". Without it the 8-point loss cannot be assigned |
+| 2 | **Fix mid-thread misses**. If the prefix hash shows our bytes are stable: A/B the routing key (a coarser key per desk role instead of per desk thread; or a key per run; headers on/off), and try `prompt_cache_retention` if the Codex backend accepts it | up to +8 points if all misses go (77.6 -> 85.7); +4 if half (81.6) | orange/red (provider requests); the data does not say a coarser key helps (miss rate is independent of concurrency and gap); a coarser key risks overflow past about 15 requests/min per key on the API | the only lever with enough size to reach the 85-90% band; unproven |
+| 3 | **If the prefix hash shows drift**, fix it (the live run-memory replay, tool-output re-serialisation) | same +8 | low once located | would be the cheapest case: our bug, no provider dependence |
+| 4 | Lengthen the **stable, shared prefix** (desk-stable instructions, skills text placed in the system prompt, ahead of anything unique) | +2.5 points per extra 2k stable tokens on every thread (calculated: (62.0+10.6)/(80.0+10.6) = 80.1%) | red-adjacent (prompt text), costs real tokens on every call at the cached price | **raises the metric, not the savings**: it adds cached tokens, and a miss makes them expensive. Do only if the content is wanted anyway |
+| 5 | Fewer, longer threads (keep a desk's thread instead of new runs): fewer first calls and resumed-activation uncached content | maybe +1 to +3 | design change in desk activation | first calls are 6 points of uncached; the unique content does not shrink, but the static prefix is amortised |
+| 6 | Keep-warm pings | about 0 | wasted calls | gap-flat miss rate says TTL is not binding; do not do |
+| 7 | Restart avoidance | about +0.4 | operational | restart effect is 5 minutes, about 10 points on 4% of tokens |
+
+Not recommended: elision or search trimming (owner ruling, and it rewrites
+cached bytes).
+
+Reachability: with zero mid-thread misses the window is about 85.7%. The rest
+(first-call unique content 6.0 points, appended delta plus 1,024-grid tail 8.3
+points) is irreducible under append-only without padding. **90% is not
+reachable by fixing the miss rate alone**; it needs lever 2 fully plus about
+4 points from lever 4 or 5. A realistic target without padding is 84-86% on
+the current mix; the 13h-style hours above 88% come from long, huge-context
+runs, not from a better cache.
+
+## 5. Next measurement
+
+1. Ship the log fields in lever 1 (gateway, `internal/provider/provider.go`
+   log lines near 2551/2721, plus the label in the request). Class: orange (a
+   log line; nothing sensitive: hash only, no key or token).
+2. After 2 hours with no deploy, rebuild the table by (label, key): calls,
+   first vs later, cached %, and whether a missed call's prefix hash equals the
+   previous call's.
+3. Only then change the key scope or the retention parameter.
+
+Mutation class of this document: green. Heresy delta: discovered (the
+problem doc's restart hypothesis is not supported by the journal; the journal
+lacks the cache key), introduced none, repaired none.
