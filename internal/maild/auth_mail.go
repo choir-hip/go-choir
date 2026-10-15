@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // AuthRecoveryLinkPath is the host-internal route the auth service calls to
@@ -51,6 +53,13 @@ func (h *Handler) HandleAuthRecoveryLink(w http.ResponseWriter, r *http.Request)
 	}
 	if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Internal-Caller")), "true") {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal caller required"})
+		return
+	}
+	// Loopback is not a credential on its own: the caller must also hold the
+	// host-internal token (docs/problems/loopback-is-a-credential-2026-10-14.md).
+	// Checked after the transport, so a guest call never reaches this path.
+	if !hostauth.Authorize(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "internal credential required"})
 		return
 	}
 	// The proxy marks everything it forwards with X-Authenticated-User. Auth

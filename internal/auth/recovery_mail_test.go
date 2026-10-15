@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/maild"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -331,24 +333,34 @@ func TestConsumeRecoveryTokenConcurrentUseHasOneWinner(t *testing.T) {
 	}
 }
 
-// TestRecoveryRequestDeliversThroughMaild runs the real path: auth's maild
-// mailer posts to maild's internal route, and maild sends one fixed-template
-// email through a fake Resend endpoint. No real email is sent.
-func TestRecoveryRequestDeliversThroughMaild(t *testing.T) {
-	var (
-		mu       sync.Mutex
-		payloads []map[string]any
-	)
+// testMaild starts a real maild handler (behind the shared server
+// middleware, so hostauth applies) whose Resend endpoint is a fake that
+// records each send. No real email is sent.
+type testMaild struct {
+	srv      *httptest.Server
+	mu       sync.Mutex
+	payloads []map[string]any
+}
+
+func (m *testMaild) sends() []map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]map[string]any(nil), m.payloads...)
+}
+
+func startTestMaild(t *testing.T) *testMaild {
+	t.Helper()
+	m := &testMaild{}
 	resend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var p map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&p)
-		mu.Lock()
-		payloads = append(payloads, p)
-		mu.Unlock()
+		m.mu.Lock()
+		m.payloads = append(m.payloads, p)
+		m.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"fake-resend-1"}`))
 	}))
-	defer resend.Close()
+	t.Cleanup(resend.Close)
 
 	dir := t.TempDir()
 	mcfg := &maild.Config{
@@ -376,12 +388,20 @@ func TestRecoveryRequestDeliversThroughMaild(t *testing.T) {
 	}
 	ms := server.NewServer("maild", "0")
 	maild.RegisterRoutes(ms, maild.NewHandler(mcfg, mstore))
-	maildSrv := httptest.NewServer(ms) // listens on 127.0.0.1: a loopback host caller
-	defer maildSrv.Close()
+	m.srv = httptest.NewServer(ms) // listens on 127.0.0.1: a loopback host caller
+	t.Cleanup(m.srv.Close)
+	return m
+}
+
+// TestRecoveryRequestDeliversThroughMaild runs the real path: auth's maild
+// mailer posts to maild's internal route, and maild sends one fixed-template
+// email through a fake Resend endpoint. No real email is sent.
+func TestRecoveryRequestDeliversThroughMaild(t *testing.T) {
+	m := startTestMaild(t)
 
 	h, _ := testHandlerEnv(t)
 	h.config.RPOrigins = []string{"https://choir.news"}
-	h.recoveryMailer = NewMaildRecoveryMailer(maildSrv.URL, maildSrv.Client())
+	h.recoveryMailer = NewMaildRecoveryMailer(m.srv.URL, m.srv.Client())
 	done := make(chan struct{}, 4)
 	h.recoveryMailDispatch = func(f func()) { f(); done <- struct{}{} }
 	if _, err := h.store.CreateUser("maild-user", "owner@example.com"); err != nil {
@@ -402,8 +422,7 @@ func TestRecoveryRequestDeliversThroughMaild(t *testing.T) {
 		t.Fatal("recovery mail dispatch did not run")
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	payloads := m.sends()
 	if len(payloads) != 1 {
 		t.Fatalf("resend sends = %d, want 1", len(payloads))
 	}
@@ -422,4 +441,46 @@ func TestRecoveryRequestDeliversThroughMaild(t *testing.T) {
 	if strings.Contains(logs, RecoveryTokenPrefix) {
 		t.Fatalf("logs leaked the token:\n%s", logs)
 	}
+}
+
+// TestRecoveryMailCarriesHostCredentialUnderEnforce: with hostauth in
+// enforce, maild's recovery route needs the host-internal credential as
+// well as loopback. Auth's mailer attaches it (hostauth.MarkInternal) only
+// to a loopback internal-service port; when the port is not one, the
+// credential is withheld, maild refuses, and no mail is sent
+// (docs/problems/loopback-is-a-credential-2026-10-14.md).
+func TestRecoveryMailCarriesHostCredentialUnderEnforce(t *testing.T) {
+	const token = "auth-recovery-hostauth-test-0123456789abcdef0123"
+	m := startTestMaild(t)
+	u, err := url.Parse(m.srv.URL)
+	if err != nil {
+		t.Fatalf("parse maild url: %v", err)
+	}
+	link := "https://choir.news/recover#token=" + RecoveryTokenPrefix + "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
+	mailer := NewMaildRecoveryMailer(m.srv.URL, m.srv.Client())
+
+	t.Run("credential withheld from a non-internal port", func(t *testing.T) {
+		t.Setenv(hostauth.EnvPorts, "1")
+		restore := hostauth.SetForTesting(hostauth.ModeEnforce, token)
+		defer restore()
+		before := len(m.sends())
+		if err := mailer.SendRecoveryLink(context.Background(), "owner@example.com", link, RecoveryTokenTTL); err == nil {
+			t.Fatal("send without the credential succeeded, want maild to refuse")
+		}
+		if got := len(m.sends()); got != before {
+			t.Fatalf("resend sends = %d, want %d (refused before sending)", got, before)
+		}
+	})
+	t.Run("credential attached to the maild port", func(t *testing.T) {
+		t.Setenv(hostauth.EnvPorts, u.Port())
+		restore := hostauth.SetForTesting(hostauth.ModeEnforce, token)
+		defer restore()
+		before := len(m.sends())
+		if err := mailer.SendRecoveryLink(context.Background(), "owner@example.com", link, RecoveryTokenTTL); err != nil {
+			t.Fatalf("send with the credential: %v", err)
+		}
+		if got := len(m.sends()); got != before+1 {
+			t.Fatalf("resend sends = %d, want %d", got, before+1)
+		}
+	})
 }

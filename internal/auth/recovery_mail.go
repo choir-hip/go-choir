@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 )
 
 // RecoveryLinkPath is the frontend page a recovery link opens. The token
@@ -63,7 +65,9 @@ func (m *maildRecoveryMailer) SendRecoveryLink(ctx context.Context, toAddress, l
 		return fmt.Errorf("build recovery mail request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
+	// The marker always; the host-internal credential only to a loopback
+	// maild port (docs/problems/loopback-is-a-credential-2026-10-14.md).
+	hostauth.MarkInternal(req)
 	resp, err := m.client.Do(req)
 	if err != nil {
 		// The *url.Error names the endpoint, never the body.

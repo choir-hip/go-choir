@@ -547,6 +547,10 @@ in
       # auth.db holds sessions and API-key records; it was 0644 in a 0755
       # directory, private only because /var/lib/go-choir is 0750.
       StateDirectoryMode = "0750";
+      # Account-recovery mail goes to maild's host-internal route, which
+      # needs the host-internal credential once hostauth enforces
+      # (docs/problems/account-recovery-token-discarded-2026-10-14.md).
+      LoadCredential = internalTokenCredential;
       Environment = [
         "AUTH_PORT=8081"
         "AUTH_DB_PATH=/var/lib/go-choir/auth/auth.db"
@@ -556,6 +560,9 @@ in
         "AUTH_ACCESS_TOKEN_TTL=5m"
         "AUTH_REFRESH_TOKEN_TTL=720h"
         "AUTH_COOKIE_SECURE=true"
+        # Recovery links are mailed through maild (empty disables mail).
+        "AUTH_MAILD_URL=http://127.0.0.1:8087"
+        internalAuthEnv
       ];
     };
   };

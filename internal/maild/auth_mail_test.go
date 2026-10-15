@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/hostauth"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -219,5 +220,34 @@ func TestAuthRecoveryLinkRouteIsRegistered(t *testing.T) {
 	s.ServeHTTP(w, authRecoveryRequest(recoveryBody("owner@example.com", testRecoveryLink, 15)))
 	if w.Code != http.StatusAccepted || fake.count() != 1 {
 		t.Fatalf("status = %d sends = %d", w.Code, fake.count())
+	}
+}
+
+// Under hostauth enforce, loopback plus the marker is not enough: the
+// recovery route also needs the host-internal credential
+// (docs/problems/loopback-is-a-credential-2026-10-14.md).
+func TestAuthRecoveryLinkRequiresHostCredentialInEnforce(t *testing.T) {
+	const token = "maild-recovery-gate-token-0123456789abcdef012345"
+	restore := hostauth.SetForTesting(hostauth.ModeEnforce, token)
+	defer restore()
+	call := func(presented string) (int, int) {
+		h, fake := newAuthMailTestHandler(t)
+		req := authRecoveryRequest(recoveryBody("owner@example.com", testRecoveryLink, 15))
+		req.RemoteAddr = "127.0.0.1:8000"
+		if presented != "" {
+			req.Header.Set(hostauth.Header, presented)
+		}
+		w := httptest.NewRecorder()
+		hostauth.Middleware(http.HandlerFunc(h.HandleAuthRecoveryLink)).ServeHTTP(w, req)
+		return w.Code, fake.count()
+	}
+	if code, sends := call(""); code != http.StatusForbidden || sends != 0 {
+		t.Fatalf("no credential: status=%d sends=%d, want 403 and 0", code, sends)
+	}
+	if code, sends := call("wrong-credential-0123456789abcdef0123456789"); code != http.StatusForbidden || sends != 0 {
+		t.Fatalf("wrong credential: status=%d sends=%d, want 403 and 0", code, sends)
+	}
+	if code, sends := call(token); code != http.StatusAccepted || sends != 1 {
+		t.Fatalf("credential: status=%d sends=%d, want 202 and 1", code, sends)
 	}
 }
