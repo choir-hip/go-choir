@@ -235,7 +235,7 @@ func Assign(selection provideriface.LLMSelection, thread string) (provideriface.
 	if !ok || len(members) == 0 {
 		members = modelcatalog.Pools()[modelcatalog.DefaultPool]
 	}
-	index := int(fnv32(thread) % uint32(len(members)))
+	index := weightedIndex(members, fnv32(thread))
 	ordered := poolSelections(rotate(members, index), selection)
 	return ordered[0], ordered[1:], assignment
 }
@@ -247,6 +247,23 @@ func FormatFallbacks(fallbacks []provideriface.LLMSelection) string {
 		parts = append(parts, fallback.Provider+"/"+fallback.Model)
 	}
 	return strings.Join(parts, ",")
+}
+
+// weightedIndex maps a thread hash onto a member, each member taking a
+// share of hashes in proportion to its weight.
+func weightedIndex(members []modelcatalog.PoolMember, hash uint32) int {
+	total := 0
+	for _, member := range members {
+		total += member.SlotWeight()
+	}
+	slot := int(hash % uint32(total))
+	for i, member := range members {
+		if slot < member.SlotWeight() {
+			return i
+		}
+		slot -= member.SlotWeight()
+	}
+	return len(members) - 1
 }
 
 func rotate(members []modelcatalog.PoolMember, start int) []modelcatalog.PoolMember {

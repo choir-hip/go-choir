@@ -250,6 +250,17 @@ const PoolSpecPrefix = "pool:"
 type PoolMember struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
+	// Weight is the member's share of hashed thread assignments; zero
+	// counts as one.
+	Weight int `json:"weight,omitempty"`
+}
+
+// SlotWeight is the member's assignment weight, at least one.
+func (m PoolMember) SlotWeight() int {
+	if m.Weight < 1 {
+		return 1
+	}
+	return m.Weight
 }
 
 // Pools returns the named model pools, each an ordered list of catalog
@@ -264,12 +275,16 @@ type PoolMember struct {
 // 21.8 s median and 115 s p90 per call on the paper computer, up to 932 s,
 // against 2.5 s and 10 s for gpt-6-luna; a management turn on it held the
 // paper for 38 minutes (docs/evidence/model-latency-paper-2026-10-14.md).
+// cat-jam-free left the pool on 2026-10-15 (owner: a dual pool of
+// deepseek-v4.1-flash and gpt-6-luna). An OpenCode key is parked for every
+// model after any 429, so its free-tier 429s parked the keys deepseek uses
+// (docs/reports/chatgpt-cache-ratio-2026-10-15.md §7.3). The owner weighted
+// it 1:3 the same day, so gpt-6-luna takes about three threads in four.
 func Pools() map[string][]PoolMember {
 	return map[string][]PoolMember{
 		DefaultPool: {
-			{Provider: "opencode-go", Model: "deepseek-v4.1-flash"},
-			{Provider: "opencode-go", Model: "cat-jam-free"},
-			{Provider: "chatgpt", Model: "gpt-6-luna"},
+			{Provider: "opencode-go", Model: "deepseek-v4.1-flash", Weight: 1},
+			{Provider: "chatgpt", Model: "gpt-6-luna", Weight: 3},
 		},
 	}
 }

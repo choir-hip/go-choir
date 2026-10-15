@@ -201,10 +201,33 @@ func TestAssignPoolIsStablePerThreadAndSpreadsAcrossThreads(t *testing.T) {
 		chosen, _, _ := Assign(spec, fmt.Sprintf("trajectory-%d", i))
 		seen[chosen.Model]++
 	}
+	total := 0
 	for _, m := range pool {
-		if seen[m.Model] < 400/len(pool)/2 {
-			t.Fatalf("assignment skewed: %v", seen)
+		total += m.SlotWeight()
+	}
+	for _, m := range pool {
+		if want := 400 * m.SlotWeight() / total; seen[m.Model] < want/2 {
+			t.Fatalf("assignment skewed: %v (want about %d for %s)", seen, want, m.Model)
 		}
+	}
+}
+
+// The default pool is weighted (owner 2026-10-15): gpt-6-luna takes about
+// three threads in four and deepseek-v4.1-flash one in four.
+func TestAssignDefaultPoolIsWeightedThreeToOne(t *testing.T) {
+	spec := provideriface.LLMSelection{Model: "pool:default"}
+	seen := map[string]int{}
+	const n = 4000
+	for i := 0; i < n; i++ {
+		chosen, fallbacks, _ := Assign(spec, fmt.Sprintf("thread-%d", i))
+		seen[chosen.Model]++
+		if len(fallbacks) != 1 || fallbacks[0].Model == chosen.Model {
+			t.Fatalf("thread-%d: chosen %+v, fallbacks %+v", i, chosen, fallbacks)
+		}
+	}
+	luna := float64(seen["gpt-6-luna"]) / n
+	if luna < 0.70 || luna > 0.80 {
+		t.Fatalf("gpt-6-luna share = %.3f (%v), want about 0.75", luna, seen)
 	}
 }
 
