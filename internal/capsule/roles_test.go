@@ -19,8 +19,12 @@ func TestRoleVerbSets(t *testing.T) {
 	if !comanagement["write_file"] {
 		t.Error("cosuper should have write_file verb")
 	}
-	if !comanagement["edit_file"] {
-		t.Error("cosuper should have edit_file verb")
+	// Granting a verb the broker cannot serve only moves the failure to
+	// "unknown verb"; these three had no handler and no prompt teaches them.
+	for _, verb := range []string{"edit_file", "rename", "chmod"} {
+		if comanagement[verb] {
+			t.Errorf("engineering is granted %s, which the broker does not implement", verb)
+		}
 	}
 
 	// Research should have read_file but not exec or write_file.

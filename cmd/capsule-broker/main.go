@@ -687,7 +687,7 @@ func (b *Broker) handleWriteFile(ctx context.Context, cap *capsule.Capability, p
 		mode = os.FileMode(p.Mode)
 	}
 
-	if err := os.WriteFile(fullPath, p.Content, mode); err != nil {
+	if err := yaegikernel.WriteFileReplacing(fullPath, p.Content, mode, p.Mode != 0); err != nil {
 		return BrokerRPCResponse{Error: fmt.Sprintf("failed to write file: %v", err)}
 	}
 
