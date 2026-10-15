@@ -47,13 +47,18 @@ func delegateBaseEnv(lookup func(string) (string, bool)) []string {
 	return append(env, capsule.EgressProxyEnv()...)
 }
 
+// delegateServed reports whether this broker will serve the delegate. A
+// capsule without egress never does: the delegate needs the model API.
+func delegateServed(token, binary string, egress bool) bool {
+	return token != "" && binary != "" && egress
+}
+
 // startDelegate serves the delegate socket when this broker holds a token.
-// A capsule without egress never gets one: the delegate needs the model API.
 func startDelegate(token, binary string, egress bool) {
 	if token == "" {
 		return
 	}
-	if !egress || binary == "" {
+	if !delegateServed(token, binary, egress) {
 		log.Printf("capsule-broker: claude delegate token present but egress=%v binary=%v; delegate off", egress, binary != "")
 		return
 	}
@@ -78,9 +83,10 @@ func startDelegate(token, binary string, egress bool) {
 
 // runDelegateStage hardens this process the way a session worker is
 // hardened (a workload Landlock layer of its own, capability drop, the L2
-// seccomp filter), then becomes claude. Its Landlock domain sits beside the
-// cells' domains, not under them, so a cell cannot ptrace it or read its
-// /proc environ (UNVERIFIED on the staging kernel; F13).
+// seccomp filter plus the Bun runtime calls of the delegate profile), then
+// becomes claude. Its Landlock domain sits beside the cells' domains, not
+// under them, so a cell cannot ptrace it or read its /proc environ
+// (UNVERIFIED on the staging kernel; F13).
 func runDelegateStage(runDir, binary string) error {
 	runDir = filepath.Clean(runDir)
 	if !strings.HasPrefix(runDir, claudedelegate.RunRoot+"/") {
@@ -103,7 +109,9 @@ func runDelegateStage(runDir, binary string) error {
 	if err := capsule.DropWorkloadCapabilities(); err != nil {
 		return fmt.Errorf("delegate capability drop: %w", err)
 	}
-	if err := capsule.LoadWorkloadInetFilter(); err != nil {
+	// Without timerfd Bun panics at start (us_create_timer returned null);
+	// docs/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md.
+	if err := capsule.LoadDelegateFilter(); err != nil {
 		return fmt.Errorf("delegate seccomp: %w", err)
 	}
 	if err := os.Chdir(claudedelegate.Workdir); err != nil {

@@ -275,6 +275,11 @@ func main() {
 	if egress {
 		loadBrokerFilter = capsule.LoadBrokerInetFilter
 	}
+	if delegateServed(delegateToken, delegateBin, egress) {
+		// The delegate stage inherits this filter; it must admit the Bun
+		// runtime calls the delegate filter adds (cells still refuse them).
+		loadBrokerFilter = capsule.LoadBrokerDelegateFilter
+	}
 	if err := loadBrokerFilter(); err != nil {
 		log.Fatalf("failed to load seccomp filter: %v", err)
 	}

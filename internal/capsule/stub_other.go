@@ -191,10 +191,12 @@ func (b *BrokerClient) GoEval(context.Context, *Capability, GoEvalRequest) (GoEv
 	return GoEvalResult{}, stubErr("go_eval")
 }
 
-func LoadWorkloadFilter() error     { return stubErr("seccomp") }
-func LoadBrokerFilter() error       { return stubErr("seccomp") }
-func LoadWorkloadInetFilter() error { return stubErr("seccomp") }
-func LoadBrokerInetFilter() error   { return stubErr("seccomp") }
+func LoadWorkloadFilter() error       { return stubErr("seccomp") }
+func LoadBrokerFilter() error         { return stubErr("seccomp") }
+func LoadWorkloadInetFilter() error   { return stubErr("seccomp") }
+func LoadBrokerInetFilter() error     { return stubErr("seccomp") }
+func LoadDelegateFilter() error       { return stubErr("seccomp") }
+func LoadBrokerDelegateFilter() error { return stubErr("seccomp") }
 
 type LandlockRestrictor struct{}
 

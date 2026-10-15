@@ -94,6 +94,49 @@ func BrokerInetSeccompFilter() seccomp.Filter {
 	return seccompFilterAllowing(allowed, true)
 }
 
+// delegateExtraSyscalls are what the Claude delegate's binary (Claude Code,
+// built on Bun) needs beyond the workload allowlist
+// (docs/problems/claude-delegate-bun-timer-seccomp-2026-10-15.md).
+// uSockets arms its loop timer through a timerfd; refused, Bun panics at
+// start ("us_create_timer returned null"). JavaScriptCore parks a thread for
+// the collector with SIGPWR and rt_sigsuspend; refused, sigsuspend returns
+// at once and the thread runs on while its stack is scanned. Only the
+// delegate stage and the broker it inherits from get them; cells and jobs
+// keep stacking the workload filter.
+var delegateExtraSyscalls = []string{"timerfd_create", "timerfd_settime", "timerfd_gettime", "rt_sigsuspend"}
+
+// DelegateSeccompFilter is the delegate stage's filter: the L2 workload
+// filter (the delegate needs the model API through the egress forwarder)
+// plus the Bun runtime calls above.
+func DelegateSeccompFilter() seccomp.Filter {
+	allowed := append(append([]string(nil), capsuleAllowedSyscalls...), delegateExtraSyscalls...)
+	return seccompFilterAllowing(allowed, true)
+}
+
+// BrokerDelegateSeccompFilter is the L2 broker filter of a capsule that
+// serves the Claude delegate. The delegate stage inherits the broker's
+// filter and seccomp answers with the strictest filter of the stack, so the
+// broker must admit the delegate's calls too. Its session workers and jobs
+// still stack the workload filter, which refuses them.
+func BrokerDelegateSeccompFilter() seccomp.Filter {
+	allowed := append(append(append([]string(nil), capsuleAllowedSyscalls...), brokerExtraSyscalls...), delegateExtraSyscalls...)
+	return seccompFilterAllowing(allowed, true)
+}
+
+func LoadDelegateFilter() error {
+	if err := seccomp.LoadFilter(DelegateSeccompFilter()); err != nil {
+		return fmt.Errorf("failed to load claude delegate seccomp filter: %w", err)
+	}
+	return nil
+}
+
+func LoadBrokerDelegateFilter() error {
+	if err := seccomp.LoadFilter(BrokerDelegateSeccompFilter()); err != nil {
+		return fmt.Errorf("failed to load claude delegate broker seccomp filter: %w", err)
+	}
+	return nil
+}
+
 func LoadWorkloadFilter() error {
 	if err := seccomp.LoadFilter(WorkloadSeccompFilter()); err != nil {
 		return fmt.Errorf("failed to load workload seccomp filter: %w", err)

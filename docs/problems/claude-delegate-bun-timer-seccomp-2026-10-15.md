@@ -146,3 +146,31 @@ as `loop_id`; the field is `run_id`.
    column and `metadata.trajectory_id`), reads the trajectory from
    `metadata` as well, reads `run_id`, and on timeout lists the
    engineering runs it did see.
+
+## Fix (branch `fix/claude-delegate-bun-seccomp`, not deployed)
+
+- `internal/capsule/seccomp.go`: `delegateExtraSyscalls`
+  (`timerfd_create`, `timerfd_settime`, `timerfd_gettime`,
+  `rt_sigsuspend`); `DelegateSeccompFilter` (workload L2 + those) and
+  `BrokerDelegateSeccompFilter` (broker L2 + those), with loaders.
+- `cmd/capsule-broker`: the broker loads the broker-delegate filter only
+  when it will serve the delegate (`delegateServed`: token, binary and
+  egress); `runDelegateStage` loads the delegate filter. Session workers
+  and jobs still load the workload filters, unchanged.
+- The `epoll_pwait2`, `preadv2` and `pidfd_open` refusals are left in
+  place: Bun's fallbacks ran in every trace.
+- Tests (`internal/capsule/seccomp_delegate_linux_test.go`, failure
+  modes D1-D6 written first): both delegate filters admit the four calls;
+  each adds exactly those four to its base, with the same socket
+  families; the workload, workload L2, broker and broker L2 filters admit
+  none of them; and in helper processes a timerfd is created, armed and
+  read under the broker-delegate + delegate stack, while a cell's stack
+  (broker-delegate + workload L2) and plain broker L2 + delegate both
+  get `EPERM`. Run in `golang:1.26` on aarch64 with the same name
+  mapping as the harness (the existing seccomp tests need it too there);
+  CI runs them on x86_64 as written.
+- Re-run of the reproduction with the production filters (mapped to
+  aarch64): `claude --version` prints `2.1.197 (Claude Code)` with no
+  refusal; the full fake-API `-p` run ends `"subtype":"success"`, exit
+  0, with only the fallback refusals and the bwrap failure above.
+- The probe: `engineering_run` (scripts/claude_delegate_probe.py).

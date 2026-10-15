@@ -135,6 +135,48 @@ def delegate_evidence(events):
     return {"start_seen": started, "delegate_run_ids": run_ids, "done_with_success": bool(done), "result": result}
 
 
+def run_trajectory(run):
+    """A run's trajectory. GET /api/runs has no top-level trajectory_id: an
+    engineering run carries it in metadata (and the server's trajectory
+    filter matches that), and an attached trajectory status names it too."""
+    meta = run.get("metadata") or {}
+    return (run.get("trajectory_id") or meta.get("trajectory_id") or meta.get("assignment_trajectory_id")
+            or (run.get("trajectory") or {}).get("trajectory_id"))
+
+
+def is_engineering(run):
+    return run.get("agent_profile") == "engineering" or str(run.get("agent_id") or "").startswith("engineering:")
+
+
+def engineering_run(c, tid, seen):
+    """The newest engineering run that serves the prompt-bar trajectory.
+
+    Engineering is not started by the prompt: Texture casts the request to
+    management, and management's Cast opens an assignment whose run is
+    run:<assignment> under agent engineering:<assignment>. That run carries
+    the Texture document's trajectory (the prompt bar's trajectory_id) in
+    metadata.trajectory_id, which GET /api/runs?trajectory_id= matches. The
+    owner's newest runs are scanned too, in case the trajectory filter
+    misses it. `seen` collects every engineering run observed, for the
+    receipt when none matches."""
+    q = urllib.parse.quote(tid, safe="")
+    by_traj = c.call("GET", f"/api/runs?trajectory_id={q}&limit=200").get("runs") or []
+    recent = c.call("GET", "/api/runs?limit=200").get("runs") or []
+    matches = {}
+    for r in by_traj + recent:
+        if not is_engineering(r) or not r.get("run_id"):
+            continue
+        meta = r.get("metadata") or {}
+        seen[r["run_id"]] = {"run_id": r["run_id"], "agent_id": r.get("agent_id"), "state": r.get("state"),
+                             "trajectory_id": run_trajectory(r), "assignment_id": meta.get("assignment_id"),
+                             "created_at": r.get("created_at")}
+        if run_trajectory(r) == tid:
+            matches[r["run_id"]] = r
+    if not matches:
+        return None
+    return max(matches.values(), key=lambda r: str(r.get("created_at") or ""))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cred", required=True)
@@ -192,22 +234,20 @@ def main():
         finish(1, "fail: the prompt bar did not return a trajectory")
 
     deadline = time.time() + args.timeout_min * 60
-    eng = None
+    eng, seen = None, {}
     while time.time() < deadline:
-        runs = c.call("GET", "/api/runs?limit=200").get("runs") or []
-        cands = [r for r in runs if r.get("trajectory_id") == tid and r.get("agent_profile") == "engineering"]
-        if cands:
-            eng = cands[0]
-            if eng.get("state") in TERMINAL:
-                break
+        eng = engineering_run(c, tid, seen) or eng
+        if eng and eng.get("state") in TERMINAL:
+            break
         time.sleep(20)
     if not eng:
+        receipt["engineering_runs_seen"] = list(seen.values())
         finish(1, "fail: no engineering run appeared for the trajectory in time")
-    receipt["engineering_run"] = {"run_id": eng.get("loop_id"), "state": eng.get("state"),
+    receipt["engineering_run"] = {"run_id": eng.get("run_id"), "state": eng.get("state"),
                                   "assignment_id": (eng.get("metadata") or {}).get("assignment_id"),
                                   "capsule_network_mode": (eng.get("metadata") or {}).get("capsule_network_mode")}
     log("engineering_run", **receipt["engineering_run"])
-    evidence = delegate_evidence(c.events(eng.get("loop_id")))
+    evidence = delegate_evidence(c.events(eng.get("run_id")))
     receipt["delegate"] = evidence
     ok = (receipt["engineering_run"]["capsule_network_mode"] == "claude" and evidence["start_seen"]
           and evidence["done_with_success"] and eng.get("state") == "completed")
