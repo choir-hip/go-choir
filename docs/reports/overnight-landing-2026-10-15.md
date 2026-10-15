@@ -173,6 +173,25 @@ adopter's desks never opened an operation (one engineering assignment failed in
 about 2 minutes, Texture closed `done`), so the polled checks never mattered
 (`docs/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md`).
 
+## Afternoon landings (after the adopt drill)
+
+- **First passing P6-P8 adopt loop: `adopt-1523`** (staging `d43dd6301`, after the
+  engineering release-copy fix `fix/engineering-release-copy`): `pass: true`,
+  `reached: adopter_applied`, no failed checks. The adopter froze, was approved,
+  materialized and applied in about 30 s; `adopter_served` held at 81 ms and
+  `identity_names_adoption` after 26 s of polling. On the adopter's console: no
+  "preserving permissions" line, no failed assignment, no poison, no `not a
+  directory`. Both computers stopped.
+- **Dolt 2.4.2 for the sql-servers** (main `b92ead151`, deployed 15:40Z): cherry-picked
+  `d92dbb20f`, `ca5f0f5e2`, `d893bc998`, `bcd0b458a` only (no embedded Go module bump).
+  `nix eval` and `systemctl show` both name `dolt-2.4.2` for the platform and corpus
+  servers; both active; liveness probe 31 clean runs in 16 min, no alert; `go test
+  ./internal/store -run Texture` passes; staging ok, vmctl ok; checkpointd now runs clean
+  (`Deactivated successfully`, 76-88 ms, no panic or exit 1). The CI SBOM candidate job hit a
+  network flake (`proxy.golang.org` stream error), was rerun once and passed.
+- Paper cache ratio after the frame.go change: 72-76%, but it was already 76% before it
+  (`docs/problems/paper-chatgpt-cache-ratio-below-85-after-restarts-2026-10-15.md`).
+
 ## Skipped or pending (as of writing)
 
 - Re-run P4's deploy; then patch lanes + hotplug + exa (already on main),
