@@ -168,6 +168,16 @@ type ComputerEventCAS struct {
 	signingKey computerevent.SigningKey
 	pins       PinReceiptValidator
 	now        func() time.Time
+	// ownerActs is the S1 effect_accepted admission gate; nil is the
+	// pre-S1 rule (the reducer alone decides).
+	ownerActs *OwnerActAuthority
+}
+
+// ConfigureEffectAdmission installs the S1 gate: an effect_accepted append
+// is admitted only when its authority traces to an offer corpusd minted or
+// to an owner-armed ModeReceipt corpusd issued.
+func (c *ComputerEventCAS) ConfigureEffectAdmission(authority *OwnerActAuthority) {
+	c.ownerActs = authority
 }
 
 func NewComputerEventCAS(store *Store, issuer string, signingKey computerevent.SigningKey, pins PinReceiptValidator) (*ComputerEventCAS, error) {
@@ -225,6 +235,11 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	computedDigest, err := request.Event.Digest()
 	if err != nil || computedDigest != request.EventDigest {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: event digest mismatch")
+	}
+	if request.Event.EventKind == computerevent.EventEffectAccepted && c.ownerActs != nil {
+		if err := c.ownerActs.admitEffectAccepted(ctx, tx, request.Event, computedDigest); err != nil {
+			return computerevent.Receipt{}, err
+		}
 	}
 
 	now := c.now().UTC()

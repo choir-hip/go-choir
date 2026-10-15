@@ -25,6 +25,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/owneract"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -154,6 +155,10 @@ type AuthResult struct {
 	Scopes     []string // empty for cookie auth = full access
 	ComputerID string   // optional stable-computer binding for API keys
 	AuthMethod string   // "cookie" or "api_key"
+	// CredentialRef names the credential for an owner-act receipt:
+	// "session-jwt-sha256:<sha256 of the access JWT>" (the JWT has no jti)
+	// or "api-key:<key id>". Never the secret itself.
+	CredentialRef string
 }
 
 // APIKeyValidator is the interface the proxy uses to validate Bearer token
@@ -197,6 +202,10 @@ type Handler struct {
 	apiKeyValidator            APIKeyValidator // optional: enables Bearer token (API key) auth
 	authStore                  *auth.Store     // optional: owned auth store for API key validation
 	platformSignerDigest       string
+	// ownerActSigner is the proxy's own host-owner-act key (S1): it signs
+	// that the proxy authenticated the owner for one act. nil: no receipts
+	// are minted (corpusd's CHOIR_OWNER_ACT_MODE decides what follows).
+	ownerActSigner *owneract.Signer
 	// routeCacheTTL bounds the short-lived computer-route memo
 	// (resolveComputerURL + ensureComputerVersionRoute). vmctl remains the
 	// route of record; the cache only avoids paying two resolve RPCs on every
@@ -387,6 +396,17 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load platform trust anchor: %w", err)
 	}
+	ownerActSigner, ownerActKeyPath, err := owneract.LoadSignerFromEnv()
+	switch {
+	case err != nil:
+		log.Printf("proxy: owner-act key unusable, owner acts go to corpusd without a receipt: %v", err)
+		ownerActSigner = nil
+	case ownerActSigner == nil && ownerActKeyPath != "":
+		log.Printf("proxy: no owner-act key at %s, owner acts go to corpusd without a receipt", ownerActKeyPath)
+	case ownerActSigner == nil:
+	default:
+		log.Printf("proxy: owner-act key %s loaded from %s", ownerActSigner.KeyID(), ownerActKeyPath)
+	}
 
 	// Build the handler. When authStore is nil, apiKeyValidator must be a
 	// nil interface (not a typed-nil *auth.Store) so the nil check in
@@ -427,6 +447,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		recoveries:                 newComputeRecoveryTracker(),
 		authStore:                  authStore,
 		platformSignerDigest:       platformSignerDigest,
+		ownerActSigner:             ownerActSigner,
 	}
 	if authStore != nil {
 		h.apiKeyValidator = authStore
@@ -512,7 +533,9 @@ func (h *Handler) validateAccessJWT(r *http.Request) (*AuthResult, error) {
 	}
 	email, _ := claims["email"].(string)
 
-	return &AuthResult{UserID: userID, Email: strings.TrimSpace(email), Valid: true, AuthMethod: "cookie"}, nil
+	tokenSum := sha256.Sum256([]byte(cookie.Value))
+	return &AuthResult{UserID: userID, Email: strings.TrimSpace(email), Valid: true, AuthMethod: "cookie",
+		CredentialRef: "session-jwt-sha256:" + hex.EncodeToString(tokenSum[:])}, nil
 }
 
 // authenticate tries cookie-based JWT auth first (browser sessions), then
@@ -640,6 +663,8 @@ func (h *Handler) validateAPIKey(r *http.Request) (*AuthResult, error) {
 		Scopes:     ak.Scopes,
 		ComputerID: ak.ComputerID,
 		AuthMethod: "api_key",
+		// The key id, never the secret or its hash.
+		CredentialRef: "api-key:" + ak.ID,
 	}, nil
 }
 

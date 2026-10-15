@@ -305,3 +305,31 @@ Compatibility:
 - The key is generated on the host and not backed up; losing it means
   generating a new one and restarting both units (no history depends on
   it: corpusd stores the digests and receipts it verified).
+
+## Build (branch `feat/s1-owner-act-receipts`, not pushed)
+
+- `internal/owneract`: the receipt format, the proxy `Signer` (PEM PKCS#8
+  from `$CREDENTIALS_DIRECTORY/choir-owner-act-key` or
+  `CHOIR_OWNER_ACT_KEY_FILE`) and corpusd's `Verifier` (PEM SPKI from
+  `choir-owner-act-public-key` or `CHOIR_OWNER_ACT_PUBLIC_KEY_FILE`).
+- `internal/proxy`: the mode PUT decodes the write, mints the receipt
+  after the ownership check and sends it in `X-Choir-Owner-Act-Receipt`;
+  `AuthResult.CredentialRef` names the session (JWT digest) or key id.
+- `internal/platform/owner_acts.go`: `CHOIR_OWNER_ACT_MODE`, the three
+  append-only tables (`owner_act_receipts`, `self_development_mode_receipts`,
+  `platform_update_offers`), mode-write verification, and the
+  `effect_accepted` gate called from `CompareAndSwap`. A refusal is a 403
+  at the append route (`ErrEffectAdmissionRefused`) and at the mode route
+  (`ErrOwnerActRefused`).
+- `nix/node-b.nix`: the activation script generates the key pair; the
+  proxy loads the private key and corpusd the public key by
+  `LoadCredential=`; corpusd runs with `CHOIR_OWNER_ACT_MODE=observe`.
+
+Tests: `internal/platform/owner_acts_test.go` (failure modes 1-17, 19-22
+on the embedded Dolt store), `internal/proxy/owner_act_receipts_test.go`
+(the session and `owner:acts` key paths mint a receipt that verifies and
+binds the request commitment; proxy to real corpusd mode route in enforce:
+the keyless proxy and a direct loopback write are refused, the keyed
+proxy arms and the ModeReceipt names the owner act),
+`internal/owneract/owneract_test.go` (keys made by the activation's
+openssl commands load through the credential names and round-trip).

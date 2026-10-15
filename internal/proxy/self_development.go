@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +11,8 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/hostauth"
+	"github.com/yusefmosiah/go-choir/internal/owneract"
+	"github.com/yusefmosiah/go-choir/internal/platform"
 )
 
 func selfDevelopmentGuestRoute(path string) (computerID, action string, ok bool) {
@@ -187,10 +191,25 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 	query.Set("computer_id", computerID)
 	u.RawQuery = query.Encode()
 	upstreamMethod := r.Method
+	var upstreamBody io.Reader
+	ownerActHeader := ""
 	if upstreamMethod == http.MethodPut {
 		upstreamMethod = http.MethodPost
+		body, readErr := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+		if readErr != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
+			return
+		}
+		// S1: the proxy authenticated the owner above; it now signs that
+		// statement over this exact write, for corpusd to verify.
+		ownerActHeader, err = h.mintModeOwnerAct(authResult, computerID, body)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+			return
+		}
+		upstreamBody = bytes.NewReader(body)
 	}
-	upstream, err := http.NewRequestWithContext(r.Context(), upstreamMethod, u.String(), http.MaxBytesReader(w, r.Body, 64<<10))
+	upstream, err := http.NewRequestWithContext(r.Context(), upstreamMethod, u.String(), upstreamBody)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
 		return
@@ -199,6 +218,9 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 	upstream.Header.Set("X-Authenticated-User", authResult.UserID)
 	if r.Method == http.MethodPut {
 		upstream.Header.Set("Content-Type", "application/json")
+		if ownerActHeader != "" {
+			upstream.Header.Set(owneract.Header, ownerActHeader)
+		}
 	}
 	response, err := h.corpusd.Do(upstream)
 	if err != nil {
@@ -216,6 +238,39 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 	}
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(body)
+}
+
+// mintModeOwnerAct signs the owner-act receipt for a mode write the proxy
+// has just authorized: act selfdev.approve for an accept_once arm (the
+// owner's approval of one operation and bundle), selfdev.mode.set
+// otherwise, over the write's request commitment. With no key loaded it
+// returns "" and the write goes without a receipt, as before S1.
+func (h *Handler) mintModeOwnerAct(authResult *AuthResult, computerID string, body []byte) (string, error) {
+	var request platform.SetSelfDevelopmentModeRequest
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		return "", fmt.Errorf("invalid mode request")
+	}
+	if h.ownerActSigner == nil {
+		return "", nil
+	}
+	subject, err := platform.OwnerActModeSubject(computerID, request)
+	if err != nil {
+		return "", fmt.Errorf("invalid mode request")
+	}
+	method := owneract.AuthMethodSession
+	if authResult.AuthMethod == "api_key" {
+		method = owneract.AuthMethodAPIKey
+	}
+	receipt, err := h.ownerActSigner.Mint(owneract.Act{
+		Kind: platform.OwnerActKindForMode(request.Mode), OwnerUserID: authResult.UserID,
+		AuthMethod: method, CredentialRef: authResult.CredentialRef, ComputerID: computerID, Subject: subject,
+	}, time.Now())
+	if err != nil {
+		return "", fmt.Errorf("owner act receipt: %w", err)
+	}
+	return owneract.Encode(receipt)
 }
 
 const replayCompletenessWriteGrace = time.Second
