@@ -36,6 +36,10 @@ paper). Owner rule: "we need paper publishing 24/7, even after crashes."
    existed, but nothing acted on it. Hypothesis: Dolt history and
    artifacts grow with 24/7 publishing faster than GC reclaims; not yet
    measured by component.
+   **Measured 2026-10-15:** 27.2 GB of the 33.5 GB was Dolt chunk-journal
+   garbage. The periodic GC never ticked (its ctx was cancelled on return),
+   and the 5 GiB guard skipped every boot GC from 10-14 13:43. See
+   [`guest-dolt-storage-growth-2026-10-15`](guest-dolt-storage-growth-2026-10-15.md).
 2. **The wedge detector plus warmness policy left the always-on paper
    down for up to 24 h.** That contradicts the owner's 24/7 rule. A
    standing intent should survive a crash; the computer itself has to
