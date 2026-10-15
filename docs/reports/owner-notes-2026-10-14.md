@@ -447,3 +447,8 @@ branch `feat/autopaper-compute-halving`.
 - **There are no new desks.** "Story writer" and "triage" in a coordinator
   prompt were the coordinator's mistake. There are four desks: Texture,
   management, engineering and research.
+- **Search: stay on Keenable for now** (owner, ~18:00 UTC). Don't top up
+  the paid search providers (brave, serper, parallel, tavily, serpapi are
+  out of credit or quota). Source ingestion scales up 2026-10-16; search
+  gets revisited later, maybe next week. Exa and searxng come back on
+  their own once the stale-cooldown clamp (84d507204) deploys.
