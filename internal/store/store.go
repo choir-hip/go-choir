@@ -122,10 +122,13 @@ type Store struct {
 	// finalizeSinceCheckpoint counts finalized events since the last Dolt
 	// checkpoint. finalizeBatch commits at most every doltCheckpointEvery
 	// events (0 = defaultFinalizeCheckpointEvery) instead of once per event:
-	// the canonical tape is the durability authority (replay rebuilds), while
-	// Dolt commits exist for AS OF addressability, which needs only
-	// macro-boundaries. Reads that need current history flush via the
-	// dirty-gated checkpoint in GetHistory.
+	// the canonical tape is the durability authority (replay rebuilds).
+	// Nothing reads Dolt history: no product query uses AS OF or
+	// dolt_history_*, Texture history follows the revision parent chain, and
+	// HASHOF('HEAD') is audit-only. A checkpoint is a promotion boundary for
+	// the generational GC and an audit mark. Online compaction squashes these
+	// commits away (dolt_compaction.go). GetHistory still flushes a
+	// dirty-gated checkpoint for the audit shape; its reads never depend on it.
 	finalizeSinceCheckpoint uint64
 	doltCheckpointEvery     uint64
 	workerUpdateMu          sync.Mutex
@@ -190,10 +193,13 @@ func (s *Store) DB() *sql.DB {
 	return s.db
 }
 
-// commitDoltCheckpoint makes the current VM-local working set addressable by
-// Dolt history and AS OF queries. Dolt commits are database-wide, so callers
-// must describe the boundary as a VM-state checkpoint rather than claiming the
-// commit contains only one logical record.
+// commitDoltCheckpoint commits the current VM-local working set as a Dolt
+// checkpoint. No product read uses Dolt history or AS OF (Texture history
+// follows the revision parent chain); the commit is a promotion boundary for
+// the generational GC and an audit mark, and online compaction squashes old
+// checkpoints away (dolt_compaction.go). Dolt commits are database-wide, so
+// callers must describe the boundary as a VM-state checkpoint rather than
+// claiming the commit contains only one logical record.
 func (s *Store) commitDoltCheckpoint(ctx context.Context, message string) error {
 	if s == nil || s.textureHandle() == nil {
 		return fmt.Errorf("runtime store: nil database")
