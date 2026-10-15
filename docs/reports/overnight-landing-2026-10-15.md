@@ -1,6 +1,7 @@
 # Overnight landing, 2026-10-15 (briefing, in progress)
 
-Written by the overnight lander at 09:30 UTC; updated at the end of the run.
+Written by the overnight lander at 09:30 UTC; last updated 10:55 UTC. Landing
+is paused on a coordinator hold (Node B host kernel reboot).
 Staging https://choir.news; paper computer
 `vm-1669020adcece51c2f5ff9b6df399ef5`. Dolt compaction, memory hotplug, patch
 lanes and P6-P8 have not landed yet (see Skipped / pending).
@@ -13,6 +14,8 @@ lanes and P6-P8 have not landed yet (see Skipped / pending).
 | 0b | `73b14c327` | Autopaper cache routing: chatgpt session/conversation headers, `cached_in=` log field, `prompt_cache` on gateway `/health`. Owner ruling applied before merge: search trimming and run-memory elision are **off by default** (`6f7a764f4`, merged via branch `land/halving-append-only`, because `feat/autopaper-compute-halving` is checked out in another worktree) | green | `73b14c327`, 07:53Z | see cache table |
 | 1 | `9c62b209f` | S1 owner-act receipts, observe mode | green | `9c62b209f`, 08:05Z | proxy `owner-act key host-owner-act-4323d8e7e60998de loaded`; corpusd `owner acts: mode=observe`; proxy and corpusd active; `https://choir.news/` 200 |
 | 2 | `2eae77de6` | P5 host build and layered apply. The merge broke the build (`restoreRestartBusy` called the old `plannedRestartBusy` signature); fixed in the same push | green | `2eae77de6`, 08:23Z | corpusd `host build: enabled (source /opt/go-choir, installable .#autoputer)`; tracer `p5-go-served-0825` FAIL, did not reach apply (below) |
+| 3 | `f8007f5d6` (code `978a18d4e` plus final branch head `19a19425d`) | Autopaper section pages: corpusd front list takes `?section=`, front-importance keeps score rows past the newest 100, `-pages N` backfill flag, frontend section pages | green (both pushes) | `f8007f5d6`, 09:54Z | see Section pages |
+| 4 | `97e023100` | P4 standing consensus on P5 (nothing autonomous until armed) | CI green; **deploy FAILED** (incomplete) | proxy serves `97e023100`; `/health` deployed_commit still `f8007f5d6` | see Deploy failure; autonomous tracer owed (steps 0 and 2 did not pass; coordinator asked for no more self-development tracers) |
 
 ## Tracer results
 
@@ -20,8 +23,13 @@ lanes and P6-P8 have not landed yet (see Skipped / pending).
   `reached=engineering_final_report`. The engineering assignment ran 22
   minutes and was cancelled with no bundle. A capsule cell hit its 30 s timeout
   (`broker.sock: i/o timeout`) and the next call hung 13 minutes. This is the
-  jobs-0101 item 2 class (capsule broker RPC desync); its repair
-  (`5c5db2027`) is on `fix/selfdev-go-drill-0101` and is **not on main**. The
+  jobs-0101 item 2 class (capsule broker RPC desync). Correction from the
+  coordinator: the broker repair IS on main (`b4f778552`, the client drops its
+  connection after any transport or framing error and re-dials), so this
+  timeout is a remaining or different problem; another agent is tracing
+  "engineering never freezes" from the run ledger (see
+  `docs/problems/` ledger traces), and no more self-development tracers were
+  run. The
   raced-activation fix worked: `recovered raced activation` appeared, no
   `dispatcher: poison`, no `mutation authority mismatch`. Problem doc:
   `docs/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md`.
@@ -52,6 +60,52 @@ Gateway `/health` `prompt_cache` (since the S1 restart at 08:05Z):
 chatgpt 81.5% (961 calls), opencode-go 87.5% (467 calls). The step is the
 session/conversation header routing; no economizing lever is active.
 
+## Section pages (step 3) and backfill
+
+Merged `fix/autopaper-section-pages`. After the deploy,
+`/api/platform/publications/front?section=us_politics&limit=20` returns 20
+stories including the Milei midterms story and the Fox News approval poll (12
+before the frontend/backfill, from the newest page only). One-off backfill on
+Node B exactly as in the problem doc (`-pages 5 -max-calls 500 -budget 30m`
+temporary drop-in, `start --wait`, drop-in removed, timer restarted): `500
+stories, 102 kept, 398 scored, 0 failed`, 60 s. Unfiltered front list, first 530
+rows, section counts before -> after: tech_ai 27 -> 225, business 16 -> 52,
+world 47 -> 171, us_politics 12 -> 52, no section 428 -> 30. Page 1 (newest 100)
+unchanged (tech_ai 25, business 16, world 47, us_politics 12). The 10:05 timer
+run's carry-forward was not re-checked.
+
+## Deploy failure of P4 (97e023100)
+
+CI run 38717028854 deploy job failed: nixos switch took about 29 min under load
+(host load 11-12), then vmctl exited status 1 every 30 s from 10:42:23 to
+10:45:43 on `ping ComputerVersion route database: context deadline exceeded`
+(7 restarts, start-limit-hit); a start at 10:47:44 was healthy. Staging
+`/health` was `degraded` / 502 for about 5 minutes and is `ok` now; the paper
+computer kept running and was reattached. Not a P4 code failure. Problem doc:
+`docs/problems/deploy-97e0231-vmctl-route-db-ping-crash-loop-2026-10-15.md`.
+Suggested: rerun the failed job after the reboot.
+
+## Locally validated, not yet deployed
+
+Merged on main locally and pushed by the coordinator in `a3481814d` (its CI run
+38720298222 was cancelled for the reboot): ops/patch-lanes (`01d8c5981`),
+land/memory-hotplug (`ce959b2db`; one conflict in `internal/agentcore/api.go`
+resolved by keeping both the `EffectiveRelease` and `Memory` fields),
+fix/exa-search (`5d16af67c`). Build clean; focused tests pass
+(capsule, capsulejob, autoputer, hostboot, yaegikernel, vmctl, vmmanager,
+gateway, search, agentcore job/meminfo); both workflow contract tests pass.
+Hotplug probe (`scripts/memory_hotplug_probe.py`) and Exa proof (`exa=` in
+gateway journal) are owed after the deploy. account-recovery merges cleanly onto
+main (owner ruling: land it).
+
+## Owner rulings recorded
+
+- Land `land/account-recovery` (supersedes the earlier delete ruling; do not
+  delete `/auth/recovery/*`).
+- Keenable stays on free-tier pacing.
+- Fix Exa (`fix/exa-search`; per-day cap of 150 stays).
+- Halve-compute ruling: do not economize on search; keep append-only prompts.
+
 ## Paper health
 
 Paper booted on `2eae77de6` (epoch after each deploy), `status=ready`,
@@ -60,11 +114,10 @@ deploy-time regressions seen.
 
 ## Skipped or pending (as of writing)
 
-- Section-page fix `fix/autopaper-section-pages` (backend commits only; the
-  branch's frontend edits were uncommitted in another worktree): merged as
-  `978a18d4e`, pushed with this briefing; proof below if filled in.
-- P4 standing consensus, memory hotplug (known conflict in
-  `internal/agentcore/api.go`), Dolt compaction, patch lanes, P6-P8
+- Re-run P4's deploy; then patch lanes + hotplug + exa (already on main),
+  recovery, Dolt compaction (paper only), P6-P8 (adopt tracer owed until
+  engineering freezes again): all after the host reboot.
+- Dolt compaction, P6-P8
   (known conflicts in `api.go`, `api_self_development.go`,
   `platform/handlers.go`, `proxy/self_development.go`,
   `scripts/reeng_tracer.mjs`): not yet landed.
