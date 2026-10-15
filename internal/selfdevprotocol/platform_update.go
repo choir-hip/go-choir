@@ -21,6 +21,11 @@ import (
 // checkpoint/route_projection so a forged selfdev receipt cannot mint an update.
 const (
 	ReceiptKindPlatformUpdate = "platform_update"
+	// ReceiptKindHostBuild signs a host build service result (P5): the
+	// request commitment is the build job id, the artifact digest the
+	// canonical result. Its own kind, so a build receipt can never stand in
+	// for an update offer or a checkpoint.
+	ReceiptKindHostBuild = "host_build"
 
 	// PlatformUpdateFollowActor/Scope bind the platform-follow evidence class
 	// in route-projection requests. The owner self-dev path uses owner actor +

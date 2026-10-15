@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/hostbuild"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -24,6 +25,7 @@ type Handler struct {
 	checkpointAuthority  *CheckpointAuthority
 	keyEscrow            *keyEscrowRuntime
 	guestLookup          guestOwnershipLookup
+	hostBuild            *hostbuild.Service
 }
 type healthResponse struct {
 	Status  string         `json:"status"`
@@ -472,6 +474,8 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/route-projection-certificates", h.HandleRouteProjectionCertificate)
 	s.HandleFunc("/internal/computers/platform-updates/offer", h.HandlePlatformUpdateOfferMint)
 	s.HandleFunc("/internal/computers/platform-updates/blob/", h.HandlePlatformUpdateBlob)
+	s.HandleFunc(hostbuild.Route, h.HandleHostBuilds)
+	s.HandleFunc(hostbuild.Route+"/", h.HandleHostBuilds)
 	s.HandleFunc("/internal/computers/keys/escrow-public-key", h.HandleKeyEscrowPublicKey)
 	s.HandleFunc("/internal/computers/keys/escrow", h.HandleKeyEscrow)
 	s.HandleFunc("/internal/computers/keys/escrow/status", h.HandleKeyEscrowStatus)

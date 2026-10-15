@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"github.com/yusefmosiah/go-choir/internal/frontimportance"
+	"github.com/yusefmosiah/go-choir/internal/hostbuild"
 	"github.com/yusefmosiah/go-choir/internal/keyescrow"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/platform"
@@ -90,6 +91,17 @@ func main() {
 	}
 	if err := handler.ConfigureSelfDevelopmentModes(modeCAS); err != nil {
 		log.Fatalf("corpusd self-development mode routes: %v", err)
+	}
+	// P5 host build service: builds a computer's accepted Go change from its
+	// base commit plus the frozen patch. Off unless the source checkout is
+	// configured; the route then answers host_builder_unconfigured.
+	if buildCfg, enabled := hostbuild.ConfigFromEnv(os.Getenv); enabled {
+		buildSvc, err := handler.ConfigureHostBuild(buildCfg)
+		if err != nil {
+			log.Fatalf("corpusd host build: %v", err)
+		}
+		buildSvc.Start(context.Background())
+		log.Printf("corpusd host build: enabled (source %s, installable %s)", buildCfg.SourceDir, buildCfg.Installable)
 	}
 	escrowPrivateKey, err := keyescrow.LoadOrGeneratePrivateKey(cfg.KeyEscrowKeyPath)
 	if err != nil {
