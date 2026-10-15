@@ -317,3 +317,28 @@ Lead:
   `docs/reports/boundary-strength-ladder-2026-10-15.md`.
 - **When:** red teaming itself stays with the security stream scheduled
   just before production, alongside the secrets vault.
+
+## 19. Late-night rulings: defaults accepted, the Claude token installed, OVH API reboot
+
+- **Claude token:** the owner installed it on Node B at
+  /var/lib/go-choir/secrets/claude-oauth-token (mode 400, root, 154
+  bytes). The lead allowlists a test computer once Slice 1 deploys.
+- **Defaults accepted** ("I guess your defaults are fine"):
+  - the proxy signs owner-act receipts first, then passkey-signed acts on
+    `approve.choir.news`; no desk keys yet;
+  - sweep the audit's top-10 dead routes;
+  - SMT stays on until outside users share the host;
+  - hostauth moves to enforce after a clean day;
+  - calibration feedback stays off;
+  - `auth/recovery/request` is deleted for now;
+  - option T proceeds (the binary's loader path is patched by nixpkgs; this
+    is the owner's own subscription on the owner's own infrastructure).
+- **OVH API:** the owner says Node B can be rebooted through the OVH API.
+  The reboot plan becomes:
+  1. add the proven 6.18.16 kernel as a fallback boot entry;
+  2. reboot through the API in a quiet window;
+  3. if the host doesn't return, use OVH rescue mode (netboot through the
+     API) to restore the fallback.
+  Open item: where the OVH API credentials live (names only).
+- **API keys:** owner acts need the new `owner:acts` scope (live since
+  0ebf254b3). The owner mints a new key from Settings.
