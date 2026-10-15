@@ -437,36 +437,37 @@ now:
   # the reviewed restart design. The spine's card points at the live station.
   status: working
   slice: >-
-    2026-10-14 08:40 UTC. Overnight deploys (staging ce59d406; site up
-    throughout except a 10 s proxy drain, L1 residual D4):
-    - L2a: S1a deployed; fixture run 1 passes (merge recall 1.0, 0 false
-      merges; the citation-language clause removed by the owner);
-      intake.labels ON on the live paper since 06:50:58 UTC; after-window
-      06:51-12:51 to score against baseline A.
-    - C1e B1 deployed (e9d727a7) with the capsule-gate fix (bc09dcc1) and
-      the Freeze fixes (9874ebc5, 96b82cec); paper scenario passes; the
-      engineering drill reaches honest failed Reports, blocked only by Go
-      module egress (owner decision:
-      docs/reports/capsule-go-modules-decision-2026-10-14.md).
-    - LR: lever 6, lever 7 (prices; /api/costs in dollars), LongCat out of
-      the pool, Jev support judgement off management's turn, balloon and
-      soft memory limits; desk worker ~17 MiB private, daemon ~690 MiB
-      (docs/evidence/guest-memory-split-balloon-2026-10-14.md).
-    - S3 real hibernation (accelerated into the cost track by the owner):
-      103 ms wake (9.7 s cold), 396 ms after 55 min with a delivered
-      credential (docs/evidence/s3-snapshot-hibernate-staging-2026-10-14.md).
-    - L1: standing source schedules survive planned and crash restarts
-      (ce59d406), after a refresh that crossed B1's work-state epoch
-      closed the paper's schedules (paper silent about an hour).
-    - The newspaper front page, the logged-out home straight to
-      Autopaper, London Salmon default.
-    In flight: management delegation to sub-RLMs (design note, owner
-    direction); research searching the corpus first; station LU, guest
-    updates (owner-approved 10-14; drafted, panel next), which answers how
-    an always-busy paper takes updates. Open for the owner: Go module
-    route, LU's O1-O3b, O5, O7-O10, snapshot max age, SP0 host and key backups.
-  source_ref: 0257fac3
-  deploy_identity: staging ce59d406 (deployed 07:46 UTC)
+    2026-10-15 19:00 UTC. Handoff: docs/reports/handoff-2026-10-15.md.
+    Landed and proven on staging today:
+    - Raced activation fix 2.
+    - ChatGPT cache routing and logging, and model-named failover keys.
+      The cache ratio is about 78%.
+    - Default pool gpt-6-luna 3 : deepseek-v4.1-flash 1, with cat-jam-free
+      out. The management task pin moved to gpt-6-luna (77633ecdc).
+    - Dolt guardrails and the liveness probe, Dolt 2.4.2 sql-servers, and
+      the paper lost-wake fix.
+    - P5 host build and P6-P8 release, publish and adopt. adopt-1523 was
+      the first passing adopt loop.
+    - Engineering release-copy recipe; capsule broker re-dial.
+    - go-served-1825 passes the full self-development loop 18/18 on
+      cc720cd20, after the tracer's go-test check fix.
+    - Account recovery, section pages, and the search stale-cooldown clamp.
+    Incidents, documented: a platform Dolt deadlock (root cause
+    unconfirmed; the probe sends SIGABRT on recurrence), and the paper
+    silent 10:56-12:42 after the host reboot (re-armed; the sweep now
+    catches it).
+    Gated: Dolt soak until 2026-10-17 about 15:40, then the Store A
+    squash, the embedded Dolt module bump, and re-landing guest compaction
+    with a typed I4 exception.
+    Owner rulings, owner-notes §23:
+    - search stands pat on Keenable;
+    - source ingestion scales up 2026-10-16;
+    - Autopaper quality is a world-model problem (think, don't build);
+    - D1 app packages are ratified.
+    Open for the owner: DeepSeek at 1/4 of runs (met in expectation) or
+    1/4 of compute (it takes about 64% of calls).
+  source_ref: 19b40fdd4
+  deploy_identity: staging cc720cd20 (deployed 18:21:34 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LG-1
@@ -495,7 +496,16 @@ now:
     next_observation: the A5 build, then S1a labels on top of it; the fixture run on a minted test computer
   blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
   next_action: >-
-    Overnight 2026-10-14 (owner: "we should do this redesign then optimize
+    2026-10-15 evening:
+    (a) the checkpointd replay exit on one computer (a commitment record
+    with no verified identity formula);
+    (b) engineering residuals (seven granted verbs without handlers, the
+    seccomp xattr, no management owner-escalation target);
+    (c) re-measure the pool split over hours;
+    (d) after the soak (2026-10-17), the Dolt squash, the module bump and
+    re-landing compaction;
+    (e) source ingestion scale-up with the owner, 2026-10-16.
+    The earlier plan follows. Overnight 2026-10-14 (owner: "we should do this redesign then optimize
     resources. thats our overnight work, alongside b1"). Rule: design,
     panels, measurement and code in separate worktrees run concurrently;
     deploys to the shared guest runtime go one at a time, each verified on
