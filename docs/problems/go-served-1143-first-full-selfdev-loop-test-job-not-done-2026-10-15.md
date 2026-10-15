@@ -120,3 +120,31 @@ Decision (yellow, tracer only; no product prompt change):
 
 Heresy delta: discovered one (the prompt contradiction); repaired the
 false negative in the drill check; introduced none.
+
+**The failed first build** (11:46:56 to 12:03:27): the job tail ends in
+`internal/selfdevprobe/selfdevprobe.go:19:6: undefined: json`.
+Engineering's own compile error made it fail, which is correct behaviour.
+It took 16.5 min because the capsule's Go module cache was cold: the tail is
+`go: downloading …` lines. After the fix, the rebuild took 10 s. Residual,
+performance only: a capsule's first Go build pays a full module download.
+
+## Proof after the check change: go-served-1825 (2026-10-15 18:22–18:53 UTC)
+
+`node scripts/reeng_tracer.mjs --label go-served-1825 --scenario engineering --change go-served --expect-sha cc720cd20… --timeout-min 60 --apply-min 30 --restore-min 12`
+on staging cc720cd20. The tracer minted `computer-f8d6ef41…` and stopped it
+(201). Evidence: `~/.config/choir-qa/traces/go-served-1825/`.
+
+- **`pass=true`, `reached=restore`, `failed=[]`: 18 of 18 checks**,
+  including `go_build_job_done` and `go_test_passed` (evidence: `job`).
+- Engineering took the job path this time. Its two jobs were both done:
+  the build, then `sh -c "cd /workspace/platform && go test ./internal/selfdevprobe/ && go vet …"`.
+- The new run-events reader worked against the live route:
+  `go_test_cells passed=1` on the completing assignment.
+- Timeline:
+  - management cast engineering at 18:23:15;
+  - frozen about 18:39:30;
+  - final report 18:39:52;
+  - applied 18:53:20, after the planned restart;
+  - restored 18:53:42, and the probe was gone by 18:53:47.
+- Gap: the known one only. No product route serves the projection head
+  after a restore.
