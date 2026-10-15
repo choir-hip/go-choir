@@ -519,9 +519,17 @@ func Run() {
 	// runs. A replay-only recovery drive exits before the runtime starts, so
 	// it leaves the marker for the boot that does.
 	if strings.TrimSpace(os.Getenv("RUNTIME_RECOVERY_REPLAY_ONLY")) != "1" {
-		bootMarker, plannedBoot := agentcore.ConsumePlannedRestartMarker(rtCfg.StorePath, time.Now().UTC())
+		// The marker's age is judged at process start, not here: boot Dolt GC,
+		// store open and credential exchange run first and take minutes on a
+		// large store, and must not expire a planned refresh
+		// (docs/problems/always-busy-computer-never-updates-2026-10-15.md).
+		bootTimelineClock.Lock()
+		processStartedAt := bootTimelineClock.start.UTC()
+		bootTimelineClock.Unlock()
+		bootMarker, plannedBoot := agentcore.ConsumePlannedRestartMarker(rtCfg.StorePath, processStartedAt)
 		if plannedBoot {
-			log.Printf("autoputer: restart kind=planned reason=%s target=%s", bootMarker.Reason, bootMarker.Target)
+			log.Printf("autoputer: restart kind=planned reason=%s target=%s marker_age_at_process_start=%s consumed_after=%s",
+				bootMarker.Reason, bootMarker.Target, processStartedAt.Sub(bootMarker.RequestedAt).Round(time.Second), time.Since(processStartedAt).Round(time.Second))
 		} else {
 			log.Printf("autoputer: restart kind=crash_or_stop")
 		}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -195,6 +196,177 @@ func postPlannedRestart(t *testing.T, handler *APIHandler, remoteAddr, body stri
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/internal/runtime/planned-restart", bytes.NewBufferString(body))
 	req.RemoteAddr = remoteAddr
+	rec := httptest.NewRecorder()
+	handler.HandleInternalPlannedRestart(rec, req)
+	return rec.Code, rec.Body.String()
+}
+
+// Owner ruling 2026-10-15 ("we need to update the Autopaper computer even
+// when it is busy, because it's always going to be busy";
+// docs/problems/always-busy-computer-never-updates-2026-10-15.md). The host
+// may ask with allow_busy for an always-on platform computer. Ways this could
+// fail, written first:
+//   - allow_busy still refuses running runs, so the paper never updates;
+//   - allow_busy is honoured for a self-development apply in flight or a live
+//     capsule, whose state a restart destroys (capsules live in the
+//     executor's memory; a decided op is mid-apply);
+//   - a request without allow_busy (every ordinary computer, and every host
+//     built before the change) starts writing a marker while busy;
+//   - the busy marker resumes more than once: a crash during the resume must
+//     boot markerless and close the work.
+
+func TestPlannedRestartEndpointAllowBusyWritesMarkerWithRunningRuns(t *testing.T) {
+	rt, _ := testRuntime(t)
+	t.Cleanup(func() { _ = ClearPlannedRestartMarker(rt.cfg.StorePath) })
+	_ = ClearPlannedRestartMarker(rt.cfg.StorePath)
+	handler := &APIHandler{rt: rt}
+	rt.runningMu.Lock()
+	rt.running["loop-busy-a"] = func() {}
+	rt.running["loop-busy-b"] = func() {}
+	rt.runningMu.Unlock()
+
+	// Without allow_busy: unchanged, refused and no marker.
+	if code, body := postPlannedRestart(t, handler, "192.0.2.1:4000", `{"target":"761d94c5"}`); code != http.StatusConflict {
+		t.Fatalf("busy guest without allow_busy: status=%d body=%s, want 409", code, body)
+	}
+	if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); !os.IsNotExist(err) {
+		t.Fatalf("a refusal wrote a marker: %v", err)
+	}
+
+	code, body := postPlannedRestartURL(t, handler, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`)
+	if code != http.StatusOK {
+		t.Fatalf("busy guest with allow_busy: status=%d body=%s, want 200", code, body)
+	}
+	if !strings.Contains(body, `"interrupted_running_runs":2`) {
+		t.Fatalf("200 body=%s, want the running runs it interrupts named", body)
+	}
+	raw, err := os.ReadFile(PlannedRestartMarkerPath(rt.cfg.StorePath))
+	if err != nil {
+		t.Fatalf("200 returned before the marker was durable: %v", err)
+	}
+	var marker PlannedRestart
+	if err := json.Unmarshal(raw, &marker); err != nil || marker.Reason != PlannedRestartPlatformRefresh || marker.Target != "761d94c5" || marker.WorkStateEpoch != CurrentWorkStateEpoch {
+		t.Fatalf("marker = %+v (%v), want a platform update to 761d94c5 at epoch %d", marker, err, CurrentWorkStateEpoch)
+	}
+}
+
+func TestPlannedRestartEndpointAllowBusyStillRefusesSelfDevelopmentApply(t *testing.T) {
+	ctx := context.Background()
+	for _, state := range []string{selfdev.StateExecuting, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending} {
+		t.Run(state, func(t *testing.T) {
+			rt, s := testRuntime(t)
+			t.Cleanup(func() { _ = ClearPlannedRestartMarker(rt.cfg.StorePath) })
+			_ = ClearPlannedRestartMarker(rt.cfg.StorePath)
+			rt.cfg.ComputerID = "computer-planned-restart-allow-busy"
+			operations, err := selfdev.NewStore(s, s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rt.selfdevOperations = operations
+			now := time.Now().UTC()
+			if _, err := s.DB().ExecContext(ctx, `INSERT INTO self_development_operations (operation_id,computer_id,idempotency_key,request_commitment,trajectory_id,base_head,prompt_artifact_ref,verifier_refs_json,desired_head,effective_head,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'[]',?,?,?, ?,?)`,
+				"selfdev-"+state, rt.cfg.ComputerID, "key-"+state, strings.Repeat("d", 64), "trajectory-"+state, strings.Repeat("a", 64),
+				"artifact:sha256:"+strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), state, now, now); err != nil {
+				t.Fatal(err)
+			}
+			code, body := postPlannedRestartURL(t, &APIHandler{rt: rt}, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`)
+			if code != http.StatusConflict || !strings.Contains(body, `"selfdev_active_operations":1`) || !strings.Contains(body, `"outcome":"busy"`) {
+				t.Fatalf("self-development %s with allow_busy: status=%d body=%s, want 409 busy naming selfdev_active_operations", state, code, body)
+			}
+			if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); !os.IsNotExist(err) {
+				t.Fatalf("refusal wrote a marker: %v", err)
+			}
+		})
+	}
+}
+
+func TestPlannedRestartEndpointAllowBusyStillRefusesLiveCapsule(t *testing.T) {
+	rt, s := testRuntime(t)
+	t.Cleanup(func() { _ = ClearPlannedRestartMarker(rt.cfg.StorePath) })
+	_ = ClearPlannedRestartMarker(rt.cfg.StorePath)
+	ctx := context.Background()
+	seed, err := store.SeedEngineeringAssignmentAuthority(s, "owner-live-capsule", rt.TextureComputerID(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := "opaque-live-capsule"
+	open := store.SeedEngineeringOpenRequest(seed, 0, capability)
+	if _, err := s.OpenEngineeringAssignment(ctx, open); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.BindEngineeringAssignment(ctx, store.SeedEngineeringBindRequest(open, "run:"+seed.AssignmentIDs[0], capability)); err != nil {
+		t.Fatal(err)
+	}
+	code, body := postPlannedRestartURL(t, &APIHandler{rt: rt}, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`)
+	if code != http.StatusConflict || !strings.Contains(body, `"live_capsules":1`) {
+		t.Fatalf("live capsule with allow_busy: status=%d body=%s, want 409 naming live_capsules", code, body)
+	}
+	if _, err := os.Stat(PlannedRestartMarkerPath(rt.cfg.StorePath)); !os.IsNotExist(err) {
+		t.Fatalf("refusal wrote a marker: %v", err)
+	}
+}
+
+// A busy refresh resumes once: the planned boot parks the running work for
+// its one resume, and a crash during that resume (no marker left) closes it.
+func TestPlannedRestartAllowBusyResumesOnceThenCrashBootCloses(t *testing.T) {
+	rt, s := testRuntime(t)
+	t.Cleanup(func() { _ = ClearPlannedRestartMarker(rt.cfg.StorePath) })
+	_ = ClearPlannedRestartMarker(rt.cfg.StorePath)
+	ownerID := "user-busy-planned-restart"
+	t.Setenv("CHOIR_OWNER_ID", ownerID)
+	runs := seedPreBootRuns(t, rt, ownerID)
+	rt.runningMu.Lock()
+	rt.running["loop-busy"] = func() {}
+	rt.runningMu.Unlock()
+
+	if code, body := postPlannedRestartURL(t, &APIHandler{rt: rt}, "/internal/runtime/planned-restart?allow_busy=1", `{"target":"761d94c5"}`); code != http.StatusOK {
+		t.Fatalf("mark busy: status=%d body=%s", code, body)
+	}
+	marker, planned := ConsumePlannedRestartMarker(rt.cfg.StorePath, time.Now().UTC())
+	if !planned {
+		t.Fatal("boot after a busy host marker was not planned")
+	}
+	boot1 := testPeerRuntime(t, rt, s)
+	WithBootRestart(marker, planned)(boot1)
+	boot1.Start(context.Background())
+	for _, want := range runs {
+		got, err := s.GetRun(context.Background(), want.RunID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.State == types.RunCancelled && got.Error == runFateInterruptedByRestart {
+			t.Fatalf("planned busy boot closed pre-boot %s run %s; the one resume was lost", want.State, want.RunID)
+		}
+	}
+	boot1.Stop()
+
+	// The resume crashed the guest: the next boot finds no marker.
+	marker2, planned2 := ConsumePlannedRestartMarker(rt.cfg.StorePath, time.Now().UTC())
+	if planned2 {
+		t.Fatalf("marker consumed twice (%+v): a crashing resume would loop", marker2)
+	}
+	boot2 := testPeerRuntime(t, rt, s)
+	WithBootRestart(marker2, planned2)(boot2)
+	boot2.Start(context.Background())
+	closed := 0
+	for _, want := range runs {
+		got, err := s.GetRun(context.Background(), want.RunID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.State == types.RunCancelled && got.Error == runFateInterruptedByRestart {
+			closed++
+		}
+	}
+	if closed == 0 {
+		t.Fatal("markerless boot after the busy planned one closed no pre-boot run; it was not a crash boot")
+	}
+}
+
+func postPlannedRestartURL(t *testing.T, handler *APIHandler, target, body string) (int, string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, target, bytes.NewBufferString(body))
+	req.RemoteAddr = "192.0.2.1:4000"
 	rec := httptest.NewRecorder()
 	handler.HandleInternalPlannedRestart(rec, req)
 	return rec.Code, rec.Body.String()

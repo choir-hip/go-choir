@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 // Owner rule (AGENTS.md "Restarts End Work (Crash) Or Resume It"): a crash
@@ -103,7 +104,9 @@ func ClearPlannedRestartMarker(storePath string) error {
 
 // ConsumePlannedRestartMarker reads and removes the marker. It reports a
 // planned restart only for a readable marker younger than
-// plannedRestartMaxAge; anything else is a crash boot. The marker is removed
+// plannedRestartMaxAge at now; anything else is a crash boot. The boot passes
+// its process start as now, so slow boot phases before consumption do not
+// count against the age. The marker is removed
 // before the caller resumes work, so a resume that crashes the guest leads to
 // a markerless (crash) boot: one resume per planned restart.
 func ConsumePlannedRestartMarker(storePath string, now time.Time) (PlannedRestart, bool) {
@@ -314,25 +317,74 @@ func (rt *Runtime) markPlannedRestart(reason, target string) (func(applyErr erro
 // refreshes this guest onto a new platform build for a deploy.
 const PlannedRestartPlatformRefresh = "platform update"
 
-// plannedRestartBusy counts the work a restart must not cut: running runs
-// and self-development operations mid-transaction (the states the idle sweep
-// also treats as busy). It fails closed: an unreadable operation list is an
-// error, not idle.
-func (rt *Runtime) plannedRestartBusy(ctx context.Context) (running, selfdevActive int, err error) {
-	running = rt.RunningCount()
-	if rt.selfdevOperations == nil {
-		return running, 0, nil
-	}
+// plannedRestartWork is the work a restart would cut, in two kinds
+// (docs/problems/always-busy-computer-never-updates-2026-10-15.md):
+//
+//   - running runs resume on a planned boot (their runs park and their
+//     unconsumed actor occurrences are redelivered), so a host may cut them
+//     when it asks with allow_busy;
+//   - self-development operations mid-transaction (executing in a capsule,
+//     or decided and applying) and live capsules (an engineering assignment
+//     that is not terminal) do not survive a restart: capsules live in the
+//     executor's memory, and a decided operation is mid-apply. They always
+//     refuse.
+type plannedRestartWork struct {
+	Running       int
+	SelfdevActive int
+	LiveCapsules  int
+}
+
+// unsafe reports work no restart may cut, whatever the host asks.
+func (w plannedRestartWork) unsafe() bool { return w.SelfdevActive > 0 || w.LiveCapsules > 0 }
+
+// plannedRestartBusy counts the work a restart would cut; countCapsules adds
+// the live capsules (a restart loses them; a memory snapshot does not). It
+// fails closed: an unreadable operation or assignment list is an error, not
+// idle.
+func (rt *Runtime) plannedRestartBusy(ctx context.Context, countCapsules bool) (plannedRestartWork, error) {
+	work := plannedRestartWork{Running: rt.RunningCount()}
 	computerID := strings.TrimSpace(rt.TextureComputerID())
 	if computerID == "" {
-		return running, 0, nil
+		return work, nil
 	}
-	ops, err := rt.selfdevOperations.ListByStates(ctx, computerID,
-		selfdev.StateExecuting, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
-	if err != nil {
-		return running, 0, err
+	if rt.selfdevOperations != nil {
+		ops, err := rt.selfdevOperations.ListByStates(ctx, computerID,
+			selfdev.StateExecuting, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
+		if err != nil {
+			return work, fmt.Errorf("cannot read self-development operations: %w", err)
+		}
+		work.SelfdevActive = len(ops)
 	}
-	return running, len(ops), nil
+	if countCapsules && rt.store != nil {
+		assignments, err := rt.store.ListEngineeringAssignmentsForComputer(ctx, computerID)
+		if err != nil {
+			return work, fmt.Errorf("cannot read engineering assignments: %w", err)
+		}
+		for _, assignment := range assignments {
+			if plannedRestartLiveCapsule(assignment) {
+				work.LiveCapsules++
+			}
+		}
+	}
+	return work, nil
+}
+
+// plannedRestartLiveCapsule reports an assignment whose capsule a restart
+// would destroy: not terminal, and bound to a capsule that is active,
+// freezing, frozen and undecided, or being revoked. An unbound assignment
+// has no capsule yet (its spawn deadline owns it), and counting it would let
+// a stranded pre-bind row block every refresh; a bound one is bounded by its
+// fate deadline.
+func plannedRestartLiveCapsule(assignment types.EngineeringAssignment) bool {
+	if assignment.Disposition.Terminal() {
+		return false
+	}
+	switch assignment.CapsuleDisposition {
+	case types.EngineeringCapsuleActive, types.EngineeringCapsuleFreezeRequested,
+		types.EngineeringCapsuleFrozen, types.EngineeringCapsuleRevokeRequested:
+		return true
+	}
+	return false
 }
 
 type plannedRestartRequest struct {
@@ -342,8 +394,30 @@ type plannedRestartRequest struct {
 type plannedRestartBusyResponse struct {
 	Error            string `json:"error"`
 	Outcome          string `json:"outcome"`
+	AllowBusy        bool   `json:"allow_busy"`
 	RunningRuns      int    `json:"running_runs"`
 	SelfdevActiveOps int    `json:"selfdev_active_operations"`
+	LiveCapsules     int    `json:"live_capsules"`
+}
+
+type plannedRestartWrittenResponse struct {
+	PlannedRestart
+	// InterruptedRunningRuns is how many running runs this restart cuts
+	// (allow_busy); they park for the planned boot's one resume.
+	InterruptedRunningRuns int `json:"interrupted_running_runs"`
+}
+
+// plannedRestartAllowBusy reads the host's allow_busy request. It is a query
+// parameter, not a body field: the handler decodes the body with
+// DisallowUnknownFields, so a body field would make every guest built before
+// it answer 400; a query parameter is ignored by those guests, which keep
+// their old busy refusal.
+func plannedRestartAllowBusy(r *http.Request) bool {
+	switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("allow_busy"))) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
 }
 
 // HandleInternalPlannedRestart serves /internal/runtime/planned-restart, the
@@ -352,7 +426,12 @@ type plannedRestartBusyResponse struct {
 //   - POST {"target": "<build>"} writes the planned-restart marker (reason
 //     "platform update") and answers 200 only once it is durable. A busy
 //     guest answers 409 with outcome "busy" and writes nothing, so the host
-//     leaves it for its next idle moment.
+//     retries it at its next idle moment.
+//   - POST ...?allow_busy=1 (the host's policy for always-on platform
+//     computers, owner ruling 2026-10-15) also writes the marker while runs
+//     are running: they park for the planned boot's one resume. It still
+//     answers 409 while a self-development operation is mid-transaction or a
+//     capsule is live, which a restart would destroy.
 //   - DELETE clears the marker when the host did not restart after all.
 //
 // Host-peer only, like the other /internal/runtime routes. The marker carries
@@ -392,16 +471,22 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "target is required"})
 		return
 	}
-	running, selfdevActive, err := h.rt.plannedRestartBusy(r.Context())
+	allowBusy := plannedRestartAllowBusy(r)
+	work, err := h.rt.plannedRestartBusy(r.Context(), true)
 	if err != nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "planned restart: cannot read self-development operations: " + err.Error()})
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "planned restart: " + err.Error()})
 		return
 	}
-	if running > 0 || selfdevActive > 0 {
+	if work.unsafe() || (work.Running > 0 && !allowBusy) {
+		why := "guest is busy; restart deferred to its next idle moment"
+		if work.unsafe() {
+			why = "a self-development operation or a live capsule would not survive a restart; restart deferred until it settles"
+		}
 		writeAPIJSON(w, http.StatusConflict, plannedRestartBusyResponse{
-			Error:       "guest is busy; restart deferred to its next idle moment",
+			Error:       why,
 			Outcome:     "busy",
-			RunningRuns: running, SelfdevActiveOps: selfdevActive,
+			AllowBusy:   allowBusy,
+			RunningRuns: work.Running, SelfdevActiveOps: work.SelfdevActive, LiveCapsules: work.LiveCapsules,
 		})
 		return
 	}
@@ -411,6 +496,6 @@ func (h *APIHandler) HandleInternalPlannedRestart(w http.ResponseWriter, r *http
 		return
 	}
 	marker.WorkStateEpoch = CurrentWorkStateEpoch
-	log.Printf("runtime: host requested a planned restart (%s %s)", marker.Reason, marker.Target)
-	writeAPIJSON(w, http.StatusOK, marker)
+	log.Printf("runtime: host requested a planned restart (%s %s; allow_busy=%v, interrupting %d running run(s))", marker.Reason, marker.Target, allowBusy, work.Running)
+	writeAPIJSON(w, http.StatusOK, plannedRestartWrittenResponse{PlannedRestart: marker, InterruptedRunningRuns: work.Running})
 }

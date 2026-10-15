@@ -289,11 +289,14 @@ func (rt *Runtime) prepareHibernate(ctx context.Context) (int, hibernatePrepareR
 	// Admission is closed; anything still running started outside the actor
 	// boundary (or a self-development transaction is open). Either keeps the
 	// guest awake.
-	running, selfdevActive, err := rt.plannedRestartBusy(ctx)
+	// A memory snapshot keeps capsules (they live in this process), so
+	// hibernate does not count them.
+	work, err := rt.plannedRestartBusy(ctx, false)
 	if err != nil {
 		rt.hibernate.lift()
-		return http.StatusServiceUnavailable, hibernatePrepareResponse{Error: "hibernate: cannot read self-development operations: " + err.Error()}
+		return http.StatusServiceUnavailable, hibernatePrepareResponse{Error: "hibernate: " + err.Error()}
 	}
+	running, selfdevActive := work.Running, work.SelfdevActive
 	if running > 0 || selfdevActive > 0 {
 		rt.hibernate.lift()
 		return http.StatusConflict, hibernatePrepareResponse{

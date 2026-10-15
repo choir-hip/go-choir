@@ -105,3 +105,32 @@ func TestPlannedRestartMarkerResumesOnlyWithinItsWorkStateEpoch(t *testing.T) {
 		}
 	}
 }
+
+// The marker's 15-minute age is taken at process start, not at consumption
+// (docs/problems/always-busy-computer-never-updates-2026-10-15.md). The boot
+// runs Dolt GC (journals up to 4 GiB), opens the store and exchanges
+// credentials before it consumes the marker; a large store's slow boot must
+// not turn a planned refresh into a crash. Ways this could fail, written
+// first: the boot passes the consumption instant, so a 2-minute kill and boot
+// plus a 14-minute GC reads as stale; a marker already stale when the process
+// started reads as planned.
+func TestPlannedRestartMarkerAgeIsTakenAtProcessStart(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "state")
+	written := time.Date(2026, 10, 15, 3, 0, 0, 0, time.UTC)
+	processStarted := written.Add(2 * time.Minute) // kill and VM boot
+	if err := WritePlannedRestartMarker(store, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: "c0ffee", RequestedAt: written}); err != nil {
+		t.Fatal(err)
+	}
+	// Consumed after a 14-minute boot GC: 16 minutes after the write, but 2
+	// minutes old when the process started.
+	if marker, planned := ConsumePlannedRestartMarker(store, processStarted); !planned || marker.Target != "c0ffee" {
+		t.Fatalf("slow boot of a fresh refresh: planned=%v marker=%+v, want planned", planned, marker)
+	}
+
+	if err := WritePlannedRestartMarker(store, PlannedRestart{Reason: PlannedRestartPlatformRefresh, Target: "c0ffee", RequestedAt: written}); err != nil {
+		t.Fatal(err)
+	}
+	if _, planned := ConsumePlannedRestartMarker(store, written.Add(plannedRestartMaxAge+time.Minute)); planned {
+		t.Fatal("a marker already stale at process start read as planned")
+	}
+}
