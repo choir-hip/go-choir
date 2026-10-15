@@ -337,3 +337,14 @@ the gate would refuse a successor for is then always visible to the wake,
 so the stale loop never sees the active run's pending row.
 
 The `delivery_failed` residual is unchanged.
+
+### Fix for the second path (branch `fix/texture-raced-activation-2`, not deployed)
+
+Commit 44944dc72: `TextureActiveRunByAgent` reads `agent.ActiveRunID` first.
+Regression `internal/textureowner/texture_active_run_authority_test.go`
+reproduces the staging signature before the fix (the active run is hidden;
+after the wake, "mutation authority mismatch") and passes after it. Deployed
+proof owed: a tracer whose desk takes more than one run shows no refusal
+after a "recovered raced activation". The f80d052d computer stays wedged
+until its active run is passivated or the computer restarts. The fix
+prevents new wedges but does not repair existing ones.
