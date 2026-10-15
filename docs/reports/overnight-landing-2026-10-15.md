@@ -34,6 +34,12 @@ lanes and P6-P8 have not landed yet (see Skipped / pending).
   `dispatcher: poison`, no `mutation authority mismatch`. Problem doc:
   `docs/problems/selfdev-jobs-0654-raced-activation-verified-engineering-budget-2026-10-15.md`.
   Judged not a new failure class, so landing continued.
+- `go-served-1143` (build `7b8944f03`, after the broker re-dial and write-replace
+  fixes): **first full self-development loop on staging**: reached `restore`,
+  17 of 18 checks passed (Freeze, verify, owner approval, layered apply with one
+  planned restart, route receipt, restore, probe gone); only `go_test_job_done`
+  failed (jobs count 3, done 2). Problem doc:
+  `docs/problems/go-served-1143-first-full-selfdev-loop-test-job-not-done-2026-10-15.md`.
 - `p5-go-served-0825` (P5, build `2eae77de6`): FAIL, `pass=false`,
   `reached=engineering_final_report`. Three engineering assignments ended
   `failed` with no bundle (Texture re-cast through round 5); no poison, no
