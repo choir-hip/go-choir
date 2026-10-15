@@ -84,3 +84,19 @@ the whole deploy.
 2. Give `OpenStore`/`Bootstrap` a deadline (and use the signal context).
 3. Don't bootstrap the schema from checkpointd; it is a reader/maintainer,
    and the owning service bootstraps.
+
+## Root cause investigation
+
+Full write-up, with the Node B journal evidence, the 3-week Dolt clustering
+assessment, monitoring proposals and the recommendation:
+[dolt-clustering-assessment-2026-10-15](dolt-clustering-assessment-2026-10-15.md).
+Summary: root cause **not confirmed** (no stack; best hypothesis is a stall in
+Dolt's online maintenance path, GC and conjoin, against 24 GB of retained
+history). Two corrections to this doc: the server degraded from 09:23 (a
+conjoin plus auto GC at 09:23:05, then `checkpointd` runs of 4.5 minutes) and
+stopped answering about 10:05 (last `ConnectionClosed` 10:05:06, first
+`DOLT_COMMIT` timeout started 10:04:57), not at 09:49; and SIGQUIT was
+received (three header lines were printed) but the dump stalled. The Dolt
+problems cluster on unbounded history plus unobserved online maintenance.
+Recommended first steps: a query-level probe that captures a stack with
+SIGABRT, bounded client deadlines, and ending history retention on Store A.
