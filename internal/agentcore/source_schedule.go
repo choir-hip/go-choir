@@ -293,9 +293,12 @@ func sourcePollInterval(sched store.SourceSchedule) time.Duration {
 // 2026-10-14: standing intents survive a crash, their occurrences do not).
 //
 // A planned boot may resume: an active schedule keeps its generation and its
-// saved tick, which is armed again (it collapses into the pending wake, so a
-// lost wake is repaired and an existing one is not doubled); its pending
-// arrivals are named by that poll.
+// saved tick, which is armed again (it collapses into the pending wake, so an
+// existing one is not doubled); its pending arrivals are named by that poll.
+// A schedule more than sourceScheduleOverdueGrace overdue has lost its wake
+// (re-arming the same tick would collapse into the lost one, see
+// problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md), so it is
+// re-armed as a new tick under a new generation, staggered per schedule.
 //
 // A crash boot never resumes an occurrence. For an active schedule:
 //   - a poll in flight is closed (recorded with the status
@@ -324,20 +327,22 @@ func (rt *Runtime) recoverSourceSchedulesAtBoot(ctx context.Context) {
 		log.Printf("source schedule: boot: list schedules: %v", err)
 		return
 	}
+	now := time.Now().UTC()
+	repaired := 0
 	for _, sched := range schedules {
 		if planned {
-			rt.recoverSourceScheduleAfterPlannedBoot(ctx, sched)
+			rt.recoverSourceScheduleAfterPlannedBoot(ctx, sched, now, &repaired)
 		} else {
 			rt.recoverSourceScheduleAfterCrash(ctx, sched)
 		}
 	}
 }
 
-func (rt *Runtime) recoverSourceScheduleAfterPlannedBoot(ctx context.Context, sched store.SourceSchedule) {
+func (rt *Runtime) recoverSourceScheduleAfterPlannedBoot(ctx context.Context, sched store.SourceSchedule, now time.Time, repaired *int) {
 	if !sched.PollInFlightSince.IsZero() {
 		// The planned restart cut a poll; its wake is redelivered (a planned
 		// boot may resume) and marks it again. Not a crash: nothing counts.
-		sched.PollInFlightSince, sched.UpdatedAt = time.Time{}, time.Now().UTC()
+		sched.PollInFlightSince, sched.UpdatedAt = time.Time{}, now
 		if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
 			log.Printf("source schedule: planned boot: %s: %v", sched.SourceID, err)
 			return
@@ -346,9 +351,41 @@ func (rt *Runtime) recoverSourceScheduleAfterPlannedBoot(ctx context.Context, sc
 	if sched.State != store.SourceScheduleActive || sched.NextDue.IsZero() {
 		return
 	}
+	if sourceScheduleOverdue(sched, now) {
+		// The saved tick is far in the past with nothing running: its wake was
+		// lost (poisoned or dropped in an outage), and re-arming the same tick
+		// would collapse into that lost wake. Make it a new tick instead.
+		if err := rt.rearmOverdueSourceSchedule(ctx, sched, now, *repaired, "planned boot"); err != nil {
+			log.Printf("source schedule: planned boot: %s: re-arm the overdue schedule as a new tick: %v (the schedule list marks it overdue)", sched.SourceID, err)
+			return
+		}
+		*repaired++
+		return
+	}
 	if err := rt.armSourcePoll(ctx, sched); err != nil {
 		log.Printf("source schedule: planned boot: %s: re-arm the saved tick: %v (the schedule list marks it overdue)", sched.SourceID, err)
 	}
+}
+
+// rearmOverdueSourceSchedule restarts an overdue active schedule's chain as a
+// new tick: the generation goes up, so a stale, lost, or poisoned wake of the
+// old chain is refused by HandleSourcePollDue, and the first poll of the new
+// chain is due now plus index*sourceScheduleRearmStagger so many repaired
+// sources do not poll at once. The caller holds sourceScheduleMu and has
+// judged the schedule overdue with no live poll. The crash bound is left
+// alone: a repaired tick that crashes the computer is counted by the crash
+// boot like any other.
+func (rt *Runtime) rearmOverdueSourceSchedule(ctx context.Context, sched store.SourceSchedule, now time.Time, index int, cause string) error {
+	was := sched.NextDue
+	sched.Generation++
+	sched.NextDue = now.Add(time.Duration(index) * sourceScheduleRearmStagger)
+	sched.PollInFlightSince, sched.UpdatedAt = time.Time{}, now
+	if err := rt.store.PutSourceSchedule(ctx, sched); err != nil {
+		return err
+	}
+	log.Printf("source schedule: %s: %s: overdue since %s with no wake; re-armed as generation %d, next tick %s",
+		sched.SourceID, cause, was.Format(time.RFC3339), sched.Generation, sched.NextDue.Format(time.RFC3339))
+	return rt.armSourcePoll(ctx, sched)
 }
 
 func (rt *Runtime) recoverSourceScheduleAfterCrash(ctx context.Context, sched store.SourceSchedule) {
@@ -419,6 +456,10 @@ func arrivalIDs(items []types.CaptureArrival) []string {
 // failing leaves a schedule active with nothing queued, and only this flag
 // shows it (problems/w1-panel-capture-boundary-and-lost-items-2026-10-11.md).
 const sourceScheduleOverdueGrace = 15 * time.Minute
+
+// sourceScheduleRearmStagger spaces the first polls of schedules repaired in
+// one pass, so a paper with dozens of sources does not poll them all at once.
+const sourceScheduleRearmStagger = 15 * time.Second
 
 type sourceScheduleView struct {
 	store.SourceSchedule
