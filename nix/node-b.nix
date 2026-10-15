@@ -868,11 +868,20 @@ in
       CPUQuota = "100%";
       Nice = 10;
       UMask = "0077";
-      ReadWritePaths = [ platformArtifactsDir ];
+      # The projection rebuilder opens a scratch embedded Dolt workspace,
+      # which needs a writable $HOME/.dolt. ProtectHome=tmpfs leaves /root
+      # read-only, so without this the unit panicked once a minute after
+      # claiming a job (docs/problems/dolt-clustering-assessment-2026-10-15.md
+      # section 7.1). cmd/checkpointd refuses to start without a writable
+      # home. Rollback: revert this block.
+      StateDirectory = "go-choir/checkpointd";
+      StateDirectoryMode = "0700";
+      ReadWritePaths = [ platformArtifactsDir "/var/lib/go-choir/checkpointd" ];
       InaccessiblePaths = hiddenSecretsExcept [ "platformSigningKey" "escrowKey" ];
       EnvironmentFile = [ "-/var/lib/go-choir/corpus-dsn.env" ];
       LoadCredential = doltClientCredential;
       Environment = doltClientEnv ++ [
+        "HOME=/var/lib/go-choir/checkpointd"
         "CHOIR_CHECKPOINT_MAINTENANCE_AUTHORIZED=true"
         "CORPUSD_DOLT_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "CORPUSD_ARTIFACTS_ROOT=${platformArtifactsDir}"

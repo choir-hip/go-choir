@@ -29,6 +29,9 @@ func main() {
 	if _, err := os.Stat(cfg.SigningKeyPath); err != nil {
 		log.Fatal("existing checkpoint signing trust root unavailable")
 	}
+	if err := ensureDoltHome(os.Getenv); err != nil {
+		log.Fatal(err)
+	}
 	escrow, err := keyescrow.LoadOrGeneratePrivateKey(cfg.KeyEscrowKeyPath)
 	if err != nil {
 		log.Fatal(err)
