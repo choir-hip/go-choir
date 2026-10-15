@@ -251,7 +251,9 @@ section, the nix lines marked "claude delegate", the probe, this note.
   secret hiding makes any vmctl-read host secret need an explicit,
   privileged hand-off; the capsule broker is PID 1 of its namespace and
   reaps no orphans, so a killed run's grandchildren stay zombies (counted
-  against `pids.max`) until the capsule ends; the capsule's
+  against `pids.max`) until the capsule ends (closed 2026-10-15: claude now
+  runs under the capsule-job supervisor, a child subreaper that kills and
+  reaps its whole subtree; docs/design/capsule-long-exec-2026-10-15.md); the capsule's
   `/workspace/platform` has no `.git`, so neither engineering nor the
   delegate can use `git diff` there.
 - Introduced, ratified by the owner on 2026-10-14 for Option T: a

@@ -59,9 +59,10 @@ func startDelegate(token, binary string, egress bool) {
 	}
 	brokerBin := "/run/capsule/broker"
 	srv := claudedelegate.NewServer(claudedelegate.RunRoot, token, delegateBaseEnv(os.LookupEnv), func(runDir string) *exec.Cmd {
-		cmd := exec.Command(brokerBin, "--isolation-stage", delegateStage, "--delegate-run-dir", runDir, "--delegate-claude-bin", binary)
+		// The supervisor stage (jobs.go) reaps claude's whole subtree, which
+		// slice 1 left as zombies under the broker (PID 1).
+		cmd := supervisedCommand(brokerBin, -1, brokerBin, "--isolation-stage", delegateStage, "--delegate-run-dir", runDir, "--delegate-claude-bin", binary)
 		cmd.Dir = claudedelegate.Workdir
-		cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 		return cmd
 	})
 	_ = os.Remove(claudedelegate.SocketPath)

@@ -17,6 +17,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/capsulejob"
 )
 
 const (
@@ -41,7 +43,7 @@ const (
 	MaxWallClockMin     = 120
 	MaxObjectiveBytes   = 16 << 10
 	// WaitMaxSeconds keeps one `choir-delegate wait` under choir.Exec's 30 s.
-	WaitMaxSeconds = 25
+	WaitMaxSeconds = capsulejob.WaitMaxSeconds
 )
 
 // Spec is what engineering sends for one run.

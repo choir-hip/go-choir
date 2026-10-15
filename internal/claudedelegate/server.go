@@ -18,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/capsulejob"
 )
 
 // Run states.
@@ -341,7 +343,7 @@ func (s *Server) supervise(r *run, spec Spec, stdout, stderr io.Reader, events, 
 			}
 		})
 	}()
-	var tail bytes.Buffer
+	tail := capsulejob.NewTail(2048)
 	go func() {
 		defer pumps.Done()
 		var written int64
@@ -353,12 +355,7 @@ func (s *Server) supervise(r *run, spec Spec, stdout, stderr io.Reader, events, 
 				n, _ := stderrFile.Write(line)
 				written += int64(n)
 			}
-			tail.Write(line)
-			if tail.Len() > 4096 {
-				rest := append([]byte(nil), tail.Bytes()[tail.Len()-2048:]...)
-				tail.Reset()
-				tail.Write(rest)
-			}
+			_, _ = tail.Write(line)
 		})
 	}()
 	pumps.Wait()
@@ -375,11 +372,7 @@ func (s *Server) supervise(r *run, spec Spec, stdout, stderr io.Reader, events, 
 	r.status.ExitCode = &code
 	r.status.FinishedAt = now.UTC()
 	r.status.EventsSHA256 = "sha256:" + hex.EncodeToString(hash.Sum(nil))
-	t := tail.String()
-	if len(t) > 2048 {
-		t = t[len(t)-2048:]
-	}
-	r.status.StderrTail = t
+	r.status.StderrTail = tail.String()
 	resultMu.Lock()
 	if len(lastResult) > 0 {
 		var res Result
@@ -447,7 +440,9 @@ func (r *run) observe(line []byte, resultMu *sync.Mutex, lastResult *[]byte) {
 }
 
 // kill ends the run's whole process group: SIGTERM, then SIGKILL after a
-// grace period.
+// grace period (capsulejob.KillGroup). The group's leader is the supervisor
+// stage, which forwards the stop to claude's own group and reaps every
+// descendant (docs/design/capsule-long-exec-2026-10-15.md, F2/F3).
 func (r *run) kill(reason string) {
 	r.mu.Lock()
 	if r.stopping != "" || r.cmd == nil || r.cmd.Process == nil {
@@ -463,14 +458,7 @@ func (r *run) kill(reason string) {
 	r.stopping = reason
 	pid := r.cmd.Process.Pid
 	r.mu.Unlock()
-	_ = syscall.Kill(-pid, syscall.SIGTERM)
-	go func() {
-		select {
-		case <-r.done:
-		case <-time.After(killGrace):
-			_ = syscall.Kill(-pid, syscall.SIGKILL)
-		}
-	}()
+	capsulejob.KillGroup(pid, killGrace, r.done)
 }
 
 // Stop asks the current run to stop.
@@ -516,20 +504,12 @@ func (r *run) snapshot(now time.Time) Status {
 // write replaces status.json atomically.
 func (r *run) write(now time.Time) {
 	st := r.snapshot(now)
-	data, err := json.MarshalIndent(st, "", "  ")
-	if err != nil {
-		return
-	}
-	tmp := filepath.Join(st.Dir, "."+StatusFile+".tmp")
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, filepath.Join(st.Dir, StatusFile))
+	_ = capsulejob.WriteJSONAtomic(st.Dir, StatusFile, st)
 }
 
 // ReadStatus reads a run's status.json.
 func ReadStatus(root, id string) (Status, error) {
-	if id == "" || strings.ContainsAny(id, `/\`) || id == "." || id == ".." {
+	if !capsulejob.ValidID(id) {
 		return Status{}, fmt.Errorf("invalid run id %q", id)
 	}
 	data, err := os.ReadFile(filepath.Join(root, id, StatusFile))

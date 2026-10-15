@@ -25,6 +25,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/capsulejob"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
@@ -49,6 +50,9 @@ type Broker struct {
 	brokerBin          string // path to this broker binary (for go_eval worker spawn)
 	sessionWorkerReady bool
 	egress             bool // ecosystem_proxy (L2): workloads get the proxy env and the inet filter
+	// jobs is the capsule's job table (jobs.go): long commands the executor
+	// starts, reads and stops; nil serves no job verbs.
+	jobs *capsulejob.Manager
 }
 
 // Session represents a long-lived shell session.
@@ -97,6 +101,8 @@ func main() {
 		egress             bool
 		delegateRunDir     string
 		delegateClaudeBin  string
+		superviseResultFD  int
+		jobInet            bool
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
@@ -118,7 +124,22 @@ func main() {
 	flag.BoolVar(&egress, "egress", false, "this capsule is ecosystem_proxy (L2): bring up lo and forward 127.0.0.1:3128 to the executor's egress socket")
 	flag.StringVar(&delegateRunDir, "delegate-run-dir", "", "Claude delegate run directory (delegate-claude stage only)")
 	flag.StringVar(&delegateClaudeBin, "delegate-claude-bin", "", "Claude Code binary (delegate-claude stage only)")
+	flag.IntVar(&superviseResultFD, "supervise-result-fd", -1, "fd the supervisor writes its outcome to (supervise stage only)")
+	flag.BoolVar(&jobInet, "job-inet", false, "load the L2 workload filter that admits inet sockets (job-exec stage only)")
 	flag.Parse()
+	switch isolationStage {
+	case supervisorStage:
+		// A child subreaper around one command (jobs.go, the Claude
+		// delegate): returns the command's exit status.
+		os.Exit(capsulejob.RunSupervisorStage(flag.Args(), superviseResultFD))
+	case jobExecStage:
+		// Becomes the job's command (jobs.go); returns only on failure.
+		if err := runJobExecStage(flag.Args(), jobInet); err != nil {
+			fmt.Fprintf(os.Stderr, "job: %v\n", err)
+			os.Exit(126)
+		}
+		return
+	}
 	if isolationStage == delegateStage {
 		// Becomes the claude process (delegate.go); returns only on failure.
 		if err := runDelegateStage(delegateRunDir, delegateClaudeBin); err != nil {
@@ -272,6 +293,7 @@ func main() {
 		sessionWorkerReady: true,
 		egress:             egress,
 	}
+	broker.jobs = newJobManager(broker.brokerBin, egress)
 	log.Printf("capsule-broker: session worker ready=%v", broker.sessionWorkerReady)
 	startDelegate(delegateToken, delegateBin, egress)
 	delegateToken = ""
@@ -446,6 +468,8 @@ func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
 		return b.handleInitSession(ctx, &cap, req.Params)
 	case "close_session":
 		return b.handleCloseSession(ctx, &cap, req.Params)
+	case "job_start", "job_status", "job_stop":
+		return b.handleJob(ctx, &cap, req.Verb, req.Params)
 	default:
 		return BrokerRPCResponse{Error: fmt.Sprintf("unknown verb: %s", req.Verb)}
 	}
