@@ -957,6 +957,15 @@ func (p *ChatGPTProvider) doStreamRequest(ctx context.Context, body openAIReques
 	}
 	httpReq.Header.Set("Authorization", authHeader)
 	httpReq.Header.Set("Accept", "text/event-stream")
+	// Codex CLI, the reference client for this backend, sends the thread id
+	// as session_id and conversation_id next to prompt_cache_key. Measured
+	// without them: later calls of a run cache only the static prefix, as if
+	// each landed on another cache machine. Rollback:
+	// CHOIR_CHATGPT_SESSION_HEADERS=0.
+	if body.PromptCacheKey != "" && chatGPTSessionHeadersEnabled() {
+		httpReq.Header.Set("session_id", body.PromptCacheKey)
+		httpReq.Header.Set("conversation_id", body.PromptCacheKey)
+	}
 	resp, err := p.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("chatgpt: http call: %w", err)
@@ -2127,8 +2136,9 @@ func parseOpenAIChatCompletionsResponse(resp *http.Response, modelID string, pro
 		})
 	}
 
-	log.Printf("provider: %s chat completion model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
-		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
+	RecordCacheUsage(providerName, result.Usage)
+	log.Printf("provider: %s chat completion model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d",
+		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls))
 
 	return result, nil
 }
@@ -2537,9 +2547,10 @@ func parseSSEStream(body io.Reader, modelID string, providerName string, onChunk
 		return nil, fmt.Errorf("%s: read stream: %w", providerName, err)
 	}
 
-	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
+	RecordCacheUsage(providerName, result.Usage)
+	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d",
 		providerName, result.Model, result.StopReason,
-		result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
+		result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls))
 
 	return result, nil
 }
@@ -2706,8 +2717,9 @@ func parseOpenAIStream(body io.Reader, modelID string, providerName string, onCh
 	}
 
 	onChunk(StreamChunk{Type: "message_stop", StopReason: result.StopReason})
-	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d text_len=%d tool_calls=%d",
-		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, len(result.Text), len(result.ToolCalls))
+	RecordCacheUsage(providerName, result.Usage)
+	log.Printf("provider: %s stream complete model=%s stop=%s tokens_in=%d tokens_out=%d cached_in=%d cache_reported=%t text_len=%d tool_calls=%d",
+		providerName, result.Model, result.StopReason, result.Usage.InputTokens, result.Usage.OutputTokens, result.Usage.CachedInputTokens, result.Usage.CacheReported, len(result.Text), len(result.ToolCalls))
 	return result, nil
 }
 

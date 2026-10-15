@@ -30,6 +30,15 @@ type gatewayHealthResponse struct {
 	RateLimitMaxRequests int      `json:"rate_limit_max_requests,omitempty"`
 	RateLimitWindowMs    int64    `json:"rate_limit_window_ms,omitempty"`
 	SearchProviders      []string `json:"search_providers,omitempty"`
+	// PromptCache is the per-provider cached-input share since the gateway
+	// started: sample it twice and subtract for an hourly ratio.
+	PromptCache map[string]gatewayCacheHealth `json:"prompt_cache,omitempty"`
+}
+
+// gatewayCacheHealth is provider.CacheStats plus its hit rate.
+type gatewayCacheHealth struct {
+	provider.CacheStats
+	HitRate float64 `json:"hit_rate"`
 }
 
 // ProviderRequest is the JSON payload for POST /provider/v1/inference.
@@ -218,6 +227,13 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	if h.searchClient != nil {
 		resp.SearchProviders = h.searchClient.AvailableProviders()
+	}
+
+	if stats := provider.CacheStatsSnapshot(); len(stats) > 0 {
+		resp.PromptCache = make(map[string]gatewayCacheHealth, len(stats))
+		for name, s := range stats {
+			resp.PromptCache[name] = gatewayCacheHealth{CacheStats: s, HitRate: s.HitRate()}
+		}
 	}
 
 	writeGatewayJSON(w, http.StatusOK, resp)
