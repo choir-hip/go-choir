@@ -293,14 +293,16 @@ func fnv32(key string) uint32 {
 
 // The management task model (management delegation S2a, design round 2
 // R2-9 and O5): a task has a 10-minute deadline, so it runs on one
-// non-preview model with bounded latency (run 305a582d on this model
-// averaged 29 s a call), never on a pool that assigns a free model per
-// thread. The owner may name another provider and model for the role; a
-// pool, a free model or a preview model is not honoured.
+// non-preview model with bounded latency, never on a pool that assigns a
+// model per thread. The owner may name another provider and model for the
+// role; a pool, a free model or a preview model is not honoured. The pin
+// was deepseek-v4.1-flash until the owner's 3:1 GPT split (2026-10-15),
+// which it kept at a fifth of the paper's calls on DeepSeek
+// (docs/problems/pool-split-misses-three-to-one-management-task-pin-2026-10-15.md).
 const (
 	ManagementTaskRole     = agentprofile.ManagementTask
-	ManagementTaskProvider = "opencode-go"
-	ManagementTaskModel    = "deepseek-v4.1-flash"
+	ManagementTaskProvider = "chatgpt"
+	ManagementTaskModel    = "gpt-6-luna"
 )
 
 func managementTaskSelection(p Policy) provideriface.LLMSelection {

@@ -61,11 +61,11 @@ model = "gpt-6-luna"
 		}
 		pinned(configured, p)
 	}
-	override, err := parsePolicy("[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"chatgpt\"\nmodel = \"gpt-6-luna\"\n", "/System/model-policy.toml")
+	override, err := parsePolicy("[defaults]\nmodel = \"pool:default\"\n\n[roles.management_task]\nprovider = \"opencode-go\"\nmodel = \"deepseek-v4.1-flash\"\n", "/System/model-policy.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := override.Resolve(agentprofile.ManagementTask); got.Provider != "chatgpt" || got.Model != "gpt-6-luna" {
+	if got := override.Resolve(agentprofile.ManagementTask); got.Provider != "opencode-go" || got.Model != "deepseek-v4.1-flash" {
 		t.Fatalf("the owner's override was ignored: %+v", got)
 	}
 	// Through the manager and the run metadata: one model, no failover
