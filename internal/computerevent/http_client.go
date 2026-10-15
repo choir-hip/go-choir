@@ -279,6 +279,17 @@ func (c *HTTPClient) Events(ctx context.Context, computerID string, afterSequenc
 	return records, nil
 }
 
+// DoJSON sends one authenticated JSON request to corpusd and decodes the
+// answer; a non-2xx status returns the status and corpusd's error. It is the
+// transport other corpusd routes on the guest's connection reuse (the host
+// build route, P5).
+func (c *HTTPClient) DoJSON(ctx context.Context, method, path string, body, response any) (int, error) {
+	if c == nil {
+		return 0, fmt.Errorf("computer event client: not configured")
+	}
+	return c.do(ctx, method, path, body, response)
+}
+
 func (c *HTTPClient) do(ctx context.Context, method, path string, body any, response any) (int, error) {
 	return c.doWithResponseLimit(ctx, method, path, body, response, 0)
 }

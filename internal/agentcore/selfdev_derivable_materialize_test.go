@@ -326,6 +326,10 @@ type derivableSelfDevFixture struct {
 	platformKey ed25519.PrivateKey
 	baseSource  *liveBaseSource
 	checkpoints map[string]selfdevprotocol.CheckpointResponse
+	// goPatch, when set, makes writeFrozenBundle freeze a Go change: a
+	// workspace/platform Go effect, source.patch, and its sha and base
+	// commit (P5 host build tests).
+	goPatch []byte
 }
 
 // shortSockDir makes a short-named temp dir because unix socket paths cap at
@@ -875,6 +879,11 @@ func (fx *derivableSelfDevFixture) writeFrozenBundle(t *testing.T, operation sel
 		Groups:                  map[string][]transaction.ChangeRecord{},
 		RuntimeFiles:            []capsule.FrozenReleaseFile{{Path: "frontend/index.html", SHA256: fileSHA, Mode: 0o444}},
 	}
+	if fx.goPatch != nil {
+		bundle.OrderedFileEffects = append(bundle.OrderedFileEffects, transaction.ChangeRecord{Path: "workspace/platform/internal/selfdevprobe/probe.go", Kind: "added", Mode: 0o644})
+		bundle.SourcePatchSHA256 = computerevent.DigestBytes(fx.goPatch)
+		bundle.SourcePatchBaseCommit = hostBuildTestBaseCommit
+	}
 	contentDigest, err := bundle.ComputeContentDigest()
 	if err != nil {
 		t.Fatal(err)
@@ -894,6 +903,11 @@ func (fx *derivableSelfDevFixture) writeFrozenBundle(t *testing.T, operation sel
 	}
 	if err := os.WriteFile(filepath.Join(incoming, "frontend", "index.html"), content, 0o444); err != nil {
 		t.Fatal(err)
+	}
+	if fx.goPatch != nil {
+		if err := os.WriteFile(filepath.Join(incoming, "source.patch"), fx.goPatch, 0o444); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return bundleDigest
 }

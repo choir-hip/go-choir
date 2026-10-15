@@ -172,6 +172,9 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 				Sequence              uint64 `json:"sequence"`
 				CommittedSequence     uint64 `json:"committed_sequence"`
 				Progress              uint64 `json:"progress"`
+				Build                 struct {
+					Commit string `json:"commit"`
+				} `json:"build"`
 			}
 			decodeErr := json.NewDecoder(response.Body).Decode(&health)
 			_ = response.Body.Close()
@@ -189,6 +192,13 @@ func (p HTTPHealthProber) Probe(ctx context.Context, releaseDigest string, manif
 				stallsLeft--
 			case health.Status == "" || health.Status == "failed" || health.SelfDevelopmentMarker != manifest.Marker || health.EventSchemaVersion != manifest.EventSchemaVersion || health.ReducerVersion != manifest.ReducerVersion || health.ReleaseDigest != releaseDigest:
 				lastErr = fmt.Errorf("health identity mismatch")
+				stallsLeft--
+			case manifest.LayeringEntrypoint != "" && manifest.CodeCommit != "" && strings.TrimSpace(health.Build.Commit) != strings.TrimSpace(manifest.CodeCommit):
+				// A layered release is applied only when its own binary
+				// serves: the base binary (overlay failure, boot guard) would
+				// report the right release digest from current/ but its own
+				// build commit (P5 G7).
+				lastErr = fmt.Errorf("health identity mismatch: serving build %q, release built %q", health.Build.Commit, manifest.CodeCommit)
 				stallsLeft--
 			default:
 				// Canonicalize the SAME identity shape as before the

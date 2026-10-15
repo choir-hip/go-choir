@@ -67,19 +67,53 @@ type ClosureResult struct {
 	// applied to. Empty for unpatched builds.
 	SourcePatchSHA256     string `json:"source_patch_sha256,omitempty"`
 	SourcePatchBaseCommit string `json:"source_patch_base_commit,omitempty"`
+	// FlakeLockSHA256 is the sha256 of the built tree's flake.lock: the
+	// pinned toolchain and every flake input the build evaluated against.
+	// Recorded for patched builds, whose recipe the host never lets a patch
+	// change, so it is the base commit's own lock.
+	FlakeLockSHA256 string `json:"flake_lock_sha256,omitempty"`
 }
 
-// nixTimeout caps a single nix invocation. Eval and export on a warm store
-// are seconds; a cold eval against the daemon can take a few minutes.
-const nixTimeout = 10 * time.Minute
+// nixTimeout caps a single nix evaluation, path-info or export call. Eval
+// and export on a warm store are seconds; a cold eval against the daemon can
+// take a few minutes. The build step is bound by the build's own timeout,
+// not by this (buildResult).
+var nixTimeout = 10 * time.Minute
+
+// defaultBuildStepTimeout bounds `nix build` when the request names no build
+// timeout of its own.
+const defaultBuildStepTimeout = 60 * time.Minute
 
 var storePathRe = regexp.MustCompile(`^/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._?=-]+$`)
 
 // runNix invokes a nix subcommand and returns trimmed stdout. Nix 2.x puts
 // store/path-info/build under the `nix` CLI.
 func runNix(ctx context.Context, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, nixTimeout)
+	return runNixWithin(ctx, nixTimeout, args...)
+}
+
+// hostNixOptions go on every nix call the builder makes. The builder
+// evaluates and builds guest-authored trees, so:
+//
+//   - an empty builders list disables remote building: Node B's /etc/nix/machines names
+//     node-a-builder, which is shared with another project and must never
+//     build guest-authored code. Every derivation builds on this host.
+//   - max-jobs 2 keeps local building on (with no remote builders, max-jobs
+//     0 would fail every build); 2 is Node B's configured value.
+//   - sandbox true restates Node B's setting so a future config change
+//     cannot run a guest derivation unsandboxed. corpusd runs as root, a
+//     trusted user, so the daemon honors these overrides.
+var hostNixOptions = []string{
+	"--option", "builders", "",
+	"--option", "max-jobs", "2",
+	"--option", "sandbox", "true",
+}
+
+// runNixWithin is runNix under an explicit bound.
+func runNixWithin(ctx context.Context, bound time.Duration, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
+	args = append(append([]string{}, hostNixOptions...), args...)
 	cmd := exec.CommandContext(ctx, "nix", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -114,9 +148,14 @@ func evalDrvPath(ctx context.Context, installable string) (string, error) {
 }
 
 // buildResult builds a flake installable to a result symlink and returns the
-// resolved store path. The result symlink lives outside the checkout.
-func buildResult(ctx context.Context, installable, resultLink string) (string, error) {
-	if _, err := runNix(ctx, "build", installable, "-o", resultLink); err != nil {
+// resolved store path. The result symlink lives outside the checkout. The
+// build is bound by bound (the caller's build timeout; the default when
+// zero), never by the shorter per-call evaluation bound (H18).
+func buildResult(ctx context.Context, installable, resultLink string, bound time.Duration) (string, error) {
+	if bound <= 0 {
+		bound = defaultBuildStepTimeout
+	}
+	if _, err := runNixWithin(ctx, bound, "build", installable, "-o", resultLink); err != nil {
 		return "", fmt.Errorf("build %s: %w", installable, err)
 	}
 	return evalOutputPath(ctx, installable)

@@ -189,6 +189,20 @@ func main() {
 		}
 		writeJSON(w, http.StatusOK, result)
 	})
+	// A tape restore restages the pinned release pointer in place; when the
+	// exec identity changed, the runtime asks for a restart into current
+	// (P5 R1). The runtime writes its planned-restart marker first.
+	mux.HandleFunc("/v1/restart-current", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		if err := engine.RestartCurrent(context.WithoutCancel(r.Context())); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	server.Handler = mux
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()

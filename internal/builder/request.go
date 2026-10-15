@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Request names the app-layer installable to build and the booted base it
@@ -47,6 +48,15 @@ type Request struct {
 	// (the capsule's pinned source snapshot). Required when SourcePatch is
 	// set; the builder checks out exactly this commit before applying.
 	SourcePatchBaseCommit string
+	// BuildTimeout bounds the `nix build` step (default 60 minutes). The
+	// caller's context bounds the whole build.
+	BuildTimeout time.Duration
+	// AdmitPatchedTree decides whether the committed patched tree may be
+	// evaluated. It sees the changes git actually committed (paths and
+	// modes, read in the clone before nix runs); its error stops the build
+	// and is wrapped, so a caller recovers its own type with errors.As.
+	// Links and git metadata are refused before it is called.
+	AdmitPatchedTree func([]PatchedChange) error
 }
 
 // parseBaseManifest reads the Nix-generated guest-image-manifest and returns
@@ -133,6 +143,16 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 	baseSet := map[string]bool{}
 	for _, p := range basePaths {
 		baseSet[p] = true
+		// The manifest names only the base's top-level store paths. Their
+		// runtime closures (glibc, icu, ...) are in the booted EROFS store
+		// too; when the host store holds them (it built the image), count
+		// them as base so the exported delta is only what the base lacks.
+		// Best effort: an unknown path keeps the larger, still-correct delta.
+		if closure, closureErr := pathInfoClosure(ctx, p); closureErr == nil {
+			for _, q := range closure {
+				baseSet[q] = true
+			}
+		}
 	}
 	// S2-c: the builder is the authority on what it built. Derive the code
 	// commit from the source checkout rather than trusting the caller.
@@ -149,7 +169,7 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		sourceDirty = dirty
 	}
 	installable := req.Installable
-	patchSHA, patchBase := "", ""
+	patchSHA, patchBase, flakeLock := "", "", ""
 	if req.SourcePatch != "" {
 		// S2-f: the release is built from the patch's pinned base plus the
 		// diff, never the caller's live tree. Worktree-isolate the patch,
@@ -159,17 +179,22 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		if patchBase == "" {
 			return nil, fmt.Errorf("builder: source patch requires a base commit")
 		}
-		patchedRef, patchedCommit, sha, cleanup, patchErr := patchedFlakeRef(ctx, req.SourceDir, req.SourcePatch, req.Installable, patchBase)
+		patchedRef, patchedCommit, sha, cleanup, patchErr := patchedFlakeRef(ctx, req.SourceDir, req.SourcePatch, req.Installable, patchBase, req.AdmitPatchedTree)
 		if patchErr != nil {
 			return nil, fmt.Errorf("builder: apply source patch: %w", patchErr)
 		}
 		defer cleanup()
 		installable = patchedRef
 		patchSHA = sha
+		if repo, _, ok := strings.Cut(strings.TrimPrefix(patchedRef, "git+file://"), "#"); ok {
+			if lock, lockErr := fileSHA256(filepath.Join(repo, "flake.lock")); lockErr == nil {
+				flakeLock = lock
+			}
+		}
 		codeCommit, codeCommitSource, sourceDirty = patchedCommit, "derived-patch", false
 	}
 	// 2. Build/eval the app-layer installable.
-	outputPath, err := buildResult(ctx, installable, req.ResultLink)
+	outputPath, err := buildResult(ctx, installable, req.ResultLink, req.BuildTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -211,6 +236,7 @@ func Build(ctx context.Context, req Request) (*ClosureResult, error) {
 		SourceDirty:           sourceDirty,
 		SourcePatchSHA256:     patchSHA,
 		SourcePatchBaseCommit: patchBase,
+		FlakeLockSHA256:       flakeLock,
 		StoreSchemaVersion:    storeschema.Version,
 		BuiltAt:               nowRFC3339(),
 	}

@@ -309,6 +309,29 @@ func (c *Client) ImportBaseline(ctx context.Context, request BaselineImportReque
 	return manifest, nil
 }
 
+// RestartCurrent asks the updater to restart the runtime into the current
+// release (after a tape restore changed the exec identity). The caller has
+// written its planned-restart marker.
+func (c *Client) RestartCurrent(ctx context.Context) error {
+	if c == nil || c.http == nil {
+		return fmt.Errorf("updater client: unavailable")
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://updater/v1/restart-current", nil)
+	if err != nil {
+		return err
+	}
+	response, err := c.http.Do(httpRequest)
+	if err != nil {
+		return fmt.Errorf("updater client: restart current: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		raw, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+		return fmt.Errorf("updater client: restart current refused with status %d: %s", response.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	return nil
+}
+
 func (c *Client) Apply(ctx context.Context, request ApplyRequest) (ApplyResult, error) {
 	if c == nil || c.http == nil {
 		return ApplyResult{}, fmt.Errorf("updater client: unavailable")

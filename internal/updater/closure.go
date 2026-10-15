@@ -534,3 +534,86 @@ func verifyEntrypointBuildCommit(entrypoint, wantCommit string) error {
 }
 
 func sha256Hex(b []byte) [32]byte { return sha256.Sum256(b) }
+
+// ExtractClosureSubtree writes the regular files under <storeBase>/<subdir>
+// of an exported closure into targetDir/<subdir>/..., read-only, and returns
+// their manifest entries (paths relative to targetDir, sorted). A layered
+// self-development release lists its layer's own frontend this way, so the
+// release manifest names exactly the frontend the release dir serves and the
+// checkpoint's frontend identity is derivable from it
+// (docs/problems/layered-checkpoint-identity-gate2-2026-10-10.md). A symlink
+// or an empty subtree refuses: the manifest cannot name either.
+func ExtractClosureSubtree(blob []byte, storeBase, subdir, targetDir string) ([]ManifestFile, error) {
+	subdir = strings.Trim(filepath.ToSlash(filepath.Clean(subdir)), "/")
+	if subdir == "" || subdir == "." || strings.HasPrefix(subdir, "..") || strings.Contains(storeBase, "/") {
+		return nil, fmt.Errorf("nar: invalid subtree %q of %q", subdir, storeBase)
+	}
+	objects, roots, err := ParseClosure(blob)
+	if err != nil {
+		return nil, err
+	}
+	var node *narNode
+	for _, obj := range objects {
+		if filepath.Base(obj.StorePath) == storeBase {
+			node = roots[obj.StorePath]
+		}
+	}
+	if node == nil {
+		return nil, fmt.Errorf("nar: store path %s is not in the closure", storeBase)
+	}
+	for _, part := range strings.Split(subdir, "/") {
+		var next *narNode
+		if node.kind == "directory" {
+			for _, child := range node.children {
+				if child.name == part {
+					next = child
+				}
+			}
+		}
+		if next == nil {
+			return nil, fmt.Errorf("nar: %s has no %s", storeBase, subdir)
+		}
+		node = next
+	}
+	var files []ManifestFile
+	var walk func(n *narNode, rel string) error
+	walk = func(n *narNode, rel string) error {
+		if !safeRelativePath(rel) {
+			return fmt.Errorf("nar: unsafe subtree path %q", rel)
+		}
+		switch n.kind {
+		case "directory":
+			for _, child := range n.children {
+				if err := walk(child, rel+"/"+child.name); err != nil {
+					return err
+				}
+			}
+			return nil
+		case "regular":
+			mode := os.FileMode(0o444)
+			if n.executable {
+				mode = 0o555
+			}
+			target := filepath.Join(targetDir, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(target, n.contents, mode); err != nil {
+				return err
+			}
+			sum := sha256.Sum256(n.contents)
+			files = append(files, ManifestFile{Path: rel, SHA256: fmt.Sprintf("%x", sum), Mode: uint32(mode)})
+			return nil
+		default:
+			return fmt.Errorf("nar: %s is a %s; a release manifest names regular files only", rel, n.kind)
+		}
+	}
+	if err := walk(node, subdir); err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("nar: %s/%s has no files", storeBase, subdir)
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
+}
