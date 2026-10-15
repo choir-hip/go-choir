@@ -88,6 +88,34 @@
       choirGo = mkChoirGo pkgs;
       buildChoirGoModule = pkgs.buildGoModule.override { go = choirGo; };
 
+      # Dolt lane (docs/reports/dolt-upgrade-compat-2026-10-15.md). The sql-server
+      # for Store A and Store B, the host `dolt` CLI and the dev shell all use
+      # pkgs.dolt; the locked nixpkgs ships 2.1.9. Same pattern as choirGo: the
+      # base's own recipe with a newer version, source hash and vendor hash
+      # (taken from nixpkgs' pkgs/by-name/do/dolt/package.nix at 2.4.2), applied
+      # only while the given nixpkgs is older, so the weekly base bump retires
+      # it. The embedded Go module in go.mod is a separate form of Dolt and is
+      # pinned there.
+      choirDoltRelease = {
+        version = "2.4.2";
+        hash = "sha256-4/VvjwV7N99lraNnc2vJpW17lIe5+1yShudGsZ2r39w=";
+        vendorHash = "sha256-wJqA2gWhwEfHQim3a4HJpDsSj1Igeiyrg6xn8pPLrA4=";
+      };
+      mkChoirDolt = p:
+        if p.lib.versionAtLeast p.dolt.version choirDoltRelease.version then p.dolt
+        else p.dolt.overrideAttrs (_: {
+          inherit (choirDoltRelease) version vendorHash;
+          src = p.fetchFromGitHub {
+            owner = "dolthub";
+            repo = "dolt";
+            tag = "v${choirDoltRelease.version}";
+            inherit (choirDoltRelease) hash;
+          };
+        });
+      choirDoltModule = { ... }: {
+        nixpkgs.overlays = [ (final: prev: { dolt = mkChoirDolt prev; }) ];
+      };
+
       # Go module version from go.mod
       goModuleVersion = "0.1.0";
       buildCommit = self.rev or self.dirtyRev or "local";
@@ -114,7 +142,7 @@
             (mkChoirGo devPkgs)
             devPkgs.pkg-config
             devPkgs.icu
-            devPkgs.dolt
+            (mkChoirDolt devPkgs)
           ];
           shellHook = ''
             export PKG_CONFIG_PATH="${devPkgs.icu.dev}/lib/pkgconfig:${devPkgs.icu}/lib/pkgconfig''${PKG_CONFIG_PATH:+:''${PKG_CONFIG_PATH}}"
@@ -539,6 +567,7 @@ EOF
           ./nix/disks.nix
           ./nix/node-b.nix
           choirKernelModule
+          choirDoltModule
         ];
       };
 
