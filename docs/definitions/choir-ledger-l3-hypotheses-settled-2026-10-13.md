@@ -187,16 +187,33 @@ now:
       already has an owner-only independent scoring path with scorer
       identity; what is missing is the clock (resolves_by, criterion), the
       settler's evidence, and keeping settlement out of the scoring average.
-    main_uncertainty: whether management writes hypotheses that a week of the paper's own captures can settle, or mostly long-horizon ones
-    next_observation: the share of current Cast hypotheses on the paper whose statement names a dated, checkable event within 7 days (read-only, from /api inbox records)
+    main_uncertainty: >-
+      Observed 2026-10-15 21:45 UTC, read-only, from /api/inboxes records
+      of the 27 Texture inboxes in the paper's newest 100 runs (38
+      hypotheses):
+      - 32 are present- or past-tense verification claims ("X happened,
+        according to Y"). Only 6 are forward-looking, and only 1 names a
+        date.
+      - 18 of 38 have p >= 0.85 (mean 0.72).
+      - All 28 in open rounds are still open.
+      So the open question is no longer horizon. It is whether management
+      can be asked for forecasts (future, dated, checkable, p in a band
+      that is not near-certain) beside its verification claims, and
+      whether the two kinds should be scored apart. Verification claims
+      settle by corroboration; forecasts settle by events.
+    next_observation: >-
+      The agentic-consensus review of this file, with this finding in the
+      prompt. Does L3-1 add a hypothesis kind (verification or forecast)
+      with resolves_by and criterion required for forecasts only, or keep
+      one kind?
   blocker_or_risk: >-
     The entry criterion (an off-host ledger copy) is not built and waits
     on an owner go-ahead for the backup target; L3-1 does not need it, but
     L3 cannot finish without it.
   next_action: >-
-    Read-only: sample the paper's Cast hypotheses through the product API
-    and classify how many are short-horizon and checkable; then run the
-    agentic-consensus review of this file before any L3-1 code.
+    Run the agentic-consensus review of this file (readiness drafted ->
+    reviewed), carrying the hypothesis-kind finding. No L3-1 code before
+    the review.
 
 receipts: []
 ---
