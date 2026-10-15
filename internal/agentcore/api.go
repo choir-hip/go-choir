@@ -693,6 +693,45 @@ type guestObservabilityResponse struct {
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
 	ClaudeDelegate *capsule.ClaudeDelegateStatus `json:"claude_delegate,omitempty"`
+	// Memory is the guest's /proc/meminfo view, read per request: a memory
+	// hotplug lease changes MemTotal, and the staging probe reads it here
+	// instead of over SSH (docs/reports/memory-hotplug-controller-design-2026-10-14.md).
+	Memory *guestMemoryObservability `json:"memory,omitempty"`
+}
+
+// guestMemoryObservability is the guest's own memory as the kernel reports it.
+type guestMemoryObservability struct {
+	MemTotalBytes     uint64 `json:"mem_total_bytes"`
+	MemAvailableBytes uint64 `json:"mem_available_bytes"`
+	MemFreeBytes      uint64 `json:"mem_free_bytes"`
+}
+
+// parseGuestMeminfo reads MemTotal, MemAvailable and MemFree (kB) from
+// /proc/meminfo text; nil when MemTotal is missing.
+func parseGuestMeminfo(data string) *guestMemoryObservability {
+	var out guestMemoryObservability
+	for _, line := range strings.Split(data, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		kib, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		switch fields[0] {
+		case "MemTotal:":
+			out.MemTotalBytes = kib << 10
+		case "MemAvailable:":
+			out.MemAvailableBytes = kib << 10
+		case "MemFree:":
+			out.MemFreeBytes = kib << 10
+		}
+	}
+	if out.MemTotalBytes == 0 {
+		return nil
+	}
+	return &out
 }
 
 // HandleGuestObservability handles GET /api/runtime/observability: the guest's
@@ -713,6 +752,9 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		ComputerID: h.rt.cfg.ComputerID,
 		Build:      buildinfo.Snapshot("autoputer"),
 		RecentLog:  h.rt.RecentBootLog(),
+	}
+	if raw, err := os.ReadFile("/proc/meminfo"); err == nil {
+		resp.Memory = parseGuestMeminfo(string(raw))
 	}
 	if h.rt.store != nil {
 		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())

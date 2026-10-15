@@ -700,7 +700,7 @@ func (r *OwnershipRegistry) WaitMemory(ctx context.Context, own *VMOwnership, wa
 	}
 	deadline := time.Now().Add(wait)
 	for {
-		view := r.observeMemory(own)
+		view, _ := r.ObserveMemory(own)
 		settled := view.PluggedMiB == view.RequestedMiB-view.BaseMiB
 		if settled || wait <= 0 || time.Now().After(deadline) {
 			return view
@@ -713,25 +713,30 @@ func (r *OwnershipRegistry) WaitMemory(ctx context.Context, own *VMOwnership, wa
 	}
 }
 
-// observeMemory reads one computer's status (taking opMu) and returns its
-// view.
-func (r *OwnershipRegistry) observeMemory(own *VMOwnership) MemoryHotplugView {
+// ObserveMemory reads one computer's hotplug status from its Firecracker
+// (taking opMu) and returns the refreshed view; an error means the
+// computer has no reachable device (or is busy).
+func (r *OwnershipRegistry) ObserveMemory(own *VMOwnership) (MemoryHotplugView, error) {
 	cfg := r.memoryHotplugConfig()
 	ctl := &r.memoryCtl
-	if mgr, ok := r.memoryManager(); ok {
-		ctl.opMu.Lock()
-		status, err := mgr.MemoryHotplugStatus(own.VMID)
-		ctl.opMu.Unlock()
-		if err == nil {
-			ctl.mu.Lock()
-			st := ctl.stateLocked(own.VMID, own.ComputerID)
-			st.status, st.observedAt = status, r.now()
-			r.updatePhaseLocked(st, cfg)
-			ctl.mu.Unlock()
-		}
+	mgr, ok := r.memoryManager()
+	if !ok {
+		return MemoryHotplugView{}, memoryErr(http.StatusServiceUnavailable, "no memory hotplug manager")
 	}
+	ctl.opMu.Lock()
+	status, err := mgr.MemoryHotplugStatus(own.VMID)
+	ctl.opMu.Unlock()
+	if err != nil {
+		view, _ := r.MemoryView(own.VMID)
+		return view, mapManagerMemoryErr(err)
+	}
+	ctl.mu.Lock()
+	st := ctl.stateLocked(own.VMID, own.ComputerID)
+	st.status, st.observedAt = status, r.now()
+	r.updatePhaseLocked(st, cfg)
+	ctl.mu.Unlock()
 	view, _ := r.MemoryView(own.VMID)
-	return view
+	return view, nil
 }
 
 // updatePhaseLocked derives the phase from the lease and the last status.

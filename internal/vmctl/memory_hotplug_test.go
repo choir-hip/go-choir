@@ -580,6 +580,15 @@ func TestMemoryRoutesAuthorization(t *testing.T) {
 	if rec := serveThroughHostauth(f.h.HandleGuestMemory, http.MethodPost, "/internal/vmctl/memory/guest", "10.200.3.6:41000", "", map[string]any{"target_mib": 1, "extra": true}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown field = %d", rec.Code)
 	}
+	if rec := serveThroughHostauth(f.h.HandleMemory, http.MethodGet, "/internal/vmctl/memory?computer_id=computer-memory-n", "127.0.0.1:5000", token, nil); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"plugged_mib":1024`) {
+		t.Fatalf("observe = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mgr.hmu.Lock()
+	delete(f.mgr.dev, "vm-n")
+	f.mgr.hmu.Unlock()
+	if rec := serveThroughHostauth(f.h.HandleMemory, http.MethodGet, "/internal/vmctl/memory?computer_id=computer-memory-n", "127.0.0.1:5000", token, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("observe without a device = %d %s", rec.Code, rec.Body.String())
+	}
 }
 
 // F20 and the list field: current memory in the VM list, from the cache,

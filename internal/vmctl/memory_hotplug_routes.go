@@ -98,7 +98,17 @@ func (h *Handler) HandleMemory(w http.ResponseWriter, r *http.Request) {
 			writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "computer not found"})
 			return
 		}
-		writeVMCTLJSON(w, http.StatusOK, h.registry.observeMemory(own))
+		view, err := h.registry.ObserveMemory(own)
+		if err != nil {
+			status := http.StatusInternalServerError
+			var reqErr *MemoryRequestError
+			if errors.As(err, &reqErr) {
+				status = reqErr.Status
+			}
+			writeVMCTLJSON(w, status, vmctlErrorResponse{Error: err.Error()})
+			return
+		}
+		writeVMCTLJSON(w, http.StatusOK, view)
 	case http.MethodPost:
 		body, ok := decodeMemoryRequest(w, r)
 		if !ok {
