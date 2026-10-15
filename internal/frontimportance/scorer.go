@@ -19,6 +19,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -93,6 +94,9 @@ type config struct {
 	// story keeps its section and importance after it leaves the newest
 	// 100. Zero means defaultRetention.
 	Retention time.Duration
+	// Pages is how many front-list pages to read, following next_cursor;
+	// 0 or 1 reads only the first.
+	Pages int
 }
 
 // Main runs one scoring pass with the subcommand's flags and returns the
@@ -102,6 +106,7 @@ func Main(args []string) int {
 	fs := flag.NewFlagSet("front-importance", flag.ContinueOnError)
 	fs.StringVar(&cfg.FrontURL, "front-url", envOr("FRONT_IMPORTANCE_FRONT_URL", defaultFrontURL), "corpusd internal front list URL")
 	fs.StringVar(&cfg.ScoresPath, "scores", envOr("FRONT_IMPORTANCE_SCORES_PATH", defaultScoresPath), "scores file to write")
+	fs.IntVar(&cfg.Pages, "pages", envInt("FRONT_IMPORTANCE_PAGES", 1), "front list pages to read, following next_cursor (backfill)")
 	fs.IntVar(&cfg.MaxCalls, "max-calls", 80, "most Jev calls per run")
 	fs.DurationVar(&cfg.Budget, "budget", 3*time.Minute, "time budget for the run's Jev calls")
 	fs.DurationVar(&cfg.CallTime, "call-timeout", 45*time.Second, "time limit for one Jev call")
@@ -139,7 +144,7 @@ type runStats struct {
 // be read.
 func run(ctx context.Context, cfg config, client *http.Client, jev decider, now func() time.Time) (runStats, error) {
 	var stats runStats
-	stories, err := fetchFront(ctx, client, cfg.FrontURL)
+	stories, err := fetchFrontPages(ctx, client, cfg.FrontURL, cfg.Pages)
 	if err != nil {
 		return stats, err
 	}
@@ -218,34 +223,60 @@ func carryForward(previous, next map[string]scoreRow, now time.Time, retention t
 	return carried
 }
 
-func fetchFront(ctx context.Context, client *http.Client, url string) ([]frontStory, error) {
+// fetchFrontPages reads up to pages front-list pages (one when pages < 1),
+// following next_cursor by appending &cursor= to the front URL. The first
+// page failing is an error; a later page failing logs and keeps the stories
+// already read (carry-forward then keeps rows for the unread ones).
+func fetchFrontPages(ctx context.Context, client *http.Client, frontURL string, pages int) ([]frontStory, error) {
+	stories, cursor, err := fetchFront(ctx, client, frontURL)
+	if err != nil {
+		return nil, err
+	}
+	for page := 2; page <= pages && cursor != ""; page++ {
+		sep := "?"
+		if strings.Contains(frontURL, "?") {
+			sep = "&"
+		}
+		more, next, err := fetchFront(ctx, client, frontURL+sep+"cursor="+url.QueryEscape(cursor))
+		if err != nil {
+			log.Printf("front-importance: front list page %d: %v; scoring the %d stories read", page, err, len(stories))
+			break
+		}
+		stories = append(stories, more...)
+		cursor = next
+	}
+	return stories, nil
+}
+
+func fetchFront(ctx context.Context, client *http.Client, frontURL string) ([]frontStory, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, frontURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("front list request: %w", err)
+		return nil, "", fmt.Errorf("front list request: %w", err)
 	}
 	hostauth.MarkInternal(req)
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("front list: %w", err)
+		return nil, "", fmt.Errorf("front list: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if err != nil {
-		return nil, fmt.Errorf("front list read: %w", err)
+		return nil, "", fmt.Errorf("front list read: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("front list returned %s", resp.Status)
+		return nil, "", fmt.Errorf("front list returned %s", resp.Status)
 	}
 	var page struct {
-		Stories []frontStory `json:"stories"`
+		Stories    []frontStory `json:"stories"`
+		NextCursor string       `json:"next_cursor"`
 	}
 	if err := json.Unmarshal(body, &page); err != nil {
-		return nil, fmt.Errorf("front list decode: %w", err)
+		return nil, "", fmt.Errorf("front list decode: %w", err)
 	}
-	return page.Stories, nil
+	return page.Stories, page.NextCursor, nil
 }
 
 // readScores returns the previous scores, or none when the file is missing
@@ -429,6 +460,16 @@ func envDuration(key string, fallback time.Duration) time.Duration {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		if d, err := time.ParseDuration(v); err == nil && d > 0 {
 			return d
+		}
+		log.Printf("front-importance: ignoring invalid %s=%q", key, v)
+	}
+	return fallback
+}
+
+func envInt(key string, fallback int) int {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
 		}
 		log.Printf("front-importance: ignoring invalid %s=%q", key, v)
 	}

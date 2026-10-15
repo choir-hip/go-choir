@@ -118,10 +118,17 @@ export function storyTextureContext(route: string, title = ''): Record<string, u
  */
 export const FRONT_FIRST_PAGE_SIZE = 60;
 
-export async function fetchFrontPage(cursor = '', limit = 20): Promise<FrontPage> {
+/**
+ * One page of the front list. With a section id (not the front page's) the
+ * server returns only that section's stories, newest first, and next_cursor
+ * continues that section; a section page may be short or empty with a
+ * next_cursor when the server stopped scanning (the caller keeps following).
+ */
+export async function fetchFrontPage(cursor = '', limit = 20, section = ''): Promise<FrontPage> {
   const params = new URLSearchParams();
   params.set('limit', String(limit));
   if (cursor) params.set('cursor', cursor);
+  if (section && section !== FRONT_SECTION_ID) params.set('section', section);
   const res = await fetch(`/api/platform/publications/front?${params}`, {
     credentials: 'same-origin',
     cache: 'no-store',

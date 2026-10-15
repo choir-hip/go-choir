@@ -28,6 +28,11 @@
  *     section choices counted on the device lift those sections on the front
  *     page; with fewer than half filed the row is absent; at 375px the row
  *     scrolls inside itself with no page overflow.
+ *   - section pages (2026-10-15): a section is fetched from the server
+ *     (`?section=<id>&limit=60`), not filtered from the front page's rows,
+ *     so a quiet section still lists its older stories; "Older stories"
+ *     pages the section's own cursor; "No stories in this section yet."
+ *     shows only when the server returns none.
  * The rank rule itself (rankFrontStories in src/lib/autopaper.ts) is checked
  * directly in the first describe block; the repo has no TS unit runner, and
  * Playwright loads the TypeScript module as is.
@@ -111,7 +116,11 @@ function slugOf(route) {
   return String(route || '').replace(/^\/pub\/texture\//, '').split('/')[0];
 }
 
-async function mockFront(page, { first, second }, { status = 200, empty = false } = {}) {
+// A section request (`?section=<id>`) is answered by `sectionBody(section,
+// cursor)` when given, else with every fixture story filed under that
+// section in one page, as corpusd does for a short section. Every request's
+// query string is pushed onto `requests`.
+async function mockFront(page, { first, second }, { status = 200, empty = false, sectionBody = null, requests = null } = {}) {
   await page.route('**/auth/session', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ authenticated: false }) }),
   );
@@ -119,6 +128,14 @@ async function mockFront(page, { first, second }, { status = 200, empty = false 
     if (status !== 200) return route.fulfill({ status, contentType: 'application/json', body: '{"error":"down"}' });
     const url = new URL(route.request().url());
     const cursor = url.searchParams.get('cursor');
+    const section = url.searchParams.get('section');
+    if (requests) requests.push(url.search);
+    if (section) {
+      const body = sectionBody
+        ? sectionBody(section, cursor || '')
+        : { stories: [...first, ...second].filter((s) => s.section === section) };
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    }
     const body = empty
       ? { stories: [] }
       : cursor === 'page-2'
@@ -153,10 +170,10 @@ async function shoot(page, testInfo, name) {
   }
 }
 
-async function openFront(page, viewport, fx, theme = '') {
+async function openFront(page, viewport, fx, theme = '', mockOptions = {}) {
   await page.setViewportSize(viewport);
   await useTheme(page, theme);
-  await mockFront(page, fx);
+  await mockFront(page, fx, mockOptions);
   await page.goto(`${BASE_URL}/autopaper`);
   await expect(page.locator('[data-autopaper-grid]')).toBeVisible({ timeout: 20_000 });
 }
@@ -447,8 +464,9 @@ test.describe('Autopaper sections', () => {
     await expect(page.locator('[data-autopaper-lead] h2')).toHaveText(politics[0].title);
     await shoot(page, testInfo, 'autopaper-sections-1440-us-politics');
 
-    // A section that ends within its front tiers shows no lone More
-    // stories block or Older stories button, though the cursor has more.
+    // A section that ends within its front tiers (the server returned no
+    // cursor for it) shows no lone More stories block or Older stories
+    // button, though the front page's own cursor has more.
     await expect(page.locator('[data-autopaper-more-stories]')).toHaveCount(0);
     await expect(page.locator('[data-autopaper-more]')).toHaveCount(0);
 
@@ -469,21 +487,74 @@ test.describe('Autopaper sections', () => {
     );
   });
 
-  test('a section with stories past its tiers keeps More stories and pages in only its own older stories', async ({ page }) => {
+  test('a section pages its own older stories with the section cursor', async ({ page }) => {
     const base = sectionedFixture();
     // Every first-page story but one is World; the second page has one World story.
     const fx = {
       first: base.first.map((s, i) => (i === 0 ? { ...s, section: 'tech_ai' } : { ...s, section: 'world' })),
       second: base.second.map((s, i) => (i === 0 ? { ...s, section: 'world' } : s)),
     };
-    await openFront(page, { width: 1440, height: 900 }, fx);
-    await page.locator('[data-autopaper-section="world"]').click();
     const world = rankFrontStories(storiesInSection(fx.first, 'world'));
     expect(world.length).toBe(13);
+    const requests = [];
+    // The server's own section list: 13 stories, then one more behind w2.
+    const sectionBody = (section, cursor) =>
+      cursor === 'w2' ? { stories: [fx.second[0]] } : { stories: storiesInSection(fx.first, section), next_cursor: 'w2' };
+    await openFront(page, { width: 1440, height: 900 }, fx, '', { sectionBody, requests });
+    await page.locator('[data-autopaper-section="world"]').click();
     await expect(page.locator('[data-autopaper-more-stories]')).toHaveCount(1);
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText(world.map((s) => s.title));
+    // The first page of a section is the server's, sized like the front page's.
+    expect(requests.some((q) => /(^|[?&])section=world(&|$)/.test(q) && /(^|[?&])limit=60(&|$)/.test(q) && !/cursor=/.test(q))).toBe(true);
     await page.locator('[data-autopaper-more]').click();
     await expect(page.locator('[data-autopaper-more]')).toHaveCount(0);
     await expect(page.locator('[data-autopaper-headline]')).toHaveText([...world, fx.second[0]].map((s) => s.title));
+    // "Older stories" continued the section's cursor, not the front page's.
+    expect(requests.some((q) => /cursor=w2(&|$)/.test(q) && /section=world(&|$)/.test(q))).toBe(true);
+    expect(requests.some((q) => /cursor=page-2/.test(q))).toBe(false);
+  });
+
+  test('a section lists its stories from the server even when none is among the front page rows', async ({ page }) => {
+    const fx = sectionedFixture();
+    // Politics rows on the front page (court, vaccine, election) are dropped,
+    // as when the section has been quiet for more than the newest 60 stories.
+    const front = { first: fx.first.filter((s) => s.section !== 'us_politics'), second: fx.second };
+    const old = { ...fx.first[0], publication_id: 'pub-old-politics', title: 'Senate passes the budget after an overnight session', section: 'us_politics', importance: 6 };
+    const requests = [];
+    const sectionBody = (section) => (section === 'us_politics' ? { stories: [old] } : { stories: [] });
+    await openFront(page, { width: 1280, height: 900 }, front, '', { sectionBody, requests });
+    await expect(page.locator('[data-autopaper-sections]')).toBeVisible();
+    await page.locator('[data-autopaper-section="us_politics"]').click();
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText([old.title]);
+    await expect(page.locator('[data-autopaper-section-empty]')).toHaveCount(0);
+    expect(requests.some((q) => /section=us_politics/.test(q) && /limit=60/.test(q))).toBe(true);
+  });
+
+  test('"No stories in this section yet." shows only when the server returns no story for the section', async ({ page }) => {
+    const fx = sectionedFixture();
+    const requests = [];
+    const sectionBody = (section, cursor) => {
+      if (section === 'business') return { stories: [] };
+      // The server stopped scanning without a match, then found one.
+      if (cursor === 'c1') return { stories: [fx.first[4]] };
+      return { stories: [], next_cursor: 'c1' };
+    };
+    await openFront(page, { width: 1280, height: 900 }, fx, '', { sectionBody, requests });
+    await page.locator('[data-autopaper-section="business"]').click();
+    await expect(page.locator('[data-autopaper-section-empty]')).toHaveText('No stories in this section yet.');
+    await expect(page.locator('[data-autopaper-more]')).toHaveCount(0);
+    // An empty page that carries a cursor is followed, not reported empty.
+    await page.locator('[data-autopaper-section="tech_ai"]').click();
+    await expect(page.locator('[data-autopaper-headline]')).toHaveText([fx.first[4].title]);
+    await expect(page.locator('[data-autopaper-section-empty]')).toHaveCount(0);
+    expect(requests.filter((q) => /section=tech_ai/.test(q)).length).toBe(2);
+    // The front page still shows its own rows, untouched by section fetches.
+    await page.locator('[data-autopaper-section="front"]').click();
+    // (Same stories; the visits just made lift sections, so the order may differ.)
+    await expect(page.locator('[data-autopaper-headline]')).toHaveCount(fx.first.length);
+    expect((await page.locator('[data-autopaper-headline]').allTextContents()).map((t) => t.trim()).sort()).toEqual(
+      fx.first.map((s) => s.title).sort(),
+    );
   });
 
   test('the reader habit lifts their sections on the front page', async ({ page }) => {

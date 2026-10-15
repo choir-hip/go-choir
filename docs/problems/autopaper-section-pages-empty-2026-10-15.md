@@ -50,3 +50,64 @@ as the paper goes, with "Older stories" paging.
   passes `section` through.
 - Frontend: a section page fetches `?section=<id>` itself with cursor paging,
   instead of filtering the front page's rows.
+
+## Fix
+
+Branch `fix/autopaper-section-pages` (orange; rollback: git revert each commit).
+
+- `b6490f95b` scorer: `run` carries previous score rows for stories outside
+  the fetched window, dropping rows older than 14 days by `scored_at`
+  (`-retention` flag / `FRONT_IMPORTANCE_RETENTION`, default 14d) or with no
+  readable `scored_at`.
+- `44226829e` corpusd: `?section=` on the internal front list; invalid section
+  is 400; scans publication batches (100 at a time, at most 2000 per request),
+  `next_cursor` resumes after the last publication scanned, so a short or
+  empty page can carry a cursor. Unfiltered path unchanged.
+- `763e05ea9` proxy: passes `section` through.
+- `e15d7b3a8` frontend: a section page fetches `?section=<id>&limit=60` and
+  pages its own cursor; empty pages with a cursor are followed; the empty
+  state shows only when the server returns zero.
+
+Deploy: the scorer change ships in the corpusd binary (the timer runs
+`corpusd front-importance`), so restart/redeploy corpusd, proxy and the
+frontend. Sections of stories already past the newest 100 are not recovered
+(their rows are already gone); they refill only as stories are rescored.
+
+### One-off backfill after deploy (stories past the newest 100)
+
+The scorer now reads `-pages N` front-list pages (env
+`FRONT_IMPORTANCE_PAGES`, default 1, the old behaviour), following
+`next_cursor` from `FRONT_IMPORTANCE_FRONT_URL` (`...?limit=100`). Stories
+that already lost their rows have no score, so one run over deeper pages
+scores them. The unit (`nix/node-b.nix`, `go-choir-front-importance`) is a
+hardened oneshot with credentials, `TimeoutStartSec=5min`, `CPUQuota=50%`
+and a fixed `ExecStart`, so run the backfill as a temporary runtime drop-in
+that changes only the command line and timeout, not as a hand-built
+`systemd-run`. On Node B, after the deploy has put the new corpusd binary in
+place:
+
+```sh
+sudo systemctl stop go-choir-front-importance.timer
+sudo mkdir -p /run/systemd/system/go-choir-front-importance.service.d
+BIN=$(systemctl show -p ExecStart --value go-choir-front-importance.service \
+  | sed -n 's/.*path=\([^ ;]*\).*/\1/p')
+sudo tee /run/systemd/system/go-choir-front-importance.service.d/backfill.conf >/dev/null <<EOF2
+[Service]
+ExecStart=
+ExecStart=$BIN front-importance -pages 5 -max-calls 500 -budget 30m
+TimeoutStartSec=45min
+EOF2
+sudo systemctl daemon-reload
+sudo systemctl start --wait go-choir-front-importance.service
+journalctl -u go-choir-front-importance.service -n 20 --no-pager
+# cleanup: back to the normal 10-minute run
+sudo rm -r /run/systemd/system/go-choir-front-importance.service.d
+sudo systemctl daemon-reload
+sudo systemctl start go-choir-front-importance.timer
+```
+
+Expect `front-importance: ... N scored` in the journal; check `scores.json`
+section counts afterwards. `-pages 5` covers the newest 500 stories (about
+a day); the 14-day carry-forward keeps those rows from then on. If the run
+hits the budget, run it again: scored rows are kept and only unscored
+stories cost calls.
