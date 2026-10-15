@@ -7,7 +7,9 @@ package frontimportance
 //  2. A failed or bad Jev answer drops a story's previous score, or writes
 //     an out-of-range importance.
 //  3. A front-list failure overwrites the scores file (losing scores).
-//  4. Scores for stories no longer on the front list pile up forever.
+//  4. Scores for stories outside the window pile up forever (they are
+//     carried forward for a bounded retention), or are dropped as soon as
+//     the story leaves the newest 100 (the story loses its section).
 //  5. The call bound is not honoured.
 //  6. The request is not the gateway's Jev shape (choice questions with
 //     the importance choices "1".."10").
@@ -117,7 +119,7 @@ func TestScorerScoresKeepsAndPrunes(t *testing.T) {
 		"pub-a":    {Revision: 2, Importance: 7, Section: "world", Criteria: scoringCriteria}, // current: kept, no call
 		"pub-b":    {Revision: 1, Importance: 6},                                              // revised: rescored
 		"pub-c":    {Revision: 1, Importance: 5},                                              // revised, Jev fails: old kept
-		"pub-gone": {Revision: 1, Importance: 9},                                              // off the front: pruned
+		"pub-gone": {Revision: 1, Importance: 9, ScoredAt: "2000-01-01T00:00:00Z"},            // off the window, past retention: pruned
 	}}
 	if err := writeScores(path, writePrev); err != nil {
 		t.Fatal(err)

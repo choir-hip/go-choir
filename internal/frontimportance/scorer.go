@@ -34,6 +34,9 @@ const (
 	defaultFrontURL   = "http://127.0.0.1:8086/internal/platform/publications/front?limit=100"
 	defaultScoresPath = "/var/lib/go-choir/front-importance/scores.json"
 	scorerComputerID  = "host:front-importance"
+	// defaultRetention bounds how long a score row outlives its story's
+	// time in the scored window (docs/problems/autopaper-section-pages-empty-2026-10-15.md).
+	defaultRetention = 14 * 24 * time.Hour
 )
 
 // scoresFile is the scores file schema (version 1), shared with corpusd.
@@ -85,6 +88,11 @@ type config struct {
 	MaxCalls   int
 	Budget     time.Duration
 	CallTime   time.Duration
+	// Retention is how long a score row for a story that has left the
+	// scored window is carried forward, measured from its scored_at, so a
+	// story keeps its section and importance after it leaves the newest
+	// 100. Zero means defaultRetention.
+	Retention time.Duration
 }
 
 // Main runs one scoring pass with the subcommand's flags and returns the
@@ -97,6 +105,7 @@ func Main(args []string) int {
 	fs.IntVar(&cfg.MaxCalls, "max-calls", 80, "most Jev calls per run")
 	fs.DurationVar(&cfg.Budget, "budget", 3*time.Minute, "time budget for the run's Jev calls")
 	fs.DurationVar(&cfg.CallTime, "call-timeout", 45*time.Second, "time limit for one Jev call")
+	fs.DurationVar(&cfg.Retention, "retention", envDuration("FRONT_IMPORTANCE_RETENTION", defaultRetention), "how long a score row is kept after its story leaves the scored window")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -175,12 +184,38 @@ func run(ctx context.Context, cfg config, client *http.Client, jev decider, now 
 		next.Scores[id] = row
 		stats.Scored++
 	}
+	carried := carryForward(previous.Scores, next.Scores, now(), cfg.Retention)
+	log.Printf("front-importance: %d rows carried forward for stories outside the window", carried)
 	next.ScoredAt = now().UTC().Format(time.RFC3339)
 	if err := writeScores(cfg.ScoresPath, next); err != nil {
 		return stats, err
 	}
 	stats.Depth = summarizeDepth(stories, next.Scores)
 	return stats, nil
+}
+
+// carryForward copies previous rows for stories absent from the current
+// window into next, so a story keeps its section after it leaves the newest
+// 100. Rows scored longer ago than retention, or with no readable scored_at
+// (their age cannot be bounded), are dropped. Rows already in next (the
+// window's stories) are never overwritten. It returns the number carried.
+func carryForward(previous, next map[string]scoreRow, now time.Time, retention time.Duration) int {
+	if retention <= 0 {
+		retention = defaultRetention
+	}
+	carried := 0
+	for id, row := range previous {
+		if _, inWindow := next[id]; inWindow {
+			continue
+		}
+		scoredAt, err := time.Parse(time.RFC3339, row.ScoredAt)
+		if err != nil || now.Sub(scoredAt) > retention {
+			continue
+		}
+		next[id] = row
+		carried++
+	}
+	return carried
 }
 
 func fetchFront(ctx context.Context, client *http.Client, url string) ([]frontStory, error) {
@@ -388,6 +423,16 @@ func clip(s string, n int) string {
 		return s
 	}
 	return string([]rune(s)[:n])
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+		log.Printf("front-importance: ignoring invalid %s=%q", key, v)
+	}
+	return fallback
 }
 
 func envOr(key, fallback string) string {
