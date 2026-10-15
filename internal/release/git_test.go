@@ -55,7 +55,10 @@ func repoFingerprint(t *testing.T, dir string) string {
 		}
 		return nil
 	})
-	return string(index) + "\x00" + strings.Join(objects, ",") + "\x00" + git(t, dir, "rev-parse", "HEAD") + "\x00" + git(t, dir, "status", "--porcelain")
+	// --no-optional-locks: a plain status refreshes a racy index (stat data
+	// of files written in the same second as the commit) and rewrites
+	// .git/index, so the fingerprint itself would change the repository.
+	return string(index) + "\x00" + strings.Join(objects, ",") + "\x00" + git(t, dir, "rev-parse", "HEAD") + "\x00" + git(t, dir, "--no-optional-locks", "status", "--porcelain")
 }
 
 func TestPatchedTreeEqualsTheCommittedTreeAndLeavesTheRepositoryUntouched(t *testing.T) {
