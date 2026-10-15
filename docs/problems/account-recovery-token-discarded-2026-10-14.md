@@ -181,7 +181,7 @@ F6 row g) found `POST /auth/recovery/request` to be an unauthenticated
 write that mints a token nobody can use, and asked the owner to choose
 between deleting it and building the UI. The owner chose "deleted for
 now" ([owner-notes-2026-10-14.md](../reports/owner-notes-2026-10-14.md)
-§19). That ruling has not been carried out: on `origin/main` at 133de45fa
+§19). That ruling has not been carried out: on `origin/main` at 3a5084fea
 both routes are still registered (`cmd/auth/main.go:77-78`), and no branch
 deletes them. Slice 1 is the other branch of that choice. It keeps the
 route and gives it a destination: the token is mailed to the account's
@@ -222,6 +222,34 @@ from its own computer's frontend, which carries the recovery page only
 after that computer's next base-image refresh. A person who has lost
 every passkey is normally signed out, so this affects only a person who
 opens the link on a device that still has a session.
+
+### Staging proof (after the deploy reports the landed SHA)
+
+Uses one of the owner's three recovery requests per hour. No schema
+migration: the token table and routes are unchanged.
+
+```sh
+# 1. identity: auth and maild report the landed commit
+ssh node-b 'for p in 8081 8087; do curl -fsS http://127.0.0.1:$p/health | jq -c "{service, commit:.build.commit}"; done'
+# 2. a real account and an unknown address get identical answers (200 {"ok":true})
+for e in "$OWNER_EMAIL" "nobody-$(date +%s)@example.com"; do
+  curl -sS -w ' %{http_code}\n' -X POST https://choir.news/auth/recovery/request \
+    -H 'Content-Type: application/json' -d "{\"email\":\"$e\"}"
+done
+# 3. exactly one send, for the real account only; no token in either journal;
+#    no hostauth "would refuse" line for the recovery route
+ssh node-b 'journalctl -u go-choir-auth -u go-choir-maild --since -5min \
+  | grep -E "operation=(recovery_mail|auth_recovery_mail|recovery_request)|would refuse.*recovery-link"; \
+  journalctl -u go-choir-auth -u go-choir-maild --since -5min | grep -c choir_rt_'
+#    expect: auth result=sent once, maild result=sent provider_message_id=<id> once,
+#    user_not_found for the unknown address, zero "would refuse", count 0
+# 4. on a phone, signed out: open the email, tap "Add a new passkey", create
+#    the passkey, land signed in to the same account (same computer, same documents).
+# 5. open the same link again: "used or expired", with an offer of a new link.
+```
+
+Steps 4 and 5 are the owner's acceptance; steps 1 to 3 need only the
+shell. A deployed Playwright spec cannot do step 4 without a real inbox.
 
 ## Slice 2 needs (magic-link sign-in, several passkeys, visible sessions)
 
