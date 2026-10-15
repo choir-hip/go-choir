@@ -72,7 +72,7 @@ func platformBench(args []string) {
 		must(err)
 		_ = rdb.Close()
 	}
-	store, err := platform.OpenStore(*dsn, "")
+	store, err := platform.OpenStore(context.Background(), *dsn, "")
 	must(err)
 	defer store.Close()
 	og := platform.NewObjectGraphStore(store)
