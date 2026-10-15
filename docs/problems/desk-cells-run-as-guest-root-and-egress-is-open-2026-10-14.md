@@ -250,3 +250,142 @@ forwarding to a tap only for established flows, is not in either change.
   and regular files.
 - `ip6tables` absent on the host logs a warning and leaves guest IPv6
   open (Node B has it).
+
+## Landing (2026-10-15): rebase onto `origin/main` 133de45fa
+
+Branch `land/desk-cell-confinement` is `fix/desk-cell-confinement`
+rebased onto 133de45fa, which had moved 142 commits (capsule jobs, the
+Claude delegate, the capsule broker re-dial, the Freeze changes, egress
+for the claude network mode, hostauth, the auth boundary, VMM jailer
+slice 1). Not pushed. Mutation class: **red**, as above.
+
+### Failure modes of the rebase (written before resolving)
+
+1. A textual conflict resolved by dropping one side: the egress ensure
+   on reattach, or main's jailer change to console adoption.
+2. A guest-to-host route added on `main` after the egress inventory
+   above, whose port is not in `tapReachableHostServicePorts`, so the
+   policy cuts it the moment vmctl restarts (every running guest at once:
+   the mangle jump covers `vm-+`).
+3. The claude network mode's model API (`api.anthropic.com:443`) or the
+   capsule goproxy route (`goproxy.choir.internal` mapped to the gateway
+   host on 8088) refused by the host policy.
+4. Jailed taps (slice 1) set up on a path that skips
+   `setupHostNetworking`, so a jailed guest has no egress policy; or the
+   VMM no-IP rule and the egress chain fighting over a table.
+5. A `main` change that makes desk session workers (not capsules) exec,
+   open sockets or read outside their grants after confinement: the new
+   `jobs.go`, `build_toolchain.go`, `inspect_bundle.go` and broker env in
+   `internal/yaegikernel`.
+6. A secret added to the guest after the branch that a cell could now
+   read: the Claude delegate token on the credential disk.
+7. `fix/tap-deny-guest-range` half-landed, leaving two filter-table
+   schemes.
+8. Tests that pass only as non-root (CI) while the guest runtime is root.
+
+### What the rebase found
+
+- `11d257d53` (the problem record) was dropped by git as already applied
+  (`e2e595629` on `main`). One conflict, in `ReattachVMWithConfig`
+  (`internal/vmmanager/manager.go`): `main` changed
+  `adoptConsole(vmID, pid)` to `adoptConsole(vmID, pid,
+  inst.confinement.jailed())` (jailer slice 1); the branch had added
+  `m.ensureGuestEgressPolicy()` before it. Kept both: the ensure, then
+  `main`'s call. (1)
+- Guest-to-host routes, re-inventoried on 133de45fa (2): the guest's
+  kernel command line names `choir.gateway_url` :8084,
+  `choir.vmctl_url` :8083, `choir.maild_url` :8087,
+  `choir.platform_url` :8086 (corpusd) and `choir.proxy_url` :8082
+  (`buildFirecrackerConfig`); the capsule Go module proxy is :8088 on
+  the gateway host (`capsule.GoModuleProxyAddr`). All six are in
+  `tapReachableHostServicePorts`, the one list the chain uses. vmctl
+  :8083 also carries `feat/memory-hotplug`'s guest memory route (tap
+  source only), so that branch needs no policy change. hostauth and the
+  auth-boundary fixes add credentials on these routes, not ports. New
+  test `TestGuestEgressAdmitsEveryGuestToHostRoute` reads the ports from
+  the kernel command line itself, so a future `choir.*_url` without its
+  port fails CI instead of cutting guests off.
+- The claude network mode (3): the capsule egress proxy runs in the guest
+  runtime and dials `api.anthropic.com:443` directly (public TCP,
+  returned by the chain); goproxy is :8088 on the host address
+  (returned). DNS goes to public resolvers (systemd-resolved fallback;
+  `ip=` names none), UDP/TCP 53, returned.
+- Jailer slice 1 (4): `prepareVMNetwork` creates jailed taps as `vm-*`
+  in the host namespace through the same `setupHostNetworking`, which
+  ensures the policy. The no-IP rule is filter `OUTPUT` (VMM uids'
+  own sockets); the egress chain is mangle `PREROUTING` on `vm-+`. They
+  do not touch.
+- Desk workers (5): capsule jobs (`choir.Start/Poll/Stop`), the build
+  toolchain env and `Exec` are engineering's, which runs in a capsule;
+  the desk module sets for management, Texture and research gained none
+  of them. The whole `internal/yaegikernel` suite passes with every
+  desk worker spawned confined as root (below).
+- The Claude delegate token (6) is on the credential disk, mounted at
+  `/run/choir-bootstrap` (`CHOIR_CLAUDE_DELEGATE_CREDENTIAL_DIR`). The
+  self-test below probes that mount and the gateway token file from a
+  confined cell.
+- `fix/tap-deny-guest-range` (7): both of its commits are on `main`
+  (`git cherry` marks 816077e83 and 8653a48a2 as applied, as efbd69e27
+  and f38752ab6). Nothing of that branch is left to merge; the
+  composition described above holds.
+- Running as root (8): the existing yaegikernel desk tests spawn the
+  `go test` binary from its 0700 build dir, which a cell user cannot
+  exec. Compiled with `go test -c` into a 0755 dir, the whole suite
+  passes as root with every worker confined.
+
+### Staging proof (owed; a script now exists)
+
+Neither Landlock nor the host policy can be proven off staging, and a
+guest is never reached by SSH. The branch adds an owner-only guest route,
+`POST /api/runtime/isolation-selftest` (not on the ProductAPI allowlist,
+so no desk can call it):
+
+- desk cells: one worker per desk through the production spawner and
+  entrypoint, which confines itself and then acts as an escaped cell
+  (sockets of seven kinds, fork, exec, signals, set*id, unshare, writes
+  outside its tmp dir, and reads of `/etc/passwd`, the owner's files,
+  the store, the credential disk and a world-readable canary in another
+  desk's live tmp dir), then runs one plain cell. The runtime reads each
+  worker's `/proc` status and namespaces from outside;
+- egress: the guest runtime itself dials host :22, :13306, :2019,
+  169.254.169.254:80 and another guest's address (must be dropped) and
+  the gateway, corpusd and 1.1.1.1:443 (must stay open).
+
+`scripts/desk_cell_confinement_probe.py` calls it and judges the raw facts
+itself. Against a real receipt from a kernel without Landlock it fails on
+exactly the Landlock-only checks (mode, ABI, `/etc/passwd`, a write to the
+allowed root), so it can pass only where Landlock is enforced.
+
+Plan, after the Landing Loop deploys this branch:
+
+1. CI green; `/health` `deployed_commit` is the pushed SHA. vmctl's
+   restart installs the chain for every tap at once. Read it:
+   `ssh node-b sudo iptables -t mangle -S CHOIR-GUEST-EGRESS`, and
+   `sudo iptables -t mangle -S PREROUTING` / `sudo ip6tables -t mangle -S
+   PREROUTING` each show one `go-choir-guest-egress` jump first.
+2. Cold boot a disposable test computer onto the new guest image (an
+   idle computer; deploys do not restart busy ones), then:
+   `scripts/desk_cell_confinement_probe.py --cred <its 0600 credential>
+   --out docs/evidence/desk-cell-confinement-staging-<date>.json`.
+   Pass: exit 0 (mode `required`, Landlock ABI >= 5, three distinct cell
+   uids, CapEff 0, NoNewPrivs 1, Seccomp 2, own net and IPC namespaces,
+   every escape probe EPERM or EACCES, the cross-desk canary EACCES,
+   the check cell runs; host :22 and the metadata address dropped, the
+   gateway and the internet open).
+3. Desks still work confined, on the product path:
+   `cd frontend && BASE_URL=https://choir.news npx playwright test
+   tests/texture-acceptance-deployed.spec.js` (management, research and
+   Texture cells all run in confined workers).
+4. Rollback: `git revert` the branch commits and deploy. Live host,
+   before that: `iptables -t mangle -D PREROUTING -i vm-+ -m comment
+   --comment go-choir-guest-egress -j CHOIR-GUEST-EGRESS`; `iptables -t
+   mangle -F CHOIR-GUEST-EGRESS`; `iptables -t mangle -X
+   CHOIR-GUEST-EGRESS`; `ip6tables -t mangle -D PREROUTING -i vm-+ -m
+   comment --comment go-choir-guest-egress -j DROP`.
+
+Residuals added by the landing: the cell's capability bounding set is
+not dropped (CapBnd full, CapEff/CapPrm 0 under no_new_privs; nothing
+can raise them, but dropping it is cheap defense in depth); workers that
+exit while their session object is never closed stay zombies until the
+session is reaped (seen in tests, not yet checked in the guest); UDP 443
+(QUIC) is dropped, which nothing in the guest uses today.
