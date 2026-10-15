@@ -304,6 +304,8 @@
         "cmd/autoputer" "cmd/choir-builder" "cmd/goproxy"
         # claude delegate (docs/design/claude-delegate-slice1-2026-10-14.md)
         "cmd/choir-delegate"
+        # visual capture (docs/design/visual-evidence-slice-2026-10-15.md)
+        "cmd/choir-capture"
       ];
       # Keep source selection structural. Go owns the package dependency graph;
       # repeating it here as per-service internalDirs caused fallback builds to
@@ -428,6 +430,12 @@
         choirDelegate = mkGoService {
           pname = "choir-delegate";
           subPackage = "cmd/choir-delegate";
+        };
+        # visual capture: the capsule job that screenshots the release
+        # frontend (docs/design/visual-evidence-slice-2026-10-15.md).
+        choirCapture = mkGoService {
+          pname = "choir-capture";
+          subPackage = "cmd/choir-capture";
         };
         autoputer = mkGoService {
           pname = "autoputer";

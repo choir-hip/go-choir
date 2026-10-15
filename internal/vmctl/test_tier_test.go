@@ -89,3 +89,40 @@ func TestRefreshTestAccountsReadsTheAuthDBAndSurvivesItsLoss(t *testing.T) {
 		t.Fatal("an unreadable auth DB emptied the test set")
 	}
 }
+
+// V2 (docs/design/visual-evidence-slice-2026-10-15.md): a test account
+// minted after the last sweep is still booted as test, because a primary
+// answer reloads the tier once; a real account stays primary, and a lost
+// auth DB fails closed.
+func TestBootWarmnessClassSeesATestAccountMintedSinceTheSweep(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "auth.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, created_at DATETIME NOT NULL);
+		INSERT INTO users VALUES ('real-1','someone@mosiah.org','2026-10-13');`); err != nil {
+		t.Fatal(err)
+	}
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetRetentionPruneConfig(RetentionPruneConfig{AuthDBPath: path, EphemeralEmailDomains: []string{"example.test"}})
+	reg.SetWarmnessPolicyConfig(tierConfig())
+	reg.refreshTestAccounts() // the sweep, before the QA account exists
+	if _, err := db.Exec(`INSERT INTO users VALUES ('qa-new','tracer-9@example.test','2026-10-15')`); err != nil {
+		t.Fatal(err)
+	}
+	if got := reg.bootWarmnessClass(&VMOwnership{UserID: "qa-new", ComputerID: "computer-qa-new"}); got != WarmnessClassTest {
+		t.Fatalf("fresh test account booted as %q", got)
+	}
+	if got := reg.bootWarmnessClass(&VMOwnership{UserID: "real-1", ComputerID: "computer-real"}); got != WarmnessClassPrimary {
+		t.Fatalf("real account booted as %q", got)
+	}
+	if got := reg.bootWarmnessClass(&VMOwnership{UserID: "real-1", ComputerID: paperComputerID}); got != WarmnessClassCriticalProtected {
+		t.Fatalf("platform computer booted as %q", got)
+	}
+	reg.SetRetentionPruneConfig(RetentionPruneConfig{AuthDBPath: filepath.Join(t.TempDir(), "missing.db"), EphemeralEmailDomains: []string{"example.test"}})
+	if got := reg.bootWarmnessClass(&VMOwnership{UserID: "qa-unknown", ComputerID: "computer-x"}); got != WarmnessClassPrimary {
+		t.Fatalf("an unreadable auth DB promoted an unknown account to %q", got)
+	}
+}

@@ -137,6 +137,7 @@ func LoadConfigFromEnv() ManagerConfig {
 
 	cfg.Jailer = loadJailerConfigFromEnv(cfg.FirecrackerBinPath)
 	cfg.ClaudeDelegate = loadClaudeDelegateConfig(os.Getenv)
+	cfg.VisualCapture = loadVisualCaptureConfig(os.Getenv)
 
 	// virtio-mem hotplug (memory_hotplug.go). Off by default; vmctl also
 	// selects each computer, so this flag alone adds no device.
