@@ -68,3 +68,55 @@ before the job settles) or the desk skipped waiting for the test. Owed: read
 Heresy delta: discovered two small (go_test job settle, hotplug probe noise);
 introduced none; repaired: the broker desync / write-replace class (no
 `not a directory`, Freeze reached).
+
+## Trace reading (2026-10-15 18:35 UTC): the test ran and passed; the check counts only jobs
+
+Read from `receipt.json` (`drill_claim.jobs_by_inbox`) and `bundle-a1.json`
+(run events of assignment `62be17a2…`). The earlier hypothesis that the
+test job was started and left unpolled is **refuted**.
+
+- **The three jobs** were:
+  - `go build … ./cmd/autoputer`, **failed**, exit 1, 11:46:56 to 12:03:27
+    (16.5 min). Not investigated here.
+  - `go vet ./internal/apihandler/`, done.
+  - `go build … ./cmd/autoputer`, done, 12:06:54 to 12:07:04.
+
+  No `go test` job was ever started. "count 3, done 2" is the failed
+  first build.
+- **The requested test ran as a cell.** Engineering ran
+  `choir.Exec("sh", ["-c", "cd /workspace/platform && go test ./internal/selfdevprobe/"])`
+  in a cell that panics on a non-zero exit.
+  - First run: compile error, `selfdevprobe_test.go:21:12: undefined: json`.
+    The cell panicked.
+  - Second run, after the fix: `ok … 0.003s`, cell exit 0, receipt
+    `capsule-go-eval:sha256:6a5db84d…`.
+- **The prompt contradicts itself**
+  (`internal/runtimeprompts/overlays/rlm_engineering_runtime.yaml`):
+  - Line 56 says go test "is a job (choir.Start), never a choir.Exec".
+    Line 59 says to run the requested go test "as a second job".
+  - Line 36 says a quick command (under 30 s) "runs directly" with
+    choir.Exec.
+  - Line 61 lets Freeze cite "the cell or job that ran the requested
+    tests", and the `tests_pass` rule settles on a check cell that panics
+    on failure.
+  - Engineering took the line 36 and 61 path. Freeze accepted it, and
+    management's Verify passed.
+- **Classification: tracer check, not product failure.**
+  `checks.go_test_job_done` in `scripts/reeng_tracer.mjs` counts only
+  done jobs (`doneJobs(claim.jobs).some(isGoTest)`). The product contract
+  admits a receipted check cell. This was a pass the check could not see.
+
+Decision (yellow, tracer only; no product prompt change):
+
+- The check becomes `go_test_passed`. It passes on either:
+  - a done go-test job with a receipt; or
+  - a successful `capsule_go_eval` result with a `capsule-go-eval:` receipt,
+    whose invoked source runs `go test` and panics on a non-zero exit (the
+    form line 61 prescribes for a check cell).
+- The receipt records which form passed.
+- The prompt contradiction (lines 56/59 versus 36/61) is left as a named
+  residual, not fixed here. Deciding whether tests must be jobs is a
+  product choice, and Freeze already admits cells.
+
+Heresy delta: discovered one (the prompt contradiction); repaired the
+false negative in the drill check; introduced none.
