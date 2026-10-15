@@ -112,6 +112,10 @@ Source: the gateway journal, 17:46–18:06, and `/api/runs` on the paper
     hypothesis until a per-run call count confirms it.
   - The owner's wording ("1/4 of runs") is met in expectation. A 1/4
     share of *compute* is not, and per-thread hashing cannot give it.
+- **Deadline kept.** All 10 management task runs after the fix
+  completed, median 45 s, max 73 s, against the 10-minute deadline. The
+  runs API page went back only to 17:43, so there are no pre-fix task runs
+  to compare.
 - OpenCode failures: 0 in the window. ChatGPT cache ratio: 75.4% (the
   restart lowers it; earlier windows were 78%).
 
