@@ -80,3 +80,78 @@ logged 202 paper `inference succeeded` calls between 12:41 and about 12:52.
    Add a paper liveness check that alerts when 2 or more schedules are
    overdue, or when no paper inference has happened for 30 minutes, to
    the Landing Loop's "paper healthy" step and as a host timer.
+
+## Failure modes considered
+
+Written before the fix (branch `fix/paper-schedule-lost-wake`). Each is a way
+the planned-boot repair, the runtime sweep, or the `delivery_failed` handler
+could make the paper worse than the silence it repairs. The tests name them.
+
+Design in one paragraph: a schedule that is active, past
+`sourceScheduleOverdueGrace`, and has no live poll in flight is re-armed as a
+new tick: `Generation++`, `NextDue = now + i*15s`, saved, then armed. A wake
+carries its generation, and `HandleSourcePollDue` refuses a wake whose
+generation or `NextDue` is not the saved one, so any stale or poisoned wake of
+the old chain is dead. The wake's update id is derived from its content
+(source, generation, due), so the new tick is a new tape row, never a collapse
+into the lost one. Two callers: the planned-boot recovery (once, at boot) and a
+periodic sweep (every few minutes while the runtime lives). Crash-boot
+semantics are unchanged.
+
+1. **Double polls.** The repair must never leave two live chains for one
+   source. Guard: the generation bump happens in the same `sourceScheduleMu`
+   critical section as the overdue judgement, and the old wake's handler
+   re-reads the schedule under that mutex before marking the poll in flight,
+   so it sees the new generation and returns. The only residual is an old
+   poll that is genuinely still running past the abandoned-mark bound (1 h);
+   it finishes with `live=false`, records usage, and arms nothing.
+2. **Stagger storm.** 26 schedules re-armed together would poll 26 feeds in
+   one second and then stay phase-locked, repeating the burst every interval.
+   Guard: tick `i` of one repair pass is due `now + i*15s`, so 26 sources
+   spread over 6.5 minutes. Residual: the spread persists as each source's
+   own interval re-arms it; that is the intended steady state.
+3. **Sweep racing a live poll.** A poll marks `PollInFlightSince` under the
+   mutex and records its result under the mutex. The sweep skips any
+   schedule with a fresh in-flight mark, and a poll that finishes after the
+   sweep re-armed sees `Generation` changed, so it records usage and arms
+   nothing. A wake that is delivered but waiting on the mutex while the sweep
+   runs is refused by generation.
+4. **Generation churn.** A sweep that fired every pass would bump the
+   generation forever. Guard: a repaired schedule is due in the future
+   (`now + stagger`), so it is not overdue past the 15-minute grace again
+   until a full grace has passed with no poll. A schedule whose arm keeps
+   failing is retried at most once per grace window, not once per sweep.
+5. **Crash-loop interaction.** The repair must not hide a poll that crashes
+   the computer, and must not count a planned boot as a crash. Guard: the
+   repair never touches `CrashesWithPollInFlight`; a repaired tick that
+   crashes the computer is a crash boot with the in-flight mark, counted and
+   closed at `sourceScheduleCrashLoopLimit` exactly as before. A schedule
+   closed with that cause is not active, so neither the planned-boot repair
+   nor the sweep resurrects it (an owner act restarts it).
+6. **Sweep during a Dolt outage.** Every list or put fails for an hour. The
+   sweep must back off, not spin or flood the log. Guard: a failed pass
+   doubles the wait before the next pass (5 min, 10, 20, 40, capped at 1 h)
+   and logs one line per failed pass; the first failed save ends the pass, so
+   26 schedules cost one failed write, not 26; a clean pass resets the wait.
+   A pass makes no model call and polls nothing itself.
+7. **Stuck in-flight mark.** A panic or hung handler can leave
+   `PollInFlightSince` set with no poll running; skipping such a schedule
+   forever is the same silence. Guard: a mark older than one hour is treated
+   as abandoned and the schedule is repaired (see 1 for the double-poll
+   bound).
+8. **Non-active schedules.** Stopped, `interrupted_by_restart`, or a zero
+   `NextDue` are owner or crash-loop decisions; the repair ignores them.
+9. **`delivery_failed` poisoning.** The kind is emitted by the dispatcher into
+   the `delivery-poison` sink mailbox. Today the sink's default branch logs
+   `unknown update kind` and consumes it, so it is already dead-lettered once
+   but looks like a handler bug and records nothing about what died. Guard:
+   an explicit handler logs one line naming the failed update and its
+   mailbox, never returns an error (an erroring sink handler would itself
+   retry), and leaves a source-poll wake's recovery to the sweep. Open
+   question, not decided here: whether the failed wake's own handler should
+   re-arm on error (it cannot while the store is down, which is the case
+   that matters), so the sweep is the single recovery owner.
+10. **Detection false alarms.** The host timer must not page on a healthy
+    paper that is legitimately quiet (feeds with no new items make no model
+    call) or on a paper that is mid-deploy. Guard: it alerts on "no inference
+    for 30 minutes", logs to the journal only, and does not restart anything.
