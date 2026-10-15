@@ -113,7 +113,12 @@ func (rt *Runtime) TextureComputerID() string {
 	return rt.cfg.ComputerID
 }
 
-// TextureActiveRunByAgent returns the latest executing lifecycle run for one computer-scoped actor.
+// TextureActiveRunByAgent returns the executing lifecycle run for one
+// computer-scoped actor. agent.ActiveRunID is the authority the activation
+// gate enforces, so it is read first: the latest-updated run of the agent can
+// be an older, inactive run written after the active one, which hid the
+// active run and let a wake stale its mutation
+// (texture-raced-activation-refused-first-turn-2026-10-11, second path).
 func (rt *Runtime) TextureActiveRunByAgent(ctx context.Context, ownerID, computerID, agentID string) (types.RunRecord, bool, error) {
 	if rt == nil || rt.store == nil {
 		return types.RunRecord{}, false, nil
@@ -123,6 +128,19 @@ func (rt *Runtime) TextureActiveRunByAgent(ctx context.Context, ownerID, compute
 	agentID = strings.TrimSpace(agentID)
 	if ownerID == "" || computerID == "" || agentID == "" {
 		return types.RunRecord{}, false, nil
+	}
+	agent, err := rt.store.GetAgentByScope(ctx, ownerID, computerID, agentID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return types.RunRecord{}, false, err
+	}
+	if activeRunID := strings.TrimSpace(agent.ActiveRunID); err == nil && activeRunID != "" {
+		rec, runErr := rt.store.GetLifecycleRun(ctx, ownerID, computerID, activeRunID)
+		if runErr != nil && !errors.Is(runErr, store.ErrNotFound) {
+			return types.RunRecord{}, false, runErr
+		}
+		if runErr == nil && rec.State.Active() && rec.State != types.RunBlocked {
+			return rec, true, nil
+		}
 	}
 	rec, err := rt.store.GetLatestActiveLifecycleRunByAgent(ctx, ownerID, computerID, agentID)
 	if err != nil {
