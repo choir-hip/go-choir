@@ -56,3 +56,25 @@ because it is always busy; /tmp/paper-refresh-loop.sh on Node B
   is ready (ops-local/ovh_node_b.py), but the go-choir host configuration
   has never cold-booted.
 - hostauth enforce waits for a clean day of observe logs.
+
+## Expanded at ~03:00 (owner: "not ambitious enough; more concurrent and sequential")
+
+Parallel branches; the lead merges and deploys in batches about hourly,
+with a tracer run between batches:
+
+| Stream | Branch |
+|---|---|
+| P5 host build + layered apply (Go changes run) | feat/p5-host-build-layered-apply |
+| S1 owner-act receipts (observe) | feat/s1-owner-act-receipts (built) |
+| P4 standing consensus + decision poster + signed ballots | feat/p4-standing-consensus |
+| P6 identity, P7 release record, P8 source adoption (Station B) | feat/p6-p8-release-adopt |
+| Bound guest Dolt history (paper ~6 GB/day) | fix/bound-guest-dolt-history |
+| Desk-cell confinement landing + jailer step 2 | land/desk-cell-confinement, ops/jailer-step2 |
+| Patch lanes: not-booted detector, Firecracker 1.17, Go 1.26.9, pdfjs-dist, weekly bump, SECURITY.md, Actions SHA pins | ops/patch-lanes |
+| Dead-route sweep + CLI lean set | cleanup/surface-sweep |
+| Account recovery + Store B retrieval rebases | land/account-recovery, land/store-b-retrieval |
+| Visual evidence slice (Chromium screenshots cited at Freeze) | feat/visual-evidence-slice |
+| S7-0 app packages first slice | feat/s7-0-app-packages |
+| Memory hotplug for class:test, wired to capsule jobs | land/memory-hotplug |
+
+The kernel reboot is moved to the morning with the owner.
