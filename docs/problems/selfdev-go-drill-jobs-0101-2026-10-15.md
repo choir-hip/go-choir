@@ -389,6 +389,15 @@ Not on this branch: item 1 (design choice above), the job end-digest timing
 (substrate 3, revisit after fix 1), the projection-head surface, desk
 behavior.
 
+Landed on the branch (unit evidence only; not pushed, not deployed):
+
+- `5c5db2027` fix 1. The two off-by-one tests failed before the change
+  ("call after a timeout read \"late\""), pass after (linux container).
+- `f9109003c` fix 2. Replaying this drill's recorded claim (plus the later
+  Texture Casts from the bundle and the job records read at 01:44), all
+  five stale checks pass; `restore_to_pre_apply_head` stays failed.
+- `a39168d78` fix 3.
+
 ## Residuals
 
 - R1 restore on a busy computer (item 1), and the same skew in the
