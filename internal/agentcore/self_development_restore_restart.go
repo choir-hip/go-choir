@@ -104,12 +104,12 @@ func (rt *Runtime) restartIntoCurrentAfterRestore(ctx context.Context, target st
 // restoreRestartBusy reports why a restart must wait (running runs or
 // self-development operations mid-transaction), or "" when idle (R5).
 func (rt *Runtime) restoreRestartBusy(ctx context.Context) string {
-	running, selfdevActive, err := rt.plannedRestartBusy(ctx)
+	work, err := rt.plannedRestartBusy(ctx, true)
 	switch {
 	case err != nil:
 		return "busy: self-development operations are unreadable: " + err.Error()
-	case running > 0 || selfdevActive > 0:
-		return fmt.Sprintf("busy: %d running runs, %d self-development operations mid-transaction", running, selfdevActive)
+	case work.Running > 0 || work.unsafe():
+		return fmt.Sprintf("busy: %d running runs, %d self-development operations mid-transaction, %d live capsules", work.Running, work.SelfdevActive, work.LiveCapsules)
 	}
 	return ""
 }
