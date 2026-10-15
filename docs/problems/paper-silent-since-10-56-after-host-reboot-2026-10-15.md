@@ -33,3 +33,50 @@ only, not investigated further by the lander.
 Needs the paper's schedule record and the run ledger (product route or the
 paper's tape), not the host journal; the Landing Loop's "paper healthy" check
 (health + disk) did not catch this because the computer is healthy but idle.
+
+## Confirmed (coordinator, 12:40 UTC)
+
+- Read with the paper credential (states and timings only):
+  `GET /api/autopaper/sources/schedules` listed 28 schedules, all `active`.
+  **26 were `overdue`.** Their `next_due` values were 10:04:38–10:05:31 UTC
+  with `poll_in_flight_since` zero, so each schedule's saved tick fell
+  inside the platform Dolt outage (about 09:49–10:47;
+  [deadlock doc](platform-dolt-deadlock-hangs-checkpointd-and-crashloops-vmctl-2026-10-15.md)).
+- The paper's console from 09:56:06 to 10:47:37 shows a poison loop:
+  `actorruntime: handler: unknown update kind "delivery_failed" for agent
+  computer-1355…` and `dispatcher: poison e5962310-…`. `delivery_failed`
+  has no handler, a known residual from the raced-activation work.
+- All five boots after that (10:50 host reboot, 11:05, 11:20, 11:37, 12:22)
+  were `restart kind=planned`. `recoverSourceScheduleAfterPlannedBoot`
+  (internal/agentcore/source_schedule.go) re-arms the saved tick through
+  `armSourcePoll`, which "collapses into the pending wake". The planned
+  path never moves `next_due` or the generation, and a lost wake is not
+  re-created. So the schedules stayed active and overdue with nothing
+  queued, through every boot.
+- Hypothesis 1 (no re-arm after a crash) is refuted: no boot was a crash.
+  The cause is wakes lost during the Dolt outage, plus a planned-boot
+  re-arm that does not repair a wake already marked delivered or
+  poisoned. The exact wake disposition (poisoned, or deferred and dropped)
+  is not read; it would need the actor mailbox rows.
+
+## Recovered (owner act, 12:42–12:49 UTC)
+
+The coordinator restarted the 26 overdue schedules with
+`POST /api/autopaper/sources/schedules`, keeping each source's interval and
+max_items, staggered 15 s apart. The reason recorded was "owner act: re-arm
+after wakes lost in the 2026-10-15 platform Dolt outage". Generations went
+up by 1, and first polls were due 12:42:45–12:49:15. Result: the gateway
+logged 202 paper `inference succeeded` calls between 12:41 and about 12:52.
+
+## Defects to fix (not fixed)
+
+1. `delivery_failed` has no handler. A failed source-poll wake is
+   poisoned, and nothing re-arms the schedule.
+2. A planned boot re-arms an overdue schedule's saved tick into whatever
+   wake the actor thinks is pending. It should re-arm any schedule more
+   than one grace period overdue as a new tick, so a lost wake is
+   re-created.
+3. Detection: the list's `overdue` flag existed and nobody read it.
+   Add a paper liveness check that alerts when 2 or more schedules are
+   overdue, or when no paper inference has happened for 30 minutes, to
+   the Landing Loop's "paper healthy" step and as a host timer.
