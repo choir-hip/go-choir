@@ -1562,6 +1562,8 @@ async function engineeringScenario(c, out, n, deadline, phase, fenceBuild) {
       // stop serving the nonce, through the unreachable window.
       claim.restore.exec_changed = r?.body?.exec_changed === true;
       claim.restore.restart_scheduled = r?.body?.restart_scheduled === true;
+      // A busy computer defers the restart to its next idle moment.
+      claim.restore.restart_deferred = r?.body?.restart_deferred || null;
       const probeDeadline = Date.now() + RESTORE_MIN * 60_000;
       let p = await probe('post_restore');
       while (Date.now() < probeDeadline && (p.served || p.status === 0 || p.status >= 500)) {
@@ -1623,7 +1625,10 @@ function acceptEngineering(out, claim, gaps, reached, phase) {
     checks.probe_absent_before_apply = claim.probe.pre_apply?.served === false && claim.probe.pre_apply?.status !== 0;
     checks.probe_served_after_apply = claim.probe.post_apply?.served === true;
     checks.layered_release_serving = claim.probe.post_apply?.layered_serving === true;
-    checks.restore_restarted_into_pre_apply = claim.restore?.restart_scheduled === true;
+    // Scheduled now, or deferred to the next idle moment; the probe check
+    // below is what proves the restart happened.
+    checks.restore_restarted_into_pre_apply = claim.restore?.restart_scheduled === true
+      || (typeof claim.restore?.restart_deferred === 'string' && claim.restore.restart_deferred.startsWith('busy'));
     checks.probe_gone_after_restore = claim.probe.post_restore?.served === false && claim.probe.post_restore?.status !== 0
       && claim.probe.post_restore?.effective_release?.layered !== true;
   }

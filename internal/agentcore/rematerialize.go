@@ -37,10 +37,13 @@ type RematerializeReport struct {
 	PinCheckoutUsed      bool   `json:"pin_checkout_used"`
 	// ExecChanged: the restored release execs a different binary than the
 	// one serving (a layered self-development release restored away, or
-	// back). RestartScheduled: the runtime restarts into it under a planned
-	// marker shortly after this answer (P5 R1).
+	// back). RestartScheduled: the computer was idle and the planned marker
+	// is durable; the runtime restarts into it shortly after this answer
+	// (P5 R1, R6). RestartDeferred: why it did not (a busy computer restarts
+	// at its next idle moment, R5).
 	ExecChanged        bool   `json:"exec_changed,omitempty"`
 	RestartScheduled   bool   `json:"restart_scheduled,omitempty"`
+	RestartDeferred    string `json:"restart_deferred,omitempty"`
 	BaseSequence       uint64 `json:"base_sequence"`
 	BaseBlobSHA256     string `json:"base_blob_sha256"`
 	TailTargetSequence uint64 `json:"tail_target_sequence"`
@@ -307,8 +310,7 @@ func (h *APIHandler) rematerializeComputerFromTape(w http.ResponseWriter, r *htt
 		return
 	}
 	if report.ExecChanged {
-		report.RestartScheduled = true
-		h.rt.scheduleRestoreRestart(request.Checkpoint.Digest)
+		report.RestartScheduled, report.RestartDeferred = h.rt.requestRestoreRestart(r.Context(), request.Checkpoint.Digest)
 	}
 	writeAPIJSON(w, http.StatusOK, report)
 }
@@ -352,8 +354,7 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 		return
 	}
 	if report.ExecChanged {
-		report.RestartScheduled = true
-		h.rt.scheduleRestoreRestart(request.Checkpoint.Digest)
+		report.RestartScheduled, report.RestartDeferred = h.rt.requestRestoreRestart(r.Context(), request.Checkpoint.Digest)
 	}
 	writeAPIJSON(w, http.StatusOK, report)
 }
