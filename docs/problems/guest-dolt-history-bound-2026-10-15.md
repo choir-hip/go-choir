@@ -177,6 +177,37 @@ default GC every 10,000 rows. The rerun had the Mac to itself:
 Each tick of the periodic loop runs the journal GC first. It then considers
 an **online history compaction** (`internal/store/dolt_compaction.go`):
 
+- **Gate (added at review, 2026-10-15).**
+  - **Off for the fleet.** Compaction runs only on computers listed in
+    `CHOIR_DOLT_COMPACT_COMPUTERS` (comma or space separated ComputerIDs).
+    The list is set in the guest image's runtime environment
+    (`nix/autoputer-vm.nix`), and each guest compares it with its own
+    `CHOIR_COMPUTER_ID`. It lists only the paper:
+    `computer-1355b83bced1613eb048ee28d66688a8` (VM slot
+    `vm-1669020adcece51c2f5ff9b6df399ef5`). The journal GC stays
+    fleet-wide. Every other computer records `not_enabled`.
+    - Why not `nix/node-b.nix`: that file is vmctl's environment, and no
+      existing host-to-guest path carries a generic per-computer switch.
+      The Claude delegate grant rides vmctl's credential disk, which would
+      mean a vmctl change (red, VM lifecycle) for a list the guest can
+      check itself.
+    - Changing the list takes a deploy, then the computer's next boot.
+  - **Never on the first tick.** The first tick fires before `rt.Start`
+    (`internal/autoputer/run.go`), so boot writes would wait out a full GC.
+    It records `boot_wait`.
+  - **Boot jitter.** Compaction is not eligible before a random 0–30
+    minutes after boot, so computers refreshed by one deploy do not
+    compact together. Until then the record says `boot_wait` with the
+    eligible time.
+  - **In-progress record.** Before anything changes, the record is
+    rewritten durably (fsync of file and directory) as `in_progress`, with
+    `last_failure_at` set to the start. Success clears it.
+    - A guest killed mid-run (a planned refresh of the always-busy paper,
+      an OOM, the wedge detector) boots into the 6 h backoff instead of
+      compacting again.
+    - The first tick after such a boot notes the interrupted run in the
+      record and in the log.
+
 - **Trigger.**
   - History is estimated as the non-journal store's growth since the last
     compaction (`baseline_bytes`, kept in the record). Live growth counts
@@ -197,19 +228,41 @@ an **online history compaction** (`internal/store/dolt_compaction.go`):
   controller keeps them valid across the GC.
 - **Steps.**
   1. Refuse unless there is exactly one branch.
-  2. Take the witness.
-  3. `DOLT_RESET('--soft', root)` then
+  2. Take both witnesses (below).
+  3. Find the root: the only parentless commit in `dolt_commit_ancestors`
+     (`parent_hash IS NULL`). It is not chosen by date, so clock skew
+     cannot pick the wrong commit. More than one root refuses.
+  4. `DOLT_RESET('--soft', root)` then
      `DOLT_COMMIT('-A', '--allow-empty', …)`.
-  4. Take the witness again. If it changed, `DOLT_RESET('--soft', old
-     head)` and fail.
-  5. Run `DOLT_GC('--full')`.
-  6. Take the witness again. If it changed, fail and rebuild the
-     projection from the tape.
-- **Witness.** It holds the runbook's checks:
-  - a digest of every `computer_event_projection_heads` row (sequence,
-    canonical, desired and effective heads);
-  - the `computer_event_index` count;
-  - every base table's row count.
+  5. Take the light witness again. If it changed, `DOLT_RESET('--soft',
+     old head)` and fail.
+  6. Run `DOLT_GC('--full')`.
+  7. Take both witnesses again, still before releasing the write
+     connection. A mismatch **fails closed**:
+     - the outcome is `degraded`, with `degraded` naming the changed
+       table(s), shown on `/health` until a compaction succeeds;
+     - the 6 h backoff starts;
+     - a loud log line (`DOLT COMPACTION DEGRADED`) says to rebuild the
+       projection from the tape.
+- **Witnesses.**
+  - The **light witness**, on the write connection, holds the runbook's
+    checks:
+    - a digest of every `computer_event_projection_heads` row (sequence,
+      canonical, desired and effective heads);
+    - the `computer_event_index` count;
+    - every base table's row count.
+  - The **full content witness**, on the read pool (a second session),
+    digests every column of every row of every base table, in
+    primary-key order. Rows are streamed into the digest, so memory stays
+    flat. The record carries its root as `content_root`.
+    - It has the strength of the offline tool's `WitnessContentMatches`.
+      It does not reuse `computerversion.DoltStateExtractor`, which opens
+      a second engine on the workspace and sorts every row in memory.
+  - Both are taken while writes are still held off. The review asked for
+    the content witness after releasing the write connection. Once writes
+    resume, the content changes legitimately and no before/after
+    comparison means anything, so the second session is used but the
+    write connection is released last.
 - **Crash safety.**
   - The only non-atomic window is between the soft reset and the squash
     commit. There, HEAD is the root and every row is in the persisted
@@ -220,9 +273,14 @@ an **online history compaction** (`internal/store/dolt_compaction.go`):
     attempt holds writes for a full GC.
   - The decision is written on every tick to
     `.choir-dolt-compaction.json` and served on guest `/health` as
-    `dolt_compaction`: outcome, store, baseline, history, budget, free
-    space, commits before and after, duration, heads digest and event
-    index count.
+    `dolt_compaction`. It carries:
+    - outcome, store, baseline, history, budget and free space;
+    - commits before and after;
+    - duration with `witness_ms`, `squash_ms` and `gc_ms`;
+    - `peak_rss_mib` (the runtime's VmHWM after the compaction);
+    - heads digest, event index count and `content_root`;
+    - `witness_match`, `degraded`, `last_success_at` and
+      `last_failure_at`.
 - **Kill switches.** `RUNTIME_DOLT_COMPACT_DISABLED`, or the existing
   `RUNTIME_DOLT_GC_DISABLED`.
 - **Boot.** Boot is unchanged: no compaction before the listener (the
@@ -248,6 +306,16 @@ an **online history compaction** (`internal/store/dolt_compaction.go`):
 - **FH10** A compaction decision is invisible off the guest.
 - **FH11** The kill switches are ignored.
 - **FH12** A store-size gate turns compaction off for a large store.
+- **FH14** A compaction killed mid-run compacts again on the next boot
+  instead of backing off.
+- **FH15** Boot storm: compaction runs on the first tick (before
+  `rt.Start`), or every enabled computer compacts at once after a deploy.
+- **FH16** Fleet exposure: compaction runs on a computer the host did not
+  enable.
+- **FH17** A content change the light witness cannot see (rows, not
+  counts) passes, or a mismatch is only an error string.
+- **FH18** The squash target is picked by date and the wrong commit is
+  chosen.
 - **FH13** (residual) A full GC holds the write connection while it
   rewrites the live set. Measured locally: 4 s for 190 MB live. On the
   paper the estimate is under about 2 minutes for 1–3 GiB live; the record
@@ -280,11 +348,24 @@ Tests (`internal/store/dolt_compaction_test.go`):
 - The record is readable for `/health`; the baseline makes the next tick a
   no-op; both kill switches work.
 - The periodic loop compacts.
+- Gate tests (FH14–FH18):
+  - A snapshot of the record taken mid-run is `in_progress` with
+    `last_failure_at`; restored as if the process died, the next call backs
+    off and names the interrupted run.
+  - The first tick never compacts (`boot_wait`, commits unchanged).
+  - Jitter stays in [0, 30 min), and a tick before the eligible time waits.
+  - Off by default: an empty list, another computer's id, or an empty
+    computer id records `not_enabled`; a listed id runs.
+  - A row changed after the GC with every count unchanged is caught by
+    the content witness, the record is `degraded` naming the table, and
+    the next tick backs off.
+  - The root is parentless.
 
 ## Expected outcome and what is achievable
 
 - **Disk after this fix** = live + history since the last compaction
-  (≤ 2 GiB) + journal (≤ 1 GiB). The first tick after deploy compacts the
+  (≤ 2 GiB) + journal (≤ 1 GiB). The first eligible tick after deploy
+  (5–35 minutes after boot) compacts the
   paper's 11 GiB store. The estimate is 1–3 GiB live: about 2 GB raw at
   10-15 00:30, at the measured 27–40% ratio, plus growth since.
 - **Steady-state growth** is the live growth rate:
@@ -301,11 +382,21 @@ Tests (`internal/store/dolt_compaction_test.go`):
   station.
 - **Compactions on the paper**: one every 2–8 h at 6–18 GB/day of history.
   Each rewrites the live set.
-- **Acceptance after deploy**, read-only:
-  - `/health` `dolt_compaction.outcome = ran`, with `commits_after ≤ 2`;
-  - `heads_digest` and `event_index_count` consistent with the tape head;
+- **Staging acceptance after deploy** (read-only, paper guest `/health`
+  on port 8085 from Node B; counts and sizes only):
+  - before the first compaction: `dolt_compaction.outcome` is
+    `boot_wait`, then `noop` or `ran` within about 35 minutes of boot;
+  - on another computer: `not_enabled`;
+  - after: `outcome = ran` and `witness_match = true`, with
+    `commits_after ≤ 2`;
+  - `gc_ms` and `witness_ms`, the measured write stall, replace the FH13
+    estimate;
+  - `peak_rss_mib` stays well under the guest's memory;
+  - `heads_digest` and `event_index_count` are consistent with the tape
+    head, and `content_root` is recorded;
   - `after_store_mib` is the live size, replacing the estimate above;
-  - free space after GC flat to within the live growth over 24 h.
+  - free space after GC is flat to within the live growth over 24 h;
+  - no `degraded`.
 
 ## Belief and remaining error
 
@@ -315,9 +406,20 @@ Tests (`internal/store/dolt_compaction_test.go`):
   - the live growth rate (above);
   - the write stall during each full GC (FH13): 4 s for 190 MB live
     locally, not yet measured on the guest;
-  - one-time cost: on the first tick after deploy, every computer whose
-    non-journal store is at least 2 GiB compacts once, because no baseline
-    exists yet;
+  - one-time cost: the first eligible tick on an enabled computer (only
+    the paper) compacts once, because no baseline exists yet;
   - a `deferred_space` disk still needs the offline runbook;
+  - pre-existing: replay completeness opens a second embedded engine on
+    the live workspace. `computerversion.DoltStateExtractor.Extract` is
+    called from `internal/agentcore/replay_completeness.go:239`, under
+    `HoldAppends`, which does not stop a compaction. A full GC rewrites
+    the table files and swaps the manifest under that engine, so a check
+    running during a compaction may read a moving store. The compaction
+    widens this window; it did not create it. The fix is for the
+    extractor to read through the store's own read pool, as the
+    compaction's content witness does;
+  - the witness reads add to the write stall: two full content scans
+    while writes are held. That is `witness_ms` in the record, not yet
+    measured on the guest;
   - after compaction, projection bases copy a compact store. That is an
     upside: bases were 8.7 GB each on 10-09.
