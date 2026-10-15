@@ -172,7 +172,7 @@ func (f Frame) renderRecord(b *strings.Builder, r FrameRecord) {
 				if f.Captured[s.Handle] {
 					b.WriteString(" (captured)")
 				} else {
-					b.WriteString(" (not captured: it cannot be cited until research Reads it)")
+					b.WriteString(notCapturedHint(s))
 				}
 			}
 			if s.Excerpt != "" {
@@ -346,4 +346,20 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// notCapturedHint says what an uncaptured frame source needs. Research can
+// Read a web page or an already-captured source, so the hint sends Texture
+// there. A source that is an internal record (an engineering assignment
+// report, a ledger ref: no http(s) URL, no capture id) is not something
+// research can Read, and casting it to "capture" one only returns "record not
+// found" (docs/problems/adopt-1418-adopter-desks-finish-without-an-operation-2026-10-15.md).
+// For that source the hint says to state the outcome in the document without
+// citing it, and sends a blocker to management for one bounded re-cast, or to
+// the owner.
+func notCapturedHint(s Source) string {
+	if s.CaptureID != "" || strings.HasPrefix(s.URL, "http://") || strings.HasPrefix(s.URL, "https://") {
+		return " (not captured: it cannot be cited until research Reads it)"
+	}
+	return " (not captured, and research cannot Read it: an internal record, not a web source. Do not cast research for it; state its outcome in the document without citing it. If it reports a blocker, management owns one bounded re-cast, otherwise the owner decides)"
 }

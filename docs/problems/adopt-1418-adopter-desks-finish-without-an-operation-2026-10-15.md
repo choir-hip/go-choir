@@ -134,3 +134,22 @@ exit 0 and updated content both times; the same test asserts the old `cp -r` rec
 fails on the second run (the reproduced failure). The `cp -a` seccomp EPERM cannot be
 reproduced without the capsule filter and is not claimed by the test; it is covered by
 the recipe no longer using `cp -a`. Frame hint: a unit test on the rendered text.
+
+## Fix landed (branch fix/engineering-release-copy, not pushed)
+
+- Overlay recipe: `cp -a` replaced by `cp -rf --no-preserve=mode,ownership,timestamps`
+  (yellow; tested in a Linux container as non-root over 0444 output, twice, plus the
+  reproduced plain `cp -r` retry failure). Idempotent, so a retry cell is safe.
+- Texture frame: an uncaptured source with no http(s) URL and no capture id (an internal
+  record such as an assignment report) no longer says "until research Reads it"; it says
+  research cannot Read it, to state the outcome uncited, and that a blocker goes to
+  management for one bounded re-cast or to the owner.
+- Residual (named, not fixed): the capsule seccomp filter still refuses the read-only
+  xattr/ACL calls, so any other `cp -a`, `tar`, `rsync -a` or `install -p` a desk
+  improvises exits 1 the same way. Allowing `getxattr`/`lgetxattr`/`fgetxattr`/
+  `listxattr`/`llistxattr`/`flistxattr` (never the set family) is a red capsule change
+  with a staging proof; take it only if a second tool shows up in a ledger.
+- A rerun of the adopt drill must show: the adopter's engineering cell with the
+  `cp -rf --no-preserve…` copy exits 0 on its first attempt (no `preserving permissions`
+  lines), `choir.Freeze` accepted, an `adopter_operation_state` phase recorded, and
+  Texture casting no research for an `assignment-report:` source.

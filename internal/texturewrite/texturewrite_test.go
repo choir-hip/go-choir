@@ -355,6 +355,31 @@ func TestFrameRendersAliasesRecordsAndSources(t *testing.T) {
 	}
 }
 
+// The not-captured hint sends a web source to research and keeps research
+// away from an internal record it cannot Read (adopt-1418: Texture cast
+// research to capture an engineering assignment report; research got
+// "record not found").
+func TestFrameNotCapturedHintDependsOnWhetherResearchCanRead(t *testing.T) {
+	packet := `{"kind":"evidence_update","summary":"Adoption blocked","claims":[{"text":"Engineering could not copy the release tree","source_ids":["s1","s2"]}],"sources":[{"source_id":"s1","kind":"web","target":{"uri":"https://example.org/court","title":"Court ruling"}},{"source_id":"s2","kind":"report","target":{"uri":"assignment-report:report:sha256:abc","title":"Engineering final report"}}]}`
+	records := RecordsFrom([]RecordInput{{Seq: 7, RecordID: "rec-7", Kind: "report", From: "management:o", Body: packet}})
+	frame := Frame{DocID: "doc", RevisionID: "rev-1", Records: records, Captured: map[string]bool{}}.Render()
+	var web, internal string
+	for _, line := range strings.Split(frame, "\n") {
+		switch {
+		case strings.Contains(line, "https://example.org/court"):
+			web = line
+		case strings.Contains(line, "assignment-report:report:sha256:abc"):
+			internal = line
+		}
+	}
+	if !strings.Contains(web, "until research Reads it") {
+		t.Fatalf("web source line = %q, want the research-Reads hint\n%s", web, frame)
+	}
+	if strings.Contains(internal, "until research Reads it") || !strings.Contains(internal, "research cannot Read it") || !strings.Contains(internal, "management owns one bounded re-cast") {
+		t.Fatalf("internal record line = %q, want the cannot-Read hint naming management and the owner\n%s", internal, frame)
+	}
+}
+
 // Support judgement (Cut 2 2a (v)): a committed citation's check carries its
 // tier and pair, and management's failing verdict reaches Texture's frame on
 // the block it fails. Ways it can fail: a tolerant match is reported exact;
