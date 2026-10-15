@@ -47,7 +47,7 @@ jobs:
       sample_bucket: ${{ steps.classify.outputs.sample_bucket }}
       race_selected: ${{ steps.select-race.outputs.race_selected }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 2
 
@@ -134,9 +134,9 @@ jobs:
 
       - name: Set up Go for CI contract tests
         if: steps.classify.outputs.ci == 'true'
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.9'
 
       - name: Test CI classifiers and differential SBOM reuse
         if: steps.classify.outputs.ci == 'true'
@@ -162,7 +162,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.go == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-build-cache
@@ -189,7 +189,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-build-cache
@@ -221,7 +221,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-build-cache
@@ -261,7 +261,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.go == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-build-cache
@@ -281,15 +281,59 @@ jobs:
           done
           exit 1
 
+  # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 3):
+  # reachable vulnerabilities for the toolchain go.mod names (its toolchain
+  # directive, the production compiler) and the locked modules. Never gates
+  # check; the daily Patch Watch workflow files the issues.
+  govulncheck:
+    name: govulncheck (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go (go.mod toolchain)
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: govulncheck ./...
+        shell: bash
+        run: |
+          set -uo pipefail
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > "$RUNNER_TEMP/govulncheck.txt" 2>&1
+          status=$?
+          count=$(grep -c '^Vulnerability #' "$RUNNER_TEMP/govulncheck.txt" || true)
+          {
+            echo "## govulncheck ($(go version | awk '{print $3}'))"
+            echo
+            echo "exit ${status}; reachable findings: ${count:-0}. Report only: this job never gates CI."
+            echo
+            echo '```'
+            grep -E '^(Vulnerability #|    Found in:|    Fixed in:|  Standard library)' "$RUNNER_TEMP/govulncheck.txt" | head -200
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/govulncheck.txt"
+          if [ "${count:-0}" != "0" ]; then
+            echo "::warning title=govulncheck::${count} reachable vulnerabilities (report only)"
+          fi
+          exit 0
+
   doccheck:
     name: Docs Truth Check
     runs-on: ubuntu-latest
     needs: plan
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: true
@@ -303,7 +347,7 @@ jobs:
         run: test -s doccheck-report.md && test -s doccheck.json
 
       - name: Upload doccheck reports
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: doccheck-report
           path: |
@@ -316,7 +360,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.non_docs == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Install ripgrep
         shell: bash
@@ -332,7 +376,7 @@ jobs:
         run: scripts/check-heresies.sh --fail-on-regression --report heresy-detector-report.json
 
       - name: Upload heresy detector report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: heresy-detector-report
           path: heresy-detector-report.json
@@ -343,7 +387,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.non_docs == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Run V1 writer-purity gate
         shell: bash
@@ -420,22 +464,22 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v20
+        uses: DeterminateSystems/nix-installer-action@786fff0690178f1234e4e1fe9b536e94f5433196 # v20
         with:
           determinate: false
 
       - name: Restore previous accepted SBOM bundle
         id: restore-sbom-baseline
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/sbom-baseline
           key: sbom-bundle-v2-${{ github.sha }}
@@ -456,7 +500,7 @@ jobs:
             > sboms/candidate.json
 
       - name: Upload unaccepted SBOM candidate
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-candidate-${{ github.run_id }}-${{ github.sha }}
           path: sboms
@@ -471,21 +515,21 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v20
+        uses: DeterminateSystems/nix-installer-action@786fff0690178f1234e4e1fe9b536e94f5433196 # v20
         with:
           determinate: false
 
       - name: Restore accepted baseline for differential verification
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/sbom-baseline
           key: sbom-bundle-v2-${{ github.sha }}
@@ -493,7 +537,7 @@ jobs:
             sbom-bundle-v2-
 
       - name: Download SBOM candidate from this workflow run
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sbom-candidate-${{ github.run_id }}-${{ github.sha }}
           path: sboms
@@ -510,13 +554,13 @@ jobs:
           cp -a sboms/. "$RUNNER_TEMP/sbom-baseline/"
 
       - name: Cache accepted SBOM baseline
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/sbom-baseline
           key: sbom-bundle-v2-${{ github.sha }}
 
       - name: Upload accepted SBOM artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sboms-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -533,15 +577,15 @@ jobs:
     needs: [plan, deploy-impact]
     if: always() && ((github.event_name == 'pull_request' && needs.plan.outputs.frontend == 'true') || needs.deploy-impact.outputs.deploy_frontend == 'true')
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '22'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 10
 
@@ -550,6 +594,51 @@ jobs:
 
       - name: Build frontend
         run: cd frontend && pnpm build
+
+  # Report-only (docs/reports/patch-lanes-plan-2026-10-15.md, slice 4):
+  # advisories against package-lock.json, the lock the Nix build ships.
+  # Runtime dependencies are what users' browsers run; dev dependencies are
+  # listed separately. Never gates check; Patch Watch files the issues.
+  npm-audit:
+    name: npm audit (report only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: plan
+    if: needs.plan.outputs.frontend == 'true'
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '22'
+
+      - name: npm audit (lock only, no install)
+        shell: bash
+        working-directory: frontend
+        run: |
+          set -uo pipefail
+          npm audit --package-lock-only --omit=dev --json > "$RUNNER_TEMP/npm-audit-runtime.json" || true
+          npm audit --package-lock-only --json > "$RUNNER_TEMP/npm-audit-all.json" || true
+          runtime_high=$(jq '[.vulnerabilities // {} | .[] | select(.severity == "high" or .severity == "critical")] | length' "$RUNNER_TEMP/npm-audit-runtime.json")
+          {
+            echo "## npm audit (frontend/package-lock.json)"
+            echo
+            echo "Report only: this job never gates CI."
+            echo
+            echo "### Runtime dependencies"
+            jq -r '.vulnerabilities // {} | .[] | "- \(.name) \(.range): \(.severity)"' "$RUNNER_TEMP/npm-audit-runtime.json"
+            echo
+            echo "### All dependencies (including dev)"
+            jq -r '.vulnerabilities // {} | .[] | "- \(.name) \(.range): \(.severity)"' "$RUNNER_TEMP/npm-audit-all.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${runtime_high:-0}" != "0" ]; then
+            echo "::warning title=npm audit::${runtime_high} high or critical runtime advisories (report only)"
+          fi
+          exit 0
 
   deploy-impact:
     name: Detect Staging Deploy Impact
@@ -567,7 +656,7 @@ jobs:
       host_services: ${{ steps.detect.outputs.host_services }}
       class_explanation: ${{ steps.detect.outputs.class_explanation }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 2
 
@@ -674,11 +763,11 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: DeterminateSystems/determinate-nix-action@v3
-      - uses: DeterminateSystems/flakehub-push@main
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
+      - uses: DeterminateSystems/flakehub-push@e001ee821cdb763ef120c01f1048bfb2f938bb9c # v7
         with:
           name: choir-hip/go-choir
           rolling: true
@@ -699,7 +788,7 @@ jobs:
     needs: [plan, deploy-impact]
     if: always() && github.ref == 'refs/heads/main' && needs.deploy-impact.outputs.deploy_needed == 'true'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup SSH
         run: |
@@ -844,7 +933,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Setup SSH
         run: |
@@ -1762,6 +1851,18 @@ jobs:
             fi
             nixos_closure_digest=$(nix hash path --type sha256 "$nixos_closure")
             nixos_closure_digest="sha256:${nixos_closure_digest#sha256-}"
+            # Installed is not running (docs/reports/patch-lanes-plan-
+            # 2026-10-15.md, slice 1): record whether the host runs the
+            # kernel, modules, command line and KVM parameters it just
+            # activated. The detector never fails a deploy.
+            boot_state=$(python3 scripts/verify-host-hardening.py --boot-state-json 2>/dev/null) || boot_state=''
+            if ! printf '%s' "$boot_state" | jq -e 'type == "object" and .schema_version == 1' >/dev/null 2>&1; then
+              boot_state='{"schema_version":1,"available":false,"error":"boot-state detector failed"}'
+            fi
+            boot_state=$(printf '%s' "$boot_state" | jq -c .)
+            if [ "$(printf '%s' "$boot_state" | jq -r '.reboot_pending')" = "true" ]; then
+              echo "::warning title=Host reboot pending::Node B runs $(printf '%s' "$boot_state" | jq -r '.running_kernel_release // "unknown"'); activated changes not booted: $(printf '%s' "$boot_state" | jq -r '.reasons | join(", ")') (pending since $(printf '%s' "$boot_state" | jq -r '.pending_since // "unknown"'), overdue=$(printf '%s' "$boot_state" | jq -r '.pending_overdue'))"
+            fi
             # Service runners execute atomically copied packages under /var/lib.
             # Bind those live bytes back to an immutable Nix package by digest;
             # a leftover build result or the unit's fallback package is not
@@ -1824,7 +1925,8 @@ jobs:
               --arg nixos_closure "$nixos_closure" \
               --arg nixos_closure_digest "$nixos_closure_digest" \
               --argjson services "$host_services" \
-              '{canonical_ref: $canonical_ref, checkout_head: $checkout_head, checkout_clean: true, nixos_closure: $nixos_closure, nixos_closure_digest: $nixos_closure_digest, services: $services}')
+              --argjson boot_state "$boot_state" \
+              '{canonical_ref: $canonical_ref, checkout_head: $checkout_head, checkout_clean: true, nixos_closure: $nixos_closure, nixos_closure_digest: $nixos_closure_digest, boot_state: $boot_state, services: $services}')
 
             activated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             receipt_tmp=/var/lib/go-choir/deploy-receipt.json.tmp

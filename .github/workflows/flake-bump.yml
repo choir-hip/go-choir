@@ -1,0 +1,190 @@
+# Weekly full nixpkgs bump (docs/reports/patch-lanes-plan-2026-10-15.md,
+# slice 5; docs/reports/patch-pipeline-time-to-patch-2026-10-15.md, 5.1
+# "Everything else"). The base `nixpkgs` input is a frozen nixos-unstable
+# snapshot; left alone it stops patching everything that is not in its own
+# lane (systemd, OpenSSH, glibc, OpenSSL, Caddy, Dolt, Qdrant, SearXNG, the
+# guest's userspace). Every week this opens or refreshes ONE pull request that
+# moves only `nixpkgs` to the current nixos-unstable head, then builds the host
+# closure and the guest image from that branch and reports the result on the
+# pull request. The kernel lane (`nixpkgs-kernel`) has its own cadence and is
+# never touched here.
+#
+# It never merges and never deploys: a push to main is a deploy, so the owner
+# merges. Pull requests opened with the default GITHUB_TOKEN trigger no other
+# workflows, so the PR's own CI (ci.yml) runs only when the PATCH_BOT_TOKEN
+# secret (a GitHub App or fine-grained token with contents and pull-requests
+# write) is set; the host and guest builds below run either way.
+name: Weekly nixpkgs Bump
+
+on:
+  schedule:
+    - cron: '23 5 * * 1' # Mondays 05:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: flake-bump-nixpkgs
+  cancel-in-progress: false
+
+env:
+  BUMP_BRANCH: patch/weekly-nixpkgs
+
+jobs:
+  open-pr:
+    name: Bump nixpkgs and open the PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      pr: ${{ steps.bump.outputs.pull-request-number }}
+      operation: ${{ steps.bump.outputs.pull-request-operation }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
+
+      - name: Update the base nixpkgs input only
+        id: bump
+        uses: DeterminateSystems/update-flake-lock@da03c0f078bc4b2c37ee4f7e072d34bf8f188bb3 # v29
+        with:
+          inputs: nixpkgs
+          token: ${{ secrets.PATCH_BOT_TOKEN || github.token }}
+          branch: ${{ env.BUMP_BRANCH }}
+          commit-msg: 'flake.lock: weekly nixpkgs bump to the current nixos-unstable (base input only)'
+          pr-title: 'Weekly nixpkgs bump (base input, nixos-unstable)'
+          pr-labels: |
+            dependencies
+            patch-lane
+          pr-body: |
+            Weekly base bump: `nixpkgs` moves to the current `nixos-unstable`
+            head. `nixpkgs-kernel` (the kernel lane) is not touched.
+            Design: docs/reports/patch-lanes-plan-2026-10-15.md, slice 5.
+
+            ```
+            {{ env.GIT_COMMIT_MESSAGE }}
+            ```
+
+            The **Weekly nixpkgs Bump** workflow builds the host closure and
+            the guest image from this branch and sets the
+            `patch-lane/host-guest-build` status on the head commit, with a
+            comment listing the package versions that moved.
+
+            Merging is a deploy (owner merges; never auto-merged). Check
+            before merging: the build status above, the version table, and,
+            when PATCH_BOT_TOKEN is set, the regular CI on this PR. A Go
+            toolchain override in `flake.nix` (`choirGo`) retires itself
+            when the base ships that Go or newer.
+
+  build:
+    name: Build host closure and guest image on the bump branch
+    needs: open-pr
+    if: needs.open-pr.outputs.pr != '' && needs.open-pr.outputs.operation != 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ needs.open-pr.outputs.pr }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ env.BUMP_BRANCH }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Free runner disk for the closure
+        shell: bash
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
+
+      - name: Mark the head commit pending
+        shell: bash
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "HEAD_SHA=$sha" >> "$GITHUB_ENV"
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${sha}" -f state=pending \
+            -f context=patch-lane/host-guest-build \
+            -f description="Building host closure and guest image" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >/dev/null
+
+      - name: Versions that moved (main vs bump branch)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Evaluation only. One attribute per line: label, then the flake
+          # attribute whose .version is read.
+          attrs=(
+            "host kernel|nixosConfigurations.go-choir-b.config.boot.kernelPackages.kernel"
+            "go (choirGo)|packages.x86_64-linux.choir-go"
+            "go (base)|nixosConfigurations.go-choir-b.pkgs.go"
+            "firecracker|nixosConfigurations.go-choir-b.pkgs.firecracker"
+            "systemd|nixosConfigurations.go-choir-b.pkgs.systemd"
+            "openssh|nixosConfigurations.go-choir-b.pkgs.openssh"
+            "openssl|nixosConfigurations.go-choir-b.pkgs.openssl"
+            "glibc|nixosConfigurations.go-choir-b.pkgs.glibc"
+            "caddy|nixosConfigurations.go-choir-b.pkgs.caddy"
+            "dolt|nixosConfigurations.go-choir-b.pkgs.dolt"
+            "qdrant|nixosConfigurations.go-choir-b.pkgs.qdrant"
+            "searxng|nixosConfigurations.go-choir-b.pkgs.searxng"
+            "python3|nixosConfigurations.go-choir-b.pkgs.python3"
+            "nodejs|nixosConfigurations.go-choir-b.pkgs.nodejs"
+          )
+          ver() { nix eval --raw "$1#$2.version" 2>/dev/null || echo "?"; }
+          git worktree add -q "$RUNNER_TEMP/main" origin/main
+          table="$RUNNER_TEMP/versions.md"
+          {
+            echo "| package | main | this PR |"
+            echo "|---|---|---|"
+            for a in "${attrs[@]}"; do
+              label="${a%%|*}"; attr="${a#*|}"
+              old=$(ver "$RUNNER_TEMP/main" "$attr"); new=$(ver . "$attr")
+              mark=""; [ "$old" != "$new" ] && mark=" **(moved)**"
+              echo "| ${label} | ${old} | ${new}${mark} |"
+            done
+          } > "$table"
+          cat "$table" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build host closure and guest image
+        id: build
+        shell: bash
+        run: |
+          set -u
+          status=0
+          # The host closure binds the guest image (guestImage in flake.nix);
+          # both are named so a failure says which. Kernels and most of the
+          # closure substitute from cache.nixos.org; Choir's packages build.
+          nix build --print-build-logs --keep-going --no-link \
+            .#nixosConfigurations.go-choir-b.config.system.build.toplevel \
+            .#guest-image || status=$?
+          df -h /
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Report on the pull request
+        if: always()
+        shell: bash
+        env:
+          BUILD_STATUS: ${{ steps.build.outputs.status }}
+        run: |
+          set -euo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ "${BUILD_STATUS:-1}" = "0" ]; then
+            state=success; verdict="Host closure and guest image **built**."
+          else
+            state=failure; verdict="Host closure or guest image **failed to build** (exit ${BUILD_STATUS:-unknown}); see the run log."
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" -f state="$state" \
+            -f context=patch-lane/host-guest-build -f description="$verdict" -f target_url="$run_url" >/dev/null || true
+          body="$RUNNER_TEMP/comment.md"
+          {
+            echo "Weekly nixpkgs bump, head \`${HEAD_SHA}\`: ${verdict} ([run](${run_url}))"
+            echo
+            cat "$RUNNER_TEMP/versions.md" 2>/dev/null || echo "(version table unavailable)"
+          } > "$body"
+          gh pr comment "$PR" --body-file "$body"
+          [ "$state" = success ]

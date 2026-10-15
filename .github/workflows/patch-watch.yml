@@ -30,11 +30,11 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
-      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: DeterminateSystems/determinate-nix-action@e847f25223456b3058e12f7fc9d777b6a6f25060 # v3.23.2
 
       - name: Evaluate declared versions (no build)
         id: declared
@@ -47,7 +47,7 @@ jobs:
             echo "host_kernel=$(ev .#nixosConfigurations.go-choir-b.config.boot.kernelPackages.kernel.version)"
             echo "guest_kernel=$(ev .#nixosConfigurations.go-choir-autoputer-vm.config.boot.kernelPackages.kernel.version)"
             echo "firecracker=$(ev .#nixosConfigurations.go-choir-b.pkgs.firecracker.version)"
-            echo "go=$(ev .#nixosConfigurations.go-choir-b.pkgs.go.version)"
+            echo "go=$(ev .#packages.x86_64-linux.choir-go.version)"
           } | tee -a "$GITHUB_OUTPUT"
 
       - name: Kernel - KEV entries vs kernel CNA fixed versions, and 6.18 lag
@@ -135,7 +135,7 @@ jobs:
           [ "$DECLARED" = "$latest" ] && echo "lag=" >> "$GITHUB_OUTPUT" || echo "lag=${DECLARED}->${latest}" >> "$GITHUB_OUTPUT"
 
       - name: Set up the production Go toolchain version
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ steps.declared.outputs.go }}
           cache: false
@@ -145,7 +145,7 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          go run golang.org/x/vuln/cmd/govulncheck@latest ./... > "$RUNNER_TEMP/govuln.txt" 2>&1
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./... > "$RUNNER_TEMP/govuln.txt" 2>&1
           status=$?
           count=$(grep -c '^Vulnerability #' "$RUNNER_TEMP/govuln.txt" || true)
           { echo "## Go (toolchain ${{ steps.declared.outputs.go }})"; echo; echo "- govulncheck exit ${status}, reachable findings: ${count}"; echo; } >> "$REPORT"

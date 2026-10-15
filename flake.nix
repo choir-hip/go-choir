@@ -60,6 +60,34 @@
         }];
       };
 
+      # Go toolchain lane (docs/reports/patch-lanes-plan-2026-10-15.md,
+      # slice 3). Go point releases carry only security and critical fixes,
+      # and they are the cheapest patch in the inventory: 1.26.9 closes 22
+      # reachable standard-library govulncheck findings that the base's
+      # 1.26.4 ships. The base's go_1_26 recipe with a newer version and
+      # source hash (the same recipe nixos-unstable uses for 1.26.8, which
+      # differs only in those two fields). It applies only while the given
+      # nixpkgs is older, so the weekly base bump retires it. One compiler
+      # everywhere: every Choir Go build, the dev shells, the host's and the
+      # guest's `go`, and CI (go.mod's toolchain directive, ci.yml's pins).
+      # Next point release: bump version + hash here, `toolchain` in go.mod,
+      # and the go-version pins in .github/workflows/ci.yml.
+      choirGoRelease = {
+        version = "1.26.9";
+        hash = "sha256-lzXX3Ntls10/pXfwQGRzfAO4nPGitx5uaf4vPG+f1Mo=";
+      };
+      mkChoirGo = p:
+        if p.lib.versionAtLeast p.go_1_26.version choirGoRelease.version then p.go_1_26
+        else p.go_1_26.overrideAttrs (_: {
+          inherit (choirGoRelease) version;
+          src = p.fetchurl {
+            url = "https://go.dev/dl/go${choirGoRelease.version}.src.tar.gz";
+            inherit (choirGoRelease) hash;
+          };
+        });
+      choirGo = mkChoirGo pkgs;
+      buildChoirGoModule = pkgs.buildGoModule.override { go = choirGo; };
+
       # Go module version from go.mod
       goModuleVersion = "0.1.0";
       buildCommit = self.rev or self.dirtyRev or "local";
@@ -83,7 +111,7 @@
         devPkgs.mkShell {
           packages = [
             devPkgs.git
-            devPkgs.go
+            (mkChoirGo devPkgs)
             devPkgs.pkg-config
             devPkgs.icu
             devPkgs.dolt
@@ -148,7 +176,7 @@
               base == "svelte.config.js" ||
               base == "vite.config.js";
         };
-        npmDepsHash = "sha256-1ivvmDrQmaHDTUu38BoEsyajT9TP9xdzie2gGU2DJtA=";
+        npmDepsHash = "sha256-oA1Qf3x5Ff2kHBLJwhcVvy/d0n5GWlOXrXbue/HJ5UQ=";
         npmBuildScript = "build";
         VITE_CHOIR_BUILD_VERSION = goModuleVersion;
         VITE_CHOIR_BUILD_SHA = buildCommit;
@@ -182,7 +210,7 @@
         doCheck = false;
       };
 
-      zotPkg = pkgs.buildGoModule {
+      zotPkg = buildChoirGoModule {
         pname = "zot";
         version = "0.2.6";
         src = pkgs.fetchFromGitHub {
@@ -235,7 +263,7 @@
             (type != "directory" && inSubPackage && isProductionFile) ||
             (pkgs.lib.hasPrefix "internal/" rel && isProductionFile);
       };
-      goServicesAll = pkgs.buildGoModule (commonGoArgs // {
+      goServicesAll = buildChoirGoModule (commonGoArgs // {
         pname = "go-choir-services";
         version = goModuleVersion;
         src = goServicesSrc;
@@ -425,7 +453,7 @@ EOF
           # Go only: the app embeds no frontend, and cmd/desktop/build.sh
           # compiles cgo with Xcode's clang and SDK, not a Nix toolchain.
           packages = [
-            devPkgs.go
+            (mkChoirGo devPkgs)
           ];
           shellHook = ''
             echo "Choir Desktop dev shell (Wails v3)"
@@ -442,6 +470,8 @@ EOF
       packages.${system} = goChoirPackages // {
         default = self.packages.${system}.auth;
         choir-builder = choirBuilder;
+        # The Go toolchain lane's compiler (the declared Go for Patch Watch).
+        choir-go = choirGo;
         # Expose the guest image as a top-level package for easy building:
         #   nix build .#guest-image
         inherit guest-image;
@@ -482,6 +512,7 @@ EOF
         system = "x86_64-linux";
         specialArgs = {
           goChoirPackages = goChoirPackages;
+          inherit choirGo;
           inherit buildCommit sourceRepoRemote;
         };
         modules = [
@@ -497,6 +528,7 @@ EOF
         system = "x86_64-linux";
         specialArgs = {
           goChoirPackages = goChoirPackages;
+          inherit choirGo;
           inherit buildCommit sourceRepoRemote;
           # Bind the exact immutable guest image into the host system closure;
           # node-b activation advances /var/lib/go-choir/guest atomically.

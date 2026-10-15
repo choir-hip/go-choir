@@ -31,6 +31,10 @@ require 'deploy-receipt.json'
 require '.github/scripts/deploy-receipt-merge /var/lib/go-choir/deploy-receipt.json < "${receipt_tmp}.new" > "$receipt_tmp"'
 require 'selection="$(.github/scripts/deploy-base-select --after "$after" --health "$health_json" --receipt "$RUNNER_TEMP/deployed-receipt.json")"'
 require "'cat /var/lib/go-choir/deploy-receipt.json' >\"\$receipt_json\""
+# The receipt records whether the activated kernel is booted, and the
+# detector can never fail a deploy (docs/reports/patch-lanes-plan-2026-10-15.md).
+require "boot_state=\$(python3 scripts/verify-host-hardening.py --boot-state-json 2>/dev/null) || boot_state=''"
+require 'boot_state: $boot_state'
 require 'Staging deploy forced: no trustworthy deployed base'
 require 'selection="$(.github/scripts/deploy-base-select --after "$AFTER" --health "$health_json")"'
 reject 'before="${{ github.event.before }}"'

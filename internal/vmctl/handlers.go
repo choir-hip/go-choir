@@ -1234,6 +1234,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/retention-shadow-plan", h.HandleRetentionShadowPlan)
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/boot-timeline", h.HandleBootTimeline)
+	s.HandleFunc(HostBootStatePath, h.HandleHostBootState)
 	s.HandleFunc("/internal/vmctl/hibernate", attributedLifecycle(h.HandleHibernate))
 }
 
