@@ -375,3 +375,20 @@ docs/problems/search-throughput-keenable-underused-2026-10-15.md.
   with their work committed on branches (surface sweep, account recovery
   and Store B rebases, visual evidence, S7-0 app packages, memory hotplug)
   and resume one at a time as others finish.
+
+## 22. Halve Autopaper's compute, keep or raise quality (2026-10-15, ~05:20 UTC)
+
+Owner: "We should try to halve the compute intensity of Autopaper. I still
+want to ingest the sources, but try to have half the output, maybe … halve
+the token usage, but keep the quality as high as possible. We still want
+the most important stories. Or maybe we can even improve the quality at
+half the compute intensity."
+
+Baseline (gateway journal, paper guest, 24 h to 05:20): 26,763 calls,
+601.4M input tokens, 22.0M output (27:1), 44% of input cached; about 22.5k
+input tokens per call. The cost is mostly context, not writing. Disposition:
+measure by desk, stage and story; rank levers (importance triage before
+research, fewer and shorter search results in context, per-turn context
+compaction, cache-friendly prefixes, cheaper triage models); implement the
+safest behind flags. Report: docs/reports/autopaper-compute-halving-2026-10-15.md,
+branch `feat/autopaper-compute-halving`.
