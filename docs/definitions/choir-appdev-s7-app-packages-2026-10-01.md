@@ -349,3 +349,27 @@ on demand from a host content-addressed cache (the same pattern as the
 capsule Go module proxy) and distributed by station LU (guest updates).
 Sequencing: in the ledger metamission, S6 and S7 come after the Autopaper
 scaling work (owner priority), not before.
+
+## S7-0a, the package seam (2026-10-14)
+
+The conversion above needs a seam to convert into. S7-0a builds it, and the
+design and failure modes are in
+[docs/design/s7-0-app-packages-2026-10-14.md](../design/s7-0-app-packages-2026-10-14.md).
+The slice delivers:
+
+- a versioned manifest, `choir.app-package/v1`, validated in Go;
+- a host build receipt with the `static/v1` recipe;
+- install, enable, disable and purge as hash-chained object-graph objects on
+  the computer's tape, folded by a pure reducer;
+- package data purged according to the manifest's restore requirements;
+- the desktop loading one enabled package's frontend module by verified
+  digest, beside the static registry;
+- the fixture `packages/hello`.
+
+The backend service and the host build job are designed there and not
+built. The conversion of the first-party apps is S7-0b.
+
+Decision D1 in that design moves package presence from "a member of the
+computer's release closure" to "a fact on the computer's tape", with bytes
+addressed by host build digest. The reason is the owner's 2026-10-14
+build-once ruling. It is orchestrator-settled and awaits owner ratification.
