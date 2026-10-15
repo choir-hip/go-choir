@@ -313,8 +313,25 @@ route no longer returns the nonce and the build commit is the base's again.
 
 ## Residuals (named, not fixed here)
 
-- The host does not check the tape for an accepted decision before building;
-  admission, the per-request job id and the queue bound limit abuse.
+- The host does not check the tape for an accepted decision before building.
+  The bound is the per-computer quota (`CORPUSD_HOST_BUILD_MAX_PER_COMPUTER_PER_DAY`,
+  default 8 jobs in a rolling 24 hours, refused ones included), with
+  admission, the queue bound and record pruning (failed records 24 h, done
+  7 days, at most 512). A tape check alone would add little: the decision
+  event is appended with the same computer capability that submits the
+  build, so the host would also have to verify the owner or consensus
+  authority behind it (corpusd stores events as artifacts, so this is a
+  replay read plus `decisionpolicy` verification on the host). That is the
+  next cut, not done here.
+- The host evaluates a guest-authored tree. After the review fix the bounds
+  are: no change to any `.nix` file, flake file, Go module or npm manifest,
+  `vendor/`, the store schema, a link or git metadata, decided on the
+  committed tree; the nix sandbox for the Go build itself (whether Node B's
+  nix daemon enforces `sandbox = true` is unverified); the build timeout.
+- A restore restart deferred by a busy computer waits up to an hour for an
+  idle moment, in memory: a crash or another restart in that hour drops it,
+  and the previous binary keeps serving until the next restart. An
+  always-busy computer may never take it.
 - A host restart (every deploy) fails builds in flight; the operation fails
   visibly and a new operation must be requested.
 - `goServicesAll` compiles every service for one autoputer change (minutes);
