@@ -129,8 +129,8 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	// delivery is a tape projection, not a scan.
 	// Bound delivery: a wake that fails (or crashes the process) MaxAttempts
 	// times is routed to the dead-letter sink mailbox instead of looping
-	// forever. The sink is a scoped mailbox whose unknown-kind handler drops
-	// delivery_failed events (actorruntime/handler.go default case).
+	// forever. The sink is a scoped mailbox whose handler dead-letters once with a
+	// log line (delivery_failed / delivery_invalid in actorruntime/handler.go).
 	sinkMailbox := scopedActorMailboxID(cfg.ComputerID, cfg.ComputerID, "delivery-poison")
 	a.actorRT = actor.NewKernelRuntime(actorLog, actorLog, handler, actorOpts, actor.DispatcherOptions{
 		MaxAttempts:  8,

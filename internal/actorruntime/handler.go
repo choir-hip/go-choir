@@ -215,10 +215,34 @@ func (h *actorHandler) HandleUpdate(ctx context.Context, agentID string, u actor
 		return h.handleOwnerRevision(ctx, u, memory)
 	case "cancel":
 		return h.handleCancel(ctx, u, memory)
+	case "delivery_failed", "delivery_invalid":
+		// The delivery-poison sink: the dispatcher routed a wake here after it
+		// exhausted its attempts (delivery_failed) or was adjudicated
+		// undeliverable (delivery_invalid). Dead-letter it once, visibly.
+		log.Printf("actorruntime: %s", describeDeadLetter(u))
+		return memory, nil
 	default:
 		log.Printf("actorruntime: handler: unknown update kind %q for agent %s", u.Kind, agentID)
 		return memory, nil // leave memory unchanged; update marked processed
 	}
+}
+
+// describeDeadLetter is the one log line a dead-lettered wake leaves: what
+// failed, from which mailbox. A failed source-poll wake is not re-driven here;
+// the schedule's lost-wake sweep (agentcore sweepOverdueSourceSchedules)
+// re-arms it as a new tick, so the sink never needs the store, which is the
+// very thing that is down when wakes fail.
+func describeDeadLetter(u actor.Update) string {
+	from := strings.TrimSpace(u.FromAgentID)
+	agent := from
+	if _, _, id, err := parseScopedActorMailboxID(from); err == nil {
+		agent = id
+	}
+	line := fmt.Sprintf("dead letter: %s for update %s from %s dropped after delivery failed", u.Kind, strings.TrimSpace(u.Content), agent)
+	if strings.HasPrefix(agent, "source:") {
+		line += "; this was a source poll wake, the source schedule sweep re-arms the schedule"
+	}
+	return line
 }
 
 func (h *actorHandler) handleActivationBudgetDeadline(ctx context.Context, u actor.Update, memory []byte) ([]byte, error) {

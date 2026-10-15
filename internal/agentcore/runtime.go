@@ -101,6 +101,8 @@ type Runtime struct {
 	// kernel projector never binds or otherwise mutates resident runs.
 	kernelMode    bool
 	projectorStop chan struct{}
+	// sourceSweepStop ends the periodic lost-wake sweep of source schedules.
+	sourceSweepStop chan struct{}
 
 	runningMu sync.Mutex
 	running   map[string]context.CancelFunc // loop_id → cancel function
@@ -846,6 +848,9 @@ func (rt *Runtime) Start(ctx context.Context) {
 	})
 	bootPhase("selfdev_close_after_crash", func() { rt.closeSelfDevelopmentOperationsAfterCrash(ctx) })
 	bootPhase("source_schedules_after_restart", func() { rt.recoverSourceSchedulesAtBoot(ctx) })
+	// The sweep repairs a wake lost while the computer stays up (an outage that
+	// poisons wakes); its first pass is one interval after boot.
+	rt.startSourceScheduleSweep(ctx)
 	bootPhase("selfdev_materialization_reconcile", func() { rt.triggerSelfDevelopmentReconcile() })
 	// M7 derivable continuations: every committed canonical event may carry
 	// a self-development settlement boundary (verification -> approval,
@@ -910,6 +915,7 @@ func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Contex
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
 	rt.stopProjector()
+	rt.stopSourceScheduleSweep()
 	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()

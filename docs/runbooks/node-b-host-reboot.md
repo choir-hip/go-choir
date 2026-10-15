@@ -219,6 +219,17 @@ these checks read-only at any time:
   gets the new image at its next wake, because its snapshot is invalid.
 - The paper: its computer (critical_protected) is active, its source
   schedules are armed, and new paper ticks appear after one interval.
+  **Paper healthy = health ok AND schedules not overdue AND inference in
+  the last 30 minutes.** Health ok alone passed for 1h45m on 2026-10-15
+  while 26 of 28 schedules were overdue and the paper made no call
+  ([problem](../problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md)).
+  Schedules: `GET /api/autopaper/sources/schedules` with the paper
+  credential; none may have `overdue: true`. Inference: the host timer
+  `go-choir-paper-liveness-probe` alerts at journal priority err
+  (`journalctl -u go-choir-paper-liveness-probe -p err --since -1h`), and
+  `scripts/verify-host-hardening.py` fails its `paper-probe` check on an
+  alert in the last 15 minutes. The same state is the Landing Loop's
+  "paper healthy" step after every deploy.
 
 Then record the receipt in the problem doc: the kernel, `boot_id`, how
 long the reboot took, and the boot kinds.

@@ -1350,6 +1350,41 @@ in
     };
   };
 
+  # Paper liveness: alert in the journal (priority err) when the paper computer
+  # made no inference call for 30 minutes, judged from the gateway journal line
+  # "inference succeeded for autoputer <vm>" (scripts/paper-liveness-probe.py;
+  # tests: scripts/test_paper_liveness_probe.py;
+  # docs/problems/paper-silent-since-10-56-after-host-reboot-2026-10-15.md).
+  # The paper's vm id is looked up, not hardcoded: the platform computer in the
+  # tracked tiers file, mapped to its vm_id by vmctl's ownerships.json. The
+  # probe reads only. See alerts:  journalctl -u go-choir-paper-liveness-probe -p err
+  # Rollback: remove this service and timer.
+  systemd.services.go-choir-paper-liveness-probe = {
+    description = "go-choir paper liveness probe (no inference call for 30 minutes)";
+    path = [ pkgs.coreutils pkgs.systemd ];
+    environment = {
+      PAPER_TIERS_FILE = "${../internal/computertiers/computer-tiers.json}";
+      OWNERSHIPS_FILE = "/var/lib/go-choir/vm-state/ownerships.json";
+    };
+    serviceConfig = commonServiceHardening // {
+      Type = "oneshot";
+      ExecStart = "${pkgs.python3}/bin/python3 -I ${../scripts/paper-liveness-probe.py}";
+      TimeoutStartSec = "1min";
+      InaccessiblePaths = hiddenSecretsExcept [ ];
+    };
+  };
+
+  systemd.timers.go-choir-paper-liveness-probe = {
+    description = "Check the paper made an inference call in the last 30 minutes, every 5 minutes";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      # The probe itself skips while the host has been up for under 30 minutes.
+      OnBootSec = "10min";
+      OnUnitActiveSec = "5min";
+      AccuracySec = "10s";
+    };
+  };
+
   systemd.services.go-choir-gateway = {
     # The deploy restarts this unit once, after the service pointer holds the
     # new binary; a switch-time restart ran the old pointer and held the site
