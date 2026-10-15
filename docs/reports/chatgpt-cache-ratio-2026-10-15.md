@@ -314,3 +314,50 @@ against `choir-` calls once a day of data exists, by grouping on
   rather than to nothing. Expected gain: sibling children would share
   their first call's prefix (system prompt plus tools, about 3–6k tokens
   each).
+
+### 7.2 Research-child hypothesis refuted from code; failover keys are the likelier source (green)
+
+- **Refuted [C]: `parent.AgentID` is not empty.** The parent passed to
+  `runResearchChildren` (`tools_desk.go:1048`) is `cellExec`, taken from
+  `ExecutionContextFrom(egrCtx)` or, if that carries no run, from the
+  desk tool's `execCtx` (`tools_desk.go:419-421`). That context is installed
+  by `toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))`
+  (`runtime.go:3521`), which sets `AgentID: agentIDForRun(rec)`, `OwnerID`
+  and `ComputerID` from the run (`tool_profiles.go:39-49`).
+  `agentIDForRun` falls back to `rec.RunID` (`tool_profiles.go:117-130`),
+  so AgentID is non-empty for every run with a record. `runResearchChild`
+  copies the parent (`childExec := parent`, `research_children.go:190`) and
+  clears only RunRecord, ChannelID and ToolCallID, so nested children keep
+  it too. `researchChildCacheScope` (`research_children.go:271`) therefore
+  returns a non-empty scope and children get a `research_child` key. No code
+  path found that builds a parent with an empty AgentID. Not hypothesis-
+  tested against a live ledger; the absence of `cache_label=research_child`
+  in 30 minutes is explained below without it.
+- **Finding [C, reproduced]: a failed-over call is logged as `h:` / `-`.**
+  On model failover `RunToolLoop` sets `cacheKey = baseCacheKey + "-failover"`
+  (plus a counter from the second fallback), `toolloop.go:583-588`.
+  `loggableCacheKey` (`internal/provider/cache_log.go:85-97`) recognises a
+  desk key only when `strings.Split(rest, "-")` has exactly 3 parts. A
+  failover key has 4, so it is logged as `h:<hash of key>` with
+  `cache_label=-`. A throwaway test printed, for
+  `choir-management-<scope>-<prompt>`: key as sent, label `management`;
+  with `-failover`: `h:bf446ea518086703`, label `-`; with `-failover2`:
+  `h:ba0750e7e3d3793b`, label `-`.
+- **Reading:** the `cache_label=-` calls are plausibly calls that failed
+  over to gpt-6-luna on the chatgpt route (docs/problems/free-model-429-
+  opens-provider-circuit-stub-stories-2026-10-14.md describes the free
+  models 429ing), from any desk or child. That fits every observation in
+  §7.1: multi-turn tool loops, an intact `prefix_hash_prev` chain (the
+  failover key is stable for the rest of the loop, so the loop caches
+  within itself), and no `research_child` label. It is a hypothesis until a
+  ledger shows `model_failover` run.retry events on the same runs
+  (`toolloop.go:595-603`), which is the next check. Mechanism of harm, if
+  true: the failover key is deliberately distinct from the desk key, so a
+  failed-over call does not share the desk's cache thread. That is by design
+  (the key doubles as OpenCode's session), so the lever is fewer failovers,
+  not a different key. The compactor (`run_memory.go:680`) sets no CacheKey
+  and uses its own provider path; it is a single-shot call with 1 input
+  message and is not a tool loop.
+- **Decision:** no code change. The logging blind spot (a 4-part key shown
+  as `h:`) is worth a one-line fix later (label the failover suffix) so
+  the next measurement separates failover from keyless calls; not made here.
