@@ -206,3 +206,18 @@ owner and desks can see) needs the poisoned update's kind and content on the
 dead letter or a log lookup by update id; neither exists today, so it is not
 a small change and is left as a named residual for the protocol's
 observation records (P2 or later).
+
+## Fix (2026-10-15, branch `fix/texture-raced-activation-mutation`, not yet deployed)
+
+Commit 41cdcb94c: `ensureConductorTextureRoute` and
+`ensureCoagentTextureRevisionRoute` hold `lockTextureWakeScope` around
+`submitTextureAgentRevisionRun`. Regression
+`internal/textureowner/texture_activation_wake_scope_test.go` reproduced the
+staging refusal before the fix ("validate Texture activation: mutation
+authority mismatch" on the recovered run) and passes after it.
+
+Status: fixed locally, not deployed. Deployed proof still owed: after
+deploy, guest consoles that log "recovered raced activation" show no
+"mutation authority mismatch" or poisoned initial_dispatch for that doc.
+The `delivery_failed` visible-fate handler remains a residual (see Root
+cause).
