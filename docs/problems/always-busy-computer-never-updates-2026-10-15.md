@@ -199,3 +199,27 @@ count.)
   refreshes it at its first idle minute between polls. If that never comes,
   `refresh_active_computers=true` (a crash boot; schedules survive crashes
   since L1) is the one-time operator path.
+
+## Fix (branch `feat/always-on-planned-refresh`, not pushed)
+
+- 9bc79854f (guest): `?allow_busy=1` on the planned-restart endpoint;
+  self-development ops (executing, accepted, materializing,
+  rollback_pending) and live capsules always refuse; marker age taken at
+  process start.
+- f4260e116 (vmctl, CI text): warmness policy (`critical_protected`,
+  `public_platform`), durable pending set and one-minute retry sweep,
+  per-computer in-flight guard; CI logs `busy_allowed` and says deferred
+  computers are retried by vmctl. No new CI flag.
+- Tests: `internal/agentcore` `TestPlannedRestartEndpointAllowBusy*`,
+  `TestPlannedRestartAllowBusyResumesOnceThenCrashBootCloses`,
+  `TestPlannedRestartMarkerAgeIsTakenAtProcessStart`; `internal/vmctl`
+  `TestDeployRefreshAllowsBusyForCriticalProtectedComputer`,
+  `TestDeployRefreshBusyOrdinaryComputerStillDefersAndIsRecorded`,
+  `TestDeployRefreshSelfDevelopmentApplyDefersEvenWhenBusyIsAllowed`,
+  `TestDeployRefreshSweep*`, `TestDeployRefreshConcurrentRefreshDoesNotTouchTheMarker`,
+  `TestDeployRefreshPendingSurvivesVMCTLRestartAndKeepsNewestTarget`.
+- Not yet done: the Landing Loop (push, CI, staging deploy, the paper's
+  `/health` commit and `restart.kind=planned` after a busy deploy). CLAUDE.md
+  still says "Deploys never restart a busy computer"; the owner's ruling
+  amends it for platform computers, and that sentence is the owner's to
+  change.
