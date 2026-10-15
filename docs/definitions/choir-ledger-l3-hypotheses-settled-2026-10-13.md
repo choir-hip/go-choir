@@ -391,6 +391,18 @@ now:
       lifecycle_commit_act.go, can still store a typed Cast unchecked. No
       live producer uses them for hypotheses. Guard or exclude them before
       L3-3 scoring relies on "every new hypothesis was checked".
+    L3-1 deployed: 0fe4cead0, deployed to staging 22:29:33; the paper
+    booted onto it at 22:28. Smoke at 22:55 (read-only, counts only):
+    - liveness ok, 0 overdue schedules;
+    - 22 management runs, all completed, none showing an L3-1 refusal
+      text in its events;
+    - 2 story opens, both with kind "assertion": 100% kinded, no
+      forecasts yet.
+    Open hypothesis, not yet a finding: story opens fell from 24 per 89
+    min to 2 per 25 min. Feeds held at about one disposition per minute
+    and captures at about one per minute. The trace shows no refusal, so
+    the likelier cause is the news cycle (more existing stories to feed).
+    Re-measure over a full hour against the hour before.
 
 receipts: []
 ---
