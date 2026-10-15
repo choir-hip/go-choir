@@ -267,3 +267,52 @@ func TestGuestEgressEnsureWithoutIP6Tables(t *testing.T) {
 		t.Fatal("IPv4 policy not installed")
 	}
 }
+
+// TestGuestEgressAdmitsEveryGuestToHostRoute: every host service the guest
+// is told about must stay reachable through the egress chain. The routes are
+// read from the guest's own kernel command line (choir.*_url, the source the
+// guest image turns into RUNTIME_GATEWAY_URL, RUNTIME_VMCTL_URL and so on),
+// plus the capsule Go module proxy on the gateway host
+// (capsule.GoProxyHostPort, 8088). vmctl (8083) carries self-development
+// routes today and the guest memory route on feat/memory-hotplug.
+// Ways this could fail: a new choir.*_url is added without its port in
+// tapReachableHostServicePorts, so the policy silently cuts the guest off.
+func TestGuestEgressAdmitsEveryGuestToHostRoute(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
+	cfg.RootfsPath = "/opt/go-choir/guest/rootfs.ext4"
+	mgr := NewManager(cfg)
+	fc := mgr.buildFirecrackerConfig(VMConfig{VMID: "vm-egress-routes", GuestPort: 8085, MachineCPUCount: 2, MachineMemSizeMib: 512, Epoch: 1}, 9001)
+	boot, _ := fc["boot-source"].(map[string]interface{})
+	args, _ := boot["boot_args"].(string)
+	ports := map[string]string{"goproxy (capsule.GoProxyHostPort)": "8088"}
+	for _, arg := range strings.Fields(args) {
+		key, value, ok := strings.Cut(arg, "=")
+		if !ok || !strings.HasPrefix(key, "choir.") || !strings.HasSuffix(key, "_url") {
+			continue
+		}
+		hostport := strings.TrimPrefix(strings.TrimPrefix(value, "http://"), "https://")
+		hostport, _, _ = strings.Cut(hostport, "/")
+		if i := strings.LastIndex(hostport, ":"); i >= 0 {
+			ports[key] = hostport[i+1:]
+		}
+	}
+	for _, want := range []string{"choir.gateway_url", "choir.vmctl_url", "choir.platform_url", "choir.proxy_url"} {
+		if _, ok := ports[want]; !ok {
+			t.Fatalf("kernel command line has no %s: %q", want, args)
+		}
+	}
+	admitted := ""
+	for _, r := range guestEgressRuleSpecs() {
+		joined := strings.Join(r, " ")
+		if strings.Contains(joined, "--dst-type LOCAL") && strings.HasSuffix(joined, "-j RETURN") && !strings.Contains(joined, "80,443") {
+			admitted = dportsOf(joined)
+		}
+	}
+	for route, port := range ports {
+		if !slices.Contains(strings.Split(admitted, ","), port) {
+			t.Errorf("guest route %s (port %s) is not admitted by the egress chain (admitted: %s)", route, port, admitted)
+		}
+	}
+}

@@ -57,10 +57,14 @@ func TestDeskCellConfinedHelperProcess(t *testing.T) {
 		fmt.Fprintf(os.Stderr, "helper: no session socket: %v\n", err)
 		os.Exit(2)
 	}
-	if err := ConfineDeskSessionWorker(nil, ""); err != nil {
-		fmt.Fprintf(os.Stderr, "helper: confine: %v\n", err)
-		os.Exit(3)
+	// The self-test's mutation check runs a worker that skips confinement.
+	if os.Getenv("CHOIR_DESK_CELL_SKIP_CONFINE") != "1" {
+		if err := ConfineDeskSessionWorker(nil, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "helper: confine: %v\n", err)
+			os.Exit(3)
+		}
 	}
+	RunDeskCellSelfTestIfRequested(nil, "")
 	if os.Getenv("CHOIR_DESK_CELL_PROBE") == "1" {
 		raw, _ := json.Marshal(runEscapeProbes(cfg))
 		fmt.Fprintf(os.Stdout, "PROBES %s\n", raw)
