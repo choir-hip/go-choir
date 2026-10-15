@@ -233,6 +233,92 @@ windows, and the call returns 1,000 full rows; the unbounded text on the
 same index stays 3-6× slower and grows with the range. Each capture write
 pays ~10-20 ms more for its projection (a second transaction).
 
+## Landing reconciliation (rebase onto main 133de45fa)
+
+The branch was rebased as `land/store-b-retrieval` (not pushed). The
+rebase had no textual conflicts. Each of main's changes was then checked
+against the branch:
+
+- **Cross-owner scoping (96dd9fc62, auth-boundary-gaps F5).** Main now
+  requires a guest's object list to name exactly the owner and computer
+  vmctl binds it to. The new routes already use that rule
+  (`requireInternalOrBoundGuest(r, owner, computer, false)`, which routes to
+  `requireInternalOrBoundGuestWrite`), and their SQL is scoped by
+  `owner_id AND computer_id`. Added
+  `TestCaptureIndexRoutesFollowTheGuestListRule`:
+  - a bound guest naming another owner, another computer, or both is
+    refused on both routes;
+  - an unbound tap address is refused;
+  - a loopback caller with the marker but no host credential is refused
+    under hostauth enforce;
+  - a host search for another owner on the same computer id returns
+    nothing.
+- **Host credential (44656ef90).** The routes inherit `trustedInternalCaller`,
+  which now includes `hostauth.Authorize`. The guest client reaches corpusd
+  over its tap and is bound by vmctl, so it needs no credential.
+- **Object-graph write gate and boot-ordered record columns (85d2295b7,
+  f1005b16e, 8f6708541).** Those are the guest store
+  (`internal/objectgraph`, `internal/store`). This branch changes Store B
+  only (`internal/platform`); no shared index names or DDL.
+- **Guest Dolt GC (4bf25d82a).** Guest store only. Store B's two
+  projection tables are `dolt_ignore`d (working set only, never committed);
+  `og_lookup_keys` is versioned with `og_objects` (small: five
+  publication-side kinds).
+- **Dolt password auth (9ab0c6b7b).** Node B is at stage `users`: corpusd
+  still connects as root. At stage `clients`, the app user has `ALL` on its
+  one database, which covers `CREATE INDEX`, `CREATE TABLE` and writes to
+  `dolt_ignore`. This has not been run against an app-user connection.
+  Check it when the stage flips (residual).
+
+### Migration safety (the 2026-10-14 index lesson)
+
+The lesson ([guest-cpu-is-unindexed-store-scans-2026-10-14.md](guest-cpu-is-unindexed-store-scans-2026-10-14.md),
+"Deploy evidence"): a guest built its record indexes before its first
+healthy answer, took 1m55s, passed vmctl's 120 s write timeout, and failed
+the deploy. Store B's migration does not have that shape:
+
+- It runs in corpusd (a host service), not in a guest, so vmctl's
+  deploy-refresh timeout does not apply. CI restarts corpusd and curls
+  `127.0.0.1:8086/health` with five retries.
+- `StartRetrievalMigrations` is a goroutine started before the listener
+  and never awaited. `Bootstrap` runs none of the new DDL. `/health`
+  answers at once. Each new query shape switches on only when its step
+  reports live (`retrieval.live` on `/health`). A failed step leaves the
+  old shape in use and retries with backoff (30 s, doubling to 10 min).
+- The steps:
+  1. two `CREATE INDEX` statements: the `og_objects` composite and
+     `og_edges (to_id, kind)`;
+  2. create and backfill `og_lookup_keys`;
+  3. create the two projection tables;
+  4. the throttled projection backfill (250-capture pages, 250 ms pause).
+- Estimated backfill time: Store B was reset on 10-09 and takes ~4,500
+  captures a day, so the projection holds ~25-30 k captures. At the
+  measured throttled rate of ~180 captures/s, that is about 3 minutes.
+  Search and URL lookup refuse until it completes, so guests use the
+  window until then.
+- Measured locally with a capture writer every 20 ms running beside the
+  whole migration, at 50 k captures: no write errors, p95 225 ms, max
+  3.4 s.
+- Not measured: `CREATE INDEX` on Node B's platform Dolt (MemoryHigh 3G;
+  the 2026-10-01 OOM cluster) while Store A shares the server. Store B
+  still shares the `platform` database unless `corpus-dsn.env` is present.
+  Watch `go-choir-platform-dolt` memory during the first boot. Each index
+  is committed once (`markCorpusDirty`), so its chunks enter platform Dolt
+  history once.
+
+### Rollback
+
+- Host switch without a deploy: `nix/node-b.nix` now gives corpusd an
+  optional `EnvironmentFile`, `/var/lib/go-choir/corpusd-retrieval.env`.
+  Write `CORPUSD_CAPTURE_SEARCH=off` there and restart `go-choir-corpusd`.
+  Both routes then answer 503, and guests fall back to the window.
+- Guest switch: with `CHOIR_CORPUS_SEARCH=window` in its runtime
+  environment, a guest never calls the routes. That setting reaches a
+  computer only through its runtime environment, so the host switch is
+  the one to use in operation.
+- Schema: revert the commits. The indexes and tables can stay; without
+  the code they do nothing.
+
 ## Residuals
 
 - **Backfill of a large Store B is slow** (~180 captures/s throttled, and
