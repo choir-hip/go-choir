@@ -256,3 +256,18 @@ here; `flake.lock` is not bumped.
 
 No slice needs a reboot to land. The detector exists to report what the
 reboot will change.
+
+## Status (branch `ops/patch-lanes`, not pushed)
+
+- Landed on the branch: slices 1, 3, 4, 5 and 6. Commit messages record
+  what each verified.
+- Not verified locally: a Nix build of Go 1.26.9 (the remote
+  aarch64-linux builder was unreachable, and the local build was
+  stopped to free the Mac's CPUs), a browser render of a PDF with pdfjs
+  6, and a run of the bump workflow on a hosted runner.
+- **Next: slice 2 (Firecracker 1.17.0)** on `ops/firecracker-1.17`,
+  stacked on this branch, per the design above. 1.17.0 needs rustc 1.97;
+  the base has 1.95.0 and `nixos-unstable` (7fd4004) has 1.98.1, so the
+  override starts from the unstable recipe through a `nixpkgs-vmm` input.
+- Owner actions: the `PATCH_BOT_TOKEN` secret (slice 5) and enabling
+  private vulnerability reporting in the repository settings (slice 6).
