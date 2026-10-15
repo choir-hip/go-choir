@@ -12,8 +12,11 @@
 
   Under the masthead, a row of section names (Front page, World, U.S.
   Politics, Business & Finance, Tech & AI) switches the page to one
-  section's stories, in the same rank; it scrolls sideways on a phone. The
-  row shows only when at least half the stories carry a section. The last
+  section's stories, in the same rank; it scrolls sideways on a phone. A
+  section page is fetched from the server (`?section=`), newest first back
+  as far as the paper goes, and its "Older stories" button pages that
+  section's cursor. The row shows only when at least half the front page's
+  stories carry a section. The last
   section chosen is remembered on this device and restored on reopen, and
   the reader's section choices, counted on this device only, lift those
   sections on the front page.
@@ -42,7 +45,6 @@
     recordSectionVisit,
     saveSection,
     sectionShares,
-    storiesInSection,
     storyTextureContext,
     usesSections,
     type FrontStory,
@@ -71,19 +73,39 @@
   let section = FRONT_SECTION_ID;
   let visits: Record<string, number> = {};
 
+  // A section page is the server's own list for that section (`?section=`),
+  // newest first back as far as the paper goes, with its own cursor: it is
+  // not a filter over the front page's rows, so a quiet section still shows
+  // its older stories (docs/problems/autopaper-section-pages-empty-2026-10-15.md).
+  type SectionPage = {
+    first: FrontStory[];
+    older: FrontStory[];
+    cursor: string;
+    status: 'loading' | 'ready' | 'error';
+    loadingMore: boolean;
+  };
+  let sectionPages: Record<string, SectionPage> = {};
+  /** Empty pages (the server stopped scanning) followed before giving up. */
+  const EMPTY_PAGE_FOLLOWS = 4;
+
   $: sectioned = usesSections(frontStories);
   $: activeSection = sectioned ? section : FRONT_SECTION_ID;
-  $: shares = activeSection === FRONT_SECTION_ID ? sectionShares(visits) : null;
-  $: layout = layoutFrontPage(rankFrontStories(storiesInSection(frontStories, activeSection), { sectionShares: shares }));
-  $: moreStories = [...layout.more, ...storiesInSection(olderStories, activeSection)];
-  // On a section page the More stories block (and its Older stories button)
-  // shows only when the section has stories past the front tiers: a section
-  // with a handful of stories ends after them instead of offering a lone
-  // button that may page in nothing for it.
   $: onFront = activeSection === FRONT_SECTION_ID;
-  $: showMoreSection = moreStories.length > 0 || (onFront && !!nextCursor);
-  $: sectionEmpty = status === 'ready' && frontStories.length > 0 && !layout.lead && moreStories.length === 0;
-  $: storyCount = frontStories.length + olderStories.length;
+  $: shares = onFront ? sectionShares(visits) : null;
+  $: sectionPage = onFront ? null : sectionPages[activeSection] || null;
+  $: viewFirst = onFront ? frontStories : sectionPage?.first || [];
+  $: viewOlder = onFront ? olderStories : sectionPage?.older || [];
+  $: viewCursor = onFront ? nextCursor : sectionPage?.cursor || '';
+  $: viewStatus = onFront ? status : status === 'error' ? 'error' : sectionPage?.status || 'loading';
+  $: viewLoadingMore = onFront ? loadingMore : !!sectionPage?.loadingMore;
+  $: viewCount = viewFirst.length + viewOlder.length;
+  $: layout = layoutFrontPage(rankFrontStories(viewFirst, { sectionShares: shares }));
+  $: moreStories = [...layout.more, ...viewOlder];
+  // The More stories block carries the Older stories button whenever the
+  // server has more for this page (a section's cursor is that section's).
+  $: showMoreSection = moreStories.length > 0 || !!viewCursor;
+  // Shown only when the server returned no story for the section.
+  $: sectionEmpty = !onFront && viewStatus === 'ready' && viewCount === 0;
   $: edition = editionTime(frontStories);
   $: editionISO = Number.isFinite(edition) ? new Date(edition).toISOString() : '';
   $: todayLabel = today.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -96,14 +118,62 @@
       frontStories = page.stories;
       olderStories = [];
       nextCursor = page.next_cursor || '';
+      sectionPages = {};
       today = new Date();
       status = 'ready';
+      if (usesSections(frontStories) && section !== FRONT_SECTION_ID) void loadSection(section);
     } catch (_err) {
       status = 'error';
     }
   }
 
+  /** A section page, following empty pages the server hands back with a cursor. */
+  async function fetchSectionPage(id: string, cursor: string, limit: number) {
+    let page = await fetchFrontPage(cursor, limit, id);
+    for (let i = 0; i < EMPTY_PAGE_FOLLOWS && page.stories.length === 0 && page.next_cursor; i++) {
+      page = await fetchFrontPage(page.next_cursor, limit, id);
+    }
+    return page;
+  }
+
+  function setSectionPage(id: string, patch: Partial<SectionPage>) {
+    const base: SectionPage = sectionPages[id] || { first: [], older: [], cursor: '', status: 'loading', loadingMore: false };
+    sectionPages = { ...sectionPages, [id]: { ...base, ...patch } };
+  }
+
+  async function loadSection(id: string) {
+    if (id === FRONT_SECTION_ID) return;
+    if (sectionPages[id] && sectionPages[id].status !== 'error') return;
+    setSectionPage(id, { first: [], older: [], cursor: '', status: 'loading', loadingMore: false });
+    try {
+      const page = await fetchSectionPage(id, '', FRONT_FIRST_PAGE_SIZE);
+      setSectionPage(id, { first: page.stories, cursor: page.next_cursor || '', status: 'ready' });
+    } catch (_err) {
+      setSectionPage(id, { status: 'error' });
+    }
+  }
+
+  async function loadMoreSection(id: string) {
+    const current = sectionPages[id];
+    if (!current?.cursor || current.loadingMore) return;
+    setSectionPage(id, { loadingMore: true });
+    try {
+      const page = await fetchSectionPage(id, current.cursor, 20);
+      const latest = sectionPages[id];
+      const seen = new Set([...latest.first, ...latest.older].map((s) => s.publication_id));
+      setSectionPage(id, {
+        older: [...latest.older, ...page.stories.filter((s) => !seen.has(s.publication_id))],
+        cursor: page.next_cursor || '',
+      });
+    } catch (_err) {
+      // Keep what is shown; the button stays for a retry.
+    } finally {
+      setSectionPage(id, { loadingMore: false });
+    }
+  }
+
   async function loadMore() {
+    if (!onFront) return loadMoreSection(activeSection);
     if (!nextCursor || loadingMore) return;
     loadingMore = true;
     try {
@@ -119,10 +189,15 @@
   }
 
   function selectSection(id: string) {
-    if (id === section) return;
+    if (id === section) {
+      // Choosing the current section again retries a failed load.
+      if (status === 'ready') void loadSection(id);
+      return;
+    }
     section = id;
     saveSection(id);
     visits = recordSectionVisit(id);
+    if (status === 'ready') void loadSection(id);
   }
 
   function openStory(event: MouseEvent, row: FrontStory, route: string) {
@@ -186,15 +261,24 @@
       {/if}
     </header>
 
-    <section class="ap-front" data-autopaper-front aria-label="Front page" aria-busy={status === 'loading'}>
-      {#if status === 'loading' && storyCount === 0}
-        <p class="ap-status" role="status" data-autopaper-status>Loading the front page…</p>
-      {:else if status === 'error'}
+    <section class="ap-front" data-autopaper-front aria-label="Front page" aria-busy={viewStatus === 'loading'}>
+      {#if viewStatus === 'loading' && viewCount === 0}
+        <p class="ap-status" role="status" data-autopaper-status>{onFront ? 'Loading the front page…' : 'Loading the section…'}</p>
+      {:else if viewStatus === 'error'}
         <p class="ap-status ap-error" role="alert" data-autopaper-error>Could not load stories. Try again shortly.</p>
-      {:else if storyCount === 0}
+      {:else if onFront && viewCount === 0}
         <p class="ap-status" data-autopaper-empty>No stories yet.</p>
       {:else if sectionEmpty}
-        <p class="ap-status" data-autopaper-section-empty>No stories in this section yet.</p>
+        <!-- A cursor here means the server stopped scanning before it found
+             a story; only a cursor-less empty page is an empty section. -->
+        <p class="ap-status" data-autopaper-section-empty>
+          {viewCursor ? 'No recent stories in this section.' : 'No stories in this section yet.'}
+        </p>
+        {#if viewCursor}
+          <button class="ap-older" type="button" on:click={loadMore} disabled={viewLoadingMore} data-autopaper-more>
+            {viewLoadingMore ? 'Loading…' : 'Older stories'}
+          </button>
+        {/if}
       {:else}
         <div class="ap-grid" data-autopaper-grid>
           {#if layout.lead}
@@ -238,9 +322,9 @@
                 {/each}
               </ol>
             {/if}
-            {#if nextCursor}
-              <button class="ap-older" type="button" on:click={loadMore} disabled={loadingMore} data-autopaper-more>
-                {loadingMore ? 'Loading…' : 'Older stories'}
+            {#if viewCursor}
+              <button class="ap-older" type="button" on:click={loadMore} disabled={viewLoadingMore} data-autopaper-more>
+                {viewLoadingMore ? 'Loading…' : 'Older stories'}
               </button>
             {/if}
           </section>
