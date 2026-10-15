@@ -96,6 +96,29 @@ stays in the new generation, so every GC copies the live set again.
 - A squash plus full GC leaves exactly the live set. The rows are unchanged:
   the squash commits the same working set.
 
+### What an online compaction costs (local, same harness)
+
+The scale points used the implementation's own `compactDoltHistoryOnline`
+on bulk-loaded index rows: 3.8 KB raw each, one commit per 100 rows, a
+default GC every 10,000 rows. The rerun had the Mac to itself:
+
+| Rows | Commits | Store before | Live after | Witness (3 reads) | Squash | Full GC |
+|---|---|---|---|---|---|---|
+| 50,000 | 502 | 342 MB | 41 MB | 16 ms | 49 ms | 0.91 s |
+| 200,000 | 1,502 | 1,602 MB | 190 MB | 11 ms | 45 ms | **4.05 s** |
+
+- History was **88%** of the store at both points.
+- The full GC dominates. Its cost follows the live set, about 21 ms per
+  MB of live data on a Mac SSD. The squash and the witness reads are
+  negligible.
+- An earlier run of the same 200k point took 84 s on a CPU-pegged machine.
+  This is a cost to measure on the guest, not to infer.
+- Extrapolated to the paper's 1–3 GiB live set: about 20–65 s on the Mac.
+  The guest's default GCs read 1.6–6.6 GiB of journal in 10–54 s, so
+  under about 2 minutes is the planning number. The paper-scale run
+  (about 360k rows plus objects) is left for Node B or the first deployed
+  compaction's record (`gc_ms`).
+
 ## Constraint: what may be compacted
 
 - The tape is the authority. Event heads, the canonical chain and the
@@ -226,10 +249,17 @@ an **online history compaction** (`internal/store/dolt_compaction.go`):
 - **FH11** The kill switches are ignored.
 - **FH12** A store-size gate turns compaction off for a large store.
 - **FH13** (residual) A full GC holds the write connection while it
-  rewrites the live set. On the paper this is estimated at under about
-  90 s: default GCs that read 1.6–6.6 GiB of journal took 10–54 s there.
-  Run trace appends wait for it. Today's default GC already stalls writes
-  for 7–54 s every 15–25 minutes.
+  rewrites the live set. Measured locally: 4 s for 190 MB live. On the
+  paper the estimate is under about 2 minutes for 1–3 GiB live; the record
+  carries `gc_ms` to confirm it. Run trace appends wait for it. Today's
+  default GC already stalls writes for 7–54 s every 15–25 minutes; a
+  compaction adds one longer stall every few hours.
+  - If the guest's `gc_ms` is too long, the follow-up is to run the full
+    GC on a separate session over the same connector, so writes continue.
+    The Dolt pin includes the upstream race fix 6bea93f2.
+  - The post-GC check then becomes a prefix check: the pre-squash head
+    and the event count up to its sequence are unchanged. It cannot be an
+    equality check.
 
 Tests (`internal/store/dolt_compaction_test.go`):
 - The policy:
@@ -283,8 +313,11 @@ Tests (`internal/store/dolt_compaction_test.go`):
   checks and the same proven mechanism as the offline tool.
 - **Remaining**:
   - the live growth rate (above);
-  - the write stall during each full GC (FH13), not yet measured on the
-    guest;
+  - the write stall during each full GC (FH13): 4 s for 190 MB live
+    locally, not yet measured on the guest;
+  - one-time cost: on the first tick after deploy, every computer whose
+    non-journal store is at least 2 GiB compacts once, because no baseline
+    exists yet;
   - a `deferred_space` disk still needs the offline runbook;
   - after compaction, projection bases copy a compact store. That is an
     upside: bases were 8.7 GB each on 10-09.

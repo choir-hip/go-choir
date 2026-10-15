@@ -154,6 +154,10 @@ type runtimeHealthResponse struct {
 	// (store.ReadDoltGCDisposition): outcome, journal and free space, and
 	// compaction_needed when GC alone cannot keep the disk free.
 	DoltGC json.RawMessage `json:"dolt_gc,omitempty"`
+	// DoltCompaction is the guest store's last history compaction record
+	// (store.ReadDoltCompactionRecord): outcome, history and budget, the
+	// heads digest and event index count it preserved.
+	DoltCompaction json.RawMessage `json:"dolt_compaction,omitempty"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
@@ -671,6 +675,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		resp.PersistentDisk = &status
 	}
 	resp.DoltGC = store.ReadDoltGCDisposition(filepath.Dir(h.rt.cfg.StorePath))
+	resp.DoltCompaction = store.ReadDoltCompactionRecord(filepath.Dir(h.rt.cfg.StorePath))
 	resp.EngineMutex = h.rt.store.EngineMutexStats()
 	_ = json.NewEncoder(w).Encode(resp)
 }

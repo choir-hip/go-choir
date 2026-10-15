@@ -1,8 +1,10 @@
 # Runbook: Offline Guest Dolt GC (Node B, break-glass)
 
-Use this runbook when the guest's GC record (`/health` → `dolt_gc`, the same
-content as `.choir-dolt-gc-disposition.json`) reports `compaction_needed: true`,
-or `deferred_online` and the online GC cannot finish. Run it with the VM
+Use this runbook when the guest's history compaction record (`/health` →
+`dolt_compaction`, the same content as `.choir-dolt-compaction.json`) reports
+`deferred_space`, `refused` or `error`, or when the GC record (`/health` →
+`dolt_gc`, `.choir-dolt-gc-disposition.json`) reports `deferred_online` and
+the online GC cannot finish. Run it with the VM
 stopped to reclaim Dolt history or a huge journal from the host. Proven
 2026-09-03 (9.8 GB → 1.7 GB), 2026-09-11 (18.6 GB journal → 2.1 GB store,
 heads/rows/branch history intact) and 2026-10-03.
@@ -17,9 +19,25 @@ The GC now works like this:
   (`RUNTIME_DOLT_GC_JOURNAL_GIB`).
 
 That bounds the journal. A default GC never reclaims history or live data.
-When free space stays under 25% after a GC, the record says
-`compaction_needed`: squash plus `dolt gc --full` with `projection-compact`,
-which is this runbook's offline path.
+
+Since 2026-10-15 history is bounded online too
+([`guest-dolt-history-bound-2026-10-15`](../problems/guest-dolt-history-bound-2026-10-15.md)).
+After each journal GC tick the guest compacts once the store has grown by
+the history budget since its last compaction:
+- the budget is `RUNTIME_DOLT_HISTORY_BUDGET_MIB` (default 2,048 MiB),
+  lowered to a quarter of free space, with a 512 MiB floor;
+- the compaction is a squash to one commit over the root, then
+  `DOLT_GC('--full')`, on the open store's write connection;
+- it is checked like step 6 below: the projection heads and the event index
+  count, plus every table's row count.
+
+It needs free space of at least store + journal + 512 MiB; with less, it
+records `deferred_space`. That case, a refusal (extra branch) or an error
+is what this runbook's offline path (`projection-compact`) is for.
+`compaction_needed` on `dolt_gc` still means free space stayed under 25%
+after a GC; with online compaction running, that is live data, not history.
+Kill switches: `RUNTIME_DOLT_COMPACT_DISABLED` (compaction only) or
+`RUNTIME_DOLT_GC_DISABLED` (both).
 
 ## Preconditions
 
