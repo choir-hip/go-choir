@@ -466,8 +466,8 @@ now:
     - D1 app packages are ratified.
     Open for the owner: DeepSeek at 1/4 of runs (met in expectation) or
     1/4 of compute (it takes about 64% of calls).
-  source_ref: 19b40fdd4
-  deploy_identity: staging cc720cd20 (deployed 18:21:34 UTC)
+  source_ref: bb83f3a7e
+  deploy_identity: staging bb83f3a7e (deployed 19:17:02 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LG-1
@@ -499,8 +499,10 @@ now:
     2026-10-15 evening:
     (a) the checkpointd replay exit on one computer (a commitment record
     with no verified identity formula);
-    (b) engineering residuals (seven granted verbs without handlers, the
-    seccomp xattr, no management owner-escalation target);
+    (b) engineering residuals (the seccomp xattr, no management
+    owner-escalation target, a broker i/o timeout still seen; the seven
+    unhandled verbs are fixed in bb83f3a7e, and checkpointd scratch
+    pruning is in d3f248843);
     (c) re-measure the pool split over hours;
     (d) after the soak (2026-10-17), the Dolt squash, the module bump and
     re-landing compaction;

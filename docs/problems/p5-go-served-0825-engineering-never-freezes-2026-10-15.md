@@ -342,3 +342,26 @@ Ceremony (red: the capsule capability surface):
 - **Rollback.** git revert of the fix commit.
 - **Heresy delta.** Discovered: none new (the residual was named
   earlier). Introduced: none. Repaired: grants without handlers.
+
+### Deployed proof (bb83f3a7e, deployed 19:17:02 UTC): go-served-1920
+
+`node scripts/reeng_tracer.mjs --label go-served-1920 --scenario engineering --change go-served --expect-sha bb83f3a7e… --timeout-min 60 --apply-min 30 --restore-min 12`.
+The tracer minted `computer-e2c2e019…` and stopped it (201). Evidence:
+`~/.config/choir-qa/traces/go-served-1920/`.
+
+- **`pass=true`, `reached=restore`, 18 of 18 checks.** The go test
+  evidence was a job: the completing assignment's 3 jobs were all done.
+- **Verb refusals across all run events: 0** (`unknown verb` or
+  `capsule operation refused`).
+- **Engineering took three assignments.**
+  - The first, `90085d0f…`, failed at 19:30. Three things went wrong:
+    its own compile error (`undefined: json`, the same slip as
+    go-served-1143); one `failed to read broker response: … broker.sock:
+    i/o timeout`; and a malformed `choir.Complete` call (`assignment
+    mismatch: 2 variables but … returns 1 value`), so the run ended
+    `failed`.
+  - The second, `cee0c731…`, also ended `failed`, at 19:33:48.
+  - The third, `b948d017…`, completed, froze, was verified, applied at
+    20:05:14 and restored at 20:05:34.
+- **New residual: the broker read-timeout class still occurs.** It was 1
+  in this run, after the a64f28e1f re-dial fix. Counted, not chased.
