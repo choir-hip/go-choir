@@ -78,11 +78,12 @@ code; nothing was changed.
   `src` and `cargoHash`, or the upstream static release binary) in its own
   change. The Firecracker version is part of snapshot validity, so the
   bump also turns every hibernated computer's next wake into a cold boot.
-- **A release-branch kernel doesn't evaluate as-is.** `linuxPackages_6_18`
-  from nixos-26.05 (6.18.56) fails under the main input's NixOS modules
-  (`attribute 'buildDTBs' missing`, then `target`). A passthru-only shim
-  fixes that without changing the kernel derivation; see the status
-  below.
+- **The base is a 26.11 pre-release snapshot.** Main nixpkgs (`ec84054`)
+  is nixos-unstable frozen on 2026-07-01, which reports NixOS 26.11. A
+  kernel from nixos-26.05 crosses lineages. It fails under the base's
+  NixOS modules (`attribute 'buildDTBs' missing`, then `target`) and only
+  works with an attribute shim. A kernel from current nixos-unstable
+  stays in the base's lineage and evaluates as-is.
 
 ## Why it matters (from the ladder report; CVE details there)
 
@@ -101,29 +102,32 @@ code; nothing was changed.
 ## What the fix needs: status (2026-10-15, branch `ops/kernel-6.18-security`, not pushed)
 
 1. **A kernel at or above 6.18.45 for host and guest: prepared.**
-   - A new flake input, `nixpkgs-kernel` (nixos-26.05 @ `a033e66`), is
-     used only for `boot.kernelPackages = linuxPackagesFor linux_6_18`
-     on `go-choir-b` and `go-choir-autoputer-vm`. Both evaluate to
-     **6.18.56**, the current 6.18.x. Main nixpkgs is untouched.
-   - Main's NixOS modules read `kernel.buildDTBs` and `kernel.target`.
-     A passthru-only shim supplies them (false, bzImage) and survives
-     NixOS's `.override`. The kernel's out path is identical to Hydra's,
-     and the kernel, `-dev` (the guest vmlinux) and config are all in
-     cache.nixos.org. `nix build --dry-run` builds only the module
-     closure and the initrds.
-   - Fallback: nixos-unstable (`7fd4004`, 6.18.55) evaluates without the
-     shim.
+   - A new flake input, `nixpkgs-kernel` (nixos-unstable @ `7fd4004`,
+     2026-10-11), is used only for `boot.kernelPackages =
+     linuxPackages_6_18` on `go-choir-b` and `go-choir-autoputer-vm`.
+     Both evaluate to **6.18.55**. Main nixpkgs is untouched.
+   - Lineage: the base is a NixOS 26.11 pre-release snapshot
+     (nixos-unstable, 2026-07-01). The kernel input is the same branch,
+     newer, so it needs no shim. nixos-26.05's 6.18.56 is one point
+     release newer, but it crosses lineages and needed an attribute shim,
+     so it was dropped (owner, 2026-10-15). The full base bump (main
+     nixpkgs) belongs to the patch pipeline's weekly lane, not this
+     branch.
+   - The kernel, `-dev` (the guest vmlinux) and config are in
+     cache.nixos.org. `nix build --dry-run` builds only the module closure
+     and the initrds.
    - An assertion holds the floor at 6.18.45. That covers Copy Fail
      (6.18.22), CVE-2026-53266 (6.18.36), CVE-2026-53362 and Januscape
      (6.18.38), and Vghost (6.18.45).
-   - The guest kernel config differs from 6.18.37 in 14 lines: gcc 15.3,
-     DEBUG_LIST, CXL_RAS, ACPI_PLATFORM_PROFILE=y, and EROFS deflate and
-     zstd off. The guest store disk is LZ4 only. Every option the guest
-     kernel capability probe and Firecracker boot need is unchanged:
-     overlay=m, Landlock in CONFIG_LSM, namespaces, the seccomp filter,
-     virtio blk/net/mmio/balloon, PAGE_REPORTING, erofs and ext4.
+   - The guest kernel config differs from 6.18.37 in 21 lines: gcc 15.2
+     to 16.2, rustc and pahole versions, TCP_AO=y, MODULE_DECOMPRESS=y
+     (modules stay xz), CXL_RAS, ACPI_PLATFORM_PROFILE=y. Every option the
+     guest kernel capability probe and Firecracker boot need is
+     unchanged: overlay=m, Landlock in CONFIG_LSM, namespaces, the seccomp
+     filter, virtio blk/net/mmio/balloon, PAGE_REPORTING, erofs (with its
+     compressors) and ext4.
    - Not built locally: this Mac has only an aarch64-linux builder. The
-     6.18.56 bzImage was substituted and checked (`file`: 6.18.56). Node B
+     6.18.55 bzImage was substituted and checked (`file`: 6.18.55). Node B
      builds the rest at deploy, as usual.
    - The guest half lands at deploy, through the deploy refresh. Busy
      computers stay on 6.18.37 until the next deploy or the reboot.
@@ -164,8 +168,7 @@ code; nothing was changed.
      boot.
 4. **Firecracker 1.17.0: not in this branch.** No nixpkgs has it yet:
    main and nixos-26.05 have 1.15.1, and nixos-unstable has 1.16.1.
-   - From the kernel input: no. It would only give 1.15.1 (26.05) or
-     1.16.1 (unstable).
+   - From the kernel input: no. It would only give 1.16.1 (unstable).
    - The easy route is an overlay on main's `firecracker` with the
      1.17.0 `src` and `cargoHash`. The alternative is the upstream static
      release binary from `fetchurl`.
@@ -182,7 +185,7 @@ code; nothing was changed.
   boundary, and it ranks above the jailer and confinement work.
 - Remaining error:
   - resolved: the main nixpkgs pin has only 6.18.37. A kernel-only input
-    gives 6.18.56 (status item 1);
+    gives 6.18.55 (status item 1);
   - whether the host comes back at all. This is the go-choir
     configuration's first cold boot, with a new systemd stage 1 on md
     RAID, and no GRUB entry is known good. The boot path last ran in

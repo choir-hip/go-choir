@@ -25,14 +25,17 @@
     # Kernel-only nixpkgs (docs/problems/host-kernel-216-days-unpatched-
     # 2026-10-15.md). Used ONLY for boot.kernelPackages on the host
     # (go-choir-b) and the guest (go-choir-autoputer-vm), so a kernel
-    # security update never drags the rest of the system along. It tracks
-    # the NixOS release branch: 6.18 LTS point releases as they ship, and a
-    # kernel config that changes only by backport. Channel revisions are
-    # Hydra-built, so the kernel is a cache hit, not a compile on Node B.
-    # Update it alone (the kernel half of the patch cadence) with
+    # security update never drags the rest of the system along. Same
+    # lineage as the base: main nixpkgs is a frozen nixos-unstable snapshot
+    # (NixOS 26.11 pre-release, 2026-07-01), and this input is the current
+    # nixos-unstable, so the kernel package matches the NixOS modules that
+    # consume it (a 26.05 release-branch kernel needed an attribute shim).
+    # Channel revisions are Hydra-built, so the kernel is a cache hit, not a
+    # compile on Node B. Update it alone (the kernel half of the patch
+    # cadence) with
     #   nix flake update nixpkgs-kernel
-    # The main nixpkgs input keeps its own cadence.
-    nixpkgs-kernel.url = "github:NixOS/nixpkgs/nixos-26.05";
+    # The full base bump belongs to the patch pipeline's weekly lane.
+    nixpkgs-kernel.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs = { self, nixpkgs, nixpkgs-kernel, microvm, sbomnix, ... }:
@@ -48,19 +51,7 @@
       # (6.18.45), CVE-2026-53362 and Januscape (6.18.38), CVE-2026-53266
       # (6.18.36), Copy Fail (6.18.22). The assertion keeps a lock
       # regression from silently shipping an older kernel.
-      kernelPkgs = import nixpkgs-kernel { inherit system; };
-      # The main input's NixOS modules read kernel.buildDTBs and
-      # kernel.target, which the release branch's kernel package predates.
-      # Supply them with main's x86_64 defaults (no DTBs, bzImage) and keep
-      # supplying them through .override, because NixOS re-overrides the
-      # kernel (boot.kernelPatches, randstructSeed). Only passthru attributes
-      # are added: the kernel derivation is Hydra's, byte for byte.
-      withMainModuleAttrs = k: k // {
-        buildDTBs = k.buildDTBs or false;
-        target = k.target or "bzImage";
-        override = args: withMainModuleAttrs (k.override args);
-      };
-      choirKernelPackages = kernelPkgs.linuxPackagesFor (withMainModuleAttrs kernelPkgs.linux_6_18);
+      choirKernelPackages = (import nixpkgs-kernel { inherit system; }).linuxPackages_6_18;
       choirKernelModule = { lib, ... }: {
         boot.kernelPackages = choirKernelPackages;
         assertions = [{

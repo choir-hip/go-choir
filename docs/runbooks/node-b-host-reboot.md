@@ -18,13 +18,20 @@ more than the kernel:
 
 | | booted now | after the reboot |
 |---|---|---|
-| kernel | 6.18.16 | 6.18.56 (`nixpkgs-kernel` input) |
+| kernel | 6.18.16 | 6.18.55 (`nixpkgs-kernel` input) |
 | stage 1 | scripted initrd | systemd initrd (`root=fstab`) |
 | NixOS | 26.05.20260306 (choiros-b) | 26.11.20260701 (go-choir-b) |
 | hostname | choiros-b | go-choir-b |
 | `kvm_intel nested` | Y | N |
 | `kvm.halt_poll_ns` | 200000 | 0 |
 | SMT | on | on (owner decision pending) |
+
+Lineage: the base (main nixpkgs `ec84054`) is a NixOS 26.11 pre-release,
+a nixos-unstable snapshot frozen on 2026-07-01. The kernel comes from the
+`nixpkgs-kernel` input, which is current nixos-unstable: the same lineage,
+newer. Only the kernel is newer. Userspace stays on the 2026-07-01 base
+until the patch pipeline's weekly lane bumps it, and that lane, not this
+reboot, owns the full base bump.
 
 The root and `/boot` arrays (md RAID1), fstab and mdadm.conf are the
 same. **No GRUB entry is known to boot.** Every entry on Node B today
@@ -48,14 +55,14 @@ until step 0 has been done in the same window.** The script refuses
    each took to open.
 2. **Deploy the kernel branch** through the normal Landing Loop: push to
    `main`, then CI, then the deploy. The deploy switches the host
-   (staging 6.18.56 for the next boot) and rebuilds the guest image. The
-   deploy refresh then moves idle computers onto the 6.18.56 guest kernel
+   (staging 6.18.55 for the next boot) and rebuilds the guest image. The
+   deploy refresh then moves idle computers onto the 6.18.55 guest kernel
    (busy ones defer). Check it:
-   - on Node B: `readlink /run/current-system/kernel` shows linux-6.18.56,
+   - on Node B: `readlink /run/current-system/kernel` shows linux-6.18.55,
      and `grep nested /run/current-system/etc/modprobe.d/nixos.conf`
      shows nested=0;
    - a refreshed guest's kernel capability receipt shows
-     `kernel_release` 6.18.56.
+     `kernel_release` 6.18.55.
 3. **Dry run:** `scripts/node_b_host_reboot.py`. Every pre-check must
    pass. It prints the computers it would mark.
 4. **Optional, owner decision: a known-good fallback entry.** The proven
@@ -172,7 +179,7 @@ ssh node-b 'curl -fsS -H "X-Internal-Caller: true" -H @/var/lib/go-choir/secrets
   http://127.0.0.1:8083/internal/vmctl/list | jq -r ".ownerships[] | select(.state==\"active\") | [.vm_id,.computer_url,.warmness_class] | @tsv"'
 # per running computer (from Node B):
 ssh node-b 'curl -sS -X POST -H "X-Internal-Caller: true" -H "Content-Type: application/json" \
-  -d "{\"target\":\"host-reboot kernel 6.18.56\"}" http://10.200.X.2:8085/internal/runtime/planned-restart'
+  -d "{\"target\":\"host-reboot kernel 6.18.55\"}" http://10.200.X.2:8085/internal/runtime/planned-restart'
 ssh node-b systemctl reboot
 ```
 
@@ -181,7 +188,7 @@ ssh node-b systemctl reboot
 `scripts/node_b_host_reboot.py --phase post --state <receipt>` re-runs
 these checks read-only at any time:
 
-- `uname -r` is 6.18.56. `/run/booted-system` equals
+- `uname -r` is 6.18.55. `/run/booted-system` equals
   `/run/current-system`. The hostname is go-choir-b.
 - `cat /sys/module/kvm_intel/parameters/nested` shows `N`.
 - `systemctl is-system-running` shows `running`, there are no failed
@@ -208,7 +215,7 @@ these checks read-only at any time:
   retries it only at the next deploy.** The pre-checks flag every running
   computer that booted before the current guest image was installed. The
   reboot cold-boots every computer onto the new image, so after it all
-  running computers are on 6.18.56. A computer still hibernated or stopped
+  running computers are on 6.18.55. A computer still hibernated or stopped
   gets the new image at its next wake, because its snapshot is invalid.
 - The paper: its computer (critical_protected) is active, its source
   schedules are armed, and new paper ticks appear after one interval.
@@ -225,7 +232,7 @@ long the reboot took, and the boot kinds.
    - the 6.18.16 fallback entry, if step 0.4 added it. It is the only
      proven kernel and initrd: scripted stage 1, old userspace;
    - an earlier go-choir generation (6.18.37, also never booted). This
-     helps only when 6.18.56 itself is at fault, because the initrd type
+     helps only when 6.18.55 itself is at fault, because the initrd type
      and the userspace are the same.
 3. **Stage 1 fails on every go-choir entry and there is no fallback
    entry:** use OVH Netboot → Rescue, assemble the arrays
