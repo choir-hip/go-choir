@@ -268,3 +268,19 @@ thousand calls an hour.
 
 Heresy delta: discovered none, introduced none, repaired none (measurement
 only). Next step is section 5 item 2 after a deploy and two quiet hours.
+
+## 7. First data after lever 1 deployed (8f2f0dc5d, about 16:40 UTC)
+
+In 15 minutes of `provider: chatgpt stream complete` lines on Node B,
+**48 of 75 paper calls (64%) carried a fallback key** (`cache_key=h:<hash>`,
+`cache_label=-`). Only 27 used desk keys: `choir-management` 18,
+`choir-research` 4, `choir-texture` 5. So most calls never set
+`PromptCacheKey` and fall back to the per-conversation id, which means
+cache affinity is per conversation, not per desk thread. This is the
+leading candidate for the mid-thread misses in §3 (evidence: the label
+counts; hypothesis: that it drives the misses). Next: find which callers
+reach the chatgpt route without a cache key (grep for the provider call
+sites that leave `CacheKey` empty), and measure the hit rate of `h:` calls
+against `choir-` calls once a day of data exists, by grouping on
+`cache_label` and checking `prefix_hash_prev` against the previous
+`prefix_hash`.
