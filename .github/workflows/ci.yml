@@ -1762,6 +1762,18 @@ jobs:
             fi
             nixos_closure_digest=$(nix hash path --type sha256 "$nixos_closure")
             nixos_closure_digest="sha256:${nixos_closure_digest#sha256-}"
+            # Installed is not running (docs/reports/patch-lanes-plan-
+            # 2026-10-15.md, slice 1): record whether the host runs the
+            # kernel, modules, command line and KVM parameters it just
+            # activated. The detector never fails a deploy.
+            boot_state=$(python3 scripts/verify-host-hardening.py --boot-state-json 2>/dev/null) || boot_state=''
+            if ! printf '%s' "$boot_state" | jq -e 'type == "object" and .schema_version == 1' >/dev/null 2>&1; then
+              boot_state='{"schema_version":1,"available":false,"error":"boot-state detector failed"}'
+            fi
+            boot_state=$(printf '%s' "$boot_state" | jq -c .)
+            if [ "$(printf '%s' "$boot_state" | jq -r '.reboot_pending')" = "true" ]; then
+              echo "::warning title=Host reboot pending::Node B runs $(printf '%s' "$boot_state" | jq -r '.running_kernel_release // "unknown"'); activated changes not booted: $(printf '%s' "$boot_state" | jq -r '.reasons | join(", ")') (pending since $(printf '%s' "$boot_state" | jq -r '.pending_since // "unknown"'), overdue=$(printf '%s' "$boot_state" | jq -r '.pending_overdue'))"
+            fi
             # Service runners execute atomically copied packages under /var/lib.
             # Bind those live bytes back to an immutable Nix package by digest;
             # a leftover build result or the unit's fallback package is not
@@ -1824,7 +1836,8 @@ jobs:
               --arg nixos_closure "$nixos_closure" \
               --arg nixos_closure_digest "$nixos_closure_digest" \
               --argjson services "$host_services" \
-              '{canonical_ref: $canonical_ref, checkout_head: $checkout_head, checkout_clean: true, nixos_closure: $nixos_closure, nixos_closure_digest: $nixos_closure_digest, services: $services}')
+              --argjson boot_state "$boot_state" \
+              '{canonical_ref: $canonical_ref, checkout_head: $checkout_head, checkout_clean: true, nixos_closure: $nixos_closure, nixos_closure_digest: $nixos_closure_digest, boot_state: $boot_state, services: $services}')
 
             activated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             receipt_tmp=/var/lib/go-choir/deploy-receipt.json.tmp

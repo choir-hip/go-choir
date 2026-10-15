@@ -20,6 +20,18 @@ It never changes anything and never prints a secret:
     :13307 (accepted = the old hole); with --with-credential, the app user
     login.
   * modes of the secret files and of formerly world-readable state.
+  * boot: whether the host runs what it last activated (kernel, kernel
+    modules, kernel command line, declared KVM module parameters), and
+    kvm_intel nested=N whatever is declared
+    (docs/reports/patch-lanes-plan-2026-10-15.md, slice 1). A pending
+    reboot is a FAIL unless --allow-reboot-pending.
+
+    python3 - --boot-state-json < scripts/verify-host-hardening.py
+
+prints only the boot-state JSON (no root needed): the deploy receipt's
+host_identity.boot_state. internal/hostboot is the same contract in Go
+(vmctl's GET /internal/vmctl/host/boot-state); its parity test runs this
+script with --root against fixture trees.
 
 Exit status: 0 when every check matches the expected rollout stage, 1
 otherwise. Expectations:
@@ -28,9 +40,11 @@ otherwise. Expectations:
 """
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
+import re
 import socket
 import stat
 import struct
@@ -49,6 +63,7 @@ HEADER = "X-Choir-Internal-Token"
 INTERNAL_PROBES = [
     ("vmctl list", 8083, "/internal/vmctl/list", {}),
     ("vmctl pprof index", 8083, "/internal/debug/pprof/", {}),
+    ("vmctl host boot-state", 8083, "/internal/vmctl/host/boot-state", {}),
     ("gateway breakers", 8084, "/provider/v1/breakers", {}),
     ("gateway search health", 8084, "/provider/v1/search/health", {}),
     ("corpusd control key", 8086, "/internal/platform/control-key", {}),
@@ -341,6 +356,251 @@ def check_modes():
         record("modes", path, ok, f"mode={mode:o} uid={st.st_uid} want<={want:o} root")
 
 
+# ── boot state: installed but not booted ────────────────────────────────────
+# Mirrors internal/hostboot (Go). Keep the two in step: TestPythonParity in
+# internal/hostboot compares their JSON on the same fixture trees.
+
+BOOT_SCHEMA_VERSION = 1
+BOOT_OVERDUE_SECONDS = 7 * 24 * 3600
+KERNEL_PARAM_RE = re.compile(r"(kvm[A-Za-z0-9_-]*)\.([A-Za-z0-9_]+)=(.*)")
+
+
+def _read_trim(path):
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
+def _resolve(path):
+    try:
+        return os.path.realpath(path, strict=True)
+    except OSError:
+        return ""
+
+
+def _iso(ts):
+    return datetime.datetime.fromtimestamp(int(ts), datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _read_modprobe(system):
+    d = os.path.join(system, "etc", "modprobe.d")
+    try:
+        names = sorted(n for n in os.listdir(d) if n.endswith(".conf"))
+    except OSError:
+        return ""
+    return "".join(_read_trim(os.path.join(d, n)) + "\n" for n in names)
+
+
+def _boot_inputs(system):
+    return {
+        "kernel": _resolve(os.path.join(system, "kernel")),
+        "modules": _resolve(os.path.join(system, "kernel-modules")),
+        "params": _read_trim(os.path.join(system, "kernel-params")),
+        "modprobe": _read_modprobe(system),
+    }
+
+
+def _same_boot(a, b):
+    def norm(s):
+        return " ".join(s.split())
+    return (a["kernel"] == b["kernel"] and a["modules"] == b["modules"]
+            and norm(a["params"]) == norm(b["params"]) and norm(a["modprobe"]) == norm(b["modprobe"]))
+
+
+def _declared_module_params(params, system):
+    """KVM module parameters the system declares. A later declaration wins,
+    kernel parameters last (the command line overrides modprobe options)."""
+    out, index = [], {}
+
+    def add(mod, param, value, source):
+        mod = mod.replace("-", "_")
+        mp = {"module": mod, "param": param, "declared": value, "source": source}
+        key = mod + "." + param
+        if key in index:
+            out[index[key]] = mp
+        else:
+            index[key] = len(out)
+            out.append(mp)
+
+    for line in _read_modprobe(system).split("\n"):
+        f = line.split()
+        if len(f) < 3 or f[0] != "options" or not f[1].startswith("kvm"):
+            continue
+        for kv in f[2:]:
+            if "=" in kv:
+                k, v = kv.split("=", 1)
+                add(f[1], k, v, "modprobe.d")
+    for tok in params.split():
+        m = KERNEL_PARAM_RE.fullmatch(tok)
+        if m:
+            add(m.group(1), m.group(2), m.group(3), "kernel-params")
+    return out
+
+
+def _same_param(declared, live):
+    # Boolean module parameters read back as Y or N whatever was written.
+    if live in ("Y", "N"):
+        d = declared.lower()
+        if d in ("1", "y", "yes", "true", "on"):
+            return live == "Y"
+        if d in ("0", "n", "no", "false", "off"):
+            return live == "N"
+    return declared == live
+
+
+def _pending_since(profiles, booted, booted_in):
+    """Activation time of the first generation after the booted one whose boot
+    inputs differ (or the first differing one if the booted one is gone)."""
+    try:
+        names = os.listdir(profiles)
+    except OSError:
+        return None
+    gens = []
+    for name in names:
+        m = re.fullmatch(r"system-(\d+)-link", name)
+        if m:
+            gens.append((int(m.group(1)), os.path.join(profiles, name)))
+    gens.sort()
+    start = 0
+    for i, (_, link) in enumerate(gens):
+        if _resolve(link) == booted:
+            start = i + 1
+    for _, link in gens[start:]:
+        target = _resolve(link)
+        if not target or _same_boot(_boot_inputs(target), booted_in):
+            continue
+        try:
+            return os.lstat(link).st_mtime
+        except OSError:
+            return None
+    return None
+
+
+def boot_state(root="/", now=None):
+    """The installed-but-not-booted fact. Same JSON as internal/hostboot."""
+    if now is None:
+        now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+
+    def at(p):
+        return os.path.join(root, p.lstrip("/"))
+
+    st = {
+        "schema_version": BOOT_SCHEMA_VERSION,
+        "checked_at": _iso(now),
+        "available": False,
+        "error": "",
+        "running_kernel_release": _read_trim(at("/proc/sys/kernel/osrelease")),
+        "booted_at": "",
+        "booted_system": "",
+        "current_system": "",
+        "booted_kernel": "",
+        "current_kernel": "",
+        "booted_kernel_modules": "",
+        "current_kernel_modules": "",
+        "kernel_params_not_on_cmdline": [],
+        "module_params": [],
+        "reboot_pending": False,
+        "reasons": [],
+        "pending_since": "",
+        "pending_overdue": False,
+    }
+    for line in _read_trim(at("/proc/stat")).split("\n"):
+        if line.startswith("btime "):
+            try:
+                st["booted_at"] = _iso(int(line.split()[1]))
+            except (IndexError, ValueError):
+                pass
+
+    def finish():
+        # Empty strings are omitted, as Go's omitempty does.
+        for key in ("error", "running_kernel_release", "booted_at", "booted_system", "current_system",
+                    "booted_kernel", "current_kernel", "booted_kernel_modules", "current_kernel_modules",
+                    "pending_since"):
+            if st[key] == "":
+                del st[key]
+        for mp in st["module_params"]:
+            if mp.get("live") == "":
+                del mp["live"]
+        return st
+
+    booted = _resolve(at("/run/booted-system"))
+    if not booted:
+        st["error"] = "booted system unreadable"
+        return finish()
+    current = _resolve(at("/run/current-system"))
+    if not current:
+        st["error"] = "current system unreadable"
+        return finish()
+    st["available"] = True
+    st["booted_system"], st["current_system"] = booted, current
+    b_in, c_in = _boot_inputs(booted), _boot_inputs(current)
+    st["booted_kernel"], st["current_kernel"] = b_in["kernel"], c_in["kernel"]
+    st["booted_kernel_modules"], st["current_kernel_modules"] = b_in["modules"], c_in["modules"]
+    if b_in["kernel"] != c_in["kernel"]:
+        st["reasons"].append("kernel")
+    if b_in["modules"] != c_in["modules"]:
+        st["reasons"].append("kernel_modules")
+    cmdline = set(_read_trim(at("/proc/cmdline")).split())
+    st["kernel_params_not_on_cmdline"] = [p for p in c_in["params"].split() if p not in cmdline]
+    if st["kernel_params_not_on_cmdline"]:
+        st["reasons"].append("kernel_params")
+    mismatch = False
+    for mp in _declared_module_params(c_in["params"], current):
+        d = at("/sys/module/" + mp["module"])
+        if os.path.exists(d):
+            mp["loaded"] = True
+            mp["live"] = _read_trim(os.path.join(d, "parameters", mp["param"]))
+            mp["match"] = _same_param(mp["declared"], mp["live"])
+            mismatch = mismatch or not mp["match"]
+        else:
+            # Not loaded: the parameter applies when the module loads.
+            mp["loaded"], mp["match"] = False, True
+        st["module_params"].append(mp)
+    if mismatch:
+        st["reasons"].append("module_param")
+    st["reboot_pending"] = bool(st["reasons"])
+    if st["reboot_pending"]:
+        since = _pending_since(at("/nix/var/nix/profiles"), booted, b_in)
+        if since is not None:
+            st["pending_since"] = _iso(since)
+            st["pending_overdue"] = now - since > BOOT_OVERDUE_SECONDS
+    return finish()
+
+
+def check_boot(allow_pending, root="/"):
+    st = boot_state(root)
+    if not st["available"]:
+        record("boot", "boot state readable", False, st.get("error", "unavailable"))
+        return
+    reasons = set(st["reasons"])
+    allowed = " (allowed: --allow-reboot-pending)" if allow_pending else ""
+    since = st.get("pending_since", "unknown")
+    record("boot", "booted kernel is the activated kernel", "kernel" not in reasons or allow_pending,
+           "running %s; booted %s; activated %s%s" % (
+               st.get("running_kernel_release"), st.get("booted_kernel"), st.get("current_kernel"),
+               allowed if "kernel" in reasons else ""))
+    record("boot", "booted kernel modules are the activated ones", "kernel_modules" not in reasons or allow_pending,
+           "pending since %s%s" % (since, allowed) if "kernel_modules" in reasons else "ok")
+    record("boot", "activated kernel parameters are on /proc/cmdline", "kernel_params" not in reasons or allow_pending,
+           "missing: %s%s" % (" ".join(st["kernel_params_not_on_cmdline"]), allowed)
+           if "kernel_params" in reasons else "ok")
+    for mp in st["module_params"]:
+        live = mp.get("live", "") if mp["loaded"] else "module not loaded"
+        record("boot", "%s.%s live value is the declared one" % (mp["module"], mp["param"]),
+               mp["match"] or allow_pending,
+               "declared %s (%s), live %s%s" % (mp["declared"], mp["source"], live, "" if mp["match"] else allowed))
+    record("boot", "reboot not pending for more than 7 days", not st["pending_overdue"] or allow_pending,
+           "pending since %s" % since if st["reboot_pending"] else "no reboot pending")
+    # The security floor whatever is declared: no Choir guest runs a
+    # hypervisor (docs/problems/host-kernel-216-days-unpatched-2026-10-15.md).
+    nested = _read_trim(os.path.join(root, "sys/module/kvm_intel/parameters/nested"))
+    nested_on = nested not in ("N", "0", "")
+    record("boot", "kvm_intel nested is off", not nested_on or allow_pending,
+           ("nested=%s" % nested if nested else "kvm_intel not loaded") + (allowed if nested_on else ""))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--expect-internal", choices=["off", "observe", "enforce"], default="observe")
@@ -348,7 +608,16 @@ def main():
     ap.add_argument("--with-credential", action="store_true",
                     help="also run positive controls using the root-only credential files (never printed)")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--allow-reboot-pending", action="store_true",
+                    help="report a pending host reboot without failing (the baseline before a planned reboot)")
+    ap.add_argument("--boot-state-json", action="store_true",
+                    help="print only the boot-state JSON and exit 0 (no root needed)")
+    ap.add_argument("--root", default="/", help=argparse.SUPPRESS)  # fixture trees in tests
+    ap.add_argument("--now", type=float, default=None, help=argparse.SUPPRESS)  # fixed clock in tests
     args = ap.parse_args()
+    if args.boot_state_json:
+        print(json.dumps(boot_state(args.root, args.now), indent=2, sort_keys=True))
+        return 0
     if os.geteuid() != 0:
         print("run as root on Node B (systemctl show, /proc and nsenter need it)", file=sys.stderr)
         return 2
@@ -357,6 +626,7 @@ def main():
     check_units()
     check_dolt(args.expect_dolt, args.with_credential)
     check_modes()
+    check_boot(args.allow_reboot_pending)
     if args.json:
         print(json.dumps(results, indent=2))
     else:
