@@ -234,9 +234,18 @@ type Runtime struct {
 	// eventPayloadReader fetches event payloads by digest (corpusd CAS). The
 	// platform-update boot sweep needs it: an accepted event pins its offer,
 	// and resuming that update after the self-restart reads it back.
-	eventPayloadReader    computerevent.ArtifactReader
-	selfdevVerifier       *receiptsigner.Client
-	selfdevControl        *selfdev.GuestCredentials
+	eventPayloadReader computerevent.ArtifactReader
+	selfdevVerifier    *receiptsigner.Client
+	selfdevControl     *selfdev.GuestCredentials
+	// selfdevHostBuilder overrides the corpusd host build client (P5);
+	// nil derives it from eventPayloadReader. Tests inject a fake.
+	selfdevHostBuilder selfdevHostBuilder
+	// selfdevGuestImageManifest overrides CHOIR_GUEST_IMAGE_MANIFEST, the
+	// booted base a host build is bound to.
+	selfdevGuestImageManifest string
+	// selfdevRestartCurrent overrides the updater's restart-into-current
+	// call a restore makes when it changed the exec identity.
+	selfdevRestartCurrent func(context.Context) error
 	ownerRecoveryControl  *selfdev.GuestCredentials
 	selfdevRoute          *vmctl.Client
 	selfdevRouteOwnerID   string
@@ -260,6 +269,7 @@ type Runtime struct {
 	// wakeRetries bounds failed actor wake dispatches (SL slice 2).
 	wakeRetries                 wakeRetryTracker
 	selfdevStartupReleaseDigest string
+	selfdevStartupRelease       *effectiveReleaseIdentity
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
 	// managementReconcileMu serializes persistent-Management creation
@@ -741,6 +751,7 @@ func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realiz
 		if manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot); err == nil {
 			rt.selfdevStartupMarker = manifest.Marker
 			rt.selfdevStartupReleaseDigest = manifest.ContentDigest
+			rt.selfdevStartupRelease = effectiveReleaseFromManifest(manifest)
 			rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
 			rt.selfdevStartupReducer = manifest.ReducerVersion
 		}

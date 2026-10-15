@@ -327,6 +327,26 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		return fmt.Errorf("materializer: invalid frozen bundle")
 	}
 
+	// P5: a candidate that touched Go input runs only as a host-built layered
+	// release. The host builds while the operation stays accepted (desks keep
+	// working); a failed build fails the operation and changes nothing. A
+	// crash-boot settlement reads the journal only and never asks the host
+	// (G9).
+	var hostBuilt *hostBuiltRelease
+	if !journalOnly && len(selfDevelopmentBundleBinaryInputs(bundle)) > 0 {
+		built, buildErr := rt.selfDevelopmentHostBuild(ctx, operation, bundle)
+		var failure hostBuildFailure
+		switch {
+		case buildErr == nil:
+			hostBuilt = &built
+		case errors.As(buildErr, &failure) && operation.State == selfdev.StateAccepted:
+			log.Printf("selfdev materializer: operation %s: %v; the computer keeps its current release", operation.OperationID, failure)
+			return rt.recordMaterializationFailed(ctx, operation, updater.ApplyResult{Outcome: "host_build_failed"}, failure, operation.State)
+		default:
+			return buildErr
+		}
+	}
+
 	if operation.State == selfdev.StateAccepted {
 		idempotency := "selfdev-materialization-started-" + operation.DecisionEvent
 		if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {
@@ -384,19 +404,27 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	for index, file := range bundle.RuntimeFiles {
 		manifestFiles[index] = updater.ManifestFile{Path: file.Path, SHA256: file.SHA256, Mode: file.Mode}
 	}
-	manifest, err := updater.FinalizeManifest(updater.ReleaseManifest{
+	release := updater.ReleaseManifest{
 		Version: updater.ManifestVersion, ComputerID: operation.ComputerID, AcceptedEventHead: operation.DecisionEvent,
 		CodeRef: string(version.CodeRef), ArtifactProgramRef: string(version.ArtifactProgramRef),
 		EventSchemaVersion: computerevent.SchemaVersionV1, ReducerVersion: computerevent.ReducerVersionV1,
 		Marker: "selfdev-" + operation.BundleDigest[:16], Files: manifestFiles,
-	})
+	}
+	sourceDir := filepath.Dir(bundlePath)
+	if hostBuilt != nil {
+		// The layered release: the host's closure, receipts and the layer's
+		// own frontend. The capsule-built binary is not a release input.
+		release = layeredSelfDevelopmentManifest(release, *hostBuilt)
+		sourceDir = hostBuilt.Dir
+	}
+	manifest, err := updater.FinalizeManifest(release)
 	if err != nil {
 		return err
 	}
 	applyRequest := updater.ApplyRequest{
 		ComputerID: operation.ComputerID, RealizationID: rt.selfdevRealizationID, OperationID: operation.OperationID,
 		IdempotencyKey: "selfdev-apply-" + operation.DecisionEvent, AcceptedEventHead: operation.DecisionEvent,
-		SourceDir: filepath.Dir(bundlePath), Manifest: manifest,
+		SourceDir: sourceDir, Manifest: manifest,
 	}
 	applyRequest.RequestCommitment, err = updater.ComputeApplyRequestCommitment(applyRequest)
 	if err != nil {

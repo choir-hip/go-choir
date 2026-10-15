@@ -119,6 +119,17 @@ type internalRunEventAppendResponse struct {
 	Kind    types.EventKind `json:"kind"`
 }
 
+// effectiveReleaseIdentity is /health's account of the running release.
+type effectiveReleaseIdentity struct {
+	ReleaseDigest        string `json:"release_digest"`
+	Layered              bool   `json:"layered"`
+	CodeCommit           string `json:"code_commit,omitempty"`
+	BaseCommit           string `json:"base_commit,omitempty"`
+	BaseImageDigest      string `json:"base_image_manifest_digest,omitempty"`
+	ClosureDigest        string `json:"closure_digest,omitempty"`
+	BuilderReceiptDigest string `json:"builder_receipt_digest,omitempty"`
+}
+
 // runtimeHealthResponse is the JSON structure returned by GET /health.
 // It reports runtime readiness for real run handling, and surfaces
 // degraded state rather than hiding it behind a generic healthy response
@@ -145,6 +156,12 @@ type runtimeHealthResponse struct {
 	// the updater probe fails closed and hosts see the trip, not a healthy
 	// report from a binary that is not the applied release.
 	LayeringBootguard string `json:"layering_bootguard,omitempty"`
+	// EffectiveRelease names the release current/ held when this process
+	// started: plain or layered, and for a layered (host-built) release the
+	// commit its binary was built from. Compare code_commit with
+	// build.commit: equal means the layered binary is the one serving
+	// (P5, docs/reports/p5-host-build-layered-apply-2026-10-15.md).
+	EffectiveRelease *effectiveReleaseIdentity `json:"effective_release,omitempty"`
 	// EngineMutex exposes cumulative per-call-path wait/hold counters for the
 	// embedded-Dolt engine lock (write + read pools share it). The latency
 	// mission's drain probe uses wait-vs-hold attribution to decide between
@@ -661,6 +678,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	resp.EventSchemaVersion = h.rt.selfdevStartupEventSchema
 	resp.ReducerVersion = h.rt.selfdevStartupReducer
 	resp.ReleaseDigest = h.rt.selfdevStartupReleaseDigest
+	resp.EffectiveRelease = h.rt.selfdevStartupRelease
 	// Guard trip (computed above, before WriteHeader) marks the response.
 	if guard != "" {
 		resp.Status = "layering_bootguard"
@@ -693,6 +711,10 @@ type guestObservabilityResponse struct {
 	// and why not (docs/design/claude-delegate-slice1-2026-10-14.md). Never
 	// the token.
 	ClaudeDelegate *capsule.ClaudeDelegateStatus `json:"claude_delegate,omitempty"`
+	// EffectiveRelease is /health's effective release on the product route
+	// (P5): a layered release's code_commit equals build.commit when the
+	// host-built binary is the one serving.
+	EffectiveRelease *effectiveReleaseIdentity `json:"effective_release,omitempty"`
 }
 
 // HandleGuestObservability handles GET /api/runtime/observability: the guest's
@@ -713,6 +735,8 @@ func (h *APIHandler) HandleGuestObservability(w http.ResponseWriter, r *http.Req
 		ComputerID: h.rt.cfg.ComputerID,
 		Build:      buildinfo.Snapshot("autoputer"),
 		RecentLog:  h.rt.RecentBootLog(),
+
+		EffectiveRelease: h.rt.selfdevStartupRelease,
 	}
 	if h.rt.store != nil {
 		resp.ManagementTasks = h.rt.managementTaskObservability(r.Context(), ownerID, h.rt.TextureComputerID())

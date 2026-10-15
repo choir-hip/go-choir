@@ -35,11 +35,17 @@ type RematerializeReport struct {
 	FrontendRestaged     bool   `json:"frontend_restaged"`
 	StoreClosed          bool   `json:"store_closed"`
 	PinCheckoutUsed      bool   `json:"pin_checkout_used"`
-	BaseSequence         uint64 `json:"base_sequence"`
-	BaseBlobSHA256       string `json:"base_blob_sha256"`
-	TailTargetSequence   uint64 `json:"tail_target_sequence"`
-	TailEventsApplied    int    `json:"tail_events_applied"`
-	TailPagesFetched     int    `json:"tail_pages_fetched"`
+	// ExecChanged: the restored release execs a different binary than the
+	// one serving (a layered self-development release restored away, or
+	// back). RestartScheduled: the runtime restarts into it under a planned
+	// marker shortly after this answer (P5 R1).
+	ExecChanged        bool   `json:"exec_changed,omitempty"`
+	RestartScheduled   bool   `json:"restart_scheduled,omitempty"`
+	BaseSequence       uint64 `json:"base_sequence"`
+	BaseBlobSHA256     string `json:"base_blob_sha256"`
+	TailTargetSequence uint64 `json:"tail_target_sequence"`
+	TailEventsApplied  int    `json:"tail_events_applied"`
+	TailPagesFetched   int    `json:"tail_pages_fetched"`
 }
 
 type rematerializeAPIRequest struct {
@@ -273,6 +279,7 @@ func (rt *Runtime) RematerializeFromTape(ctx context.Context, computerID string,
 	report.FrontendRestaged = true
 	report.StoreClosed = false
 	report.PinCheckoutUsed = false
+	report.ExecChanged = rt.restoreExecChanged(checkpoint.Request.ReleaseDigest)
 	keepRestaged = true
 	return report, nil
 }
@@ -298,6 +305,10 @@ func (h *APIHandler) rematerializeComputerFromTape(w http.ResponseWriter, r *htt
 	if err != nil {
 		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
 		return
+	}
+	if report.ExecChanged {
+		report.RestartScheduled = true
+		h.rt.scheduleRestoreRestart(request.Checkpoint.Digest)
 	}
 	writeAPIJSON(w, http.StatusOK, report)
 }
@@ -339,6 +350,10 @@ func (h *APIHandler) restoreComputer(w http.ResponseWriter, r *http.Request, com
 	if err != nil {
 		writeAPIJSON(w, rematerializeRefusalStatus(err), apiError{Error: err.Error()})
 		return
+	}
+	if report.ExecChanged {
+		report.RestartScheduled = true
+		h.rt.scheduleRestoreRestart(request.Checkpoint.Digest)
 	}
 	writeAPIJSON(w, http.StatusOK, report)
 }
