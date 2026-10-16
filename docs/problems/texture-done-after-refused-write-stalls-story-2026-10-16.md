@@ -76,3 +76,16 @@ passage supports its sentence", and the calibration digest labelled the
 claim "pSupported on Writes (per citation)". The follow-up commit
 rewords both: one number for the whole Write, scored against every new
 citation. A refused Write's Done is refused too.
+
+## Staging evidence after both commits (paper, 02:59–04:00 UTC)
+
+7869cdef3 deployed at 02:59. In the next hour the paper ran 74 Texture
+runs:
+- 0 refused for per-citation pSupported. Before the wording change, 9
+  of 32 runs on the test computer were.
+- 4 Writes refused for other script errors: a block changed twice, the
+  copied example handle `r1.c1`, and an unclosed cite.
+- 2 Done calls refused after a refused Write. Each is a stall the fix
+  prevented. Those stories kept getting runs.
+- No new seed-only story. The newest paper story still at revision 1
+  opened at 01:34, before the fix.
