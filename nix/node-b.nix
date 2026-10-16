@@ -1112,6 +1112,12 @@ in
         "VM_HEALTH_CHECK_INTERVAL=15s"
         "VM_HEALTH_CHECK_TIMEOUT=10s"
         "VM_BOOT_READY_TIMEOUT=30m"
+        # A deploy refresh answers only after the computer boots; a replaying
+        # boot of the paper takes about 4 min. The server default (120s)
+        # emptied the reply of a refresh that succeeded and failed the deploy
+        # (problems/deploy-refresh-empty-reply-vmctl-write-timeout-2026-10-16.md).
+        # The deploy's refresh curl gives up at 600s, before this.
+        "SERVER_WRITE_TIMEOUT=10m30s"
         # Recovery replay: guest Dolt checkpoint commits at the 5-8 GiB workspace
         # scale exceed 120s on the 4096 MiB guest (stall-gate fired mid-commit
         # at seq 99,765 / 103,148 / 105,196 during recovery boots). B10 range

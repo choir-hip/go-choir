@@ -1594,7 +1594,9 @@ jobs:
                     echo "    ${refresh_vm_id}: expecting served commit ${refresh_expected_commit} or ${autoputer_runtime_commit} after refresh"
                     payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" --arg target "$autoputer_runtime_commit" '{user_id:$user_id,desktop_id:$desktop_id,target:$target}')
                     refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
-                    refresh_http_status=$(timeout 300 curl -sS -o "$refresh_body" -w '%{http_code}' \
+                    # A stale body from an earlier deploy must not explain this one.
+                    rm -f "$refresh_body"
+                    refresh_http_status=$(timeout 600 curl -sS -o "$refresh_body" -w '%{http_code}' \
                       -H "X-Internal-Caller: true" \
                       "${choir_internal_auth[@]}" \
                       -H "X-Choir-Lifecycle-Caller: ci.deploy-refresh" \
