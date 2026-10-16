@@ -157,3 +157,22 @@ item is the upstream cause and remains open.
 The bare-Wait guard (fix direction 2) is deferred: no query yet names a
 document's unanswered Asks, and a wrong guard would refuse legitimate
 Waits. It is a named residual.
+
+## Bare-Wait residual re-measured (2026-10-16 23:50): not building the guard
+
+The paper's Texture runs since 20:00 numbered 290, with 1,316 desk cells.
+61 cells called `Wait`. 3 of those were bare: no Cast, Ask, Note, Write or
+Reject in the cell, and all 3 cells reported an error. None of the three
+documents stalled. Each was woken again and completed later turns within
+the half hour:
+- 7e9cbf98: 3 later runs;
+- 9ff4d12d: 7 later runs;
+- 550e983a: 1 later run.
+
+With ReadCapture on Texture, the blind openings that led to bare Waits are
+gone (cause 1 above). A guard would need a query for a document's
+outstanding Asks and could refuse legitimate Waits, against a failure that
+no longer shows. Decision: the guard stays unbuilt. Reopen if a story is
+again found stalled after a bare Wait (measure with `barewait.py <since>`
+in the session scratchpad: bare Wait cells and later runs on their
+documents).

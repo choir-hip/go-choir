@@ -506,7 +506,8 @@ now:
     (c) after the soak (about 15:40 UTC): Store B indexes for the
     route and check lookups, the Dolt squash, the module bump, and
     re-landing compaction;
-    (d) the bare-Wait guard and an RSS budget per worker.
+    (d) an RSS budget per worker (the bare-Wait guard is not needed: 3
+    bare Waits in 1,316 cells since 20:00, none stalled).
     Earlier, 2026-10-15 evening:
     (a) the checkpointd replay exit on one computer (a commitment record
     with no verified identity formula);
