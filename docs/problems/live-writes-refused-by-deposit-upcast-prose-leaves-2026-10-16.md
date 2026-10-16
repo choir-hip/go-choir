@@ -1,6 +1,6 @@
 # The paper's live writes are refused (or rewritten) by the deposit upcast: prose leaves with "-super-" read as identities (2026-10-16)
 
-Status: documented; fix in the next commit. Third symptom of the class in
+Status: fixed in b8feaa147 and deployed 16:30; outcome below. Third symptom of the class in
 the clustering assessment of
 `paper-boot-refused-vocabulary-migration-capture-label-override-2026-10-16.md`.
 **A boot with a replay tail can take the paper down again.**
@@ -105,3 +105,28 @@ clustering assessment, narrowed to what the code already claims.
 Not chosen: freezing the boot migration (option 2) leaves the live path
 and checkpointd replay broken; making a refusal per-object (option 3)
 keeps the loss.
+
+## Outcome (16:30–16:40)
+
+- **The fix held under the risky case.** The deploy's planned refresh
+  of the paper booted with a replay tail ("projection recovery resume
+  … tail=1", 16:29:59). The full rescan ran and passed. No "identity
+  formula" refusal appears in the console since the boot. The paper
+  reports `ready` on b8feaa147.
+- **The deploy job failed anyway, on timing.** The full rescan took 4
+  minutes (16:30:00 → 16:34:00, "replay complete"). vmctl's health
+  check failed at 16:33:58 and then succeeded; vmctl logged
+  `outcome=refreshed` at 16:34:00. The deploy's last check, a 5-second
+  curl of the paper's health, ran in that same second and timed out.
+  The services are installed (deploy-failures/38931321339-1.json:
+  `autoputer installed`), but no receipt was written. `/health`
+  reports 3d669e89b until the next deploy. I did not rerun the job:
+  vmctl has no "already on target" skip, so a rerun would restart the
+  paper again only to write a receipt.
+- **Still open:**
+  - the full rescan on any replaying boot costs about 4 minutes on the
+    paper (the S0 finding, `s0-vocab-rescan-fires-on-any-replay-2026-10-01.md`);
+  - the deploy's 5-second final health curl does not wait out a
+    replaying boot;
+  - checkpointd's two refusing QA computers (2026-10-15) are in failed-job
+    backoff. Whether this fix clears them shows at their next retry.

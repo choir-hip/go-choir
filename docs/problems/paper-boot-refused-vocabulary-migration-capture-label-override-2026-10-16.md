@@ -20,7 +20,10 @@ its API returns 502. The deploy job failed on the paper's refresh. The
 other two computers it refreshed came up.
 
 The 10:50 boot (bc67aee10) passed the same migration. An override
-written since then trips it. c8e1dc259 does not touch the migration, so
+written since then trips it. **Corrected 16:40:** not every boot runs the
+full migration. The 12:49 boot replayed a one-event tail, which forces the
+full rescan; boots without a replay take the fenced fast path. See
+`live-writes-refused-by-deposit-upcast-prose-leaves-2026-10-16.md`. c8e1dc259 does not touch the migration, so
 reverting it would not help: every boot runs the migration
 (`internal/autoputer/run.go:690`).
 
@@ -101,3 +104,9 @@ Recommended order: confirm the hypothesis (the report file and its
 `FencedAt`) on the next stopped boot, then option 2, which is the
 smallest change that ends boot-time re-migration. Option 1 is the true
 repair and needs its own review.
+
+**Resolved 16:40 (b8feaa147).** The hypothesis above is answered: the
+report is fenced, and the 12:49 boot was a replay (tail=1). The
+substrate fix is option 1, narrowed: a leaf with whitespace or "://"
+is never rewritten. See
+`live-writes-refused-by-deposit-upcast-prose-leaves-2026-10-16.md`.
