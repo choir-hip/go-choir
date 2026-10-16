@@ -8,11 +8,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/outlet"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -196,6 +198,15 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc 
 		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
 		return held
 	}
+	if outlets, err := rt.citedOutlets(ctx, ownerID, rev); err != nil || len(outlets) < MinPublishOutlets {
+		held = fmt.Sprintf("it cites %d outlet%s (%s); a story publishes only when its citations span at least %d distinct outlets, so v%d stays a gap; the next revision that cites another outlet's capture publishes",
+			len(outlets), plural(len(outlets)), strings.Join(outlets, ", "), MinPublishOutlets, v.Revision)
+		if err != nil {
+			held = "its cited captures could not be read (" + err.Error() + "), so v" + strconv.Itoa(v.Revision) + " stays a gap"
+		}
+		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
+		return held
+	}
 	if texturedoc.Headline(rev.BodyDoc) == "" {
 		held = "it does not lead with a headline (a heading as its first block, which titles the story), so v" + strconv.Itoa(v.Revision) + " stays a gap; the next revision that leads with one publishes"
 		log.Printf("story publish: %s revision %s not published: %s", v.DocID, v.RevisionID, held)
@@ -214,6 +225,53 @@ func (rt *Runtime) AutoPublishRevision(ctx context.Context, ownerID string, doc 
 		log.Printf("story publish: %s published v%d (revision %s)", v.DocID, v.Revision, v.RevisionID)
 	})
 	return ""
+}
+
+// MinPublishOutlets is how many distinct outlets a story's citations must
+// span before it publishes (owner §24: "We always should have two, ideally
+// more"; docs/problems/capture-and-production-are-coupled-2026-10-16.md).
+const MinPublishOutlets = 2
+
+// citedOutletsTimeout bounds the capture reads on Texture's turn.
+const citedOutletsTimeout = 20 * time.Second
+
+// citedOutlets returns the distinct outlets of the captures rev cites,
+// sorted. A cited capture the store cannot resolve, or whose URL names no
+// outlet, does not count.
+// A store that is not configured is an error: the revision is held.
+func (rt *Runtime) citedOutlets(ctx context.Context, ownerID string, rev types.Revision) ([]string, error) {
+	docs, err := texturewrite.CitedCaptures(rev)
+	if err != nil {
+		return nil, err
+	}
+	captures := rt.TextureCaptures()
+	if captures == nil {
+		return nil, fmt.Errorf("the capture store is not configured")
+	}
+	ctx, cancel := context.WithTimeout(ctx, citedOutletsTimeout)
+	defer cancel()
+	seen := map[string]bool{}
+	var out []string
+	for _, doc := range docs {
+		capture, err := captures.CaptureBlocks(ctx, ownerID, doc)
+		if err != nil {
+			log.Printf("story publish: cited capture %s does not count toward outlets: %v", doc, err)
+			continue
+		}
+		if key := outlet.Of(capture.URL); key != "" && !seen[key] {
+			seen[key] = true
+			out = append(out, key)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func revisionRole(rev types.Revision) string {

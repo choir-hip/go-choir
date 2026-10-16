@@ -528,3 +528,8 @@ Given by the owner before sleep. Quotes are the owner's words.
   262,144-token context. Above about 32 KB of text, 1.14 runs in a slower
   long-context mode. Version drift is accepted in exchange for upgrades;
   the served model on each receipt keeps it traceable.
+- **Skip Telegram for now.** "Skip telegram for now. We will use mtproto.
+  We'll set that up tomorrow." The registry's 73 `t.me` sources are not
+  activated in the overnight scale-up. Telegram ingestion will come
+  through MTProto, set up with the owner. The outlet key already names a
+  Telegram channel as its own outlet (`t.me/<channel>`).

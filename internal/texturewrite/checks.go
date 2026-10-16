@@ -120,6 +120,25 @@ func CitesSource(rev types.Revision) (bool, error) {
 	return false, nil
 }
 
+// CitedCaptures returns the distinct capture ids a revision's body cites
+// through Write Refs, in first-citation order. A citation by source entity
+// alone (made before Write) names no capture, so it is not listed.
+func CitedCaptures(rev types.Revision) ([]string, error) {
+	doc, _, err := Base(rev)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, node := range sourceRefs(doc.Doc) {
+		if ref, ok := RefOf(node); ok && !seen[ref.Doc] {
+			seen[ref.Doc] = true
+			out = append(out, ref.Doc)
+		}
+	}
+	return out, nil
+}
+
 // ChecksFrom reads the citation checks a revision recorded.
 func ChecksFrom(rev types.Revision) []QuoteCheck {
 	var meta map[string]json.RawMessage

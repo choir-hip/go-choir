@@ -12,7 +12,9 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/quotematch"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/texturewrite"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
@@ -153,10 +155,39 @@ func storyWrite(t *testing.T, h *Handler, s *store.Store, rec *types.RunRecord, 
 	return head
 }
 
-// cited appends a sentence citing a captured source: a publish-auto story
-// publishes only revisions that cite one.
+// cited appends sentences citing captured sources from two outlets: a
+// publish-auto story publishes only revisions whose citations span two
+// (docs/problems/capture-and-production-are-coupled-2026-10-16.md).
 func cited(text string) string {
+	return text + "\n\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}." +
+		" The regulator will not appeal {{cite https://wire.example.net/merger \"the regulator said it will not appeal\"}}."
+}
+
+// citedOnce cites only the court capture: one outlet.
+func citedOnce(text string) string {
 	return text + "\n\nThe court ruled that the merger may proceed {{cite https://example.org/court \"the court ruled that the merger may proceed\"}}."
+}
+
+var wireCapture = texturewrite.Capture{
+	Doc: "cap-wire", Version: "doc-hash-wire", URL: "https://wire.example.net/merger", Title: "Regulator response",
+	Blocks: []quotematch.Block{{ID: "cid-w1", Text: "The regulator said it will not appeal the ruling."}},
+}
+
+// sameOutletCapture is a second page of the court's outlet.
+var sameOutletCapture = texturewrite.Capture{
+	Doc: "cap-court-2", Version: "doc-hash-court-2", URL: "https://news.example.org/merger-reaction", Title: "Reaction",
+	Blocks: []quotematch.Block{{ID: "cid-s1", Text: "Shares rose after the ruling."}},
+}
+
+// storyCaptures resolves captures by URL (Write) and by capture id (the
+// publish gate reads a citation's Ref.Doc), as the capture store does.
+func storyCaptures() fakeCaptureStore {
+	court := courtCapture["https://example.org/court"]
+	out := fakeCaptureStore{}
+	for _, c := range []texturewrite.Capture{court, wireCapture, sameOutletCapture} {
+		out[c.URL], out[c.Doc] = c, c
+	}
+	return out
 }
 
 func revisionMetadataString(rev types.Revision, key string) string {
@@ -166,7 +197,7 @@ func revisionMetadataString(rev types.Revision, key string) string {
 func storySetup(t *testing.T) (*agentcore.Runtime, *Handler, *store.Store, *recordingStoryPublisher) {
 	t.Helper()
 	core, h := testAPISetup(t)
-	core.SetTextureCaptures(courtCapture)
+	core.SetTextureCaptures(storyCaptures())
 	pub := newRecordingStoryPublisher()
 	core.SetStoryPublisher(pub)
 	return core, h, core.Store(), pub
@@ -371,4 +402,50 @@ func TestStoryIsTitledByTexturesHeadlineAndAHeadlinelessRevisionIsHeld(t *testin
 	if err != nil || owned.Title != "Cell author not-a-story" {
 		t.Fatalf("owner document title = %q, %v; want it unchanged", owned.Title, err)
 	}
+}
+
+// Owner §24: "We always should have two, ideally more." Ways the gate can
+// fail (docs/problems/capture-and-production-are-coupled-2026-10-16.md):
+// G1 two captures of one outlet publish; G2 two outlets are held; G3 a
+// citation that resolves to no capture counts as an outlet; G4 the hold
+// does not tell Texture what is missing.
+func TestRevisionCitingOneOutletIsHeldUntilASecondOutletIsCited(t *testing.T) {
+	core, h, s, pub := storySetup(t)
+	rec := openStoryForTexture(t, h, s, "one-outlet", types.CastPublishAuto)
+	ctx := context.Background()
+	write := func(identity, edits string) string {
+		t.Helper()
+		base := headOf(t, s, rec)
+		out, err := h.CommitCellTextureAuthor(ctx, &rec, turnBody(t, yaegikernel.TextureTurn{BaseRevisionID: base.RevisionID,
+			Write: &yaegikernel.TextureWrite{Edits: edits, Why: "report"}}), identity)
+		if err != nil {
+			t.Fatalf("Write %s: %v", identity, err)
+		}
+		return out
+	}
+
+	out := write("write-one", "@all\n# Harbor\n\n"+citedOnce("The harbor reopens Monday."))
+	pub.none(t, "a revision citing one outlet")
+	if !strings.Contains(out, `"publish_held"`) || !strings.Contains(out, "1 outlet") || !strings.Contains(out, "example.org") { // G4
+		t.Fatalf("turn result %s does not say the revision cites one outlet", out)
+	}
+
+	// G1: a second page of the same publisher is still one outlet.
+	write("write-same", "@all\n# Harbor\n\n"+citedOnce("The harbor reopens Monday.")+
+		" Shares rose {{cite https://news.example.org/merger-reaction \"shares rose after the ruling\"}}.")
+	pub.none(t, "two captures of one outlet")
+
+	// G3: when the store cannot resolve the second capture, it does not count.
+	core.SetTextureCaptures(fakeCaptureStore{"https://example.org/court": courtCapture["https://example.org/court"],
+		"cap-court": courtCapture["https://example.org/court"], "https://wire.example.net/merger": wireCapture})
+	write("write-unresolved", "@all\n# Harbor\n\n"+cited("The harbor reopens Monday."))
+	pub.none(t, "a second outlet the store cannot resolve by capture id")
+
+	// G2: two resolvable outlets publish.
+	core.SetTextureCaptures(storyCaptures())
+	write("write-two", "@all\n# Harbor\n\n"+cited("The harbor reopens Monday. Ferries resume."))
+	if v := pub.next(t); v.Revision != 5 {
+		t.Fatalf("published %+v; want v5 (v2-v4 held)", v)
+	}
+	pub.none(t, "after the two-outlet revision")
 }
