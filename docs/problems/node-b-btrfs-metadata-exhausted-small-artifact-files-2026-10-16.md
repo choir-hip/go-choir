@@ -85,3 +85,12 @@ Staging stayed healthy at bc67aee10 throughout.
   the 4 captures stay without an event.
 - **Dolt auto GC** for corpus failed once. Its next attempt should
   succeed; check the corpus Dolt log after the next GC.
+
+## Recurrence guard landed
+
+14308b42e and a2276e78c (the first run failed: `awk` was not on the
+script's PATH) add `go-choir-btrfs-headroom`, a daily timer. Below
+30 GiB unallocated it runs the same bounded balance at idle IO priority.
+A manual run at 11:42 found 25 GiB, relocated 20 chunks in 35 s, and
+left **45 GiB unallocated**, with metadata at 12.65 of 15.64 GiB. An
+alert on low unallocated space and the small-file growth remain open.
