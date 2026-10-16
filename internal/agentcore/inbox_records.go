@@ -894,10 +894,21 @@ func (rt *Runtime) WakeRecordsInbox(ctx context.Context, ownerID, computerID, de
 		}
 		return nil, fmt.Errorf("records inbox: load desk %s: %w", deskAgentID, err)
 	}
-	if _, found, err := rt.activeRunByAgent(ctx, ownerID, deskAgentID); err != nil {
+	if active, found, err := rt.activeRunByAgent(ctx, ownerID, deskAgentID); err != nil {
 		return nil, fmt.Errorf("records inbox: active run of %s: %w", deskAgentID, err)
 	} else if found {
-		return nil, nil
+		if !rt.runHasNoLiveLoop(active, time.Now().UTC()) {
+			return nil, nil
+		}
+		// The stored run claims a loop this process does not have: its end
+		// write failed, or its loop died without one. It would absorb every
+		// wake until the progress deadline, an hour later
+		// (failed-terminal-run-write-blocks-desk-for-an-hour-2026-10-16, step 2).
+		if err := rt.terminalizeRun(ctx, active.RunID, ownerID, runFateNoLiveLoop); err != nil && !strings.Contains(err.Error(), "cannot cancel") {
+			return nil, fmt.Errorf("records inbox: end run %s with no live loop: %w", active.RunID, err)
+		}
+		log.Printf("runtime: records inbox: ended run %s of %s (stored running, no live loop, unchanged since %s)",
+			active.RunID, deskAgentID, active.UpdatedAt.Format(time.RFC3339))
 	}
 	if unread, err := rt.inboxUnread(ctx, ownerID, computerID, deskAgentID); err != nil {
 		return nil, fmt.Errorf("records inbox: unread of %s: %w", deskAgentID, err)

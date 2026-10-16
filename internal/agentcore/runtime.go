@@ -4616,6 +4616,29 @@ func (rt *Runtime) latestActiveRunByAgent(ctx context.Context, ownerID, agentID 
 	return rt.store.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
 }
 
+// runFateNoLiveLoop ends a run stored as running whose loop is gone.
+const runFateNoLiveLoop = "interrupted: stored as running with no live loop in this process"
+
+// deadRunGrace is how long a run may be stored as running before its loop
+// registers. Setting a run running and registering its loop happen in one
+// activation, well inside this; a dead run's state has not changed for
+// longer.
+const deadRunGrace = 2 * time.Minute
+
+// runHasNoLiveLoop reports a run stored as running whose loop this process
+// does not have, unchanged for longer than deadRunGrace. A pending run is
+// never dead here: its dispatch may be in flight, and the fresh-mint
+// watchdog owns a lost one.
+func (rt *Runtime) runHasNoLiveLoop(rec types.RunRecord, now time.Time) bool {
+	if rt == nil || rec.State != types.RunRunning || rec.UpdatedAt.IsZero() || now.Sub(rec.UpdatedAt) < deadRunGrace {
+		return false
+	}
+	rt.runningMu.Lock()
+	_, live := rt.running[rec.RunID]
+	rt.runningMu.Unlock()
+	return !live
+}
+
 // activeRunByAgent is the store-backed replacement for the old in-memory
 // residentRunByAgent. It queries the store for the latest executing run
 // (pending or running, NOT blocked) for an agent. Blocked runs are excluded
