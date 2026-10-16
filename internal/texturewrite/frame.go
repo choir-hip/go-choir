@@ -169,7 +169,9 @@ func (f Frame) renderRecord(b *strings.Builder, r FrameRecord) {
 				b.WriteString(" capture " + s.CaptureID)
 			}
 			if f.Captured != nil {
-				if f.Captured[s.Handle] {
+				if f.Captured[s.Handle] && s.Excerpt == "" {
+					b.WriteString(" (captured; read it with choir.ReadCapture(\"" + s.Handle + "\", 0, 0))")
+				} else if f.Captured[s.Handle] {
 					b.WriteString(" (captured)")
 				} else {
 					b.WriteString(notCapturedHint(s))

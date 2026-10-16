@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -160,6 +161,9 @@ func NewChoirScope(broker *Broker, issuer *HandleIssuer, computerID, activationI
 	// research egress verbs — the typed product_api_request tool is deleted.
 	if desk == "management" {
 		actions = append(actions, ActionProductAPI, ActionReadCapture, ActionStories)
+	}
+	if desk == "texture" {
+		actions = append(actions, ActionReadCapture)
 	}
 	handleRef, err := issuer.Issue(computerID, "choir-session", epoch, actions, sessionHandleTTL)
 	if err != nil {
@@ -358,8 +362,11 @@ var deskModuleSets = map[string][]string{
 	// with Done, Wait or Reject (Cut 2 2a); the cell's turn commits through
 	// ApplyTextureTurn. It dispatches to research and management with Cast,
 	// Ask and Note, which the reducer folds into the same cell's turn
-	// (protocol P2a), so a dispatch commits with the turn.
-	"texture": {"Cast", "Ask", "Note", "ReadDoc", "Write", "Done", "Wait", "Reject"},
+	// (protocol P2a), so a dispatch commits with the turn. It reads the
+	// captures its frame names (ReadCapture, by capture id or frame handle),
+	// so it can quote the capture a story was opened on; it never fetches
+	// the world (problems/texture-opens-stories-blind-to-their-capture-2026-10-16.md).
+	"texture": {"Cast", "Ask", "Note", "ReadDoc", "ReadCapture", "Write", "Done", "Wait", "Reject"},
 }
 
 // legacyObservation gates the observation verbs of the packet transports
@@ -650,11 +657,44 @@ func (s *ChoirScope) PollSource(sourceID string, maxItems int) (JSON, error) {
 // ReadCapture reads one shared capture (from any computer's poll or Read):
 // its blocks with their ids from block fromBlock, as many as fit in
 // maxChars characters (0 means 8000), and next_block when more remain.
+//
+// On Texture, captureID may also be a frame source handle (r1.c1): it reads
+// the capture that source names.
 func (s *ChoirScope) ReadCapture(captureID string, fromBlock, maxChars int) (JSON, error) {
+	if s.desk == "texture" {
+		id, err := s.frameCaptureID(captureID)
+		if err != nil {
+			return nil, err
+		}
+		captureID = id
+	}
 	var out JSON
 	err := s.call(ActionReadCapture, ReadCapturePayload{CaptureID: captureID, FromBlock: fromBlock, MaxChars: maxChars}, &out)
 	return out, err
 }
+
+// frameCaptureID resolves a Texture frame source handle to the capture it
+// names. Anything that is not a handle passes through as a capture id.
+func (s *ChoirScope) frameCaptureID(ref string) (string, error) {
+	ref = strings.TrimSpace(ref)
+	if !frameHandleRE.MatchString(ref) {
+		return ref, nil
+	}
+	if s.doc != nil {
+		for _, src := range s.doc.Sources {
+			if src.Handle != ref {
+				continue
+			}
+			if id := strings.TrimSpace(src.CaptureID); id != "" {
+				return id, nil
+			}
+			return "", fmt.Errorf("choir: %s has no capture (%s); cite its URL, or Cast research to capture it", ref, src.URL)
+		}
+	}
+	return "", fmt.Errorf("choir: %s is not a source in your frame; choir.ReadDoc().Sources lists them", ref)
+}
+
+var frameHandleRE = regexp.MustCompile(`^r[0-9]+\.c[0-9]+$`)
 
 // SearchWireCorpus searches the owner's published wire corpus.
 func (s *ChoirScope) SearchWireCorpus(query string, limit int) (JSON, error) {

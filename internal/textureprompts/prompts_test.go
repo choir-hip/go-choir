@@ -75,9 +75,11 @@ func TestPromptCoreRetiresTheOldWriteSurface(t *testing.T) {
 	}
 	// 4000 until the story headline rule (2026-10-14) added one line; 4.3k
 	// until the citation self-score (icrl-calibration-experiment-2026-10-14)
-	// added one sentence.
-	if n := len(prompt); n > 4420 {
-		t.Errorf("prompt core is %d characters; the budget is about 4.4k", n)
+	// added one sentence; 4.4k until Texture could read its frame's
+	// captures (texture-opens-stories-blind-to-their-capture-2026-10-16)
+	// and one sentence said so.
+	if n := len(prompt); n > 4560 {
+		t.Errorf("prompt core is %d characters; the budget is about 4.55k", n)
 	}
 }
 
