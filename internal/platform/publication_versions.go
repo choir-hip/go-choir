@@ -137,6 +137,9 @@ type CitationCheck struct {
 
 // CheckOverlayVersion keys an overlay by the published version.
 type CheckOverlayVersion struct {
+	// OwnerID is the publishing owner: a version's checks are stored under
+	// it, keyed by version and anchor.
+	OwnerID              string
 	PublicationID        string
 	PublicationVersionID string
 	Revision             int

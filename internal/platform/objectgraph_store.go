@@ -193,6 +193,47 @@ func (o *ObjectGraphStore) GetObject(ctx context.Context, id string) (objectgrap
 	return obj, nil
 }
 
+// GetObjects reads objects by canonical ID in one query, keyed by ID. IDs
+// that name no object are absent from the result.
+func (o *ObjectGraphStore) GetObjects(ctx context.Context, ids []string) (map[string]objectgraph.Object, error) {
+	out := map[string]objectgraph.Object{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	if o == nil || o.store == nil || o.store.db == nil {
+		return nil, fmt.Errorf("platform objectgraph: nil store")
+	}
+	seen := map[string]bool{}
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			args = append(args, id)
+		}
+	}
+	if len(args) == 0 {
+		return out, nil
+	}
+	rows, err := o.store.corpus().QueryContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, body_ref, body_size, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects WHERE canonical_id IN (?`+strings.Repeat(",?", len(args)-1)+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("platform objectgraph: get objects: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		obj, bodyRef, err := scanObjectGraphObject(rows)
+		if err != nil {
+			return nil, err
+		}
+		if err := o.hydrateBody(&obj, bodyRef); err != nil {
+			return nil, err
+		}
+		out[obj.CanonicalID] = obj
+	}
+	return out, rows.Err()
+}
+
 func (o *ObjectGraphStore) DeleteObject(ctx context.Context, id string) error {
 	if o == nil || o.store == nil || o.store.db == nil {
 		return fmt.Errorf("platform objectgraph: nil store")

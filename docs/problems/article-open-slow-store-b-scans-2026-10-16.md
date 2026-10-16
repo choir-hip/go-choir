@@ -31,7 +31,15 @@ article, then polls the bare route every 60 s
 (`PUBLISHED_POLL_MS`) for the whole bundle (up to 394 KB and about a
 second of server time) only to read `nav.latest`.
 
-## Mechanism (code-read; the time split is a hypothesis until measured)
+## Measured (22:35, e8379a0ca's step log)
+
+Twelve resolves of six front stories: the check overlay took 889–2399 ms
+of each; every other step together took 30–50 ms (route lookup 3–37 ms,
+transclusions 4–22 ms, entities 2–7 ms). The overlay is the cost, and it
+does not depend on the story: it is the scan of every
+`choir.publication_check` row in Store B.
+
+## Mechanism (code-read; confirmed for the overlay by the step log above)
 
 `GetPublicationBundleByRoute` (`internal/platform/service_publication_read.go`)
 rebuilds the bundle on every request, in sequence:

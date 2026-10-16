@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -74,6 +75,29 @@ func checkObject(kind objectgraph.ObjectKind, ownerID, key string, body any, met
 		CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
+
+// publicationCheckID is the ID of a version's check of one anchor, as
+// writeVersionChecks stores it.
+func publicationCheckID(ownerID, versionID, anchorID string) string {
+	id, err := objectgraph.BuildCanonicalID(ogKindPublicationCheck, ownerID, objectgraph.StableSuffixFromKey(versionID+"\x00"+anchorID))
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
+// supportJudgementID is the ID of an owner's judgement of one pair.
+func supportJudgementID(ownerID, pairKey string) string {
+	id, err := objectgraph.BuildCanonicalID(ogKindSupportJudgement, ownerID, objectgraph.StableSuffixFromKey(pairKey))
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
+// overlayScans counts overlays that fell back to scanning every check row
+// by JSON path; a resolve with a known owner reads by ID instead.
+var overlayScans atomic.Int64
 
 // writeVersionChecks stores the quote check of each anchor the version
 // carries, read from the revision's texture_citation_checks.
@@ -178,20 +202,51 @@ func (o *StoreCheckOverlay) CheckOverlay(ctx context.Context, version CheckOverl
 	if og == nil {
 		return PublicationCheckOverlay{}, fmt.Errorf("check overlay: store unavailable")
 	}
-	rows, err := og.ListObjectsByMetadata(ctx, string(ogKindPublicationCheck), "$.publication_version_id", version.PublicationVersionID, maxVersionChecks)
-	if err != nil {
-		return PublicationCheckOverlay{}, err
-	}
 	type checkRow struct {
 		owner string
 		check publicationCheck
 	}
 	byAnchor := map[string]checkRow{}
-	for _, obj := range rows {
+	addRow := func(obj objectgraph.Object) {
 		var c publicationCheck
 		if json.Unmarshal(obj.Body, &c) == nil && c.PublicationVersionID == version.PublicationVersionID {
 			byAnchor[c.AnchorID] = checkRow{owner: obj.OwnerID, check: c}
 		}
+	}
+	if owner := strings.TrimSpace(version.OwnerID); owner != "" {
+		// The checks are keyed by owner, version and anchor: read exactly
+		// those rows, never the whole kind
+		// (docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+		ids := make([]string, 0, len(citations))
+		for _, cite := range citations {
+			ids = append(ids, publicationCheckID(owner, version.PublicationVersionID, cite.AnchorID))
+		}
+		objs, err := og.GetObjects(ctx, ids)
+		if err != nil {
+			return PublicationCheckOverlay{}, err
+		}
+		for _, obj := range objs {
+			addRow(obj)
+		}
+	} else {
+		overlayScans.Add(1)
+		rows, err := og.ListObjectsByMetadata(ctx, string(ogKindPublicationCheck), "$.publication_version_id", version.PublicationVersionID, maxVersionChecks)
+		if err != nil {
+			return PublicationCheckOverlay{}, err
+		}
+		for _, obj := range rows {
+			addRow(obj)
+		}
+	}
+	judgementIDs := make([]string, 0, len(byAnchor))
+	for _, row := range byAnchor {
+		if row.check.PairKey != "" {
+			judgementIDs = append(judgementIDs, supportJudgementID(row.owner, row.check.PairKey))
+		}
+	}
+	judgements, err := og.GetObjects(ctx, judgementIDs)
+	if err != nil {
+		return PublicationCheckOverlay{}, err
 	}
 	out := PublicationCheckOverlay{Source: storeOverlaySource, Citations: make([]CitationCheck, 0, len(citations))}
 	for _, cite := range citations {
@@ -199,39 +254,18 @@ func (o *StoreCheckOverlay) CheckOverlay(ctx context.Context, version CheckOverl
 		row, ok := byAnchor[cite.AnchorID]
 		if ok {
 			entry.Quote = quoteState(row.check)
-			if row.check.PairKey != "" {
-				judgement, found, err := o.judgement(ctx, og, row.owner, row.check.PairKey)
-				if err != nil {
+			if obj, found := judgements[supportJudgementID(row.owner, row.check.PairKey)]; found && row.check.PairKey != "" {
+				var judgement supportJudgement
+				if err := json.Unmarshal(obj.Body, &judgement); err != nil {
 					return PublicationCheckOverlay{}, err
 				}
-				if found {
-					entry.Judgement, entry.Detail, entry.CheckedAt = judgementState(judgement.Verdict), judgement.Why, judgement.JudgedAt
-				}
+				entry.Judgement, entry.Detail, entry.CheckedAt = judgementState(judgement.Verdict), judgement.Why, judgement.JudgedAt
 			}
 		}
 		entry.State = badgeState(entry.Quote, entry.Judgement)
 		out.Citations = append(out.Citations, entry)
 	}
 	return out, nil
-}
-
-func (o *StoreCheckOverlay) judgement(ctx context.Context, og *ObjectGraphStore, ownerID, pairKey string) (supportJudgement, bool, error) {
-	id, err := objectgraph.BuildCanonicalID(ogKindSupportJudgement, ownerID, objectgraph.StableSuffixFromKey(pairKey))
-	if err != nil {
-		return supportJudgement{}, false, err
-	}
-	obj, err := og.GetObject(ctx, id)
-	if errors.Is(err, objectgraph.ErrNotFound) {
-		return supportJudgement{}, false, nil
-	}
-	if err != nil {
-		return supportJudgement{}, false, err
-	}
-	var j supportJudgement
-	if err := json.Unmarshal(obj.Body, &j); err != nil {
-		return supportJudgement{}, false, err
-	}
-	return j, true, nil
 }
 
 // quoteState maps a committed quote check to the overlay: a matched quote

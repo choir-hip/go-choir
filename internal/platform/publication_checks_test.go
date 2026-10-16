@@ -206,3 +206,41 @@ func TestNotCapturedCitationIsUnreadSource(t *testing.T) {
 		}
 	}
 }
+
+// The overlay scanned every check row in Store B by JSON path on each
+// resolve: 890-2400 ms of a 1 s article open
+// (docs/problems/article-open-slow-store-b-scans-2026-10-16.md). It now
+// reads a version's checks and judgements by their IDs. Ways it could fail:
+// a resolve still scans; a check or verdict is missed because its ID is
+// computed differently from the one publish wrote; a batch read returns an
+// object nobody asked for, or fails on an empty list.
+func TestOverlayReadsChecksByIDWithoutScanning(t *testing.T) {
+	svc, v, checks := publishCheckedVersion(t)
+	ctx := context.Background()
+	if err := svc.RecordSupportVerdicts(ctx, types.StoryVerdictsRequest{OwnerID: "owner-1", ComputerID: "computer-paper", Verdicts: []types.StoryVerdict{
+		{Key: checks[0].Pair, Verdict: types.SupportSupported, Judge: "jev:test"},
+	}}); err != nil {
+		t.Fatalf("record verdicts: %v", err)
+	}
+	before := overlayScans.Load()
+	got := overlayByAnchor(readBundle(t, svc, v.PermalinkPath))
+	if n := overlayScans.Load() - before; n != 0 {
+		t.Fatalf("resolve scanned the check rows %d times", n)
+	}
+	if c := got[checks[0].RefID]; c.State != CheckExact || c.Judgement != types.SupportSupported {
+		t.Fatalf("checked and judged citation = %+v", c)
+	}
+	if c := got[checks[1].RefID]; c.Quote != CheckTolerant || c.Judgement != CheckPending {
+		t.Fatalf("checked, unjudged citation = %+v", c)
+	}
+
+	og := svc.ogStore()
+	if objs, err := og.GetObjects(ctx, nil); err != nil || len(objs) != 0 {
+		t.Fatalf("empty batch: %v %v", objs, err)
+	}
+	id := publicationCheckID("owner-1", v.PublicationVersionID, checks[0].RefID)
+	objs, err := og.GetObjects(ctx, []string{id, "obj:choir.publication_check:owner-1:missing", id})
+	if err != nil || len(objs) != 1 || objs[id].CanonicalID != id {
+		t.Fatalf("batch read = %v, %v; want the one existing check", objs, err)
+	}
+}

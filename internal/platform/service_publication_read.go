@@ -220,6 +220,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	// 5. The live fields: nav among the published versions, and the check
 	// overlay keyed by this version and its citations.
 	overlay := s.checkOverlay(ctx, CheckOverlayVersion{
+		OwnerID:              versionObj.OwnerID,
 		PublicationID:        versionMeta.PublicationID,
 		PublicationVersionID: versionMeta.PublicationVersionID,
 		Revision:             revision,
