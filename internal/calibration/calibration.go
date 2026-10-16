@@ -248,7 +248,7 @@ func direction(meanP, observed float64) string {
 var claimNoun = map[string]string{
 	types.CalibrationClaimHypothesis:      "hypothesis probabilities",
 	types.CalibrationClaimCompleted:       "p_complete on final Reports",
-	types.CalibrationClaimCitationSupport: "pSupported on Writes (per citation)",
+	types.CalibrationClaimCitationSupport: "pSupported on Writes (one per Write, scored per citation)",
 }
 
 // Render is the block the desk reads. It has no time and no per-item
