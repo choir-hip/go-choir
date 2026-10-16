@@ -1023,7 +1023,7 @@
     publishedPollTimer = setInterval(async () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
-        const latest = await resolvePublication(bare);
+        const latest = await resolvePublication(bare, { view: 'nav' });
         const n = Number(latest?.nav?.latest || latest?.payload?.revision || 0);
         if (publishedBareRoute() === bare && n > publishedLatestSeen) publishedLatestSeen = n;
       } catch (_err) {

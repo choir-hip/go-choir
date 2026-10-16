@@ -63,6 +63,23 @@ func TestInternalPublishRequiresInternalCallerAndBundleResolve(t *testing.T) {
 	if len(bundle.Citations) == 0 {
 		t.Fatalf("bundle citations missing")
 	}
+
+	// view=nav answers with the nav alone (the reader's poll for a newer
+	// version; docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+	navReq := httptest.NewRequest(http.MethodGet, "/internal/platform/publications/resolve?view=nav&route="+resp.RoutePath, nil)
+	navReq.Header.Set("X-Internal-Caller", "true")
+	navW := httptest.NewRecorder()
+	handler.HandleInternalResolvePublication(navW, navReq)
+	if navW.Code != http.StatusOK {
+		t.Fatalf("nav status: got %d body %s", navW.Code, navW.Body.String())
+	}
+	var nav PublicationBundle
+	if err := json.NewDecoder(navW.Body).Decode(&nav); err != nil {
+		t.Fatalf("decode nav: %v", err)
+	}
+	if nav.Nav.Latest != 1 || nav.Artifact.Content != "" || len(nav.Citations) != 0 {
+		t.Fatalf("nav view: %+v", nav)
+	}
 }
 
 func TestInternalListTextureRevisionsUsesTextureEnvelope(t *testing.T) {

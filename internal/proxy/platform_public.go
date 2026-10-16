@@ -60,6 +60,10 @@ func (h *Handler) HandlePlatformPublicationResolve(w http.ResponseWriter, r *htt
 	}
 	q := u.Query()
 	q.Set("route", routePath)
+	if r.URL.Query().Get("view") == "nav" {
+		// The reader's poll for a newer version: nav alone.
+		q.Set("view", "nav")
+	}
 	u.RawQuery = q.Encode()
 	var out platform.PublicationBundle
 	status, err := h.getPlatformJSON(r, u.String(), &out)

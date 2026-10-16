@@ -21,8 +21,9 @@
  *     text;
  *   - every citation renders as a numbered source whose quote sits inside its
  *     pinned source block (inline popover and the source list) with a check
- *     badge (exact, tolerant, pending, unread, failed); every transclusion renders as
- *     a block; the view offers no editing affordance;
+ *     badge (exact, tolerant, pending, unread, failed); a stored embed is
+ *     a numbered marker too, and no source text draws as a block; the view
+ *     offers no editing affordance;
  *   - a story with more than one version moves between versions with the
  *     Texture chevrons, and an older version offers the newer one;
  *   - nothing scrolls horizontally at 375px.

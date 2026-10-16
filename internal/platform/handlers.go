@@ -168,7 +168,12 @@ func (h *Handler) HandleInternalResolvePublication(w http.ResponseWriter, r *htt
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "route is required"})
 		return
 	}
-	bundle, err := h.service.GetPublicationBundleByRoute(r.Context(), routePath)
+	resolve := h.service.GetPublicationBundleByRoute
+	if r.URL.Query().Get("view") == "nav" {
+		// The reader's poll for a newer version needs the nav alone.
+		resolve = h.service.GetPublicationNavByRoute
+	}
+	bundle, err := resolve(r.Context(), routePath)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.NotFound(w, r)

@@ -19,7 +19,31 @@ import (
 // number that was never published (a gap) is not found. The bundle carries
 // the version's immutable payload and, beside it, the live nav and check
 // overlay.
-func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath string) (*PublicationBundle, error) {
+// publicationHead is what every resolve reads first: the route, the
+// publication it names, and the published version the link asks for.
+type publicationHead struct {
+	og        *ObjectGraphStore
+	routePath string
+	bare      string
+	revision  int
+	routeMeta struct {
+		State    string `json:"state"`
+		TargetID string `json:"target_id"`
+	}
+	pubMeta struct {
+		PublicationID string `json:"publication_id"`
+		Slug          string `json:"slug"`
+		Title         string `json:"title"`
+		State         string `json:"state"`
+	}
+	versions []publishedVersion
+	ref      publishedVersion
+}
+
+// resolvePublicationHead reads a route's publication and the version its
+// link names (the latest for a bare link). sql.ErrNoRows means no public
+// version answers the link.
+func (s *Service) resolvePublicationHead(ctx context.Context, routePath string, steps *resolveSteps) (*publicationHead, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
 	}
@@ -27,13 +51,12 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if og == nil {
 		return nil, fmt.Errorf("platform service: object graph store unavailable")
 	}
-	routePath = normalizePublicationRoutePath(routePath)
-	bare, revision, ok := parsePublicationRoute(routePath)
+	h := &publicationHead{og: og, routePath: normalizePublicationRoutePath(routePath)}
+	bare, revision, ok := parsePublicationRoute(h.routePath)
 	if !ok {
 		return nil, sql.ErrNoRows
 	}
-	steps := newResolveSteps()
-	defer steps.logIfSlow(routePath)
+	h.bare, h.revision = bare, revision
 
 	// 1. The bare route names the publication.
 	routeObj, err := og.GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", bare)
@@ -44,52 +67,78 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		return nil, fmt.Errorf("platform bundle: find route: %w", err)
 	}
 	steps.mark("route")
-	var routeMeta struct {
-		State    string `json:"state"`
-		TargetID string `json:"target_id"`
-	}
-	if err := json.Unmarshal(routeObj.Metadata, &routeMeta); err != nil {
+	if err := json.Unmarshal(routeObj.Metadata, &h.routeMeta); err != nil {
 		return nil, fmt.Errorf("platform bundle: parse route metadata: %w", err)
 	}
-	if routeMeta.State != "active" {
+	if h.routeMeta.State != "active" {
 		return nil, sql.ErrNoRows
 	}
-	pubObj, err := og.GetObject(ctx, routeMeta.TargetID)
+	pubObj, err := og.GetObject(ctx, h.routeMeta.TargetID)
 	if err != nil {
 		if err == objectgraph.ErrNotFound {
 			return nil, sql.ErrNoRows
 		}
 		return nil, fmt.Errorf("platform bundle: get publication: %w", err)
 	}
-	var pubMeta struct {
-		PublicationID string `json:"publication_id"`
-		Slug          string `json:"slug"`
-		Title         string `json:"title"`
-		State         string `json:"state"`
-	}
-	if err := json.Unmarshal(pubObj.Metadata, &pubMeta); err != nil {
+	if err := json.Unmarshal(pubObj.Metadata, &h.pubMeta); err != nil {
 		return nil, fmt.Errorf("platform bundle: parse publication metadata: %w", err)
 	}
-	if pubMeta.State != "published" {
+	if h.pubMeta.State != "published" {
 		return nil, sql.ErrNoRows
 	}
 
 	// 2. The version: n, or the latest when the link is bare.
-	versions, err := publishedVersions(ctx, og, pubObj.CanonicalID)
+	h.versions, err = publishedVersions(ctx, og, pubObj.CanonicalID)
 	if err != nil {
 		return nil, fmt.Errorf("platform bundle: list versions: %w", err)
 	}
 	steps.mark("versions")
-	if len(versions) == 0 {
+	if len(h.versions) == 0 {
 		return nil, sql.ErrNoRows
 	}
-	if revision == 0 {
-		revision = versions[len(versions)-1].Revision
+	if h.revision == 0 {
+		h.revision = h.versions[len(h.versions)-1].Revision
 	}
-	ref, ok := findPublishedVersion(versions, revision)
+	h.ref, ok = findPublishedVersion(h.versions, h.revision)
 	if !ok {
 		return nil, sql.ErrNoRows
 	}
+	return h, nil
+}
+
+func (h *publicationHead) route() PublicationRoute {
+	return PublicationRoute{Path: h.routePath, State: h.routeMeta.State, Bare: h.bare, Permalink: versionPermalink(h.bare, h.revision)}
+}
+
+func (h *publicationHead) publication() PublicationSummary {
+	return PublicationSummary{ID: h.pubMeta.PublicationID, Title: h.pubMeta.Title, Slug: h.pubMeta.Slug, State: h.pubMeta.State}
+}
+
+// GetPublicationNavByRoute answers a link with its route, publication and
+// nav alone: the reader's poll for a newer version needs nothing else, and
+// the full bundle costs about a second to build
+// (docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+func (s *Service) GetPublicationNavByRoute(ctx context.Context, routePath string) (*PublicationBundle, error) {
+	steps := newResolveSteps()
+	defer steps.logIfSlow(routePath + " (nav)")
+	h, err := s.resolvePublicationHead(ctx, routePath, steps)
+	if err != nil {
+		return nil, err
+	}
+	if policy := s.graphPublicationPolicy(ctx, h.og, h.ref.CanonicalID); !publicationAccessPolicyAllowsPublicRoute(policy.Access) {
+		return nil, sql.ErrNoRows
+	}
+	return &PublicationBundle{Route: h.route(), Publication: h.publication(), Nav: navFor(h.versions, h.revision)}, nil
+}
+
+func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath string) (*PublicationBundle, error) {
+	steps := newResolveSteps()
+	defer steps.logIfSlow(routePath)
+	h, err := s.resolvePublicationHead(ctx, routePath, steps)
+	if err != nil {
+		return nil, err
+	}
+	og, revision, ref, versions := h.og, h.revision, h.ref, h.versions
 	versionObj, err := og.GetObject(ctx, ref.CanonicalID)
 	if err != nil {
 		return nil, fmt.Errorf("platform bundle: get version: %w", err)
@@ -179,13 +228,8 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	steps.mark("overlay")
 
 	return &PublicationBundle{
-		Route: PublicationRoute{Path: routePath, State: routeMeta.State, Bare: bare, Permalink: versionPermalink(bare, revision)},
-		Publication: PublicationSummary{
-			ID:    pubMeta.PublicationID,
-			Title: pubMeta.Title,
-			Slug:  pubMeta.Slug,
-			State: pubMeta.State,
-		},
+		Route:       h.route(),
+		Publication: h.publication(),
 		Version: PublicationVersionSummary{
 			ID:                   versionMeta.PublicationVersionID,
 			Revision:             revision,
@@ -215,7 +259,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		Policy:         policy,
 		Proposals: PublicationProposalCapability{
 			CanSubmit:           true,
-			SourcePublicationID: pubMeta.PublicationID,
+			SourcePublicationID: h.pubMeta.PublicationID,
 		},
 		Provenance: provenance,
 		Payload: PublicationVersionPayload{

@@ -335,8 +335,13 @@ export async function publishTexture(docId, { revisionId = '', slug = '', access
   return res.json();
 }
 
-export async function resolvePublication(routePath) {
+// resolvePublication reads a published link's bundle. view 'nav' asks for
+// the route, publication and nav alone: the reader's poll for a newer
+// version needs nothing else, and the whole bundle costs about a second to
+// build (docs/problems/article-open-slow-store-b-scans-2026-10-16.md).
+export async function resolvePublication(routePath, { view = '' } = {}) {
   const params = new URLSearchParams({ route: routePath });
+  if (view === 'nav') params.set('view', 'nav');
   const res = await fetch(platformPath(`/publications/resolve?${params.toString()}`), {
     method: 'GET',
     credentials: 'include',

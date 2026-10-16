@@ -16,7 +16,7 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	var gotInternal string
+	var gotInternal, gotView string
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotInternal = r.Header.Get("X-Internal-Caller")
 		switch r.URL.Path {
@@ -24,6 +24,7 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 			if r.URL.Query().Get("route") != "/pub/texture/test" {
 				t.Fatalf("platform route query: %s", r.URL.RawQuery)
 			}
+			gotView = r.URL.Query().Get("view")
 			_ = json.NewEncoder(w).Encode(platform.PublicationBundle{
 				Route:       platform.PublicationRoute{Path: "/pub/texture/test", State: "active"},
 				Publication: platform.PublicationSummary{ID: "pub-1", Title: "Public"},
@@ -66,6 +67,18 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 	}
 	if gotInternal != "true" {
 		t.Fatalf("missing internal caller header")
+	}
+	if gotView != "" {
+		t.Fatalf("plain resolve forwarded view=%q", gotView)
+	}
+	// The reader's poll asks for the nav alone; any other view is dropped.
+	for _, c := range []struct{ query, want string }{{"&view=nav", "nav"}, {"&view=everything", ""}} {
+		gotView = "unset"
+		navW := httptest.NewRecorder()
+		h.HandleAPI(navW, httptest.NewRequest(http.MethodGet, "/api/platform/publications/resolve?route=/pub/texture/test"+c.query, nil))
+		if navW.Code != http.StatusOK || gotView != c.want {
+			t.Fatalf("resolve%s: status %d, forwarded view=%q, want %q", c.query, navW.Code, gotView, c.want)
+		}
 	}
 	exportReq := httptest.NewRequest(http.MethodGet, "/api/platform/publications/export?route=/pub/texture/test&format=md", nil)
 	exportW := httptest.NewRecorder()

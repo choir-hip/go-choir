@@ -2,6 +2,9 @@ package platform
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
+	"errors"
 	"log"
 	"strings"
 	"testing"
@@ -42,5 +45,35 @@ func TestSlowResolveLogsEachStep(t *testing.T) {
 	readBundle(t, svc, v1.RoutePath)
 	if strings.Contains(buf.String(), "platform bundle: resolve") {
 		t.Fatalf("fast resolve logged %q", buf.String())
+	}
+}
+
+// The reader polls the bare route every minute only to learn whether a
+// newer version exists, and each poll rebuilt the whole bundle (up to
+// 394 KB on the paper). The nav view answers with the route, the
+// publication and the nav alone. Ways it could fail: its nav differs from
+// the full bundle's; it still carries the text, manifest or checks; it
+// serves a route the full resolve refuses.
+func TestNavViewAnswersWithoutTheBundle(t *testing.T) {
+	svc, _ := newVersionTestService(t)
+	v1 := publishRevision(t, svc, 1, "rev-a", "Harbor opens.")
+	publishRevision(t, svc, 2, "rev-b", "Harbor opens at dawn.")
+
+	full := readBundle(t, svc, v1.PermalinkPath)
+	nav, err := svc.GetPublicationNavByRoute(context.Background(), v1.PermalinkPath)
+	if err != nil {
+		t.Fatalf("nav view: %v", err)
+	}
+	if nav.Nav != full.Nav || nav.Nav.Latest != 2 || nav.Route != full.Route || nav.Publication != full.Publication {
+		t.Fatalf("nav view %+v %+v %+v, full %+v %+v %+v", nav.Nav, nav.Route, nav.Publication, full.Nav, full.Route, full.Publication)
+	}
+	if nav.Payload.Text != "" || len(nav.Payload.Manifest) != 0 || nav.Artifact.Content != "" || len(nav.Checks.Citations) != 0 {
+		t.Fatalf("nav view carries the bundle: %+v", nav)
+	}
+	if _, err := svc.GetPublicationNavByRoute(context.Background(), v1.RoutePath+"/v9"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("nav view of a missing version: %v", err)
+	}
+	if _, err := svc.GetPublicationNavByRoute(context.Background(), "/pub/texture/no-such-story"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("nav view of a missing route: %v", err)
 	}
 }
