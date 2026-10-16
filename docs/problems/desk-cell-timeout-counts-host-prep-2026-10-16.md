@@ -1,6 +1,6 @@
 # A desk cell's own timeout_ms starts before the cell does (2026-10-16)
 
-Status: open. **A management cell on the paper was killed by its
+Status: fixed in 57c4d0b9b, deployed 21:38; outcome below. **A management cell on the paper was killed by its
 `timeout_ms=1000` after running 3 ms.**
 
 ## Evidence
@@ -51,3 +51,14 @@ Arm the bound immediately before `EvalCell`, after the host's preparation,
 so `timeout_ms` measures the cell. A regression test charges the
 preparation step a delay longer than the cell's bound and expects the
 cell to finish. Rollback: revert the commit.
+
+## Outcome (21:38)
+
+57c4d0b9b arms the bound just before `EvalCell`.
+`TestDeskCellTimeoutCountsOnlyTheCell` makes the host's preparation take
+700 ms behind a 500 ms bound. Without the move it reproduces the paper
+("timeout_ms=500 after 10 ms"); with it the cell runs, and a runaway cell
+is still stopped by its bound. CI green (govulncheck, report-only, fails
+as on every code commit). Deployed 21:38:13; the paper's planned refresh
+booted at 21:37:26 (tail=0, 4 s). Not yet seen live: a tight-bound cell
+on the paper after the deploy.
