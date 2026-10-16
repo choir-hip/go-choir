@@ -96,3 +96,25 @@ Ways the fix could fail (tests first):
   were read by the next management run after 12:02.
 - The 11:03 Texture runs whose state writes failed ended without their
   turns' follow-ups. Their documents were woken again by later records.
+
+## Step 2 (2026-10-16 23:35)
+
+Step 1 (end writes retried, c8e1dc259) leaves a gap. A run whose loop
+died without any end write, or whose retries ran out during a longer
+outage, still absorbs a records desk's wakes until the progress
+deadline.
+
+Step 2: `WakeRecordsInbox` ends a stored active run when all three hold:
+- it is stored `running`;
+- this process has no loop for it (`rt.running`, which `executeActivation`
+  clears whenever a loop ends, even when the end write fails);
+- its state has not changed for longer than 2 minutes, so a run whose loop
+  is about to register is never ended.
+
+The wake then starts a fresh run. Pending runs are left alone, because
+their dispatch may be in flight and the fresh-mint watchdog owns a lost
+one. On "parked runs are running without a goroutine": parking stores a
+run as `passivated`, so a parked run is never `running`.
+`TestRecordsWakeReplacesARunWithNoLiveLoop` was written first; it
+reproduced the absorbed wake and covers the live, just-started and
+pending cases.

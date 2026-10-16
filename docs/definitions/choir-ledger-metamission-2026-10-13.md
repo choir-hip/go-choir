@@ -442,37 +442,34 @@ now:
   # the reviewed restart design. The spine's card points at the live station.
   status: working
   slice: >-
-    2026-10-15 19:00 UTC. Handoff: docs/reports/handoff-2026-10-15.md.
-    Landed and proven on staging today:
-    - Raced activation fix 2.
-    - ChatGPT cache routing and logging, and model-named failover keys.
-      The cache ratio is about 78%.
-    - Default pool gpt-6-luna 3 : deepseek-v4.1-flash 1, with cat-jam-free
-      out. The management task pin moved to gpt-6-luna (77633ecdc).
-    - Dolt guardrails and the liveness probe, Dolt 2.4.2 sql-servers, and
-      the paper lost-wake fix.
-    - P5 host build and P6-P8 release, publish and adopt. adopt-1523 was
-      the first passing adopt loop.
-    - Engineering release-copy recipe; capsule broker re-dial.
-    - go-served-1825 passes the full self-development loop 18/18 on
-      cc720cd20, after the tracer's go-test check fix.
-    - Account recovery, section pages, and the search stale-cooldown clamp.
-    Incidents, documented: a platform Dolt deadlock (root cause
-    unconfirmed; the probe sends SIGABRT on recurrence), and the paper
-    silent 10:56-12:42 after the host reboot (re-armed; the sweep now
-    catches it).
-    Gated: Dolt soak until 2026-10-17 about 15:40, then the Store A
-    squash, the embedded Dolt module bump, and re-landing guest compaction
-    with a typed I4 exception.
-    Owner rulings, owner-notes §23:
-    - search stands pat on Keenable;
-    - source ingestion scales up 2026-10-16;
-    - Autopaper quality is a world-model problem (think, don't build);
-    - D1 app packages are ratified.
-    Open for the owner: DeepSeek at 1/4 of runs (met in expectation) or
-    1/4 of compute (it takes about 64% of calls).
-  source_ref: b244507f4
-  deploy_identity: staging b244507f4 (deployed 21:03:45 UTC)
+    2026-10-16 23:40 UTC. Handoff: docs/reports/handoff-2026-10-15.md §0
+    (overnight and 2026-10-16 tables). Landed and proven on staging
+    2026-10-16:
+    - Event layer V1 and V2 on the paper; V3a/V3b code behind flags (off).
+      V1 fails the false-merge bar twice (7.0%, 9.5%); the remaining
+      merges are story-level, so the event definition is the owner's.
+    - The publish gate (two outlets), Jev pinned, retention never
+      destroys a warmness-protected computer, Texture ReadCapture, and a
+      Done after a refused Write is refused.
+    - Storage and boot robustness: the btrfs headroom guard, end writes
+      retried, capture-label identity formulas, prose leaves never
+      upcast, vmctl refresh timeouts, the narrowed vocabulary fence, the
+      yaegi loop rewrite, and workers volunteering for the OOM killer.
+    - Desk cells: the timeout counts only the cell.
+    - Owner requests from the evening: embeds retired; every desk thread
+      on gpt-6-luna (deepseek fails over only); article open from
+      1.1-1.3 s to 0.16-0.26 s (check overlay by ID, nav-only poll);
+      edge compression (bundle 467 to 55 KB) with streams never wrapped.
+    - A planned restart resumes a parked Texture turn through the Texture
+      controller (e3ffabbca; not yet exercised live).
+    Open for the owner:
+    - the event definition, which gates V3;
+    - the evidence-store growth (about 1.5M small files a day);
+    - the pool split (moot while luna-only);
+    - the witness key, the off-host backup target, and the yaegi
+      upstream report.
+  source_ref: 85a9f5742
+  deploy_identity: staging 85a9f5742 (deployed 23:27:53 UTC)
   candidate: {id: none, state: none, ref: none, base: none, digest: none, scope: []}
   conjecture:
     id: LG-1
@@ -501,7 +498,16 @@ now:
     next_observation: the A5 build, then S1a labels on top of it; the fixture run on a minted test computer
   blocker_or_risk: the owner's computer still runs 761d94c5 and defers every guest-image deploy; one operator refresh was already spent (docs/evidence/owner-computer-refresh-2026-10-13.json) and the deferral recurs until planned restarts are host-attested (L1c); every durable home shares one host until L3's off-host copy
   next_action: >-
-    2026-10-15 evening:
+    2026-10-17:
+    (a) a records wake ends a run stored running with no live loop
+    (failed-terminal-run-write step 2), then land it;
+    (b) watch the next planned boot that parks a Texture run (e3ffabbca
+    live proof);
+    (c) after the soak (about 15:40 UTC): Store B indexes for the
+    route and check lookups, the Dolt squash, the module bump, and
+    re-landing compaction;
+    (d) the bare-Wait guard and an RSS budget per worker.
+    Earlier, 2026-10-15 evening:
     (a) the checkpointd replay exit on one computer (a commitment record
     with no verified identity formula);
     (b) engineering residuals (the seccomp xattr, no management
