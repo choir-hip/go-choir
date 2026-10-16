@@ -617,3 +617,41 @@ list, which is the duplicate-story risk the labels existed to cut.
 
 The class is orange (prompt text, a record annotation and a skipped
 optional call). The rollback is a revert, or turning event wakes off.
+
+## 19. Overnight evidence, 2026-10-16 03:00–03:15 UTC
+
+### 19.1 V2 on the paper
+
+Since V1 was turned on (01:02), 29 of 38 of the paper's research runs
+(76%) carried world event ids in their run events. The bar in §9 is
+≥ 50%. Event wakes are off on the paper, so event ids reach research
+only through corpus search. The count is a proxy, by run, not by call.
+
+`EventDossier` for Texture and outlet statistics are not built. They
+wait until V3 is measured on the paper. A change to Texture's frame now
+would confound the §16 baseline, which counts Texture runs per hour.
+
+### 19.2 The V1 blind sample, rehearsed
+
+The judge script sees only the opener's and the member's title and URL,
+never Jev's p or model. It gives the judge the resolver's own
+definition: the same occurrence or its direct development (a later
+announcement, reaction or outcome). A false merge counts only when both
+judges say different. The judges are `openai/gpt-6.1-sol` and
+`google/gemini-3.8-flash`, both non-Claude, through OpenRouter.
+
+- **Paper (03:10):** 36 joined memberships. Only 14 have distinct URLs;
+  the rest are repeat captures of one URL. The single judge in the
+  rehearsal disagreed on the two tesla.com pages titled only "Tesla
+  Roadster". Those are the official page of the reveal, which a title
+  alone does not show.
+- **Test computer (6 world feeds):** 21 joined memberships, all with
+  distinct URLs. Both judges said different for 1 of 21 (4.8%): two
+  Middle East live blogs on different strikes.
+- **Judge noise:** one judge flipped on the Argentina protest pair
+  between two runs. A single judge is not enough.
+
+The paper alone will not reach 40 distinct-URL joins by 07:00. The
+acceptance run pools the paper and the test computer. Both run the same
+resolver; the test computer's six world feeds make more cross-outlet
+joins. Each computer is reported separately.
