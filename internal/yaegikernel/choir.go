@@ -872,10 +872,40 @@ func (s *ChoirScope) Delegate(kind, objective string, refs any, grouping any) (s
 			out = append(out, kept)
 		}
 	}
-	for _, id := range ids {
-		if !grouped[id] {
-			out = append(out, []string{id})
+	// Records of one world event go to one task, so two tasks never open
+	// two stories of one event (docs/problems/event-records-of-one-event-
+	// delegated-apart-2026-10-16.md): a record no group names joins the
+	// task holding its event's other records while they fit in one task.
+	eventOf := map[string]string{}
+	for _, r := range s.records {
+		if r.Captures != nil && r.Captures.Event != nil && strings.TrimSpace(r.Captures.Event.EventID) != "" {
+			eventOf[r.RecordID] = r.Captures.Event.EventID
 		}
+	}
+	taskOf, size := map[string]int{}, make([]int, len(out))
+	for i, group := range out {
+		for _, id := range group {
+			size[i] += captures[id]
+			if ev := eventOf[id]; ev != "" {
+				taskOf[ev] = i
+			}
+		}
+	}
+	for _, id := range ids {
+		if grouped[id] {
+			continue
+		}
+		grouped[id] = true
+		if ev := eventOf[id]; ev != "" {
+			if i, ok := taskOf[ev]; ok && size[i]+captures[id] <= MaxTaskCaptures {
+				out[i] = append(out[i], id)
+				size[i] += captures[id]
+				continue
+			}
+			taskOf[ev] = len(out)
+		}
+		out = append(out, []string{id})
+		size = append(size, captures[id])
 	}
 	if strings.TrimSpace(objective) == "" {
 		objective = "Open, feed or decline every capture these records name."

@@ -625,3 +625,34 @@ func TestEventRecordsNameTheStoriesThatHoldTheEvent(t *testing.T) {
 		t.Fatal("V3b: the growth of a declined event does not say it was declined")
 	}
 }
+
+// docs/problems/event-records-of-one-event-delegated-apart-2026-10-16.md:
+// an event's corroboration and growth records, read in one turn and
+// delegated per record, must go to one task, or two tasks open two
+// stories of one event.
+func TestRecordsOfOneEventAreDelegatedToOneTask(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
+	ctx := context.Background()
+	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	inputs := []eventInput{
+		capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", ""),
+		capItem("c2", "Bus and train collide at Channel Tunnel terminal", "https://www.dw.com/en/2", ""),
+	}
+	report, _ := rt.resolveEvents(ctx, owner, computer, inputs)
+	rt.mintEventWakes(ctx, owner, computer, inputs, report, nil)
+	third := []eventInput{capItem("c4", "Eurotunnel crash injures 19", "https://www.euronews.com/4", "")}
+	again, _ := rt.resolveEvents(ctx, owner, computer, third)
+	rt.mintEventWakes(ctx, owner, computer, third, again, nil)
+	cell := managementCell(t, rt, owner, computer, "run-event-delegate")
+	if out := cell(delegateAllCell); !strings.Contains(out, "rlm:delegate:") {
+		t.Fatalf("delegate: %s", out)
+	}
+	tasks, err := rt.store.ListManagementTasks(ctx, owner, computer, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("two records of one event made %d tasks, want one", len(tasks))
+	}
+}
