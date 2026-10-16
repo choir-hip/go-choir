@@ -145,6 +145,7 @@ var frozenOGObjectKinds = map[string]bool{
 	"choir.browser_session":              true,
 	"choir.capture_label":                true,
 	"choir.capture_label_override":       true,
+	"choir.event_membership":             true,
 	"choir.channel_message":              true,
 	"choir.coagent_mailbox":              true,
 	"choir.commitment_record":            true,
@@ -194,6 +195,7 @@ var frozenOGObjectKinds = map[string]bool{
 	"choir.web_capture":                  true,
 	"choir.work_item":                    true,
 	"choir.worker_update":                true,
+	"choir.world_event":                  true,
 	// V1-spelled kinds (the vocabulary this family freezes).
 	"choir.co_super_assignment":        true, // V1 — engineering assignment
 	"choir.co_super_assignment_report": true, // V1 — engineering report

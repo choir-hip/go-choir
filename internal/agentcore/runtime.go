@@ -216,6 +216,8 @@ type Runtime struct {
 	candidateJudge CandidateJudge
 	// support is the support-judgement job state (support_judge.go).
 	support supportJudging
+	// events is the event layer's queue and index (event_layer.go).
+	events eventLayer
 
 	assignmentHandleResolver interface {
 		AssignmentHandle(string, string) (string, error)

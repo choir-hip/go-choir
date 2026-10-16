@@ -101,6 +101,9 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.computer_setting", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.capture_label", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
 		{Kind: "choir.capture_label_override", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore},
+		// The event layer's V1 (docs/reports/event-layer-at-ingestion-design-2026-10-16.md).
+		{Kind: "choir.world_event", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.WorldEvent"},
+		{Kind: "choir.event_membership", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.EventMembership"},
 		// An owner-requested source adoption of a published release (P8,
 		// docs/reports/p6-p8-release-adopt-2026-10-15.md).
 		{Kind: "choir.release_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey, Owner: OwnerVMStore, Schema: "store.ReleaseAdoption"},

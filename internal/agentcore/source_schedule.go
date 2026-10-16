@@ -209,6 +209,11 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		if len(report.Captured) > 0 && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
 			usage.Labelled, usage.Unlabelled = rt.labelCaptures(ctx, ownerID, computerID, sched.SourceID, report.Captured)
 		}
+		// With intake.events on, the new captures queue for the event
+		// layer, which resolves every source's captures together onto
+		// world events off this path (event_layer.go). It never gates the
+		// arrival.
+		rt.enqueueEventResolution(ctx, ownerID, computerID, sched.SourceID, report.Captured)
 		// The poll's new captures reach management as one record (Cut 2
 		// 2b), after any the source still has pending, at most the poll's
 		// limit. Captures a failed append could not announce stay pending
