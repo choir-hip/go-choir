@@ -106,3 +106,29 @@ one capture and a published article.
   revert.
 - **F2–F4** are red where they touch Store B writes and the frozen
   inbox declarations. They need the full ceremony.
+
+## Found after F1 landed: aggregators and syndicators count as outlets
+
+An offline event study on 2026-10-16, about 00:20 UTC, replayed 500 real
+paper captures (about 4 hours, 184 outlets) through batched Jev event
+resolution. The script and outputs are in the session scratchpad,
+outside the repo.
+
+Of the 36 events that reached two or more "outlets", four were an
+article plus its Hacker News thread (`news.ycombinator.com`). Under the
+d54242fc9 key, the following also count as outlets:
+- syndicators that republish other outlets' copy (Yahoo News carrying a
+  Reuters story, AOL);
+- search pages (google.com/search);
+- reader-proxy captures (`r.jina.ai/<url>`, named after the proxy
+  instead of the publisher).
+
+So the F1 gate can pass a story whose second "source" is only a link to,
+or a copy of, the first. The fix: aggregators, search and syndicators
+name no outlet, and proxies are unwrapped (O5, O6 in
+internal/outlet/outlet_test.go).
+
+Distinct outlets still do not prove independence: wire copy carried by
+two originating outlets reads as two. Wire-origin detection (wire tags
+plus lead-block overlap; panel Gemini, round 1) belongs to the event
+layer's V1.
