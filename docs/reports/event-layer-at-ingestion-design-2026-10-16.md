@@ -369,3 +369,130 @@ the right bias for a gate whose failure mode is false corroboration.
 The replay includes research-read captures (FEC pages, review
 aggregators), which V1 does not resolve (it takes only source-poll
 captures), so production precision should be higher.
+
+## 15. V3 mechanism (drafted 2026-10-16 about 01:00 UTC, for panel round 2)
+
+A survey at 9eb2c037f of what V3 must change. File and line references
+are from that commit.
+
+### 15.1 What wakes management today
+
+- `store.RecordWakesReader` (`store/management_tasks.go:63`) is the one
+  wake predicate. A system record wakes when it is a capture arrival with
+  items (line 73). It is a pure function of the record, so it cannot read
+  a setting.
+- Each poll's arrival is one record to `management:<owner>`
+  (`agentcore/capture_arrival.go:53`). Its id is deterministic in the
+  source and the capture ids, and its digest covers its content.
+- Management's turn reads every unread captures record through
+  `choir.Records()`, with Jev's labels joined in when `intake.labels` is
+  on. The paper has `intake.labels` on (since 2026-10-14 06:50), so each
+  capture also costs one label call.
+- `Delegate("intake", …, "per_record")` makes one task per captures record.
+  `Decline` routes each capture to `source:<id>` using the record's
+  `SourceID`. `Feed` needs a story. The disposition index
+  (`choir.capture_disposition`) is per capture, so any captures record
+  that names a capture can lease it.
+
+### 15.2 The change: arrivals are held, and events wake
+
+1. **Held arrivals.** `CommitmentCaptures` gains `Held bool`
+   (`json:"held,omitempty"`). When `intake.events` and the new
+   `intake.event_wakes` are both on at mint time, the poll mints its
+   arrival with `Held: true`. `RecordWakesReader` returns false for a held
+   captures record. The record is still minted, so every capture is still
+   announced on the ledger (the frozen declaration holds), and the pending
+   list and the retry and conflict rules are unchanged. A flag flip
+   between a failed append and its retry changes the digest. The retry
+   then gets `ErrLifecycleCommandConflict` and is treated as announced,
+   which is the existing rule.
+2. **Held arrivals leave the desk's view.** `choir.Records()` drops a held
+   captures record from the view; the cursor still passes it. In its
+   place the view carries one counted line: "N captures held on M
+   single-outlet events (oldest Xh); U unresolved". Nothing is invisible.
+3. **Event records wake.** When the event index sees an event cross to
+   `EventMinOrigins` counted origins (the transition V1 already logs), the
+   flush mints one system captures record to `management:<owner>` with:
+   - `SourceID: "event:<event_id>"`;
+   - `Items` = the event's members (counted and tentative), each with a
+     new per-item `SourceID`;
+   - a new `Event` body: headline, counted origins, outlets, first seen.
+
+   Its record id is `event-corroborated:<event_id>`, so it fires once per
+   event (E4), whatever the retries. It wakes because it is not held.
+4. **Growth.** A capture that joins an event that already woke is not
+   lost. At the end of each flush, one growth record per event with new
+   members is minted, with id `event-grew:<event_id>:<hash of new member
+   ids>`. Wakes per flush are bounded by events that grew, and the
+   management cursor batches them.
+5. **Decline routes by item.** `Decline` uses an item's `SourceID` when
+   set, otherwise the record's. A capture declined from an event record
+   still lands on its real `source:<id>`.
+6. **Fallback: the layer down must not stop production.** A flush that
+   fails (Jev errors or timeouts past the retry) mints a plain, unheld
+   captures record for the failed captures, with id
+   `event-fallback:<hash of ids>`. That is today's behaviour for exactly
+   those captures (E10). `stopEventLayer` at shutdown mints nothing. A
+   crash drops the in-memory queue: those captures stay held and
+   unresolved, counted in the line from 2. The next live flush may take
+   up to 50 of the newest held, unresolved captures (from the last 6h) as
+   siblings. That is new work by a live act, not a boot resumer.
+7. **Aged official events** (Devin, round 1). In each flush, an event
+   still below `EventMinOrigins` whose opener's source is
+   `sources.Source.Official`, and which was first seen more than 45 min
+   ago, mints one `event-aged:<event_id>` record. It is the same shape as
+   3, with `Event.Reason: "official single-outlet"`, so management can ask
+   research for a second outlet. The publish gate is unchanged.
+8. **The intake.labels gates.** The Stories, Delegate, Feed/Decline and
+   override surfaces are on when `intake.labels || intake.event_wakes`. The
+   per-capture label calls stay as they are in V3a. Folding the topic
+   question into the batched event call, and retiring per-capture labels,
+   is V3b, which must land before V4.
+
+### 15.3 Why this shape
+
+- **No new record kind and no new wake class.** An event record is a
+  captures record, so `Delegate`, `Feed`, `Decline`, the disposition
+  index, task leases, residual re-delegation and the crash budget all
+  apply unchanged. The only predicate change is that held records do not
+  wake.
+- **The ledger still names every capture at arrival.** That is the
+  announcement contract. The held flag records why it did not wake.
+- **Rollback is one setting.** With `intake.event_wakes` off, arrivals mint
+  unheld and wake as before. Records already held stay held and stay
+  counted. Turning the flag off does not wake them; turning it on again,
+  or the sibling sweep, picks them up.
+
+### 15.4 Ways V3 could fail (tests are written against these)
+
+- **E10:** a Jev outage silently stops production. The fallback record in
+  6 covers it. Test: the judge fails, and an unheld captures record wakes
+  management naming exactly those captures.
+- **E11:** an event wakes twice for one transition, or a growth record
+  repeats members the corroboration record named.
+- **E12:** a held record wakes management, or appears in its view as
+  work.
+- **E13:** Decline of an event-record capture lands on `source:event:…`.
+- **E14:** a capture named by both its held arrival and its event record
+  is disposed twice. The index refuses the second. The test asserts that
+  the held record's presence does not make the capture a residual.
+- **E15:** the aged official wake fires for a non-official source, or
+  fires twice.
+- **E16:** the counted line hides a stuck queue. The test asserts the
+  unresolved count rises when the layer is stopped.
+
+### 15.5 Acceptance (V3a, on the paper)
+
+The baseline is taken during V1's shadow window from the same paper:
+management turns per hour, intake tasks per hour, captures per new story,
+and stories published per hour. V3a acceptance over 6h:
+- management turns per hour ≤ the baseline;
+- intake tasks per hour ≤ 0.5× the baseline;
+- every corroborated event is woken (count of transitions = count of
+  `event-corroborated` records);
+- stories published per hour ≥ 0.7× the baseline;
+- zero events woken twice.
+
+A fall in published stories is expected and is the owner's two-source
+rule working. A collapse below 0.7× means the threshold or the
+resolution recall needs work before V4.
