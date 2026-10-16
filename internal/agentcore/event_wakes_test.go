@@ -349,6 +349,9 @@ func TestWithEventWakesOnAPollsArrivalIsHeldAndWakesNoOne(t *testing.T) {
 	owner, computer, sourceID := "owner-held", rt.cfg.ComputerID, "rss:held"
 	management := agentprofile.Management + ":" + owner
 	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	if err := s.PutComputerSetting(ctx, store.ComputerSetting{OwnerID: owner, ComputerID: computer, Key: store.SettingIntakeLabels, Value: true}); err != nil {
+		t.Fatal(err)
+	}
 	reg := &sources.Registry{UserAgent: "test", Sources: []sources.Source{{ID: sourceID, Type: sources.SourceTypeRSS, Name: "Held", URL: feed.URL}}}
 	rt.researchDeps = &researchtools.Dependencies{Sources: reg, Captures: &arrivalSink{seen: map[string]string{}}}
 	var wakes []armedWake
@@ -374,6 +377,11 @@ func TestWithEventWakesOnAPollsArrivalIsHeldAndWakesNoOne(t *testing.T) {
 		if w.TargetAgentID == management {
 			t.Fatalf("E12: a held arrival woke management: %+v", w)
 		}
+	}
+	// V3b-3 (§18): labels are on, but under event wakes the poll makes no
+	// per-capture label call (the event flush runs later, off this path).
+	if n := rt.candidateJudge.(*eventJudge).callCount(); n != 0 {
+		t.Fatalf("labels ran under event wakes: %d calls", n)
 	}
 }
 
@@ -563,5 +571,57 @@ func TestTheSweepTallyReachesTheStoriesPage(t *testing.T) {
 	rt.sweepHeldCaptures(ctx, owner, computer, time.Now().UTC().Add(eventHeldGrace+time.Minute))
 	if tally := rt.heldCapturesTally(owner, computer); tally == nil || tally.Released != 1 || tally.Waiting != 0 {
 		t.Fatalf("E16: tally = %+v", tally)
+	}
+}
+
+// V3b (§18): an event record names the stories holding the event's
+// earlier reports, and whether management declined them, from the
+// disposition index, with no model call.
+func TestEventRecordsNameTheStoriesThatHoldTheEvent(t *testing.T) {
+	deskTestWorkerBin(t)
+	rt, owner, computer := eventRuntime(t, eurotunnelJudge())
+	ctx := context.Background()
+	setEventSettings(t, rt, owner, computer, true, true, time.Now().UTC().Add(-time.Hour))
+	story := openTestStory(t, rt.store, owner, computer, "Channel Tunnel collision injures 19")
+	inputs := []eventInput{
+		capItem("c1", "Nineteen injured in Eurotunnel accident", "https://www.bbc.co.uk/news/1", ""),
+		capItem("c2", "Bus and train collide at Channel Tunnel terminal", "https://www.dw.com/en/2", ""),
+	}
+	report, _ := rt.resolveEvents(ctx, owner, computer, inputs)
+	rt.mintEventWakes(ctx, owner, computer, inputs, report, nil)
+	cell := managementCell(t, rt, owner, computer, "run-event-cover")
+	if out := cell(`choir.Feed("` + story + `", []string{"c1", "c2"}, "the collision story")`); !strings.Contains(out, "rlm:note:") {
+		t.Fatalf("feed: %s", out)
+	}
+	third := []eventInput{capItem("c4", "Eurotunnel crash injures 19", "https://www.euronews.com/4", "")}
+	again, _ := rt.resolveEvents(ctx, owner, computer, third)
+	rt.mintEventWakes(ctx, owner, computer, third, again, nil)
+	grew := recordsWithPrefix(managementRecords(t, rt, owner, computer), "event-grew:")
+	if len(grew) != 1 || strings.Join(grew[0].Captures.Event.Covered, ",") != "texture:"+story || grew[0].Captures.Event.Declined {
+		t.Fatalf("growth event = %+v; want it covered by texture:%s", grew[0].Captures.Event, story)
+	}
+
+	// Declined: an event whose reports management declined says so.
+	judge := rt.candidateJudge.(*eventJudge)
+	judge.answers["Plex adds ticketing"] = eventAnswer{target: "Plex sells movie tickets"}
+	judge.answers["Plex launches movie tickets"] = eventAnswer{target: "Plex sells movie tickets"}
+	plex := []eventInput{capItem("p1", "Plex sells movie tickets", "https://arstechnica.com/p1", ""), capItem("p2", "Plex adds ticketing", "https://www.theverge.com/p2", "")}
+	r2, _ := rt.resolveEvents(ctx, owner, computer, plex)
+	rt.mintEventWakes(ctx, owner, computer, plex, r2, nil)
+	cell = managementCell(t, rt, owner, computer, "run-event-decline-2")
+	if out := cell(`choir.Decline([]string{"p1", "p2"}, "a product launch, not news")`); !strings.Contains(out, "rlm:note:") {
+		t.Fatalf("decline: %s", out)
+	}
+	p3 := []eventInput{capItem("p3", "Plex launches movie tickets", "https://techcrunch.com/p3", "")}
+	r3, _ := rt.resolveEvents(ctx, owner, computer, p3)
+	rt.mintEventWakes(ctx, owner, computer, p3, r3, nil)
+	var declined bool
+	for _, r := range recordsWithPrefix(managementRecords(t, rt, owner, computer), "event-grew:") {
+		if itemIDs(r) == "p3" {
+			declined = r.Captures.Event.Declined && len(r.Captures.Event.Covered) == 0
+		}
+	}
+	if !declined {
+		t.Fatal("V3b: the growth of a declined event does not say it was declined")
 	}
 }

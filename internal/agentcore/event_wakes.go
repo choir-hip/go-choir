@@ -126,6 +126,9 @@ type eventWake struct {
 func (rt *Runtime) eventWakeRequests(ctx context.Context, ownerID, computerID string, idx *eventIndex, report eventResolveReport, enabledAt, now time.Time) []eventWake {
 	var wakes []eventWake
 	add := func(sourceID, recordID string, held bool, event *types.CaptureEvent, items []types.CaptureArrival, settle, aged *eventView) {
+		if v := firstView(settle, aged); v != nil {
+			rt.annotateCoverage(ctx, ownerID, computerID, v, event, items)
+		}
 		req, err := capturesRecordRequest(ownerID, computerID, sourceID, recordID, held, event, items)
 		if err != nil {
 			log.Printf("event layer: record %s: %v", recordID, err)
@@ -204,6 +207,56 @@ func (rt *Runtime) eventWakeRequests(ctx context.Context, ownerID, computerID st
 		wakes = append(wakes, eventWake{req: req})
 	}
 	return wakes
+}
+
+func firstView(views ...*eventView) *eventView {
+	for _, v := range views {
+		if v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
+// annotateCoverage sets an event record's Covered and Declined from the
+// disposition index of the event's counted members the record does not
+// name (§18): which stories already hold the event, or whether management
+// declined it. Tentative members are skipped, so a doubtful match never
+// names a story. A lookup error is logged and leaves the record as it is.
+func (rt *Runtime) annotateCoverage(ctx context.Context, ownerID, computerID string, v *eventView, event *types.CaptureEvent, items []types.CaptureArrival) {
+	naming := map[string]bool{}
+	for _, item := range items {
+		naming[item.CaptureID] = true
+	}
+	covered := map[string]bool{}
+	disposed, declined := 0, 0
+	for _, m := range v.memberships {
+		if m.Tentative || naming[m.CaptureID] {
+			continue
+		}
+		d, ok, err := rt.store.CaptureDispositionOf(ctx, ownerID, computerID, m.CaptureID)
+		if err != nil {
+			log.Printf("event layer: disposition of %s: %v", m.CaptureID, err)
+			return
+		}
+		if !ok || d.Kind == "" {
+			continue
+		}
+		disposed++
+		switch d.Kind {
+		case types.DispositionDecline:
+			declined++
+		case types.DispositionOpen, types.DispositionFeed:
+			if strings.HasPrefix(d.Inbox, "texture:") {
+				covered[d.Inbox] = true
+			}
+		}
+	}
+	for inbox := range covered {
+		event.Covered = append(event.Covered, inbox)
+	}
+	sort.Strings(event.Covered)
+	event.Declined = disposed > 0 && declined == disposed
 }
 
 // unresolvedRequests names inputs to management in records of one task's

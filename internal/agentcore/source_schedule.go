@@ -205,8 +205,13 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		}
 		// With intake.labels on, Jev labels the new captures before the
 		// arrival names them (L2a A1). Labels are their own objects and
-		// never gate the arrival.
-		if len(report.Captured) > 0 && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
+		// never gate the arrival. Under event wakes they retire: management
+		// reads captures on event records, which name the stories that
+		// hold the event (event layer §18), so a label call per capture
+		// would scale calls with captures for nothing.
+		eventWakes := rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents) &&
+			rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
+		if len(report.Captured) > 0 && !eventWakes && rt.intakeLabelsEnabled(ctx, ownerID, computerID) {
 			usage.Labelled, usage.Unlabelled = rt.labelCaptures(ctx, ownerID, computerID, sched.SourceID, report.Captured)
 		}
 		// With intake.events on, the new captures queue for the event
@@ -219,9 +224,8 @@ func (rt *Runtime) HandleSourcePollDue(ctx context.Context, ownerID, computerID,
 		// arrival never wakes management while production waits on events
 		// (code review, Gemini B3); any never queued are released by the
 		// sweep.
-		queued := rt.enqueueEventResolution(ctx, ownerID, computerID, sched.SourceID, report.Captured)
-		held := (queued || rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents)) &&
-			rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
+		rt.enqueueEventResolution(ctx, ownerID, computerID, sched.SourceID, report.Captured)
+		held := eventWakes
 		// The poll's new captures reach management as one record (Cut 2
 		// 2b), after any the source still has pending, at most the poll's
 		// limit. Captures a failed append could not announce stay pending

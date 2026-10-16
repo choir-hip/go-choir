@@ -78,6 +78,11 @@ type CaptureEvent struct {
 	Headline  string   `json:"headline,omitempty"`
 	Origins   []string `json:"origins,omitempty"` // counted origins: outlets or wire tags
 	FirstSeen string   `json:"first_seen,omitempty"`
+	// Covered names the stories (texture:<doc>) that opened with or were
+	// fed the event's other members; Declined, that every one of them
+	// that was disposed of was declined. Both from the disposition index.
+	Covered  []string `json:"covered,omitempty"`
+	Declined bool     `json:"declined,omitempty"`
 }
 
 // Dispositions management gives captures (L2a R2-5).
