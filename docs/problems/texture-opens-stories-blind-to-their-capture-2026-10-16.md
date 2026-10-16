@@ -132,3 +132,28 @@ than 30 minutes.
   `ListDir(".")` and got the guest's `/tmp` (`systemd-private-…`,
   `.X11-unix`). This is a separate residual (broker jail width), not part
   of this fix.
+
+## Landed and measured (paper, 10:50–11:18 UTC)
+
+bc67aee10 put `ReadCapture` on Texture, accepting a frame handle. The
+paper took a planned restart onto it at 10:50.
+
+| Opening runs of stories opened on a capture | Before (07:12–10:24) | After (10:50–11:18) |
+|---|---|---|
+| Read the capture with `choir.ReadCapture` | none possible | **11 of 11** |
+| Looked for a reader | 44 of 78 | 0 of 11 |
+| Asked management for the passage | 20 of 78 | 0 of 11 |
+| Write refused for a quote not in the capture | 7 of 78 | 1 of 11 (8d3b14e1, which recovered: 2 revisions) |
+| New seed-only story | 80e6896d (stalled), c5aaaf86 | none |
+
+Observation: one capture read was a Hacker News RSS item whose body is
+only "Article URL: …". Texture wrote truthfully that the capture holds
+only a link (7dfc9d2c, "A Science Focus link is captured only as a
+URL"). That is coordination prose in a story, which the prompt forbids.
+The two-outlet publish gate holds a single-source story, so it should
+not reach readers. Management opening a story on a link-only aggregator
+item is the upstream cause and remains open.
+
+The bare-Wait guard (fix direction 2) is deferred: no query yet names a
+document's unanswered Asks, and a wrong guard would refuse legitimate
+Waits. It is a named residual.
