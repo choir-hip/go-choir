@@ -1140,16 +1140,27 @@ func (s *ChoirScope) ReadDoc() DocSnapshot {
 // checked when the turn commits after the cell, with the same line numbers.
 // One Write per cell. An optional third argument, pSupported, is the
 // Write's self-score: the probability that the judge finds each new
-// citation's passage supports its sentence.
+// citation's passage supports its sentence. A refused Write is remembered
+// on the cell's tray, so a Done after it in the same cell is refused too
+// unless an earlier Write in it staged, rather than completing the work at
+// the unrevised document.
 func (s *ChoirScope) Write(edits, why string, pSupported ...float64) (string, error) {
 	t, err := s.boundTray("write")
 	if err != nil {
 		return "", err
 	}
+	id, err := s.stageWrite(t, edits, why, pSupported)
+	if err != nil {
+		t.writeRefused = err.Error()
+	}
+	return id, err
+}
+
+func (s *ChoirScope) stageWrite(t *Tray, edits, why string, pSupported []float64) (string, error) {
 	var selfP *float64
 	switch {
 	case len(pSupported) > 1:
-		return "", fmt.Errorf("choir: Write takes one pSupported, not %d", len(pSupported))
+		return "", fmt.Errorf("choir: Write refused, nothing staged: pSupported is one number for the whole Write (the probability that every new citation's passage supports its sentence), not one per citation; got %d", len(pSupported))
 	case len(pSupported) == 1:
 		if p := pSupported[0]; !(p >= 0 && p <= 1) {
 			return "", fmt.Errorf("choir: Write refused, nothing staged: pSupported is a probability from 0 to 1, not %v", p)
@@ -1198,6 +1209,8 @@ func (s *ChoirScope) Done(why string) (string, error) {
 	}
 	return s.closeTurn("done", why, func(turn *TextureTurn, why string) error {
 		switch {
+		case turn.Write == nil && s.tray.writeRefused != "":
+			return fmt.Errorf("choir: Done refused, nothing staged: this cell's Write was refused (%s); fix the script and call Write again, then Done", s.tray.writeRefused)
 		case turn.Done != "":
 			return fmt.Errorf("choir: Done once per cell")
 		case turn.Wait != "":

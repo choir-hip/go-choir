@@ -89,3 +89,41 @@ func TestCellCallsWriteWithSelfScoreAndReadsCalibration(t *testing.T) {
 		t.Fatalf("stdout = %q, want the digest fields and a staged Write", out.Stdout)
 	}
 }
+
+// docs/problems/texture-done-after-refused-write-stalls-story-2026-10-16.md:
+// a cell whose Write was refused must not close the turn with Done, which
+// would complete the story at its seed for good. A successful Write's Done
+// still completes, and Wait (a turn without a revision) stays open.
+func TestDoneAfterARefusedWriteIsRefused(t *testing.T) {
+	scope, hooks := textureTurnScope(t)
+	_, werr := scope.Write("@insert end\nA {{cite r1.c1 \"q\"}}.", "add", 0.98, 0.97)
+	if werr == nil || !strings.Contains(werr.Error(), "one number for the whole Write") {
+		t.Fatalf("per-citation pSupported refusal = %v; want it to say one number for the whole Write", werr)
+	}
+	if _, err := scope.Done("integrated the reports"); err == nil || !strings.Contains(err.Error(), "Write was refused") {
+		t.Fatalf("Done after a refused Write = %v, want refused", err)
+	}
+	if got := hooks.End(); len(got) != 0 {
+		t.Fatalf("a refused Write and its Done staged %d intents", len(got))
+	}
+
+	scope, hooks = textureTurnScope(t)
+	if _, err := scope.Write("@insert end\nA.", "add", 0.9); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := scope.Done("written"); err != nil {
+		t.Fatalf("Done after a Write that staged: %v", err)
+	}
+	if got := hooks.End(); len(got) != 1 {
+		t.Fatalf("Write and Done staged %d intents, want one turn", len(got))
+	}
+
+	scope, hooks = textureTurnScope(t)
+	_, _ = scope.Write("@insert end\nA.", "add", 2)
+	if _, err := scope.Wait("waiting for a second outlet"); err != nil {
+		t.Fatalf("Wait after a refused Write: %v", err)
+	}
+	if got := hooks.End(); len(got) != 1 {
+		t.Fatalf("Wait staged %d intents, want one", len(got))
+	}
+}

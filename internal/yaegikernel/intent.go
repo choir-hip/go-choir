@@ -363,6 +363,9 @@ type Tray struct {
 	intents []StagedIntent
 	bytes   int
 	next    int
+	// writeRefused holds the refusal of this cell's Write, if one was
+	// refused; Done refuses after it (choir.go).
+	writeRefused string
 }
 
 // Message stages an asynchronous outbound message to a peer desk (mesh) or
