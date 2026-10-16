@@ -38,3 +38,15 @@ record's captures were disposed of when the growth record was minted.
 fit in `MaxTaskCaptures`. The overlay says records sharing an event id are
 one event. A test: two records of one event, delegated `per_record`, give
 one task.
+
+## Fixed, and the residual
+
+The fix is f81e729c5: `Delegate` gives one event's records one task.
+
+Residual: a growth record minted while the first task is still opening
+its story carries no `Covered` yet, because the capture is leased but not
+disposed of. A later turn may delegate it to a second task. The R2-5
+story-library check refuses an open from a task that has not seen the
+first open, which narrows the window. If the test computer or the paper
+shows it, the next step is to annotate `Event.Leased` (the task holding
+the event's other members) from `CaptureDisposition.LeaseTask`.
