@@ -934,6 +934,7 @@ func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Contex
 func (rt *Runtime) Stop() {
 	rt.stopProjector()
 	rt.stopSourceScheduleSweep()
+	rt.stopEventLayer()
 	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()

@@ -63,7 +63,6 @@ const (
 	// eventIndexLoad bounds the rebuild read.
 	eventIndexLoadEvents      = 10000
 	eventIndexLoadMemberships = 20000
-	eventMinOrigins           = 2
 )
 
 // eventInput is one capture to resolve.
@@ -110,7 +109,7 @@ type eventView struct {
 	last      time.Time
 }
 
-func (v *eventView) corroborated() bool { return len(v.origins) >= eventMinOrigins }
+func (v *eventView) corroborated() bool { return len(v.origins) >= store.EventMinOrigins }
 
 func (v *eventView) apply(m store.EventMembership) {
 	if m.CapturedAt.After(v.last) {
@@ -123,9 +122,9 @@ func (v *eventView) apply(m store.EventMembership) {
 	v.members++
 	v.titles = append(v.titles, m.Title)
 	v.captures = append(v.captures, m.CaptureID)
-	if m.Outlet != "" {
+	if origin := m.CountedOrigin(); origin != "" {
 		v.outlets[m.Outlet] = true
-		v.origins[firstNonEmpty(m.Origin, m.Outlet)] = true
+		v.origins[origin] = true
 	}
 }
 
@@ -148,8 +147,9 @@ type eventIndex struct {
 }
 
 type eventQueue struct {
-	items []eventInput
-	timer *time.Timer
+	items    []eventInput
+	timer    *time.Timer
+	inFlight bool // one flush at a time drains the queue, in order
 }
 
 // eventLayer is the runtime's event-layer state.
@@ -157,6 +157,9 @@ type eventLayer struct {
 	mu      sync.Mutex
 	indexes map[string]*eventIndex
 	queues  map[string]*eventQueue
+	stopped bool
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 func eventKey(ownerID, computerID string) string { return ownerID + "\x00" + computerID }
@@ -197,6 +200,17 @@ func (idx *eventIndex) loadLocked(ctx context.Context, s *store.Store, ownerID, 
 		idx.byCapture[m.CaptureID] = m.EventID
 		if v := idx.events[m.EventID]; v != nil {
 			v.apply(m)
+		}
+	}
+	// An event whose memberships fell past the load cap still counts its
+	// opener's outlet, so a slow second report corroborates it (code
+	// review, Gemini). The opener's wire origin is not on the event; the
+	// outlet stands in for it.
+	for _, v := range idx.events {
+		if v.members == 0 && v.ev.OpenedOutlet != "" {
+			v.members = 1
+			v.outlets[v.ev.OpenedOutlet] = true
+			v.origins[v.ev.OpenedOutlet] = true
 		}
 	}
 	idx.loaded = true
@@ -306,14 +320,25 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 	}
 	candidates := eventShortlist(idx, tokens, now)
 	stateRaw, questions, alias := eventQuestion(chunk, candidates, eventSummaryRunes)
-	if len(stateRaw) > eventStateMaxBytes && len(chunk) > 1 {
+	// The bound counts the questions too: each repeats every candidate's
+	// criteria, so they grow with chunk x candidates (code review, Devin
+	// B2). Split the chunk first; a single capture over the bound drops its
+	// summary, then its weakest candidates.
+	if eventRequestBytes(stateRaw, questions) > eventStateMaxBytes && len(chunk) > 1 {
 		half := len(chunk) / 2
 		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[:half], report)
 		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk[half:], report)
 		return
 	}
-	if len(stateRaw) > eventStateMaxBytes {
-		stateRaw, questions, alias = eventQuestion(chunk, candidates, 0)
+	for summary := eventSummaryRunes; eventRequestBytes(stateRaw, questions) > eventStateMaxBytes; {
+		if summary > 0 {
+			summary = 0
+		} else if len(candidates) > 0 {
+			candidates = candidates[:len(candidates)-1]
+		} else {
+			break
+		}
+		stateRaw, questions, alias = eventQuestion(chunk, candidates, summary)
 	}
 	raw, err := callJudgeWithin(ctx, rt.candidateJudge, judgmentScopeIntakeLabels, eventCallTimeout, stateRaw, questions)
 	report.Calls++
@@ -339,8 +364,11 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 	model := firstNonEmpty(dist.Model, candidateJudgmentModel)
 	share := dist.Usage.Cost / float64(len(chunk))
 
-	// Decide each capture: join (counted), tentative, sibling union, or new.
+	// Each answered capture: a counted or tentative match to a known
+	// event, or a sibling union. An unanswered capture stays unresolved;
+	// it is never minted (code review, Gemini).
 	type decision struct {
+		answered  bool
 		event     *eventView
 		tentative bool
 		p         float64
@@ -350,8 +378,7 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 	for i := range parent {
 		parent[i] = i
 	}
-	var find func(int) int
-	find = func(i int) int {
+	find := func(i int) int {
 		for parent[i] != i {
 			i = parent[i]
 		}
@@ -364,7 +391,7 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 		}
 		choice := strings.TrimSpace(a.Choice)
 		p := a.Probabilities[choice]
-		decisions[j].p = p
+		decisions[j] = decision{answered: true, p: p}
 		switch {
 		case alias.events[choice] != nil && p >= eventJoinP:
 			decisions[j].event = alias.events[choice]
@@ -379,15 +406,19 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 			}
 		}
 	}
-	// A sibling group joins its best counted match, or mints one event
-	// opened by its earliest capture.
+	// The formation fold, per sibling component of answered captures: the
+	// best counted match takes the whole component; else the best
+	// tentative match takes it tentatively (a sibling of a tentative member
+	// never mints a rival event; code review, Devin B1); else one event is
+	// minted, opened by the component's earliest capture.
 	groups := map[int][]int{}
 	for j := range chunk {
-		if decisions[j].tentative {
+		if !decisions[j].answered {
+			report.Unresolved++
+			log.Printf("event layer: %s unresolved: Jev's answer omitted it", chunk[j].Item.CaptureID)
 			continue
 		}
-		root := find(j)
-		groups[root] = append(groups[root], j)
+		groups[find(j)] = append(groups[find(j)], j)
 	}
 	roots := make([]int, 0, len(groups))
 	for r := range groups {
@@ -396,19 +427,35 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 	sort.Ints(roots)
 	for _, root := range roots {
 		members := groups[root]
-		var target *eventView
-		best := -1.0
+		var counted, tentative *eventView
+		bestCounted, bestTentative := -1.0, -1.0
 		for _, j := range members {
-			if d := decisions[j]; d.event != nil && !d.tentative && d.p > best {
-				target, best = d.event, d.p
+			d := decisions[j]
+			switch {
+			case d.event != nil && !d.tentative && d.p > bestCounted:
+				counted, bestCounted = d.event, d.p
+			case d.event != nil && d.tentative && d.p > bestTentative:
+				tentative, bestTentative = d.event, d.p
 			}
 		}
-		opened := ""
+		if counted == nil && tentative != nil {
+			for _, j := range members {
+				ok, created := rt.writeMembership(ctx, idx, tentative, ownerID, computerID, chunk[j], true, false, decisions[j].p, model, share)
+				switch {
+				case !ok:
+					report.Unresolved++
+				case created:
+					report.Tentative++
+				}
+			}
+			continue
+		}
+		target, opened := counted, ""
 		if target == nil {
 			first := chunk[members[0]]
 			ev := store.WorldEvent{OwnerID: ownerID, ComputerID: computerID, EventID: eventID(computerID, first.Item.CaptureID),
 				Headline: strings.TrimSpace(first.Item.Title), OpenedBy: first.Item.CaptureID, OpenedOutlet: outlet.Of(first.Item.URL), FirstSeen: first.At}
-			stored, _, err := rt.store.PutWorldEvent(ctx, ev)
+			stored, created, err := rt.store.PutWorldEvent(ctx, ev)
 			if err != nil {
 				report.Unresolved += len(members)
 				log.Printf("event layer: mint event for %s: %v", first.Item.CaptureID, err)
@@ -420,16 +467,18 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 				idx.events[stored.EventID] = target
 			}
 			opened = first.Item.CaptureID
-			report.Minted++
+			if created {
+				report.Minted++
+			}
 		}
 		for _, j := range members {
 			wasCorroborated := target.corroborated()
-			if rt.writeMembership(ctx, idx, target, ownerID, computerID, chunk[j], false, opened == chunk[j].Item.CaptureID, decisions[j].p, model, share) {
-				if opened != chunk[j].Item.CaptureID {
-					report.Joined++
-				}
-			} else {
+			ok, created := rt.writeMembership(ctx, idx, target, ownerID, computerID, chunk[j], false, opened == chunk[j].Item.CaptureID, decisions[j].p, model, share)
+			switch {
+			case !ok:
 				report.Unresolved++
+			case created && opened != chunk[j].Item.CaptureID:
+				report.Joined++
 			}
 			if !wasCorroborated && target.corroborated() {
 				report.Corroborated = append(report.Corroborated, target.ev.EventID)
@@ -437,26 +486,29 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 			}
 		}
 	}
-	for j, d := range decisions {
-		if !d.tentative {
-			continue
-		}
-		if rt.writeMembership(ctx, idx, d.event, ownerID, computerID, chunk[j], true, false, d.p, model, share) {
-			report.Tentative++
-		} else {
-			report.Unresolved++
-		}
-	}
 }
 
-func (rt *Runtime) writeMembership(ctx context.Context, idx *eventIndex, target *eventView, ownerID, computerID string, in eventInput, tentative, opened bool, p float64, model string, cost float64) bool {
+// eventRequestBytes is what one call sends upstream: the state and every
+// question.
+func eventRequestBytes(state json.RawMessage, questions map[string]json.RawMessage) int {
+	n := len(state)
+	for _, q := range questions {
+		n += len(q)
+	}
+	return n
+}
+
+// writeMembership writes one capture's membership. ok is false when the
+// write failed; created is false when the capture already had one (a
+// retry), which is not a failure.
+func (rt *Runtime) writeMembership(ctx context.Context, idx *eventIndex, target *eventView, ownerID, computerID string, in eventInput, tentative, opened bool, p float64, model string, cost float64) (ok, created bool) {
 	m := store.EventMembership{OwnerID: ownerID, ComputerID: computerID, CaptureID: in.Item.CaptureID, EventID: target.ev.EventID,
 		Opened: opened, Tentative: tentative, P: p, Outlet: outlet.Of(in.Item.URL), Origin: wireOrigin(in.Item.Summary, in.Item.Title),
 		URL: in.Item.URL, Title: strings.TrimSpace(in.Item.Title), SourceID: in.SourceID, CapturedAt: in.At, Model: model, CostUSD: cost}
 	stored, created, err := rt.store.PutEventMembership(ctx, m)
 	if err != nil {
 		log.Printf("event layer: membership of %s: %v", in.Item.CaptureID, err)
-		return false
+		return false, false
 	}
 	idx.byCapture[stored.CaptureID] = stored.EventID
 	if created {
@@ -464,7 +516,7 @@ func (rt *Runtime) writeMembership(ctx context.Context, idx *eventIndex, target 
 			v.apply(stored)
 		}
 	}
-	return created
+	return true, created
 }
 
 type eventAliases struct {
@@ -610,7 +662,8 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 // enqueueEventResolution queues a poll's new captures for the next flush,
 // when intake.events is on. A flush runs at eventChunkSize queued captures
 // or eventFlushInterval after the first, whichever comes first, so captures
-// from many sources share calls.
+// from many sources share calls. One flush at a time drains a computer's
+// queue, in order; captures queued meanwhile are drained by the same flush.
 func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem) {
 	if rt == nil || len(captured) == 0 || !rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents) {
 		return
@@ -618,6 +671,10 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 	now := time.Now().UTC()
 	key := eventKey(ownerID, computerID)
 	rt.events.mu.Lock()
+	defer rt.events.mu.Unlock()
+	if rt.events.stopped {
+		return
+	}
 	if rt.events.queues == nil {
 		rt.events.queues = map[string]*eventQueue{}
 	}
@@ -631,40 +688,97 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 			q.items = append(q.items, eventInput{Item: c, SourceID: sourceID, At: now})
 		}
 	}
-	full := len(q.items) >= eventChunkSize
-	if !full && q.timer == nil {
-		q.timer = time.AfterFunc(eventFlushInterval, func() { rt.flushEventQueue(ownerID, computerID) })
+	if q.inFlight || len(q.items) == 0 {
+		return
 	}
-	rt.events.mu.Unlock()
-	if full {
-		go rt.flushEventQueue(ownerID, computerID)
+	if len(q.items) >= eventChunkSize {
+		rt.startEventFlushLocked(ownerID, computerID, q)
+		return
+	}
+	if q.timer == nil {
+		q.timer = time.AfterFunc(eventFlushInterval, func() {
+			rt.events.mu.Lock()
+			defer rt.events.mu.Unlock()
+			q.timer = nil
+			if !rt.events.stopped && !q.inFlight && len(q.items) > 0 {
+				rt.startEventFlushLocked(ownerID, computerID, q)
+			}
+		})
 	}
 }
 
-// flushEventQueue resolves everything queued for one computer.
+// startEventFlushLocked starts the computer's one flush. The caller holds
+// rt.events.mu, and the runtime is not stopped, so the WaitGroup add never
+// races Stop's wait.
+func (rt *Runtime) startEventFlushLocked(ownerID, computerID string, q *eventQueue) {
+	if rt.events.ctx == nil {
+		rt.events.ctx, rt.events.cancel = context.WithCancel(context.Background())
+	}
+	if q.timer != nil {
+		q.timer.Stop()
+		q.timer = nil
+	}
+	q.inFlight = true
+	layerCtx := rt.events.ctx
+	rt.wg.Add(1)
+	go func() {
+		defer rt.wg.Done()
+		rt.drainEventQueue(layerCtx, ownerID, computerID, q)
+	}()
+}
+
+// drainEventQueue resolves the queue until it is empty or the runtime
+// stops.
+func (rt *Runtime) drainEventQueue(layerCtx context.Context, ownerID, computerID string, q *eventQueue) {
+	for {
+		rt.events.mu.Lock()
+		if rt.events.stopped || len(q.items) == 0 {
+			q.inFlight = false
+			rt.events.mu.Unlock()
+			return
+		}
+		items := q.items
+		q.items = nil
+		rt.events.mu.Unlock()
+		ctx, cancel := context.WithTimeout(layerCtx, eventFlushBudget)
+		report, err := rt.resolveEvents(ctx, ownerID, computerID, items)
+		cancel()
+		if err != nil {
+			log.Printf("event layer: %d captures unresolved: %v", len(items), err)
+			continue
+		}
+		log.Printf("event layer: resolved %d captures in %d calls: %d joined, %d tentative, %d new events, %d unresolved, %d corroborated, $%.5f",
+			len(items), report.Calls, report.Joined, report.Tentative, report.Minted, report.Unresolved, len(report.Corroborated), report.CostUSD)
+	}
+}
+
+// flushEventQueue starts a flush of one computer's queue now, unless one is
+// running.
 func (rt *Runtime) flushEventQueue(ownerID, computerID string) {
-	key := eventKey(ownerID, computerID)
 	rt.events.mu.Lock()
-	q := rt.events.queues[key]
-	var items []eventInput
-	if q != nil {
-		items, q.items = q.items, nil
+	defer rt.events.mu.Unlock()
+	q := rt.events.queues[eventKey(ownerID, computerID)]
+	if rt.events.stopped || q == nil || q.inFlight || len(q.items) == 0 {
+		return
+	}
+	rt.startEventFlushLocked(ownerID, computerID, q)
+}
+
+// stopEventLayer stops the timers, cancels a running flush, and refuses new
+// work. Queued captures are dropped and stay visibly unresolved; nothing
+// resolves them at the next boot.
+func (rt *Runtime) stopEventLayer() {
+	rt.events.mu.Lock()
+	defer rt.events.mu.Unlock()
+	rt.events.stopped = true
+	for _, q := range rt.events.queues {
 		if q.timer != nil {
 			q.timer.Stop()
 			q.timer = nil
 		}
+		q.items = nil
 	}
-	rt.events.mu.Unlock()
-	if len(items) == 0 {
-		return
+	if rt.events.cancel != nil {
+		rt.events.cancel()
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), eventFlushBudget)
-	defer cancel()
-	report, err := rt.resolveEvents(ctx, ownerID, computerID, items)
-	if err != nil {
-		log.Printf("event layer: %d captures unresolved: %v", len(items), err)
-		return
-	}
-	log.Printf("event layer: resolved %d captures in %d calls: %d joined, %d tentative, %d new events, %d unresolved, %d corroborated, $%.5f",
-		len(items), report.Calls, report.Joined, report.Tentative, report.Minted, report.Unresolved, len(report.Corroborated), report.CostUSD)
 }

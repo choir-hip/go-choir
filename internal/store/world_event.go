@@ -215,3 +215,20 @@ func (s *Store) listRecentOwned(ctx context.Context, kind objectgraph.ObjectKind
 	}
 	return nil
 }
+
+// CountedOrigin is what a membership adds to its event's corroboration:
+// its wire origin, else its outlet, and nothing for a tentative member or a
+// capture of no outlet. Corroboration is at least two distinct counted
+// origins. The event index and corpus search both count by it.
+func (m EventMembership) CountedOrigin() string {
+	if m.Tentative || strings.TrimSpace(m.Outlet) == "" {
+		return ""
+	}
+	if o := strings.TrimSpace(m.Origin); o != "" {
+		return o
+	}
+	return strings.TrimSpace(m.Outlet)
+}
+
+// EventMinOrigins is how many distinct counted origins corroborate an event.
+const EventMinOrigins = 2

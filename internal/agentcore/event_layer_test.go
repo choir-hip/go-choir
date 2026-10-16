@@ -37,15 +37,26 @@ import (
 //     store must give the same outlets and corroboration, and nothing
 //     queued before the restart is resolved after it;
 //   - R8 a call's state grows past Jev's default-context bound;
-//   - R9 the setting off still calls Jev.
+//   - R9 the setting off still calls Jev;
+//   - R10 a capture Jev's answer omits is minted as an event instead of
+//     staying unresolved (code review, Gemini);
+//   - R11 a capture unioned with a tentative member mints a rival event
+//     (code review, Devin B1);
+//   - R12 flushes run concurrently, so queued flushes pile on the index and
+//     expire, and chunk order breaks (code review, Gemini);
+//   - R13 a stopped runtime still flushes from a timer (code review, Gemini).
 
 // eventJudge answers each capture question by title: target is an event
 // headline, a recent title of one, or another capture's title; "" is new.
 type eventJudge struct {
-	mu      sync.Mutex
-	answers map[string]eventAnswer
-	calls   []map[string]any
-	bytes   []int
+	mu       sync.Mutex
+	answers  map[string]eventAnswer
+	omit     map[string]bool // capture titles whose answer is left out
+	calls    []map[string]any
+	bytes    []int
+	delay    time.Duration
+	inFlight int
+	maxIn    int
 }
 
 type eventAnswer struct {
@@ -72,13 +83,32 @@ func (j *eventJudge) JudgeScoped(_ context.Context, _ string, stateRaw json.RawM
 	}
 	var generic map[string]any
 	_ = json.Unmarshal(stateRaw, &generic)
+	total := len(stateRaw)
+	for _, q := range questions {
+		total += len(q)
+	}
 	j.mu.Lock()
 	j.calls = append(j.calls, generic)
-	j.bytes = append(j.bytes, len(stateRaw))
+	j.bytes = append(j.bytes, total)
+	j.inFlight++
+	if j.inFlight > j.maxIn {
+		j.maxIn = j.inFlight
+	}
 	j.mu.Unlock()
+	defer func() {
+		j.mu.Lock()
+		j.inFlight--
+		j.mu.Unlock()
+	}()
+	if j.delay > 0 {
+		time.Sleep(j.delay)
+	}
 	answers := map[string]any{}
 	for key := range questions {
 		title := state.Captures[key].Title
+		if j.omit[title] {
+			continue
+		}
 		a := j.answers[title]
 		choice := "new"
 		if a.target != "" {
@@ -302,16 +332,30 @@ func TestEventLayerKeepsEachCallUnderTheContextBound(t *testing.T) {
 	judge := &eventJudge{answers: map[string]eventAnswer{}}
 	rt, owner, computer := eventRuntime(t, judge)
 	long := strings.Repeat("A long summary sentence about the matter. ", 200)
+	// Fill the shortlist first: questions repeat every candidate's
+	// criteria, so the bound must count them (code review, Devin B2).
+	var fill []eventInput
+	for i := 0; i < eventShortlistRecent+5; i++ {
+		fill = append(fill, capItem(fmt.Sprintf("p%d", i), fmt.Sprintf("Prior event number %d with a fairly long headline about matters", i), fmt.Sprintf("https://p%d.example.com/x", i), ""))
+	}
+	if _, err := rt.resolveEvents(context.Background(), owner, computer, fill); err != nil {
+		t.Fatal(err)
+	}
+	judge.bytes = nil
 	var inputs []eventInput
 	for i := 0; i < eventChunkSize*2; i++ {
 		inputs = append(inputs, capItem(fmt.Sprintf("l%d", i), fmt.Sprintf("Long item %d", i), fmt.Sprintf("https://l%d.example.com/x", i), long))
 	}
-	if _, err := rt.resolveEvents(context.Background(), owner, computer, inputs); err != nil {
+	r, err := rt.resolveEvents(context.Background(), owner, computer, inputs)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if r.Unresolved != 0 || r.Minted != len(inputs) {
+		t.Fatalf("report = %+v", r)
 	}
 	for i, n := range judge.bytes { // R8
 		if n > eventStateMaxBytes {
-			t.Fatalf("call %d state = %d bytes, over %d", i, n, eventStateMaxBytes)
+			t.Fatalf("call %d state and questions = %d bytes, over %d", i, n, eventStateMaxBytes)
 		}
 	}
 }
@@ -350,5 +394,16 @@ func (rt *Runtime) flushEventQueueForTest(context.Context) {
 	for _, k := range keys {
 		owner, computer, _ := strings.Cut(k, "\x00")
 		rt.flushEventQueue(owner, computer)
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		busy := false
+		rt.events.mu.Lock()
+		for _, q := range rt.events.queues {
+			busy = busy || q.inFlight || len(q.items) > 0
+		}
+		rt.events.mu.Unlock()
+		if !busy {
+			return
+		}
 	}
 }
