@@ -12,8 +12,9 @@ package store
 //      (super:/Engineering:/cosuper:/researcher: prefixes, -super-/-Engineering-/
 //      -cosuper-/-researcher- infixes) rewrite through migrateIDForward;
 //      frozen protocol values (owner, trusted-core) never move; everything
-//      else is untouched. Prose is safe: both rules require the whole leaf
-//      to be a token or a whitespace-free ID shape.
+//      else is untouched. Prose and URLs are safe: a leaf with any
+//      whitespace or a "://" is never rewritten, so a headline or slug
+//      holding "-super-" keeps its text.
 //   2. content_hash is recomputed over migrated body+metadata.
 //   3. canonical_id is re-derived: content-suffixed objects take the new
 //      hash; key-suffixed objects re-derive through the kind's identity-key
@@ -38,6 +39,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/vocabmigrate"
@@ -160,9 +162,11 @@ func IsServingVocabularyLeaf(v string) bool {
 // Returns the migrated value and whether it changed. Frozen protocol values
 // and unknown tokens pass through unchanged (the fence owns refusal).
 func ogLeafMigrate(v string) (string, bool) {
-	trimmed := strings.TrimSpace(v)
-	if trimmed == "" || trimmed != v {
-		// Whitespace-bearing leaves are prose, never IDs or tokens.
+	if strings.TrimSpace(v) == "" || strings.IndexFunc(v, unicode.IsSpace) >= 0 || strings.Contains(v, "://") {
+		// Whitespace-bearing leaves are prose and "://" leaves are URLs,
+		// never IDs or tokens: a headline or slug holding "-super-" is not
+		// a desk identity
+		// (problems/live-writes-refused-by-deposit-upcast-prose-leaves-2026-10-16.md).
 		return v, false
 	}
 	if vocabmigrate.IsFrozenProtocol(v) {
@@ -664,7 +668,6 @@ func (s *Store) planOGMigration(ctx context.Context, rep *MigrationReport, seed 
 			return nil, nil, err
 		}
 	}
-
 
 	// Record provenance.
 	for _, o := range objs {
