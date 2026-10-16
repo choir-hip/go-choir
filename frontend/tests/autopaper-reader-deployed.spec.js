@@ -304,7 +304,9 @@ test('Autopaper front list and stories as Texture published views, logged out at
 // Ways this could fail: the edge sends no Content-Encoding; it compresses
 // the page but not the API or the hashed assets; the decoded body differs.
 test('the edge compresses the story bundle, the page, and its scripts and styles', async ({ request }) => {
-  const headers = { 'Accept-Encoding': 'gzip, br, zstd' };
+  // Playwright's request client decodes gzip and br, not zstd; browsers
+  // that advertise zstd get it.
+  const headers = { 'Accept-Encoding': 'gzip, br' };
   const stories = await publishedStories(request);
   test.skip(stories.length === 0, 'no Autopaper story is published yet');
   const largest = [...stories].sort((a, b) => (b.source_count || 0) - (a.source_count || 0))[0];
@@ -317,7 +319,7 @@ test('the edge compresses the story bundle, the page, and its scripts and styles
   for (const path of ['/autopaper', bundlePath, ...assets]) {
     const res = await request.get(`${BASE_URL}${path}`, { headers, timeout: 30_000 });
     expect(res.status(), `${path} status`).toBe(200);
-    expect(res.headers()['content-encoding'] || '', `${path} is compressed`).toMatch(/^(gzip|br|zstd)$/);
+    expect(res.headers()['content-encoding'] || '', `${path} is compressed`).toMatch(/^(gzip|br)$/);
   }
   const bundle = await getJSON(request, bundlePath);
   expect(bundle.route?.bare, 'the compressed bundle decodes to the story').toBe(largest.route.bare);
