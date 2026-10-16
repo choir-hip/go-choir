@@ -409,6 +409,23 @@ in
     enable = true;
     virtualHosts."choir.news" = {
       extraConfig = ''
+        # Compress what benefits: a story bundle is up to ~460 KB of JSON
+        # and the app ~475 KB of script and CSS. The explicit list keeps
+        # text/event-stream (live Texture and trajectory updates) unencoded,
+        # so a compressor never buffers a stream; WebSocket upgrades pass
+        # untouched (docs/problems/edge-serves-everything-uncompressed-2026-10-16.md).
+        encode {
+          zstd
+          gzip
+          match {
+            header Content-Type application/json*
+            header Content-Type text/html*
+            header Content-Type text/css*
+            header Content-Type text/javascript*
+            header Content-Type application/javascript*
+            header Content-Type image/svg+xml*
+          }
+        }
         handle /auth/* {
           reverse_proxy 127.0.0.1:8081
         }

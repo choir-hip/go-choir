@@ -26,7 +26,9 @@
  *     offers no editing affordance;
  *   - a story with more than one version moves between versions with the
  *     Texture chevrons, and an older version offers the newer one;
- *   - nothing scrolls horizontally at 375px.
+ *   - nothing scrolls horizontally at 375px;
+ *   - the edge compresses the story bundle, the page and its scripts and
+ *     styles (docs/problems/edge-serves-everything-uncompressed-2026-10-16.md).
  * Screenshots are attached and written under test-results (or
  * AUTOPAPER_SCREENSHOT_DIR when set). Skips when no story is published.
  *
@@ -295,4 +297,28 @@ test('Autopaper front list and stories as Texture published views, logged out at
   await page.goBack();
   await expect(page).toHaveURL(new RegExp(`/autopaper/${slug}/v${olderRevision}$`));
   await expect(reader).toHaveAttribute('data-publication-revision', String(olderRevision), { timeout: 30_000 });
+});
+
+// A story bundle is up to about 460 KB of JSON and the app ships about
+// 475 KB of script and CSS; uncompressed, a phone pays for every byte.
+// Ways this could fail: the edge sends no Content-Encoding; it compresses
+// the page but not the API or the hashed assets; the decoded body differs.
+test('the edge compresses the story bundle, the page, and its scripts and styles', async ({ request }) => {
+  const headers = { 'Accept-Encoding': 'gzip, br, zstd' };
+  const stories = await publishedStories(request);
+  test.skip(stories.length === 0, 'no Autopaper story is published yet');
+  const largest = [...stories].sort((a, b) => (b.source_count || 0) - (a.source_count || 0))[0];
+  const bundlePath = `/api/platform/publications/resolve?route=${encodeURIComponent(largest.route.bare)}`;
+  const page = await request.get(`${BASE_URL}/autopaper`, { headers, timeout: 30_000 });
+  expect(page.status()).toBe(200);
+  const html = await page.text();
+  const assets = [...new Set(html.match(/\/assets\/[A-Za-z0-9._-]+\.(?:js|css)/g) || [])];
+  expect(assets.length, 'the page names its scripts and styles').toBeGreaterThan(0);
+  for (const path of ['/autopaper', bundlePath, ...assets]) {
+    const res = await request.get(`${BASE_URL}${path}`, { headers, timeout: 30_000 });
+    expect(res.status(), `${path} status`).toBe(200);
+    expect(res.headers()['content-encoding'] || '', `${path} is compressed`).toMatch(/^(gzip|br|zstd)$/);
+  }
+  const bundle = await getJSON(request, bundlePath);
+  expect(bundle.route?.bare, 'the compressed bundle decodes to the story').toBe(largest.route.bare);
 });
