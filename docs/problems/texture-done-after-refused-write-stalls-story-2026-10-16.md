@@ -55,3 +55,24 @@ Ways the fix could fail (tests): Done after a refused Write commits a
 turn; Done after a successful Write is refused; Wait (a legitimate turn
 without a revision) is refused after a refused Write, which would be the
 same stall the other way.
+
+## Landed, and what the test computer adds
+
+The fix is 1e13ab348: the cell's tray remembers a refused Write, and
+`Done` is refused unless a Write in the cell staged. Wait is unchanged.
+
+Run events on the V3a test computer (02:45 UTC) show this is the main
+way stories stall there, not a rare one. 5 of its 11 stories stayed at
+the seed revision, and every one has a refused Write followed by Done:
+
+- 9 of 32 Texture runs were refused with "takes one pSupported, not N"
+  (N from 2 to 5);
+- 2 were refused with "r1.c1 is not a source in your frame". `r1.c1` is
+  the handle in the Write surface's example, copied as if it were real.
+
+The surface itself invites the per-citation misuse. Write's summary said
+pSupported is the probability "that the judge finds each new citation's
+passage supports its sentence", and the calibration digest labelled the
+claim "pSupported on Writes (per citation)". The follow-up commit
+rewords both: one number for the whole Write, scored against every new
+citation. A refused Write's Done is refused too.
