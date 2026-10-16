@@ -1,6 +1,6 @@
 # A planned restart drops the Texture work that was in flight (2026-10-16)
 
-Status: documented; cause is a hypothesis until a mutation row is traced.
+Status: cause confirmed by reproduction (23:00); fix follows in its own commit.
 Found during the 22:40 hourly check.
 
 ## Evidence (the paper, vm-1669020adcece51c2f5ff9b6df399ef5)
@@ -48,6 +48,33 @@ wake to start a new turn.
 
 To confirm: read the `agent_mutations` row of e27c019a (state, revision
 id) against the document's current revision, from the run's own trace.
+
+## Mechanism (confirmed: code trace and a test that reproduces the error)
+
+1. Boot passivation (`passivateInterruptedActivations`,
+   `internal/agentcore/runtime.go`) parks the turn in flight with
+   `passivated_reason=runtime_restarted` and, for Texture, marks its agent
+   mutation `stale_activation`.
+2. The turn's own `initial_dispatch` is still queued, because the handler
+   never returned. On redelivery, `handleInitialDispatch`
+   (`internal/actorruntime/handler.go`) reactivates it with the generic
+   `ReactivateRunCanonical` and sets it `running`. Nothing re-arms the
+   mutation.
+3. `ValidateActivationAuthority` then requires the mutation to be
+   `pending` and refuses it: "mutation authority mismatch". The error is
+   not a deferral, so the dispatcher retries it eight times, poisons it and
+   dead-letters it. The run stays `running` with nobody running it, which is
+   what 386ce9a8 shows. The next boot passivates it again, which is what
+   e27c019a shows.
+
+Only the Texture controller re-arms a stale mutation
+(`reactivatePassivatedTextureRun`: it accepts `stale_activation` when the
+mutation's revision is the document's head, and calls
+`ReactivateAgentMutation`). The inbox-record and coagent wakes go through
+it. The initial-dispatch resume was the one path that did not.
+`TestPlannedRestartResumesTheParkedTextureTurn`
+(`internal/actorruntime/texture_restart_resume_test.go`) reproduces the
+production error exactly, six runs out of six.
 
 ## Why it matters now
 

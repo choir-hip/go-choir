@@ -1,6 +1,7 @@
 # Opening an article costs about a second of server time, every time (2026-10-16)
 
-Status: open; reported by the owner ("opening an article is slow. Makes me
+Status: overlay fixed and deployed (575cb3ef5, 22:46 UTC); bundle cache and
+Store B indexes remain open. Reported by the owner ("opening an article is slow. Makes me
 think we have memory and/or storage pressure").
 
 ## Evidence (22:10–22:20 UTC)
@@ -38,6 +39,22 @@ of each; every other step together took 30–50 ms (route lookup 3–37 ms,
 transclusions 4–22 ms, entities 2–7 ms). The overlay is the cost, and it
 does not depend on the story: it is the scan of every
 `choir.publication_check` row in Store B.
+
+## After the fix (575cb3ef5, deployed 22:46)
+
+The overlay now reads each version's checks and judgements by ID, in one
+`IN (...)` query each, instead of scanning every check row. The reader's
+minute poll asks for the nav alone (3b345f87c). The same eight front stories
+resolved from outside in 0.16–0.26 s, first read and second, against
+1.1–1.3 s before: 36 KB to 257 KB, up to 10 sources. Since corpusd
+restarted at 22:45 it has logged no resolve over the 300 ms threshold. The
+deployed reader spec (`tests/autopaper-reader-deployed.spec.js`) passes,
+2 of 2.
+
+What is left is about 150 ms of fixed cost that grows with the story
+(transclusions and entities are still N+1 reads) and no reuse of an
+immutable version's bundle. The cache and the indexes below are still the
+next steps, but neither is urgent now.
 
 ## Mechanism (code-read; confirmed for the overlay by the step log above)
 
