@@ -475,10 +475,22 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 			// score-free by construction (types.ActingPack), so the
 			// epistemic boundary holds on the wire.
 			pack := actingCommitmentPackForDesk(ctx, rt, execCtx)
+			// RLM prompt-as-variable: pending update_coagent records ride the
+			// frame so choir.Updates() exposes them inside the cell. The chat
+			// wake turn carries only ids.
+			updates := pendingCellUpdates(ctx, rt, execCtx)
+			emits := pendingCellEmits(ctx, rt, execCtx)
+			if reduction.active {
+				rt.armCellTerminalDeadline(ctx, reduction)
+			}
+			deskCellFramePrepared()
 			// The cell's bound is its own timeout_ms when set, else the host's
-			// deadline for the desk (management only, S1). It goes on the eval
-			// context, not ctx: armCellTerminalDeadline keys on the outer
-			// context's deadline, which stays the activation's.
+			// deadline for the desk (management only, S1). It is armed after
+			// the host has prepared the frame, so it measures the cell: armed
+			// before, a second of store reads on the paper left a 1000 ms
+			// cell 3 ms to run. It goes on the eval context, not ctx:
+			// armCellTerminalDeadline keys on the outer context's deadline,
+			// which stays the activation's.
 			evalCtx := ctx
 			hostDeadline := time.Duration(0)
 			if input.TimeoutMS <= 0 {
@@ -492,14 +504,6 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				var cancel context.CancelFunc
 				evalCtx, cancel = context.WithTimeout(ctx, bound)
 				defer cancel()
-			}
-			// RLM prompt-as-variable: pending update_coagent records ride the
-			// frame so choir.Updates() exposes them inside the cell. The chat
-			// wake turn carries only ids.
-			updates := pendingCellUpdates(ctx, rt, execCtx)
-			emits := pendingCellEmits(ctx, rt, execCtx)
-			if reduction.active {
-				rt.armCellTerminalDeadline(ctx, reduction)
 			}
 			evalStart := time.Now()
 			res, evalErr := w.EvalCell(evalCtx, input.Source, reduction.inbox, docSnapshot, pack, updates, emits, reduction.records.view)
@@ -1018,6 +1022,10 @@ func (rt *Runtime) answerIdleTextureTrigger(ctx context.Context, rec *types.RunR
 	}
 	return nil
 }
+
+// deskCellFramePrepared runs when the host has prepared a cell's frame, just
+// before the cell's bound is armed; tests use it to make preparation slow.
+var deskCellFramePrepared = func() {}
 
 // cellTimeoutError explains a cell stopped by the timeout_ms its desk chose.
 // A bare "context deadline exceeded" left research shortening the limit or
