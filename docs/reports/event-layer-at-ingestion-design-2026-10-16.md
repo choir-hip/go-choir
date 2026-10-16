@@ -553,3 +553,67 @@ Both said "ship with fixes". All blocking findings are fixed and tested.
   flush's ledger check.
 - The rollback drains at most 48 captures per sweep, one sweep per 5 min:
   a backlog of N held captures drains in about N/48 × 5 min.
+
+## 18. V3a staging proof, and V3b: event records name their stories; labels retire under event wakes
+
+### 18.1 V3a on a minted test computer (2026-10-16, 01:45–02:00 UTC)
+
+`v3-events-0146` was minted on build 4b66f9ef2 with `intake.labels`,
+`intake.events` and `intake.event_wakes` on. It ran six schedules at
+15 min: BBC World, Al Jazeera, Guardian World, DW, NPR World and the
+Fed's press feed. Within 4 min of the first polls:
+- 6 held arrivals were minted. None woke anyone.
+- 24 events formed, and 4 were corroborated: BBC+NPR (Russia/Ukraine
+  refinery), BBC+DW (Channel Tunnel collision), BBC+DW (Maduro plea), and
+  AJ+DW (Houthi/Saudi).
+- Exactly 4 `event-corroborated:` records were minted, one per event.
+- Management delegated them to 4 intake tasks. Each opened one story
+  ("2 of 2 captures disposed"), and the 4 story headlines match the 4
+  events.
+- One story had published v1 by 02:00. The other three Textures asked
+  management for capture passages first: the usual Texture–management
+  ask, not a V3 path.
+
+On the paper (V1 shadow, events only), the first two corroborated events
+were the Tesla Roadster (TechCrunch, The Verge, Wired, tesla.com) and the
+Oregon school shooting (The Hill, Guardian, Al Jazeera). Both are
+correct. Repeat captures of one URL (one HN item through several feeds)
+join one event and add no outlet.
+
+### 18.2 The problem V3b fixes
+
+Under event wakes, management sees captures only on event records. But
+the per-capture Jev label call (`intake.labels`: "same event as story X",
+"same topic as story Y") still runs on every capture at poll time.
+Captures that never corroborate never reach a desk, so most of those
+calls are spent on nothing, and the calls still scale with captures
+(§24). An event record also does not say whether a story already holds
+the event's earlier reports. Management must infer it from the Stories
+list, which is the duplicate-story risk the labels existed to cut.
+
+### 18.3 The change
+
+1. **Covered and Declined, from the ledger, with no model call.** When an
+   event record is built, the disposition index (`CaptureDispositionOf`)
+   of each of the event's other members gives the story inboxes that
+   opened or were fed one of them. These go in `Event.Covered`. If every
+   disposed member was declined, `Event.Declined` is set. The overlay
+   says: feed a covered event's captures to the story named; a declined
+   event's new reports may be declined unless they change the event.
+2. **Labels retire under event wakes.** With `intake.event_wakes` on, the
+   poll does not run per-capture labels. Model calls at ingestion are
+   then one batched event call per flush (§12: about 137 calls per 500
+   captures, against 500 or more before).
+3. Nothing changes with `intake.event_wakes` off.
+
+### 18.4 Ways it could fail
+
+- **V3b-1:** Covered names a story that only a tentative member reached.
+  Tentative members are skipped in the Covered lookup.
+- **V3b-2:** a lookup error blocks the record. Covered is best effort; an
+  error is logged and the record still mints.
+- **V3b-3:** labels are skipped while event wakes are off. The label gate
+  is unchanged when event wakes are off.
+
+The class is orange (prompt text, a record annotation and a skipped
+optional call). The rollback is a revert, or turning event wakes off.
