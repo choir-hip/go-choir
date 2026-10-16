@@ -1307,7 +1307,7 @@ in
       IOSchedulingClass = "idle";
       ExecStart = pkgs.writeShellScript "go-choir-btrfs-headroom" ''
         set -euo pipefail
-        export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.btrfs-progs ]}:$PATH"
+        export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.gawk pkgs.btrfs-progs ]}:$PATH"
         unallocated=$(btrfs filesystem usage -b / | awk '/Device unallocated:/ {print $3}')
         echo "btrfs unallocated: $((unallocated / 1073741824)) GiB"
         if [ "$unallocated" -ge $((30 * 1073741824)) ]; then
