@@ -99,6 +99,25 @@ replay wrote, and keep the full rescan as the fallback:
 - Otherwise, including a marker left by another process, run the full
   pass.
 
-Rows written live since the fence are trusted exactly as on today's
-zero-replay fast path; the narrowed path neither widens nor narrows that
-trust.
+Rows written live since the fence are trusted as the zero-replay fast
+path trusts them. That trust is narrower than "at the plan's fixpoint":
+the write guard checks only role fields, so a live row with a migrating
+non-role leaf, or a reference to a pre-cutover ID, passes it. Until now
+the full pass on every replaying boot also swept such rows. After the
+change, only a boot that falls back to the full pass sweeps them. None
+has been observed on the paper; it is a residual, not a regression of
+the fence.
+
+**Panel (Devin + omp-gemini38, 2026-10-16) on the first draft.**
+omp-gemini38: ship, nothing blocking. Devin found two holes, both
+fixed before landing:
+
+- The report was renamed into place without an fsync, so after a VM
+  crash the marker could be lost while the replayed deposit survived.
+  The report write now fsyncs the file and its directory, which also
+  hardens the existing "provenance before apply" order.
+- An alias can reach the append-only upcast ledger without a marker: a
+  crash between recording the alias and marking the report, or a batch
+  that rolled back after one op recorded an alias. The narrowed path now
+  requires the ledger's alias count to equal the count the report
+  recorded at the fence.
