@@ -124,11 +124,11 @@ confound that soak.
   - Budgets: 30s per call and 2 min per flush, on the flush's own
     timer, off the poll path.
 - **Thresholds and the formation fold.**
-  - **p ≥ 0.85 for a known event:** a counted member.
-  - **0.5 ≤ p < 0.85 for a known event:** a **tentative** member. It is
+  - **p ≥ 0.92 for a known event:** a counted member (0.85 until 2026-10-16; see docs/problems/event-layer-false-merges-at-marginal-p-2026-10-16.md).
+  - **0.5 ≤ p < 0.92 for a known event:** a **tentative** member. It is
     visible on the event, never counts toward its outlets, and never
     mints a rival event (panel B1).
-  - **p ≥ 0.85 for another capture of the chunk:** a sibling union
+  - **p ≥ 0.92 for another capture of the chunk:** a sibling union
     (union-find, lowest index as root). A sibling group joins its
     members' best counted match by p. Otherwise it mints one event,
     opened by its earliest capture.

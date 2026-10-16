@@ -407,3 +407,33 @@ func (rt *Runtime) flushEventQueueForTest(context.Context) {
 		}
 	}
 }
+
+// docs/problems/event-layer-false-merges-at-marginal-p-2026-10-16.md:
+// on staging every join from p 0.85 to 0.92 was a topic merge that faked a
+// corroboration. A match below 0.92 is tentative, whether to a known event
+// or to a sibling capture; 0.92 and above counts.
+func TestEventLayerMarginalMatchIsTentativeNotCorroboration(t *testing.T) {
+	judge := &eventJudge{answers: map[string]eventAnswer{
+		"Middle East updates: Houthis target palace": {target: "Iran war live: Saudi blasts Houthis", p: 0.90},
+		"Saudi coalition condemns Houthi strikes":    {target: "Iran war live: Saudi blasts Houthis", p: 0.92},
+	}}
+	rt, owner, computer := eventRuntime(t, judge)
+	ctx := context.Background()
+	if _, err := rt.resolveEvents(ctx, owner, computer, []eventInput{capItem("m1", "Iran war live: Saudi blasts Houthis", "https://a.example.com/1", "")}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := rt.resolveEvents(ctx, owner, computer, []eventInput{capItem("m2", "Middle East updates: Houthis target palace", "https://b.example.net/2", "")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Tentative != 1 || len(r.Corroborated) != 0 {
+		t.Fatalf("p 0.90 report = %+v; want a tentative member and no corroboration", r)
+	}
+	r, err = rt.resolveEvents(ctx, owner, computer, []eventInput{capItem("m3", "Saudi coalition condemns Houthi strikes", "https://c.example.org/3", "")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Corroborated) != 1 {
+		t.Fatalf("p 0.92 report = %+v; want the event corroborated", r)
+	}
+}

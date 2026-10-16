@@ -54,7 +54,10 @@ const (
 	// eventJoinP joins an event as a counted member; eventTentativeP up to
 	// it attaches the capture as a tentative member, which never counts
 	// toward the event's outlets and never mints a rival event (panel B1).
-	eventJoinP      = 0.85
+	// eventJoinP was 0.85; on staging every join from 0.85 to 0.92 was a
+	// topic merge that faked a corroboration (docs/problems/
+	// event-layer-false-merges-at-marginal-p-2026-10-16.md).
+	eventJoinP      = 0.92
 	eventTentativeP = 0.5
 	// eventStateMaxBytes keeps a call under Jev's default context (above
 	// about 32 KB, 1.14 runs a slower, less accurate long-context mode).
