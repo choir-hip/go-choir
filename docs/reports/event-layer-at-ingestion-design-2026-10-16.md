@@ -520,3 +520,36 @@ endorsed the held flag on the existing record kind over a new kind.
 | management | management tasks | research | Texture |
 |---|---|---|---|
 | ~33 | ~14 | ~21 | ~100 |
+
+## 17. V3a code review adjudication (Devin and Gemini, 2026-10-16 about 01:20 UTC)
+
+Both said "ship with fixes". All blocking findings are fixed and tested.
+
+| Finding | From | Fix |
+|---|---|---|
+| `settled` and `agedWoken` were set when a record was built, not when it committed, so a transient commit failure lost the wake until a restart | both (B1) | The flags are set after the commit, or on a conflict that counts as committed. Test: a failed commit, then the next flush mints the wake |
+| A failed flush sent every input as unresolved, including captures a chunk had already resolved | Devin B2 | Only inputs without a membership are left. Test |
+| An event with more members than one record holds left the rest unnamed for good | Gemini B2 | Members past the bound go on held growth pages in the same flush. Test |
+| A poll with no new captures but pending ones minted an unheld arrival | Gemini B3 | Held whenever both settings are on. Captures never queued are released by the sweep |
+| The counted held line was missing | both | `choir.Stories()` first page carries `held_captures` (waiting, released, swept_at) from the last sweep. Test |
+| `enabledAt` moved on any rewrite of the setting | both | Setting a value it already has writes nothing (`/api/computer-settings`). Test |
+| The labels text was shown when only event wakes were on | Devin | The overlay splits: labels on `intake.labels`; the Delegate, Feed, Decline and Stories text on either setting; event records on `intake.event_wakes`. Test |
+| A failed sweep read suppressed sweeps for 5 min | Devin | The sweep is stamped only after its scan reads |
+| Aged wake across a restart | test gap | Test: one record after a restart |
+
+**Named residuals** (accepted for V3a, watched on the paper):
+- The sweep sees only the newest 1000 management records. On a very busy
+  inbox, a held arrival can fall out of the window before it is released.
+- A capture whose event never corroborates waits until it ages out of the
+  24h window. That is the owner's two-source rule. It is counted as
+  waiting on Stories while in the window.
+- The aged official check runs only inside a flush. A computer with no
+  new captures never ages an event. The paper is always busy.
+- Event items carry no PublishedAt, Language or Script (memberships do
+  not store them).
+- The flag-flip window can present one capture on an unheld arrival and
+  on an event record. The disposition index refuses the second disposal.
+- Ledger reads run under the index lock, so corpus search waits on a
+  flush's ledger check.
+- The rollback drains at most 48 captures per sweep, one sweep per 5 min:
+  a backlog of N held captures drains in about N/48 × 5 min.
