@@ -57,8 +57,9 @@ const (
 // A desk's record wakes its reader. A source inbox has no reader. A system
 // record does not wake (D5: a closure is minted at boot, and waking there
 // would resume work after a crash), except four minted only by live work:
-// a support failure, a capture arrival, and a management task's final
-// Report that is not clean and was not written by a crash boot. A clean
+// a support failure, a capture arrival that is not held for its events
+// (event layer §15), and a management task's final Report that is not
+// clean and was not written by a crash boot. A clean
 // task Report waits, unread, for the parent's next turn.
 func RecordWakesReader(rec types.CommitmentRecord) bool {
 	if strings.HasPrefix(rec.Inbox, "source:") {
@@ -71,7 +72,7 @@ func RecordWakesReader(rec types.CommitmentRecord) bool {
 		return true
 	}
 	if rec.Captures != nil && len(rec.Captures.Items) > 0 {
-		return true
+		return !rec.Captures.Held
 	}
 	if _, fromTask := types.ManagementTaskIDOfInbox(rec.SenderInbox); fromTask && rec.Final && rec.TaskOutcome != nil {
 		stop := ""

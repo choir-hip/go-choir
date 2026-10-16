@@ -50,21 +50,30 @@ func captureArrivalItems(captured []sourcegraph.CapturedItem) []types.CaptureArr
 // id is deterministic in the source and the capture set, and its content
 // in the items as given, so a retry naming the same items replays instead
 // of minting a second record.
-func captureArrivalRequest(ownerID, computerID, sourceID string, items []types.CaptureArrival) (types.CommitInboxRecordsRequest, error) {
-	ownerID, computerID, sourceID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(sourceID)
+//
+// A held arrival (event layer §15) is the same record with Held set: it
+// names the captures and wakes no one.
+func captureArrivalRequest(ownerID, computerID, sourceID string, items []types.CaptureArrival, held bool) (types.CommitInboxRecordsRequest, error) {
 	ids := make([]string, len(items))
 	for i, item := range items {
 		ids[i] = item.CaptureID
 	}
+	return capturesRecordRequest(ownerID, computerID, sourceID, types.CaptureArrivalRecordID(strings.TrimSpace(sourceID), ids), held, nil, items)
+}
+
+// capturesRecordRequest builds a captures record command to management: a
+// poll's arrival, or an event's record (event_wakes.go).
+func capturesRecordRequest(ownerID, computerID, sourceID, recordID string, held bool, event *types.CaptureEvent, items []types.CaptureArrival) (types.CommitInboxRecordsRequest, error) {
+	ownerID, computerID, sourceID = strings.TrimSpace(ownerID), strings.TrimSpace(computerID), strings.TrimSpace(sourceID)
 	management := agentprofile.Management + ":" + ownerID
 	rec := types.CommitmentRecord{
-		SchemaID: types.CommitmentRecordSchemaV1, RecordID: types.CaptureArrivalRecordID(sourceID, ids),
+		SchemaID: types.CommitmentRecordSchemaV1, RecordID: recordID,
 		Kind: types.CommitmentKindReport, Discrepancy: types.DiscrepancyUnresolved,
 		Provenance:  types.CommitmentProvenance{AgentID: types.CaptureArrivalSystemAgentID},
 		EmitterKind: types.CommitmentEmitterSystem, ComputerID: computerID,
 		Inbox: management, SenderInbox: types.CaptureArrivalSenderInbox(sourceID), Addressee: management,
 		SubjectRefs: map[string]string{"source_id": sourceID},
-		Captures:    &types.CommitmentCaptures{SourceID: sourceID, Items: append([]types.CaptureArrival(nil), items...)},
+		Captures:    &types.CommitmentCaptures{SourceID: sourceID, Held: held, Event: event, Items: append([]types.CaptureArrival(nil), items...)},
 	}
 	req := types.CommitInboxRecordsRequest{OwnerID: ownerID, ComputerID: computerID, CommandID: rec.RecordID, Records: []types.CommitmentRecord{rec}}
 	digest, err := store.ComputeCommitInboxRecordsDigest(req)
@@ -76,14 +85,19 @@ func captureArrivalRequest(ownerID, computerID, sourceID string, items []types.C
 }
 
 // appendCaptureArrival commits one arrival record naming items.
-func (rt *Runtime) appendCaptureArrival(ctx context.Context, ownerID, computerID, sourceID string, items []types.CaptureArrival) error {
+func (rt *Runtime) appendCaptureArrival(ctx context.Context, ownerID, computerID, sourceID string, items []types.CaptureArrival, held bool) error {
 	if rt == nil || rt.store == nil || len(items) == 0 {
 		return nil
 	}
-	req, err := captureArrivalRequest(ownerID, computerID, sourceID, items)
+	req, err := captureArrivalRequest(ownerID, computerID, sourceID, items, held)
 	if err != nil {
 		return err
 	}
+	return rt.commitCapturesRecord(ctx, req)
+}
+
+// commitCapturesRecord commits a captures record command.
+func (rt *Runtime) commitCapturesRecord(ctx context.Context, req types.CommitInboxRecordsRequest) error {
 	commit := rt.commitCaptureArrival
 	if commit == nil {
 		commit = func(ctx context.Context, req types.CommitInboxRecordsRequest) error {
@@ -104,7 +118,7 @@ func (rt *Runtime) appendCaptureArrival(ctx context.Context, ownerID, computerID
 // append refused as a conflicting command means a record naming exactly
 // these captures was already committed, so they were announced and leave
 // the list.
-func (rt *Runtime) announceCaptures(ctx context.Context, ownerID, computerID, sourceID string, pending []types.CaptureArrival, captured []sourcegraph.CapturedItem, limit int) ([]types.CaptureArrival, error) {
+func (rt *Runtime) announceCaptures(ctx context.Context, ownerID, computerID, sourceID string, pending []types.CaptureArrival, captured []sourcegraph.CapturedItem, limit int, held bool) ([]types.CaptureArrival, error) {
 	queue := make([]types.CaptureArrival, 0, len(pending)+len(captured))
 	seen := map[string]bool{}
 	for _, item := range append(append([]types.CaptureArrival(nil), pending...), captureArrivalItems(captured)...) {
@@ -122,7 +136,7 @@ func (rt *Runtime) announceCaptures(ctx context.Context, ownerID, computerID, so
 	}
 	announce := queue[:min(limit, len(queue))]
 	rest := queue[len(announce):]
-	if err := rt.appendCaptureArrival(ctx, ownerID, computerID, sourceID, announce); err != nil {
+	if err := rt.appendCaptureArrival(ctx, ownerID, computerID, sourceID, announce, held); err != nil {
 		if errors.Is(err, store.ErrLifecycleCommandConflict) {
 			log.Printf("capture arrival: %s: %d captures already announced by a committed record: %v", sourceID, len(announce), err)
 			return rest, nil

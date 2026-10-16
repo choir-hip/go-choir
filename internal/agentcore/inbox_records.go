@@ -175,6 +175,12 @@ func (rt *Runtime) loadCellRecords(ctx context.Context, ownerID, computerID, des
 	labelsOn, labelsRead := false, false
 	parents := map[string]types.EngineeringAssignmentBinding{}
 	for _, rec := range recs {
+		if rec.Captures != nil && rec.Captures.Held && rec.Captures.Event == nil {
+			// A held arrival (event layer §15) is not work: its captures
+			// reach the desk on their events' records. The cursor passes
+			// it; Stories counts what is held.
+			continue
+		}
 		view := inboxRecordView(rec)
 		if rec.Support != nil && len(rec.Support.Pairs) > 0 {
 			// A support_pairs list minted before support judgement left
@@ -555,7 +561,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 	// intake.labels setting is off (L2a A6): the whole cell commits
 	// nothing, and choir.Note does the same work.
 	for _, in := range intents {
-		if in.Disposition != "" && !rt.intakeLabelsEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
+		if in.Disposition != "" && !rt.intakeSurfacesEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
 			return nil, fmt.Errorf("reduce: %s: choir.Feed and choir.Decline are off on this computer (the owner's intake.labels setting); feed or decline with choir.Note, naming the capture ids", in.LocalID)
 		}
 	}
@@ -710,7 +716,7 @@ func (r *rlmCallReduction) commitRecordsRoute(ctx context.Context, intents []yae
 		OwnerID: r.scope.OwnerID, ComputerID: r.scope.ComputerID,
 		CommandID: "cell-records:" + r.scope.CellID, Records: records, Cursor: cursor, Tasks: tasks,
 	}
-	if opensStory && deskProfile == agentprofile.Management && rt.intakeLabelsEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
+	if opensStory && deskProfile == agentprofile.Management && rt.intakeSurfacesEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
 		// The story-library head this run last read (R2-5); a run that
 		// never read choir.Stories() has seen head 0. With intake.labels
 		// off, choir.Stories() is off too, and nothing is checked.

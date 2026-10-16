@@ -949,6 +949,12 @@ func foldConversation(conversationID string, records []types.CommitmentRecord) t
 	return head
 }
 
+// ConversationRecords returns one conversation's records, by (inbox, seq),
+// from the conversation index.
+func (s *Store) ConversationRecords(ctx context.Context, ownerID, computerID, conversationID string) ([]types.CommitmentRecord, error) {
+	return s.listInboxRecordsBy(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), "conversation_id", strings.TrimSpace(conversationID))
+}
+
 // ConversationState folds one conversation's records into its head.
 func (s *Store) ConversationState(ctx context.Context, ownerID, computerID, conversationID string) (types.ConversationHead, error) {
 	records, err := s.listInboxRecordsBy(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(computerID), "conversation_id", strings.TrimSpace(conversationID))

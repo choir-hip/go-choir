@@ -203,6 +203,17 @@ type StoryEntry struct {
 type StoriesPage struct {
 	Stories []StoryEntry `json:"stories"`
 	Next    string       `json:"next,omitempty"`
+	// Held counts, on the newest page, the captures waiting on their
+	// events, as the last sweep found them (event layer §15): they are in
+	// no record you read until their event is corroborated.
+	Held *HeldCaptures `json:"held_captures,omitempty"`
+}
+
+// HeldCaptures is the last held-capture sweep's count.
+type HeldCaptures struct {
+	Waiting  int    `json:"waiting"`  // with an event that is not corroborated
+	Released int    `json:"released"` // sent to you unresolved by that sweep
+	SweptAt  string `json:"swept_at"`
 }
 
 // String prints the page as JSON, so a cell that prints it reads it.

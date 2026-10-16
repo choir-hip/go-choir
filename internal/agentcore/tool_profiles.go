@@ -222,8 +222,9 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	// and functions (L2a A6); off, the prompt is as before. A computer
 	// setting, so stable across runs.
 	intakeLabels := profile == agentprofile.Management && rec != nil && rt.intakeLabelsEnabled(context.Background(), rec.OwnerID, rec.ComputerID)
+	eventWakes := profile == agentprofile.Management && rec != nil && rt.computerSettingOn(context.Background(), rec.OwnerID, rec.ComputerID, store.SettingIntakeEventWakes)
 	if profile == agentprofile.Management {
-		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels}))
+		b.WriteString(runtimeprompts.RLMManagementOverlay(runtimeprompts.RLMManagementOverlayOptions{IntakeLabels: intakeLabels, EventWakes: eventWakes}))
 	}
 	if profile == agentprofile.Engineering {
 		// The two flags pick one of four fixed overlay variants; the exact

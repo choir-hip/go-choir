@@ -31,7 +31,16 @@ const (
 // rollback.
 const SettingIntakeEvents = "intake.events"
 
-func init() { KnownComputerSettings[SettingIntakeEvents] = false }
+// SettingIntakeEventWakes makes production wait on events (event layer
+// §15, V3): with intake.events also on, a poll's arrival is held, and
+// management wakes on an event's records instead. Off by default; turning
+// it off is the rollback.
+const SettingIntakeEventWakes = "intake.event_wakes"
+
+func init() {
+	KnownComputerSettings[SettingIntakeEvents] = false
+	KnownComputerSettings[SettingIntakeEventWakes] = false
+}
 
 // WorldEvent is one real-world occurrence.
 type WorldEvent struct {

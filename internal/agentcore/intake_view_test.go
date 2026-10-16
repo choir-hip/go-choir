@@ -31,7 +31,7 @@ import (
 
 func seedArrival(t *testing.T, s *store.Store, owner, computer, sourceID string, items []types.CaptureArrival) {
 	t.Helper()
-	req, err := captureArrivalRequest(owner, computer, sourceID, items)
+	req, err := captureArrivalRequest(owner, computer, sourceID, items, false)
 	if err != nil {
 		t.Fatal(err)
 	}

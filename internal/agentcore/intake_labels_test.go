@@ -473,7 +473,7 @@ func TestRelabelWritesTheNextVersionAndLeavesTheArrivalDigest(t *testing.T) {
 	}
 	pope := openTestStory(t, s, owner, computer, "Pope has lung surgery")
 	captured := []sourcegraph.CapturedItem{{CaptureID: "choir.web_capture:relabel-1", Title: "Papst operiert", URL: "https://relabel.example/1", Language: "de", Summary: "Vatikan", Outlet: "DW"}}
-	before, err := captureArrivalRequest(owner, computer, sourceID, captureArrivalItems(captured))
+	before, err := captureArrivalRequest(owner, computer, sourceID, captureArrivalItems(captured), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,7 +492,7 @@ func TestRelabelWritesTheNextVersionAndLeavesTheArrivalDigest(t *testing.T) {
 	if labels[0].Version != 1 || labels[0].EventDocID != pope || labels[1].Version != 2 || labels[1].Event != store.CaptureLabelEventNew || labels[1].Model != "typesafe/jev-1.14" {
 		t.Fatalf("versions = %+v; want v1 kept as written and v2 the relabel", labels)
 	}
-	after, err := captureArrivalRequest(owner, computer, sourceID, captureArrivalItems(captured))
+	after, err := captureArrivalRequest(owner, computer, sourceID, captureArrivalItems(captured), false)
 	if err != nil {
 		t.Fatal(err)
 	}

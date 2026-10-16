@@ -326,8 +326,8 @@ func (r *rlmCallReduction) planDelegation(ctx context.Context, in yaegikernel.St
 	if spec.Kind != yaegikernel.TaskKindIntake {
 		return nil, nil, fmt.Errorf("delegate %s: kind %q is not open; S2a delegates intake", in.LocalID, spec.Kind)
 	}
-	if !rt.intakeLabelsEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
-		return nil, nil, fmt.Errorf("delegate %s: intake tasks feed and decline with choir.Feed and choir.Decline, which are off on this computer (the owner's intake.labels setting)", in.LocalID)
+	if !rt.intakeSurfacesEnabled(ctx, r.scope.OwnerID, r.scope.ComputerID) {
+		return nil, nil, fmt.Errorf("delegate %s: intake tasks feed and decline with choir.Feed and choir.Decline, which are off on this computer (the owner's intake.labels and intake.event_wakes settings)", in.LocalID)
 	}
 	// A captures record delegates its captures; a task's final Report
 	// delegates its residuals again, with the records its task was given.

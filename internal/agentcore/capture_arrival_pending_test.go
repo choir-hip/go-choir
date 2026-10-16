@@ -184,7 +184,7 @@ func TestReplayedArrivalKeepsItsDigestAndAConflictClearsPending(t *testing.T) {
 		{CaptureID: "choir.web_capture:r-2", Title: "東京で地震", URL: "https://replay.example/2", Language: "en", Script: sources.ScriptKana},
 		{CaptureID: "choir.web_capture:r-1", Title: "Markets steady", URL: "https://replay.example/1", PublishedAt: "2026-10-14T01:00:00Z", Language: "en", Script: sources.ScriptLatin},
 	}
-	first, err := captureArrivalRequest(owner, computer, sourceID, items)
+	first, err := captureArrivalRequest(owner, computer, sourceID, items, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,17 +197,17 @@ func TestReplayedArrivalKeepsItsDigestAndAConflictClearsPending(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := captureArrivalRequest(owner, computer, sourceID, stored.PendingArrivals)
+	again, err := captureArrivalRequest(owner, computer, sourceID, stored.PendingArrivals, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first.CommandID != again.CommandID || first.CommandDigest != again.CommandDigest {
 		t.Fatalf("a replayed arrival changed: %s/%s then %s/%s", first.CommandID, first.CommandDigest, again.CommandID, again.CommandDigest)
 	}
-	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, items); err != nil {
+	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, items, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, stored.PendingArrivals); err != nil {
+	if err := rt.appendCaptureArrival(ctx, owner, computer, sourceID, stored.PendingArrivals, false); err != nil {
 		t.Fatalf("replaying the same arrival was refused: %v", err)
 	}
 	if records, _ := s.ListInboxRecords(ctx, owner, computer, management, 0, 0); len(records) != 1 {
@@ -219,7 +219,7 @@ func TestReplayedArrivalKeepsItsDigestAndAConflictClearsPending(t *testing.T) {
 	// pending list instead of wedging it.
 	changed := append([]types.CaptureArrival(nil), items...)
 	changed[0].Title = "A different title"
-	left, err := rt.announceCaptures(ctx, owner, computer, sourceID, changed, nil, 5)
+	left, err := rt.announceCaptures(ctx, owner, computer, sourceID, changed, nil, 5, false)
 	if err != nil || len(left) != 0 {
 		t.Fatalf("a conflicting arrival left %v pending (err %v); want the announced captures cleared", left, err)
 	}

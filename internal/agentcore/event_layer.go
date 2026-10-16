@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/outlet"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/yaegikernel"
 )
 
 // The event layer's V1 (docs/reports/event-layer-at-ingestion-design-
@@ -81,6 +82,10 @@ type eventResolveReport struct {
 	Unresolved   int
 	Corroborated []string
 	CostUSD      float64
+	// Created is each event's members this resolution wrote, by event id.
+	Created map[string][]string
+	// Left are the inputs that ended without a membership.
+	Left []eventInput
 }
 
 // eventSummary is an event as the index holds it.
@@ -107,6 +112,17 @@ type eventView struct {
 	members   int
 	tentative int
 	last      time.Time
+	// memberships are the event's members, counted and tentative, in
+	// resolution order: an event's captures record names them (§15).
+	memberships []store.EventMembership
+	// agedWoken is set once the event's aged official wake was minted
+	// this boot; the record id keeps a later boot's retry to a replay.
+	agedWoken bool
+	// corroboratedAt is when the membership that made it corroborated
+	// was resolved. settled is set once its records were checked against
+	// the ledger and cleared by every new member (event_wakes.go).
+	corroboratedAt time.Time
+	settled        bool
 }
 
 func (v *eventView) corroborated() bool { return len(v.origins) >= store.EventMinOrigins }
@@ -115,6 +131,8 @@ func (v *eventView) apply(m store.EventMembership) {
 	if m.CapturedAt.After(v.last) {
 		v.last = m.CapturedAt
 	}
+	v.memberships = append(v.memberships, m)
+	v.settled = false
 	if m.Tentative {
 		v.tentative++
 		return
@@ -123,8 +141,15 @@ func (v *eventView) apply(m store.EventMembership) {
 	v.titles = append(v.titles, m.Title)
 	v.captures = append(v.captures, m.CaptureID)
 	if origin := m.CountedOrigin(); origin != "" {
+		was := v.corroborated()
 		v.outlets[m.Outlet] = true
 		v.origins[origin] = true
+		if !was && v.corroborated() {
+			v.corroboratedAt = m.ResolvedAt
+			if v.corroboratedAt.IsZero() {
+				v.corroboratedAt = m.CapturedAt
+			}
+		}
 	}
 }
 
@@ -160,6 +185,10 @@ type eventLayer struct {
 	stopped bool
 	ctx     context.Context
 	cancel  context.CancelFunc
+	// lastSweep rate-limits the held-capture sweep per computer; tally is
+	// what the last one counted, for management's Stories page.
+	lastSweep map[string]time.Time
+	tally     map[string]yaegikernel.HeldCaptures
 }
 
 func eventKey(ownerID, computerID string) string { return ownerID + "\x00" + computerID }
@@ -305,6 +334,12 @@ func (rt *Runtime) resolveEvents(ctx context.Context, ownerID, computerID string
 		pending = pending[n:]
 		rt.resolveEventChunk(ctx, idx, ownerID, computerID, chunk, &report)
 	}
+	for _, in := range inputs {
+		id := strings.TrimSpace(in.Item.CaptureID)
+		if id != "" && seen[id] && idx.byCapture[id] == "" {
+			report.Left = append(report.Left, in)
+		}
+	}
 	return report, nil
 }
 
@@ -446,6 +481,7 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 					report.Unresolved++
 				case created:
 					report.Tentative++
+					report.noteCreated(tentative.ev.EventID, chunk[j].Item.CaptureID)
 				}
 			}
 			continue
@@ -479,6 +515,9 @@ func (rt *Runtime) resolveEventChunk(ctx context.Context, idx *eventIndex, owner
 				report.Unresolved++
 			case created && opened != chunk[j].Item.CaptureID:
 				report.Joined++
+			}
+			if ok && created {
+				report.noteCreated(target.ev.EventID, chunk[j].Item.CaptureID)
 			}
 			if !wasCorroborated && target.corroborated() {
 				report.Corroborated = append(report.Corroborated, target.ev.EventID)
@@ -517,6 +556,14 @@ func (rt *Runtime) writeMembership(ctx context.Context, idx *eventIndex, target 
 		}
 	}
 	return true, created
+}
+
+// noteCreated records a membership this resolution wrote.
+func (r *eventResolveReport) noteCreated(eventID, captureID string) {
+	if r.Created == nil {
+		r.Created = map[string][]string{}
+	}
+	r.Created[eventID] = append(r.Created[eventID], captureID)
 }
 
 type eventAliases struct {
@@ -664,16 +711,18 @@ func eventQuestion(chunk []eventInput, candidates []*eventView, summaryRunes int
 // or eventFlushInterval after the first, whichever comes first, so captures
 // from many sources share calls. One flush at a time drains a computer's
 // queue, in order; captures queued meanwhile are drained by the same flush.
-func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem) {
+//
+// It reports whether it queued the captures.
+func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computerID, sourceID string, captured []sourcegraph.CapturedItem) bool {
 	if rt == nil || len(captured) == 0 || !rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEvents) {
-		return
+		return false
 	}
 	now := time.Now().UTC()
 	key := eventKey(ownerID, computerID)
 	rt.events.mu.Lock()
 	defer rt.events.mu.Unlock()
 	if rt.events.stopped {
-		return
+		return false
 	}
 	if rt.events.queues == nil {
 		rt.events.queues = map[string]*eventQueue{}
@@ -689,11 +738,11 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 		}
 	}
 	if q.inFlight || len(q.items) == 0 {
-		return
+		return true
 	}
 	if len(q.items) >= eventChunkSize {
 		rt.startEventFlushLocked(ownerID, computerID, q)
-		return
+		return true
 	}
 	if q.timer == nil {
 		q.timer = time.AfterFunc(eventFlushInterval, func() {
@@ -705,6 +754,7 @@ func (rt *Runtime) enqueueEventResolution(ctx context.Context, ownerID, computer
 			}
 		})
 	}
+	return true
 }
 
 // startEventFlushLocked starts the computer's one flush. The caller holds
@@ -743,6 +793,9 @@ func (rt *Runtime) drainEventQueue(layerCtx context.Context, ownerID, computerID
 		ctx, cancel := context.WithTimeout(layerCtx, eventFlushBudget)
 		report, err := rt.resolveEvents(ctx, ownerID, computerID, items)
 		cancel()
+		if layerCtx.Err() == nil {
+			rt.mintEventWakes(layerCtx, ownerID, computerID, items, report, err)
+		}
 		if err != nil {
 			log.Printf("event layer: %d captures unresolved: %v", len(items), err)
 			continue

@@ -46,9 +46,38 @@ const (
 const StorySeedRole = "story_seed"
 
 // CommitmentCaptures is the body of a capture arrival record.
+//
+// With the event layer's wakes on (event layer §15,
+// docs/reports/event-layer-at-ingestion-design-2026-10-16.md), a poll's
+// arrival is Held: it still names every capture on the ledger, but wakes
+// no one, because its captures wait on their events. An event's record is
+// a captures record too, from SourceID "event:<id>", naming the event's
+// members with each one's own source, and carrying the Event.
 type CommitmentCaptures struct {
 	SourceID string           `json:"source_id"`
+	Held     bool             `json:"held,omitempty"`
+	Event    *CaptureEvent    `json:"event,omitempty"`
 	Items    []CaptureArrival `json:"items"`
+}
+
+// Why an event's captures record woke management.
+const (
+	CaptureEventCorroborated = "corroborated"
+	CaptureEventGrew         = "grew"
+	CaptureEventOfficial     = "official_single_outlet"
+	CaptureEventUnresolved   = "unresolved"
+	// CaptureEventReleased: held captures released when production stopped
+	// waiting on events (the setting turned off).
+	CaptureEventReleased = "released"
+)
+
+// CaptureEvent is the world event an event's captures record names.
+type CaptureEvent struct {
+	EventID   string   `json:"event_id,omitempty"`
+	Reason    string   `json:"reason"`
+	Headline  string   `json:"headline,omitempty"`
+	Origins   []string `json:"origins,omitempty"` // counted origins: outlets or wire tags
+	FirstSeen string   `json:"first_seen,omitempty"`
 }
 
 // Dispositions management gives captures (L2a R2-5).
@@ -77,6 +106,12 @@ type CaptureArrival struct {
 	// defect 5).
 	Language string `json:"language,omitempty"`
 	Script   string `json:"script,omitempty"`
+	// SourceID is the capture's own source, set on an event's record,
+	// whose items come from many sources; Decline routes by it.
+	SourceID string `json:"source_id,omitempty"`
+	// Tentative marks an event's member Jev matched below the join
+	// confidence: shown with the event, never counted as its source.
+	Tentative bool `json:"tentative,omitempty"`
 }
 
 // CaptureArrivalSystemAgentID is the provenance of a capture arrival

@@ -753,7 +753,13 @@ func (s *ChoirScope) Decline(captureIDs any, reason string) (string, error) {
 			continue
 		}
 		for _, item := range r.Captures.Items {
-			sourceOf[item.CaptureID] = r.Captures.SourceID
+			// An event's record names captures of many sources, each
+			// with its own (event layer §15).
+			src := strings.TrimSpace(item.SourceID)
+			if src == "" {
+				src = r.Captures.SourceID
+			}
+			sourceOf[item.CaptureID] = src
 		}
 	}
 	bySource := map[string][]string{}

@@ -119,7 +119,7 @@ func TestManagementRecordsSurviveFailedTurn(t *testing.T) {
 	if err := rt.appendCaptureArrival(ctx, owner, computer, "rss:test", []types.CaptureArrival{
 		{CaptureID: "obj:choir.web_capture:test:key-a", Title: "a"},
 		{CaptureID: "obj:choir.web_capture:test:key-b", Title: "b"},
-	}); err != nil {
+	}, false); err != nil {
 		t.Fatalf("arrival: %v", err)
 	}
 	turn := func() types.RunRecord {
@@ -217,7 +217,7 @@ func TestManagementFailedTurnRetryIsBoundedAndBacksOff(t *testing.T) {
 		t.Fatalf("(f) a failed turn with nothing unread scheduled a wake: %v", delays)
 	}
 	rt.recordsFailedTurns.Delete(management)
-	if err := rt.appendCaptureArrival(ctx, owner, computer, "rss:test", []types.CaptureArrival{{CaptureID: "obj:choir.web_capture:test:key-r"}}); err != nil {
+	if err := rt.appendCaptureArrival(ctx, owner, computer, "rss:test", []types.CaptureArrival{{CaptureID: "obj:choir.web_capture:test:key-r"}}, false); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < failedRecordsTurnRetryLimit+2; i++ {

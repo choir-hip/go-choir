@@ -69,6 +69,9 @@ type RLMManagementOverlayOptions struct {
 	// when on does management read about Jev's labels, choir.Feed,
 	// choir.Decline and choir.Stories.
 	IntakeLabels bool
+	// EventWakes is the computer's intake.event_wakes setting (event
+	// layer §15): captures reach management on their events' records.
+	EventWakes bool
 }
 
 // RLMManagementTaskOverlay is a management task's overlay (management

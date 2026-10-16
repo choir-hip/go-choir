@@ -374,7 +374,19 @@ func TestRecordWakesReaderIsTheOnePredicate(t *testing.T) {
 	if !RecordWakesReader(residual) {
 		t.Fatal("a residual task Report wakes")
 	}
-	for id, rec := range map[string]types.CommitmentRecord{"agent": agent, "decline": decline, "crash": crash, "clean": clean, "residual": residual} {
+	// V3 (event layer §15, E12): an arrival held for its events wakes no
+	// one; an event's captures record, not held, does.
+	arrival := types.CommitmentRecord{EmitterKind: types.CommitmentEmitterSystem, Inbox: taskParent,
+		Captures: &types.CommitmentCaptures{SourceID: "rss:x", Items: []types.CaptureArrival{{CaptureID: "c1", URL: "https://x.example/1"}}}}
+	if !RecordWakesReader(arrival) {
+		t.Fatal("an arrival that is not held wakes")
+	}
+	held := arrival
+	held.Captures = &types.CommitmentCaptures{SourceID: "rss:x", Held: true, Items: arrival.Captures.Items}
+	if RecordWakesReader(held) {
+		t.Fatal("E12: a held arrival wakes no one")
+	}
+	for id, rec := range map[string]types.CommitmentRecord{"agent": agent, "decline": decline, "crash": crash, "clean": clean, "residual": residual, "arrival": arrival, "held": held} {
 		if RecordWakesReader(rec) != inboxRecordWakes(rec) {
 			t.Fatalf("%s: the store's wake rule and RecordWakesReader disagree", id)
 		}

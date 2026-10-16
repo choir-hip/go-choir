@@ -18,6 +18,13 @@ import (
 // owner act through the product API at /api/computer-settings, which is not
 // on management's ProductAPI allowlist.
 
+// intakeSurfacesEnabled reports whether management's intake surface
+// (choir.Stories, Feed, Decline, Delegate) is on: with intake.labels, or
+// with intake.event_wakes, whose event records need it (event layer §15).
+func (rt *Runtime) intakeSurfacesEnabled(ctx context.Context, ownerID, computerID string) bool {
+	return rt.intakeLabelsEnabled(ctx, ownerID, computerID) || rt.computerSettingOn(ctx, ownerID, computerID, store.SettingIntakeEventWakes)
+}
+
 // intakeLabelsEnabled reports whether intake.labels is on for the computer.
 // Anything but a stored true (no setting, a store error) is off.
 func (rt *Runtime) intakeLabelsEnabled(ctx context.Context, ownerID, computerID string) bool {
@@ -81,6 +88,13 @@ func (h *APIHandler) HandleComputerSettings(w http.ResponseWriter, r *http.Reque
 		var value bool
 		if raw := bytes.TrimSpace(req.Value); len(raw) == 0 || json.Unmarshal(raw, &value) != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "value must be true or false"})
+			return
+		}
+		// Setting a value it already has writes nothing, so updated_at is
+		// when the value last changed: intake.event_wakes reads it as when
+		// production began waiting on events (event layer §15).
+		if current, err := rt.store.GetComputerSetting(r.Context(), ownerID, computerID, key); err == nil && current.Value == value {
+			writeAPIJSON(w, http.StatusOK, map[string]any{"setting": current})
 			return
 		}
 		setting := store.ComputerSetting{OwnerID: ownerID, ComputerID: computerID, Key: key, Value: value, UpdatedAt: time.Now().UTC()}
