@@ -1,7 +1,8 @@
 # A correct Go loop never ends in a desk cell, and the runaway worker takes down the paper (2026-10-16)
 
-Status: documented; fix pending. **The paper crashed at 18:55:52 and
-closed 16 runs; a worker died the same way three times at 12:30–12:46.**
+Status: fixed in 3046fbb9a (the loop) and f93bbfd84 (containment),
+deployed 20:02 and 20:19; outcome below. **The paper crashed at 18:55:52
+and closed 16 runs; a worker died the same way three times at 12:30–12:46.**
 
 ## Evidence
 
@@ -93,3 +94,23 @@ already rewrites cell source so yaegi runs it as Go would.
    "frame: read header: EOF". Residual until then.
 3. **Upstream:** report the `forStmt1` wiring to traefik/yaegi (needs the
    owner's go-ahead: outward-facing).
+
+## Outcome (20:20)
+
+- **3046fbb9a** rewrites `for init; ; {` to `for init; true; {` in
+  `normalizeCellSource`. The three production loops end in a cell (they
+  print the runaway guard without it). CI green; deployed 20:02, and the
+  paper's planned refresh booted with tail=0 in 3 s.
+- **f93bbfd84** (containment, the part of fix direction 2 that needs no
+  new subsystem): each desk worker sets its own `oom_score_adj` to 1000
+  (best effort), so a guest OOM takes a worker before the daemon; a
+  worker that dies without a deadline now tells the model how it ended
+  and the usual cause, instead of "frame: read header: EOF". On Linux CI
+  `TestDeskWorkerVolunteersForTheOOMKiller` passed (not skipped): a real
+  re-executed worker reads 1000, the test process does not. Deployed
+  20:19 (tail=0, 3 s).
+- **Not yet seen live:** a loop-shape cell on the paper after 20:02, and
+  a worker death message in a run's tool result.
+- **Still open:** an RSS budget per worker (a runaway cell still grows
+  until the guest is short, and a guest OOM still kills, now a worker);
+  reporting the `forStmt1` wiring upstream (outward-facing, owner's call).
