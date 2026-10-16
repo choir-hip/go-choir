@@ -113,20 +113,18 @@ keeps the loss.
   … tail=1", 16:29:59). The full rescan ran and passed. No "identity
   formula" refusal appears in the console since the boot. The paper
   reports `ready` on b8feaa147.
-- **The deploy job failed anyway, on timing.** The full rescan took 4
-  minutes (16:30:00 → 16:34:00, "replay complete"). vmctl's health
-  check failed at 16:33:58 and then succeeded; vmctl logged
-  `outcome=refreshed` at 16:34:00. The deploy's last check, a 5-second
-  curl of the paper's health, ran in that same second and timed out.
-  The services are installed (deploy-failures/38931321339-1.json:
-  `autoputer installed`), but no receipt was written. `/health`
-  reports 3d669e89b until the next deploy. I did not rerun the job:
-  vmctl has no "already on target" skip, so a rerun would restart the
-  paper again only to write a receipt.
+- **The deploy job failed anyway, but not on the fix.** The full rescan
+  took 4 minutes (16:30:00 → 16:34:00, "replay complete"), and vmctl
+  logged `outcome=refreshed` at 16:34:00. The deploy's refresh request
+  got an empty reply (curl 52), because vmctl's HTTP write timeout was
+  the 120 s default. (An earlier version of this note blamed the 5 s
+  diagnostic curl; that curl only ran after the failure.) Problem doc:
+  `deploy-refresh-empty-reply-vmctl-write-timeout-2026-10-16.md`. Fix:
+  173d02b68, deployed 16:57. The job's rerun at 16:45 succeeded. It
+  deployed main's head (028af566e, docs only), so it restarted the
+  paper once more: a planned restart, tail=0, 37 s.
 - **Still open:**
   - the full rescan on any replaying boot costs about 4 minutes on the
     paper (the S0 finding, `s0-vocab-rescan-fires-on-any-replay-2026-10-01.md`);
-  - the deploy's 5-second final health curl does not wait out a
-    replaying boot;
   - checkpointd's two refusing QA computers (2026-10-15) are in failed-job
     backoff. Whether this fix clears them shows at their next retry.
