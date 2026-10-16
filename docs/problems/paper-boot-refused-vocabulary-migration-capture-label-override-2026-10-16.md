@@ -56,3 +56,48 @@ from those fields and keeps it.
 - Any other frozen kind without a formula whose free text holds
   `-super-`, `-researcher-` or `-co-super-` can brick a boot the same
   way.
+
+## Clustering assessment (two refusals of one class)
+
+| Incident | Kind | Path | Effect |
+|---|---|---|---|
+| 2026-10-15 | `choir.commitment_record` | checkpointd replay (deposit upcast) | two QA computers' checkpoints can never rebuild (`checkpointd-replay-upcast-missing-identity-formula-2026-10-15.md`) |
+| 2026-10-16 | `choir.capture_label_override` | boot-time `MigrateAndFenceServingVocabulary` | the paper refused to boot for 18 min |
+
+**Shared cause.** The V1→V2 vocabulary rules (`migrateIDForward`) are
+applied to every string leaf of an object, then `identityFieldMigrated`
+treats any changed `-`- or `:`-bearing leaf as a possible identity
+field. Free text (headlines, titles, reasons) and references both
+qualify. Any frozen kind without an `ogIdentityFormulas` entry then
+refuses. Adding formulas kind by kind (3d669e89b) repairs instances. It
+does not change the class: the vocabulary families list many frozen
+kinds and the formula table names about 40.
+
+**Unexplained, a hypothesis to check before the substrate fix.** The
+boot call has a fast path: once a store's report carries `FencedAt`,
+a boot without replay returns at once
+(`internal/store/vocab_migrate.go:210`). The paper ran the full pass at
+12:49, so either its report (a file beside the store, `texturePath`)
+lacked `FencedAt`, or this boot reached the migration as a replay after
+the projection-recovery resume. If the paper re-migrates on every boot,
+then every boot also rewrites "-super-" in post-cutover free text, and
+explains part of the long store-lock holds after boot (`GetObject`
+held up to 48 s at 13:07). Reading the report file needs the guest's
+disk; it is not read while the guest runs.
+
+**Substrate options (red: checkpoint projection and boot; owner or
+panel decision):**
+1. Restrict the vocabulary rules to identifier-shaped leaves (whole
+   values matching an id grammar), never substrings of prose. Replay must
+   then equal live for every existing tape. The f95311775 "replay matches
+   live" class applies, and old checkpoints may need rebuilding.
+2. Freeze the boot migration as done: a store fenced once is never
+   migrated again, and the report moves into the store itself so it
+   cannot be lost with a file.
+3. Keep refusing, but make a refusal terminal for that object (record it,
+   serve the rest), not for the computer's boot.
+
+Recommended order: confirm the hypothesis (the report file and its
+`FencedAt`) on the next stopped boot, then option 2, which is the
+smallest change that ends boot-time re-migration. Option 1 is the true
+repair and needs its own review.
