@@ -174,7 +174,7 @@ func retentionPruneConfigSummary(cfg RetentionPruneConfig) RetentionPruneConfigS
 
 func (r *OwnershipRegistry) RetentionPrunePlan() RetentionPrunePlan {
 	cfg, ownerships, emails, detached := r.retentionSnapshot()
-	return retentionPrunePlanFromSnapshot(cfg, ownerships, emails, detached)
+	return retentionPrunePlanFromSnapshot(cfg, r.warmnessPolicySnapshot(), ownerships, emails, detached)
 }
 
 func (r *OwnershipRegistry) RetentionShadowPlan() RetentionPrunePlan {
@@ -188,10 +188,10 @@ func (r *OwnershipRegistry) RetentionShadowPlan() RetentionPrunePlan {
 			Config:   retentionPruneConfigSummary(cfg),
 		}
 	}
-	return retentionPrunePlanFromSnapshot(cfg, ownerships, emails, detached)
+	return retentionPrunePlanFromSnapshot(cfg, r.warmnessPolicySnapshot(), ownerships, emails, detached)
 }
 
-func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, ownerships []*VMOwnership, emails map[string]string, detached map[string]RetentionProtectedState) RetentionPrunePlan {
+func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, warmness WarmnessPolicyConfig, ownerships []*VMOwnership, emails map[string]string, detached map[string]RetentionProtectedState) RetentionPrunePlan {
 	plan := RetentionPrunePlan{
 		Mode:     cfg.Mode,
 		Decision: "disabled",
@@ -233,7 +233,7 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, ownerships []*VMOw
 		if retentionOwnershipEphemeral(own, email, cfg) {
 			plan.Inventory.EphemeralOwnerships++
 		}
-		if !retentionOwnershipReclaimable(own, email, cfg, now) {
+		if !retentionOwnershipReclaimable(own, email, cfg, now) || retentionOwnershipProtected(own, warmness) {
 			continue
 		}
 		size := vmStateDirUsageBytes(cfg.StateDir, own.VMID)
@@ -335,6 +335,9 @@ func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]boo
 			continue
 		}
 		vmID := entry.Name()
+		if strings.HasPrefix(vmID, "vm-") || strings.HasPrefix(vmID, "candidate-") {
+			stateDirCount++
+		}
 		// vmctl-managed state dirs are named vm-* (generated) or candidate-*
 		// (named candidate/fleet computers). Anything else under vm-state is
 		// host bookkeeping (ownerships.json, backups), not a guest disk.
@@ -403,6 +406,15 @@ func retentionOwnershipReclaimable(own *VMOwnership, email string, cfg Retention
 		return false
 	}
 	return now.Sub(own.LastActiveAt) >= cfg.EphemeralMinAge
+}
+
+// retentionOwnershipProtected reports whether a computer's warmness class
+// keeps it out of retention entirely. An account on an ephemeral domain says
+// nothing about whether the computer is disposable: the paper runs under such
+// an account and is critical_protected
+// (docs/problems/retention-prune-would-destroy-the-paper-2026-10-16.md).
+func retentionOwnershipProtected(own *VMOwnership, warmness WarmnessPolicyConfig) bool {
+	return warmnessClassProtected(warmnessClassForOwnership(own, warmness))
 }
 
 func sortRetentionCandidates(candidates []RetentionPruneCandidate) {
@@ -523,7 +535,8 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 		if loadedEmail := strings.TrimSpace(loaded[current.UserID]); loadedEmail != "" {
 			email = loadedEmail
 		}
-		if !retentionOwnershipReclaimable(cloneOwnership(current), email, cfg, time.Now()) {
+		if !retentionOwnershipReclaimable(cloneOwnership(current), email, cfg, time.Now()) ||
+			retentionOwnershipProtected(current, r.warmnessPolicySnapshot()) {
 			return false
 		}
 	} else if candidate.Reason != "orphan_state_dir" {
