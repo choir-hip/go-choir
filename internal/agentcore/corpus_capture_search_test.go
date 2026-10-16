@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
@@ -294,5 +295,85 @@ func TestSearchWireCorpusKeepsStoriesWhenCapturesFail(t *testing.T) {
 	unconfigured := &researchtools.Dependencies{Store: s}
 	if note := searchCorpusAsCell(t, unconfigured, owner, computer, `{"query":"harbor"}`).CapturesNote; !strings.Contains(note, "not configured") {
 		t.Fatalf("note = %q; want the unconfigured capture store named", note)
+	}
+}
+
+// The event layer's V2 (docs/reports/event-layer-at-ingestion-design-
+// 2026-10-16.md §7): corpus search returns the world events it matches
+// before captures, so research reads what the paper already knows about an
+// occurrence, from whom and since when, in one result. Ways it fails,
+// written before the code:
+//   - V2-1 events are not returned, or another computer's or owner's are;
+//   - V2-2 a tentative member's outlet counts toward an event's outlets or
+//     corroboration, or wire copy counts twice;
+//   - V2-3 a corroborated event ranks below a single-outlet one of the same
+//     match strength;
+//   - V2-4 events are unbounded, or a store failure fails the whole call;
+//   - V2-5 an event result carries no capture handle research can read.
+func TestSearchWireCorpusReturnsMatchingEventsFirst(t *testing.T) {
+	s, _, deps, owner, computer := corpusFixture(t)
+	ctx := context.Background()
+	at := time.Date(2026, 10, 15, 22, 0, 0, 0, time.UTC)
+	put := func(own, comp, eventID, headline string, members ...store.EventMembership) {
+		t.Helper()
+		if _, _, err := s.PutWorldEvent(ctx, store.WorldEvent{OwnerID: own, ComputerID: comp, EventID: eventID, Headline: headline, OpenedBy: members[0].CaptureID, FirstSeen: at}); err != nil {
+			t.Fatal(err)
+		}
+		for i, m := range members {
+			m.OwnerID, m.ComputerID, m.EventID = own, comp, eventID
+			m.CapturedAt, m.ResolvedAt = at.Add(time.Duration(i)*time.Minute), at.Add(time.Duration(i)*time.Minute)
+			if _, _, err := s.PutEventMembership(ctx, m); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	put(owner, computer, "ev-harbor", "Harbor reopens after the storm",
+		store.EventMembership{CaptureID: "cap-h1", Title: "Harbor reopens after the storm", Outlet: "portnews.example", URL: "https://www.portnews.example/h", Opened: true},
+		store.EventMembership{CaptureID: "cap-h2", Title: "Port reopens to cargo traffic", Outlet: "bbc.co.uk", URL: "https://www.bbc.co.uk/h"},
+		store.EventMembership{CaptureID: "cap-h3", Title: "Harbour reopening", Outlet: "dw.com", Tentative: true})
+	put(owner, computer, "ev-harbor-wire", "Harbor workers strike",
+		store.EventMembership{CaptureID: "cap-w1", Title: "Harbor workers strike", Outlet: "thestar.com", Origin: "wire:reuters", Opened: true},
+		store.EventMembership{CaptureID: "cap-w2", Title: "Harbor strike spreads", Outlet: "cna.com", Origin: "wire:reuters"})
+	put(owner, "computer-other", "ev-other", "Harbor reopens elsewhere",
+		store.EventMembership{CaptureID: "cap-o1", Title: "Harbor reopens elsewhere", Outlet: "example.org", Opened: true})
+
+	raw, err := deps.HostEgress(toolregistry.WithExecutionContext(ctx, toolregistry.ExecutionContext{RunID: "research-run", OwnerID: owner, ComputerID: computer, Profile: agentprofile.Research}),
+		"search_wire_corpus", json.RawMessage(`{"query":"harbor"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Events []struct {
+			EventID      string   `json:"event_id"`
+			Headline     string   `json:"headline"`
+			Outlets      []string `json:"outlets"`
+			Origins      int      `json:"origins"`
+			Corroborated bool     `json:"corroborated"`
+			Tentative    int      `json:"tentative"`
+			CaptureIDs   []string `json:"capture_ids"`
+		} `json:"events"`
+		EventCount int `json:"event_count"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("decode %s: %v", raw, err)
+	}
+	// V2-1, V2-3: this computer's two events, the corroborated one first.
+	if out.EventCount != 2 || len(out.Events) != 2 || out.Events[0].EventID != "ev-harbor" || out.Events[1].EventID != "ev-harbor-wire" {
+		t.Fatalf("events = %+v", out.Events)
+	}
+	h, w := out.Events[0], out.Events[1]
+	// V2-2: the tentative dw.com member is shown but not counted; wire copy is one origin.
+	if !h.Corroborated || h.Origins != 2 || len(h.Outlets) != 2 || h.Tentative != 1 {
+		t.Fatalf("harbor event = %+v", h)
+	}
+	if w.Corroborated || w.Origins != 1 {
+		t.Fatalf("wire event = %+v; two outlets of one wire story are one origin", w)
+	}
+	// V2-5: capture handles to read.
+	if len(h.CaptureIDs) != 2 || h.CaptureIDs[0] != "cap-h1" {
+		t.Fatalf("capture ids = %v", h.CaptureIDs)
+	}
+	if got := searchCorpusAsCell(t, deps, owner, computer, `{"query":"zebra"}`); len(got.Captures) != 0 {
+		t.Fatalf("unexpected captures %+v", got.Captures)
 	}
 }

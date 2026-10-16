@@ -42,7 +42,7 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 		OwnerID string `json:"owner_id,omitempty"`
 	}
 	return toolregistry.Tool{Name: "search_wire_corpus",
-		Description: "Search this computer's own corpus by topic, title, outlet or keywords: its stories (results: doc_id, title, snippet) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at), strongest and newest matches first. A capture_id is a citable handle. Search here before the web.",
+		Description: "Search this computer's own corpus by topic, title, outlet or keywords: the world events it has resolved (events: event_id, headline, outlets, origins, corroborated, first_seen, last_seen, capture_ids), its stories (results: doc_id, title, snippet) and its captures (captures: capture_id, title, url, outlet, language, topic, fetched_at), strongest and newest matches first. A capture_id is a citable handle. Search here before the web.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"query":    map[string]any{"type": "string", "description": "Search terms: topic, title, entity, outlet, or keywords"},
 			"limit":    map[string]any{"type": "integer", "description": "Max results per list (default 10, at most 25)"},
@@ -93,9 +93,20 @@ func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 			if captures == nil {
 				captures = []CorpusCapture{}
 			}
-			body := map[string]any{"results": out, "count": len(out), "query": query, "captures": captures, "capture_count": len(captures)}
+			// Events first: what the paper already knows about an
+			// occurrence, from whom, since when (event layer V2). A store
+			// failure keeps the rest and says so.
+			events, err := searchEvents(ctx, deps.Store, ownerID, exec.ComputerID, corpusQueryTerms(query), limit)
+			eventsNote := ""
+			if err != nil {
+				events, eventsNote = []CorpusEvent{}, "events not searched: "+err.Error()
+			}
+			body := map[string]any{"events": events, "event_count": len(events), "results": out, "count": len(out), "query": query, "captures": captures, "capture_count": len(captures)}
 			if note != "" {
 				body["captures_note"] = note
+			}
+			if eventsNote != "" {
+				body["events_note"] = eventsNote
 			}
 			return toolregistry.ResultJSON(body)
 		}}
