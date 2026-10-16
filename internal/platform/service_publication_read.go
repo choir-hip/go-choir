@@ -32,6 +32,8 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if !ok {
 		return nil, sql.ErrNoRows
 	}
+	steps := newResolveSteps()
+	defer steps.logIfSlow(routePath)
 
 	// 1. The bare route names the publication.
 	routeObj, err := og.GetObjectByMetadata(ctx, "choir.public_route", "$.route_path", bare)
@@ -41,6 +43,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		}
 		return nil, fmt.Errorf("platform bundle: find route: %w", err)
 	}
+	steps.mark("route")
 	var routeMeta struct {
 		State    string `json:"state"`
 		TargetID string `json:"target_id"`
@@ -76,6 +79,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if err != nil {
 		return nil, fmt.Errorf("platform bundle: list versions: %w", err)
 	}
+	steps.mark("versions")
 	if len(versions) == 0 {
 		return nil, sql.ErrNoRows
 	}
@@ -95,6 +99,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		return nil, fmt.Errorf("platform bundle: %w", err)
 	}
 	publishedAt, _ := time.Parse(time.RFC3339Nano, versionMeta.PublishedAt)
+	steps.mark("version")
 
 	// 3. The payload: manifest, text blob, resolved blocks, signatures.
 	manifestEdges, err := og.ListEdgesByKind(ctx, versionObj.CanonicalID, "has_manifest")
@@ -111,6 +116,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if sha256Hex(manifestObj.Body) != versionMeta.ManifestHash {
 		return nil, fmt.Errorf("platform bundle: v%d manifest does not hash to %s", revision, versionMeta.ManifestHash)
 	}
+	steps.mark("manifest")
 	blobEdges, err := og.ListEdgesByKind(ctx, manifestObj.CanonicalID, "contains_blob")
 	if err != nil {
 		return nil, fmt.Errorf("platform bundle: find blob edges: %w", err)
@@ -132,10 +138,12 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 	if err != nil {
 		return nil, err
 	}
+	steps.mark("blob")
 	resolvedBlocks, err := s.graphResolvedBlocks(ctx, og, versionObj.CanonicalID, manifestObj.Body)
 	if err != nil {
 		return nil, err
 	}
+	steps.mark("blocks")
 	signatures := versionMeta.Signatures
 	if signatures == nil {
 		signatures = []PublicationSignature{}
@@ -143,11 +151,17 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 
 	// 4. Retrieval spans, citations, source entities, transclusions, policy, provenance.
 	spans, sourceID := s.graphRetrievalSpans(ctx, og, versionObj.CanonicalID, string(content))
+	steps.mark("spans")
 	citations := s.graphCitationEdges(ctx, og, versionObj.CanonicalID, versionMeta.SourceRevisionHash)
+	steps.mark("citations")
 	policy := s.graphPublicationPolicy(ctx, og, versionObj.CanonicalID)
+	steps.mark("policy")
 	sourceEntities := s.graphSourceEntities(ctx, og, versionObj.CanonicalID)
+	steps.mark("entities")
 	transclusions := s.graphTransclusions(ctx, og, versionObj.CanonicalID)
+	steps.mark("transclusions")
 	provenance := s.graphProvenanceSummary(ctx, og, versionObj.CanonicalID)
+	steps.mark("provenance")
 	bodyDoc, structuredSourceEntities := structuredArtifactFieldsFromManifest(string(manifestObj.Body))
 
 	if !publicationAccessPolicyAllowsPublicRoute(policy.Access) {
@@ -162,6 +176,7 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		Revision:             revision,
 		ManifestHash:         versionMeta.ManifestHash,
 	}, manifestAnchors(manifestObj.Body))
+	steps.mark("overlay")
 
 	return &PublicationBundle{
 		Route: PublicationRoute{Path: routePath, State: routeMeta.State, Bare: bare, Permalink: versionPermalink(bare, revision)},
