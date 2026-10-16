@@ -29,3 +29,7 @@ func ApplyWorkerMemoryLimit(bytes uint64) error {
 	}
 	return nil
 }
+
+// VolunteerForOOMKill is Linux only (oom_score_adj); elsewhere it does
+// nothing.
+func VolunteerForOOMKill() error { return nil }

@@ -25,6 +25,10 @@ func RunDeskSessionWorker() int {
 	if len(cfg.AllowedPackages) == 0 {
 		cfg.AllowedPackages = yaegikernel.DefaultSafeStdlibPackagesList()
 	}
+	// Best effort: a worker that cannot volunteer still serves cells.
+	if err := yaegikernel.VolunteerForOOMKill(); err != nil {
+		fmt.Fprintf(os.Stderr, "desk-session: oom_score_adj unavailable: %v\n", err)
+	}
 	if err := yaegikernel.ApplyWorkerMemoryLimit(cfg.MemoryLimitBytes); err != nil {
 		fmt.Fprintf(os.Stderr, "desk-session: memory cap unavailable: %v\n", err)
 		return 2

@@ -522,9 +522,11 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 				cellEvent["error"] = evalErr.Error()
 				// A dead worker is released before the event is recorded, so
 				// the event and the log carry how it ended (R2-19, H1).
+				workerExit := ""
 				if w.Dead() {
 					workers.release(lease.key)
 					exit := w.ExitCause()
+					workerExit = exit
 					cellEvent["worker_exit"] = exit
 					switch {
 					case ownBoundFired && hostDeadline > 0:
@@ -541,6 +543,10 @@ func newDeskGoEvalTool(rt *Runtime, workers *deskSessionWorkers, deskRole string
 					}
 				}
 				result.Error = evalErr.Error()
+				if workerExit != "" && !ownBoundFired && ctx.Err() == nil {
+					result.Error = cellWorkerDiedError(workerExit, elapsed)
+					result.DurationMs = elapsed.Milliseconds()
+				}
 				if ownBoundFired {
 					if hostDeadline > 0 {
 						result.Error = cellHostDeadlineError(deskRole, hostDeadline, elapsed)
@@ -1021,6 +1027,21 @@ func cellTimeoutError(timeoutMS int, elapsed time.Duration) string {
 	return fmt.Sprintf("cell stopped by its own timeout_ms=%d after %d ms; the session was killed, so values defined in earlier cells are gone. "+
 		"Host calls such as choir.Read take several seconds each (up to about 10 s), and choir.SearchWait blocks as long as you ask: leave timeout_ms unset or allow for them",
 		timeoutMS, elapsed.Milliseconds())
+}
+
+// cellWorkerDiedError is what a model reads when its cell's worker died
+// mid-cell with no deadline behind it: how it ended (without the stderr
+// tail), the lost session, and the usual cause. On the paper a bare "frame:
+// read header: EOF" told the Texture desk nothing, and it re-ran the same
+// runaway loop until the guest OOM killer took the daemon
+// (docs/problems/desk-cell-init-only-for-loop-never-ends-guest-oom-2026-10-16.md).
+func cellWorkerDiedError(exit string, elapsed time.Duration) string {
+	if i := strings.Index(exit, "; stderr:"); i >= 0 {
+		exit = exit[:i]
+	}
+	return fmt.Sprintf("cell's worker died after %d ms (%s); the session was killed, so values defined in earlier cells are gone. "+
+		"A worker killed by a signal, or exiting with status 2, has usually run out of memory: check that every loop ends and that nothing grows without bound, and do one step per cell",
+		elapsed.Milliseconds(), exit)
 }
 
 // cellHostDeadlineError is what a model reads when the host's cell deadline
