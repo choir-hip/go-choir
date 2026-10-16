@@ -3746,11 +3746,18 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	persisted, err := rt.persistActivationStateAndEmit(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
 	if err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
+		rt.persistRunEndInBackground(*rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload, rt.afterRunCompleted)
 		return
 	}
 	if !persisted {
 		return
 	}
+	rt.afterRunCompleted(persistCtx, rec)
+}
+
+// afterRunCompleted runs a completed run's follow-ups once its end is
+// stored: the outcome binding and the desk's inbox recheck.
+func (rt *Runtime) afterRunCompleted(persistCtx context.Context, rec *types.RunRecord) {
 	if bindErr := rt.bindTerminalRunOutcome(persistCtx, rec, true); bindErr != nil {
 		log.Printf("runtime: bind completion outcome for run %s: %v", rec.RunID, bindErr)
 	}
@@ -4432,10 +4439,21 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	persisted, updateErr := rt.persistActivationStateAndEmit(persistCtx, rec, kind, cause, errPayload)
 	if updateErr != nil {
 		log.Printf("runtime: update run %s to %s: %v", rec.RunID, state, updateErr)
+		rt.persistRunEndInBackground(*rec, kind, cause, errPayload, func(ctx context.Context, stored *types.RunRecord) {
+			rt.afterRunFailed(ctx, stored, state, err)
+		})
+		return
 	}
 	if !persisted {
 		return
 	}
+	rt.afterRunFailed(persistCtx, rec, state, err)
+}
+
+// afterRunFailed runs a failed, cancelled or blocked run's follow-ups once
+// its state is stored: the outcome binding, the Texture mutation
+// settlement, and the desk's inbox recheck.
+func (rt *Runtime) afterRunFailed(persistCtx context.Context, rec *types.RunRecord, state types.RunState, err error) {
 	if bindErr := rt.bindTerminalRunOutcome(persistCtx, rec, true); bindErr != nil {
 		log.Printf("runtime: bind terminal outcome for run %s: %v", rec.RunID, bindErr)
 	}
@@ -4474,7 +4492,6 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 		rt.maybeContinuePersistentManagementInbox(persistCtx, rec)
 		rt.recheckRecordsInbox(persistCtx, rec)
 	}
-
 }
 
 // providerResult returns fallback result text when a completed provider
