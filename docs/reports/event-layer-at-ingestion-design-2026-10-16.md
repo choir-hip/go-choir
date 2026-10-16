@@ -1,6 +1,6 @@
 # The event layer at ingestion: captures accumulate on events, production waits for corroboration
 
-Draft 2026-10-16, about 00:30 UTC, for panel review (Devin and Gemini,
+Draft 2026-10-16, about 00:15 UTC, for panel review (Devin and Gemini,
 plus the orchestrator, per owner §24).
 - Problem: [capture and production are coupled](../problems/capture-and-production-are-coupled-2026-10-16.md), F2–F4.
 - Rulings: [owner notes](owner-notes-2026-10-14.md) §24 and §25.
@@ -99,7 +99,7 @@ confound that soak.
   the eventual Autopaper object graph home. But it adds a red corpusd
   write route and Store B growth during the soak.
 
-## 5. Ingestion: resolution with Jev, batched per poll
+## 5. Ingestion: resolution with Jev, batched across sources
 
 - **Shortlist (deterministic).** It covers:
   - events with any member capture first seen in the last 72h: the 30
@@ -109,23 +109,33 @@ confound that soak.
   - the poll's siblings.
 
   After the soak it gains Store B title postings (land/store-b-retrieval).
-- **One Jev call per poll, not per capture.** The state holds the
-  candidate events (headline plus the last 2 member titles, clipped) and
-  all of the poll's new captures (title plus summary clipped to 600
-  runes). It asks one choice question per capture: "same event as
-  e1…eN, same as sibling n1…nM, or new". Questions per call are bounded
-  so the state stays under Jev's ~32 KB default-context threshold
-  (1.14's long-context mode is slower and less accurate). A poll of
-  more than the bound splits into several calls.
-  - **Cost shape:** calls scale with polls, and tokens with
-    captures × shortlist. One call per poll replaces one per capture.
-  - **To measure:** whether batching lowers per-question accuracy against
-    the per-capture baseline.
-- **Thresholds.** p ≥ 0.85 for a candidate joins the event. Anything else
-  mints a new event, with the runner-up recorded. A low-confidence join
-  is *not* made: a false merge is worse than a late merge, because
-  corroboration then counts the wrong outlets. A later merge judgment
-  (`merged_into`) can join two events once they are seen to be one.
+- **One Jev call per coalescing window, across sources.** Superseded
+  "per poll" after the offline study (§12): most polls bring one item.
+  - New captures from every source queue in memory. A flush runs at 12
+    queued captures, or 60s after the first.
+  - A flush resolves in chunks of up to 12, **in order**, so events
+    minted in one chunk are candidates in the next.
+  - The state holds the candidate events (headline plus the last 2 member
+    titles, clipped) and the chunk's captures (title, summary clipped to
+    400 runes, outlet). It asks one choice question per capture, whose
+    choices are the events, the *other* captures, or new.
+  - A chunk whose state exceeds 24 KB splits in half, keeping it under
+    Jev's ~32 KB default context.
+  - Budgets: 30s per call and 2 min per flush, on the flush's own
+    timer, off the poll path.
+- **Thresholds and the formation fold.**
+  - **p ≥ 0.85 for a known event:** a counted member.
+  - **0.5 ≤ p < 0.85 for a known event:** a **tentative** member. It is
+    visible on the event, never counts toward its outlets, and never
+    mints a rival event (panel B1).
+  - **p ≥ 0.85 for another capture of the chunk:** a sibling union
+    (union-find, lowest index as root). A sibling group joins its
+    members' best counted match by p. Otherwise it mints one event,
+    opened by its earliest capture.
+  - **Anything else** mints a new event.
+
+  A false merge is worse than a late one, because it counts the wrong
+  outlets.
 - **Restart rule (CLAUDE.md).** Resolution is in-memory, with no durable
   obligation. On a crash, captures in flight stay unresolved, which is a
   visible state, and there is no boot sweep. An unresolved capture is
@@ -250,3 +260,72 @@ sources before V3 multiplies desk runs, which contradicts §24.
   - Introduced: the transitional dual answer (capture_label's story
     pointer and event memberships), with CEE's dated deletion clock.
   - Repaired: none until V3.
+
+## 12. Offline study (2026-10-16, about 00:20 UTC)
+
+**Setup.**
+- The paper's 500 newest captures (`GET /api/captures`, 20:19–00:18 UTC,
+  184 outlets) were resolved in arrival order against an evolving event
+  set.
+- Resolution used `~typesafe/jev-latest` (served jev-1.14), one choice
+  question per capture.
+- The shortlist followed §5: the 30 most recent events plus 10 by title
+  overlap.
+- Join threshold p ≥ 0.85.
+- The script and outputs are in the session scratchpad, outside the repo.
+
+**Results.**
+
+| Measure | Value |
+|---|---|
+| Calls | 432 for 500 captures. Per-poll batching barely batches, because most polls bring one new item |
+| Cost | $0.064 in total, about **$0.00013 per capture** |
+| Largest request | 23 KB, under the 32 KB long-context threshold |
+| Events | 273, of which **36 reached ≥ 2 outlets** |
+| Joins / explicit new / low-confidence new | 227 / 182 / 89 |
+
+**Quality of the 36 corroborated events (orchestrator read, not blind).**
+About 33 are one real-world occurrence. They include cross-language
+joins: the Brazil runoff poll in Portuguese and English, and the
+Eurotunnel accident in French and English. Topic-but-not-event pairs
+stayed apart: the Plex ticketing deal and the Plex data-sharing story
+became separate events.
+
+Errors:
+- **Four were an article plus its Hacker News thread.** These were fixed
+  in the outlet key (afd160449, O5).
+- **One cluster was research's own reads of one subject** (FEC record
+  pages): research's web reads are captures too.
+- **One** (a trade-show news item plus the show's exhibitor page) is a
+  topic link.
+
+**Design consequences, adopted.**
+- **Batch across sources on a coalescing window,** not per poll. Pending
+  captures from every source are resolved together every 60s (or at 12
+  captures), so calls scale with time and not with sources.
+- **The 89 low-confidence mints are the splintering risk** the panel
+  named. Uncertain matches become tentative members; see §13.
+- **Corroboration counts feed (registry) captures and research reads
+  alike.** But research's repeated reads of one subject are one actor's
+  search, not independent reporting. A research-origin capture can
+  corroborate only an event a feed capture opened.
+
+## 13. Panel round 1 adjudication (Devin and Gemini, 2026-10-16)
+
+Both returned **ready with changes**. Raw output is in
+`.agentic-consensus/event-layer-r1/` (gitignored).
+
+| Point | Raised by | Decision |
+|---|---|---|
+| Q1: events first in the paper's store (a) | both | **Adopted.** Memberships carry p, model and cost now, so a later Store B export is a route change, not a re-mint (Devin) |
+| Tentative members (splintering at p < 0.85) | both | **Adopted** in §5 and in code: visible, uncounted, no rival event. **Residual R-T:** re-asking tentative members when their event grows is not built. V1 measures how many there are |
+| Wire copy needs a wire-tag origin, not doc_hash | Gemini | **Adopted.** A wire tag in the lead (`(Reuters)`, `AFP -`, …) sets an origin, and one origin counts once. Residual: untagged syndication |
+| Overlap horizon of 14 days for uncorroborated events | Gemini | **Adopted** (recency slots stay at 72h) |
+| `EventCorroborated` keyed by event only, fired on the ≥2 transition, 0→2 included | both | **Adopted** in V1 as the projection's transition (logged). V3 mints the record on it |
+| Batch across sources on a coalescing window | Devin, the study | **Adopted** (§5) |
+| Sibling formation fold | Devin | **Adopted:** union-find, then best counted match, else one mint by the earliest capture. Devin's "no blind transitivity" is not adopted for V1; V1 measures false merges instead |
+| Rebuild the pending set at boot from stored captures lacking a membership | Devin | **Rejected.** That is a boot-time resumer (CLAUDE.md, "Restarts end work"). A crash leaves captures visibly unresolved. A later live act (the next flush's sibling, or V3's consumer) may resolve them as new work |
+| Measure shortlist overflow, and a `merged_into` producer for post-horizon misses | Devin | **V1 measures it** with the event view (singleton events with high title overlap). The merge question is V1.5 |
+| Single-outlet official sources: all wait (Gemini), or an aged, bounded wake for `sources.Source.Official` events (Devin) | split | **Decided for V3: Devin's aged wake.** An official-source event still single-outlet after one poll interval wakes management once, so it can ask research for a second source. The publish gate is unchanged. Gemini's concern (noise) is met by the age bound and one wake per event |
+| `Stories`, `Delegate("intake")` and Feed/Decline are gated on `intake.labels` | Devin | **V3 must decide the enable matrix.** Lean: fold the topic question into the batched call, migrate the gates to `intake.events`, and retire per-capture label calls, so calls stop scaling with captures |
+| Batched multi-question accuracy is unmeasured | Devin | **V1 acceptance:** replay the 500-capture study coalesced, against per-capture resolution, and report agreement before V3 depends on it |
