@@ -1,6 +1,7 @@
 # choir.news serves every response uncompressed (2026-10-16)
 
-Status: open. Found at 22:56 UTC while measuring article opens for the
+Status: fixed and deployed (869420ad3, 1a0eef8de; staging on 85a9f5742 at 23:27).
+Found at 22:56 UTC while measuring article opens for the
 owner ("opening an article is slow… How can we optimize resource usage?
 Be ambitious with optimizations").
 
@@ -69,3 +70,12 @@ trajectory hangs until its next event. The Texture document stream's
 Fix direction: skip encoding for any request that asks for a stream
 (`Accept: text/event-stream`, which EventSource always sends). The
 encoder then never wraps a stream response at all.
+
+## Verified on staging (23:28)
+
+- The Texture document stream and the trajectory stream both send
+  headers in 0.10 s with `Accept-Encoding: gzip, br, zstd`, uncompressed
+  (`text/event-stream`).
+- Authenticated JSON comes back gzip. `/autopaper`, the story bundle and
+  the hashed assets come back compressed.
+- The deployed spec passes 3 of 3.

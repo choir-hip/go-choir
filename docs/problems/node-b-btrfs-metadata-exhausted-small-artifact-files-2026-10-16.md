@@ -94,3 +94,24 @@ script's PATH) add `go-choir-btrfs-headroom`, a daily timer. Below
 A manual run at 11:42 found 25 GiB, relocated 20 chunks in 35 s, and
 left **45 GiB unallocated**, with metadata at 12.65 of 15.64 GiB. An
 alert on low unallocated space and the small-file growth remain open.
+
+## Growth measured (23:00 UTC, `du --inodes`)
+
+| `platform-artifacts/sha256/` directory | 11:00 | 23:00 | 12 h |
+|---|---|---|---|
+| `pin-receipts` | 3,519,356 | 3,883,975 | +364,619 |
+| `computer-event-payload` | 1,766,674 | 1,948,350 | +181,676 |
+| `computer-event` | 1,749,283 | 1,932,281 | +182,998 |
+| `og` | 574,782 | 575,912 | +1,130 |
+
+That is about 730,000 new small files in 12 hours (about 1.5 million a
+day, about 4 events a second across the node). Each pinned artifact gets
+exactly one signed `PinReceipt` (`internal/platform/event_artifacts.go`),
+whose digest the event CAS checks (`ValidateEventPins`). So the receipts
+duplicate nothing: there are two per event, one for the event and one for
+its payload. Metadata is 13.61 of 15.64 GiB (87%, DUP), against 12.65 GiB
+at 11:42, with 40 GiB unallocated. The daily headroom guard balances
+below 30 GiB, so this is not urgent. But the file count grows with every
+computer's event rate, and receipts are evidence: packing or retiring
+them changes the evidence store (red). That is an owner-level design
+choice, not a tuning knob.
