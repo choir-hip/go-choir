@@ -77,3 +77,50 @@ Ways it could fail:
   acceptance must be rerun on a fresh window after the fix.
 - **Existing memberships:** tentative is stored at write time, so the
   test computer's three band members stay counted. The paper has none.
+
+## Fresh-window rerun after the fix (13:20 UTC): fails again, and not at marginal p
+
+78ae91887 raised the join threshold to 0.92 at 07:31. The rerun sampled
+only memberships resolved after 07:31: every distinct-URL join on both
+computers, 21 on the paper and 21 on the test computer. Same two judges,
+same blind protocol.
+
+| | Paper | Test computer | Both |
+|---|---|---|---|
+| Both judges DIFFERENT | 2 of 21 | 2 of 21 | **4 of 42 (9.5%)** |
+| gpt-6.1-sol DIFFERENT | 2 | 2 | 4 |
+| gemini-3.8-flash DIFFERENT | 5 | 7 | 12 |
+
+The four both-judge disagreements:
+
+| Join p | Event | Member | Orchestrator's reading |
+|---|---|---|---|
+| 0.98–1 | Tesla reveals SpaceX-powered Roadster (TechCrunch) | tesla.com/roadster, "Tesla Roadster" | correct: the reveal's official page (as before) |
+| 0.93 | "What is your personal recession indicator?" (Guardian) | "Bad news for Trump: it's still the economy" (Guardian) | false: one topic |
+| 0.98 | Ship attack reports near Hormuz at a record high (BBC) | Two container ships sink near Hormuz (Guardian) | a developing story, not one occurrence |
+| 1.0 | Indonesia fights fire with dry ice as haze spreads (Guardian) | Wildfire kills 4 firefighters at Mount Bromo (DW) | a fire season, not one fire |
+
+The 0.93 join formed between two captures in one batch: the opener chose
+its sibling at 0.93. The member's stored p (0.74) is its own answer's
+probability, not the join's, which makes `member_list.p` misleading for
+sibling-formed events.
+
+**What this shows:** the remaining false merges are not marginal. Jev
+merges the developments of one ongoing story at p 0.98–1.0. The judges,
+given the same event definition, read "event" as one occurrence. No
+threshold separates them. The disagreement is the definition of an event
+(occurrence or developing story), so the next step is a design decision,
+not a parameter.
+
+Options, for the owner and a panel (not tuned here):
+1. **Tighten Jev's event definition** in its prompt (same incident, place
+   and time; a later development of the same story is a new event linked
+   to it). Then rerun V1 on a fresh window.
+2. **Adopt story-level events** and require corroboration to name the
+   same occurrence by a second check, for example a counted origin needs
+   p ≥ 0.97 and a same-incident verification call.
+3. **Count corroboration only from captures resolved in the same flush
+   window**, since developments arrive later than the first reports.
+
+**V3 event wakes stay off on the paper.** V1 has failed twice; turning
+wakes on would wake management on story-level merges.
